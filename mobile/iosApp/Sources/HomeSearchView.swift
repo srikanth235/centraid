@@ -1,8 +1,6 @@
 import SwiftUI
 
-#if canImport(CentraidShared)
 import CentraidShared
-#endif
 
 /// HOME'S SEARCH, REGISTERED (R-CHROME-6). Not an app — Home is not one — so
 /// `ShellModel` registers it beside `AppRegistry.apps`, by the machine's
@@ -15,7 +13,7 @@ import CentraidShared
 /// sends `Opened` before it pushes (`open(_:)`).
 enum HomeSearchScreens {
     /// `HomeSearchMachine.SCREEN_ID`.
-    static let screen = "home.search"
+    static let screen = HomeSearchMachine.shared.SCREEN_ID
 
     static let route = ShellModel.Route.screen(screen, Data())
 
@@ -36,9 +34,7 @@ enum HomeSearchScreens {
 
     @MainActor
     static func register(into shell: ShellModel) {
-        #if canImport(CentraidShared)
         shell.register(.of(screen, HomeSearchBridge()))
-        #endif
         shell.route(
             screen,
             open: { _ in },

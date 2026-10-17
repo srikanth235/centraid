@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -16,6 +17,9 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.ProvidableCompositionLocal
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
@@ -26,6 +30,7 @@ import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import centraid.screen.v1.Denied
@@ -162,7 +167,7 @@ public fun FailureView(
             )
         }
         if (onRetry != null) {
-            QuietButton(
+            OutlineButton(
                 label = retryLabel,
                 testTag = "kit-retry",
                 modifier = Modifier.padding(top = 12.dp),
@@ -213,14 +218,14 @@ public fun EmptyStateView(
             )
         }
         if (importer != null) {
-            QuietButton(
+            OutlineButton(
                 label = importVerb,
                 testTag = "kit-empty-import",
                 modifier = Modifier.padding(top = 16.dp),
                 onPress = importer,
             )
         } else if (empty.action_label.isNotEmpty() && onAction != null) {
-            QuietButton(
+            OutlineButton(
                 label = empty.action_label,
                 testTag = "kit-empty-action",
                 modifier = Modifier.padding(top = 16.dp),
@@ -265,9 +270,14 @@ public fun DeniedGate(denied: Denied, modifier: Modifier = Modifier) {
     }
 }
 
-/** A quiet button: words on a hairline, no fill, a 44dp-wide target. */
+/**
+ * An outline button: words on a hairline, no fill. IT HUGS ITS LABEL and sits
+ * at the leading edge of what is above it; there is no width switch on the
+ * call. The one place it stretches is inside a [ChoiceStack], which hands every
+ * button in it the same full width (and the ink button's 44dp height).
+ */
 @Composable
-public fun QuietButton(
+public fun OutlineButton(
     label: String,
     modifier: Modifier = Modifier,
     testTag: String = "kit-button",
@@ -275,6 +285,7 @@ public fun QuietButton(
     enabled: Boolean = true,
     onPress: () -> Unit,
 ) {
+    val stacked = LocalChoiceStack.current
     val edge = when {
         !enabled -> "textDisabled"
         ink == "text" -> "lineStrong"
@@ -284,19 +295,50 @@ public fun QuietButton(
         label,
         style = centraidType("annotLabelOn"),
         color = centraidColor(if (enabled) ink else "textDisabled"),
+        textAlign = if (stacked) TextAlign.Center else TextAlign.Unspecified,
         modifier = modifier
-            .heightIn(min = 36.dp)
+            .then(if (stacked) Modifier.fillMaxWidth() else Modifier)
+            .heightIn(min = if (stacked) KitGeometry.ROW_MIN else 36.dp)
             .widthIn(min = 44.dp)
             .clip(RoundedCornerShape(KitGeometry.RADIUS))
             .border(KitGeometry.HAIRLINE, centraidColor(edge), RoundedCornerShape(KitGeometry.RADIUS))
             .clickable(enabled = enabled, onClick = onPress)
-            .padding(horizontal = 12.dp, vertical = 9.dp)
+            // 13 + 18 (the label's line) + 13 is the stack's 44; 9 + 18 + 9 is
+            // the hugging button's 36.
+            .padding(horizontal = 12.dp, vertical = if (stacked) 13.dp else 9.dp)
             .testTag(testTag)
             .semantics {
                 role = Role.Button
                 if (!enabled) disabled()
             },
     )
+}
+
+/**
+ * True inside a [ChoiceStack]: an [OutlineButton] there stretches to the
+ * stack's width. Nothing else reads it.
+ */
+public val LocalChoiceStack: ProvidableCompositionLocal<Boolean> = compositionLocalOf { false }
+
+/**
+ * ALTERNATIVES STACKED VERTICALLY: an ink button and its Cancel or Not now, or
+ * a set of choices like a Money transaction's offers. Every button in the stack
+ * shares one full width, [InkButton] and [OutlineButton] alike, so the column
+ * reads as one set of answers to one question. This is the only place an
+ * outline button stretches; anywhere else it hugs its label.
+ */
+@Composable
+public fun ChoiceStack(
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    CompositionLocalProvider(LocalChoiceStack provides true) {
+        Column(
+            modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(KitGeometry.STACK_GAP),
+            content = content,
+        )
+    }
 }
 
 /** The kit's geometry, in one place. */
@@ -311,5 +353,8 @@ public object KitGeometry {
     public val RADIUS: Dp = (CentraidTokens.light.radii["md"] ?: 0).dp
 
     public val HAIRLINE: Dp = 1.dp
+
+    /** The gap between the buttons of a [ChoiceStack]: the token scale's `spacing.3`. */
+    public val STACK_GAP: Dp = (CentraidTokens.light.spacing["3"] ?: 0).dp
 }
 

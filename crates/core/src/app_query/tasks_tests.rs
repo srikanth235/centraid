@@ -761,3 +761,59 @@ fn a_project_is_found_by_name_beside_the_tasks() {
     assert!(slipped.tasks.is_empty() && slipped.containers.len() == 1);
     assert!(search("wombat").corrected.is_empty());
 }
+
+/// PRIORITY IS ONE SCALE, AND EVERY SURFACE SAYS WHICH (Q-1047-10): 0 is unset
+/// and 1..9 run HIGHER MORE URGENT — Todoist's, ruled by D-1020-S5 — not RFC
+/// 5545's 1-is-highest. The question arrived believing the vault followed RFC
+/// 5545 and the proto and the phone's mapping were the outliers; the vault, the
+/// open order, the proto and Soon / Next / Now are all one scale, and the
+/// outlier was the assistant's own sentence about the vault. This is the open
+/// order's half of the agreement, over the real vault: the number goes in as
+/// sent, comes out as sent, and a task's subtasks — the one place the phone's
+/// answer is ordered by priority — put the larger one first. (A place's groups
+/// order by due date and then title, as v0's `byDue` does; priority is a label
+/// on their rows.)
+#[test]
+fn priority_runs_higher_more_urgent_and_subtasks_are_ordered_that_way() {
+    let scratch = Scratch::founded();
+    let parent = scratch.titled("Parent", None);
+    let child = |title: &str, priority: Option<i64>| {
+        let mut input = serde_json::json!({ "title": title, "parent_task_id": parent });
+        if let Some(priority) = priority {
+            input["priority"] = serde_json::json!(priority);
+        }
+        scratch.add(input)
+    };
+    let none = child("Unset", None);
+    let low = child("Low", Some(1));
+    let high = child("High", Some(9));
+    let middle = child("Middle", Some(3));
+
+    // THE ORDER IS PRIORITY DESC, UNSET LAST (not creation order, not title).
+    let all = scratch.board(wire::TasksView::All);
+    let family = all
+        .groups
+        .iter()
+        .flat_map(|group| group.tasks.iter())
+        .find(|task| task.task_id == parent)
+        .expect("the parent is on the board");
+    let order: Vec<&str> = family
+        .children
+        .iter()
+        .map(|task| task.title.as_str())
+        .collect();
+    assert_eq!(order, ["High", "Middle", "Low", "Unset"]);
+
+    // THE WIRE CARRIES IT AS STORED: nothing here translates a scale.
+    let stored = |task_id: &String| scratch.detail(task_id).task.expect("a task").priority;
+    assert_eq!([&none, &low, &middle, &high].map(stored), [0, 1, 3, 9]);
+
+    // THE ASSISTANT'S SENTENCE ABOUT THE VAULT SAYS THE SAME: it once said
+    // "1 highest", and a model believing it filed its most urgent task as the
+    // app's least urgent.
+    assert!(
+        centraid_assist::native::meta::PRIORITY_SCALE.starts_with("9 highest..1 lowest"),
+        "{}",
+        centraid_assist::native::meta::PRIORITY_SCALE
+    );
+}

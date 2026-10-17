@@ -21,6 +21,7 @@ import centraid.screen.v1.TasksRowGroup
 import dev.centraid.design.copy.TasksCopy
 import dev.centraid.shared.kit.WriteLaw
 import dev.centraid.shared.kit.jsonString
+import dev.centraid.shared.nav.ScreenIds
 import dev.centraid.shared.platform.DeviceClock
 import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.screen.ScreenEffect
@@ -57,7 +58,7 @@ public sealed interface TasksProjectInput {
  * `organize_task` into the project and the section the member pointed at.
  */
 public object TasksProjectMachine : ScreenMachine<TasksProjectPage, TasksProjectInput> {
-    public const val SCREEN_ID: String = "tasks.project"
+    public const val SCREEN_ID: String = ScreenIds.TASKS_PROJECT
 
     public val TABLES: Set<String> = TasksHomeMachine.TABLES
 

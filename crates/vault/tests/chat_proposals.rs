@@ -1,5 +1,5 @@
-//! A PROPOSAL'S LIFE IS VAULT DATA (#1088): rung twelve, `chat.settle_proposal`,
-//! and what `chat.save_turn` does to a card nobody answered.
+//! A PROPOSAL'S LIFE IS VAULT DATA (#1088): `chat.settle_proposal`, and what
+//! `chat.save_turn` does to a card nobody answered.
 //!
 //! A write the assistant makes parks behind a confirm card; the turn that parked
 //! is saved `proposed`, and how the card ended is recorded once. What each test
@@ -14,10 +14,13 @@
 //! 4. **The schema says so too.** The two triggers refuse what no command asks:
 //!    a told answer changing, an end changing, a message born settled.
 //! 5. **The journal does not keep the line.** `text` is sealed.
-//! 6. **Rung twelve is a rebuild that keeps the children.** A file at rung eleven
-//!    climbs with every message, card and attachment it had, and the foreign keys
-//!    still cascade from the thread — dropping the parent runs the children's
-//!    `ON DELETE CASCADE`, which `defer_foreign_keys` does not defer.
+//! 6. **The founded chat carries the widened list, both guards and the cascades.**
+//!    `chat_message` is the parent of two child tables, and a delete runs the
+//!    children's `ON DELETE CASCADE` from the thread down.
+//!
+//! (How a vault written before a proposal had a life was migrated is not proved
+//! here: the ladder was squashed into one baseline on 2026-10-15, Q-1029-1, and
+//! no vault in the field predates it.)
 
 mod common;
 
@@ -455,7 +458,7 @@ fn the_audit_journal_keeps_a_token_and_never_the_settled_line() {
         .vault()
         .read(|connection| {
             Ok(connection.query_row(
-                "SELECT input_json FROM agent_command_invocation
+                "SELECT input_json FROM command_invocation
                   WHERE command_id = 'chat.settle_proposal'",
                 [],
                 |row| row.get(0),
@@ -471,37 +474,10 @@ fn the_audit_journal_keeps_a_token_and_never_the_settled_line() {
 }
 
 // ---------------------------------------------------------------------------
-// 6. Rung twelve over a chat that already has rows
+// 6. The schema a vault is founded with
 // ---------------------------------------------------------------------------
 
-/// Everything the three tables hold, one line a row, in key order.
-fn dump(connection: &rusqlite::Connection) -> Vec<String> {
-    let mut out = Vec::new();
-    for sql in [
-        "SELECT 'm|' || thread_id || '|' || ordinal || '|' || role || '|' || text || '|' || outcome
-                || '|' || COALESCE(refusal, '-') || '|' || COALESCE(notice, '-')
-                || '|' || COALESCE(record_json, '-') || '|' || created_at
-           FROM chat_message ORDER BY thread_id, ordinal",
-        "SELECT 'c|' || thread_id || '|' || message_ordinal || '|' || position || '|' || app
-                || '|' || entity || '|' || row_id || '|' || qualifier || '|' || title
-                || '|' || subtitle || '|' || meta
-           FROM chat_message_card ORDER BY thread_id, message_ordinal, position",
-        "SELECT 'a|' || thread_id || '|' || message_ordinal || '|' || position || '|' || kind
-                || '|' || label || '|' || COALESCE(asset_id, '-') || '|' || COALESCE(document_id, '-')
-                || '|' || COALESCE(thumb_content_id, '-')
-           FROM chat_message_attachment ORDER BY thread_id, message_ordinal, position",
-    ] {
-        let mut statement = connection.prepare(sql).expect("the dump prepares");
-        out.extend(
-            statement
-                .query_map([], |row| row.get::<_, String>(0))
-                .expect("the dump runs")
-                .map(|row| row.expect("a dump row")),
-        );
-    }
-    out
-}
-
+/// Every chat object's DDL, keyed by name.
 fn chat_schema(connection: &rusqlite::Connection) -> Vec<(String, String)> {
     let mut statement = connection
         .prepare(
@@ -519,185 +495,71 @@ fn chat_schema(connection: &rusqlite::Connection) -> Vec<(String, String)> {
 }
 
 #[test]
-fn a_vault_at_rung_eleven_climbs_rung_twelve_keeping_every_message_card_and_attachment() {
-    let dir = centraid_ontology::golden::scratch_dir();
-    std::fs::create_dir_all(&dir).unwrap();
-    let path = dir.join("vault.db");
-    let vault = Vault::create(&path).expect("a vault");
-    vault.found("Test", "Test Owner").unwrap();
-    vault.close().expect("closes");
-
-    // WIND THE FILE BACK TO RUNG ELEVEN with a chat of its own: two threads, every kind of message
-    // rung eleven could hold, cards, and attachments of the three kinds. Written with foreign keys
-    // on, as the vault writes.
-    let before = {
-        let raw = rusqlite::Connection::open(&path).unwrap();
-        raw.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
-        common::undo_rung_twelve(&raw);
-        raw.execute_batch(
-            "BEGIN;
-             INSERT INTO chat_thread (thread_id, title, scope_app, created_at)
-               VALUES ('t-1', 'what is due?', NULL, '2026-10-01T09:00:00.000Z'),
-                      ('t-2', 'show my photos', 'photos', '2026-10-02T09:00:00.000Z');
-             INSERT INTO chat_message
-               (thread_id, ordinal, role, text, outcome, refusal, notice, record_json, created_at)
-             VALUES
-               ('t-1', 0, 'user', 'what is due?', 'sent', NULL, NULL, NULL, '2026-10-01T09:00:00.000Z'),
-               ('t-1', 1, 'assistant', 'Rent.', 'answered', NULL, 'doc_truncated',
-                '{\"user\":\"q\"}', '2026-10-01T09:00:01.000Z'),
-               ('t-1', 2, 'user', 'and my lease?', 'sent', NULL, NULL, NULL, '2026-10-01T09:01:00.000Z'),
-               ('t-1', 3, 'assistant', '', 'refused', 'attachment_unreadable', NULL, NULL,
-                '2026-10-01T09:01:01.000Z'),
-               ('t-2', 0, 'user', 'show my photos', 'sent', NULL, NULL, NULL, '2026-10-02T09:00:00.000Z'),
-               ('t-2', 1, 'assistant', 'You have thr', 'stopped', NULL, NULL, NULL,
-                '2026-10-02T09:00:01.000Z');
-             INSERT INTO chat_message_card
-               (thread_id, message_ordinal, position, app, entity, row_id, qualifier, title, subtitle, meta)
-             VALUES
-               ('t-1', 1, 0, 'tasks', 'task', 'task-1', '', 'Pay rent', '2026-10-01', 'due'),
-               ('t-1', 1, 1, 'notes', 'note', 'note-9', 'q', 'Lease', '', ''),
-               ('t-2', 1, 0, 'photos', 'photo', 'asset-3', '', 'Sunset', '', '');
-             INSERT INTO chat_message_attachment
-               (thread_id, message_ordinal, position, kind, label, asset_id, document_id, thumb_content_id)
-             VALUES
-               ('t-1', 2, 0, 'document', 'Lease.pdf', NULL, NULL, NULL),
-               ('t-1', 2, 1, 'photo', 'IMG_0001', NULL, NULL, NULL),
-               ('t-2', 0, 0, 'image', 'camera roll', NULL, NULL, NULL);
-             PRAGMA user_version = 11;
-             COMMIT;",
-        )
-        .expect("the rung-eleven chat is written");
-        dump(&raw)
-    };
-    assert_eq!(before.len(), 6 + 3 + 3, "the fixture holds what it says");
-
-    // THE REAL PATH: `Vault::open` sees rung eleven, snapshots, and climbs.
-    let migrated = Vault::open(&path).expect("the file climbs rung twelve");
-    assert_eq!(migrated.schema_version(), centraid_vault::head_version());
-    // Rung twelve is in the ladder this climb ran, whatever rungs sit above it.
-    assert!(centraid_vault::head_version() >= 12);
-    let (after, orphans, schema) = migrated
-        .read(|connection| {
-            let orphans: i64 = connection.query_row(
-                "SELECT COUNT(*) FROM pragma_foreign_key_check",
-                [],
-                |row| row.get(0),
-            )?;
-            Ok((dump(connection), orphans, chat_schema(connection)))
-        })
-        .unwrap();
-    assert_eq!(
-        after, before,
-        "every message, card and attachment came through"
-    );
-    assert_eq!(orphans, 0, "and nothing points at a row that is not there");
-
-    // THE REBUILT OBJECTS ARE THE LADDER HEAD'S OWN: the same text a vault founded today gets.
-    let founded = common::Scratch::empty("rung-twelve-founded").unwrap();
-    let head = founded
-        .vault
+fn the_founded_chat_carries_the_widened_list_both_guards_and_the_cascades() {
+    let chats = Chats::open("proposal-schema");
+    let schema = chats
+        .vault()
         .read(|connection| Ok(chat_schema(connection)))
         .unwrap();
-    assert_eq!(schema, head);
-    assert!(
-        head.iter()
-            .any(|(name, sql)| name == "chat_message" && sql.contains("'proposed'")),
-        "and it is the widened list"
-    );
+    let sql_of = |name: &str| {
+        schema
+            .iter()
+            .find(|(found, _)| found == name)
+            .unwrap_or_else(|| panic!("`{name}` is not in a founded vault"))
+            .1
+            .as_str()
+    };
+    // THE LIST IS THE FIVE WORDS OF A PROPOSAL'S LIFE, beside the ones a told answer has.
+    let message = sql_of("chat_message");
+    for word in [
+        "sent",
+        "answered",
+        "stopped",
+        "refused",
+        "proposed",
+        "applied",
+        "dismissed",
+        "stale",
+        "failed",
+    ] {
+        assert!(
+            message.contains(&format!("'{word}'")),
+            "`{word}` is not listed"
+        );
+    }
+    // THE TWO GUARDS ARE THERE.
     for guard in [
         "chat_message_is_not_born_settled",
         "chat_message_outcome_settles_once",
     ] {
-        assert!(head.iter().any(|(name, _)| name == guard), "{guard}");
+        assert!(sql_of(guard).contains("RAISE"), "{guard}");
     }
-
-    // THE FOREIGN KEYS STILL CASCADE FROM THE THREAD: deleting t-1 takes its messages, cards and
-    // attachments and leaves t-2's whole.
-    migrated
-        .commit(|tx| {
-            tx.connection()
-                .execute("DELETE FROM chat_thread WHERE thread_id = 't-1'", [])?;
-            Ok(())
-        })
-        .unwrap();
-    let left = migrated.read(|connection| Ok(dump(connection))).unwrap();
-    assert!(left.iter().all(|line| line.contains("|t-2|")), "{left:?}");
-    assert_eq!(
-        left.len(),
-        2 + 1 + 1,
-        "t-2's two messages, card and attachment"
-    );
-
-    // AND THE NEW LIFE WORKS ON THE CLIMBED FILE: a proposal is saved and settled.
-    let registry = Registry::with_system_commands().unwrap();
-    registry.install(&migrated).unwrap();
-    let saved = migrated
-        .execute(
-            &registry,
-            &Principal::owner("phone"),
-            &Command::new(
-                "chat.save_turn",
-                json!({ "thread_id": "t-2", "turn": {
-                    "question": { "text": "star it" },
-                    "answer": { "outcome": "proposed", "text": "Proposed: star it." }
-                }}),
-            ),
-        )
-        .unwrap();
-    assert_eq!(saved.status, CommandStatus::Executed, "{:?}", saved.reason);
-    let settled = migrated
-        .execute(
-            &registry,
-            &Principal::owner("phone"),
-            &Command::new(
-                "chat.settle_proposal",
-                json!({ "thread_id": "t-2", "outcome": "applied", "text": "Done." }),
-            ),
-        )
-        .unwrap();
-    assert_eq!(
-        settled.status,
-        CommandStatus::Executed,
-        "{:?}",
-        settled.reason
-    );
-}
-
-#[test]
-fn a_vault_below_rung_eleven_climbs_through_twelve_with_the_widened_list() {
-    // The older climbs drop the chat and let rung eleven make it; rung twelve then rebuilds an
-    // empty table. The result is the ladder head's chat, and a proposal can be saved into it.
-    let dir = centraid_ontology::golden::scratch_dir();
-    std::fs::create_dir_all(&dir).unwrap();
-    let path = dir.join("vault.db");
-    let vault = Vault::create(&path).expect("a vault");
-    vault.found("Test", "Test Owner").unwrap();
-    vault.close().expect("closes");
-    {
-        let raw = rusqlite::Connection::open(&path).unwrap();
-        common::undo_rung_fifteen(&raw);
-        raw.execute_batch(&format!(
-            "BEGIN; {} PRAGMA user_version = 10; COMMIT;",
-            common::UNDO_RUNG_ELEVEN
-        ))
-        .unwrap();
+    // THE FOREIGN KEYS CASCADE FROM THE THREAD: a delete takes the messages, and the messages
+    // take their cards and attachments.
+    for table in [
+        "chat_message",
+        "chat_message_card",
+        "chat_message_attachment",
+    ] {
+        assert!(
+            sql_of(table).contains("ON DELETE CASCADE"),
+            "`{table}` does not cascade"
+        );
     }
-    let migrated = Vault::open(&path).expect("the file climbs rungs eleven and twelve");
-    assert_eq!(migrated.schema_version(), centraid_vault::head_version());
-    let registry = Registry::with_system_commands().unwrap();
-    registry.install(&migrated).unwrap();
-    let saved = migrated
-        .execute(
-            &registry,
-            &Principal::owner("phone"),
-            &Command::new(
-                "chat.save_turn",
-                json!({ "turn": {
-                    "question": { "text": "after the climb" },
-                    "answer": { "outcome": "proposed", "text": "Proposed: x." }
-                }}),
-            ),
-        )
-        .unwrap();
-    assert_eq!(saved.status, CommandStatus::Executed, "{:?}", saved.reason);
+    let thread = chats.propose(None, "complete it")["thread_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    chats.run("chat.delete_thread", json!({ "thread_id": thread }));
+    for table in [
+        "chat_message",
+        "chat_message_card",
+        "chat_message_attachment",
+    ] {
+        assert_eq!(
+            chats.count(&format!("SELECT COUNT(*) FROM {table}")),
+            0,
+            "{table} outlived its thread"
+        );
+    }
 }

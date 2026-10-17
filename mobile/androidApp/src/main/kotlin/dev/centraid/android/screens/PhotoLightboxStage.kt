@@ -82,6 +82,7 @@ import dev.centraid.android.theme.centraidType
 import dev.centraid.design.CentraidGeometry
 import dev.centraid.design.copy.PhotosCopy
 import dev.centraid.shared.apps.photos.PhotoLightboxMachine
+import dev.centraid.shared.kit.MediaFormat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -496,7 +497,7 @@ internal fun LightboxTransport(player: LightboxPlayer) {
     ) {
         StageKey(
             iconKey = if (player.playing) "Pause" else "Play",
-            label = if (player.playing) "Pause" else "Play",
+            label = if (player.playing) PhotosCopy.PHOTOS_PLAYER_PAUSE else PhotosCopy.PHOTOS_PLAYER_PLAY,
             onClick = { player.toggle() },
         )
         // The strip's width is the pointer scope's `size`; nothing reads the
@@ -506,8 +507,10 @@ internal fun LightboxTransport(player: LightboxPlayer) {
                 .weight(1f)
                 .height(28.dp)
                 .semantics {
-                    contentDescription = "Position"
-                    stateDescription = mediaClock(player.position) + " of " + mediaClock(player.duration)
+                    contentDescription = PhotosCopy.PHOTOS_PLAYER_POSITION
+                    stateDescription = PhotosCopy.PHOTOS_PLAYER_POSITION_VALUE
+                        .replace("{position}", MediaFormat.clock(player.position / 1_000L))
+                        .replace("{duration}", MediaFormat.clock(player.duration / 1_000L))
                 }
                 .pointerInput(player) {
                     detectTapGestures { player.seekTo(it.x / size.width) }
@@ -533,7 +536,7 @@ internal fun LightboxTransport(player: LightboxPlayer) {
             )
         }
         Text(
-            text = mediaClock(player.position) + " / " + mediaClock(player.duration),
+            text = MediaFormat.clock(player.position / 1_000L) + " / " + MediaFormat.clock(player.duration / 1_000L),
             color = soft,
             style = centraidType("mono"),
         )
@@ -565,7 +568,7 @@ internal fun LightboxFilmstrip(state: PhotoLightboxState, onEvent: (PhotoLightbo
         modifier = Modifier
             .fillMaxWidth()
             .height(FILMSTRIP_HEIGHT.dp)
-            .semantics { contentDescription = "Filmstrip" },
+            .semantics { contentDescription = PhotosCopy.PHOTOS_FILMSTRIP },
         horizontalArrangement = Arrangement.spacedBy(2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -582,7 +585,9 @@ internal fun LightboxFilmstrip(state: PhotoLightboxState, onEvent: (PhotoLightbo
                     .semantics {
                         role = Role.Button
                         selected = here
-                        contentDescription = "Show photo ${offset + index + 1} of $total"
+                        contentDescription = PhotosCopy.PHOTOS_FILMSTRIP_SHOW
+                            .replace("{number}", "${offset + index + 1}")
+                            .replace("{total}", "$total")
                     }
                     .clickable {
                         if (!here) onEvent(PhotoLightboxEvent(moved = PhotoLightboxEvent.Moved(id)))
@@ -621,18 +626,15 @@ internal fun LiveChip(live: LightboxPlayer) {
             .padding(horizontal = 10.dp)
             .semantics(mergeDescendants = true) {
                 role = Role.Button
-                contentDescription = "Play Live Photo"
+                contentDescription = PhotosCopy.PHOTOS_PLAY_LIVE
             },
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         CentraidIcon(iconKey = "Play", tint = ink, size = 14.dp)
-        Text(text = "Live", color = ink, style = centraidType("small"), textAlign = TextAlign.Center)
+        Text(text = PhotosCopy.PHOTOS_LIVE_BADGE, color = ink, style = centraidType("small"), textAlign = TextAlign.Center)
     }
 }
-
-/** `1:01:40`, with an hours arm — `lightboxClock`'s rule, in milliseconds. */
-internal fun mediaClock(milliseconds: Long): String = lightboxClock((milliseconds / 1_000L).toInt())
 
 private enum class Gesture { UNDECIDED, PAGE, DISMISS, PAN, ZOOM, NONE }
 

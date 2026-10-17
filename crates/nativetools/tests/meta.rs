@@ -181,7 +181,7 @@ fn the_constants_and_the_card_come_from_the_table() {
     let card = prompt::kind_card("USD");
     assert_eq!(card.len(), Kind::ALL.len());
     assert!(card.iter().any(|line| line.starts_with(
-        "task: name, date (due), status (open|in_progress|completed|cancelled), effort (min), priority (1 highest..9 lowest, 0 none)"
+        "task: name, date (due), status (open|in_progress|completed|cancelled), effort (min), priority (9 highest..1 lowest, 0 none)"
     )));
     // §14: member is folded into person; the model-facing names are these.
     let names: Vec<&str> = Kind::ALL.iter().map(|kind| kind.name()).collect();

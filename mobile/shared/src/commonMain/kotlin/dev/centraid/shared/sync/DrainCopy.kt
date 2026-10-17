@@ -1,5 +1,7 @@
 package dev.centraid.shared.sync
 
+import dev.centraid.design.copy.SharedCopy
+
 /**
  * THE FOLD FROM A PASS'S ANSWER INTO THE BACKUP CLAIM (#1029 W18-2).
  *
@@ -75,6 +77,7 @@ public object DrainCopy {
             "Backup device didn't answer. Will try again."
         DrainAnswer.Stopped.UNTRUSTED ->
             "That isn't your backup device. Nothing was sent."
+        DrainAnswer.Stopped.REFUSED -> SharedCopy.BACKUP_REFUSED
         DrainAnswer.Stopped.MOVED ->
             "Moved to another phone. This phone is read-only."
     }

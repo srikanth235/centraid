@@ -97,5 +97,9 @@ internal fun FreeUpSpaceRowView(freeUp: FreeUpSpace?) {
         if (reason.isNotEmpty()) {
             Text(text = reason, style = centraidType("small"), color = centraidColor("textSoft"))
         }
+        // WHAT A PHOTO DELETED FOR GOOD COSTS THE BACKUP DEVICE (#1080 F5).
+        if (freeUp?.offered == true) {
+            Text(text = KeepOriginals.FREE_UP_RETENTION, style = centraidType("small"), color = centraidColor("textSoft"))
+        }
     }
 }

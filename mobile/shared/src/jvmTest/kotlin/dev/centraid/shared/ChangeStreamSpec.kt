@@ -225,6 +225,33 @@ class ChangeStreamSpec : StringSpec({
         watcher.cancel()
     }
 
+    "a changed rule makes the grid read its page again, and a list does not" {
+        // THE RULE IS NOT A ROW (#1080). No `media_asset` row moved when the
+        // member chose a rule, yet every cell's download arrow was derived
+        // under the old one; the grid is offered the change through its
+        // machine, and a screen whose rows say nothing about what this phone
+        // holds answers null and reads nothing.
+        val list = listShowing("t-1")
+        val photos = photosShowing("ast-1")
+        val listEffects = mutableListOf<ScreenEffect>()
+        val photosEffects = mutableListOf<ScreenEffect>()
+        val a = watch(list, listEffects)
+        val b = watch(photos, photosEffects)
+
+        val stream = ChangeStream()
+        stream.route(list)
+        stream.route(photos)
+        stream.conditionsChanged()
+
+        photosEffects shouldBe listOf(ScreenEffect.ReadPage(PhotosGridMachine.SCREEN_ID, null))
+        listEffects shouldBe emptyList()
+        TasksTrashMachine.machine.conditionsChanged().shouldBeNull()
+        NotesEditorMachine.conditionsChanged().shouldBeNull()
+        PhotosGridMachine.conditionsChanged().shouldNotBeNull()
+        a.cancel()
+        b.cancel()
+    }
+
     "one change reaches every screen that cares and no others" {
         val list = listShowing("t-1")
         val photos = photosShowing("ast-1")

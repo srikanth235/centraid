@@ -2,6 +2,8 @@ import Foundation
 import SwiftProtobuf
 import SwiftUI
 
+import CentraidShared
+
 /// The shelf of near-duplicate clusters, in SwiftUI (#1029, photos port).
 ///
 /// A list of DECISIONS, not of photographs. Each row is one cluster and the row
@@ -66,13 +68,13 @@ struct DuplicatesView: View {
                         // and a member who reads it stops looking.
                         if shelf.scanComplete {
                             ScreenEmptyView(
-                                sentence: PhotosWords.photosEmptyDuplicates,
-                                remedy: PhotosWords.photosDuplicatesNoneCaption
+                                sentence: PhotosCopy.shared.PHOTOS_EMPTY_DUPLICATES,
+                                remedy: PhotosCopy.shared.PHOTOS_DUPLICATES_NONE_CAPTION
                             )
                         } else {
                             ScreenEmptyView(
-                                sentence: PhotosWords.photosDuplicatesLooking,
-                                remedy: PhotosWords.photosDuplicatesLookingCaption
+                                sentence: PhotosCopy.shared.PHOTOS_DUPLICATES_LOOKING,
+                                remedy: PhotosCopy.shared.PHOTOS_DUPLICATES_LOOKING_CAPTION
                             )
                         }
                     } else {
@@ -96,9 +98,11 @@ struct DuplicatesView: View {
                         // while it cannot measure it at all.
                         if !shelf.totalReclaimablePhrase.isEmpty {
                             Text(
-                                shelf.totalCapped
-                                    ? "At least \(shelf.totalReclaimablePhrase) to reclaim."
-                                    : "\(shelf.totalReclaimablePhrase) to reclaim."
+                                copyFill(
+                                    PhotosCopy.shared.PHOTOS_TO_RECLAIM,
+                                    "size",
+                                    CappedCount.shared.floor(quantity: shelf.totalReclaimablePhrase, capped: shelf.totalCapped)
+                                )
                             )
                             .centraidType("small")
                             .foregroundStyle(Theme.color("textSoft", scheme))
@@ -110,7 +114,7 @@ struct DuplicatesView: View {
                             // that went quiet once it had something to show
                             // would only be honest while it was empty.
                             Label {
-                                Text(PhotosWords.photosDuplicatesStillLooking)
+                                Text(PhotosCopy.shared.PHOTOS_DUPLICATES_STILL_LOOKING)
                                     .centraidType("small")
                                     .foregroundStyle(Theme.color("textSoft", scheme))
                             } icon: {
@@ -135,7 +139,7 @@ struct DuplicatesView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .contentMargins(.horizontal, CentraidGeometry.pageMargin, for: .scrollContent)
-        .navigationTitle("Duplicates")
+        .navigationTitle(PhotosCopy.shared.PHOTOS_DUPLICATES)
         // NO `.onAppear { opened }` HERE, and that is the house pattern:
         // `ShellModel.opened(_:)` is the ONE place a screen is told it is on
         // screen, because a view that opened itself as well would issue two
@@ -209,10 +213,12 @@ private struct DuplicateClusterRow: View {
     /// means four. A view that hard-coded that would be a view that lies the
     /// day the read learns to walk.
     private var headline: String {
-        let noun = cluster.memberCount == 1 ? "copy" : "near-identical copies"
-        return cluster.memberCountCapped
-            ? "At least \(cluster.memberCount) \(noun)"
-            : "\(cluster.memberCount) \(noun)"
+        CappedCount.shared.phrase(
+            count: Int64(cluster.memberCount),
+            capped: cluster.memberCountCapped,
+            one: PhotosCopy.shared.PHOTOS_DUPLICATES_COPY_ONE,
+            many: PhotosCopy.shared.PHOTOS_DUPLICATES_COPY_MANY
+        )
     }
 
     /// WHAT THIS ONE CARD WOULD GIVE BACK, or the invitation when nothing can
@@ -229,10 +235,12 @@ private struct DuplicateClusterRow: View {
     /// read saw, so a count that is a floor makes the sum a floor by the same
     /// arithmetic and in the same rows.
     private var subhead: String {
-        guard !cluster.reclaimablePhrase.isEmpty else { return PhotosWords.photosDuplicatesPickOne }
-        return cluster.memberCountCapped
-            ? "At least \(cluster.reclaimablePhrase) to reclaim."
-            : "\(cluster.reclaimablePhrase) to reclaim."
+        guard !cluster.reclaimablePhrase.isEmpty else { return PhotosCopy.shared.PHOTOS_DUPLICATES_PICK_ONE }
+        return copyFill(
+            PhotosCopy.shared.PHOTOS_TO_RECLAIM,
+            "size",
+            CappedCount.shared.floor(quantity: cluster.reclaimablePhrase, capped: cluster.memberCountCapped)
+        )
     }
 }
 
@@ -275,8 +283,8 @@ struct DuplicatesStateView {
     var lede: String {
         let count = state.data.clusters.count
         return count == 1
-            ? PhotosWords.photosDuplicatesSetOne
-            : PhotosWords.fill(PhotosWords.photosDuplicatesSetMany, "count", "\(count)")
+            ? PhotosCopy.shared.PHOTOS_DUPLICATES_SET_ONE
+            : copyFill(PhotosCopy.shared.PHOTOS_DUPLICATES_SET_MANY, "count", "\(count)")
     }
 
     var openedEvent: Data {

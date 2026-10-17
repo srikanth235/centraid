@@ -184,10 +184,15 @@ jobs:
           ./gradlew -Pkotlin.native.enableKlibsCrossCompilation=true \
             :shared:linkReleaseFrameworkIosArm64 --no-daemon
 
+      # `protobuf` and `swift-protobuf` are `protoc` and `protoc-gen-swift`.
+      # `xcodegen generate` runs `mobile/scripts/generate-swift-protos.sh` first
+      # (`project.yml`'s `options.preGenCommand`, because the target globs
+      # `Sources/Generated`), and the app target's pre-build phase runs it again
+      # when a `.proto` is newer than its output.
       - name: Generate the Xcode project
         working-directory: mobile/iosApp
         run: |
-          brew install xcodegen
+          brew install xcodegen protobuf swift-protobuf
           CENTRAID_IOS_DEPLOYMENT_TARGET="$(cat ../ios-deployment-target)" \
             xcodegen generate
 
@@ -209,11 +214,9 @@ jobs:
           # THE OTHER HALF of mobile/shared's ScreenFixtureSpec, over the same
           # 19 files in contracts/screens. This is the first machine in the
           # pipeline that can run it.
-          swift test || {
-            echo "OWNER HAND-OFF: swift test needs the SwiftProtobuf types"
-            echo "generated first (mobile/README.md -> The iOS hand-off)."
-            exit 1
-          }
+          # A SIMULATOR BUNDLE, NOT `swift test`: `Sources/` imports UIKit.
+          xcodebuild -scheme Centraid \
+            -destination 'platform=iOS Simulator,name=iPhone 16' test
 
       - name: Submit to TestFlight
         if: inputs.submit && needs.probe.outputs.ios_signed == 'true'

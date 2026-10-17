@@ -1,5 +1,5 @@
 {
-  "$comment": "Hand-maintained source: no emitter writes this file (export-copy.ts left with v0's copy leaves in #1020 wave 6). Its twin is mobile/shared/src/commonMain/kotlin/dev/centraid/design/copy/WordsCopy.kt; edit both, and KitTimeMoneyCopySpec fails when their strings disagree.",
+  "$comment": "The source of these strings. `:shared:generateCopy` turns `strings` into dev.centraid.design.copy.WordsCopy at build time, which both shells read; there is no checked-in Kotlin twin.",
   "app": "words",
   "strings": {
     "BAD_CHECKSUM": "Those words don't match. Check the order and spelling.",
@@ -91,6 +91,25 @@
     "TRY_AGAIN": "Try again",
     "UNKNOWN_WORD": "Word {n} isn't a recovery key word. Check the spelling.",
     "WORD_PROMPT": "Word {n}",
-    "WORD_SPOKEN": "Word {n}, {word}"
+    "WORD_SPOKEN": "Word {n}, {word}",
+    "PAIR_TITLE": "Pair with your backup device",
+    "PAIR_ASK": "Run “centraid-gateway pair” on your backup device, then scan the QR code or paste the pairing code.",
+    "PAIR_EMPTY": "Scan the QR code, or paste the pairing code.",
+    "PAIR_PASTE_LABEL": "Pairing code",
+    "PAIR_SCAN": "Scan QR code",
+    "PAIR_PHOTO": "Choose a photo",
+    "PAIR_PHOTO_UNREAD": "No readable QR code in that photo. Choose a sharper one, or paste the pairing code.",
+    "PAIR_PRIMARY": "Pair",
+    "PAIRING": "Pairing with your backup device…",
+    "PAIRED_TITLE": "Check it's your backup device",
+    "PAIR_FAILED_TITLE": "Not paired",
+    "PAIR_NEEDS_WORDS_TITLE": "Enter your recovery key first",
+    "PAIR_NEEDS_WORDS": "This vault is open without your recovery key. Enter it, then pair.",
+    "PAIR_NO_VAULT": "Make a vault on this phone first, then pair it with your backup device.",
+    "PAIR_UNREACHABLE": "No answer from your backup device. Check it's awake and on the same network.",
+    "PAIR_NOTHING_TO_COMPARE": "Couldn't verify your backup device, so it didn't pair. Try again.",
+    "PAIRED_LINE": "Paired with {where}. Check the number below matches the safety number “centraid-gateway pair” printed on {who}. If it doesn't, pair again on a network you trust.",
+    "PAIRED_AT": "{who} at {address}",
+    "PAIRED_WHO": "your backup device"
   }
 }

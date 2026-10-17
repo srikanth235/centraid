@@ -5,7 +5,7 @@
 //! 1. **The sample coupling** (census seam A3): every shipped frame is at or
 //!    under `THUMB_EDGE` on its long edge, asserted against the committed
 //!    manifest that recorded it. Nothing on either side tested this before.
-//! 2. **The eight queries**, folded over a vault seeded by
+//! 2. **The five queries**, folded over a vault seeded by
 //!    `centraid_apps_kit::fixtures::photos_demo` — v0's own nineteen-frame
 //!    roll, transcribed as data — inside a database created from
 //!    `contracts/schema/vault-ddl.sql`, read through the kit's test door.
@@ -20,10 +20,10 @@
 //! outputs carry from `packages/design` (`partyHueValue`, `identityInitials`,
 //! `figureTone`) have no Rust home until `design/` lands, so the manifest
 //! declares `design: "deferred"` (D-1020-D3-9) and those fields are not read
-//! here. Three rosters are compared as SETS, not sequences: v0 orders
-//! `people` by `localeCompare` and SQLite by `BINARY`, and the two disagree on
-//! a non-ASCII name (D-1020-D3-6). Nothing else is excluded, and no generated
-//! fixture was edited to make anything pass.
+//! here. The three face queries (`faces`, `face-queue`, `people`) are not
+//! compared at all: the app retired them (Q-1047-2, 2026-10-16), and their cases
+//! stay in the frozen bundle as evidence of what v0 answered. Nothing else is
+//! excluded, and no generated fixture was edited to make anything pass.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -33,13 +33,11 @@ use centraid_apps_kit::contract_vault::{
     FrozenRowMapping, open_contract_vault, open_contract_vault_without,
 };
 use centraid_apps_kit::fixtures::{
-    self, DEMO_ALBUM_FILES, DEMO_ALBUM_TITLE, DEMO_FACE_PEOPLE, DEMO_ROLL, SampleFrame, THUMB_EDGE,
-    photos_demo,
+    self, DEMO_ALBUM_FILES, DEMO_ALBUM_TITLE, DEMO_ROLL, SampleFrame, THUMB_EDGE, photos_demo,
 };
 use centraid_apps_kit::testdoor::TestDoor;
 use centraid_apps_photos::duplicates::duplicate_clusters;
 use centraid_apps_photos::enrichment::{Tier, enrichment_status};
-use centraid_apps_photos::faces::{asset_faces, face_queue, people_roster};
 use centraid_apps_photos::places::{NamedPlace, PhraseContext, PhraseInput, place_phrase};
 use centraid_apps_photos::queries::{LibraryInput, load_library, load_search_term};
 use centraid_apps_photos::storage::{Totals, storage_summary};
@@ -400,84 +398,6 @@ fn the_storage_summary_of_an_unswept_vault_is_not_counted_yet() {
 }
 
 #[test]
-fn the_face_queue_counts_matches_and_dates_them_by_capture() {
-    let connection = seeded();
-    let door = TestDoor::new(&connection);
-    let queue = face_queue(&door).expect("the queue reads");
-    assert_eq!(queue.unmatched_total, 8, "eight proposals, all unanswered");
-    assert_eq!(queue.queue.len(), 8);
-    assert_eq!(queue.confirmed_total, 0);
-    assert!(!queue.region_window_filled);
-    // The seed's proposals name NOBODY, so every match count is zero and no
-    // first-seen date is invented from a party nobody proposed.
-    assert!(queue.queue.iter().all(|entry| entry.match_count == 0));
-    assert!(queue.queue.iter().all(|entry| entry.party_id.is_none()));
-    // But a proposal IS on a photograph with a capture time, so first-seen is
-    // that photograph's own.
-    assert!(
-        queue
-            .queue
-            .iter()
-            .all(|entry| entry.first_seen_at.is_some())
-    );
-    // The roster the picker offers is every PERSON party in the vault — the two
-    // the seed names, plus the owner. A picker that offered only the named
-    // pair could not confirm a face as the member themself.
-    assert_eq!(queue.people.len(), DEMO_FACE_PEOPLE.len() + 1);
-
-    // Answer one, and it leaves the queue for good.
-    fixtures::confirm_face_region(
-        &connection,
-        "demo-region-000000",
-        "demo-party-000001",
-        "demo-owner",
-    )
-    .expect("the answer lands");
-    let queue = face_queue(&door).expect("the queue reads");
-    assert_eq!(queue.unmatched_total, 7);
-    assert_eq!(queue.confirmed_total, 1);
-}
-
-#[test]
-fn the_people_roster_names_only_confirmed_parties_and_groups_the_rest_as_questions() {
-    let connection = seeded();
-    // Confirm two faces of one person, in two different photographs.
-    for region in ["demo-region-000000", "demo-region-000002"] {
-        fixtures::confirm_face_region(&connection, region, "demo-party-000001", "demo-owner")
-            .expect("the answer lands");
-    }
-    let door = TestDoor::new(&connection);
-    let roster = people_roster(&door).expect("the roster reads");
-    assert_eq!(roster.people.len(), 1);
-    assert_eq!(roster.people[0].party_id, "demo-party-000001");
-    assert_eq!(roster.people[0].name.as_deref(), Some("Ana Ribeiro"));
-    assert_eq!(
-        roster.people[0].count, 2,
-        "the count is distinct PHOTOGRAPHS"
-    );
-    assert_eq!(roster.unmatched_total, 6);
-    // The remaining proposals carry no name, and with no cluster rows they
-    // group into nothing — an honest empty shelf rather than six people.
-    assert!(roster.proposals.is_empty());
-    assert!(roster.people[0].confirmed_by.len() == 1);
-}
-
-#[test]
-fn one_photographs_faces_are_the_unanswered_and_the_confirmed_and_no_others() {
-    let connection = seeded();
-    fixtures::reject_face_region(&connection, "demo-region-000004").expect("the answer lands");
-    let door = TestDoor::new(&connection);
-    // `ana-and-marco-table.png` is the fifth portrait and carries TWO faces.
-    let asset_id = fixtures::asset_id_by_title(&connection, "Ana and Marco at the table")
-        .expect("the read runs")
-        .expect("the frame is there");
-    let faces = asset_faces(&door, &asset_id).expect("the faces read");
-    assert_eq!(faces.regions.len(), 1, "the rejected face is gone for good");
-    assert!(faces.regions[0].detector_confidence.is_some());
-    assert!(!faces.regions[0].confirmed);
-}
-
-#[test]
 fn duplicates_read_the_cluster_id_a_sweep_stamped_and_nothing_when_none_has() {
     let connection = seeded();
     let door = TestDoor::new(&connection);
@@ -740,9 +660,19 @@ fn the_bundle_is_v0s_own_answers_and_says_how_many() {
         .map(|entry| entry.name.as_str())
         .collect();
     from_app.sort_unstable();
+    // THE THREE FACE QUERIES THE APP RETIRED (Q-1047-2, 2026-10-16): the bundle is evidence of
+    // what v0 answered and still carries their cases, but the app no longer answers them, so
+    // nothing compares them. The bundle's list is the app's plus exactly these.
+    const RETIRED: [&str; 3] = ["face-queue", "faces", "people"];
     let mut declared = declared;
     declared.sort_unstable();
-    assert_eq!(declared, from_app);
+    let kept: Vec<&str> = declared
+        .iter()
+        .copied()
+        .filter(|name| !RETIRED.contains(name))
+        .collect();
+    assert_eq!(kept, from_app);
+    assert_eq!(declared.len(), from_app.len() + RETIRED.len());
 
     // FLOORS, so a bundle that regenerated to nothing cannot pass every
     // comparison below by comparing nothing.
@@ -1071,237 +1001,6 @@ fn the_storage_summary_is_what_v0_answered_swept_and_unswept() {
 }
 
 #[test]
-fn the_face_queue_is_what_v0_answered() {
-    let connection = v0_vault();
-    let door = TestDoor::new(&connection);
-    let cases = v0_swept("face-queue");
-    assert_eq!(cases.len(), 1);
-    let want = &cases[0]["output"]["body"];
-    let queue = face_queue(&door).expect("the queue reads");
-
-    assert_eq!(
-        usize::try_from(want["unmatchedTotal"].as_u64().expect("a total")).expect("a total"),
-        queue.unmatched_total,
-        "the pending total"
-    );
-    for (label, got, key) in [
-        ("confirmed", queue.confirmed_total, "confirmedTotal"),
-        ("rejected", queue.rejected_total, "rejectedTotal"),
-        ("dismissed", queue.dismissed_total, "dismissedTotal"),
-    ] {
-        assert_eq!(
-            u64::try_from(got).expect("a total"),
-            want[key].as_u64().expect("a total"),
-            "the {label} total"
-        );
-    }
-    // ALL FOUR REVIEW STATES ARE IN THE CORPUS, so the filter is proved rather
-    // than asserted: a port that ignored `review_state` would answer the same
-    // queue for a corpus that had only proposals.
-    assert!(queue.confirmed_total >= 1 && queue.rejected_total >= 1);
-    assert!(queue.dismissed_total >= 1 && queue.unmatched_total >= 1);
-
-    let want_queue = want["queue"].as_array().expect("a list");
-    assert_eq!(queue.queue.len(), want_queue.len(), "the queue's length");
-    for (entry, row) in queue.queue.iter().zip(want_queue.iter()) {
-        let where_ = &entry.region_id;
-        assert_eq!(
-            entry.region_id,
-            row["region_id"].as_str().expect("a region id"),
-            "the queue's order"
-        );
-        // CONFIRMATION COUNT IS A COUNT (D-1020-P2), never a ratio.
-        assert_eq!(
-            u64::try_from(entry.match_count).expect("a count"),
-            row["matchCount"].as_u64().expect("a count"),
-            "matchCount of {where_}"
-        );
-        // FIRST SEEN IS A CAPTURE TIME OR NOTHING: no proposal time is
-        // invented, and v0 invents none either.
-        assert_eq!(
-            entry.first_seen_at.as_deref(),
-            text(&row["firstSeenAt"]),
-            "firstSeenAt of {where_}"
-        );
-        assert_eq!(
-            entry.party_id.as_deref(),
-            text(&row["party_id"]),
-            "party_id of {where_}"
-        );
-        assert_eq!(
-            entry.person_name.as_deref(),
-            text(&row["person_name"]),
-            "person_name of {where_}"
-        );
-        match entry.asset.as_ref() {
-            None => assert!(row["asset"].is_null(), "the asset of {where_}"),
-            Some(asset) => {
-                assert_eq!(
-                    asset.asset_id,
-                    row["asset"]["asset_id"].as_str().expect("an asset id"),
-                    "the asset of {where_}"
-                );
-                assert_eq!(
-                    asset.uris.src.as_deref(),
-                    text(&row["asset"]["content_uri"]),
-                    "the asset uri of {where_}"
-                );
-                assert_eq!(
-                    asset.uris.thumb.as_deref(),
-                    text(&row["asset"]["thumb_uri"]),
-                    "the asset thumb of {where_}"
-                );
-                assert_eq!(asset.width, row["asset"]["width"].as_i64());
-                assert_eq!(asset.height, row["asset"]["height"].as_i64());
-            }
-        }
-    }
-
-    // THE PICKER'S ROSTER, which is every person party — the owner included.
-    assert_eq!(
-        queue
-            .people
-            .iter()
-            .map(|person| person.party_id.as_str())
-            .collect::<BTreeSet<&str>>(),
-        want["people"]
-            .as_array()
-            .expect("a list")
-            .iter()
-            .map(|person| person["party_id"].as_str().expect("a party id"))
-            .collect::<BTreeSet<&str>>(),
-        "the picker's roster, as a SET: v0 orders it by localeCompare"
-    );
-}
-
-#[test]
-fn the_people_roster_is_what_v0_answered() {
-    let connection = v0_vault();
-    let door = TestDoor::new(&connection);
-    let cases = v0_swept("people");
-    assert_eq!(cases.len(), 1);
-    let want = &cases[0]["output"];
-    let roster = people_roster(&door).expect("the roster reads");
-
-    assert_eq!(
-        u64::try_from(roster.unmatched_total).expect("a total"),
-        want["unmatchedTotal"].as_u64().expect("a total")
-    );
-    let want_people = want["people"].as_array().expect("a list");
-    assert!(
-        !want_people.is_empty(),
-        "the corpus carries a confirmed face, or this test proves nothing"
-    );
-    assert_eq!(roster.people.len(), want_people.len());
-    for (person, row) in roster.people.iter().zip(want_people.iter()) {
-        assert_eq!(
-            person.party_id,
-            row["party_id"].as_str().expect("a party id")
-        );
-        assert_eq!(person.name.as_deref(), text(&row["name"]));
-        assert_eq!(
-            u64::try_from(person.count).expect("a count"),
-            row["count"].as_u64().expect("a count")
-        );
-        assert_eq!(
-            person.asset_ids,
-            row["asset_ids"]
-                .as_array()
-                .expect("a list")
-                .iter()
-                .map(|value| value.as_str().expect("an asset id").to_owned())
-                .collect::<Vec<String>>()
-        );
-        assert_eq!(
-            person
-                .confirmed_by
-                .iter()
-                .map(|by| by.party_id.as_str())
-                .collect::<Vec<&str>>(),
-            row["confirmed_by"]
-                .as_array()
-                .expect("a list")
-                .iter()
-                .map(|by| by["party_id"].as_str().expect("a party id"))
-                .collect::<Vec<&str>>(),
-            "who confirmed the face is part of the answer, not decoration"
-        );
-    }
-    assert_eq!(
-        roster
-            .proposals
-            .iter()
-            .map(|proposal| proposal.cluster_key.as_str())
-            .collect::<Vec<&str>>(),
-        want["proposals"]
-            .as_array()
-            .expect("a list")
-            .iter()
-            .map(|proposal| proposal["cluster_key"].as_str().expect("a key"))
-            .collect::<Vec<&str>>()
-    );
-}
-
-#[test]
-fn one_photographs_faces_are_what_v0_answered() {
-    let connection = v0_vault();
-    let door = TestDoor::new(&connection);
-    let cases = v0_swept("faces");
-    assert_eq!(cases.len(), 5, "four assets and one that does not exist");
-    let mut with_regions = 0;
-    for case in &cases {
-        let asset_id = case["input"]["asset_id"].as_str().expect("an asset id");
-        let want = &case["output"]["body"];
-        let faces = asset_faces(&door, asset_id).expect("the lightbox reads");
-        let want_regions = want["regions"].as_array().expect("a list");
-        if !want_regions.is_empty() {
-            with_regions += 1;
-        }
-        assert_eq!(
-            faces.regions.len(),
-            want_regions.len(),
-            "the face count on {asset_id}"
-        );
-        for (face, row) in faces.regions.iter().zip(want_regions.iter()) {
-            assert_eq!(
-                face.region_id,
-                row["region_id"].as_str().expect("a region id"),
-                "the order on {asset_id}"
-            );
-            assert_eq!(face.party_id.as_deref(), text(&row["party_id"]));
-            assert_eq!(face.person_name.as_deref(), text(&row["person_name"]));
-            assert_eq!(face.confirmed, row["confirmed"].as_bool().expect("a flag"));
-            // THE TWO CONFIDENCES ARE NOT ONE. This is the DETECTOR's score,
-            // which v0 calls `confidence` here and which is NOT the queue's
-            // match count.
-            assert_eq!(
-                face.detector_confidence,
-                row["confidence"].as_f64(),
-                "the detector score on {asset_id}"
-            );
-        }
-        assert_eq!(
-            faces
-                .people
-                .iter()
-                .map(|person| person.party_id.as_str())
-                .collect::<BTreeSet<&str>>(),
-            want["people"]
-                .as_array()
-                .expect("a list")
-                .iter()
-                .map(|person| person["party_id"].as_str().expect("a party id"))
-                .collect::<BTreeSet<&str>>(),
-            "the picker on {asset_id}, as a SET"
-        );
-    }
-    assert!(
-        with_regions >= 2,
-        "at least two of the compared assets carry a face, or the empty answer is all this proves"
-    );
-}
-
-#[test]
 fn the_duplicate_clusters_are_what_v0_answered() {
     let connection = v0_vault();
     let door = TestDoor::new(&connection);
@@ -1443,14 +1142,6 @@ fn every_statement_is_named_in_the_apps_own_namespace() {
         (
             "storage.rollup",
             centraid_apps_photos::storage::rollup_statement(),
-        ),
-        (
-            "faceQueue.regions",
-            centraid_apps_photos::faces::queue_regions_statement(),
-        ),
-        (
-            "people.clusters",
-            centraid_apps_photos::faces::clusters_statement(),
         ),
         (
             "duplicates.phashes",

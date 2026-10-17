@@ -1,8 +1,6 @@
 import SwiftUI
 
-#if canImport(CentraidShared)
 import CentraidShared
-#endif
 
 /// ONE LOCKER ITEM (#1047; the handoff's field row recipe): its sections of
 /// field rows — plain metadata shows its value, a sealed cell shows its mask
@@ -18,7 +16,6 @@ struct LockerItemView: View {
     let lock: Data
     let send: (Data) -> Void
     let sendLock: (Data) -> Void
-    let push: (ShellModel.Route) -> Void
     let onBack: () -> Void
     let onDeparted: () -> Void
 
@@ -56,7 +53,6 @@ struct LockerItemView: View {
                 if !state.chrome.editLabel.isEmpty {
                     ToolbarVerb(label: state.chrome.editLabel, identifier: "locker-item-edit") {
                         send(Self.event { $0.edit = .init() })
-                        push(LockerScreens.editRoute(state.itemID))
                     }
                 }
             } content: {
@@ -213,7 +209,7 @@ struct LockerItemView: View {
     /// A row's verb. `open` is the shell's — the address, handed to the OS;
     /// every other verb is the machine's.
     private func tapped(_ row: Centraid_Screen_V1_LockerFieldRow, _ verb: Centraid_Screen_V1_LockerVerb) {
-        if verb.key == "open", let url = URL(string: row.value), url.scheme != nil {
+        if verb.key == LockerItemMachine.shared.VERB_OPEN, let url = URL(string: row.value), url.scheme != nil {
             openURL(url)
             return
         }
@@ -321,6 +317,7 @@ struct LockerMemoSheetView: View {
         SheetRoom(
             title: memo.title,
             primary: SheetPrimary(label: memo.saveLabel, action: onSave),
+            outlines: [SheetOutline(label: memo.cancelLabel, identifier: "\(identifier)-cancel", action: onClose)],
             titleIdentifier: identifier
         ) {
             MachineTextField(placeholder: memo.hint, value: memo.text, axis: .vertical, focusOnAppear: true, onEdit: onType)
@@ -328,8 +325,6 @@ struct LockerMemoSheetView: View {
                 .foregroundStyle(Theme.color("text", scheme))
                 .lineLimit(3...8)
                 .accessibilityIdentifier("\(identifier)-text")
-            KitOutlineButton(label: memo.cancelLabel, fullWidth: true, action: onClose)
-                .accessibilityIdentifier("\(identifier)-cancel")
         }
     }
 }
@@ -349,6 +344,21 @@ struct LockerFieldSheetView: View {
         { value in send(LockerItemView.event { $0.fieldTyped = .with { $0.key = key; $0.value = value } }) }
     }
 
+    /// REMOVE, WHERE THE FIELD CAN BE REMOVED, THEN CANCEL: Save's alternatives,
+    /// drawn under it in its stack.
+    private var alternatives: [SheetOutline] {
+        var outlines: [SheetOutline] = []
+        if !sheet.removeLabel.isEmpty {
+            outlines.append(SheetOutline(label: sheet.removeLabel, tone: "net", identifier: "locker-field-remove") {
+                send(LockerItemView.event { $0.fieldRemoved = .init() })
+            })
+        }
+        outlines.append(SheetOutline(label: sheet.cancelLabel, identifier: "locker-field-cancel") {
+            send(LockerItemView.event { $0.fieldClosed = .init() })
+        })
+        return outlines
+    }
+
     var body: some View {
         SheetRoom(
             title: sheet.title,
@@ -356,6 +366,7 @@ struct LockerFieldSheetView: View {
             primary: sheet.canSave ? SheetPrimary(label: sheet.saveLabel) {
                 send(LockerItemView.event { $0.fieldSaved = .init() })
             } : nil,
+            outlines: alternatives,
             titleIdentifier: "locker-field-sheet"
         ) {
             labelled(sheet.sectionLabel) {
@@ -392,16 +403,6 @@ struct LockerFieldSheetView: View {
                     .centraidType("annotLabel")
                     .foregroundStyle(Theme.color("textFaint", scheme))
             }
-            if !sheet.removeLabel.isEmpty {
-                KitOutlineButton(label: sheet.removeLabel, tone: "net", fullWidth: true) {
-                    send(LockerItemView.event { $0.fieldRemoved = .init() })
-                }
-                .accessibilityIdentifier("locker-field-remove")
-            }
-            KitOutlineButton(label: sheet.cancelLabel, fullWidth: true) {
-                send(LockerItemView.event { $0.fieldClosed = .init() })
-            }
-            .accessibilityIdentifier("locker-field-cancel")
         }
     }
 

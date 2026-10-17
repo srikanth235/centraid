@@ -156,7 +156,7 @@ private struct PeoplePersonBody: View {
                     )
                 }
 
-                VStack(alignment: .leading, spacing: 8) {
+                KitChoiceStack {
                     if !chrome.merge.isEmpty {
                         KitOutlineButton(label: chrome.merge) {
                             send(PeopleEvents.person { $0.sheetOpened = .with { $0.which = .merge } })
@@ -405,17 +405,21 @@ private struct PeoplePersonSheetView: View {
             primary: SheetPrimary(label: frame.submitLabel) {
                 guard frame.submitEnabled, !frame.sending else { return }
                 send(PeopleEvents.person { $0.submitted = .init() })
-            }
+            },
+            outlines: frame.cancelLabel.isEmpty ? [] : [
+                SheetOutline(label: frame.cancelLabel, identifier: "people-sheet-cancel") {
+                    send(PeopleEvents.person { $0.sheetClosed = .init() })
+                },
+            ]
         ) {
             fields()
-            cancel(frame.cancelLabel)
         }
     }
 
     @ViewBuilder
     private func cancel(_ label: String) -> some View {
         if !label.isEmpty {
-            KitOutlineButton(label: label, fullWidth: true) {
+            KitOutlineButton(label: label) {
                 send(PeopleEvents.person { $0.sheetClosed = .init() })
             }
             .accessibilityIdentifier("people-sheet-cancel")

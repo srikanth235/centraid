@@ -49,6 +49,13 @@ public data class DestinationReading(
     public val lastSeenMs: Long?,
     /** When it last acknowledged anything, gateway clock; null when never. */
     public val lastAckMs: Long?,
+    /**
+     * It answered `UNAUTHORIZED` to this phone's token (#1080, the sweep's
+     * F2): it lost its store, or its operator revoked the token, so every
+     * acknowledgement this phone still holds for it describes a gateway that
+     * is gone. Pair it again.
+     */
+    public val pairAgain: Boolean = false,
 )
 
 /** Why an item waits (`WaitReason`, seam contract §1). */
@@ -65,6 +72,12 @@ public enum class WaitReason {
 
     /** The machine that answered at a gateway's address is not the pinned gateway. */
     UNTRUSTED,
+
+    /** The gateway answered and refused a write for its own reason: a full disk, a quota (#1080, F1). */
+    REFUSED,
+
+    /** The gateway no longer knows this phone's token: pair it again (#1080, F2). */
+    PAIR_AGAIN,
 }
 
 /** The `backup_status` door, as a seam. Null when there is no core to ask. */

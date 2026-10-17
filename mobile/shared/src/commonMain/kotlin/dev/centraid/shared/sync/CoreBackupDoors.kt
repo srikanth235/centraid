@@ -150,6 +150,7 @@ private fun destinationOf(destination: Destination): DestinationReading = Destin
     // ZERO IS "NEVER" on the wire, and never a time.
     lastSeenMs = destination.last_seen_ms.takeIf { it > 0L },
     lastAckMs = destination.last_ack_ms.takeIf { it > 0L },
+    pairAgain = destination.pair_again,
 )
 
 private fun reasonOf(reason: WireWaitReason): WaitReason? = when (reason) {
@@ -161,5 +162,7 @@ private fun reasonOf(reason: WireWaitReason): WaitReason? = when (reason) {
     WireWaitReason.WAIT_REASON_WINDOW -> WaitReason.WINDOW
     WireWaitReason.WAIT_REASON_ASK -> WaitReason.ASK
     WireWaitReason.WAIT_REASON_UNTRUSTED -> WaitReason.UNTRUSTED
+    WireWaitReason.WAIT_REASON_REFUSED -> WaitReason.REFUSED
+    WireWaitReason.WAIT_REASON_PAIR_AGAIN -> WaitReason.PAIR_AGAIN
     WireWaitReason.WAIT_REASON_UNSPECIFIED -> null
 }

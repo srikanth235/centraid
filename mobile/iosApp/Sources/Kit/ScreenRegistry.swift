@@ -1,9 +1,7 @@
 import Foundation
 import SwiftUI
 
-#if canImport(CentraidShared)
 import CentraidShared
-#endif
 
 // THE SHELL REGISTRY (K5; shared-constructs §5).
 //
@@ -34,10 +32,16 @@ protocol AppScreens {
     /// OS prompt a lock asks for, the platform sheets a bridge's seam
     /// presents. `nil` for an app with nothing there.
     @MainActor static func global(_ shell: ShellModel) -> AnyView?
+    /// HOW A SCREEN THE SHARED SIDE NAMED IS PUSHED (`ScreenOpening`): the id and
+    /// the event that screen opens by. Nearly always the event is the route's
+    /// parameter as it stands; an app whose parameter wraps it (Money's nonce)
+    /// wraps it here.
+    static func present(_ screen: String, _ opened: Data) -> ShellModel.Route
 }
 
 extension AppScreens {
     @MainActor static func global(_ shell: ShellModel) -> AnyView? { nil }
+    static func present(_ screen: String, _ opened: Data) -> ShellModel.Route { .screen(screen, opened) }
 }
 
 /// THE ONE LIST. A port adds exactly one line here.
@@ -55,6 +59,13 @@ enum AppRegistry {
     static func tileRoute(_ tile: Centraid_Screen_V1_HomeTile) -> ShellModel.Route? {
         apps.first { $0.appID == tile.appID }?.tileRoute(tile)
     }
+
+    /// A screen id's app is its prefix (`tasks.detail` is Tasks'); a screen no app
+    /// claims is pushed as it stands.
+    static func present(_ screen: String, _ opened: Data) -> ShellModel.Route {
+        guard let app = apps.first(where: { screen.hasPrefix($0.appID + ".") }) else { return .screen(screen, opened) }
+        return app.present(screen, opened)
+    }
 }
 
 /// How a registered screen opens and what it draws.
@@ -67,7 +78,6 @@ struct ScreenRoute {
     let view: @MainActor (ShellModel, Data) -> AnyView
 }
 
-#if canImport(CentraidShared)
 /// ONE BRIDGE, AS THE SHELL SEES IT: bytes in, bytes out, attach, departed.
 ///
 /// Closures rather than the Kotlin class, so a bridge that predates the kit
@@ -94,7 +104,6 @@ struct ScreenPort {
         )
     }
 }
-#endif
 
 extension ShellModel {
     /// A registered screen's last state, or empty bytes — which every decoder
@@ -112,12 +121,9 @@ extension ShellModel {
 
     /// The member left a registered screen without closing its bridge.
     func departed(_ id: String) {
-        #if canImport(CentraidShared)
         ports[id]?.departed()
-        #endif
     }
 
-    #if canImport(CentraidShared)
     /// Take a port: observe it into `states`, and attach it if the session is
     /// already open.
     func register(_ port: ScreenPort) {
@@ -125,7 +131,6 @@ extension ShellModel {
         port.observe { [weak self] bytes in self?.states[port.id] = bytes }
         if let session { port.attach(session) }
     }
-    #endif
 }
 
 /// A REGISTERED SCREEN ON THE STACK. Its own `@ObservedObject`, so a state

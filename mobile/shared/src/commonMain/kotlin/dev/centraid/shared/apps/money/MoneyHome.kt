@@ -33,6 +33,7 @@ import centraid.screen.v1.StatusChip
 import dev.centraid.design.copy.MoneyCopy
 import dev.centraid.shared.kit.ContentLens
 import dev.centraid.shared.kit.ReadContent
+import dev.centraid.shared.nav.ScreenIds
 import dev.centraid.shared.screen.Step
 
 /**
@@ -51,8 +52,8 @@ import dev.centraid.shared.screen.Step
  * a bigger window, up to the ceiling the core serves ([MAX_ROWS]).
  */
 public object MoneyHomeMachine :
-    MoneyQueryMachine<MoneyHomeState, MoneyHomeEvent, MoneyHomeData>("money.home", MONEY_TABLES) {
-    public const val SCREEN_ID: String = "money.home"
+    MoneyQueryMachine<MoneyHomeState, MoneyHomeEvent, MoneyHomeData>(ScreenIds.MONEY_HOME, MONEY_TABLES) {
+    public const val SCREEN_ID: String = ScreenIds.MONEY_HOME
 
     /** Activity rows asked for per page. */
     public const val PAGE: Int = 50
@@ -246,7 +247,10 @@ public object MoneyHomeMachine :
             today = today,
             month_label = MoneyFold.monthLabel(month),
             can_step_next = month.isNotEmpty() && month < MoneyFold.monthOf(today),
-            shows_month = screen.destination != MoneyHomeState.Destination.DESTINATION_UNSPECIFIED,
+            // THE STEPPER IS SPENDING'S AND ACTIVITY'S. Cash flow reads twelve months at
+            // once, so a month to step through there would move nothing it draws.
+            shows_month = screen.destination != MoneyHomeState.Destination.DESTINATION_UNSPECIFIED &&
+                screen.destination != MoneyHomeState.Destination.DESTINATION_CASHFLOW,
             month_options = MoneyFold.monthOptions(MoneyFold.monthOf(today), month),
         )
         return when (screen.destination) {
@@ -403,6 +407,8 @@ public object MoneyHomeMachine :
                 needs_category = answer.needs_category.filter { it.count > 0 }.map { counted ->
                     MoneyFold.figure(counted.amount?.currency.orEmpty(), counted.amount)
                 },
+                // THE FILTER THAT LISTS THOSE ROWS is the Needs row's tap.
+                needs_key = if (needsCount > 0) FILTER_UNCATEGORISED else "",
                 sections = MoneyFold.sections(answer.rows, answer.today),
                 window = when {
                     atCeiling -> MoneyFold.fill(MoneyCopy.WINDOW_CEILING, "n" to shown.toString())

@@ -38,9 +38,9 @@ plugins {
 }
 
 // ONE FILE FOR THE DEPLOYMENT FLOOR (D-1020-E1). Gradle reads it for the
-// Kotlin/Native targets, XcodeGen reads it for the Xcode project, and
-// `mobile/iosApp/Package.swift` reads it for SPM. Three readers, one number:
-// a floor written in three places is a floor that raises in two of them.
+// Kotlin/Native targets and XcodeGen reads it for the Xcode project. Two
+// readers, one number: a floor written in two places is a floor that raises in
+// one of them.
 val iosDeploymentTarget: String = rootDir.resolve("ios-deployment-target").readText().trim()
 
 // The repository root, for the modules that reach outside `mobile/` — the

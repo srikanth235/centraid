@@ -1,21 +1,34 @@
+<!--
+  DRAFT FOR THE OWNER'S REVIEW. Q-1029-5 in docs/decisions.md. Not approved, not published.
+
+  A published set of terms is the owner's. This is a rewrite around what Centraid is now: open
+  source software with no account and no hosted service. It keeps the owner's earlier "as is" and
+  "rights that cannot be excluded" sentences and the change and contact paragraph, and adds no
+  legal term of its own. Remove this comment when you publish.
+
+  TODO(owner): the effective date in the eyebrow is the draft date (15 October 2026). Set it to
+  the day this goes live.
+  TODO(owner): the earlier terms named no governing law or venue, and none is added here.
+  TODO(owner): the earlier acceptable-use sentence ("Do not use Assist to ...") was specific to
+  Centraid Assist and is removed with it. Add a general one only if you want it.
+  TODO(owner): "Continued use after notice" is kept as it was. With no account and no hosted
+  service, the only notice is this page's effective date. Decide whether that is what you mean.
+  TODO(owner): the earlier text called the product "the service" in the "as is" sentence. It now
+  says "the software". Confirm that is the warranty disclaimer you want.
+-->
 <section class="hero sec wrap" id="service">
-  <p class="eyebrow r">Terms of Service · effective 23 July 2026</p>
+  <p class="eyebrow r">Terms of Service · effective 15 October 2026</p>
   <h1 class="r" style="--d: 0.06s">Terms for Centraid.</h1>
   <div class="prose r" style="--d: 0.12s">
     <p>
       Centraid is open-source, local-first software. <b>Centraid operates no service.</b> The app
-      runs on your phone and the gateway runs on hardware you provide; there is no account, no
-      subscription and nothing hosted on your behalf.
+      runs on your phone and the backup software runs on a computer you provide; there is no
+      account, no subscription and nothing hosted on your behalf.
     </p>
     <p>
-      Repository software is governed by its included license. Any third-party service you choose
-      to point it at has its own terms.
-    </p>
-    <p>
-      <b>Note, 21 September 2026:</b> the sections below were written for the <b>Centraid Assist</b>
-      OAuth ceremony service, which <b>is not part of the current release</b>. They are kept here
-      pending a rewrite of these terms; read them as describing a service that is not currently
-      offered.
+      The software is governed by its included license, the MIT License in the repository. Anything
+      else you use with it, such as the app store you install from, iCloud Keychain or Google, the
+      host of the assistant's model file, or a map app, has its own terms.
     </p>
   </div>
 </section>
@@ -23,19 +36,17 @@
 <section class="dark" id="responsibility">
   <div class="wrap">
     <p class="eyebrow r">§02 · responsibility</p>
-    <h2 class="r" style="--d: 0.06s">Use the access you intended.</h2>
+    <h2 class="r" style="--d: 0.06s">Your vault, your keys.</h2>
     <div class="prose r" style="--d: 0.12s">
       <p>
-        You are responsible for the gateway and accounts you connect, the capabilities you select,
-        the model/services you configure, and compliance with laws or organizational policies that
-        apply to your use. Do not use Assist to access an account without authorization, evade
-        provider controls, attack the OAuth service, exhaust shared quota, or interfere with other
-        users.
+        You are responsible for this phone, your recovery key and every backup device you pair:
+        keeping them safe, keeping the backup device running, and storing the recovery key where
+        you will find it. Centraid keeps no copy of your key and cannot recover a vault without it.
+        If you lose this phone and the recovery key, the vault is gone.
       </p>
       <p>
-        Access may be rate-limited, disabled, or revoked to protect users, the shared OAuth client,
-        or provider reputation. A provider or Workspace administrator may independently refuse or
-        revoke access.
+        You are also responsible for the permissions you grant, the model and services you choose
+        to use, and compliance with laws or organizational policies that apply to your use.
       </p>
     </div>
   </div>
@@ -43,15 +54,20 @@
 
 <section class="sec wrap" id="availability">
   <p class="eyebrow r">§03 · availability</p>
-  <h2 class="r" style="--d: 0.06s">Local data, external ceremony.</h2>
+  <h2 class="r" style="--d: 0.06s">No service to go down.</h2>
   <div class="prose r" style="--d: 0.12s">
     <p>
-      Assist is provided without a promise of uninterrupted availability. An outage can delay new
-      connections or token refreshes; it does not give the service custody of your stored tokens or
-      imported vault data. The Advanced BYO path remains available when its callback is reachable.
+      Centraid runs no servers, so there is no uptime to promise. The app works without a network.
+      Backups, the assistant's one-time model download and anything you hand to another app depend
+      on networks and services Centraid does not control.
     </p>
     <p>
-      To the extent permitted by law, the service is provided “as is” without implied warranties.
+      A backup is only as good as the backup device that holds it. One backup device at home can
+      be lost together with the phone to fire or theft. A second backup device somewhere else is
+      the off-site copy.
+    </p>
+    <p>
+      To the extent permitted by law, the software is provided “as is” without implied warranties.
       Nothing in these terms excludes rights that cannot legally be excluded.
     </p>
   </div>
@@ -66,6 +82,9 @@
         Material changes will update the effective date. Continued use after notice means you
         accept the updated terms where permitted by law. Questions:
         <a href="mailto:srikanth@crowdshakti.com">srikanth@crowdshakti.com</a>.
+      </p>
+      <p class="aside">
+        Related: <a href="../privacy/">Privacy policy</a>
       </p>
     </div>
   </div>

@@ -1,5 +1,7 @@
 import SwiftUI
 
+import CentraidShared
+
 /// The decoder between `photos.places`' bytes and the view below.
 ///
 /// Its own file rather than an addition to `StateViews.swift`: that file is
@@ -60,7 +62,7 @@ struct PlacesStateView {
     static var unplacedShelf: Data {
         var shelf = Centraid_Screen_V1_PhotoShelf()
         shelf.place = .with {
-            $0.placeName = PhotosWords.placeNoLocation
+            $0.placeName = PhotosCopy.shared.PLACE_NO_LOCATION
             $0.unplaced = true
         }
         return (try? shelf.serializedData()) ?? Data()
@@ -148,8 +150,8 @@ struct PlacesView: View {
                 case let .data(places, unplaced, capped):
                     if places.isEmpty {
                         ScreenEmptyView(
-                            sentence: PhotosWords.photosPlacesEmpty,
-                            remedy: PhotosWords.photosPlacesEmptyCaption
+                            sentence: PhotosCopy.shared.PHOTOS_PLACES_EMPTY,
+                            remedy: PhotosCopy.shared.PHOTOS_PLACES_EMPTY_CAPTION
                         )
                     } else if state.presentation == .map {
                         PlacesPlot(places: places) { row in
@@ -164,7 +166,7 @@ struct PlacesView: View {
             .padding(.vertical, 12)
         }
         .contentMargins(.horizontal, CentraidGeometry.pageMargin, for: .scrollContent)
-        .navigationTitle("Places")
+        .navigationTitle(PhotosCopy.shared.PHOTOS_PLACES)
         .onAppear { send(state.openedEvent) }
         .sheet(item: $renaming) { target in
             renameSheet(target)
@@ -176,8 +178,8 @@ struct PlacesView: View {
         HStack {
             KitSegmented(
                 options: [
-                    (key: Centraid_Screen_V1_PlacesState.Presentation.cards, label: "Cards"),
-                    (key: Centraid_Screen_V1_PlacesState.Presentation.map, label: "Map"),
+                    (key: Centraid_Screen_V1_PlacesState.Presentation.cards, label: PhotosCopy.shared.PHOTOS_PLACES_CARDS),
+                    (key: Centraid_Screen_V1_PlacesState.Presentation.map, label: PhotosCopy.shared.PHOTOS_PLACES_MAP),
                 ],
                 selected: state.presentation,
                 identifier: "places-presentation"
@@ -244,7 +246,7 @@ struct PlacesView: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("\(sentence) Open them.")
+                .accessibilityLabel("\(sentence) \(PhotosCopy.shared.PHOTOS_PLACES_OPEN_THEM)")
                 .accessibilityIdentifier("places.unplaced")
             }
             if state.presentation == .map {
@@ -252,13 +254,13 @@ struct PlacesView: View {
                 if unpinned > 0 {
                     Text(
                         unpinned == 1
-                            ? PhotosWords.photosPlacesUnpinnedOne
-                            : PhotosWords.fill(PhotosWords.photosPlacesUnpinnedMany, "count", "\(unpinned)")
+                            ? PhotosCopy.shared.PHOTOS_PLACES_UNPINNED_ONE
+                            : copyFill(PhotosCopy.shared.PHOTOS_PLACES_UNPINNED_MANY, "count", "\(unpinned)")
                     )
                     .centraidType("small")
                     .foregroundStyle(Theme.color("textSoft", scheme))
                 }
-                Text(PhotosWords.photosPlacesMapNote)
+                Text(PhotosCopy.shared.PHOTOS_PLACES_MAP_NOTE)
                     .centraidType("small")
                     .foregroundStyle(Theme.color("textFaint", scheme))
             }
@@ -266,27 +268,27 @@ struct PlacesView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// One sentence, four shapes, because "1 photo has" and "at least 1 photo
-    /// has" are both things a member may read.
+    /// One sentence, two verbs, because "1 photo has" and "at least 1 photo
+    /// has" are both things a member may read; the count phrase is `CappedCount`'s.
     private func unplacedSentence(_ unplaced: UInt32, capped: Bool) -> String {
-        let template: String
-        switch (unplaced == 1, capped) {
-        case (true, false): template = PhotosWords.photosPlacesUnplacedOne
-        case (false, false): template = PhotosWords.photosPlacesUnplacedMany
-        case (true, true): template = PhotosWords.photosPlacesUnplacedOneCapped
-        case (false, true): template = PhotosWords.photosPlacesUnplacedManyCapped
-        }
-        return PhotosWords.fill(template, "count", "\(unplaced)")
+        let photos = CappedCount.shared.phrase(
+            count: Int64(unplaced),
+            capped: capped,
+            one: PhotosCopy.shared.TILE_COUNT_ONE,
+            many: PhotosCopy.shared.TILE_COUNT_MANY
+        )
+        let template = unplaced == 1 ? PhotosCopy.shared.PHOTOS_PLACES_UNPLACED_ONE : PhotosCopy.shared.PHOTOS_PLACES_UNPLACED_MANY
+        return copyFill(template, "photos", photos)
     }
 
     private func renameSheet(_ target: RenameTarget) -> some View {
         SheetRoom(
-            title: PhotosWords.photosPlacesNameThis,
+            title: PhotosCopy.shared.PHOTOS_PLACES_NAME_THIS,
             // `media.name_place` REFUSES A BLANK NAME, so the control that would
             // send one is greyed. A round trip whose only possible outcome is
             // a denial teaches a member nothing.
             primary: SheetPrimary(
-                label: "Save",
+                label: PhotosCopy.shared.PHOTOS_SAVE,
                 enabled: !typedName.trimmingCharacters(in: .whitespaces).isEmpty
             ) {
                 send(
@@ -298,7 +300,7 @@ struct PlacesView: View {
                 renaming = nil
             }
         ) {
-            TextField("Name", text: $typedName)
+            TextField(PhotosCopy.shared.PHOTOS_PLACE_NAME, text: $typedName)
                 .centraidType("body")
                 .padding(.horizontal, 12)
                 .frame(minHeight: CentraidGeometry.targetMinCoarse)
@@ -338,7 +340,7 @@ private struct PlaceCard: View {
     /// saying so, and printing a bare number over it would be this card
     /// claiming a total it never read.
     static func countPhrase(_ row: Centraid_Screen_V1_PlaceRow) -> String {
-        row.assetCountCapped ? "at least \(row.assetCount)" : "\(row.assetCount)"
+        CappedCount.shared.spoken(count: Int64(row.assetCount), capped: row.assetCountCapped, one: "", many: "")
     }
 
     var body: some View {
@@ -349,8 +351,8 @@ private struct PlaceCard: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel(
             row.assetCount > 0
-                ? PhotosWords.fill(
-                    PhotosWords.fill(PhotosWords.photosPlacesSpoken, "name", row.name),
+                ? copyFill(
+                    copyFill(PhotosCopy.shared.PHOTOS_PLACES_SPOKEN, "name", row.name),
                     "count", PlaceCard.countPhrase(row))
                 : row.name
         )
@@ -361,7 +363,7 @@ private struct PlaceCard: View {
                 onRename()
             } label: {
                 Label {
-                    Text(PhotosWords.photosPlacesNameThis)
+                    Text(PhotosCopy.shared.PHOTOS_PLACES_NAME_THIS)
                 } icon: {
                     CentraidIconView(iconKey: "Pencil", tint: Theme.color("text", scheme))
                 }
@@ -408,10 +410,9 @@ private struct PlaceCard: View {
 /// request to anyone. A real-tile map remains a separate decision with that
 /// privacy cost attached.
 ///
-/// The projection mirrors `PlacesMachine.plot`, which is what Compose calls.
-/// The two exist because the state crosses this boundary as BYTES: Swift holds
-/// `Centraid_Screen_V1_PlaceRow` and cannot hand it to a Kotlin function. Kept
-/// in step by hand, like `PhotoCells.swift` and `PhotoCells.kt`.
+/// The projection is the machine's (`PlacesMachine.plot`, run as the rows
+/// arrive): every pinned row carries its place on the plate and its pin's size
+/// (`pinX`, `pinY`, `pinSize`), and this only multiplies by its own box.
 private struct PlacesPlot: View {
     @Environment(\.colorScheme) private var scheme
     let places: [Centraid_Screen_V1_PlaceRow]
@@ -446,7 +447,7 @@ private struct PlacesPlot: View {
                 }
                 // NORTH, because the plate has no other orientation cue and a
                 // chart without one is a picture.
-                Text("N ↑")
+                Text(PhotosCopy.shared.PHOTOS_PLACES_NORTH)
                     .centraidType("mono")
                     .foregroundStyle(Theme.color("textFaint", scheme))
                     .padding(6)
@@ -464,8 +465,8 @@ private struct PlacesPlot: View {
                     .buttonStyle(.plain)
                     .accessibilityLabel(
                         pin.row.assetCount > 0
-                            ? PhotosWords.fill(
-                                PhotosWords.fill(PhotosWords.photosPlacesSpoken, "name", pin.row.name),
+                            ? copyFill(
+                                copyFill(PhotosCopy.shared.PHOTOS_PLACES_SPOKEN, "name", pin.row.name),
                                 "count", PlaceCard.countPhrase(pin.row))
                             : pin.row.name
                     )
@@ -484,49 +485,20 @@ private struct PlacesPlot: View {
         let size: CGFloat
     }
 
-    /// Equirectangular, normalised to the plotted rows' own bounding box.
-    ///
-    /// **y grows SOUTH**: the canvas origin is the top left, and a plot that
-    /// forgot that draws every library upside down. One place — or several at
-    /// one spot — lands in the middle rather than dividing by a zero span.
+    /// The pins in this box: the machine's unit square scaled inside the plate's
+    /// inset. **y grows SOUTH**: the canvas origin is the top left.
     private func plot(in size: CGSize) -> [Pin] {
-        let rows = pinned
-        guard !rows.isEmpty else { return [] }
-        let inset: CGFloat = 26
-        let minimumLatitude = rows.map(\.latitude).min() ?? 0
-        let maximumLatitude = rows.map(\.latitude).max() ?? 0
-        let minimumLongitude = rows.map(\.longitude).min() ?? 0
-        let maximumLongitude = rows.map(\.longitude).max() ?? 0
-        let latitudeSpan = maximumLatitude - minimumLatitude
-        let longitudeSpan = maximumLongitude - minimumLongitude
-        let largest = rows.map(\.assetCount).max() ?? 1
-        return rows.map { row in
-            let unitX = longitudeSpan == 0
-                ? 0.5
-                : (row.longitude - minimumLongitude) / longitudeSpan
-            let unitY = latitudeSpan == 0
-                ? 0.5
-                : (maximumLatitude - row.latitude) / latitudeSpan
-            return Pin(
+        let inset = CGFloat(PlacesMachine.shared.PLOT_INSET)
+        return pinned.map { row in
+            Pin(
                 row: row,
                 point: CGPoint(
-                    x: inset + CGFloat(unitX) * max(1, size.width - inset * 2),
-                    y: inset + CGFloat(unitY) * max(1, size.height - inset * 2)
+                    x: inset + CGFloat(row.pinX) * max(1, size.width - inset * 2),
+                    y: inset + CGFloat(row.pinY) * max(1, size.height - inset * 2)
                 ),
-                size: pinSize(count: row.assetCount, largest: largest)
+                size: CGFloat(row.pinSize)
             )
         }
-    }
-
-    /// Area tracks the count, as `pinSize` did: the square root, so a place
-    /// with four times the photographs is twice as wide and not four times.
-    private func pinSize(count: UInt32, largest: UInt32) -> CGFloat {
-        // Large enough that the photograph in it is a photograph.
-        let floor: CGFloat = 40
-        let ceiling: CGFloat = 64
-        guard largest > 1, count > 0 else { return floor }
-        let ratio = (Double(count).squareRoot()) / (Double(largest).squareRoot())
-        return floor + (ceiling - floor) * CGFloat(ratio)
     }
 }
 

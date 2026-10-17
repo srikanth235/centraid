@@ -16,9 +16,12 @@ import centraid.core.v1.LockerItems
 import centraid.core.v1.LockerPasskey
 import centraid.core.v1.LockerRevealRefusal
 import centraid.core.v1.LockerSecret
+import centraid.screen.v1.LockerAccessEvent
+import centraid.screen.v1.LockerAccessState
 import centraid.screen.v1.LockerExportEvent
 import centraid.screen.v1.LockerExportState
 import centraid.screen.v1.LockerHomeEvent
+import centraid.screen.v1.LockerHomeState
 import centraid.screen.v1.LockerImportEvent
 import centraid.screen.v1.LockerImportState
 import centraid.screen.v1.LockerItemEvent
@@ -27,7 +30,11 @@ import centraid.screen.v1.LockerLockEvent
 import centraid.screen.v1.StatusChip
 import centraid.screen.v1.WriteSettled
 import dev.centraid.design.copy.LockerCopy
+import dev.centraid.shared.apps.locker.ACCESS_ALL_WINDOW
+import dev.centraid.shared.apps.locker.LOCKER_ACCESS_TABLES
 import dev.centraid.shared.apps.locker.LOCKER_TABLES
+import dev.centraid.shared.apps.locker.LockerAccessMachine
+import dev.centraid.shared.apps.locker.LockerAccessReads
 import dev.centraid.shared.apps.locker.LockerDoorAnswer
 import dev.centraid.shared.apps.locker.LockerExportMachine
 import dev.centraid.shared.apps.locker.LockerExportReads
@@ -300,6 +307,127 @@ class LockerTransferSpec : StringSpec({
         none.rows.single().label shouldBe LockerCopy.ACCESS_NONE
     }
 
+    // --- the whole Locker's access history (Q-1047-21) --------------------------
+
+    val access = LockerAccessMachine
+    fun accessView(event: LockerAccessEvent) = LockerInput.View(event)
+    fun openAccess(vararg answers: AppQueryResponse): LockerHeld<LockerAccessState> = access.run(
+        accessView(LockerAccessEvent(opened = LockerAccessEvent.Opened())),
+        LockerInput.Lock(open = true),
+        LockerInput.Answered(answers.toList()),
+    ).first
+    fun wholeAnswer(entries: List<LockerAccessEntry> = emptyList(), window: Int = 200, truncated: Boolean = false) =
+        AppQueryResponse(locker_access = LockerAccess(entries = entries, window = window, truncated = truncated))
+
+    val everyKind = listOf(
+        LockerAccessEntry(receipt_id = "r7", kind = LockerAccessKind.LOCKER_ACCESS_KIND_EXPORT, allowed = true, local_day = "2099-06-30", local_time = "22:09"),
+        LockerAccessEntry(receipt_id = "r6", kind = LockerAccessKind.LOCKER_ACCESS_KIND_UNLOCK, allowed = true, local_day = "2099-06-30", local_time = "22:00"),
+        LockerAccessEntry(receipt_id = "r5", kind = LockerAccessKind.LOCKER_ACCESS_KIND_CODE, copied = true, allowed = true, columns = listOf("otp_seed"), item_id = "item-bank", item_title = "Bank", local_day = "2099-06-30", local_time = "21:58"),
+        LockerAccessEntry(receipt_id = "r4", kind = LockerAccessKind.LOCKER_ACCESS_KIND_REVEAL, copied = true, allowed = true, columns = listOf("value_sealed"), field_id = "field-rc", field_label = "Recovery code", item_id = "item-bank", item_title = "Bank", local_day = "2099-06-30", local_time = "21:50"),
+        LockerAccessEntry(receipt_id = "r3", kind = LockerAccessKind.LOCKER_ACCESS_KIND_REVEAL, allowed = true, columns = listOf("value_sealed"), field_id = "field-gone", item_id = "item-bank", item_title = "Bank", local_day = "2099-06-29", local_time = "08:00"),
+        LockerAccessEntry(receipt_id = "r2", kind = LockerAccessKind.LOCKER_ACCESS_KIND_REVEAL, allowed = false, columns = listOf("card_number"), item_id = "item-card", item_title = "Visa", local_day = "2099-06-29", local_time = "07:30"),
+        LockerAccessEntry(receipt_id = "r1", kind = LockerAccessKind.LOCKER_ACCESS_KIND_REVEAL, allowed = true, columns = listOf("password"), item_id = "item-temp", local_day = "2099-06-28", local_time = "12:00"),
+    )
+
+    "the whole Locker's history asks for every receipt, with no item, and nothing while locked" {
+        LockerAccessReads.requests(LockerAccessMachine.initial(), now).shouldBeNull()
+        val asked = LockerAccessReads.requests(openAccess(), now).shouldNotBeNull().single().locker_access.shouldNotBeNull()
+        asked.item_id shouldBe ""
+        asked.limit shouldBe ACCESS_ALL_WINDOW
+        asked.tz shouldBe now.zone
+        // The item page's read is still its own item's.
+        LockerItemReads.requests(openItem(), now).shouldNotBeNull().mapNotNull { it.locker_access?.item_id } shouldBe listOf("item-bank")
+    }
+
+    "every kind of receipt is a row: the act, the item it is about, the minute, a refusal" {
+        val rows = openAccess(wholeAnswer(everyKind)).screen.data_.shouldNotBeNull().history.shouldNotBeNull().rows
+        rows.map { it.label } shouldBe listOf(
+            // An export and an unlock name no item.
+            "Every item exported",
+            "Locker unlocked",
+            "Code copied · Bank",
+            // A custom field by its label now; a removed one by the words for that.
+            "Recovery code copied · Bank",
+            "A removed field revealed · Bank",
+            "Card number revealed · Visa",
+            // A purge takes the row and leaves the receipt.
+            "Password revealed · A removed item",
+        )
+        rows.map { it.value_ } shouldBe listOf(
+            "${CivilWords.dayMonth("2099-06-30")} · 22:09",
+            "${CivilWords.dayMonth("2099-06-30")} · 22:00",
+            "${CivilWords.dayMonth("2099-06-30")} · 21:58",
+            "${CivilWords.dayMonth("2099-06-30")} · 21:50",
+            "${CivilWords.dayMonth("2099-06-29")} · 08:00",
+            "${CivilWords.dayMonth("2099-06-29")} · 07:30",
+            "${CivilWords.dayMonth("2099-06-28")} · 12:00",
+        )
+        // A REFUSAL IS MARKED, AND ONLY A REFUSAL; the spoken label carries it.
+        rows.map { it.note } shouldBe listOf("", "", "", "", "", LockerCopy.ACCESS_REFUSED, "")
+        rows[5].accessibility_label shouldContain LockerCopy.ACCESS_REFUSED
+        rows.first().key shouldBe "access:r7"
+    }
+
+    "the whole Locker's history is inert: no verb, no secret, no value" {
+        val data = openAccess(wholeAnswer(everyKind)).screen.data_.shouldNotBeNull()
+        val rows = data.history.shouldNotBeNull().rows
+        rows.forEach {
+            it.verbs.isEmpty().shouldBeTrue()
+            it.sealed_.shouldBeFalse()
+            it.revealed.shouldBeFalse()
+            it.mask shouldBe ""
+            it.countdown.shouldBeNull()
+        }
+        data.lede shouldBe LockerCopy.ACCESS_ALL_LEDE
+        data.history.shouldNotBeNull().note shouldBe LockerCopy.ACCESS_NOTE
+        data.history.shouldNotBeNull().title shouldBe ""
+        LockerCopy.ACCESS_NOTE shouldContain "never the value"
+    }
+
+    "a full window says where it ends, and an empty history says so rather than inventing a row" {
+        val full = openAccess(wholeAnswer(everyKind, window = 200, truncated = true)).screen.data_.shouldNotBeNull()
+        full.history.shouldNotBeNull().note shouldBe "${LockerCopy.ACCESS_NOTE} Latest 200 shown."
+        val none = openAccess(wholeAnswer()).screen.data_.shouldNotBeNull().history.shouldNotBeNull()
+        none.rows.single().label shouldBe LockerCopy.ACCESS_ALL_NONE
+        none.rows.single().key shouldBe "access:none"
+    }
+
+    "the whole Locker's history draws the item page's rows, the item named on top" {
+        val reveal = LockerAccessEntry(
+            receipt_id = "r1", kind = LockerAccessKind.LOCKER_ACCESS_KIND_REVEAL, copied = true, allowed = true,
+            columns = listOf("password"), item_id = "item-bank", item_title = "Bank", local_day = "2099-06-29", local_time = "09:15",
+        )
+        val page = openItem(itemAnswer(), accessAnswer(reveal)).screen.data_!!.sections.first { it.title == LockerCopy.ACCESS_HEAD }.rows.single()
+        val whole = openAccess(wholeAnswer(listOf(reveal))).screen.data_.shouldNotBeNull().history.shouldNotBeNull().rows.single()
+        page.label shouldBe "Password copied"
+        whole.label shouldBe "Password copied · Bank"
+        // The same receipt, the same minute, the same key.
+        whole.value_ shouldBe page.value_
+        whole.key shouldBe page.key
+    }
+
+    "a relock wipes the history, and a late answer to a locked Locker is dropped" {
+        val drawn = openAccess(wholeAnswer(everyKind))
+        drawn.screen.data_.shouldNotBeNull()
+        val locked = access.reduce(drawn, LockerInput.Lock(open = false)).state
+        locked.screen.data_.shouldBeNull()
+        locked.answers.access.shouldBeNull()
+        LockerAccessReads.requests(locked, now).shouldBeNull()
+        val late = access.reduce(locked, LockerInput.Answered(listOf(wholeAnswer(everyKind)))).state
+        late.screen.data_.shouldBeNull()
+        late.answers.access.shouldBeNull()
+        // Opened again, it reads afresh and shows what that read answers.
+        val reopened = access.after(late, LockerInput.Lock(open = true), LockerInput.Answered(listOf(wholeAnswer(everyKind.take(1)))))
+        reopened.state.screen.data_.shouldNotBeNull().history.shouldNotBeNull().rows.map { it.key } shouldBe listOf("access:r7")
+    }
+
+    "the history re-reads when a receipt, an item or a field changes, and on nothing else" {
+        LockerAccessMachine.tables shouldBe LOCKER_ACCESS_TABLES
+        LOCKER_ACCESS_TABLES shouldBe setOf("access_receipt", "locker_item", "locker_item_field")
+        access.rowsChanged("access_receipt", listOf("k")).shouldNotBeNull()
+        access.rowsChanged("core_tag", listOf("k")).shouldBeNull()
+    }
+
     // --- export ---------------------------------------------------------------
 
     val export = LockerExportMachine
@@ -476,12 +604,21 @@ class LockerTransferSpec : StringSpec({
 
     // --- the More sheet -------------------------------------------------------
 
-    "the More sheet offers Import and Export beside the trash" {
+    "the More sheet offers Import and Export beside the trash, and the whole Locker's Access history" {
         val (home, _) = LockerHomeMachine.run(
             LockerInput.View(LockerHomeEvent(opened = LockerHomeEvent.Opened())),
             LockerInput.Lock(open = true),
         )
-        home.screen.chrome.shouldNotBeNull().more_rows.map { it.key } shouldBe listOf("import", "trash", "export", "facts", "lock")
+        val rows = home.screen.chrome.shouldNotBeNull().more_rows
+        rows.map { it.key } shouldBe listOf("import", "trash", "export", "access", "facts", "lock")
+        val row = rows.first { it.key == "access" }
+        row.label shouldBe LockerCopy.MORE_ACCESS
+        row.meta shouldBe LockerCopy.MORE_ACCESS_META
+        row.icon_key shouldBe "History"
+        // An intent: the machine changes nothing and the shell pushes the page.
+        val picked = LockerHomeMachine.reduce(home, LockerInput.View(LockerHomeEvent(more = LockerHomeEvent.MorePicked(key = "access")))).state
+        picked.screen.destination shouldBe home.screen.destination
+        picked.screen.sheet shouldBe LockerHomeState.Sheet.SHEET_NONE
     }
 
     "the new screens read Locker's tables and nothing while locked" {

@@ -172,11 +172,6 @@ const HASH_COLUMN_WRITERS: &[(&str, &str)] = &[
         "`content_hash_hex` over the staged bytes, which is `content_digest`",
     ),
     (
-        "vault/tests/drop_tally.rs",
-        "`content_digest` over a stand-in receipt's bytes — a Tally attachment's \
-         file, which the rung that drops Tally must leave standing",
-    ),
-    (
         "vault/tests/media_commands.rs",
         "`content_digest` over the bytes the test minted",
     ),

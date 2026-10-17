@@ -331,10 +331,18 @@ class PhotosMemoriesSpec : StringSpec({
         )
         val trip = folded.memories.first()
         // A REPEAT OF THE STOP BEFORE IS ONE STOP, in the trip's own order.
-        trip.route shouldBe listOf(
+        val stops = listOf(
             MemoryStop(place_id = "p-lis", latitude = 38.72, longitude = -9.14),
             MemoryStop(place_id = "p-opo", latitude = 41.15, longitude = -8.61),
         )
+        // THE SKETCH RIDES IN THE STATE, projected once by the machine, so
+        // neither shell restates the projection (`PhotosMemoriesMachine.sketch`).
+        val points = PhotosMemoriesMachine.sketch(stops, PhotosMemoriesMachine.SKETCH_ASPECT)
+        trip.route shouldBe stops.mapIndexed { at, stop ->
+            stop.copy(sketch_x = points[at].x, sketch_y = points[at].y)
+        }
+        // Lisbon is south of Porto, and y grows south.
+        (trip.route[0].sketch_y > trip.route[1].sketch_y) shouldBe true
         // NAMED FOR WHERE MOST OF IT WAS TAKEN, which is what [titleOf] prints.
         trip.place_name shouldBe "Lisbon"
         PhotosMemoriesMachine.titleOf(trip) shouldBe "Lisbon"

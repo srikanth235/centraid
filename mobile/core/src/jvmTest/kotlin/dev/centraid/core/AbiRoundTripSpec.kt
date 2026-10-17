@@ -277,7 +277,7 @@ class AbiRoundTripSpec : StringSpec({
         //
         // `Hello` carries no digest today (see `CentraidCore.identityOf`), so
         // the core reports `dev` and `requireDigest` takes the NOT-CHECKED
-        // branch — the same branch `crates/centraid/src/identity.rs` takes, and
+        // branch — the same branch `crates/core/src/identity.rs` takes, and
         // the allowance is NEVER SILENT: the warning names both sides. What it
         // does not do is what a released shell needs, which is why the wire
         // field is a finding with a patch rather than a note.

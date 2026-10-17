@@ -205,6 +205,22 @@ tasks.withType<Test>().configureEach {
         "centraid.core.headerPath",
         repositoryRoot.resolve("crates/core-ffi/include/centraid.h").path,
     )
+    // The Rust `require_digest`, so `RequireDigestMatchesRustSpec` can tie the
+    // Kotlin port's marker and sentences to it.
+    systemProperty(
+        "centraid.core.identitySource",
+        repositoryRoot.resolve("crates/core/src/identity.rs").path,
+    )
+    // BOTH ARE FILES A SPEC OPENS, SO BOTH ARE INPUTS: a change to the header or
+    // to `identity.rs` alone must re-run the specs that compare against them
+    // (`mobile/shared/build.gradle.kts` says why a read that is not an input
+    // passes on yesterday's tree).
+    inputs.file(repositoryRoot.resolve("crates/core-ffi/include/centraid.h"))
+        .withPropertyName("abiHeader")
+        .withPathSensitivity(org.gradle.api.tasks.PathSensitivity.NONE)
+    inputs.file(repositoryRoot.resolve("crates/core/src/identity.rs"))
+        .withPropertyName("identitySource")
+        .withPathSensitivity(org.gradle.api.tasks.PathSensitivity.NONE)
     systemProperty("centraid.core.cargoTargetDir", providers.environmentVariable("CARGO_TARGET_DIR").orNull ?: "")
     // JNA resolves `libcentraid_core_ffi` against this.
     systemProperty("jna.library.path", coreLibraryDir.path)

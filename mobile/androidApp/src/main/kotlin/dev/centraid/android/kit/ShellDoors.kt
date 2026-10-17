@@ -1,25 +1,23 @@
 package dev.centraid.android.kit
 
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Row
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Text
+import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ProvidableCompositionLocal
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.staticCompositionLocalOf
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.unit.dp
 import centraid.screen.v1.ImportSource
 import dev.centraid.android.theme.centraidColor
-import dev.centraid.android.theme.centraidType
 import dev.centraid.design.copy.AgendaCopy
 import dev.centraid.design.copy.PeopleCopy
 
@@ -47,46 +45,48 @@ public fun importLabel(source: ImportSource): String = when (source) {
 }
 
 /**
- * THE SHELL'S BANNER, one sentence and at most one verb: what a shell-level
- * act did (an import's progress and outcome). It stays until its verb is tapped — DESIGN.md
- * has no toast — and an empty [action] (an import still running) has no verb.
+ * THE SHELL'S STATUS LINE, handed down to whichever place draws it above its
+ * band: [AppPlace], [PushedPage] and Home's band. Null where the shell has none.
+ */
+public val LocalShellLine: ProvidableCompositionLocal<(@Composable () -> Unit)?> = compositionLocalOf { null }
+
+/**
+ * THE IMPORT'S STATUS LINE (DESIGN.md: "`StatusLine` is the one feedback
+ * channel … docked to the bottom of the frame … no floating overlay, no
+ * auto-dismiss"): an import's progress and outcome, above the band, on Home
+ * and on every app. One fragment, at most one action ([actionLabel], "Open
+ * People"), and a close key once the work is done ([closeLabel] empty while it
+ * runs). It never clears on a timer: the close key, the action or the member's
+ * next move puts it away.
  */
 @Composable
 public fun ShellBanner(
     sentence: String,
-    action: String,
+    actionLabel: String,
+    closeLabel: String,
     tag: String,
     onAct: () -> Unit,
-    modifier: Modifier = Modifier,
+    onClose: () -> Unit,
 ) {
-    Row(
-        modifier
-            .fillMaxWidth()
-            .padding(horizontal = KitGeometry.GUTTER, vertical = 6.dp)
-            .clip(RoundedCornerShape(KitGeometry.RADIUS))
-            .border(KitGeometry.HAIRLINE, centraidColor("line"), RoundedCornerShape(KitGeometry.RADIUS))
-            .padding(start = 12.dp, end = 4.dp)
-            .testTag("$tag-banner"),
-        verticalAlignment = Alignment.CenterVertically,
+    // ENTRY AND SETTLE AT 280MS (DESIGN.md's one motion grammar).
+    AnimatedVisibility(
+        visible = sentence.isNotEmpty(),
+        enter = slideInVertically(tween(ENTER_MS)) { it } + fadeIn(tween(ENTER_MS)),
+        exit = fadeOut(tween(CHANGE_MS)),
     ) {
-        Text(
-            sentence,
-            style = centraidType("small"),
-            color = centraidColor("text"),
-            modifier = Modifier.weight(1f).padding(vertical = 8.dp),
-        )
-        if (action.isNotEmpty()) {
-            Text(
-                action,
-                style = centraidType("control"),
-                color = centraidColor("link"),
-                modifier = Modifier
-                    .heightIn(min = KitGeometry.ROW_MIN)
-                    .clip(RoundedCornerShape(KitGeometry.RADIUS))
-                    .clickable(role = Role.Button, onClick = onAct)
-                    .padding(horizontal = 8.dp, vertical = 12.dp)
-                    .testTag("$tag-done"),
+        Column(Modifier.fillMaxWidth().background(centraidColor("bg")).testTag("$tag-banner")) {
+            Box(Modifier.fillMaxWidth().height(KitGeometry.HAIRLINE).background(centraidColor("line")))
+            ProgressStatusLine(
+                sentence = sentence,
+                actionLabel = actionLabel,
+                onAct = onAct,
+                closeLabel = closeLabel,
+                onClose = onClose,
+                testTag = "$tag-line",
             )
         }
     }
 }
+
+private const val ENTER_MS = 280
+private const val CHANGE_MS = 140

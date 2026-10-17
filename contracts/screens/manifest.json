@@ -339,27 +339,6 @@
       "binary": "contracts/screens/photos-duplicates/scanned-and-clean.bin"
     },
     {
-      "case": "recognition-off",
-      "screen": "photos-faces",
-      "type": "centraid.screen.v1.FaceReviewState",
-      "textproto": "contracts/screens/photos-faces/recognition-off.textproto",
-      "binary": "contracts/screens/photos-faces/recognition-off.bin"
-    },
-    {
-      "case": "unnamed-guess",
-      "screen": "photos-faces",
-      "type": "centraid.screen.v1.FaceReviewState",
-      "textproto": "contracts/screens/photos-faces/unnamed-guess.textproto",
-      "binary": "contracts/screens/photos-faces/unnamed-guess.bin"
-    },
-    {
-      "case": "worked-through",
-      "screen": "photos-faces",
-      "type": "centraid.screen.v1.FaceReviewState",
-      "textproto": "contracts/screens/photos-faces/worked-through.textproto",
-      "binary": "contracts/screens/photos-faces/worked-through.bin"
-    },
-    {
       "case": "chrome-hidden",
       "screen": "photos-lightbox",
       "type": "centraid.screen.v1.PhotoLightboxState",
@@ -414,27 +393,6 @@
       "type": "centraid.screen.v1.PhotosMemoriesState",
       "textproto": "contracts/screens/photos-memories/title-hint-absent.textproto",
       "binary": "contracts/screens/photos-memories/title-hint-absent.bin"
-    },
-    {
-      "case": "named-with-proposals-waiting",
-      "screen": "photos-people",
-      "type": "centraid.screen.v1.PhotosPeopleState",
-      "textproto": "contracts/screens/photos-people/named-with-proposals-waiting.textproto",
-      "binary": "contracts/screens/photos-people/named-with-proposals-waiting.bin"
-    },
-    {
-      "case": "none-named",
-      "screen": "photos-people",
-      "type": "centraid.screen.v1.PhotosPeopleState",
-      "textproto": "contracts/screens/photos-people/none-named.textproto",
-      "binary": "contracts/screens/photos-people/none-named.bin"
-    },
-    {
-      "case": "recognition-off",
-      "screen": "photos-people",
-      "type": "centraid.screen.v1.PhotosPeopleState",
-      "textproto": "contracts/screens/photos-people/recognition-off.textproto",
-      "binary": "contracts/screens/photos-people/recognition-off.bin"
     },
     {
       "case": "already-in-album",
@@ -512,13 +470,6 @@
       "type": "centraid.screen.v1.PhotoShelfState",
       "textproto": "contracts/screens/photos-shelf/memory-empty-but-titled.textproto",
       "binary": "contracts/screens/photos-shelf/memory-empty-but-titled.bin"
-    },
-    {
-      "case": "person",
-      "screen": "photos-shelf",
-      "type": "centraid.screen.v1.PhotoShelfState",
-      "textproto": "contracts/screens/photos-shelf/person.textproto",
-      "binary": "contracts/screens/photos-shelf/person.bin"
     },
     {
       "case": "trash-states-its-window",

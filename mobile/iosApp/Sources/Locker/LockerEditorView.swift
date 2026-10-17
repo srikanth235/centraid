@@ -1,8 +1,6 @@
 import SwiftUI
 
-#if canImport(CentraidShared)
 import CentraidShared
-#endif
 
 /// ADD OR EDIT AN ITEM (#1047, R-1047-L5): AN EXPLICIT SAVE, NOT AUTOSAVE —
 /// a secret saved on a pause mid-typing would be a wrong secret. Cancel with
@@ -137,7 +135,7 @@ struct LockerEditorView: View {
         }
         .onChange(of: state.done) { _, done in if done { onClose() } }
         // A refused save is still an open form: give the fields back.
-        .onChange(of: state.write.phase) { _, phase in if phase == .refused { concealing = false } }
+        .onChange(of: state.write.refused) { _, refused in if refused { concealing = false } }
         .sheet(isPresented: Binding(
             get: { state.hasConfirm },
             set: { open in if !open, state.hasConfirm { send(Self.event { $0.dismissed = .init() }) } }
@@ -195,9 +193,9 @@ struct LockerWriteLine: View {
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        if write.phase == .refused, write.hasFailure {
+        if !write.refusal.isEmpty {
             VStack(alignment: .leading, spacing: 2) {
-                Text(write.failure.sentence)
+                Text(write.refusal)
                     .centraidType("small")
                     .foregroundStyle(Theme.color("net", scheme))
                 if !write.failure.remedy.isEmpty {

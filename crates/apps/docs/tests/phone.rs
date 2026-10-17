@@ -1,5 +1,6 @@
-//! THE PHONE'S READS (#1046): a denial is a state, and every shelf is cut
-//! from the one window.
+//! THE PHONE'S READS (#1046): a denial is a state, and the shelves are cut
+//! from the one window (the three that read for themselves once it is
+//! truncated are `tests/arms.rs`).
 
 use centraid_apps_docs::phone::{Modified, RECENT_WINDOW, Shelf, Sort, View, shelve};
 use centraid_apps_docs::queries::{

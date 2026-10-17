@@ -11,7 +11,6 @@ import centraid.screen.v1.WriteState
 import centraid.screen.v1.CollectionsDoor
 import centraid.screen.v1.DuplicateReviewState
 import centraid.screen.v1.DuplicatesState
-import centraid.screen.v1.FaceReviewState
 import centraid.screen.v1.HomeState
 import centraid.screen.v1.MoneyHomeState
 import centraid.screen.v1.MoneyImportState
@@ -29,8 +28,6 @@ import centraid.screen.v1.PhotoStateView
 import centraid.screen.v1.PhotosCollectionsState
 import centraid.screen.v1.PhotosGridState
 import centraid.screen.v1.PhotosMemoriesState
-import centraid.screen.v1.PhotosPeopleData
-import centraid.screen.v1.PhotosPeopleState
 import centraid.screen.v1.PhotosSearchState
 import centraid.screen.v1.PlacesState
 import centraid.screen.v1.ReadFailureKind
@@ -171,17 +168,9 @@ class ScreenFixtureSpec : StringSpec({
         trash.shelf.shouldNotBeNull().state_view.shouldNotBeNull().mode
             .shouldNotBeNull().kind shouldBe PhotoStateView.Mode.Kind.KIND_TRASH
         trash.purge_window_days shouldBe 30
-        listOf("person", "album-selecting", "memory-empty-but-titled").forEach { case ->
+        listOf("album-selecting", "memory-empty-but-titled").forEach { case ->
             shelf(case).purge_window_days shouldBe 0
         }
-    }
-
-    "photos-shelf: the person arm brings its own name, and is not a mode" {
-        val view = shelf("person").shelf.shouldNotBeNull().state_view.shouldNotBeNull()
-        // A discriminated union: taking the person arm means there is no mode
-        // to read, which is what a bag of optionals could not promise.
-        view.mode.shouldBeNull()
-        view.person.shouldNotBeNull().person_name shouldBe "Ada Lovelace"
     }
 
     "photos-shelf: a selection outlives the page it was made on" {
@@ -233,8 +222,6 @@ class ScreenFixtureSpec : StringSpec({
         val info = lightbox("info-sheet-proposals")
         info.sheet shouldBe PhotoLightboxState.Sheet.SHEET_INFO
         val detail = info.detail.shouldNotBeNull()
-        // Confirmed regions only — a proposal here would look like a fact.
-        detail.people.single().display_name shouldBe "Ada Lovelace"
         // The member's tag and a derivation's proposal in one list, each saying
         // which it is.
         detail.labels.map { it.confirmed } shouldContainExactly listOf(true, false)
@@ -278,10 +265,10 @@ class ScreenFixtureSpec : StringSpec({
         videos.cover_thumbnail_path.shouldBeNull()
         // The doors are the taps that do not land on a shelf, and the badge is
         // a different number from the count.
-        val people = data.doors.single { it.kind == CollectionsDoor.Kind.KIND_PEOPLE }
-        people.count shouldBe 214
-        people.needs_attention shouldBe 63
-        data.doors.size shouldBe 4
+        val duplicates = data.doors.single { it.kind == CollectionsDoor.Kind.KIND_DUPLICATES }
+        duplicates.count shouldBe 3
+        duplicates.needs_attention shouldBe 3
+        data.doors.size shouldBe 3
     }
 
     "photos-collections: the new-album sheet leaves the list underneath intact" {
@@ -304,15 +291,15 @@ class ScreenFixtureSpec : StringSpec({
         // "At least 137". A bare number here states a total nobody counted.
         album.item_count_capped.shouldBeTrue()
 
-        val peopleDoor = data.doors.single { it.kind == CollectionsDoor.Kind.KIND_PEOPLE }
+        val placesDoor = data.doors.single { it.kind == CollectionsDoor.Kind.KIND_PLACES }
         val duplicatesDoor = data.doors.single {
             it.kind == CollectionsDoor.Kind.KIND_DUPLICATES
         }
-        peopleDoor.count_capped.shouldBeTrue()
+        placesDoor.count_capped.shouldBeTrue()
         duplicatesDoor.count_capped.shouldBeFalse()
         // A badge is "there is work": a floor and a total draw the same dot,
         // which is why `needs_attention` has no capped sibling to assert.
-        peopleDoor.needs_attention shouldBe 63
+        duplicatesDoor.needs_attention shouldBe 3
         data.next_cursor.shouldNotBeNull()
     }
 
@@ -368,15 +355,15 @@ class ScreenFixtureSpec : StringSpec({
         // sentence is the view's.
         val hits = search("hits-say-why").hits.shouldNotBeNull()
         hits.matches.map { it.kind } shouldContainExactly listOf(
-            SearchMatch.Kind.KIND_PERSON,
+            SearchMatch.Kind.KIND_PLACE,
             SearchMatch.Kind.KIND_LABEL,
             SearchMatch.Kind.KIND_TITLE,
         )
         // The value is the vault's word for the thing, never the query echoed
-        // back: two of these three do not contain "Ada" as it was typed.
+        // back: two of these three do not contain "Dublin" as it was typed.
         // (`value_` is Wire's escaped name, as `data_` and `where_` are.)
-        hits.matches.first().value_ shouldBe "Ada Lovelace"
-        hits.matches.count { it.value_.contains("Ada") } shouldBe 2
+        hits.matches.first().value_ shouldBe "Dún Laoghaire"
+        hits.matches.count { it.value_.contains("Dublin") } shouldBe 1
         hits.cells.size shouldBe 2
     }
 
@@ -416,79 +403,6 @@ class ScreenFixtureSpec : StringSpec({
         val data = places("no-places-but-unplaced").data_.shouldNotBeNull()
         data.places.shouldContainExactly()
         data.unplaced_count shouldBe 1904
-    }
-
-    fun people(case: String): PhotosPeopleState =
-        PhotosPeopleState.ADAPTER.decode(screens.bytes("photos-people/$case"))
-
-    "photos-people: an empty list is two different screens" {
-        // v0 drew one sentence for all three causes (`PeopleEmptyState.tsx`).
-        // These two have the same empty list and differ in both fields that
-        // decide what a member is told and what they are offered.
-        val off = people("recognition-off").data_.shouldNotBeNull()
-        val noneNamed = people("none-named").data_.shouldNotBeNull()
-        off.people.shouldContainExactly()
-        noneNamed.people.shouldContainExactly()
-
-        off.empty_reason shouldBe PhotosPeopleData.EmptyReason.EMPTY_REASON_RECOGNITION_OFF
-        // No plane running means no queue: the answer is a setting, not a door.
-        off.proposed_face_count shouldBe 0
-
-        noneNamed.empty_reason shouldBe PhotosPeopleData.EmptyReason.EMPTY_REASON_NONE_NAMED
-        // The answer here IS the door, with its count on it.
-        noneNamed.proposed_face_count shouldBe 63
-        off.empty_reason shouldNotBe noneNamed.empty_reason
-    }
-
-    "photos-people: a populated list says NONE explicitly, badge and all" {
-        // `EMPTY_REASON_NONE` is a value and not the absence of one; 0 is the
-        // UNSPECIFIED slot, so "not empty" is stated rather than inferred.
-        val full = people("named-with-proposals-waiting").data_.shouldNotBeNull()
-        full.empty_reason shouldBe PhotosPeopleData.EmptyReason.EMPTY_REASON_NONE
-        full.people.size shouldBe 2
-        // Independent facts: named people, and questions still waiting.
-        full.proposed_face_count shouldBe 7
-        // And the per-person count is a floor when its own read filled a page.
-        // Ada's 148 is where the read stopped; Grace's twelve came back whole.
-        full.people.single { it.display_name == "Ada Lovelace" }
-            .photo_count_capped.shouldBeTrue()
-        full.people.single { it.display_name == "Grace Hopper" }
-            .photo_count_capped.shouldBeFalse()
-    }
-
-    fun faces(case: String): FaceReviewState =
-        FaceReviewState.ADAPTER.decode(screens.bytes("photos-faces/$case"))
-
-    "photos-faces: a cursor past the end is a finish, not an empty queue" {
-        val done = faces("worked-through")
-        val off = faces("recognition-off")
-        done.data_.shouldNotBeNull().candidates.size shouldBe 2
-        (done.cursor >= done.data_.candidates.size).shouldBeTrue()
-        done.recognition_enabled.shouldBeTrue()
-
-        // The other screen with no question showing, and it is not a finish: a
-        // queue cannot fill while the plane that fills it is off.
-        off.data_.shouldNotBeNull().candidates.shouldContainExactly()
-        off.cursor shouldBe 0
-        off.recognition_enabled.shouldBeFalse()
-        // A setting a member chose is not an error, so there is no retry.
-        off.failure.shouldBeNull()
-    }
-
-    "photos-faces: a face with no guess is still a question, in fractions" {
-        val data = faces("unnamed-guess").data_.shouldNotBeNull()
-        val unnamed = data.candidates.single { it.region_id == "rgn-0010" }
-        unnamed.proposed_party_id shouldBe ""
-        unnamed.proposed_name shouldBe ""
-        unnamed.confidence shouldBe 0.0
-        // Fractions of the image and never pixels: there is no per-face
-        // derivative, so the box is drawn over the asset's thumbnail at
-        // whatever size the view rendered.
-        data.candidates.all {
-            it.box_x + it.box_width <= 1.0 && it.box_y + it.box_height <= 1.0
-        }.shouldBeTrue()
-        // The picker needs no second read while a member is mid-answer.
-        data.known_people.size shouldBe 2
     }
 
     fun duplicates(case: String): DuplicatesState =
@@ -638,7 +552,7 @@ class ScreenFixtureSpec : StringSpec({
         state.picked_asset_ids.shouldContainExactly()
     }
 
-    "photos: each of the eleven new screens sets exactly one content state" {
+    "photos: each of the nine new screens sets exactly one content state" {
         // The three-state law as a sweep. An empty data case standing in for a
         // failure is the fourth state every one of these is tempted to grow,
         // and the only way to know none of them did is to ask all of them.
@@ -669,14 +583,6 @@ class ScreenFixtureSpec : StringSpec({
         }
         sweep("photos-memories") { bytes ->
             PhotosMemoriesState.ADAPTER.decode(bytes)
-                .let { contentCount(it.loading, it.failure, it.data_) }
-        }
-        sweep("photos-people") { bytes ->
-            PhotosPeopleState.ADAPTER.decode(bytes)
-                .let { contentCount(it.loading, it.failure, it.data_) }
-        }
-        sweep("photos-faces") { bytes ->
-            FaceReviewState.ADAPTER.decode(bytes)
                 .let { contentCount(it.loading, it.failure, it.data_) }
         }
         sweep("photos-duplicates") { bytes ->

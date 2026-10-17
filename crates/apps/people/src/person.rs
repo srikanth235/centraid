@@ -1,5 +1,5 @@
-//! ONE PERSON'S SHEET — and the three reads that deny independently of it
-//! (D-1020-PE1).
+//! ONE PERSON'S SHEET — and the two reads that deny independently of it
+//! (D-1020-PE1, P1).
 //!
 //! `queries/person.ts` is 542 lines and the largest handler in the app. Its
 //! doctrine, in its own words: *"One person's full profile, gathered from the
@@ -9,40 +9,44 @@
 //! the profile … and a denial leaves those three fields null instead of
 //! blanking the person."*
 //!
-//! ## The three denials, re-judged rather than transcribed
+//! ## The independent readings, re-judged rather than transcribed
 //!
-//! v0 makes ONE of the three independent. `readPersonShareLinks` catches and
-//! answers `null` (`_shared.ts:51`-`:75`); everything else in the sheet sits in
-//! one `Promise.all` under one `try`, so a denial anywhere in it answers
-//! `{person: null, vaultDenied}` — the whole person gone. The census's
-//! sentence ("three sharing questions deny independently") describes an
-//! intention the code has one third of.
+//! v0 makes ONE of its three sharing questions independent:
+//! `readPersonShareLinks` catches and answers `null` (`_shared.ts:51`-`:75`);
+//! everything else in the sheet sits in one `Promise.all` under one `try`, so a
+//! denial anywhere in it answers `{person: null, vaultDenied}` — the whole
+//! person gone. The census's sentence ("three sharing questions deny
+//! independently") describes an intention the code has one third of.
 //!
-//! What the manifest actually declares is a `read` scope over the linked-entity
-//! schemas, revocable on its own and behind the one reading this sheet makes
-//! beside the profile:
+//! What the manifest actually declares is a `read` scope per plane, each
+//! revocable on its own and each behind a reading this sheet makes beside the
+//! profile:
 //!
 //! | Reading | Scopes | What it carries | v0 |
 //! |---|---|---|---|
 //! | [`Person::links`] | `core.link`, `core.activity`, `schedule.task` | relationships, tasks, gift ideas, interaction history | blanks the sheet |
+//! | [`Person::contact`] | `social.contact_channel` | how to reach the person, and who else holds the same value | blanks the sheet |
 //!
-//! The linked plane is where a person's *relationships* live — revoking
-//! `core.link` should cost the relationship rail, not the person, so a member
-//! who has revoked it still sees their grandfather's birthday and not an "ask
-//! the owner" wall. (The share plane's reading and Tally's open debts were the
-//! other two; the first left in rung five, #1029, and the second with Tally,
-//! #1099.)
+//! The linked plane is where a person's *relationships* live and the contact
+//! plane is where their *channels* live — revoking `core.link` should cost the
+//! relationship rail, and revoking `social.contact_channel` the contact rail,
+//! so a member who has revoked either still sees their grandfather's birthday
+//! and not an "ask the owner" wall. (The share plane's reading and Tally's open
+//! debts were two more; the first left in rung five, #1029, and the second
+//! with Tally, #1099.)
 //!
-//! So the port makes the reading and the profile stands whatever it says. [`a_denied_read_leaves_the_profile_standing`] is the test, and
-//! `linked` is unrepresentable on a denied sharing read because the field lives
-//! inside the reading.
+//! So the port makes each a reading and the profile stands whatever they say.
+//! [`a_denied_read_leaves_the_profile_standing`] and
+//! `tests/three_state.rs` are the tests, and a denied reading has no list to be
+//! mistaken for an empty one because the data lives inside the reading.
 //!
-//! **The fourth candidate is named rather than modelled.**
-//! `social.contact_channel` is also a scope of its own and its denial also
-//! blanks the sheet in v0 and here. It is kept inside [`Profile`] on the
-//! argument that how to reach a person is part of who the sheet is about, and
-//! the question goes to the owner in this lane's receipt rather than being
-//! decided quietly.
+//! **The contact plane is a reading of its own (P1,
+//! `docs/release/v1-handoffs.md`).** The question was whether how to reach a
+//! person is part of who the sheet is about — and so whether a sheet without it
+//! is a lie. It is not: a sheet that says *the channels could not be read* tells
+//! the truth, and one that drew "No channels" would not, which is what
+//! [`ReadState`] exists to prevent. The reading's three states reach the phone
+//! as `PeopleSheet.channels_known`, beside `touches_known`.
 //!
 //! ## Finding PE-F2 — `shared_with_them` has never existed
 //!
@@ -179,7 +183,7 @@ pub struct Interaction {
     pub occurred_at: String,
 }
 
-/// THE PROFILE, which stands whatever the reading says.
+/// THE PROFILE, which stands whatever the readings say.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Profile {
     pub party_id: String,
@@ -194,7 +198,6 @@ pub struct Profile {
     pub met: String,
     pub list_id: Option<String>,
     pub starred: bool,
-    pub contact: Vec<ContactEntry>,
     pub dates: Vec<ImportantDate>,
     pub notes: Vec<NoteEntry>,
 }
@@ -208,10 +211,15 @@ pub struct Links {
     pub interactions: Vec<Interaction>,
 }
 
-/// One person, as the sheet renders them.
+/// One person, as the sheet renders them: the profile, which stands, and the
+/// two readings that deny independently of it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Person {
     pub profile: Profile,
+    /// How to reach them, ordered as the sheet draws it. Denied when
+    /// `social.contact_channel` is — and then there is no list at all, rather
+    /// than an empty one.
+    pub contact: ReadState<Vec<ContactEntry>>,
     pub links: ReadState<Links>,
 }
 
@@ -361,19 +369,12 @@ pub fn load_person(door: &dyn PageDoor, party_id: &str) -> KitResult<(PersonData
         PERSON_JOIN_BOUND,
         empty.clone()
     );
-    let channels = walked!(
-        door,
-        &person_channels_statement(party_id),
-        PERSON_JOIN_BOUND,
-        empty.clone()
-    );
 
-    // The contact rail, and the collision search bounded by the values THIS
-    // person holds.
-    let contact = match read_contact(door, party_id, &channels)? {
-        Ok(contact) => contact,
-        Err(denial) => return Ok((empty, Some(denial))),
-    };
+    // THE CONTACT READING beside the profile: its failure is its own (P1). The
+    // channels, and the collision search bounded by the values THIS person
+    // holds, are one reading — a refusal anywhere in it is the rail's, and the
+    // sheet stands.
+    let contact = read_contact(door, party_id)?;
 
     let (list_by_party, starred) = fold_party_tags(&tags, &taxonomy);
     let profile = Profile {
@@ -391,7 +392,6 @@ pub fn load_person(door: &dyn PageDoor, party_id: &str) -> KitResult<(PersonData
         met: text_of(profile_row, "met").unwrap_or_default(),
         list_id: list_by_party.get(party_id).cloned(),
         starred: starred.contains(party_id),
-        contact,
         dates: dates
             .iter()
             .filter_map(|row| {
@@ -422,18 +422,40 @@ pub fn load_person(door: &dyn PageDoor, party_id: &str) -> KitResult<(PersonData
 
     Ok((
         PersonData {
-            person: Some(Person { profile, links }),
+            person: Some(Person {
+                profile,
+                contact,
+                links,
+            }),
         },
         None,
     ))
 }
 
-/// The contact rail, ordered as the sheet draws it.
-fn read_contact(
+/// THE CONTACT READING: the rail, ordered as the sheet draws it.
+///
+/// A door refusal at any step — the person's channels, the collision search,
+/// the names of those who collide — is [`ReadState::Denied`] with the door's
+/// own sentence; anything else is an error.
+fn read_contact(door: &dyn PageDoor, party_id: &str) -> KitResult<ReadState<Vec<ContactEntry>>> {
+    Ok(match read_contact_rail(door, party_id)? {
+        Ok(contact) => ReadState::Ready(contact),
+        Err(denial) => ReadState::Denied(denial),
+    })
+}
+
+fn read_contact_rail(
     door: &dyn PageDoor,
     party_id: &str,
-    channels: &[Row],
 ) -> KitResult<Result<Vec<ContactEntry>, Denial>> {
+    let channels = match walk(
+        door,
+        &person_channels_statement(party_id),
+        PERSON_JOIN_BOUND,
+    )? {
+        Walked::Rows(rows) => rows,
+        Walked::Denied(denial) => return Ok(Err(denial)),
+    };
     // THIS PERSON'S channels only. v0 filters the read's own rows by
     // `party_id` again (`person.ts:293`-`:295`) even though the statement
     // binds it; the port keeps the read narrow and does not re-filter.
@@ -853,19 +875,22 @@ mod tests {
                 met: String::new(),
                 list_id: None,
                 starred: false,
-                contact: Vec::new(),
                 dates: Vec::new(),
                 notes: Vec::new(),
             },
+            contact: ReadState::Denied(Denial::default()),
             links: ReadState::Denied(Denial::default()),
         };
         // THE PROFILE IS INTACT.
         assert_eq!(person.profile.name, "Grandpa Ray");
         assert_eq!(person.profile.cadence_days, 7);
-        // AND THE DENIED READ CARRIES NO DATA. There is no `relationships: []`
-        // to mistake for "linked to nothing".
+        // AND A DENIED READ CARRIES NO DATA. There is no `relationships: []`
+        // to mistake for "linked to nothing" and no `contact: []` to mistake for
+        // "no way to reach them".
         assert!(person.links.ready().is_none());
         assert!(person.links.denied());
+        assert!(person.contact.ready().is_none());
+        assert!(person.contact.denied());
     }
 
     #[test]
@@ -894,7 +919,6 @@ mod tests {
             met: String::new(),
             list_id: None,
             starred: false,
-            contact: Vec::new(),
             dates: vec![date("d1", true), date("d2", false)],
             notes: Vec::new(),
         };

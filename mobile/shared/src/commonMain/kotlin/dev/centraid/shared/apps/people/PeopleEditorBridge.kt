@@ -3,8 +3,6 @@ package dev.centraid.shared.apps.people
 import centraid.screen.v1.PeopleEditorEvent
 import centraid.screen.v1.PeopleEditorState
 import dev.centraid.shared.kit.ScreenBridge
-import kotlin.uuid.ExperimentalUuidApi
-import kotlin.uuid.Uuid
 
 /**
  * What both shells hold for the profile editor (#1029 app port). Close =
@@ -26,10 +24,10 @@ public class PeopleEditorBridge : ScreenBridge<PeopleEditorState, PeopleEditorEv
      * honoured by `people.add_person`), so every save of this editor names
      * the same person. Returns the id, for the shell's route.
      */
-    @OptIn(ExperimentalUuidApi::class)
-    public fun openNew(): String {
-        val id = Uuid.random().toString()
-        forward(PeopleEditorEvent(opened = PeopleEditorEvent.Opened(minted_party_id = id)))
-        return id
+    public fun openNew(): String = PeopleRouting.mintPartyId().also(::openNew)
+
+    /** A new person under [partyId], minted by `PeopleRouting` for the route that opened it. */
+    public fun openNew(partyId: String) {
+        forward(PeopleEditorEvent(opened = PeopleEditorEvent.Opened(minted_party_id = partyId)))
     }
 }

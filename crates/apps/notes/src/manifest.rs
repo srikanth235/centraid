@@ -173,19 +173,15 @@ mod tests {
         assert_eq!(title("create-note"), 1);
     }
 
+    /// NOTES' ACTIONS INVOKE THE COMMANDS OF THREE SCHEMAS — its own
+    /// `knowledge`, the spine's `core` and `schedule`'s `add_task` — and the
+    /// table says so. What each command wrote is the commit's own census, not a
+    /// list a manifest carries (V3).
     #[test]
-    fn every_action_declares_the_tables_it_writes() {
-        for action in &manifest().actions {
-            assert!(
-                !action.writes.is_empty(),
-                "{} declares no writes, but every Notes action writes",
-                action.name
-            );
-        }
-        let mut schemas: Vec<&str> = manifest()
-            .declared_writes()
+    fn the_actions_invoke_the_commands_of_three_schemas() {
+        let mut schemas: Vec<&str> = ACTIONS
             .iter()
-            .filter_map(|table| table.split('.').next())
+            .filter_map(|row| row.command.split('.').next())
             .collect();
         schemas.sort_unstable();
         schemas.dedup();
@@ -344,5 +340,21 @@ mod tests {
                 "{name} declares a limit the port does not clamp"
             );
         }
+    }
+
+    /// THE ACT SCOPES AND THE ACTIONS AGREE, both ways (finding PE-F1, P3): a
+    /// narrow `act` scope names a command some action invokes, and every
+    /// action's command is covered by a scope. A scope no action uses tells a
+    /// consent screen the app reaches a command it never calls.
+    #[test]
+    fn every_act_scope_names_a_command_an_action_invokes_and_every_command_is_covered() {
+        let commands: Vec<&str> = crate::commands::ACTIONS
+            .iter()
+            .map(|row| row.command)
+            .collect();
+        assert_eq!(
+            manifest().act_scope_disagreements(&commands),
+            Vec::<String>::new()
+        );
     }
 }

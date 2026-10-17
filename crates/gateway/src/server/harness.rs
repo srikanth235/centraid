@@ -240,6 +240,12 @@ impl Spawned {
         self.shared.store().flip_bit(vault, name)
     }
 
+    /// Make the gateway's disk read as full — every upload is refused
+    /// `DISK_FULL` — or as having room again.
+    pub fn fill_disk(&self, full: bool) {
+        self.shared.store().pretend_full(full);
+    }
+
     /// Stop serving and wait for the server to finish.
     pub async fn shutdown(mut self) {
         if let Some(stop) = self.stop.take() {

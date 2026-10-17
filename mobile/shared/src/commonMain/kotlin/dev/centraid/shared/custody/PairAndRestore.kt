@@ -1,7 +1,9 @@
 package dev.centraid.shared.custody
 
+import dev.centraid.design.copy.WordsCopy
+
 /**
- * PAIRING AND RESTORE: THEIR DOORS, THEIR ANSWERS AND THEIR COPY (#1029 W18-4).
+ * PAIRING AND RESTORE: THEIR DOORS AND THEIR ANSWERS (#1029 W18-4).
  *
  * The two flows a phone has that are not about a vault it already holds:
  *
@@ -18,8 +20,8 @@ package dev.centraid.shared.custody
  * **Machines and not views.** `commonMain` holds what both shells do
  * identically — which state the flow is in, what may be tapped, and what
  * sentence is shown — and a SwiftUI or Compose view holds the pixels. Every
- * sentence a member reads is [CustodyCopy]'s for `DrainCopy`'s reason: a
- * sentence spelled in each shell is a sentence one shell gets wrong.
+ * sentence a member reads is `copy/words.json`'s (`WordsCopy`): a sentence
+ * spelled in each shell is a sentence one shell gets wrong.
  *
  * **The doors are W15's request kinds**, the same seam shape
  * `dev.centraid.shared.sync.DrainDoor` uses and for the same reason: the
@@ -214,79 +216,19 @@ public data class RestoredVaultAt(
 )
 
 /**
- * THE COPY FOR BOTH FLOWS, IN ONE PLACE (#1029 W18-4).
+ * **THE COMPARISON IS THE MEMBER'S** (#1029 §5, #1080 A7).
  *
- * `DrainCopy`'s rule, applied to the two screens a member only ever sees when
- * something has gone wrong or is being set up — which is exactly when a
- * sentence one shell got wrong costs the most.
+ * A safety number a member is shown but never asked to compare is
+ * decoration. The sentence says what to do with it and what it means, and
+ * it says the second half plainly: matching numbers mean nobody is in the
+ * middle. Its words are `copy/words.json`'s; this closes the holes.
  */
-public object CustodyCopy {
-
-    /** The pairing screen's heading, and what it asks for. */
-    public const val PAIR_TITLE: String = "Pair with your backup device"
-
-    public const val PAIR_ASK: String =
-        "Run “centraid-gateway pair” on your backup device, then scan the QR code or paste the pairing code."
-
-    public const val PAIR_EMPTY: String = "Scan the QR code, or paste the pairing code."
-
-    public const val PAIR_PASTE_LABEL: String = "Pairing code"
-
-    public const val PAIR_SCAN: String = "Scan QR code"
-
-    /** The camera screen's way to a photo or screenshot of the QR code. */
-    public const val PAIR_PHOTO: String = "Choose a photo"
-
-    public const val PAIR_PHOTO_UNREAD: String =
-        "No readable QR code in that photo. Choose a sharper one, or paste the pairing code."
-
-    public const val PAIR_PRIMARY: String = "Pair"
-
-    public const val PAIRING: String = "Pairing with your backup device…"
-
-    public const val PAIRED_TITLE: String = "Check it's your backup device"
-
-    public const val PAIR_FAILED_TITLE: String = "Not paired"
-
-    public const val PAIR_NEEDS_WORDS_TITLE: String = "Enter your recovery key first"
-
-    /** A vault opened without its words has no identity to pair with. */
-    public const val PAIR_NEEDS_WORDS: String =
-        "This vault is open without your recovery key. Enter it, then pair."
-
-    public const val PAIR_NO_VAULT: String = "Make a vault on this phone first, then pair it with your backup device."
-
-    public const val DONE: String = "Done"
-
-    public const val CANCEL: String = "Cancel"
-
-    public const val TRY_AGAIN: String = "Try again"
-
-    public const val PAIR_UNREACHABLE: String =
-        "No answer from your backup device. Check it's awake and on the same network."
-
-    public const val PAIR_NOTHING_TO_COMPARE: String =
-        "Couldn't verify your backup device, so it didn't pair. Try again."
-
-    /**
-     * **THE COMPARISON IS THE MEMBER'S** (#1029 §5, #1080 A7).
-     *
-     * A safety number a member is shown but never asked to compare is
-     * decoration. The sentence says what to do with it and what it means, and
-     * it says the second half plainly: matching numbers mean nobody is in the
-     * middle.
-     */
-    public fun pairedLine(answer: PairAnswer): String {
-        val who = answer.destinationLabel.ifBlank { "your backup device" }
-        val where = if (answer.destinationAddress.isBlank()) "" else " at ${answer.destinationAddress}"
-        return "Paired with $who$where. Check the number below matches the safety number " +
-            "centraid-gateway printed on $who. If it doesn't, pair again on a network you trust."
+public fun pairedLine(answer: PairAnswer): String {
+    val who = answer.destinationLabel.ifBlank { WordsCopy.PAIRED_WHO }
+    val where = if (answer.destinationAddress.isBlank()) {
+        who
+    } else {
+        WordsCopy.PAIRED_AT.replace("{who}", who).replace("{address}", answer.destinationAddress)
     }
-
-    /** Thousands separated, so a six-figure row count is readable at a glance. */
-    public fun grouped(value: Long): String = value.toString()
-        .reversed()
-        .chunked(3)
-        .joinToString(",")
-        .reversed()
+    return WordsCopy.PAIRED_LINE.replace("{where}", where).replace("{who}", who)
 }

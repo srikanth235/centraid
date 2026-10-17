@@ -193,7 +193,7 @@ fn a_real_command_writes_its_row_its_log_row_and_its_receipt() {
         .read(|connection| {
             Ok(connection.query_row(
                 "SELECT i.status, r.decision, r.action
-                   FROM agent_command_invocation i
+                   FROM command_invocation i
                    JOIN access_receipt r ON r.invocation_id = i.invocation_id
                   WHERE i.invocation_id = ?1",
                 [&outcome.invocation_id],
@@ -244,10 +244,10 @@ fn every_precondition_is_written_as_a_check_row_and_the_first_failure_denies() {
         .vault
         .read(|connection| {
             Ok(connection.query_row(
-                "SELECT (SELECT COUNT(*) FROM agent_invocation_check WHERE invocation_id = ?1),
-                        (SELECT COUNT(*) FROM agent_invocation_check
+                "SELECT (SELECT COUNT(*) FROM command_invocation_check WHERE invocation_id = ?1),
+                        (SELECT COUNT(*) FROM command_invocation_check
                           WHERE invocation_id = ?1 AND passed = 0),
-                        (SELECT status FROM agent_command_invocation WHERE invocation_id = ?1),
+                        (SELECT status FROM command_invocation WHERE invocation_id = ?1),
                         (SELECT decision FROM access_receipt WHERE invocation_id = ?1)",
                 [&outcome.invocation_id],
                 |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
@@ -264,7 +264,7 @@ fn every_precondition_is_written_as_a_check_row_and_the_first_failure_denies() {
         .vault
         .read(|connection| {
             Ok(connection.query_row(
-                "SELECT COUNT(*) FROM agent_explanation WHERE invocation_id = ?1",
+                "SELECT COUNT(*) FROM command_explanation WHERE invocation_id = ?1",
                 [&outcome.invocation_id],
                 |row| row.get(0),
             )?)
@@ -447,7 +447,7 @@ fn a_stale_registration_is_an_ontology_mismatch_and_not_a_compatibility_range() 
         .commit(|tx| {
             tx.set_producer("test.stale");
             tx.connection().execute(
-                "UPDATE agent_command SET ontology_version = '0.9' WHERE name = 'core.add_party'",
+                "UPDATE command_definition SET ontology_version = '0.9' WHERE name = 'core.add_party'",
                 [],
             )?;
             Ok(())
@@ -606,7 +606,7 @@ fn updating_a_party_reads_back_exactly_what_it_was_sent() {
         .vault
         .read(|connection| {
             Ok(connection.query_row(
-                "SELECT COUNT(*) FROM agent_invocation_check
+                "SELECT COUNT(*) FROM command_invocation_check
                   WHERE invocation_id = ?1 AND phase = 'post' AND passed = 1",
                 [&updated.invocation_id],
                 |row| row.get(0),
@@ -691,8 +691,8 @@ fn the_registrys_record_is_written_and_is_not_what_runs() {
         .vault
         .read(|connection| {
             Ok(connection.query_row(
-                "SELECT (SELECT COUNT(*) FROM agent_command),
-                        (SELECT preconditions_json FROM agent_command
+                "SELECT (SELECT COUNT(*) FROM command_definition),
+                        (SELECT preconditions_json FROM command_definition
                           WHERE name = 'core.update_party')",
                 [],
                 |row| Ok((row.get(0)?, row.get(1)?)),

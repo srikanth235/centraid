@@ -1,9 +1,7 @@
 import LocalAuthentication
 import SwiftUI
 
-#if canImport(CentraidShared)
 import CentraidShared
-#endif
 
 /// THE LOCK'S PLATFORM SEAM (#1047, D-5; `LockerGate.kt`'s `LockerLockBridge`
 /// header, R-1047-L1): what the shell does that the machine cannot, and
@@ -57,15 +55,11 @@ struct LockerLockSeam: View {
                 switch phase {
                 case .background:
                     wentBackground = true
-                    #if canImport(CentraidShared)
                     LockerScreens.lockBridge.backgrounded()
-                    #endif
                 case .active:
                     guard wentBackground else { return }
                     wentBackground = false
-                    #if canImport(CentraidShared)
                     LockerScreens.lockBridge.foregrounded()
-                    #endif
                     Self.attached(shell)
                 case .inactive:
                     break

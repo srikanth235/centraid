@@ -5,6 +5,8 @@ import ImageIO
 import CoreImage
 import UIKit
 
+import CentraidShared
+
 /// THE iOS HALF OF v0's `photo-edit-save.ts`: decode, draw, encode (#1029,
 /// photos port).
 ///
@@ -31,7 +33,7 @@ enum PhotoEditRenderer {
             // THE CAMERA'S OWN TURN, applied before anything the member did,
             // exactly as the renderer applies it below.
             kCGImageSourceCreateThumbnailWithTransform: true,
-            kCGImageSourceThumbnailMaxPixelSize: previewEdge,
+            kCGImageSourceThumbnailMaxPixelSize: Int(PhotoEditorMachine.shared.PREVIEW_EDGE),
         ]
         guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
         else { return nil }
@@ -49,7 +51,7 @@ enum PhotoEditRenderer {
     static func render(sourcePath: String, plan: Centraid_Screen_V1_PhotoEditPlan) -> Rendered {
         guard let bytes = try? Data(contentsOf: URL(fileURLWithPath: sourcePath)),
               let decoded = CIImage(data: bytes, options: [.applyOrientationProperty: true])
-        else { return .refused(PhotosWords.photosEditCannotOpen) }
+        else { return .refused(PhotosCopy.shared.PHOTOS_EDIT_CANNOT_OPEN) }
 
         var image = decoded.transformed(
             by: CGAffineTransform(translationX: -decoded.extent.minX, y: -decoded.extent.minY)
@@ -83,20 +85,25 @@ enum PhotoEditRenderer {
         )
         image = image.cropped(to: frame)
 
-        let crop = clamped(plan)
-        if crop.w < 1 || crop.h < 1 {
-            let width = Int(frame.width)
-            let height = Int(frame.height)
-            let pixels = cropPixels(crop, width: width, height: height)
-            image = image.cropped(
-                to: CGRect(
-                    x: frame.minX + CGFloat(pixels.x),
-                    y: frame.maxY - CGFloat(pixels.y + pixels.h),
-                    width: CGFloat(pixels.w),
-                    height: CGFloat(pixels.h)
-                )
+        // WHERE THE CROP LANDS, from the shared machine: its clamp and its
+        // half-up round, so one crop is one rectangle on both shells.
+        let pixels = PhotoEditorMachine.shared.cropRect(
+            hasCrop: plan.hasCrop,
+            x: plan.crop.x,
+            y: plan.crop.y,
+            w: plan.crop.w,
+            h: plan.crop.h,
+            width: Int32(frame.width),
+            height: Int32(frame.height)
+        )
+        image = image.cropped(
+            to: CGRect(
+                x: frame.minX + CGFloat(pixels.x),
+                y: frame.maxY - CGFloat(pixels.y + pixels.h),
+                width: CGFloat(pixels.w),
+                height: CGFloat(pixels.h)
             )
-        }
+        )
 
         let context = CIContext()
         let space = image.colorSpace ?? CGColorSpace(name: CGColorSpace.sRGB)!
@@ -106,7 +113,7 @@ enum PhotoEditRenderer {
             options: [
                 CIImageRepresentationOption(
                     rawValue: kCGImageDestinationLossyCompressionQuality as String
-                ): jpegQuality,
+                ): Double(PhotoEditorMachine.shared.JPEG_QUALITY_PERCENT) / 100,
             ]
         ) else { return .refused(couldNotDraw) }
         let file = FileManager.default.temporaryDirectory
@@ -119,36 +126,6 @@ enum PhotoEditRenderer {
         return .made(path: file.path, width: Int(image.extent.width), height: Int(image.extent.height))
     }
 
-    /// `PhotoEditorMachine.clampCrop`, mirrored.
-    private static func clamped(_ plan: Centraid_Screen_V1_PhotoEditPlan)
-        -> (x: Double, y: Double, w: Double, h: Double)
-    {
-        guard plan.hasCrop else { return (0, 0, 1, 1) }
-        let w = min(max(plan.crop.w, minCrop), 1)
-        let h = min(max(plan.crop.h, minCrop), 1)
-        return (min(max(plan.crop.x, 0), 1 - w), min(max(plan.crop.y, 0), 1 - h), w, h)
-    }
-
-    /// `PhotoEditorMachine.cropPixels`, mirrored: rounded and clamped so
-    /// rounding cannot ask for a rectangle running off the bitmap.
-    private static func cropPixels(
-        _ crop: (x: Double, y: Double, w: Double, h: Double),
-        width: Int,
-        height: Int
-    ) -> (x: Int, y: Int, w: Int, h: Int) {
-        // HALF UP, as the Kotlin half rounds: a tie on a half pixel must land
-        // on the same pixel on both shells.
-        func halfUp(_ value: Double) -> Int { Int((value + 0.5).rounded(.down)) }
-        let w = max(1, halfUp(crop.w * Double(width)))
-        let h = max(1, halfUp(crop.h * Double(height)))
-        let x = min(max(halfUp(crop.x * Double(width)), 0), max(0, width - w))
-        let y = min(max(halfUp(crop.y * Double(height)), 0), max(0, height - h))
-        return (x, y, min(w, width), min(h, height))
-    }
-
-    private static let previewEdge = 2048
-    private static let jpegQuality = 0.92
-    private static let minCrop = 0.1
-    private static let couldNotDraw = PhotosWords.photosEditCannotDraw
+    private static let couldNotDraw = PhotosCopy.shared.PHOTOS_EDIT_CANNOT_DRAW
 }
 #endif

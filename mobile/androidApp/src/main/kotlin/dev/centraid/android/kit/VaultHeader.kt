@@ -111,7 +111,7 @@ public fun VaultHeader(
     onDownloadSettings: () -> Unit = {},
     /**
      * THE VAULT'S BACKUP, said as the second line (R-ONBOARD-11):
-     * `BackupLine.status` in place of "on this phone". Null — an example, or a
+     * `BackupLine.status` in place of "On this phone". Null — an example, or a
      * preview — keeps the vault's own state line. A vault that MOVED keeps its
      * own line too: that is the fact.
      */
@@ -164,7 +164,7 @@ public fun VaultHeader(
                 .semantics(mergeDescendants = true) {
                     contentDescription =
                         listOf(name, if (status.isEmpty()) line else "", waiting).filter { it.isNotEmpty() }
-                            .joinToString(", ") + ". Switch vault"
+                            .joinToString(", ") + ". " + SharedCopy.VAULT_SWITCH_SPOKEN
                 },
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -259,7 +259,7 @@ public fun VaultHeader(
             if (waiting.isNotEmpty()) {
                 IconKey(
                     iconKey = "Settings",
-                    label = "Download settings",
+                    label = PhotosCopy.TRANSFER_SETTINGS_LABEL,
                     testTag = "home-transfer-rules",
                     onPress = onDownloadSettings,
                 )

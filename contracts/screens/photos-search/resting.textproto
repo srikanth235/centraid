@@ -8,9 +8,9 @@
 # different; here they are two arms and `query` is empty in exactly one of them.
 #
 # What resting offers is the vocabulary a member can actually search BY:
-# concepts the enrichment plane has attached to THIS vault's photographs, people
-# it holds rows for, places with photographs behind them — each as the shelf it
-# opens, so a tap costs no second lookup. Never a fixed list of words the
+# concepts the enrichment plane has attached to THIS vault's photographs and
+# places with photographs behind them — each place as the shelf it opens, so a
+# tap costs no second lookup. Never a fixed list of words the
 # product hopes are there — a suggestion that matches nothing is a promise the
 # search cannot keep.
 #
@@ -33,10 +33,6 @@ resting {
     concept_id: "cpt-bicycle"
     label: "Bicycle"
     confirmed: false
-  }
-  people {
-    party_id: "pty-0031"
-    display_name: "Ada Lovelace"
   }
   places {
     place_id: "plc-0007"

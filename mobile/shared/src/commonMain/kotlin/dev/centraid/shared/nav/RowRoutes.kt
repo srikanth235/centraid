@@ -7,10 +7,11 @@ import centraid.screen.v1.PhotoShelf
  * WHERE A REFERENCE TO ONE ROW OPENS (R-CHROME-6).
  *
  * A row reference is `ChatCard`'s shape — an app, the row's noun in that app
- * (`task`, `event`, `person`…), its id and a second key — and iOS has routed
- * it since the chat's cards (`ChatRouting.swift`). This is the same table for
- * a shell that routes by [Destination], so Home's search opens a row on
- * Android exactly where a chat card opens it on iOS:
+ * (`task`, `event`, `person`…), its id and a second key. THIS IS THE ONE TABLE
+ * FOR BOTH SHELLS: Android routes by [Destination] ([destination]), and iOS,
+ * whose views cannot hold one, asks for the screen id and opening event
+ * ([route], [ScreenOpenings]) — so a chat card, a Home search hit and an
+ * import's "open" land on the same screen on both:
  *
  * | app | entity | destination |
  * | --- | --- | --- |
@@ -25,7 +26,7 @@ import centraid.screen.v1.PhotoShelf
  * | photos | `album` | the album's shelf |
  * | docs | `folder` | the folder's page; `parent` is the pushing page's title |
  * | money | `transaction` | the transaction page; `parent` is the pushing page's title |
- * | chat | `thread` | none: Chat is a tab and not a screen. The iOS shell opens it (`ShellModel.openChatThread`), and Android has no Chat tab, so Home's search never offers the row there (R-1097-24) |
+ * | chat | `thread` | none: Chat is a tab and not a screen ([isThread]). The iOS shell opens it (`ShellModel.openChatThread`), and Android has no Chat tab, so Home's search never offers the row there (R-1097-24) |
  *
  * A notebook, album or folder arrives with its id and its name (the
  * card's `title`) and nothing else, which is all each destination needs: the
@@ -35,42 +36,107 @@ import centraid.screen.v1.PhotoShelf
  * not know is null, and the stack stays put.
  */
 public object RowRoutes {
+    private const val TASK: String = "task"
+    private const val PROJECT: String = "project"
+    private const val NOTE: String = "note"
+    private const val NOTEBOOK: String = "notebook"
+    private const val ALBUM: String = "album"
+    private const val PHOTO: String = "photo"
+    private const val FOLDER: String = "folder"
+    private const val DOCUMENT: String = "document"
+    private const val PERSON: String = "person"
+    private const val EVENT: String = "event"
+    private const val TRANSACTION: String = "transaction"
+    private const val THREAD: String = "thread"
+
     /** [parent] is the pushing page's title, which a pushed page's back says. */
     public fun destination(
         card: ChatCard,
         parent: String = "",
         neighbours: List<String> = emptyList(),
-    ): Destination? = when (card.app to card.entity) {
-        "tasks" to "task" -> Destination.TasksDetail(card.id)
-        "tasks" to "project" -> Destination.TasksProject(card.id, card.title)
-        "notes" to "note" -> Destination.NotesEditor(card.id, title = card.title)
-        "notes" to "notebook" -> Destination.NotesLibrary(notebookId = card.id, notebookName = card.title, unfiledOnly = false)
-        "photos" to "album" -> Destination.PhotoShelfRoute(
-            PhotoShelf(album = PhotoShelf.Album(collection_id = card.id, name = card.title)),
+    ): Destination? = destination(RowRef(card.app, card.entity, card.id, card.title, card.qualifier), parent, neighbours)
+
+    /** [destination] over a reference's plain fields, for a shell that cannot hand over a `ChatCard`. */
+    public fun destination(
+        row: RowRef,
+        parent: String = "",
+        neighbours: List<String> = emptyList(),
+    ): Destination? = when (row.app to row.entity) {
+        AppIds.TASKS to TASK -> Destination.TasksDetail(row.id)
+        AppIds.TASKS to PROJECT -> Destination.TasksProject(row.id, row.title)
+        AppIds.NOTES to NOTE -> Destination.NotesEditor(row.id, title = row.title)
+        AppIds.NOTES to NOTEBOOK -> Destination.NotesLibrary(notebookId = row.id, notebookName = row.title, unfiledOnly = false)
+        AppIds.PHOTOS to ALBUM -> Destination.PhotoShelfRoute(
+            PhotoShelf(album = PhotoShelf.Album(collection_id = row.id, name = row.title)),
         )
-        "docs" to "folder" -> Destination.DocsFolder(card.id, card.title, parent = parent)
-        "docs" to "document" -> Destination.DocsDocument(card.id, card.title, parent = parent)
-        "people" to "person" -> Destination.PeoplePerson(card.id, card.title)
-        "agenda" to "event" -> Destination.AgendaEvent(
-            eventId = card.id,
-            instanceKey = card.qualifier,
+        AppIds.DOCS to FOLDER -> Destination.DocsFolder(row.id, row.title, parent = parent)
+        AppIds.DOCS to DOCUMENT -> Destination.DocsDocument(row.id, row.title, parent = parent)
+        AppIds.PEOPLE to PERSON -> Destination.PeoplePerson(row.id, row.title)
+        AppIds.AGENDA to EVENT -> Destination.AgendaEvent(
+            eventId = row.id,
+            instanceKey = row.qualifier,
             originalStartLocal = null,
             day = "",
         )
-        "photos" to "photo" -> Destination.PhotoLightbox(card.id, neighbours.ifEmpty { listOf(card.id) })
-        "money" to "transaction" -> Destination.MoneyTransaction(card.id, parent = parent)
-        else -> appHome(card.app)
+        AppIds.PHOTOS to PHOTO -> Destination.PhotoLightbox(row.id, neighbours.ifEmpty { listOf(row.id) })
+        AppIds.MONEY to TRANSACTION -> Destination.MoneyTransaction(row.id, parent = parent)
+        else -> appHome(row.app)
     }
+
+    /**
+     * [destination] AS THE SCREEN ID AND OPENING EVENT a shell that keys its
+     * screens by id opens. [among] is the answer's other references: a
+     * photograph's swipe walks the photographs among them, in the order they
+     * were shown.
+     */
+    public fun route(row: RowRef, parent: String = "", among: List<RowRef> = emptyList()): ScreenOpening? {
+        val neighbours = among.filter { it.app == AppIds.PHOTOS && it.entity == PHOTO }.map { it.id }
+        return destination(row, parent, neighbours)?.let(ScreenOpenings::of)
+    }
+
+    /** Whether a reference names one of the member's conversations, which opens in the Chat tab and is no route. */
+    public fun isThread(row: RowRef): Boolean = row.app == AppIds.CHAT && row.entity == THREAD
 
     /** An app's own front door, for a reference whose noun has no row route. */
     public fun appHome(app: String): Destination? = when (app) {
-        "tasks" -> Destination.TasksHome()
-        "notes" -> Destination.NotesLibrary()
-        "docs" -> Destination.DocsHome()
-        "people" -> Destination.PeopleHome()
-        "agenda" -> Destination.AgendaHome()
-        "photos" -> Destination.PhotosHome()
-        "money" -> Destination.MoneyHome()
+        AppIds.TASKS -> Destination.TasksHome()
+        AppIds.NOTES -> Destination.NotesLibrary()
+        AppIds.DOCS -> Destination.DocsHome()
+        AppIds.PEOPLE -> Destination.PeopleHome()
+        AppIds.AGENDA -> Destination.AgendaHome()
+        AppIds.PHOTOS -> Destination.PhotosHome()
+        AppIds.MONEY -> Destination.MoneyHome()
         else -> null
     }
+
+    /** [appHome] as a route, for a shell that keys its screens by id. */
+    public fun appHomeRoute(app: String): ScreenOpening? = appHome(app)?.let(ScreenOpenings::of)
+}
+
+/**
+ * A ROW REFERENCE IN PLAIN FIELDS: `ChatCard`'s routing shape, which a shell
+ * that cannot hand over a Wire message builds directly.
+ */
+public class RowRef(
+    public val app: String,
+    public val entity: String,
+    public val id: String,
+    public val title: String = "",
+    /** The second key some nouns need: an event's occurrence. */
+    public val qualifier: String = "",
+)
+
+/** THE CATALOGUE IDS the apps go by: what a Home tile, a card and a screen id's prefix name. */
+public object AppIds {
+    public const val TASKS: String = "tasks"
+    public const val NOTES: String = "notes"
+    public const val DOCS: String = "docs"
+    public const val PEOPLE: String = "people"
+    public const val AGENDA: String = "agenda"
+    public const val PHOTOS: String = "photos"
+    public const val MONEY: String = "money"
+    public const val LOCKER: String = "locker"
+
+    /** Not an app: the Chat tab, which a card's reference can name (a conversation). */
+    public const val CHAT: String = "chat"
 }

@@ -7,11 +7,13 @@
 //!
 //! ## Enrollment is full trust (#996 R11)
 //!
-//! There is no `share_authority` join for a device. An enrolled device has a
-//! row in `access_device_secret` whose public key matches, and revoking DELETES
-//! that row — so **unknown and revoked are the same refusal**. That is not laxity:
+//! There is no `share_authority` join for a device, and no device table: the
+//! `access_device` and `access_device_secret` rows that held an enrolled
+//! device's public key left with the gateway's peer allowlist (#1080), and the
+//! baseline no longer founds them. A [`Principal`] is the owner's own phone
+//! acting, narrowed by a clamp when the caller is an app. That is not laxity:
 //! the alternative was a per-device authority plane nobody could read, and the
-//! thing a member actually does is revoke the device.
+//! thing a member actually does is revoke the app.
 //!
 //! ## The order of judgement, and why it is this order
 //!
@@ -171,7 +173,7 @@ impl Principal {
         }
     }
 
-    /// The caller id that lands in `agent_command_invocation.caller_id`.
+    /// The caller id that lands in `command_invocation.caller_id`.
     #[must_use]
     pub fn caller_id(&self) -> &str {
         match self {

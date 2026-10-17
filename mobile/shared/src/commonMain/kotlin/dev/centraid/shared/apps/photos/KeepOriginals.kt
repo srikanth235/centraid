@@ -70,6 +70,13 @@ public object KeepOriginals {
     /** The More sheet row's title. */
     public const val FREE_UP_TITLE: String = PhotosCopy.PHOTOS_FREE_UP_TITLE
 
+    /**
+     * WHAT A PHOTO DELETED FOR GOOD COSTS THE BACKUP DEVICE (#1080 F5): the
+     * file stays sealed there while a kept restore point may name it, up to
+     * about six months. Drawn under the row on both shells, whatever the count.
+     */
+    public const val FREE_UP_RETENTION: String = PhotosCopy.PHOTOS_FREE_UP_RETENTION_BODY
+
     /** While the census runs. */
     public const val COUNTING: String = "Counting the originals on this phone…"
 

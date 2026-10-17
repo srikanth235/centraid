@@ -831,18 +831,7 @@ fn the_manifests_scopes_are_ones_the_core_registry_accepts() {
     use centraid_vault::{Decision, Verb, evaluate_access};
     let manifest = centraid_apps_money::manifest::manifest();
     let registry = centraid_vault::commands::Registry::with_system_commands().expect("registry");
-    // Every action names a command the core's registry holds.
-    for row in centraid_apps_money::commands::ACTIONS {
-        assert!(
-            registry.get(row.command).is_some(),
-            "`{}` names `{}`, which the core registry does not hold",
-            row.action,
-            row.command
-        );
-    }
-    // A principal clamped to exactly the manifest's scopes may act on every
-    // table the manifest declares writing, and on nothing else.
-    let scopes = manifest
+    let scopes: Vec<Scope> = manifest
         .vault
         .as_ref()
         .expect("a vault block")
@@ -856,21 +845,32 @@ fn the_manifests_scopes_are_ones_the_core_registry_accepts() {
             field_mask: None,
         })
         .collect();
+    // Every action names a command the core's registry holds, and the schema
+    // that owns it is one the manifest's scopes reach: an action whose command
+    // sits outside the grant is a write the app could never make.
+    for row in centraid_apps_money::commands::ACTIONS {
+        let registered = registry.get(row.command).unwrap_or_else(|| {
+            panic!(
+                "`{}` names `{}`, which the core registry does not hold",
+                row.action, row.command
+            )
+        });
+        let owner = registered.definition.owner_schema;
+        assert!(
+            scopes.iter().any(|scope| scope.schema == owner),
+            "`{}` invokes `{}`, owned by `{owner}`, which no scope of the manifest reaches",
+            row.action,
+            row.command
+        );
+    }
+    // A principal clamped to exactly the manifest's scopes is denied what they
+    // do not name.
     let clamped = VaultPrincipal::OwnerDevice {
         device_id: "money".to_owned(),
         may_act: true,
         scope_clamp: Some(ScopeClamp { scopes }),
     };
     let connection = centraid_vault::rusqlite::Connection::open_in_memory().expect("memory");
-    for table in manifest.declared_writes() {
-        let (schema, name) = table.split_once('.').expect("schema.table");
-        assert!(
-            evaluate_access(&connection, &clamped, schema, name, Verb::Act)
-                .expect("judged")
-                .is_allow(),
-            "{table} is declared and not allowed"
-        );
-    }
     assert!(matches!(
         evaluate_access(&connection, &clamped, "notes", "note", Verb::Read).expect("judged"),
         Decision::Deny { .. }

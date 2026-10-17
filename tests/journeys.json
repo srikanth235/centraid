@@ -1608,17 +1608,6 @@
             "note": "The library at its 500 default window. Asked for 2,000 it serves ONE page in 42 ms, deliberately: its sort column is nullable, so a keyset walk would silently drop every undated asset (D-1020-P11). Ten cursored pages are 458 ms."
           }
         },
-        "faceQueue": {
-          "status": "projected",
-          "probe": "cargo test -p centraid-apps-photos --test year3 -- --ignored --nocapture",
-          "_observedMs": 40,
-          "_basis": "One run on ci-linux-x64-4c under concurrent lanes, through the app crate's real query path over a vault seeded by `crates/apps/kit::fixtures`. PROJECTED in this ledger's sense and in D-1020-D3-7's: the number is observed, but one run on one contended container is not a distribution, and the target this journey exists to protect is stated on a reference DEVICE, which this host is not. Every number here is parked under a leading underscore so the ratchet cannot read it as a ceiling; the device lane of R-1020-20 is what promotes one.",
-          "_provenance": {
-            "at": "2026-09-13",
-            "host": "ci-linux-x64-4c, 4 vCPU / 15 GB, shared with concurrent lanes",
-            "note": "Over the 4,000-region window."
-          }
-        },
         "duplicates": {
           "status": "projected",
           "probe": "cargo test -p centraid-apps-photos --test year3 -- --ignored --nocapture",

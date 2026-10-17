@@ -1,5 +1,5 @@
 {
-  "$comment": "Hand-maintained source: no emitter writes this file. Its twin is mobile/shared/src/commonMain/kotlin/dev/centraid/design/copy/ChatCopy.kt; edit both, and KitTimeMoneyCopySpec fails when their strings disagree. Chat is a tab, not an app: the strings are the on-device assistant's, and the tool activity line names the app it is looking in.",
+  "$comment": "The source of these strings. `:shared:generateCopy` turns `strings` into dev.centraid.design.copy.ChatCopy at build time, which both shells read; there is no checked-in Kotlin twin. Chat is a tab, not an app: the strings are the on-device assistant's, and the tool activity line names the app it is looking in.",
   "app": "chat",
   "strings": {
     "A11Y_ANSWER": "Centraid said",

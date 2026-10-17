@@ -239,13 +239,18 @@ pub fn subtitle_of(row: &ItemRow) -> String {
     }
 }
 
-/// One audit entry, and which of the two things it records.
+/// One audit entry, and which of the four things it records.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AccessKind {
     /// An unlock. `object_type = locker.auth`.
     Auth,
-    /// A reveal in the app.
+    /// A reveal or a copy of one sealed cell in the app.
     Reveal,
+    /// A one-time code made from an item's seed (`context.derivation = totp`).
+    Code,
+    /// Every secret into a file (`context.derivation = export`): the one
+    /// receipt that names the whole Locker and no item (#1047 T2).
+    Export,
 }
 
 impl AccessKind {
@@ -254,6 +259,8 @@ impl AccessKind {
         match self {
             Self::Auth => "auth",
             Self::Reveal => "reveal",
+            Self::Code => "code",
+            Self::Export => "export",
         }
     }
 }
@@ -279,6 +286,15 @@ pub struct AccessEntry {
     pub copied: bool,
     /// The custom field a reveal opened (#1047 T2).
     pub field_id: Option<String>,
+    /// The item's title as it is now, when the history was asked of the whole
+    /// Locker ([`crate::phone::load_access`] with no item): `None` for an
+    /// unlock or an export, which name no item, and for an item the vault no
+    /// longer holds. A receipt itself names the item by id only.
+    pub item_title: Option<String>,
+    /// The custom field's label as it is now; `None` when none was opened, the
+    /// history was one item's (its page names its own fields) or the field is
+    /// gone.
+    pub field_label: Option<String>,
 }
 
 /// What the `access` query answers.
@@ -303,17 +319,26 @@ pub fn access_answer(window: usize, rows: &[Row]) -> AccessAnswer {
             let detail = text_of(row, "detail_json")
                 .and_then(|json| serde_json::from_str::<serde_json::Value>(&json).ok())
                 .unwrap_or(serde_json::Value::Null);
+            let derivation = detail["context"]["derivation"].as_str().map(str::to_owned);
+            // THE KIND IS READ OFF THE RECEIPT: an unlock by its object type,
+            // a code and an export by the derivation the command recorded.
             let kind = if object_type == AUTH_ENTITY_TYPE {
                 AccessKind::Auth
             } else {
-                AccessKind::Reveal
+                match derivation.as_deref() {
+                    Some("export") => AccessKind::Export,
+                    Some("totp") => AccessKind::Code,
+                    _ => AccessKind::Reveal,
+                }
             };
             AccessEntry {
                 receipt_id: text_of(row, "receipt_id").unwrap_or_default(),
                 kind,
                 action: text_of(row, "action").unwrap_or_default(),
                 allowed: text_of(row, "decision").as_deref() != Some("deny"),
-                item_id: if object_type == ITEM_ENTITY_TYPE {
+                // AN EXPORT NAMES NO ITEM: its receipt's `object_id` is the
+                // word `export`, which is not an item's id.
+                item_id: if object_type == ITEM_ENTITY_TYPE && kind != AccessKind::Export {
                     text_of(row, "object_id")
                 } else {
                     None
@@ -329,9 +354,11 @@ pub fn access_answer(window: usize, rows: &[Row]) -> AccessAnswer {
                         .collect()
                 }),
                 reason: detail["failing"].as_str().map(str::to_owned),
-                derivation: detail["context"]["derivation"].as_str().map(str::to_owned),
+                derivation,
                 copied: detail["context"]["use"].as_str() == Some("copy"),
                 field_id: detail["field_id"].as_str().map(str::to_owned),
+                item_title: None,
+                field_label: None,
             }
         })
         .collect();
@@ -594,10 +621,92 @@ mod tests {
         ];
         let answer = access_answer(200, &rows);
         assert_eq!(answer.entries[0].derivation.as_deref(), Some("totp"));
+        assert_eq!(answer.entries[0].kind, AccessKind::Code);
         assert!(answer.entries[0].copied);
         assert_eq!(answer.entries[1].field_id.as_deref(), Some("f1"));
+        assert_eq!(answer.entries[1].kind, AccessKind::Reveal);
         assert!(!answer.entries[1].copied);
         assert_eq!(answer.entries[1].derivation, None);
+    }
+
+    /// THE WHOLE-LOCKER HISTORY'S FOUR KINDS (Q-1047-21), read off the
+    /// receipts the commands write: an unlock names the vault, an export
+    /// names the Locker (its `object_id` is the word `export`, which must
+    /// never be taken for an item), a code and a reveal name an item.
+    #[test]
+    fn an_unlock_an_export_a_code_and_a_reveal_are_four_kinds() {
+        let rows = vec![
+            row(&[
+                ("receipt_id", "r4"),
+                ("action", "reveal locker.export"),
+                ("object_type", "locker.item"),
+                ("object_id", "export"),
+                ("decision", "allow"),
+                ("occurred_at", "2026-01-04T00:00:00.000Z"),
+                (
+                    "detail_json",
+                    r#"{"columns":["password","otp_seed"],"context":{"kind":"reveal","derivation":"export"},"items":3}"#,
+                ),
+            ]),
+            row(&[
+                ("receipt_id", "r3"),
+                ("action", "reveal locker.item"),
+                ("object_type", "locker.auth"),
+                ("decision", "allow"),
+                ("occurred_at", "2026-01-03T00:00:00.000Z"),
+                (
+                    "detail_json",
+                    r#"{"columns":["session"],"context":{"kind":"auth"}}"#,
+                ),
+            ]),
+            row(&[
+                ("receipt_id", "r2"),
+                ("action", "reveal locker.totp_code"),
+                ("object_type", "locker.item"),
+                ("object_id", "i1"),
+                ("decision", "allow"),
+                ("occurred_at", "2026-01-02T00:00:00.000Z"),
+                (
+                    "detail_json",
+                    r#"{"columns":["otp_seed"],"context":{"kind":"reveal","derivation":"totp"}}"#,
+                ),
+            ]),
+            row(&[
+                ("receipt_id", "r1"),
+                ("action", "reveal locker.item"),
+                ("object_type", "locker.item"),
+                ("object_id", "i1"),
+                ("decision", "allow"),
+                ("occurred_at", "2026-01-01T00:00:00.000Z"),
+                (
+                    "detail_json",
+                    r#"{"columns":["password"],"context":{"kind":"reveal","use":"show"}}"#,
+                ),
+            ]),
+        ];
+        let answer = access_answer(200, &rows);
+        let kinds: Vec<(AccessKind, Option<&str>)> = answer
+            .entries
+            .iter()
+            .map(|entry| (entry.kind, entry.item_id.as_deref()))
+            .collect();
+        assert_eq!(
+            kinds,
+            [
+                (AccessKind::Export, None),
+                (AccessKind::Auth, None),
+                (AccessKind::Code, Some("i1")),
+                (AccessKind::Reveal, Some("i1")),
+            ]
+        );
+        // The fold names nobody: titles and labels are the loader's second
+        // read, and a fold over receipts alone holds ids.
+        assert!(
+            answer
+                .entries
+                .iter()
+                .all(|entry| entry.item_title.is_none() && entry.field_label.is_none())
+        );
     }
 
     #[test]

@@ -1,9 +1,7 @@
 import CryptoKit
 import Foundation
 
-#if canImport(CentraidShared)
 import CentraidShared
-#endif
 
 // THE ONLY THINGS CENTRAID EVER FETCHES: THE ON-DEVICE CHAT'S MODEL, AND — ONLY
 // WHEN A MEMBER FIRST ATTACHES A PHOTO — ITS VISION PROJECTOR.
@@ -24,27 +22,15 @@ enum ChatAsset: String {
     var isVision: Bool { self == .vision }
 
     var fileName: String {
-        #if canImport(CentraidShared)
         isVision ? ChatModelAsset.shared.VISION_FILE_NAME : ChatModelAsset.shared.FILE_NAME
-        #else
-        isVision ? "mmproj.gguf" : "model.gguf"
-        #endif
     }
 
     var sha256: String {
-        #if canImport(CentraidShared)
         isVision ? ChatModelAsset.shared.VISION_SHA256 : ChatModelAsset.shared.SHA256
-        #else
-        ""
-        #endif
     }
 
     var url: URL? {
-        #if canImport(CentraidShared)
         URL(string: isVision ? ChatModelAsset.shared.VISION_URL : ChatModelAsset.shared.URL)
-        #else
-        nil
-        #endif
     }
 
     var staging: String { ".download-\(rawValue)" }
@@ -91,11 +77,7 @@ enum ChatModelStore {
 
     /// The model's size as the download step quotes it before a byte moves.
     static var expectedBytes: Int64 {
-        #if canImport(CentraidShared)
         ChatModelAsset.shared.BYTES
-        #else
-        0
-        #endif
     }
 
     /// Create the directory and keep it out of iCloud backup: half a gigabyte

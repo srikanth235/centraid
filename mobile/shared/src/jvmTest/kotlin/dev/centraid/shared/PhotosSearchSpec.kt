@@ -131,12 +131,10 @@ class PhotosSearchSpec : StringSpec({
 
     "the vocabulary lands only on an empty field" {
         val vocabulary = PhotosSearchReads.restingArrived(
-            peopleRows = listOf(Row(values = listOf(Value(text = "p-1"), Value(text = "Ada")))),
             placeRows = emptyList(),
             labelRows = listOf(Row(values = listOf(Value(text = "c-1"), Value(text = "beach")))),
         )
         val resting = machine.reduce(machine.initial(), vocabulary).state.resting.shouldNotBeNull()
-        resting.people.map { it.display_name } shouldContainExactly listOf("Ada")
         resting.suggested_labels.map { it.label } shouldContainExactly listOf("beach")
 
         // A MEMBER WHO STARTED TYPING while it was in flight is looking at
@@ -226,7 +224,7 @@ class PhotosSearchSpec : StringSpec({
     }
 
     "a row change re-reads what is showing, and only a live search filters by asset" {
-        // AN EMPTY FIELD RE-READS ITS VOCABULARY IN PLACE: a person named or a
+        // AN EMPTY FIELD RE-READS ITS VOCABULARY IN PLACE: a place named or a
         // label put on is a new word to search for, and the words on screen
         // stay until the new ones land.
         val restingStep = machine.reduce(
@@ -268,12 +266,10 @@ class PhotosSearchSpec : StringSpec({
     "rowsChanged answers for every table a search reads, and null for the rest" {
         machine.rowsChanged("media_asset", listOf("a-1")).shouldNotBeNull()
             .rows_changed.shouldNotBeNull().asset_ids shouldBe listOf("a-1")
-        // A PERSON NAMED, A PLACE RENAMED, AN ALBUM FILLED, A LABEL PUT ON:
-        // each can change an answer, and none of their keys is an asset id —
-        // so they arrive as "something moved", never as a filter.
+        // A PLACE RENAMED, AN ALBUM FILLED, A LABEL PUT ON: each can change an
+        // answer, and none of their keys is an asset id — so they arrive as
+        // "something moved", never as a filter.
         listOf(
-            "core_party",
-            "media_face_region",
             "core_place",
             "core_collection",
             "core_collection_entry",
@@ -286,6 +282,10 @@ class PhotosSearchSpec : StringSpec({
             }
         }
         machine.rowsChanged("core_content_item", listOf("c-1")) shouldBe null
+        // NO PERSON IS SEARCHED FOR, so a party or a face region moves nothing
+        // here (Q-1047-2).
+        machine.rowsChanged("core_party", listOf("p-1")) shouldBe null
+        machine.rowsChanged("media_face_region", listOf("r-1")) shouldBe null
     }
 
     "the query is words, and a query of short words is matched whole" {
@@ -343,7 +343,7 @@ class PhotosSearchSpec : StringSpec({
 
         // `a_b` IS SHORT WORDS ONLY, so it is matched whole — and escaped. The
         // structured legs still match by `LIKE`; the text leg is the door's.
-        val query = PhotosSearchReads.peopleQuery(PhotosSearchReads.tokens("a_b"))
+        val query = PhotosSearchReads.labelsQuery(PhotosSearchReads.tokens("a_b"))
         query.bind.map { it.text }.contains("%a\\_b%") shouldBe true
         query.where_.shouldNotBeNull() shouldContain "ESCAPE"
     }
@@ -431,7 +431,7 @@ class PhotosSearchSpec : StringSpec({
         // The no-match state is the machine's: the sentence and everywhere search looked, with Ask as its action.
         val empty = none.hits.shouldNotBeNull().empty.shouldNotBeNull()
         empty.headline shouldBe "No results"
-        empty.body shouldBe "Nothing matches “zzqx”. Search covers captions, text in photos, people, places, labels and albums."
+        empty.body shouldBe "Nothing matches “zzqx”. Search covers captions, text in photos, places, labels and albums."
         empty.action_label shouldBe "Ask about “zzqx”"
 
         // A photograph is a result: no Ask, no no-match state.

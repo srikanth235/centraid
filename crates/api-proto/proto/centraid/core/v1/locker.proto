@@ -477,13 +477,21 @@ enum LockerRevealRefusal {
 }
 
 // ---------------------------------------------------------------------------
-// `locker.access` (64): one item's access history (#1047 T2).
+// `locker.access` (64): the access history, one item's or the whole
+// Locker's (#1047 T2, Q-1047-21).
 // ---------------------------------------------------------------------------
 
-// The receipts the vault already wrote about an item — reveals, copies and
-// one-time codes, refusals included — newest first. METADATA ONLY: a receipt
-// names the act, the time and the column, and never carried a value.
+// The receipts the vault already wrote — reveals, copies and one-time codes,
+// refusals included — newest first. METADATA ONLY: a receipt names the act,
+// the time and the column, and never carried a value.
+//
+// WITH AN `item_id` it is that item's history, which the item page draws. With
+// NONE it is the whole Locker's, which the More sheet's Access history draws:
+// every item's receipts and the two kinds that name no item, an unlock and an
+// export. Both ride the same arm and the same shell gate: a shell asks
+// nothing of either while the Locker is locked.
 message LockerAccessRequest {
+  // Empty: the whole Locker.
   string item_id = 1;
   // At most this many; 0 is 50. Clamped to 20–2,000.
   uint32 limit = 2;
@@ -492,7 +500,7 @@ message LockerAccessRequest {
 
 message LockerAccess {
   repeated LockerAccessEntry entries = 1;
-  // More receipts than `window` name this item.
+  // More receipts than `window` match the request.
   bool truncated = 2;
   uint32 window = 3;
 }
@@ -511,6 +519,15 @@ message LockerAccessEntry {
   // In the request's zone: `YYYY-MM-DD` and `HH:MM`.
   string local_day = 7;
   string local_time = 8;
+  // The item the receipt is about; empty for an unlock or an export.
+  string item_id = 9;
+  // WHOLE-LOCKER READS ONLY: the item's title as it is now. Empty for an
+  // unlock or an export, and for an item the vault no longer holds (a purge
+  // takes the row, not the receipt). Plain metadata, as on a shelf.
+  string item_title = 10;
+  // WHOLE-LOCKER READS ONLY: the custom field's label as it is now; empty
+  // when none was opened or the field is gone.
+  string field_label = 11;
 }
 
 enum LockerAccessKind {
@@ -518,4 +535,8 @@ enum LockerAccessKind {
   LOCKER_ACCESS_KIND_REVEAL = 1;
   // A one-time code made from the item's seed.
   LOCKER_ACCESS_KIND_CODE = 2;
+  // The Locker was unlocked: the receipt names the vault, no item.
+  LOCKER_ACCESS_KIND_UNLOCK = 3;
+  // Every secret went into a file: the receipt names the Locker, no item.
+  LOCKER_ACCESS_KIND_EXPORT = 4;
 }

@@ -37,7 +37,8 @@ import centraid.screen.v1.PhotoCell
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 import dev.centraid.design.copy.PhotosCopy
-import kotlin.math.roundToInt
+import dev.centraid.shared.apps.photos.PhotoJustify
+import dev.centraid.shared.kit.MediaFormat
 
 /**
  * ONE CELL RENDERER, FOR EVERY SURFACE THAT DRAWS PHOTOGRAPHS.
@@ -146,7 +147,7 @@ public fun PhotoCellSquare(
  * ONE TILE OF THE JUSTIFIED TIMELINE (v0's `PhotoTile.tsx`, #1029 photos port).
  *
  * Its box is fixed from the asset record before a byte arrives — `width` and
- * `height` come from [justify] — and every state paints INSIDE it, so nothing
+ * `height` come from `PhotoJustify` — and every state paints INSIDE it, so nothing
  * reflows when a thumbnail lands. Four overlay slots and nothing else (v0's
  * `tile-overlays.ts`): selection top-trailing, kind bottom-trailing, and the
  * held state bottom-leading. The fourth, v0's vault rule, marked a photograph
@@ -182,7 +183,7 @@ public fun PhotoTile(
             .combinedClickable(
                 onClick = onTap,
                 onLongClick = onLongPress,
-                onClickLabel = if (selecting) "Select" else "Open",
+                onClickLabel = if (selecting) PhotosCopy.PHOTOS_SELECT else PhotosCopy.PHOTOS_OPEN,
             )
             .semantics {
                 contentDescription = label
@@ -213,9 +214,9 @@ public fun PhotoTile(
  */
 private fun cellLabel(cell: PhotoCell, packAbsent: Boolean): String {
     val noun = when {
-        cell.live -> "Live photo"
-        cell.kind == PhotoCell.Kind.KIND_VIDEO -> "Video"
-        else -> "Photo"
+        cell.live -> PhotosCopy.PHOTOS_CELL_LIVE
+        cell.kind == PhotoCell.Kind.KIND_VIDEO -> PhotosCopy.PHOTOS_CELL_VIDEO
+        else -> PhotosCopy.PHOTOGRAPH
     }
     return when {
         !cell.thumbnail_path.isNullOrEmpty() -> noun
@@ -245,7 +246,7 @@ private fun BoxScope.HeldState(
     when {
         cell.held == PhotoCell.Held.HELD_FETCHING ->
             Text(
-                text = "downloading",
+                text = PhotosCopy.PHOTOS_CELL_DOWNLOADING_MARK,
                 style = centraidType("mono"),
                 color = centraidColor("textFaint"),
                 maxLines = 1,
@@ -253,7 +254,7 @@ private fun BoxScope.HeldState(
                     .clip(RoundedCornerShape(RADIUS_SM.dp))
                     .background(centraidColor("bg"))
                     .padding(horizontal = 3.dp, vertical = 1.dp)
-                    .semantics { contentDescription = "Downloading" },
+                    .semantics { contentDescription = PhotosCopy.PHOTOS_CELL_DOWNLOADING },
             )
 
         cell.held == PhotoCell.Held.HELD_WITHHELD_BY_RULE &&
@@ -265,10 +266,10 @@ private fun BoxScope.HeldState(
                 Modifier
                     .align(Alignment.BottomStart)
                     .size(TARGET_MIN.dp)
-                    .clickable(onClickLabel = "Download full-size photo") {
+                    .clickable(onClickLabel = PhotosCopy.PHOTOS_CELL_DOWNLOAD_FULL) {
                         onFetch(cell.asset_id, cell.original_hash)
                     }
-                    .semantics { contentDescription = "Download full-size photo" },
+                    .semantics { contentDescription = PhotosCopy.PHOTOS_CELL_DOWNLOAD_FULL },
                 contentAlignment = Alignment.BottomStart,
             ) {
                 Box(
@@ -323,7 +324,7 @@ private fun BoxScope.SelectionDot(selected: Boolean, muted: Boolean = false) {
 private fun BoxScope.KindLine(cell: PhotoCell, rung: Int) {
     if (rung < TILE_KIND_MIN_RUNG) return
     val text = when {
-        cell.live -> "live"
+        cell.live -> PhotosCopy.PHOTOS_CELL_LIVE_MARK
         cell.kind == PhotoCell.Kind.KIND_VIDEO && cell.duration_seconds > 0 ->
             mediaClock(cell.duration_seconds)
         else -> null
@@ -347,90 +348,30 @@ private fun BoxScope.KindLine(cell: PhotoCell, rung: Int) {
 }
 
 /**
- * `1:04`, `12:07`, `1:02:03` — v0's `mediaClock`, so a tile and a viewer
- * transport state one recording's length the same way.
+ * `1:04`, `12:07`, `1:02:03` — the shared [MediaFormat]'s, so a tile, the player
+ * and the facts panel state one recording's length the same way.
  */
-public fun mediaClock(seconds: Int): String {
-    val hours = seconds / 3_600
-    val minutes = (seconds % 3_600) / 60
-    val rest = seconds % 60
-    return if (hours > 0) {
-        "$hours:" + minutes.toString().padStart(2, '0') + ":" + rest.toString().padStart(2, '0')
-    } else {
-        "$minutes:" + rest.toString().padStart(2, '0')
-    }
-}
+public fun mediaClock(seconds: Int): String = MediaFormat.clock(seconds.toLong())
 
-/** A tile's packed box: the cell, and where [justify] put its edges. */
+/**
+ * A tile's packed box: the cell, and where `PhotoJustify` put its edges. The
+ * packing is shared's (`commonMain`) and names tiles by index; the library
+ * puts the cell back under each (`libraryRows`).
+ */
 public data class JustifiedTile(val cell: PhotoCell, val width: Int, val height: Int)
-
-/**
- * JUSTIFIED ROWS FROM REAL ASPECT RATIOS (v0's `justify.ts`, §4.1).
- *
- * Rows pack to a target height and scale to fill the width exactly; nothing
- * crops to a square and nothing reflows when bytes land. The constants are
- * v0's and must stay equal to the SwiftUI twin's: a 2 gutter, a 28% overshoot
- * before a row closes, and a trailing partial row kept at natural height
- * capped at 1.25× so one wide photograph cannot become a banner. A full row's
- * rounding remainder folds into its LAST tile so the row fills the width to
- * the point; the trailing row deliberately does not.
- */
-public fun justify(cells: List<PhotoCell>, containerWidth: Int, targetHeight: Int): List<List<JustifiedTile>> {
-    if (containerWidth <= 0 || targetHeight <= 0) return emptyList()
-    val rows = mutableListOf<List<JustifiedTile>>()
-    val row = mutableListOf<Pair<PhotoCell, Double>>()
-    var sum = 0.0
-    for (cell in cells) {
-        val ratio = aspectRatio(cell)
-        row += cell to ratio
-        sum += ratio
-        val threshold = containerWidth - GAP * (row.size - 1) + targetHeight * OVERSHOOT
-        if (sum * targetHeight >= threshold) {
-            val height = ((containerWidth - GAP * (row.size - 1)) / sum).roundToInt()
-            val widths = row.map { (height * it.second).roundToInt() }.toMutableList()
-            val available = containerWidth - GAP * (row.size - 1)
-            widths[widths.lastIndex] = widths.last() + (available - widths.sum())
-            rows += row.mapIndexed { index, (packed, _) -> JustifiedTile(packed, widths[index], height) }
-            row.clear()
-            sum = 0.0
-        }
-    }
-    if (row.isNotEmpty()) {
-        val natural = (containerWidth - GAP * (row.size - 1)) / sum
-        val height = minOf(targetHeight * LAST_ROW_CAP, natural)
-        rows += row.map { (packed, ratio) ->
-            JustifiedTile(packed, (height * ratio).roundToInt(), height.roundToInt())
-        }
-    }
-    return rows
-}
-
-/**
- * The real aspect ratio; an unknown box packs SQUARE — a missing record is
- * the one case there is nothing to be faithful to.
- */
-private fun aspectRatio(cell: PhotoCell): Double =
-    if (cell.width > 0 && cell.height > 0) cell.width.toDouble() / cell.height.toDouble() else 1.0
 
 /**
  * THE GRID IS THE LOADING STATE (v0's `PhotosGridSkeleton.tsx`, §14).
  *
- * Skeleton tiles at the rung's own geometry, packed by the same [justify], so
- * the photographs land where their placeholders stood. The aspect sequence is
+ * Skeleton tiles at the rung's own geometry, packed by the same `PhotoJustify`
+ * so the photographs land where their placeholders stood. The aspect sequence is
  * FIXED — random aspects would flicker — and nothing moves: DESIGN.md's
  * `Loading` is static skeletons, and a shimmer is attention-seeking about work
  * the product can simply describe.
  */
 @Composable
 public fun PhotoGridSkeleton(containerWidth: Int, targetHeight: Int, viewportHeight: Int, modifier: Modifier = Modifier) {
-    // BOTH HALVES ROUND UP: too few reads as "the library ends here".
-    val perRow = maxOf(1, containerWidth / maxOf(1, targetHeight)) + 1
-    val rowCount = maxOf(1, viewportHeight / maxOf(1, targetHeight) + 1)
-    val placeholders = List(perRow * rowCount) { index ->
-        val aspect = SKELETON_ASPECTS[index % SKELETON_ASPECTS.size]
-        PhotoCell(asset_id = "skeleton-$index", width = (1000 * aspect).roundToInt(), height = 1000)
-    }
-    val rows = justify(placeholders, containerWidth, targetHeight)
+    val rows = PhotoJustify.skeleton(containerWidth.toDouble(), targetHeight.toDouble(), viewportHeight.toDouble())
     Column(
         modifier.semantics { contentDescription = PhotosCopy.PHOTOS_OPENING_LIBRARY },
         verticalArrangement = Arrangement.spacedBy(GAP.dp),
@@ -450,14 +391,8 @@ public fun PhotoGridSkeleton(containerWidth: Int, targetHeight: Int, viewportHei
     }
 }
 
-/** v0's `SKELETON_ASPECTS`, in order. */
-private val SKELETON_ASPECTS: List<Double> =
-    listOf(1.5, 1.0, 4.0 / 3, 0.75, 1.5, 16.0 / 9, 1.0, 2.0 / 3, 4.0 / 3, 1.0, 1.5, 0.75)
-
-/** The gutter between tiles, both axes — the 4 base rung halved. */
-public const val GAP: Int = 2
-private const val OVERSHOOT: Double = 0.28
-private const val LAST_ROW_CAP: Double = 1.25
+/** The gutter between tiles, both axes — the 4 base rung halved. Shared's. */
+public const val GAP: Int = PhotoJustify.GAP
 
 /** v0's `KIND_MIN_RUNG`: S. */
 private const val TILE_KIND_MIN_RUNG: Int = 1

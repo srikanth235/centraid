@@ -106,7 +106,7 @@ internal object PhotoHandOff {
         // needs a storage grant this app never asks for, and asking for one to
         // save one photograph would be the wrong trade.
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
-            return Outcome(false, "Saving to your photos needs Android 10 or later.")
+            return Outcome(false, PhotosCopy.PHOTOS_EXPORT_NEEDS_ANDROID_10)
         }
         val video = detail.kind == PhotoCell.Kind.KIND_VIDEO
         val mediaType = detail.original_media_type.ifEmpty { if (video) "video/mp4" else "image/jpeg" }

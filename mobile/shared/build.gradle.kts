@@ -235,6 +235,72 @@ kotlin {
     }
 }
 
+// THE COPY IS GENERATED FROM `copy/<app>.json`; NO KOTLIN TWIN IS CHECKED IN.
+//
+// The JSON is the one source: Rust reads it (`crates/design`, the assistant's
+// `include_str!`), `scripts/lint-copy.mjs` holds it to DESIGN.md's Copy rules,
+// and this task turns each file's `strings` into `dev.centraid.design.copy.
+// <App>Copy`, which both shells read (Swift through the framework, as
+// `PhotosCopy.shared.…`). A hand-kept twin drifted by construction and needed
+// a spec to say so; a generated one cannot.
+@org.gradle.api.tasks.CacheableTask
+abstract class GenerateCopy : DefaultTask() {
+    @get:InputDirectory
+    @get:PathSensitive(org.gradle.api.tasks.PathSensitivity.RELATIVE)
+    abstract val copyDir: DirectoryProperty
+
+    @get:OutputDirectory
+    abstract val outputDir: DirectoryProperty
+
+    @TaskAction
+    fun generate() {
+        val target = outputDir.get().asFile.resolve("dev/centraid/design/copy")
+        target.deleteRecursively()
+        target.mkdirs()
+        copyDir.get().asFile.listFiles { file -> file.name.endsWith(".json") }!!.sorted().forEach { file ->
+            val app = file.name.removeSuffix(".json")
+            val name = app.replaceFirstChar { it.uppercase() } + "Copy"
+            @Suppress("UNCHECKED_CAST")
+            val strings = ((groovy.json.JsonSlurper().parse(file) as Map<String, Any?>)["strings"]
+                as Map<String, Any?>?) ?: error("${file.name} has no `strings`")
+            val body = strings.toSortedMap().entries.joinToString("\n") { (key, value) ->
+                require(Regex("[A-Z][A-Z0-9_]*").matches(key)) { "${file.name}: `$key` is not a constant name" }
+                val text = value as? String ?: error("${file.name}: `$key` is not a string")
+                "    public const val $key: String = \"${kotlinLiteral(text)}\""
+            }
+            target.resolve("$name.kt").writeText(
+                "// GENERATED from `copy/${file.name}` by `:shared:generateCopy`. Edit the JSON.\n\n" +
+                    "package dev.centraid.design.copy\n\n" +
+                    "/** `copy/${file.name}`'s strings. STRINGS ONLY: a function composes a sentence and is the reader's to write. */\n" +
+                    "public object $name {\n$body\n}\n",
+            )
+        }
+    }
+
+    private fun kotlinLiteral(text: String): String = buildString {
+        text.forEach { char ->
+            when (char) {
+                '\\' -> append("\\\\")
+                '"' -> append("\\\"")
+                '$' -> append("\\$")
+                '\n' -> append("\\n")
+                '\r' -> append("\\r")
+                '\t' -> append("\\t")
+                else -> append(char)
+            }
+        }
+    }
+}
+
+val generateCopy = tasks.register<GenerateCopy>("generateCopy") {
+    copyDir.set(repositoryRoot.resolve("copy"))
+    outputDir.set(layout.buildDirectory.dir("generated/copy/kotlin"))
+}
+
+kotlin.sourceSets.named("commonMain") {
+    kotlin.srcDir(generateCopy.map { it.outputDir })
+}
+
 // `centraid.screen.v1` ONLY. `centraid.core.v1` comes from `:core`, and the
 // `sourcePath`/`protoPath` split is what says so to Wire: `protoPath` files are
 // parsed for imports and not generated.
@@ -268,17 +334,49 @@ tasks.withType<Test>().configureEach {
     // `Theme.swift` and watching the suite not run at all. A source-scanning
     // test whose sources are not inputs is a test that passes on yesterday's
     // tree.
-    inputs.dir(repositoryRoot.resolve("contracts/screens")).withPathSensitivity(
-        org.gradle.api.tasks.PathSensitivity.RELATIVE,
-    )
-    inputs.dir(repositoryRoot.resolve("design"))
-        .withPathSensitivity(org.gradle.api.tasks.PathSensitivity.RELATIVE)
-    inputs.dir(repositoryRoot.resolve("copy"))
-        .withPathSensitivity(org.gradle.api.tasks.PathSensitivity.RELATIVE)
-    inputs.dir(rootProject.layout.projectDirectory.dir("iosApp"))
-        .withPathSensitivity(org.gradle.api.tasks.PathSensitivity.RELATIVE)
-    inputs.dir(rootProject.layout.projectDirectory.dir("androidApp/src"))
-        .withPathSensitivity(org.gradle.api.tasks.PathSensitivity.RELATIVE)
+    //
+    // THE LIST IS WHAT THE SPECS OPEN, ONE LINE PER FAMILY OF READS:
+    //   - `contracts/screens`, `design`, `copy`: the fixtures, the emitted token
+    //     tables and the copy JSON;
+    //   - `crates/vault/src/commands`, `crates/vault/src/chat.rs`:
+    //     `ShellCommandsExistSpec` reads the registry's declarations and
+    //     `ChatScopeSpec` the card list the scope menu mirrors;
+    //   - `contracts/schema/vault-ddl.sql`: `AppReadsSpec`'s table universe and
+    //     `ShellCommandsExistSpec`'s object types;
+    //   - `crates/api-proto/proto`: `ScreenQueryRuntimeSpec`'s zone pre-check,
+    //     which lists the proto's `tz` requests;
+    //   - `shared/src` and `core/src`, WHOLE: `BackgroundSchedulingSpec`,
+    //     `CommonMainIsPlatformFreeSpec` and the command scan read Kotlin as
+    //     text, and a change to a comment or a string recompiles to the same
+    //     classes — so the classpath alone would call the task up to date;
+    //   - the two native shells.
+    // A spec that opens a new place adds it here, or it passes on yesterday's tree.
+    val relative = org.gradle.api.tasks.PathSensitivity.RELATIVE
+    listOf(
+        repositoryRoot.resolve("contracts/screens"),
+        repositoryRoot.resolve("design"),
+        repositoryRoot.resolve("copy"),
+        repositoryRoot.resolve("crates/vault/src/commands"),
+        repositoryRoot.resolve("crates/api-proto/proto"),
+        rootProject.layout.projectDirectory.dir("shared/src").asFile,
+        rootProject.layout.projectDirectory.dir("core/src").asFile,
+        rootProject.layout.projectDirectory.dir("androidApp/src").asFile,
+    ).forEach { dir -> inputs.dir(dir).withPathSensitivity(relative) }
+    listOf(
+        repositoryRoot.resolve("crates/vault/src/chat.rs"),
+        repositoryRoot.resolve("contracts/schema/vault-ddl.sql"),
+    ).forEach { file -> inputs.file(file).withPathSensitivity(relative) }
+    // The iOS tree WITHOUT what it builds. `Sources/Generated` is protoc's
+    // output (`mobile/scripts/generate-swift-protos.sh`) and is a function of
+    // `crates/api-proto/proto`, already an input above; `*.xcodeproj` is
+    // XcodeGen's, and `build/` and `DerivedData/` are Xcode's. Declaring them
+    // would make the Kotlin suite re-run on every Xcode build, and says nothing
+    // the specs read.
+    inputs.files(
+        fileTree(rootProject.layout.projectDirectory.dir("iosApp")) {
+            exclude("Sources/Generated/**", ".generated/**", "*.xcodeproj/**", "build/**", "DerivedData/**", "**/.DS_Store")
+        },
+    ).withPropertyName("iosApp").withPathSensitivity(relative)
     testLogging { showStandardStreams = true }
 }
 

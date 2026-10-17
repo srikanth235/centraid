@@ -6,6 +6,7 @@
 //! records    move the snapshot's parts, then move the head          (manifest after ranges)
 //! prepare    seal what no gateway holds: derivatives, then originals, newest first
 //! move       PUT each part, bundles for the small ones; repeat until nothing is left
+//! snapshot   again, when this pass confirmed files whose rows no snapshot covers
 //! ```
 //!
 //! **Acknowledgement is the `PUT`'s success** (#1080 ruling 7): a part counts
@@ -70,17 +71,18 @@ use centraid_vault::backup::naming::{BackupKeys, Name, name as part_name, names_
 use centraid_vault::backup::retention;
 use centraid_vault::backup::snapshot::{self, Manifest, Settled};
 use centraid_vault::backup::spool::Spool;
-use centraid_vault::backup::store::{self as plane_store, Store, StoreError};
+use centraid_vault::backup::store::{self as plane_store, Refusal, Store, StoreError};
 use centraid_vault::clock::SystemClock;
 
 use super::link::{self, GatewayStore, Reached, Unreached};
-use super::{Keyring, Plane, now_ms, plane_error, store_error};
+use super::{Keyring, Plane, now_ms, plane_error, row_backed_up, store_error};
 use crate::error::{CoreError, Result};
 use crate::handle::Handle;
 use crate::stage::{Planned, bytes_of_parts, window_within};
 
-/// A snapshot is taken at most this often unless the member asks: an hour,
-/// the recovery point for records at home (#1080 ruling 5).
+/// A snapshot is taken at most this often unless the member asks or a pass
+/// confirms files whose rows no snapshot covers (R-1080-C15): an hour, the
+/// recovery point for records at home (#1080 ruling 5).
 pub const SNAPSHOT_EVERY_MS: u64 = 60 * 60 * 1000;
 
 /// The most items one answer asks the shell to stream (`NeedBytes`).
@@ -310,7 +312,9 @@ impl Conditions {
 /// `None` when it reached one, or when no pass has run yet — a phone that has
 /// not tried is not blamed on its gateway; `GATEWAY` when none answered;
 /// `UNTRUSTED` when the machine that answered is not the pinned gateway,
-/// whether at the start of the pass or part-way through it.
+/// whether at the start of the pass or part-way through it; `REFUSED` when it
+/// answered and refused a write for its own reason (a full disk, a quota);
+/// `PAIR_AGAIN` when it no longer knows this phone's token.
 ///
 /// # Errors
 /// The ledger's refusal.
@@ -319,15 +323,43 @@ pub fn last_reach(ledger: &Ledger) -> Result<Option<wire::WaitReason>> {
         match ledger.meta(REACHABLE_KEY).map_err(plane_error)?.as_deref() {
             Some(REACH_SILENT) => Some(wire::WaitReason::Gateway),
             Some(REACH_UNTRUSTED) => Some(wire::WaitReason::Untrusted),
+            Some(REACH_REFUSED) => Some(wire::WaitReason::Refused),
+            Some(REACH_PAIR_AGAIN) => Some(wire::WaitReason::PairAgain),
             _ => None,
         },
     )
 }
 
-/// `REACHABLE_KEY`'s three values.
+/// `REACHABLE_KEY`'s values.
 const REACH_ANSWERED: &str = "1";
 const REACH_SILENT: &str = "0";
 const REACH_UNTRUSTED: &str = "untrusted";
+/// The gateway answered and refused a write: a full disk, a quota (the
+/// sweep's F1).
+const REACH_REFUSED: &str = "refused";
+/// The gateway answered `UNAUTHORIZED` to this phone's token (the sweep's F2).
+const REACH_PAIR_AGAIN: &str = "pair_again";
+
+/// What a refusal the gateway sent outside a part's own `PUT` is to a pass,
+/// told by its code — [`super::store_error`] spells a refusal as
+/// [`CoreError::GatewayRefused`] with the code as its reason.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Refused {
+    /// `UNAUTHORIZED`: the gateway does not know this phone's token.
+    Token,
+    /// `DISK_FULL`, `QUOTA`, `TOO_LARGE`: the gateway's own limit.
+    Room,
+}
+
+/// The class a refusal's code belongs to, or `None` for one a pass does not
+/// give a status of its own.
+fn refused_by(reason: &str) -> Option<Refused> {
+    match reason {
+        "UNAUTHORIZED" => Some(Refused::Token),
+        "DISK_FULL" | "QUOTA" | "TOO_LARGE" => Some(Refused::Room),
+        _ => None,
+    }
+}
 
 // ─── the pass ───────────────────────────────────────────────────────────────
 
@@ -339,6 +371,14 @@ struct Pass {
     need: Vec<wire::NeedBytes>,
     asked_for: BTreeSet<Name>,
     waiting_bytes: BTreeSet<Name>,
+    /// The spool volume's free bytes, read when the pass began: the floor an
+    /// oversize part keeps (the sweep's F6).
+    free: u64,
+    /// Parts a gateway acknowledged in this pass's media rounds (originals and
+    /// derivatives, never the records), and the names the gateway already held
+    /// that were confirmed from its answer: the files whose rows a snapshot
+    /// may still owe the pass one for.
+    media_confirmed: usize,
     /// The spool's bytes promised to the library items asked for: the shell
     /// streams them after the pass answers, so no later round of this pass
     /// may spend them first.
@@ -348,9 +388,9 @@ struct Pass {
     planned: BTreeMap<String, Planned>,
     /// What the gateway did part-way through, for the status to say until a
     /// pass reaches it again: `REACH_SILENT` when it stopped answering,
-    /// `REACH_UNTRUSTED` when another machine answered in its place. `None`
-    /// when it answered to the end — a refusal included, which is the
-    /// gateway's answer and not its absence.
+    /// `REACH_UNTRUSTED` when another machine answered in its place,
+    /// `REACH_REFUSED` when it answered and refused a write for its own
+    /// reason (the sweep's F1). `None` when it answered to the end.
     heard: Option<&'static str>,
 }
 
@@ -363,6 +403,8 @@ impl Pass {
             need: Vec::new(),
             asked_for: BTreeSet::new(),
             waiting_bytes: BTreeSet::new(),
+            free: 0,
+            media_confirmed: 0,
             promised: 0,
             planned: BTreeMap::new(),
             heard: None,
@@ -379,6 +421,7 @@ impl Pass {
         self.heard = match stop {
             Stop::Unreachable(_) => Some(REACH_SILENT),
             Stop::Untrusted(_) => Some(REACH_UNTRUSTED),
+            Stop::Refused(_) => Some(REACH_REFUSED),
             _ => None,
         };
         Ok(true)
@@ -434,6 +477,16 @@ fn deadline_of(deadline_ms: u64, started: Instant) -> Instant {
     started.checked_add(budget).unwrap_or(started)
 }
 
+/// `gateway_id` answered `UNAUTHORIZED` to this phone's token: mark it for
+/// pairing again, and let the status wait on that rather than on time (the
+/// sweep's F2). A pairing starts the gateway's record over, which spends it.
+fn mark_token_refused(ledger: &Ledger, gateway_id: &str) -> Result<()> {
+    ledger.set_unauthorized(gateway_id).map_err(plane_error)?;
+    ledger
+        .set_meta(REACHABLE_KEY, REACH_PAIR_AGAIN)
+        .map_err(plane_error)
+}
+
 /// A mover's stop as the pass answers it; `MOVED` is a refusal, never a stop.
 fn stop_of(stop: &Stop) -> Result<Option<wire::DrainStop>> {
     match stop {
@@ -447,9 +500,17 @@ fn stop_of(stop: &Stop) -> Result<Option<wire::DrainStop>> {
             tracing::warn!(%reason, "the machine that answered is not the pinned gateway");
             Ok(Some(wire::DrainStop::Untrusted))
         }
+        // A TOKEN THE GATEWAY NO LONGER KNOWS is the pass's error, as it was
+        // before any part moved (`pass_over`'s first question): `run` marks
+        // the gateway for pairing again. Every other refusal is the
+        // gateway's own limit — a full disk, a quota — and is its own stop,
+        // not an absence (#1080, the sweep's F1): the status says so.
+        Stop::Refused(Refusal::Unauthorized) => Err(CoreError::GatewayRefused {
+            reason: Refusal::Unauthorized.code().to_owned(),
+        }),
         Stop::Refused(refusal) => {
-            tracing::warn!(code = %refusal, "the gateway refused a part; the pass stops");
-            Ok(Some(wire::DrainStop::Unreachable))
+            tracing::warn!(code = %refusal.code(), "the gateway refused a part; the pass stops");
+            Ok(Some(wire::DrainStop::Refused))
         }
         Stop::Moved { epoch } => Err(CoreError::VaultMoved {
             current_epoch: *epoch,
@@ -588,6 +649,34 @@ pub fn run(
                 moved_at_ms: reached.gateway_ms,
             })
         }
+        Err(CoreError::GatewayRefused { reason }) => match refused_by(&reason) {
+            // THE GATEWAY ANSWERED, AND ITS ANSWER IS ITS OWN LIMIT — a full
+            // disk, a quota — on a call that was not a part's `PUT` (the
+            // head, `exists`, retention's list): the same stop the mover
+            // gives a refused part (#1080, the sweep's F1), so the status
+            // says the machine has to make room, not that time will pass.
+            Some(Refused::Room) => {
+                tracing::warn!(code = %reason, "the gateway refused; the pass stops");
+                handle.plan_library(std::mem::take(&mut pass.planned));
+                ledger
+                    .set_meta(REACHABLE_KEY, REACH_REFUSED)
+                    .map_err(plane_error)?;
+                pass.stopped = wire::DrainStop::Refused;
+                answer(&spool, pass)
+            }
+            // A TOKEN THE GATEWAY DOES NOT KNOW (#1080, the sweep's F2): its
+            // store was lost and its identity kept, or its operator revoked
+            // the token. Every acknowledgement in the ledger describes a
+            // gateway that is gone, and no pass can add to them, so the
+            // gateway is marked and the status says to pair again. The pass
+            // still answers the error it always did.
+            Some(Refused::Token) => {
+                tracing::warn!("the gateway does not know this phone's token; pair again");
+                mark_token_refused(&ledger, &reached.destination.gateway_id)?;
+                Err(CoreError::GatewayRefused { reason })
+            }
+            None => Err(CoreError::GatewayRefused { reason }),
+        },
         Err(other) => Err(other),
     }
 }
@@ -620,7 +709,11 @@ fn pass_over(
                 moved_at_ms: 0,
             });
         }
-        Ok(_) => {}
+        // THE GATEWAY KNOWS THIS PHONE'S TOKEN, whatever it refused before:
+        // a mark that said to pair again is spent (the sweep's F2).
+        Ok(_) => ledger
+            .clear_unauthorized(&reached.destination.gateway_id)
+            .map_err(plane_error)?,
         Err(StoreError::Unreachable(reason)) => {
             pass.stopped_by(&Stop::Unreachable(reason))?;
             return Ok(());
@@ -633,6 +726,7 @@ fn pass_over(
     }
 
     let budget = plane.budget();
+    pass.free = plane.free_bytes();
     let files = handle.with_vault(|vault| content_files(vault).map_err(plane_error))?;
 
     // 0. ONCE A CORE'S LIFE, THE LEDGER IS SQUARED WITH THE GATEWAY (#1080
@@ -644,6 +738,9 @@ fn pass_over(
     if handle.owes_full_reconcile() {
         let squared = mover::reconcile(ledger, spool, store, &SystemClock).map_err(plane_error)?;
         handle.reconciled_fully();
+        // NAMES THE GATEWAY HELD ARE FILES CONFIRMED, here as in a pass's own
+        // rounds: their rows may be in no snapshot yet (R-1080-C15).
+        pass.media_confirmed = pass.media_confirmed.saturating_add(squared.confirmed.len());
         if !squared.unconfirmed.is_empty() {
             tracing::warn!(
                 lost = squared.unconfirmed.len(),
@@ -653,28 +750,26 @@ fn pass_over(
     }
 
     // 1. THE RECORDS, when the link may carry them.
+    let records = RecordsRound {
+        handle,
+        keyring,
+        plane,
+        ledger,
+        spool,
+        store,
+        budget,
+        deadline,
+    };
     if conditions.may_move(Kind::Records) {
-        if snapshot_due(ledger, store.gateway_id(), snapshot_owed(ledger)?)? {
-            take_snapshot(handle, keyring, plane, ledger, spool, store, budget)?;
-            ledger
-                .set_meta(SNAPSHOT_OWED_KEY, "0")
-                .map_err(plane_error)?;
-        }
-        let moved =
-            mover::move_queue_where(ledger, spool, store, deadline, &SystemClock, &|part| {
-                part.handed_off_ms.is_none() && Kind::of_part(part) == Kind::Records
-            })
-            .map_err(plane_error)?;
-        pass.count(moved.confirmed.len());
-        if pass.stopped_by(&moved.stopped)? {
+        let take = snapshot_due(ledger, store.gateway_id(), snapshot_owed(ledger)?)?;
+        if records.run(take, &files, pass)? {
             return Ok(());
         }
-        settle_newest(ledger, store, keyring, &files, pass)?;
     }
 
     // 2. THE MEDIA, in rounds: seal what fits the spool, move it, again.
     let bytes = handle.bytes();
-    loop {
+    let finished = loop {
         let sealed = prepare(
             &files,
             ledger,
@@ -689,7 +784,7 @@ fn pass_over(
         )?;
         if Instant::now() >= deadline {
             pass.stopped = wire::DrainStop::Deadline;
-            return Ok(());
+            break false;
         }
         let moved =
             mover::move_queue_where(ledger, spool, store, deadline, &SystemClock, &|part| {
@@ -698,17 +793,122 @@ fn pass_over(
             })
             .map_err(plane_error)?;
         pass.count(moved.confirmed.len());
+        pass.media_confirmed = pass.media_confirmed.saturating_add(moved.confirmed.len());
         if pass.stopped_by(&moved.stopped)? {
-            return Ok(());
+            break false;
         }
         // A ROUND THAT MOVED PARTS FREED ROOM, so one more prepare asks for
         // the next window of a library item larger than the spool
         // (R-1080-C39) before the pass answers; a round that did neither is
         // the end.
         if sealed == 0 && moved.confirmed.is_empty() {
-            return Ok(());
+            break true;
+        }
+    };
+
+    // 3. THE RECORDS AGAIN, WHEN THIS PASS CONFIRMED FILES THEIR ROWS ARE NOT
+    // IN A SNAPSHOT FOR (R-1080-C15, the cadence the simulator runs asked
+    // for). A file is backed up only once its bytes AND its row are
+    // (`row_backed_up`), and the hourly snapshot would leave every photograph
+    // an ordinary pass moved reading as waiting until the app leaves the
+    // screen, a tap, or the hour. So a pass that confirmed files, and left a
+    // row no snapshot taken so far covers, takes one before it answers; a
+    // pass that was cut off (a deadline, a gateway that went) owes it to the
+    // next, which takes it first.
+    if pass.media_confirmed > 0 && conditions.may_move(Kind::Records) {
+        let now_files = handle.with_vault(|vault| content_files(vault).map_err(plane_error))?;
+        if rows_uncovered(ledger, &keyring.backup, conditions, &now_files)? {
+            if finished {
+                records.run(true, &now_files, pass)?;
+            } else {
+                owe_a_snapshot(ledger)?;
+            }
         }
     }
+    Ok(())
+}
+
+/// What the records' half of a pass needs, so the pass can run it twice: when
+/// it begins, and when it has confirmed files whose rows nothing covers.
+struct RecordsRound<'a> {
+    handle: &'a Handle,
+    keyring: &'a Keyring,
+    plane: &'a Plane,
+    ledger: &'a Ledger,
+    spool: &'a Spool,
+    store: &'a GatewayStore,
+    budget: u64,
+    deadline: Instant,
+}
+
+impl RecordsRound<'_> {
+    /// Take a snapshot when `take`, move the records' parts, and move the head
+    /// once every part of the newest snapshot is confirmed. Answers whether
+    /// the pass stopped.
+    fn run(&self, take: bool, files: &[ContentFile], pass: &mut Pass) -> Result<bool> {
+        if take {
+            take_snapshot(
+                self.handle,
+                self.keyring,
+                self.plane,
+                self.ledger,
+                self.spool,
+                self.store,
+                self.budget,
+            )?;
+            self.ledger
+                .set_meta(SNAPSHOT_OWED_KEY, "0")
+                .map_err(plane_error)?;
+        }
+        let moved = mover::move_queue_where(
+            self.ledger,
+            self.spool,
+            self.store,
+            self.deadline,
+            &SystemClock,
+            &|part| part.handed_off_ms.is_none() && Kind::of_part(part) == Kind::Records,
+        )
+        .map_err(plane_error)?;
+        pass.count(moved.confirmed.len());
+        if pass.stopped_by(&moved.stopped)? {
+            return Ok(true);
+        }
+        // RETENTION IS JUDGED ON THE VAULT'S OWN CLOCK, the one every snapshot's
+        // `taken_at_ms` is dated by: the same reading as the phone's wall
+        // clock on a phone, and one a test can hold and advance.
+        let now = self
+            .handle
+            .with_vault(|vault| Ok(u64::try_from(vault.clock().now_ms()).unwrap_or(0)))?;
+        settle_newest(self.ledger, self.store, self.keyring, files, now, pass)?;
+        Ok(false)
+    }
+}
+
+/// **A FILE THE MEMBER BACKS UP, WHOSE BYTES A GATEWAY HOLDS AND WHOSE ROW NO
+/// SNAPSHOT THIS PHONE TOOK COVERS** (R-1080-C15): the file the status would
+/// read as waiting for the next snapshot. "Covers" counts every snapshot in
+/// the ledger — one still on its way included, since it is already in flight —
+/// by the vault's own clock, as [`row_backed_up`] does.
+fn rows_uncovered(
+    ledger: &Ledger,
+    keys: &BackupKeys,
+    conditions: &Conditions,
+    files: &[ContentFile],
+) -> Result<bool> {
+    let confirmed = ledger.confirmed_anywhere().map_err(plane_error)?;
+    let covered_at = ledger
+        .snapshots()
+        .map_err(plane_error)?
+        .iter()
+        .map(|snapshot| snapshot.taken_at_ms)
+        .max();
+    Ok(files.iter().any(|file| {
+        conditions.counts(Kind::of_file(file))
+            && names_of(keys, &file.h, file.len)
+                .iter()
+                .all(|name| confirmed.contains(name))
+            && !row_backed_up(file, covered_at)
+    }))
 }
 
 fn answer(spool: &Spool, pass: Pass) -> Result<wire::DrainResponse> {
@@ -854,6 +1054,13 @@ fn take_snapshot(
             for name in names_of_snapshot(&old)?.difference(&keep) {
                 ledger.dequeue(name).map_err(plane_error)?;
                 spool.remove(name).map_err(plane_error)?;
+                // A PART OF A SNAPSHOT THAT NEVER BECAME A HEAD is named by no
+                // kept snapshot, so retention's hold on unlive names (the
+                // sweep's F5) must not keep the copy the gateway already has:
+                // its grave is dated before every snapshot (#1080, S5).
+                ledger
+                    .set_meta(&format!("{GRAVE_PREFIX}{}", name.to_hex()), "0")
+                    .map_err(plane_error)?;
             }
             ledger.forget_snapshot(&old.name).map_err(plane_error)?;
         }
@@ -871,6 +1078,7 @@ fn settle_newest(
     store: &GatewayStore,
     keyring: &Keyring,
     files: &[ContentFile],
+    now: u64,
     pass: &mut Pass,
 ) -> Result<()> {
     let Some(newest) = ledger
@@ -890,7 +1098,7 @@ fn settle_newest(
                 .set_head_acked(store.gateway_id(), head.set_at_ms)
                 .map_err(plane_error)?;
             pass.acked_at_ms = i64::try_from(head.set_at_ms).ok();
-            retain(ledger, store, &keyring.backup, files)?;
+            retain(ledger, store, &keyring.backup, files, now)?;
         }
         Settled::Waiting { unconfirmed } => {
             tracing::debug!(
@@ -933,20 +1141,49 @@ fn manifest_of(
     Manifest::from_json(&json).map_err(plane_error)
 }
 
+/// A name retention is holding back, in the ledger's `meta`: the moment this
+/// phone first saw it unlive (the sweep's F5).
+const GRAVE_PREFIX: &str = "grave:";
+
 /// **Retention, then garbage** (#1080, "Retention"): keep 7 daily, 4 weekly
 /// and 6 monthly snapshots; when that drops one, delete every name nothing
 /// kept refers to — the kept manifests and their ranges, every name the
 /// vault's content implies, and everything still on its way.
+///
+/// **A FILE THE VAULT DELETED STAYS WHILE A KEPT SNAPSHOT MAY NAME IT** (the
+/// sweep's F5; F4's second half). The snapshot history protects records, and
+/// a restore of an older snapshot needs the files its rows name — including,
+/// after a stale phone took the vault over with an older copy, the files the
+/// newer phone backed up, which the older copy does not name. A name that is
+/// neither live nor a dropped snapshot's own range is held until every kept
+/// snapshot was taken after this phone first saw it unlive
+/// ([`retention::collectable`]); a dropped snapshot's manifest and ranges are
+/// garbage at once, since they are the history, not what it names.
 fn retain(
     ledger: &Ledger,
     store: &GatewayStore,
     keys: &BackupKeys,
     files: &[ContentFile],
+    now: u64,
 ) -> Result<()> {
     let registered = store.snapshots().map_err(store_error)?;
-    let decided = retention::keep(&registered, now_ms());
+    let decided = retention::keep(&registered, now);
     if decided.drop.is_empty() {
         return Ok(());
+    }
+    // WHAT A DROPPED SNAPSHOT IS MADE OF — its manifest and its ranges — is
+    // garbage the moment it goes. Read before the manifest is deleted; one
+    // that will not open leaves its ranges to wait with the other garbage.
+    let mut promptly: BTreeSet<Name> = decided.drop.iter().copied().collect();
+    for name in &decided.drop {
+        match manifest_of(ledger, store, keys, name) {
+            Ok(manifest) => promptly.extend(manifest.range_names()),
+            Err(error @ CoreError::Unavailable { .. }) => return Err(error),
+            Err(error) => tracing::warn!(
+                %error,
+                "a dropped snapshot's manifest would not open; its ranges wait with the rest"
+            ),
+        }
     }
     let dropped = plane_store::delete_all(store, &decided.drop).map_err(store_error)?;
     for name in &decided.drop {
@@ -968,7 +1205,56 @@ fn retain(
     let live = retention::live_names(keys, live, files.iter().map(|file| (file.h, file.len)));
     let listed = plane_store::list_all(store).map_err(store_error)?;
     let garbage = retention::garbage(listed.iter().map(|entry| entry.name), &live);
-    let deleted = plane_store::delete_all(store, &garbage).map_err(store_error)?;
+
+    // THE OLDEST SNAPSHOT STILL KEPT, on the clock snapshots are dated by.
+    let oldest_kept = decided
+        .keep
+        .iter()
+        .filter_map(|kept| registered.iter().find(|entry| entry.name == *kept))
+        .map(|entry| entry.taken_at_ms)
+        .min();
+    let graves: BTreeMap<String, u64> = ledger
+        .meta_with_prefix(GRAVE_PREFIX)
+        .map_err(plane_error)?
+        .into_iter()
+        .filter_map(|(key, value)| Some((key, value.parse().ok()?)))
+        .collect();
+    let grave_of = |name: &Name| format!("{GRAVE_PREFIX}{}", name.to_hex());
+    let mut doomed: Vec<Name> = Vec::new();
+    let mut held_back = 0_usize;
+    let mut unlive: BTreeSet<String> = BTreeSet::new();
+    for name in garbage {
+        if promptly.contains(&name) {
+            doomed.push(name);
+            continue;
+        }
+        let key = grave_of(&name);
+        let first = match graves.get(&key) {
+            Some(first) => *first,
+            None => {
+                ledger
+                    .set_meta(&key, &now.to_string())
+                    .map_err(plane_error)?;
+                now
+            }
+        };
+        unlive.insert(key);
+        if retention::collectable(first, oldest_kept) {
+            doomed.push(name);
+        } else {
+            held_back += 1;
+        }
+    }
+    // A NAME THAT IS LIVE AGAIN (the same bytes added back) or gone from the
+    // listing is no longer being held back: its mark would otherwise date a
+    // later leaving from the wrong day.
+    for key in graves.keys().filter(|key| !unlive.contains(*key)) {
+        ledger.forget_meta(key).map_err(plane_error)?;
+    }
+    let deleted = plane_store::delete_all(store, &doomed).map_err(store_error)?;
+    for name in &deleted.deleted {
+        ledger.forget_meta(&grave_of(name)).map_err(plane_error)?;
+    }
     // WHAT THE GATEWAY DELETED IS NOT HELD THERE ANY MORE, so the ledger — a
     // cache of the gateway's truth (#1080 ruling 7) — stops confirming it now
     // rather than at the next launch's reconcile.
@@ -984,6 +1270,7 @@ fn retain(
     tracing::info!(
         dropped = decided.drop.len(),
         collected = deleted.deleted.len(),
+        held_back,
         "retention dropped snapshots and collected what nothing kept"
     );
     Ok(())
@@ -1058,6 +1345,7 @@ fn prepare(
             .confirm_many(&held, store.gateway_id(), now_ms())
             .map_err(plane_error)?;
         confirmed.extend(held.iter().map(|(name, _)| *name));
+        pass.media_confirmed = pass.media_confirmed.saturating_add(held.len());
     }
 
     let mut candidates: Vec<&ContentFile> = unconfirmed
@@ -1104,6 +1392,7 @@ fn prepare(
                 ledger,
                 budget,
                 deadline,
+                pass.free,
                 &mut held_bytes,
             )?;
             continue;
@@ -1126,7 +1415,12 @@ fn prepare(
         // NOWHERE ON THIS PHONE: a restored phone that has not fetched an
         // original, or bytes a member released. Nothing here can send them.
     }
-    plan_library(&library, budget.saturating_sub(held_bytes), pass);
+    plan_library(
+        &library,
+        budget.saturating_sub(held_bytes),
+        (held_bytes == 0).then_some(pass.free),
+        pass,
+    );
     Ok(sealed)
 }
 
@@ -1145,7 +1439,12 @@ struct LibraryAsk<'a> {
 /// never reads an item the stage door could only hash. What is asked for is
 /// promised, so a later round of the same pass cannot spend it before the
 /// shell streams.
-fn plan_library(asks: &[LibraryAsk<'_>], mut room: u64, pass: &mut Pass) {
+fn plan_library(
+    asks: &[LibraryAsk<'_>],
+    mut room: u64,
+    empty_spool_free: Option<u64>,
+    pass: &mut Pass,
+) {
     let mut larger: Option<&LibraryAsk<'_>> = None;
     for ask in asks {
         if pass.need.len() >= MAX_NEED_BYTES {
@@ -1165,7 +1464,7 @@ fn plan_library(asks: &[LibraryAsk<'_>], mut room: u64, pass: &mut Pass) {
         }
     }
     if let Some(ask) = larger {
-        let window = window_within(room, ask.file.len, &ask.parts);
+        let window = window_within(room, ask.file.len, &ask.parts, empty_spool_free);
         if !window.is_empty() {
             pass.ask_for(ask, window);
         }
@@ -1186,6 +1485,7 @@ fn seal_store_file(
     ledger: &Ledger,
     budget: u64,
     deadline: Instant,
+    free: u64,
     held_bytes: &mut u64,
 ) -> Result<usize> {
     let invariant = |what: &str, error: &dyn std::fmt::Display| CoreError::Invariant {
@@ -1222,7 +1522,7 @@ fn seal_store_file(
         // THE SPOOL NEVER HOLDS MORE THAN ITS BUDGET: a part that would pass
         // it waits for the room the mover frees (`Spool`'s "admits").
         if Instant::now() >= deadline
-            || !centraid_vault::backup::spool::admits(*held_bytes, len, budget)
+            || !centraid_vault::backup::spool::admits_on(*held_bytes, len, budget, free)
         {
             break;
         }
@@ -1427,6 +1727,7 @@ pub fn settle(
     let spool = plane.spool()?;
     let mine = keyring.vault_hex();
     let mut answer = wire::SettleResponse::default();
+    let mut files_confirmed = false;
     for settled in &request.settled {
         if !settled.vault_id.is_empty() && settled.vault_id != mine {
             continue;
@@ -1440,6 +1741,14 @@ pub fn settle(
         let destination = ledger
             .destination(&settled.gateway_id)
             .map_err(plane_error)?;
+        // THE OPERATING SYSTEM WAS TOLD NO BY A GATEWAY THAT DOES NOT KNOW
+        // THIS PHONE'S TOKEN (the sweep's F2): marked as a pass would mark it,
+        // so the status says to pair again whichever half met the refusal.
+        if let Some(refusing) = &destination
+            && (settled.http_status == 401 || settled.error == "UNAUTHORIZED")
+        {
+            mark_token_refused(&ledger, &refusing.gateway_id)?;
+        }
         let acknowledged = matches!(settled.http_status, 200 | 201)
             || (settled.http_status == 409 && settled.error == "NAME_TAKEN");
         match destination {
@@ -1450,6 +1759,7 @@ pub fn settle(
                 ledger.dequeue(&name).map_err(plane_error)?;
                 spool.remove(&name).map_err(plane_error)?;
                 answer.confirmed += 1;
+                files_confirmed |= Kind::of_part(&part) != Kind::Records;
             }
             Some(_) if settled.error == "DIGEST_MISMATCH" => {
                 ledger.dequeue(&name).map_err(plane_error)?;
@@ -1478,7 +1788,19 @@ pub fn settle(
             }
         }
     }
+    // FILES THE OPERATING SYSTEM CONFIRMED ARE FILES A PASS DID NOT (R-1080-C15):
+    // their rows are in no snapshot yet, so the next pass that may carry the
+    // records takes one first, as it does for a pass that was cut off.
+    if files_confirmed {
+        owe_a_snapshot(&ledger)?;
+    }
     Ok(answer)
+}
+
+/// The next pass that reaches a gateway takes a snapshot first
+/// ([`snapshot_owed`]).
+fn owe_a_snapshot(ledger: &Ledger) -> Result<()> {
+    ledger.set_meta(SNAPSHOT_OWED_KEY, "1").map_err(plane_error)
 }
 
 /// **Square the ledger with what a gateway holds** (`reconcile`, #1080
@@ -1523,10 +1845,17 @@ pub fn reconcile(
         Ok(reconciled) => reconciled,
         Err(centraid_vault::backup::PlaneError::Store(error)) => {
             tracing::debug!(%error, "the gateway stopped answering mid-reconcile");
+            if matches!(error, StoreError::Refused(Refusal::Unauthorized)) {
+                mark_token_refused(&ledger, &reached.destination.gateway_id)?;
+            }
             return Ok(unreachable);
         }
         Err(other) => return Err(plane_error(other)),
     };
+    // NAMES THE GATEWAY HELD ARE FILES CONFIRMED OUTSIDE A PASS (R-1080-C15).
+    if !reconciled.confirmed.is_empty() {
+        owe_a_snapshot(&ledger)?;
+    }
     let now = now_ms();
     let mut requeued = 0_u32;
     for part in ledger.queued().map_err(plane_error)? {

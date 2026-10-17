@@ -1,8 +1,6 @@
 import SwiftUI
 
-#if canImport(CentraidShared)
 import CentraidShared
-#endif
 
 /// LOCKER'S HOME — Items · Review · Generate, More as a sheet (#1047; the
 /// handoff's Locker §1). Search is the room's bar (R-CHROME-2), never a tab;
@@ -20,7 +18,8 @@ struct LockerHomeView: View {
     let send: (Data) -> Void
     let sendLock: (Data) -> Void
     let sendGenerator: (Data) -> Void
-    let push: (ShellModel.Route) -> Void
+    /// The generator's "Put it on an item": the shell's own editor route.
+    let onUseGenerated: () -> Void
     let onHome: () -> Void
 
     @Environment(\.colorScheme) private var scheme
@@ -131,7 +130,7 @@ struct LockerHomeView: View {
                 send: sendGenerator,
                 onUse: {
                     sendGenerator(LockerGeneratorView.event { $0.use = .init() })
-                    push(LockerScreens.addFromGeneratorRoute)
+                    onUseGenerated()
                 }
             )
         } else {
@@ -225,24 +224,21 @@ struct LockerHomeView: View {
 
     private func addItem() {
         send(Self.event { $0.add = .init() })
-        push(LockerScreens.addRoute)
     }
 
     private func open(_ row: Centraid_Screen_V1_LockerRow, _ state: Centraid_Screen_V1_LockerHomeState) {
         send(Self.event { $0.item = .with { $0.itemID = row.itemID } })
-        push(LockerScreens.itemRoute(row.itemID, parent: state.chrome.title))
     }
 
     /// A More row: `facts` is the machine's sheet; `import`, `trash`,
-    /// `export` and `lock` are the shell's (a push, and the gate's
+    /// `export`, `access` and `lock` are the shell's (a push, and the gate's
     /// `LockTapped`).
     private func more(_ row: Centraid_Screen_V1_LockerMoreRow) {
         send(Self.event { $0.more = .with { $0.key = row.key } })
         switch row.key {
-        case "import": push(LockerScreens.importRoute)
-        case "export": push(LockerScreens.exportRoute)
-        case "trash": push(LockerScreens.trashRoute)
-        case "lock": sendLock(LockerLockSeam.event { $0.lock = .init() })
+        // Import, Export, Access and Trash are pushes the shell routes
+        // (`LockerRouting`); Lock is the gate's.
+        case LockerHomeMachine.shared.MORE_LOCK: sendLock(LockerLockSeam.event { $0.lock = .init() })
         default: break
         }
     }

@@ -228,7 +228,7 @@ Deliberate non-goal of this rule: **no JSDoc tag vocabulary** — prose JSDoc is
 - Behaviour-preserving refactors keep tests green without rewriting assertions to match new private helpers ([TESTING.md](../TESTING.md)).
 - No hardcoded model ids in production source (constitution).
 - A new hot path ships with a measured perceived-latency budget (constitution).
-- Query handlers do not write; actions declare `writes:`.
+- Query handlers do not write; what an action wrote is the commit's own census, never a list a manifest declares.
 
 ## Related
 

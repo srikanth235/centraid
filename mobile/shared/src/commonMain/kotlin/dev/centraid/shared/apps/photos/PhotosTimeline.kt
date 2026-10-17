@@ -6,12 +6,12 @@ import centraid.screen.v1.PhotosGridState
  * THE LIBRARY'S CALENDAR AND ITS TILE SIZES, AS DATA (#1029, photos port).
  *
  * v0's `timeline-model.ts`, `timeline-grains.ts` and `photos-rungs.ts`, reduced
- * to the parts that are DECISIONS rather than layout: which day a photograph
+ * to the parts that are DECISIONS rather than drawing: which day a photograph
  * belongs to, which grain is next when a member pinches or taps a card, and
- * which rung a pinch lands on. The layout — justified rows, headers, the rail —
- * is each shell's, because it is arithmetic over a width only the shell knows;
- * what a day IS must not be, or the two shells would file one photograph under
- * two dates.
+ * which rung a pinch lands on. What a day IS must not be a shell's, or the two
+ * shells would file one photograph under two dates. The packing of tiles into
+ * rows is `PhotoJustify` and the rows, headers and cards over a width are
+ * `PhotosLibraryLayout`: written once here, drawn by each shell.
  */
 public object PhotosTimeline {
     /**
@@ -41,9 +41,19 @@ public object PhotosTimeline {
     }
 
     /**
+     * THE CAPTURE-LOCAL CLOCK, `HH:MM` on 24 hours, or empty when there is no
+     * capture time: [captureDay]'s instant moved by the same offset, so the
+     * stamp's date and its time cannot name two different moments.
+     */
+    public fun captureClock(capturedAt: String, offsetMinutes: Int): String {
+        val instant = epochMinutes(capturedAt) ?: return ""
+        val minuteOfDay = (instant + offsetMinutes) - floorDiv(instant + offsetMinutes, MINUTES_PER_DAY) * MINUTES_PER_DAY
+        return (minuteOfDay / 60).toString().padStart(2, '0') + ":" + (minuteOfDay % 60).toString().padStart(2, '0')
+    }
+
+    /**
      * THE PHONE'S TILE HEIGHTS, XS to L (`photos-rungs.ts`' `phone` column).
-     * The numbers are v0's and are restated in each shell only where the SPM
-     * host build cannot read Kotlin.
+     * The numbers are v0's; both shells read them from here.
      */
     public val RUNG_HEIGHTS: List<Int> = listOf(64, 88, 120, 168)
 
@@ -90,6 +100,20 @@ public object PhotosTimeline {
 
     /** Where a pinch lands. */
     public data class Pinch(val grain: PhotosGridState.Grain, val rung: Int)
+
+    /**
+     * [pinch] OVER THE WIRE ENUM'S NUMBER, for SwiftUI: Swift holds
+     * SwiftProtobuf's `Grain` and cannot pass Wire's, which is how the table
+     * came to be written twice. A number the schema does not know reads as the
+     * unspecified grain, as the library draws it.
+     */
+    public fun pinchNumbers(grain: Int, rung: Int, scale: Float): PinchNumbers {
+        val landed = pinch(PhotosGridState.Grain.fromValue(grain) ?: PhotosGridState.Grain.GRAIN_UNSPECIFIED, rung, scale)
+        return PinchNumbers(landed.grain.value, landed.rung)
+    }
+
+    /** [Pinch], with the grain as its proto number. */
+    public data class PinchNumbers(val grain: Int, val rung: Int)
 
     /**
      * ONE GRAIN NARROWER — what a period card opens (v0's `openPeriod`: Years

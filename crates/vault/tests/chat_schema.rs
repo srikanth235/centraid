@@ -1,4 +1,4 @@
-//! THE CHAT'S HISTORY IS VAULT DATA (R-CHAT-1): rung eleven's schema, its four
+//! THE CHAT'S HISTORY IS VAULT DATA (R-CHAT-1): the chat's schema, its four
 //! commands and the reads that bring a thread back.
 //!
 //! What each test holds, and the claim a port would get wrong:
@@ -459,7 +459,7 @@ fn the_audit_journal_keeps_a_token_and_never_what_was_said() {
         .vault()
         .read(|connection| {
             Ok(connection.query_row(
-                "SELECT input_json FROM agent_command_invocation WHERE command_id = 'chat.save_turn'",
+                "SELECT input_json FROM command_invocation WHERE command_id = 'chat.save_turn'",
                 [],
                 |row| row.get(0),
             )?)
@@ -795,55 +795,64 @@ fn the_thumbnail_column_is_in_the_registrys_reference_list() {
 }
 
 #[test]
-fn a_vault_below_rung_eleven_climbs_it_and_gains_an_empty_chat() {
-    let dir = centraid_ontology::golden::scratch_dir();
-    std::fs::create_dir_all(&dir).unwrap();
-    let path = dir.join("vault.db");
-    let vault = Vault::create(&path).expect("a vault");
-    vault.found("Test", "Test Owner").unwrap();
-    vault.close().expect("closes");
-    {
-        let raw = rusqlite::Connection::open(&path).unwrap();
-        common::undo_rung_fifteen(&raw);
-        raw.execute_batch(&format!(
-            "BEGIN; {} PRAGMA user_version = 10; COMMIT;",
-            common::UNDO_RUNG_ELEVEN
-        ))
-        .unwrap();
-    }
-    let migrated = Vault::open(&path).expect("the file climbs rung eleven");
-    assert_eq!(migrated.schema_version(), centraid_vault::head_version());
-    assert!(migrated.chat_threads(10).unwrap().is_empty());
-    // And the registry the first insert depends on was seeded by the rung.
-    let kinds: i64 = migrated
-        .read(|connection| {
-            Ok(connection.query_row(
-                "SELECT COUNT(*) FROM core_entity_kind WHERE kind = 'chat.thread'",
-                [],
-                |row| row.get(0),
-            )?)
-        })
-        .unwrap();
-    assert_eq!(kinds, 1);
-    let registry = Registry::with_system_commands().unwrap();
-    registry.install(&migrated).unwrap();
-    let outcome = migrated
-        .execute(
-            &registry,
-            &Principal::owner("phone"),
-            &Command::new(
-                "chat.save_turn",
-                json!({ "turn": {
-                    "question": { "text": "after the climb" },
-                    "answer": { "outcome": "answered", "text": "Fine." }
-                }}),
-            ),
-        )
-        .unwrap();
+fn a_founded_vault_has_an_empty_chat_and_the_kind_its_first_insert_depends_on() {
+    // A thread is an entity, so its first insert fails its foreign key unless founding
+    // registered the kind. The registry is derived from the schema when the vault is founded
+    // (D-1020-D1-15), so this is the claim that the chat's table is among what it derives.
+    let chats = Chats::open("chat-founded");
+    assert!(chats.vault().chat_threads(10).unwrap().is_empty());
     assert_eq!(
-        outcome.status,
-        CommandStatus::Executed,
-        "{:?}",
-        outcome.reason
+        chats.count("SELECT COUNT(*) FROM core_entity_kind WHERE kind = 'chat.thread'"),
+        1
     );
+    let saved = chats.ask(None, "after founding", "Fine.");
+    assert!(saved["thread_id"].is_string(), "{saved}");
+    assert_eq!(chats.vault().chat_threads(10).unwrap().len(), 1);
+}
+
+#[test]
+fn the_chat_names_money_as_a_scope_and_a_card_app_and_tally_as_neither() {
+    // The chat's two app lists are the schema's own CHECKs. Tally left the product with
+    // its app (#1099), so a thread scoped to it, or a card naming it, is a row the file
+    // refuses — and Money is on both lists in its place.
+    let chats = Chats::open("chat-scopes");
+    let direct = |sql: &str| -> Result<(), String> {
+        chats
+            .vault()
+            .commit(|tx| {
+                tx.connection().execute_batch(sql)?;
+                Ok(())
+            })
+            .map(drop)
+            .map_err(|error| error.to_string())
+    };
+    direct(
+        "INSERT INTO chat_thread (thread_id, title, scope_app, created_at)
+         VALUES ('th-new', 'About money', 'money', '2026-03-01T00:00:00Z')",
+    )
+    .expect("money is a scope");
+    let refused = direct(
+        "INSERT INTO chat_thread (thread_id, title, scope_app, created_at)
+         VALUES ('th-old', 'About tally', 'tally', '2026-03-01T00:00:00Z')",
+    )
+    .expect_err("tally is not a scope");
+    assert!(refused.contains("CHECK"), "{refused}");
+    direct(
+        "INSERT INTO chat_message (thread_id, ordinal, role, text, outcome, created_at)
+         VALUES ('th-new', 0, 'assistant', 'x', 'answered', '2026-03-01T00:00:01Z')",
+    )
+    .expect("the message the cards hang from");
+    direct(
+        "INSERT INTO chat_message_card
+           (thread_id, message_ordinal, position, app, entity, row_id, title)
+         VALUES ('th-new', 0, 0, 'money', 'account', 'a-1', 'Savings')",
+    )
+    .expect("money is a card app");
+    let refused = direct(
+        "INSERT INTO chat_message_card
+           (thread_id, message_ordinal, position, app, entity, row_id, title)
+         VALUES ('th-new', 0, 1, 'tally', 'friend', 'x', 'x')",
+    )
+    .expect_err("tally is not a card app");
+    assert!(refused.contains("CHECK"), "{refused}");
 }

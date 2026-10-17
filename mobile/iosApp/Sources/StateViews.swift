@@ -1,6 +1,8 @@
 import Foundation
 import SwiftProtobuf
 
+import CentraidShared
+
 /// The thin decoders between a screen's bytes and its SwiftUI view
 /// (#1020, D-1020-E3; wired in #1025 S5, lane L5).
 ///
@@ -81,15 +83,15 @@ struct PhotosGridStateView {
     /// a place moves the grid.
     private static func bandEvent(_ key: String, more: Data) -> Data {
         switch key {
-        case "more": return more
-        case "collections": return destinationEvent(.collections)
+        case PhotosGridMachine.shared.BAND_MORE: return more
+        case PhotosGridMachine.shared.BAND_COLLECTIONS: return destinationEvent(.collections)
         default: return destinationEvent(.library)
         }
     }
 
     /// The band tab a destination is — what the search row's way back wears.
     func bandTab(for destination: Centraid_Screen_V1_PhotosGridState.Destination) -> Centraid_Screen_V1_PhotosBandTab? {
-        let key = destination == .collections ? "collections" : "library"
+        let key = destination == .collections ? PhotosGridMachine.shared.BAND_COLLECTIONS : PhotosGridMachine.shared.BAND_LIBRARY
         return state.band.first { $0.key == key }
     }
 
@@ -143,22 +145,22 @@ struct PhotosGridStateView {
             // member watching a roll upload saw a number shrink with nothing to
             // say how much had been done, and a backup near the end and a backup
             // that had barely started both read as a small number.
-            return PhotosWords.fill(
-                PhotosWords.fill(PhotosWords.photosImportProgress, "done", "\(done)"), "left", "\(left)")
+            return copyFill(
+                copyFill(PhotosCopy.shared.PHOTOS_IMPORT_PROGRESS, "done", "\(done)"), "left", "\(left)")
         case .enumerating:
-            return PhotosWords.photosImportLooking
+            return PhotosCopy.shared.PHOTOS_IMPORT_LOOKING
         case .waitingForPower:
-            return waiting(done: done, left: left, PhotosWords.photosImportWaitPower)
+            return waiting(done: done, left: left, PhotosCopy.shared.PHOTOS_IMPORT_WAIT_POWER)
         case .waitingForUnmetered:
-            return waiting(done: done, left: left, PhotosWords.photosImportWaitWifi)
+            return waiting(done: done, left: left, PhotosCopy.shared.PHOTOS_IMPORT_WAIT_WIFI)
         case .parkedLowDisk:
-            return PhotosWords.photosImportPausedDisk
+            return PhotosCopy.shared.PHOTOS_IMPORT_PAUSED_DISK
         case .done:
             return done > 0
-                ? PhotosWords.fill(PhotosWords.photosImportDoneCount, "done", "\(done)")
-                : PhotosWords.photosImportDone
+                ? copyFill(PhotosCopy.shared.PHOTOS_IMPORT_DONE_COUNT, "done", "\(done)")
+                : PhotosCopy.shared.PHOTOS_IMPORT_DONE
         case .idle, .unspecified, .UNRECOGNIZED:
-            return PhotosWords.photosImportOff
+            return PhotosCopy.shared.PHOTOS_IMPORT_OFF
         }
     }
 
@@ -169,8 +171,8 @@ struct PhotosGridStateView {
     private func waiting(done: UInt32, left: UInt32, _ sentence: String) -> String {
         done == 0
             ? sentence
-            : sentence + " " + PhotosWords.fill(
-                PhotosWords.fill(PhotosWords.photosImportWaitCounts, "done", "\(done)"), "left", "\(left)")
+            : sentence + " " + copyFill(
+                copyFill(PhotosCopy.shared.PHOTOS_IMPORT_WAIT_COUNTS, "done", "\(done)"), "left", "\(left)")
     }
 
     var pausedReason: String { state.backup.pausedReason }

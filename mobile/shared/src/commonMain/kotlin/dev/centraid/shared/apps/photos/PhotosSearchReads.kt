@@ -7,9 +7,7 @@ import centraid.core.v1.Row
 import centraid.core.v1.Value
 import centraid.screen.v1.PhotoCell
 import centraid.screen.v1.PhotoLabel
-import centraid.screen.v1.PhotoPerson
 import centraid.screen.v1.PhotoShelf
-import centraid.screen.v1.PhotoStateView
 import centraid.screen.v1.PhotosSearchEvent
 import centraid.screen.v1.ReadFailure
 import centraid.screen.v1.SearchHits
@@ -26,14 +24,15 @@ import kotlin.math.sqrt
 /**
  * WHAT SEARCH READS, AND WHAT IT MAKES OF THE ROWS (#1029, the photos port).
  *
- * v0's `search-hits.ts` is the spec: a query reaches **people** (confirmed
- * parties), **places** (the member's name, the gazetteer's, and the home band),
- * **albums**, **labels** (concepts tagged on a photograph) and **text** (the
- * caption, and now the words recognised in the picture and a video's
- * transcript), and the answer is two things — the people, places and albums it
- * NAMED, as doors above the grid, and the photographs all of them REACH, as the
- * grid. Typing "Tahoe" returns the album's photographs, not an empty grid under
- * a row saying the album exists (#712).
+ * v0's `search-hits.ts` is the spec: a query reaches **places** (the member's
+ * name, the gazetteer's, and the home band), **albums**, **labels** (concepts
+ * tagged on a photograph) and **text** (the caption, and now the words
+ * recognised in the picture and a video's transcript), and the answer is two
+ * things — the places and albums it NAMED, as doors above the grid, and the
+ * photographs all of them REACH, as the grid. Typing "Tahoe" returns the
+ * album's photographs, not an empty grid under a row saying the album exists
+ * (#712). v0 also reached **people** (confirmed parties); that leg left with
+ * the face surfaces (Q-1047-2).
  *
  * ## WHAT THE CORE ANSWERS AND WHAT STAYS HERE (#1097, R-1097-25, R-1097-26)
  *
@@ -41,14 +40,13 @@ import kotlin.math.sqrt
  * `photos.search` (`photos.proto`) with the live photographs whose caption, text
  * or transcript hold the words, in rank order, and the albums whose name does,
  * and it corrects a typo when asked ([PhotosSearchBridge] asks only when every
- * leg here found nothing). This object holds the STRUCTURED legs — the people
- * confirmed on a face, the places, the labels — and the folds, none of which
- * has a full-text index to ask.
+ * leg here found nothing). This object holds the STRUCTURED legs — the places,
+ * the labels — and the folds, none of which has a full-text index to ask.
  *
  * ## WHY THESE ARE LEGS AND NOT ONE STATEMENT
  *
  * The page door names one table and has no join. The doors above the grid are
- * rows of three different tables with a count each, and a place is matched on
+ * rows of two different tables with a count each, and a place is matched on
  * words the vault does not store as a column (the home band is arithmetic on
  * two coordinates). So `PhotosSearchBridge` runs the legs here in order — the
  * entities, their counts, then ONE `media_asset` page whose predicate reaches
@@ -168,27 +166,6 @@ public object PhotosSearchReads {
     private const val LIVE_ASSETS: String = "SELECT asset_id FROM media_asset WHERE $LIVE"
 
     /**
-     * A PERSON IS A PARTY SOMEBODY CONFIRMED ON A FACE — never a proposal, which
-     * is a model's guess and not a person yet (`PersonRow.photo_count`).
-     */
-    private const val CONFIRMED_ON_A_LIVE_PHOTO: String =
-        "party_id IN (SELECT party_id FROM media_face_region WHERE review_state = ? " +
-            "AND asset_id IN ($LIVE_ASSETS))"
-
-    /** `photos.search.people` — people whose name holds a word of the query. */
-    public fun peopleQuery(words: List<String>): PageQuery {
-        val (names, binds) = anyWord("display_name", words)
-        return PageQuery(
-            name = "photos.search.people",
-            select = listOf("party_id", "display_name"),
-            from = PhotosPeopleReads.PARTY_TABLE,
-            where_ = "kind = ? AND deleted_at IS NULL AND $names AND $CONFIRMED_ON_A_LIVE_PHOTO",
-            bind = listOf(Value(text = PERSON)) + binds + Value(text = CONFIRMED),
-            order = PageOrder(sort_column = "display_name", pk_column = "party_id"),
-        )
-    }
-
-    /**
      * `photos.search.places` — EVERY place row, because the words a place
      * answers to are not all columns: the gazetteer name lives inside
      * `address_json` and the home band is a distance from the Home place.
@@ -244,20 +221,6 @@ public object PhotosSearchReads {
     // The count legs, one per kind of door.
     // -----------------------------------------------------------------------
 
-    /** Confirmed faces of these people on live photographs. */
-    public fun personCountsQuery(partyIds: List<String>): PageQuery? {
-        if (partyIds.isEmpty()) return null
-        return PageQuery(
-            name = "photos.search.personCounts",
-            select = listOf("region_id", "party_id", "asset_id"),
-            from = FaceReviewReads.REGION_TABLE,
-            where_ = "review_state = ? AND ${inList("party_id", partyIds.size)} " +
-                "AND asset_id IN ($LIVE_ASSETS)",
-            bind = listOf(Value(text = CONFIRMED)) + partyIds.map { Value(text = it) },
-            order = PageOrder(sort_column = "region_id", pk_column = "region_id"),
-        )
-    }
-
     /** Live photographs at these places — or, with [unplaced], at none. */
     public fun placeCountsQuery(placeIds: List<String>, unplaced: Boolean): PageQuery? {
         val arms = buildList {
@@ -301,7 +264,6 @@ public object PhotosSearchReads {
      * grid may reach.
      */
     public data class Reach(
-        val partyIds: List<String> = emptyList(),
         val placeIds: List<String> = emptyList(),
         val unplaced: Boolean = false,
         val albumIds: List<String> = emptyList(),
@@ -311,14 +273,14 @@ public object PhotosSearchReads {
     ) {
         /** Nothing reached: the grid has nothing to read, and no statement is made. */
         val isEmpty: Boolean
-            get() = partyIds.isEmpty() && placeIds.isEmpty() && !unplaced &&
+            get() = placeIds.isEmpty() && !unplaced &&
                 albumIds.isEmpty() && conceptIds.isEmpty() && assetIds.isEmpty()
     }
 
     /**
      * `photos.search.hits` — the grid: every live photograph the core's door
      * named by its text (caption, recognised text, transcript), UNIONED with
-     * every one a matched person, place, album or label reaches. **Null when
+     * every one a matched place, album or label reaches. **Null when
      * nothing was reached**: a statement with no arm would read the whole shelf.
      *
      * One statement, so one keyset walk and one order — the library's,
@@ -336,12 +298,6 @@ public object PhotosSearchReads {
         if (reach.assetIds.isNotEmpty()) {
             arms += inList("asset_id", reach.assetIds.size)
             binds += reach.assetIds.map { Value(text = it) }
-        }
-        if (reach.partyIds.isNotEmpty()) {
-            arms += "asset_id IN (SELECT asset_id FROM media_face_region WHERE review_state = ? " +
-                "AND ${inList("party_id", reach.partyIds.size)})"
-            binds += Value(text = CONFIRMED)
-            binds += reach.partyIds.map { Value(text = it) }
         }
         if (reach.placeIds.isNotEmpty()) {
             arms += inList("place_id", reach.placeIds.size)
@@ -392,16 +348,6 @@ public object PhotosSearchReads {
 
     /** One named thing a query matched: its id and the vault's word for it. */
     public data class Named(val id: String, val label: String)
-
-    /** The people leg, as names, alphabetical, three at most. */
-    public fun people(rows: List<Row>): List<Named> = rows
-        .mapNotNull { row ->
-            val id = row.text(0)
-            val name = row.text(1).trim()
-            if (id.isEmpty() || name.isEmpty()) null else Named(id, name)
-        }
-        .sortedWith(compareBy({ it.label.lowercase() }, { it.id }))
-        .take(PER_KIND_CAP)
 
     /**
      * The albums leg: the core's container hits (`photos.search`, narrowed to
@@ -529,9 +475,9 @@ public object PhotosSearchReads {
     public data class Counted(val byKey: Map<String, Int>, val capped: Boolean)
 
     /**
-     * DISTINCT PHOTOGRAPHS PER KEY, from one count page. Two faces of one
-     * person in one photograph are one photograph. [keyAt] and [assetAt] are
-     * the row positions the leg projected.
+     * DISTINCT PHOTOGRAPHS PER KEY, from one count page. Two rows of one key
+     * on one photograph are one photograph. [keyAt] and [assetAt] are the row
+     * positions the leg projected.
      */
     public fun counted(rows: List<Row>, keyAt: Int, assetAt: Int, limit: Int): Counted {
         val seen = LinkedHashMap<String, MutableSet<String>>()
@@ -543,43 +489,20 @@ public object PhotosSearchReads {
     }
 
     /**
-     * THE DOORS ABOVE THE GRID, in v0's order — person, place, album,
-     * narrowest to broadest — three of each at most. The no-location bucket is
-     * a place and comes LAST among them: a typed name wants the name first.
+     * THE DOORS ABOVE THE GRID, in v0's order — place, album, narrowest to
+     * broadest — three of each at most. The no-location bucket is a place and
+     * comes LAST among them: a typed name wants the name first.
      *
-     * A person or a place with no photograph behind it is not a door (v0 drops
-     * a zero), but an album is: an empty album is still a thing the member
+     * A place with no photograph behind it is not a door (v0 drops a zero), but
+     * an album is: an empty album is still a thing the member
      * named and may want to open and fill.
      */
     public fun topHits(
-        people: List<Named>,
-        personCounts: Counted,
         places: PlaceMatch,
         placeCounts: Counted,
         albums: List<Named>,
         albumCounts: Counted,
     ): List<SearchTopHit> {
-        val personDoors = people.mapNotNull { person ->
-            val count = personCounts.byKey[person.id] ?: 0
-            if (count == 0) {
-                null
-            } else {
-                SearchTopHit(
-                    kind = SearchMatch.Kind.KIND_PERSON,
-                    label = person.label,
-                    photo_count = count,
-                    photo_count_capped = personCounts.capped,
-                    shelf = PhotoShelf(
-                        state_view = PhotoStateView(
-                            person = PhotoStateView.Person(
-                                party_id = person.id,
-                                person_name = person.label,
-                            ),
-                        ),
-                    ),
-                )
-            }
-        }
         val named = places.places.mapNotNull { place ->
             val count = placeCounts.byKey[place.id] ?: 0
             if (count == 0) {
@@ -623,8 +546,7 @@ public object PhotosSearchReads {
                 ),
             )
         }
-        return personDoors.take(PER_KIND_CAP) +
-            (named + bucket).take(PER_KIND_CAP) +
+        return (named + bucket).take(PER_KIND_CAP) +
             albumDoors.take(PER_KIND_CAP)
     }
 
@@ -636,7 +558,7 @@ public object PhotosSearchReads {
 
     /**
      * What the grid may reach, from the doors that were kept and the labels.
-     * Only the KEPT doors: a fourth person the member cannot see above the
+     * Only the KEPT doors: a fourth place the member cannot see above the
      * grid must not be why photographs are in it (v0's `reachableAssetIds`).
      */
     public fun reach(
@@ -645,7 +567,6 @@ public object PhotosSearchReads {
         assetIds: List<String> = emptyList(),
     ): Reach = Reach(
         assetIds = assetIds,
-        partyIds = topHits.mapNotNull { it.shelf?.state_view?.person?.party_id },
         placeIds = topHits.mapNotNull { hit ->
             hit.shelf?.place?.takeIf { !it.unplaced }?.place_id
         },
@@ -710,16 +631,6 @@ public object PhotosSearchReads {
     // The resting page: what there is to search FOR.
     // -----------------------------------------------------------------------
 
-    /** `photos.search.resting.people` — everyone confirmed on a live photograph. */
-    public fun restingPeopleQuery(): PageQuery = PageQuery(
-        name = "photos.search.resting.people",
-        select = listOf("party_id", "display_name"),
-        from = PhotosPeopleReads.PARTY_TABLE,
-        where_ = "kind = ? AND deleted_at IS NULL AND $CONFIRMED_ON_A_LIVE_PHOTO",
-        bind = listOf(Value(text = PERSON), Value(text = CONFIRMED)),
-        order = PageOrder(sort_column = "display_name", pk_column = "party_id"),
-    )
-
     /** `photos.search.resting.places` — places with a live photograph behind them. */
     public fun restingPlacesQuery(): PageQuery = PageQuery(
         name = "photos.search.resting.places",
@@ -753,21 +664,11 @@ public object PhotosSearchReads {
      * anything would be an error nobody caused.
      */
     public fun restingArrived(
-        peopleRows: List<Row>,
         placeRows: List<Row>,
         labelRows: List<Row>,
     ): PhotosSearchEvent = PhotosSearchEvent(
         resting = PhotosSearchEvent.RestingArrived(
             resting = SearchResting(
-                people = peopleRows.mapNotNull { row ->
-                    val id = row.text(0)
-                    val name = row.text(1).trim()
-                    if (id.isEmpty() || name.isEmpty()) {
-                        null
-                    } else {
-                        PhotoPerson(party_id = id, display_name = name)
-                    }
-                },
                 places = placeRows.mapNotNull { row ->
                     val id = row.text(0)
                     val label = PlacesReads.readableName(row.text(1))
@@ -847,9 +748,6 @@ public object PhotosSearchReads {
     private const val THUMBNAIL: Int = 6
     private const val ORIGINAL_HASH: Int = 7
     private const val ORIGINAL_HELD: Int = 8
-
-    private const val PERSON: String = "person"
-    private const val CONFIRMED: String = "confirmed"
 
     /** `crates/apps/photos`' `TAG_TARGET_TYPE`, spelled the same. */
     private const val ASSET_TARGET_TYPE: String = "media.asset"

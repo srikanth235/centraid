@@ -859,9 +859,9 @@ fn add_asset_handler(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     ctx.connection().execute(
         "INSERT INTO media_asset
            (asset_id, content_id, kind, title, captured_at, tz_offset_min, capture_group_id,
-            source_asset_id, place_id, camera_device_id, width, height, duration_s, exif_json,
+            source_asset_id, place_id, width, height, duration_s, exif_json,
             deleted_at, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, NULL, ?10, ?11, ?12, ?13, NULL, ?14, ?14)",
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, NULL, ?14, ?14)",
         rusqlite::params![
             asset_id,
             content_id,

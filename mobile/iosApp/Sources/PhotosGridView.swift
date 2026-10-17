@@ -1,5 +1,7 @@
 import SwiftUI
 
+import CentraidShared
+
 /// The Photos grid, in SwiftUI (#1020, D-1020-E3).
 ///
 /// Two planes on one screen: the GRID renders the vault's assets, the BACKUP
@@ -78,9 +80,9 @@ struct PhotosGridView: View {
         .sheet(isPresented: albumBinding(grid)) {
             AlbumChoiceSheet(
                 choices: grid.albumChoices,
-                onChoose: { shell.send(screen: "photos.grid", event: LibraryEvents.albumChosen($0)) },
-                onNewAlbum: { shell.send(screen: "photos.grid", event: LibraryEvents.albumCreated($0)) },
-                onCancel: { shell.send(screen: "photos.grid", event: LibraryEvents.albumDismissed()) }
+                onChoose: { shell.send(screen: PhotosScreens.grid, event: LibraryEvents.albumChosen($0)) },
+                onNewAlbum: { shell.send(screen: PhotosScreens.grid, event: LibraryEvents.albumCreated($0)) },
+                onCancel: { shell.send(screen: PhotosScreens.grid, event: LibraryEvents.albumDismissed()) }
             )
         }
         .sheet(isPresented: sheetBinding(.confirmTrash)) {
@@ -88,24 +90,24 @@ struct PhotosGridView: View {
                 Centraid_Screen_V1_Confirm.with {
                     $0.title = LibraryTrashCopy.question(grid.selected.count)
                     $0.body = LibraryTrashCopy.body
-                    $0.confirmLabel = PhotosWords.photosGridTrashConfirm
+                    $0.confirmLabel = PhotosCopy.shared.PHOTOS_GRID_TRASH_CONFIRM
                     $0.destructive = true
                 },
-                cancelLabel: PhotosWords.photosKeepThem,
-                onConfirm: { shell.send(screen: "photos.grid", event: LibraryEvents.trashConfirmed()) },
-                onDismiss: { shell.send(screen: "photos.grid", event: state.sheetEvent(.none)) }
+                cancelLabel: PhotosCopy.shared.PHOTOS_KEEP_THEM,
+                onConfirm: { shell.send(screen: PhotosScreens.grid, event: LibraryEvents.trashConfirmed()) },
+                onDismiss: { shell.send(screen: PhotosScreens.grid, event: state.sheetEvent(.none)) }
             )
         }
         // HOW MUCH OF THE PLACE TRAVELS, asked every time (#816) — the shelf's
         // two answers, for the shelf's reason: a place NAME is one sentence per
         // photograph, and a batch has as many places as photographs.
         .sheet(isPresented: $choosingPlace) {
-            OptionSheet(title: PhotosWords.photosSendPlaceTitle) {
-                SheetRow(label: PhotosWords.photosSendNoLocation) {
+            OptionSheet(title: PhotosCopy.shared.PHOTOS_SEND_PLACE_TITLE) {
+                SheetRow(label: PhotosCopy.shared.PHOTOS_SEND_NO_LOCATION) {
                     choosingPlace = false
                     shell.exportLibrary(grid.selected, keepLocation: false)
                 }
-                SheetRow(label: PhotosWords.photosSendExactLocation) {
+                SheetRow(label: PhotosCopy.shared.PHOTOS_SEND_EXACT_LOCATION) {
                     choosingPlace = false
                     shell.exportLibrary(grid.selected, keepLocation: true)
                 }
@@ -133,7 +135,7 @@ struct PhotosGridView: View {
                         label: label,
                         selected: rung == Int(grid.rung),
                         identifier: "photos.tileSize.\(rung)"
-                    ) { shell.send(screen: "photos.grid", event: LibraryEvents.rung(rung)) }
+                    ) { shell.send(screen: PhotosScreens.grid, event: LibraryEvents.rung(rung)) }
                 }
             }
             .presentationDetents([.medium])
@@ -163,7 +165,7 @@ struct PhotosGridView: View {
                         data: shell.photosCollectionsState,
                         showAllLabel: grid.chrome.showAllLabel,
                         collapseAllLabel: grid.chrome.collapseAllLabel,
-                        send: { shell.send(screen: "photos.collections", event: $0) },
+                        send: { shell.send(screen: PhotosScreens.collections, event: $0) },
                         onOpenShelf: { shelf in
                             shell.path.append(
                                 .photoShelf((try? shelf.serializedData()) ?? Data())
@@ -171,7 +173,6 @@ struct PhotosGridView: View {
                         },
                         onOpenDoor: { kind in
                             switch kind {
-                            case .people: shell.path.append(.photosPeople)
                             case .places: shell.path.append(.places)
                             case .memories: shell.path.append(.photosMemories)
                             case .duplicates: shell.path.append(.photoDuplicates)
@@ -190,7 +191,7 @@ struct PhotosGridView: View {
                 VStack(alignment: .leading) {
                     PhotosSearchView(
                         data: shell.photosSearchState,
-                        send: { shell.send(screen: "photos.search", event: $0) },
+                        send: { shell.send(screen: PhotosScreens.search, event: $0) },
                         onOpenAsset: { identifier in
                             shell.path.append(.photoLightbox(identifier, []))
                         },
@@ -215,7 +216,7 @@ struct PhotosGridView: View {
         }
         // A PINCH IS A STEPPER PRESS, NOT A CONTINUOUS ZOOM (v0 §4.2), and past
         // the table's ends it moves the grain — the machine's table,
-        // `PhotosTimeline.pinch`, restated in `pinched`.
+        // `PhotosTimeline.pinch`, asked in `pinched`.
         .simultaneousGesture(
             MagnifyGesture().onEnded { value in pinched(grid: grid, scale: value.magnification) },
             including: isLibrary && !cells.isEmpty ? .all : .subviews
@@ -242,7 +243,7 @@ struct PhotosGridView: View {
             // a tap aimed at Trash cannot land on a destination.
             LibrarySelectionBar(
                 grid: grid,
-                send: { shell.send(screen: "photos.grid", event: $0) },
+                send: { shell.send(screen: PhotosScreens.grid, event: $0) },
                 onSendCopy: { choosingPlace = true }
             )
         } else {
@@ -252,7 +253,7 @@ struct PhotosGridView: View {
                 if isLibrary, !cells.isEmpty {
                     LibraryGrainControl(grain: grid.grain) { next in
                         shell.send(
-                            screen: "photos.grid",
+                            screen: PhotosScreens.grid,
                             event: LibraryEvents.grain(next, at: LibraryLayout.day(forID: scrolledID, cells: cells))
                         )
                     }
@@ -262,7 +263,7 @@ struct PhotosGridView: View {
                 AppBand(
                     app: "photos",
                     tabs: state.bands,
-                    onSelect: { shell.send(screen: "photos.grid", event: $0) },
+                    onSelect: { shell.send(screen: PhotosScreens.grid, event: $0) },
                     onHome: { shell.path.removeAll() }
                 )
             }
@@ -279,7 +280,7 @@ struct PhotosGridView: View {
     @ViewBuilder
     private func libraryBody(grid: Centraid_Screen_V1_PhotosGridState, rows: [LibraryRow]) -> some View {
         let cells = grid.data.cells
-        let send: (Data) -> Void = { shell.send(screen: "photos.grid", event: $0) }
+        let send: (Data) -> Void = { shell.send(screen: PhotosScreens.grid, event: $0) }
         let skeleton = PhotoGridSkeleton(width: width, target: PhotoTileMetrics.height(rung: Int(grid.rung)))
         LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
             // THE OTHER PLANE, IN ITS OWN VIEW (#1025 S6). See `BackupStatus`.
@@ -323,13 +324,13 @@ struct PhotosGridView: View {
                     // sentence, never the empty-library copy.
                     if grid.filter == .favorites {
                         ScreenEmptyView(
-                            sentence: PhotosWords.photosGridNoFavorites,
-                            remedy: PhotosWords.photosGridNoFavoritesCaption
+                            sentence: PhotosCopy.shared.PHOTOS_GRID_NO_FAVORITES,
+                            remedy: PhotosCopy.shared.PHOTOS_GRID_NO_FAVORITES_CAPTION
                         )
                     } else {
                         ScreenEmptyView(
-                            sentence: PhotosWords.photosGridEmpty,
-                            remedy: PhotosWords.photosGridEmptyCaption
+                            sentence: PhotosCopy.shared.PHOTOS_GRID_EMPTY,
+                            remedy: PhotosCopy.shared.PHOTOS_GRID_EMPTY_CAPTION
                         )
                     }
                 } else if grid.grain == .years || grid.grain == .months {
@@ -371,9 +372,9 @@ struct PhotosGridView: View {
     /// The header while selecting: the count, as v0's room swapped it in place.
     private func selectionTitle(_ count: Int) -> String {
         switch count {
-        case 0: return PhotosWords.photosGridSelect
-        case 1: return PhotosWords.photosGridSelectedOne
-        default: return PhotosWords.fill(PhotosWords.photosGridSelectedMany, "count", "\(count)")
+        case 0: return PhotosCopy.shared.PHOTOS_GRID_SELECT
+        case 1: return PhotosCopy.shared.PHOTOS_GRID_SELECTED_ONE
+        default: return copyFill(PhotosCopy.shared.PHOTOS_GRID_SELECTED_MANY, "count", "\(count)")
         }
     }
 
@@ -391,7 +392,7 @@ struct PhotosGridView: View {
                 identifier: "photos.collections.new-album"
             ) {
                 shell.send(
-                    screen: "photos.collections",
+                    screen: PhotosScreens.collections,
                     event: PhotosCollectionsStateView(data: shell.photosCollectionsState).sheetEvent(.newAlbum)
                 )
             }
@@ -400,12 +401,12 @@ struct PhotosGridView: View {
         case .library, .unspecified, .UNRECOGNIZED:
             if grid.selecting {
                 return RoomAction(iconKey: "X", label: chrome.cancelLabel, identifier: "photos.library.cancel") {
-                    shell.send(screen: "photos.grid", event: LibraryEvents.selecting(false))
+                    shell.send(screen: PhotosScreens.grid, event: LibraryEvents.selecting(false))
                 }
             }
             guard hasCells else { return nil }
             return RoomAction(iconKey: "CheckCircle", label: chrome.selectLabel, identifier: "photos.library.select") {
-                shell.send(screen: "photos.grid", event: LibraryEvents.selecting(true))
+                shell.send(screen: PhotosScreens.grid, event: LibraryEvents.selecting(true))
             }
         }
     }
@@ -426,11 +427,11 @@ struct PhotosGridView: View {
             // view's to state; none of it is decided here.
             field: PhotosSearchStateView(data: shell.photosSearchState).field(open: searching),
             placeholder: grid.chrome.searchPlaceholder,
-            onOpen: { shell.send(screen: "photos.grid", event: PhotosGridStateView.destinationEvent(.search)) },
-            onTerm: { shell.send(screen: "photos.search", event: PhotosSearchStateView.queryEvent($0)) },
+            onOpen: { shell.send(screen: PhotosScreens.grid, event: PhotosGridStateView.destinationEvent(.search)) },
+            onTerm: { shell.send(screen: PhotosScreens.search, event: PhotosSearchStateView.queryEvent($0)) },
             onClose: {
-                shell.send(screen: "photos.search", event: PhotosSearchStateView.queryEvent(""))
-                shell.send(screen: "photos.grid", event: PhotosGridStateView.destinationEvent(beforeSearch))
+                shell.send(screen: PhotosScreens.search, event: PhotosSearchStateView.queryEvent(""))
+                shell.send(screen: PhotosScreens.grid, event: PhotosGridStateView.destinationEvent(beforeSearch))
             }
         )
     }
@@ -443,34 +444,21 @@ struct PhotosGridView: View {
                 identifier: chip.filter == .favorites ? "photos-filter-favorites" : "photos-filter-all",
                 label: chip.label,
                 selected: chip.selected
-            ) { shell.send(screen: "photos.grid", event: LibraryEvents.filter(chip.filter)) }
+            ) { shell.send(screen: PhotosScreens.grid, event: LibraryEvents.filter(chip.filter)) }
         }
     }
 
-    /// A PINCH, as `PhotosTimeline.pinch` reads it — restated because the SPM
-    /// host build links no Kotlin: a rung step inside All, a grain past its
-    /// ends, v0's thresholds. Landing where the member was, like every grain
-    /// change.
+    /// A PINCH, as `PhotosTimeline.pinch` reads it: a rung step inside All, a
+    /// grain past its ends, v0's thresholds. Landing where the member was, like
+    /// every grain change. The table is the machine's; this only carries the
+    /// grain across as its proto number and sends what comes back.
     private func pinched(grid: Centraid_Screen_V1_PhotosGridState, scale: CGFloat) {
-        let out = scale >= 1.15
-        let inward = scale <= 0.86
-        guard out || inward else { return }
-        let day = LibraryLayout.day(forID: scrolledID, cells: grid.data.cells)
-        let send: (Data) -> Void = { shell.send(screen: "photos.grid", event: $0) }
-        let rung = Int(grid.rung)
-        switch grid.grain {
-        case .years:
-            if out { send(LibraryEvents.grain(.months, at: day)) }
-        case .months:
-            send(LibraryEvents.grain(out ? .all : .years, at: day))
-        default:
-            if out {
-                if rung < PhotoTileMetrics.rungHeights.count - 1 { send(LibraryEvents.rung(rung + 1)) }
-            } else if rung > 0 {
-                send(LibraryEvents.rung(rung - 1))
-            } else {
-                send(LibraryEvents.grain(.months, at: day))
-            }
+        let rung = Int32(grid.rung)
+        let landed = PhotosTimeline.shared.pinchNumbers(grain: Int32(grid.grain.rawValue), rung: rung, scale: Float(scale))
+        let send: (Data) -> Void = { shell.send(screen: PhotosScreens.grid, event: $0) }
+        if landed.rung != rung { send(LibraryEvents.rung(Int(landed.rung))) }
+        if landed.grain != Int32(grid.grain.rawValue), let grain = Centraid_Screen_V1_PhotosGridState.Grain(rawValue: Int(landed.grain)) {
+            send(LibraryEvents.grain(grain, at: LibraryLayout.day(forID: scrolledID, cells: grid.data.cells)))
         }
     }
 
@@ -481,14 +469,11 @@ struct PhotosGridView: View {
         let month = String(day.prefix(7))
         let target: String?
         switch grid.grain {
-        case .years:
-            target = "y:\(day.prefix(4))"
-        case .months:
-            let periods = LibraryLayout.periods(grid.data.cells, years: false)
-            let pair = LibraryLayout.monthPairs(periods)
-                .flatMap(\.pairs)
-                .first { $0.contains { $0.key == month } }
-            target = pair?.first.map { "p:\($0.key)" }
+        case .years, .months:
+            // THE CARD THAT HOLDS THE DAY — shared's rule, the same one Compose lands on.
+            let items = LibraryLayout.grainItems(grid.data.cells, years: grid.grain == .years)
+            let index = Int(PhotosLibraryLayout.shared.grainItemIndex(items: items, day: day))
+            target = index >= 0 ? items[index].key : nil
         default:
             target = rows.first { $0.id == "d:\(day)" }?.id
                 ?? rows.first {
@@ -509,7 +494,7 @@ struct PhotosGridView: View {
             get: { grid.albumChoiceOpen },
             set: { open in
                 guard !open, grid.albumChoiceOpen else { return }
-                shell.send(screen: "photos.grid", event: LibraryEvents.albumDismissed())
+                shell.send(screen: PhotosScreens.grid, event: LibraryEvents.albumDismissed())
             }
         )
     }
@@ -527,7 +512,7 @@ struct PhotosGridView: View {
             get: { state.sheet == sheet },
             set: { open in
                 guard !open, state.sheet == sheet else { return }
-                shell.send(screen: "photos.grid", event: state.sheetEvent(.none))
+                shell.send(screen: PhotosScreens.grid, event: state.sheetEvent(.none))
             }
         )
     }

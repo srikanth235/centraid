@@ -159,7 +159,7 @@ public object PhotosMemoriesMachine :
             MemoryRow.Kind.KIND_ON_THIS_DAY -> ON_THIS_DAY
             MemoryRow.Kind.KIND_TRIP -> row.place_name.ifEmpty { AWAY_FROM_HOME }
             MemoryRow.Kind.KIND_SIMILAR ->
-                if (row.member_count > 0) "${row.member_count} similar photos" else SIMILAR
+                if (row.member_count > 0) PhotosCopy.PHOTOS_MEMORY_SIMILAR_COUNT.replace("{count}", "${row.member_count}") else SIMILAR
             MemoryRow.Kind.KIND_UNSPECIFIED -> UNKNOWN_KIND
         }
     }
@@ -177,8 +177,9 @@ public object PhotosMemoriesMachine :
      * canvases put the origin at the top left.
      *
      * Answers unit coordinates the views multiply by their own box, less a
-     * dot's radius of padding. One stop, or several at one spot, lands in the
-     * middle rather than dividing by a zero span.
+     * dot's radius of padding; `PhotosMemoriesReads.withRoutes` puts them in
+     * the state, so no view calls this. One stop, or several at one spot,
+     * lands in the middle rather than dividing by a zero span.
      */
     public fun sketch(route: List<MemoryStop>, aspect: Double): List<SketchPoint> {
         if (route.isEmpty() || aspect <= 0.0) return emptyList()
@@ -208,6 +209,21 @@ public object PhotosMemoriesMachine :
 
     /** One stop in the unit box: 0,0 top left, 1,1 bottom right. */
     public data class SketchPoint(public val x: Double, public val y: Double)
+
+    /**
+     * THE SKETCH'S PLATE, in points: its size, and the padding that keeps a
+     * dot's radius clear of the edge (as v0's was). Both shells draw this plate
+     * and the route is projected into its inside, so the aspect is the plate's
+     * less the padding and the state carries finished points
+     * (`MemoryStop.sketch_x`/`sketch_y`).
+     */
+    public const val SKETCH_WIDTH: Int = 96
+    public const val SKETCH_HEIGHT: Int = 56
+    public const val SKETCH_PAD: Int = 7
+
+    /** The aspect of the plate's inside, which [sketch] projects into. */
+    internal const val SKETCH_ASPECT: Double =
+        (SKETCH_WIDTH - 2 * SKETCH_PAD).toDouble() / (SKETCH_HEIGHT - 2 * SKETCH_PAD).toDouble()
 
     private const val MIDDLE: Double = 0.5
 
@@ -263,8 +279,8 @@ public object PhotosMemoriesMachine :
     /** `YYYY-MM-DD`. */
     private const val DAY_LENGTH: Int = 10
 
-    internal const val ON_THIS_DAY: String = "On this day"
-    internal const val AWAY_FROM_HOME: String = "Away from home"
+    internal const val ON_THIS_DAY: String = PhotosCopy.PHOTOS_MEMORIES_ON_THIS_DAY
+    internal const val AWAY_FROM_HOME: String = PhotosCopy.PHOTOS_MEMORY_AWAY
     internal const val SIMILAR: String = PhotosCopy.PHOTOS_MEMORY_SIMILAR
 
     /**
@@ -274,7 +290,7 @@ public object PhotosMemoriesMachine :
      * vault must not be drawn as a trip, and it must not be dropped either — a
      * card a member can open is better than a shelf that quietly shrinks.
      */
-    internal const val UNKNOWN_KIND: String = "A memory"
+    internal const val UNKNOWN_KIND: String = PhotosCopy.PHOTOS_MEMORY_UNKNOWN
 
     override fun seatChanged(seat: SeatState): PhotosMemoriesEvent =
         PhotosMemoriesEvent(seat_changed = PhotosMemoriesEvent.SeatChanged(seat = seat))

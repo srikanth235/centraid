@@ -49,10 +49,10 @@ const SEED_RELATIONS: &[(&str, &str)] = &[
 
 /// THE `transfer` RELATION (#1099, R-1099-15): two `core.transaction`s that are the two halves
 /// of one movement of the member's own money. Seeded beside the others, but under a FIXED id and
-/// outside the loop above, for two reasons: rung fourteen gives a vault that already has the
-/// relations scheme the same row under the same id, so a vault founded at the head and one
-/// climbed from rung thirteen hold identical rows; and a fixed id draws nothing from the id
-/// source, so adding it moves no id a seeded vault mints afterwards.
+/// outside the loop above, for two reasons: the relations scheme does not exist when the
+/// baseline runs, so a vault founds this row here and under a fixed id, the same one a vault
+/// that already has the scheme is given; and a fixed id draws nothing from the id source, so
+/// adding it moves no id a seeded vault mints afterwards.
 const TRANSFER_RELATION: (&str, &str, &str) = ("money:relation:transfer", "transfer", "Transfer");
 
 /// Seed the relations scheme and its notations. Idempotent over an existing

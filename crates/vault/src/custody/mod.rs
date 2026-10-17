@@ -14,7 +14,7 @@
 //! D1): the phone is the only seat and it derives `K`. The vault DEK's
 //! `sealed:v1:` cell layer and its fingerprint stamp are deleted too (#1047
 //! slice D2, R-1047-D2): the only columns it sealed were the connector
-//! credentials rung five dropped, so no production path wrote or read one.
+//! credentials #1029 dropped, so no production path wrote or read one.
 //!
 //! See `crates/vault/src/custody/README.md` for the whole picture.
 

@@ -6,8 +6,10 @@ import centraid.core.v1.Envelope
 import centraid.core.v1.Request
 import dev.centraid.core.CentraidCore
 import dev.centraid.core.CoreOutcome
+import dev.centraid.design.CentraidCatalog
 import dev.centraid.design.copy.AgendaCopy
 import dev.centraid.design.copy.PeopleCopy
+import dev.centraid.design.copy.SharedCopy
 import dev.centraid.design.copy.TasksCopy
 import okio.ByteString.Companion.encodeUtf8
 import kotlin.uuid.ExperimentalUuidApi
@@ -63,15 +65,35 @@ public object PhoneImport {
     /**
      * WHAT A MADE VAULT'S IMPORTS SAY, AS ONE LINE (R-ONBOARD-8): making a
      * vault brings in the photos, the contacts, the calendar and the reminders
-     * one after another, and the banner says what came in — "6 people
-     * imported, 12 events imported". An import with nothing to bring
-     * ([quiet], the apps' `…_NONE` lines) says nothing, and a shell passes no
-     * refusal at all: the member just said no, and a Settings line would
-     * argue with them. Empty when nothing came in.
+     * one after another, and the status line says what came in as one
+     * fragment (DESIGN.md's success budget) — "6 people, 12 events imported".
+     * An import with nothing to bring ([quiet], the apps' `…_NONE` lines) says
+     * nothing, and a shell passes no refusal at all: the member just said no,
+     * and a Settings line would argue with them. Empty when nothing came in.
+     *
+     * **THE SHARED LAST WORD IS SAID ONCE.** Every app's outcome ends in its
+     * verb ("6 people imported", "1 event imported"); when all of them end in
+     * the same word, it closes the list once instead of after every clause.
      */
-    public fun madeSummary(outcomes: List<String>): String = outcomes
-        .filter { it.isNotBlank() && it !in quiet }
-        .joinToString(", ") { it.trimEnd('.') }
+    public fun madeSummary(outcomes: List<String>): String {
+        val said = outcomes.filter { it.isNotBlank() && it !in quiet }.map { it.trim().trimEnd('.') }
+        val verb = said.map { it.substringAfterLast(' ', "") }.distinct().singleOrNull()
+        if (said.size < 2 || verb.isNullOrEmpty()) return said.joinToString(", ")
+        return said.dropLast(1).joinToString(", ") { it.substringBeforeLast(' ') } + ", " + said.last()
+    }
+
+    /**
+     * THE APP A MADE VAULT'S LINE OPENS: the first import that brought
+     * anything in, by the app it wrote to ([apps] and [outcomes] pair by
+     * position, as the shell ran them). Empty when nothing came in — a line
+     * with nothing new has nowhere worth going.
+     */
+    public fun madeOpens(apps: List<String>, outcomes: List<String>): String =
+        apps.zip(outcomes).firstOrNull { (_, said) -> said.isNotBlank() && said !in quiet }?.first.orEmpty()
+
+    /** "Open People": the line's one action, for the app [madeOpens] named. */
+    public fun openLabel(app: String): String =
+        CentraidCatalog.apps.firstOrNull { it.id == app }?.name?.let { SharedCopy.OPEN_APP.replace("{name}", it) }.orEmpty()
 
     private val quiet: Set<String> = setOf(
         PeopleCopy.IMPORT_CONTACTS_NONE,

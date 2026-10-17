@@ -1,14 +1,20 @@
 import SwiftUI
 
-// THE LIBRARY'S LAYOUT, IN SWIFTUI (#1029, photos port — v0's `PhotoTimeline.tsx`,
+import CentraidShared
+
+// THE LIBRARY'S DRAWING, IN SWIFTUI (#1029, photos port — v0's `PhotoTimeline.tsx`,
 // `PhotoGrainView.tsx`, `ScrubRail.tsx`, `TimelineGrainControl.tsx` and
 // `timeline-rows.ts`).
 //
-// Everything here is arithmetic over a width only the shell knows: which rows
-// the cells pack into, where a header goes, which tile is under a finger. What a
-// day IS, which grain comes next and what a pick means are the machine's
-// (`PhotosGridMachine`, `PhotosTimeline`), so Compose's
-// `PhotosLibraryTimeline.kt` draws the same library from the same state.
+// What is drawn here is arithmetic over a width only the shell knows: where a
+// header sits, which tile is under a finger. WHICH ROWS THE CELLS PACK INTO,
+// where a month or a day header goes, which cards a grain draws and how the
+// months pair are not this file's: they are `PhotosLibraryLayout` and
+// `PhotoJustify` in `commonMain`, so Compose's `PhotosLibraryTimeline.kt` draws
+// the same library from the same rules. What a day IS, which grain comes next
+// and what a pick means are the machine's (`PhotosGridMachine`,
+// `PhotosTimeline`). Only the date's spelling in the device's locale stays
+// here, because only the platform knows it (`LocaleLibraryTitles`).
 
 /// One row of the All grain. The id is what `scrollPosition` reports and
 /// what a grain switch lands on, so it carries the day it belongs to.
@@ -50,65 +56,90 @@ struct LibrarySection: Identifiable {
     var id: String { month.id }
 }
 
-/// One Years or Months card: the prefix key, its name, its tally, its cover.
-struct LibraryPeriod: Identifiable {
-    let key: String
-    let title: String
-    let count: String
-    let cover: Centraid_Screen_V1_PhotoCell?
-    let anchorDay: String
-    var id: String { key }
-}
-
+/// The library's measures, which are shared's (`PhotosLibraryLayout`): both
+/// shells draw the same headers, rail and cards at the same sizes.
 enum LibraryMetrics {
-    static let monthRow: CGFloat = 46
-    static let dayRow: CGFloat = 34
-    static let railWidth: CGFloat = 44
-    static let railInset: CGFloat = 8
-    static let thumb: CGFloat = 44
-    static let railMinimumRows = 12
-    static let yearCoverRatio: CGFloat = 0.72
-    static let cardGutter: CGFloat = 8
-    static let cardBottom: CGFloat = 20
+    static let monthRow = CGFloat(PhotosLibraryLayout.shared.MONTH_ROW)
+    static let dayRow = CGFloat(PhotosLibraryLayout.shared.DAY_ROW)
+    static let railWidth = CGFloat(PhotosLibraryLayout.shared.RAIL_WIDTH)
+    static let railInset = CGFloat(PhotosLibraryLayout.shared.RAIL_INSET)
+    static let thumb = CGFloat(PhotosLibraryLayout.shared.THUMB)
+    static let railMinimumRows = Int(PhotosLibraryLayout.shared.RAIL_MIN_ROWS)
+    static let yearCoverRatio = CGFloat(PhotosLibraryLayout.shared.YEAR_COVER_RATIO)
+    static let cardGutter = CGFloat(PhotosLibraryLayout.shared.CARD_GUTTER)
+    static let cardBottom = CGFloat(PhotosLibraryLayout.shared.CARD_BOTTOM)
 }
 
-enum LibraryLayout {
-    static let undated = "undated"
+/// A DATE IN THE READER'S LOCALE — `Fri, Aug 14`, with the year only when it is
+/// not this one, and `August 2026`. The one thing the shared layout cannot say:
+/// `CivilWords` spells days in English from the copy tables, and the library
+/// has always spelled them the way the device does. The day is already
+/// capture-local; it is formatted at noon UTC in UTC so no zone can move it.
+final class LocaleLibraryTitles: NSObject, LibraryTitles {
+    static let instance = LocaleLibraryTitles()
 
-    /// CELLS INTO ROWS (v0's `buildRows`): a month header where the month
-    /// changes, a day header per day, then the day's cells justified at the
-    /// rung's height.
-    ///
-    /// The cells arrive newest first and already grouped by the read's order,
-    /// so a section is a run of equal `day`s and nothing is re-sorted: a
-    /// re-sort would make this a different library from the one the lightbox
-    /// walks. THE UNDATED TAIL HAS ONE HEADER, "Undated", and no day under it —
-    /// the same word twice says nothing more.
-    static func rows(_ cells: [Centraid_Screen_V1_PhotoCell], width: CGFloat, rung: Int) -> [LibraryRow] {
-        let target = PhotoTileMetrics.height(rung: rung)
-        let year = Calendar.current.component(.year, from: Date())
-        var rows: [LibraryRow] = []
-        var month: String?
-        var start = 0
-        while start < cells.count {
-            let day = cells[start].day
-            var end = start
-            while end < cells.count, cells[end].day == day { end += 1 }
-            let section = Array(cells[start..<end])
-            let monthKey = day.isEmpty ? undated : String(day.prefix(7))
-            if monthKey != month {
-                month = monthKey
-                rows.append(.month(id: "m:\(monthKey)", title: monthTitle(monthKey), day: day))
-            }
-            if !day.isEmpty {
-                rows.append(.day(id: "d:\(day)", day: day, title: dayTitle(day, currentYear: year), ids: section.map(\.assetID)))
-            }
-            for (index, tiles) in PhotoJustify.rows(section, width: width, target: target).enumerated() {
-                rows.append(.tiles(id: "r:\(day):\(index)", day: day, tiles: tiles))
-            }
-            start = end
+    private static let utc = TimeZone(identifier: "UTC") ?? .current
+
+    func day(year: Int32, month: Int32, day: Int32, withYear: Bool) -> String {
+        Self.format(Int(year), Int(month), Int(day), template: withYear ? "EEEMMMdyyyy" : "EEEMMMd")
+    }
+
+    func month(year: Int32, month: Int32) -> String {
+        Self.format(Int(year), Int(month), 1, template: "MMMMyyyy")
+    }
+
+    private static func format(_ year: Int, _ month: Int, _ day: Int, template: String) -> String {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = utc
+        guard let date = calendar.date(from: DateComponents(year: year, month: month, day: day, hour: 12)) else {
+            return "\(year)-\(month)-\(day)"
         }
-        return rows
+        let formatter = DateFormatter()
+        formatter.timeZone = utc
+        formatter.setLocalizedDateFormatFromTemplate(template)
+        return formatter.string(from: date)
+    }
+}
+
+/// THE SWIFT SIDE OF THE LIBRARY'S LAYOUT: copy the five fields the rules read
+/// into shared's `LibraryCell`, call `PhotosLibraryLayout`, and put the cells
+/// back under what it answers. Swift holds SwiftProtobuf cells and Kotlin
+/// holds Wire's, so neither can hand its own to the other; nothing is decided
+/// here.
+enum LibraryLayout {
+    static func facts(_ cells: [Centraid_Screen_V1_PhotoCell]) -> [LibraryCell] {
+        cells.map { cell in
+            LibraryCell(
+                assetId: cell.assetID,
+                day: cell.day,
+                video: cell.kind == .video,
+                thumbnailPath: cell.hasThumbnailPath ? cell.thumbnailPath : "",
+                width: Int32(clamping: cell.width),
+                height: Int32(clamping: cell.height)
+            )
+        }
+    }
+
+    static func rows(_ cells: [Centraid_Screen_V1_PhotoCell], width: CGFloat, rung: Int) -> [LibraryRow] {
+        let year = Calendar.current.component(.year, from: Date())
+        return PhotosLibraryLayout.shared.rows(
+            cells: facts(cells),
+            width: Double(width),
+            rung: Int32(rung),
+            currentYear: Int32(year),
+            titles: LocaleLibraryTitles.instance
+        ).map { row in
+            switch row.kind {
+            case .month:
+                return .month(id: row.id, title: row.title, day: row.day)
+            case .day:
+                return .day(id: row.id, day: row.day, title: row.title, ids: row.ids)
+            default:
+                return .tiles(id: row.id, day: row.day, tiles: row.tiles.map {
+                    JustifiedTile(cell: cells[Int($0.index)], width: CGFloat($0.width), height: CGFloat($0.height))
+                })
+            }
+        }
     }
 
     /// The rows under their month headers, for pinned sections.
@@ -129,105 +160,25 @@ enum LibraryLayout {
         return sections
     }
 
-    /// PERIODS FROM CELLS (v0's `buildPeriods`), in the cells' own newest-first
-    /// order and never re-sorted. COVER = NEWEST: this vault has none of the
-    /// signals a key photograph is picked by, and a card must land on the
-    /// photograph at the top of that period in All. Undated photographs are
-    /// in All only — "sometime" is not a stretch of time.
-    static func periods(_ cells: [Centraid_Screen_V1_PhotoCell], years: Bool) -> [LibraryPeriod] {
-        let width = years ? 4 : 7
-        var order: [String] = []
-        var grouped: [String: [Centraid_Screen_V1_PhotoCell]] = [:]
-        for cell in cells where !cell.day.isEmpty {
-            let key = String(cell.day.prefix(width))
-            if grouped[key] == nil { order.append(key) }
-            grouped[key, default: []].append(cell)
-        }
-        return order.map { key in
-            let group = grouped[key] ?? []
-            return LibraryPeriod(
-                key: key,
-                title: years ? key : monthTitle(key),
-                count: describeCounts(group),
-                cover: group.first { $0.hasThumbnailPath && !$0.thumbnailPath.isEmpty } ?? group.first,
-                anchorDay: group.first?.day ?? ""
-            )
-        }
+    /// The Years or Months list: its cards, in the cells' own newest-first order.
+    static func grainItems(_ cells: [Centraid_Screen_V1_PhotoCell], years: Bool) -> [GrainItem] {
+        let layout = PhotosLibraryLayout.shared
+        return layout.grainItems(
+            periods: layout.periods(cells: facts(cells), years: years, titles: LocaleLibraryTitles.instance),
+            years: years
+        )
     }
 
-    /// Two months to a row, PAIRED WITHIN A YEAR: December beside the previous
-    /// January under a heading true of only half is what this prevents. The
-    /// pair's id is its first month's key.
-    static func monthPairs(_ periods: [LibraryPeriod]) -> [(year: String, pairs: [[LibraryPeriod]])] {
-        var years: [(year: String, pairs: [[LibraryPeriod]])] = []
-        for period in periods {
-            let year = String(period.key.prefix(4))
-            if years.last?.year != year { years.append((year, [])) }
-            var last = years[years.count - 1]
-            if let pair = last.pairs.last, pair.count == 1 {
-                last.pairs[last.pairs.count - 1].append(period)
-            } else {
-                last.pairs.append([period])
-            }
-            years[years.count - 1] = last
-        }
-        return years
-    }
-
-    /// `3 photos · 1 video` — v0's `describeCounts`.
-    static func describeCounts(_ cells: [Centraid_Screen_V1_PhotoCell]) -> String {
-        let videos = cells.filter { $0.kind == .video }.count
-        let photographs = cells.count - videos
-        var parts: [String] = []
-        if photographs > 0 {
-            parts.append("\(photographs) " + (photographs == 1 ? PhotosWords.tileCountOne : PhotosWords.tileCountMany))
-        }
-        if videos > 0 { parts.append("\(videos) video" + (videos == 1 ? "" : "s")) }
-        return parts.isEmpty ? "0 \(PhotosWords.tileCountMany)" : parts.joined(separator: " · ")
-    }
-
-    /// THE DAY BEHIND A SCROLL TARGET'S ID — a row's own day, or a card's
-    /// newest loaded day — so a grain switch lands where the member was.
+    /// THE DAY BEHIND A SCROLL TARGET'S ID, so a grain switch lands where the
+    /// member was.
     static func day(forID id: String?, cells: [Centraid_Screen_V1_PhotoCell]) -> String {
-        guard let id else { return "" }
-        let body = id.dropFirst(2)
-        switch id.prefix(2) {
-        case "d:": return String(body)
-        case "r:": return String(body.split(separator: ":", omittingEmptySubsequences: false).first ?? "")
-        case "y:", "p:": return cells.first { !$0.day.isEmpty && $0.day.hasPrefix(body) }?.day ?? ""
-        default: return ""
-        }
+        PhotosLibraryLayout.shared.dayOfId(id: id, days: cells.map(\.day))
     }
 
-    private static let utc = TimeZone(identifier: "UTC") ?? .current
-
-    /// A DAY'S NAME IN THE READER'S LOCALE — `Fri, Aug 14`, with the year only
-    /// when it is not this one. The day is already capture-local; it is
-    /// formatted at noon UTC in UTC so no zone can move it.
-    static func dayTitle(_ day: String, currentYear: Int) -> String {
-        let parts = day.split(separator: "-").compactMap { Int($0) }
-        guard parts.count == 3 else { return day }
-        return format(parts[0], parts[1], parts[2], template: parts[0] == currentYear ? "EEEMMMd" : "EEEMMMdyyyy")
-    }
-
-    /// `August 2026`, or "Undated" for the tail.
-    static func monthTitle(_ month: String) -> String {
-        if month == undated { return "Undated" }
-        let parts = month.split(separator: "-").compactMap { Int($0) }
-        guard parts.count == 2 else { return month }
-        return format(parts[0], parts[1], 1, template: "MMMMyyyy")
-    }
-
-    private static func format(_ year: Int, _ month: Int, _ day: Int, template: String) -> String {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = utc
-        guard let date = calendar.date(from: DateComponents(year: year, month: month, day: day, hour: 12)) else {
-            return "\(year)-\(month)-\(day)"
-        }
-        let formatter = DateFormatter()
-        formatter.timeZone = utc
-        formatter.setLocalizedDateFormatFromTemplate(template)
-        return formatter.string(from: date)
+    /// A MONTH'S NAME for the day it holds — `August 2026`, or "Undated".
+    static func monthTitle(ofDay day: String) -> String {
+        let layout = PhotosLibraryLayout.shared
+        return layout.monthTitle(monthKey: layout.monthKey(day: day), titles: LocaleLibraryTitles.instance)
     }
 }
 
@@ -367,8 +318,8 @@ struct LibraryTimelineRows: View {
                 // THE TARGET IS A THUMB'S EVEN WHERE THE ROW IS NOT: the kit's
                 // link is 44 and overflows the row's 34, which is what the
                 // sweep's arithmetic reads.
-                KitLink(label: all ? "Deselect" : "Select", dense: true) { send(LibraryEvents.pick(ids, !all)) }
-                    .accessibilityLabel("\(all ? "Deselect" : "Select") \(title)")
+                KitLink(label: all ? PhotosCopy.shared.PHOTOS_DESELECT : PhotosCopy.shared.PHOTOS_SELECT, dense: true) { send(LibraryEvents.pick(ids, !all)) }
+                    .accessibilityLabel(copyFill(all ? PhotosCopy.shared.PHOTOS_DESELECT_DAY : PhotosCopy.shared.PHOTOS_SELECT_DAY, "title", title))
             }
         }
         .padding(.horizontal, CentraidGeometry.pageMargin)
@@ -432,47 +383,42 @@ struct LibraryGrainCards: View {
     let send: (Data) -> Void
 
     var body: some View {
-        let periods = LibraryLayout.periods(cells, years: years)
+        let items = LibraryLayout.grainItems(cells, years: years)
         let stage = max(1, width - 2 * CentraidGeometry.pageMargin)
-        if periods.isEmpty, complete {
+        if items.isEmpty, complete {
             // A QUIET LINE, NOT A CARD: undated photographs live in All, and a
             // card for them would be a fake period.
-            Text(PhotosWords.photosLibraryUndatedNote)
+            Text(PhotosCopy.shared.PHOTOS_LIBRARY_UNDATED_NOTE)
                 .centraidType("small")
                 .foregroundStyle(Theme.color("textSoft", scheme))
                 .padding(CentraidGeometry.pageMargin)
         }
-        if years {
-            ForEach(periods) { period in
+        let cardWidth = max(1, ((stage - LibraryMetrics.cardGutter) / 2).rounded(.down))
+        ForEach(items, id: \.key) { item in
+            if !item.header.isEmpty {
+                Text(item.header)
+                    .centraidType("eyebrow")
+                    .foregroundStyle(Theme.color("text", scheme))
+                    .padding(.horizontal, CentraidGeometry.pageMargin)
+                    .padding(.bottom, 6)
+                    .frame(maxWidth: .infinity, minHeight: LibraryMetrics.monthRow, alignment: .bottomLeading)
+                    .accessibilityAddTraits(.isHeader)
+                    .id(item.key)
+            } else if years, let period = item.periods.first {
                 card(period, coverHeight: (stage * LibraryMetrics.yearCoverRatio).rounded(), overlaid: true)
                     .padding(.horizontal, CentraidGeometry.pageMargin)
-                    .id("y:\(period.key)")
-            }
-        } else {
-            let grouped = LibraryLayout.monthPairs(periods)
-            let cardWidth = max(1, ((stage - LibraryMetrics.cardGutter) / 2).rounded(.down))
-            ForEach(grouped, id: \.year) { group in
-                if grouped.count > 1 {
-                    Text(group.year)
-                        .centraidType("eyebrow")
-                        .foregroundStyle(Theme.color("text", scheme))
-                        .padding(.horizontal, CentraidGeometry.pageMargin)
-                        .padding(.bottom, 6)
-                        .frame(maxWidth: .infinity, minHeight: LibraryMetrics.monthRow, alignment: .bottomLeading)
-                        .accessibilityAddTraits(.isHeader)
-                }
-                ForEach(group.pairs, id: \.first?.key) { pair in
-                    HStack(alignment: .top, spacing: LibraryMetrics.cardGutter) {
-                        ForEach(pair) { period in
-                            card(period, coverHeight: cardWidth, overlaid: false).frame(width: cardWidth)
-                        }
-                        // AN ODD MONTH LEAVES ITS COLUMN EMPTY — a wider card
-                        // would read as a bigger month.
-                        if pair.count == 1 { Spacer().frame(width: cardWidth) }
+                    .id(item.key)
+            } else {
+                HStack(alignment: .top, spacing: LibraryMetrics.cardGutter) {
+                    ForEach(item.periods, id: \.key) { period in
+                        card(period, coverHeight: cardWidth, overlaid: false).frame(width: cardWidth)
                     }
-                    .padding(.horizontal, CentraidGeometry.pageMargin)
-                    .id("p:\(pair.first?.key ?? "")")
+                    // AN ODD MONTH LEAVES ITS COLUMN EMPTY — a wider card
+                    // would read as a bigger month.
+                    if item.periods.count == 1 { Spacer().frame(width: cardWidth) }
                 }
+                .padding(.horizontal, CentraidGeometry.pageMargin)
+                .id(item.key)
             }
         }
     }
@@ -486,8 +432,8 @@ struct LibraryGrainCards: View {
                     .frame(maxWidth: .infinity)
                     .frame(height: coverHeight)
                     .overlay {
-                        if let cover = period.cover, cover.hasThumbnailPath, !cover.thumbnailPath.isEmpty {
-                            ContentImage(path: cover.thumbnailPath)
+                        if !period.coverPath.isEmpty {
+                            ContentImage(path: period.coverPath)
                         }
                     }
                     .overlay(alignment: .bottomLeading) {
@@ -550,7 +496,7 @@ struct LibraryMoreSentinel: View {
                 .frame(maxWidth: .infinity)
                 .frame(height: PhotoTileMetrics.rungHeights[0])
                 .task(id: count) { send(LibraryEvents.nextPage()) }
-                .accessibilityLabel(PhotosWords.photosLibraryLoadingMore)
+                .accessibilityLabel(PhotosCopy.shared.PHOTOS_LIBRARY_LOADING_MORE)
         }
     }
 }
@@ -585,8 +531,7 @@ struct LibraryScrubRail: View {
     private func month(at index: Int) -> String {
         let list = targets
         guard !list.isEmpty else { return "" }
-        let day = list[min(max(index, 0), list.count - 1)].day
-        return LibraryLayout.monthTitle(day.isEmpty ? LibraryLayout.undated : String(day.prefix(7)))
+        return LibraryLayout.monthTitle(ofDay: list[min(max(index, 0), list.count - 1)].day)
     }
 
     private func jump(to value: CGFloat) {
@@ -663,7 +608,7 @@ struct LibraryScrubRail: View {
             .frame(width: LibraryMetrics.railWidth, height: LibraryMetrics.thumb, alignment: .trailing)
             .contentShape(Rectangle())
             .accessibilityElement()
-            .accessibilityLabel("Scrub the timeline by month")
+            .accessibilityLabel(PhotosCopy.shared.PHOTOS_SCRUB)
             .accessibilityValue(month(at: targets.firstIndex { $0.id == position } ?? 0))
             .accessibilityAdjustableAction { direction in
                 switch direction {
@@ -685,7 +630,11 @@ struct LibraryGrainControl: View {
 
     var body: some View {
         KitSegmented(
-            options: [(key: .years, label: "Years"), (key: .months, label: "Months"), (key: .all, label: "All")],
+            options: [
+                (key: .years, label: PhotosCopy.shared.PHOTOS_GRAIN_YEARS),
+                (key: .months, label: PhotosCopy.shared.PHOTOS_GRAIN_MONTHS),
+                (key: .all, label: PhotosCopy.shared.PHOTOS_GRAIN_ALL),
+            ],
             selected: grain == .unspecified ? .all : grain,
             onSelect: onGrain
         )
@@ -722,9 +671,9 @@ struct LibrarySelectionBar: View {
         let armed = !grid.selected.isEmpty
         let favorites = grid.filter == .favorites
         HStack(spacing: BandMetrics.groupGutter) {
-            verb("FolderPlus", PhotosWords.photosAddToAlbum, armed) { send(LibraryEvents.albumOpened()) }
-            verb("Heart", favorites ? PhotosWords.photosUnfavorite : PhotosWords.photosFavorite, armed) { send(LibraryEvents.favorite(!favorites)) }
-            verb("Share", PhotosWords.photosSendCopy, armed) { onSendCopy() }
+            verb("FolderPlus", PhotosCopy.shared.PHOTOS_ADD_TO_ALBUM, armed) { send(LibraryEvents.albumOpened()) }
+            verb("Heart", favorites ? PhotosCopy.shared.PHOTOS_UNFAVORITE : PhotosCopy.shared.PHOTOS_FAVORITE, armed) { send(LibraryEvents.favorite(!favorites)) }
+            verb("Share", PhotosCopy.shared.PHOTOS_SEND_COPY, armed) { onSendCopy() }
             verb("Trash", "Trash", armed) { send(LibraryEvents.confirmTrash()) }
         }
         .padding(BandMetrics.platePad)
@@ -767,9 +716,9 @@ struct LibrarySelectionBar: View {
 enum LibraryTrashCopy {
     static func question(_ count: Int) -> String {
         count == 1
-            ? PhotosWords.photosTrashOne
-            : PhotosWords.fill(PhotosWords.photosTrashMany, "count", "\(count)")
+            ? PhotosCopy.shared.PHOTOS_TRASH_ONE
+            : copyFill(PhotosCopy.shared.PHOTOS_TRASH_MANY, "count", "\(count)")
     }
 
-    static let body = PhotosWords.photosTrashBody
+    static let body = PhotosCopy.shared.PHOTOS_TRASH_BODY
 }

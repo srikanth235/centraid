@@ -17,6 +17,7 @@ import centraid.screen.v1.TasksListEvent
 import centraid.screen.v1.TasksListState
 import dev.centraid.design.copy.TasksCopy
 import dev.centraid.shared.kit.WriteLaw
+import dev.centraid.shared.nav.ScreenIds
 import dev.centraid.shared.platform.DeviceClock
 import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.screen.ScreenEffect
@@ -51,7 +52,7 @@ public sealed interface TasksListInput {
  * reopens, because a done row is drawn in the Logbook only (owner ruling).
  */
 public object TasksListMachine : ScreenMachine<TasksList, TasksListInput> {
-    public const val SCREEN_ID: String = "tasks.list"
+    public const val SCREEN_ID: String = ScreenIds.TASKS_LIST
 
     public val TABLES: Set<String> = TasksHomeMachine.TABLES
 

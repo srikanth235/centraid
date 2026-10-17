@@ -62,6 +62,16 @@ public object Staging {
          * not tell would re-send the roll.
          */
         public val alreadyHeld: Boolean,
+        /**
+         * THE TIERS (`thumb`, `preview`) THE VAULT ALREADY HOLDS FOR THIS
+         * ORIGINAL, rows and bytes both (#1080, the simulator run). A restored
+         * phone's re-walk finds [alreadyHeld] false — the original is the
+         * gateway's — while the restore brought every derivative back, so a
+         * walk that rendered a tier named here would re-make what the vault
+         * holds. Empty for owned bytes and for an original the vault has no
+         * derivative for.
+         */
+        public val derivativesHeld: Set<String> = emptySet(),
     )
 
     /** Why a stage did not finish, in words a member reads. */
@@ -172,6 +182,7 @@ public object Staging {
                 contentHash = handle.content_hash,
                 byteSize = handle.byte_size,
                 alreadyHeld = handle.already_held,
+                derivativesHeld = handle.derivatives_held.toSet(),
             ),
         )
     }

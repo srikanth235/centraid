@@ -101,6 +101,8 @@ class EnrollmentSpec : StringSpec({
             }
 
             override suspend fun indexedHoldings(): Int = indexed
+
+            override suspend fun holdsAVault(): Boolean = indexed > 0
         }
 
         val enrollment = Enrollment(secrets, phrase, restore, keeper)

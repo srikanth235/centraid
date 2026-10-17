@@ -14,15 +14,14 @@ import centraid.screen.v1.NotesLinkPickerState
 import centraid.screen.v1.NotesNotebooksEvent
 import centraid.screen.v1.NotesNotebooksState
 import centraid.screen.v1.SearchField
-import centraid.screen.v1.WriteState
 import dev.centraid.android.kit.AppPlace
 import dev.centraid.android.kit.CentraidRow
 import dev.centraid.android.kit.CentraidSearchField
 import dev.centraid.android.kit.EditableFieldRow
 import dev.centraid.android.kit.EmptyStateView
 import dev.centraid.android.kit.FailureView
+import dev.centraid.android.kit.OutlineButton
 import dev.centraid.android.kit.PushedPage
-import dev.centraid.android.kit.QuietButton
 import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.RoomAction
 import dev.centraid.android.kit.RowSkeleton
@@ -57,7 +56,7 @@ public fun NotesNotebooksScreen(
                 onEvent(NotesNotebooksEvent(create_opened = NotesNotebooksEvent.CreateOpened()))
             }
         },
-        status = if (write?.phase == WriteState.Phase.PHASE_REFUSED && !state.creating) write.failure?.sentence.orEmpty() else "",
+        status = if (state.creating) "" else write?.refusal.orEmpty(),
         band = { NotesBandView(state.band, { key -> onEvent(NotesNotebooksEvent(band = NotesNotebooksEvent.BandPicked(key))) }, onHome) },
     ) {
         ReadStateView(
@@ -85,7 +84,7 @@ public fun NotesNotebooksScreen(
         SheetRoom(
             title = chrome.new_notebook,
             onDismiss = { onEvent(NotesNotebooksEvent(create_dismissed = NotesNotebooksEvent.CreateDismissed())) },
-            status = if (write?.phase == WriteState.Phase.PHASE_REFUSED) write.failure?.sentence.orEmpty() else "",
+            status = write?.refusal.orEmpty(),
             primary = SheetPrimary(chrome.create, testTag = "notes-notebook-create", enabled = state.create_enabled) {
                 onEvent(NotesNotebooksEvent(create_confirmed = NotesNotebooksEvent.CreateConfirmed()))
             },
@@ -165,7 +164,7 @@ public fun NotesJournalScreen(
                     }
                     if (data.truncated && data.window_end_verb.isNotEmpty()) {
                         item(key = "window") {
-                            QuietButton(
+                            OutlineButton(
                                 data.window_end_verb,
                                 testTag = "notes-journal-widen",
                                 modifier = Modifier.padding(KitGeometry.GUTTER),
@@ -233,7 +232,7 @@ public fun NotesHistoryScreen(
         title = chrome?.title.orEmpty(),
         parentTitle = parentTitle,
         onBack = onBack,
-        status = if (write?.phase == WriteState.Phase.PHASE_REFUSED) write.failure?.sentence.orEmpty() else "",
+        status = write?.refusal.orEmpty(),
     ) {
         ReadStateView(
             content = screenContentOf(state.loading, state.failure, state.data_, state.denied),
@@ -254,7 +253,7 @@ public fun NotesHistoryScreen(
                             testTag = "notes-version-${row.content_id}",
                         ) {
                             if (row.restore_label.isNotEmpty() && !row.current) {
-                                QuietButton(
+                                OutlineButton(
                                     row.restore_label,
                                     testTag = "notes-restore-${row.content_id}",
                                     modifier = Modifier.padding(start = 8.dp),

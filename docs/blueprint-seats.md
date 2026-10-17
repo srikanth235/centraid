@@ -39,7 +39,7 @@ Form factor says how wide the window is. The byte seat says where bytes live. Th
 
 An app is admitted by these claims, each held by a check rather than by review:
 
-1. **A valid manifest.** `crates/apps/kit/src/manifest.rs` is the one parser: `manifestVersion` is checked first, `_`-prefixed and duplicate handler names are refused, `writes` is required on every action (`[]` still means "no database writes"), and the [designed-states](#designed-states) partition is closed. Each app's own `src/manifest.rs` parses its manifest under it and pins its `seats` block.
+1. **A valid manifest.** `crates/apps/kit/src/manifest.rs` is the one parser: `manifestVersion` is checked first, `_`-prefixed and duplicate handler names are refused, an action that declares `writes` is refused (the commit's own census says what a command wrote), and the [designed-states](#designed-states) partition is closed. Each app's own `src/manifest.rs` parses its manifest under it and pins its `seats` block.
 2. **No SQL outside the confined crates.** `cargo xtask rules`' `sql-confinement` refuses a SQL literal outside `crates/{ontology,vault,search}` and `crates/apps/kit`, tests included.
 3. **Parity with the recorded behaviour.** Each app's `crates/apps/<app>/tests/parity.rs` runs its queries against the fixture bundle in `contracts/apps/<app>/` through `contract_vault::open_contract_vault`.
 

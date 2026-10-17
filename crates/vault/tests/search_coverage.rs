@@ -1,15 +1,16 @@
-//! RUNG THIRTEEN, END TO END: SEARCH FINDS WHAT A MEMBER TYPED (#1097).
+//! SEARCH FINDS WHAT A MEMBER TYPED, END TO END (#1097).
 //!
 //! A member who typed a nickname, an email, a place, a project, a category, a
 //! line item or a memo searched for it and found nothing, because the text lived
-//! in a table whose index nothing read. Rung thirteen folds that text into the
+//! in a table whose index nothing read. The vault now folds that text into the
 //! index each domain's probe reads (R1), leaves out what the member can no longer
 //! see (R1b), keeps a Locker memo out of every index (R1c), stores no rank weights
-//! (R1d: the door owns them) and adds a vocabulary table per domain (R3). It also
+//! (R1d: the door owns them) and holds a vocabulary table per domain (R3). It also
 //! keeps four indexes for the containers a member files things in (R5): a
-//! notebook and an album, a project, a Docs folder. (Rung fifteen then dropped
-//! the expense index and the Tally-group circle index with Tally, #1099, and the
-//! rung's climb is proved over a file wound back from the head.)
+//! notebook and an album, a project, a Docs folder. (The expense index and the
+//! Tally-group circle index left with Tally, #1099.) How a vault written before
+//! the folds was backfilled is not proved here: the ladder was squashed into one
+//! baseline on 2026-10-15, Q-1029-1, and no vault in the field predates them.
 //!
 //! ## How the claims are made
 //!
@@ -21,10 +22,9 @@
 //! **Against an oracle that is not the triggers.** [`assert_indexes_match`]
 //! rebuilds what each of the three widened indexes SHOULD hold from the base
 //! tables with plain joins and compares it, row by row and column by column,
-//! with what the index holds. The triggers and the rung's backfill are the two
-//! writers of that index; the oracle is a third answer, so a trigger that
-//! forgot a path, or a backfill that disagreed with the triggers, is a
-//! difference rather than a quiet gap. It runs after every scenario below.
+//! with what the index holds. The triggers are the one writer of that index; the
+//! oracle is a second answer, so a trigger that forgot a path is a difference
+//! rather than a quiet gap. It runs after every scenario below.
 //!
 //! **A column filter proves WHERE the word sits.** `nickname : "chotu"` finds a
 //! party only if the word is in the folded column; a bare word would match the
@@ -33,11 +33,9 @@
 mod common;
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::Path;
 
 use centraid_vault::access::Principal;
 use centraid_vault::commands::Registry;
-use centraid_vault::migrations::BASELINE_SQL;
 use centraid_vault::{Command, CommandOutcome, CommandStatus, Vault};
 use rusqlite::{Connection, OptionalExtension as _};
 use serde_json::{Value, json};
@@ -1082,7 +1080,7 @@ fn purging_a_person_leaves_nothing_of_them_in_the_index() {
 
 /// THE WEIGHTS ARE NOT IN THE INDEX (R1d). A `rank` row in an index's `_config`
 /// is data, `contracts/schema/vault-ddl.sql` carries none, and a vault built by
-/// replaying it would rank differently from one that ran the rung. The door
+/// replaying it would rank differently from one the ladder founded. The door
 /// passes the weights with each query (`crates/search`, which tests the order
 /// against a replayed vault and a founded one).
 #[test]
@@ -1282,7 +1280,7 @@ fn a_locker_memo_is_in_no_index_and_no_vocabulary() {
         );
     }
     // And Locker has no index at all, so no vocabulary either: its index was
-    // retired with rung thirteen (Q-1097-1 (c)).
+    // retired (Q-1097-1 (c)).
     assert_eq!(
         world.count(
             "SELECT COUNT(*) FROM sqlite_master WHERE name LIKE 'fts\\_locker%' ESCAPE '\\'"
@@ -1311,8 +1309,8 @@ fn mentions_word(sql: &str, word: &str) -> bool {
 }
 
 /// `commitments.rs`' `no_sealed_column_appears_in_any_fts_ddl`, over the LADDER
-/// HEAD: that test reads the frozen v0 corpus, which has none of rung
-/// thirteen's objects. Every `fts_*` object and every trigger that names an
+/// HEAD: that test reads the frozen v0 corpus, which has none of the folded
+/// indexes' objects. Every `fts_*` object and every trigger that names an
 /// index is checked against the sealed registry.
 #[test]
 fn no_sealed_column_appears_in_any_fts_object_at_the_ladder_head() {
@@ -1328,7 +1326,7 @@ fn no_sealed_column_appears_in_any_fts_object_at_the_ladder_head() {
         .filter(|object| object.name.starts_with("fts_") || object.sql.contains("fts_"))
         .collect();
 
-    // NOT VACUOUS: rung thirteen's objects are in the set being checked.
+    // NOT VACUOUS: the folded indexes' objects are in the set being checked.
     for named in [
         "fts_core_party_vocab",
         "fts_core_party_from_knowledge_annotation_ai",
@@ -1370,122 +1368,11 @@ fn no_sealed_column_appears_in_any_fts_object_at_the_ladder_head() {
 }
 
 // ---------------------------------------------------------------------------
-// 5. The rung over a vault written before it.
+// 5. The schema a vault is founded with.
 // ---------------------------------------------------------------------------
 
-/// One object's DDL out of the baseline, which is the text rung twelve's file
-/// still carries for every index rung thirteen did not rewrite.
-fn baseline_block(kind: &str, name: &str) -> String {
-    let marker = format!("-- {kind} {name}");
-    let lines: Vec<&str> = BASELINE_SQL.lines().collect();
-    let start = lines
-        .iter()
-        .position(|line| *line == marker)
-        .unwrap_or_else(|| panic!("`{marker}` is not in the baseline"));
-    let mut block = String::new();
-    for line in &lines[start + 1..] {
-        if ["-- table ", "-- trigger ", "-- index ", "-- view ", "---- "]
-            .iter()
-            .any(|head| line.starts_with(head))
-        {
-            break;
-        }
-        block.push_str(line);
-        block.push('\n');
-    }
-    block
-}
-
-/// WIND A FOUNDED FILE BACK TO RUNG TWELVE: rung thirteen's objects leave, and
-/// the thirteen indexes it rebuilt or retired come back in the baseline's own text,
-/// empty — a file at rung twelve held them in that shape.
-fn wind_back_to_rung_twelve(path: &Path) {
-    let raw = Connection::open(path).expect("the file opens");
-    // Rung thirteen creates triggers ON Tally's tables, and a head file has none: they
-    // come back empty, in the baseline's text, for rung fifteen to drop again (#1099).
-    common::undo_rung_fifteen(&raw);
-    let rung_thirteen: Vec<(String, String)> = {
-        let mut statement = raw
-            .prepare(
-                r"SELECT type, name FROM sqlite_master
-                   WHERE name LIKE 'fts\_%' ESCAPE '\'
-                     AND (name LIKE '%\_vocab' ESCAPE '\' OR name LIKE '%\_from\_%' ESCAPE '\')",
-            )
-            .expect("the schema reads");
-        statement
-            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
-            .expect("the schema reads")
-            .collect::<rusqlite::Result<_>>()
-            .expect("the schema reads")
-    };
-    // Ten vocabularies (six domains, three containers, the chat), fourteen
-    // re-indexing triggers of the domains, the folder index's one from its scheme
-    // and the chat index's three from the messages. (Rung fifteen dropped the
-    // expense and circle vocabularies and their eleven re-indexing triggers.)
-    assert_eq!(
-        rung_thirteen.len(),
-        10 + 14 + 1 + 3,
-        "rung thirteen's own objects"
-    );
-    let mut statements = String::from("BEGIN;\n");
-    for (kind, name) in &rung_thirteen {
-        statements.push_str(&format!("DROP {} {name};\n", kind.to_uppercase()));
-    }
-    // The folder index is born in rung thirteen: it leaves and nothing replaces it.
-    for suffix in ["ai", "au", "ad"] {
-        statements.push_str(&format!(
-            "DROP TRIGGER IF EXISTS fts_core_concept_{suffix};\n"
-        ));
-    }
-    statements.push_str("DROP TABLE IF EXISTS fts_core_concept;\n");
-    // So is the chat index (R-1097-22): it leaves, and nothing replaces it.
-    for suffix in ["ai", "au", "ad"] {
-        statements.push_str(&format!(
-            "DROP TRIGGER IF EXISTS fts_chat_thread_{suffix};\n"
-        ));
-    }
-    statements.push_str("DROP TABLE IF EXISTS fts_chat_thread;\n");
-    let rebuilt = [
-        "fts_core_party",
-        "fts_core_event",
-        "fts_schedule_task",
-        "fts_tally_expense",
-        "fts_people_profile",
-        "fts_core_place",
-        "fts_schedule_project",
-        "fts_social_circle",
-        "fts_knowledge_annotation",
-        "fts_core_transaction",
-        "fts_locker_item",
-        "fts_social_thread",
-        "fts_social_message",
-    ];
-    for fts in rebuilt {
-        for suffix in ["ai", "au", "ad"] {
-            statements.push_str(&format!("DROP TRIGGER IF EXISTS {fts}_{suffix};\n"));
-        }
-        statements.push_str(&format!("DROP TABLE IF EXISTS {fts};\n"));
-    }
-    for fts in rebuilt {
-        statements.push_str(&baseline_block("table", fts));
-        for suffix in ["ai", "au", "ad"] {
-            statements.push_str(&baseline_block("trigger", &format!("{fts}_{suffix}")));
-        }
-    }
-    // The four triggers of other indexes that also wrote `fts_social_message`,
-    // in the baseline's own text.
-    for writer in SOCIAL_WRITERS {
-        statements.push_str(&format!("DROP TRIGGER IF EXISTS {writer};\n"));
-        statements.push_str(&baseline_block("trigger", writer));
-    }
-    statements.push_str("PRAGMA user_version = 12;\nCOMMIT;\n");
-    raw.execute_batch(&statements)
-        .expect("the file is wound back to rung twelve");
-}
-
-/// The seven indexes rung thirteen retires (R2a). `fts_schedule_project` and
-/// `fts_social_circle` are not among them: they served containers (R5), until rung
-/// fifteen dropped the circle index with Tally.
+/// The seven indexes a vault no longer has (R2a). `fts_schedule_project` is not among
+/// them: it serves containers (R5). The circle index left with Tally.
 const RETIRED: [&str; 7] = [
     "fts_people_profile",
     "fts_core_place",
@@ -1500,16 +1387,16 @@ const RETIRED: [&str; 7] = [
 /// R5), each with a vocabulary of its own. Chat history is `chat_thread` and
 /// `chat_message`, not the People messaging model `fts_social_*` indexed, so
 /// the messaging pair is retired. The circle index, the fourth, left with Tally
-/// in rung fifteen (R-1099-35).
+/// (R-1099-35).
 const CONTAINER_INDEXES: [&str; 3] = [
     "fts_core_collection",
     "fts_schedule_project",
     "fts_core_concept",
 ];
 
-/// The triggers of OTHER indexes that also wrote `fts_social_message`: a body's
-/// text or a representation arriving re-indexes every note, document and
-/// message that owns it. Rung thirteen creates them again without the message.
+/// The triggers of OTHER indexes that once also wrote `fts_social_message`: a body's
+/// text or a representation arriving re-indexes every note and document that owns
+/// it, and the message is no longer one of them.
 const SOCIAL_WRITERS: [&str; 4] = [
     "trg_fts_content_text_ai",
     "trg_fts_content_text_au",
@@ -1538,114 +1425,25 @@ fn remaining_objects(vault: &Vault, fts: &str) -> Vec<String> {
 }
 
 #[test]
-fn a_vault_at_rung_twelve_climbs_to_thirteen_with_its_rows_backfilled() {
-    let world = World::new("cov-rung");
-    let calendar = world.calendar();
-    let place = world.place("Lisbon Docks");
-    let ravi = world.person("Ravi Menon", Some("Chotu"), Some("Cousin"));
-    world.run(
-        "people.edit_person",
-        json!({ "party_id": ravi, "met": "at the Goa wedding" }),
-    );
-    world.channel(&ravi, "email", "ravi@example.org");
-    world.run(
-        "people.add_note",
-        json!({ "party_id": ravi, "text": "loves kayaking" }),
-    );
-    world.interaction(&ravi, "lunch at Rao's");
-    let trashed = world.person("Old Friend", Some("Zed"), None);
-    world.run("people.trash_person", json!({ "party_id": trashed }));
-    let event = world.event(&calendar, "Team offsite", Some(&place));
-    let gone_event = world.event(&calendar, "Cancelled offsite", Some(&place));
-    world.run("schedule.delete_event", json!({ "event_id": gone_event }));
-    let project = world.id(
-        "schedule.save_project",
-        json!({ "name": "Kitchen refit" }),
-        "project_id",
-    );
-    let task = world.task_in("Order tiles", Some(&project));
-    // Containers (R5): one of each, and an archived project that the baseline
-    // indexed and the rebuilt index must not.
-    let notebook = world.notebook("Reading list");
-    let album = world.album("Goa trip");
-    let folder = world.folder("Leases");
-    let archived_project = world.project("Archived chores");
-    world.execute_sql(
-        "UPDATE schedule_project SET archived_at = '2099-01-01T00:00:00.000Z' WHERE project_id = ?1",
-        &[&archived_project],
-    );
-    // The chat (R-1097-22): a thread whose second question and whose answers
-    // were written before the rung.
-    let thread = world.chat_turn(None, "sierra backfill", "assistantzed one", false);
-    world.chat_turn(Some(&thread), "tango later", "assistantzed two", false);
+fn a_founded_vault_has_no_retired_index_and_every_container_index_whole() {
+    let world = World::new("cov-head");
+    let vault = world.vault();
 
-    let path = world.vault().path().to_path_buf();
-    wind_back_to_rung_twelve(&path);
-
-    // THE REAL PATH: `Vault::open` sees rung twelve, snapshots, and climbs.
-    let migrated = Vault::open(&path).expect("the file climbs rung thirteen");
-    assert_eq!(migrated.schema_version(), centraid_vault::head_version());
-    assert!(centraid_vault::head_version() >= 13);
-
-    // Rows written before the rung are in the widened indexes.
-    for (fts, column, word, found) in [
-        ("fts_core_party", "nickname", "chotu", &ravi),
-        ("fts_core_party", "role", "cousin", &ravi),
-        ("fts_core_party", "met", "goa", &ravi),
-        ("fts_core_party", "channels", "ravi@example.org", &ravi),
-        ("fts_core_party", "memo", "kayaking", &ravi),
-        // An interaction's note, logged before the rung, is backfilled too.
-        ("fts_core_party", "memo", "lunch", &ravi),
-        ("fts_core_event", "location", "lisbon", &event),
-        ("fts_schedule_task", "project", "kitchen", &task),
-    ] {
-        assert_eq!(
-            hits(&migrated, fts, &col(column, word)),
-            set([found]),
-            "{fts}.{column} after the climb"
-        );
-    }
-    // A trashed profile's text and a trashed event are not backfilled either.
-    assert_eq!(
-        hits(&migrated, "fts_core_party", &col("nickname", "zed")),
-        none()
-    );
-    assert_eq!(
-        hits(&migrated, "fts_core_event", &col("location", "lisbon")),
-        set([&event]),
-        "the trashed event is not the one found"
-    );
-    // The backfill equals what the base tables say, which is what the triggers
-    // are held to as well.
-    assert_indexes_match(&migrated);
-    // The chat history is backfilled: the title, the member's later question,
-    // and nothing the assistant said.
-    assert_eq!(
-        hits(&migrated, "fts_chat_thread", &col("title", "sierra")),
-        set([&thread])
-    );
-    assert_eq!(
-        hits(&migrated, "fts_chat_thread", &col("said", "tango")),
-        set([&thread])
-    );
-    assert_eq!(hits(&migrated, "fts_chat_thread", "assistantzed"), none());
-    assert_chat_matches(&migrated);
-
-    // The retired indexes are gone: the table, its FTS5 shadow tables and its
+    // The retired indexes are not there: the table, its FTS5 shadow tables and its
     // triggers. Seven were retired (R2a): five whose text is folded, and two
     // (Q-1097-1 (c)) that nothing read.
     for retired in RETIRED {
         assert_eq!(
-            remaining_objects(&migrated, retired),
+            remaining_objects(vault, retired),
             Vec::<String>::new(),
-            "{retired} is still in the file"
+            "{retired} is in a founded file"
         );
     }
     // NO OBJECT AT ALL STILL NAMES A RETIRED INDEX: a trigger of another index
     // that inserted into one would fail the statement that fired it. The four
-    // that did (`SOCIAL_WRITERS`) were created again without it.
+    // that once did (`SOCIAL_WRITERS`) do not.
     for retired in RETIRED {
-        let naming: Vec<String> = migrated
+        let naming: Vec<String> = vault
             .read(|connection| {
                 let mut statement = connection.prepare(
                     "SELECT name FROM sqlite_master WHERE instr(sql, ?1) > 0 ORDER BY name",
@@ -1664,9 +1462,7 @@ fn a_vault_at_rung_twelve_climbs_to_thirteen_with_its_rows_backfilled() {
     }
     for writer in SOCIAL_WRITERS {
         assert_eq!(
-            remaining_objects(&migrated, writer)
-                .first()
-                .map(String::as_str),
+            remaining_objects(vault, writer).first().map(String::as_str),
             Some(writer),
             "{writer} is gone"
         );
@@ -1675,7 +1471,7 @@ fn a_vault_at_rung_twelve_climbs_to_thirteen_with_its_rows_backfilled() {
     // three triggers and its vocabulary (R5), and the folder index has the
     // trigger of the table it hangs on besides.
     for kept in CONTAINER_INDEXES {
-        let objects = remaining_objects(&migrated, kept);
+        let objects = remaining_objects(vault, kept);
         let from_children = match kept {
             "fts_core_concept" => 1,
             _ => 0,
@@ -1683,88 +1479,9 @@ fn a_vault_at_rung_twelve_climbs_to_thirteen_with_its_rows_backfilled() {
         assert_eq!(
             objects.len(),
             1 + 5 + 3 + 1 + from_children,
-            "{kept} lost objects at the climb: {objects:?}"
+            "{kept} is missing objects: {objects:?}"
         );
     }
-    // What the containers held before the rung is in them after it.
-    for (fts, word, found) in [
-        ("fts_core_collection", "reading", &notebook),
-        ("fts_core_collection", "goa", &album),
-        ("fts_schedule_project", "kitchen", &project),
-        ("fts_core_concept", "leases", &folder),
-    ] {
-        assert_eq!(
-            hits(&migrated, fts, &format!("\"{word}\"")),
-            set([found]),
-            "{fts} after the climb"
-        );
-    }
-    // A project archived before the rung is not backfilled.
-    assert_eq!(
-        hits(&migrated, "fts_schedule_project", "\"archived\""),
-        none(),
-        "fts_schedule_project: `archived` is archived"
-    );
-    assert_containers_match(&migrated);
-    // The triggers work on the migrated file as they do on a founded one.
-    let registry = Registry::with_system_commands().expect("the registry builds");
-    registry.install(&migrated).expect("the record installs");
-    let outcome = migrated
-        .execute(
-            &registry,
-            &Principal::owner("phone"),
-            &Command::new(
-                "people.edit_person",
-                json!({ "party_id": ravi, "nickname": "Guddu" }),
-            ),
-        )
-        .expect("the command answers");
-    assert_eq!(
-        outcome.status,
-        CommandStatus::Executed,
-        "{:?}",
-        outcome.reason
-    );
-    assert_eq!(
-        hits(&migrated, "fts_core_party", &col("nickname", "guddu")),
-        set([&ravi])
-    );
-    assert_eq!(
-        hits(&migrated, "fts_core_party", &col("nickname", "chotu")),
-        none()
-    );
-}
-
-#[test]
-fn the_rung_climbs_over_a_file_that_already_has_its_objects() {
-    // The suites wind a founded file back by pragma and climb again, so the
-    // rung must run over its own objects: every DROP is IF EXISTS and every
-    // CREATE follows its DROP.
-    let world = World::new("cov-twice");
-    let ravi = world.person("Ravi Menon", Some("Chotu"), None);
-    world.channel(&ravi, "email", "ravi@example.org");
-    let path = world.vault().path().to_path_buf();
-    {
-        let raw = Connection::open(&path).expect("the file opens");
-        common::undo_rung_fifteen(&raw);
-        raw.execute_batch("PRAGMA user_version = 12;")
-            .expect("the pragma is set");
-    }
-    let migrated = Vault::open(&path).expect("the file climbs rung thirteen again");
-    assert_eq!(migrated.schema_version(), centraid_vault::head_version());
-    assert_eq!(
-        hits(&migrated, "fts_core_party", &col("nickname", "chotu")),
-        set([&ravi])
-    );
-    assert_eq!(
-        hits(
-            &migrated,
-            "fts_core_party",
-            &col("channels", "ravi@example.org")
-        ),
-        set([&ravi])
-    );
-    assert_indexes_match(&migrated);
 }
 
 // ---------------------------------------------------------------------------

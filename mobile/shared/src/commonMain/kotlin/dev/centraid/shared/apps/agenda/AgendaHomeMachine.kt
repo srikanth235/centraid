@@ -15,6 +15,7 @@ import centraid.screen.v1.Loading
 import centraid.screen.v1.SeatState
 import dev.centraid.design.copy.AgendaCopy
 import dev.centraid.shared.kit.SearchLaw
+import dev.centraid.shared.nav.ScreenIds
 import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.ScreenMachine
@@ -117,7 +118,7 @@ public sealed interface AgendaInput {
  * every step ([decorate]), so no view derives one from another field.
  */
 public object AgendaHomeMachine : ScreenMachine<AgendaHome, AgendaInput> {
-    public const val SCREEN_ID: String = "agenda.home"
+    public const val SCREEN_ID: String = ScreenIds.AGENDA_HOME
 
     /** Schedule's and Waiting's reach from the anchor, in days (v0's). */
     public const val LIST_DAYS: Int = 120

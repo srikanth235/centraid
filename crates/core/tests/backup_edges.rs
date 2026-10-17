@@ -66,7 +66,10 @@ fn a_note_is_backed_up_with_the_records_it_lives_in() {
 /// gateway that already holds the vault claims it; the claim names the head
 /// the gateway held, and the phone's next pass must set its own snapshot as
 /// the head over that one — or the records it writes are never backed up
-/// again, while every pass answers that it emptied.
+/// again, while every pass answers that it emptied. The second phone writes
+/// before it pairs, so its copy is newer than the head: a copy older than the
+/// head with fewer commands is refused instead (F4,
+/// `a_phone_with_no_record_of_the_gateway_and_an_older_copy_takes_nothing_over`).
 #[test]
 fn a_phone_that_took_the_vault_over_moves_the_head() {
     let gateway = gateway();
@@ -79,12 +82,12 @@ fn a_phone_that_took_the_vault_over_moves_the_head() {
     let second_dir = tempfile::tempdir().expect("a directory");
     let second_path = second_dir.path().join("vault.db");
     let second = phone(second_dir.path());
-    pair(&second, &gateway);
     note(
         &second,
         "After",
         "written on the phone that took the vault over",
     );
+    pair(&second, &gateway);
     let drained = drain(&second, at_home());
     assert_eq!(
         drained.stopped,
@@ -246,6 +249,13 @@ fn a_gateway_that_goes_away_mid_pass_is_blamed_and_the_next_pass_finishes() {
         (1..6).contains(&cut.confirmed_parts),
         "some moved before the gateway went: {cut:?}"
     );
+    // A PASS CUT OFF AFTER CONFIRMING FILES OWES THEIR ROWS A SNAPSHOT
+    // (R-1080-C15): the next pass that reaches the gateway takes it first.
+    assert_eq!(
+        ledger(&path).meta("pass.snapshot_owed").expect("reads"),
+        Some("1".to_owned()),
+        "the cut pass owes the snapshot"
+    );
     let held = gateway.held(&vault_id());
     let confirmed = ledger(&path).confirmed_names(&id).expect("reads");
     assert!(
@@ -269,6 +279,7 @@ fn a_gateway_that_goes_away_mid_pass_is_blamed_and_the_next_pass_finishes() {
 
     // THE GATEWAY COMES BACK, and the next pass sends what is left.
     gateway.cable().mend();
+    let held_before = gateway.held(&vault_id());
     let resumed = drain(&phone, quietly());
     assert_eq!(
         resumed.stopped,
@@ -276,16 +287,28 @@ fn a_gateway_that_goes_away_mid_pass_is_blamed_and_the_next_pass_finishes() {
         "{resumed:?}"
     );
     assert_eq!(
-        u64::from(resumed.confirmed_parts),
+        u64::from(resumed.confirmed_parts - snapshot_parts_after(&path, &held_before)),
         left,
         "nothing acknowledged is sent again"
     );
-    let rows_wait = status(&phone);
+    // A PASS THAT CONFIRMS FILES TAKES THE SNAPSHOT THEIR ROWS NEED
+    // (R-1080-C15): the cut pass owed it, the next took it first, so the bytes
+    // AND the rows are there the moment it finishes — no wait for the hour.
     assert_eq!(
-        waiting(&rows_wait, wire::WaitReason::Window),
-        6,
-        "the bytes are there and the rows wait for the next snapshot: {:?}",
-        rows_wait.waiting
+        ledger(&path).meta("pass.snapshot_owed").expect("reads"),
+        Some("0".to_owned()),
+        "the snapshot the cut pass owed was taken"
+    );
+    let after_resume = status(&phone);
+    assert_eq!(
+        after_resume.content_confirmed, after_resume.content_total,
+        "{:?}",
+        after_resume.waiting
+    );
+    assert!(
+        after_resume.waiting.is_empty(),
+        "{:?}",
+        after_resume.waiting
     );
     drain(
         &phone,
@@ -313,6 +336,7 @@ fn a_gateway_that_goes_away_mid_pass_is_blamed_and_the_next_pass_finishes() {
 fn a_gateway_that_goes_away_mid_question_is_an_unreachable_pass() {
     let gateway = gateway();
     let dir = tempfile::tempdir().expect("a directory");
+    let path = dir.path().join("vault.db");
     let phone = phone(dir.path());
     pair(&phone, &gateway);
     drain(&phone, at_home());
@@ -342,13 +366,17 @@ fn a_gateway_that_goes_away_mid_question_is_an_unreachable_pass() {
     );
 
     gateway.cable().mend();
+    let held_before = gateway.held(&vault_id());
     let resumed = drain(&phone, quietly());
     assert_eq!(
         resumed.stopped,
         wire::DrainStop::Empty as i32,
         "{resumed:?}"
     );
-    assert_eq!(resumed.confirmed_parts, 50);
+    assert_eq!(
+        resumed.confirmed_parts - snapshot_parts_after(&path, &held_before),
+        50
+    );
     drain(
         &phone,
         wire::DrainRequest {
@@ -537,6 +565,7 @@ fn a_status_read_while_a_pass_runs_always_answers() {
         .gateway_id;
     drain(&phone, at_home());
     originals(&phone, "a photograph the screen watches go", 120, 2_048);
+    let held_before = gateway.held(&vault_id());
 
     let running = std::sync::Arc::clone(&phone);
     let pass = std::thread::spawn(move || {
@@ -572,7 +601,10 @@ fn a_status_read_while_a_pass_runs_always_answers() {
         wire::DrainStop::Empty as i32,
         "{drained:?}"
     );
-    assert_eq!(drained.confirmed_parts, 120);
+    assert_eq!(
+        drained.confirmed_parts - snapshot_parts_after(&path, &held_before),
+        120
+    );
     assert!(reads > 1, "the screen read the status while the pass ran");
     assert!(refused_second, "a second pass is refused while one runs");
     assert!(!phone.plane().asking(), "the tap ended with its pass");
@@ -927,6 +959,7 @@ fn a_pairing_code_that_does_not_pair_keeps_nothing() {
 fn a_gateway_asleep_when_the_pass_begins_is_waited_for() {
     let gateway = gateway();
     let dir = tempfile::tempdir().expect("a directory");
+    let path = dir.path().join("vault.db");
     let phone = phone(dir.path());
     pair(&phone, &gateway);
     drain(&phone, at_home());
@@ -949,14 +982,19 @@ fn a_gateway_asleep_when_the_pass_begins_is_waited_for() {
     );
 
     // AWAKE, where the phone last reached it; kept for the passes below.
-    let _awake = gateway.restart();
+    let awake_gateway = gateway.restart();
+    let held_before = awake_gateway.held(&vault_id());
     let awake = drain(&phone, quietly());
     assert_eq!(awake.stopped, wire::DrainStop::Empty as i32, "{awake:?}");
-    assert_eq!(awake.confirmed_parts, 3);
     assert_eq!(
-        waiting(&status(&phone), wire::WaitReason::Window),
-        3,
-        "the rows wait"
+        awake.confirmed_parts - snapshot_parts_after(&path, &held_before),
+        3
+    );
+    // THE PASS THAT CONFIRMED THEM SNAPSHOTTED THEIR ROWS TOO (R-1080-C15).
+    assert!(
+        status(&phone).waiting.is_empty(),
+        "the bytes and the rows are there: {:?}",
+        status(&phone).waiting
     );
     drain(
         &phone,
@@ -995,9 +1033,14 @@ fn a_phone_killed_after_sealing_moves_its_spool_next_time() {
     drop(phone);
 
     let phone = reopen(&path);
+    let held_before = gateway.held(&vault_id());
     let moved = drain(&phone, quietly());
     assert_eq!(moved.stopped, wire::DrainStop::Empty as i32, "{moved:?}");
-    assert_eq!(moved.confirmed_parts, 3, "each sealed part once");
+    assert_eq!(
+        moved.confirmed_parts - snapshot_parts_after(&path, &held_before),
+        3,
+        "each sealed part once"
+    );
     assert!(ledger(&path).queued().expect("reads").is_empty());
     assert_eq!(
         gateway.held(&vault_id()),
@@ -1071,9 +1114,17 @@ fn a_part_the_os_moved_unsettled_is_confirmed_by_the_next_core() {
     drop(phone);
 
     let phone = reopen(&path);
+    let held_before = gateway.held(&vault_id());
     let next = drain(&phone, quietly());
     assert_eq!(next.stopped, wire::DrainStop::Empty as i32, "{next:?}");
-    assert_eq!(next.confirmed_parts, 0, "nothing is sent again");
+    // THE PASS CONFIRMED THE TWO FROM THE GATEWAY'S ANSWER and took the
+    // snapshot their rows need (R-1080-C15): the snapshot's new parts are the
+    // only ones it sent.
+    assert_eq!(
+        next.confirmed_parts - snapshot_parts_after(&path, &held_before),
+        0,
+        "no file part is sent again"
+    );
     assert!(ledger(&path).queued().expect("reads").is_empty());
     assert!(file_names(&phone).iter().all(|name| {
         ledger(&path)
@@ -1187,8 +1238,8 @@ fn an_item_edited_after_backup_backs_up_beside_the_original() {
     let backed = status(&phone);
     assert_eq!(
         (backed.content_confirmed, backed.content_total),
-        (1, 2),
-        "the edit's row waits for the next snapshot"
+        (2, 2),
+        "the pass that moved the edit snapshotted its row too (R-1080-C15)"
     );
     drain(
         &phone,
@@ -1370,5 +1421,282 @@ fn an_item_deleted_after_backup_is_collected_once_purged() {
             .any(|record| Name::from_bytes(*record.name.as_bytes()) == object
                 && record.tombstone.is_some()),
         "as a tombstone, with the gateway's grace"
+    );
+}
+
+/// **A GATEWAY THAT REFUSES FOR ROOM IS NOT AN ABSENT ONE** (#1080, the
+/// sweep's F1). Its disk is full: it answered, and what it answered is its own
+/// limit. The pass stops `REFUSED` rather than `UNREACHABLE`, nothing counts as
+/// backed up, what waits is waiting on the machine and not on time, and once
+/// the room is back the next pass moves everything.
+#[test]
+fn a_full_gateway_is_a_refusal_the_status_names_and_the_next_pass_finishes() {
+    let gateway = gateway();
+    let dir = tempfile::tempdir().expect("a directory");
+    let phone = phone(dir.path());
+    pair(&phone, &gateway);
+    originals(&phone, "no room for these", 3, 60_000);
+    gateway.spawned.fill_disk(true);
+
+    let refused = drain(&phone, at_home());
+    assert_eq!(
+        refused.stopped,
+        wire::DrainStop::Refused as i32,
+        "a full disk is the gateway's answer, not its absence: {refused:?}"
+    );
+    assert_eq!(refused.confirmed_parts, 0, "{refused:?}");
+    let waiting_on_room = status(&phone);
+    assert_eq!(waiting_on_room.content_confirmed, 0, "{waiting_on_room:?}");
+    assert_eq!(
+        waiting(&waiting_on_room, wire::WaitReason::Refused),
+        waiting_on_room.content_total,
+        "every file waits on the machine's room: {waiting_on_room:?}"
+    );
+    assert_eq!(
+        waiting(&waiting_on_room, wire::WaitReason::Window)
+            + waiting(&waiting_on_room, wire::WaitReason::Gateway),
+        0,
+        "none of it waits for time or for an absent gateway: {waiting_on_room:?}"
+    );
+
+    gateway.spawned.fill_disk(false);
+    let moved = drain(&phone, quietly());
+    assert_eq!(moved.stopped, wire::DrainStop::Empty as i32, "{moved:?}");
+    let backed = status(&phone);
+    assert_eq!(backed.content_confirmed, backed.content_total, "{backed:?}");
+    assert!(backed.waiting.is_empty(), "{backed:?}");
+}
+
+/// **A GATEWAY THAT LOST ITS STORE BUT KEPT ITS IDENTITY IS NOT "ALL BACKED
+/// UP"** (#1080, the sweep's F2). Its id and certificate are the ones this
+/// phone pinned, so it answers `info` as itself, and its token opens nothing:
+/// every pass is refused `UNAUTHORIZED` while the ledger's acknowledgements
+/// still describe a gateway that is gone. The status marks the gateway to be
+/// paired again — with nothing waiting to put the words on — and pairing
+/// clears it.
+#[test]
+fn a_gateway_that_lost_its_store_reads_pair_again_and_pairing_clears_it() {
+    let gateway = gateway();
+    let dir = tempfile::tempdir().expect("a directory");
+    let path = dir.path().join("vault.db");
+    let phone = phone(dir.path());
+    let id = pair_for_id(&phone, &gateway);
+    originals(&phone, "from before the store went", 2, 40_000);
+    drain(&phone, at_home());
+    let before = status(&phone);
+    assert_eq!(before.content_confirmed, before.content_total, "{before:?}");
+    assert!(before.waiting.is_empty(), "{before:?}");
+    assert!(
+        before.destinations.iter().all(|row| !row.pair_again),
+        "an accepted token is not marked: {before:?}"
+    );
+
+    let replaced = tempfile::tempdir().expect("a directory");
+    identity_into(gateway.spawned.data_dir(), replaced.path());
+    drop(gateway);
+    let gateway = gateway_in(replaced);
+    let book = ledger(&path);
+    let mut row = book.destination(&id).expect("reads").expect("paired");
+    row.addrs = vec![gateway.spawned.addr.to_string()];
+    book.put_destination(&row).expect("writes");
+
+    // BEFORE ANY PASS HAS MET THE REFUSAL the ledger still says everything is
+    // held, and says nothing else: that is the lie this closes.
+    let unseen = status(&phone);
+    assert_eq!(unseen.content_confirmed, unseen.content_total, "{unseen:?}");
+
+    let refused = try_drain(&phone, at_home()).expect_err("the gateway does not know the token");
+    assert_eq!(refused.code(), wire::ErrorCode::Unauthorized, "{refused}");
+    let marked = status(&phone);
+    assert_eq!(
+        marked
+            .destinations
+            .iter()
+            .map(|row| (row.gateway_id.as_str(), row.pair_again))
+            .collect::<Vec<_>>(),
+        vec![(id.as_str(), true)],
+        "the gateway that refused the token is the one to pair again: {marked:?}"
+    );
+    assert_eq!(
+        marked.content_confirmed, marked.content_total,
+        "the acknowledgements are untouched, so the mark is what tells the truth: {marked:?}"
+    );
+
+    // Pairing starts the gateway's record over, the mark with it.
+    pair(&phone, &gateway);
+    let paired = status(&phone);
+    assert!(
+        paired.destinations.iter().all(|row| !row.pair_again),
+        "{paired:?}"
+    );
+    let drained = drain(&phone, quietly());
+    assert_eq!(
+        drained.stopped,
+        wire::DrainStop::Empty as i32,
+        "{drained:?}"
+    );
+    let backed = status(&phone);
+    assert_eq!(backed.content_confirmed, backed.content_total, "{backed:?}");
+}
+
+/// **A PASS THAT CONFIRMS A PHOTOGRAPH ALSO SNAPSHOTS ITS ROW** (R-1080-C15,
+/// the cadence the simulator runs asked for). A file counts as backed up only
+/// once its bytes and its row are in what a gateway holds, and the hourly
+/// snapshot left every photograph an ordinary pass moved reading as waiting
+/// until the app left the screen, a tap, or the hour. An ordinary pass — no
+/// snapshot asked, none due — that moves a photograph takes the snapshot its
+/// row needs before it answers, so a restore brings the photograph back; a
+/// pass that moves nothing takes none.
+#[test]
+fn an_ordinary_pass_that_moves_a_photograph_snapshots_its_row_too() {
+    let gateway = gateway();
+    let dir = tempfile::tempdir().expect("a directory");
+    let path = dir.path().join("vault.db");
+    let phone = phone(dir.path());
+    pair(&phone, &gateway);
+    drain(&phone, at_home());
+    // RETENTION KEEPS ONE SNAPSHOT A DAY, so the newest one's name is the
+    // count of snapshots taken: it moves when one is, and not otherwise.
+    let newest = |path: &std::path::Path| {
+        ledger(path)
+            .snapshots()
+            .expect("reads")
+            .last()
+            .map(|snapshot| snapshot.name)
+    };
+    let before = newest(&path);
+
+    // NOTHING TO CONFIRM, NOTHING TO SNAPSHOT: an hour has not passed.
+    let idle = drain(&phone, quietly());
+    assert_eq!(idle.stopped, wire::DrainStop::Empty as i32, "{idle:?}");
+    assert_eq!(newest(&path), before, "an idle pass takes no snapshot");
+
+    let photo = bytes_of("a photograph taken after the last snapshot", 90_000);
+    let staged = stage(&phone, owned("image/heic", &photo), &photo);
+    add_asset(&phone, &staged, "photo");
+    let moved = drain(&phone, quietly());
+    assert_eq!(moved.stopped, wire::DrainStop::Empty as i32, "{moved:?}");
+    assert!(moved.confirmed_parts > 0, "{moved:?}");
+    let backed = status(&phone);
+    assert_eq!(
+        (backed.content_confirmed, backed.content_total),
+        (1, 1),
+        "bytes and row both: {:?}",
+        backed.waiting
+    );
+    assert!(backed.waiting.is_empty(), "{:?}", backed.waiting);
+    let taken = newest(&path);
+    assert_ne!(taken, before, "a snapshot was taken, for its row");
+
+    // A SECOND ORDINARY PASS, with nothing new, takes none.
+    let again = drain(&phone, quietly());
+    assert_eq!(again.stopped, wire::DrainStop::Empty as i32, "{again:?}");
+    assert_eq!(newest(&path), taken, "nothing new, no snapshot");
+
+    // THE HEAD THE GATEWAY HOLDS NAMES THE PHOTOGRAPH: a restore brings it back.
+    let restored_dir = tempfile::tempdir().expect("a directory");
+    let restored = restore(restored_dir.path(), &gateway);
+    let (_, files) = census(&PathBuf::from(&restored.vaults[0].path));
+    assert!(
+        files
+            .iter()
+            .any(|(hash, _, variant)| *hash == staged.content_hash && variant.is_none()),
+        "the restored vault's rows name the photograph: {files:?}"
+    );
+}
+
+/// **A FILE THE VAULT DELETED STAYS WHILE A KEPT SNAPSHOT MAY NAME IT** (#1080,
+/// the sweep's F5). Collection kept only the files the current vault names, so
+/// the 7/4/6 snapshot history protected records and not photographs: restore
+/// an older snapshot and its rows named bytes the gateway had purged. A
+/// snapshot kept from before a photograph was deleted forever now keeps the
+/// photograph's object — held, not tombstoned — while a dropped snapshot's own
+/// ranges and manifest go at once, since they are the history and not what it
+/// names. The vault's clock is held and advanced so the snapshots fall on
+/// different days, which is what lets the history keep one from before.
+#[test]
+fn a_deleted_file_stays_while_a_kept_snapshot_may_name_it() {
+    let clock = std::sync::Arc::new(centraid_vault::clock::FixedClock::frozen());
+    let gateway = gateway();
+    let dir = tempfile::tempdir().expect("a directory");
+    let path = dir.path().join("vault.db");
+    let phone = {
+        let clock = std::sync::Arc::clone(&clock);
+        phone_with(dir.path(), move |config| {
+            config.with_clock(
+                clock.clone(),
+                std::sync::Arc::new(centraid_vault::clock::ClockIds::new(Box::new(clock))),
+            )
+        })
+    };
+    pair(&phone, &gateway);
+    let photo = bytes_of(
+        "a photograph the member deletes after a snapshot kept it",
+        70_000,
+    );
+    let staged = stage(&phone, owned("image/heic", &photo), &photo);
+    let asset = add_asset(&phone, &staged, "photo");
+    drain(&phone, at_home());
+    let object = Name::from_bytes(*gateway_name(&staged.content_hash, 0).as_bytes());
+    assert!(gateway.held(&vault_id()).contains(&object));
+    let from_before = ledger(&path)
+        .snapshots()
+        .expect("reads")
+        .last()
+        .expect("one")
+        .name;
+
+    // TWO DAYS ON, THE PHOTOGRAPH IS DELETED FOREVER, and two snapshots fall on
+    // the new day: the second drops the first, and the one from before stays.
+    clock.advance_days(2);
+    command(
+        &phone,
+        "media.delete_asset",
+        &json!({ "asset_id": asset }),
+        "to-the-trash",
+    );
+    command(
+        &phone,
+        "media.purge_asset",
+        &json!({ "asset_id": asset }),
+        "deleted-forever",
+    );
+    drain(&phone, at_home());
+    let dropped_next = ledger(&path)
+        .snapshots()
+        .expect("reads")
+        .last()
+        .expect("one")
+        .name;
+    clock.advance_ms(60 * 60 * 1000);
+    drain(&phone, at_home());
+    let newest = ledger(&path)
+        .snapshots()
+        .expect("reads")
+        .last()
+        .expect("one")
+        .name;
+    assert_ne!(dropped_next, newest);
+
+    let held = gateway.held(&vault_id());
+    assert!(
+        held.contains(&from_before),
+        "the snapshot from before the deletion is kept"
+    );
+    assert!(
+        !held.contains(&dropped_next),
+        "a dropped snapshot's manifest is garbage at once"
+    );
+    assert!(
+        held.contains(&object),
+        "the photograph the kept snapshot names is held"
+    );
+    assert!(
+        gateway
+            .objects(&vault_id())
+            .iter()
+            .filter(|record| Name::from_bytes(*record.name.as_bytes()) == object)
+            .all(|record| record.tombstone.is_none()),
+        "and not even tombstoned"
     );
 }

@@ -61,7 +61,6 @@ import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
-import java.io.File
 
 /**
  * PEOPLE ON THE PHONE (#1029 app port), from the core's typed answers to what
@@ -470,7 +469,7 @@ class PeopleSpec : StringSpec({
 
     // --- Person ------------------------------------------------------------
 
-    fun sheet(touchesKnown: Boolean = true) = PeoplePerson(
+    fun sheet(touchesKnown: Boolean = true, channelsKnown: Boolean = true) = PeoplePerson(
         today = TODAY,
         sheet = PeopleSheet(
             person = person("p1", "Dana Reyes", { it.copy(role = "Designer", cadence_days = 14, last_contacted_at = "2026-06-12T10:00:00.000Z", days_since_contact = 3) }),
@@ -482,6 +481,7 @@ class PeopleSpec : StringSpec({
             ),
             dates = listOf(PeopleDate(date_id = "d1", label = "Birthday", month_day = "08-14", reminder_on = true, in_days = 60)),
             notes = listOf(PeopleNote(annotation_id = "n1", text = "Loves ceramics", created_at = "2026-06-15T08:00:00.000Z", created_local_day = "2026-06-15")),
+            channels_known = channelsKnown,
             touches_known = touchesKnown,
             touches = listOf(PeopleTouchEntry(interaction_id = "i1", kind = "call", text = "Caught up", occurred_at = "2026-06-12T10:00:00.000Z", occurred_local_day = "2026-06-12")),
         ),
@@ -522,6 +522,41 @@ class PeopleSpec : StringSpec({
         // THE LOG v0 NEVER SHOWED.
         data.touches.single().kind_label shouldBe "Call"
         data.touches_head.shouldNotBeNull().count shouldBe 1
+        // A KNOWN RAIL says its count and no unreadable sentence.
+        data.channels_head.shouldNotBeNull().count shouldBe 2
+        data.channels_empty shouldBe ""
+    }
+
+    "an unreadable contact rail is said, not drawn as no channels, and the rest of the sheet stands" {
+        val unknown = run(
+            PeoplePersonMachine,
+            PeoplePersonMachine.initial(),
+            PeoplePersonEvent(opened = PeoplePersonEvent.Opened(party_id = "p1")),
+            PeoplePersonReads.arrived(listOf(AppQueryResponse(people_person = sheet(channelsKnown = false).let { asked ->
+                // The core sends no channels with a refused plane, whatever else it knows.
+                asked.copy(sheet = asked.sheet?.copy(channels = emptyList()))
+            }))),
+        ).state.data_.shouldNotBeNull()
+        unknown.channels.shouldBeEmpty()
+        unknown.channels_empty shouldBe "The channels could not be read."
+        unknown.channels_head.shouldNotBeNull().count.shouldBeNull()
+        // THE SHEET STANDS: the person, the dates, the notes and the log are all there.
+        unknown.name shouldBe "Dana Reyes"
+        unknown.dates.single().label shouldBe "Birthday"
+        unknown.notes.single().text shouldBe "Loves ceramics"
+        unknown.touches.single().kind_label shouldBe "Call"
+
+        // KNOWN AND EMPTY IS A FACT, said in its own words.
+        val empty = run(
+            PeoplePersonMachine,
+            PeoplePersonMachine.initial(),
+            PeoplePersonEvent(opened = PeoplePersonEvent.Opened(party_id = "p1")),
+            PeoplePersonReads.arrived(listOf(AppQueryResponse(people_person = sheet().let { asked ->
+                asked.copy(sheet = asked.sheet?.copy(channels = emptyList()))
+            }))),
+        ).state.data_.shouldNotBeNull()
+        empty.channels_empty shouldBe "No channels."
+        empty.channels_head.shouldNotBeNull().count shouldBe 0
     }
 
     "an unreadable touch log is said, not drawn as nothing; a person who is not there is gone, not an error" {
@@ -711,6 +746,9 @@ class PeopleSpec : StringSpec({
             PeopleEditorMachine.left(),
         ).state
         blank.autosave.shouldNotBeNull().phase shouldBe Autosave.Phase.PHASE_REFUSED
+        // THE LAW SAYS "REFUSED" ONCE, so no shell reads the phase for its ink.
+        blank.autosave.shouldNotBeNull().refused shouldBe true
+        typed.state.autosave.shouldNotBeNull().refused shouldBe false
         blank.save_label shouldBe "A person needs a name."
         blank.draft.shouldNotBeNull().display_name shouldBe " "
     }
@@ -881,21 +919,6 @@ class PeopleSpec : StringSpec({
     }
 
     // --- The whole port ------------------------------------------------------
-
-    "every command People submits exists in the vault's declared surface" {
-        val root = File(System.getProperty("centraid.repositoryRoot") ?: error("unset"))
-        val name = Regex("\"([a-z_]+\\.[a-z_]+)\"")
-        val declared = root.resolve("crates/vault/src/commands").walkTopDown()
-            .filter { it.isFile && it.extension == "rs" }
-            .flatMap { file -> name.findAll(file.readText()).map { it.groupValues[1] } }
-            .toSet()
-        (PeoplePersonMachine.COMMANDS + listOf(
-            PeopleEditorMachine.ADD_COMMAND,
-            PeopleEditorMachine.EDIT_COMMAND,
-            PeopleEditorMachine.CADENCE_COMMAND,
-            "people.restore_person",
-        )).forEach { command -> withClue(command) { declared.contains(command) shouldBe true } }
-    }
 
     "no People word says gateway, vault link or share" {
         val words = PeopleCopy::class.java.declaredFields

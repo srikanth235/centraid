@@ -1,8 +1,6 @@
 import SwiftUI
 
-#if canImport(CentraidShared)
 import CentraidShared
-#endif
 
 /// AGENDA, REGISTERED (K5; #1046 waves 4 and 5). Its bridges predate the kit's
 /// `ScreenBridge`, so each port is spelled out closure by closure — the
@@ -17,52 +15,19 @@ import CentraidShared
 /// sends it as it stands — the occurrence's ids and day for the detail, the
 /// mode and day (and ids, on an edit) for the editor.
 ///
-/// **INTENTS ARE THE SHELL'S.** `EventPicked` pushes the detail,
-/// `NewEventRequested` the editor on the home's anchor day, and the detail's
-/// `ActionPicked{edit}` the editor on that occurrence.
+/// **INTENTS ARE THE SHELL'S, AND WHERE THEY GO IS SHARED.** `EventPicked`
+/// pushes the detail, `NewEventRequested` the editor on the home's anchor day,
+/// and the detail's `ActionPicked{edit}` the editor on that occurrence — each
+/// answered by `AgendaRouting.route` (Android pushes the same page).
 enum AgendaScreens: AppScreens {
-    static let appID = "agenda"
-    static let home = "agenda.home"
-    static let detail = "agenda.event"
-    static let editor = "agenda.editor"
-    static let homeRoute = ShellModel.Route.screen(home, Data())
-
-    static func detailRoute(eventID: String, instanceKey: String, originalStartLocal: String?, day: String) -> ShellModel.Route {
-        .screen(detail, tasksEvent(Centraid_Screen_V1_AgendaEventEvent.self) {
-            $0.opened = .with {
-                $0.eventID = eventID
-                $0.instanceKey = instanceKey
-                if let originalStartLocal { $0.originalStartLocal = originalStartLocal }
-                $0.day = day
-            }
-        })
-    }
-
-    /// A new event on `day` (the home's anchor; empty is the core's today).
-    static func newEventRoute(day: String) -> ShellModel.Route {
-        .screen(editor, tasksEvent(Centraid_Screen_V1_AgendaEditorEvent.self) {
-            $0.opened = .with {
-                $0.mode = .create
-                $0.day = day
-            }
-        })
-    }
-
-    static func editRoute(eventID: String, instanceKey: String, originalStartLocal: String?, day: String) -> ShellModel.Route {
-        .screen(editor, tasksEvent(Centraid_Screen_V1_AgendaEditorEvent.self) {
-            $0.opened = .with {
-                $0.mode = .edit
-                $0.eventID = eventID
-                $0.instanceKey = instanceKey
-                if let originalStartLocal { $0.originalStartLocal = originalStartLocal }
-                $0.day = day
-            }
-        })
-    }
+    static let appID = AppIds.shared.AGENDA
+    /// The machines' `SCREEN_ID`s.
+    static let home = AgendaHomeMachine.shared.SCREEN_ID
+    static let detail = AgendaEventMachine.shared.SCREEN_ID
+    static let editor = AgendaEditorMachine.shared.SCREEN_ID
 
     @MainActor
     static func register(into shell: ShellModel) {
-        #if canImport(CentraidShared)
         let marks = AgendaMarks()
         let homeBridge = AgendaBridge(marks: marks)
         let detailBridge = AgendaEventBridge(marks: marks)
@@ -87,7 +52,6 @@ enum AgendaScreens: AppScreens {
             observe: { onState in editorBridge.observe { onState($0.data) } },
             departed: { editorBridge.departed() }
         ))
-        #endif
         shell.route(
             home,
             // EVERY OPEN LANDS ON TODAY, on Day — `AgendaBridge.open`'s event,
@@ -102,7 +66,7 @@ enum AgendaScreens: AppScreens {
                     send: { [weak shell] bytes in
                         guard let shell else { return }
                         shell.send(screen: home, event: bytes)
-                        routeHomeIntent(bytes, shell)
+                        shell.apply(AgendaRouting.shared.route(screenId: home, event: bytes.kotlin, state: shell.state(home).kotlin))
                     },
                     onHome: { [weak shell] in shell?.path.removeAll() }
                 ))
@@ -117,7 +81,7 @@ enum AgendaScreens: AppScreens {
                     send: { [weak shell] bytes in
                         guard let shell else { return }
                         shell.send(screen: detail, event: bytes)
-                        routeDetailIntent(bytes, shell)
+                        shell.apply(AgendaRouting.shared.route(screenId: detail, event: bytes.kotlin, state: shell.state(detail).kotlin))
                     },
                     onBack: { [weak shell] in pop(shell) }
                 ))
@@ -143,37 +107,5 @@ enum AgendaScreens: AppScreens {
         shell.path.removeLast()
     }
 
-    @MainActor
-    private static func routeHomeIntent(_ bytes: Data, _ shell: ShellModel) {
-        guard let event = try? Centraid_Screen_V1_AgendaHomeEvent(serializedBytes: bytes) else { return }
-        switch event.kind {
-        case let .eventPicked(picked):
-            shell.path.append(detailRoute(
-                eventID: picked.eventID,
-                instanceKey: picked.instanceKey,
-                originalStartLocal: picked.hasOriginalStartLocal ? picked.originalStartLocal : nil,
-                day: picked.day
-            ))
-        case .newEvent:
-            let state = (try? Centraid_Screen_V1_AgendaHomeState(serializedBytes: shell.state(home))) ?? .init()
-            shell.path.append(newEventRoute(day: state.anchorDay))
-        default:
-            break
-        }
-    }
-
-    @MainActor
-    private static func routeDetailIntent(_ bytes: Data, _ shell: ShellModel) {
-        guard case let .action(action)? = (try? Centraid_Screen_V1_AgendaEventEvent(serializedBytes: bytes))?.kind,
-              action.key == "edit" else { return }
-        let state = (try? Centraid_Screen_V1_AgendaEventState(serializedBytes: shell.state(detail))) ?? .init()
-        shell.path.append(editRoute(
-            eventID: state.eventID,
-            instanceKey: state.instanceKey,
-            originalStartLocal: state.hasOriginalStartLocal ? state.originalStartLocal : nil,
-            day: state.day
-        ))
-    }
-
-    static func tileRoute(_ tile: Centraid_Screen_V1_HomeTile) -> ShellModel.Route? { homeRoute }
+    static func tileRoute(_ tile: Centraid_Screen_V1_HomeTile) -> ShellModel.Route? { .home(of: appID) }
 }

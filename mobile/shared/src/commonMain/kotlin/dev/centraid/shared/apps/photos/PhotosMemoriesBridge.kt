@@ -29,14 +29,14 @@ import kotlinx.coroutines.launch
  * The shelf is one statement over `media_memory`; a TRIP's route is three more
  * — its members, where each was taken, and those places' pins — and each one's
  * predicate is built from the one before. That chaining cannot ride the
- * reducer, so it happens here, as `PhotosPeopleBridge` does it: the shelf, then
+ * reducer, so it happens here, as `HomeRuntime` does it: the shelf, then
  * the route legs, folded by `PhotosMemoriesReads.withRoutes` into ONE
  * `DataArrived`.
  *
  * **A ROUTE LEG THAT REFUSES COSTS THE SKETCH AND NOTHING ELSE.** The route is
  * decoration beside a trip's name; replacing a readable shelf with a sentence
  * because a pin could not be read would be the decoration taking the content
- * down with it — `PhotosPeopleBridge.withCovers`' rule.
+ * down with it — `PhotosCollectionsBridge`'s covers rule.
  *
  * **NO WRITES.** Memories is browse-only, as v0's `MemoriesView.tsx` was, so
  * no effect but `ReadPage` is served here.

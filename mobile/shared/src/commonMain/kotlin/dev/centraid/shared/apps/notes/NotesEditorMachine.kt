@@ -12,6 +12,7 @@ import dev.centraid.design.copy.NotesCopy
 import dev.centraid.shared.kit.AutosaveLaw
 import dev.centraid.shared.kit.AutosaveLens
 import dev.centraid.shared.kit.ReadContent
+import dev.centraid.shared.nav.ScreenIds
 import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.ScreenMachine
@@ -32,7 +33,7 @@ import dev.centraid.shared.screen.Step
  * change from the vault never replaces words being typed.
  */
 public object NotesEditorMachine : ScreenMachine<NotesEditorState, NotesEditorEvent> {
-    public const val SCREEN_ID: String = "notes.editor"
+    public const val SCREEN_ID: String = ScreenIds.NOTES_EDITOR
 
     override fun initial(): NotesEditorState = NotesEditorState(
         loading = Loading(first_load = true),

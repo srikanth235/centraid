@@ -201,7 +201,7 @@ private fun saveToPhotos(context: Context, originals: List<LocatedOriginal>): In
 
 /** `Photo 1.jpg`, `Video 2.mp4` — the extension from the media type the byte door reported. */
 private fun fileName(original: LocatedOriginal, index: Int): String {
-    val stem = if (original.isVideo) "Video" else "Photo"
+    val stem = if (original.isVideo) PhotosCopy.PHOTOS_CELL_VIDEO else PhotosCopy.PHOTOGRAPH
     val ext = MimeTypeMap.getSingleton().getExtensionFromMimeType(original.mediaType)
         ?: if (original.isVideo) "mp4" else "jpg"
     return "$stem ${index + 1}.$ext"

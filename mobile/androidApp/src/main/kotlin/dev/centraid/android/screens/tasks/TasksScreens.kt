@@ -34,8 +34,8 @@ import dev.centraid.android.kit.EmptyStateView
 import dev.centraid.android.kit.FieldRow
 import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.OptionSheet
+import dev.centraid.android.kit.OutlineButton
 import dev.centraid.android.kit.PushedPage
-import dev.centraid.android.kit.QuietButton
 import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.RoomAction
 import dev.centraid.android.kit.RoomSearch
@@ -226,7 +226,7 @@ internal fun TasksNoticeView(notice: TasksNotice, onAct: () -> Unit) {
     Column(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 10.dp)) {
         Text(notice.sentence, style = centraidType("body"), color = centraidColor("text"))
         if (notice.verb_label.isNotEmpty()) {
-            QuietButton(notice.verb_label, testTag = "tasks-notice-act", modifier = Modifier.padding(top = 8.dp), onPress = onAct)
+            OutlineButton(notice.verb_label, testTag = "tasks-notice-act", modifier = Modifier.padding(top = 8.dp), onPress = onAct)
         }
     }
 }

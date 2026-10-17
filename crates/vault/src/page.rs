@@ -635,6 +635,90 @@ pub struct KeysetAnswer {
 }
 
 impl Vault {
+    /// Serve one keyset page whose predicate may read only `readable`.
+    ///
+    /// **THE PREDICATE IS TEXT, SO A TABLE LIST ON `from` ALONE IS NOT A
+    /// DOOR.** `media_asset WHERE (SELECT secret FROM locker_item_field) …`
+    /// names an allowed `from` and reads a refused table. This prepares the
+    /// projection and predicate, without the computed columns the vault adds
+    /// itself, under an SQLite authorizer that refuses a read of any table
+    /// outside `readable` and any action a `SELECT` has no use for. SQLite
+    /// resolves every table a statement touches at prepare, through views,
+    /// CTEs and subqueries alike, so nothing is parsed here and nothing slips
+    /// by in a spelling a parser missed.
+    ///
+    /// The statement is prepared on its own and never cached: a cached
+    /// statement is not re-authorized.
+    pub fn keyset_page_reading_only(
+        &self,
+        page: &KeysetPage,
+        readable: &[&str],
+    ) -> Result<KeysetAnswer> {
+        if let Some(predicate) = &page.predicate {
+            self.predicate_reads_only(page, predicate, readable)?;
+        }
+        self.keyset_page(page)
+    }
+
+    fn predicate_reads_only(
+        &self,
+        page: &KeysetPage,
+        predicate: &str,
+        readable: &[&str],
+    ) -> Result<()> {
+        use rusqlite::hooks::{AuthAction, AuthContext, Authorization};
+        use std::sync::{Arc, Mutex};
+
+        let sql = format!(
+            "SELECT {projection} FROM {from} WHERE ({predicate})",
+            projection = page
+                .select
+                .iter()
+                .map(|column| projected(column))
+                .collect::<Vec<_>>()
+                .join(", "),
+            from = crate::log::quoted(&page.from),
+        );
+        let allowed: Vec<String> = readable.iter().map(|&table| table.to_owned()).collect();
+        let refused: Arc<Mutex<Option<String>>> = Arc::default();
+        let witness = Arc::clone(&refused);
+        let outcome = self.read(|connection| {
+            connection.authorizer(Some(move |context: AuthContext<'_>| {
+                let refusal = match context.action {
+                    AuthAction::Select | AuthAction::Function { .. } | AuthAction::Recursive => {
+                        None
+                    }
+                    AuthAction::Read { table_name, .. } => {
+                        (!allowed.iter().any(|table| table == table_name))
+                            .then(|| format!("reads `{table_name}`"))
+                    }
+                    other => Some(format!("asks for {other:?}")),
+                };
+                match refusal {
+                    None => Authorization::Allow,
+                    Some(why) => {
+                        if let Ok(mut slot) = witness.lock() {
+                            slot.get_or_insert(why);
+                        }
+                        Authorization::Deny
+                    }
+                }
+            }))?;
+            let prepared = connection.prepare(&sql).map(drop);
+            connection.authorizer(None::<fn(AuthContext<'_>) -> Authorization>)?;
+            Ok(prepared)
+        })?;
+        let why = refused.lock().ok().and_then(|mut slot| slot.take());
+        match (why, outcome) {
+            (Some(why), _) => Err(VaultError::InvalidInput {
+                name: page.name.clone(),
+                detail: format!("the page's predicate {why}, which this door does not serve"),
+            }),
+            (None, Err(error)) => Err(error.into()),
+            (None, Ok(())) => Ok(()),
+        }
+    }
+
     /// Serve one keyset page.
     ///
     /// Renders the statement, runs it with the `+1` probe that separates "the
@@ -947,6 +1031,56 @@ fn cursor_text(row: &RowImage, column: &str) -> String {
 mod keyset_tests {
     use super::*;
     use crate::bytes::BlobStore as _;
+
+    /// A PREDICATE IS HELD TO THE SAME LIST AS `from`. An allowed table with a
+    /// subquery on a refused one is refused — through a CTE and the schema
+    /// table too — and a subquery on another listed table, which Photos'
+    /// shelves send, still answers. The core's Page door passes its
+    /// `PAGE_TABLES` here.
+    #[test]
+    fn a_predicate_that_reads_a_table_outside_the_list_is_refused() {
+        let dir = centraid_ontology::golden::scratch_dir();
+        std::fs::create_dir_all(&dir).expect("the directory is made");
+        let vault = Vault::create(dir.join("v.db")).expect("a vault");
+        vault.found("T", "O").expect("founded");
+        let readable = ["core_party", "core_tag"];
+        let page = |predicate: &str| KeysetPage {
+            name: "people".to_owned(),
+            select: vec!["party_id".to_owned()],
+            from: "core_party".to_owned(),
+            predicate: Some(predicate.to_owned()),
+            binds: Vec::new(),
+            sort_column: "party_id".to_owned(),
+            pk_column: "party_id".to_owned(),
+            descending: false,
+            limit: 10,
+            after: None,
+            held_thumbnail: false,
+            note_body: false,
+            document_size: false,
+        };
+        for predicate in [
+            "EXISTS (SELECT 1 FROM locker_item_field)",
+            "party_id IN (SELECT receipt_id FROM access_receipt)",
+            "EXISTS (WITH r AS (SELECT * FROM core_entity_revision) SELECT 1 FROM r)",
+            "EXISTS (SELECT 1 FROM sqlite_master)",
+        ] {
+            let refused = vault
+                .keyset_page_reading_only(&page(predicate), &readable)
+                .expect_err(predicate);
+            assert!(
+                matches!(refused, VaultError::InvalidInput { .. }),
+                "`{predicate}`: {refused}"
+            );
+        }
+        vault
+            .keyset_page_reading_only(
+                &page("party_id NOT IN (SELECT tag_id FROM core_tag)"),
+                &readable,
+            )
+            .expect("a subquery on a listed table answers");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     /// A THUMBNAIL READ REACHES THE BYTE STORE, AND THE STATEMENT PREPARES.
     ///

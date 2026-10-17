@@ -63,8 +63,8 @@ pub(crate) fn refusal_of(word: &str) -> wire::AssistRefusalReason {
     }
 }
 
-/// A stored outcome word as the wire's. The words are the schema's CHECK list (rung twelve widened
-/// it with a proposal's five), so a word this does not know is a build that is older than its
+/// A stored outcome word as the wire's. The words are the schema's CHECK list (a proposal's five
+/// beside the three a told answer has), so a word this does not know is a build that is older than its
 /// file, and it reads as unspecified rather than as one of the others.
 pub(crate) fn outcome_of(word: &str) -> wire::ChatStoredOutcome {
     use wire::ChatStoredOutcome as O;
@@ -245,10 +245,11 @@ pub(super) fn card(vault: &Vault, asked: &wire::ChatCardRequest) -> Result<Answe
 mod tests {
     use super::*;
 
-    /// The words inside the first `IN (...)` list after `anchor` in the rung-twelve DDL: the
-    /// schema's own list, so a word the CHECK gains and this mapping misses fails here.
+    /// The words inside the first `IN (...)` list after `anchor` in the baseline DDL: the schema's
+    /// own list, so a word the CHECK gains and this mapping misses fails here.
     fn check_words(anchor: &str) -> Vec<String> {
-        let ddl = centraid_vault::migrations::CHAT_PROPOSALS_SQL;
+        // The anchor is unique in the baseline: only `chat_message` checks an `outcome`.
+        let ddl = centraid_vault::migrations::BASELINE_SQL;
         let from = ddl
             .find(anchor)
             .and_then(|at| ddl[at..].find("IN (").map(|list| at + list))
@@ -263,7 +264,7 @@ mod tests {
 
     #[test]
     fn every_outcome_word_the_schema_allows_has_a_value() {
-        // contracts/migrations/012_chat_proposals.sql: `chat_message.outcome CHECK (outcome IN …)`
+        // contracts/migrations/001_baseline.sql: `chat_message.outcome CHECK (outcome IN …)`
         let words = check_words("CHECK (outcome IN (");
         // a mis-read of the DDL must not pass for "no word is missing"
         assert!(words.contains(&"sent".to_owned()) && words.contains(&"failed".to_owned()));

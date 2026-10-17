@@ -222,6 +222,56 @@ impl Snapshot {
     }
 }
 
+/// **HOW FAR A VAULT COPY HAS RUN**, from the one table that only grows: the
+/// receipt chain, one row per command, append-only by trigger. A snapshot's
+/// census carries the same count, so a phone can tell whether a head holds
+/// commands its own copy never ran (#1080, the sweep's F4) without opening it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct History {
+    /// Receipts in the copy.
+    pub receipts: u64,
+    /// When the newest command ran, on the vault's clock; `None` for a vault
+    /// no command has touched.
+    pub last_write_ms: Option<u64>,
+}
+
+/// The table [`History`] counts, and the key a manifest's census holds it
+/// under.
+pub const RECEIPT_TABLE: &str = "access_receipt";
+
+/// [`History`] of `vault`.
+///
+/// # Errors
+/// SQLite's refusal.
+pub fn history(vault: &Vault) -> Result<History> {
+    let (receipts, newest): (i64, Option<String>) = vault.read(|connection| {
+        Ok(connection.query_row(
+            "SELECT count(*), max(occurred_at) FROM access_receipt",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )?)
+    })?;
+    Ok(History {
+        receipts: u64::try_from(receipts).unwrap_or(0),
+        last_write_ms: newest
+            .as_deref()
+            .and_then(crate::clock::parse_iso_ms)
+            .and_then(|at| u64::try_from(at).ok()),
+    })
+}
+
+impl Manifest {
+    /// How many receipts the snapshot holds: the commands the vault had run
+    /// when it was taken. A table with no rows is absent from the census.
+    #[must_use]
+    pub fn receipts(&self) -> u64 {
+        self.census
+            .get(RECEIPT_TABLE)
+            .and_then(|count| u64::try_from(*count).ok())
+            .unwrap_or(0)
+    }
+}
+
 /// The page-identical copy and when it was taken.
 #[derive(Debug, Clone)]
 pub struct Copied {
@@ -914,7 +964,14 @@ mod tests {
         let planned = plan(&snapshot, &store).expect("plans");
         let ledger = Ledger::open(dir.path().join("vault.backup.db")).expect("a ledger");
         let spool_dir = Spool::open(dir.path().join("vault.spool")).expect("a spool");
-        let budget = 150 * 1024;
+        // THE BUDGET IS ONE RANGE'S WORST CASE, not a number of bytes. A part is admitted into
+        // an empty spool whatever the budget, and into a held one only when its sealed bound
+        // fits beside what is held, so a budget of exactly one bound admits the first range and
+        // defers every other. A fixed byte count means "less than the whole snapshot" only while
+        // the founded vault is as large and as poorly compressible as the day it was written;
+        // the schema moves that, and the squash of the ladder did (a founded vault seals to
+        // ~85 KB now, which a budget of 150 KiB admits whole).
+        let budget = super::super::spool::sealed_bound(snapshot.ranges[0].len);
         let spooled =
             spool(&snapshot, &planned, &spool_dir, &ledger, &keys, budget, 1).expect("spools");
         assert!(
@@ -923,6 +980,10 @@ mod tests {
             spool_dir.bytes().expect("sums")
         );
         assert!(!spooled.spooled.is_empty(), "what fits was spooled");
+        assert!(
+            spooled.deferred.len() > 1,
+            "the ranges past what fits wait: {spooled:?}"
+        );
         assert!(spooled.deferred.contains(&snapshot.manifest_name));
     }
 

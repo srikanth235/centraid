@@ -181,6 +181,7 @@ pub(super) fn journal(
                 today,
                 truncated: data.truncated,
                 window: count(data.window),
+                tz: zone.name().to_owned(),
             })
         },
     )
@@ -664,6 +665,10 @@ mod tests {
         };
         assert!(journal.days.is_empty());
         assert_eq!(journal.today, "2099-06-01", "the device's day, not UTC's");
+        assert_eq!(
+            journal.tz, TZ,
+            "the zone the day was read in rides back, so a new entry is filed in it"
+        );
         assert!(matches!(
             scratch.ask(Q::NotesSearch(wire::NotesSearchRequest {
                 term: "anything".to_owned(),
@@ -693,6 +698,121 @@ mod tests {
             }))
             .expect_err("no zone is refused");
         assert_eq!(refused.code(), wire::ErrorCode::InvalidRequest);
+    }
+
+    /// **"NEW ENTRY FOR TODAY" IS A NOTE DATED TODAY, AND NEEDS NO COMMAND OF
+    /// ITS OWN** (Q-1047-8, owner ruling 2026-10-15). The journal sheet's Save is
+    /// `people.add_journal_entry` with the journal's own `today` as `entry_date`:
+    /// that command writes a `knowledge.note` and marks it, so the entry is a
+    /// note — dated the day the member put it on, drawn under that day in the
+    /// device's zone, and kept off the library the way every journal entry is.
+    #[test]
+    fn a_new_entry_for_today_is_a_note_dated_today_with_no_command_of_its_own() {
+        let scratch = Scratch::founded();
+        let journal = || {
+            let Ok(Answer::NotesJournal(journal)) =
+                scratch.ask(Q::NotesJournal(wire::NotesJournalRequest {
+                    window: 0,
+                    tz: TZ.to_owned(),
+                }))
+            else {
+                panic!("journal answers");
+            };
+            journal
+        };
+        let today = journal().today;
+        assert_eq!(today, "2099-06-01", "the device's day, not UTC's");
+
+        let entry = scratch.run(
+            "people.add_journal_entry",
+            serde_json::json!({ "mood": "Good", "text": "Lunch with Ana", "entry_date": today }),
+        )["entry_id"]
+            .as_str()
+            .expect("an entry id")
+            .to_owned();
+
+        let after = journal();
+        assert_eq!(after.days.len(), 1);
+        assert_eq!(
+            after.days[0].day, today,
+            "under today, in the device's zone"
+        );
+        assert_eq!(after.days[0].entries.len(), 1);
+        assert_eq!(after.days[0].entries[0].note_id, entry);
+        assert_eq!(
+            after.days[0].entries[0].preview, "Lunch with Ana",
+            "the entry is a note with a body"
+        );
+        // A NOTE, KEPT APART: it is not on the shelf, and not an unfiled note.
+        assert!(scratch.library().notes.is_empty());
+        let Ok(Answer::NotesNotebooks(spine)) =
+            scratch.ask(Q::NotesNotebooks(wire::NotesNotebooksRequest {}))
+        else {
+            panic!("notebooks answers");
+        };
+        assert_eq!(spine.unfiled_count, 0);
+        // AND REACHABLE BY ID, which is how the People screen opens one.
+        assert!(scratch.note(&entry).found);
+    }
+
+    /// A JOURNAL ENTRY MADE TODAY IS FILED UNDER TODAY, east of UTC+11:59 too
+    /// (the Q-1047-8 follow-up). The vault clock reads 2 June 02:00Z, which is
+    /// 2 June, 14:00 in Auckland. An entry dated that day and filed with no zone
+    /// is stamped noon UTC, which Auckland (UTC+12) already calls 3 June; one
+    /// filed with the zone the journal answered in lands on 2 June.
+    #[test]
+    fn a_journal_entry_made_today_is_filed_under_today_east_of_utc_plus_eleven() {
+        const AUCKLAND: &str = "Pacific/Auckland";
+        let scratch = Scratch::founded();
+        let journal = |tz: &str| match scratch
+            .ask(Q::NotesJournal(wire::NotesJournalRequest {
+                window: 0,
+                tz: tz.to_owned(),
+            }))
+            .expect("the journal answers")
+        {
+            Answer::NotesJournal(journal) => journal,
+            other => panic!("journal answered as {other:?}"),
+        };
+        let asked = journal(AUCKLAND);
+        assert_eq!(asked.today, "2099-06-02");
+        assert_eq!(
+            asked.tz, AUCKLAND,
+            "the zone the day was read in rides back"
+        );
+
+        // THE SHELL STATES BACK what the answer said: `today`, in `tz`.
+        scratch.run(
+            "people.add_journal_entry",
+            serde_json::json!({
+                "mood": "Good", "text": "In zone", "entry_date": asked.today, "tz": asked.tz,
+            }),
+        );
+        let after = journal(AUCKLAND);
+        assert_eq!(
+            after
+                .days
+                .iter()
+                .map(|day| day.day.as_str())
+                .collect::<Vec<_>>(),
+            ["2099-06-02"],
+            "today's entry is under today"
+        );
+
+        // AND WITHOUT IT, the old behaviour is what it was: tomorrow's.
+        scratch.run(
+            "people.add_journal_entry",
+            serde_json::json!({ "mood": "Good", "text": "No zone", "entry_date": asked.today }),
+        );
+        let both = journal(AUCKLAND);
+        assert_eq!(
+            both.days
+                .iter()
+                .map(|day| day.day.as_str())
+                .collect::<Vec<_>>(),
+            ["2099-06-03", "2099-06-02"],
+            "a zoneless entry is noon UTC, which Auckland calls the next day"
+        );
     }
 
     /// A TYPO FINDS THE NOTE AND SAYS WHAT WAS SEARCHED (#1097, R4, R8).

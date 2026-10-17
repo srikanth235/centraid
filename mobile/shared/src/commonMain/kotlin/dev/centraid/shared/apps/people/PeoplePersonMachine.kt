@@ -27,6 +27,7 @@ import dev.centraid.shared.kit.InvokeKeys
 import dev.centraid.shared.kit.WriteLaw
 import dev.centraid.shared.kit.WriteLens
 import dev.centraid.shared.kit.jsonString
+import dev.centraid.shared.nav.ScreenIds
 import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.ScreenMachine
@@ -54,7 +55,7 @@ import dev.centraid.shared.screen.Step
  * channel; its row carries the intent and the value).
  */
 public object PeoplePersonMachine : ScreenMachine<PeoplePersonState, PeoplePersonEvent> {
-    public const val SCREEN_ID: String = "people.person"
+    public const val SCREEN_ID: String = ScreenIds.PEOPLE_PERSON
 
     public const val LOG_COMMAND: String = "people.log_interaction"
     public const val NOTE_COMMAND: String = "people.add_note"

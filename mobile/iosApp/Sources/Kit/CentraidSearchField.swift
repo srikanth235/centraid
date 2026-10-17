@@ -1,8 +1,6 @@
 import SwiftUI
 
-#if canImport(CentraidShared)
 import CentraidShared
-#endif
 import UIKit
 
 // THE SEARCH FIELD, ONCE (K5). Lifted from `PhotosSearchBar`, which still draws
@@ -81,6 +79,15 @@ struct BareSearchField: UIViewRepresentable {
     func updateUIView(_ field: UITextField, context: Context) {
         context.coordinator.parent = self
         if field.text != text { field.text = text }
+        // THE FONT FOLLOWS THE SYSTEM TEXT SIZE: `makeUIView` set it once, and a
+        // setting changed while the field is on screen arrives here.
+        if field.font != font {
+            field.font = font
+            field.attributedPlaceholder = NSAttributedString(
+                string: placeholder,
+                attributes: [.foregroundColor: placeholderColor, .font: font]
+            )
+        }
         if focused, !field.isFirstResponder {
             DispatchQueue.main.async { field.becomeFirstResponder() }
         } else if !focused, field.isFirstResponder {
@@ -139,6 +146,7 @@ struct CentraidSearchField: View {
     @State private var typed = ""
     @State private var focused = false
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         // THE LINE UNDER THE FIELD is where the correction is said (#1097): this
@@ -153,7 +161,7 @@ struct CentraidSearchField: View {
                         text: $typed,
                         focused: $focused,
                         placeholder: placeholder,
-                        font: Theme.uiFont("body", scheme),
+                        font: Theme.uiFont("body", scheme, dynamicTypeSize),
                         color: UIColor(Theme.color("text", scheme)),
                         placeholderColor: UIColor(Theme.color("textFaint", scheme)),
                         onSubmit: onSubmit

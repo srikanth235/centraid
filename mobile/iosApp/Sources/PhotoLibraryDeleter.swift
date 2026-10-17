@@ -3,9 +3,7 @@ import Foundation
 import Photos
 #endif
 
-#if canImport(CentraidShared)
 import CentraidShared
-#endif
 
 // FREE UP SPACE'S HAND ON THE PHOTO LIBRARY (#1080 A19, A20).
 //
@@ -77,7 +75,7 @@ enum LibraryDeletion {
     }
 }
 
-#if canImport(CentraidShared) && canImport(Photos)
+#if canImport(Photos)
 /// THE KOTLIN-VISIBLE HALF (seam contract A20): `LibraryDeleter` is
 /// `commonMain`'s interface and this is its iOS implementation, installed once
 /// through `HomeBridge.installLibraryDeleter` (`ShellModel.init`).

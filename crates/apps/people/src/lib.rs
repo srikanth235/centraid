@@ -18,24 +18,26 @@
 //! - **THE PERSON IS THE PARTY, NOT THE PROFILE.** `people_profile` is a 1:1
 //!   enrichment of a `core.party`; trashing a person trashes the profile and
 //!   **the canonical party survives** (`actions/trash-person.ts:3`).
-//! - **THE LINKED READ DENIES INDEPENDENTLY OF THE PROFILE** ([`ReadState`],
-//!   D-1020-PE1): the linked-entity plane sits behind a scope over a *different
-//!   schema*, and a denial on it leaves the person on the screen. v0 caught
+//! - **THE LINKED AND CONTACT READS DENY INDEPENDENTLY OF THE PROFILE**
+//!   ([`ReadState`], D-1020-PE1, P1): each sits behind a scope over a *different
+//!   schema*, and a denial on either leaves the person on the screen. v0 caught
 //!   one of three reads (the share plane, the linked plane, Tally's obligations)
-//!   and blanked the sheet for the other two; the first left in rung five and
-//!   the third with Tally (#1099). See [`person`].
+//!   and blanked the sheet for the other two — and for the contact plane,
+//!   which it never counted; the first left in rung five and the third with
+//!   Tally (#1099). See [`person`].
 //! - **MERGE IS THE ONTOLOGY PRIMITIVE, NEVER A LOCAL SOFT MERGE.**
 //!   `merge-people` invokes `core.merge_party`: every foreign key re-points,
 //!   the polymorphic pointers follow, the merged party is **deleted**, and a
 //!   non-owner caller is parked (`actions/merge-people.ts:3`-`:7`,
 //!   `crates/vault/src/commands/core.rs`).
-//! - **`people.*` IS GRANTED AS A WHOLE SCHEMA.** Four `act` scopes for
-//!   twenty-nine actions, because `{schema: "people", verbs: "read+act"}` is
-//!   the widest form and only agenda and People use it. **A port that expands
-//!   it into twenty-four explicit scopes changes the grant's meaning**
-//!   (census §A5) — and would also break three actions outright, because the
-//!   three narrow `social.*` act scopes name commands the `people` schema owns
-//!   ([`commands`], finding PE-F1).
+//! - **`people.*` IS GRANTED AS A WHOLE SCHEMA.** `{schema: "people", verbs:
+//!   "read+act"}` covers the twenty-seven `people.*` commands and is the widest
+//!   form there is; only agenda and People use it. One narrow `act` scope
+//!   (`core.merge_party`) sits beside it for the twenty-eighth action. **A port
+//!   that expands the whole-schema grant into twenty-seven explicit scopes
+//!   changes its meaning** (census §A5). The three contact-channel commands are
+//!   `people`-owned, so the whole-schema grant covers them and no `social.*`
+//!   act scope names them ([`commands`], finding PE-F1, closed by P3).
 //!
 //! ## What this crate is allowed to contain, and what stops the rest
 //!
@@ -45,7 +47,7 @@
 //! | A write from a query | [`queries`] holds statements and a [`centraid_apps_kit::PageDoor`], whose one method reads |
 //! | An invocation with no `invoke_key` | the field is required on [`commands::Invocation`] (D-1020-D3-5) |
 //! | A denial turned into an error | [`commands::Outcome::Denied`] and [`Denial`] are states a surface renders |
-//! | A failed read folded into a `0` or a `[]` | every three-state answer here is a [`ReadState`], and a denied share plane has **no `linked` field at all** rather than a `null` one |
+//! | A failed read folded into a `0` or a `[]` | every three-state answer here is a [`ReadState`], and a denied linked or contact plane has **no list at all** rather than an empty one |
 //! | A civil date read off the host clock | [`dates`] takes the vault's zone offset as an argument; there is no `now()` in this crate |
 //!
 //! ## The manifest

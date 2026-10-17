@@ -348,8 +348,8 @@ public const val SHARE_PLACE_NOT_REMOVABLE: String =
 public const val SHARE_ORIGINAL_NOT_HERE: String =
     PhotosCopy.PHOTOS_SEND_ORIGINAL_NOT_HERE
 
-/** `PHOTOS_ERROR_EXPORT_FAILED` out of `copy/photos.json`, and its retry word. */
-public const val EXPORT_FAILED: String = PhotosCopy.PHOTOS_ERROR_EXPORT_FAILED + " Try again."
+/** `PHOTOS_ERROR_EXPORT_FAILED_RETRY` out of `copy/photos.json`. */
+public const val EXPORT_FAILED: String = PhotosCopy.PHOTOS_ERROR_EXPORT_FAILED_RETRY
 
 /** What "Download" says when the original went into the device's photos. */
 public const val EXPORT_SAVED: String = PhotosCopy.PHOTOS_EXPORT_SAVED

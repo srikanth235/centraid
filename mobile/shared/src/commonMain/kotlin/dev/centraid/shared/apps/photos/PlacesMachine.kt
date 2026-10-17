@@ -13,6 +13,7 @@ import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.ScreenMachine
 import dev.centraid.shared.screen.Step
+import kotlin.math.sqrt
 
 /**
  * PLACES — WHERE THE PHOTOGRAPHS WERE TAKEN, AS CARDS OR AS A PLOT (#1029, photos port).
@@ -149,7 +150,7 @@ public object PlacesMachine : ScreenMachine<PlacesState, PlacesEvent> {
                 state.copy(
                     loading = null,
                     failure = null,
-                    data_ = merge(state.data_, event.data_.data_),
+                    data_ = merge(state.data_, event.data_.data_)?.let(::withPlot),
                 ),
             )
 
@@ -408,12 +409,14 @@ public object PlacesMachine : ScreenMachine<PlacesState, PlacesEvent> {
         val maxLng = pinned.maxOf { it.longitude }
         val latSpan = maxLat - minLat
         val lngSpan = maxLng - minLng
+        val largest = pinned.maxOf { it.asset_count }
         return pinned.map { row ->
             PlacePlot(
                 placeId = row.place_id,
                 x = if (lngSpan == 0.0) MIDDLE else (row.longitude - minLng) / lngSpan,
                 y = if (latSpan == 0.0) MIDDLE else (maxLat - row.latitude) / latSpan,
                 count = row.asset_count,
+                size = pinSize(row.asset_count, largest),
             )
         }
     }
@@ -424,7 +427,44 @@ public object PlacesMachine : ScreenMachine<PlacesState, PlacesEvent> {
         public val x: Double,
         public val y: Double,
         public val count: Int,
+        public val size: Double,
     )
+
+    /**
+     * THE PLOT, IN THE STATE: every pinned row carries its place on the plate
+     * (`PlaceRow.pin_x`, `pin_y`, `pin_size`), so a view multiplies by its box
+     * and nothing more. Computed over the rows as they stand, after every
+     * join, because the bounding box is the whole set's.
+     */
+    internal fun withPlot(data: PlacesData): PlacesData {
+        val plotted = plot(data.places).associateBy { it.placeId }
+        return data.copy(
+            places = data.places.map { row ->
+                val pin = plotted[row.place_id] ?: return@map row
+                row.copy(pin_x = pin.x, pin_y = pin.y, pin_size = pin.size)
+            },
+        )
+    }
+
+    /**
+     * The plate's inset from its edge, in points. HALF THE LARGEST PIN, so a
+     * pin plotted at the edge of the box stands on the plate and not over it.
+     */
+    public const val PLOT_INSET: Int = 32
+
+    /** A pin's side, in points: [PIN_FLOOR] for the smallest place to [PIN_CEILING] for the largest. */
+    public const val PIN_FLOOR: Int = 40
+    public const val PIN_CEILING: Int = 64
+
+    /**
+     * Area tracks the count, as `pinSize` did: the square root, so a place with
+     * four times the photographs is twice as wide and not four times. The
+     * floor is large enough that the photograph in the pin is a photograph.
+     */
+    private fun pinSize(count: Int, largest: Int): Double {
+        if (largest <= 1 || count <= 0) return PIN_FLOOR.toDouble()
+        return PIN_FLOOR + (PIN_CEILING - PIN_FLOOR) * sqrt(count.toDouble()) / sqrt(largest.toDouble())
+    }
 
     private const val MIDDLE: Double = 0.5
 

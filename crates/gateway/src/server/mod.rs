@@ -27,7 +27,8 @@
 //! | [`state`], [`sql`] | `State` over SQLite, its statements as files |
 //! | [`store`] | objects as files: staged, verified, renamed |
 //! | [`http`] | axum over the rules |
-//! | [`serve`] | the one bind and accept loop, and the Bonjour advertisement |
+//! | [`serve`] | the one bind and accept loop, and the in-process Bonjour advertisement |
+//! | [`bonjour`] | who advertises: the system's `dns-sd` on macOS, [`serve`]'s advertisement elsewhere |
 //! | [`sweeps`] | purge hourly, scrub quarterly |
 //! | [`harness`] | a real gateway on an ephemeral port, for tests in any crate |
 //! | [`addrs`] | the addresses the pairing QR lists |
@@ -35,6 +36,7 @@
 //! | [`service`], [`qr`] | the unit files `install` writes, the terminal QR |
 
 pub mod addrs;
+pub mod bonjour;
 pub mod harness;
 pub mod http;
 pub mod qr;

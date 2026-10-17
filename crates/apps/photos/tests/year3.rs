@@ -31,7 +31,6 @@ use centraid_apps_kit::fixtures::{
 };
 use centraid_apps_kit::testdoor::TestDoor;
 use centraid_apps_photos::duplicates::duplicate_clusters;
-use centraid_apps_photos::faces::face_queue;
 use centraid_apps_photos::queries::{LibraryInput, load_library};
 use rusqlite::Connection;
 
@@ -116,10 +115,6 @@ fn the_shrunken_axis_goes_through_the_same_statements() {
         with_album <= SMALL.albums * SMALL.album_members,
         "the walk reported more album members than were seeded"
     );
-
-    let queue = face_queue(&door).expect("the queue reads");
-    assert_eq!(queue.unmatched_total, SMALL.face_regions);
-    assert_eq!(queue.queue.len(), 60, "the page is sixty entries");
 
     let clusters = duplicate_clusters(&door).expect("the duplicates read");
     assert_eq!(clusters.len(), SMALL.near_duplicate_families);
@@ -262,11 +257,6 @@ fn the_year3_photos_axis_measures_the_librarys_own_ceilings() {
             }
         }
         assert!(reached >= 4_900, "ten pages reached only {reached}");
-    });
-    at("face-queue (4,000-region window)", &|| {
-        let queue = face_queue(&door).expect("the queue reads");
-        assert_eq!(queue.unmatched_total, YEAR3_PHOTOS.face_regions);
-        assert_eq!(queue.queue.len(), 60);
     });
     at("duplicates (4,000 clustered fingerprints)", &|| {
         let clusters = duplicate_clusters(&door).expect("the duplicates read");

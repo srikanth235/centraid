@@ -1,8 +1,6 @@
 import SwiftUI
 
-#if canImport(CentraidShared)
 import CentraidShared
-#endif
 
 /// THE CONFIRM: the machine's `Confirm` (title, the one full sentence the copy
 /// table allows, the verb) in a `SheetRoom`. **Destructive is the outlined

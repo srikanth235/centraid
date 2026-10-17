@@ -109,16 +109,7 @@
           "output": { "type": "object" },
           "reason": { "type": "string" }
         }
-      },
-      "writes": [
-        "core.content_derivative",
-        "core.content_item",
-        "core.content_representation",
-        "core.content_text",
-        "core.place",
-        "media.asset",
-        "media.asset_phash"
-      ]
+      }
     },
     {
       "name": "update-asset",
@@ -143,14 +134,7 @@
           "output": { "type": "object" },
           "reason": { "type": "string" }
         }
-      },
-      "writes": [
-        "core.concept",
-        "core.concept_scheme",
-        "core.content_item",
-        "core.tag",
-        "media.asset"
-      ]
+      }
     },
     {
       "name": "delete-asset",
@@ -171,13 +155,7 @@
           "output": { "type": "object" },
           "reason": { "type": "string" }
         }
-      },
-      "writes": [
-        "core.collection",
-        "core.collection_entry",
-        "core.content_item",
-        "media.asset"
-      ]
+      }
     },
     {
       "name": "restore",
@@ -198,8 +176,7 @@
           "output": { "type": "object" },
           "reason": { "type": "string" }
         }
-      },
-      "writes": ["core.content_item", "media.asset"]
+      }
     },
     {
       "name": "purge-asset",
@@ -220,14 +197,7 @@
           "output": { "type": "object" },
           "reason": { "type": "string" }
         }
-      },
-      "writes": [
-        "core.collection",
-        "core.collection_entry",
-        "core.content_item",
-        "media.asset",
-        "media.face_region"
-      ]
+      }
     },
     {
       "name": "create-album",
@@ -253,8 +223,7 @@
           "output": { "type": "object" },
           "reason": { "type": "string" }
         }
-      },
-      "writes": ["core.collection"]
+      }
     },
     {
       "name": "rename-album",
@@ -276,8 +245,7 @@
           "output": { "type": "object" },
           "reason": { "type": "string" }
         }
-      },
-      "writes": ["core.collection"]
+      }
     },
     {
       "name": "set-album-cover",
@@ -299,8 +267,7 @@
           "output": { "type": "object" },
           "reason": { "type": "string" }
         }
-      },
-      "writes": ["core.collection"]
+      }
     },
     {
       "name": "delete-album",
@@ -321,8 +288,7 @@
           "output": { "type": "object" },
           "reason": { "type": "string" }
         }
-      },
-      "writes": ["core.collection", "core.collection_entry"]
+      }
     },
     {
       "name": "restore-album",
@@ -344,12 +310,7 @@
           "output": { "type": "object" },
           "reason": { "type": "string" }
         }
-      },
-      "writes": [
-        "core.collection",
-        "core.collection_entry",
-        "core.entity_revision"
-      ]
+      }
     },
     {
       "name": "add-to-album",
@@ -371,8 +332,7 @@
           "output": { "type": "object" },
           "reason": { "type": "string" }
         }
-      },
-      "writes": ["core.collection", "core.collection_entry"]
+      }
     },
     {
       "name": "remove-from-album",
@@ -394,8 +354,7 @@
           "output": { "type": "object" },
           "reason": { "type": "string" }
         }
-      },
-      "writes": ["core.collection", "core.collection_entry"]
+      }
     },
     {
       "name": "answer-face",
@@ -421,8 +380,7 @@
           "output": { "type": "object" },
           "reason": { "type": "string" }
         }
-      },
-      "writes": ["media.face_region"]
+      }
     },
     {
       "name": "set-place",
@@ -444,8 +402,7 @@
           "output": { "type": "object" },
           "reason": { "type": "string" }
         }
-      },
-      "writes": ["media.asset"]
+      }
     },
     {
       "name": "name-place",
@@ -471,8 +428,7 @@
           "output": { "type": "object" },
           "reason": { "type": "string" }
         }
-      },
-      "writes": ["core.place"]
+      }
     },
     {
       "name": "tag-asset",
@@ -494,8 +450,7 @@
           "output": { "type": "object" },
           "reason": { "type": "string" }
         }
-      },
-      "writes": ["core.concept", "core.concept_scheme", "core.tag"]
+      }
     },
     {
       "name": "untag-asset",
@@ -516,8 +471,7 @@
           "output": { "type": "object" },
           "reason": { "type": "string" }
         }
-      },
-      "writes": ["core.tag"]
+      }
     },
     {
       "name": "request-enrichment",
@@ -538,8 +492,7 @@
           "output": { "type": "object" },
           "reason": { "type": "string" }
         }
-      },
-      "writes": ["enrich.request", "share.authority"]
+      }
     }
   ],
   "queries": [
@@ -588,63 +541,6 @@
           "truncated": { "type": "boolean" },
           "window": { "type": "integer" },
           "tail": { "type": ["string", "null"] },
-          "vaultDenied": { "type": "object" }
-        }
-      }
-    },
-    {
-      "name": "faces",
-      "description": "Face proposals for one asset (issue #299): the enricher's media.face_region rows (confidence, confirmed state) plus a bounded people list for the confirm picker.",
-      "input": {
-        "type": "object",
-        "properties": {
-          "asset_id": { "type": "string", "minLength": 1 }
-        },
-        "required": ["asset_id"],
-        "additionalProperties": false
-      },
-      "output": {
-        "type": "object",
-        "properties": {
-          "regions": { "type": "array" },
-          "people": { "type": "array" },
-          "denied": { "type": "boolean" }
-        }
-      }
-    },
-    {
-      "name": "face-queue",
-      "description": "The Face review surface's vault-wide queue (issue #711): one ordered page of unconfirmed media.face_region proposals with a match count (never a percentage — README.md:285), first-seen capture date, and the source photograph, plus confirmed/unmatched totals for the status line.",
-      "input": {
-        "type": "object",
-        "properties": {},
-        "additionalProperties": false
-      },
-      "output": {
-        "type": "object",
-        "properties": {
-          "queue": { "type": "array" },
-          "unmatchedTotal": { "type": "number" },
-          "confirmedTotal": { "type": "number" },
-          "people": { "type": "array" },
-          "denied": { "type": "boolean" }
-        }
-      }
-    },
-    {
-      "name": "people",
-      "description": "The People shelf's roster: every person confirmed on a face (with how many photographs carry them and which ones) alongside the unconfirmed face proposals sitting next to them, grouped by candidate identity where the enricher offered one and never carrying a name — plus the same vault-wide unmatched count queries/face-queue.ts derives, so the shelf's pending note needs no second read.",
-      "input": {
-        "type": "object",
-        "properties": {},
-        "additionalProperties": false
-      },
-      "output": {
-        "type": "object",
-        "properties": {
-          "people": { "type": "array" },
-          "proposals": { "type": "array" },
-          "unmatchedTotal": { "type": "number" },
           "vaultDenied": { "type": "object" }
         }
       }
