@@ -10279,7 +10279,6 @@
       {
         "id": "pr-gate",
         "paths": [
-          ".github/workflows/ci.yml",
           "scripts/ci/**"
         ],
         "decision": "#the-pr-gate-loop-892"

@@ -12,6 +12,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+- Weekly test hygiene inventories now ratchet down to the remaining TypeScript test population; the isolated governance Markdown tooling resolves patched KaTeX 0.18.2 with compatibility coverage, without widening any allowance ([#1110](https://github.com/srikanth235/centraid/issues/1110)).
+
 ### Added
 
 - **One phone, one statement of every fact** ([#1124](https://github.com/srikanth235/centraid/pull/1124)). The owner's rulings of 2026-10-15/16 land: one baseline migration, Notes wikilinks, a Page read held to the tables screens use, backup refusals that stop the pass and a phone that re-finds a backup device that moved. The two phone shells stop restating each other: copy, Photos layout, the lightbox text, sizes and clocks, and every app's navigation are decided once in shared code; restore scans the pairing QR; Android shows one primary button on Backup; Money can be the chat's scope. Android edits are not yet compiled.
@@ -229,3 +231,5 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Read-only CLI verbs (`devices list`, `backup status`, `backup list`) report that the running daemon owns the database instead of a raw `database is locked` stack trace ([#568](https://github.com/srikanth235/centraid/issues/568))
 - macOS network-filesystem detection reads the mount table's filesystem type; the previous probe could never match and also suppressed its own fallback ([#568](https://github.com/srikanth235/centraid/issues/568))
 - Re-opening the founding QR while a restore is downloading no longer destroys that restore ([#568](https://github.com/srikanth235/centraid/issues/568))
+
+- #1110: Synchronize the arrival fixture with the existing evaluator domain; retain deterministic byte and dirty-checkout assertions.

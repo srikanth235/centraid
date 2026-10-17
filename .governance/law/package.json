@@ -3,10 +3,13 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "description": "The governance law: ESLint rules over the arrival record and the governance documents. Its own dependency tree on purpose — see README.md.",
+  "description": "The governance law: ESLint rules over the arrival record and the governance documents. Its own dependency tree on purpose \u2014 see README.md.",
   "dependencies": {
     "@eslint/json": "2.1.0",
     "@eslint/markdown": "8.0.3",
     "eslint": "10.10.0"
+  },
+  "overrides": {
+    "katex": "0.18.2"
   }
 }
