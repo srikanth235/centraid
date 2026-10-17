@@ -137,8 +137,19 @@ public enum class TransferRule(
 
         public suspend fun read(store: SecureStore): TransferRule = of(store.read(KEY))
 
+        /**
+         * THE ONE WRITER OF THE RULE, AND IT LEAVES THE GRID'S READING WITH IT.
+         *
+         * [LinkConditions.rule] is what a cell's download arrow is labelled by,
+         * and until a pass next ran it still held the rule the LAST pass read: a
+         * member who changed the rule saw the arrows of the old one until then.
+         * Writing the two together is what makes a label and a store one fact;
+         * a screen already on the page is told to read it again by
+         * [dev.centraid.shared.sync.ChangeStream.conditionsChanged].
+         */
         public suspend fun write(store: SecureStore, rule: TransferRule) {
             store.write(KEY, rule.stored)
+            LinkConditions.rule = rule
         }
 
         /**
@@ -179,8 +190,9 @@ public enum class TransferRule(
  * business anyway: it is the same window the pass runs under, which is what
  * makes it impossible for a grid to draw a download arrow under one rule while
  * the pass plans under another. [PassConditions.read] writes it at the start
- * of every pass, from the reading that pass is about to carry; a screen reads
- * it.
+ * of every pass, from the reading that pass is about to carry, and
+ * [TransferRule.write] writes the rule the moment a member changes it; a screen
+ * reads it.
  *
  * The defaults WITHHOLD NOTHING, so a read that ran before anybody said
  * otherwise labels a cell "still on its way" rather than drawing a download

@@ -2,9 +2,7 @@ import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
 
-#if canImport(CentraidShared)
 import CentraidShared
-#endif
 
 // LOCKER'S SHARED PARTS (#1047): the wall, the covered page, the item row,
 // the choice pills and the clipboard. Every word is the machines'.
@@ -51,30 +49,34 @@ struct LockerWall: View {
                         .foregroundStyle(Theme.color(lock.phase == .failed ? "net" : "textSoft", scheme))
                         .accessibilityIdentifier("locker-wall-notice")
                 }
-                if !lock.unlockLabel.isEmpty {
-                    KitInkButton(label: lock.unlockLabel) {
-                        sendLock(LockerLockSeam.event { $0.unlock = .init() })
+                // UNLOCK AND THE WORDS DOOR ARE ALTERNATIVES: one stack.
+                if !lock.unlockLabel.isEmpty || !lock.wordsLabel.isEmpty {
+                    KitChoiceStack {
+                        if !lock.unlockLabel.isEmpty {
+                            KitInkButton(label: lock.unlockLabel) {
+                                sendLock(LockerLockSeam.event { $0.unlock = .init() })
+                            }
+                            .accessibilityIdentifier("locker-unlock")
+                        }
+                        // THE KEY IS NOT ON THIS PHONE: "Enter your 24 words",
+                        // the intent the shell routes to words.enter (#1047
+                        // E2). ONE INK PER VIEW: Unlock is the thing to do; the
+                        // words verb is the ink only when it stands alone.
+                        if !lock.wordsLabel.isEmpty {
+                            if lock.unlockLabel.isEmpty {
+                                KitInkButton(label: lock.wordsLabel) {
+                                    sendLock(LockerLockSeam.event { $0.words = .init() })
+                                }
+                                .accessibilityIdentifier("locker-words")
+                            } else {
+                                KitOutlineButton(label: lock.wordsLabel) {
+                                    sendLock(LockerLockSeam.event { $0.words = .init() })
+                                }
+                                .accessibilityIdentifier("locker-words")
+                            }
+                        }
                     }
-                    .accessibilityIdentifier("locker-unlock")
                     .padding(.top, 4)
-                }
-                // THE KEY IS NOT ON THIS PHONE: "Enter your 24 words", the
-                // intent the shell routes to words.enter (#1047 E2).
-                // ONE INK PER VIEW: Unlock is the thing to do; the words verb
-                // is the ink only when it stands alone.
-                if !lock.wordsLabel.isEmpty {
-                    if lock.unlockLabel.isEmpty {
-                        KitInkButton(label: lock.wordsLabel) {
-                            sendLock(LockerLockSeam.event { $0.words = .init() })
-                        }
-                        .accessibilityIdentifier("locker-words")
-                        .padding(.top, 4)
-                    } else {
-                        KitOutlineButton(label: lock.wordsLabel, fullWidth: true) {
-                            sendLock(LockerLockSeam.event { $0.words = .init() })
-                        }
-                        .accessibilityIdentifier("locker-words")
-                    }
                 }
             }
             .padding(.horizontal, CentraidGeometry.pageMargin)
@@ -102,7 +104,7 @@ struct LockerCovered<Content: View>: View {
     var body: some View {
         let state = Centraid_Screen_V1_LockerLockState.of(lock)
         if state.covers {
-            PushedPage(title: "", parentTitle: LockerWords.appName, onBack: onBack) {
+            PushedPage(title: "", parentTitle: LockerCopy.shared.APP_NAME, onBack: onBack) {
                 EmptyView()
             } content: {
                 LockerWall(lock: state, sendLock: sendLock)
@@ -134,18 +136,6 @@ struct LockerShield<Content: View>: View {
 
     var body: some View {
         WordsShield(secure: Centraid_Screen_V1_LockerLockState.of(lock).secure, content: content)
-    }
-}
-
-/// The app's name, from its copy table — the covered page's back word, where
-/// the wiped screen under the wall has no title left to name.
-enum LockerWords {
-    static var appName: String {
-        #if canImport(CentraidShared)
-        LockerCopy.shared.APP_NAME
-        #else
-        ""
-        #endif
     }
 }
 

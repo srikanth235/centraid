@@ -34,7 +34,7 @@ pub fn manifest() -> &'static Manifest {
 mod tests {
     use super::*;
     use crate::commands::{ACTIONS, Confirm, action_row};
-    use centraid_apps_kit::manifest::{CANONICAL_DESIGNED_STATES, Confirmation, ScopeVerbs};
+    use centraid_apps_kit::manifest::{CANONICAL_DESIGNED_STATES, Confirmation};
 
     #[test]
     fn the_committed_manifest_parses_and_is_moneys() {
@@ -102,35 +102,29 @@ mod tests {
         }
     }
 
+    /// MONEY REACHES `money` AND THE SPINE, and no other schema, read or act.
+    /// What each command wrote is the commit's own census, not a list a
+    /// manifest carries (V3), so the reach is stated by the scopes and the
+    /// commands the actions invoke.
     #[test]
-    fn every_action_declares_the_tables_it_writes_and_only_money_and_the_spine() {
-        for action in &manifest().actions {
+    fn money_reaches_only_money_and_the_spine() {
+        let vault = manifest().vault.as_ref().expect("a vault block");
+        for scope in &vault.scopes {
             assert!(
-                !action.writes.is_empty(),
-                "{} declares no writes",
-                action.name
+                ["money", "core"].contains(&scope.schema.as_str()),
+                "{}.{:?} is outside Money's reach",
+                scope.schema,
+                scope.table
             );
         }
-        for table in manifest().declared_writes() {
-            let schema = table.split('.').next().unwrap_or_default();
+        for row in ACTIONS {
+            let schema = row.command.split('.').next().unwrap_or_default();
             assert!(
                 ["money", "core"].contains(&schema),
-                "{table} is outside Money's reach"
+                "{} invokes {}, which is outside Money's reach",
+                row.action,
+                row.command
             );
-        }
-    }
-
-    #[test]
-    fn a_table_an_action_writes_is_a_table_the_app_may_act_on() {
-        let vault = manifest().vault.as_ref().expect("a vault block");
-        for table in manifest().declared_writes() {
-            let (schema, name) = table.split_once('.').expect("schema.table");
-            let scope = vault
-                .scopes
-                .iter()
-                .find(|s| s.schema == schema && s.table.as_deref() == Some(name))
-                .unwrap_or_else(|| panic!("no scope for {table}"));
-            assert_eq!(scope.verbs, ScopeVerbs::ReadAct, "{table}");
         }
     }
 

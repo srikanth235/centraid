@@ -36,6 +36,7 @@ import dev.centraid.shared.screen.ScreenMachine
 import dev.centraid.shared.screen.Step
 import dev.centraid.shared.sync.ScreenQueries
 import dev.centraid.shared.sync.ScreenWrites
+import dev.centraid.shared.nav.ScreenIds
 
 /**
  * THE JOURNAL (#1029 port): People-journal entries grouped by the LOCAL day
@@ -44,11 +45,14 @@ import dev.centraid.shared.sync.ScreenWrites
  *
  * An entry is a note People's command marks (D-1020-N3), so "New entry for
  * today" opens the journal's own sheet (`compose`) and Save writes
- * `people.add_journal_entry{mood, text, entry_date}` — the one command that
+ * `people.add_journal_entry{mood, text, entry_date, tz}` — the one command that
  * makes an entry a journal entry. A plain new note would land in the library.
+ * `tz` is the zone the core read `today` in (`NotesJournal.tz`): the command
+ * files the entry on that day IN that zone, so east of UTC+11:59 today's entry
+ * is not filed under tomorrow.
  */
 public object NotesJournalMachine : ScreenMachine<NotesJournalState, NotesJournalEvent> {
-    public const val SCREEN_ID: String = "notes.journal"
+    public const val SCREEN_ID: String = ScreenIds.NOTES_JOURNAL
 
     /** The note, and the tag/concept pair that marks one a journal entry. */
     public val TABLES: Set<String> = setOf("knowledge_note", "core_tag", "core_concept")
@@ -84,7 +88,11 @@ public object NotesJournalMachine : ScreenMachine<NotesJournalState, NotesJourna
                 state.compose != null -> Step(state)
                 // No day to date it by: the answer has not landed, so nothing opens.
                 day.isEmpty() -> Step(state)
-                else -> Step(state.copy(compose = NotesJournalCompose(day = day), more_open = false))
+                // The zone the day was read in rides with the sheet, so the entry is
+                // filed on `day` IN it (east of UTC+11:59 noon UTC is the next day).
+                else -> Step(
+                    state.copy(compose = NotesJournalCompose(day = day, tz = state.data_?.tz.orEmpty()), more_open = false),
+                )
             }
         }
         event.compose_edited != null -> {
@@ -129,7 +137,8 @@ public object NotesJournalMachine : ScreenMachine<NotesJournalState, NotesJourna
             Writes,
             state.copy(compose = compose.copy(status_label = "")),
             ADD_ENTRY,
-            "{\"mood\":${jsonString(mood)},\"text\":${jsonString(text)},\"entry_date\":${jsonString(compose.day)}}",
+            "{\"mood\":${jsonString(mood)},\"text\":${jsonString(text)},\"entry_date\":${jsonString(compose.day)}" +
+                (if (compose.tz.isEmpty()) "" else ",\"tz\":${jsonString(compose.tz)}") + "}",
             InvokeKeys.of(ADD_ENTRY, compose.day, mood, text.hashCode().toString()),
         )
     }
@@ -194,6 +203,7 @@ public object NotesJournalMachine : ScreenMachine<NotesJournalState, NotesJourna
         return NotesJournalData(
             days = days,
             today = journal.today,
+            tz = journal.tz,
             empty = if (days.isEmpty()) {
                 EmptyState(headline = NotesCopy.JOURNAL_EMPTY_HEADLINE, body = NotesCopy.JOURNAL_EMPTY_BODY)
             } else {

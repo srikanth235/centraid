@@ -26,14 +26,14 @@ import dev.centraid.shared.screen.Step
  *   drew two component families here and had to keep their covers, counts and
  *   empty states in step by hand (`PhotosCollectionsView.tsx`,
  *   `CollectionShelfBody.tsx`).
- * * **`CollectionsDoor`** — People, Places, Memories and Duplicates, whose tap
+ * * **`CollectionsDoor`** — Places, Memories and Duplicates, whose tap
  *   lands somewhere else entirely.
  *
  * ## THIS MACHINE HOLDS NO SHELF AND MAKES NO COUNT
  *
  * Both are [PhotosCollectionsReads]', and the reducer's whole job on a data
  * event is the MERGE. That division matters because this screen's numbers come
- * off ten tables and one page each — the door has no `COUNT(*)` and no join —
+ * off nine tables and one page each — the door has no `COUNT(*)` and no join —
  * so a count is rows read and counted, with `item_count_capped` saying when the
  * page filled and the number is therefore a floor. None of that is a reduction
  * over an event; all of it is a fold over rows, and it lives where it can be
@@ -198,7 +198,7 @@ public object PhotosCollectionsMachine :
         //
         // No re-read is emitted from here: the commit's own change event is
         // what redraws this list, and a re-read beside it would be two trips
-        // for one write racing each other over ten statements.
+        // for one write racing each other over nine statements.
         //
         // A WRITE THAT DID NOT COMMIT LANDS ITS SENTENCE ON `write_failure`
         // AND TOUCHES `content` NOTHING. The `content` oneof's `failure` is the
@@ -304,8 +304,6 @@ public object PhotosCollectionsMachine :
         val view = shelf.state_view
         val mode = view?.mode
         if (mode != null) return "mode:${mode.kind.name}"
-        val person = view?.person
-        if (person != null) return "person:${person.party_id}"
         val place = shelf.place
         if (place != null) return "place:${place.place_id}"
         val memory = shelf.memory

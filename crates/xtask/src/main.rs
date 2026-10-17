@@ -18,11 +18,13 @@ use clap::{Parser, Subcommand, ValueEnum};
 
 mod artifact;
 mod ci;
+mod doc_links;
 mod gate;
 mod ledger;
 mod measure;
 mod photos_sample;
 mod rules;
+mod select;
 #[cfg(test)]
 mod testing;
 
@@ -59,6 +61,20 @@ enum Command {
     },
     /// Run only the structural rules (the cheap half of every profile).
     Rules,
+    /// Check that every relative markdown link and in-repo anchor resolves —
+    /// the `doc-links` step on its own. See `crates/xtask/src/doc_links.rs`
+    /// for what it checks, what it skips and why.
+    DocLinks,
+    /// Print which crates the `local` profile's `test` step would run for the
+    /// current change, and why each is in. Runs nothing. The rule is the
+    /// module doc of `crates/xtask/src/select.rs`.
+    TestPlan {
+        /// Also print what every crate's sources read outside its own
+        /// directory — the derived table the selection trusts, so a wrong
+        /// entry in it can be seen rather than inferred.
+        #[arg(long)]
+        reads: bool,
+    },
     /// Regenerate the Photos sample manifest and the rows that name its frames.
     ///
     /// The generator the v0 retirement took with it (#1025 S4). See
@@ -278,6 +294,38 @@ fn main() -> ExitCode {
             }
         },
         Command::Rules => rules::print_report(&root),
+        Command::DocLinks => match doc_links::check(&root) {
+            Ok(report) => {
+                print!("{}", report.block());
+                println!(
+                    "doc-links: {} finding(s) over {}",
+                    report.findings.len(),
+                    report.summary()
+                );
+                report.findings.is_empty()
+            }
+            Err(error) => {
+                eprintln!("doc-links: {error:#}");
+                false
+            }
+        },
+        Command::TestPlan { reads } => {
+            let plan = select::for_local(&root);
+            print!("{}", plan.describe());
+            if let Some(filter) = plan.filterset() {
+                println!("  nextest filter: {filter}");
+            }
+            if reads {
+                match select::load_workspace(&root) {
+                    Ok(workspace) => print!(
+                        "{}",
+                        select::describe_reads(&select::scan_reads(&root, &workspace))
+                    ),
+                    Err(error) => eprintln!("test-plan: {error}"),
+                }
+            }
+            true
+        }
         Command::PhotosSample => match photos_sample::run(&root) {
             Ok(written) => {
                 for path in written {

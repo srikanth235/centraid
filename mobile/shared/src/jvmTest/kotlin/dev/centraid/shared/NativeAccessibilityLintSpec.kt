@@ -39,7 +39,12 @@ class NativeAccessibilityLintSpec : StringSpec({
         .toList()
 
     val swiftSources = mobileRoot.resolve("iosApp").walkTopDown()
-        .filter { it.isFile && it.extension == "swift" && !it.path.contains("/Design/") }
+        // Design/ is emitted and Generated/ is protoc's: neither is a view, and
+        // neither is a task input (mobile/shared/build.gradle.kts).
+        .filter {
+            it.isFile && it.extension == "swift" &&
+                !it.path.contains("/Design/") && !it.path.contains("/Sources/Generated/")
+        }
         .toList()
 
     "the lint sees both surfaces — an empty file set is a lint that always passes" {

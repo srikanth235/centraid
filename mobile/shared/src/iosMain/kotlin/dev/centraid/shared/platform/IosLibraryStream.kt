@@ -4,23 +4,34 @@ package dev.centraid.shared.platform
 
 import kotlinx.cinterop.BetaInteropApi
 import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.cinterop.convert
+import kotlinx.cinterop.reinterpret
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
+import platform.CoreFoundation.CFRelease
 import platform.CoreGraphics.CGSizeMake
+import platform.Foundation.CFBridgingRelease
+import platform.Foundation.CFBridgingRetain
 import platform.Foundation.NSData
 import platform.Foundation.NSError
 import platform.Foundation.NSKeyedArchiver
 import platform.Foundation.NSKeyedUnarchiver
+import platform.Foundation.NSURL
 import platform.Foundation.base64EncodedStringWithOptions
 import platform.Foundation.create
+import platform.ImageIO.CGImageSourceCopyPropertiesAtIndex
+import platform.ImageIO.CGImageSourceCreateWithURL
 import platform.Photos.PHAsset
+import platform.Photos.PHAssetMediaTypeImage
 import platform.Photos.PHAssetResource
 import platform.Photos.PHAssetResourceManager
 import platform.Photos.PHAssetResourceRequestOptions
+import platform.Photos.PHContentEditingInput
+import platform.Photos.PHContentEditingInputRequestOptions
 import platform.Photos.PHImageContentModeAspectFit
 import platform.Photos.PHImageManager
 import platform.Photos.PHImageRequestOptions
@@ -29,6 +40,8 @@ import platform.Photos.PHImageRequestOptionsResizeModeExact
 import platform.Photos.PHObjectTypeAsset
 import platform.Photos.PHPersistentChangeToken
 import platform.Photos.PHPhotoLibrary
+import platform.Photos.cancelContentEditingInputRequest
+import platform.Photos.requestContentEditingInputWithOptions
 import platform.UIKit.UIImage
 import platform.UIKit.UIImageJPEGRepresentation
 
@@ -201,6 +214,66 @@ internal suspend fun renderAsset(asset: PHAsset, edge: Int): ByteArray? {
         }
     } ?: return null
     return UIImageJPEGRepresentation(image, IosLibraryStream.JPEG_QUALITY)?.toByteArray()
+}
+
+/**
+ * THE CAPTURE'S TIME-ZONE OFFSET, MINUTES EAST OF UTC (D-1025-S7-77).
+ *
+ * `PHAsset` publishes no capture zone; the camera wrote it into the file as the
+ * EXIF `OffsetTimeOriginal` tag, so this asks Photos for a URL to the image and
+ * lets ImageIO read that tag out of its header. **`OffsetTime` is never read**:
+ * it is the zone of the file's last change, and Photos has already built
+ * `creationDate` in the device's zone. What the text MEANS — what a malformed
+ * one is, the vault's bound — is [ExifOffset]'s, in `commonMain` and proved on
+ * the JVM; this is only the finding.
+ *
+ * **Zero, the old answer, for everything that cannot be read**, and never the
+ * phone's own zone: a video (its tags are not EXIF), an original that lives
+ * only in iCloud (`networkAccessAllowed = false`: describing a page must not
+ * download a library), one removed since the page, and a file that names no
+ * offset. The pass offers the photograph either way.
+ */
+internal suspend fun captureOffsetOf(asset: PHAsset): Int {
+    if (asset.mediaType != PHAssetMediaTypeImage) return 0
+    val options = PHContentEditingInputRequestOptions()
+    options.networkAccessAllowed = false
+    val input = suspendCancellableCoroutine<PHContentEditingInput?> { continuation ->
+        val request = asset.requestContentEditingInputWithOptions(options) { found, _ ->
+            if (continuation.isActive) continuation.resume(found)
+        }
+        continuation.invokeOnCancellation { asset.cancelContentEditingInputRequest(request) }
+    }
+    // `input` IS KEPT ALIVE ACROSS THE READ: the URL is only good while the
+    // object that handed it out is.
+    val url = input?.fullSizeImageURL ?: return 0
+    return ExifOffset.of(exifOffsetTag(url))
+}
+
+/**
+ * The EXIF `OffsetTimeOriginal` text of the image at [url], null when the file
+ * does not carry it. `OffsetTime`, which the file may carry beside it, is not
+ * read. `internal` so `iosTest` can drive it over a file with and without the
+ * tag.
+ *
+ * ImageIO reads the header and not the pixels, so a 48-megapixel original
+ * costs what a thumbnail does. The keys are the SDK's own spellings
+ * (`kCGImagePropertyExifDictionary` and
+ * `kCGImagePropertyExifOffsetTimeOriginal`), written as literals because a
+ * constant that a Kotlin binding leaves out is a build that cannot see it.
+ */
+internal fun exifOffsetTag(url: NSURL): String? {
+    val retained = CFBridgingRetain(url) ?: return null
+    val source = try {
+        CGImageSourceCreateWithURL(retained.reinterpret(), null)
+    } finally {
+        CFRelease(retained)
+    } ?: return null
+    // `CGImageSourceCopyPropertiesAtIndex` follows the Create rule, so the
+    // bridge's RELEASE is what hands the reference to ARC to be balanced.
+    val properties = CFBridgingRelease(CGImageSourceCopyPropertiesAtIndex(source, 0.convert(), null)) as? Map<*, *>
+    CFRelease(source)
+    val exif = properties?.get("{Exif}") as? Map<*, *> ?: return null
+    return exif["OffsetTimeOriginal"] as? String
 }
 
 /**

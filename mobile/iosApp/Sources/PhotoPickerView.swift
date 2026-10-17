@@ -2,6 +2,8 @@ import Foundation
 import SwiftProtobuf
 import SwiftUI
 
+import CentraidShared
+
 /// ADDING PHOTOGRAPHS TO AN ALBUM, in SwiftUI (#1029, photos port; v0's
 /// `PhotoPicker.tsx`).
 ///
@@ -107,7 +109,7 @@ struct PhotoPickerView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .contentMargins(.horizontal, CentraidGeometry.pageMargin, for: .scrollContent)
-        .navigationTitle("Add to \u{201C}\(collectionName)\u{201D}")
+        .navigationTitle(copyFill(PhotosCopy.shared.PHOTOS_PICKER_TITLE, "name", collectionName))
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
                 // THE ONE FILLED ELEMENT (§18) — and it cannot fire with
@@ -115,7 +117,7 @@ struct PhotoPickerView: View {
                 // control that appears when a member picks is a control that
                 // moves under their thumb.
                 ToolbarVerb(
-                    label: state.picked.isEmpty ? "Add" : "Add \(state.picked.count)",
+                    label: state.picked.isEmpty ? PhotosCopy.shared.PHOTOS_ADD : copyFill(PhotosCopy.shared.PHOTOS_ADD_COUNT, "count", "\(state.picked.count)"),
                     identifier: "photos.picker.add"
                 ) {
                     send(state.confirmEvent)
@@ -160,8 +162,8 @@ struct PhotoPickerStateView {
     /// v0's two sentences, verbatim. Static because they are constants of the
     /// screen and not of a state — a member reads the first one before any read
     /// has landed.
-    static let refersNotCopies = PhotosWords.photosAlbumRefers
-    static let nothingLeft = PhotosWords.photosPickerNothingLeft
+    static let refersNotCopies = PhotosCopy.shared.PHOTOS_ALBUM_REFERS
+    static let nothingLeft = PhotosCopy.shared.PHOTOS_PICKER_NOTHING_LEFT
 
     private var state: Centraid_Screen_V1_PhotoPickerState {
         (try? Centraid_Screen_V1_PhotoPickerState(serializedBytes: data)) ?? .init()
@@ -194,8 +196,8 @@ struct PhotoPickerStateView {
     /// is where the album changes.
     var chosenSentence: String {
         picked.isEmpty
-            ? PhotosWords.photosPickerNothingChosen
-            : PhotosWords.fill(PhotosWords.photosChosen, "count", "\(picked.count)")
+            ? PhotosCopy.shared.PHOTOS_PICKER_NOTHING_CHOSEN
+            : copyFill(PhotosCopy.shared.PHOTOS_CHOSEN, "count", "\(picked.count)")
     }
 
     func openedEvent(

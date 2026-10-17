@@ -68,6 +68,9 @@ public class Enrollment(
         public suspend fun rekey(): Int
 
         public suspend fun indexedHoldings(): Int
+
+        /** Whether any vault is on this phone; false until the shelf has read its directory. */
+        public suspend fun holdsAVault(): Boolean
     }
 
     /** What this phone holds before the make-vault flow starts. */
@@ -87,6 +90,9 @@ public class Enrollment(
         secrets.seedSettled() -> Standing.SETTLED
         else -> Standing.UNSETTLED
     }
+
+    /** Whether any vault is on this phone: a settled seed with none is a reinstall's first make. */
+    public suspend fun holdsAVault(): Boolean = keeper.holdsAVault()
 
     /** 24 fresh words from the core, or null. */
     public suspend fun mint(): List<String>? = phrase.mint()
@@ -382,6 +388,8 @@ public class Enrollment(
                 override suspend fun rekey(): Int = session.rekeyed()
 
                 override suspend fun indexedHoldings(): Int = session.shelf.indexedHoldings()
+
+                override suspend fun holdsAVault(): Boolean = session.shelf.holdsNoVault.value == false
             },
         )
     }

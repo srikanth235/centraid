@@ -1,9 +1,7 @@
 import SwiftUI
 import UIKit
 
-#if canImport(CentraidShared)
 import CentraidShared
-#endif
 
 /// THE CHAT TAB (`chat`, `screen.proto`'s Chat section).
 ///
@@ -476,7 +474,7 @@ private struct ChatDrawer: View {
                 .padding(.bottom, 12)
                 .accessibilityAddTraits(.isHeader)
 
-            KitOutlineButton(label: state.newChatLabel, fullWidth: true, iconKey: "Plus", action: onNewChat)
+            KitOutlineButton(label: state.newChatLabel, iconKey: "Plus", action: onNewChat)
                 .padding(.horizontal, 16)
                 .padding(.bottom, 12)
                 .accessibilityIdentifier("chat-drawer-new")
@@ -767,7 +765,7 @@ private struct ChatMessageRow: View {
         }
     }
 
-    private var copiedLabel: String { ChatWords.copied.isEmpty ? state.copyLabel : ChatWords.copied }
+    private var copiedLabel: String { ChatCopy.shared.COPIED.isEmpty ? state.copyLabel : ChatCopy.shared.COPIED }
 }
 
 /// An outlined action under an answer: the kit's outline button, glyph first.
@@ -1112,12 +1110,12 @@ private struct ChatScopePill: View {
     @Environment(\.colorScheme) private var scheme
 
     private func name(_ id: String) -> String {
-        id.isEmpty ? ChatWords.scopeAll : (CentraidCatalog.byID[id]?.name ?? id.capitalized)
+        id.isEmpty ? ChatCopy.shared.SCOPE_ALL : (CentraidCatalog.byID[id]?.name ?? id.capitalized)
     }
 
     var body: some View {
         Menu {
-            Button(ChatWords.scopeAll) { onSetScope("") }
+            Button(ChatCopy.shared.SCOPE_ALL) { onSetScope("") }
                 .accessibilityIdentifier("chat-scope-all")
             ForEach(ChatRouting.scopable, id: \.self) { id in
                 Button(name(id)) { onSetScope(id) }
@@ -1142,7 +1140,7 @@ private struct ChatScopePill: View {
         }
         .menuStyle(.button)
         .buttonStyle(.plain)
-        .accessibilityLabel(ChatWords.scopeLabel + ", " + name(app))
+        .accessibilityLabel(ChatCopy.shared.SCOPE_LABEL + ", " + name(app))
         .accessibilityIdentifier("chat-scope")
     }
 }
@@ -1380,10 +1378,11 @@ private struct ProgressTrack: View {
 
 /// A TYPE ROLE THAT FOLLOWS THE MEMBER'S TEXT SIZE.
 ///
-/// `centraidType` draws each role at its emitted point size; the chat's reading
-/// text and composer take that size as the BODY rung of Dynamic Type instead,
-/// scaled by `UIFontMetrics` at the member's category, with the role's own line
-/// height scaled by the same factor.
+/// `centraidType` scales each role on the system text style nearest its size;
+/// the chat's reading text and composer take every role's size as the BODY rung
+/// of Dynamic Type instead, scaled by `UIFontMetrics` at the member's category,
+/// with the role's own line height scaled by the same factor. It starts from
+/// `Theme.baseFont`, the face at the token's size, so nothing scales twice.
 private struct ChatTypeModifier: ViewModifier {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.dynamicTypeSize) private var size
@@ -1391,7 +1390,7 @@ private struct ChatTypeModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         let style = Theme.style(role, scheme)
-        let base = Theme.uiFont(role, scheme)
+        let base = Theme.baseFont(role, scheme)
         let traits = UITraitCollection(preferredContentSizeCategory: Self.category(size))
         let font = UIFontMetrics(forTextStyle: .body).scaledFont(for: base, compatibleWith: traits)
         let scale = font.pointSize / base.pointSize
@@ -1435,28 +1434,3 @@ extension View {
     }
 }
 
-/// The chat's own words that arrive outside `ChatState` (a transient label, a
-/// picker's title).
-enum ChatWords {
-    #if canImport(CentraidShared)
-    static var copied: String { ChatCopy.shared.COPIED }
-    static var tab: String { ChatCopy.shared.TAB_LABEL }
-    static var close: String { ChatCopy.shared.CLOSE }
-    static var pickPhoto: String { ChatCopy.shared.ATTACH_PICK_PHOTO }
-    static var pickDocument: String { ChatCopy.shared.ATTACH_PICK_DOCUMENT }
-    static var noPhotos: String { ChatCopy.shared.ATTACH_NO_PHOTOS }
-    static var noDocuments: String { ChatCopy.shared.ATTACH_NO_DOCUMENTS }
-    static var scopeAll: String { ChatCopy.shared.SCOPE_ALL }
-    static var scopeLabel: String { ChatCopy.shared.SCOPE_LABEL }
-    #else
-    static var copied: String { "" }
-    static var tab: String { "" }
-    static var close: String { "" }
-    static var pickPhoto: String { "" }
-    static var pickDocument: String { "" }
-    static var noPhotos: String { "" }
-    static var noDocuments: String { "" }
-    static var scopeAll: String { "" }
-    static var scopeLabel: String { "" }
-    #endif
-}

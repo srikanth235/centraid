@@ -175,6 +175,15 @@ class VaultWordsSpec : StringSpec({
         made.effects shouldBe listOf(WordsEffect.Make())
         made.model.state.words.shouldBeEmpty()
 
+        // DELETED AND PUT BACK: the keychain kept a settled seed and no vault
+        // is on the phone. The first make asks nothing — no name and no
+        // own-words choice, which is for a further vault (R-ONBOARD-10 (4)).
+        val reinstalled = reduce(open, WordsInput.Standing(Enrollment.Standing.SETTLED, "", holdsAVault = false))
+        reinstalled.effects shouldBe listOf(WordsEffect.Make())
+        reinstalled.model.state.phase shouldBe VaultWordsState.Phase.PHASE_MAKING
+        reinstalled.model.state.own_label shouldBe ""
+        reinstalled.model.state.words.shouldBeEmpty()
+
         val unsettled = reduce(open, WordsInput.Standing(Enrollment.Standing.UNSETTLED, "")).model.state
         unsettled.phase shouldBe VaultWordsState.Phase.PHASE_RESTORE_FIRST
         unsettled.restore_label shouldBe WordsCopy.RESTORE_FIRST_ACTION
@@ -244,6 +253,7 @@ class VaultWordsSpec : StringSpec({
                     override suspend fun adoptRestored(restored: List<Shelf.Restored>) = 0
                     override suspend fun rekey() = 0
                     override suspend fun indexedHoldings() = 0
+                    override suspend fun holdsAVault() = false
                 },
             )
             val flow = VaultWordsFlow({ enrollment }, services, CoroutineScope(Dispatchers.Unconfined))
@@ -290,6 +300,7 @@ class VaultWordsSpec : StringSpec({
                     override suspend fun adoptRestored(restored: List<Shelf.Restored>) = 0
                     override suspend fun rekey() = 0
                     override suspend fun indexedHoldings() = 0
+                    override suspend fun holdsAVault() = false
                 },
             )
             val flow = VaultWordsFlow({ enrollment }, services, CoroutineScope(Dispatchers.Unconfined))

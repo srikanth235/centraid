@@ -158,6 +158,11 @@ message NotesJournal {
   string today = 2;
   bool truncated = 3;
   uint32 window = 4;
+  // The IANA zone `today` and every day's grouping were read in: the request's,
+  // else the vault's own. A new entry is filed ON `today` IN THIS ZONE
+  // (`people.add_journal_entry`'s `tz`), so a shell states it back rather than
+  // computing a zone of its own.
+  string tz = 5;
 }
 
 message NotesSearch {

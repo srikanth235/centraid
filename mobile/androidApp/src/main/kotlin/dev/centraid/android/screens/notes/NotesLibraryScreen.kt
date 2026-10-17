@@ -18,7 +18,6 @@ import centraid.screen.v1.NotesLibrarySort
 import centraid.screen.v1.NotesLibraryState
 import centraid.screen.v1.NotesNoteRow
 import centraid.screen.v1.StatusChip
-import centraid.screen.v1.WriteState
 import dev.centraid.android.kit.AppBand
 import dev.centraid.android.kit.AppBandTab
 import dev.centraid.android.kit.AppPlace
@@ -28,7 +27,7 @@ import dev.centraid.android.kit.EmptyStateView
 import dev.centraid.android.kit.IconKey
 import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.OptionSheet
-import dev.centraid.android.kit.QuietButton
+import dev.centraid.android.kit.OutlineButton
 import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.RoomAction
 import dev.centraid.android.kit.RoomChip
@@ -105,7 +104,7 @@ public fun NotesLibraryScreen(
                 spoken = chip.spoken,
             ) { onEvent(NotesLibraryEvent(chip = NotesLibraryEvent.ChipPicked(chip.key))) }
         },
-        status = if (write?.phase == WriteState.Phase.PHASE_REFUSED) write.failure?.sentence.orEmpty() else "",
+        status = write?.refusal.orEmpty(),
         band = { NotesBandView(state.band, { key -> onEvent(NotesLibraryEvent(band = NotesLibraryEvent.BandPicked(key))) }, onHome) },
     ) {
         val results = state.results
@@ -148,7 +147,7 @@ public fun NotesLibraryScreen(
                                     modifier = Modifier.weight(1f).padding(top = 9.dp),
                                 )
                                 if (data.window_end_verb.isNotEmpty()) {
-                                    QuietButton(data.window_end_verb, testTag = "notes-window-widen") {
+                                    OutlineButton(data.window_end_verb, testTag = "notes-window-widen") {
                                         onEvent(NotesLibraryEvent(window_widened = NotesLibraryEvent.WindowWidened()))
                                     }
                                 }

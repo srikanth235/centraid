@@ -71,6 +71,7 @@ public class CoreDrainDoor(private val core: () -> CentraidCore?) : DrainDoor {
                         DrainStop.DRAIN_STOP_DEADLINE -> DrainAnswer.Stopped.DEADLINE
                         DrainStop.DRAIN_STOP_UNREACHABLE -> DrainAnswer.Stopped.UNREACHABLE
                         DrainStop.DRAIN_STOP_UNTRUSTED -> DrainAnswer.Stopped.UNTRUSTED
+                        DrainStop.DRAIN_STOP_REFUSED -> DrainAnswer.Stopped.REFUSED
                         // UNSPECIFIED IS READ AS UNREACHABLE, DELIBERATELY: the
                         // safe reading of "I do not know why it stopped" leaves
                         // the claim behind rather than ahead.

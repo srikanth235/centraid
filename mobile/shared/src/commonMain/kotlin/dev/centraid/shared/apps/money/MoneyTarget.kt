@@ -17,6 +17,7 @@ import dev.centraid.shared.kit.ReadContent
 import dev.centraid.shared.kit.WriteLaw
 import dev.centraid.shared.kit.WriteLens
 import dev.centraid.shared.screen.Step
+import dev.centraid.shared.nav.ScreenIds
 
 /**
  * A CATEGORY'S PLAN FOR ONE MONTH (#1099, R-1099-5), a sheet over Spending. The
@@ -26,7 +27,7 @@ import dev.centraid.shared.screen.Step
  */
 public object MoneyTargetMachine :
     MoneyQueryMachine<MoneyTargetState, MoneyTargetEvent, MoneyTargetData>("money.target", MONEY_TABLES) {
-    public const val SCREEN_ID: String = "money.target"
+    public const val SCREEN_ID: String = ScreenIds.MONEY_TARGET
     public const val CMD_SET: String = "money.set_target"
 
     override val lens: ContentLens<MoneyTargetState, MoneyTargetData> = Lens

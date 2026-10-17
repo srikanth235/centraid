@@ -23,6 +23,7 @@ import dev.centraid.shared.kit.ReadContent
 import dev.centraid.shared.kit.WriteLaw
 import dev.centraid.shared.kit.WriteLens
 import dev.centraid.shared.screen.Step
+import dev.centraid.shared.nav.ScreenIds
 
 /**
  * CATEGORIES (#1099, R-1099-16): one scheme, two levels. A category is added
@@ -33,7 +34,7 @@ import dev.centraid.shared.screen.Step
  */
 public object MoneyCategoriesMachine :
     MoneyQueryMachine<MoneyCategoriesState, MoneyCategoriesEvent, MoneyCategoriesData>("money.categories", MONEY_TABLES) {
-    public const val SCREEN_ID: String = "money.categories"
+    public const val SCREEN_ID: String = ScreenIds.MONEY_CATEGORIES
     public const val CMD_ADD: String = "money.add_category"
     public const val CMD_MERGE: String = "money.merge_category"
     public const val CMD_ARCHIVE: String = "money.archive_category"

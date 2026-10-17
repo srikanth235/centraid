@@ -32,8 +32,10 @@ use anyhow::{Context as _, Result};
 use crate::Profile;
 use crate::artifact;
 use crate::ci;
+use crate::doc_links;
 use crate::ledger;
 use crate::rules;
+use crate::select;
 
 /// The four device cells (#1020 open question 13, D-1020-G4). Named here, in
 /// the runner, so `gate-nightly.yml`'s matrix and this file cannot disagree
@@ -63,16 +65,11 @@ pub struct Ctx {
     pub artifacts: PathBuf,
     /// The profile this run is.
     ///
-    /// Its one reader was [`run_tests`], which excluded `crates/sim` on the
-    /// edit-run loop; the crate is deleted (#1029 §1) and nothing reads this
-    /// today. It is kept rather than removed because a `Ctx` that could not
-    /// say which profile it is would make the next step that needs to do less
-    /// locally a second step with a second name, which is the shape
-    /// D-1020-CL9 chose against.
-    #[allow(
-        dead_code,
-        reason = "no step needs it since `crates/sim` went (#1029 §1)"
-    )]
+    /// Read by [`run_tests`], which narrows to the crates a change touches on
+    /// the `local` profile and on no other (hand-off 6.5). It was once the same
+    /// step's `crates/sim` exclusion, and a `Ctx` that cannot say which profile
+    /// it is would make the next step that needs to do less locally a second
+    /// step with a second name, which is the shape D-1020-CL9 chose against.
     pub profile: Profile,
 }
 
@@ -148,6 +145,10 @@ pub fn steps(profile: Profile) -> Vec<Step> {
         //
         step("restore-drill", run_restore_drill),
         step("rules", run_rules),
+        // THE DOCS DOCTRINE'S STATUTE (Q-1005-1): "broken internal links are
+        // bugs", decidable and fast (every markdown file, no network), so it is
+        // a `local` step and therefore a step of every profile.
+        step("doc-links", run_doc_links),
         step("ledgers", run_ledgers),
     ];
     if profile == Profile::Local {
@@ -434,19 +435,10 @@ fn run_mobile_jvm(ctx: &Ctx) -> Result<Outcome> {
     if !matches!(formatted, Outcome::Ok(_)) {
         return Ok(formatted);
     }
-    process(
+    assert_clean_tree(
         ctx,
         "mobile-jvm",
-        "git",
-        &[
-            "diff",
-            "--exit-code",
-            "--",
-            "design",
-            "copy",
-            "mobile",
-            "contracts/screens",
-        ],
+        &["design", "copy", "mobile", "contracts/screens"],
     )
 }
 
@@ -473,11 +465,73 @@ fn run_emitters(ctx: &Ctx) -> Result<Outcome> {
     if !matches!(formatted, Outcome::Ok(_)) {
         return Ok(formatted);
     }
-    process(
-        ctx,
-        "emitters",
-        "git",
-        &["diff", "--exit-code", "--", "copy", "design", "mobile"],
+    assert_clean_tree(ctx, "emitters", &["copy", "design", "mobile"])
+}
+
+/// THE CLEAN-TREE ASSERTION BOTH DRIFT CHECKS END WITH: nothing under `paths`
+/// differs from the index, AND nothing under them is untracked.
+///
+/// `git diff --exit-code` alone reads only files git already knows, so an
+/// emitter that started writing a NEW file (a second Swift table, a fixture
+/// for a screen added this week) left the tree "clean" and the step green with
+/// the file uncommitted — the drift check passed on exactly the drift it
+/// exists to find. Untracked files are listed with `--exclude-standard`, so
+/// anything `.gitignore` already names (`Sources/Generated`, `build/`) is
+/// not drift; a file staged with `git add` is tracked and passes, as an edited
+/// one does.
+fn assert_clean_tree(ctx: &Ctx, step: &str, paths: &[&str]) -> Result<Outcome> {
+    let mut args = vec!["diff", "--exit-code", "--"];
+    args.extend_from_slice(paths);
+    let diffed = process(ctx, step, "git", &args)?;
+    if !matches!(diffed, Outcome::Ok(_)) {
+        return Ok(diffed);
+    }
+    let untracked = untracked_files(&ctx.root, paths)?;
+    if untracked.is_empty() {
+        return Ok(diffed);
+    }
+    Ok(Outcome::Failed(untracked_message(&untracked, paths)))
+}
+
+/// Every file under `paths` that git neither tracks nor ignores.
+fn untracked_files(root: &Path, paths: &[&str]) -> Result<Vec<String>> {
+    let output = Command::new("git")
+        .args(["ls-files", "--others", "--exclude-standard", "--"])
+        .args(paths)
+        .current_dir(root)
+        .output()
+        .context("spawn `git ls-files --others`")?;
+    anyhow::ensure!(
+        output.status.success(),
+        "`git ls-files --others --exclude-standard -- {}` failed: {}",
+        paths.join(" "),
+        String::from_utf8_lossy(&output.stderr).trim()
+    );
+    Ok(String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .map(str::to_owned)
+        .collect())
+}
+
+/// The failure line for [`assert_clean_tree`]: the files, by name, because "the
+/// tree is dirty" without them sends a reader to run `git status` themselves.
+fn untracked_message(files: &[String], paths: &[&str]) -> String {
+    const SHOWN: usize = 8;
+    let mut named = files
+        .iter()
+        .take(SHOWN)
+        .cloned()
+        .collect::<Vec<_>>()
+        .join(", ");
+    if files.len() > SHOWN {
+        named.push_str(&format!(" (+{} more)", files.len() - SHOWN));
+    }
+    format!(
+        "{} untracked file(s) under {}: {named} — an emitter wrote a file the repository \
+         does not carry; `git add` it if it is meant to be committed, or stop the emitter",
+        files.len(),
+        paths.join(" ")
     )
 }
 
@@ -925,12 +979,36 @@ fn cargo_subcommand_available(root: &Path, subcommand: &str) -> bool {
 /// different under a runner that reports per-test timings and one that does
 /// not.
 ///
+/// **`local` runs the crates the change touches, plus their dependents; every
+/// other profile runs the whole workspace** (hand-off 6.5, the owner's ruling
+/// of 2026-10-15). `cargo xtask gate --profile local` took 290 to 500 s against
+/// a 120 s budget and this step was nearly all of it. [`select`] decides which
+/// crates, and the step says so loudly: a banner before its line naming every
+/// crate that ran and why, a `NARROWED` prefix on the line itself (which is the
+/// evidence row), and `selection.txt` beside the failure artifacts. What
+/// narrowing cannot see — a read it did not derive — is caught by `pr`, which CI
+/// runs on every pull request over the whole workspace.
+///
+/// **The narrowing is a nextest filter, not `-p`.** `cargo nextest run
+/// --workspace -E 'package(=a) | package(=b)'` builds the same units the
+/// `restore-drill` step and the whole-workspace run build; `-p a -p b` resolves
+/// features for those packages alone, which is a different feature set, and
+/// alternating the two measured 162 to 186 s of rebuild each way. Without
+/// nextest there is no way to narrow without that cost, so the step runs the
+/// whole workspace and says why.
+///
+/// **A narrowed run leaves the `restore_drill` binaries to the `restore-drill`
+/// step**, which runs them by name later in the same gate run: they are
+/// integration tests of `centraid-vault` and `centraid`, so a selection that
+/// reaches either would otherwise run both drills twice (about a minute and a
+/// half of CPU each time). `--lane test` keeps them, and `pr` and the
+/// whole-workspace fallback are unchanged.
+///
 /// **It used to EXCLUDE `crates/sim` in the `local` profile** (D-1020-CL9) and
 /// run it twice everywhere else — once here and once as a `sim` step — because
 /// the deterministic simulation was #1020's primary sync proof and cost ~29 s
 /// of a 120 s budget. The simulation simulated SEATS, and there are none
-/// (#1029 §1, §6): the crate, the step and the exclusion all go, and every
-/// profile now runs one unqualified `--workspace`.
+/// (#1029 §1, §6): the crate, the step and the exclusion all go.
 ///
 /// **nextest does not run doctests, so the doctests run after it** (#1047).
 /// `cargo test --workspace` runs every lib's doctests after its test binaries;
@@ -945,6 +1023,113 @@ fn cargo_subcommand_available(root: &Path, subcommand: &str) -> bool {
 /// both; 240 s of test time back to back under `cargo test`, a 69 s run under
 /// nextest).
 fn run_tests(ctx: &Ctx) -> Result<Outcome> {
+    if ctx.profile != Profile::Local {
+        return run_whole_workspace_tests(ctx);
+    }
+    let plan = select::for_local(&ctx.root);
+    let banner = plan.describe();
+    print!("{}", indent(&banner));
+    let dir = ctx.artifacts.join("test");
+    fs::create_dir_all(&dir)?;
+    fs::write(dir.join("selection.txt"), &banner)?;
+    if !plan.narrowed() {
+        return run_whole_workspace_tests(ctx);
+    }
+    let Some(filter) = plan.filterset() else {
+        return Ok(Outcome::Skipped(format!(
+            "NARROWED to 0 of {} crates — nothing changed since {} is inside a crate, read by \
+             one, or an input every crate shares. `cargo xtask gate --profile pr` runs the \
+             whole workspace · selection: {}",
+            plan.total,
+            plan.base,
+            display_relative(&ctx.root, &dir.join("selection.txt"))
+        )));
+    };
+    if !cargo_subcommand_available(&ctx.root, "nextest") {
+        println!(
+            "        cargo-nextest is not installed, and narrowing without it would rebuild \
+             the graph under a different feature set — running the WHOLE workspace instead. \
+             `cargo install cargo-nextest --locked` turns the narrowing on"
+        );
+        return run_whole_workspace_tests(ctx);
+    }
+    let selected = plan.selected();
+    // THE DRILLS RUN ONCE PER LOOP, NOT TWICE. `restore_drill` is an ordinary
+    // integration test of `centraid-vault` and `centraid`, so a narrowed run
+    // that selects either one would run both drills here and then again as the
+    // `restore-drill` step that follows — about a minute and a half of CPU, and
+    // the cost QUALITY.md recorded as "the drills run twice per loop". The step
+    // still runs them, by name, in this same gate run, so the promise is proved
+    // on every loop exactly as before; only the duplicate goes. Asked for
+    // alone (`--lane test`) the step keeps them, because nothing else will run
+    // them then. `pr` and the whole-workspace fallback are untouched.
+    let drills_elsewhere = ctx.lane.is_none();
+    let expression = narrowed_expression(&filter, drills_elsewhere);
+    let said = format!(
+        "NARROWED to {} of {} crates ({}) since {} — pr runs all {}{}",
+        selected.len(),
+        plan.total,
+        crate_list(&selected),
+        plan.base,
+        plan.total,
+        if drills_elsewhere {
+            "; the restore_drill binaries run once, in the restore-drill step"
+        } else {
+            ""
+        }
+    );
+    let nextest = process(
+        ctx,
+        "test",
+        "cargo",
+        &[
+            "nextest",
+            "run",
+            "--workspace",
+            "-E",
+            &expression,
+            "--no-tests=warn",
+        ],
+    )?;
+    let Outcome::Ok(nextest) = nextest else {
+        return Ok(nextest);
+    };
+    match process(ctx, "test", "cargo", &["test", "--workspace", "--doc"])? {
+        Outcome::Ok(doc) => Ok(Outcome::Ok(format!("{said} · {nextest}, then {doc}"))),
+        other => Ok(other),
+    }
+}
+
+/// The nextest filter a narrowed run passes: the selected crates, less the
+/// drill binaries when the `restore-drill` step runs them.
+fn narrowed_expression(filter: &str, drills_elsewhere: bool) -> String {
+    if drills_elsewhere {
+        format!("({filter}) & not binary(=restore_drill)")
+    } else {
+        filter.to_owned()
+    }
+}
+
+/// The first few names, then a count: the full list is in the banner and in
+/// `selection.txt`, and the evidence line has to stay one line.
+fn crate_list(names: &[&str]) -> String {
+    const SHOWN: usize = 6;
+    let shown = names
+        .iter()
+        .take(SHOWN)
+        .copied()
+        .collect::<Vec<_>>()
+        .join(", ");
+    if names.len() > SHOWN {
+        format!("{shown}, … +{}", names.len() - SHOWN)
+    } else {
+        shown
+    }
+}
+
+/// Every workspace crate: what `pr`, `nightly` and `release` run, and what
+/// `local` falls back to when it cannot narrow.
+fn run_whole_workspace_tests(ctx: &Ctx) -> Result<Outcome> {
     if !cargo_subcommand_available(&ctx.root, "nextest") {
         return process(ctx, "test", "cargo", &["test", "--workspace"]);
     }
@@ -1042,6 +1227,28 @@ fn run_rules(ctx: &Ctx) -> Result<Outcome> {
     print!("{}", indent(&block));
     Ok(Outcome::Failed(format!(
         "{findings} structural finding(s) · artifact: {}",
+        display_relative(&ctx.root, &dir)
+    )))
+}
+
+/// `doc-links` — every relative markdown link and in-repo anchor resolves.
+/// What it checks, skips and why is the module doc of [`doc_links`].
+fn run_doc_links(ctx: &Ctx) -> Result<Outcome> {
+    let report = doc_links::check(&ctx.root)?;
+    if report.findings.is_empty() {
+        return Ok(Outcome::Ok(format!(
+            "every link resolves — {}",
+            report.summary()
+        )));
+    }
+    let block = report.block();
+    let dir = ctx.artifacts.join("doc-links");
+    fs::create_dir_all(&dir)?;
+    fs::write(dir.join("findings.txt"), &block)?;
+    print!("{}", indent(&block));
+    Ok(Outcome::Failed(format!(
+        "{} broken link(s) · artifact: {}",
+        report.findings.len(),
         display_relative(&ctx.root, &dir)
     )))
 }
@@ -2055,6 +2262,63 @@ mod tests {
         steps(profile).into_iter().map(|entry| entry.name).collect()
     }
 
+    /// Run `git` in a throwaway tree; the untracked-file rule is asserted over
+    /// a repository built for the purpose, not over whatever this one holds.
+    fn git(root: &Path, args: &[&str]) {
+        let status = Command::new("git")
+            .args(args)
+            .current_dir(root)
+            .status()
+            .expect("spawn git");
+        assert!(status.success(), "git {args:?} failed");
+    }
+
+    /// THE HOLE THIS CLOSES: an emitter's NEW file is invisible to `git diff`.
+    /// It is found while untracked, named, and not found once the author has
+    /// staged it — and a file `.gitignore` names is never drift.
+    #[test]
+    fn a_new_untracked_file_under_an_emitted_path_is_drift() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let root = dir.path();
+        git(root, &["init", "--quiet"]);
+        fs::create_dir_all(root.join("design")).unwrap();
+        fs::create_dir_all(root.join("other")).unwrap();
+        fs::write(root.join(".gitignore"), "design/build/\n").unwrap();
+        fs::write(root.join("design/known.json"), "{}").unwrap();
+        git(root, &["add", "-A"]);
+
+        assert_eq!(
+            untracked_files(root, &["design"]).unwrap(),
+            Vec::<String>::new()
+        );
+
+        fs::write(root.join("design/emitted-new.json"), "{}").unwrap();
+        fs::create_dir_all(root.join("design/build")).unwrap();
+        fs::write(root.join("design/build/out.json"), "{}").unwrap();
+        fs::write(root.join("other/elsewhere.json"), "{}").unwrap();
+        let found = untracked_files(root, &["design"]).unwrap();
+        assert_eq!(
+            found,
+            ["design/emitted-new.json"],
+            "ignored and out-of-scope files are not drift"
+        );
+
+        git(root, &["add", "design/emitted-new.json"]);
+        assert!(untracked_files(root, &["design"]).unwrap().is_empty());
+    }
+
+    #[test]
+    fn the_untracked_failure_names_the_files() {
+        let few = untracked_message(&["design/a.json".to_owned()], &["copy", "design"]);
+        assert!(few.contains("design/a.json"), "{few}");
+        assert!(few.contains("copy design"), "{few}");
+        let many: Vec<String> = (0..11).map(|n| format!("mobile/f{n}.swift")).collect();
+        let long = untracked_message(&many, &["mobile"]);
+        assert!(long.contains("mobile/f0.swift"), "{long}");
+        assert!(long.contains("(+3 more)"), "{long}");
+        assert!(!long.contains("mobile/f10.swift"), "{long}");
+    }
+
     /// The `call` budget the `pr` profile owes (#1020).
     ///
     /// It used to assert `sim` as well — #1020's primary sync proof, 25 seeds
@@ -2105,6 +2369,21 @@ mod tests {
         }
     }
 
+    /// A narrowed run does not run the drills twice, and `--lane test` still
+    /// runs them because then nothing else will.
+    #[test]
+    fn a_narrowed_run_leaves_the_drills_to_their_own_step() {
+        assert_eq!(
+            narrowed_expression("package(=a) | package(=b)", true),
+            "(package(=a) | package(=b)) & not binary(=restore_drill)"
+        );
+        assert_eq!(
+            narrowed_expression("package(=a)", false),
+            "package(=a)",
+            "asked for alone, the test step keeps the drills"
+        );
+    }
+
     /// The cheap steps, and the ORDER, which is load-bearing for one of them.
     ///
     /// `restore-drill` joined them in #1029 W5-4 and sits AFTER `test`
@@ -2114,10 +2393,18 @@ mod tests {
     /// its two targets would. A drill placed before `test` would put a compile
     /// on the loop's critical path and read as a slow drill.
     #[test]
-    fn local_carries_the_six_cheap_steps_with_the_drill_after_the_tests() {
+    fn local_carries_the_seven_cheap_steps_with_the_drill_after_the_tests() {
         assert_eq!(
             names(Profile::Local),
-            ["fmt", "clippy", "test", "restore-drill", "rules", "ledgers"]
+            [
+                "fmt",
+                "clippy",
+                "test",
+                "restore-drill",
+                "rules",
+                "doc-links",
+                "ledgers"
+            ]
         );
     }
 

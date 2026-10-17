@@ -250,6 +250,13 @@ impl Plane {
     /// fills no disk on a guess.
     #[must_use]
     pub fn budget(&self) -> u64 {
+        Spool::budget_under(self.ceiling, self.free_bytes())
+    }
+
+    /// How many bytes are free on the spool's volume; zero for a volume that
+    /// will not say, which reads as full.
+    #[must_use]
+    pub fn free_bytes(&self) -> u64 {
         let dir = self.spool_dir();
         // `statvfs` is POSIX, which covers both phones; on any other target
         // the volume is read as full, which gives the spool nothing (C-D23)
@@ -262,7 +269,7 @@ impl Plane {
             let _ = &dir;
             0_u64
         };
-        Spool::budget_under(self.ceiling, free)
+        free
     }
 }
 
@@ -339,6 +346,9 @@ pub fn wire_destination(destination: &Destination) -> wire::Destination {
             .last_ack_ms
             .and_then(|ms| i64::try_from(ms).ok())
             .unwrap_or(0),
+        // `backup_status` reads the ledger's mark; a pairing's answer and the
+        // pins are the destination as it was written.
+        pair_again: false,
     }
 }
 
@@ -437,6 +447,119 @@ pub fn forget_destination(
         forgotten: true,
         revoked,
     })
+}
+
+/// The most candidates one refresh dials, and the most addresses the ledger
+/// keeps for a gateway: a LAN advertises a handful of interface addresses, and
+/// a list that only grows would dial its dead ones for ever.
+const ADDRESS_CAP: usize = 8;
+
+/// How long one candidate may take to answer. A browse's addresses are on the
+/// LAN or nowhere, so this is far shorter than a pass's own dial.
+const REFRESH_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(3);
+
+/// **A paired gateway found again at new addresses** (`refresh_destination`,
+/// Q-1080-D3). The shell's foreground browse of `_centraid-gateway._tcp` hands
+/// over the addresses of whatever advertised this gateway's id; **the shell's
+/// match is a hint and this is the check**. Each candidate is dialled with the
+/// certificate this phone pinned at pairing, so a machine that only claims the
+/// id is refused by TLS, and must answer `GET /v2/info` with this gateway's own
+/// id. The ones that did are recorded first, ahead of what the ledger had; the
+/// ones that did not are not recorded at all.
+///
+/// It sends no token and writes nothing to the gateway, and it changes only the
+/// addresses of one ledger row: the certificate, the token and every
+/// acknowledgement stay. A superseded phone refuses it like every other door
+/// that reaches a gateway ([`CoreError::VaultMoved`]).
+///
+/// # Errors
+/// [`CoreError::VaultMoved`] for a phone a gateway superseded; the ledger's
+/// refusal.
+pub fn refresh_destination(
+    plane: &Plane,
+    runtime: &tokio::runtime::Handle,
+    request: &wire::RefreshDestinationRequest,
+) -> Result<wire::RefreshDestinationResponse> {
+    use centraid_gateway::client::Client;
+
+    let ledger = plane.ledger()?;
+    if let Some((_, epoch)) = moved(&ledger)? {
+        return Err(CoreError::VaultMoved {
+            current_epoch: epoch,
+            moved_at_ms: 0,
+        });
+    }
+    let Some(destination) = ledger
+        .destination(&request.gateway_id)
+        .map_err(plane_error)?
+    else {
+        return Ok(wire::RefreshDestinationResponse::default());
+    };
+    let candidates = refresh_candidates(&request.candidates);
+    let mut answered: Vec<String> = Vec::new();
+    for candidate in candidates {
+        let client = Client::trusting(vec![candidate.clone()], destination.cert_der.clone());
+        let info = runtime.block_on(async {
+            tokio::time::timeout(REFRESH_TIMEOUT, client.info())
+                .await
+                .ok()
+                .and_then(std::result::Result::ok)
+        });
+        // THE GATEWAY'S OWN ID, NOT THE ADVERTISEMENT'S: TLS has already shown
+        // the certificate is the pinned one, and this is the second check.
+        if info.is_some_and(|info| info.gateway_id.hex() == destination.gateway_id) {
+            answered.push(candidate);
+        }
+    }
+    if answered.is_empty() {
+        return Ok(wire::RefreshDestinationResponse {
+            refreshed: false,
+            addrs: destination.addrs,
+        });
+    }
+    let mut addrs = answered;
+    for recorded in &destination.addrs {
+        if !addrs.contains(recorded) {
+            addrs.push(recorded.clone());
+        }
+    }
+    addrs.truncate(ADDRESS_CAP);
+    ledger
+        .set_destination_addrs(&destination.gateway_id, &addrs)
+        .map_err(plane_error)?;
+    Ok(wire::RefreshDestinationResponse {
+        refreshed: true,
+        addrs,
+    })
+}
+
+/// The candidates a refresh will dial: IP socket addresses only (a name is the
+/// platform's to resolve and the core never resolves one here), no duplicates,
+/// and no IPv6 link-local address, which cannot be dialled without a scope the
+/// advertisement does not carry. At most [`ADDRESS_CAP`].
+pub(crate) fn refresh_candidates(given: &[String]) -> Vec<String> {
+    let mut kept: Vec<String> = Vec::new();
+    for text in given {
+        let Ok(address) = text.trim().parse::<std::net::SocketAddr>() else {
+            continue;
+        };
+        if address.port() == 0 || address.ip().is_unspecified() || address.ip().is_multicast() {
+            continue;
+        }
+        if let std::net::IpAddr::V6(v6) = address.ip()
+            && (v6.segments()[0] & 0xffc0) == 0xfe80
+        {
+            continue;
+        }
+        let canonical = address.to_string();
+        if !kept.contains(&canonical) {
+            kept.push(canonical);
+        }
+        if kept.len() == ADDRESS_CAP {
+            break;
+        }
+    }
+    kept
 }
 
 /// Ask `destination` to revoke this phone's token for `vault`. Whether the
@@ -622,8 +745,20 @@ pub fn backup_status(
         .filter(|part| drain::Kind::of_part(part) == drain::Kind::Records)
         .map(|part| part.size)
         .sum();
+    // A GATEWAY THAT REFUSED THIS PHONE'S TOKEN IS NOT BACKING UP, however
+    // many acknowledgements the ledger still holds for it (#1080, the sweep's
+    // F2): the mark rides on the destination, so a line that would read "all
+    // backed up" can say to pair again instead.
+    let mut wired = Vec::with_capacity(destinations.len());
+    for destination in &destinations {
+        let mut row = wire_destination(destination);
+        row.pair_again = ledger
+            .unauthorized(&destination.gateway_id)
+            .map_err(plane_error)?;
+        wired.push(row);
+    }
     Ok(wire::BackupStatusResponse {
-        destinations: destinations.iter().map(wire_destination).collect(),
+        destinations: wired,
         acked_at_ms: acked_at_ms.and_then(|ms| i64::try_from(ms).ok()),
         last_snapshot_ms: last_snapshot_ms.and_then(|ms| i64::try_from(ms).ok()),
         pending_bytes: standing.pending_bytes.saturating_add(records_waiting),
@@ -812,5 +947,34 @@ mod item_tests {
             super::item_of("content://media/external/images/media/42"),
             "content://media/external/images/media/42"
         );
+    }
+}
+
+#[cfg(test)]
+mod refresh_tests {
+    fn given(texts: &[&str]) -> Vec<String> {
+        texts.iter().map(|text| (*text).to_owned()).collect()
+    }
+
+    /// **THE CORE DIALS IP SOCKET ADDRESSES AND NOTHING ELSE** (Q-1080-D3): a
+    /// name is the platform's to resolve, a link-local IPv6 address cannot be
+    /// dialled without a scope, and the list is bounded.
+    #[test]
+    fn only_dialable_ip_addresses_are_candidates() {
+        let kept = super::refresh_candidates(&given(&[
+            "192.168.1.44:7443",
+            " 192.168.1.44:7443 ",
+            "[2001:db8::7]:7443",
+            "[fe80::1]:7443",
+            "laptop.local:7443",
+            "192.168.1.44",
+            "192.168.1.44:0",
+            "0.0.0.0:7443",
+            "224.0.0.251:5353",
+            "",
+        ]));
+        assert_eq!(kept, given(&["192.168.1.44:7443", "[2001:db8::7]:7443"]));
+        let many: Vec<String> = (1..=20).map(|n| format!("10.0.0.{n}:7443")).collect();
+        assert_eq!(super::refresh_candidates(&many).len(), super::ADDRESS_CAP);
     }
 }

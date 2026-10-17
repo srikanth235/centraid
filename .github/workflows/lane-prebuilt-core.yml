@@ -358,7 +358,7 @@ jobs:
 
   # THE iOS XCFRAMEWORK: `libcentraid_core_ffi.a` per slice plus the cbindgen
   # header. The DEPLOYMENT FLOOR is declared once, here, and read by lane E's
-  # Package.swift — v0 learned that lesson the hard way, where the pod's floor
+  # XcodeGen project — v0 learned that lesson the hard way, where the pod's floor
   # had to match the vendored framework's or the app target would not link
   # (`CentraidTunnel.podspec:9`–`:13`).
   ios:

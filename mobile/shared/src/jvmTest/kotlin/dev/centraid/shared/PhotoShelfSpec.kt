@@ -27,7 +27,6 @@ import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
-import java.io.File
 
 /**
  * THE PHOTO SHELF (#1029, photos port).
@@ -152,7 +151,7 @@ class PhotoShelfSpec : StringSpec({
         // holds, so the machine answers an EMPTY list — this screen's own
         // spelling of "the membership moved and I cannot tell whose" — and the
         // reducer reads that as "read again".
-        listOf("core_collection_entry", "core_tag", "media_face_region", "media_memory_member")
+        listOf("core_collection_entry", "core_tag", "media_memory_member")
             .forEach { table ->
                 val event = PhotoShelfMachine.rowsChanged(table, listOf("entry-1"))
                     .shouldNotBeNull()
@@ -522,15 +521,8 @@ class PhotoShelfSpec : StringSpec({
             PhotoShelfMachine.emptySentence(
                 PhotoShelf(memory = PhotoShelf.Memory(memory_id = "m1", title = "Last June")),
             ),
-            PhotoShelfMachine.emptySentence(
-                PhotoShelf(
-                    state_view = PhotoStateView(
-                        person = PhotoStateView.Person(party_id = "p", person_name = "Ana"),
-                    ),
-                ),
-            ),
         )
-        // EIGHT SHELVES, EIGHT SENTENCES. v0 had four screens and three
+        // SEVEN SHELVES, SEVEN SENTENCES. v0 had four screens and three
         // sentences between them, which is how `PlaceDetail` ended up with copy
         // the state views did not have.
         sentences.toSet().size shouldBe sentences.size
@@ -580,11 +572,6 @@ class PhotoShelfSpec : StringSpec({
             PhotoShelf(album = PhotoShelf.Album(collection_id = "c1", name = "Portugal")),
             PhotoShelf(place = PhotoShelf.Place(place_id = "p1", place_name = "Lisbon")),
             PhotoShelf(memory = PhotoShelf.Memory(memory_id = "m1", title = "Last June")),
-            PhotoShelf(
-                state_view = PhotoStateView(
-                    person = PhotoStateView.Person(party_id = "party-1", person_name = "Ana"),
-                ),
-            ),
         )
         shelves.forEach { shelf ->
             val query = PhotoShelfReads.query(opened(shelf).state, null).shouldNotBeNull()
@@ -610,18 +597,20 @@ class PhotoShelfSpec : StringSpec({
     }
 
     "every id a shelf is about is BOUND and never spelled into the predicate" {
-        val person = PhotoShelf(
-            state_view = PhotoStateView(
-                person = PhotoStateView.Person(party_id = "party-1", person_name = "Ana"),
-            ),
-        )
-        val query = PhotoShelfReads.query(opened(person).state, null).shouldNotBeNull()
-        query.where_.shouldNotBeNull() shouldNotContain "party-1"
-        query.bind.map { it.text } shouldContain "party-1"
-        // A PROPOSAL IS A QUESTION, NOT AN IDENTIFICATION. Putting proposed
-        // faces on a person's shelf would show a member photographs of a
-        // stranger under their sister's name.
-        query.bind.map { it.text } shouldContain "confirmed"
+        listOf(
+            PhotoShelf(album = PhotoShelf.Album(collection_id = "collection-7f3", name = "Portugal")) to
+                "collection-7f3",
+            PhotoShelf(place = PhotoShelf.Place(place_id = "place-7f3", place_name = "Lisbon")) to
+                "place-7f3",
+            PhotoShelf(memory = PhotoShelf.Memory(memory_id = "memory-7f3", title = "Last June")) to
+                "memory-7f3",
+        ).forEach { (shelf, id) ->
+            val query = PhotoShelfReads.query(opened(shelf).state, null).shouldNotBeNull()
+            withClue(query.name) {
+                query.where_.shouldNotBeNull() shouldNotContain id
+                query.bind.map { it.text } shouldContain id
+            }
+        }
     }
 
     "favourites reads the column the favourite WRITE writes" {
@@ -745,47 +734,6 @@ class PhotoShelfSpec : StringSpec({
                 PhotoShelfReads.settled(status, "no", "test.command:row-0001")
                     .write_settled.shouldNotBeNull().committed shouldBe false
             }
-        }
-    }
-
-    "every command this shelf can submit exists in the vault's declared surface" {
-        // THE GATE `ShellCommandsExistSpec` IS, APPLIED TO THIS LANE'S FOUR.
-        // That spec holds a hand-written map of every command a screen can
-        // submit, and a screen added without an entry in it is a screen outside
-        // the gate — so the assertion is restated here, over this screen's own
-        // constants, rather than left to a file this lane does not own.
-        //
-        // The oracle is the registry's own source, and the scan over-matches on
-        // purpose: it cannot prove a command is REGISTERED, only that the name
-        // is spelled in `crates/vault/src/commands`. That is exactly the class
-        // of defect it exists for — `knowledge.save_note` appeared nowhere in
-        // this repository, and a typo never does.
-        val root = File(
-            System.getProperty("centraid.repositoryRoot")
-                ?: error("centraid.repositoryRoot is unset; see mobile/shared/build.gradle.kts"),
-        )
-        val declared = root.resolve("crates/vault/src/commands")
-            .walkTopDown()
-            .filter { it.isFile && it.extension == "rs" }
-            .flatMap { file ->
-                Regex("\"([a-z_]+\\.[a-z_]+)\"").findAll(file.readText())
-                    .map { it.groupValues[1] }
-            }
-            .toSet()
-        listOf(
-            PhotoShelfMachine.RESTORE_COMMAND,
-            PhotoShelfMachine.DELETE_COMMAND,
-            PhotoShelfMachine.PURGE_COMMAND,
-            PhotoShelfMachine.UPDATE_COMMAND,
-            PhotoShelfMachine.FAVORITE_COMMAND,
-            PhotoShelfMachine.RENAME_ALBUM_COMMAND,
-            PhotoShelfMachine.DELETE_ALBUM_COMMAND,
-            PhotoShelfMachine.SET_COVER_COMMAND,
-            PhotoShelfMachine.REMOVE_FROM_ALBUM_COMMAND,
-            AlbumChoice.ADD_COMMAND,
-            AlbumChoice.CREATE_COMMAND,
-        ).forEach { command ->
-            withClue(command) { declared.contains(command) shouldBe true }
         }
     }
 

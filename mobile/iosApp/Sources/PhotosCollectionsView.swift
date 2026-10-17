@@ -2,6 +2,8 @@ import Foundation
 import SwiftProtobuf
 import SwiftUI
 
+import CentraidShared
+
 /// COLLECTIONS, IN SWIFTUI (#1029, the photos port).
 ///
 /// The hub: v0's `PHOTOS_MORE_FOOT` says "The rest of Photos is in
@@ -11,10 +13,10 @@ import SwiftUI
 /// **LAID OUT AS THE SYSTEM PHOTOS APP LAYS OUT ITS COLLECTIONS TAB** (iOS 26):
 /// a run of titled sections, each foldable — Memories as one wide card, Pinned
 /// as a strip of square covers with the name printed on the photograph, Albums
-/// as covers with the name and count beneath, People, and Utilities as a
-/// grouped list. A member who knows that screen knows this one. What is NOT
-/// borrowed is the system's own look: the type, colour and icons are the
-/// emitted tables' (DESIGN.md), because a second icon set is a second product.
+/// as covers with the name and count beneath, and Utilities as a grouped list.
+/// A member who knows that screen knows this one. What is NOT borrowed is the
+/// system's own look: the type, colour and icons are the emitted tables'
+/// (DESIGN.md), because a second icon set is a second product.
 ///
 /// **The wire decides nothing new.** Which section a row lands in is read off
 /// what the row already is — `member_owned` for albums, the mode for a standing
@@ -88,9 +90,6 @@ struct PhotosCollectionsView: View {
                     section(.pinned) { pinnedStrip(layout.pinned) }
                 }
                 section(.albums) { albums(layout.albums) }
-                if let people = layout.people {
-                    section(.people) { PeopleCard(door: people, onOpen: onOpenDoor) }
-                }
                 if !layout.utilities.isEmpty {
                     section(.utilities) {
                         UtilitiesGroup(
@@ -113,12 +112,12 @@ struct PhotosCollectionsView: View {
         .sheet(isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {
             ConfirmSheet(
                 Centraid_Screen_V1_Confirm.with {
-                    $0.title = PhotosWords.photosDeleteAlbumTitle
-                    $0.body = PhotosWords.photosDeleteAlbumBody
-                    $0.confirmLabel = PhotosWords.photosDeleteAlbum
+                    $0.title = PhotosCopy.shared.PHOTOS_DELETE_ALBUM_TITLE
+                    $0.body = PhotosCopy.shared.PHOTOS_DELETE_ALBUM_BODY
+                    $0.confirmLabel = PhotosCopy.shared.PHOTOS_DELETE_ALBUM
                     $0.destructive = true
                 },
-                cancelLabel: PhotosWords.photosKeepIt,
+                cancelLabel: PhotosCopy.shared.PHOTOS_KEEP_IT,
                 onConfirm: {
                     if let row = deleting, case let .album(album) = row.shelf.of {
                         send(PhotosCollectionsStateView.deleteEvent(album.collectionID))
@@ -171,7 +170,7 @@ struct PhotosCollectionsView: View {
                 Spacer(minLength: 8)
                 KitIconKey(
                     iconKey: "ChevronDown",
-                    label: isFolded ? "Show \(section.title)" : "Hide \(section.title)",
+                    label: copyFill(isFolded ? PhotosCopy.shared.PHOTOS_SECTION_SHOW : PhotosCopy.shared.PHOTOS_SECTION_HIDE, "title", section.title),
                     framed: true
                 ) {
                     withAnimation(.easeInOut(duration: CentraidGeometry.durationOne / 1000)) {
@@ -211,9 +210,9 @@ struct PhotosCollectionsView: View {
         if rows.isEmpty {
             EmptySectionCard(
                 iconKey: "album",
-                title: PhotosWords.photosCollectionsNoAlbums,
-                caption: PhotosWords.photosCollectionsNoAlbumsCaption,
-                verb: "Create",
+                title: PhotosCopy.shared.PHOTOS_COLLECTIONS_NO_ALBUMS,
+                caption: PhotosCopy.shared.PHOTOS_COLLECTIONS_NO_ALBUMS_CAPTION,
+                verb: PhotosCopy.shared.PHOTOS_CREATE,
                 onVerb: { send(state.sheetEvent(.newAlbum)) }
             )
         } else {
@@ -242,21 +241,20 @@ private let pinnedSide: CGFloat = 110
 /// An album cover's side: larger than Pinned's, because an album is read by
 /// its picture and a pinned shelf by its name.
 private let albumSide: CGFloat = 150
-/// The Memories and People cards' height — the system's Memories card.
+/// The Memories card's height — the system's Memories card.
 private let wideCardHeight: CGFloat = 150
 
 // MARK: - which row goes in which section
 
 enum CollectionsSection: Hashable, CaseIterable {
-    case memories, pinned, albums, people, utilities
+    case memories, pinned, albums, utilities
 
     var title: String {
         switch self {
-        case .memories: return "Memories"
-        case .pinned: return "Pinned"
-        case .albums: return "Albums"
-        case .people: return "People"
-        case .utilities: return "Utilities"
+        case .memories: return PhotosCopy.shared.PHOTOS_MEMORIES
+        case .pinned: return PhotosCopy.shared.PHOTOS_PINNED
+        case .albums: return PhotosCopy.shared.PHOTOS_ALBUMS
+        case .utilities: return PhotosCopy.shared.PHOTOS_UTILITIES
         }
     }
 }
@@ -275,7 +273,6 @@ enum CollectionsItem {
 /// Deleted. Anything else a standing shelf turns out to be lands in Pinned.
 struct CollectionsLayout {
     var memories: Centraid_Screen_V1_CollectionsDoor?
-    var people: Centraid_Screen_V1_CollectionsDoor?
     var pinned: [CollectionsItem] = []
     var albums: [Centraid_Screen_V1_ShelfRow] = []
     var utilities: [CollectionsItem] = []
@@ -286,7 +283,6 @@ struct CollectionsLayout {
         for door in doors {
             switch door.kind {
             case .memories: memories = door
-            case .people: people = door
             case .places: places = door
             case .duplicates: duplicates = door
             case .unspecified, .UNRECOGNIZED: break
@@ -332,8 +328,18 @@ struct CollectionsLayout {
 /// to say is a door that has not been counted.
 private enum Counted {
     static func shelf(_ row: Centraid_Screen_V1_ShelfRow) -> (shown: String, spoken: String) {
-        if row.itemCountCapped { return ("\(row.itemCount)+", "at least \(row.itemCount)") }
-        return row.itemCount == 0 ? ("Empty", "empty") : ("\(row.itemCount)", "\(row.itemCount)")
+        if row.itemCount == 0 && !row.itemCountCapped {
+            return (PhotosCopy.shared.PHOTOS_COUNT_EMPTY, PhotosCopy.shared.PHOTOS_COUNT_EMPTY)
+        }
+        return bare(Int64(row.itemCount), capped: row.itemCountCapped)
+    }
+
+    /// A count with no noun: `12+` drawn, `at least 12` spoken.
+    private static func bare(_ count: Int64, capped: Bool) -> (shown: String, spoken: String) {
+        (
+            CappedCount.shared.shown(count: count, capped: capped, one: "", many: ""),
+            CappedCount.shared.spoken(count: count, capped: capped, one: "", many: "")
+        )
     }
 
     /// `needs_attention` OUTRANKS the count: a member deciding whether to open
@@ -341,19 +347,19 @@ private enum Counted {
     /// clusters exist.
     static func door(_ door: Centraid_Screen_V1_CollectionsDoor) -> (shown: String, spoken: String, urgent: Bool)? {
         if door.needsAttention > 0 {
-            return ("\(door.needsAttention) waiting", "\(door.needsAttention) waiting", true)
+            let waiting = copyFill(PhotosCopy.shared.PHOTOS_WAITING, "count", "\(door.needsAttention)")
+            return (waiting, waiting, true)
         }
         guard door.count > 0 else { return nil }
-        return door.countCapped
-            ? ("\(door.count)+", "at least \(door.count)", false)
-            : ("\(door.count)", "\(door.count)", false)
+        let counted = bare(Int64(door.count), capped: door.countCapped)
+        return (counted.shown, counted.spoken, false)
     }
 
     /// AN ALBUM WITH NO NAME IS STILL A CARD, and it says so. Dropping it would
     /// leave a member with an album they made and cannot find; a blank caption
     /// would leave them with one they cannot recognise.
     static func title(_ row: Centraid_Screen_V1_ShelfRow) -> String {
-        row.title.isEmpty ? PhotosWords.photosUntitledAlbum : row.title
+        row.title.isEmpty ? PhotosCopy.shared.PHOTOS_UNTITLED_ALBUM : row.title
     }
 }
 
@@ -498,17 +504,17 @@ private struct AlbumCard: View {
         // THE SYSTEM'S LONG-PRESS ON AN ALBUM. Only an album: a standing shelf
         // is not `member_owned`, and never reaches this card.
         .contextMenu {
-            Button(PhotosWords.photosDeleteAlbum, role: .destructive, action: onDelete)
+            Button(PhotosCopy.shared.PHOTOS_DELETE_ALBUM, role: .destructive, action: onDelete)
                 .accessibilityIdentifier("photos.collections.delete-album")
         }
         .accessibilityLabel("\(Counted.title(row)), \(Counted.shelf(row).spoken)")
         .accessibilityIdentifier("photos.collections.shelf")
-        .accessibilityAction(named: PhotosWords.photosDeleteAlbum, onDelete)
+        .accessibilityAction(named: PhotosCopy.shared.PHOTOS_DELETE_ALBUM, onDelete)
     }
 }
 
-/// THE WIDE CARD both Memories and People are drawn on: an icon at the top,
-/// the sentence at the foot, the whole card a door.
+/// THE WIDE CARD Memories is drawn on: an icon at the top, the sentence at the
+/// foot, the whole card a door.
 private struct WideCard: View {
     let iconKey: String
     let title: String
@@ -560,31 +566,11 @@ private struct MemoriesCard: View {
         let count = Counted.door(door)
         WideCard(
             iconKey: "Sparkle",
-            title: count.map { "\($0.shown) memories" } ?? PhotosWords.photosCollectionsNoMemories,
-            caption: count == nil ? PhotosWords.photosCollectionsNoMemoriesCaption : nil,
+            title: count.map { copyFill(PhotosCopy.shared.PHOTOS_MEMORIES_COUNT, "count", $0.shown) } ?? PhotosCopy.shared.PHOTOS_COLLECTIONS_NO_MEMORIES,
+            caption: count == nil ? PhotosCopy.shared.PHOTOS_COLLECTIONS_NO_MEMORIES_CAPTION : nil,
             urgent: count?.urgent ?? false,
-            spoken: count.map { "Memories, \($0.spoken)" } ?? "Memories, none yet",
+            spoken: count.map { copyFill(PhotosCopy.shared.PHOTOS_MEMORIES_SPOKEN, "count", $0.spoken) } ?? PhotosCopy.shared.PHOTOS_MEMORIES_SPOKEN_NONE,
             action: { onOpen(.memories) }
-        )
-    }
-}
-
-/// PEOPLE, AS A WIDE CARD. The system draws a grid of faces here; this state
-/// carries a count and no faces, so the card names the door and what waits
-/// behind it rather than drawing circles it has nothing to fill with.
-private struct PeopleCard: View {
-    let door: Centraid_Screen_V1_CollectionsDoor
-    let onOpen: (Centraid_Screen_V1_CollectionsDoor.Kind) -> Void
-
-    var body: some View {
-        let count = Counted.door(door)
-        WideCard(
-            iconKey: "Users",
-            title: count.map { $0.urgent ? $0.shown : "\($0.shown) people" } ?? "People",
-            caption: PhotosWords.photosCollectionsPeopleCaption,
-            urgent: count?.urgent ?? false,
-            spoken: count.map { "People, \($0.spoken)" } ?? "People",
-            action: { onOpen(.people) }
         )
     }
 }
@@ -728,14 +714,14 @@ private struct NewAlbumSheet: View {
 
     var body: some View {
         SheetRoom(
-            title: PhotosWords.photosNewAlbum,
+            title: PhotosCopy.shared.PHOTOS_NEW_ALBUM,
             primary: SheetPrimary(
-                label: "Create",
+                label: PhotosCopy.shared.PHOTOS_CREATE,
                 enabled: !trimmed.isEmpty,
                 identifier: "photos.collections.create-album"
             ) { send(PhotosCollectionsStateView.createEvent(name)) }
         ) {
-            TextField(PhotosWords.photosAlbumName, text: $name)
+            TextField(PhotosCopy.shared.PHOTOS_ALBUM_NAME, text: $name)
                 .centraidType("body")
                 .focused($focused)
                 .submitLabel(.done)
@@ -851,7 +837,6 @@ struct PhotosCollectionsStateView {
                 case .videos: return "Video"
                 case .unspecified, .UNRECOGNIZED: return "album"
                 }
-            case .person: return "person"
             case .none: return "album"
             }
         case .album, .none: return "album"
@@ -862,7 +847,6 @@ struct PhotosCollectionsStateView {
 
     static func iconKey(for kind: Centraid_Screen_V1_CollectionsDoor.Kind) -> String {
         switch kind {
-        case .people: return "Users"
         case .places: return "place"
         case .memories: return "Sparkle"
         case .duplicates: return "dupe"
@@ -872,15 +856,14 @@ struct PhotosCollectionsStateView {
 
     /// A DOOR'S NAME IS COPY AND RIDES THE SHELL, not the wire.
     ///
-    /// `CollectionsDoor` carries a `kind` and no title, deliberately: the four
-    /// are fixed and a string on the row would be four strings to keep in step
-    /// with Compose's four. The kind is the fact; this is the word.
+    /// `CollectionsDoor` carries a `kind` and no title, deliberately: the three
+    /// are fixed and a string on the row would be three strings to keep in step
+    /// with Compose's three. The kind is the fact; this is the word.
     static func title(for kind: Centraid_Screen_V1_CollectionsDoor.Kind) -> String {
         switch kind {
-        case .people: return "People"
-        case .places: return "Places"
-        case .memories: return "Memories"
-        case .duplicates: return "Duplicates"
+        case .places: return PhotosCopy.shared.PHOTOS_PLACES
+        case .memories: return PhotosCopy.shared.PHOTOS_MEMORIES
+        case .duplicates: return PhotosCopy.shared.PHOTOS_DUPLICATES
         case .unspecified, .UNRECOGNIZED: return ""
         }
     }

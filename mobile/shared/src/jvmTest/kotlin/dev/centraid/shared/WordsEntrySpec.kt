@@ -84,6 +84,35 @@ class WordsEntrySpec : StringSpec({
         rekey.primary_label shouldBe WordsCopy.REKEY_PRIMARY
     }
 
+    "the pairing code is scanned as well as pasted, wherever its field is drawn" {
+        fun opened(purpose: WordsEntryState.Purpose, camera: Boolean): Entry = reduce(
+            WordsEntryMachine.initial(),
+            EntryInput.View(WordsEntryEvent(opened = WordsEntryEvent.Opened(purpose = purpose, camera = camera))),
+        ).model
+
+        val withCamera = opened(WordsEntryState.Purpose.PURPOSE_RESTORE, camera = true)
+        withCamera.state.scan_label shouldBe WordsCopy.PAIR_SCAN
+        withCamera.state.scan_camera shouldBe true
+        withCamera.state.photo_label shouldBe WordsCopy.PAIR_PHOTO
+
+        // NO CAMERA: the same control opens the photo picker.
+        val noCamera = opened(WordsEntryState.Purpose.PURPOSE_RESTORE_HELD, camera = false)
+        noCamera.state.scan_label shouldBe WordsCopy.PAIR_SCAN
+        noCamera.state.scan_camera shouldBe false
+        noCamera.state.photo_label shouldBe ""
+
+        // A re-key names no gateway, so there is nothing to scan.
+        opened(WordsEntryState.Purpose.PURPOSE_REKEY, camera = true).state.scan_label shouldBe ""
+
+        // A scan fills the field as a paste would, and waits for the primary.
+        val unread = reduce(withCamera, EntryInput.View(WordsEntryEvent(unread = WordsEntryEvent.PhotoUnread()))).model
+        unread.state.notice shouldBe WordsCopy.PAIR_PHOTO_UNREAD
+        val scanned = reduce(unread, EntryInput.View(WordsEntryEvent(scanned = WordsEntryEvent.Scanned(payload = code))))
+        scanned.effects.shouldBeEmpty()
+        scanned.model.state.endpoint shouldBe code
+        scanned.model.state.notice shouldBe ""
+    }
+
     "typing asks the core, and a space runs on into the next cells" {
         val step = reduce(open(WordsEntryState.Purpose.PURPOSE_RESTORE), typed(3, "abandon ability "))
         val check = step.effects.single() as EntryEffect.Check

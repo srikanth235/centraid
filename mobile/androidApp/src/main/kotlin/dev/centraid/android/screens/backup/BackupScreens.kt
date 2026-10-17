@@ -54,7 +54,7 @@ import centraid.screen.v1.BackupLine
 import centraid.screen.v1.BackupScreenEvent
 import centraid.screen.v1.BackupScreenState
 import dev.centraid.android.kit.InkButton
-import dev.centraid.android.kit.QuietButton
+import dev.centraid.android.kit.OutlineButton
 import dev.centraid.android.screens.words.WordsHead
 import dev.centraid.android.screens.words.WordsPage
 import dev.centraid.android.theme.centraidColor
@@ -126,6 +126,8 @@ internal data class BackupScreenModel(
     val keyShowLabel: String = "",
     val keySyncLabel: String = "",
     val keySynced: Boolean = false,
+    /** The page's one Ink button, named by the machine; every other button is the Outline button. */
+    val ink: BackupScreenState.InkAction = BackupScreenState.InkAction.INK_ACTION_NONE,
 ) {
     internal data class Destination(
         val id: String,
@@ -161,6 +163,7 @@ internal data class BackupScreenModel(
             keyShowLabel = state.key_show_label,
             keySyncLabel = state.key_sync_label,
             keySynced = state.key_synced,
+            ink = state.ink_action,
         )
     }
 }
@@ -390,23 +393,38 @@ private fun BackupScreen(
         if (batteryHeld) {
             Sentence(model.batterySentence)
             if (model.batteryLabel.isNotEmpty()) {
-                QuietButton(label = model.batteryLabel, testTag = "backup-battery", onPress = onBattery)
+                OutlineButton(label = model.batteryLabel, testTag = "backup-battery", onPress = onBattery)
             }
         }
+        // ONE INK BUTTON AT A TIME, and the machine names it (`ink_action`); a
+        // verb that is not the page's one thing to do is the outline.
         if (!paired && model.addLabel.isNotEmpty()) {
-            InkButton(label = model.addLabel, testTag = "backup-add-destination", onPress = onAddDestination)
+            if (model.ink == BackupScreenState.InkAction.INK_ACTION_ADD_DESTINATION) {
+                InkButton(label = model.addLabel, testTag = "backup-add-destination", onPress = onAddDestination)
+            } else {
+                OutlineButton(label = model.addLabel, testTag = "backup-add-destination", onPress = onAddDestination)
+            }
         }
         // BACK UP NOW, only once there is somewhere to back up to (the machine
         // draws no label before). Pressable when the machine says so; while a
         // run goes, its progress sentence stands beside it.
         if (model.backUpNowLabel.isNotEmpty()) {
             val enabled = model.backUpNowEnabled
-            InkButton(
-                label = model.backUpNowLabel,
-                testTag = "backup-now",
-                enabled = enabled,
-                onPress = onBackUpNow,
-            )
+            if (model.ink == BackupScreenState.InkAction.INK_ACTION_BACK_UP_NOW) {
+                InkButton(
+                    label = model.backUpNowLabel,
+                    testTag = "backup-now",
+                    enabled = enabled,
+                    onPress = onBackUpNow,
+                )
+            } else {
+                OutlineButton(
+                    label = model.backUpNowLabel,
+                    testTag = "backup-now",
+                    enabled = enabled,
+                    onPress = onBackUpNow,
+                )
+            }
         }
         if (model.progress.isNotEmpty()) {
             Row(
@@ -487,9 +505,10 @@ private fun BackupScreen(
 /**
  * WHERE THE RECOVERY KEY IS, and what can be done about it (iOS
  * `BackupView.recoveryKey`). A warning carries the attention mark Home's line
- * uses and makes "Show recovery key" the primary; otherwise it is one quiet
- * sentence. Moving the key into or out of the keychain is a plain link: a
- * choice made once, not a thing to do.
+ * uses, and the machine makes "Show recovery key" the page's Ink button
+ * (`ink_action`); otherwise it is one quiet sentence and an outline button.
+ * Moving the key into or out of the keychain is a plain link: a choice made
+ * once, not a thing to do.
  */
 @Composable
 private fun RecoveryKey(model: BackupScreenModel, onEvent: (BackupScreenEvent) -> Unit, onShowKey: () -> Unit) {
@@ -503,13 +522,14 @@ private fun RecoveryKey(model: BackupScreenModel, onEvent: (BackupScreenEvent) -
                 Box(Modifier.width(2.dp).fillMaxHeight().background(centraidColor("attention")))
                 Text(model.keyLine, style = centraidType("body"), color = centraidColor("text"))
             }
-            if (model.keyShowLabel.isNotEmpty()) {
-                InkButton(label = model.keyShowLabel, testTag = "backup-show-key", onPress = onShowKey)
-            }
         } else {
             Sentence(model.keyLine, "backup-key-line")
-            if (model.keyShowLabel.isNotEmpty()) {
-                QuietButton(label = model.keyShowLabel, testTag = "backup-show-key", onPress = onShowKey)
+        }
+        if (model.keyShowLabel.isNotEmpty()) {
+            if (model.ink == BackupScreenState.InkAction.INK_ACTION_SHOW_KEY) {
+                InkButton(label = model.keyShowLabel, testTag = "backup-show-key", onPress = onShowKey)
+            } else {
+                OutlineButton(label = model.keyShowLabel, testTag = "backup-show-key", onPress = onShowKey)
             }
         }
         if (model.keySyncLabel.isNotEmpty()) {
@@ -609,7 +629,7 @@ private fun Destinations(
                 // forgets this phone's pairing and nothing the gateway holds,
                 // and pairing again undoes it.
                 if (model.forgetLabel.isNotEmpty()) {
-                    QuietButton(
+                    OutlineButton(
                         label = model.forgetLabel,
                         testTag = "backup-forget-" + row.id,
                         modifier = Modifier.semantics { contentDescription = model.forgetLabel + " " + row.label },
@@ -624,7 +644,7 @@ private fun Destinations(
             )
         }
         if (model.addLabel.isNotEmpty()) {
-            QuietButton(
+            OutlineButton(
                 label = model.addLabel,
                 testTag = "backup-add-destination",
                 modifier = Modifier.padding(top = 12.dp),

@@ -49,6 +49,7 @@ use crate::commands::core::{
     minted_id_is_free, purge_at, record_body_revision, revision_chain_of, set_representation,
 };
 use crate::commands::media::release_content_if_unreferenced;
+use crate::commands::wikilinks;
 use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency, Risk};
 use crate::error::{Result, VaultError};
 
@@ -145,8 +146,8 @@ fn content_item_for(ctx: &CommandCtx<'_, '_>, body_text: &str, format: &str) -> 
     ctx.connection().execute(
         "INSERT INTO core_content_item
            (content_id, content_uri, content_hash, byte_size, language, creator_party_id,
-            origin_device_id, deleted_at, purge_at, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, NULL, ?5, NULL, NULL, NULL, ?6, ?6)",
+            deleted_at, purge_at, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, NULL, ?5, NULL, NULL, ?6, ?6)",
         rusqlite::params![
             content_id,
             format!(
@@ -389,6 +390,13 @@ fn create_note() -> CommandDefinition {
             if let Some(notebook_id) = notebook_id {
                 place_note(ctx, &note_id, &notebook_id)?;
             }
+            // A FIRST BODY MAY ALREADY NAME THINGS: a member who picks from the
+            // powerbox before the first autosave lands makes the note with the
+            // wikilink in it. A new note has no edges to end, so a body with no
+            // `[[` is not even read for them.
+            if body_text.contains("[[") {
+                wikilinks::compile(ctx, &note_id, &body_text)?;
+            }
             Ok(serde_json::json!({
                 "note_id": note_id,
                 "body_content_id": content_id,
@@ -506,6 +514,14 @@ fn edit_note() -> CommandDefinition {
                     sets.join(", ")
                 ))?
                 .execute(rusqlite::params_from_iter(binds))?;
+            // THE TEXT IS THE SOURCE, THE EDGES ITS COMPILATION (Q-1047-9): a
+            // changed body recomputes the note's `[[wikilink]]` edges in the
+            // same transaction, so a backlink is a read of the vault and never
+            // a scan of bodies. A title-only edit changes no words and compiles
+            // nothing.
+            if let Some(body_text) = ctx.optional_str("body_text") {
+                wikilinks::compile(ctx, &note_id, body_text)?;
+            }
             Ok(match minted {
                 Some(content_id) => serde_json::json!({
                     "note_id": note_id, "body_content_id": content_id
@@ -989,6 +1005,18 @@ fn restore_note_version() -> CommandDefinition {
             // changes WHICH bytes the note reads, never HOW it reads them — so
             // the note's own format is what the new head is read as.
             set_note_representation(ctx, &note_id, &content_id, &format)?;
+            // A RESTORE CHANGES THE WORDS, SO IT RECOMPILES THEM: the head is an
+            // older body whose wikilinks are not the ones the edges now hold. An
+            // absent decoded text means no words to read, and leaves the edges.
+            let restored: Option<String> =
+                rusqlite::OptionalExtension::optional(ctx.connection().query_row(
+                    "SELECT body_text FROM core_content_text WHERE content_id = ?1",
+                    [&content_id],
+                    |row| row.get(0),
+                ))?;
+            if let Some(body_text) = restored {
+                wikilinks::compile(ctx, &note_id, &body_text)?;
+            }
             Ok(serde_json::json!({ "note_id": note_id, "content_id": content_id }))
         },
         sealed_input: &[],

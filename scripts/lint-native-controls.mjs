@@ -11,7 +11,7 @@
 //       never a confirmation dialog."
 //   native-material-button (Android)
 //       The control table: an ink button is `InkButton`, an outline button is
-//       `QuietButton`, a link is `KitLink`. A Material `Button`, `TextButton`,
+//       `OutlineButton`, a link is `KitLink`. A Material `Button`, `TextButton`,
 //       `OutlinedButton` or `FilledTonalButton` is a hand-rolled second set.
 //   native-icon-button (Android)
 //       "Icon key": `IconKey` is the 44 target with the 18 glyph; Material's
@@ -246,7 +246,7 @@ function main() {
     }
     console.error(
       '\nDESIGN.md "The controls (mobile)": draw the control from the kit\n' +
-        "(InkButton/QuietButton/KitLink/IconKey/ConfirmSheet/ReadStateView, a\n" +
+        "(InkButton/OutlineButton/KitLink/IconKey/ConfirmSheet/ReadStateView, a\n" +
         "token radius, a leaf disabled ink). Do not raise the budget; see the\n" +
         "header of scripts/lint-native-controls.mjs.\n"
     );

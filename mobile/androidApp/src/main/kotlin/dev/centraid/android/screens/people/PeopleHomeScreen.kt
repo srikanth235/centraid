@@ -34,7 +34,6 @@ import centraid.screen.v1.PeopleHomeState
 import centraid.screen.v1.PeopleRosterData
 import centraid.screen.v1.PeopleRow
 import centraid.screen.v1.PeopleTouchData
-import centraid.screen.v1.WriteState
 import dev.centraid.android.kit.AppBand
 import dev.centraid.android.kit.AppBandTab
 import dev.centraid.android.kit.AppPlace
@@ -42,7 +41,7 @@ import dev.centraid.android.kit.CentraidRow
 import dev.centraid.android.kit.EmptyStateView
 import dev.centraid.android.kit.IconKey
 import dev.centraid.android.kit.KitGeometry
-import dev.centraid.android.kit.QuietButton
+import dev.centraid.android.kit.OutlineButton
 import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.OptionSheet
 import dev.centraid.android.kit.RoomAction
@@ -79,7 +78,7 @@ public fun PeopleHomeScreen(
     val search = state.search
     val write = state.write
     val status = when {
-        write?.phase == WriteState.Phase.PHASE_REFUSED -> write.failure?.sentence.orEmpty()
+        !write?.refusal.isNullOrEmpty() -> write?.refusal.orEmpty()
         state.status.isNotEmpty() -> state.status
         else -> state.data_?.roster?.status_line ?: state.data_?.touch?.status_line ?: ""
     }
@@ -259,7 +258,7 @@ private fun LazyListScope.touch(touch: PeopleTouchData, onEvent: (PeopleHomeEven
             onTap = { onEvent(PeopleHomeEvent(person = PeopleHomeEvent.PersonPicked(card.party_id, card.name))) },
         ) {
             if (card.action_label.isNotEmpty()) {
-                QuietButton(
+                OutlineButton(
                     label = card.action_label,
                     testTag = "people-log-${card.party_id}",
                     modifier = Modifier.padding(start = 8.dp),

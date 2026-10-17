@@ -5,9 +5,7 @@ import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
 
-#if canImport(CentraidShared)
 import CentraidShared
-#endif
 
 // PAIR WITH THE LAPTOP, DRAWN (#1047 E5) — `pair.laptop` over
 // `PairLaptopBridge`, opened from the More sheet's pairing row.
@@ -48,7 +46,7 @@ struct PairLaptopView: View {
                 // SCAN FIRST, ON EVERY PHONE: the camera, or the photo picker
                 // where there is none (`scan_camera`).
                 if !state.scanLabel.isEmpty {
-                    KitOutlineButton(label: state.scanLabel, fullWidth: true) {
+                    KitOutlineButton(label: state.scanLabel) {
                         send(Self.event { $0.scan = .init() })
                         if state.scanCamera { scanning = true } else { choosingPhoto = true }
                     }
@@ -98,26 +96,28 @@ struct PairLaptopView: View {
 
                 WordsNotice(notice: state.notice)
 
-                if !state.wordsLabel.isEmpty {
-                    KitOutlineButton(label: state.wordsLabel) {
-                        send(Self.event { $0.words = .init() })
-                    }
-                    .accessibilityIdentifier("pair-words")
-                }
-
                 if !state.progress.isEmpty {
                     KitSpinner(label: state.progress)
                         .accessibilityIdentifier("pair-progress")
                 }
 
-                WordsControls(
-                    primary: state.primaryLabel,
-                    primaryEnabled: state.primaryEnabled,
-                    secondary: state.secondaryLabel,
-                    prefix: "pair",
-                    onPrimary: { send(Self.event { $0.primary = .init() }) },
-                    onSecondary: { send(Self.event { $0.secondary = .init() }) }
-                )
+                // THE WORDS DOOR AND THE PRIMARY ARE ALTERNATIVES: one stack.
+                KitChoiceStack {
+                    WordsControls(
+                        primary: state.primaryLabel,
+                        primaryEnabled: state.primaryEnabled,
+                        secondary: state.secondaryLabel,
+                        prefix: "pair",
+                        onPrimary: { send(Self.event { $0.primary = .init() }) },
+                        onSecondary: { send(Self.event { $0.secondary = .init() }) }
+                    )
+                    if !state.wordsLabel.isEmpty {
+                        KitOutlineButton(label: state.wordsLabel) {
+                            send(Self.event { $0.words = .init() })
+                        }
+                        .accessibilityIdentifier("pair-words")
+                    }
+                }
             }
             .padding(.horizontal, CentraidGeometry.pageMargin)
             .padding(.vertical, 24)

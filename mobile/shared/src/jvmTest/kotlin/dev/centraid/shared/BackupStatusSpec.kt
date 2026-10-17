@@ -111,6 +111,54 @@ class BackupStatusSpec : StringSpec({
             .tone shouldBe BackupLine.Tone.TONE_QUIET
     }
 
+    "a gateway that refused for room, and one that no longer knows this phone, have rows of their own (#1080, F1 and F2)" {
+        val line = BackupLines.line(
+            reading(
+                confirmed = 1_200,
+                waiting = mapOf(WaitReason.REFUSED to 25L, WaitReason.PAIR_AGAIN to 15L),
+            ),
+            frozen = false,
+            nowMs = now,
+        )
+        line.waiting.map { it.reason } shouldBe listOf(
+            BackupWaitingRow.Reason.REASON_REFUSED,
+            BackupWaitingRow.Reason.REASON_PAIR_AGAIN,
+        )
+        line.waiting.map { it.sentence } shouldBe listOf(
+            "25 waiting. Your backup device is full or refusing.",
+            "15 waiting. Pair your backup device again.",
+        )
+        // THE SCREEN'S NUMBERS ARE THE CORE'S (`WAIT_REASON_REFUSED = 9`,
+        // `WAIT_REASON_PAIR_AGAIN = 10`), so a shell reading either sees one value.
+        BackupWaitingRow.Reason.REASON_REFUSED.value shouldBe 9
+        BackupWaitingRow.Reason.REASON_PAIR_AGAIN.value shouldBe 10
+    }
+
+    "every gateway refusing this phone's token reads pair again, never all backed up (#1080, F2)" {
+        // THE LEDGER STILL SAYS EVERYTHING IS ACKNOWLEDGED: nothing waits, so
+        // no row can say otherwise — the mark on the gateway does.
+        val refused = gateway().copy(pairAgain = true)
+        val line = BackupLines.line(reading(destinations = listOf(refused)), frozen = false, nowMs = now)
+        line.pair_again shouldBe true
+        line.sentence shouldBe SharedCopy.BACKUP_LINE_PAIR_AGAIN
+        line.status shouldBe SharedCopy.BACKUP_STATUS_PAIR_AGAIN
+        line.sentence shouldNotStartWith "Backed up"
+        line.status shouldNotStartWith "Backed up"
+        line.tone shouldBe BackupLine.Tone.TONE_ATTENTION
+        line.detail shouldBe "All 1,240 photos and files"
+
+        // ONE OF TWO REFUSING: the other carries the backup, so the line is
+        // the ordinary one and only its tone earns a look.
+        val other = gateway().copy(gatewayId = "gw-2", label = "NAS")
+        val half = BackupLines.line(reading(destinations = listOf(refused, other)), frozen = false, nowMs = now)
+        half.pair_again shouldBe false
+        half.sentence shouldBe "Backed up 2 minutes ago."
+        half.tone shouldBe BackupLine.Tone.TONE_ATTENTION
+
+        // A MOVED VAULT STILL SAYS SO ABOVE EVERYTHING.
+        BackupLines.line(reading(destinations = listOf(refused)), frozen = true, nowMs = now).frozen shouldBe true
+    }
+
     "everything acknowledged is backed up, quietly, at the gateway's time" {
         val line = BackupLines.line(reading(), frozen = false, nowMs = now)
         line.sentence shouldBe "Backed up 2 minutes ago."

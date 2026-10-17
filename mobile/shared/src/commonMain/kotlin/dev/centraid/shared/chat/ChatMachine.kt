@@ -137,6 +137,16 @@ public object ChatMachine {
     /** The most suggestions the thread's empty state offers. */
     public const val SUGGESTIONS: Int = 3
 
+    /**
+     * The apps a chat can be scoped to, in the order the composer's menu lists
+     * them: the ones the assistant reads, Locker never among them. The core
+     * accepts exactly these (`CARD_APPS` in `crates/vault/src/chat.rs` and
+     * `scope_app`'s enum in `commands/chat.rs`); `ChatScopeSpec` ties the three
+     * together, and the shells draw their menu from here.
+     */
+    public val SCOPABLE_APPS: List<String> =
+        listOf("agenda", "docs", "money", "notes", "people", "photos", "tasks")
+
     public fun reduce(chat: Chat, input: ChatInput): ChatStep = when (input) {
         is ChatInput.View -> view(chat, input.event)
         is ChatInput.Status -> status(chat, input.state)

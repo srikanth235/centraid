@@ -48,10 +48,7 @@ Run this motion:
    - [ ] In an album, selecting one photograph offers Make key photo; the viewer's `···` offers it only when the photograph was opened from an album.
    - [ ] The chosen cover appears on the album in the Add to album sheet. Collections' album tiles draw no cover, which is expected ([switcher walkthrough](switcher-walkthrough.md), step 9).
 
-9. **People, faces and memories.** Nothing in this tree detects faces or runs OCR ([switcher walkthrough](switcher-walkthrough.md), steps 6 and 11), so a library brought in from the camera roll has an empty review queue; run these on a vault that holds face rows. Verify:
-   - [ ] Skip moves a face to the back of the queue and writes nothing; "Keep unnamed" dismisses it; New person names one in a single step and the confirm follows.
-   - [ ] A confirmed person's photographs are browsable from their card.
-   - [ ] Forget a person (`media.forget_person`) and verify their regions leave the review queue and no photo still shows their name.
+9. **Memories.** Nothing in this tree runs OCR or computes memories ([switcher walkthrough](switcher-walkthrough.md), step 6). Verify:
    - [ ] An empty Memories shelf reads that Centraid has not looked yet, never that there are none; a trip memory draws its route from the member's own coordinates.
 
 10. **Check four known stuck-state classes**:

@@ -70,7 +70,7 @@ import centraid.screen.v1.PhotoEditorState
 import centraid.screen.v1.PhotoLightboxState
 import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.ConfirmSheet
-import dev.centraid.android.kit.QuietButton
+import dev.centraid.android.kit.OutlineButton
 import dev.centraid.android.kit.ScreenFailure
 import dev.centraid.android.kit.StageKey
 import dev.centraid.android.kit.StageSpinner
@@ -162,7 +162,7 @@ public fun PhotoEditorScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 ScreenFailure(sentence = failure.sentence, remedy = failure.remedy)
-                QuietButton(
+                OutlineButton(
                     label = PhotoEditorMachine.EDITOR_CANCEL,
                     testTag = "editor-failure-cancel",
                     ink = "onStage",
@@ -218,7 +218,7 @@ private fun Editor(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text(text = PhotoEditorMachine.EDITOR_TITLE, color = ink, style = centraidType("control"))
-            Text(text = editorMeta(source.captured_at, source.captured_utc_offset_minutes ?: 0), color = soft, style = centraidType("small"))
+            Text(text = PhotoEditorMachine.editorMeta(source.captured_at, source.captured_utc_offset_minutes ?: 0), color = soft, style = centraidType("small"))
         }
         BoxWithConstraints(
             modifier = Modifier.fillMaxWidth().weight(1f).padding(16.dp),
@@ -435,10 +435,10 @@ private fun EditBar(
         ) {
             // "CROP" IS ALWAYS SELECTED: it is the mode this editor is in, and
             // pressing it returns the crop to the whole frame (v0).
-            Tool("Crop", selected = true, enabled = editing, ink, soft, line) {
+            Tool(PhotosCopy.PHOTOS_EDIT_CROP, selected = true, enabled = editing, ink, soft, line) {
                 onEvent(ratioEvent(PhotoEditPlan.Ratio.RATIO_ORIGINAL, 0.0))
             }
-            Tool("Rotate 90°", selected = false, enabled = editing, ink, soft, line) {
+            Tool(PhotosCopy.PHOTOS_EDIT_ROTATE, selected = false, enabled = editing, ink, soft, line) {
                 onEvent(PhotoEditorEvent(rotate = PhotoEditorEvent.RotateRequested()))
             }
             Tool(state.straighten_label, selected = false, enabled = editing, ink, soft, line) {
@@ -478,7 +478,7 @@ private fun EditBar(
                     onEvent(ratioEvent(ratio, frameRatio))
                 }
             }
-            Tool("Reset", selected = false, enabled = editing && state.edited, ink, soft, line) {
+            Tool(PhotosCopy.PHOTOS_EDIT_RESET, selected = false, enabled = editing && state.edited, ink, soft, line) {
                 onEvent(PhotoEditorEvent(reset = PhotoEditorEvent.ResetRequested()))
             }
         }
@@ -600,7 +600,7 @@ internal fun PhotoEditButton(state: PhotoLightboxState, detail: PhotoDetail) {
     val enabled = refusal == null && open != null
     StageKey(
         iconKey = "Sliders",
-        label = "Edit",
+        label = PhotosCopy.PHOTOS_EDIT,
         onClick = { open?.invoke(detail.asset_id, state.neighbour_asset_ids) },
         enabled = enabled,
         // THE REFUSAL RIDES OUTSIDE THE KEY'S OWN SEMANTICS, which the key clears.
@@ -619,24 +619,6 @@ public val LocalPhotoEditOpener: androidx.compose.runtime.ProvidableCompositionL
 
 private fun ratioEvent(ratio: PhotoEditPlan.Ratio, frameRatio: Double): PhotoEditorEvent =
     PhotoEditorEvent(ratio = PhotoEditorEvent.RatioChosen(ratio = ratio, frame_ratio = frameRatio))
-
-/**
- * "from a photograph taken 30 July 2026" — v0's `editorMeta`, and "from a
- * photograph" when the row records no time. The day is the one the shutter
- * fired on, in the capture's own zone, so it names the day the Library and the
- * viewer file the photograph under; no offset is UTC, as there.
- */
-private fun editorMeta(capturedAt: String, offsetMinutes: Int): String {
-    if (capturedAt.length < 19) return PhotosCopy.PHOTOS_EDIT_FROM_UNDATED
-    val parsed = runCatching {
-        java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.US).apply {
-            timeZone = java.util.TimeZone.getTimeZone("UTC")
-        }.parse(capturedAt.substring(0, 19))
-    }.getOrNull() ?: return PhotosCopy.PHOTOS_EDIT_FROM_UNDATED
-    val zone = java.util.TimeZone.getTimeZone("UTC").apply { rawOffset = offsetMinutes * 60_000 }
-    return "from a photo taken " +
-        java.text.DateFormat.getDateInstance(java.text.DateFormat.LONG).apply { timeZone = zone }.format(parsed)
-}
 
 @Composable
 private fun radius(name: String): Int = LocalCentraidTokens.current.radii[name] ?: 0
@@ -667,7 +649,7 @@ internal object PhotoEditRenderer {
         BitmapFactory.decodeFile(path, bounds)
         if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
         var sample = 1
-        while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= PREVIEW_EDGE) sample *= 2
+        while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= PhotoEditorMachine.PREVIEW_EDGE) sample *= 2
         val bitmap = BitmapFactory.decodeFile(path, BitmapFactory.Options().apply { inSampleSize = sample })
             ?: return null
         return oriented(bitmap, path).asImageBitmap()
@@ -722,7 +704,7 @@ internal object PhotoEditRenderer {
             }
             val file = java.io.File(cacheDir, "edit-" + java.util.UUID.randomUUID() + ".jpg")
             file.outputStream().use { out ->
-                if (!cropped.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, out)) {
+                if (!cropped.compress(Bitmap.CompressFormat.JPEG, PhotoEditorMachine.JPEG_QUALITY_PERCENT, out)) {
                     return Rendered.Refused(COULD_NOT_DRAW)
                 }
             }
@@ -765,8 +747,6 @@ internal object PhotoEditRenderer {
         return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
     }
 
-    private const val PREVIEW_EDGE: Int = 2048
-    private const val JPEG_QUALITY: Int = 92
     private const val COULD_NOT_DRAW: String = PhotosCopy.PHOTOS_EDIT_CANNOT_DRAW
 }
 

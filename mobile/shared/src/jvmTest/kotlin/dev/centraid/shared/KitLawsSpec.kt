@@ -381,6 +381,29 @@ class KitLawsSpec : StringSpec({
         ).state
         refused.phase shouldBe WriteState.Phase.PHASE_REFUSED
         refused.failure.shouldNotBeNull().sentence shouldBe "No."
+        // THE SENTENCE A SHELL DRAWS IS SAID ONCE, HERE: refused is its words, a
+        // silent refusal is nothing to draw, and anything else is empty.
+        refused.refusal shouldBe "No."
+        WriteLaw.settled(
+            lens,
+            sent.state,
+            WriteLaw.settledOf(CommandStatus.COMMAND_STATUS_DENIED, "", "k1"),
+        ).state.refusal shouldBe ""
+        sent.state.refusal shouldBe ""
+        WriteLaw.settled(lens, refused, WriteSettled(invoke_key = "k1", committed = true)).state.refusal shouldBe ""
+        // A NEW ATTEMPT CLEARS THE OLD SENTENCE.
+        WriteLaw.submit(lens, refused, "tasks.complete_task", "{}", "k2").state.refusal shouldBe ""
+        // AND "REFUSED" IS SAID ONCE TOO — a silent refusal is still one, so the
+        // sentence cannot say it alone; nothing else is.
+        refused.refused shouldBe true
+        WriteLaw.settled(
+            lens,
+            sent.state,
+            WriteLaw.settledOf(CommandStatus.COMMAND_STATUS_DENIED, "", "k1"),
+        ).state.refused shouldBe true
+        sent.state.refused shouldBe false
+        WriteLaw.settled(lens, refused, WriteSettled(invoke_key = "k1", committed = true)).state.refused shouldBe false
+        WriteLaw.submit(lens, refused, "tasks.complete_task", "{}", "k2").state.refused shouldBe false
     }
 
     // --- Trash ------------------------------------------------------------

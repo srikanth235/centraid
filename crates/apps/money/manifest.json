@@ -124,8 +124,7 @@
             "type": "string"
           }
         }
-      },
-      "writes": ["core.account", "money.account"]
+      }
     },
     {
       "name": "edit-account",
@@ -175,8 +174,7 @@
             "type": "string"
           }
         }
-      },
-      "writes": ["core.account", "money.account"]
+      }
     },
     {
       "name": "set-opening-balance",
@@ -216,8 +214,7 @@
             "type": "string"
           }
         }
-      },
-      "writes": ["money.account"]
+      }
     },
     {
       "name": "import-transactions",
@@ -325,12 +322,7 @@
             "type": "string"
           }
         }
-      },
-      "writes": [
-        "core.transaction",
-        "money.transaction",
-        "money.balance_checkpoint"
-      ]
+      }
     },
     {
       "name": "record-checkpoint",
@@ -375,8 +367,7 @@
             "type": "string"
           }
         }
-      },
-      "writes": ["money.balance_checkpoint"]
+      }
     },
     {
       "name": "save-import-profile",
@@ -466,8 +457,7 @@
             "type": "string"
           }
         }
-      },
-      "writes": ["money.import_profile"]
+      }
     },
     {
       "name": "categorize",
@@ -506,8 +496,7 @@
             "type": "string"
           }
         }
-      },
-      "writes": ["core.transaction"]
+      }
     },
     {
       "name": "void-transaction",
@@ -537,8 +526,7 @@
             "type": "string"
           }
         }
-      },
-      "writes": ["core.transaction"]
+      }
     },
     {
       "name": "set-display-name",
@@ -572,8 +560,7 @@
             "type": "string"
           }
         }
-      },
-      "writes": ["money.transaction"]
+      }
     },
     {
       "name": "link-transfer",
@@ -607,8 +594,7 @@
             "type": "string"
           }
         }
-      },
-      "writes": ["core.link"]
+      }
     },
     {
       "name": "unlink-transfer",
@@ -638,8 +624,7 @@
             "type": "string"
           }
         }
-      },
-      "writes": ["core.link"]
+      }
     },
     {
       "name": "set-target",
@@ -685,8 +670,7 @@
             "type": "string"
           }
         }
-      },
-      "writes": ["money.target"]
+      }
     },
     {
       "name": "set-carry",
@@ -723,8 +707,7 @@
             "type": "string"
           }
         }
-      },
-      "writes": ["money.target"]
+      }
     },
     {
       "name": "add-rule",
@@ -786,8 +769,7 @@
             "type": "string"
           }
         }
-      },
-      "writes": ["money.rule"]
+      }
     },
     {
       "name": "edit-rule",
@@ -849,8 +831,7 @@
             "type": "string"
           }
         }
-      },
-      "writes": ["money.rule"]
+      }
     },
     {
       "name": "delete-rule",
@@ -880,8 +861,7 @@
             "type": "string"
           }
         }
-      },
-      "writes": ["money.rule"]
+      }
     },
     {
       "name": "apply-rule-to-history",
@@ -913,8 +893,7 @@
             "type": "string"
           }
         }
-      },
-      "writes": ["core.transaction", "money.transaction"]
+      }
     },
     {
       "name": "add-category",
@@ -953,8 +932,7 @@
             "type": "string"
           }
         }
-      },
-      "writes": ["core.concept"]
+      }
     },
     {
       "name": "merge-category",
@@ -988,13 +966,7 @@
             "type": "string"
           }
         }
-      },
-      "writes": [
-        "core.concept",
-        "core.transaction",
-        "money.rule",
-        "money.target"
-      ]
+      }
     },
     {
       "name": "archive-category",
@@ -1027,8 +999,7 @@
             "type": "string"
           }
         }
-      },
-      "writes": ["core.tag"]
+      }
     }
   ],
   "queries": [

@@ -6,11 +6,11 @@ import centraid.screen.v1.PhotoDetail
 import centraid.screen.v1.PhotoLabel
 import centraid.screen.v1.PhotoLightboxEvent
 import centraid.screen.v1.PhotoLightboxState
-import centraid.screen.v1.PhotoPerson
 import centraid.screen.v1.PhotoPlaceChoice
 import centraid.screen.v1.SeatState
 import dev.centraid.design.copy.PhotosCopy
 import dev.centraid.shared.kit.jsonString
+import dev.centraid.shared.nav.ScreenIds
 import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.ScreenMachine
@@ -30,11 +30,11 @@ import dev.centraid.shared.screen.Step
  *
  * 1. **A READ THAT ARRIVES IN PIECES.** There is no join clause on the page
  *    door, so one photograph is several statements: the asset itself, then its
- *    place, its confirmed faces and those people's names, its tags and those
- *    concepts' words, and its byte size. Each is a [Leg] with its own screen
- *    id, its own `ScreenReads`, and its own `ReadPage` effect. The screen is
- *    `loading` until the ASSET lands and never after: **a face read that never
- *    answers is not a failure of the photograph**, and a lightbox that showed a
+ *    place, its tags and those concepts' words, and its byte size. Each is a
+ *    [Leg] with its own screen id, its own `ScreenReads`, and its own
+ *    `ReadPage` effect. The screen is `loading` until the ASSET lands and never
+ *    after: **a tag read that never answers is not a failure of the
+ *    photograph**, and a lightbox that showed a
  *    sentence instead of a picture because the tag table was empty would be the
  *    fourth state the read law forbids, arrived at from the other side.
  * 2. **A CHROME STATE, NOT AN ANIMATION.** `chrome_visible` is reduced here so
@@ -55,7 +55,7 @@ import dev.centraid.shared.screen.Step
  * once per photograph a member flicked past.
  */
 public object PhotoLightboxMachine : ScreenMachine<PhotoLightboxState, PhotoLightboxEvent> {
-    public const val SCREEN_ID: String = "photos.lightbox"
+    public const val SCREEN_ID: String = ScreenIds.PHOTOS_LIGHTBOX
 
     /**
      * THE READS ONE PHOTOGRAPH TAKES, BESIDE THE ASSET ITSELF.
@@ -75,12 +75,6 @@ public object PhotoLightboxMachine : ScreenMachine<PhotoLightboxState, PhotoLigh
     public enum class Leg {
         /** `core_place`, for [PhotoDetail.place_name]. */
         PLACE,
-
-        /** `media_face_region`, confirmed only, for the party ids in it. */
-        FACES,
-
-        /** `core_party`, to put a NAME on each of those ids. */
-        PEOPLE,
 
         /** `core_tag` on this asset, for [PhotoDetail.labels]' concept ids. */
         TAGS,
@@ -136,13 +130,26 @@ public object PhotoLightboxMachine : ScreenMachine<PhotoLightboxState, PhotoLigh
     public const val SLIDESHOW_INTERVAL_MS: Long = 4_000L
 
     /** The neighbours the strip reads around the photograph on screen. */
-    public fun filmWindow(state: PhotoLightboxState): List<String> {
-        val neighbours = state.neighbour_asset_ids
-        val at = neighbours.indexOf(state.asset_id)
+    public fun filmWindow(state: PhotoLightboxState): List<String> =
+        filmWindow(state.neighbour_asset_ids, state.asset_id)
+
+    /**
+     * [filmWindow] over primitives, for SwiftUI: it holds SwiftProtobuf's state
+     * and cannot hand it to a function that takes Wire's, so it passes the two
+     * fields the window is a function of.
+     */
+    public fun filmWindow(neighbours: List<String>, assetId: String): List<String> {
+        val at = neighbours.indexOf(assetId)
         if (at < 0 || neighbours.size <= 1) return emptyList()
         val from = maxOf(0, at - FILM_REACH)
         val to = minOf(neighbours.size, at + FILM_REACH + 1)
         return neighbours.subList(from, to)
+    }
+
+    /** Where [filmWindow] starts on the shelf, for "3 of 184". Zero when there is no window. */
+    public fun filmOffset(neighbours: List<String>, assetId: String): Int {
+        val first = filmWindow(neighbours, assetId).firstOrNull() ?: return 0
+        return neighbours.indexOf(first).coerceAtLeast(0)
     }
 
     /** The window's frames this screen has not read yet. */
@@ -160,7 +167,10 @@ public object PhotoLightboxMachine : ScreenMachine<PhotoLightboxState, PhotoLigh
         val at = state.neighbour_asset_ids.indexOf(state.asset_id)
         if (at < 0) return ""
         val seconds = SLIDESHOW_INTERVAL_MS / 1_000L
-        return "${at + 1} of ${state.neighbour_asset_ids.size} · $seconds seconds a photo"
+        return PhotosCopy.PHOTOS_SLIDESHOW_META
+            .replace("{position}", "${at + 1}")
+            .replace("{total}", "${state.neighbour_asset_ids.size}")
+            .replace("{seconds}", "$seconds")
     }
 
     /** v0's slideshow status line, unchanged. */
@@ -173,13 +183,28 @@ public object PhotoLightboxMachine : ScreenMachine<PhotoLightboxState, PhotoLigh
      * A photograph that arrives bare is a screen with no visible way back,
      * whatever the gesture can do.
      */
-    override fun initial(): PhotoLightboxState = PhotoLightboxState(
-        loading = Loading(first_load = true),
-        chrome_visible = true,
-        sheet = PhotoLightboxState.Sheet.SHEET_NONE,
+    override fun initial(): PhotoLightboxState = PhotoLightboxText.fill(
+        PhotoLightboxState(
+            loading = Loading(first_load = true),
+            chrome_visible = true,
+            sheet = PhotoLightboxState.Sheet.SHEET_NONE,
+        ),
     )
 
+    /**
+     * EVERY STEP LANDS WITH ITS WORDS FILLED ([PhotoLightboxText.fill]).
+     *
+     * Filled here and not at each of the arms that change `detail`, because the
+     * arms are many and a lines-from-detail rule is one: a place that arrives,
+     * a fetch that moves its percentage and a caption that re-reads all change
+     * what the stage says, and an arm that forgot would draw a stale sentence.
+     */
     override fun reduce(
+        state: PhotoLightboxState,
+        event: PhotoLightboxEvent,
+    ): Step<PhotoLightboxState> = fold(state, event).let { it.copy(state = PhotoLightboxText.fill(it.state)) }
+
+    private fun fold(
         state: PhotoLightboxState,
         event: PhotoLightboxEvent,
     ): Step<PhotoLightboxState> = when {
@@ -246,6 +271,18 @@ public object PhotoLightboxMachine : ScreenMachine<PhotoLightboxState, PhotoLigh
         )
 
         event.located != null -> located(state, event.located)
+
+        // THE CAMERA THE ORIGINAL'S HEADER NAMES, read by the shell. Keyed by
+        // asset, like `located`: an answer for a photograph the member has
+        // swiped past lands on nothing.
+        event.camera_read != null -> {
+            val detail = state.detail
+            if (detail == null || event.camera_read.asset_id != detail.asset_id) {
+                Step(state)
+            } else {
+                Step(state.copy(detail = detail.copy(camera = event.camera_read.camera)))
+            }
+        }
 
         // A SLIDESHOW NEEDS SOMEWHERE TO GO. On a shelf of one it would be a
         // mode with a clock that moves nothing, so it is refused by doing
@@ -816,18 +853,18 @@ public object PhotoLightboxMachine : ScreenMachine<PhotoLightboxState, PhotoLigh
     )
 
     /**
-     * A PAGE LANDED. Which of the seven reads was it?
+     * A PAGE LANDED. Which of the five reads was it?
      *
      * **`amendment` IS EXPLICIT AND IS NOT INFERRED FROM AN EMPTY `asset_id`.**
      * It was, for one draft — "a detail with no id is a satellite" — and that
-     * holds only while no satellite CAN carry an id. A placement or face leg
+     * holds only while no satellite CAN carry an id. A placement leg
      * would want to carry exactly that, and the day one does the inference
      * fails silently: a reducer that cannot tell a merge from a replace paints
-     * one photograph's people onto another, and both shapes typecheck.
+     * one photograph's labels onto another, and both shapes typecheck.
      *
      * The asset leg REPLACES rather than merges, including on a re-read: a
      * favourite the member just removed must not survive because a previous
-     * leg's answer was carried forward. The six amendments re-fire immediately
+     * leg's answer was carried forward. The four amendments re-fire immediately
      * after, off a local SQLite file, which is the cost of that correctness.
      */
     private fun arrived(
@@ -857,12 +894,11 @@ public object PhotoLightboxMachine : ScreenMachine<PhotoLightboxState, PhotoLigh
      * The reads the ASSET's own row makes possible, and only those.
      *
      * A place is read when there is a place id; the byte size when there is a
-     * content hash to find the item by. Faces and tags are always read — their
-     * absence is a real answer and the only way to learn it is to ask.
+     * content hash to find the item by. Tags are always read — their absence is
+     * a real answer and the only way to learn it is to ask.
      */
     private fun openers(state: PhotoLightboxState, detail: PhotoDetail): List<ScreenEffect> =
         buildList {
-            add(ScreenEffect.ReadPage(readId(Leg.FACES), null))
             add(ScreenEffect.ReadPage(readId(Leg.TAGS), null))
             if (detail.place_id.isNotEmpty()) add(ScreenEffect.ReadPage(readId(Leg.PLACE), null))
             if (detail.original_hash.isNotEmpty()) {
@@ -898,26 +934,25 @@ public object PhotoLightboxMachine : ScreenMachine<PhotoLightboxState, PhotoLigh
             live_asset_id = previous.live_asset_id,
             live_content_id = previous.live_content_id,
             live_path = previous.live_path,
+            // THE HEADER'S CAMERA, for the reason the paths are kept: no page
+            // read carries it, and a caption edit would blank the row until
+            // the shell read the file again. The vault's own word wins.
+            camera = arriving.camera.ifEmpty { previous.camera },
         )
     }
 
     /**
      * THE SECOND HOP, AND WHY IT CANNOT LOOP.
      *
-     * A face region names a party and a tag names a concept; neither carries
-     * the NAME, so each needs one more read. The follow-up fires only for ids
-     * this arrival INTRODUCED — `after` minus `before` — so a `core_party` read
-     * that came back without a row for somebody (a person purged between the
-     * two reads) introduces no new unnamed id and asks again about nobody. A
-     * rule of "read while anything is unnamed" would ask for ever.
+     * A tag names a concept and does not carry the WORD, so it needs one more
+     * read. The follow-up fires only for ids this arrival INTRODUCED — `after`
+     * minus `before` — so a `core_concept` read that came back without a row
+     * for somebody (a concept purged between the two reads) introduces no new
+     * unworded id and asks again about nothing. A rule of "read while anything
+     * is unworded" would ask for ever.
      */
     private fun followUps(before: PhotoDetail, after: PhotoDetail): List<ScreenEffect> =
         buildList {
-            val known = before.people.filter { it.display_name.isEmpty() }
-                .map { it.party_id }.toSet()
-            if (after.people.any { it.display_name.isEmpty() && it.party_id !in known }) {
-                add(ScreenEffect.ReadPage(readId(Leg.PEOPLE), null))
-            }
             val said = before.labels.filter { it.label.isEmpty() }.map { it.concept_id }.toSet()
             if (after.labels.any { it.label.isEmpty() && it.concept_id !in said }) {
                 add(ScreenEffect.ReadPage(readId(Leg.CONCEPTS), null))
@@ -955,7 +990,6 @@ public object PhotoLightboxMachine : ScreenMachine<PhotoLightboxState, PhotoLigh
         // committed write re-reads the asset, which resets this to false before
         // the concepts are asked again.
         favorite = current.favorite || part.favorite,
-        people = mergePeople(current.people, part.people),
         labels = mergeLabels(current.labels, part.labels),
     )
 
@@ -970,32 +1004,16 @@ public object PhotoLightboxMachine : ScreenMachine<PhotoLightboxState, PhotoLigh
      * which replaces the detail whole and re-fires every leg.
      *
      * That asymmetry is deliberate and its failure is the conservative one:
-     * the screen can say "Centraid could not read who is in this photograph"
-     * while the truth is "nobody is", and the sentence is still true of the
+     * the screen can say "Centraid could not read this photo's labels" while
+     * the truth is "it has none", and the sentence is still true of the
      * last time it asked. The opposite fold — a union that never clears —
      * would leave a refusal standing over an answer that is on screen, which
      * is a screen contradicting itself.
      */
     private fun answered(part: PhotoDetail): Set<PhotoDetail.Part> = buildSet {
         if (part.place_name.isNotEmpty()) add(PhotoDetail.Part.PART_PLACE)
-        if (part.people.isNotEmpty()) add(PhotoDetail.Part.PART_PEOPLE)
         if (part.labels.isNotEmpty()) add(PhotoDetail.Part.PART_LABELS)
         if (part.byte_size > 0L) add(PhotoDetail.Part.PART_CONTENT)
-    }
-
-    /** [Leg.FACES] brings the ids; [Leg.PEOPLE] brings the names. */
-    private fun mergePeople(
-        current: List<PhotoPerson>,
-        part: List<PhotoPerson>,
-    ): List<PhotoPerson> {
-        if (part.isEmpty()) return current
-        val named = part.associateBy { it.party_id }
-        val kept = current.map { person ->
-            val name = named[person.party_id]?.display_name.orEmpty()
-            if (name.isEmpty()) person else person.copy(display_name = name)
-        }
-        val known = kept.map { it.party_id }.toSet()
-        return kept + part.filterNot { it.party_id in known }
     }
 
     /**

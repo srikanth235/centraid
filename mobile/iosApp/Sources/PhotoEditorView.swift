@@ -7,9 +7,7 @@ import SwiftUI
 import UIKit
 #endif
 
-#if canImport(CentraidShared)
 import CentraidShared
-#endif
 
 /// THE PHOTO EDITOR — crop, rotate, straighten, flip (#1029, photos port).
 ///
@@ -177,21 +175,21 @@ struct PhotoEditorView: View {
                 .contentShape(Rectangle())
                 .gesture(cropGesture(frame: geometry.frame), including: state.isEditing ? .all : .none)
                 .accessibilityElement()
-                .accessibilityLabel(PhotosWords.photosCropArea)
-                .accessibilityHint(PhotosWords.photosCropHint)
+                .accessibilityLabel(PhotosCopy.shared.PHOTOS_CROP_AREA)
+                .accessibilityHint(PhotosCopy.shared.PHOTOS_CROP_HINT)
                 // NOTHING IS REACHABLE BY GESTURE ALONE (§15). The drag and the
                 // pinch have spoken equivalents, one step at a time.
-                .accessibilityAction(named: PhotosWords.photosCropLeft) { send(state.movedEvent(-step, 0)) }
-                .accessibilityAction(named: PhotosWords.photosCropRight) { send(state.movedEvent(step, 0)) }
-                .accessibilityAction(named: PhotosWords.photosCropUp) { send(state.movedEvent(0, -step)) }
-                .accessibilityAction(named: PhotosWords.photosCropDown) { send(state.movedEvent(0, step)) }
-                .accessibilityAction(named: PhotosWords.photosCropLarger) { send(state.scaledEvent(grow)) }
-                .accessibilityAction(named: PhotosWords.photosCropSmaller) { send(state.scaledEvent(1 / grow)) }
+                .accessibilityAction(named: PhotosCopy.shared.PHOTOS_CROP_LEFT) { send(state.movedEvent(-step, 0)) }
+                .accessibilityAction(named: PhotosCopy.shared.PHOTOS_CROP_RIGHT) { send(state.movedEvent(step, 0)) }
+                .accessibilityAction(named: PhotosCopy.shared.PHOTOS_CROP_UP) { send(state.movedEvent(0, -step)) }
+                .accessibilityAction(named: PhotosCopy.shared.PHOTOS_CROP_DOWN) { send(state.movedEvent(0, step)) }
+                .accessibilityAction(named: PhotosCopy.shared.PHOTOS_CROP_LARGER) { send(state.scaledEvent(grow)) }
+                .accessibilityAction(named: PhotosCopy.shared.PHOTOS_CROP_SMALLER) { send(state.scaledEvent(1 / grow)) }
                 .accessibilityIdentifier("photos.editor.stage")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             Text(state.stagePath == nil
-                ? PhotosWords.photosNotOnPhone
+                ? PhotosCopy.shared.PHOTOS_NOT_ON_PHONE
                 : PhotoEditorStateView.title)
                 .centraidType("small")
                 .multilineTextAlignment(.center)
@@ -271,10 +269,10 @@ struct PhotoEditorView: View {
                 HStack(spacing: 6) {
                     // "CROP" IS ALWAYS SELECTED: it is the mode this editor is
                     // in, and pressing it returns the crop to the whole frame.
-                    tool("Crop", selected: true, enabled: editing) {
+                    tool(PhotosCopy.shared.PHOTOS_EDIT_CROP, selected: true, enabled: editing) {
                         send(state.ratioEvent(.original, frameRatio: 0))
                     }
-                    tool("Rotate 90°", enabled: editing) { send(state.rotateEvent) }
+                    tool(PhotosCopy.shared.PHOTOS_EDIT_ROTATE, enabled: editing) { send(state.rotateEvent) }
                     tool(state.straightenLabel, enabled: editing) { send(state.straightenEvent) }
                     tool(state.flipLabel, selected: state.isFlipped, enabled: editing) {
                         send(state.flipEvent)
@@ -294,7 +292,7 @@ struct PhotoEditorView: View {
                             send(state.ratioEvent(ratio, frameRatio: frameRatio))
                         }
                     }
-                    tool("Reset", enabled: editing && state.edited) { send(state.resetEvent) }
+                    tool(PhotosCopy.shared.PHOTOS_EDIT_RESET, enabled: editing && state.edited) { send(state.resetEvent) }
                 }
             }
             Text(PhotoEditorStateView.explanation)
@@ -417,10 +415,9 @@ struct PhotoEditorView: View {
     private let maskAlpha = Double(0x8C) / 255
 }
 
-/// The frame, fitted, and the image inside it. v0's `rotatedBox` and
-/// `fitMedia`, ported with `PhotoEditorMachine`'s geometry — mirrored here
-/// rather than called across the Kotlin boundary, as the lightbox mirrors its
-/// share rows.
+/// The frame, fitted, and the image inside it. v0's `fitMedia`, over
+/// `PhotoEditorMachine`'s rotated box and frame ratio, which are called and not
+/// restated.
 struct PhotoEditGeometry {
     let frame: CGSize
     let image: CGSize
@@ -432,21 +429,17 @@ struct PhotoEditGeometry {
         } else {
             frame = CGSize(width: space.width, height: frameRatio > 0 ? space.width / frameRatio : 0)
         }
-        let box = Self.rotatedBox(width: Double(sourceRatio), height: 1, degrees: rotation)
-        let scale = box.width > 0 ? frame.width / CGFloat(box.width) : 0
+        let boxWidth = PhotoEditorMachine.shared.rotatedBox(
+            width: Double(sourceRatio),
+            height: 1,
+            degrees: Int32(rotation)
+        ).first?.doubleValue ?? 0
+        let scale = boxWidth > 0 ? frame.width / CGFloat(boxWidth) : 0
         image = CGSize(width: sourceRatio * scale, height: scale)
     }
 
-    static func rotatedBox(width: Double, height: Double, degrees: Int) -> (width: Double, height: Double) {
-        let radians = Double(degrees) * .pi / 180
-        let c = abs(cos(radians))
-        let s = abs(sin(radians))
-        return (width * c + height * s, width * s + height * c)
-    }
-
     static func rotatedFrameRatio(_ ratio: Double, degrees: Int) -> Double {
-        let box = rotatedBox(width: ratio, height: 1, degrees: degrees)
-        return box.height > 0 ? box.width / box.height : ratio
+        PhotoEditorMachine.shared.rotatedFrameRatio(assetRatio: ratio, degrees: Int32(degrees))
     }
 }
 
@@ -561,50 +554,34 @@ struct PhotoEditorStateView {
 
     // MARK: - The words
     //
-    // `PhotoEditorMachine`'s, mirrored: this view holds SwiftProtobuf's types
-    // and not the shared module's, so the constants are restated rather than
-    // called — the lightbox's share rows are the same arrangement.
+    // COPY ONLY: this view holds SwiftProtobuf's types and not the shared
+    // module's, so a rule over a state is the machine's to fill, and what is
+    // left here is the generated words and the order the segments are drawn in.
 
-    static let title = PhotosWords.photosEditorTitle
-    static let cancelWord = "Cancel"
-    static let saveWord = PhotosWords.photosSaveAsNew
+    static let title = PhotosCopy.shared.PHOTOS_EDITOR_TITLE
+    static let cancelWord = PhotosCopy.shared.PHOTOS_CANCEL
+    static let saveWord = PhotosCopy.shared.PHOTOS_SAVE_AS_NEW
     static let explanation =
-        PhotosWords.photosSaveAsNewExplanation
-    static let discardQuestion = PhotosWords.photosEditDiscardQuestion
-    static let discardWord = "Discard"
-    static let keepEditingWord = PhotosWords.photosEditKeepEditing
+        PhotosCopy.shared.PHOTOS_SAVE_AS_NEW_EXPLANATION
+    static let discardQuestion = PhotosCopy.shared.PHOTOS_EDIT_DISCARD_QUESTION
+    static let discardWord = PhotosCopy.shared.PHOTOS_EDIT_DISCARD
+    static let keepEditingWord = PhotosCopy.shared.PHOTOS_EDIT_KEEP_EDITING
     static let ratios: [Centraid_Screen_V1_PhotoEditPlan.Ratio] = [.original, .square, .threeTwo]
 
     /// SPACING IS LOAD-BEARING: `3 : 2` renders in the numeric register.
     static func ratioName(_ ratio: Centraid_Screen_V1_PhotoEditPlan.Ratio) -> String {
         switch ratio {
-        case .square: return "Square"
-        case .threeTwo: return "3 : 2"
-        default: return "Original"
+        case .square: return PhotosCopy.shared.PHOTOS_EDIT_RATIO_SQUARE
+        case .threeTwo: return PhotosCopy.shared.PHOTOS_EDIT_RATIO_THREE_TWO
+        default: return PhotosCopy.shared.PHOTOS_EDIT_RATIO_ORIGINAL
         }
     }
 
-    /// "from a photograph taken 30 July 2026" — v0's `editorMeta`, and "from a
-    /// photograph" when the row records no time. The day is the one the shutter
-    /// fired on, in the capture's own zone, so it names the day the Library and
-    /// the viewer file the photograph under; no offset is UTC, as there.
+    /// "from a photograph taken 30 July 2026" — the shared machine's
+    /// `editorMeta`, so the editor and the lightbox file one photograph under
+    /// one date.
     static func meta(_ capturedAt: String, offsetMinutes: Int) -> String {
-        guard let when = instant(capturedAt) else { return PhotosWords.photosEditFromUndated }
-        var style = Date.FormatStyle.dateTime.day().month(.wide).year()
-        style.timeZone = TimeZone(secondsFromGMT: offsetMinutes * 60) ?? .gmt
-        return "from a photo taken \(when.formatted(style))"
-    }
-
-    /// The vault writes `%Y-%m-%dT%H:%M:%fZ`; fractional seconds first, for the
-    /// lightbox's reason.
-    private static func instant(_ text: String) -> Date? {
-        guard !text.isEmpty else { return nil }
-        let fractional = ISO8601DateFormatter()
-        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let parsed = fractional.date(from: text) { return parsed }
-        let whole = ISO8601DateFormatter()
-        whole.formatOptions = [.withInternetDateTime]
-        return whole.date(from: text)
+        PhotoEditorMachine.shared.editorMeta(capturedAt: capturedAt, offsetMinutes: Int32(offsetMinutes))
     }
 }
 
@@ -628,17 +605,18 @@ extension EnvironmentValues {
 ///
 /// It lives HERE, beside the screen it opens, so the lightbox carries one line
 /// for it and no knowledge of the editor. Live, or refused with the sentence
-/// `PhotoEditorMachine.editRefusal` gives — mirrored by hand below — for a
+/// `PhotoEditorMachine.editRefusal` gives — filled onto the lightbox state — for a
 /// video, or an original this phone does not hold yet; the lightbox's own
 /// status line already carries "Load the original" for the second.
 struct PhotoEditButton: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.openPhotoEditor) private var open
     let detail: Centraid_Screen_V1_PhotoDetail
+    /// `PhotoEditorMachine.editRefusal`, filled onto the lightbox state.
+    let refusal: String?
     let neighbours: [String]
 
     var body: some View {
-        let refusal = Self.refusal(detail)
         let enabled = refusal == nil && open != nil
         Button {
             guard enabled else { return }
@@ -656,22 +634,8 @@ struct PhotoEditButton: View {
         }
         .buttonStyle(.plain)
         .disabled(!enabled)
-        .accessibilityLabel("Edit")
+        .accessibilityLabel(PhotosCopy.shared.PHOTOS_EDIT)
         .accessibilityHint(refusal ?? "")
         .accessibilityIdentifier("photos.lightbox.edit")
-    }
-
-    /// `PhotoEditorMachine.editRefusal`, mirrored.
-    static func refusal(_ detail: Centraid_Screen_V1_PhotoDetail) -> String? {
-        if detail.assetID.isEmpty { return PhotosWords.photosNotInVault }
-        guard detail.kind == .photo || detail.kind == .scan else {
-            return PhotosWords.photosEditNotAPhoto
-        }
-        switch detail.held {
-        case .original: return nil
-        case .withheldByRule: return "Load the original first."
-        case .fetching: return "The original is still loading."
-        default: return "The original is not on this phone yet."
-        }
     }
 }

@@ -106,7 +106,7 @@ const TAGGABLE: &[(&str, &str, bool)] = &[
 /// `core.purge_document` — and the vault switcher's `core.rename_vault`.
 ///
 /// The order is v0's own file order — parties, tags, then documents and folders
-/// — so the registry's `agent_command` record reads like the source it was
+/// — so the registry's `command_definition` record reads like the source it was
 /// ported from.
 #[must_use]
 pub fn definitions() -> Vec<CommandDefinition> {
@@ -1125,8 +1125,8 @@ pub(crate) fn mint_content_from_data_uri(ctx: &CommandCtx<'_, '_>, uri: &str) ->
     ctx.connection().execute(
         "INSERT INTO core_content_item
            (content_id, content_uri, content_hash, byte_size, language, creator_party_id,
-            origin_device_id, deleted_at, purge_at, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, NULL, ?5, NULL, NULL, NULL, ?6, ?6)",
+            deleted_at, purge_at, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, NULL, ?5, NULL, NULL, ?6, ?6)",
         rusqlite::params![
             content_id,
             content_uri,
@@ -1192,8 +1192,8 @@ pub(crate) fn promote_staged_blob(ctx: &CommandCtx<'_, '_>, content_hash: &str) 
             ctx.connection().execute(
                 "INSERT INTO core_content_item
                    (content_id, content_uri, content_hash, byte_size, language, creator_party_id,
-                    origin_device_id, deleted_at, purge_at, created_at, updated_at)
-                 VALUES (?1, ?2, ?3, ?4, NULL, ?5, NULL, NULL, NULL, ?6, ?6)",
+                    deleted_at, purge_at, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, NULL, ?5, NULL, NULL, ?6, ?6)",
                 rusqlite::params![
                     content_id,
                     blob_uri_for(content_hash),
@@ -1228,8 +1228,8 @@ pub(crate) fn promote_staged_blob(ctx: &CommandCtx<'_, '_>, content_hash: &str) 
             ctx.connection().execute(
                 "INSERT INTO core_content_item
                    (content_id, content_uri, content_hash, byte_size, language, creator_party_id,
-                    origin_device_id, deleted_at, purge_at, created_at, updated_at)
-                 VALUES (?1, ?2, ?3, ?4, NULL, ?5, NULL, NULL, NULL, ?6, ?6)",
+                    deleted_at, purge_at, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, NULL, ?5, NULL, NULL, ?6, ?6)",
                 rusqlite::params![
                     content_id,
                     blob_uri_for(content_hash),

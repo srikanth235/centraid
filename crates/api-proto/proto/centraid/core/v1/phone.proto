@@ -138,6 +138,13 @@ enum DrainStop {
   // (#1080, the audit's finding 5). Nothing was sent to it, and the spool is
   // intact.
   DRAIN_STOP_UNTRUSTED = 4;
+  // The gateway ANSWERED AND REFUSED a write for a reason that is its own, not
+  // an absence: its disk is full, it has a quota, or it will not take a part
+  // of this size (`DISK_FULL`, `QUOTA`, `TOO_LARGE`; #1080, the sweep's F1).
+  // Nothing was acknowledged, the spool is intact, and the next pass tries
+  // again. Not `UNREACHABLE`: the member can act on this one (free room on
+  // the machine), and a status that waited for time would never say so.
+  DRAIN_STOP_REFUSED = 5;
 }
 
 message DrainResponse {
@@ -426,6 +433,14 @@ enum WaitReason {
   // pinned gateway (`DRAIN_STOP_UNTRUSTED`). Not time but the member: the
   // gateway was replaced or something else answers at its address.
   WAIT_REASON_UNTRUSTED = 8;
+  // The last pass stopped because the gateway answered and refused a write
+  // for its own reason: a full disk, a quota (`DRAIN_STOP_REFUSED`; #1080, the
+  // sweep's F1). Not time: the machine has to make room.
+  WAIT_REASON_REFUSED = 9;
+  // The gateway no longer knows this phone's token — its store was lost, or
+  // its operator revoked the token — so nothing reaches it until the member
+  // pairs again (`Destination.pair_again`; #1080, the sweep's F2).
+  WAIT_REASON_PAIR_AGAIN = 10;
 }
 
 // ----------------------------------------------------------- destinations --
@@ -455,6 +470,41 @@ message Destination {
   // acknowledged a part; 0 is never.
   int64 last_seen_ms = 5;
   int64 last_ack_ms = 6;
+  // THIS GATEWAY ANSWERED `UNAUTHORIZED` TO THIS PHONE'S TOKEN (#1080, the
+  // sweep's F2): it lost its store but kept its identity, or its operator
+  // revoked the token. The ledger's acknowledgements are a cache of what the
+  // gateway held, so "backed up" would still read true while every pass is
+  // refused; this says it is not. Cleared by pairing again, or by the gateway
+  // accepting the token. Set only by `backup_status`; `pins` leaves it false.
+  bool pair_again = 7;
+}
+
+// A PAIRED GATEWAY, FOUND AGAIN AT NEW ADDRESSES (#1080, Q-1080-D3).
+//
+// The shell's foreground browse of `_centraid-gateway._tcp` saw something that
+// advertised this gateway's id and hands its addresses here. **The shell's
+// match is a hint and the core's is the check**: each candidate is dialled
+// with the certificate this phone pinned at pairing and must answer
+// `GET /v2/info` with this gateway's own id, so a machine that merely claims
+// the id in its advertisement is refused by the certificate, and one that
+// answers as another gateway is not recorded. Only addresses that answered
+// are kept, first in the list, ahead of the ones already recorded.
+message RefreshDestinationRequest {
+  // `Destination.gateway_id`.
+  string gateway_id = 1;
+  // `host:port`, at most eight, each an IP literal (IPv6 in brackets). The
+  // core drops anything else without dialling it.
+  repeated string candidates = 2;
+}
+
+message RefreshDestinationResponse {
+  // Whether at least one candidate answered as this gateway and the ledger
+  // now lists it. False for no such gateway, no candidate worth dialling, and
+  // candidates that did not answer, which is an answer and not a refusal.
+  bool refreshed = 1;
+  // The addresses the ledger lists for the gateway after this call, empty
+  // when it holds no such gateway.
+  repeated string addrs = 2;
 }
 
 // FORGET ONE GATEWAY (#1080). The destination and every confirmation it gave

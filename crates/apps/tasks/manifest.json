@@ -194,8 +194,7 @@
             "type": "string"
           }
         }
-      },
-      "writes": ["schedule.task"]
+      }
     },
     {
       "name": "set-status",
@@ -229,8 +228,7 @@
             "type": "string"
           }
         }
-      },
-      "writes": ["schedule.task"]
+      }
     },
     {
       "name": "delete",
@@ -260,8 +258,7 @@
             "type": "string"
           }
         }
-      },
-      "writes": ["schedule.task"]
+      }
     },
     {
       "name": "purge",
@@ -291,8 +288,7 @@
             "type": "string"
           }
         }
-      },
-      "writes": ["schedule.task"]
+      }
     },
     {
       "name": "restore",
@@ -322,8 +318,7 @@
             "type": "string"
           }
         }
-      },
-      "writes": ["schedule.task"]
+      }
     },
     {
       "name": "edit",
@@ -397,8 +392,7 @@
             "type": "string"
           }
         }
-      },
-      "writes": ["schedule.task"]
+      }
     },
     {
       "name": "save-project",
@@ -423,8 +417,7 @@
           "output": { "type": "object" },
           "reason": { "type": "string" }
         }
-      },
-      "writes": ["schedule.project"]
+      }
     },
     {
       "name": "save-section",
@@ -448,8 +441,7 @@
           "output": { "type": "object" },
           "reason": { "type": "string" }
         }
-      },
-      "writes": ["schedule.section"]
+      }
     },
     {
       "name": "organize-task",
@@ -480,8 +472,7 @@
           "output": { "type": "object" },
           "reason": { "type": "string" }
         }
-      },
-      "writes": ["schedule.task"]
+      }
     },
     {
       "name": "attach",
@@ -535,13 +526,7 @@
             "type": "string"
           }
         }
-      },
-      "writes": [
-        "core.attachment",
-        "core.content_item",
-        "core.content_representation",
-        "core.content_text"
-      ]
+      }
     },
     {
       "name": "detach",
@@ -571,8 +556,7 @@
             "type": "string"
           }
         }
-      },
-      "writes": ["core.attachment"]
+      }
     },
     {
       "name": "add-tag",
@@ -606,8 +590,7 @@
             "type": "string"
           }
         }
-      },
-      "writes": ["core.concept", "core.concept_scheme", "core.tag"]
+      }
     },
     {
       "name": "remove-tag",
@@ -637,8 +620,7 @@
             "type": "string"
           }
         }
-      },
-      "writes": ["core.tag"]
+      }
     }
   ],
   "queries": [

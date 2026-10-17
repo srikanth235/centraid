@@ -18,15 +18,14 @@
 //!    claimed exactly once across the two sides (`manifest.ts:508-537`). A
 //!    manifest that forgets a state fails validation instead of reading as "it
 //!    does not apply here".
-//!
-//! One thing this port makes stricter, recorded as D-1020-D3-5 in the receipt:
-//! **`writes` is required on every action**, not optional. v0's schema has it
-//! optional and the `declared-writes` directive re-imposes it from outside with
-//! a shell script that takes no waiver, because "JSON has no comments and the
-//! right opt-out is the explicit empty array"
-//! (`.governance/packs/.../handler-contract/constitution.md:5`, `:10`). A gate
-//! outside the type is a gate that can be forgotten; here the type is the gate,
-//! and `[]` is still valid and still means "no database writes".
+//! 4. **No action declares `writes`** (V3 in `docs/release/v1-handoffs.md`).
+//!    v0 required each action to list the tables it wrote, so that change-stream
+//!    invalidation could not drop a subscriber. The vault now says what a commit
+//!    wrote itself: the commit guard's `update_hook` census, carried as
+//!    `CommandOutcome.tables` and turned into the change events. A declared copy
+//!    has no reader and can only drift, so the parser refuses the key — `[]`
+//!    included — rather than carry a second copy of a fact the vault already
+//!    reports.
 
 use std::collections::BTreeSet;
 
@@ -63,10 +62,6 @@ pub struct ActionEntry {
     /// The JSON Schema the dispatcher validates a body against, as data.
     pub input: Value,
     pub output: Option<Value>,
-    /// Required here; `[]` means "no database writes". Carried verbatim to the
-    /// change bus for per-table query invalidation, and NOT the share
-    /// doorbell.
-    pub writes: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -153,12 +148,59 @@ impl Manifest {
         self.queries.iter().find(|query| query.name == name)
     }
 
-    /// Every table any action declares it writes, deduplicated.
-    pub fn declared_writes(&self) -> BTreeSet<&str> {
-        self.actions
-            .iter()
-            .flat_map(|action| action.writes.iter().map(String::as_str))
-            .collect()
+    /// Where the manifest's `act` scopes and the commands its actions invoke
+    /// disagree, as sentences; empty when they agree. `commands` are the
+    /// qualified names (`schema.name`) of the app's action table.
+    ///
+    /// A narrow `act` scope is a command's name, and a consent screen lists it
+    /// as a command the app reaches, so the two directions are one rule:
+    ///
+    /// 1. every narrow `act` scope (a `schema` and a `table` naming a command)
+    ///    names a command some action invokes; a scope no action uses misleads
+    ///    the screen (Locker's `locker.counts` and `locker.totp_code` did), and
+    /// 2. every action's command is covered: by a scope that grants its whole
+    ///    schema (`read+act` or `act` with no table), or by a narrow `act`
+    ///    scope naming it.
+    ///
+    /// The first app to hold itself to this was People (finding PE-F1, P3).
+    #[must_use]
+    pub fn act_scope_disagreements(&self, commands: &[&str]) -> Vec<String> {
+        let scopes: &[VaultScope] = self
+            .vault
+            .as_ref()
+            .map_or(&[], |vault| vault.scopes.as_slice());
+        let acts =
+            |scope: &&VaultScope| matches!(scope.verbs, ScopeVerbs::Act | ScopeVerbs::ReadAct);
+        let mut found = Vec::new();
+        for scope in scopes.iter().filter(|scope| scope.verbs == ScopeVerbs::Act) {
+            if let Some(table) = &scope.table {
+                let qualified = format!("{}.{table}", scope.schema);
+                if !commands.contains(&qualified.as_str()) {
+                    found.push(format!(
+                        "the `act` scope {qualified} names a command no action invokes"
+                    ));
+                }
+            }
+        }
+        for command in commands {
+            let Some((schema, name)) = command.split_once('.') else {
+                found.push(format!("{command} is not `schema.name`"));
+                continue;
+            };
+            let covered = scopes.iter().filter(acts).any(|scope| {
+                scope.schema == schema
+                    && scope
+                        .table
+                        .as_deref()
+                        .is_none_or(|table| table == name && scope.verbs == ScopeVerbs::Act)
+            });
+            if !covered {
+                found.push(format!(
+                    "an action invokes {command} and no scope grants it"
+                ));
+            }
+        }
+        found
     }
 }
 
@@ -318,12 +360,14 @@ fn parse_actions(raw: &Value) -> KitResult<Vec<ActionEntry>> {
                 Some(&path),
             ));
         };
-        // Required here, unlike v0. `[]` is valid and means "no writes".
-        if field(entry, "writes").is_none() {
+        // REFUSED, not ignored: a `writes` list nobody reads is a comment with a
+        // schema, and a quiet one is how the second copy comes back (module note,
+        // 4). The commit's own census says what an action wrote.
+        if entry.get("writes").is_some() {
             return Err(KitError::manifest(
-                "invalid_handler_entry",
+                "removed_field",
                 format!(
-                    "action \"{name}\" declares no \"writes\"; list the tables it writes, or [] to say it writes none"
+                    "action \"{name}\" declares \"writes\", which is not a manifest field: the vault reports the tables a command wrote"
                 ),
                 Some(&path),
             ));
@@ -334,7 +378,6 @@ fn parse_actions(raw: &Value) -> KitResult<Vec<ActionEntry>> {
             confirmation,
             input: input.clone(),
             output: field(entry, "output").cloned(),
-            writes: string_list(entry, "writes", &path)?,
         });
     }
     Ok(actions)
@@ -568,9 +611,8 @@ mod tests {
 
     #[test]
     fn a_reserved_handler_name_is_refused_on_both_sides() {
-        let action = minimal(
-            r#", "actions": [{"name": "_private", "confirmation": "none", "input": {}, "writes": []}]"#,
-        );
+        let action =
+            minimal(r#", "actions": [{"name": "_private", "confirmation": "none", "input": {}}]"#);
         assert!(matches!(
             parse_manifest(&action).unwrap_err(),
             KitError::Manifest {
@@ -591,7 +633,7 @@ mod tests {
     #[test]
     fn one_name_in_both_lists_is_allowed_and_two_in_one_is_not() {
         let both = minimal(
-            r#", "actions": [{"name": "search", "confirmation": "none", "input": {}, "writes": []}], "queries": [{"name": "search", "input": {}}]"#,
+            r#", "actions": [{"name": "search", "confirmation": "none", "input": {}}], "queries": [{"name": "search", "input": {}}]"#,
         );
         parse_manifest(&both).unwrap();
         let twice = minimal(
@@ -607,22 +649,33 @@ mod tests {
     }
 
     #[test]
-    fn an_action_with_no_writes_key_is_refused() {
-        let text =
+    fn an_action_that_declares_writes_is_refused_and_one_that_does_not_parses() {
+        // THE KEY IS REFUSED, `[]` and `null` included: "no database writes"
+        // was a claim nothing read, and a copy of what the commit's census
+        // already says can only drift.
+        for declared in [
+            r#""writes": []"#,
+            r#""writes": ["core.party"]"#,
+            r#""writes": null"#,
+        ] {
+            let text = minimal(&format!(
+                r#", "actions": [{{"name": "add", "confirmation": "none", "input": {{}}, {declared}}}]"#
+            ));
+            let error = parse_manifest(&text).unwrap_err();
+            assert!(
+                matches!(
+                    &error,
+                    KitError::Manifest {
+                        code: "removed_field",
+                        ..
+                    }
+                ),
+                "{declared}: {error}"
+            );
+        }
+        let plain =
             minimal(r#", "actions": [{"name": "add", "confirmation": "none", "input": {}}]"#);
-        let error = parse_manifest(&text).unwrap_err();
-        assert!(matches!(
-            error,
-            KitError::Manifest {
-                code: "invalid_handler_entry",
-                ..
-            }
-        ));
-        // `[]` is valid and says "no database writes".
-        let empty = minimal(
-            r#", "actions": [{"name": "add", "confirmation": "none", "input": {}, "writes": []}]"#,
-        );
-        assert!(parse_manifest(&empty).unwrap().actions[0].writes.is_empty());
+        assert_eq!(parse_manifest(&plain).unwrap().actions[0].name, "add");
     }
 
     #[test]

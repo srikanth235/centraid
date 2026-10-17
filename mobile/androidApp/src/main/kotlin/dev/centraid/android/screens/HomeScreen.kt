@@ -1,5 +1,6 @@
 package dev.centraid.android.screens
 
+import dev.centraid.android.kit.LocalShellLine
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -70,6 +71,7 @@ import dev.centraid.android.theme.formatMoney
 import dev.centraid.design.CentraidCatalog
 import dev.centraid.design.CentraidGeometry
 import dev.centraid.design.copy.WordsCopy
+import dev.centraid.shared.shell.BandPolicy
 import dev.centraid.shared.shell.HomeWords
 
 /**
@@ -174,9 +176,10 @@ public fun HomeScreen(
         // vault's, and the band stays where it is.
         if (backupShown) {
             Box(Modifier.weight(1f)) { backupTab() }
+            LocalShellLine.current?.invoke()
             HomeBand(
-                active = "backup",
-                onSelect = { target -> if (target == "home") onOpenHome() },
+                active = BandPolicy.PLACE_BACKUP,
+                onSelect = { target -> if (target == BandPolicy.PLACE_HOME) onOpenHome() },
             )
             return@Column
         }
@@ -195,12 +198,14 @@ public fun HomeScreen(
                 else -> SpringboardGrid(data, onEvent)
             }
         }
+        // THE IMPORT'S LINE, on the band (DESIGN.md's one status line).
+        LocalShellLine.current?.invoke()
         HomeBand(
-            active = "home",
+            active = BandPolicy.PLACE_HOME,
             onSelect = { target ->
                 // BACKUP is a tab: where this vault's backup stands, the
                 // backup devices and the recovery key.
-                if (target == "backup") onOpenBackup()
+                if (target == BandPolicy.PLACE_BACKUP) onOpenBackup()
             },
         )
     }

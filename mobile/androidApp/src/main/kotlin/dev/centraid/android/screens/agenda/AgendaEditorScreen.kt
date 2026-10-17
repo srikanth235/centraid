@@ -30,7 +30,6 @@ import centraid.screen.v1.AgendaDraft
 import centraid.screen.v1.AgendaEditorData
 import centraid.screen.v1.AgendaEditorEvent
 import centraid.screen.v1.AgendaEditorState
-import centraid.screen.v1.WriteState
 import dev.centraid.android.kit.ChoiceFieldRow
 import dev.centraid.android.kit.ConfirmSheet
 import dev.centraid.android.kit.EditableFieldRow
@@ -39,7 +38,7 @@ import dev.centraid.android.kit.FieldRow
 import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.KitWords
 import dev.centraid.android.kit.OptionSheet
-import dev.centraid.android.kit.QuietButton
+import dev.centraid.android.kit.OutlineButton
 import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.RoomAction
 import dev.centraid.android.kit.RowSkeleton
@@ -86,7 +85,7 @@ internal fun AgendaEditorScreen(
             return@EditorRoom
         }
         val write = state.write
-        StatusLine(if (write?.phase == WriteState.Phase.PHASE_REFUSED) write.failure?.sentence.orEmpty() else "")
+        StatusLine(write?.refusal.orEmpty())
         ReadStateView(
             content = screenContentOf(state.loading, state.failure, data, state.denied),
             onRetry = { onEvent(AgendaEditorEvent(refreshed = AgendaEditorEvent.Refreshed())) },
@@ -184,7 +183,7 @@ private fun EditorBody(state: AgendaEditorState, data: AgendaEditorData, onEvent
         )
         if (data.blocked_reason.isNotEmpty()) Note(data.blocked_reason)
         if (data.show_skip && data.skip_label.isNotEmpty()) {
-            QuietButton(data.skip_label, testTag = "agenda-editor-skip", ink = "net", modifier = Modifier.padding(KitGeometry.GUTTER)) {
+            OutlineButton(data.skip_label, testTag = "agenda-editor-skip", ink = "net", modifier = Modifier.padding(KitGeometry.GUTTER)) {
                 onEvent(AgendaEditorEvent(skip = AgendaEditorEvent.SkipTapped()))
             }
         }

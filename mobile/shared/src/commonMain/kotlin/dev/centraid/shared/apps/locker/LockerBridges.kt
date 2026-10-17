@@ -2,6 +2,8 @@ package dev.centraid.shared.apps.locker
 
 import centraid.core.v1.PageQuery
 import centraid.core.v1.Row
+import centraid.screen.v1.LockerAccessEvent
+import centraid.screen.v1.LockerAccessState
 import centraid.screen.v1.LockerEditorEvent
 import centraid.screen.v1.LockerEditorState
 import centraid.screen.v1.LockerGeneratorEvent
@@ -123,6 +125,22 @@ public class LockerGeneratorBridge : LockerScreenBridge<LockerGeneratorState, Lo
 ) {
     public fun open() {
         forward(LockerGeneratorEvent(opened = LockerGeneratorEvent.Opened()))
+    }
+}
+
+/**
+ * The whole Locker's access history (#1047, Q-1047-21), pushed from the More
+ * sheet's Access history row. Metadata only, so there is nothing to conceal on
+ * leaving and no seam for a shell to implement: it reads when the Locker is
+ * open and wipes when it closes, like every Locker screen.
+ */
+public class LockerAccessBridge : LockerScreenBridge<LockerAccessState, LockerAccessEvent>(
+    LockerAccessMachine,
+    LockerAccessEvent.ADAPTER,
+    LockerAccessReads,
+) {
+    public fun open() {
+        forward(LockerAccessEvent(opened = LockerAccessEvent.Opened()))
     }
 }
 

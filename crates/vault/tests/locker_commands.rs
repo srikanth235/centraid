@@ -532,17 +532,20 @@ fn a_password_write_without_the_rotation_claim_is_refused() {
 // The lifecycle, which did not change.
 // ---------------------------------------------------------------------------
 
-/// AN EDIT REWRITES THE TYPE'S FIELDS AND DOES NOT PATCH THEM.
+/// AN EDIT REPLACES THE TYPE'S FIELDS AND DOES NOT PATCH THEM — AND SAYS SO
+/// (L4, ruled 2026-10-15).
 ///
 /// v0's contract, named by v0's own test: *"edit_item rewrites the type fields
 /// and replaces tags"*. An edit carrying only a password clears the username,
-/// the url, the OTP seed and the notes, because `fieldValues` returns every
-/// column of the type with `null` for the omitted ones.
+/// the url, the OTP seed and the notes, because every column of the type is
+/// written, `NULL` for the omitted ones.
 ///
-/// This is pinned rather than improved for one reason: the same input must
-/// produce the same vault in both trees. The hazard — a caller reading the
-/// manifest's optional fields as a patch API — is in the receipt as a finding
-/// with an owner question, not fixed quietly here.
+/// The owner ruled it stays a replace and is stated where callers read: the
+/// command's schema (`the_edit_commands_schema_says_it_replaces`), the
+/// manifest's `edit-item`, the editor's proto comment and the Locker README.
+/// This test holds the behaviour: the clearing, what an omission leaves alone
+/// (title, tags, the compromised flag), and what keeps a secret through a
+/// replace, the placeholder.
 #[test]
 fn an_edit_rewrites_the_types_fields_rather_than_patching_them() {
     let world = World::new("locker-replace", "key-1");
@@ -564,7 +567,7 @@ fn an_edit_rewrites_the_types_fields_rather_than_patching_them() {
             "key_id": "key-1"
         }),
     );
-    // THE OMITTED COLUMNS ARE CLEARED. This is v0.
+    // THE OMITTED COLUMNS ARE CLEARED. This is the contract.
     for column in ["username", "url", "otp_seed", "notes"] {
         let value: Option<String> = world.one(
             &format!("SELECT {column} FROM locker_item WHERE item_id = ?1"),
@@ -579,6 +582,38 @@ fn an_edit_rewrites_the_types_fields_rather_than_patching_them() {
             &["item-1"]
         ),
         "The bank"
+    );
+    // THE TAGS ARE NOT A TYPE FIELD EITHER: the login's one (`money` once,
+    // the repeat and the blank dropped) came through an edit that did not
+    // name them, and an empty list is how a caller clears them.
+    let tags = |world: &World| {
+        world.one::<i64>(
+            "SELECT COUNT(*) FROM core_tag WHERE target_id = ?1",
+            &["item-1"],
+        )
+    };
+    assert_eq!(tags(&world), 1, "an edit that named no tags changed them");
+    world.ok(
+        "locker.edit_item",
+        serde_json::json!({ "item_id": "item-1", "password": "«sealed»", "tags": [] }),
+    );
+    assert_eq!(tags(&world), 0, "an empty list did not clear the tags");
+    // A COMPROMISED FLAG THE EDIT DOES NOT STATE IS LEFT ALONE, too.
+    world.ok(
+        "locker.edit_item",
+        serde_json::json!({ "item_id": "item-1", "password": "«sealed»", "compromised": true }),
+    );
+    world.ok(
+        "locker.edit_item",
+        serde_json::json!({ "item_id": "item-1", "password": "«sealed»" }),
+    );
+    assert_eq!(
+        world.one::<i64>(
+            "SELECT compromised FROM locker_item WHERE item_id = ?1",
+            &["item-1"]
+        ),
+        1,
+        "an edit that stated no flag changed it"
     );
 
     // A FULL DRAFT — which is what the UI sends — keeps everything.
@@ -607,6 +642,32 @@ fn an_edit_rewrites_the_types_fields_rather_than_patching_them() {
         ),
         ciphertext("rotated")
     );
+}
+
+/// THE COMMAND SAYS IT REPLACES, WHERE A CALLER READS (L4, ruled 2026-10-15).
+///
+/// `describe` serves a command's input schema to whoever builds a form or a
+/// tool call from it, and an assistant or an API caller reads it as the
+/// contract. The root `description` is where "replaces, does not patch" lives,
+/// so a caller who takes the optional fields for a patch API is told before it
+/// loses data. Held here so a rewrite of the schema cannot drop the sentence
+/// while the behaviour above stays.
+#[test]
+fn the_edit_commands_schema_says_it_replaces() {
+    let registry = registry();
+    let schema = registry
+        .get("locker.edit_item")
+        .expect("the command is registered")
+        .schema();
+    let said = schema["description"]
+        .as_str()
+        .expect("the schema carries a description at its root");
+    for phrase in ["REPLACES, does not patch", "CLEARED", "«sealed»"] {
+        assert!(
+            said.contains(phrase),
+            "the description lost `{phrase}`: {said}"
+        );
+    }
 }
 
 /// THE COMPROMISED FLAG IS THE MEMBER'S, AND A NEW PASSWORD ANSWERS IT

@@ -138,14 +138,29 @@ pub fn open_golden_labelled(label: &str) -> Result<InflatedGolden> {
 
 /// A unique scratch directory for an inflated copy. Outside the repository, so
 /// nothing it holds can be committed by accident.
+///
+/// **NOT UNIQUE BY PROCESS ID AND COUNTER ALONE.** Under `cargo nextest` every
+/// test is its own process, so ids are reused within one run and the counter
+/// starts at 0 in each; a copy a killed test never dropped then collides with
+/// the next test that draws the same pair ("vault.db already exists"). The
+/// clock's nanoseconds make the pair unique, and a name that is taken anyway is
+/// stepped past rather than reused.
 #[must_use]
 pub fn scratch_dir() -> PathBuf {
     use std::sync::atomic::{AtomicU64, Ordering};
     static COUNTER: AtomicU64 = AtomicU64::new(0);
-    let unique = format!(
-        "centraid-golden-{}-{}",
-        std::process::id(),
-        COUNTER.fetch_add(1, Ordering::Relaxed)
-    );
-    std::env::temp_dir().join(unique)
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |elapsed| elapsed.as_nanos());
+    loop {
+        let unique = format!(
+            "centraid-golden-{}-{nanos}-{}",
+            std::process::id(),
+            COUNTER.fetch_add(1, Ordering::Relaxed)
+        );
+        let dir = std::env::temp_dir().join(unique);
+        if !dir.exists() {
+            return dir;
+        }
+    }
 }

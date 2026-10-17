@@ -47,9 +47,6 @@ class PhotosCollectionsSpec : StringSpec({
     fun shelfRow(assetId: String, sortKey: String, thumbnail: String = "") =
         row(assetId, sortKey, thumbnail)
 
-    /** A face row: `region_id, party_id, review_state`. */
-    fun faceRow(regionId: String, partyId: String, state: String) = row(regionId, partyId, state)
-
     /** A phash row: `asset_id, cluster_id`. */
     fun phashRow(assetId: String, clusterId: String) = row(assetId, clusterId)
 
@@ -61,7 +58,6 @@ class PhotosCollectionsSpec : StringSpec({
         trash: Scan = Scan(),
         videos: Scan = Scan(),
         starred: Scan = Scan(),
-        faces: Scan = Scan(),
         places: Scan = Scan(),
         memories: Scan = Scan(),
         duplicates: Scan = Scan(),
@@ -73,7 +69,6 @@ class PhotosCollectionsSpec : StringSpec({
         trash = trash,
         videos = videos,
         starred = starred,
-        faces = faces,
         places = places,
         memories = memories,
         duplicates = duplicates,
@@ -183,7 +178,6 @@ class PhotosCollectionsSpec : StringSpec({
             PhotosCollectionsReads.flagsSchemeQuery(),
             PhotosCollectionsReads.starredConceptQuery("scheme-1"),
             PhotosCollectionsReads.starredTagsQuery("concept-1"),
-            PhotosCollectionsReads.facesQuery(),
             PhotosCollectionsReads.placesQuery(),
             PhotosCollectionsReads.memoriesQuery(),
             PhotosCollectionsReads.duplicatesQuery(),
@@ -238,7 +232,6 @@ class PhotosCollectionsSpec : StringSpec({
         ).forEach { withClue(it.name) { it.with_held_thumbnail shouldBe true } }
         listOf(
             PhotosCollectionsReads.albumEntriesQuery(),
-            PhotosCollectionsReads.facesQuery(),
             PhotosCollectionsReads.starredTagsQuery("c"),
         ).forEach { withClue(it.name) { it.with_held_thumbnail shouldBe false } }
     }
@@ -302,21 +295,20 @@ class PhotosCollectionsSpec : StringSpec({
         album.shelf.shouldNotBeNull().album.shouldNotBeNull().collection_id shouldBe "col-1"
 
         data.doors.map { it.kind } shouldContainExactly listOf(
-            CollectionsDoor.Kind.KIND_PEOPLE,
             CollectionsDoor.Kind.KIND_PLACES,
             CollectionsDoor.Kind.KIND_MEMORIES,
             CollectionsDoor.Kind.KIND_DUPLICATES,
         )
     }
 
-    "a vault with nothing in it is four shelves and four doors, never a refusal" {
+    "a vault with nothing in it is four shelves and three doors, never a refusal" {
         // AN EMPTY VAULT IS A REAL ANSWER, unlike the Notes editor's empty page:
         // a member with no albums and no photographs has a Collections screen
-        // with four standing shelves and four doors on it, which is a screen
+        // with four standing shelves and three doors on it, which is a screen
         // and not an absence.
         val data = fold()
         data.shelves.size shouldBe 4
-        data.doors.size shouldBe 4
+        data.doors.size shouldBe 3
         data.shelves.forEach {
             withClue(it.title) {
                 it.item_count shouldBe 0
@@ -366,7 +358,7 @@ class PhotosCollectionsSpec : StringSpec({
             entries = Scan(rows = listOf(entryRow("e-1", "col-1")), capped = true),
             trash = Scan(rows = listOf(shelfRow("a-1", "2026-02-02")), capped = true),
             archive = Scan(rows = listOf(shelfRow("a-2", "2026-02-02")), capped = false),
-            faces = Scan(rows = listOf(faceRow("r-1", "p-1", "confirmed")), capped = true),
+            places = Scan(rows = listOf(row("pl-1", "Lisbon")), capped = true),
         )
         val byTitle = data.shelves.associateBy { it.title }
         byTitle.getValue("Trash").item_count_capped shouldBe true
@@ -377,33 +369,8 @@ class PhotosCollectionsSpec : StringSpec({
         // entirely — "0" would be a claim and "at least 0" is the truth.
         byTitle.getValue("Portugal").item_count shouldBe 1
         byTitle.getValue("Portugal").item_count_capped shouldBe true
-        data.doors.single { it.kind == CollectionsDoor.Kind.KIND_PEOPLE }
+        data.doors.single { it.kind == CollectionsDoor.Kind.KIND_PLACES }
             .count_capped shouldBe true
-    }
-
-    "People counts the named and badges the unanswered" {
-        // Two facts off one table: who is CONFIRMED is the door's count, and
-        // how many proposals are UNANSWERED is the badge. A party named on two
-        // faces is one person, which is why the confirmed ids are deduped.
-        val data = fold(
-            faces = Scan(
-                rows = listOf(
-                    faceRow("r-1", "p-1", "confirmed"),
-                    faceRow("r-2", "p-1", "confirmed"),
-                    faceRow("r-3", "p-2", "confirmed"),
-                    faceRow("r-4", "", "proposed"),
-                    faceRow("r-5", "", "proposed"),
-                    // ANSWERED AND NOT NAMED IS NOT A BACKLOG ITEM: "rejected"
-                    // and "dismissed" are states precisely so the queue can be
-                    // finished (#712), and counting them would make it endless.
-                    faceRow("r-6", "", "rejected"),
-                    faceRow("r-7", "", "dismissed"),
-                ),
-            ),
-        )
-        val people = data.doors.single { it.kind == CollectionsDoor.Kind.KIND_PEOPLE }
-        people.count shouldBe 2
-        people.needs_attention shouldBe 2
     }
 
     "Duplicates counts GROUPS of look-alikes, never rows" {
@@ -449,7 +416,7 @@ class PhotosCollectionsSpec : StringSpec({
         shelves.count { it.title == "Favorites" } shouldBe 1
         shelves.filter { it.member_owned }.map { it.title } shouldContainExactly
             listOf("Portugal", "Rooftops")
-        second.data_.shouldNotBeNull().doors.size shouldBe 4
+        second.data_.shouldNotBeNull().doors.size shouldBe 3
     }
 
     "creating an album is the VAULT's command, keyed on what it is for" {

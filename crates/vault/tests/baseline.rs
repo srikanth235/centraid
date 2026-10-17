@@ -1,8 +1,10 @@
-//! The baseline migration IS the corpus's schema (D-1020-D1-1, D-1020-D1-2).
+//! The baseline migration against the v0 corpus (D-1020-D1-1, D-1020-D1-2, Q-1029-1).
 //!
-//! `contracts/migrations/001_baseline.sql` is generated from the corpus, so the
-//! claim it makes is testable: found a v1 file from it and its `sqlite_master`
-//! must equal the corpus's, object for object, SQL for SQL.
+//! `contracts/migrations/001_baseline.sql` is the vault's whole schema and the rows
+//! founding seeds: rung one of the ladder, squashed on 2026-10-15 from the fifteen
+//! rungs that began as a v0 file's schema. A founded v1 file is therefore the frozen
+//! v0 corpus (`contracts/golden/issue-1020/vault.db.gz`) plus a short list of
+//! NAMED differences, and this suite holds the baseline to that list.
 //!
 //! **The exclusions, and every one's reason.** The generator leaves out exactly
 //! three classes of object, and this test confirms each is back in the founded
@@ -10,31 +12,31 @@
 //!
 //! | Excluded | Why | Back in the file? |
 //! |---|---|---|
-//! | FTS shadow tables (`fts_*_{data,idx,content,docsize,config}`) | `CREATE VIRTUAL TABLE` creates them; issuing their DDL too is an error | yes, 90 of them |
-//! | `sqlite_sequence` | created for the first `AUTOINCREMENT` table; a hand-written `CREATE TABLE` for it is refused | yes |
+//! | FTS shadow tables (`fts_*_{data,idx,content,docsize,config}`) | `CREATE VIRTUAL TABLE` creates them; issuing their DDL too is an error | yes, 50 of them |
+//! | `sqlite_sequence` | created for the first `AUTOINCREMENT` table; a hand-written `CREATE TABLE` for it is refused | only while a table uses `AUTOINCREMENT` — none does now |
 //! | `sqlite_autoindex_*` | implicit, created by the UNIQUE constraint that needs it, and not nameable in DDL | yes, and not in `sqlite_master` with a `sql` at all |
 //!
 //! So the answer to "what is excluded from the comparison" is **nothing**. The
 //! founded schema and the corpus's schema are equal as sets and as text, EXCEPT
-//! for what the LADDER does above the baseline, in both directions:
+//! for what v1 did to v0's schema, in four named ways:
 //!
-//! - what a rung ADDS and no later rung drops — rung two's four revision
-//!   guards (#1020, D-1020-N2), rung six's kind guard on `core_collection` and
-//!   rung seven's one-generation index on `locker_key` — named in
-//!   `LADDER_OBJECTS`. Rung three's four backup-index objects and rung four's
-//!   four blob-custody objects (#1029 §2, §4) are founded and dropped again by
-//!   rung ten (#1080), so a founded file holds none of them;
-//! - what rung five DROPS — the planes v1 does not have (#1029) — rung
-//!   seven's `locker_key_live_idx` and rung nine's `notifications_notice`,
-//!   named in `DROPPED_OBJECTS`;
-//! - the tables a rung ALTERS — `locker_item`, which loses the
-//!   `connection_id` column that pointed into `sync_connection` (rung five),
-//!   `core_collection`, which gains its required `kind` (rung six),
-//!   `locker_key`, which loses `retired_at` (rung seven), and
-//!   `locker_item_address`, which loses `match_policy` as `locker_item` loses
-//!   `url_match_policy` (rung eight) — named in `ALTERED_OBJECTS`.
+//! - what v1 ADDED — the revision graph's four guards (#1020, D-1020-N2), the
+//!   collection kind's guard, the Locker's one-generation index, the chat, the
+//!   widened search indexes and their vocabularies, and Money — named in
+//!   `ADDED_OBJECTS`;
+//! - what v1 DROPPED — the planes #1029 struck, Tally (#1099), the Locker's
+//!   `retired_at` index and `notifications_notice`, and `sqlite_sequence`, which
+//!   SQLite stopped keeping once the last `AUTOINCREMENT` table went — named in
+//!   `DROPPED_OBJECTS`;
+//! - the tables v1 ALTERED — `core_collection`, which gains its required `kind`,
+//!   `locker_key`, `locker_item` and `locker_item_address`, and the search
+//!   indexes that fold in attribute text — named in `ALTERED_OBJECTS`;
+//! - what v1 RENAMED — the command registry, the invocation journal and its four
+//!   siblings, whose v0 names say `agent` (Q-1029-3) — named in `RENAMES`, and undone on the
+//!   founded text before it is compared, so an object that only MENTIONS a
+//!   renamed table (a foreign key, an index, a comment) still equals the corpus's.
 //!
-//! All three are named rather than matched by prefix, so a table that comes
+//! All four are named rather than matched by prefix, so a table that comes
 //! back, a drop that stops running and an object arriving from nowhere are each
 //! a failure with a name. Any future exclusion has to be added to this table
 //! with its reason, and the assertion below is what forces that.
@@ -45,32 +47,63 @@ use std::collections::BTreeMap;
 
 use centraid_vault::{APPLICATION_ID, Vault, head_version};
 
-/// What the ladder adds above the baseline: rung two's four revision guards
-/// (#1020, D-1020-N2), rung six's guard that a collection's kind never
-/// changes, rung seven's index that makes a second Locker generation
-/// unrepresentable (R-1047-D2), rung eleven's chat: four tables, their
-/// three entity triggers and the indexes (R-CHAT-1), and rung twelve's two
-/// guards on a proposal's life (#1088), and rung thirteen's eleven `_vocab`
-/// tables, the folder index `fts_core_concept` with its shadow tables and four
-/// triggers, and the triggers that re-index a party, event, task or
-/// expense from the child table that feeds it, including the one edge that
-/// carries an interaction's note to the person (#1097) — of which rung fifteen
-/// drops those that fed Tally's expense and circle indexes (#1099) — and its chat index
-/// `fts_chat_thread` with its five shadow tables, its vocabulary and the six
-/// triggers that keep it to a thread's title and what the member said
-/// (R-1097-22), and rung fourteen's Money: six `money_*` tables with their
-/// touch and membership triggers and indexes, the unique index that lands a
-/// statement line once per account, and the three triggers that hold a Money
-/// account to one currency and an imported row to never being edited (#1099). Rungs three and four
-/// added the old backup plane's index and blob custody (#1029 §2, §4); rung
-/// ten drops all eight objects again (#1080), so they are founded and gone.
+/// What v1 renamed, `(v0 name, v1 name)`, in the order they are undone: a v1 name that begins
+/// with another (`command_invocation_check` with `command_invocation`) goes first. Q-1029-3:
+/// despite the names they are the command registry, the invocation journal and the journal's
+/// four siblings, and there is no agent left in v0. The last four were renamed on 2026-10-16.
+const RENAMES: [(&str, &str); 6] = [
+    ("agent_invocation_check", "command_invocation_check"),
+    ("agent_command_invocation", "command_invocation"),
+    ("agent_command", "command_definition"),
+    ("agent_capability", "command_capability"),
+    ("agent_evidence", "command_evidence"),
+    ("agent_explanation", "command_explanation"),
+];
+
+/// A founded file's text, with every v1 name it uses for a renamed object put back to v0's.
 ///
-/// The corpus is a v0 file and knows nothing of the v1 ladder above rung one,
-/// so a founded v1 file legitimately carries exactly these and nothing else.
-/// Named here rather than filtered by prefix: a guard that stopped being
-/// created, or an object arriving from somewhere, both have to show up as a
-/// failure.
-const LADDER_OBJECTS: [&str; 89] = [
+/// A name is undone where it BEGINS a word and not where it ends one: a trigger is named
+/// `command_invocation_append_only_d`, and an index `idx_command_invocation_receipt` — which
+/// v1 did not rename — begins with something else. The logical name in a comment
+/// (`command.definition`, once `agent.command`) goes with them.
+fn undo_renames(text: &str) -> String {
+    let mut text = text.replace("\u{2192} command.definition", "\u{2192} agent.command");
+    for (old, new) in RENAMES {
+        let mut out = String::with_capacity(text.len());
+        let mut rest = text.as_str();
+        while let Some(at) = rest.find(new) {
+            let before = rest[..at].chars().next_back();
+            let begins_a_word = before.is_none_or(|c| !(c.is_ascii_alphanumeric() || c == '_'));
+            out.push_str(&rest[..at]);
+            out.push_str(if begins_a_word { old } else { new });
+            rest = &rest[at + new.len()..];
+        }
+        out.push_str(rest);
+        text = out;
+    }
+    text
+}
+
+/// What v1 ADDED to v0's schema: the revision graph's four guards (#1020,
+/// D-1020-N2), the guard that a collection's kind never changes, the index that
+/// makes a second Locker generation unrepresentable (R-1047-D2), the chat — four
+/// tables, their three entity triggers and the indexes (R-CHAT-1) — and the two
+/// guards on a proposal's life (#1088); the eleven `_vocab` tables over the
+/// search indexes, the folder index `fts_core_concept` with its shadow tables and
+/// four triggers, and the triggers that re-index a party, event, task from the
+/// child table that feeds it, including the one edge that carries an interaction's
+/// note to the person (#1097); the chat index `fts_chat_thread` with its five
+/// shadow tables, its vocabulary and the six triggers that keep it to a thread's
+/// title and what the member said (R-1097-22); and Money (#1099): six `money_*`
+/// tables with their touch and membership triggers and indexes, the unique index
+/// that lands a statement line once per account, and the three triggers that hold
+/// a Money account to one currency and an imported row to never being edited.
+///
+/// The corpus is a v0 file and knows nothing of v1's additions, so a founded v1
+/// file legitimately carries exactly these and nothing else. Named here rather
+/// than filtered by prefix: a guard that stopped being created, or an object
+/// arriving from somewhere, both have to show up as a failure.
+const ADDED_OBJECTS: [&str; 89] = [
     "chat_message",
     "chat_message_attachment",
     "chat_message_card",
@@ -162,34 +195,41 @@ const LADDER_OBJECTS: [&str; 89] = [
     "money_transaction_touch_updated_at",
 ];
 
-/// WHAT RUNG FIVE DROPS (#1029): the storage of every plane this umbrella
-/// deleted in code — sharing, the outbox, the replica plane, per-device blob
-/// wrapping, automations, connectors, agents and the conversation ledger band —
-/// with each dropped table's own indexes and triggers, the `fts_conversation`
-/// virtual table's five shadow tables, the `run_summary` view over the ledger
-/// and the `core_entity_revoke_on_purge` trigger whose whole body was an UPDATE
-/// on `share_authority` — and, from rung seven, `locker_key_live_idx`, the
-/// predicate index whose `retired_at` had no writer once rotation went
-/// (R-1047-D2) — and, from rung nine, `notifications_notice` with its two
-/// indexes, a table no plane has written or read since #1029 — and, from rung
-/// thirteen, the seven full-text indexes nothing read (`fts_people_profile`,
+/// WHAT V1 DROPPED FROM V0'S SCHEMA (#1029): the storage of every plane the
+/// umbrella deleted in code — sharing, the outbox, the replica plane, per-device
+/// blob wrapping, automations, connectors, agents and the conversation ledger
+/// band — with each dropped table's own indexes and triggers, the
+/// `fts_conversation` virtual table's five shadow tables, the `run_summary` view
+/// over the ledger and the `core_entity_revoke_on_purge` trigger whose whole body
+/// was an UPDATE on `share_authority`; `locker_key_live_idx`, the predicate index
+/// whose `retired_at` had no writer once rotation went (R-1047-D2);
+/// `notifications_notice` with its two indexes, a table no plane has written or
+/// read since #1029; the seven full-text indexes nothing read (`fts_people_profile`,
 /// `fts_core_place`, `fts_knowledge_annotation`, and by the owner's ruling
 /// `fts_core_transaction`, `fts_locker_item`, `fts_social_thread` and
-/// `fts_social_message`) with their shadow tables and twenty-one triggers
-/// (#1097, R2a, R-1097-12) — and, from rung fifteen, Tally (#1099): its twelve
-/// tables with their indexes and triggers, the expense index `fts_tally_expense`
-/// and the circle index `fts_social_circle` (whose only reader was a Tally group,
-/// R-1099-35) with their shadow tables and triggers. `fts_schedule_project` is kept
-/// for containers (R-1097-19), so it is not dropped; its triggers are rewritten
-/// with a liveness guard and are in `ALTERED_OBJECTS`.
+/// `fts_social_message`) with their shadow tables and twenty-one triggers (#1097,
+/// R2a, R-1097-12); and Tally (#1099): its twelve tables with their indexes and
+/// triggers, the expense index `fts_tally_expense` and the circle index
+/// `fts_social_circle` (whose only reader was a Tally group, R-1099-35) with
+/// their shadow tables and triggers. `fts_schedule_project` is kept for
+/// containers (R-1097-19), so it is not dropped; its triggers are rewritten with
+/// a liveness guard and are in `ALTERED_OBJECTS`.
 ///
-/// `access_device` and `access_device_secret` are NOT here, and that is an
-/// open item rather than a ruling: their writer (`Vault::enrol_device`, the
-/// gateway's peer allowlist) left with the iroh plane in #1080, and no rung
-/// drops them yet.
-const DROPPED_OBJECTS: [&str; 276] = [
+/// `sqlite_sequence` is SQLite's own bookkeeping table for `AUTOINCREMENT`, and
+/// the corpus has two such tables (`replica_log`, `trigger_ingress`). It stayed
+/// behind, empty, when the ladder dropped both; the squashed baseline never
+/// creates either, so a founded vault no longer has the table.
+///
+/// `access_device` and `access_device_secret` are here with their owner-party index: their
+/// writer (`Vault::enrol_device`, the gateway's peer allowlist) left with the iroh plane in
+/// #1080, and the baseline stopped founding them on 2026-10-16. So are the two indexes on the
+/// columns that named them, `core_content_item.origin_device_id` and
+/// `media_asset.camera_device_id`; both columns went, and both tables are in `ALTERED_OBJECTS`.
+const DROPPED_OBJECTS: [&str; 282] = [
     "access_agent",
     "access_agent_secret",
+    "access_device",
+    "access_device_secret",
     "attachments",
     "automation_state",
     "automation_trigger_cursor",
@@ -308,6 +348,7 @@ const DROPPED_OBJECTS: [&str; 276] = [
     "idx_automation_trigger_cursor_updated",
     "idx_blob_device_content_key_device",
     "idx_blob_outbox_retry",
+    "idx_content_item_origin_device",
     "idx_conversation_archive_conv",
     "idx_conversation_archive_sha",
     "idx_conversation_archive_unpruned",
@@ -317,11 +358,13 @@ const DROPPED_OBJECTS: [&str; 276] = [
     "idx_conversations_app",
     "idx_conversations_automation",
     "idx_conversations_user_updated",
+    "idx_device_owner_party",
     "idx_harness_health_breaker",
     "idx_items_by_model",
     "idx_items_by_turn",
     "idx_items_run_rollup",
     "idx_items_turn_call",
+    "idx_media_asset_camera_device",
     "idx_outbox_item_authority",
     "idx_outbox_item_connection",
     "idx_outbox_item_published_message",
@@ -379,6 +422,7 @@ const DROPPED_OBJECTS: [&str; 276] = [
     "share_subscription_member",
     "share_subscription_subscribed_page_idx",
     "share_subscription_touch_updated_at",
+    "sqlite_sequence",
     "sync_connection",
     "sync_connection_credential",
     "sync_connection_credential_touch_updated_at",
@@ -466,37 +510,41 @@ const DROPPED_OBJECTS: [&str; 276] = [
     "turns",
 ];
 
-/// The objects the ladder ALTERS rather than creates or drops.
+/// The objects v1 ALTERED rather than created or dropped.
 ///
-/// - `core_collection` (rung six): the table gains its REQUIRED `kind`
-///   (`notebook` | `album`), so Notes and Photos stop reading each other's
-///   rows. The rung rebuilds the table and re-creates its indexes and triggers
-///   in the baseline's own text, so the table is the only one of them whose DDL
-///   differs from the corpus's.
-/// - `locker_key` (rung seven): the table loses `retired_at`, whose only
-///   writer was the rotation R-1047-D1 deleted; the Locker names one
-///   generation (R-1047-D2).
-/// - `locker_item` (rung five): `locker_item.connection_id` was a foreign key
-///   into `sync_connection`, "the connector this password belongs to". There is
-///   no connector runtime, so the column and its index go. Rung eight drops
-///   `url_match_policy` too (Q-1047-15), so the table's DDL differs from the
-///   corpus's by those two columns.
-/// - `locker_item_address` (rung eight): `match_policy` goes with the matcher
-///   nothing ran (Q-1047-15).
-/// - the three sync triggers of `fts_schedule_project` (rung thirteen): an
-///   archived project is not indexed (R-1097-19), so the triggers carry that guard.
-/// - `fts_core_party`, `fts_core_event` and `fts_schedule_task` (rung
-///   thirteen): each index is dropped and created
-///   again with the attribute columns it folds in, so the virtual table, its
-///   `_content` shadow (one column per indexed column) and its three sync
-///   triggers differ from the corpus's. The other shadows (`_config`, `_data`,
-///   `_docsize`, `_idx`) have the same DDL whatever the columns (#1097).
-/// - the four `trg_fts_content_text_*` and `trg_fts_representation_*` triggers
-///   (rung thirteen): they re-index notes, documents and messages when a body
-///   or a representation arrives, and rung thirteen creates them again without
-///   the message block, because `fts_social_message` is retired (#1097).
-const ALTERED_OBJECTS: [&str; 26] = [
+/// - `core_collection`: the table gains its REQUIRED `kind` (`notebook` |
+///   `album`), so Notes and Photos stop reading each other's rows. Its indexes
+///   and triggers are in the baseline's own text, so the table is the only one of
+///   them whose DDL differs from the corpus's.
+/// - `locker_key`: the table loses `retired_at`, whose only writer was the
+///   rotation R-1047-D1 deleted; the Locker names one generation (R-1047-D2).
+/// - `locker_item`: `connection_id` was a foreign key into `sync_connection`,
+///   "the connector this password belongs to". There is no connector runtime, so
+///   the column and its index go, and `url_match_policy` goes with the matcher
+///   nothing ran (Q-1047-15), so the table's DDL differs from the corpus's by
+///   those two columns.
+/// - `locker_item_address`: `match_policy` goes with the same matcher
+///   (Q-1047-15).
+/// - the three sync triggers of `fts_schedule_project`: an archived project is
+///   not indexed (R-1097-19), so the triggers carry that guard.
+/// - `fts_core_party`, `fts_core_event` and `fts_schedule_task`: each index folds
+///   in attribute columns, so the virtual table, its `_content` shadow (one
+///   column per indexed column) and its three sync triggers differ from the
+///   corpus's. The other shadows (`_config`, `_data`, `_docsize`, `_idx`) have
+///   the same DDL whatever the columns (#1097).
+/// - `core_content_item` and `media_asset`: each loses the column that named an
+///   `access_device` row, `origin_device_id` and `camera_device_id`, which every writer
+///   left NULL (2026-10-16).
+/// - `schedule_recurrence_exception`: its `target_type` CHECK loses the Tally
+///   value `tally.recurring_expense`, which no row has carried since #1099
+///   (2026-10-16); `people_profile` loses the same app's name from a comment.
+/// - the four `trg_fts_content_text_*` and `trg_fts_representation_*` triggers:
+///   they re-index notes and documents when a body or a representation arrives,
+///   and no longer carry the message block, because `fts_social_message` is
+///   retired (#1097).
+const ALTERED_OBJECTS: [&str; 30] = [
     "core_collection",
+    "core_content_item",
     "fts_core_event",
     "fts_core_event_ad",
     "fts_core_event_ai",
@@ -518,6 +566,9 @@ const ALTERED_OBJECTS: [&str; 26] = [
     "locker_item",
     "locker_item_address",
     "locker_key",
+    "media_asset",
+    "people_profile",
+    "schedule_recurrence_exception",
     "trg_fts_content_text_ai",
     "trg_fts_content_text_au",
     "trg_fts_representation_ai",
@@ -547,16 +598,21 @@ fn schema_of(connection: &rusqlite::Connection) -> BTreeMap<(String, String), St
 }
 
 #[test]
-fn a_founded_v1_file_carries_exactly_the_corpuss_schema() {
+fn a_founded_file_is_the_v0_corpus_plus_what_v1_names() {
     let golden = centraid_ontology::golden::open_golden().expect("the corpus inflates");
     let corpus = rusqlite::Connection::open(golden.db_path()).expect("the corpus opens");
     let expected = schema_of(&corpus);
 
     let scratch = common::Scratch::empty("baseline").expect("a vault is founded");
-    let actual = scratch
+    // THE RENAMES ARE UNDONE ON THE FOUNDED SIDE, name and text, so what is compared is the
+    // schema and not the spelling of two tables.
+    let actual: BTreeMap<(String, String), String> = scratch
         .vault
         .read(|connection| Ok(schema_of(connection)))
-        .expect("the founded schema reads");
+        .expect("the founded schema reads")
+        .into_iter()
+        .map(|((kind, name), sql)| ((kind, undo_renames(&name)), undo_renames(&sql)))
+        .collect();
 
     let mut findings: Vec<String> = Vec::new();
     let mut dropped: Vec<&str> = Vec::new();
@@ -581,7 +637,7 @@ fn a_founded_v1_file_carries_exactly_the_corpuss_schema() {
         if expected.contains_key(key) {
             continue;
         }
-        if LADDER_OBJECTS.contains(&key.1.as_str()) {
+        if ADDED_OBJECTS.contains(&key.1.as_str()) {
             beyond.push(key.1.as_str());
             continue;
         }
@@ -592,15 +648,11 @@ fn a_founded_v1_file_carries_exactly_the_corpuss_schema() {
     }
     beyond.sort_unstable();
     assert_eq!(findings.join("\n"), "");
-    // AND THE DROPS ARE THE LADDER'S, NAMED. A table that came back, or a drop
-    // that stopped running, is this assertion rather than a silent pass.
+    // AND THE DROPS ARE V1'S, NAMED. A table that came back is this assertion rather than a
+    // silent pass.
     assert_eq!(dropped, DROPPED_OBJECTS);
-    // AND THE DELTA IS THE LADDER, NAMED (#1020, close pass). A founded file is
-    // the baseline PLUS every rung above it, so the difference from the corpus
-    // is not "nothing" any more — it is exactly rung two's four guards and rung
-    // three's four backup-index objects, and anything else appearing here is a
-    // rung nobody declared.
-    assert_eq!(beyond, LADDER_OBJECTS);
+    // AND WHAT V1 ADDED IS NAMED: anything else appearing here is a change nobody declared.
+    assert_eq!(beyond, ADDED_OBJECTS);
 
     // NOT VACUOUS. Two empty schemas compare equal, which is the one way this
     // could pass for free.
@@ -610,7 +662,7 @@ fn a_founded_v1_file_carries_exactly_the_corpuss_schema() {
         expected.len()
     );
     assert_eq!(
-        expected.len() + LADDER_OBJECTS.len() - DROPPED_OBJECTS.len(),
+        expected.len() + ADDED_OBJECTS.len() - DROPPED_OBJECTS.len(),
         actual.len()
     );
 }
@@ -618,7 +670,7 @@ fn a_founded_v1_file_carries_exactly_the_corpuss_schema() {
 #[test]
 fn the_three_excluded_classes_are_created_by_sqlite_itself() {
     let scratch = common::Scratch::empty("excluded").expect("a vault is founded");
-    let (shadows, sequence, autoindexes): (i64, i64, i64) = scratch
+    let (shadows, sequence, autoincrement, autoindexes): (i64, i64, i64, i64) = scratch
         .vault
         .read(|connection| {
             Ok((
@@ -635,6 +687,12 @@ fn the_three_excluded_classes_are_created_by_sqlite_itself() {
                     |row| row.get(0),
                 )?,
                 connection.query_row(
+                    "SELECT COUNT(*) FROM sqlite_master
+                      WHERE type = 'table' AND sql LIKE '%AUTOINCREMENT%'",
+                    [],
+                    |row| row.get(0),
+                )?,
+                connection.query_row(
                     r"SELECT COUNT(*) FROM sqlite_master
                         WHERE name LIKE 'sqlite\_autoindex%' ESCAPE '\'",
                     [],
@@ -643,26 +701,26 @@ fn the_three_excluded_classes_are_created_by_sqlite_itself() {
             ))
         })
         .expect("the counts read");
-    // 10 FTS5 tables × 5 shadow tables each: rung five drops `fts_conversation`
-    // with the ledger band it indexed (#1029), rung thirteen drops the seven
-    // indexes nothing read (#1097, R2a, R-1097-12) and adds the folder index
-    // (R-1097-19) and the chat index (R-1097-22), and rung fifteen drops the
-    // expense index and the circle index with Tally (#1099). The `_vocab` tables
-    // rung thirteen adds are virtual tables over those, with no shadow tables of
-    // their own.
+    // 10 FTS5 tables × 5 shadow tables each: `fts_core_party`, `_event`, `_collection`,
+    // `_content_item`, `_document`, `_concept`, `_schedule_task`, `_schedule_project`,
+    // `fts_knowledge_note` and `fts_chat_thread`. The `_vocab` tables over them are virtual
+    // tables with no shadow tables of their own.
     assert_eq!(shadows, 50);
-    assert_eq!(sequence, 1);
+    // `sqlite_sequence` is SQLite's own bookkeeping for `AUTOINCREMENT`: it is in the file
+    // exactly when some table uses the keyword. v0 had two, and v1 dropped both with the
+    // planes they belonged to, so a founded vault has none.
+    assert_eq!(sequence, i64::from(autoincrement > 0));
     assert!(autoindexes > 0, "no implicit index was created");
     // And none of the three appears in the baseline's own text.
     assert!(!centraid_vault::migrations::BASELINE_SQL.contains("CREATE TABLE sqlite_sequence"));
 }
 
 #[test]
-fn the_fifty_seven_fts_sync_triggers_survive_the_baseline() {
+fn the_fts_sync_triggers_survive_the_baseline() {
     // THE SLIP THIS CATCHES. An FTS sync trigger is named `fts_<table>_ai`,
     // which starts with the virtual table's name and an underscore exactly as a
-    // shadow table does; excluding shadow objects by name alone dropped all of
-    // them, and a seat's first write then wrote nothing into the index.
+    // shadow table does; excluding shadow objects by name alone dropped all
+    // 57 of them, and a seat's first write then wrote nothing into the index.
     let scratch = common::Scratch::empty("fts").expect("a vault is founded");
     let triggers: i64 = scratch
         .vault
@@ -675,22 +733,11 @@ fn the_fifty_seven_fts_sync_triggers_survive_the_baseline() {
             )?)
         })
         .expect("the count reads");
-    // 57 in the corpus, less the six `fts_conversation_*` sync triggers rung
-    // five drops with the conversation ledger band (#1029) is 51: seventeen
-    // indexes, three each. Rung thirteen retires seven indexes (21 triggers) and
-    // adds the triggers that re-index a parent from a child table (#1097): 12 for
-    // a party (profile, channel, memo, and the link of an interaction's note), 1
-    // for an event (place), 1 for a task (project) and 8 for an expense (line
-    // item, memo, circle, group); and for the containers (R-1097-19) the folder
-    // index's three and its one from the scheme, and the circle's three from its
-    // Tally group; and for the chat (R-1097-22) the thread index's three and the
-    // three that re-index a thread from its messages. Rung fifteen then drops
-    // Tally's expense index (its three and the eight that re-index it) and the
-    // circle index (its three and the three from the group), 17 in all (#1099).
-    assert_eq!(
-        triggers,
-        51 - 21 + 12 + 1 + 1 + 8 + 4 + 3 + 3 + 3 - (3 + 8) - (3 + 3)
-    );
+    // Ten indexes, three triggers each, and the triggers that re-index a parent from a
+    // child table: 12 for a party (profile, channel, memo, and the link of an interaction's
+    // note), 1 for an event (place), 1 for a task (project), 1 for the folder index (from its
+    // scheme) and 3 for a chat thread (from its messages).
+    assert_eq!(triggers, 10 * 3 + 12 + 1 + 1 + 1 + 3);
 }
 
 #[test]
@@ -729,8 +776,8 @@ fn the_entity_kind_registry_is_derived_and_equals_what_v0s_ladder_seeded() {
         .filter(|kind| !derived.contains(kind))
         .map(String::as_str)
         .collect();
-    // THE KINDS A RUNG ABOVE THE CORPUS DROPS, NAMED: rung fifteen's Tally (#1099).
-    const DROPPED_BY_THE_LADDER: [&str; 8] = [
+    // THE KINDS V1 DROPPED, NAMED: Tally's (#1099).
+    const DROPPED_BY_V1: [&str; 8] = [
         "tally.expense",
         "tally.expense_line_item",
         "tally.friend",
@@ -740,12 +787,11 @@ fn the_entity_kind_registry_is_derived_and_equals_what_v0s_ladder_seeded() {
         "tally.recurring_expense",
         "tally.settlement",
     ];
-    // THE KINDS A RUNG ABOVE THE CORPUS ADDS, NAMED: rung eleven's chat thread and
-    // rung fourteen's Money rule.
-    // The derivation must find it (a thread's first insert would fail its
-    // foreign key otherwise), and the corpus, being v0, cannot hold it.
-    const ADDED_BY_THE_LADDER: [&str; 2] = ["chat.thread", "money.rule"];
-    for kind in ADDED_BY_THE_LADDER {
+    // THE KINDS V1 ADDED, NAMED: the chat thread and the Money rule. The derivation must find
+    // them (a thread's first insert would fail its foreign key otherwise), and the corpus,
+    // being v0, cannot hold them.
+    const ADDED_BY_V1: [&str; 2] = ["chat.thread", "money.rule"];
+    for kind in ADDED_BY_V1 {
         assert!(
             derived.iter().any(|found| found == kind),
             "{kind} is derived"
@@ -753,11 +799,11 @@ fn the_entity_kind_registry_is_derived_and_equals_what_v0s_ladder_seeded() {
     }
     let extra: Vec<&String> = derived
         .iter()
-        .filter(|kind| !seeded.contains(kind) && !ADDED_BY_THE_LADDER.contains(&kind.as_str()))
+        .filter(|kind| !seeded.contains(kind) && !ADDED_BY_V1.contains(&kind.as_str()))
         .collect();
     assert_eq!(
         (missing, extra.is_empty()),
-        (DROPPED_BY_THE_LADDER.to_vec(), true),
+        (DROPPED_BY_V1.to_vec(), true),
         "missing, extra {extra:?}"
     );
     // A spot check that the exclusions are the RIGHT ones: a child row of a
@@ -768,7 +814,7 @@ fn the_entity_kind_registry_is_derived_and_equals_what_v0s_ladder_seeded() {
 }
 
 #[test]
-fn the_two_pragmas_and_the_replica_seed_are_written() {
+fn the_two_pragmas_are_written_and_the_file_is_in_wal() {
     let scratch = common::Scratch::empty("pragmas").expect("a vault is founded");
     let (application_id, user_version, journal): (i64, i64, String) = scratch
         .vault
@@ -785,18 +831,10 @@ fn the_two_pragmas_and_the_replica_seed_are_written() {
     // because there is no v0-artifact compatibility and the v0 ladder number
     // says nothing about a v1 file (D-1020-D1-2).
     assert_eq!(user_version, head_version());
-    // Rung two is the revision guards (#1020, D-1020-N2); rung three is the
-    // in-vault backup index and rung four is blob custody (#1029 §2, §4); rung
-    // five is the cut (#1029); rung six is the collection kind; rung seven is
-    // the Locker's one generation (R-1047-D2); rung eight drops the Locker's
-    // match policy (Q-1047-15); rung nine drops the notices no plane writes;
-    // rung ten drops rungs three and four's backup index (#1080); rung eleven
-    // founds the chat (R-CHAT-1); rung twelve gives a proposal its life
-    // (#1088); rung thirteen folds attribute text into the search indexes
-    // (#1097); rung fourteen founds Money and rung fifteen drops Tally (#1099).
     // Spelled out rather than left as `head_version()` alone: a rung silently
-    // vanishing would still satisfy the line above.
-    assert_eq!(user_version, 15);
+    // vanishing would still satisfy the line above. The ladder is the baseline
+    // (squashed on 2026-10-15, Q-1029-1); the next schema change makes this 2.
+    assert_eq!(user_version, 1);
     assert_eq!(journal, "wal");
 }
 
@@ -818,4 +856,82 @@ fn reopening_a_founded_file_changes_nothing() {
     // one-snapshot rule costs nothing on an up-to-date file.
     let snapshots = centraid_vault::snapshot::pre_migration_dir(&path);
     assert!(!snapshots.exists(), "a snapshot was taken for no migration");
+}
+
+#[test]
+fn a_founded_vault_dangles_no_foreign_key_and_passes_its_own_integrity_check() {
+    // THE BASELINE CARRIES ROWS, and `Vault::create` runs it with foreign keys off: this is the
+    // check that the rows it seeds (the categories scheme, its concepts and their entities)
+    // point at rows that are there once the entity-kind registry has been derived.
+    let scratch = common::Scratch::empty("integrity").expect("a vault is founded");
+    let (dangling, integrity): (i64, String) = scratch
+        .vault
+        .read(|connection| {
+            Ok((
+                connection.query_row(
+                    "SELECT COUNT(*) FROM pragma_foreign_key_check",
+                    [],
+                    |row| row.get(0),
+                )?,
+                connection.query_row("PRAGMA integrity_check", [], |row| row.get(0))?,
+            ))
+        })
+        .expect("the checks read");
+    assert_eq!(dangling, 0, "a founded vault dangles a foreign key");
+    assert_eq!(integrity, "ok");
+}
+
+/// What the baseline's own ladder founded and dropped before the first release: the old backup
+/// plane's index (#1029 §2, §4), which #1080 replaced with a plane that names every part from
+/// the plaintext it carries and asks the gateway what it holds. Not in the v0 corpus, so not in
+/// `DROPPED_OBJECTS`.
+const THE_OLD_BACKUP_PLANE: [&str; 8] = [
+    "backup_base_range",
+    "backup_base_range_by_hash",
+    "backup_blob_custody",
+    "backup_blob_custody_by_role",
+    "backup_blob_placement",
+    "backup_blob_placement_by_object",
+    "backup_object_range",
+    "backup_object_range_by_object",
+];
+
+#[test]
+fn what_the_ladder_dropped_before_the_first_release_never_returns() {
+    let scratch = common::Scratch::empty("never-return").expect("a vault is founded");
+    let schema = scratch
+        .vault
+        .read(|connection| Ok(schema_of(connection)))
+        .expect("the schema reads");
+    for name in THE_OLD_BACKUP_PLANE {
+        assert!(
+            !schema.keys().any(|(_, found)| found == name),
+            "`{name}`, the old backup plane's, is in a founded vault"
+        );
+    }
+    // TALLY LEFT THE VAULT (#1099): no object names one of its tables, and no entity kind is
+    // registered for it.
+    // Any spelling: a table (`tally_`), a registered kind (`tally.`) and a prose mention. The
+    // baseline once kept `tally.recurring_expense` in a CHECK list.
+    let naming_tally: Vec<&(String, String)> = schema
+        .iter()
+        .filter(|((_, name), sql)| {
+            name.contains("tally") || sql.to_ascii_lowercase().contains("tally")
+        })
+        .map(|(key, _)| key)
+        .collect();
+    assert!(naming_tally.is_empty(), "{naming_tally:?}");
+    let kinds: i64 = scratch
+        .vault
+        .read(|connection| {
+            Ok(connection.query_row(
+                "SELECT COUNT(*) FROM core_entity_kind WHERE kind LIKE 'tally.%'",
+                [],
+                |row| row.get(0),
+            )?)
+        })
+        .expect("the count reads");
+    assert_eq!(kinds, 0);
+    // NOT VACUOUS: the schema is the real one.
+    assert!(schema.len() > 500, "{} objects", schema.len());
 }

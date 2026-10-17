@@ -83,15 +83,15 @@ class NavigationAndMountSpec : StringSpec({
     }
 
     "a photo state view is a discriminated union" {
-        // Doctrine 3. The person case carries the name; the mode case carries
-        // no party id, and the type system is what says so.
-        val person = Destination.PhotoStateViewRoute(
+        // Doctrine 3. The view is a oneof and not `{mode, party_id?}`; the arm
+        // that carried a person left with the face surfaces (Q-1047-2), and a
+        // view says which standing shelf it is and nothing else.
+        val trash = Destination.PhotoStateViewRoute(
             PhotoStateView(
-                person = PhotoStateView.Person(party_id = "pty-1", person_name = "Ada"),
+                mode = PhotoStateView.Mode(kind = PhotoStateView.Mode.Kind.KIND_TRASH),
             ),
         )
-        person.view.person?.person_name shouldBe "Ada"
-        person.view.mode shouldBe null
+        trash.view.mode?.kind shouldBe PhotoStateView.Mode.Kind.KIND_TRASH
     }
 
     "there is no permission destination, and there is no vault parameter" {

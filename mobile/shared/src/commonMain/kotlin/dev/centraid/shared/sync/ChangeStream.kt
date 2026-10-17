@@ -84,6 +84,10 @@ public class ChangeStream {
         suspend fun deliver(seat: SeatState) {
             host.machine.seatChanged(seat)?.let { host.send(it) }
         }
+
+        suspend fun deliverConditions() {
+            host.machine.conditionsChanged()?.let { host.send(it) }
+        }
     }
 
     /**
@@ -117,6 +121,19 @@ public class ChangeStream {
     public suspend fun publishSeat(seat: SeatState) {
         _seat.value = seat
         routes.toList().forEach { it.deliver(seat) }
+    }
+
+    /**
+     * THE MEMBER'S TRANSFER RULE CHANGED, SO EVERY ROUTED SCREEN IS OFFERED IT
+     * (#1080). A screen that labels its rows by [LinkConditions] — the Photos
+     * grid's download arrows — says through its machine's
+     * [ScreenMachine.conditionsChanged] that it must read again; the others
+     * answer null. Like the seat, it is ONE fact about the device and not one
+     * per screen, and like a row change, whether it is a screen's is the
+     * machine's decision and not this class's.
+     */
+    public suspend fun conditionsChanged() {
+        routes.toList().forEach { it.deliverConditions() }
     }
 
     /** The seat as last published, for a shell that renders it directly. */

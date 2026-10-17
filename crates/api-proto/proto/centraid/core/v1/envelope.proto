@@ -121,6 +121,10 @@ message Request {
     // read: the plan carries a statement's bytes, the tile is Home's. See
     // `money.proto`.
     MoneyRequest money = 32;
+    // A PAIRED GATEWAY FOUND AGAIN AT NEW ADDRESSES (#1080, Q-1080-D3): the
+    // shell's foreground browse hands the core candidates, and the core keeps
+    // those that answer as the pinned gateway. See `phone.proto`.
+    RefreshDestinationRequest refresh_destination = 33;
   }
 }
 
@@ -159,6 +163,7 @@ message Response {
     ReleasedResponse released = 30;
     AssistResponse assist = 31;
     MoneyResponse money = 32;
+    RefreshDestinationResponse refresh_destination = 33;
   }
 }
 

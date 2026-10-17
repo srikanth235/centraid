@@ -3,9 +3,7 @@ import Foundation
 import Security
 import UIKit
 
-#if canImport(CentraidShared)
 import CentraidShared
-#endif
 
 // THE BACKGROUND MOVER (#1080 rulings 1, 2, 7; seam contract §2, A6, A10).
 //
@@ -529,7 +527,6 @@ extension BackgroundUploader: URLSessionDataDelegate {
     }
 }
 
-#if canImport(CentraidShared)
 /// THE KOTLIN-VISIBLE HALF (seam contract §2): `BackgroundUploads` is
 /// `commonMain`'s interface and this is its iOS implementation.
 extension BackgroundUploader: BackgroundUploads {
@@ -555,7 +552,6 @@ extension BackgroundUploader: BackgroundUploads {
 
     func cancelAll() { cancelEverything() }
 }
-#endif
 
 /// Where finished uploads go: the core's `UploadEvents`, or a hold until it
 /// is attached.
@@ -643,7 +639,6 @@ final class UploadSettlement {
     }
 }
 
-#if canImport(CentraidShared)
 /// The core's `UploadEvents`, as a sink. `@MainActor` because a Kotlin suspend
 /// function is callable from Swift on the main thread only.
 @MainActor
@@ -676,7 +671,6 @@ final class CoreUploadSink: UploadSink {
         }
     }
 }
-#endif
 
 /// A UIKIT BACKGROUND TASK, held while a pass finishes its current part
 /// (#1080, the shells: "a foreground pass survives backgrounding by finishing

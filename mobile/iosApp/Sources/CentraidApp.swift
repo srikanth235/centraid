@@ -8,12 +8,6 @@ import SwiftUI
 ///
 /// ONE ROOT STACK, NO TAB BAR — apps are covers over Home. That is a product
 /// ruling, not a SwiftUI preference.
-// THE ENTRY POINT IS THE iOS APP'S, NOT THE TEST HOST'S (#1020).
-//
-// `Sources` is a LIBRARY target, so an unguarded `@main` emits `_main` into it
-// and `swift test` — reason 3 in `Package.swift`'s header — fails linking the
-// XCTest runner with a duplicate symbol. The app entry belongs to the platform
-// that has an app; the macOS host build is only ever the fixture test's.
 #if os(iOS)
 @main
 struct CentraidApp: App {
@@ -77,7 +71,6 @@ struct CentraidApp: App {
                 // onto the way to make one, not onto a Home with nothing to
                 // read. The shelf's answer, never a count taken here.
                 root
-                    .safeAreaInset(edge: .top, spacing: 0) { ShellBanner(shell: shell) }
                     .navigationDestination(for: ShellModel.Route.self) { route in
                         Group {
                             switch route {
@@ -102,7 +95,7 @@ struct CentraidApp: App {
                                         serializedBytes: shelf
                                     )) ?? .init(),
                                     copy: shell.photoShelfCopy,
-                                    send: { shell.send(screen: "photos.shelf", event: $0) },
+                                    send: { shell.send(screen: PhotosScreens.shelf, event: $0) },
                                     onOpenAsset: { identifier, neighbours in
                                         // AN ALBUM'S LIGHTBOX KNOWS ITS ALBUM,
                                         // for "Make key photo".
@@ -124,7 +117,7 @@ struct CentraidApp: App {
                             case let .photoLightbox(identifier, _, _):
                                 PhotoLightboxView(
                                     data: shell.photoLightboxState,
-                                    send: { shell.send(screen: "photos.lightbox", event: $0) }
+                                    send: { shell.send(screen: PhotosScreens.lightbox, event: $0) }
                                 )
                                 // THE NEIGHBOURS RIDE THE ROUTE and reach the
                                 // machine through `shell.opened(route)` below,
@@ -148,14 +141,14 @@ struct CentraidApp: App {
                                     // open (`PhotoPickerMachine.MEMBERS_READ_ID`)
                                     // — no caller holds more than one page of it.
                                     alreadyInAlbum: [],
-                                    send: { shell.send(screen: "photos.picker", event: $0) },
+                                    send: { shell.send(screen: PhotosScreens.picker, event: $0) },
                                     onFinished: { shell.path.removeLast() }
                                 )
 
                             case .places:
                                 PlacesView(
                                     data: shell.placesState,
-                                    send: { shell.send(screen: "photos.places", event: $0) },
+                                    send: { shell.send(screen: PhotosScreens.places, event: $0) },
                                     onOpenPlace: { identifier, name in
                                         shell.path.append(.photoShelf(shell.placeShelf(
                                             identifier: identifier,
@@ -165,29 +158,10 @@ struct CentraidApp: App {
                                     onOpenShelf: { shell.path.append(.photoShelf($0)) }
                                 )
 
-                            case .photosPeople:
-                                PhotosPeopleView(
-                                    data: shell.photosPeopleState,
-                                    onEvent: { shell.send(screen: "photos.people", event: $0) },
-                                    onOpenPerson: { identifier, name in
-                                        shell.path.append(.photoShelf(shell.personShelf(
-                                            identifier: identifier,
-                                            name: name
-                                        )))
-                                    },
-                                    onOpenFaceReview: { shell.path.append(.photoFaceReview) }
-                                )
-
-                            case .photoFaceReview:
-                                FaceReviewView(
-                                    data: shell.faceReviewState,
-                                    onEvent: { shell.send(screen: "photos.faces", event: $0) }
-                                )
-
                             case .photosMemories:
                                 PhotosMemoriesView(
                                     data: shell.photosMemoriesState,
-                                    send: { shell.send(screen: "photos.memories", event: $0) },
+                                    send: { shell.send(screen: PhotosScreens.memories, event: $0) },
                                     onOpenMemory: { identifier, title in
                                         shell.path.append(.photoShelf(shell.memoryShelf(
                                             identifier: identifier,
@@ -199,7 +173,7 @@ struct CentraidApp: App {
                             case .photoDuplicates:
                                 DuplicatesView(
                                     data: shell.duplicatesState,
-                                    send: { shell.send(screen: "photos.duplicates", event: $0) },
+                                    send: { shell.send(screen: PhotosScreens.duplicates, event: $0) },
                                     onOpenCluster: { identifier in
                                         shell.path.append(.photoDuplicateReview(identifier))
                                     }
@@ -208,7 +182,7 @@ struct CentraidApp: App {
                             case let .photoDuplicateReview(identifier):
                                 DuplicateReviewView(
                                     data: shell.duplicateReviewState,
-                                    send: { shell.send(screen: "photos.duplicate", event: $0) }
+                                    send: { shell.send(screen: PhotosScreens.duplicateReview, event: $0) }
                                 )
                                 .id(identifier)
 
@@ -218,7 +192,7 @@ struct CentraidApp: App {
                             case let .photoEditor(identifier, neighbours):
                                 PhotoEditorView(
                                     data: shell.photoEditorState,
-                                    send: { shell.send(screen: "photos.editor", event: $0) },
+                                    send: { shell.send(screen: PhotosScreens.editor, event: $0) },
                                     onClose: { shell.path.removeLast() },
                                     onSaved: { saved in
                                         shell.photoEditSaved(saved, neighbours: neighbours)
@@ -249,12 +223,10 @@ struct CentraidApp: App {
                         .environment(\.importFromPhone, { shell.importFromPhone($0) })
                         // THE ASSISTANT'S DOOR for a search that found nothing (#1097, R-1097-30).
                         .environment(\.askChat, { shell.askChat($0) })
-                        // THE IMPORT'S LINE over every route. ON EACH DESTINATION and not on the stack: an
-                        // app hides the navigation bar and draws its own header
-                        // at the top of its safe area, and an inset on the
-                        // stack did not reach a pushed cover — the banner drew
-                        // over the app's title and its add.
-                        .safeAreaInset(edge: .top, spacing: 0) { ShellBanner(shell: shell) }
+                        // THE IMPORT'S LINE on every route, at the foot (DESIGN.md's
+                        // one status line): above the app's band where the page
+                        // has one, at the page's own foot where it does not.
+                        .modifier(ShellLineHost(shell: shell))
                     }
             }
             // THE ROOT'S TINT (DESIGN.md "The controls (mobile)"): `link`
@@ -295,6 +267,9 @@ struct CentraidApp: App {
             .overlay { if shell.masked { Color.black.ignoresSafeArea() } }
             // THE MEMBER'S APPEARANCE (R-CHROME-7): nil follows the phone.
             .preferredColorScheme(shell.preferredScheme)
+            // THE SYSTEM TEXT SIZE, CAPPED ONCE (DESIGN.md, Dynamic Type): every
+            // role but `band` follows it up to `xxxLarge`, here and nowhere else.
+            .dynamicTypeSize(...Theme.textSizeCap)
             .onChange(of: scenePhase) { _, phase in
                 switch phase {
                 case .active:

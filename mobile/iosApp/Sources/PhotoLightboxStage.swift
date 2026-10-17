@@ -3,6 +3,8 @@ import ImageIO
 import SwiftUI
 import UIKit
 
+import CentraidShared
+
 /// THE STAGE — the photograph, and the three gestures a member reaches it by
 /// (#1029 photos port; v0's `MediaPage.tsx` and `lightbox-gestures.ts`). The
 /// Compose twin is `PhotoLightboxStage.kt`.
@@ -501,7 +503,7 @@ struct LightboxTransport: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(player.playing ? "Pause" : "Play")
+            .accessibilityLabel(player.playing ? PhotosCopy.shared.PHOTOS_PLAYER_PAUSE : PhotosCopy.shared.PHOTOS_PLAYER_PLAY)
             GeometryReader { geometry in
                 let fraction = player.duration > 0 ? player.position / player.duration : 0
                 ZStack(alignment: .leading) {
@@ -522,30 +524,25 @@ struct LightboxTransport: View {
             }
             .frame(height: 28)
             .accessibilityElement()
-            .accessibilityLabel("Position")
-            .accessibilityValue("\(mediaClock(player.position)) of \(mediaClock(player.duration))")
+            .accessibilityLabel(PhotosCopy.shared.PHOTOS_PLAYER_POSITION)
+            .accessibilityValue(
+                copyFill(
+                    copyFill(PhotosCopy.shared.PHOTOS_PLAYER_POSITION_VALUE, "position", MediaFormat.shared.clockOf(seconds: player.position)),
+                    "duration",
+                    MediaFormat.shared.clockOf(seconds: player.duration)
+                )
+            )
             .accessibilityAdjustableAction { direction in
                 guard player.duration > 0 else { return }
                 let step = 5 / player.duration
                 let now = player.position / player.duration
                 player.seek(to: direction == .increment ? now + step : now - step)
             }
-            Text("\(mediaClock(player.position)) / \(mediaClock(player.duration))")
+            Text("\(MediaFormat.shared.clockOf(seconds: player.position)) / \(MediaFormat.shared.clockOf(seconds: player.duration))")
                 .centraidType("mono")
                 .foregroundStyle(Theme.color("onStageSoft", scheme))
         }
     }
-}
-
-/// `1:01:40`, with an hours arm — the facts panel's clock, in seconds.
-func mediaClock(_ seconds: Double) -> String {
-    let total = Int(seconds.isFinite ? max(0, seconds) : 0)
-    let hours = total / 3600
-    let minutes = (total % 3600) / 60
-    let rest = total % 60
-    return hours > 0
-        ? String(format: "%d:%02d:%02d", hours, minutes, rest)
-        : String(format: "%d:%02d", minutes, rest)
 }
 
 // MARK: - The filmstrip
@@ -579,7 +576,7 @@ struct LightboxFilmstrip: View {
                     reader.scrollTo(identifier, anchor: .center)
                 }
             }
-            .accessibilityLabel("Filmstrip")
+            .accessibilityLabel(PhotosCopy.shared.PHOTOS_FILMSTRIP)
         }
     }
 
@@ -605,7 +602,13 @@ struct LightboxFilmstrip: View {
             }
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Show photo \(number) of \(state.neighbours.count)")
+        .accessibilityLabel(
+            copyFill(
+                copyFill(PhotosCopy.shared.PHOTOS_FILMSTRIP_SHOW, "number", "\(number)"),
+                "total",
+                "\(state.neighbours.count)"
+            )
+        )
         .accessibilityAddTraits(here ? .isSelected : [])
     }
 }
@@ -640,13 +643,13 @@ struct LiveChip: View {
         Button { live.playFromStart() } label: {
             HStack(spacing: 4) {
                 CentraidIconView(iconKey: "Play", tint: Theme.color("onStage", scheme), size: 14)
-                Text("Live").centraidType("small").foregroundStyle(Theme.color("onStage", scheme))
+                Text(PhotosCopy.shared.PHOTOS_LIVE_BADGE).centraidType("small").foregroundStyle(Theme.color("onStage", scheme))
             }
             .padding(.horizontal, 10)
             .frame(height: 28)
             .background(Theme.color("stageSunken", scheme), in: Capsule())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Play Live Photo")
+        .accessibilityLabel(PhotosCopy.shared.PHOTOS_PLAY_LIVE)
     }
 }

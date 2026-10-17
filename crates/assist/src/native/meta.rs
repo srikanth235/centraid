@@ -1105,9 +1105,12 @@ pub fn reveal_synonym(word: &str) -> Option<&'static str> {
         .map(|(_, field)| *field)
 }
 
-/// Task priority as the vault reads it (RFC 5545): 1 is the highest, 9 the
-/// lowest, 0 unset.
-pub const PRIORITY_SCALE: &str = "1 highest..9 lowest, 0 none";
+/// Task priority as the vault stores it: Todoist's scale, 0 unset and 1..9 with
+/// HIGHER MORE URGENT — NOT RFC 5545's 1-is-highest. The Tasks board sorts
+/// "priority desc" (D-1020-S5), `tasks.proto` says the same, and the phone's
+/// Soon / Next / Now chips are 1 / 2 / 3, so a model told "1 highest" would file
+/// its most urgent task as the app's least (Q-1047-10).
+pub const PRIORITY_SCALE: &str = "9 highest..1 lowest, 0 none";
 
 /// Value operations (SPEC §4.3).
 pub const OPS: &[&str] = &["count", "sum", "min", "max"];

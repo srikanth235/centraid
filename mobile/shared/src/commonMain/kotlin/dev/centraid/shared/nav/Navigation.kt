@@ -159,10 +159,6 @@ public sealed interface Destination {
             PlacesState.Presentation.PRESENTATION_CARDS,
     ) : Destination
 
-    public data object PhotosPeople : Destination
-
-    public data object PhotoFaceReview : Destination
-
     public data object PhotosMemories : Destination
 
     public data object PhotoDuplicates : Destination
@@ -330,6 +326,9 @@ public sealed interface Destination {
     /** A password-manager file, reviewed and sealed in (#1047 T2): `LockerImportBridge.open(parent)`. */
     public data object LockerImport : Destination
 
+    /** The whole Locker's access history (Q-1047-21), from the More sheet: `LockerAccessBridge.open()`. */
+    public data object LockerAccess : Destination
+
     // --- Money (#1099, R-1099-13) ---
     // `parent` on a pushed Money page is the pushing page's title: the back
     // control's word. Empty: "Money".
@@ -432,24 +431,6 @@ public data class NavStack(val entries: List<Destination> = listOf(Destination.H
             push(Destination.DocsHome(destination))
         }
     }
-}
-
-/**
- * NOTES' BAND, IN PLACE (#1029 port): Notes, Notebooks and Journal are three
- * screens under one band, and moving between them is not a push — back does
- * not walk the places a member happened to tap. [key] is `NotesBandTab.key`;
- * an unknown key (or `more`, a sheet) leaves the stack alone.
- */
-public fun NavStack.withNotesPlace(key: String): NavStack {
-    val place: Destination = when (key) {
-        "notes" -> Destination.NotesLibrary()
-        "notebooks" -> Destination.NotesNotebooks
-        "journal" -> Destination.NotesJournal
-        else -> return this
-    }
-    val top = current
-    val onBand = top is Destination.NotesLibrary || top == Destination.NotesNotebooks || top == Destination.NotesJournal
-    return if (onBand) NavStack(entries.dropLast(1) + place) else push(place)
 }
 
 /** PEOPLE'S BAND, IN PLACE (#1029 port): People and Touch are one screen's parameter. */

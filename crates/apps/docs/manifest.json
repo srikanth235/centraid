@@ -78,17 +78,7 @@
           "output": { "type": "object" },
           "reason": { "type": "string" }
         }
-      },
-      "writes": [
-        "core.concept",
-        "core.concept_scheme",
-        "core.content_derivative",
-        "core.content_item",
-        "core.content_representation",
-        "core.content_text",
-        "core.document",
-        "core.tag"
-      ]
+      }
     },
     {
       "name": "create-text",
@@ -116,8 +106,7 @@
           "output": { "type": "object" },
           "reason": { "type": "string" }
         }
-      },
-      "writes": ["core.document"]
+      }
     },
     {
       "name": "rename",
@@ -139,8 +128,7 @@
           "output": { "type": "object" },
           "reason": { "type": "string" }
         }
-      },
-      "writes": ["core.document"]
+      }
     },
     {
       "name": "move",
@@ -162,13 +150,7 @@
           "output": { "type": "object" },
           "reason": { "type": "string" }
         }
-      },
-      "writes": [
-        "core.concept",
-        "core.concept_scheme",
-        "core.document",
-        "core.tag"
-      ]
+      }
     },
     {
       "name": "trash",
@@ -189,8 +171,7 @@
           "output": { "type": "object" },
           "reason": { "type": "string" }
         }
-      },
-      "writes": ["core.document"]
+      }
     },
     {
       "name": "restore",
@@ -211,8 +192,7 @@
           "output": { "type": "object" },
           "reason": { "type": "string" }
         }
-      },
-      "writes": ["core.document"]
+      }
     },
     {
       "name": "purge",
@@ -233,8 +213,7 @@
           "output": { "type": "object" },
           "reason": { "type": "string" }
         }
-      },
-      "writes": ["core.document"]
+      }
     },
     {
       "name": "empty-trash",
@@ -252,8 +231,7 @@
           "output": { "type": "object" },
           "reason": { "type": "string" }
         }
-      },
-      "writes": ["core.document"]
+      }
     },
     {
       "name": "star",
@@ -274,13 +252,7 @@
           "output": { "type": "object" },
           "reason": { "type": "string" }
         }
-      },
-      "writes": [
-        "core.concept",
-        "core.concept_scheme",
-        "core.document",
-        "core.tag"
-      ]
+      }
     },
     {
       "name": "unstar",
@@ -301,13 +273,7 @@
           "output": { "type": "object" },
           "reason": { "type": "string" }
         }
-      },
-      "writes": [
-        "core.concept",
-        "core.concept_scheme",
-        "core.document",
-        "core.tag"
-      ]
+      }
     },
     {
       "name": "tag",
@@ -329,8 +295,7 @@
           "output": { "type": "object" },
           "reason": { "type": "string" }
         }
-      },
-      "writes": ["core.concept", "core.concept_scheme", "core.tag"]
+      }
     },
     {
       "name": "untag",
@@ -351,8 +316,7 @@
           "output": { "type": "object" },
           "reason": { "type": "string" }
         }
-      },
-      "writes": ["core.tag"]
+      }
     },
     {
       "name": "edit",
@@ -375,16 +339,7 @@
           "output": { "type": "object" },
           "reason": { "type": "string" }
         }
-      },
-      "writes": [
-        "core.concept",
-        "core.concept_scheme",
-        "core.content_item",
-        "core.content_representation",
-        "core.content_text",
-        "core.document",
-        "core.link"
-      ]
+      }
     },
     {
       "name": "replace",
@@ -408,16 +363,7 @@
           "output": { "type": "object" },
           "reason": { "type": "string" }
         }
-      },
-      "writes": [
-        "core.concept",
-        "core.concept_scheme",
-        "core.content_item",
-        "core.content_representation",
-        "core.content_text",
-        "core.document",
-        "core.link"
-      ]
+      }
     },
     {
       "name": "restore-version",
@@ -439,13 +385,7 @@
           "output": { "type": "object" },
           "reason": { "type": "string" }
         }
-      },
-      "writes": [
-        "core.concept",
-        "core.concept_scheme",
-        "core.document",
-        "core.link"
-      ]
+      }
     },
     {
       "name": "create-folder",
@@ -472,8 +412,7 @@
           "output": { "type": "object" },
           "reason": { "type": "string" }
         }
-      },
-      "writes": ["core.concept", "core.concept_scheme"]
+      }
     },
     {
       "name": "rename-folder",
@@ -495,8 +434,7 @@
           "output": { "type": "object" },
           "reason": { "type": "string" }
         }
-      },
-      "writes": ["core.concept"]
+      }
     },
     {
       "name": "delete-folder",
@@ -517,8 +455,7 @@
           "output": { "type": "object" },
           "reason": { "type": "string" }
         }
-      },
-      "writes": ["core.concept"]
+      }
     }
   ],
   "queries": [

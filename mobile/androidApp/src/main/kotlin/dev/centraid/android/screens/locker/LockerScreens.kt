@@ -74,12 +74,12 @@ import centraid.screen.v1.LockerItemState
 import centraid.screen.v1.LockerLockState
 import centraid.screen.v1.LockerRow
 import centraid.screen.v1.SectionHead
-import centraid.screen.v1.WriteState
 import dev.centraid.android.kit.AppBand
 import dev.centraid.android.kit.AppBandTab
 import dev.centraid.android.kit.AppMark
 import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.CentraidRow
+import dev.centraid.android.kit.ChoiceStack
 import dev.centraid.android.kit.ConfirmSheet
 import dev.centraid.android.kit.EmptyStateView
 import dev.centraid.android.kit.FieldRow
@@ -89,8 +89,8 @@ import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.KitWords
 import dev.centraid.android.kit.NoAutofill
 import dev.centraid.android.kit.OptionSheet
+import dev.centraid.android.kit.OutlineButton
 import dev.centraid.android.kit.PushedPage
-import dev.centraid.android.kit.QuietButton
 import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.RoomAction
 import dev.centraid.android.kit.RoomChip
@@ -98,6 +98,7 @@ import dev.centraid.android.kit.RoomSearch
 import dev.centraid.android.kit.RowSkeleton
 import dev.centraid.android.kit.SectionHeader
 import dev.centraid.android.kit.SheetOption
+import dev.centraid.android.kit.SheetOutline
 import dev.centraid.android.kit.SheetPrimary
 import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.StatusChipView
@@ -107,6 +108,7 @@ import dev.centraid.android.kit.screenContentOf
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 import dev.centraid.android.theme.LocalCentraidTokens
+import dev.centraid.shared.apps.locker.LockerItemMachine
 
 // Locker's Compose views (#1047, D-5). THEY DECIDE NOTHING: every word, mask,
 // verb, chip and empty state is the shared machines' (`apps/locker/*`); a view
@@ -152,22 +154,23 @@ internal fun LockerWall(wall: LockerLockState, onUnlock: () -> Unit, onWords: ()
                         modifier = Modifier.padding(top = 12.dp).testTag("locker-wall-notice"),
                     )
                 }
-                if (wall.unlock_label.isNotEmpty()) {
-                    InkButton(
-                        label = wall.unlock_label,
-                        testTag = "locker-unlock",
-                        modifier = Modifier.padding(top = 20.dp),
-                        onPress = onUnlock,
-                    )
-                }
-                // NO KEY ON THIS PHONE (#1047 E1/E3): the words hand it back.
-                if (wall.words_label.isNotEmpty()) {
-                    InkButton(
-                        label = wall.words_label,
-                        testTag = "locker-words",
-                        modifier = Modifier.padding(top = 20.dp),
-                        onPress = onWords,
-                    )
+                // UNLOCK AND THE WORDS DOOR ARE ALTERNATIVES: one stack.
+                if (wall.unlock_label.isNotEmpty() || wall.words_label.isNotEmpty()) {
+                    ChoiceStack(Modifier.padding(top = 20.dp)) {
+                        if (wall.unlock_label.isNotEmpty()) {
+                            InkButton(label = wall.unlock_label, testTag = "locker-unlock", onPress = onUnlock)
+                        }
+                        // NO KEY ON THIS PHONE (#1047 E1/E3): the words hand it
+                        // back. ONE INK PER VIEW: Unlock is the thing to do; the
+                        // words verb is the ink only when it stands alone.
+                        if (wall.words_label.isNotEmpty()) {
+                            if (wall.unlock_label.isEmpty()) {
+                                InkButton(label = wall.words_label, testTag = "locker-words", onPress = onWords)
+                            } else {
+                                OutlineButton(label = wall.words_label, testTag = "locker-words", onPress = onWords)
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -482,17 +485,17 @@ internal fun LockerGeneratorBody(state: LockerGeneratorState, onEvent: (LockerGe
                 }
                 Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (state.regenerate_label.isNotEmpty()) {
-                        QuietButton(state.regenerate_label, testTag = "locker-regenerate") {
+                        OutlineButton(state.regenerate_label, testTag = "locker-regenerate") {
                             onEvent(LockerGeneratorEvent(regenerate = LockerGeneratorEvent.Regenerate()))
                         }
                     }
                     if (state.copy_label.isNotEmpty()) {
-                        QuietButton(state.copy_label, testTag = "locker-generator-copy") {
+                        OutlineButton(state.copy_label, testTag = "locker-generator-copy") {
                             onEvent(LockerGeneratorEvent(copy = LockerGeneratorEvent.CopyTapped()))
                         }
                     }
                     if (state.use_label.isNotEmpty()) {
-                        QuietButton(state.use_label, testTag = "locker-generator-use") {
+                        OutlineButton(state.use_label, testTag = "locker-generator-use") {
                             onEvent(LockerGeneratorEvent(use = LockerGeneratorEvent.UseTapped()))
                         }
                     }
@@ -588,7 +591,7 @@ internal fun LockerItemScreen(
         trailing = chrome?.edit_label?.takeIf { it.isNotEmpty() && data?.gone == null }?.let { label ->
             RoomAction("Pencil", label, "locker-edit") { onEvent(LockerItemEvent(edit = LockerItemEvent.EditTapped())) }
         },
-        status = refusal(state.write),
+        status = state.write?.refusal.orEmpty(),
         statusLine = { StatusLine(state.status) { onEvent(LockerItemEvent(status_acted = LockerItemEvent.StatusActed())) } },
     ) {
         ReadStateView(
@@ -626,7 +629,7 @@ internal fun LockerItemScreen(
                     item(key = "sec-$index") { if (section.title.isNotEmpty()) SectionHeader(SectionHead(title = section.title)) }
                     items(section.rows, key = { "f-$index-" + it.key }) { row ->
                         LockerFieldView(row) { verb ->
-                            if (verb == "open") {
+                            if (verb == LockerItemMachine.VERB_OPEN) {
                                 onOpen(row.value_)
                             } else {
                                 onEvent(LockerItemEvent(verb = LockerItemEvent.VerbTapped(key = row.key, verb = verb)))
@@ -680,7 +683,7 @@ internal fun LockerItemScreen(
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
                             item.actions.forEach { action ->
-                                QuietButton(
+                                OutlineButton(
                                     action.label,
                                     testTag = "locker-action-${action.key}",
                                     ink = if (action.destructive) "net" else "text",
@@ -708,6 +711,7 @@ internal fun LockerItemScreen(
             primary = SheetPrimary(label = memo.save_label, testTag = "locker-memo-save") {
                 onEvent(LockerItemEvent(memo_saved = LockerItemEvent.MemoSaved()))
             },
+            outlines = if (memo.cancel_label.isEmpty()) emptyList() else listOf(SheetOutline(memo.cancel_label, "locker-memo-cancel", onPress = close)),
         ) {
             LockerTextField(
                 text = text,
@@ -717,9 +721,6 @@ internal fun LockerItemScreen(
                 testTag = "locker-memo-text",
                 onEdit = { onEvent(LockerItemEvent(memo_typed = LockerItemEvent.MemoTyped(text = it))) },
             )
-            if (memo.cancel_label.isNotEmpty()) {
-                QuietButton(memo.cancel_label, testTag = "locker-memo-cancel", modifier = Modifier.padding(horizontal = KitGeometry.GUTTER), onPress = close)
-            }
         }
     }
     // THE PASSKEY'S NAME (#1047 T2): the memo sheet's shape.
@@ -732,6 +733,7 @@ internal fun LockerItemScreen(
             primary = SheetPrimary(label = sheet.save_label, testTag = "locker-passkey-name-save") {
                 onEvent(LockerItemEvent(passkey_name_saved = LockerItemEvent.PasskeyNameSaved()))
             },
+            outlines = if (sheet.cancel_label.isEmpty()) emptyList() else listOf(SheetOutline(sheet.cancel_label, "locker-passkey-name-cancel", onPress = close)),
         ) {
             LockerTextField(
                 text = text,
@@ -740,9 +742,6 @@ internal fun LockerItemScreen(
                 testTag = "locker-passkey-name-text",
                 onEdit = { onEvent(LockerItemEvent(passkey_name_typed = LockerItemEvent.PasskeyNameTyped(text = it))) },
             )
-            if (sheet.cancel_label.isNotEmpty()) {
-                QuietButton(sheet.cancel_label, testTag = "locker-passkey-name-cancel", modifier = Modifier.padding(horizontal = KitGeometry.GUTTER), onPress = close)
-            }
         }
     }
     // THE CUSTOM FIELD SHEET (#1047 T2): one field, added or edited; a sealed
@@ -762,6 +761,15 @@ private fun LockerFieldSheetView(sheet: LockerFieldSheet, onEvent: (LockerItemEv
         status = sheet.blocked,
         primary = SheetPrimary(label = sheet.save_label, testTag = "locker-field-save", enabled = sheet.can_save) {
             onEvent(LockerItemEvent(field_saved = LockerItemEvent.FieldSaved()))
+        },
+        // REMOVE, WHERE THE FIELD CAN BE REMOVED, THEN CANCEL: Save's alternatives.
+        outlines = buildList<SheetOutline> {
+            if (sheet.remove_label.isNotEmpty()) {
+                add(SheetOutline(sheet.remove_label, "locker-field-remove", ink = "net") {
+                    onEvent(LockerItemEvent(field_removed = LockerItemEvent.FieldRemoved()))
+                })
+            }
+            if (sheet.cancel_label.isNotEmpty()) add(SheetOutline(sheet.cancel_label, "locker-field-cancel", onPress = close))
         },
     ) {
         LockerTextField(
@@ -807,14 +815,6 @@ private fun LockerFieldSheetView(sheet: LockerFieldSheet, onEvent: (LockerItemEv
             )
         }
         LockerNote(sheet.value_note, ink = "textFaint")
-        if (sheet.remove_label.isNotEmpty()) {
-            QuietButton(sheet.remove_label, testTag = "locker-field-remove", ink = "net", modifier = Modifier.padding(horizontal = KitGeometry.GUTTER)) {
-                onEvent(LockerItemEvent(field_removed = LockerItemEvent.FieldRemoved()))
-            }
-        }
-        if (sheet.cancel_label.isNotEmpty()) {
-            QuietButton(sheet.cancel_label, testTag = "locker-field-cancel", modifier = Modifier.padding(horizontal = KitGeometry.GUTTER), onPress = close)
-        }
     }
 }
 
@@ -824,7 +824,7 @@ private fun LockerFieldSheetView(sheet: LockerFieldSheet, onEvent: (LockerItemEv
  * which Compose never makes selectable — Copy is the one way off the screen.
  */
 @Composable
-private fun LockerFieldView(row: LockerFieldRow, onVerb: (String) -> Unit) {
+internal fun LockerFieldView(row: LockerFieldRow, onVerb: (String) -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -866,7 +866,7 @@ private fun LockerFieldView(row: LockerFieldRow, onVerb: (String) -> Unit) {
             }
         }
         row.verbs.forEach { verb ->
-            QuietButton(verb.label, testTag = "locker-verb-${row.key}-${verb.key}", modifier = Modifier.padding(start = 6.dp)) {
+            OutlineButton(verb.label, testTag = "locker-verb-${row.key}-${verb.key}", modifier = Modifier.padding(start = 6.dp)) {
                 onVerb(verb.key)
             }
         }
@@ -919,7 +919,7 @@ internal fun LockerEditorScreen(state: LockerEditorState, onEvent: (LockerEditor
         } else {
             null
         },
-        status = refusal(state.write).ifEmpty { data?.blocked.orEmpty() },
+        status = state.write?.refusal.orEmpty().ifEmpty { data?.blocked.orEmpty() },
     ) {
         ReadStateView(
             content = screenContentOf(state.loading, state.failure, data, state.denied),
@@ -995,7 +995,7 @@ private fun LockerInputView(input: LockerInputRow, onEvent: (LockerEditorEvent) 
                 )
             }
             if (input.generate_label.isNotEmpty()) {
-                QuietButton(input.generate_label, testTag = "locker-generate-${input.key}", modifier = Modifier.padding(end = KitGeometry.GUTTER)) {
+                OutlineButton(input.generate_label, testTag = "locker-generate-${input.key}", modifier = Modifier.padding(end = KitGeometry.GUTTER)) {
                     onEvent(LockerEditorEvent(generate = LockerEditorEvent.GenerateTapped(key = input.key)))
                 }
             }
@@ -1127,7 +1127,3 @@ private fun LockerTextField(
         }
     }
 }
-
-/** A refused write's sentence, for the page's status line. */
-internal fun refusal(write: WriteState?): String =
-    if (write?.phase == WriteState.Phase.PHASE_REFUSED) write.failure?.sentence.orEmpty() else ""

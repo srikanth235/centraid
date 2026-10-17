@@ -44,21 +44,26 @@ mod tests {
     }
 
     #[test]
-    fn it_declares_eight_queries_and_eighteen_actions() {
+    fn it_declares_five_queries_and_eighteen_actions() {
         let manifest = manifest();
-        assert_eq!(manifest.queries.len(), 8);
+        // v0's eight less `faces`, `face-queue` and `people`, which no surface called once the
+        // face screens went (Q-1047-2) and the app retired (2026-10-16).
+        assert_eq!(manifest.queries.len(), 5);
         assert_eq!(manifest.actions.len(), 18);
         for name in [
             "storage",
             "library",
-            "faces",
-            "face-queue",
-            "people",
             "search",
             "duplicates",
             "enrichment-status",
         ] {
             assert!(manifest.query(name).is_some(), "no query {name}");
+        }
+        for name in ["faces", "face-queue", "people"] {
+            assert!(
+                manifest.query(name).is_none(),
+                "the retired query {name} is back"
+            );
         }
     }
 
@@ -120,20 +125,19 @@ mod tests {
         assert_eq!(required, ["purge-asset", "delete-album"]);
     }
 
+    /// PHOTOS' ACTIONS INVOKE THE COMMANDS OF `media`, `core` AND `enrich`, and
+    /// the table says so. What each command wrote is the commit's own census,
+    /// not a list a manifest carries (V3) — which is how a declared `share`
+    /// table outlived the sharing plane it named.
     #[test]
-    fn every_action_declares_the_tables_it_writes() {
-        for action in &manifest().actions {
+    fn every_action_invokes_a_media_core_or_enrich_command() {
+        for row in ACTIONS {
+            let schema = row.command.split('.').next().unwrap_or_default();
             assert!(
-                !action.writes.is_empty(),
-                "{} declares no writes, but every Photos action writes",
-                action.name
-            );
-        }
-        for table in manifest().declared_writes() {
-            let schema = table.split('.').next().unwrap_or_default();
-            assert!(
-                ["media", "core", "enrich", "share"].contains(&schema),
-                "{table} is outside Photos' reach"
+                ["media", "core", "enrich"].contains(&schema),
+                "{} invokes {}, which is outside Photos' reach",
+                row.action,
+                row.command
             );
         }
     }
@@ -183,5 +187,21 @@ mod tests {
         assert_eq!(raw["seats"]["byteBearing"], serde_json::json!(true));
         assert_eq!(raw["seats"]["disabledOn"], serde_json::json!([]));
         assert_eq!(raw["seats"]["originActs"], serde_json::json!(["camera"]));
+    }
+
+    /// THE ACT SCOPES AND THE ACTIONS AGREE, both ways (finding PE-F1, P3): a
+    /// narrow `act` scope names a command some action invokes, and every
+    /// action's command is covered by a scope. A scope no action uses tells a
+    /// consent screen the app reaches a command it never calls.
+    #[test]
+    fn every_act_scope_names_a_command_an_action_invokes_and_every_command_is_covered() {
+        let commands: Vec<&str> = crate::commands::ACTIONS
+            .iter()
+            .map(|row| row.command)
+            .collect();
+        assert_eq!(
+            manifest().act_scope_disagreements(&commands),
+            Vec::<String>::new()
+        );
     }
 }

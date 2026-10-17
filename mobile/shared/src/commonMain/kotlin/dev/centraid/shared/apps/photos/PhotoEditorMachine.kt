@@ -323,8 +323,8 @@ public object PhotoEditorMachine : ScreenMachine<PhotoEditorState, PhotoEditorEv
     /**
      * THE LIGHTBOX'S EDIT BUTTON: live, or refused with the sentence that says
      * why (#1015 B10 — no verb enabled that cannot run, none disabled without a
-     * reason). `PhotoLightboxView.swift`'s `PhotoEditButton` mirrors this by
-     * hand, the way `PhotoCells.swift` mirrors `kit/PhotoCells.kt`.
+     * reason). The lightbox reducer fills it onto `PhotoLightboxState.
+     * edit_refusal`, so neither shell decides it.
      */
     public fun editRefusal(detail: PhotoDetail?): String? {
         if (detail == null || detail.asset_id.isEmpty()) {
@@ -341,9 +341,9 @@ public object PhotoEditorMachine : ScreenMachine<PhotoEditorState, PhotoEditorEv
 
     private fun originalAbsent(held: PhotoCell.Held, reason: String): String = when (held) {
         // THE ARROW IS ALREADY ON THE LIGHTBOX'S STATUS LINE; this names it.
-        PhotoCell.Held.HELD_WITHHELD_BY_RULE -> "Load the original first."
-        PhotoCell.Held.HELD_FETCHING -> "The original is still loading."
-        else -> reason.ifEmpty { "The original is not on this phone yet." }
+        PhotoCell.Held.HELD_WITHHELD_BY_RULE -> PhotosCopy.PHOTOS_EDIT_LOAD_FIRST
+        PhotoCell.Held.HELD_FETCHING -> PhotosCopy.PHOTOS_EDIT_STILL_LOADING
+        else -> reason.ifEmpty { PhotosCopy.PHOTOS_EDIT_NOT_ON_PHONE }
     }
 
     // -----------------------------------------------------------------------
@@ -355,6 +355,16 @@ public object PhotoEditorMachine : ScreenMachine<PhotoEditorState, PhotoEditorEv
 
     /** Smallest crop side, as a fraction of the frame. */
     public const val MIN_CROP: Double = 0.1
+
+    /**
+     * THE LONGEST EDGE OF THE STAGE'S DECODE, in pixels. A preview and never
+     * the original: the full-size decode is Save's, and a stage that decoded it
+     * would hold a 48-megapixel bitmap to draw a phone screen.
+     */
+    public const val PREVIEW_EDGE: Int = 2048
+
+    /** v0's JPEG quality, in percent (the web editor's 0.92). */
+    public const val JPEG_QUALITY_PERCENT: Int = 92
 
     public val FULL_CROP: PhotoEditCrop = PhotoEditCrop(x = 0.0, y = 0.0, w = 1.0, h = 1.0)
 
@@ -443,9 +453,9 @@ public object PhotoEditorMachine : ScreenMachine<PhotoEditorState, PhotoEditorEv
 
     /** SPACING IS LOAD-BEARING: `3 : 2` renders in the numeric register. */
     public fun ratioName(ratio: PhotoEditPlan.Ratio): String = when (ratio) {
-        PhotoEditPlan.Ratio.RATIO_SQUARE -> "Square"
-        PhotoEditPlan.Ratio.RATIO_THREE_TWO -> "3 : 2"
-        else -> "Original"
+        PhotoEditPlan.Ratio.RATIO_SQUARE -> PhotosCopy.PHOTOS_EDIT_RATIO_SQUARE
+        PhotoEditPlan.Ratio.RATIO_THREE_TWO -> PhotosCopy.PHOTOS_EDIT_RATIO_THREE_TWO
+        else -> PhotosCopy.PHOTOS_EDIT_RATIO_ORIGINAL
     }
 
     /** A THREE-WAY CYCLE, not two toggles: one flip per render. */
@@ -514,6 +524,47 @@ public object PhotoEditorMachine : ScreenMachine<PhotoEditorState, PhotoEditorEv
     }
 
     /**
+     * "from a photograph taken 30 July 2026" — v0's `editorMeta`, and "from a
+     * photograph" when the row records no time. The day is the one the shutter
+     * fired on, in the capture's own zone, so it names the day the Library and
+     * the viewer file the photograph under; no offset is UTC, as there. Over
+     * primitives: both shells' editors held a date formatter of their own.
+     */
+    public fun editorMeta(capturedAt: String, offsetMinutes: Int): String {
+        val date = PhotoLightboxText.stampDate(capturedAt, offsetMinutes)
+        return if (date.isEmpty()) {
+            PhotosCopy.PHOTOS_EDIT_FROM_UNDATED
+        } else {
+            PhotosCopy.PHOTOS_EDIT_FROM_DATED.replace("{date}", date)
+        }
+    }
+
+    /** A crop in whole pixels of the frame it was cut from. */
+    public data class PixelRect(val x: Int, val y: Int, val w: Int, val h: Int)
+
+    /**
+     * [clampCrop] then [cropPixels], over PRIMITIVES so SwiftUI can call it.
+     *
+     * SwiftUI holds SwiftProtobuf's plan and cannot hand it to a function that
+     * takes Wire's, and the two steps it restated (a clamp and a half-up round)
+     * are exactly the ones a tie on a half pixel makes two shells disagree on.
+     * No crop in the plan is the whole frame.
+     */
+    public fun cropRect(
+        hasCrop: Boolean,
+        x: Double,
+        y: Double,
+        w: Double,
+        h: Double,
+        width: Int,
+        height: Int,
+    ): PixelRect {
+        val crop = if (hasCrop) clampCrop(PhotoEditCrop(x = x, y = y, w = w, h = h)) else FULL_CROP
+        val (px, py, pw, ph) = cropPixels(crop, width, height)
+        return PixelRect(px, py, pw, ph)
+    }
+
+    /**
      * HALF UP, v0's `Math.round`, and NOT `kotlin.math.round` — which rounds a
      * tie to the even neighbour, so the two shells would cut a crop that lands
      * on a half pixel one pixel apart.
@@ -527,7 +578,7 @@ public object PhotoEditorMachine : ScreenMachine<PhotoEditorState, PhotoEditorEv
     // -----------------------------------------------------------------------
 
     public const val EDITOR_TITLE: String = PhotosCopy.PHOTOS_EDITOR_TITLE
-    public const val EDITOR_CANCEL: String = "Cancel"
+    public const val EDITOR_CANCEL: String = PhotosCopy.PHOTOS_CANCEL
     /** v0's shared words, from the one copy table (`copy/photos.json`). */
     public const val SAVE_AS_NEW: String = PhotosCopy.PHOTOS_SAVE_AS_NEW
     public const val SAVE_AS_NEW_EXPLANATION: String =
@@ -536,7 +587,7 @@ public object PhotoEditorMachine : ScreenMachine<PhotoEditorState, PhotoEditorEv
     public const val EDIT_NOT_SAVED: String = PhotosCopy.PHOTOS_ERROR_EDIT_NOT_SAVED
     public const val RETRY: String = "Try again."
     public const val DISCARD_QUESTION: String = PhotosCopy.PHOTOS_EDIT_DISCARD_QUESTION
-    public const val DISCARD: String = "Discard"
+    public const val DISCARD: String = PhotosCopy.PHOTOS_EDIT_DISCARD
     public const val KEEP_EDITING: String = PhotosCopy.PHOTOS_EDIT_KEEP_EDITING
     public const val NOT_LOADED: String = PhotosCopy.PHOTOS_EDIT_NOT_LOADED
     public const val NOT_A_PHOTOGRAPH: String =

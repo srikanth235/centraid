@@ -40,10 +40,10 @@ import com.google.zxing.PlanarYUVLuminanceSource
 import com.google.zxing.RGBLuminanceSource
 import com.google.zxing.ReaderException
 import com.google.zxing.common.HybridBinarizer
-import dev.centraid.android.kit.QuietButton
-import dev.centraid.shared.custody.CustodyCopy
+import dev.centraid.design.copy.WordsCopy
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
+import dev.centraid.android.kit.OutlineButton
 
 /**
  * THE SQUARE, READ BY THE CAMERA (#1047 E6) — the Android twin of iOS
@@ -74,8 +74,8 @@ internal fun PairScanner(
     ) {
         Box(Modifier.fillMaxSize().background(Color.Black).testTag("pair-scanner")) {
             CameraPreview(onRead)
-            QuietButton(
-                label = CustodyCopy.CANCEL,
+            OutlineButton(
+                label = WordsCopy.CANCEL,
                 testTag = "pair-scan-close",
                 ink = "onAccent",
                 modifier = Modifier
@@ -86,7 +86,7 @@ internal fun PairScanner(
             )
             // A SCREENSHOT OF THE SQUARE, from the camera screen.
             if (photoLabel.isNotEmpty()) {
-                QuietButton(
+                OutlineButton(
                     label = photoLabel,
                     testTag = "pair-scan-photo",
                     ink = "onAccent",

@@ -2,9 +2,7 @@ import LocalAuthentication
 import SwiftUI
 import UniformTypeIdentifiers
 
-#if canImport(CentraidShared)
 import CentraidShared
-#endif
 
 /// `locker.export` — every secret, in a file (#1047 T2; the handoff's
 /// `locker/export`). The lede in the net register, what leaves, the format,
@@ -267,22 +265,35 @@ struct LockerImportView: View {
             }
         }
         if !plan.publishLabel.isEmpty {
-            KitInkButton(label: plan.publishLabel) {
-                send(Self.event { $0.publish = .init() })
+            // PUBLISH AND DISCARD ARE ALTERNATIVES: one stack, the note
+            // that says what publishing does between them.
+            KitChoiceStack {
+                KitInkButton(label: plan.publishLabel) {
+                    send(Self.event { $0.publish = .init() })
+                }
+                .accessibilityIdentifier("locker-import-publish")
+                if !plan.publishNote.isEmpty {
+                    LockerNote(text: plan.publishNote)
+                        .padding(.horizontal, -CentraidGeometry.pageMargin)
+                }
+                if !plan.discardLabel.isEmpty {
+                    discard(plan)
+                }
             }
-            .accessibilityIdentifier("locker-import-publish")
             .padding(.horizontal, CentraidGeometry.pageMargin)
-            .padding(.top, 12)
-            LockerNote(text: plan.publishNote)
+            .padding(.vertical, 12)
+        } else if !plan.discardLabel.isEmpty {
+            discard(plan)
+                .padding(.horizontal, CentraidGeometry.pageMargin)
+                .padding(.vertical, 8)
         }
-        if !plan.discardLabel.isEmpty {
-            KitOutlineButton(label: plan.discardLabel) {
-                send(Self.event { $0.discard = .init() })
-            }
-            .accessibilityIdentifier("locker-import-discard")
-            .padding(.horizontal, CentraidGeometry.pageMargin)
-            .padding(.vertical, 8)
+    }
+
+    private func discard(_ plan: Centraid_Screen_V1_LockerImportData) -> some View {
+        KitOutlineButton(label: plan.discardLabel) {
+            send(Self.event { $0.discard = .init() })
         }
+        .accessibilityIdentifier("locker-import-discard")
     }
 }
 
@@ -299,7 +310,6 @@ struct LockerTransferRoot: View {
     var body: some View {
         Color.clear
             .onAppear {
-                #if canImport(CentraidShared)
                 LockerScreens.exportBridge.onSave = { bytes, fileName, mediaType in
                     let data = bytes.data
                     DispatchQueue.main.async {
@@ -309,7 +319,6 @@ struct LockerTransferRoot: View {
                         exporting = true
                     }
                 }
-                #endif
             }
             .fileExporter(
                 isPresented: $exporting,
@@ -318,7 +327,6 @@ struct LockerTransferRoot: View {
                 defaultFilename: name
             ) { result in
                 answered = true
-                #if canImport(CentraidShared)
                 switch result {
                 case .success: LockerScreens.exportBridge.saved()
                 case let .failure(error):
@@ -328,7 +336,6 @@ struct LockerTransferRoot: View {
                         LockerScreens.exportBridge.saveRefused(sentence: "")
                     }
                 }
-                #endif
                 // THE BYTES LEAVE THIS VIEW'S STATE with the sheet.
                 file = LockerExportFile(bytes: Data(), type: .commaSeparatedText)
             }
@@ -339,9 +346,7 @@ struct LockerTransferRoot: View {
                     file = LockerExportFile(bytes: Data(), type: .commaSeparatedText)
                     guard !answered else { return }
                     answered = true
-                    #if canImport(CentraidShared)
                     LockerScreens.exportBridge.saveCancelled()
-                    #endif
                 }
             }
     }

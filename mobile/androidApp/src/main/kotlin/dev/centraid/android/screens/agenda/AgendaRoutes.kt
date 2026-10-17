@@ -17,8 +17,9 @@ import dev.centraid.android.screens.RouteNav
 import dev.centraid.shared.apps.agenda.AgendaBridge
 import dev.centraid.shared.apps.agenda.AgendaEditorBridge
 import dev.centraid.shared.apps.agenda.AgendaEventBridge
-import dev.centraid.shared.apps.agenda.AgendaEventMachine
 import dev.centraid.shared.apps.agenda.AgendaMarks
+import dev.centraid.shared.apps.agenda.AgendaRouting
+import dev.centraid.shared.nav.AppIds
 import dev.centraid.shared.nav.Destination
 import dev.centraid.shared.nav.NavStack
 import dev.centraid.shared.shell.HomeSession
@@ -41,7 +42,7 @@ public class AgendaRoutes : AppRoutes {
 
     // `open()` ON THE PUSH, not on every composition: a band move swaps the
     // top entry and must not land on today.
-    override fun opens(moveId: String): Destination? = if (moveId == "agenda") {
+    override fun opens(moveId: String): Destination? = if (moveId == AppIds.AGENDA) {
         agenda.open()
         Destination.AgendaHome()
     } else {
@@ -64,16 +65,20 @@ public class AgendaRoutes : AppRoutes {
         }
     }
 
-    /** The bridges open on the PUSH, so a pop back never re-reads over a draft. */
-    private fun pushEvent(nav: RouteNav, to: Destination.AgendaEvent) {
-        event.open(to.eventId, to.instanceKey, to.originalStartLocal, to.day)
-        nav.go(nav.stack.push(to))
-    }
-
-    private fun pushEditor(nav: RouteNav, to: Destination.AgendaEditor) {
-        val id = to.eventId
-        if (id == null) editor.openNew(to.day) else editor.openEdit(id, to.instanceKey, to.originalStartLocal, to.day)
-        nav.go(nav.stack.push(to))
+    /**
+     * A PUSH `AgendaRouting` CHOSE, with its bridge opened on the PUSH, so a
+     * pop back never re-reads over a draft.
+     */
+    private fun push(nav: RouteNav, to: Destination?) {
+        when (to) {
+            is Destination.AgendaEvent -> event.open(to.eventId, to.instanceKey, to.originalStartLocal, to.day)
+            is Destination.AgendaEditor -> {
+                val id = to.eventId
+                if (id == null) editor.openNew(to.day) else editor.openEdit(id, to.instanceKey, to.originalStartLocal, to.day)
+            }
+            else -> Unit
+        }
+        nav.push(to)
     }
 
     @Composable
@@ -95,14 +100,7 @@ public class AgendaRoutes : AppRoutes {
             state = screen,
             onEvent = { e ->
                 agenda.forward(e)
-                val picked = e.event_picked
-                when {
-                    picked != null -> pushEvent(
-                        nav,
-                        Destination.AgendaEvent(picked.event_id, picked.instance_key, picked.original_start_local, picked.day),
-                    )
-                    e.new_event != null -> pushEditor(nav, Destination.AgendaEditor(day = screen.anchor_day))
-                }
+                push(nav, AgendaRouting.home(e, screen))
             },
             onHome = { stack = NavStack() },
         )
@@ -122,12 +120,7 @@ public class AgendaRoutes : AppRoutes {
             onEvent = { e: AgendaEventEvent ->
                 event.forward(e)
                 // EDIT IS AN INTENT: the editor, on the ids the detail holds.
-                if (e.action?.key == AgendaEventMachine.ACTION_EDIT) {
-                    pushEditor(
-                        nav,
-                        Destination.AgendaEditor(screen.event_id, screen.instance_key, screen.original_start_local, screen.day),
-                    )
-                }
+                push(nav, AgendaRouting.event(e, screen))
             },
             onBack = { nav.pop() },
             onCall = { uri -> openCall(context, uri) },

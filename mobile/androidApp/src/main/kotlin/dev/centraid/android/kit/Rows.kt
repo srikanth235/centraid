@@ -257,7 +257,7 @@ public fun ShowMoreFooter(
         if (loading) {
             Text(loadingLabel, style = centraidType("annotLabel"), color = centraidColor("textFaint"))
         } else {
-            QuietButton(label = label, testTag = "kit-show-more", onPress = onMore)
+            OutlineButton(label = label, testTag = "kit-show-more", onPress = onMore)
         }
     }
 }
@@ -419,7 +419,7 @@ public fun autosaveLabel(autosave: Autosave?): String = autosave?.label.orEmpty(
 public fun AutosaveStatus(autosave: Autosave?, modifier: Modifier = Modifier) {
     val label = autosaveLabel(autosave)
     if (label.isEmpty()) return
-    val refused = autosave?.phase == Autosave.Phase.PHASE_REFUSED
+    val refused = autosave?.refused == true
     Text(
         label,
         style = centraidType("annotLabel"),

@@ -28,6 +28,7 @@ import dev.centraid.shared.kit.ReadContent
 import dev.centraid.shared.kit.WriteLaw
 import dev.centraid.shared.kit.WriteLens
 import dev.centraid.shared.kit.dataOf
+import dev.centraid.shared.nav.ScreenIds
 import dev.centraid.shared.platform.DeviceClock
 import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.screen.ScreenMachine
@@ -49,7 +50,7 @@ import dev.centraid.shared.sync.ScreenWrites
  * Editing the text is `docs.editor`, pushed by the shell on `EditRequested`.
  */
 public object DocsDocumentMachine : ScreenMachine<DocsDocumentState, DocsDocumentEvent> {
-    public const val SCREEN_ID: String = "docs.document"
+    public const val SCREEN_ID: String = ScreenIds.DOCS_DOCUMENT
 
     /**
      * The drive's tables, the version chain and the audit trail the activity

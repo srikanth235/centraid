@@ -28,6 +28,7 @@ import dev.centraid.shared.kit.WriteLaw
 import dev.centraid.shared.kit.WriteLens
 import dev.centraid.shared.kit.dataOf
 import dev.centraid.shared.kit.time.CivilWords
+import dev.centraid.shared.nav.ScreenIds
 import dev.centraid.shared.screen.Step
 
 /**
@@ -38,8 +39,8 @@ import dev.centraid.shared.screen.Step
  * the member accepts (R20(c)).
  */
 public object MoneyTransactionMachine :
-    MoneyQueryMachine<MoneyTransactionState, MoneyTransactionEvent, MoneyTransactionData>("money.transaction", MONEY_TABLES) {
-    public const val SCREEN_ID: String = "money.transaction"
+    MoneyQueryMachine<MoneyTransactionState, MoneyTransactionEvent, MoneyTransactionData>(ScreenIds.MONEY_TRANSACTION, MONEY_TABLES) {
+    public const val SCREEN_ID: String = ScreenIds.MONEY_TRANSACTION
 
     public const val CMD_CATEGORIZE: String = "money.categorize"
     public const val CMD_VOID: String = "money.void_transaction"
@@ -230,7 +231,16 @@ public object MoneyTransactionMachine :
             add(MoneyFact(MoneyCopy.FACT_ACCOUNT, answer.account_label))
             add(MoneyFact(MoneyCopy.FACT_POSTED, CivilWords.dayMonth(answer.posted_on)))
             add(MoneyFact(MoneyCopy.FACT_BANK_WROTE, answer.raw))
-            add(MoneyFact(MoneyCopy.FACT_CATEGORY, answer.category_label ?: MoneyCopy.NO_CATEGORY))
+            // CATEGORY AND NAME ARE THE FACTS A MEMBER CHANGES: each names its
+            // action, and a category still to supply is owed attention (seam).
+            add(
+                MoneyFact(
+                    MoneyCopy.FACT_CATEGORY,
+                    answer.category_label ?: MoneyCopy.NO_CATEGORY,
+                    action = ACTION_CATEGORY,
+                    tone = if (answer.category_label == null) StatusChip.Tone.TONE_SEAM else StatusChip.Tone.TONE_UNSPECIFIED,
+                ),
+            )
             add(
                 MoneyFact(
                     MoneyCopy.FACT_NAME,
@@ -239,6 +249,7 @@ public object MoneyTransactionMachine :
                         "member" -> "${answer.display_name} · ${MoneyCopy.FROM_YOU}"
                         else -> answer.display_name
                     },
+                    action = ACTION_NAME,
                 ),
             )
             answer.memo?.takeIf { it.isNotBlank() }?.let { add(MoneyFact(MoneyCopy.FACT_MEMO, it)) }

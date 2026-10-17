@@ -5,6 +5,7 @@ import centraid.screen.v1.WordEntry
 import centraid.screen.v1.WordsEntryEvent
 import centraid.screen.v1.WordsEntryState
 import dev.centraid.design.copy.WordsCopy
+import dev.centraid.shared.kit.groupedDigits
 import dev.centraid.shared.platform.platformServices
 import dev.centraid.shared.shell.HomeSession
 import kotlinx.coroutines.CoroutineScope
@@ -89,6 +90,7 @@ public object WordsEntryMachine {
                         purpose = event.opened.purpose.takeIf { it != WordsEntryState.Purpose.PURPOSE_UNSPECIFIED }
                             ?: WordsEntryState.Purpose.PURPOSE_RESTORE,
                         origin = event.opened.origin,
+                        camera = event.opened.camera,
                     ),
                 ),
             )
@@ -99,6 +101,13 @@ public object WordsEntryMachine {
                 edited(model, model.cells.toMutableList().also { it[at - 1] = event.picked.word })
             }
             event.endpoint != null && entering -> EntryStep(render(model.copy(endpoint = event.endpoint.text)))
+            // A SCAN FILLS THE CODE'S FIELD as a paste would; the restore still
+            // waits for the primary, because the words may not be in yet.
+            event.scanned != null && entering && model.restores ->
+                EntryStep(render(model.copy(endpoint = event.scanned.payload, notice = "")))
+            // A PHOTO WITH NO SQUARE keeps what was typed and says what to do.
+            event.unread != null && entering && model.restores ->
+                EntryStep(render(model.copy(notice = WordsCopy.PAIR_PHOTO_UNREAD)))
             event.primary != null -> primary(model)
             event.secondary != null -> EntryStep(closed())
             event.retry != null -> retry(model)
@@ -304,7 +313,7 @@ public object WordsEntryMachine {
         line = when {
             vault.rows == 1L -> WordsCopy.RESTORED_LINE_ONE.replace("{index}", "$number")
             vault.rows > 0 ->
-                WordsCopy.RESTORED_LINE_MANY.replace("{index}", "$number").replace("{rows}", CustodyCopy.grouped(vault.rows))
+                WordsCopy.RESTORED_LINE_MANY.replace("{index}", "$number").replace("{rows}", groupedDigits(vault.rows))
             else -> WordsCopy.RESTORED_LINE_NONE.replace("{index}", "$number")
         },
         safety_number = vault.safetyNumber,
@@ -394,6 +403,8 @@ public object WordsEntryMachine {
             WordsEntryState.Phase.PHASE_DONE -> WordsCopy.DONE
             else -> ""
         }
+        // THE SCAN IS DRAWN WHEREVER THE CODE'S FIELD IS, and only while entering.
+        val scans = model.restores && !answered && phase == WordsEntryState.Phase.PHASE_ENTERING
         val notice = model.notice.ifEmpty { if (phase == WordsEntryState.Phase.PHASE_ENTERING && !held) verdictNotice(model) else "" }
         return model.copy(
             state = WordsEntryState(
@@ -409,6 +420,9 @@ public object WordsEntryMachine {
                 // A23): every restore, and the re-key that offers one instead.
                 endpoint_label = if (model.restores && !answered && phase != WordsEntryState.Phase.PHASE_CLOSED) WordsCopy.ENDPOINT_LABEL else "",
                 endpoint = if (model.restores && !answered) model.endpoint else "",
+                scan_label = if (scans) WordsCopy.PAIR_SCAN else "",
+                scan_camera = scans && model.camera,
+                photo_label = if (scans && model.camera) WordsCopy.PAIR_PHOTO else "",
                 notice = notice,
                 primary_label = primary,
                 primary_enabled = when (phase) {
@@ -450,6 +464,8 @@ public data class Entry(
     public val state: WordsEntryState = WordsEntryState(),
     internal val cells: List<String> = List(WordsEntryMachine.CELLS) { "" },
     public val endpoint: String = "",
+    /** Whether the shell can scan with a camera (`Opened.camera`). */
+    public val camera: Boolean = false,
     /** Bumped on every edit; a check answers for one revision. */
     public val revision: Long = 0,
     internal val verdict: PhraseVerdict? = null,
@@ -649,11 +665,18 @@ public class WordsEntryBridge {
 
     public val states: StateFlow<WordsEntryState> get() = flow.state
 
+    /**
+     * Whether this phone has a camera to scan the pairing code with. The shell
+     * sets it once (iOS `PairScanner.available`, Android `FEATURE_CAMERA_ANY`);
+     * every door below carries it in `Opened.camera`.
+     */
+    public var camera: Boolean = false
+
     public fun open(
         purpose: WordsEntryState.Purpose,
         origin: WordsEntryState.Origin = WordsEntryState.Origin.ORIGIN_UNSPECIFIED,
     ) {
-        forward(WordsEntryEvent(opened = WordsEntryEvent.Opened(purpose = purpose, origin = origin)))
+        forward(WordsEntryEvent(opened = WordsEntryEvent.Opened(purpose = purpose, origin = origin, camera = camera)))
     }
 
     /** Swift: restore onto this phone. */

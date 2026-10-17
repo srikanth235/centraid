@@ -20,9 +20,10 @@ import dev.centraid.android.kit.TrashListScreen
 import dev.centraid.design.copy.PeopleCopy
 import dev.centraid.shared.apps.people.PeopleEditorBridge
 import dev.centraid.shared.apps.people.PeopleHomeBridge
-import dev.centraid.shared.apps.people.PeopleHomeMachine
 import dev.centraid.shared.apps.people.PeoplePersonBridge
+import dev.centraid.shared.apps.people.PeopleRouting
 import dev.centraid.shared.apps.people.PeopleTrashBridge
+import dev.centraid.shared.nav.AppIds
 import dev.centraid.shared.nav.Destination
 import dev.centraid.shared.nav.withPeopleDestination
 import dev.centraid.shared.shell.HomeSession
@@ -32,10 +33,10 @@ import kotlinx.coroutines.CoroutineScope
  * PEOPLE'S ROUTES (#1029 app port): home, one person, the profile editor and
  * the trash, each on its bridge for the activity's life.
  *
- * The machines emit intents and route nothing; this file answers them —
- * a person pushes `PeoplePerson`, Add pushes the editor under an id the
- * editor bridge mints, Trash pushes the kit trash, a channel goes to the OS
- * (dial, mail, map, clipboard), and a person's `done` is the pop.
+ * The machines emit intents and route nothing; `PeopleRouting` decides where
+ * each goes (for iOS too) — a person, the editor under an id it mints, the kit
+ * trash, the channel row a tap meant — and this file pushes it, hands a
+ * channel to the OS (dial, mail, map, clipboard), and pops on a person's `done`.
  */
 public class PeopleRoutes : AppRoutes {
     private val home = PeopleHomeBridge()
@@ -49,7 +50,7 @@ public class PeopleRoutes : AppRoutes {
             destination is Destination.PeopleEditor ||
             destination == Destination.PeopleTrash
 
-    override fun opens(moveId: String): Destination? = if (moveId == "people") Destination.PeopleHome() else null
+    override fun opens(moveId: String): Destination? = if (moveId == AppIds.PEOPLE) Destination.PeopleHome() else null
 
     override fun attach(session: HomeSession, scope: CoroutineScope) {
         home.attach(session)
@@ -85,12 +86,7 @@ public class PeopleRoutes : AppRoutes {
             state = state,
             onEvent = { event ->
                 home.forward(event)
-                event.person?.let { stack = stack.push(Destination.PeoplePerson(it.party_id, it.name)) }
-                event.log_touch?.let { stack = stack.push(Destination.PeoplePerson(it.party_id, it.name, logTouch = true)) }
-                if (event.add_person != null) {
-                    stack = stack.push(Destination.PeopleEditor(editor.openNew(), isNew = true))
-                }
-                if (event.more_row?.key == PeopleHomeMachine.MORE_TRASH) stack = stack.push(Destination.PeopleTrash)
+                nav.push(PeopleRouting.home(event))
             },
             onHome = { nav.home() },
         )
@@ -98,7 +94,6 @@ public class PeopleRoutes : AppRoutes {
 
     @Composable
     private fun PersonRoute(destination: Destination.PeoplePerson, nav: RouteNav) {
-        var stack by nav
         val context = LocalContext.current
         LaunchedEffect(destination) { person.open(destination.partyId, destination.name, destination.logTouch) }
         val state by person.host.state.collectAsStateWithLifecycle()
@@ -110,10 +105,8 @@ public class PeopleRoutes : AppRoutes {
             state = state,
             onEvent = { event ->
                 person.forward(event)
-                if (event.edit != null) stack = stack.push(Destination.PeopleEditor(destination.partyId))
-                event.channel?.let { tapped ->
-                    state.data_?.channels?.firstOrNull { it.channel_id == tapped.channel_id }?.let { reach(context, it) }
-                }
+                nav.push(PeopleRouting.person(event, state))
+                PeopleRouting.channel(event, state)?.let { reach(context, it) }
             },
             onBack = { nav.pop() },
         )
@@ -121,9 +114,10 @@ public class PeopleRoutes : AppRoutes {
 
     @Composable
     private fun EditorRoute(destination: Destination.PeopleEditor, nav: RouteNav) {
-        // A NEW person was opened by `openNew` on the push, under the id the
-        // destination carries; an existing one opens here.
-        LaunchedEffect(destination) { if (!destination.isNew) editor.open(destination.partyId) }
+        // A NEW person opens under the id `PeopleRouting` minted for the route.
+        LaunchedEffect(destination) {
+            if (destination.isNew) editor.openNew(destination.partyId) else editor.open(destination.partyId)
+        }
         val state by editor.host.state.collectAsStateWithLifecycle()
         PeopleEditorScreen(
             state = state,

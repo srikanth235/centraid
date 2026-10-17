@@ -6,16 +6,17 @@
 //! Identity is the core.document wrapper (#352), not the content item it points
 //! at, and every decoration is `IN`-bounded by the same window."*
 //!
-//! ## The three reads that DISCOVER rows, and the seven that decorate them
+//! ## The reads that DISCOVER rows, and the ones that decorate them
 //!
 //! | Read | What it is |
 //! |---|---|
 //! | `docs.drive.filed` | **the drive's window is a PAGE.** One page of `core_tag`, newest `tagged_at` first, sized by the caller. Everything below joins over what it returned |
+//! | `docs.shelf.trash`, `docs.shelf.starred`, `docs.shelf.recent` | **the three shelves' own reads** (Q-1047-7). Asked for only when the window is truncated, because a shelf the window does not define cannot be cut from it. See [`ShelfArm`] |
 //! | `ctx.vault.search` | `search`'s own FTS read, which is `crates/search`'s and not a [`PageQuery`] — the hits arrive here in RANK ORDER and the fold keeps that order |
 //!
 //! Everything else — the documents themselves, the stars, the labels, the
 //! content rows, the custody states, the representations and the whole share
-//! fold — is bounded by ids one of those three already returned.
+//! fold — is bounded by ids one of those already returned.
 //!
 //! ## `truncated` IS THE PAGE'S OWN CURSOR, NOT A GUESS AT IT
 //!
@@ -132,17 +133,75 @@ pub fn filed_statement(folder_concept_ids: &[String]) -> KitResult<PageQuery> {
     .filter(&format!("target_type = ? AND {}", fragment.sql), bind))
 }
 
+/// The wrapper columns every document read selects, so the window's read and a
+/// shelf's own read cannot disagree about what a row is.
+const DOCUMENT_COLUMNS: &str = "document_id, current_content_id, current_revision_id, title, \
+     created_at, updated_at, deleted_at, purge_at";
+
 /// `docs.drive.documents` — the wrappers the window named.
 pub fn documents_statement(document_ids: &[String]) -> KitResult<PageQuery> {
     let fragment = in_list("document_id", document_ids)?;
     Ok(PageQuery::new(
         "docs.drive.documents",
-        "document_id, current_content_id, current_revision_id, title, \
-         created_at, updated_at, deleted_at, purge_at",
+        DOCUMENT_COLUMNS,
         "core_document",
         PageOrder::asc("document_id", "document_id"),
     )
     .filter(&fragment.sql, fragment.bind))
+}
+
+/// `docs.shelf.trash` — THE TRASH SHELF'S OWN READ (Q-1047-7): every trashed
+/// wrapper, newest-changed first.
+///
+/// `updated_at` is the sort and not `deleted_at`: the latter is nullable, and a
+/// keyset page cannot be continued over a nullable column
+/// ([`centraid_apps_kit::error::KitError::NullableSortKey`]). `core.trash_document`
+/// stamps both with one instant, and a trashed document is frozen, so the order
+/// is the same one — and the shelf's own fold re-sorts by `deleted_at` anyway.
+#[must_use]
+pub fn trash_statement() -> PageQuery {
+    PageQuery::new(
+        "docs.shelf.trash",
+        DOCUMENT_COLUMNS,
+        "core_document",
+        PageOrder::desc("updated_at", "document_id"),
+    )
+    .filter("deleted_at IS NOT NULL", Vec::new())
+}
+
+/// `docs.shelf.recent` — RECENTLY ADDED'S OWN READ (Q-1047-7): live wrappers,
+/// newest-created first, which is the order `Recent` is defined by.
+#[must_use]
+pub fn recent_statement() -> PageQuery {
+    PageQuery::new(
+        "docs.shelf.recent",
+        DOCUMENT_COLUMNS,
+        "core_document",
+        PageOrder::desc("created_at", "document_id"),
+    )
+    .filter("deleted_at IS NULL", Vec::new())
+}
+
+/// `docs.shelf.starred` — THE STAR TAGS, newest-starred first (Q-1047-7).
+///
+/// A star is a flags-scheme tag on the wrapper, and it survives the trash, so
+/// the tag alone does not say the document is on the Starred shelf: the arm
+/// reads the wrappers these name and keeps the live ones.
+#[must_use]
+pub fn starred_tags_statement(concept_id: &str) -> PageQuery {
+    PageQuery::new(
+        "docs.shelf.starred",
+        "tag_id, target_id, tagged_at",
+        "core_tag",
+        PageOrder::desc("tagged_at", "tag_id"),
+    )
+    .filter(
+        "concept_id = ? AND target_type = ?",
+        vec![
+            PageBindValue::Text(concept_id.to_owned()),
+            PageBindValue::Text(DOCUMENT_TARGET_TYPE.to_owned()),
+        ],
+    )
 }
 
 /// `docs.drive.starred` — the star, which is a flags-scheme tag on the WRAPPER.
@@ -919,6 +978,265 @@ pub fn load_drive(
     ))
 }
 
+// ---------------------------------------------------------------------------
+// The three shelves that read for themselves (Q-1047-7).
+// ---------------------------------------------------------------------------
+
+/// A shelf that is cut from its OWN read when the drive's window is truncated.
+///
+/// The window is the newest `limit` documents *filed*, and the three shelves
+/// below are not defined by when a document was filed: Trash is whatever was
+/// trashed, Starred whatever the member starred, Recent the newest *created*.
+/// Cut from the window they inherit its cut — a trashed document filed a year
+/// ago is on no Trash shelf, and a star on an old document is no star — so each
+/// reads its own set, and the window keeps only the two shelves it defines: All
+/// and Folders (owner ruling 2026-10-15).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ShelfArm {
+    Trash,
+    Starred,
+    Recent,
+}
+
+/// What an arm found: its rows, folded as the drive folds them, and whether
+/// more exist beyond them. `filled` is the read's own cursor, never a count.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct ArmData {
+    pub documents: Vec<DocumentRow>,
+    pub filled: bool,
+}
+
+/// How many rows an arm holds, read without decorating any of them — the rail
+/// states the Starred and Trash counts whichever shelf is open. `filled` makes
+/// `rows` a floor: the arm stopped at its window.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct ArmCount {
+    pub rows: usize,
+    pub filled: bool,
+}
+
+/// Pages one starred walk may take. A star is the owner's own gesture, so 8 ×
+/// 500 stars is a bound a member does not reach; past it the read says so
+/// rather than answering short.
+const STARRED_PAGES: usize = 8;
+
+/// An arm's wrappers before any decoration.
+struct ArmRows {
+    wrappers: Vec<Row>,
+    filled: bool,
+}
+
+fn window_arm(
+    door: &dyn PageDoor,
+    statement: &PageQuery,
+    rows: usize,
+) -> KitResult<Result<ArmRows, Denial>> {
+    match read_window(door, statement, rows) {
+        Ok(window) => Ok(Ok(ArmRows {
+            wrappers: window.rows,
+            filled: window.filled,
+        })),
+        Err(KitError::Door(message)) => Ok(Err(denial_of(message))),
+        Err(other) => Err(other),
+    }
+}
+
+/// The live starred wrappers, newest-starred first, up to `rows`.
+///
+/// Two reads per page of tags — the tags, then the wrappers they name — because
+/// a star survives the trash: the first `rows` tags may name trashed documents,
+/// and counting them would answer a short shelf while live stars waited beyond.
+/// So the walk goes on until `rows + 1` live ones are found (the extra one is
+/// the proof that the shelf is longer than it) or the tags run out.
+fn starred_arm(
+    door: &dyn PageDoor,
+    taxonomy: &Taxonomy,
+    rows: usize,
+) -> KitResult<Result<ArmRows, Denial>> {
+    // NO CONCEPT, NEVER STARRED (#274): the flags scheme is created on first use.
+    let Some(concept_id) = taxonomy.concept(FLAGS_SCHEME_URI, STARRED_NOTATION) else {
+        return Ok(Ok(ArmRows {
+            wrappers: Vec::new(),
+            filled: false,
+        }));
+    };
+    let statement = starred_tags_statement(&concept_id);
+    let mut live: Vec<Row> = Vec::new();
+    let mut seen: BTreeSet<String> = BTreeSet::new();
+    let mut after = None;
+    for _ in 0..STARRED_PAGES {
+        let page = match door.page(
+            &statement,
+            &PageRequest {
+                limit: MAX_PAGE_ROWS,
+                after: after.clone(),
+            },
+        ) {
+            Ok(page) => page,
+            Err(KitError::Door(message)) => return Ok(Err(denial_of(message))),
+            Err(other) => return Err(other),
+        };
+        let ids: Vec<String> = page
+            .rows
+            .iter()
+            .filter_map(|row| text_of(row, "target_id"))
+            .collect();
+        if !ids.is_empty() {
+            let named = match walk(door, &documents_statement(&ids)?, DOC_JOIN_BOUND)? {
+                Walked::Denied(denial) => return Ok(Err(denial)),
+                Walked::Rows(found) => found,
+            };
+            let by_id: BTreeMap<String, Row> = named
+                .into_iter()
+                .filter_map(|row| Some((text_of(&row, "document_id")?, row)))
+                .collect();
+            for id in &ids {
+                if let Some(wrapper) = by_id.get(id)
+                    && text_of(wrapper, "deleted_at").is_none()
+                    && seen.insert(id.clone())
+                {
+                    live.push(wrapper.clone());
+                }
+            }
+        }
+        if live.len() > rows {
+            live.truncate(rows);
+            return Ok(Ok(ArmRows {
+                wrappers: live,
+                filled: true,
+            }));
+        }
+        match page.next {
+            None => {
+                return Ok(Ok(ArmRows {
+                    wrappers: live,
+                    filled: false,
+                }));
+            }
+            Some(next) => after = Some(next),
+        }
+    }
+    Err(KitError::FanOutExceeded {
+        query: statement.name,
+        cap: STARRED_PAGES * MAX_PAGE_ROWS,
+    })
+}
+
+fn read_arm(
+    door: &dyn PageDoor,
+    taxonomy: &Taxonomy,
+    arm: ShelfArm,
+    rows: usize,
+) -> KitResult<Result<ArmRows, Denial>> {
+    match arm {
+        ShelfArm::Trash => window_arm(door, &trash_statement(), rows),
+        ShelfArm::Recent => window_arm(door, &recent_statement(), rows),
+        ShelfArm::Starred => starred_arm(door, taxonomy, rows),
+    }
+}
+
+fn taxonomy_or_denial(door: &dyn PageDoor) -> KitResult<Result<Taxonomy, Denial>> {
+    match read_taxonomy(door) {
+        Ok(taxonomy) => Ok(Ok(taxonomy)),
+        Err(KitError::Door(message)) => Ok(Err(denial_of(message))),
+        Err(other) => Err(other),
+    }
+}
+
+/// `shelf` — ONE SHELF, FROM ITS OWN READ (Q-1047-7): up to `rows` of the arm's
+/// documents, decorated as the drive decorates them.
+///
+/// Asked for only when the drive says `truncated`: under a window that holds the
+/// whole drive the window's cut is already complete, and the parity corpus —
+/// which is smaller than any window — never reaches this.
+pub fn load_shelf_arm(
+    door: &dyn PageDoor,
+    arm: ShelfArm,
+    rows: usize,
+) -> KitResult<(ArmData, Option<Denial>)> {
+    let taxonomy = match taxonomy_or_denial(door)? {
+        Ok(taxonomy) => taxonomy,
+        Err(denial) => return Ok((ArmData::default(), Some(denial))),
+    };
+    let found = match read_arm(door, &taxonomy, arm, rows)? {
+        Ok(found) => found,
+        Err(denial) => return Ok((ArmData::default(), Some(denial))),
+    };
+    if found.wrappers.is_empty() {
+        return Ok((ArmData::default(), None));
+    }
+    let (_, root_folder_id) = fold_folders(&taxonomy);
+    let folder_concepts: BTreeSet<String> = taxonomy
+        .concepts_in(FOLDER_SCHEME_URI)
+        .into_iter()
+        .filter_map(|row| text_of(row, "concept_id"))
+        .collect();
+    let document_ids: Vec<String> = found
+        .wrappers
+        .iter()
+        .filter_map(|row| text_of(row, "document_id"))
+        .collect();
+    // THE FOLDER IS THE ONE FOLDERS-SCHEME TAG, as `load_document` reads it.
+    let tags = match walk(door, &labels_statement(&document_ids)?, DOC_PAIR_BOUND)? {
+        Walked::Denied(denial) => return Ok((ArmData::default(), Some(denial))),
+        Walked::Rows(tagged) => tagged,
+    };
+    let folder_by_document: BTreeMap<String, String> = tags
+        .iter()
+        .filter_map(|row| Some((text_of(row, "target_id")?, text_of(row, "concept_id")?)))
+        .filter(|(_, concept_id)| folder_concepts.contains(concept_id))
+        .collect();
+    let decorations = match read_decorations(
+        door,
+        &taxonomy,
+        &found.wrappers,
+        folder_by_document,
+        root_folder_id,
+    )? {
+        Err(denial) => return Ok((ArmData::default(), Some(denial))),
+        Ok(decorations) => decorations,
+    };
+    Ok((
+        ArmData {
+            documents: found
+                .wrappers
+                .iter()
+                .filter_map(|wrapper| fold_row(wrapper, &decorations))
+                .collect(),
+            filled: found.filled,
+        },
+        None,
+    ))
+}
+
+/// How many documents an arm holds, up to `rows`, without decorating them.
+pub fn count_shelf_arm(
+    door: &dyn PageDoor,
+    arm: ShelfArm,
+    rows: usize,
+) -> KitResult<(ArmCount, Option<Denial>)> {
+    // Only Starred needs the vocabulary (the flag's concept); the other two are
+    // a predicate on the wrapper.
+    let taxonomy = if arm == ShelfArm::Starred {
+        match taxonomy_or_denial(door)? {
+            Ok(taxonomy) => taxonomy,
+            Err(denial) => return Ok((ArmCount::default(), Some(denial))),
+        }
+    } else {
+        Taxonomy::default()
+    };
+    Ok(match read_arm(door, &taxonomy, arm, rows)? {
+        Ok(found) => (
+            ArmCount {
+                rows: found.wrappers.len(),
+                filled: found.filled,
+            },
+            None,
+        ),
+        Err(denial) => (ArmCount::default(), Some(denial)),
+    })
+}
+
 /// `search` — the same rows, in the order the index ranked them.
 ///
 /// The FTS read is `ctx.vault.search`, which is not a [`PageQuery`] and belongs
@@ -1404,6 +1722,9 @@ pub fn statement_names() -> Vec<&'static str> {
         "docs.drive.documents",
         "docs.drive.starred",
         "docs.drive.contents",
+        "docs.shelf.recent",
+        "docs.shelf.starred",
+        "docs.shelf.trash",
         "docs.labels.tags",
         "docs.custody.byContent",
         "docs.history.revisions",
@@ -1649,7 +1970,7 @@ mod tests {
     #[test]
     fn every_statement_is_named_once() {
         let names = statement_names();
-        assert_eq!(names.len(), 13);
+        assert_eq!(names.len(), 16);
         for name in &names {
             assert!(
                 name.starts_with("docs.") || name.starts_with("_shared/"),

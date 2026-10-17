@@ -1,9 +1,9 @@
-//! A COLLECTION IS A NOTEBOOK OR AN ALBUM, AND SAYS WHICH (rung six).
+//! A COLLECTION IS A NOTEBOOK OR AN ALBUM, AND SAYS WHICH.
 //!
 //! `knowledge.create_notebook` and `media.create_album` inserted the same shape
 //! into `core_collection`, so Notes and Photos each read, wrote into and
-//! deleted the other's rows. `contracts/migrations/006_collection_kind.sql`
-//! gives the table a REQUIRED `kind`. This suite proves four things:
+//! deleted the other's rows. The table now carries a REQUIRED `kind`. This
+//! suite proves three things about a vault founded today:
 //!
 //! 1. **The schema holds it.** A row without a kind, a kind that is neither,
 //!    and a kind that changes are each refused by the file itself.
@@ -12,13 +12,12 @@
 //!    deleting the other app's collection are each a receipted refusal with
 //!    its own sentence — and the refused delete leaves every row in place.
 //! 3. **Names are unique per kind.** A notebook may share an album's name.
-//! 4. **The rung classifies a vault written before it**, by the rule its file
-//!    states, moves the other kind's entries out, and leaves a file whose
-//!    `core_collection` objects are exactly what a new vault founds.
+//!
+//! (How a vault written before the kind existed was classified is not proved
+//! here: the ladder was squashed into one baseline on 2026-10-15, Q-1029-1,
+//! and no vault in the field predates the kind.)
 
 mod common;
-
-use std::collections::BTreeMap;
 
 use centraid_vault::Vault;
 use centraid_vault::access::Principal;
@@ -495,222 +494,4 @@ fn a_notebook_may_share_an_albums_name_but_not_another_notebooks() {
         json!({ "notebook_id": other, "name": "Portugal" }),
     );
     assert_eq!(predicate, "name_unused_by_owner");
-}
-
-// ---------------------------------------------------------------------------
-// 4. THE RUNG, OVER A VAULT WRITTEN BEFORE IT
-// ---------------------------------------------------------------------------
-
-/// Every `core_collection` object's DDL, keyed by name.
-fn collection_objects(connection: &rusqlite::Connection) -> BTreeMap<String, String> {
-    let mut statement = connection
-        .prepare(
-            "SELECT name, sql FROM sqlite_master
-              WHERE tbl_name = 'core_collection' AND sql IS NOT NULL",
-        )
-        .expect("the schema reads");
-    statement
-        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
-        .expect("the schema reads")
-        .collect::<rusqlite::Result<_>>()
-        .expect("the schema reads")
-}
-
-#[test]
-fn the_rung_classifies_a_vault_written_before_it() {
-    let world = World::new("rung-six");
-    let owner = world.owner.clone();
-    let fresh = world
-        .vault()
-        .read(|connection| Ok(collection_objects(connection)))
-        .expect("the schema reads");
-    let filed_note = world.note("Filed");
-    let mixed_note = world.note("Mixed");
-    for asset in ["asset-album", "asset-mixed", "asset-nested"] {
-        world.photograph(asset);
-    }
-    let path = world.vault().path().to_path_buf();
-
-    // WIND THE FILE BACK TO RUNG FIVE: the column and its guard come off, and
-    // the rows below are written in the shape rung five allowed — including
-    // the cross-app placements this rung ends. `locker_key` goes back to its
-    // pre-rung-seven shape too, and `locker_item` and `locker_item_address`
-    // get back the match-policy columns rung eight drops, and
-    // `notifications_notice` comes back for rung nine to drop, and rungs three
-    // and four's backup tables for rung ten to drop, because the climb runs
-    // every rung above five.
-    {
-        let raw = rusqlite::Connection::open(&path).expect("the file opens");
-        raw.execute_batch(centraid_vault::migrations::BACKUP_INDEX_SQL)
-            .expect("rung three's tables come back");
-        raw.execute_batch(centraid_vault::migrations::BLOB_CUSTODY_SQL)
-            .expect("rung four's tables come back");
-        common::undo_rung_fifteen(&raw);
-        raw.execute_batch(common::UNDO_RUNG_ELEVEN)
-            .expect("rung eleven's chat leaves");
-        raw.execute_batch("PRAGMA foreign_keys = ON;")
-            .expect("foreign keys");
-        let rows = format!(
-            "BEGIN;
-             PRAGMA defer_foreign_keys = ON;
-             DROP TRIGGER core_collection_kind_is_immutable;
-             ALTER TABLE core_collection DROP COLUMN kind;
-             CREATE TABLE notifications_notice (notice_id TEXT PRIMARY KEY) STRICT;
-             DROP TABLE locker_key;
-             CREATE TABLE locker_key (
-               key_id     TEXT PRIMARY KEY,
-               created_at TEXT NOT NULL,
-               retired_at TEXT
-             ) STRICT;
-             CREATE UNIQUE INDEX locker_key_live_idx
-               ON locker_key(retired_at IS NULL) WHERE retired_at IS NULL;
-             ALTER TABLE locker_item ADD COLUMN url_match_policy TEXT NOT NULL
-               DEFAULT 'registrable-domain'
-               CHECK (url_match_policy IN ('registrable-domain','exact-host'));
-             ALTER TABLE locker_item_address ADD COLUMN match_policy TEXT NOT NULL
-               DEFAULT 'registrable-domain'
-               CHECK (match_policy IN ('registrable-domain','exact-host'));
-             INSERT INTO core_collection
-               (collection_id, owner_party_id, name, cover_content_id,
-                parent_collection_id, sort_order, created_at, updated_at)
-             VALUES
-               ('c-notes',  '{owner}', 'Travel',     NULL, NULL, 1, '2026-01-01', '2026-01-01'),
-               ('c-photos', '{owner}', 'Portugal',   'content-asset-album', NULL, 2,
-                '2026-01-01', '2026-01-01'),
-               ('c-mixed',  '{owner}', 'Weekend',    NULL, NULL, 3, '2026-01-01', '2026-01-01'),
-               ('c-nested', '{owner}', 'Cabins',     'content-asset-nested', 'c-notes', 1,
-                '2026-01-01', '2026-01-01'),
-               ('c-by-id',  '{owner}', 'Empty trip', NULL, NULL, 4, '2026-01-01', '2026-01-01'),
-               ('c-by-title', '{owner}', 'Beach',    NULL, NULL, 5, '2026-01-01', '2026-01-01'),
-               ('c-bare',   '{owner}', 'Someday',    NULL, NULL, 6, '2026-01-01', '2026-01-01'),
-               ('c-both',   '{owner}', 'Ideas',      NULL, NULL, 7, '2026-01-01', '2026-01-01');
-             INSERT INTO core_collection_entry
-               (entry_id, collection_id, target_type, target_id, position, added_at)
-             VALUES
-               ('e-1', 'c-notes',  'knowledge.note', '{filed_note}', 1, '2026-01-01'),
-               ('e-2', 'c-photos', 'media.asset',    'asset-album',  1, '2026-01-01'),
-               ('e-3', 'c-mixed',  'media.asset',    'asset-mixed',  1, '2026-01-01'),
-               ('e-4', 'c-mixed',  'knowledge.note', '{mixed_note}', 2, '2026-01-01'),
-               ('e-5', 'c-nested', 'media.asset',    'asset-nested', 1, '2026-01-01');
-             INSERT INTO agent_command_invocation
-               (invocation_id, command_id, caller_id, input_json, status, requested_at)
-             VALUES
-               ('i-1', 'media.create_album', 'phone',
-                '{{\"album_id\":\"c-by-id\",\"title\":\"Renamed since\"}}', 'executed', '2026-01-01'),
-               ('i-2', 'media.create_album', 'phone',
-                '{{\"title\":\"Beach\"}}', 'executed', '2026-01-01'),
-               ('i-3', 'media.create_album', 'phone',
-                '{{\"title\":\"Ideas\"}}', 'executed', '2026-01-01'),
-               ('i-4', 'knowledge.create_notebook', 'phone',
-                '{{\"name\":\"Ideas\"}}', 'executed', '2026-01-01'),
-               ('i-5', 'media.create_album', 'phone',
-                '{{\"title\":\"Someday\"}}', 'failed', '2026-01-01');
-             PRAGMA user_version = 5;
-             COMMIT;"
-        );
-        raw.execute_batch(&rows)
-            .expect("the rung-five file is written");
-    }
-
-    // THE REAL PATH: `Vault::open` sees rung five, snapshots, and climbs.
-    let migrated = Vault::open(&path).expect("the file migrates");
-    assert_eq!(migrated.schema_version(), centraid_vault::head_version());
-    let (kinds, entries, covers, fts, entities, orphans, objects) = migrated
-        .read(|connection| {
-            let kinds: BTreeMap<String, String> = connection
-                .prepare("SELECT collection_id, kind FROM core_collection")?
-                .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
-                .collect::<rusqlite::Result<_>>()?;
-            let entries: Vec<String> = connection
-                .prepare("SELECT entry_id FROM core_collection_entry ORDER BY entry_id")?
-                .query_map([], |row| row.get(0))?
-                .collect::<rusqlite::Result<_>>()?;
-            let covers: BTreeMap<String, Option<String>> = connection
-                .prepare(
-                    "SELECT collection_id, cover_content_id FROM core_collection
-                      WHERE collection_id IN ('c-photos', 'c-nested')",
-                )?
-                .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
-                .collect::<rusqlite::Result<_>>()?;
-            let fts: Vec<String> = connection
-                .prepare(
-                    "SELECT collection_id FROM fts_core_collection
-                      WHERE fts_core_collection MATCH 'Portugal'",
-                )?
-                .query_map([], |row| row.get(0))?
-                .collect::<rusqlite::Result<_>>()?;
-            let entities: i64 = connection.query_row(
-                "SELECT COUNT(*) FROM core_entity
-                  WHERE entity_type = 'core.collection' AND entity_id LIKE 'c-%'",
-                [],
-                |row| row.get(0),
-            )?;
-            let orphans: i64 = connection.query_row(
-                "SELECT COUNT(*) FROM pragma_foreign_key_check",
-                [],
-                |row| row.get(0),
-            )?;
-            Ok((
-                kinds,
-                entries,
-                covers,
-                fts,
-                entities,
-                orphans,
-                collection_objects(connection),
-            ))
-        })
-        .expect("the migrated file reads");
-
-    let expected: BTreeMap<String, String> = [
-        // 3. only notes → notebook
-        ("c-notes", "notebook"),
-        // 2. only photographs → album
-        ("c-photos", "album"),
-        // 2. a photograph AND a note → album, the note leaves
-        ("c-mixed", "album"),
-        // 1. nested → notebook, the photograph leaves
-        ("c-nested", "notebook"),
-        // 4. empty, and `media.create_album` minted this id
-        ("c-by-id", "album"),
-        // 4. empty, and `media.create_album`'s title is this name
-        ("c-by-title", "album"),
-        // 5. empty with only a FAILED create_album behind it
-        ("c-bare", "notebook"),
-        // 4. empty, and create_notebook used this name too: notebook evidence
-        //    wins over a title match
-        ("c-both", "notebook"),
-    ]
-    .into_iter()
-    .map(|(id, kind)| (id.to_owned(), kind.to_owned()))
-    .collect();
-    assert_eq!(kinds, expected);
-    // e-4 (a note in an album) and e-5 (a photograph in a notebook) are gone;
-    // the note and the photograph themselves are not.
-    assert_eq!(entries, ["e-1", "e-2", "e-3"]);
-    assert_eq!(
-        migrated
-            .read(|connection| Ok(connection.query_row(
-                "SELECT (SELECT COUNT(*) FROM knowledge_note WHERE note_id = ?1)
-                      + (SELECT COUNT(*) FROM media_asset WHERE asset_id = 'asset-nested')",
-                [&mixed_note],
-                |row| row.get::<_, i64>(0),
-            )?))
-            .expect("the count reads"),
-        2
-    );
-    // An album keeps its cover; a notebook's cover that named a photograph
-    // no longer filed in it is cleared.
-    assert_eq!(covers["c-photos"].as_deref(), Some("content-asset-album"));
-    assert_eq!(covers["c-nested"], None);
-    // The rows came back WITH THEIR ROWIDS, so the name index still names the
-    // right row.
-    assert_eq!(fts, ["c-photos"]);
-    assert_eq!(
-        entities, 8,
-        "every collection's entity row survived the rebuild"
-    );
-    assert_eq!(orphans, 0, "no foreign key dangles");
-    // And the file's `core_collection` objects are exactly a new vault's.
-    assert_eq!(objects, fresh);
 }

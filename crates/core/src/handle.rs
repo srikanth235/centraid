@@ -924,8 +924,25 @@ impl Handle {
             // and keeps the gateway in the ledger beside the file.
             K::PairPhone(request) => {
                 let runtime = self.runtime_handle()?;
+                // HOW FAR THIS COPY HAS RUN, read before the network is
+                // touched and the vault let go (the sweep's F4): a takeover
+                // compares it with the head it would claim.
+                let own = self.with_vault_if_any(|vault| {
+                    vault
+                        .map(|vault| {
+                            centraid_vault::backup::snapshot::history(vault)
+                                .map_err(crate::phone::plane_error)
+                        })
+                        .transpose()
+                })?;
                 Ok(response(wire::response::Kind::PairPhone(
-                    crate::phone::pair::pair(&self.plane, self.keys.as_ref(), request, &runtime)?,
+                    crate::phone::pair::pair(
+                        &self.plane,
+                        self.keys.as_ref(),
+                        own.as_ref(),
+                        request,
+                        &runtime,
+                    )?,
                 )))
             }
             // NOR DOES A RESTORE, and for the same reason with more force: the
@@ -1027,6 +1044,12 @@ impl Handle {
                 let vault = self.keys.as_ref().map(crate::phone::Keyring::vault_id);
                 Ok(response(wire::response::Kind::ForgetDestination(
                     crate::phone::forget_destination(&self.plane, vault, &runtime, request)?,
+                )))
+            }
+            K::RefreshDestination(request) => {
+                let runtime = self.runtime_handle()?;
+                Ok(response(wire::response::Kind::RefreshDestination(
+                    crate::phone::refresh_destination(&self.plane, &runtime, request)?,
                 )))
             }
             K::Releasable(request) => {
@@ -1138,6 +1161,7 @@ impl Handle {
                 keys: keys.backup.clone(),
                 spool: plane.spool()?,
                 budget: plane.budget(),
+                free: plane.free_bytes(),
                 planned: if begin.os_ref.is_empty() {
                     None
                 } else {
@@ -1208,6 +1232,7 @@ impl Handle {
                     content_hash: hash,
                     byte_size: stored.bytes,
                     already_held: stored.already_held,
+                    derivatives_held: Vec::new(),
                 })
             }
             Staged::Library {
@@ -1248,21 +1273,45 @@ impl Handle {
                     )?;
                 }
                 let hash = h.to_hex();
-                self.with_vault(|vault| {
+                let derivatives = self.with_vault(|vault| {
                     vault.stage_bytes(&[centraid_vault::content::NeededBytes {
                         hash: hash.clone(),
                         byte_size: i64::try_from(len).unwrap_or(i64::MAX),
                         media_type,
                     }])?;
-                    Ok(())
+                    Ok(vault.derivatives_of(&hash)?)
                 })?;
                 Ok(wire::StageHandle {
                     content_hash: hash,
                     byte_size: len,
                     already_held,
+                    derivatives_held: self.tiers_held(derivatives),
                 })
             }
         }
+    }
+
+    /// **THE DERIVATIVES THIS CORE HOLDS FOR AN ORIGINAL** (#1080, the
+    /// simulator run): the tiers whose row the vault has AND whose bytes the
+    /// store has. A restored phone's first walk finds the original absent —
+    /// it is the gateway's, not the phone's — while the restore brought every
+    /// thumbnail and preview back with its row, so the walk would render and
+    /// stage again what the vault holds. A row without its bytes (a derivative
+    /// the restore could not fetch) is not held: the shell renders it, and
+    /// staging replaces the row.
+    fn tiers_held(&self, derivatives: Vec<(String, String)>) -> Vec<String> {
+        let Some(door) = self.bytes() else {
+            return Vec::new();
+        };
+        derivatives
+            .into_iter()
+            .filter(|(_, hash)| {
+                centraid_blobs::ContentHash::parse_hex(hash)
+                    .ok()
+                    .is_some_and(|hash| door.store().is_complete(hash).unwrap_or(false))
+            })
+            .map(|(variant, _)| variant)
+            .collect()
     }
 
     fn hello(&self, peer: &wire::Hello) -> wire::Hello {
@@ -1351,7 +1400,7 @@ fn request_kind(request: &wire::Request) -> RequestKind {
             | K::Locker(_)
             // A PHRASE STEP IS 24 WORDS AND ONE PBKDF2 (#1047 E1).
             | K::Phrase(_)
-            // SEVEN OF THE BACKUP PLANE'S DOORS ARE BOUNDED (#1080).
+            // EIGHT OF THE BACKUP PLANE'S DOORS ARE BOUNDED (#1080).
             // `handoff` answers at most the batch it was asked for, `settle`
             // records what the shell already heard, `pins` is one read of the
             // device's ledger and `forget_destination` one read, one revoke
@@ -1365,6 +1414,9 @@ fn request_kind(request: &wire::Request) -> RequestKind {
             | K::Pins(_)
             | K::Reconcile(_)
             | K::ForgetDestination(_)
+            // `refresh_destination` DIALS AT MOST EIGHT CANDIDATES, each for
+            // at most three seconds, and writes one row (Q-1080-D3).
+            | K::RefreshDestination(_)
             | K::Releasable(_)
             | K::Released(_)
             // A CHAT TURN IS BOUNDED BY ITS CEILINGS: `STEP_CAP` (6) steps of at most
@@ -1794,6 +1846,7 @@ mod tests {
             wire::request::Kind::Pins(wire::PinsRequest {}),
             wire::request::Kind::Reconcile(wire::ReconcileRequest {}),
             wire::request::Kind::ForgetDestination(wire::ForgetDestinationRequest::default()),
+            wire::request::Kind::RefreshDestination(wire::RefreshDestinationRequest::default()),
             wire::request::Kind::Releasable(wire::ReleasableRequest::default()),
             wire::request::Kind::Released(wire::ReleasedRequest::default()),
         ] {

@@ -789,6 +789,20 @@ class TasksSpec : StringSpec({
         refused.screen.status!!.sentence shouldBe "A repeating task needs a due date to repeat from."
     }
 
+    "priority runs higher more urgent: Soon, Next and Now are 1, 2 and 3, anything above is Now, zero is none (Q-1047-10)" {
+        // THE SCALE IS TODOIST'S, as the vault stores it and `tasks.proto` says
+        // (D-1020-S5) — not RFC 5545's 1-is-highest. A level that rose with its
+        // number is what makes "Now" the top chip and its write `3`.
+        listOf(0L, -1L).forEach { TasksRows.priorityLabel(it) shouldBe "" }
+        TasksRows.priorityLabel(1) shouldBe "Soon"
+        TasksRows.priorityLabel(2) shouldBe "Next"
+        TasksRows.priorityLabel(3) shouldBe "Now"
+        listOf(4L, 5L, 9L).forEach { TasksRows.priorityLabel(it) shouldBe "Now" }
+        val fields = detailOn(task("a", "Rent", due = "2026-06-19", days = 4)).screen.data_!!.fields.associateBy { it.key }
+        fields.getValue("priority").choices.map { it.key to it.label } shouldBe
+            listOf("none" to "None", "1" to "Soon", "2" to "Next", "3" to "Now")
+    }
+
     "subtasks: a done count, add as a write, one level only" {
         val parent = task("a", "Move house").copy(children = listOf(task("c1", "Boxes").copy(parent_task_id = "a"), task("c2", "Van").copy(parent_task_id = "a", status = "completed")), done_children = 1)
         val detail = detailOn(parent)

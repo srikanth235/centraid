@@ -23,9 +23,9 @@
 //! representable today and reader-caught tomorrow.
 //!
 //! [`note_version_chain`] returns a typed [`VersionChainError`] for both, and
-//! the accompanying storage guard is proposed as
-//! `contracts/migrations/002_revisions.sql` (the receipt names every reader
-//! that moves with it). A refusal is the honest answer: a member who cannot see
+//! the accompanying storage guard is now in the baseline
+//! (`contracts/migrations/001_baseline.sql`, D-1020-N2; the receipt names every
+//! reader that moved with it). A refusal is the honest answer: a member who cannot see
 //! their history knows it, and a member shown four of forty versions does not.
 
 /// A well-formed chain terminates on a null parent; this caps a malformed one.

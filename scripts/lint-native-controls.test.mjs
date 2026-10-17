@@ -59,7 +59,7 @@ test("Android rules separate Material buttons from kit buttons", () => {
       Button(onClick = {}) {}
       IconButton(onClick = {}) {}
       InkButton(onClick = {})
-      QuietButton(onClick = {})
+      OutlineButton(onClick = {})
       ModalBottomSheet(onDismissRequest = {})
       CircularProgressIndicator()
       RoundedCornerShape(12.dp)

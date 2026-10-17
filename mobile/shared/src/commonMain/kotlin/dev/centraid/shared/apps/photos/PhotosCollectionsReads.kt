@@ -18,7 +18,7 @@ import dev.centraid.shared.sync.ScreenWrites
 /**
  * WHAT COLLECTIONS READS (#1029, the photos port).
  *
- * ## THIS IS NOT A `ScreenReads`, FOR `PhotosPeopleReads`' REASON
+ * ## THIS IS NOT A `ScreenReads`, AND THE REASON IS A CONTRACT FINDING
  *
  * [dev.centraid.shared.sync.ScreenReads] is one table, one statement, one
  * projection, and its `arrived` is handed rows with no way to ask which
@@ -33,15 +33,14 @@ import dev.centraid.shared.sync.ScreenWrites
  * | an album's size | `core_collection_entry` |
  * | Archive, Trash, Videos | `media_asset` under three predicates |
  * | Favorites | `core_concept_scheme` → `core_concept` → `core_tag` |
- * | People | `media_face_region` |
  * | Places | `core_place` |
  * | Memories | `media_memory` |
  * | Duplicates | `media_asset_phash` |
  *
  * Those answers cannot be chained through the reducer, and the type system is
  * what says so: **`PhotosCollectionsState`'s content is a protobuf `oneof`**,
- * so `loading` and `data` cannot both be set and there is nowhere to hold nine
- * answers while the tenth is in flight. Wire enforces it in the constructor,
+ * so `loading` and `data` cannot both be set and there is nowhere to hold eight
+ * answers while the ninth is in flight. Wire enforces it in the constructor,
  * which is the three-state read law made structural and exactly what forbids a
  * half-composed screen.
  *
@@ -265,23 +264,6 @@ public object PhotosCollectionsReads :
         order = PageOrder(sort_column = "tag_id", pk_column = "tag_id"),
     )
 
-    /**
-     * `photos.collections.faces` — the People door and its badge, in one read.
-     *
-     * Two facts off one table rather than two predicates down two statements:
-     * who is CONFIRMED (the door's count) and how many proposals are
-     * UNANSWERED (the badge). `review_state` is the column that made the
-     * second one expressible at all (#712) — before it, "rejected" was a
-     * DELETE, so the enricher was free to propose the same stranger again and
-     * the queue could never be finished.
-     */
-    public fun facesQuery(): PageQuery = PageQuery(
-        name = "photos.collections.faces",
-        select = listOf("region_id", "party_id", "review_state"),
-        from = "media_face_region",
-        order = PageOrder(sort_column = "region_id", pk_column = "region_id"),
-    )
-
     /** `photos.collections.places`. */
     public fun placesQuery(): PageQuery = PageQuery(
         name = "photos.collections.places",
@@ -363,7 +345,7 @@ public object PhotosCollectionsReads :
     // -----------------------------------------------------------------------
 
     /**
-     * TEN ANSWERS, ONE SCREEN. Pure, so every line of it is provable with no
+     * NINE ANSWERS, ONE SCREEN. Pure, so every line of it is provable with no
      * vault.
      *
      * The shelves come out in the order a member reads them — the standing four
@@ -380,7 +362,6 @@ public object PhotosCollectionsReads :
         trash: Scan,
         videos: Scan,
         starred: Scan,
-        faces: Scan,
         places: Scan,
         memories: Scan,
         duplicates: Scan,
@@ -390,13 +371,6 @@ public object PhotosCollectionsReads :
         val newest = newestEntries(entries.rows)
         val byContent = covers.rows.associate { it.text(COVER_CONTENT) to it.text(SHELF_THUMBNAIL) }
         val byAsset = covers.rows.associate { it.text(0) to it.text(SHELF_THUMBNAIL) }
-        val proposals = faces.rows.count { it.text(FACE_REVIEW_STATE) == REVIEW_PROPOSED }
-        val named = faces.rows
-            .filter { it.text(FACE_REVIEW_STATE) == REVIEW_CONFIRMED }
-            .map { it.text(FACE_PARTY) }
-            .filter { it.isNotEmpty() }
-            .distinct()
-            .size
         val clusters = duplicateClusters(duplicates.rows)
 
         return PhotosCollectionsData(
@@ -437,7 +411,6 @@ public object PhotosCollectionsReads :
                 albumOf(row, sizes, entries.capped, cover?.ifEmpty { null })
             },
             doors = listOf(
-                door(CollectionsDoor.Kind.KIND_PEOPLE, named, faces.capped, proposals),
                 door(CollectionsDoor.Kind.KIND_PLACES, places.rows.size, places.capped, 0),
                 door(CollectionsDoor.Kind.KIND_MEMORIES, memories.rows.size, memories.capped, 0),
                 // A CLUSTER IS THE THING A MEMBER RESOLVES, so the badge and
@@ -628,10 +601,6 @@ public object PhotosCollectionsReads :
 
     private const val ASSETS: String = "media_asset"
 
-    private const val REVIEW_PROPOSED: String = "proposed"
-
-    private const val REVIEW_CONFIRMED: String = "confirmed"
-
     private const val ENTRY_COLLECTION: Int = 1
 
     private const val ENTRY_TARGET: Int = 2
@@ -639,10 +608,6 @@ public object PhotosCollectionsReads :
     private const val ALBUM_COVER: Int = 2
 
     private const val COVER_CONTENT: Int = 1
-
-    private const val FACE_PARTY: Int = 1
-
-    private const val FACE_REVIEW_STATE: Int = 2
 
     private const val PHASH_CLUSTER: Int = 1
 

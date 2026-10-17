@@ -27,7 +27,6 @@ import androidx.compose.ui.unit.dp
 import centraid.screen.v1.Autosave
 import centraid.screen.v1.PeopleEditorEvent
 import centraid.screen.v1.PeopleEditorState
-import centraid.screen.v1.WriteState
 import dev.centraid.android.kit.EditableFieldRow
 import dev.centraid.android.kit.EditorRoom
 import dev.centraid.android.kit.EmptyStateView
@@ -66,7 +65,7 @@ public fun PeopleEditorScreen(
         onClose = onClose,
         onDeparted = onDeparted,
     ) {
-        StatusLine(if (write?.phase == WriteState.Phase.PHASE_REFUSED) write.failure?.sentence.orEmpty() else "")
+        StatusLine(write?.refusal.orEmpty())
         val gone = state.gone
         if (gone != null) {
             EmptyStateView(gone, onAction = null)

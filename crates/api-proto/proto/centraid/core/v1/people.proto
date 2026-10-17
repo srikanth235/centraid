@@ -252,6 +252,10 @@ message PeopleSheet {
   bool touches_known = 7;
   // The touch log, newest first.
   repeated PeopleTouchEntry touches = 8;
+  // FALSE when `social.contact_channel` was refused (P1): `channels` is then
+  // unknown, not empty — a member who revoked the messaging app still sees the
+  // person — and the rest of the sheet stands.
+  bool channels_known = 9;
 }
 
 message PeoplePerson {

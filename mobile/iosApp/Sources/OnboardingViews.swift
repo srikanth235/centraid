@@ -3,9 +3,7 @@ import ContactsUI
 import EventKit
 import SwiftUI
 
-#if canImport(CentraidShared)
 import CentraidShared
-#endif
 
 // ONBOARDING WITHOUT SAMPLE DATA (docs/decisions.md, "Onboarding without sample
 // data"): where the phone already holds an app's data, its day-one empty state
@@ -25,48 +23,61 @@ extension EnvironmentValues {
     }
 }
 
-/// THE SHELL'S BANNER (DESIGN.md's Banner recipe: one sentence, plus one
-/// action): an import's progress and outcome.
+/// THE IMPORT'S STATUS LINE (DESIGN.md: "`StatusLine` is the one feedback
+/// channel … docked to the bottom of the frame … no floating overlay, no
+/// auto-dismiss"): an import's progress and outcome, above the band, on Home
+/// and on every app. One fragment, at most one action ("Open People", which
+/// takes the member to what came in), and a close key once the work is done.
+/// It never clears on a timer: the close key, the action or the member's next
+/// move puts it away (`ShellModel.importLineMoved`).
 struct ShellBanner: View {
     @ObservedObject var shell: ShellModel
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        if !shell.importNotice.isEmpty {
-            line(
-                shell.importNotice,
-                action: shell.importing ? "" : ShellWords.done,
-                identifier: "import"
-            ) { shell.dismissImportNotice() }
-        }
-    }
-
-    private func line(
-        _ sentence: String,
-        action: String,
-        identifier: String,
-        act: @escaping () -> Void
-    ) -> some View {
-        HStack(spacing: 12) {
-            Text(sentence)
-                .centraidType("smallStrong")
-                .foregroundStyle(Theme.color("text", scheme))
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .accessibilityIdentifier("\(identifier)-banner-text")
-            if !action.isEmpty {
-                KitOutlineButton(label: action, action: act)
-                    .accessibilityIdentifier("\(identifier)-done")
+        VStack(spacing: 0) {
+            if !shell.importNotice.isEmpty {
+                VStack(spacing: 0) {
+                    KitHairline()
+                    ProgressStatusLine(
+                        sentence: shell.importNotice,
+                        actionLabel: shell.importing ? "" : PhoneImport.shared.openLabel(app: shell.importOpens),
+                        onAct: { shell.openImported() },
+                        closeLabel: shell.importing ? "" : KitWords.shared.DISMISS,
+                        onClose: { shell.dismissImportNotice() },
+                        identifier: "import"
+                    )
+                }
+                .background(Theme.color("bg", scheme))
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("import-banner")
+                .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
             }
         }
-        .padding(.horizontal, CentraidGeometry.pageMargin)
-        .padding(.vertical, 8)
-        .background(Theme.color("bgSunken", scheme))
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("\(identifier)-banner")
+        // ENTRY AND SETTLE AT 280MS, a change of words at 140 (DESIGN.md's one motion grammar).
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.28), value: shell.importNotice.isEmpty)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.14), value: shell.importNotice)
     }
 }
 
-#if canImport(CentraidShared)
+/// THE IMPORT LINE ON A PUSHED PAGE: handed to `AppPlace`, which draws it above
+/// its band; a page with no `AppPlace` (a row's page, an editor) gets it docked
+/// at its own foot instead, so it is in the same place everywhere.
+struct ShellLineHost: ViewModifier {
+    @ObservedObject var shell: ShellModel
+    @State private var placeDraws = false
+
+    func body(content: Content) -> some View {
+        content
+            .environment(\.shellStatusLine, AnyView(ShellBanner(shell: shell)))
+            .onPreferenceChange(PlaceDrawsShellLine.self) { placeDraws = $0 }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if !placeDraws { ShellBanner(shell: shell) }
+            }
+    }
+}
+
 /// THE PHONE'S ADDRESS BOOK, read once the member tapped "Import contacts".
 /// The OS asks its own permission here — the first time, and never at launch —
 /// and a limited grant reads the contacts the member chose.
@@ -342,7 +353,6 @@ enum PhoneReminders {
         return String(format: "%04d-%02d-%02d", year, month, day)
     }
 }
-#endif
 
 /// IOS'S OWN CONTACT PICKER (`ContactAccessPicker`, iOS 18), raised when People's
 /// import meets limited access: the member shares more contacts in the

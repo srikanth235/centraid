@@ -2,6 +2,8 @@ import Foundation
 import SwiftProtobuf
 import SwiftUI
 
+import CentraidShared
+
 /// A PHOTO SHELF: the library under a predicate, in SwiftUI (#1029, photos port).
 ///
 /// One view for four of v0's routes — `PhotoStateView` (favourites, archive,
@@ -167,7 +169,7 @@ struct PhotoShelfView: View {
                 ToolbarItem(placement: .primaryAction) {
                     ToolbarIcon(
                         iconKey: "add",
-                        label: PhotosWords.photosAddPhotos,
+                        label: PhotosCopy.shared.PHOTOS_ADD_PHOTOS,
                         identifier: "photos.shelf.add"
                     ) {
                         onAddPhotographs(album.collectionID, copy.title)
@@ -178,17 +180,17 @@ struct PhotoShelfView: View {
                 // about a photograph in it.
                 ToolbarItem(placement: .primaryAction) {
                     Menu {
-                        Button(PhotosWords.photosRenameAlbum) {
+                        Button(PhotosCopy.shared.PHOTOS_RENAME_ALBUM) {
                             draftName = copy.title
                             renaming = true
                         }
                         .accessibilityIdentifier("photos.shelf.rename")
-                        Button(PhotosWords.photosDeleteAlbum, role: .destructive) { confirmingAlbumDelete = true }
+                        Button(PhotosCopy.shared.PHOTOS_DELETE_ALBUM, role: .destructive) { confirmingAlbumDelete = true }
                             .accessibilityIdentifier("photos.shelf.deleteAlbum")
                     } label: {
                         ToolbarIconFace(iconKey: "MoreHoriz")
                     }
-                    .accessibilityLabel(PhotosWords.photosAlbumOptions)
+                    .accessibilityLabel(PhotosCopy.shared.PHOTOS_ALBUM_OPTIONS)
                     .accessibilityIdentifier("photos.shelf.albumMenu")
                 }
             }
@@ -196,13 +198,13 @@ struct PhotoShelfView: View {
             // own Select / Cancel.
             if state.selecting {
                 ToolbarItem(placement: .primaryAction) {
-                    ToolbarVerb(label: "Done", identifier: "photos.shelf.done") {
+                    ToolbarVerb(label: PhotosCopy.shared.PHOTOS_DONE, identifier: "photos.shelf.done") {
                         send(state.selectionModeEvent(selecting: false))
                     }
                 }
             } else if state.hasCells {
                 ToolbarItem(placement: .primaryAction) {
-                    ToolbarVerb(label: "Select", identifier: "photos.shelf.select") {
+                    ToolbarVerb(label: PhotosCopy.shared.PHOTOS_SELECT, identifier: "photos.shelf.select") {
                         send(state.selectionModeEvent(selecting: true))
                     }
                 }
@@ -224,12 +226,12 @@ struct PhotoShelfView: View {
             ConfirmSheet(
                 Centraid_Screen_V1_Confirm.with {
                     $0.title = purgeQuestion
-                    $0.body = PhotosWords.photosDeleteForeverBody
-                    $0.confirmLabel = PhotosWords.fill(
-                        PhotosWords.photosDeleteForeverConfirm, "count", "\(state.selected.count)")
+                    $0.body = PhotosCopy.shared.PHOTOS_DELETE_FOREVER_BODY
+                    $0.confirmLabel = copyFill(
+                        PhotosCopy.shared.PHOTOS_DELETE_FOREVER_CONFIRM, "count", "\(state.selected.count)")
                     $0.destructive = true
                 },
-                cancelLabel: PhotosWords.photosKeepThem,
+                cancelLabel: PhotosCopy.shared.PHOTOS_KEEP_THEM,
                 onConfirm: {
                     confirmingPurge = false
                     send(state.deleteEvent(permanent: true))
@@ -240,12 +242,12 @@ struct PhotoShelfView: View {
         .sheet(isPresented: $confirmingEmptyTrash) {
             ConfirmSheet(
                 Centraid_Screen_V1_Confirm.with {
-                    $0.title = PhotosWords.photosEmptyTrashTitle
-                    $0.body = PhotosWords.photosEmptyTrashBody
-                    $0.confirmLabel = PhotosWords.photosEmptyTrash
+                    $0.title = PhotosCopy.shared.PHOTOS_EMPTY_TRASH_TITLE
+                    $0.body = PhotosCopy.shared.PHOTOS_EMPTY_TRASH_BODY
+                    $0.confirmLabel = PhotosCopy.shared.PHOTOS_EMPTY_TRASH
                     $0.destructive = true
                 },
-                cancelLabel: PhotosWords.photosKeepThem,
+                cancelLabel: PhotosCopy.shared.PHOTOS_KEEP_THEM,
                 onConfirm: {
                     confirmingEmptyTrash = false
                     send(state.emptyTrashEvent)
@@ -256,13 +258,13 @@ struct PhotoShelfView: View {
         .sheet(isPresented: $confirmingAlbumDelete) {
             ConfirmSheet(
                 Centraid_Screen_V1_Confirm.with {
-                    $0.title = PhotosWords.photosDeleteAlbumTitle
+                    $0.title = PhotosCopy.shared.PHOTOS_DELETE_ALBUM_TITLE
                     // v0's `ALBUM_DELETE_BODY`, the one thing a member deciding needs.
-                    $0.body = PhotosWords.photosDeleteAlbumBody
-                    $0.confirmLabel = PhotosWords.photosDeleteAlbum
+                    $0.body = PhotosCopy.shared.PHOTOS_DELETE_ALBUM_BODY
+                    $0.confirmLabel = PhotosCopy.shared.PHOTOS_DELETE_ALBUM
                     $0.destructive = true
                 },
-                cancelLabel: PhotosWords.photosKeepIt,
+                cancelLabel: PhotosCopy.shared.PHOTOS_KEEP_IT,
                 onConfirm: {
                     confirmingAlbumDelete = false
                     send(state.albumDeleteEvent)
@@ -274,12 +276,12 @@ struct PhotoShelfView: View {
         // for a batch: a place NAME is one sentence per photograph, and a
         // batch has as many places as photographs.
         .sheet(isPresented: $choosingPlace) {
-            OptionSheet(title: PhotosWords.photosSendPlaceTitle) {
-                SheetRow(label: PhotosWords.photosSendNoLocation) {
+            OptionSheet(title: PhotosCopy.shared.PHOTOS_SEND_PLACE_TITLE) {
+                SheetRow(label: PhotosCopy.shared.PHOTOS_SEND_NO_LOCATION) {
                     choosingPlace = false
                     onExport(Array(state.selected), .send(keepLocation: false))
                 }
-                SheetRow(label: PhotosWords.photosSendExactLocation) {
+                SheetRow(label: PhotosCopy.shared.PHOTOS_SEND_EXACT_LOCATION) {
                     choosingPlace = false
                     onExport(Array(state.selected), .send(keepLocation: true))
                 }
@@ -288,17 +290,17 @@ struct PhotoShelfView: View {
         }
         .sheet(isPresented: $renaming) {
             SheetRoom(
-                title: PhotosWords.photosRenameAlbum,
+                title: PhotosCopy.shared.PHOTOS_RENAME_ALBUM,
                 // AN EMPTY NAME IS NOT A WRITE (`media.rename_album`): Save is greyed.
                 primary: SheetPrimary(
-                    label: "Save",
+                    label: PhotosCopy.shared.PHOTOS_SAVE,
                     enabled: !draftName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 ) {
                     renaming = false
                     send(state.renameEvent(draftName))
                 }
             ) {
-                TextField(PhotosWords.photosAlbumName, text: $draftName)
+                TextField(PhotosCopy.shared.PHOTOS_ALBUM_NAME, text: $draftName)
                     .centraidType("body")
                     .padding(.horizontal, 12)
                     .frame(minHeight: CentraidGeometry.targetMinCoarse)
@@ -359,13 +361,13 @@ struct PhotoShelfView: View {
                 .foregroundStyle(Theme.color("textSoft", scheme))
             Spacer()
             if state.selecting {
-                Text(PhotosWords.fill(PhotosWords.photosChosen, "count", "\(state.selected.count)"))
+                Text(copyFill(PhotosCopy.shared.PHOTOS_CHOSEN, "count", "\(state.selected.count)"))
                     .centraidType("small")
                     .foregroundStyle(Theme.color("textSoft", scheme))
             } else if state.hasCells, copy.isTrash {
                 // EMPTY TRASH, only on the trash. An outline in `net` and never
                 // a filled one: the safety is the confirm behind it.
-                KitOutlineButton(label: PhotosWords.photosEmptyTrash, tone: "net") { confirmingEmptyTrash = true }
+                KitOutlineButton(label: PhotosCopy.shared.PHOTOS_EMPTY_TRASH, tone: "net") { confirmingEmptyTrash = true }
                     .accessibilityIdentifier("photos.shelf.emptyTrash")
             }
         }
@@ -385,14 +387,14 @@ struct PhotoShelfView: View {
     private var selectionBar: some View {
         HStack(spacing: BandMetrics.groupGutter) {
             if copy.isTrash {
-                verb(icon: "restore", label: "Restore", identifier: "photos.shelf.restore") {
+                verb(icon: "restore", label: PhotosCopy.shared.PHOTOS_RESTORE, identifier: "photos.shelf.restore") {
                     send(state.restoreEvent)
                 }
-                verb(icon: "trash", label: PhotosWords.photosDeleteForever, identifier: "photos.shelf.purge") {
+                verb(icon: "trash", label: PhotosCopy.shared.PHOTOS_DELETE_FOREVER, identifier: "photos.shelf.purge") {
                     confirmingPurge = true
                 }
             } else {
-                verb(icon: "share", label: PhotosWords.photosSendCopy, identifier: "photos.shelf.send") {
+                verb(icon: "share", label: PhotosCopy.shared.PHOTOS_SEND_COPY, identifier: "photos.shelf.send") {
                     choosingPlace = true
                 }
                 // THE HEART STARS — and UNstars on the favourites shelf, where
@@ -400,22 +402,22 @@ struct PhotoShelfView: View {
                 // menu, because a cell does not carry its star.
                 verb(
                     icon: "heart",
-                    label: isFavorites ? PhotosWords.photosUnfavorite : PhotosWords.photosFavorite,
+                    label: isFavorites ? PhotosCopy.shared.PHOTOS_UNFAVORITE : PhotosCopy.shared.PHOTOS_FAVORITE,
                     identifier: "photos.shelf.favorite"
                 ) { send(state.favoriteEvent(!isFavorites)) }
-                verb(icon: "album", label: PhotosWords.photosAddToAlbum, identifier: "photos.shelf.addToAlbum") {
+                verb(icon: "album", label: PhotosCopy.shared.PHOTOS_ADD_TO_ALBUM, identifier: "photos.shelf.addToAlbum") {
                     send(state.albumChoiceOpenedEvent)
                 }
                 if copy.isArchive {
-                    verb(icon: "restore", label: "Unarchive", identifier: "photos.shelf.restore") {
+                    verb(icon: "restore", label: PhotosCopy.shared.PHOTOS_UNARCHIVE, identifier: "photos.shelf.restore") {
                         send(state.restoreEvent)
                     }
                 } else {
-                    verb(icon: "Archive", label: "Archive", identifier: "photos.shelf.archive") {
+                    verb(icon: "Archive", label: PhotosCopy.shared.PHOTOS_ARCHIVE, identifier: "photos.shelf.archive") {
                         send(state.archiveEvent(archived: true))
                     }
                 }
-                verb(icon: "trash", label: "Trash", identifier: "photos.shelf.trash") {
+                verb(icon: "trash", label: PhotosCopy.shared.PHOTOS_TRASH, identifier: "photos.shelf.trash") {
                     send(state.deleteEvent(permanent: false))
                 }
                 moreMenu
@@ -441,26 +443,26 @@ struct PhotoShelfView: View {
     /// "Remove from album" takes the reference and never the photograph.
     private var moreMenu: some View {
         Menu {
-            Button(PhotosWords.photosDownloadOriginal) { onExport(Array(state.selected), .save) }
+            Button(PhotosCopy.shared.PHOTOS_DOWNLOAD_ORIGINAL) { onExport(Array(state.selected), .save) }
                 .accessibilityIdentifier("photos.shelf.download")
             if !isFavorites {
-                Button(PhotosWords.photosUnfavorite) { send(state.favoriteEvent(false)) }
+                Button(PhotosCopy.shared.PHOTOS_UNFAVORITE) { send(state.favoriteEvent(false)) }
                     .accessibilityIdentifier("photos.shelf.unfavorite")
             }
             if isAlbum {
-                Button(PhotosWords.photosMakeKey) {
+                Button(PhotosCopy.shared.PHOTOS_MAKE_KEY) {
                     if let only = state.selected.first { send(state.coverEvent(only)) }
                 }
                 .disabled(state.selected.count != 1)
                 .accessibilityIdentifier("photos.shelf.cover")
-                Button(PhotosWords.photosRemoveFromAlbum) { send(state.removeFromAlbumEvent) }
+                Button(PhotosCopy.shared.PHOTOS_REMOVE_FROM_ALBUM) { send(state.removeFromAlbumEvent) }
                     .accessibilityIdentifier("photos.shelf.removeFromAlbum")
             }
         } label: {
-            selectionFace(icon: "MoreHoriz", label: "More")
+            selectionFace(icon: "MoreHoriz", label: PhotosCopy.shared.PHOTOS_MORE)
         }
         .disabled(state.selected.isEmpty)
-        .accessibilityLabel("More")
+        .accessibilityLabel(PhotosCopy.shared.PHOTOS_MORE)
         .accessibilityIdentifier("photos.shelf.more")
     }
 
@@ -509,8 +511,8 @@ struct PhotoShelfView: View {
     private var purgeQuestion: String {
         let count = state.selected.count
         return count == 1
-            ? PhotosWords.photosDeleteForeverOne
-            : PhotosWords.fill(PhotosWords.photosDeleteForeverMany, "count", "\(count)")
+            ? PhotosCopy.shared.PHOTOS_DELETE_FOREVER_ONE
+            : copyFill(PhotosCopy.shared.PHOTOS_DELETE_FOREVER_MANY, "count", "\(count)")
     }
 }
 
@@ -530,8 +532,8 @@ struct PhotoShelfCopy {
 
     /// What a shelf opened without its parameter says, and what a preview uses.
     static let unknown = PhotoShelfCopy(
-        title: PhotosWords.photosShelfTitle,
-        empty: PhotosWords.photosShelfNothing,
+        title: PhotosCopy.shared.PHOTOS_SHELF_TITLE,
+        empty: PhotosCopy.shared.PHOTOS_SHELF_NOTHING,
         emptyRemedy: "",
         purgeWindow: "",
         isTrash: false,
@@ -604,10 +606,12 @@ struct PhotoShelfStateView {
     /// between a count and a claim.
     var countSentence: String {
         guard case let .data(cells, _) = content else { return "" }
-        let noun = cells.count == 1 ? PhotosWords.tileCountOne : PhotosWords.tileCountMany
-        return state.data.hasNextCursor
-            ? "At least \(cells.count) \(noun)"
-            : "\(cells.count) \(noun)"
+        return CappedCount.shared.phrase(
+            count: Int64(cells.count),
+            capped: state.data.hasNextCursor,
+            one: PhotosCopy.shared.TILE_COUNT_ONE,
+            many: PhotosCopy.shared.TILE_COUNT_MANY
+        )
     }
 
     /// A screen reads because it was OPENED, and the shelf rides the open.
@@ -761,7 +765,7 @@ private struct KeepOriginalsRowView: View {
     var body: some View {
         Toggle(isOn: Binding(get: { row.keep }, set: { onToggle($0) })) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(PhotosWords.photosKeepOriginalsTitle)
+                Text(PhotosCopy.shared.PHOTOS_KEEP_ORIGINALS_TITLE)
                     .centraidType("body")
                     .foregroundStyle(Theme.color("text", scheme))
                 Text(row.meta)
@@ -771,7 +775,7 @@ private struct KeepOriginalsRowView: View {
         }
         .kitToggle()
         .disabled(!row.ready || row.saving)
-        .accessibilityLabel(PhotosWords.photosKeepOriginalsLabel)
+        .accessibilityLabel(PhotosCopy.shared.PHOTOS_KEEP_ORIGINALS_LABEL)
         .accessibilityHint(row.meta)
         .accessibilityIdentifier("photos.shelf.keepOriginals")
     }

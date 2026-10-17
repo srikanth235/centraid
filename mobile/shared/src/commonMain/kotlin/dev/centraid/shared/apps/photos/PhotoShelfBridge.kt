@@ -41,8 +41,8 @@ import kotlinx.coroutines.launch
  *
  * ## ONE BRIDGE, EVERY SHELF
  *
- * There is one of these for all eight shelves, not one per shelf, because
- * there is one MACHINE for all eight: the shelf is a parameter that arrives
+ * There is one of these for all seven shelves, not one per shelf, because
+ * there is one MACHINE for all seven: the shelf is a parameter that arrives
  * with [opened]. A bridge per shelf would re-create a [ScreenHost] on every
  * push, and `ChangeStream.route` registers a host for the life of the session
  * with no removal — so the second host would leave the routed one drawing into

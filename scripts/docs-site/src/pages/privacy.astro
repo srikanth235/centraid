@@ -4,20 +4,22 @@ import content from '../content/privacy.html?raw';
 
 const rail = [
   { href: '#summary', no: '§01', label: 'Summary', current: true },
-  { href: '#google-data', no: '§02', label: 'Google data', current: false },
-  { href: '#oauth', no: '§03', label: 'OAuth custody', current: false },
-  { href: '#choices', no: '§04', label: 'Your choices', current: false },
-  { href: '#contact', no: '§05', label: 'Contact', current: false },
+  { href: '#this-phone', no: '§02', label: 'On this phone', current: false },
+  { href: '#assistant', no: '§03', label: 'The assistant', current: false },
+  { href: '#backups', no: '§04', label: 'Backups', current: false },
+  { href: '#network', no: '§05', label: 'What leaves', current: false },
+  { href: '#choices', no: '§06', label: 'Your choices', current: false },
+  { href: '#contact', no: '§07', label: 'Contact', current: false },
 ];
 ---
 
 <DocsLayout
   title="Centraid Privacy Policy"
-  description="How Centraid Assist accesses, uses, stores, shares, retains, and deletes Google user data while keeping OAuth tokens on your gateway."
+  description="What Centraid reads on your phone, what it sends and fetches, and how encrypted backups reach a backup device only you can open."
   current="privacy"
   canonicalPath="privacy/"
   searchLabel="Privacy"
-  searchKeywords="privacy Google OAuth Assist tokens data access storage sharing retention deletion Limited Use"
+  searchKeywords="privacy vault phone backup device recovery key assistant model download permissions photos contacts calendar retention deletion"
   bodyClass="has-rail"
   rail={rail}
   pageType="WebPage"

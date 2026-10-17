@@ -23,9 +23,37 @@ pub struct World {
 }
 
 /// Seed the fixture world into a fresh directory.
+///
+/// SEEDED ONCE PER PROCESS, COPIED PER CALL: seeding runs every migration and
+/// the whole fixture, and the suites that check every `(verb, kind)` pair ask
+/// for a fresh world per pair. A copy of the template's directory is the same
+/// vault, file for file, so each caller still owns an isolated world.
 #[must_use]
 pub fn seeded() -> World {
-    seeded_with(&serde_json::from_str(FIXTURE).expect("the fixture is JSON"))
+    static TEMPLATE: std::sync::OnceLock<World> = std::sync::OnceLock::new();
+    let template = TEMPLATE
+        .get_or_init(|| seeded_with(&serde_json::from_str(FIXTURE).expect("the fixture is JSON")));
+    let dir = tempfile::tempdir().expect("a temp dir");
+    copy_tree(template.dir.path(), dir.path());
+    let path = dir.path().join("vault.db");
+    World {
+        dir,
+        path,
+        keys: template.keys.clone(),
+    }
+}
+
+fn copy_tree(from: &Path, to: &Path) {
+    for entry in std::fs::read_dir(from).expect("the template reads") {
+        let entry = entry.expect("a template entry");
+        let target = to.join(entry.file_name());
+        if entry.file_type().expect("a file type").is_dir() {
+            std::fs::create_dir_all(&target).expect("a directory");
+            copy_tree(&entry.path(), &target);
+        } else {
+            std::fs::copy(entry.path(), &target).expect("the template copies");
+        }
+    }
 }
 
 #[must_use]
@@ -173,7 +201,7 @@ pub fn journal(world: &World) -> BTreeMap<(String, String), usize> {
         .expect("the journal opens");
     let rows = handle
         .table(
-            "agent_command_invocation",
+            "command_invocation",
             "invocation_id, command_id, status, requested_at",
             "requested_at",
             "invocation_id",

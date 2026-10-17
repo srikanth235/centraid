@@ -177,6 +177,9 @@ class MoneyScreensSpec : StringSpec({
         transfer.dimmed shouldBe true
         transfer.meta shouldContain MoneyCopy.NOT_SPENDING
         data.needs_label shouldBe "Needs a category · 3"
+        // THE NEEDS ROW'S TAP IS THE STATE'S KEY, one of its own category options, never a label a shell matches.
+        data.needs_key shouldBe MoneyHomeMachine.FILTER_UNCATEGORISED
+        data.category_options.map { it.key } shouldContain data.needs_key
         data.more shouldBe true
         data.window shouldBe "Showing 2"
         home.screen.chips.map { it.key } shouldBe listOf("month", "account", "category")
@@ -275,6 +278,16 @@ class MoneyScreensSpec : StringSpec({
         data.amount?.minor shouldBe -6_418L
         data.facts.first { it.label == MoneyCopy.FACT_NAME }.detail shouldBe "Trader Joe’s · ${MoneyCopy.FROM_RULE}"
         data.facts.first { it.label == MoneyCopy.FACT_BANK_WROTE }.detail shouldBe "TRADER JOE S #552"
+        // A FACT A MEMBER CAN CHANGE NAMES ITS ACTION, so no shell reads a label to find it.
+        data.facts.associate { it.label to it.action } shouldBe mapOf(
+            MoneyCopy.FACT_ACCOUNT to "",
+            MoneyCopy.FACT_POSTED to "",
+            MoneyCopy.FACT_BANK_WROTE to "",
+            MoneyCopy.FACT_CATEGORY to "category",
+            MoneyCopy.FACT_NAME to "name",
+            MoneyCopy.FACT_IMPORTED to "",
+        )
+        data.facts.map { it.tone }.toSet() shouldBe setOf(StatusChip.Tone.TONE_UNSPECIFIED)
         data.transfer_offer?.key shouldBe "transfer"
         data.rule_offer?.body shouldBe "4 of the last 5 Trader Joe’s rows are Groceries."
         data.rule_offer?.detail shouldBe "contains TRADER JOE S"
@@ -306,6 +319,19 @@ class MoneyScreensSpec : StringSpec({
         dismissed.state.screen.data_?.rule_offer.shouldBeNull()
         // The other offer stays until it is waved off too.
         dismissed.state.screen.data_?.transfer_offer.shouldNotBeNull()
+    }
+
+    "a category still to supply is owed attention, by tone and not by its words" {
+        val opened = open(MoneyTransactionMachine, MoneyTransactionEvent(opened = MoneyTransactionEvent.Opened(txn_id = "t1", draft_token = "tok")))
+        val held = answeredWith(
+            MoneyTransactionMachine,
+            opened,
+            AppQueryResponse(money_transaction = transaction(offers = false).copy(category_id = null, category_label = null)),
+            AppQueryResponse(money_categories = categories()),
+        )
+        val category = held.screen.data_.shouldNotBeNull().facts.first { it.action == "category" }
+        category.detail shouldBe MoneyCopy.NO_CATEGORY
+        category.tone shouldBe StatusChip.Tone.TONE_SEAM
     }
 
     "filing, naming and voiding are each one write, and void asks first" {
@@ -502,6 +528,13 @@ class MoneyScreensSpec : StringSpec({
             MoneyCopy.COUNT_ALREADY_IN to "1",
             MoneyCopy.COUNT_CHECK to "1",
             MoneyCopy.COUNT_REJECTED to "1",
+        )
+        // LINES OWED A LOOK carry their tone, so a shell never reads a label to ink a count.
+        statement.counts.map { it.tone } shouldBe listOf(
+            StatusChip.Tone.TONE_UNSPECIFIED,
+            StatusChip.Tone.TONE_UNSPECIFIED,
+            StatusChip.Tone.TONE_SEAM,
+            StatusChip.Tone.TONE_NET,
         )
         // Every verdict a row can have is said, and a bad row says why.
         statement.rows.map { it.chip?.label } shouldContain MoneyCopy.CHIP_CHECK

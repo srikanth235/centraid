@@ -50,7 +50,7 @@ const TYPES: Record<string, string> = {
   "money-transaction": "centraid.screen.v1.MoneyTransactionState",
   notes: "centraid.screen.v1.NotesEditorState",
   photos: "centraid.screen.v1.PhotosGridState",
-  // The rest of the photos miniapp: eleven state messages for v0's fourteen
+  // The rest of the photos miniapp: nine state messages for v0's fourteen
   // routes. The seven that collapsed did so under *a band destination is a
   // parameter, not a screen*, which is why there is a `photos-shelf` and no
   // album, place or album-detail directory beside it — those are `PhotoShelf`
@@ -62,10 +62,8 @@ const TYPES: Record<string, string> = {
   "photos-collections": "centraid.screen.v1.PhotosCollectionsState",
   "photos-duplicate-review": "centraid.screen.v1.DuplicateReviewState",
   "photos-duplicates": "centraid.screen.v1.DuplicatesState",
-  "photos-faces": "centraid.screen.v1.FaceReviewState",
   "photos-lightbox": "centraid.screen.v1.PhotoLightboxState",
   "photos-memories": "centraid.screen.v1.PhotosMemoriesState",
-  "photos-people": "centraid.screen.v1.PhotosPeopleState",
   "photos-picker": "centraid.screen.v1.PhotoPickerState",
   "photos-places": "centraid.screen.v1.PlacesState",
   "photos-search": "centraid.screen.v1.PhotosSearchState",

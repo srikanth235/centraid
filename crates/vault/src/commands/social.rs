@@ -401,9 +401,9 @@ fn draft_message() -> CommandDefinition {
                     ctx.connection().execute(
                         "INSERT INTO core_content_item
                            (content_id, content_uri, content_hash, byte_size, language,
-                            creator_party_id, origin_device_id, deleted_at, purge_at,
+                            creator_party_id, deleted_at, purge_at,
                             created_at, updated_at)
-                         VALUES (?1, ?2, ?3, ?4, NULL, ?5, NULL, NULL, NULL, ?6, ?6)",
+                         VALUES (?1, ?2, ?3, ?4, NULL, ?5, NULL, NULL, ?6, ?6)",
                         rusqlite::params![
                             content_id,
                             format!(

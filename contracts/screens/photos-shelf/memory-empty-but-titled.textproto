@@ -7,8 +7,8 @@
 # place with no photographs and a place whose read was refused looked alike.
 #
 # The title rides on the shelf, so the app bar says "Lisbon, April" over the
-# empty frame rather than over nothing. That is the same law as `person` above,
-# asserted in the case where there is no row at all to fall back to.
+# empty frame rather than over nothing. That is the same law as every other
+# shelf's, asserted in the case where there is no row at all to fall back to.
 seat {
   availability: AVAILABILITY_READY
   durability: DURABILITY_AUTHORITATIVE

@@ -71,11 +71,6 @@
       },
       {
         "schema": "locker",
-        "table": "totp_code",
-        "verbs": "act"
-      },
-      {
-        "schema": "locker",
         "table": "item_alias",
         "verbs": "read"
       },
@@ -200,22 +195,7 @@
       },
       {
         "schema": "locker",
-        "table": "counts",
-        "verbs": "act"
-      },
-      {
-        "schema": "locker",
         "table": "export",
-        "verbs": "act"
-      },
-      {
-        "schema": "core",
-        "table": "attach",
-        "verbs": "act"
-      },
-      {
-        "schema": "core",
-        "table": "detach",
         "verbs": "act"
       }
     ]
@@ -331,22 +311,15 @@
             "type": "string"
           }
         }
-      },
-      "writes": [
-        "core.concept",
-        "core.concept_scheme",
-        "core.tag",
-        "locker.item",
-        "locker.item_alias",
-        "locker.item_field"
-      ]
+      }
     },
     {
       "name": "edit-item",
-      "description": "Rewrite an item's fields, tags and compromised flag through locker.edit_item. A changed password clears the flag. Refuses trashed items.",
+      "description": "Replace an item's type fields through locker.edit_item. This REPLACES and does not patch: every field of the item's type that the input leaves out or empty is cleared, so send the whole draft (a sealed secret you keep goes as the placeholder «sealed»). The title, tags, alias and compromised flag are left alone when omitted, and a changed password clears the flag. Refuses trashed items.",
       "confirmation": "none",
       "input": {
         "type": "object",
+        "description": "REPLACES, does not patch. Every field of the item's type (username, url, password, one-time-code seed, notes, and the rest of its type's columns) is rewritten from this input, and each one the input leaves out or leaves empty is CLEARED: an edit carrying only a password erases the username, address, seed and notes. Send the whole draft; a sealed secret you are keeping goes as the placeholder «sealed». Only the title, the tags (an empty list clears them), the alias (an empty one clears it) and the compromised flag (a changed password clears it) are left alone when omitted. Custom fields, addresses, the passkey and the memo are their own commands and are never touched here.",
         "properties": {
           "item_id": {
             "type": "string",
@@ -434,14 +407,7 @@
             "type": "string"
           }
         }
-      },
-      "writes": [
-        "core.concept",
-        "core.concept_scheme",
-        "core.tag",
-        "locker.item",
-        "locker.item_alias"
-      ]
+      }
     },
     {
       "name": "trash-item",
@@ -471,8 +437,7 @@
             "type": "string"
           }
         }
-      },
-      "writes": ["locker.item"]
+      }
     },
     {
       "name": "restore-item",
@@ -502,8 +467,7 @@
             "type": "string"
           }
         }
-      },
-      "writes": ["locker.item"]
+      }
     },
     {
       "name": "purge-item",
@@ -533,13 +497,7 @@
             "type": "string"
           }
         }
-      },
-      "writes": [
-        "core.concept",
-        "core.concept_scheme",
-        "core.tag",
-        "locker.item"
-      ]
+      }
     },
     {
       "name": "star-item",
@@ -569,8 +527,7 @@
             "type": "string"
           }
         }
-      },
-      "writes": ["core.concept", "core.concept_scheme", "core.tag"]
+      }
     },
     {
       "name": "unstar-item",
@@ -600,8 +557,7 @@
             "type": "string"
           }
         }
-      },
-      "writes": ["core.concept", "core.concept_scheme", "core.tag"]
+      }
     },
     {
       "name": "archive-item",
@@ -631,8 +587,7 @@
             "type": "string"
           }
         }
-      },
-      "writes": ["locker.item"]
+      }
     },
     {
       "name": "unarchive-item",
@@ -662,8 +617,7 @@
             "type": "string"
           }
         }
-      },
-      "writes": ["locker.item"]
+      }
     },
     {
       "name": "duplicate-item",
@@ -693,15 +647,7 @@
             "type": "string"
           }
         }
-      },
-      "writes": [
-        "core.concept",
-        "core.concept_scheme",
-        "core.tag",
-        "locker.item",
-        "locker.item_address",
-        "locker.item_field"
-      ]
+      }
     },
     {
       "name": "set-field",
@@ -753,8 +699,7 @@
             "type": "string"
           }
         }
-      },
-      "writes": ["locker.item_field"]
+      }
     },
     {
       "name": "remove-field",
@@ -788,8 +733,7 @@
             "type": "string"
           }
         }
-      },
-      "writes": ["locker.item_field"]
+      }
     },
     {
       "name": "set-addresses",
@@ -833,8 +777,7 @@
             "type": "string"
           }
         }
-      },
-      "writes": ["locker.item_address"]
+      }
     },
     {
       "name": "set-passkey",
@@ -883,8 +826,7 @@
             "type": "string"
           }
         }
-      },
-      "writes": ["locker.item_passkey"]
+      }
     },
     {
       "name": "clear-passkey",
@@ -914,8 +856,7 @@
             "type": "string"
           }
         }
-      },
-      "writes": ["locker.item_passkey"]
+      }
     },
     {
       "name": "set-memo",
@@ -948,8 +889,7 @@
             "type": "string"
           }
         }
-      },
-      "writes": ["knowledge.annotation"]
+      }
     },
     {
       "name": "export",
@@ -984,8 +924,7 @@
             "type": "string"
           }
         }
-      },
-      "writes": []
+      }
     }
   ],
   "queries": [

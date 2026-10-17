@@ -178,8 +178,7 @@
             "type": "string"
           }
         }
-      },
-      "writes": ["core.event", "schedule.attendee", "schedule.event_ext"]
+      }
     },
     {
       "name": "rsvp",
@@ -203,8 +202,7 @@
         },
         "required": ["event_id", "party_id", "partstat"],
         "additionalProperties": false
-      },
-      "writes": ["schedule.attendee"]
+      }
     },
     {
       "name": "edit-event",
@@ -238,13 +236,7 @@
         },
         "required": ["event_id"],
         "additionalProperties": false
-      },
-      "writes": [
-        "core.event",
-        "outbox.item",
-        "schedule.attendee",
-        "schedule.event_ext"
-      ]
+      }
     },
     {
       "name": "edit-occurrence",
@@ -268,8 +260,7 @@
         },
         "required": ["event_id", "original_start_local", "scope", "action"],
         "additionalProperties": false
-      },
-      "writes": ["core.event", "outbox.item", "schedule.recurrence_exception"]
+      }
     },
     {
       "name": "cancel-event",
@@ -299,8 +290,7 @@
             "type": "string"
           }
         }
-      },
-      "writes": ["core.event", "outbox.item"]
+      }
     },
     {
       "name": "attach",
@@ -354,13 +344,7 @@
             "type": "string"
           }
         }
-      },
-      "writes": [
-        "core.attachment",
-        "core.content_item",
-        "core.content_representation",
-        "core.content_text"
-      ]
+      }
     },
     {
       "name": "detach",
@@ -390,8 +374,7 @@
             "type": "string"
           }
         }
-      },
-      "writes": ["core.attachment"]
+      }
     }
   ],
   "queries": [

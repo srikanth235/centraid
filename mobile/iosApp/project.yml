@@ -20,6 +20,15 @@ options:
   # floor is never typed twice.
   deploymentTarget:
     iOS: ${CENTRAID_IOS_DEPLOYMENT_TARGET}
+  # THE SWIFT PROTOBUF TYPES MUST EXIST BEFORE THIS FILE IS READ.
+  #
+  # `Sources` is globbed when `xcodegen generate` runs, and `Sources/Generated`
+  # is protoc's output (gitignored): a project generated before the types
+  # exist does not contain them, and no later build can add them. `prepare`
+  # clears the directory, generates, and writes the two file lists the
+  # pre-build phase on the app target declares (`.generated/`, gitignored).
+  # Run from `mobile/iosApp`, which every documented flow does.
+  preGenCommand: ../scripts/generate-swift-protos.sh prepare
 
 settings:
   base:
@@ -43,13 +52,10 @@ targets:
       base:
         # THE MODULE IS `CentraidApp` IN BOTH BUILD SYSTEMS, AND IT WAS NOT.
         #
-        # `Package.swift` names its library target `CentraidApp`, so every file in
-        # `Tests/` says `@testable import CentraidApp`. XcodeGen's target is called
-        # `Centraid`, and a Swift module is named after its target unless told
-        # otherwise — so under Xcode those same three test files imported a module
-        # that did not exist. Two build systems over ONE `Tests/` directory, each
-        # with its own idea of what the app is called, is the two-sources problem
-        # this file's header argues against, one level down.
+        # Every file in `Tests/` says `@testable import CentraidApp`. XcodeGen's
+        # target is called `Centraid`, and a Swift module is named after its
+        # target unless told otherwise — so those test files would import a
+        # module that does not exist.
         #
         # ON THIS TARGET AND NOT IN `settings.base`: the base block reaches
         # EVERY target, so stating it there renamed the test bundle's module
@@ -79,6 +85,31 @@ targets:
       # generated selves.
       - path: Resources/Fonts
         buildPhase: resources
+    # THE SWIFT PROTOBUF TYPES ARE BUILT, NOT CARRIED (#1020).
+    #
+    # `Sources/Generated` is protoc's output over `crates/api-proto/proto`, and
+    # it used to be written only by a command a person ran from
+    # `mobile/README.md`. A tree that had not run it, or had run it before the
+    # last `.proto` edit, compiled against old messages with no error from
+    # anything. This phase runs `mobile/scripts/generate-swift-protos.sh` before
+    # Compile Sources, and Xcode re-runs it when a declared input is newer than
+    # a declared output: the lists name every `.proto` and every `.pb.swift`,
+    # and are written by the script from the tree (`options.preGenCommand`), so
+    # "which protos" is stated nowhere else. The script itself is an input, so
+    # editing it re-runs it. A machine without `protoc` or `protoc-gen-swift`
+    # fails HERE with the `brew install` that fixes it.
+    #
+    # A NEW `.proto` is a new output the project does not list yet: re-run
+    # `xcodegen generate`, which regenerates the lists and the project.
+    preBuildScripts:
+      - name: Generate Swift protobuf types
+        script: '"${SRCROOT}/../scripts/generate-swift-protos.sh" generate'
+        inputFiles:
+          - $(SRCROOT)/../scripts/generate-swift-protos.sh
+        inputFileLists:
+          - $(SRCROOT)/.generated/protos.input.xcfilelist
+        outputFileLists:
+          - $(SRCROOT)/.generated/protos.output.xcfilelist
     dependencies:
       - package: SwiftProtobuf
       # THE SHARED FRAMEWORK. Dynamic in debug and static in release, which the
@@ -195,16 +226,19 @@ targets:
         # WHY CENTRAID ASKS FOR THE LOCAL NETWORK (#1047 E5; #1080). A gateway
         # is dialled at the addresses its pairing record keeps, which are
         # usually on the member's own Wi-Fi; iOS asks before an app reaches a
-        # device on the local network. NO SHELL BROWSES YET (Q-1080-D3 in
+        # device on the local network. THE IOS SHELL BROWSES (Q-1080-D3 in
         # `docs/decisions.md`): `serve` advertises `_centraid-gateway._tcp`,
-        # and the type is declared in `NSBonjourServices` below only so that a
-        # foreground browse can be added without a bundle change, since iOS
-        # refuses to browse a type the bundle does not list. Today the pairing
-        # payload lists the gateway's interface addresses and then its
-        # `<host>.local` name (`crates/gateway/src/server/addrs.rs`), the
-        # core dials them in turn, and iOS resolves the name through Bonjour:
-        # an address change on the same network is survived by the name, and a
-        # gateway whose name changed is paired again.
+        # and `GatewayBrowser.swift` browses it with `NWBrowser` in the
+        # foreground, only after a pass found no paired gateway reachable, at
+        # most once every 30 s. iOS refuses to browse a type the bundle does
+        # not list, so the type is declared in `NSBonjourServices` below. A
+        # result is matched by its TXT `gw`, never by its name, and the core
+        # re-verifies each address it is offered by the pinned certificate and
+        # `/v2/info`. The pairing payload still lists the gateway's interface
+        # addresses and then its `<host>.local` name
+        # (`crates/gateway/src/server/addrs.rs`), which the core dials in turn
+        # and iOS resolves through Bonjour. The phone only browses and
+        # connects out; it never listens. Android does not browse yet.
         NSLocalNetworkUsageDescription: Centraid finds and reaches your laptop on this network to back up your vault and to bring it back.
         NSBonjourServices:
           - _centraid-gateway._tcp
