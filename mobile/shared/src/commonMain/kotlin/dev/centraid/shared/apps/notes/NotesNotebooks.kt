@@ -30,6 +30,7 @@ import dev.centraid.shared.screen.ScreenMachine
 import dev.centraid.shared.screen.Step
 import dev.centraid.shared.sync.ScreenQueries
 import dev.centraid.shared.sync.ScreenWrites
+import dev.centraid.shared.nav.ScreenIds
 
 /**
  * NOTEBOOKS (#1029 port): "Unfiled", then every notebook with its count, and
@@ -40,7 +41,7 @@ import dev.centraid.shared.sync.ScreenWrites
  * nothing here tells a notebook from an album.
  */
 public object NotesNotebooksMachine : ScreenMachine<NotesNotebooksState, NotesNotebooksEvent> {
-    public const val SCREEN_ID: String = "notes.notebooks"
+    public const val SCREEN_ID: String = ScreenIds.NOTES_NOTEBOOKS
 
     /** The id of the "Unfiled" row, which is no collection. */
     public const val UNFILED: String = "unfiled"

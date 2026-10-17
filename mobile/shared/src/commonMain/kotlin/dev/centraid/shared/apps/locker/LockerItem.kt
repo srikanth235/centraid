@@ -37,6 +37,7 @@ import dev.centraid.shared.kit.jsonString
 import dev.centraid.shared.kit.time.CivilWords
 import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.Step
+import dev.centraid.shared.nav.ScreenIds
 
 /**
  * ONE ITEM (#1047): metadata plainly, and each secret as a sealed row with a
@@ -63,7 +64,7 @@ import dev.centraid.shared.screen.Step
  */
 public object LockerItemMachine :
     LockerQueryMachine<LockerItemState, LockerItemEvent, LockerItemData>("locker.item", LOCKER_ITEM_TABLES) {
-    public const val SCREEN_ID: String = "locker.item"
+    public const val SCREEN_ID: String = ScreenIds.LOCKER_ITEM
 
     /** A field row's verb that is the SHELL's: the address, handed to the OS. Every other verb is this machine's. */
     public const val VERB_OPEN: String = "open"
@@ -1012,7 +1013,7 @@ public const val ACCESS_WINDOW: Int = 50
 
 /** What one item asks. Nothing until it knows which item — or while locked. */
 public object LockerItemReads : LockerQueries<LockerItemState, LockerItemEvent>(
-    screenId = "locker.item",
+    screenId = ScreenIds.LOCKER_ITEM,
     tables = LOCKER_ITEM_TABLES,
     ask = { held, now ->
         held.screen.item_id.takeIf { it.isNotEmpty() }?.let {

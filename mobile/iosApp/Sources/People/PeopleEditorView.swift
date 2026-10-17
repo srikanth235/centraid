@@ -166,7 +166,7 @@ struct PeopleEditorView: View {
             if !state.saveLabel.isEmpty {
                 Text(state.saveLabel)
                     .centraidType("annotLabel")
-                    .foregroundStyle(Theme.color(state.write.phase == .refused ? "net" : "textFaint", scheme))
+                    .foregroundStyle(Theme.color(state.write.refused ? "net" : "textFaint", scheme))
             }
         }
         .padding(.horizontal, CentraidGeometry.pageMargin)

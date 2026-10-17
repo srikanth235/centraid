@@ -433,24 +433,6 @@ public data class NavStack(val entries: List<Destination> = listOf(Destination.H
     }
 }
 
-/**
- * NOTES' BAND, IN PLACE (#1029 port): Notes, Notebooks and Journal are three
- * screens under one band, and moving between them is not a push — back does
- * not walk the places a member happened to tap. [key] is `NotesBandTab.key`;
- * an unknown key (or `more`, a sheet) leaves the stack alone.
- */
-public fun NavStack.withNotesPlace(key: String): NavStack {
-    val place: Destination = when (key) {
-        "notes" -> Destination.NotesLibrary()
-        "notebooks" -> Destination.NotesNotebooks
-        "journal" -> Destination.NotesJournal
-        else -> return this
-    }
-    val top = current
-    val onBand = top is Destination.NotesLibrary || top == Destination.NotesNotebooks || top == Destination.NotesJournal
-    return if (onBand) NavStack(entries.dropLast(1) + place) else push(place)
-}
-
 /** PEOPLE'S BAND, IN PLACE (#1029 port): People and Touch are one screen's parameter. */
 public fun NavStack.withPeopleDestination(destination: PeopleHomeState.Destination): NavStack {
     val top = current

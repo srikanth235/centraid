@@ -428,9 +428,8 @@ struct PhotoLightboxView: View {
     /// decision the member did not make.
     ///
     /// The rows and their words are `PhotoLightboxBridge.kt`'s
-    /// `sharePlaceOptions`, which is the tested statement of them; they are
-    /// mirrored here rather than called across the Kotlin boundary, the same
-    /// way `PhotoCells.swift` mirrors `kit/PhotoCells.kt`.
+    /// `sharePlaceOptions`, called across the Kotlin boundary: the tested
+    /// statement of them is the only one.
     private func shareSheet(_ state: PhotoLightboxStateView) -> some View {
         SheetRoom(title: PhotosCopy.shared.PHOTOS_SEND_PLACE_TITLE) {
             ForEach(state.shareChoices, id: \.precision) { choice in
@@ -830,8 +829,9 @@ enum PhotoLightboxVerb: String {
     }
 }
 
-/// How much of the place travels with a copy. See `PhotoLightboxBridge.kt`'s
-/// `SharePlacePrecision`, which is the same three and is the tested one.
+/// How much of the place travels with a copy: `PhotoLightboxBridge.kt`'s
+/// `SharePlacePrecision`, by its name (the raw value is that name, lowercased),
+/// as `PhotoHandOff` prepares the copy for it.
 enum PhotoLightboxSharePlace: String {
     case none
     case name
@@ -1117,35 +1117,14 @@ struct PhotoLightboxStateView {
         }
     }
 
-    /// `sharePlaceOptions(placeName, located)`, mirrored.
+    /// `sharePlaceOptions(placeName, located)`, the shared rows, drawn here.
     var shareChoices: [PhotoLightboxShareRow] {
-        var rows = [
-            PhotoLightboxShareRow(
-                precision: .none,
-                label: PhotosCopy.shared.PHOTOS_SEND_NO_LOCATION,
-                detail: PhotosCopy.shared.PHOTOS_SEND_NONE_DETAIL
-            )
-        ]
-        let place = detail?.placeName ?? ""
-        if !place.isEmpty {
-            rows.append(
-                PhotoLightboxShareRow(
-                    precision: .name,
-                    label: PhotosCopy.shared.PHOTOS_SEND_PLACE_NAME_ONLY,
-                    detail: copyFill(PhotosCopy.shared.PHOTOS_SEND_NAME_DETAIL, "place", place)
-                )
-            )
-        }
-        rows.append(
-            PhotoLightboxShareRow(
-                precision: .exact,
-                label: PhotosCopy.shared.PHOTOS_SEND_EXACT_LOCATION,
-                detail: placeHasCoordinate
-                    ? PhotosCopy.shared.PHOTOS_SEND_EXACT_DETAIL_LOCATED
-                    : PhotosCopy.shared.PHOTOS_SEND_EXACT_DETAIL_UNLOCATED
-            )
-        )
-        return rows
+        PhotoLightboxBridgeKt.sharePlaceOptions(placeName: detail?.placeName ?? "", located: placeHasCoordinate)
+            .compactMap { option in
+                PhotoLightboxSharePlace(rawValue: option.precision.name.lowercased()).map {
+                    PhotoLightboxShareRow(precision: $0, label: option.label, detail: option.detail)
+                }
+            }
     }
 
     // MARK: - Events

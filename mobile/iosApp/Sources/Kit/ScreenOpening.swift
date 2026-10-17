@@ -26,3 +26,32 @@ extension ShellModel.Route {
         RowRoutes.shared.appHomeRoute(app: app).map { .opening($0) }
     }
 }
+
+extension ShellModel {
+    /// A MOVE THE SHARED SIDE CHOSE (`ScreenMove`: an app's `<App>Routing`
+    /// answer to the event a view just forwarded), applied: the top dropped,
+    /// then each opening pushed. One assignment, so the stack never shows the
+    /// half-move. Nil moves nothing.
+    @MainActor
+    func apply(_ move: ScreenMove?) {
+        guard let move else { return }
+        var next = path
+        if move.dropsTop, !next.isEmpty { next.removeLast() }
+        next.append(contentsOf: move.openings.map { Route.opening($0) })
+        path = next
+    }
+
+    /// A push the shared side chose, as `apply` takes it.
+    @MainActor
+    func push(_ opening: ScreenOpening?) {
+        guard let opening else { return }
+        path.append(.opening(opening))
+    }
+
+    /// The screen id of the entry under the top, empty when it is Home or not
+    /// a registered screen — what `NotesRouting.close` asks.
+    var screenBelowTop: String {
+        guard path.count >= 2, case let .screen(id, _) = path[path.count - 2] else { return "" }
+        return id
+    }
+}

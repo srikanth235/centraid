@@ -287,7 +287,7 @@ struct DocsRenameField: View {
             if !rename.statusLabel.isEmpty {
                 Text(rename.statusLabel)
                     .centraidType("annotLabel")
-                    .foregroundStyle(Theme.color(rename.autosave.phase == .refused ? "net" : "textFaint", scheme))
+                    .foregroundStyle(Theme.color(rename.autosave.refused ? "net" : "textFaint", scheme))
             }
         }
         .padding(.horizontal, CentraidGeometry.pageMargin)

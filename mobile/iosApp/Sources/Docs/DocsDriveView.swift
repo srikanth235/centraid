@@ -22,7 +22,6 @@ struct DocsDriveView: View {
     /// ADDING A DOCUMENT: the capture rows start it, its line is drawn here.
     let ingest: DocsIngestHooks
     let send: (Data) -> Void
-    let push: (ShellModel.Route) -> Void
     let onBack: () -> Void
     let onHome: () -> Void
     /// Open a folder found by name (#1097) through the shell's one row router.
@@ -288,7 +287,6 @@ struct DocsDriveView: View {
     private func folderRow(_ node: Centraid_Screen_V1_DocsFolderNode) -> some View {
         Button {
             send(Self.event { $0.folderPicked = .with { $0.folderID = node.folderID; $0.name = node.name } })
-            push(DocsScreens.folderRoute(node.folderID, node.name, parent: state.chrome.title))
         } label: {
             HStack(spacing: 12) {
                 CentraidIconView(iconKey: "Folder", tint: Theme.color("textSoft", scheme), size: 20)
@@ -382,8 +380,6 @@ struct DocsDriveView: View {
         send(Self.event {
             $0.documentPicked = .with { $0.documentID = row.documentID; $0.title = row.title; $0.surface = row.surface }
         })
-        // THE PARENT'S NAME IS THE DRIVE'S OWN WORD: the document's back says it.
-        push(DocsScreens.documentRoute(row.documentID, row.title, parent: state.chrome.title))
     }
 
     private func emptyAction(_ action: Centraid_Screen_V1_DocsDriveData.EmptyAction) -> (() -> Void)? {
@@ -406,7 +402,6 @@ struct DocsDriveView: View {
                 case (.add, DocsWrites.shared.KEY_TEXT): addRequested(action.key, .text, state)
                 case (.more, DocsWrites.shared.KEY_TRASH_SHELF):
                     send(Self.event { $0.trashOpened = .init() })
-                    push(DocsScreens.trashRoute)
                 default:
                     send(Self.event { $0.action = .with { $0.key = action.key } })
                 }

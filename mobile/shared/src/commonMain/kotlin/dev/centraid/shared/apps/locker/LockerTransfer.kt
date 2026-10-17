@@ -35,6 +35,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import dev.centraid.shared.nav.ScreenIds
 
 /** The item count both pages read: the shelf's own counts, a small window. */
 private fun countRequest(zone: String): AppQueryRequest =
@@ -270,8 +271,8 @@ public object LockerExportMachine :
     }
 }
 
-private const val LOCKER_EXPORT: String = "locker.export"
-private const val LOCKER_IMPORT: String = "locker.import"
+private const val LOCKER_EXPORT: String = ScreenIds.LOCKER_EXPORT
+private const val LOCKER_IMPORT: String = ScreenIds.LOCKER_IMPORT
 
 /** What the export page asks: the counts. Nothing while locked. */
 public object LockerExportReads : LockerQueries<LockerExportState, LockerExportEvent>(

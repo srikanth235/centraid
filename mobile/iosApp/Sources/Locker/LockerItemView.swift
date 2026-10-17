@@ -16,7 +16,6 @@ struct LockerItemView: View {
     let lock: Data
     let send: (Data) -> Void
     let sendLock: (Data) -> Void
-    let push: (ShellModel.Route) -> Void
     let onBack: () -> Void
     let onDeparted: () -> Void
 
@@ -54,7 +53,6 @@ struct LockerItemView: View {
                 if !state.chrome.editLabel.isEmpty {
                     ToolbarVerb(label: state.chrome.editLabel, identifier: "locker-item-edit") {
                         send(Self.event { $0.edit = .init() })
-                        push(LockerScreens.editRoute(state.itemID))
                     }
                 }
             } content: {

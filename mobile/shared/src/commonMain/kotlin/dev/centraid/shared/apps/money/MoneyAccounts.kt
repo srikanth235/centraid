@@ -26,6 +26,7 @@ import dev.centraid.shared.kit.ReadContent
 import dev.centraid.shared.kit.WriteLaw
 import dev.centraid.shared.kit.WriteLens
 import dev.centraid.shared.screen.Step
+import dev.centraid.shared.nav.ScreenIds
 
 /**
  * ACCOUNTS (#1099): the places money sits, each with a balance worked out from
@@ -42,7 +43,7 @@ import dev.centraid.shared.screen.Step
  */
 public object MoneyAccountsMachine :
     MoneyQueryMachine<MoneyAccountsState, MoneyAccountsEvent, MoneyAccountsData>("money.accounts", MONEY_TABLES) {
-    public const val SCREEN_ID: String = "money.accounts"
+    public const val SCREEN_ID: String = ScreenIds.MONEY_ACCOUNTS
     public const val CMD_ADD: String = "money.add_account"
     public const val CMD_EDIT: String = "money.edit_account"
 

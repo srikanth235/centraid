@@ -29,6 +29,7 @@ import dev.centraid.shared.kit.ReadContent
 import dev.centraid.shared.kit.WriteLaw
 import dev.centraid.shared.kit.WriteLens
 import dev.centraid.shared.screen.Step
+import dev.centraid.shared.nav.ScreenIds
 
 /**
  * RULES (#1099): how a line gets its name and its category. A rule matches the
@@ -47,7 +48,7 @@ import dev.centraid.shared.screen.Step
  */
 public object MoneyRulesMachine :
     MoneyQueryMachine<MoneyRulesState, MoneyRulesEvent, MoneyRulesData>("money.rules", MONEY_TABLES) {
-    public const val SCREEN_ID: String = "money.rules"
+    public const val SCREEN_ID: String = ScreenIds.MONEY_RULES
     public const val CMD_ADD: String = "money.add_rule"
     public const val CMD_EDIT: String = "money.edit_rule"
     public const val CMD_DELETE: String = "money.delete_rule"

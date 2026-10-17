@@ -1,4 +1,3 @@
-import SwiftProtobuf
 import SwiftUI
 
 import CentraidShared
@@ -11,11 +10,11 @@ import CentraidShared
 /// `money.accounts`, `money.rules`, `money.categories` and `money.search`. The
 /// Android twin is `screens/money/MoneyRoutes.kt`.
 ///
-/// **A ROUTE'S PARAMETER NAMES WHAT THE SCREEN SHOWS** (`MoneyParameter`: the
-/// transaction, the month and category of a plan, the pushing page's title for the
-/// back control), plus a nonce that is unique to the push. `open` turns it into the
-/// screen's own `Opened` event, with a fresh draft token, so the shell never
-/// re-spells a parameter the proto already spells.
+/// **A ROUTE'S PARAMETER IS ITS SCREEN'S `Opened` EVENT, AS THE SHARED SIDE
+/// SPELLED IT** (`ScreenOpenings`), wrapped with a nonce unique to the push
+/// (`OncePerPush`). `open` sends it through `MoneyRouting.opened`, which mints
+/// the draft token the page's bridge would mint, so the shell never re-spells
+/// a parameter the proto already spells.
 ///
 /// **THE HOME AND THE SEARCH OPEN ONCE PER PUSH.** `CentraidApp` sends a route's
 /// `open` on every appearance, and a pop back onto the home from a pushed page is
@@ -24,10 +23,11 @@ import CentraidShared
 /// already opened", and `open` sends nothing for it. Every other screen re-reads
 /// on a pop back: the import re-reads its accounts after "Add an account".
 ///
-/// **INTENTS ARE THE SHELL'S.** A machine that emits the Plus, the search door, a
-/// pick, a More row or Choose file changes nothing on it; `routeIntent` reads the
-/// event the view just forwarded and pushes the destination. Choose file is the
-/// import view's own (`.fileImporter`).
+/// **INTENTS ARE THE SHELL'S, AND WHERE THEY GO IS SHARED.** A machine that emits
+/// the Plus, the search door, a pick, a More row, Add an account or Done changes
+/// nothing on it; `send` hands the event to `MoneyRouting.route`, which answers
+/// the move (Android applies the same one). Choose file is the import view's own
+/// (`.fileImporter`).
 enum MoneyScreens: AppScreens {
     static let appID = AppIds.shared.MONEY
     /// The machines' `SCREEN_ID`s.
@@ -40,46 +40,6 @@ enum MoneyScreens: AppScreens {
     static let rules = MoneyRulesMachine.shared.SCREEN_ID
     static let categories = MoneyCategoriesMachine.shared.SCREEN_ID
     static let search = MoneySearchMachine.shared.SCREEN_ID
-
-    // MARK: - Routes
-
-    /// The home, fresh: Spending, the current month, no filters.
-    static func homeRoute() -> ShellModel.Route {
-        .screen(home, MoneyParameter().encoded)
-    }
-
-    static func transactionRoute(_ txnID: String, parent: String) -> ShellModel.Route {
-        .screen(transaction, MoneyParameter(parent: parent, txnID: txnID).encoded)
-    }
-
-    /// A category's plan for `month` (`YYYY-MM`), per the category line's `currency`.
-    static func targetRoute(month: String, categoryID: String, currency: String) -> ShellModel.Route {
-        .screen(target, MoneyParameter(month: month, categoryID: categoryID, currency: currency).encoded)
-    }
-
-    static func recurringRoute(parent: String) -> ShellModel.Route {
-        .screen(recurring, MoneyParameter(parent: parent).encoded)
-    }
-
-    static func importRoute(parent: String) -> ShellModel.Route {
-        .screen(importer, MoneyParameter(parent: parent).encoded)
-    }
-
-    static func accountsRoute(parent: String) -> ShellModel.Route {
-        .screen(accounts, MoneyParameter(parent: parent).encoded)
-    }
-
-    static func rulesRoute(parent: String) -> ShellModel.Route {
-        .screen(rules, MoneyParameter(parent: parent).encoded)
-    }
-
-    static func categoriesRoute(parent: String) -> ShellModel.Route {
-        .screen(categories, MoneyParameter(parent: parent).encoded)
-    }
-
-    static func searchRoute() -> ShellModel.Route {
-        .screen(search, MoneyParameter().encoded)
-    }
 
     // MARK: - Registration
 
@@ -163,7 +123,7 @@ enum MoneyScreens: AppScreens {
         // THE OS PICKER'S FILE, as it was on disk, to the import's bridge.
         picked = { name, bytes in importBridge.picked(name: name, bytes: bytes.kotlin) }
 
-        let memory = MoneyOpenMemory()
+        let memory = OpenMemory()
         let deliver = picked
         for identifier in [home, transaction, target, recurring, importer, accounts, rules, categories, search] {
             shell.route(
@@ -174,73 +134,15 @@ enum MoneyScreens: AppScreens {
         }
     }
 
-    /// EVERY OPEN IS THE ROUTE'S OWN `Opened`, with a draft token minted now.
+    /// EVERY OPEN IS THE ROUTE'S OWN `Opened`, with a draft token minted now
+    /// (`MoneyRouting.opened`); the home and the search once per push.
     @MainActor
-    private static func opened(_ identifier: String, _ parameter: Data, _ shell: ShellModel?, _ memory: MoneyOpenMemory) {
-        guard let shell else { return }
-        let route = MoneyParameter(decoding: parameter)
-        let token = UUID().uuidString
-        switch identifier {
-        case home:
+    private static func opened(_ identifier: String, _ parameter: Data, _ shell: ShellModel?, _ memory: OpenMemory) {
+        guard let shell, let route = OncePerPush(decoding: parameter) else { return }
+        if identifier == home || identifier == search {
             guard memory.firstOpen(identifier, route.nonce) else { return }
-            shell.send(screen: home, event: moneyEvent(Centraid_Screen_V1_MoneyHomeEvent.self) {
-                $0.opened = .with { $0.destination = .spending }
-            })
-        case search:
-            guard memory.firstOpen(identifier, route.nonce) else { return }
-            shell.send(screen: search, event: moneyEvent(Centraid_Screen_V1_MoneySearchEvent.self) { $0.opened = .init() })
-        case transaction:
-            shell.send(screen: transaction, event: moneyEvent(Centraid_Screen_V1_MoneyTransactionEvent.self) {
-                $0.opened = .with {
-                    $0.txnID = route.txnID
-                    $0.parent = route.parent
-                    $0.draftToken = token
-                }
-            })
-        case target:
-            shell.send(screen: target, event: moneyEvent(Centraid_Screen_V1_MoneyTargetEvent.self) {
-                $0.opened = .with {
-                    $0.month = route.month
-                    $0.categoryID = route.categoryID
-                    $0.currency = route.currency
-                    $0.draftToken = token
-                }
-            })
-        case recurring:
-            shell.send(screen: recurring, event: moneyEvent(Centraid_Screen_V1_MoneyRecurringEvent.self) {
-                $0.opened = .with { $0.parent = route.parent }
-            })
-        case importer:
-            shell.send(screen: importer, event: moneyEvent(Centraid_Screen_V1_MoneyImportEvent.self) {
-                $0.opened = .with {
-                    $0.parent = route.parent
-                    $0.draftToken = token
-                }
-            })
-        case accounts:
-            shell.send(screen: accounts, event: moneyEvent(Centraid_Screen_V1_MoneyAccountsEvent.self) {
-                $0.opened = .with {
-                    $0.parent = route.parent
-                    $0.draftToken = token
-                }
-            })
-        case rules:
-            shell.send(screen: rules, event: moneyEvent(Centraid_Screen_V1_MoneyRulesEvent.self) {
-                $0.opened = .with {
-                    $0.parent = route.parent
-                    $0.draftToken = token
-                }
-            })
-        case categories:
-            shell.send(screen: categories, event: moneyEvent(Centraid_Screen_V1_MoneyCategoriesEvent.self) {
-                $0.opened = .with {
-                    $0.parent = route.parent
-                    $0.draftToken = token
-                }
-            })
-        default:
-            break
         }
+        shell.send(screen: identifier, event: MoneyRouting.shared.opened(screenId: identifier, opened: route.opened.kotlin).data)
     }
 
     // MARK: - Views
@@ -302,127 +204,19 @@ enum MoneyScreens: AppScreens {
 
     // MARK: - Intents
 
-    @MainActor
-    private static func decode<State: SwiftProtobuf.Message>(_ type: State.Type, _ shell: ShellModel, _ identifier: String) -> State {
-        (try? State(serializedBytes: shell.state(identifier))) ?? State()
-    }
-
-    /// THE INTENTS, ROUTED. `parent` is the pushing page's own title, which the
-    /// pushed page's back control says; empty reads "Money".
+    /// THE INTENTS, ROUTED BY THE SHARED SIDE (`MoneyRouting`): which page an
+    /// event opens — or that Done pops — is decided once, for both shells. This
+    /// only applies it.
     @MainActor
     static func routeIntent(_ identifier: String, _ bytes: Data, _ shell: ShellModel) {
-        switch identifier {
-        case home:
-            guard let event = try? Centraid_Screen_V1_MoneyHomeEvent(serializedBytes: bytes) else { return }
-            let state = decode(Centraid_Screen_V1_MoneyHomeState.self, shell, home)
-            let here = state.chrome.title
-            switch event.kind {
-            // The header's Plus and the day-one action: rows enter by import.
-            case .add: shell.path.append(importRoute(parent: here))
-            // The search bar is a door: Money's search is a page of its own.
-            case .searchOpened: shell.path.append(searchRoute())
-            case let .transaction(picked): shell.path.append(transactionRoute(picked.txnID, parent: here))
-            case let .categoryLine(picked):
-                shell.path.append(targetRoute(month: state.month, categoryID: picked.categoryID, currency: picked.currency))
-            case .recurring: shell.path.append(recurringRoute(parent: here))
-            case let .more(row):
-                switch row.key {
-                case MoneyHomeMachine.shared.MORE_ACCOUNTS: shell.path.append(accountsRoute(parent: here))
-                case MoneyHomeMachine.shared.MORE_RULES: shell.path.append(rulesRoute(parent: here))
-                case MoneyHomeMachine.shared.MORE_CATEGORIES: shell.path.append(categoriesRoute(parent: here))
-                case MoneyHomeMachine.shared.MORE_IMPORT: shell.path.append(importRoute(parent: here))
-                default: break
-                }
-            default: break
-            }
-        case importer:
-            guard let event = try? Centraid_Screen_V1_MoneyImportEvent(serializedBytes: bytes) else { return }
-            switch event.kind {
-            case .addAccount:
-                let state = decode(Centraid_Screen_V1_MoneyImportState.self, shell, importer)
-                shell.path.append(accountsRoute(parent: state.chrome.title))
-            case .done:
-                if !shell.path.isEmpty { shell.path.removeLast() }
-            default: break
-            }
-        case search:
-            if case let .transaction(picked)? = (try? Centraid_Screen_V1_MoneySearchEvent(serializedBytes: bytes))?.kind {
-                let state = decode(Centraid_Screen_V1_MoneySearchState.self, shell, search)
-                shell.path.append(transactionRoute(picked.txnID, parent: state.chrome.title))
-            }
-        default: break
-        }
+        shell.apply(MoneyRouting.shared.route(screenId: identifier, event: bytes.kotlin, state: shell.state(identifier).kotlin))
     }
 
     static func tileRoute(_ tile: Centraid_Screen_V1_HomeTile) -> ShellModel.Route? { .home(of: appID) }
 
     /// A SCREEN THE SHARED SIDE NAMED (`ScreenOpening`) is pushed in the shape
-    /// this app's routes take: the home with a fresh nonce (it opens once per
-    /// push), the transaction with its ids in the parameter. The home opens on
-    /// Spending, which is what its `open` sends.
+    /// this app's routes take: its event, as spelled, with a nonce for the push.
     static func present(_ screen: String, _ opened: Data) -> ShellModel.Route {
-        switch screen {
-        case home:
-            return homeRoute()
-        case transaction:
-            guard let event = try? Centraid_Screen_V1_MoneyTransactionEvent(serializedBytes: opened) else { break }
-            return transactionRoute(event.opened.txnID, parent: event.opened.parent)
-        default:
-            break
-        }
-        return .screen(screen, opened)
-    }
-}
-
-/// WHAT A MONEY ROUTE CARRIES: the fields its screen's `Opened` names, and a
-/// nonce that is unique to the push. JSON because a `Route` holds `Data`.
-struct MoneyParameter: Codable, Hashable {
-    var nonce: String = UUID().uuidString
-    var parent: String = ""
-    var txnID: String = ""
-    var month: String = ""
-    var categoryID: String = ""
-    var currency: String = ""
-
-    var encoded: Data {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys]
-        return (try? encoder.encode(self)) ?? Data()
-    }
-
-    /// A parameter that did not decode names nothing and has no nonce, so it
-    /// opens the screen on its defaults.
-    init(decoding data: Data) {
-        self = (try? JSONDecoder().decode(MoneyParameter.self, from: data)) ?? MoneyParameter(nonce: "")
-    }
-
-    init(
-        nonce: String = UUID().uuidString,
-        parent: String = "",
-        txnID: String = "",
-        month: String = "",
-        categoryID: String = "",
-        currency: String = ""
-    ) {
-        self.nonce = nonce
-        self.parent = parent
-        self.txnID = txnID
-        self.month = month
-        self.categoryID = categoryID
-        self.currency = currency
-    }
-}
-
-/// WHICH PUSH A SCREEN WAS LAST OPENED FOR. A class, so a route's `open` closure
-/// holds it without crossing an actor.
-final class MoneyOpenMemory {
-    private var nonces: [String: String] = [:]
-
-    /// True the first time `nonce` opens `identifier`; an empty nonce always opens.
-    func firstOpen(_ identifier: String, _ nonce: String) -> Bool {
-        if nonce.isEmpty { return true }
-        if nonces[identifier] == nonce { return false }
-        nonces[identifier] = nonce
-        return true
+        .screen(screen, OncePerPush(opened: opened).encoded)
     }
 }

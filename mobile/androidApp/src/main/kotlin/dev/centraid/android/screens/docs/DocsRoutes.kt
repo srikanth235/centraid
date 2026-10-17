@@ -19,7 +19,6 @@ import centraid.screen.v1.DocsCapture
 import centraid.screen.v1.DocsDocumentEvent
 import centraid.screen.v1.DocsDriveEvent
 import centraid.screen.v1.DocsDriveState
-import centraid.screen.v1.DocsIngestState
 import centraid.screen.v1.DocsSheet
 import dev.centraid.android.kit.TrashListScreen
 import dev.centraid.android.screens.AppRoutes
@@ -30,6 +29,7 @@ import dev.centraid.shared.apps.docs.DocsDriveBridge
 import dev.centraid.shared.apps.docs.DocsDriveMachine
 import dev.centraid.shared.apps.docs.DocsEditorBridge
 import dev.centraid.shared.apps.docs.DocsIngestBridge
+import dev.centraid.shared.apps.docs.DocsRouting
 import dev.centraid.shared.apps.docs.DocsTrashBridge
 import dev.centraid.shared.apps.docs.DocsWrites
 import dev.centraid.shared.nav.AppIds
@@ -103,13 +103,8 @@ public class DocsRoutes : AppRoutes {
     override fun Global(nav: RouteNav) {
         val adding by ingest.host.state.collectAsStateWithLifecycle()
         LaunchedEffect(adding.request_seq, adding.phase, adding.routed) {
-            if (adding.phase == DocsIngestState.Phase.PHASE_FILED && !adding.routed && adding.document_id.isNotEmpty()) {
-                val filed = if (adding.open_editor) {
-                    Destination.DocsEditor(adding.document_id, adding.title)
-                } else {
-                    Destination.DocsDocument(adding.document_id, adding.title, parent = adding.parent)
-                }
-                nav.go(nav.stack.push(filed))
+            DocsRouting.filed(adding)?.let { filed ->
+                nav.push(filed)
                 ingest.routed(adding.request_seq)
             }
         }
@@ -151,11 +146,19 @@ public class DocsRoutes : AppRoutes {
                     onEvent = document::forward,
                     onBack = nav::pop,
                     onFolder = { id, name ->
-                        document.forward(DocsDocumentEvent(folder_picked = DocsDocumentEvent.FolderPicked(folder_id = id, name = name)))
-                        // The document's own head words, as its page draws them.
-                        toFolder(nav, id, name, parent = state.data_?.row?.title?.ifEmpty { null } ?: state.title_hint)
+                        val picked = DocsDocumentEvent(folder_picked = DocsDocumentEvent.FolderPicked(folder_id = id, name = name))
+                        document.forward(picked)
+                        if (id.isEmpty()) toFoldersTab(nav) else nav.push(DocsRouting.document(picked, state))
                     },
-                    onEdit = { id, title -> nav.go(nav.stack.push(Destination.DocsEditor(id, title))) },
+                    // The screen forwarded `EditRequested` first; where it goes is the routing's.
+                    onEdit = { id, title ->
+                        nav.push(
+                            DocsRouting.document(
+                                DocsDocumentEvent(edit_requested = DocsDocumentEvent.EditRequested(document_id = id, title = title)),
+                                state,
+                            ),
+                        )
+                    },
                 )
             }
             is Destination.DocsEditor -> {
@@ -328,8 +331,9 @@ public class DocsRoutes : AppRoutes {
                 when {
                     // The More sheet's Trash row is the shell's route.
                     sheet == DocsSheet.Kind.KIND_MORE && key == DocsWrites.KEY_TRASH_SHELF -> {
-                        bridge.forward(DocsDriveEvent(trash_opened = DocsDriveEvent.TrashOpened()))
-                        nav.go(nav.stack.push(Destination.DocsTrash))
+                        val opened = DocsDriveEvent(trash_opened = DocsDriveEvent.TrashOpened())
+                        bridge.forward(opened)
+                        nav.push(DocsRouting.drive(opened, state))
                     }
                     // The Add sheet's capture rows are the ingest's: the drive
                     // puts its sheet away (`AddRequested`), the bridge does the rest.
@@ -344,41 +348,26 @@ public class DocsRoutes : AppRoutes {
                     }
                     else -> {
                         bridge.forward(event)
-                        val folderPicked = event.folder_picked
-                        val documentPicked = event.document_picked
-                        when {
-                            folderPicked != null ->
-                                toFolder(nav, folderPicked.folder_id, folderPicked.name, parent = state.chrome?.title.orEmpty())
-                            documentPicked != null ->
-                                // THE PARENT'S NAME IS THE DRIVE'S OWN WORD: the document's back says it.
-                                nav.go(
-                                    nav.stack.push(
-                                        Destination.DocsDocument(
-                                            documentPicked.document_id,
-                                            documentPicked.title,
-                                            parent = state.chrome?.title.orEmpty(),
-                                        ),
-                                    ),
-                                )
-                        }
+                        // A folder or a document, pushed with this page's title as its
+                        // parent (`DocsRouting`); a folder with no id is the Folders tab.
+                        if (event.folder_picked?.folder_id?.isEmpty() == true) toFoldersTab(nav) else nav.push(DocsRouting.drive(event, state))
                     }
                 }
             },
         )
     }
 
-    /** A folder is a pushed page; the top level (an empty id) is the Folders tab. */
-    private fun toFolder(nav: RouteNav, id: String, name: String, parent: String) {
-        if (id.isEmpty()) {
-            val entries = nav.stack.entries
-            val root = entries.indexOfLast { it is Destination.DocsHome }
-            if (root >= 0) {
-                nav.go(NavStack(entries.take(root + 1)))
-                drive.forward(DocsDriveEvent(band = DocsDriveEvent.BandPicked(key = DocsDriveMachine.BAND_FOLDERS)))
-            }
-            return
+    /**
+     * THE FOLDERS TAB'S TOP LEVEL (a crumb with no id): back to the drive, on
+     * Folders. Not a page, so not `DocsRouting`'s; iOS draws that crumb disabled.
+     */
+    private fun toFoldersTab(nav: RouteNav) {
+        val entries = nav.stack.entries
+        val root = entries.indexOfLast { it is Destination.DocsHome }
+        if (root >= 0) {
+            nav.go(NavStack(entries.take(root + 1)))
+            drive.forward(DocsDriveEvent(band = DocsDriveEvent.BandPicked(key = DocsDriveMachine.BAND_FOLDERS)))
         }
-        nav.go(nav.stack.push(Destination.DocsFolder(id, name, parent)))
     }
 
     private companion object {

@@ -55,7 +55,7 @@ import dev.centraid.shared.apps.notes.NotesTrashMachine
 import dev.centraid.shared.apps.notes.NotesTrashReads
 import dev.centraid.shared.nav.Destination
 import dev.centraid.shared.nav.NavStack
-import dev.centraid.shared.nav.withNotesPlace
+import dev.centraid.shared.nav.applying
 import dev.centraid.shared.platform.DeviceClock
 import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.screen.ScreenEffect
@@ -450,9 +450,12 @@ class NotesAppSpec : StringSpec({
         val same = NotesLibraryMachine.reduce(state, NotesLibraryEvent(band = NotesLibraryEvent.BandPicked(key = "notes")))
         same.effects.shouldBeEmpty()
         same.state shouldBe state
+        // Another place swaps the top entry; the same place and More move nothing.
         val stack = NavStack().push(Destination.NotesLibrary())
-        stack.withNotesPlace("journal").entries shouldBe listOf(Destination.Home, Destination.NotesJournal)
-        stack.withNotesPlace("more") shouldBe stack
+        val journal = NotesRouting.library(NotesLibraryEvent(band = NotesLibraryEvent.BandPicked(key = NotesBand.JOURNAL)))!!
+        stack.applying(journal).entries shouldBe listOf(Destination.Home, Destination.NotesJournal)
+        NotesRouting.library(NotesLibraryEvent(band = NotesLibraryEvent.BandPicked(key = NotesBand.MORE))).shouldBeNull()
+        NotesRouting.library(NotesLibraryEvent(band = NotesLibraryEvent.BandPicked(key = NotesBand.NOTES))).shouldBeNull()
     }
 
     // --- Notebooks ---------------------------------------------------------

@@ -15,7 +15,6 @@ import CentraidShared
 struct DocsDocumentView: View {
     let data: Data
     let send: (Data) -> Void
-    let push: (ShellModel.Route) -> Void
     let onBack: () -> Void
     let onDeparted: () -> Void
 
@@ -23,16 +22,6 @@ struct DocsDocumentView: View {
 
     private var state: Centraid_Screen_V1_DocsDocumentState {
         (try? Centraid_Screen_V1_DocsDocumentState(serializedBytes: data)) ?? .init()
-    }
-
-    /// The head's words — the row's title, else the route's hint — which a
-    /// folder pushed from here names as its parent.
-    private var headTitle: String {
-        let state = state
-        if case let .data(document)? = state.content, document.hasRow, !document.row.title.isEmpty {
-            return document.row.title
-        }
-        return state.titleHint
     }
 
     static func event(_ build: (inout Centraid_Screen_V1_DocsDocumentEvent) -> Void) -> Data {
@@ -221,7 +210,6 @@ struct DocsDocumentView: View {
                     }
                     KitLink(label: crumb.name, dense: true, identifier: "docs-crumb-\(crumb.folderID)") {
                         send(Self.event { $0.folderPicked = .with { $0.folderID = crumb.folderID; $0.name = crumb.name } })
-                        push(DocsScreens.folderRoute(crumb.folderID, crumb.name, parent: headTitle))
                     }
                     .disabled(crumb.folderID.isEmpty)
                 }
@@ -256,7 +244,6 @@ struct DocsDocumentView: View {
     private func edit(_ document: Centraid_Screen_V1_DocsDocumentData) {
         let id = document.row.documentID
         send(Self.event { $0.editRequested = .with { $0.documentID = id; $0.title = document.row.title } })
-        push(DocsScreens.editorRoute(id, document.row.title))
     }
 
     /// A verb picked from a sheet is `ActionPicked` (which closes it) — and

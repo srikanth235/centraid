@@ -746,6 +746,9 @@ class PeopleSpec : StringSpec({
             PeopleEditorMachine.left(),
         ).state
         blank.autosave.shouldNotBeNull().phase shouldBe Autosave.Phase.PHASE_REFUSED
+        // THE LAW SAYS "REFUSED" ONCE, so no shell reads the phase for its ink.
+        blank.autosave.shouldNotBeNull().refused shouldBe true
+        typed.state.autosave.shouldNotBeNull().refused shouldBe false
         blank.save_label shouldBe "A person needs a name."
         blank.draft.shouldNotBeNull().display_name shouldBe " "
     }

@@ -39,6 +39,7 @@ import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.Step
 import dev.centraid.shared.sync.sentenceFor
 import okio.ByteString.Companion.toByteString
+import dev.centraid.shared.nav.ScreenIds
 
 /**
  * IMPORT A STATEMENT (#1099): pick a file, read the plan, publish. Nothing is
@@ -59,7 +60,7 @@ import okio.ByteString.Companion.toByteString
  */
 public object MoneyImportMachine :
     MoneyQueryMachine<MoneyImportState, MoneyImportEvent, MoneyImportData>("money.import", MONEY_TABLES) {
-    public const val SCREEN_ID: String = "money.import"
+    public const val SCREEN_ID: String = ScreenIds.MONEY_IMPORT
     public const val CMD_IMPORT: String = "money.import_transactions"
     public const val CMD_PROFILE: String = "money.save_import_profile"
 

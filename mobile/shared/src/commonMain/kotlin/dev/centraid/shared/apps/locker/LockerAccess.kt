@@ -18,6 +18,7 @@ import dev.centraid.shared.kit.ContentLens
 import dev.centraid.shared.kit.ReadContent
 import dev.centraid.shared.kit.time.CivilWords
 import dev.centraid.shared.screen.Step
+import dev.centraid.shared.nav.ScreenIds
 
 /**
  * THE WHOLE LOCKER'S ACCESS HISTORY (#1047, Q-1047-21; the handoff's
@@ -157,7 +158,7 @@ internal object LockerAccessRows {
     }
 }
 
-internal const val LOCKER_ACCESS: String = "locker.access"
+internal const val LOCKER_ACCESS: String = ScreenIds.LOCKER_ACCESS
 
 /**
  * EVERY TABLE THE WHOLE-LOCKER HISTORY READS, which is every table its machine

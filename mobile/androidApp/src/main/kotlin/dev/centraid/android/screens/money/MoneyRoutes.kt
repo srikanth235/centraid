@@ -17,9 +17,9 @@ import dev.centraid.android.screens.RouteNav
 import dev.centraid.shared.apps.money.MoneyAccountsBridge
 import dev.centraid.shared.apps.money.MoneyCategoriesBridge
 import dev.centraid.shared.apps.money.MoneyHomeBridge
-import dev.centraid.shared.apps.money.MoneyHomeMachine
 import dev.centraid.shared.apps.money.MoneyImportBridge
 import dev.centraid.shared.apps.money.MoneyRecurringBridge
+import dev.centraid.shared.apps.money.MoneyRouting
 import dev.centraid.shared.apps.money.MoneyRulesBridge
 import dev.centraid.shared.apps.money.MoneySearchBridge
 import dev.centraid.shared.apps.money.MoneyTargetBridge
@@ -37,8 +37,9 @@ import kotlinx.coroutines.withContext
  * MONEY'S ROUTES (#1099): `money.home` (Spending · Activity · Cash flow, More as
  * a sheet) and every screen pushed from it, one bridge each for the activity's
  * life. The machines emit INTENTS (a pick, the Plus, a More row, the search
- * bar, Choose file) and change nothing on them; this file is where they become
- * pushes, `open(...)` calls and the OS file picker.
+ * bar, Add an account, Done, Choose file) and change nothing on them;
+ * `MoneyRouting` decides where each goes (for iOS too), and this file applies
+ * the move, makes the `open(...)` calls and runs the OS file picker.
  */
 public class MoneyRoutes : AppRoutes {
 
@@ -130,7 +131,7 @@ public class MoneyRoutes : AppRoutes {
                     onOpenContainer = { card -> nav.open(card, parent = state.chrome?.title.orEmpty()) },
                     onEvent = { event: MoneySearchEvent ->
                         search.forward(event)
-                        event.transaction?.let { push(nav, Destination.MoneyTransaction(it.txn_id, parent = state.chrome?.title.orEmpty())) }
+                        nav.push(MoneyRouting.search(event, state))
                     },
                 )
             }
@@ -152,30 +153,7 @@ public class MoneyRoutes : AppRoutes {
         }
         MoneyHomeScreen(state, onHome = nav::home, onEvent = { event: MoneyHomeEvent ->
             home.forward(event)
-            val here = state.chrome?.title.orEmpty()
-            when {
-                // The header's Plus and the day-one action: rows enter by import.
-                event.add != null -> push(nav, Destination.MoneyImport(parent = here))
-                // THE SEARCH BAR IS A DOOR: Money's search is a page of its own.
-                event.search_opened != null -> push(nav, Destination.MoneySearch)
-                event.transaction != null -> push(nav, Destination.MoneyTransaction(event.transaction!!.txn_id, parent = here))
-                event.category_line != null -> push(
-                    nav,
-                    Destination.MoneyTarget(
-                        month = state.month,
-                        categoryId = event.category_line!!.category_id,
-                        currency = event.category_line!!.currency,
-                    ),
-                )
-                event.recurring != null -> push(nav, Destination.MoneyRecurring(parent = here))
-                event.more != null -> when (event.more!!.key) {
-                    MoneyHomeMachine.MORE_ACCOUNTS -> push(nav, Destination.MoneyAccounts(parent = here))
-                    MoneyHomeMachine.MORE_RULES -> push(nav, Destination.MoneyRules(parent = here))
-                    MoneyHomeMachine.MORE_CATEGORIES -> push(nav, Destination.MoneyCategories(parent = here))
-                    MoneyHomeMachine.MORE_IMPORT -> push(nav, Destination.MoneyImport(parent = here))
-                    else -> Unit
-                }
-            }
+            nav.push(MoneyRouting.home(event, state))
         })
     }
 
@@ -218,15 +196,9 @@ public class MoneyRoutes : AppRoutes {
                     } catch (_: android.content.ActivityNotFoundException) {
                         // No picker on this phone; nothing was read.
                     }
-                    event.add_account != null -> push(nav, Destination.MoneyAccounts(parent = held.screen.chrome?.title.orEmpty()))
-                    event.done != null -> nav.pop()
+                    else -> nav.apply(MoneyRouting.importer(event, held.screen))
                 }
             },
         )
-    }
-
-    /** A push. */
-    private fun push(nav: RouteNav, destination: Destination) {
-        nav.go(nav.stack.push(destination))
     }
 }

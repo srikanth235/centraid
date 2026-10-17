@@ -33,6 +33,7 @@ import dev.centraid.shared.screen.ScreenMachine
 import dev.centraid.shared.screen.Step
 import dev.centraid.shared.sync.ScreenQueries
 import dev.centraid.shared.sync.ScreenWrites
+import dev.centraid.shared.nav.ScreenIds
 
 /**
  * ONE NOTE'S VERSIONS (#1029 port), newest first, the current one marked.
@@ -43,7 +44,7 @@ import dev.centraid.shared.sync.ScreenWrites
  * re-reads the list.
  */
 public object NotesHistoryMachine : ScreenMachine<NotesHistoryState, NotesHistoryEvent> {
-    public const val SCREEN_ID: String = "notes.history"
+    public const val SCREEN_ID: String = ScreenIds.NOTES_HISTORY
 
     public val TABLES: Set<String> = setOf("knowledge_note", "core_entity_revision")
 

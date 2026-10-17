@@ -10,11 +10,12 @@ import CentraidShared
 /// there is no second spelling of "which person" between the push and the
 /// open.
 ///
-/// **THE INTENTS ARE THE SHELL'S.** `PersonPicked`, `AddPersonRequested`,
-/// `MoreRowPicked`, `LogTouchRequested`, `EditRequested` and `ChannelTapped`
-/// change nothing in the machines; each is forwarded (so a spec that watches
-/// the event log still sees it) and then routed here — a push, or the OS for a
-/// channel (tel:, mailto:, Maps, the pasteboard).
+/// **THE INTENTS ARE THE SHELL'S, AND WHERE THEY GO IS SHARED.** `PersonPicked`,
+/// `AddPersonRequested`, `MoreRowPicked`, `LogTouchRequested`, `EditRequested`
+/// and `ChannelTapped` change nothing in the machines; each is forwarded (so a
+/// spec that watches the event log still sees it) and then handed to
+/// `PeopleRouting` — a push it names, or, for a channel, the row it names,
+/// whose value goes to the OS here (tel:, mailto:, Maps, the pasteboard).
 enum PeopleScreens: AppScreens {
     static let appID = AppIds.shared.PEOPLE
     /// The machines' `SCREEN_ID`s.
@@ -22,30 +23,6 @@ enum PeopleScreens: AppScreens {
     static let person = PeoplePersonMachine.shared.SCREEN_ID
     static let editor = PeopleEditorMachine.shared.SCREEN_ID
     static let trash = PeopleTrashKt.PeopleTrashMachine.screenId
-
-    static func personRoute(_ partyID: String, name: String, logTouch: Bool = false) -> ShellModel.Route {
-        .screen(person, Centraid_Screen_V1_PeoplePersonEvent.with {
-            $0.opened = .with {
-                $0.partyID = partyID
-                $0.name = name
-                $0.logTouch = logTouch
-            }
-        }.encoded)
-    }
-
-    static func editorRoute(_ partyID: String) -> ShellModel.Route {
-        .screen(editor, Centraid_Screen_V1_PeopleEditorEvent.with {
-            $0.opened = .with { $0.partyID = partyID }
-        }.encoded)
-    }
-
-    /// A NEW PERSON, under an id minted here — `PeopleEditorBridge.openNew`'s
-    /// event, spelled as bytes so the route and the open are one thing.
-    static var newPersonRoute: ShellModel.Route {
-        .screen(editor, Centraid_Screen_V1_PeopleEditorEvent.with {
-            $0.opened = .with { $0.mintedPartyID = UUID().uuidString.lowercased() }
-        }.encoded)
-    }
 
     @MainActor
     static func register(into shell: ShellModel) {
@@ -63,7 +40,7 @@ enum PeopleScreens: AppScreens {
                     send: { [weak shell] bytes in
                         guard let shell else { return }
                         shell.send(screen: home, event: bytes)
-                        routeHome(bytes, shell)
+                        shell.apply(PeopleRouting.shared.route(screenId: home, event: bytes.kotlin, state: shell.state(home).kotlin))
                     },
                     onHome: { [weak shell] in shell?.path.removeAll() }
                 ))
@@ -120,38 +97,15 @@ enum PeopleScreens: AppScreens {
 
     // MARK: - Intents
 
-    @MainActor
-    private static func routeHome(_ bytes: Data, _ shell: ShellModel) {
-        guard let event = try? Centraid_Screen_V1_PeopleHomeEvent(serializedBytes: bytes) else { return }
-        switch event.kind {
-        case let .person(picked):
-            shell.path.append(personRoute(picked.partyID, name: picked.name))
-        case let .logTouch(picked):
-            shell.path.append(personRoute(picked.partyID, name: picked.name, logTouch: true))
-        case .addPerson:
-            shell.path.append(newPersonRoute)
-        case let .moreRow(row) where row.key == PeopleHomeMachine.shared.MORE_TRASH:
-            shell.path.append(.screen(trash, Data()))
-        default:
-            break
-        }
-    }
-
+    /// A person's intents: the editor push is `PeopleRouting`'s, and so is
+    /// which channel row a tap meant.
     @MainActor
     private static func routePerson(_ bytes: Data, _ shell: ShellModel) {
-        guard let event = try? Centraid_Screen_V1_PeoplePersonEvent(serializedBytes: bytes) else { return }
-        let state = (try? Centraid_Screen_V1_PeoplePersonState(serializedBytes: shell.state(person))) ?? .init()
-        switch event.kind {
-        case .edit:
-            guard !state.partyID.isEmpty else { return }
-            shell.path.append(editorRoute(state.partyID))
-        case let .channel(tapped):
-            guard case let .data(data) = state.content,
-                  let row = data.channels.first(where: { $0.channelID == tapped.channelID })
-            else { return }
-            openChannel(row)
-        default:
-            break
+        let state = shell.state(person).kotlin
+        shell.apply(PeopleRouting.shared.route(screenId: person, event: bytes.kotlin, state: state))
+        if let row = PeopleRouting.shared.channelRow(event: bytes.kotlin, state: state),
+           let channel = try? Centraid_Screen_V1_PeopleChannelRow(serializedBytes: row.data) {
+            openChannel(channel)
         }
     }
 

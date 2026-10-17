@@ -76,13 +76,10 @@ struct DocsIngestRoot: View {
         }
     }
 
+    /// THE FILED PUSH IS `DocsRouting.filed`'s: Text's editor, else the page.
     private func route(_ state: Centraid_Screen_V1_DocsIngestState) {
-        guard state.phase == .filed, !state.routed, !state.documentID.isEmpty else { return }
-        if state.openEditor {
-            shell.path.append(DocsScreens.editorRoute(state.documentID, state.title))
-        } else {
-            shell.path.append(DocsScreens.documentRoute(state.documentID, state.title, parent: state.parent))
-        }
+        guard let opening = DocsRouting.shared.filedOpening(state: state.encoded.kotlin) else { return }
+        shell.push(opening)
         DocsScreens.ingestBridge.routed(requestSeq: Int32(state.requestSeq))
     }
 

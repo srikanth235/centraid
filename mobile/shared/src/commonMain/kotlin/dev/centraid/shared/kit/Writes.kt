@@ -71,6 +71,7 @@ public object WriteLaw {
                     failure = if (settled.committed) null else settled.failure,
                     // SAID ONCE, HERE: the sentence a shell draws for a refusal.
                     refusal = if (settled.committed) "" else settled.failure?.sentence.orEmpty(),
+                    refused = !settled.committed,
                 ),
             ),
         )

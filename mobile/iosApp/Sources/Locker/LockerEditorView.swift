@@ -135,7 +135,7 @@ struct LockerEditorView: View {
         }
         .onChange(of: state.done) { _, done in if done { onClose() } }
         // A refused save is still an open form: give the fields back.
-        .onChange(of: state.write.phase) { _, phase in if phase == .refused { concealing = false } }
+        .onChange(of: state.write.refused) { _, refused in if refused { concealing = false } }
         .sheet(isPresented: Binding(
             get: { state.hasConfirm },
             set: { open in if !open, state.hasConfirm { send(Self.event { $0.dismissed = .init() }) } }

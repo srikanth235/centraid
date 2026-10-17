@@ -12,9 +12,12 @@ import CentraidShared
 /// way back. **Everything else is the machine's**: the phases, every word on
 /// the wall, what a screen may read.
 ///
-/// **INTENTS ARE THE SHELL'S**: `AddItem`, `ItemPicked`, a More row, `EditTapped`
-/// and `UseTapped` change nothing in their machines; each view forwards the
-/// event and then pushes the route built here.
+/// **INTENTS ARE THE SHELL'S, AND WHERE THEY GO IS SHARED**: `AddItem`,
+/// `ItemPicked`, a More row and `EditTapped` change nothing in their machines;
+/// each view forwards the event, and `LockerRouting.route` answers the push
+/// this applies. `UseTapped` is the one this file answers itself: its editor
+/// takes the generator's candidate bridge to bridge (`openAddFrom`), so it has
+/// no shared spelling, only the private `addFromGeneratorRoute`.
 enum LockerScreens: AppScreens {
     static let appID = AppIds.shared.LOCKER
 
@@ -52,28 +55,20 @@ enum LockerScreens: AppScreens {
         Centraid_Screen_V1_LockerHomeEvent.with { $0.opened = .with { $0.destination = .items } }.encoded
     )
 
-    /// `parent` is the PUSHING page's own title, which the item's back says.
-    static func itemRoute(_ itemID: String, parent: String) -> ShellModel.Route {
-        .screen(item, Centraid_Screen_V1_LockerItemEvent.Opened.with {
-            $0.itemID = itemID
-            $0.parent = parent
-        }.encoded)
-    }
-
-    /// A new item. The id is minted by the bridge on open, never by a route.
-    static let addRoute = ShellModel.Route.screen(editor, Data("add".utf8))
     /// A new login carrying the generator's output — handed over bridge to
-    /// bridge (`openAddFrom`), never through a route.
+    /// bridge (`openAddFrom`), never through a route. The editor's parameters
+    /// ("add", "generator", "edit:<id>") are this file's own: `present` spells
+    /// the shared side's openings into them.
     static let addFromGeneratorRoute = ShellModel.Route.screen(editor, Data("generator".utf8))
 
-    static func editRoute(_ itemID: String) -> ShellModel.Route {
-        .screen(editor, Data("edit:\(itemID)".utf8))
+    /// A SCREEN THE SHARED SIDE NAMED (`ScreenOpening`): the editor in its
+    /// private parameters, every other screen on its event as it stands.
+    static func present(_ screen: String, _ opened: Data) -> ShellModel.Route {
+        guard screen == editor else { return .screen(screen, opened) }
+        let event = (try? Centraid_Screen_V1_LockerEditorEvent(serializedBytes: opened))?.opened ?? .init()
+        if event.mode == .edit, !event.itemID.isEmpty { return .screen(editor, Data("edit:\(event.itemID)".utf8)) }
+        return .screen(editor, Data("add".utf8))
     }
-
-    static let trashRoute = ShellModel.Route.screen(trash, Data())
-    static let exportRoute = ShellModel.Route.screen(export, Data())
-    static let importRoute = ShellModel.Route.screen(importScreen, Data())
-    static let accessRoute = ShellModel.Route.screen(access, Data())
 
     // MARK: Registration
 
@@ -101,9 +96,6 @@ enum LockerScreens: AppScreens {
         shell.register(.locker(importScreen, importBridge))
         shell.register(.locker(access, accessBridge))
 
-        func push(_ shell: ShellModel?) -> (ShellModel.Route) -> Void {
-            { [weak shell] route in shell?.path.append(route) }
-        }
         func pop(_ shell: ShellModel?) -> () -> Void {
             { [weak shell] in
                 guard let shell, !shell.path.isEmpty else { return }
@@ -112,6 +104,14 @@ enum LockerScreens: AppScreens {
         }
         func sender(_ shell: ShellModel?, _ id: String) -> (Data) -> Void {
             { [weak shell] in shell?.send(screen: id, event: $0) }
+        }
+        /// A page whose intents push: forwarded, then `LockerRouting`'s answer applied.
+        func router(_ shell: ShellModel?, _ id: String) -> (Data) -> Void {
+            { [weak shell] bytes in
+                guard let shell else { return }
+                shell.send(screen: id, event: bytes)
+                shell.apply(LockerRouting.shared.route(screenId: id, event: bytes.kotlin, state: shell.state(id).kotlin))
+            }
         }
 
         // THE HOME RE-OPENS ON THE TAB IT WAS LEFT ON.
@@ -130,10 +130,10 @@ enum LockerScreens: AppScreens {
                     data: shell.state(home),
                     lock: shell.state(lock),
                     generator: shell.state(generator),
-                    send: sender(shell, home),
+                    send: router(shell, home),
                     sendLock: sender(shell, lock),
                     sendGenerator: sender(shell, generator),
-                    push: push(shell),
+                    onUseGenerated: { [weak shell] in shell?.path.append(addFromGeneratorRoute) },
                     onHome: { [weak shell] in shell?.path.removeAll() }
                 ))
             }
@@ -143,16 +143,15 @@ enum LockerScreens: AppScreens {
             open: { [weak shell] parameter in
                 guard let shell else { return }
                 LockerLockSeam.attached(shell)
-                let opened = (try? Centraid_Screen_V1_LockerItemEvent.Opened(serializedBytes: parameter)) ?? .init()
+                let opened = (try? Centraid_Screen_V1_LockerItemEvent(serializedBytes: parameter))?.opened ?? .init()
                 itemBridge.open(itemId: opened.itemID, parent: opened.parent)
             },
             view: { shell, _ in
                 AnyView(LockerItemView(
                     data: shell.state(item),
                     lock: shell.state(lock),
-                    send: sender(shell, item),
+                    send: router(shell, item),
                     sendLock: sender(shell, lock),
-                    push: push(shell),
                     onBack: pop(shell),
                     onDeparted: { [weak shell] in shell?.departed(item) }
                 ))

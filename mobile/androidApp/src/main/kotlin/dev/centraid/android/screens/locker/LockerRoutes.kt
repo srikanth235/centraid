@@ -45,6 +45,7 @@ import dev.centraid.shared.apps.locker.LockerHomeMachine
 import dev.centraid.shared.apps.locker.LockerImportBridge
 import dev.centraid.shared.apps.locker.LockerItemBridge
 import dev.centraid.shared.apps.locker.LockerLockBridge
+import dev.centraid.shared.apps.locker.LockerRouting
 import dev.centraid.shared.apps.locker.LockerTrashBridge
 import dev.centraid.shared.nav.AppIds
 import dev.centraid.shared.nav.Destination
@@ -276,9 +277,7 @@ public class LockerRoutes(
                         screen,
                         onEvent = { event ->
                             item.forward(event)
-                            if (event.edit != null) {
-                                push(nav, Destination.LockerEditor(itemId = destination.itemId)) { editor.openEdit(destination.itemId) }
-                            }
+                            push(nav, LockerRouting.item(event, screen))
                         },
                         onOpen = { address -> open(context, address) },
                         onBack = nav::pop,
@@ -367,18 +366,11 @@ public class LockerRoutes(
             onGenerator = { event -> generated(nav, event) },
             onEvent = { event: LockerHomeEvent ->
                 home.forward(event)
-                val here = state.chrome?.title.orEmpty()
-                when {
-                    event.add != null -> push(nav, Destination.LockerEditor()) { editor.openAdd() }
-                    event.item != null -> push(nav, Destination.LockerItem(event.item!!.item_id, parent = here))
-                    event.more != null -> when (event.more!!.key) {
-                        LockerHomeMachine.MORE_IMPORT -> push(nav, Destination.LockerImport)
-                        LockerHomeMachine.MORE_EXPORT -> push(nav, Destination.LockerExport)
-                        LockerHomeMachine.MORE_ACCESS -> push(nav, Destination.LockerAccess)
-                        LockerHomeMachine.MORE_TRASH -> push(nav, Destination.LockerTrash)
-                        LockerHomeMachine.MORE_LOCK -> lock.forward(LockerLockEvent(lock = LockerLockEvent.LockTapped()))
-                        else -> Unit
-                    }
+                // Lock is the gate's; every other intent is a push `LockerRouting` names.
+                if (event.more?.key == LockerHomeMachine.MORE_LOCK) {
+                    lock.forward(LockerLockEvent(lock = LockerLockEvent.LockTapped()))
+                } else {
+                    push(nav, LockerRouting.home(event, state))
                 }
             },
         )
@@ -387,9 +379,7 @@ public class LockerRoutes(
     /** The generator's events; "Put it on an item" opens the editor with the output, bridge to bridge. */
     private fun generated(nav: RouteNav, event: LockerGeneratorEvent) {
         generator.forward(event)
-        if (event.use != null) {
-            push(nav, Destination.LockerEditor(type = "login", fromGenerator = true)) { editor.openAddFrom(generator) }
-        }
+        push(nav, LockerRouting.generator(event))
     }
 
     /**
@@ -567,10 +557,20 @@ public class LockerRoutes(
         PushedPage(title = "", parentTitle = LockerCopy.APP_NAME, onBack = nav::pop) { LockerWall(wall, unlock, words) }
     }
 
-    /** A push, with the target bridge's open where the push is its reason to read. */
-    private fun push(nav: RouteNav, destination: Destination, open: (() -> Unit)? = null) {
-        open?.invoke()
-        nav.go(nav.stack.push(destination))
+    /**
+     * A PUSH `LockerRouting` CHOSE, with the editor's bridge opened on the push
+     * (its open is the push's reason to read): add, edit, or the generator's
+     * candidate handed over bridge to bridge. Null pushes nothing.
+     */
+    private fun push(nav: RouteNav, destination: Destination?) {
+        if (destination is Destination.LockerEditor) {
+            when {
+                destination.fromGenerator -> editor.openAddFrom(generator)
+                destination.itemId.isEmpty() -> editor.openAdd()
+                else -> editor.openEdit(destination.itemId)
+            }
+        }
+        nav.push(destination)
     }
 
     private fun answered(token: Long, outcome: LockerLockEvent.PromptAnswered.Outcome): LockerLockEvent =

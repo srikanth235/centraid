@@ -4820,6 +4820,10 @@ message WriteState {
   // reading `phase` and `failure`; it is the write law's to say, once, when it
   // settles. A shell draws it where the member is looking and decides nothing.
   string refusal = 4;
+  // THE WRITE WAS REFUSED, said once by the write law with every phase. A
+  // refusal the core gave no sentence for still is one, so `refusal` cannot
+  // say it alone; a shell reads this, never `phase`.
+  bool refused = 5;
 
   enum Phase {
     PHASE_UNSPECIFIED = 0;
@@ -4860,6 +4864,10 @@ message Autosave {
   // by the kit's law with every phase, so no shell spells them. Empty before
   // the law has written a phase.
   string label = 9;
+  // THE SAVE WAS REFUSED, set by the kit's law with every phase and `label`:
+  // the line inks `net` and an editor stops concealing on it. A shell reads
+  // this, never `phase`.
+  bool refused = 10;
 
   enum Phase {
     PHASE_UNSPECIFIED = 0;

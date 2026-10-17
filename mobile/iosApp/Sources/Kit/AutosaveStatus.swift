@@ -5,7 +5,7 @@ import SwiftUI
 /// There is no Save button, so this line is the member's only answer to "are
 /// my words safe": saved, saving, edited and not yet sent, refused (with the
 /// refusal's own sentence — the words stay in the editor), or changed
-/// elsewhere. It reads the phase and never guesses one.
+/// elsewhere. It reads the law's words and `refused`, and never guesses either.
 ///
 /// `SAVE_STATE_QUEUED` is gone with the explicit save: nothing under autosave
 /// produces a queued phase, so there is no "Waiting for your gateway" here.
@@ -22,12 +22,9 @@ struct AutosaveStatus: View {
         autosave.label
     }
 
-    private var tone: String {
-        switch autosave.phase {
-        case .refused, .conflict: return "net"
-        default: return "textFaint"
-        }
-    }
+    /// A refusal inks `net` (`Autosave.refused`, the law's say; the conflict
+    /// phase nothing reaches says nothing more).
+    private var tone: String { autosave.refused ? "net" : "textFaint" }
 
     var body: some View {
         let label = Self.label(autosave)

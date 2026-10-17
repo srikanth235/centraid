@@ -3,8 +3,10 @@ package dev.centraid.android.screens
 import androidx.compose.runtime.Composable
 import centraid.screen.v1.ChatCard
 import dev.centraid.shared.nav.Destination
+import dev.centraid.shared.nav.NavMove
 import dev.centraid.shared.nav.NavStack
 import dev.centraid.shared.nav.RowRoutes
+import dev.centraid.shared.nav.applying
 import dev.centraid.shared.shell.HomeSession
 import kotlinx.coroutines.CoroutineScope
 import kotlin.reflect.KProperty
@@ -80,6 +82,16 @@ public class RouteNav(
 
     public fun home() {
         go(NavStack())
+    }
+
+    /** A MOVE AN APP'S ROUTING CHOSE (`<App>Routing`), applied; null moves nothing. */
+    public fun apply(move: NavMove?) {
+        move?.let { go(stack.applying(it)) }
+    }
+
+    /** A push an app's routing chose; null pushes nothing. */
+    public fun push(destination: Destination?) {
+        destination?.let { go(stack.push(it)) }
     }
 
     /**

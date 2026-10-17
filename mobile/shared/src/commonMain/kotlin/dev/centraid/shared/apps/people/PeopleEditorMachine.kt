@@ -26,6 +26,7 @@ import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.ScreenMachine
 import dev.centraid.shared.screen.Step
+import dev.centraid.shared.nav.ScreenIds
 
 /**
  * THE PROFILE EDITOR (#1029 app port; #1015 D3: autosave everywhere, close =
@@ -43,7 +44,7 @@ import dev.centraid.shared.screen.Step
  * it the close control is "Done" and closing saves what is there.
  */
 public object PeopleEditorMachine : ScreenMachine<PeopleEditorState, PeopleEditorEvent> {
-    public const val SCREEN_ID: String = "people.editor"
+    public const val SCREEN_ID: String = ScreenIds.PEOPLE_EDITOR
 
     public const val ADD_COMMAND: String = "people.add_person"
     public const val EDIT_COMMAND: String = "people.edit_person"

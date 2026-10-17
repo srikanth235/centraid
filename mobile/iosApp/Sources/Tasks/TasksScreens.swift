@@ -28,27 +28,11 @@ enum TasksScreens: AppScreens {
     static let catchUp = TasksCatchUpMachine.shared.SCREEN_ID
     static let trash = TasksTrashMachine.shared.machine.screenId
 
-    /// The home as `openQuickAdd` left it: its route's `open` sends nothing,
-    /// because the bridge was already opened — and a pop back onto it must
-    /// not seed the words a second time.
-    private static let quickAddParameter = Data("quick-add".utf8)
-
-    @MainActor private static var homeBridge: TasksHomeBridge?
-
-    /// NOTES' "SEND TO TASKS": Tasks' home on the Inbox with `text` in a
-    /// focused quick add (`TasksHomeBridge.openQuickAdd`), pushed.
-    @MainActor
-    static func openQuickAdd(_ text: String, _ shell: ShellModel) {
-        homeBridge?.openQuickAdd(text: text)
-        shell.path.append(.screen(home, quickAddParameter))
-    }
-
     @MainActor
     static func register(into shell: ShellModel) {
         // The no-argument constructors mint `add_task`'s ids in Kotlin, so the
         // row the member sees is the row the vault keeps.
         let homeBridge = TasksHomeBridge()
-        Self.homeBridge = homeBridge
         let listBridge = TasksListBridge()
         let projectBridge = TasksProjectBridge()
         let detailBridge = TasksDetailBridge()
@@ -90,12 +74,18 @@ enum TasksScreens: AppScreens {
         ))
         shell.register(.of(trash, TasksTrashBridge()))
 
-        // EVERY OPEN IS THE ROUTE'S OWN `Opened`.
+        // EVERY OPEN IS THE ROUTE'S OWN `Opened` — the home with words for its
+        // quick add once per push (`present`), so a pop back onto it does not
+        // seed them a second time.
+        let memory = OpenMemory()
         for identifier in [home, list, project, detail, catchUp, trash] {
             shell.route(
                 identifier,
                 open: { [weak shell] parameter in
-                    if identifier == home, parameter == quickAddParameter { return }
+                    if let once = OncePerPush(decoding: parameter) {
+                        if memory.firstOpen(identifier, once.nonce) { shell?.send(screen: identifier, event: once.opened) }
+                        return
+                    }
                     shell?.send(screen: identifier, event: parameter)
                 },
                 view: { shell, parameter in view(identifier, shell, parameter) }
@@ -162,6 +152,18 @@ enum TasksScreens: AppScreens {
     }
 
     static func tileRoute(_ tile: Centraid_Screen_V1_HomeTile) -> ShellModel.Route? { .home(of: appID) }
+
+    /// NOTES' "SEND TO TASKS" lands here: the home on the Inbox with words in a
+    /// focused quick add (`TasksHomeEvent.Opened.quick_add_title`), opened once
+    /// per push. Every other screen is pushed on its event as it stands.
+    static func present(_ screen: String, _ opened: Data) -> ShellModel.Route {
+        if screen == home,
+           let event = try? Centraid_Screen_V1_TasksHomeEvent(serializedBytes: opened),
+           !event.opened.quickAddTitle.isEmpty {
+            return .screen(home, OncePerPush(opened: opened).encoded)
+        }
+        return .screen(screen, opened)
+    }
 }
 
 /// One Tasks event, encoded — the bytes every bridge takes.

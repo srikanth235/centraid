@@ -23,6 +23,7 @@ import dev.centraid.design.copy.LockerCopy
 import dev.centraid.shared.kit.ContentLens
 import dev.centraid.shared.kit.ReadContent
 import dev.centraid.shared.screen.Step
+import dev.centraid.shared.nav.ScreenIds
 
 /**
  * LOCKER'S HOME (#1047): Items · Review · Generate, and More as a sheet. One
@@ -33,7 +34,7 @@ import dev.centraid.shared.screen.Step
  */
 public object LockerHomeMachine :
     LockerQueryMachine<LockerHomeState, LockerHomeEvent, LockerHomeData>("locker.home", LOCKER_TABLES) {
-    public const val SCREEN_ID: String = "locker.home"
+    public const val SCREEN_ID: String = ScreenIds.LOCKER_HOME
 
     /**
      * More's row keys. `facts` is the machine's (a sheet); the rest are the
@@ -370,7 +371,7 @@ public val LOCKER_TABLES: Set<String> = setOf(
 
 /** What home asks: the surface on screen — and nothing while locked (`LockerQueries`). */
 public object LockerHomeReads : LockerQueries<LockerHomeState, LockerHomeEvent>(
-    screenId = "locker.home",
+    screenId = ScreenIds.LOCKER_HOME,
     tables = LOCKER_TABLES,
     ask = { held, now ->
         val screen = held.screen

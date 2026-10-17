@@ -204,13 +204,16 @@ public object AutosaveLaw {
     }
 
     /**
-     * The autosave as the lens holds it, with its words ([Autosave.label]) for
-     * its phase. A subject the vault does not hold yet ([AutosaveLens.stored])
+     * The autosave as the lens holds it, with its words ([Autosave.label]) and
+     * [Autosave.refused] for its phase. A subject the vault does not hold yet ([AutosaveLens.stored])
      * is not "Saved" while it rests: nothing of it is anywhere (#1047 walk).
      */
     private fun <S, D> put(l: AutosaveLens<S, D>, s: S, a: Autosave): S {
         val resting = a.phase == Autosave.Phase.PHASE_CLEAN && !l.stored(s)
-        return l.withAutosave(s, a.copy(label = if (resting) "" else KitWords.autosave(a)))
+        return l.withAutosave(
+            s,
+            a.copy(label = if (resting) "" else KitWords.autosave(a), refused = a.phase == Autosave.Phase.PHASE_REFUSED),
+        )
     }
 
     /** Are there words the vault does not have? */

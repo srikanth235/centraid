@@ -36,6 +36,7 @@ import dev.centraid.shared.screen.ScreenMachine
 import dev.centraid.shared.screen.Step
 import dev.centraid.shared.sync.ScreenQueries
 import dev.centraid.shared.sync.ScreenWrites
+import dev.centraid.shared.nav.ScreenIds
 
 /**
  * THE JOURNAL (#1029 port): People-journal entries grouped by the LOCAL day
@@ -51,7 +52,7 @@ import dev.centraid.shared.sync.ScreenWrites
  * is not filed under tomorrow.
  */
 public object NotesJournalMachine : ScreenMachine<NotesJournalState, NotesJournalEvent> {
-    public const val SCREEN_ID: String = "notes.journal"
+    public const val SCREEN_ID: String = ScreenIds.NOTES_JOURNAL
 
     /** The note, and the tag/concept pair that marks one a journal entry. */
     public val TABLES: Set<String> = setOf("knowledge_note", "core_tag", "core_concept")

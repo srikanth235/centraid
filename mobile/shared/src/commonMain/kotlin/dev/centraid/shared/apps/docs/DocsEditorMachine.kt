@@ -25,6 +25,7 @@ import dev.centraid.shared.screen.ScreenMachine
 import dev.centraid.shared.screen.Step
 import dev.centraid.shared.sync.ScreenQueries
 import dev.centraid.shared.sync.ScreenWrites
+import dev.centraid.shared.nav.ScreenIds
 
 /**
  * A TEXT DOCUMENT'S EDITOR (#1015 D3: autosave everywhere, close = done; D5:
@@ -41,7 +42,7 @@ import dev.centraid.shared.sync.ScreenWrites
  * else arrives as a refusal ([DocsFold.editor]) and the editor says why.
  */
 public object DocsEditorMachine : ScreenMachine<DocsEditorState, DocsEditorEvent> {
-    public const val SCREEN_ID: String = "docs.editor"
+    public const val SCREEN_ID: String = ScreenIds.DOCS_EDITOR
 
     /**
      * What `docs.document` reads. Only `core_document`'s own rows are this
