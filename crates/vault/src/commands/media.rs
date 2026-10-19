@@ -785,6 +785,47 @@ fn adopt_asset_for_content(
     Ok(Some(asset_id))
 }
 
+/// What an edit takes from the asset it was made from (R-1029-PH-5, A20).
+#[derive(Default)]
+struct Inherited {
+    title: Option<String>,
+    captured_at: Option<String>,
+    tz_offset_min: Option<i64>,
+    place_id: Option<String>,
+}
+
+/// **AN EDIT KEEPS THE ORIGINAL'S DATE, PLACE AND CAPTION**, whoever saves it.
+///
+/// The in-app editor spells these out because it has them in hand; an edit
+/// made in the phone's own Photos app (A20) arrives from the walker, which
+/// holds only the library's view of the photograph and not the member's
+/// caption or the place they filed it under. Only a field the caller left out
+/// is filled, so the editor's explicit values are what they were. Nothing is
+/// inherited when no source is named.
+fn inherited_from_source(ctx: &CommandCtx<'_, '_>) -> Result<Inherited> {
+    let Some(source) = ctx.optional_str("source_asset_id") else {
+        return Ok(Inherited::default());
+    };
+    let found = ctx.connection().query_row(
+        "SELECT title, captured_at, tz_offset_min, place_id FROM media_asset WHERE asset_id = ?1",
+        [source],
+        |row| {
+            Ok(Inherited {
+                title: row.get(0)?,
+                captured_at: row.get(1)?,
+                tz_offset_min: row.get(2)?,
+                place_id: row.get(3)?,
+            })
+        },
+    );
+    match found {
+        Ok(found) => Ok(found),
+        // `source_asset_exists` has already named a missing source.
+        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(Inherited::default()),
+        Err(error) => Err(error.into()),
+    }
+}
+
 /// EXIF as this command stores it: everything the staging band read, minus
 /// the extracted text.
 ///
@@ -842,15 +883,17 @@ fn add_asset_handler(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     }
 
     let asset_id = ctx.next_id();
+    let source = inherited_from_source(ctx)?;
     // The caller's pair wins over the staging band's, like every other field on
     // this command. Staged GPS only rides here when the owner kept it — it has
-    // already passed the location policy at staging time.
+    // already passed the location policy at staging time. A pair neither of
+    // them gave falls to the source's place, which is a row that already exists.
     let place_id = match (
         number_of(ctx, &meta, "latitude"),
         number_of(ctx, &meta, "longitude"),
     ) {
         (Some(lat), Some(lng)) => Some(find_or_create_place(ctx, lat, lng)?),
-        _ => None,
+        _ => source.place_id.clone(),
     };
     let kind = ctx.optional_str("kind").map_or_else(
         || asset_kind_for(&minted.media_type).to_owned(),
@@ -866,9 +909,22 @@ fn add_asset_handler(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
             asset_id,
             content_id,
             kind,
-            ctx.optional_str("title"),
-            text_of(ctx, &meta, "captured_at"),
-            number_of(ctx, &meta, "tz_offset_min").map(|value| value as i64),
+            ctx.optional_str("title")
+                .map(str::to_owned)
+                .or(source.title),
+            // CALLER, THEN THE SOURCE, THEN THE BYTES: an edit is the same
+            // moment seen differently (R-1029-PH-5), so a date the member set
+            // on the original outranks the one the edit's own EXIF carries.
+            ctx.optional_str("captured_at")
+                .map(str::to_owned)
+                .or(source.captured_at)
+                .or_else(|| text_of(ctx, &meta, "captured_at")),
+            ctx.input
+                .get("tz_offset_min")
+                .and_then(serde_json::Value::as_f64)
+                .map(|value| value as i64)
+                .or(source.tz_offset_min)
+                .or_else(|| number_of(ctx, &meta, "tz_offset_min").map(|value| value as i64)),
             capture_group_id,
             // EDIT LINEAGE (#711) has deliberately no fallback: only the caller
             // knows it, because nothing in the bytes says "I was cropped out of
