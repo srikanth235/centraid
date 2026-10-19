@@ -654,7 +654,7 @@ public class PhotoLightboxSideRead internal constructor(
                 } else {
                     PageQuery(
                         name = "photos.lightbox.live",
-                        select = listOf("asset_id", "content_id", "kind"),
+                        select = listOf("asset_id", "content_id", "kind", "created_at"),
                         from = table,
                         where_ = "capture_group_id = (SELECT capture_group_id FROM media_asset " +
                             "WHERE asset_id = ?) AND deleted_at IS NULL",
@@ -696,11 +696,11 @@ public class PhotoLightboxSideRead internal constructor(
 
         // A LIVE PHOTO IS ONE STILL AND ONE MOVIE in a group. Anything else —
         // a burst of stills, a group of one — is not one, and answers empty.
+        // An EDITED Live Photo has two stills and may have two movies, one per
+        // version of the capture (A20): the newest of each is the one drawn.
         PhotoLightboxMachine.Side.LIVE -> {
-            val stills = rows.filter { it.text(2) == "photo" }
-            val movies = rows.filter { it.text(2) == "video" }
-            val still = stills.singleOrNull()
-            val movie = movies.singleOrNull()
+            val still = rows.filter { it.text(2) == "photo" }.maxByOrNull { it.text(3) }
+            val movie = rows.filter { it.text(2) == "video" }.maxByOrNull { it.text(3) }
             PhotoLightboxEvent(
                 live = PhotoLightboxEvent.LiveArrived(
                     asset_id = if (still != null && movie != null) still.text(0) else "",

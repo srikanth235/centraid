@@ -137,8 +137,8 @@ public object PhotosReads :
         "duration_s",
     )
 
-    /** The live library: not trashed, not put away. The app's own predicate. */
-    private const val LIVE: String = "deleted_at IS NULL AND archived_at IS NULL"
+    /** The live library: not trashed, not put away, not folded under an edit ([PhotoFold]). The app's own predicate. */
+    private const val LIVE: String = PhotoFold.LIVE
 
     /**
      * A STAR IS A TAG, NOT A COLUMN (#916). The favourites shelf's predicate,

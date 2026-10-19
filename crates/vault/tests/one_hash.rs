@@ -176,6 +176,10 @@ const HASH_COLUMN_WRITERS: &[(&str, &str)] = &[
         "`content_digest` over the bytes the test minted",
     ),
     (
+        "vault/tests/page_fold.rs",
+        "`content_digest` over each asset id's bytes",
+    ),
+    (
         "vault/tests/originals.rs",
         "`BlobStore::put`'s return for an original held on this device, and \
          `content_digest` over the same bytes for one that is not",

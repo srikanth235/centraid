@@ -749,9 +749,14 @@ public class IosMediaLibrary : MediaLibrary {
      * (`t|<token>|<offered>`). A keyset alone missed every asset that arrives
      * with an old capture date — an AirDropped photograph from last year sorts
      * behind the cursor and was never offered — and the token is what Photos
-     * keeps for exactly this question. An edit after the walk is not
-     * re-offered: the asset is backed up as it was, and marked edited only if
-     * it already was. A token Photos
+     * keeps for exactly this question.
+     *
+     * **The token also reports assets UPDATED since** (#1127, A20): one the
+     * member edited in Photos after it was backed up comes back as an edit
+     * ([describe] gives it its camera original and its render). An asset only
+     * updated is offered when `hasAdjustments` says it is edited
+     * ([LibraryRefs.worthOffering]); a favourite or an album change on an
+     * unedited asset is not an edit and is not offered. A token Photos
      * will no longer answer for (it expired while the app was not opened)
      * starts the first walk again, and `already_held` makes that walk cheap to
      * the gateway.
@@ -771,7 +776,7 @@ public class IosMediaLibrary : MediaLibrary {
      * ## One asset, its resources
      *
      * A Live Photo is ONE asset with two resources: the still and its paired
-     * movie, whose ref carries the [PAIRED_VIDEO] suffix. Burst members
+     * movie, whose ref carries the [LibraryRefs.PAIRED_VIDEO] suffix. Burst members
      * and RAW get no grouping: grouping on `burstIdentifier` would invent a
      * relationship the owner never made (`NATIVE_V0.md:11-19`).
      */
@@ -839,29 +844,34 @@ public class IosMediaLibrary : MediaLibrary {
         )
     }
 
-    /** Every walk after the first: the assets added since [token], [offered] of them already offered. */
+    /** Every walk after the first: the assets added or edited since [token], [offered] of them already offered. */
     private suspend fun changedPage(token: String, offered: Int, limit: Int): MediaLibrary.Page? {
-        val (added, newest) = ChangeTokens.insertedSince(token) ?: return null
-        val window = added.drop(offered).take(limit)
+        val changes = ChangeTokens.changedSince(token) ?: return null
+        val window = changes.identifiers.drop(offered).take(limit)
         val found = PHAsset.fetchAssetsWithLocalIdentifiers(window, null)
         val byId = (0 until found.count.toInt())
             .mapNotNull { found.objectAtIndex(it.convert()) as? PHAsset }
             .associateBy { it.localIdentifier }
         val assets = window.mapIndexedNotNull { at, id ->
-            // ADDED, THEN DELETED inside the window: nothing to offer.
+            // ADDED OR EDITED, THEN DELETED inside the window: nothing to offer.
+            // A deletion is never mirrored (R-1127-4): the vault is the backup.
             val asset = byId[id] ?: return@mapIndexedNotNull null
+            // A METADATA-ONLY UPDATE IS NOT AN EDIT. The cursor still moves past it.
+            if (!LibraryRefs.worthOffering(id in changes.inserted, asset.hasAdjustments)) {
+                return@mapIndexedNotNull null
+            }
             describe(
                 asset,
                 Cursor(epochMillisOf(asset), id),
                 after = "$TOKEN_WALK$FIELD$token$FIELD${offered + at + 1}",
             )
         }
-        val exhausted = offered + window.size >= added.size
+        val exhausted = offered + window.size >= changes.identifiers.size
         return MediaLibrary.Page(
             assets = assets,
             // CAUGHT UP: the next walk is from the newest change seen.
             nextCursor = if (exhausted) {
-                "$TOKEN_WALK$FIELD${newest ?: token}${FIELD}0"
+                "$TOKEN_WALK$FIELD${changes.newest ?: token}${FIELD}0"
             } else {
                 "$TOKEN_WALK$FIELD$token$FIELD${offered + window.size}"
             },
@@ -875,23 +885,30 @@ public class IosMediaLibrary : MediaLibrary {
     /**
      * One resource's bytes, streamed from Photos (#1080 ruling 6; see
      * [streamResource]). [ref] is an asset's local identifier for its ORIGINAL,
-     * or with the [PAIRED_VIDEO] suffix for a Live Photo's movie.
+     * or with a [LibraryRefs] suffix: a Live Photo's movie, the camera's file under an edit, or an edit's render read at a version.
      */
     override suspend fun open(ref: String, allowNetwork: Boolean): MediaLibrary.Opened {
-        val paired = ref.endsWith(PAIRED_VIDEO)
-        val identifier = if (paired) ref.removeSuffix(PAIRED_VIDEO) else ref
+        val paired = LibraryRefs.isPairedVideo(ref)
+        val identifier = LibraryRefs.identifierOf(ref)
         val asset = PHAsset.fetchAssetsWithLocalIdentifiers(listOf(identifier), null)
             .firstObject as? PHAsset ?: return MediaLibrary.Opened.Gone
         val resources = PHAssetResource.assetResourcesForAsset(asset)
             .filterIsInstance<PHAssetResource>()
-        val resource = (if (paired) pairedVideoOf(resources) else originalOf(resources))
-            ?: return MediaLibrary.Opened.Gone
+        // THE REF'S VERSION IS EVIDENCE, NOT A REQUEST (see `Resource.Role.ORIGINAL`):
+        // a rendition ref reads the rendition as it is now. If the member
+        // edited again since, the core's hash check keeps those bytes out of
+        // the old name and the walk's next offer carries the new version.
+        val resource = when {
+            paired -> pairedVideoOf(resources)
+            LibraryRefs.isCamera(ref) -> cameraOf(resources)
+            else -> originalOf(resources)
+        } ?: return MediaLibrary.Opened.Gone
         return streamResource(resource, mimeOf(resource.uniformTypeIdentifier), allowNetwork)
     }
 
     /** A derivative of [ref]'s asset, drawn by Photos from the current edit. See [renderAsset]. */
     override suspend fun render(ref: String, tier: MediaLibrary.Tier): ByteArray? {
-        val asset = PHAsset.fetchAssetsWithLocalIdentifiers(listOf(ref.removeSuffix(PAIRED_VIDEO)), null)
+        val asset = PHAsset.fetchAssetsWithLocalIdentifiers(listOf(LibraryRefs.identifierOf(ref)), null)
             .firstObject as? PHAsset ?: return null
         return renderAsset(asset, tier.longEdge)
     }
@@ -946,8 +963,16 @@ public class IosMediaLibrary : MediaLibrary {
     /** One `PHAsset` as this interface describes it, with its resources. See [page]. */
     private suspend fun describe(asset: PHAsset, cursor: Cursor, after: String): MediaLibrary.Asset {
         val live = (asset.mediaSubtypes and PHAssetMediaSubtypePhotoLive) != 0uL
+        val identifier = asset.localIdentifier
+        val resources = PHAssetResource.assetResourcesForAsset(asset).filterIsInstance<PHAssetResource>()
+        // AN EDIT IS A RENDER BESIDE WHAT THE CAMERA WROTE (A20). `hasAdjustments`
+        // alone is not enough to say the camera's bytes are a second file: an
+        // adjustment Photos never rendered leaves the camera's file as the
+        // only one, and it is then both.
+        val edited = asset.hasAdjustments
+        val camera = edited && resources.any { isRender(it) } && cameraOf(resources) != null
         return MediaLibrary.Asset(
-            localId = asset.localIdentifier,
+            localId = identifier,
             bytes = 0L,
             capturedAtIso = isoOf(cursor.epochMillis),
             // THE SHUTTER'S ZONE, from the file's own EXIF (D-1025-S7-77): `PHAsset`
@@ -963,20 +988,42 @@ public class IosMediaLibrary : MediaLibrary {
             // computing one means decoding every original on the phone to
             // produce a value that never merges anything (D-1025-S7-50).
             perceptualHash = null,
-            // ONLY A LIVE PHOTO. Burst members, motion photos and RAW pairs get
-            // null, which is the interface's own rule.
-            captureGroupId = if (live) asset.localIdentifier else null,
+            // A LIVE PHOTO, OR AN EDIT: one capture. Burst members, motion
+            // photos and RAW pairs get null, which is the interface's own rule.
+            // The grid draws the newest photograph of a group, which is how a
+            // camera original stays under its edit (`PhotoFold`).
+            captureGroupId = if (live || edited) identifier else null,
             resources = buildList {
-                add(MediaLibrary.Resource(MediaLibrary.Resource.Role.ORIGINAL, asset.localIdentifier))
+                if (camera) add(MediaLibrary.Resource(MediaLibrary.Resource.Role.CAMERA_ORIGINAL, LibraryRefs.camera(identifier)))
+                // THE RENDITION'S REF NAMES THE VERSION IT IS READ AT (A20(3)).
+                add(
+                    MediaLibrary.Resource(
+                        MediaLibrary.Resource.Role.ORIGINAL,
+                        if (edited) LibraryRefs.rendition(identifier, modifiedMillisOf(asset)) else identifier,
+                    ),
+                )
                 if (live) {
-                    add(MediaLibrary.Resource(MediaLibrary.Resource.Role.PAIRED_VIDEO, asset.localIdentifier + PAIRED_VIDEO))
+                    add(MediaLibrary.Resource(MediaLibrary.Resource.Role.PAIRED_VIDEO, LibraryRefs.pairedVideo(identifier)))
                 }
             },
             after = after,
-            // THE NEXT EDIT REPLACES AN EDITED ASSET'S BYTES (A20).
-            edited = asset.hasAdjustments,
+            edited = edited,
         )
     }
+
+    /** `modificationDate` as epoch milliseconds, the way [epochMillisOf] reads a date; nil reads as the floor. */
+    private fun modifiedMillisOf(asset: PHAsset): Long {
+        val date = asset.modificationDate ?: return 0L
+        return (date.timeIntervalSince1970 * 1_000.0).toLong()
+    }
+
+    /** What an edit produces: the render, not what the camera wrote. */
+    private fun isRender(resource: PHAssetResource): Boolean =
+        resource.type == PHAssetResourceTypeFullSizePhoto || resource.type == PHAssetResourceTypeFullSizeVideo
+
+    /** What the camera wrote, which Photos keeps beside an edit's render (A20(1)). */
+    private fun cameraOf(resources: List<PHAssetResource>): PHAssetResource? =
+        resources.firstOrNull { it.type == PHAssetResourceTypePhoto || it.type == PHAssetResourceTypeVideo }
 
     /**
      * THE CURRENT RENDITION (#1080 A20, the ruling for v1).
@@ -985,10 +1032,8 @@ public class IosMediaLibrary : MediaLibrary {
      * preferred when present: on an edited asset the member's photograph is
      * the rendered one. Otherwise `PHAssetResourceTypePhoto` and `…Video` —
      * what the camera wrote, the RAW itself for a ProRAW capture. An edited
-     * asset is marked ([MediaLibrary.Asset.edited], `StageBegin.os_edited`),
-     * because the next edit replaces these bytes: the core never offers it for
-     * deletion, so nothing is lost. Backing up the camera original and the
-     * edit's adjustment data beside it is an owner question.
+     * asset's ref names the `modificationDate` it was read at, and the
+     * camera's own file is staged beside it as its own resource ([cameraOf]).
      */
     private fun originalOf(resources: List<PHAssetResource>): PHAssetResource? =
         resources.firstOrNull {
@@ -1073,17 +1118,8 @@ public class IosMediaLibrary : MediaLibrary {
         /** A cursor of the first walk, carrying the token it started under. */
         const val KEYSET_WALK = "k"
 
-        /** A cursor of every walk after: the token, and how many of its additions were offered. */
+        /** A cursor of every walk after: the token, and how many of its changes were offered. */
         const val TOKEN_WALK = "t"
-
-        /**
-         * The suffix that names a Live Photo's MOVIE half.
-         *
-         * `#` cannot occur in a `PHAsset` local identifier, which is
-         * `<UUID>/L0/001`, so the suffix cannot collide with an identifier
-         * Photos minted.
-         */
-        const val PAIRED_VIDEO = "#pairedVideo"
     }
 }
 
