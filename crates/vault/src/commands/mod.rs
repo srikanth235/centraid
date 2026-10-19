@@ -59,6 +59,7 @@ pub mod locker;
 pub mod media;
 pub mod money;
 pub mod people;
+pub mod phone;
 pub mod schedule;
 pub mod social;
 mod wikilinks;
@@ -306,6 +307,9 @@ impl Registry {
             registry.register(definition)?;
         }
         for definition in people::definitions() {
+            registry.register(definition)?;
+        }
+        for definition in phone::definitions() {
             registry.register(definition)?;
         }
         for definition in schedule::definitions() {
