@@ -82,7 +82,7 @@ pub const MAX_CONTENT_URLS: usize = 100;
 /// a table in `from`, and a door that reads any table by name is wider than any
 /// screen needs: it would page the receipts, the provenance log, the Locker's
 /// fields and passkeys, the money ledger and every revision snapshot for a
-/// shell that asked. So it reads these twenty and refuses the rest as an
+/// shell that asked. So it reads these twenty-one and refuses the rest as an
 /// invalid request, before the vault is asked.
 ///
 /// The set is every `from` a shell sends today, read off `mobile/shared`'s
@@ -96,6 +96,7 @@ pub const MAX_CONTENT_URLS: usize = 100;
 /// | Photos (grid, shelves, lightbox, collections, search, picker, places, memories, duplicates, album choice, editor) | `media_asset`, `media_asset_phash`, `media_memory`, `media_memory_member`, `core_collection`, `core_collection_entry`, `core_concept`, `core_concept_scheme`, `core_tag`, `core_place`, `core_content_item` |
 /// | Notes' editor | `knowledge_note` |
 /// | Calendar import | `schedule_calendar` |
+/// | Phone sync (People, Agenda and Docs follow the phone, #1127) | `phone_link` |
 /// | `with_minor_units` | `core_account` |
 ///
 /// `core_account` has no shell caller: it is the one table whose `currency`
@@ -114,11 +115,11 @@ pub const MAX_CONTENT_URLS: usize = 100;
 ///
 /// The `where` is held to the same list: it is predicate text and could name
 /// a subquery on any table, so the vault prepares it under an authorizer that
-/// refuses a read outside these twenty
+/// refuses a read outside these twenty-one
 /// ([`Vault::keyset_page_reading_only`]). The vault's test
 /// `a_predicate_that_reads_a_table_outside_the_list_is_refused` is where that
 /// is read: the predicates it tries are SQL, which lives in that crate.
-pub const PAGE_TABLES: [&str; 20] = [
+pub const PAGE_TABLES: [&str; 21] = [
     "core_account",
     "core_collection",
     "core_collection_entry",
@@ -137,6 +138,7 @@ pub const PAGE_TABLES: [&str; 20] = [
     "media_memory",
     "media_memory_member",
     "people_profile",
+    "phone_link",
     "schedule_calendar",
     "schedule_task",
 ];
@@ -803,7 +805,7 @@ mod tests {
     /// Every table a screen pages, with a column that can key its cursor. Spelled
     /// here, not derived from the allowlist, so the allowlist cannot grow without
     /// this list (and the paragraph above it) being read.
-    const PAGED_BY_A_SCREEN: [(&str, &str); 20] = [
+    const PAGED_BY_A_SCREEN: [(&str, &str); 21] = [
         ("core_account", "account_id"),
         ("core_collection", "collection_id"),
         ("core_collection_entry", "entry_id"),
@@ -822,6 +824,7 @@ mod tests {
         ("media_memory", "memory_id"),
         ("media_memory_member", "memory_id"),
         ("people_profile", "profile_id"),
+        ("phone_link", "link_id"),
         ("schedule_calendar", "calendar_id"),
         ("schedule_task", "task_id"),
     ];
@@ -882,6 +885,115 @@ mod tests {
                 panic!("`{table}` is paged by a screen and was refused: {error}")
             });
         }
+        let _ = std::fs::remove_dir_all(&scratch);
+    }
+
+    /// THE PHONE LINK PAGES THROUGH THE DOOR (#1127, lane A): the sync engine reads every link of
+    /// a source, in the phone's own id order, with a keyset cursor, and the predicate it writes
+    /// (`source = ?`) reads only `phone_link`.
+    #[test]
+    fn the_phone_link_pages_by_source_through_the_door() {
+        let scratch = centraid_ontology::golden::scratch_dir();
+        std::fs::create_dir_all(&scratch).expect("made");
+        let vault = Vault::create(scratch.join("v.db")).expect("a vault");
+        vault.found("T", "O").expect("founded");
+        let registry = Registry::with_system_commands().expect("the registry");
+        let owner = centraid_vault::Principal::owner("test-device");
+        let run = |name: &str, input: serde_json::Value| {
+            let outcome = vault
+                .execute(&registry, &owner, &Command::new(name, input))
+                .expect("the command answers");
+            assert_eq!(
+                outcome.status,
+                CommandStatus::Executed,
+                "{name}: {:?}",
+                outcome.reason
+            );
+            outcome.output
+        };
+        for (phone_id, name) in [("c3", "Cy"), ("c1", "Ada"), ("c2", "Bo")] {
+            let person = run(
+                "people.add_person",
+                serde_json::json!({ "display_name": name, "cadence_days": 30 }),
+            );
+            run(
+                "phone.link",
+                serde_json::json!({
+                    "source": "contacts", "phone_id": phone_id,
+                    "entity_id": person["party_id"], "fingerprint": format!("fp-{phone_id}"),
+                }),
+            );
+        }
+
+        let text = |value: &str| wire::Value {
+            kind: Some(wire::value::Kind::Text(value.to_owned())),
+        };
+        let mut asked = query(
+            &[
+                "link_id",
+                "phone_id",
+                "entity_id",
+                "fingerprint",
+                "detached_at",
+            ],
+            "phone_id",
+            "link_id",
+        );
+        asked.from = "phone_link".to_owned();
+        asked.r#where = Some("source = ?".to_owned());
+        asked.bind = vec![text("contacts")];
+        let phone_ids = |page: &wire::Page| -> Vec<String> {
+            page.rows
+                .iter()
+                .map(|row| match &row.values[1].kind {
+                    Some(wire::value::Kind::Text(id)) => id.clone(),
+                    other => panic!("a phone id is text, got {other:?}"),
+                })
+                .collect()
+        };
+
+        let first = page(
+            &vault,
+            &wire::PageRequest {
+                query: Some(asked.clone()),
+                limit: 2,
+                after: None,
+            },
+        )
+        .expect("the links page");
+        assert_eq!(phone_ids(&first), ["c1", "c2"], "ordered by the phone's id");
+        assert!(
+            matches!(
+                first.rows[0].values[4].kind,
+                Some(wire::value::Kind::Null(_))
+            ),
+            "a followed link has no detached_at"
+        );
+        let second = page(
+            &vault,
+            &wire::PageRequest {
+                query: Some(asked.clone()),
+                limit: 2,
+                after: first.next.clone(),
+            },
+        )
+        .expect("the next page");
+        assert_eq!(phone_ids(&second), ["c3"]);
+        assert!(second.next.is_none(), "the rows ended");
+
+        // Another source's links are not in this page. (A predicate that reaches a table off the
+        // list is refused by the vault's authorizer; its test is in `crates/vault/src/page.rs`.)
+        asked.bind = vec![text("calendar")];
+        let none = page(
+            &vault,
+            &wire::PageRequest {
+                query: Some(asked.clone()),
+                limit: 10,
+                after: None,
+            },
+        )
+        .expect("a source with no links pages empty");
+        assert!(none.rows.is_empty());
         let _ = std::fs::remove_dir_all(&scratch);
     }
 
