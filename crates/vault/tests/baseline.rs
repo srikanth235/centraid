@@ -22,7 +22,7 @@
 //!
 //! - what v1 ADDED — the revision graph's four guards (#1020, D-1020-N2), the
 //!   collection kind's guard, the Locker's one-generation index, the chat, the
-//!   widened search indexes and their vocabularies, and Money — named in
+//!   widened search indexes and their vocabularies, Money, and rung two's phone link — named in
 //!   `ADDED_OBJECTS`;
 //! - what v1 DROPPED — the planes #1029 struck, Tally (#1099), the Locker's
 //!   `retired_at` index and `notifications_notice`, and `sqlite_sequence`, which
@@ -97,13 +97,15 @@ fn undo_renames(text: &str) -> String {
 /// title and what the member said (R-1097-22); and Money (#1099): six `money_*`
 /// tables with their touch and membership triggers and indexes, the unique index
 /// that lands a statement line once per account, and the three triggers that hold
-/// a Money account to one currency and an imported row to never being edited.
+/// a Money account to one currency and an imported row to never being edited; and rung two
+/// (#1127): `phone_link` and its four triggers (the kind a source implies, a detach that is
+/// one way, the touch).
 ///
 /// The corpus is a v0 file and knows nothing of v1's additions, so a founded v1
 /// file legitimately carries exactly these and nothing else. Named here rather
 /// than filtered by prefix: a guard that stopped being created, or an object
 /// arriving from somewhere, both have to show up as a failure.
-const ADDED_OBJECTS: [&str; 89] = [
+const ADDED_OBJECTS: [&str; 94] = [
     "chat_message",
     "chat_message_attachment",
     "chat_message_card",
@@ -193,6 +195,11 @@ const ADDED_OBJECTS: [&str; 89] = [
     "money_target_touch_updated_at",
     "money_transaction",
     "money_transaction_touch_updated_at",
+    "phone_link",
+    "phone_link_detach_is_one_way",
+    "phone_link_kind_matches_source",
+    "phone_link_kind_matches_source_update",
+    "phone_link_touch_updated_at",
 ];
 
 /// WHAT V1 DROPPED FROM V0'S SCHEMA (#1029): the storage of every plane the
@@ -833,8 +840,9 @@ fn the_two_pragmas_are_written_and_the_file_is_in_wal() {
     assert_eq!(user_version, head_version());
     // Spelled out rather than left as `head_version()` alone: a rung silently
     // vanishing would still satisfy the line above. The ladder is the baseline
-    // (squashed on 2026-10-15, Q-1029-1); the next schema change makes this 2.
-    assert_eq!(user_version, 1);
+    // (squashed on 2026-10-15, Q-1029-1) and rung two, the phone link (#1127); the
+    // next schema change makes this 3.
+    assert_eq!(user_version, 2);
     assert_eq!(journal, "wal");
 }
 
