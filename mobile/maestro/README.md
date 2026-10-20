@@ -1,10 +1,10 @@
 # `mobile/maestro` — the device flows for the native shells
 
-One flow, `flows/home.yaml`, and the protocol for the backup measurement ([#1080](https://github.com/srikanth235/centraid/issues/1080)), `backup-measurement.md`: the first backup of a 2,000-asset library in one evening, a night's photos confirmed by morning with the app closed on iOS, and a fresh phone's full grid within minutes of the words. It supersedes the iOS background-transfer experiment of [#1020](https://github.com/srikanth235/centraid/issues/1020), whose question — which transport — #1080 ruling 2 answered.
+The flows under `flows/` — Home, search, onboarding and Agenda's three (`agenda-day.yaml`, `agenda-todo.yaml` and `agenda-task-from-search.yaml`, which cover Day, To-do and a task opened from search: [#1128](https://github.com/srikanth235/centraid/issues/1128)) — and the protocol for the backup measurement ([#1080](https://github.com/srikanth235/centraid/issues/1080)), `backup-measurement.md`: the first backup of a 2,000-asset library in one evening, a night's photos confirmed by morning with the app closed on iOS, and a fresh phone's full grid within minutes of the words. It supersedes the iOS background-transfer experiment of [#1020](https://github.com/srikanth235/centraid/issues/1020), whose question — which transport — #1080 ruling 2 answered.
 
 ## The flow has not run under Maestro
 
-There is no Android SDK, no Xcode, no emulator and no device on the machines that run `cargo xtask gate`. `flows/home.yaml` is an **owner hand-off**: the flow is written, the CLI version is pinned, and the run is the owner's. `cargo xtask gate --profile nightly` reports its device lanes as a loud `Skipped` with the self-hosted-runner contract rather than as a pass (the `device-lanes` step), and that is the only honest status this directory can carry.
+There is no Android SDK, no Xcode, no emulator and no device on the machines that run `cargo xtask gate`. The flows are an **owner hand-off** (`flows/home.yaml` first among them): the flow is written, the CLI version is pinned, and the run is the owner's. `cargo xtask gate --profile nightly` reports its device lanes as a loud `Skipped` with the self-hosted-runner contract rather than as a pass (the `device-lanes` step), and that is the only honest status this directory can carry.
 
 ## The CLI is pinned
 

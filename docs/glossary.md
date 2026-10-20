@@ -36,7 +36,7 @@ Schema names follow the same one-axis rule: **a table never repeats its schema n
 | Term | Meaning | Code |
 | --- | --- | --- |
 | **superapp** | What Centraid is: a personal, local-first superapp — one shell wrapping many first-party apps whose content characters could not be more different. The container for every noun below. Not a builder, platform, or host for anyone else's apps ([#799](https://github.com/srikanth235/centraid/issues/799); [decisions.md](decisions.md#product-positioning)). | the shell in `mobile/`; the apps in `crates/apps/` |
-| **system app** | One of the bundled first-party apps the superapp ships (Tasks, Agenda, People, Notes, Docs, Locker, Photos). Every app is a system app — there is no other kind. | `crates/apps/<app>/` |
+| **system app** | One of the bundled first-party apps the superapp ships (Agenda, People, Notes, Docs, Locker, Photos, Money; `tasks` is a vault domain Agenda draws, not a ninth — [R-1128-7](decisions.md#tasks-folds-into-agenda-1128)). Every app is a system app — there is no other kind. | `crates/apps/<app>/` |
 | **app** | A manifest plus two sets of pure functions — queries that hold statements as data, and actions that invoke one typed vault command each. An app crate holds no SQL and no connection; the same crate runs wherever the vault is. | `crates/apps/<app>/manifest.json`, `src/queries.rs`, `src/commands.rs`; [`crates/apps/kit`](../crates/apps/kit/README.md) |
 | **blueprint** | Older name for a system app, still used in [blueprint-seats.md](blueprint-seats.md) and in code comments. It names the same thing; there is no separate template or install step. | as **app** |
 | **handler** | A declared query (read) or action (write) in an app's `manifest.json`. A query reads through the paged door; an action invokes one vault command. | `crates/apps/<app>/src/{queries,commands}.rs` |
@@ -187,7 +187,7 @@ Store once, draw in the asking room's shape. These words are how the apps talk a
 | Term | Meaning | Code |
 | --- | --- | --- |
 | **projection** | A read-only re-shaping of rows another app or another table owns, drawn where it is useful and never copied. A birthday stays canonical on the person; Agenda projects it. An app that stores its own copy of another app's fact has left this doctrine, whatever the screen looks like. | `crates/apps/agenda/src/queries.rs` |
-| **day context** | The costless layers a calendar day learns from elsewhere — birthdays (People), due tasks (Tasks), holidays — answered by read-only Agenda reads over a bounded date range. **A layer is not a calendar**: it carries no hue dot, nothing writes to it, and it never takes grid shape. | `crates/apps/agenda/src/queries.rs` |
+| **day context** | The costless layers a calendar day learns from elsewhere — birthdays (People), due tasks (the `tasks` domain), holidays — answered by read-only Agenda reads over a bounded date range. **A layer is not a calendar**: it carries no hue dot, nothing writes to it, and it never takes grid shape. | `crates/apps/agenda/src/queries.rs` |
 | **re-entry** | How a room lets someone back in after they fall behind: one live occurrence for a repeating task with its elapsed periods collapsed beside it (`missed 4 · next is Friday`), a group that offers to catch up, and `won't do` as a respectable exit. The house alternative to a wall of shame. | `crates/apps/tasks/src/board.rs` |
 
 ## Owners (gateway, #726)
