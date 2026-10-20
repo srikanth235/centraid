@@ -22,6 +22,23 @@ One string per control, set with `Modifier.testTag` in Compose and `.accessibili
 | `photos-search-no-match` | Photos search | the no-match block (the kit empty state: "No results", then one body line, "Nothing matches “…”." and the line saying everywhere search looked), drawn when a query reached no photograph and no door; it carries `search-ask-about` on iOS; the words are `PHOTOS_SEARCH_NO_RESULTS`, `PHOTOS_SEARCH_NO_MATCH_QUERY` and `PHOTOS_SEARCH_NO_MATCH_SCOPE`, finished by the machine in `SearchHits.empty` ([#1097](https://github.com/srikanth235/centraid/issues/1097), R-1097-27) |
 | `search-ask-about` | Home search, and the search of Notes, People, Docs, Agenda (tasks included) and Photos | the no-match state's one action, "Ask about “…”": switches to the Chat tab and sends the question — **iOS only**; Android has no Chat tab, so its no-match state draws without it. **Never in Locker's search** ([#1097](https://github.com/srikanth235/centraid/issues/1097), R-1097-29) |
 | `search-container-<entity>-<id>` | Home search (inside the app's group, before its rows) and Notes', Agenda's and Docs' own search results | one container whose NAME matched — a notebook or album (`core.collection`), a project (`schedule.project`), or a Docs folder (`core.concept`) ([#1097](https://github.com/srikanth235/centraid/issues/1097)); a tap opens it in its app (the notebook's notes, the project's list, the group's ledger, the folder's page, the album's shelf) |
+| `agenda-search-open` | Agenda | the framed search bar under the title, closed; opens Agenda's search (the field is `agenda-search`) |
+| `agenda-search` | Agenda | Agenda's search field once open; it finds events and tasks, the tasks as one group above the event days |
+| `agenda-band-<key>` | Agenda | one band place, keyed on the machine's key: `day`, `schedule`, `waiting`, `todo`, `more` ([#1128](https://github.com/srikanth235/centraid/issues/1128), R-1128-1); `agenda-band-home` is the home capsule |
+| `agenda-list` | Agenda (Day, Schedule, Waiting, search) | the scrolling list of day sections |
+| `agenda-todo-list` | Agenda (To-do) | the To-do list: the Inbox's groups, then the projects by area, then "New project" |
+| `agenda-task-row-<taskId>` | Agenda (Day, Schedule, To-do, Overdue, a search's task hits) | one task row; a tap opens the task, a long press offers "Move to project" |
+| `agenda-task-row-check-<taskId>` | the same | the row's round box: checks the task off in place, and the status line (`agenda-status-action`, "Undo") takes it back |
+| `agenda-task-row-file-<taskId>` | the same | the long-press menu's "Move to project" (iOS) |
+| `agenda-new-event` / `agenda-add-task` | Agenda | the header Plus: "New event" on Day, Schedule and Waiting, "Add task" on To-do (it opens the quick-add bar) |
+| `agenda-quick-add` | Agenda (To-do) | the quick-add bar's field, drawn only after `agenda-add-task`; Add is `agenda-quick-add-verb`, and appears once there are words |
+| `agenda-project-<projectId>` | Agenda (To-do) | one project row; a tap pushes the project's page (`tasks-project`) |
+| `agenda-new-project` | Agenda (To-do) | the foot-of-list verb that opens the new-project sheet, whose field is `tasks-new-project-field` |
+| `agenda-more-<key>` | Agenda's More sheet | one row: `calendar-<id>`, `anytime`, `logbook`, `reminders`, `trash`, `reads` |
+| `agenda-status-action` | Agenda | the status line's Undo (after a check-off, a filing or a refused write) |
+| `agenda-notice-verb` | Agenda (Day on today) | the absence notice's verb |
+| `tasks-title-field` | a task's page | the title field, the page's mark that it is open; its Done closes it |
+| `tasks-list` / `tasks-project` | Tasks pages (pushed from Agenda's More and To-do) | a list page (Anytime, Logbook, Reminders) and a project page; their back control reads "Agenda" |
 | `home-search-group-chat` | Home search (iOS only) | the head of the Chats group: the member's own conversations, last among the groups, drawn only where the shell has a Chat tab ([#1097](https://github.com/srikanth235/centraid/issues/1097), R-1097-24); its rows are `home-search-row-chat.thread-<id>`, and a tap opens that thread in the Chat tab |
 | `chat-drawer` | Chat | the header's menu control, which opens the drawer of past chats |
 | `chat-drawer-panel` | Chat | the drawer itself |

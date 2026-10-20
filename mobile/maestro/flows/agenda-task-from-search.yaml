@@ -1,0 +1,47 @@
+# A task found by Home's search opens its page, and the page is Agenda's
+# (#1128, R-1128-5, R-1128-7): the hit is grouped under Agenda, a tap pushes
+# the task, and closing it lands back on the results.
+#
+# A VAULT-HOLDING INSTALL, as `home.yaml`: the onboarding starter "Tap the
+# circle to finish me" is the task. Re-runnable: it changes nothing.
+appId: dev.centraid.Centraid
+name: agenda-task-from-search
+---
+- launchApp
+- tapOn:
+    id: "home-search-open"
+- tapOn:
+    id: "home-search-field"
+- inputText: "circle"
+- extendedWaitUntil:
+    visible:
+      id: "home-search-group-agenda"
+    timeout: 5000
+- tapOn: "Tap the circle to finish me"
+- extendedWaitUntil:
+    visible:
+      id: "tasks-title-field"
+    timeout: 5000
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - tapOn: "Done"
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - back
+- assertVisible:
+    id: "home-search-group-agenda"
+# Agenda's own search finds the task too, above the event days.
+- tapOn:
+    id: "home-search-cancel"
+- tapOn:
+    id: "home-tile-agenda"
+- tapOn:
+    id: "agenda-search-open"
+- inputText: "circle"
+- extendedWaitUntil:
+    visible: "Tap the circle to finish me"
+    timeout: 5000
