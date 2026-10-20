@@ -43,7 +43,7 @@ public data class NativeIconPath(
 
 public object CentraidCatalog {
     /**
-     * The eight first-party apps, in CATALOGUE order.
+     * The first-party apps, in CATALOGUE order.
      *
      * This is the all-apps listing's order and says nothing about the grid
      * — `SpringboardPolicy.SPRINGBOARD_ORDER` owns that.

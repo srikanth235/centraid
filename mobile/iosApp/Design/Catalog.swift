@@ -35,7 +35,7 @@ public struct CentraidIconPath {
 }
 
 public enum CentraidCatalog {
-    /// The eight first-party apps, in CATALOGUE order — the all-apps
+    /// The first-party apps, in CATALOGUE order — the all-apps
     /// listing's order, which says nothing about the grid.
     public static let apps: [CentraidAppMeta] = [
         CentraidAppMeta(id: "notes", name: "Notes", desc: "Notes, notebooks and a journal.", iconKey: "Book", colorKey: "slate"),
