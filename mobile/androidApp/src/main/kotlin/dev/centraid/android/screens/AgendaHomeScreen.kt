@@ -37,8 +37,6 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.collapse
-import androidx.compose.ui.semantics.expand
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import centraid.screen.v1.AgendaBandTab
@@ -54,6 +52,7 @@ import centraid.screen.v1.AgendaNowLine
 import centraid.screen.v1.AgendaRowStatus
 import centraid.screen.v1.AgendaToolbar
 import centraid.screen.v1.SearchField
+import centraid.screen.v1.TasksChrome
 import dev.centraid.android.kit.AppBand
 import dev.centraid.android.kit.AppBandTab
 import dev.centraid.android.kit.AppPlace
@@ -67,14 +66,28 @@ import dev.centraid.android.kit.RoomSearch
 import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.SheetRow
 import dev.centraid.android.kit.SkeletonBar
+import dev.centraid.android.kit.StatusLine
 import dev.centraid.android.kit.importLabel
+import dev.centraid.android.screens.agenda.AGENDA_TASK_ROW
+import dev.centraid.android.screens.agenda.AgendaNoticeView
+import dev.centraid.android.screens.agenda.AgendaTaskActions
+import dev.centraid.android.screens.agenda.AgendaTaskSheet
+import dev.centraid.android.screens.agenda.AgendaTodoPlace
+import dev.centraid.android.screens.agenda.agendaTaskActions
+import dev.centraid.android.screens.tasks.TaskRowView
+import dev.centraid.android.screens.tasks.TasksQuickAddBar
+import dev.centraid.android.screens.tasks.taskGroupKeys
+import dev.centraid.android.screens.tasks.taskGroups
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 import dev.centraid.android.theme.LocalCentraidTokens
 
 /**
- * AGENDA'S HOME (#1046, wave 3): Day, Schedule and Waiting over one list of
- * day sections, with Search a mode over the current surface and More a sheet.
+ * AGENDA'S HOME (#1046, wave 3; #1128): Day, Schedule, Waiting and To-do, with
+ * Search a mode over the current surface and More a sheet. Day, Schedule and
+ * Waiting are one list of day sections whose rows are events AND the tasks due
+ * on the day (the round box checks one off in place); To-do is the Inbox, then
+ * the projects by area (`AgendaTodoPlace`).
  *
  * The view owns nothing. Every string is the machine's — `AgendaChrome` for the
  * fixed words, the rows for the rest — and every tap is an `AgendaHomeEvent`
@@ -104,21 +117,41 @@ public fun AgendaHomeScreen(
         return
     }
 
+    // THE TASK WORDS (`AgendaChrome.tasks`) and the task events every place's rows share.
+    val words = chrome.tasks ?: TasksChrome()
+    val actions = agendaTaskActions(words, onEvent)
     val meta = listOfNotNull(
         state.toolbar?.month_label?.takeIf { it.isNotEmpty() },
         state.data_?.event_count_label?.takeIf { it.isNotEmpty() },
+        state.data_?.todo?.count_label?.takeIf { it.isNotEmpty() },
     ).joinToString(" · ")
+    // THE PLUS, PER PLACE (R-CHROME-1, R-1128-A2): the machine says what it is
+    // called and what a tap does. On To-do it opens the quick-add bar and is
+    // drawn only while the bar can be (`quick_add.shown`); elsewhere it is the
+    // add sheet.
+    val plusOpensBar = state.add_opens_quick_add
+    val plusShown = state.add_label.isNotEmpty() && (!plusOpensBar || state.quick_add?.shown == true)
     Box(Modifier.fillMaxSize().testTag("agenda-home")) {
         AppPlace(
             app = "agenda",
             title = chrome.title,
             meta = meta,
-            trailing = chrome.new_event.takeIf { it.isNotEmpty() }?.let { label ->
+            trailing = if (plusShown) {
                 RoomAction(
                     iconKey = "Plus",
-                    label = label,
-                    testTag = "agenda-new-event",
-                ) { onEvent(AgendaHomeEvent(new_event = AgendaHomeEvent.NewEventRequested())) }
+                    label = state.add_label,
+                    testTag = if (plusOpensBar) "agenda-add-task" else "agenda-new-event",
+                ) {
+                    onEvent(
+                        if (plusOpensBar) {
+                            AgendaHomeEvent(quick_add_opened = AgendaHomeEvent.QuickAddOpened())
+                        } else {
+                            AgendaHomeEvent(new_event = AgendaHomeEvent.NewEventRequested())
+                        },
+                    )
+                }
+            } else {
+                null
             },
             // SEARCH IS THE BAR UNDER THE TITLE (R-CHROME-2), above the day
             // bar; a tap opens the field through the machine.
@@ -160,9 +193,31 @@ public fun AgendaHomeScreen(
                                 modifier = Modifier.padding(top = 12.dp),
                             ) { onEvent(AgendaHomeEvent(refreshed = AgendaHomeEvent.Refreshed())) }
                         }
-                        data != null -> AgendaList(state, data, onEvent)
+                        data != null -> {
+                            val todo = data.todo
+                            if (todo != null) {
+                                AgendaTodoPlace(todo, words, actions, onEvent)
+                            } else {
+                                AgendaList(state, data, actions, onEvent)
+                            }
+                        }
                     }
                 }
+                // THE TASK WRITE'S STATUS LINE ("Task done", Undo) docks under whichever place's list.
+                StatusLine(state.status, actTag = "agenda-status-action") {
+                    onEvent(AgendaHomeEvent(status_acted = AgendaHomeEvent.StatusActed()))
+                }
+                // THE PLUS OPENED THE BAR (To-do only): the keyboard-attached quick add, focus from `focused`.
+                TasksQuickAddBar(
+                    quickAdd = state.quick_add,
+                    placeholder = words.quick_add_placeholder,
+                    verb = words.quick_add_verb,
+                    onChange = { onEvent(AgendaHomeEvent(quick_add_changed = AgendaHomeEvent.QuickAddChanged(title = it))) },
+                    onSubmit = { onEvent(AgendaHomeEvent(quick_add_submitted = AgendaHomeEvent.QuickAddSubmitted())) },
+                    // THE KEYBOARD LEFT: the machine puts an empty bar away.
+                    onBlur = { onEvent(AgendaHomeEvent(quick_add_closed = AgendaHomeEvent.QuickAddClosed())) },
+                    testTag = "agenda-quick-add",
+                )
             }
         }
     }
@@ -170,6 +225,7 @@ public fun AgendaHomeScreen(
     when (state.sheet) {
         AgendaHomeState.Sheet.SHEET_MORE -> AgendaMoreSheet(state, chrome, onEvent)
         AgendaHomeState.Sheet.SHEET_READS -> AgendaReadsSheet(chrome, onEvent)
+        AgendaHomeState.Sheet.SHEET_FILE, AgendaHomeState.Sheet.SHEET_NEW_PROJECT -> AgendaTaskSheet(state, words, onEvent)
         else -> Unit
     }
 }
@@ -242,45 +298,17 @@ private fun AgendaSkeleton(chrome: AgendaChrome) {
 private fun AgendaList(
     state: AgendaHomeState,
     data: AgendaHomeData,
+    actions: AgendaTaskActions,
     onEvent: (AgendaHomeEvent) -> Unit,
 ) {
-    if (data.empty != AgendaEmpty.AGENDA_EMPTY_NONE && data.empty != AgendaEmpty.AGENDA_EMPTY_UNSPECIFIED) {
-        Column(
-            Modifier.fillMaxSize().padding(24.dp).testTag("agenda-empty-${data.empty.name.lowercase()}"),
-            verticalArrangement = Arrangement.Center,
-        ) {
-            Text(data.empty_title, style = centraidType("title"), color = centraidColor("text"))
-            if (data.empty_body.isNotEmpty()) {
-                Text(
-                    data.empty_body,
-                    style = centraidType("body"),
-                    color = centraidColor("textSoft"),
-                    modifier = Modifier.padding(top = 8.dp),
-                )
-            }
-            // DAY ONE, WHERE THE PHONE HOLDS A CALENDAR (`import_source`): the
-            // import in place of `empty_action` when the shell provides the
-            // door — null inside a preview — and can read that source. "New
-            // event" stays in the header, so the one action here is the
-            // faster way to the member's own events.
-            val importVerb = importLabel(data.import_source)
-            val door = LocalPhoneImport.current
-            if (importVerb.isNotEmpty() && door != null) {
-                OutlineButton(
-                    label = importVerb,
-                    testTag = "agenda-empty-import",
-                    modifier = Modifier.padding(top = 16.dp),
-                ) { door(data.import_source) }
-            } else if (data.empty_action.isNotEmpty() && data.empty != AgendaEmpty.AGENDA_EMPTY_NO_MATCH) {
-                // NO-MATCH'S ACTION IS ASK (#1097, R-1097-30): drawn only where the shell has a Chat tab,
-                // and Android has none, so it draws the sentence without it.
-                OutlineButton(
-                    label = data.empty_action,
-                    testTag = "agenda-empty-action",
-                    modifier = Modifier.padding(top = 16.dp),
-                ) { onEvent(AgendaHomeEvent(new_event = AgendaHomeEvent.NewEventRequested())) }
-            }
-        }
+    val hasEmpty = data.empty != AgendaEmpty.AGENDA_EMPTY_NONE && data.empty != AgendaEmpty.AGENDA_EMPTY_UNSPECIFIED
+    // THE BLOCKS DRAWN ABOVE THE DAYS (#1128): the absence notice and the
+    // Overdue group (Day on today), then a search's task hits.
+    val leads = data.notice != null || data.overdue != null || data.task_hits.isNotEmpty()
+    // AN EMPTY DAY THAT STILL OWES (Overdue, the notice) does not hide them
+    // behind its sentence: the sentence follows them in the list.
+    if (hasEmpty && !leads) {
+        AgendaEmptyBlock(data, onEvent, Modifier.fillMaxSize().padding(24.dp), centered = true)
         return
     }
 
@@ -296,11 +324,15 @@ private fun AgendaList(
     val keys = remember(data, offersImport) {
         buildList {
             if (offersImport) add("import")
+            if (data.notice != null) add("notice")
+            data.overdue?.let { addAll(taskGroupKeys(listOf(it))) }
+            addAll(taskGroupKeys(data.task_hits))
             data.days.forEach { section ->
                 if (section.month_heading != null) add("month-${section.day}")
                 add("day-${section.day}")
                 section.items.forEach { item ->
                     item.event?.let { add("row-${it.row_key}") }
+                    item.task?.let { add("task-${section.day}-${it.task_id}") }
                     if (item.now_line != null) add("now-${section.day}")
                 }
             }
@@ -308,7 +340,9 @@ private fun AgendaList(
     }
     val landing = data.landing
     LaunchedEffect(landing?.day, landing?.now_line, state.destination, state.anchor_day) {
-        if (landing == null || landing.day.isEmpty()) return@LaunchedEffect
+        // LANDING NEVER SCROLLS PAST THE BLOCKS ABOVE THE DAYS: the member
+        // opens on the notice and Overdue, or on a search's task hits.
+        if (landing == null || landing.day.isEmpty() || leads) return@LaunchedEffect
         val target = if (landing.now_line) "now-${landing.day}" else "day-${landing.day}"
         val index = keys.indexOf(target).takeIf { it >= 0 } ?: keys.indexOf("day-${landing.day}")
         if (index >= 0) listState.scrollToItem(maxOf(0, if (landing.now_line) index - 1 else index))
@@ -327,14 +361,84 @@ private fun AgendaList(
                 ) { door(data.import_source) }
             }
         }
-        data.days.forEach { section -> daySection(section, state.chrome?.shelf_label.orEmpty(), onEvent) }
+        data.notice?.let { notice ->
+            item(key = "notice") {
+                AgendaNoticeView(notice) { onEvent(AgendaHomeEvent(notice_acted = AgendaHomeEvent.NoticeActed())) }
+            }
+        }
+        // OVERDUE (Day on today) AND A SEARCH'S TASK HITS: task groups, the Pages' own shape.
+        taskGroups(
+            listOfNotNull(data.overdue) + data.task_hits,
+            onCheck = actions.onCheck,
+            onPick = actions.onPick,
+            onVerb = actions.onVerb,
+            onFile = actions.onFile,
+            fileVerb = actions.fileVerb,
+            idPrefix = AGENDA_TASK_ROW,
+        )
+        if (hasEmpty) {
+            item(key = "empty") { AgendaEmptyBlock(data, onEvent, Modifier.padding(24.dp), centered = false) }
+        }
+        data.days.forEach { section -> daySection(section, actions, onEvent) }
         item(key = "foot") { Spacer(Modifier.height(16.dp)) }
+    }
+}
+
+/**
+ * THE EMPTY STATE'S WORDS AND ITS ONE ACTION, whole-screen when nothing else is
+ * drawn ([centered]) and a block in the list when Overdue or the notice is.
+ */
+@Composable
+private fun AgendaEmptyBlock(
+    data: AgendaHomeData,
+    onEvent: (AgendaHomeEvent) -> Unit,
+    modifier: Modifier,
+    centered: Boolean,
+) {
+    Column(
+        modifier.testTag("agenda-empty-${data.empty.name.lowercase()}"),
+        verticalArrangement = if (centered) Arrangement.Center else Arrangement.Top,
+    ) {
+        Text(data.empty_title, style = centraidType("title"), color = centraidColor("text"))
+        if (data.empty_body.isNotEmpty()) {
+            Text(
+                data.empty_body,
+                style = centraidType("body"),
+                color = centraidColor("textSoft"),
+                modifier = Modifier.padding(top = 8.dp),
+            )
+        }
+        // DAY ONE, WHERE THE PHONE HOLDS A CALENDAR (`import_source`): the
+        // import in place of `empty_action` when the shell provides the
+        // door — null inside a preview — and can read that source. "New
+        // event" stays in the header, so the one action here is the
+        // faster way to the member's own events.
+        val importVerb = importLabel(data.import_source)
+        val door = LocalPhoneImport.current
+        if (importVerb.isNotEmpty() && door != null) {
+            // In the list the same import is already its quiet first row.
+            if (centered) {
+                OutlineButton(
+                    label = importVerb,
+                    testTag = "agenda-empty-import",
+                    modifier = Modifier.padding(top = 16.dp),
+                ) { door(data.import_source) }
+            }
+        } else if (data.empty_action.isNotEmpty() && data.empty != AgendaEmpty.AGENDA_EMPTY_NO_MATCH) {
+            // NO-MATCH'S ACTION IS ASK (#1097, R-1097-30): drawn only where the shell has a Chat tab,
+            // and Android has none, so it draws the sentence without it.
+            OutlineButton(
+                label = data.empty_action,
+                testTag = "agenda-empty-action",
+                modifier = Modifier.padding(top = 16.dp),
+            ) { onEvent(AgendaHomeEvent(new_event = AgendaHomeEvent.NewEventRequested())) }
+        }
     }
 }
 
 private fun LazyListScope.daySection(
     section: AgendaDaySection,
-    shelfLabel: String,
+    actions: AgendaTaskActions,
     onEvent: (AgendaHomeEvent) -> Unit,
 ) {
     section.month_heading?.let { month ->
@@ -360,8 +464,7 @@ private fun LazyListScope.daySection(
                 DateColumn(section)
                 Column(Modifier.weight(1f).padding(start = 8.dp)) {
                     section.ribbon?.let { Ribbon(it) }
-                    if (section.due_count > 0) DueShelf(section, shelfLabel, onEvent)
-                    if (section.items.isEmpty() && section.ribbon == null && section.due_count == 0) {
+                    if (section.items.isEmpty() && section.ribbon == null) {
                         Spacer(Modifier.height(32.dp))
                     }
                 }
@@ -370,14 +473,37 @@ private fun LazyListScope.daySection(
     }
     section.items.forEach { item ->
         val event = item.event
+        val task = item.task
         val now = item.now_line
         if (event != null) {
             item(key = "row-${event.row_key}") { EventRow(event, onEvent) }
+        } else if (task != null) {
+            // A TASK DUE ON THE DAY (R-1128-2): the round box checks it off where it
+            // stands, a tap opens it, a long press offers "Move to project". Indented
+            // past the date column, to the events' own start.
+            item(key = "task-${section.day}-${task.task_id}") {
+                TaskRowView(
+                    task,
+                    onCheck = actions.onCheck,
+                    onPick = actions.onPick,
+                    onFile = actions.onFile,
+                    fileVerb = actions.fileVerb,
+                    idPrefix = AGENDA_TASK_ROW,
+                    indent = DAY_TASK_INDENT,
+                )
+            }
         } else if (now != null) {
             item(key = "now-${section.day}") { NowLine(now) }
         }
     }
 }
+
+/**
+ * A DAY'S TASK ROW starts where the day's event rows do: the 44dp date column
+ * and the gutters (68dp), less the row's own leading margin and the box's
+ * padding, so the round mark sits under the events' hue rule.
+ */
+private val DAY_TASK_INDENT = 44.dp
 
 /** The 44dp date column: the number, the weekday, and today on an accent pill. */
 @Composable
@@ -441,45 +567,6 @@ private fun Ribbon(label: String) {
             color = centraidColor("textSoft"),
             modifier = Modifier.padding(start = 8.dp),
         )
-    }
-}
-
-/** "{n} due", a toggle, and the titles read-only when it is open. */
-@Composable
-private fun DueShelf(section: AgendaDaySection, shelfLabel: String, onEvent: (AgendaHomeEvent) -> Unit) {
-    Column(Modifier.fillMaxWidth()) {
-        Text(
-            section.due_label,
-            style = centraidType("annotLabelOn"),
-            color = centraidColor("textSoft"),
-            modifier = Modifier
-                .heightIn(min = 32.dp)
-                .clickable { onEvent(AgendaHomeEvent(due_toggled = AgendaHomeEvent.DueShelfToggled(day = section.day))) }
-                .padding(vertical = 6.dp)
-                .testTag("agenda-due-${section.day}")
-                // THE MACHINE'S WORDS (`AgendaChrome.shelf_label`) and its
-                // count; open or shut is said by the platform's own
-                // expand/collapse action, not by words spelt here.
-                .semantics {
-                    role = Role.Button
-                    if (shelfLabel.isNotEmpty()) contentDescription = "$shelfLabel, ${section.due_label}"
-                    if (section.due_open) {
-                        collapse { onEvent(AgendaHomeEvent(due_toggled = AgendaHomeEvent.DueShelfToggled(day = section.day))); true }
-                    } else {
-                        expand { onEvent(AgendaHomeEvent(due_toggled = AgendaHomeEvent.DueShelfToggled(day = section.day))); true }
-                    }
-                },
-        )
-        if (section.due_open) {
-            section.due.forEach { task ->
-                Text(
-                    task.title,
-                    style = centraidType("annotLabel"),
-                    color = centraidColor("text"),
-                    modifier = Modifier.padding(start = 8.dp, bottom = 4.dp),
-                )
-            }
-        }
     }
 }
 
@@ -608,7 +695,12 @@ private fun AgendaMoreSheet(
                 if (row.toggle) {
                     AgendaToggleRow(row, pick)
                 } else {
-                    SheetRow(label = row.label, testTag = "agenda-more-${row.key}", onTap = pick)
+                    SheetRow(
+                        label = row.label,
+                        testTag = "agenda-more-${row.key}",
+                        onTap = pick,
+                        iconKey = row.icon_key.ifEmpty { null },
+                    )
                 }
             }
         }
