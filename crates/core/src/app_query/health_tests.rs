@@ -177,10 +177,7 @@ fn close(left: Option<f64>, right: f64) -> bool {
     left.is_some_and(|left| (left - right).abs() < 1e-9)
 }
 
-fn metric<'a>(
-    today: &'a wire::HealthToday,
-    which: wire::HealthMetric,
-) -> &'a wire::HealthTodayMetric {
+fn metric(today: &wire::HealthToday, which: wire::HealthMetric) -> &wire::HealthTodayMetric {
     today
         .metrics
         .iter()
