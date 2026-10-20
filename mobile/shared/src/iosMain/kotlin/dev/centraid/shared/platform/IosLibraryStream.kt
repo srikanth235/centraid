@@ -64,7 +64,8 @@ import platform.UIKit.UIImageJPEGRepresentation
  * 3. [ChangeTokens] — the persistent change token (iOS 16; the app targets
  *    17.5) that finds an asset ADDED to the library whatever its capture date,
  *    which a `creationDate` keyset cannot: an AirDropped photograph from last
- *    year lands behind the cursor and was never offered.
+ *    year lands behind the cursor and was never offered. It also names the
+ *    assets UPDATED since, which is how an edit made in Photos is found (A20).
  */
 internal object IosLibraryStream {
     /**
@@ -280,9 +281,10 @@ internal fun exifOffsetTag(url: NSURL): String? {
  * THE PERSISTENT CHANGE TOKEN, KEPT AS TEXT (#1080, the walker's cursor).
  *
  * `PHPersistentChangeToken` is opaque and `NSSecureCoding`, so the cursor
- * carries it archived and base64'd. [insertedSince] answers every asset added
- * since the token, oldest change first, and the token of the newest change;
- * null when Photos will not answer — an expired token, which restarts the walk.
+ * carries it archived and base64'd. [changedSince] answers every asset added
+ * or UPDATED since the token, oldest change first, and the token of the newest
+ * change; null when Photos will not answer — an expired token, which restarts
+ * the walk.
  */
 internal object ChangeTokens {
     fun current(): String? = encode(PHPhotoLibrary.sharedPhotoLibrary().currentChangeToken)
@@ -296,18 +298,32 @@ internal object ChangeTokens {
             as? PHPersistentChangeToken
     }
 
-    /** The added assets' identifiers in change order, and the newest token, or null. */
-    fun insertedSince(text: String): Pair<List<String>, String?>? {
+    /**
+     * What a token walk found. [identifiers] is every asset the changes named,
+     * in the order Photos recorded them (inserted first within one change), and
+     * [inserted] says which of them were ADDED; the rest were only updated, and
+     * whether an update is an edit is [LibraryRefs.worthOffering]'s question.
+     */
+    class Changes(val identifiers: List<String>, val inserted: Set<String>, val newest: String?)
+
+    fun changedSince(text: String): Changes? {
         val token = decode(text) ?: return null
         val changes = PHPhotoLibrary.sharedPhotoLibrary().fetchPersistentChangesSinceToken(token, null) ?: return null
-        val inserted = LinkedHashSet<String>()
+        val seen = LinkedHashSet<String>()
+        val inserted = HashSet<String>()
         var newest: PHPersistentChangeToken? = null
         changes.enumerateChangesWithBlock { change, _ ->
             val details = change?.changeDetailsForObjectType(PHObjectTypeAsset, null)
-            // ONE CHANGE'S SET HAS NO ORDER; sorted, so a resumed page is the same page.
-            details?.insertedLocalIdentifiers?.mapNotNull { it as? String }?.sorted()?.forEach { inserted += it }
+            // ONE CHANGE'S SET HAS NO ORDER; sorted, so a resumed page is the
+            // same page. Within a change the additions come first, and an
+            // identifier is placed where it was FIRST named, so a longer walk
+            // only ever appends to the list a shorter one saw.
+            val added = details?.insertedLocalIdentifiers?.mapNotNull { it as? String }?.sorted().orEmpty()
+            val updated = details?.updatedLocalIdentifiers?.mapNotNull { it as? String }?.sorted().orEmpty()
+            added.forEach { seen += it; inserted += it }
+            updated.forEach { seen += it }
             change?.changeToken?.let { newest = it }
         }
-        return inserted.toList() to newest?.let { encode(it) }
+        return Changes(seen.toList(), inserted, newest?.let { encode(it) })
     }
 }

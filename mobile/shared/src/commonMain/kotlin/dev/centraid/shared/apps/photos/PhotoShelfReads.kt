@@ -143,8 +143,8 @@ public object PhotoShelfReads :
     private const val CELL_COLUMNS: Int = 5
     private const val COMPUTED_COLUMNS: Int = 3
 
-    /** The live library: not trashed, not put away. `PhotosReads`' predicate. */
-    private const val LIVE: String = "deleted_at IS NULL AND archived_at IS NULL"
+    /** The live library: not trashed, not put away, not folded under an edit. `PhotosReads`' predicate. */
+    private const val LIVE: String = PhotoFold.LIVE
 
     /**
      * A STAR IS A TAG, NOT A COLUMN (#916, and `media.rs`'s `set_starred`).

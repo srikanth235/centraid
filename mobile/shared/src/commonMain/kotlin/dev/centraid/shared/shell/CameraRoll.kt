@@ -40,9 +40,26 @@ import okio.ByteString.Companion.encodeUtf8
  * and keeps no plaintext copy — the library already holds one. When the spool
  * had no room the core asks for the bytes again later (`DrainResponse.need_bytes`,
  * `LibraryFeed`), which is why a ref must find the same bytes after a relaunch.
- * The bytes are the asset's CURRENT RENDITION (A20): an edited asset's render,
- * which the next edit replaces, so it is staged marked edited and the core
- * never offers it for deletion.
+ * The bytes are the asset's CURRENT RENDITION (A20): an edited asset's render.
+ * What keeps a rendition the next edit replaces from being deleted is not a
+ * flag here but its ref, which names the version it was read at
+ * ([MediaLibrary.Resource.Role.ORIGINAL]): the shell's deleter releases an
+ * edited asset only when the library's current version is that one.
+ *
+ * ## An edit comes in beside its original (A20, R-1127-5)
+ *
+ * An asset the member edited in the phone's Photos app is offered as two
+ * resources, the camera's own bytes first ([MediaLibrary.Resource.Role.CAMERA_ORIGINAL])
+ * and the edit's render after. The first is committed as an asset of its own,
+ * whose id `media.add_asset` answers (the adopted one, when the vault already
+ * holds those bytes — an edit after the import is exactly that); the second is
+ * committed with `source_asset_id` naming it, the lineage R-1029-PH-5 gives
+ * every edit, and without a date or a caption, which the core fills in from
+ * the original so a date the member set on it is kept. Both carry the asset's
+ * capture group, which is what the grid folds on: the newest of a group's
+ * photographs is the one drawn ([dev.centraid.shared.apps.photos.PhotoFold]).
+ * A re-offer is the same two commits and the same bytes, and the core adopts
+ * both: an edit is never doubled. No adjustment data travels (A20(2)).
  *
  * **The platform renders the derivatives.** The core cannot decode HEIC and
  * keeps no library original to decode later, so after an original is staged
@@ -305,17 +322,23 @@ public class CameraRoll(
      */
     private suspend fun offer(handle: CentraidCore, asset: MediaLibrary.Asset): Offered {
         var queued: Offered.Queued? = null
+        // THE CAMERA ORIGINAL'S ASSET, once it is committed: the edit's lineage.
+        var cameraAsset: String? = null
+        var cameraBytes = 0L
         for (resource in asset.resources) {
-            val original = resource.role == MediaLibrary.Resource.Role.ORIGINAL
-            val kind = if (original) asset.kind else MediaLibrary.Kind.VIDEO
+            val role = resource.role
+            val original = role == MediaLibrary.Resource.Role.ORIGINAL
+            val camera = role == MediaLibrary.Resource.Role.CAMERA_ORIGINAL
+            val kind = if (role == MediaLibrary.Resource.Role.PAIRED_VIDEO) MediaLibrary.Kind.VIDEO else asset.kind
             // BEFORE EACH RESOURCE: a phone that leaves Wi-Fi half way through
             // a roll stops downloading from iCloud there.
             val allowNetwork = mayFetch(services.networkStatus.current(), kind)
             val opened = when (val answer = services.mediaLibrary.open(resource.ref, allowNetwork)) {
                 is MediaLibrary.Opened.Ready -> answer.original
                 MediaLibrary.Opened.InCloud -> return Offered.InCloud
-                // A STILL THAT IS GONE IS THE ASSET GONE; a movie that is gone
-                // costs the still nothing.
+                // A STILL THAT IS GONE IS THE ASSET GONE; a movie, or a camera
+                // original Photos no longer holds, costs the edit nothing — it
+                // comes in without a lineage.
                 MediaLibrary.Opened.Gone -> if (original) return Offered.Skipped else continue
             }
             val staged = try {
@@ -325,7 +348,6 @@ public class CameraRoll(
                     byteSize = opened.bytes,
                     source = Staging.Source.OS_LIBRARY,
                     osRef = resource.ref,
-                    osEdited = asset.edited,
                     read = opened::read,
                 )
             } catch (why: IllegalStateException) {
@@ -342,8 +364,13 @@ public class CameraRoll(
                 is Staging.Outcome.No -> return Offered.Refused(staged.refused.sentence)
                 is Staging.Outcome.Ok -> staged.staged
             }
-            commit(handle, inputFor(asset, ok.contentHash, kind), ok.contentHash)?.let { return it }
-            if (original) {
+            val source = cameraAsset.takeIf { original }
+            val committed = commit(handle, inputFor(asset, ok.contentHash, kind, source), ok.contentHash)
+            committed.refusal?.let { return it }
+            if (camera) {
+                cameraAsset = committed.assetId.ifEmpty { null }
+                cameraBytes += ok.byteSize
+            } else if (original) {
                 // A RE-WALK RENDERS NOTHING: the core already holds this
                 // original, and its derivatives went in with it the first time.
                 // A RESTORED PHONE'S RE-WALK RENDERS ONLY WHAT THE VAULT LACKS
@@ -352,7 +379,7 @@ public class CameraRoll(
                 // back every derivative with its row, and the core says which
                 // tiers it holds.
                 if (!ok.alreadyHeld) derivatives(handle, resource.ref, ok.contentHash, ok.derivativesHeld)
-                queued = Offered.Queued(alreadyHeld = ok.alreadyHeld, bytes = ok.byteSize)
+                queued = Offered.Queued(alreadyHeld = ok.alreadyHeld, bytes = ok.byteSize + cameraBytes)
             } else {
                 queued = queued?.let { it.copy(bytes = it.bytes + ok.byteSize) }
             }
@@ -360,8 +387,11 @@ public class CameraRoll(
         return queued ?: Offered.Skipped
     }
 
-    /** `media.add_asset` for one staged resource; a refusal, or null when it was queued. */
-    private suspend fun commit(handle: CentraidCore, input: String, hash: String): Offered.Refused? {
+    /** What one `media.add_asset` came to: a refusal, or the asset it made or adopted. */
+    private class Committed(val refusal: Offered.Refused?, val assetId: String = "")
+
+    /** `media.add_asset` for one staged resource. */
+    private suspend fun commit(handle: CentraidCore, input: String, hash: String): Committed {
         val answer = handle.call(
             Envelope(
                 request = Request(
@@ -381,10 +411,16 @@ public class CameraRoll(
             ),
         )
         return when (answer) {
-            is CoreOutcome.Failed -> Offered.Refused(
-                answer.failure.sentence.ifEmpty { "Couldn't add that photo." },
+            is CoreOutcome.Failed -> Committed(
+                Offered.Refused(answer.failure.sentence.ifEmpty { "Couldn't add that photo." }),
             )
-            is CoreOutcome.Answered -> null
+            // `{"asset_id": …}` — the ADOPTED id on a dedupe too. Empty when the
+            // command said nothing, and an edit then comes in without lineage.
+            is CoreOutcome.Answered -> Committed(
+                refusal = null,
+                assetId = ASSET_ID.find(answer.value.response?.command?.output?.utf8().orEmpty())
+                    ?.groupValues?.getOrNull(1).orEmpty(),
+            )
         }
     }
 
@@ -431,16 +467,31 @@ public class CameraRoll(
      * has to be the exact bytes the core rehashes, and a JSON library's key
      * order is not something this layer may leave to a dependency.
      */
-    internal fun inputFor(asset: MediaLibrary.Asset, hash: String, kind: MediaLibrary.Kind = asset.kind): String =
+    internal fun inputFor(
+        asset: MediaLibrary.Asset,
+        hash: String,
+        kind: MediaLibrary.Kind = asset.kind,
+        sourceAssetId: String? = null,
+    ): String =
         buildString {
             append("{\"staged_sha\":\"").append(hash).append('"')
             append(",\"kind\":\"").append(kind.wire).append('"')
-            if (asset.capturedAtIso.isNotEmpty()) {
-                append(",\"captured_at\":\"").append(asset.capturedAtIso).append('"')
+            // AN EDIT SAYS NOTHING OF WHEN IT WAS TAKEN: the core fills the
+            // date, the zone, the caption and the place in from the original it
+            // names, so a date the member corrected there is kept (A20).
+            if (sourceAssetId == null) {
+                if (asset.capturedAtIso.isNotEmpty()) {
+                    append(",\"captured_at\":\"").append(asset.capturedAtIso).append('"')
+                }
+                append(",\"tz_offset_min\":").append(asset.capturedUtcOffsetMinutes)
             }
-            append(",\"tz_offset_min\":").append(asset.capturedUtcOffsetMinutes)
             asset.captureGroupId?.let {
                 append(",\"capture_group_id\":\"").append(it).append('"')
+            }
+            // EDIT LINEAGE (#711), named by the core's own id and only ever by
+            // one: see above.
+            sourceAssetId?.let {
+                append(",\"source_asset_id\":\"").append(it).append('"')
             }
             append('}')
         }
@@ -494,6 +545,8 @@ public class CameraRoll(
     public companion object {
         internal const val APP: String = "media"
         internal const val ACTION: String = "media.add_asset"
+
+        private val ASSET_ID = Regex("\"asset_id\"\\s*:\\s*\"([^\"]+)\"")
 
         /** `crates/media/src/renditions.rs`' `DERIVATIVE_MEDIA_TYPE`. */
         internal const val DERIVATIVE_MEDIA_TYPE: String = "image/jpeg"

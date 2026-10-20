@@ -1764,3 +1764,134 @@ fn a_derivative_the_shell_staged_is_the_tier_and_the_decoder_stays_idle() {
         "with nothing staged, the decoder is the fallback"
     );
 }
+
+/// **AN EDIT MADE IN THE PHONE'S OWN PHOTOS APP KEEPS THE ORIGINAL'S DATE,
+/// PLACE AND CAPTION** (#1127, A20, R-1029-PH-5).
+///
+/// The walker offers the edit with `source_asset_id` and nothing else about
+/// the moment: it cannot see the member's caption or the place they filed the
+/// original under. The command fills what the caller left out from the
+/// source, never overrides what the caller said, and — offered again — adopts
+/// the edit it made and leaves its lineage alone.
+#[test]
+fn an_edit_naming_its_source_keeps_the_originals_date_place_and_caption() {
+    use base64::Engine as _;
+
+    let scratch = common::Scratch::founded_with_blobs("add-asset-edit").expect("a vault");
+    let registry = registry();
+    registry
+        .install(&scratch.vault)
+        .expect("the record installs");
+    let run = |input: serde_json::Value| {
+        let outcome = scratch
+            .vault
+            .execute(
+                &registry,
+                &Principal::owner("phone"),
+                &Command::new("media.add_asset", input),
+            )
+            .expect("the command runs");
+        assert_eq!(
+            outcome.status,
+            CommandStatus::Executed,
+            "{:?}",
+            outcome.reason
+        );
+        outcome.output
+    };
+    let original = run(serde_json::json!({
+        "data_uri": png_uri(),
+        "kind": "photo",
+        "title": "Gran's 80th",
+        "captured_at": "2019-08-03T10:11:12Z",
+        "tz_offset_min": 330,
+        "latitude": 12.9716,
+        "longitude": 77.5946,
+    }));
+    let original_id = original["asset_id"].as_str().expect("an id").to_owned();
+
+    // A DIFFERENT RENDITION: the same picture with one more byte on its tail.
+    let mut bytes = base64::engine::general_purpose::STANDARD
+        .decode(ONE_PIXEL_PNG)
+        .expect("base64");
+    bytes.push(0);
+    let edited_uri = format!(
+        "data:image/png;base64,{}",
+        base64::engine::general_purpose::STANDARD.encode(&bytes)
+    );
+    let edit_input = serde_json::json!({
+        "data_uri": edited_uri,
+        "kind": "photo",
+        "source_asset_id": original_id,
+        "capture_group_id": "ABC/L0/001",
+    });
+    let first = run(edit_input.clone());
+    assert_eq!(first["deduped"], serde_json::json!(0));
+    let edit_id = first["asset_id"].as_str().expect("an id").to_owned();
+    assert_ne!(edit_id, original_id);
+
+    let row = |asset_id: &str| -> (
+        Option<String>,
+        Option<String>,
+        Option<i64>,
+        Option<String>,
+        Option<String>,
+    ) {
+        scratch
+            .vault
+            .read(|connection| {
+                Ok(connection.query_row(
+                    "SELECT title, captured_at, tz_offset_min, place_id, source_asset_id
+                       FROM media_asset WHERE asset_id = ?1",
+                    [asset_id],
+                    |row| {
+                        Ok((
+                            row.get(0)?,
+                            row.get(1)?,
+                            row.get(2)?,
+                            row.get(3)?,
+                            row.get(4)?,
+                        ))
+                    },
+                )?)
+            })
+            .expect("the row reads")
+    };
+    let (title, captured_at, tz, place, source) = row(&edit_id);
+    assert_eq!(title.as_deref(), Some("Gran's 80th"));
+    assert_eq!(captured_at.as_deref(), Some("2019-08-03T10:11:12Z"));
+    assert_eq!(tz, Some(330));
+    assert_eq!(
+        place,
+        row(&original_id).3,
+        "the same place row, not a second pin"
+    );
+    assert!(place.is_some());
+    assert_eq!(source.as_deref(), Some(original_id.as_str()));
+
+    // OFFERED AGAIN (a re-walk, or the favourite toggled on the edit): the
+    // edit is adopted, not doubled, and nothing about it moves.
+    let again = run(edit_input);
+    assert_eq!(again["deduped"], serde_json::json!(1));
+    assert_eq!(again["asset_id"], serde_json::json!(edit_id));
+    assert_eq!(row(&edit_id).4.as_deref(), Some(original_id.as_str()));
+
+    // WHAT THE CALLER SAYS WINS, so the in-app editor's explicit values are
+    // exactly what they were.
+    bytes.push(1);
+    let third = run(serde_json::json!({
+        "data_uri": format!(
+            "data:image/png;base64,{}",
+            base64::engine::general_purpose::STANDARD.encode(&bytes)
+        ),
+        "kind": "photo",
+        "source_asset_id": original_id,
+        "title": "Cropped",
+        "captured_at": "2020-01-01T00:00:00Z",
+        "tz_offset_min": 0,
+    }));
+    let (title, captured_at, tz, _, _) = row(third["asset_id"].as_str().expect("an id"));
+    assert_eq!(title.as_deref(), Some("Cropped"));
+    assert_eq!(captured_at.as_deref(), Some("2020-01-01T00:00:00Z"));
+    assert_eq!(tz, Some(0), "an explicit zero offset is not 'unsaid'");
+}
