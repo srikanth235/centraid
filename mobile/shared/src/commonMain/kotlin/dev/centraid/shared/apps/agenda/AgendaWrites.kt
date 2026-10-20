@@ -7,6 +7,8 @@ import dev.centraid.shared.kit.time.epochDayOf
 import dev.centraid.shared.kit.time.plusDays
 import dev.centraid.shared.platform.DeviceClock
 import dev.centraid.shared.sync.rfc3339FromEpochMillis
+import kotlin.uuid.ExperimentalUuidApi
+import kotlin.uuid.Uuid
 
 /**
  * THE `schedule.*` COMMANDS AGENDA'S EVENT SCREENS WRITE, AND HOW (#1046).
@@ -29,6 +31,9 @@ public object AgendaWrites {
     public const val RSVP: String = "schedule.respond_rsvp"
     public const val CANCEL: String = "schedule.cancel_event"
 
+    /** The add sheet's task kind (#1128): Tasks' own command, written from the Agenda sheet. */
+    public const val ADD_TASK: String = "schedule.add_task"
+
     /** How [AgendaMarks] tells a skipped occurrence (a cancellation) from an override. */
     public const val SKIP_MARK: String = "\"action\":\"skip\""
 
@@ -49,6 +54,20 @@ public object AgendaWrites {
         Json().str("event_id", eventId).str("party_id", partyId).str("partstat", partstat).build()
 
     public fun cancel(eventId: String): String = Json().str("event_id", eventId).build()
+
+    /**
+     * `schedule.add_task` from the add sheet (#1128): the id the bridge
+     * minted (the vault's guard against a second copy of one add), the title,
+     * and the due — a bare day, or a floating local `YYYY-MM-DDTHH:MM`
+     * (`due_at` takes an instant, a floating time or a date; Tasks' detail
+     * writes a time the same way).
+     */
+    /** A fresh task id: a v4 UUID, the shape `add_task` honours. */
+    @OptIn(ExperimentalUuidApi::class)
+    public fun mintTaskId(): String = Uuid.random().toString()
+
+    public fun addTask(taskId: String, title: String, dueAt: String): String =
+        Json().str("task_id", taskId).str("title", title).str("due_at", dueAt).build()
 
     /** Skip one occurrence, or it and the ones after. The series itself is [cancel]. */
     public fun skip(eventId: String, originalStartLocal: String, scope: String): String =

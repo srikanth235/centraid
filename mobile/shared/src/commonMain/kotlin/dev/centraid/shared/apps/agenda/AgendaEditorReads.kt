@@ -81,7 +81,8 @@ public class AgendaEditorReads(
 
     override fun settled(status: CommandStatus, sentence: String, invokeKey: String): AgendaEditorInput {
         val settled = WriteLaw.settledOf(status, sentence, invokeKey)
-        marks?.settled(invokeKey, settled.committed, sentence)
+        // A TASK ADD IS NOT AN EVENT WRITE (#1128): the marks hold none for it.
+        if (!invokeKey.startsWith("${AgendaWrites.ADD_TASK}:")) marks?.settled(invokeKey, settled.committed, sentence)
         return AgendaEditorInput.View(AgendaEditorEvent(write_settled = settled))
     }
 }
