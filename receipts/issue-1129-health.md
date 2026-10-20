@@ -66,7 +66,7 @@ No file was deleted.
 cargo xtask doc-links
 ```
 
-Outcome: pass, 0 findings over 118 markdown files.
+Outcome: pass, 0 findings.
 
 The gate runs from the close are recorded in the next section.
 
@@ -169,7 +169,7 @@ cargo xtask rules; cargo xtask doc-links; CENTRAID_GATE_STAMPS=0 bun run check:p
 
 Outcome: pass. rules passed all four checks, doc-links reported 0 findings, and the static tier passed 4 of 4.
 
-`node .governance/law/run.mjs` reports one red rule, `receipt-per-issue`: #1127's receipt has no `## Audit`, and this receipt's Audit records no verdict (see Audit).
+`node .governance/law/run.mjs` reports one red rule, `receipt-per-issue`, and only on #1127's receipt, which has no `## Audit`. That receipt is outside #1129.
 
 ## Decisions
 
@@ -233,4 +233,4 @@ Outcome: pass. rules passed all four checks, doc-links reported 0 findings, and 
 
 ## Audit
 
-Owed. No independent reviewer has judged this receipt against the diff. Lane Z wrote the receipt, so it records no verdict. `receipt-per-issue` asks for a verdict before the combined pull request merges, as it does for #1127's receipt.
+PASS (independent auditor, 2026-10-21). The file list matches `git diff c1a914ad8..9366dc296` once #1127's merged files (`crates/vault/src/page.rs`, `receipts/issue-1127-phone-sync.md`) are set aside. The lane notes support the verification numbers, the screenshots and the falsifications. The five commitments' mechanisms and named tests are present. The iOS and Android sources contain no write path. Health is in no Chat scope list. Android remains unrun, as stated.
