@@ -34,7 +34,7 @@ import CentraidShared
 ///
 /// **THE COMPOSER IS ONE CARD** (`ChatComposerCard`): the waiting attachments
 /// and any notice about them on top, the field, and one row of controls — attach,
-/// the chat's scope, send. The status line ("Looking in Tasks…") sits just above
+/// the chat's scope, send. The status line ("Looking in Agenda…") sits just above
 /// it while a turn runs.
 struct ChatView: View {
     @ObservedObject var chat: ChatModel

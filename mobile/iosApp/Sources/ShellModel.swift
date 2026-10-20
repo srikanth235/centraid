@@ -1073,6 +1073,8 @@ final class ShellModel: ObservableObject {
     }
 
     /// The app an import writes to: Contacts → People, Calendar → Agenda, Reminders → Tasks.
+    /// Reminders land in the tasks domain, which opens in Agenda's To-do (#1128, R-1128-7):
+    /// the id stays the write app's, and `openImported` routes it through `appHomeRoute`.
     private static func importApp(_ source: Centraid_Screen_V1_ImportSource) -> String {
         switch source {
         case .contacts: return "people"

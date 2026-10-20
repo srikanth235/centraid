@@ -1,10 +1,10 @@
 # A container is a search result of its own (#1097): the project a member
-# typed the name of is a row in Home's Tasks group, before the tasks, and in
-# Tasks' own search results; a tap opens it where its app opens it.
+# typed the name of is a row in Home's Agenda group, before its rows, and in
+# Agenda's own search results (#1128: projects live in To-do); a tap opens it where its app opens it.
 #
 # THE FLOW MAKES ITS OWN PROJECT. The onboarding starters hold no notebook,
 # project, group or folder, so the first run creates a Tasks project called
-# "Orchard" (Projects band -> New project) and every later run finds it there
+# "Orchard" (Agenda's To-do place -> Projects -> New project) and every later run finds it there
 # and skips the step. Re-runnable: it leaves that one project and a recent
 # search. The seed step expects an install with NO other project (the empty
 # Projects state offers "New project"); on a vault that already holds projects
@@ -18,7 +18,8 @@ name: search-containers
 ---
 - launchApp
 - tapOn:
-    id: "home-tile-tasks"
+    id: "home-tile-agenda"
+- tapOn: "To-do"
 - tapOn: "Projects"
 - runFlow:
     when:
@@ -30,7 +31,7 @@ name: search-containers
       - inputText: "Orchard"
       - tapOn: "Create project"
 - assertVisible: "Orchard"
-# Home's search: the project is a hit of the Tasks group, kind named, above the
+# Home's search: the project is a hit of the Agenda group, kind named, above the
 # tasks (none here, so it stands alone), and counted.
 - launchApp
 - tapOn:
@@ -40,7 +41,7 @@ name: search-containers
 - inputText: "orchard"
 - extendedWaitUntil:
     visible:
-      id: "home-search-group-tasks"
+      id: "home-search-group-agenda"
     timeout: 5000
 - assertVisible:
     id: "search-container-schedule.project-.*"
@@ -55,12 +56,12 @@ name: search-containers
     timeout: 5000
 - assertNotVisible:
     id: "home-search-field"
-# Tasks' own search finds it too.
+# Agenda's own search finds it too.
 - launchApp
 - tapOn:
-    id: "home-tile-tasks"
+    id: "home-tile-agenda"
 - tapOn:
-    id: "tasks-search-open"
+    id: "agenda-search-open"
 - inputText: "orchard"
 - extendedWaitUntil:
     visible:

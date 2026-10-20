@@ -114,7 +114,7 @@ enum ChatPreview {
                 message(2, .assistant, "You have three tasks due this we", streaming: true),
             ]
             state.streaming = true
-            state.activity = "Looking in Tasks"
+            state.activity = "Looking in Agenda"
             state.canNewChat = true
         case "error":
             state.messages = [message(1, .user, "What is due this week?")]
