@@ -82,7 +82,7 @@ pub const MAX_CONTENT_URLS: usize = 100;
 /// a table in `from`, and a door that reads any table by name is wider than any
 /// screen needs: it would page the receipts, the provenance log, the Locker's
 /// fields and passkeys, the money ledger and every revision snapshot for a
-/// shell that asked. So it reads these twenty-two and refuses the rest as an
+/// shell that asked. So it reads these twenty-four and refuses the rest as an
 /// invalid request, before the vault is asked.
 ///
 /// The set is every `from` a shell sends today, read off `mobile/shared`'s
@@ -96,7 +96,7 @@ pub const MAX_CONTENT_URLS: usize = 100;
 /// | Photos (grid, shelves, lightbox, collections, search, picker, places, memories, duplicates, album choice, editor) | `media_asset`, `media_asset_phash`, `media_memory`, `media_memory_member`, `core_collection`, `core_collection_entry`, `core_concept`, `core_concept_scheme`, `core_tag`, `core_place`, `core_content_item` |
 /// | Notes' editor | `knowledge_note` |
 /// | Calendar import | `schedule_calendar` |
-/// | Phone sync (People, Agenda and Docs follow the phone, #1127) | `phone_link`, `phone_origin` |
+/// | Phone sync (People, Agenda and Docs follow the phone, #1127) | `phone_link`, `phone_origin`, `core_event`, `social_contact_channel` (and `core_party`, `people_profile`, which People already pages) |
 /// | `with_minor_units` | `core_account` |
 ///
 /// `core_account` has no shell caller: it is the one table whose `currency`
@@ -115,11 +115,11 @@ pub const MAX_CONTENT_URLS: usize = 100;
 ///
 /// The `where` is held to the same list: it is predicate text and could name
 /// a subquery on any table, so the vault prepares it under an authorizer that
-/// refuses a read outside these twenty-two
+/// refuses a read outside these twenty-four
 /// ([`Vault::keyset_page_reading_only`]). The vault's test
 /// `a_predicate_that_reads_a_table_outside_the_list_is_refused` is where that
 /// is read: the predicates it tries are SQL, which lives in that crate.
-pub const PAGE_TABLES: [&str; 22] = [
+pub const PAGE_TABLES: [&str; 24] = [
     "core_account",
     "core_collection",
     "core_collection_entry",
@@ -127,6 +127,7 @@ pub const PAGE_TABLES: [&str; 22] = [
     "core_concept_scheme",
     "core_content_item",
     "core_document",
+    "core_event",
     "core_party",
     "core_place",
     "core_tag",
@@ -142,6 +143,7 @@ pub const PAGE_TABLES: [&str; 22] = [
     "phone_origin",
     "schedule_calendar",
     "schedule_task",
+    "social_contact_channel",
 ];
 
 /// One page of rows, as the wire spells it.
@@ -806,7 +808,7 @@ mod tests {
     /// Every table a screen pages, with a column that can key its cursor. Spelled
     /// here, not derived from the allowlist, so the allowlist cannot grow without
     /// this list (and the paragraph above it) being read.
-    const PAGED_BY_A_SCREEN: [(&str, &str); 22] = [
+    const PAGED_BY_A_SCREEN: [(&str, &str); 24] = [
         ("core_account", "account_id"),
         ("core_collection", "collection_id"),
         ("core_collection_entry", "entry_id"),
@@ -814,6 +816,7 @@ mod tests {
         ("core_concept_scheme", "scheme_id"),
         ("core_content_item", "content_id"),
         ("core_document", "document_id"),
+        ("core_event", "event_id"),
         ("core_party", "party_id"),
         ("core_place", "place_id"),
         ("core_tag", "tag_id"),
@@ -829,6 +832,7 @@ mod tests {
         ("phone_origin", "origin_id"),
         ("schedule_calendar", "calendar_id"),
         ("schedule_task", "task_id"),
+        ("social_contact_channel", "channel_id"),
     ];
 
     #[test]

@@ -157,7 +157,8 @@ internal fun readContacts(resolver: ContentResolver): List<PhoneContact> {
             }
         }
     }
-    return gathered.values.map { PhoneContact(it.name, it.phones, it.emails, it.birthday) }
+    // R-1127-10: CONTACT_ID is device-scoped, so it says `local:`; lane D keys by LOOKUP_KEY.
+    return gathered.map { (id, entry) -> PhoneContact(entry.name, entry.phones, entry.emails, entry.birthday, phoneId = "local:$id") }
 }
 
 private class Gathered(val name: String) {

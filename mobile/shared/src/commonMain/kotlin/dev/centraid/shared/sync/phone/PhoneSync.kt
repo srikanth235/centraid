@@ -45,6 +45,13 @@ public interface PhoneStore {
 
     /** The source's adoption ranking; [PhoneSyncPlanner.byTiebreakOverlap] unless it says otherwise. */
     public val score: PhoneScore get() = PhoneSyncPlanner.byTiebreakOverlap
+
+    /**
+     * WHICH ROWS A READ COULD HAVE SEEN. A source that reads a window (Agenda reads a week back
+     * and two months on) must not take a row outside it for a record that went: such a row is
+     * neither trashed nor forgotten. Everything is covered unless the source says otherwise.
+     */
+    public suspend fun coverage(): (VaultRow) -> Boolean = { true }
 }
 
 /** WHAT A PASS DID. [read] is false when the vault could not be read and nothing was done. */
@@ -84,7 +91,7 @@ public object PhoneSync {
         val origins = store.origins() ?: return PhoneReport(read = false)
         val links = store.links() ?: return PhoneReport(read = false)
         val rows = store.rows() ?: return PhoneReport(read = false)
-        val plan = PhoneSyncPlanner.plan(snapshot, origins, links, rows, store.score)
+        val plan = PhoneSyncPlanner.plan(snapshot, origins, links, rows, store.score, store.coverage())
         return perform(store, plan.actions, origins, rows, PhoneReport(gone = plan.gone, refused = plan.invalid))
     }
 

@@ -80,6 +80,7 @@ public object PhoneSyncPlanner {
         links: List<StoredLink>,
         rows: Map<String, VaultRow>,
         score: PhoneScore = byTiebreakOverlap,
+        covers: (VaultRow) -> Boolean = { true },
     ): PhonePlan {
         val invalid = mutableListOf<String>()
         val records = linkedMapOf<String, PhoneRecord>()
@@ -120,7 +121,7 @@ public object PhoneSyncPlanner {
             }
             seen += link.phoneId
             if (link.detached) {
-                if (link.lastSeenAt < snapshot.readAt) stale += link.phoneId
+                if (isStale(link, snapshot)) stale += link.phoneId
                 continue
             }
             val row = rows[link.entityId] ?: continue
@@ -131,7 +132,7 @@ public object PhoneSyncPlanner {
                 row.trashed -> actions += PhoneAction.Detach(link, DetachReason.TRASHED)
                 record.fields.digest() != parts.phone -> actions += PhoneAction.Update(link, record)
                 storedByPhone[record.origin]?.originId != link.originId -> actions += PhoneAction.Rehome(link, record)
-                link.lastSeenAt < snapshot.readAt -> stale += link.phoneId
+                isStale(link, snapshot) -> stale += link.phoneId
             }
         }
 
@@ -144,10 +145,13 @@ public object PhoneSyncPlanner {
                     if (!link.detached) goneCounts[origin.originId] = (goneCounts[origin.originId] ?: 0) + 1
                     continue
                 }
+                // A record the read could not have seen (an event outside the window it read) is
+                // not a record that went: it is left, trashed by nothing and forgotten by nothing.
+                val row = rows[link.entityId] ?: continue
+                if (!covers(row)) continue
                 when {
                     link.detached -> actions += PhoneAction.Forget(link)
                     else -> {
-                        val row = rows[link.entityId] ?: continue
                         val parts = PhoneFingerprint.parts(link.fingerprint)
                         actions += when {
                             parts == null || row.fields.digest() != parts.vault ->
@@ -206,6 +210,14 @@ public object PhoneSyncPlanner {
         return actions
     }
 
+    /**
+     * A link not yet sighted in this snapshot's second. Sightings are compared to the second:
+     * the vault stamps milliseconds and a shell's `readAt` may not, and a link sighted by the
+     * pass that read the snapshot must not look stale to the next pass over it.
+     */
+    private fun isStale(link: StoredLink, snapshot: PhoneSnapshot): Boolean =
+        link.lastSeenAt.take(SECOND) < snapshot.readAt.take(SECOND)
+
     private fun adoptable(
         record: PhoneRecord,
         candidates: Map<String, List<VaultRow>>,
@@ -221,4 +233,7 @@ public object PhoneSyncPlanner {
         if (top.size != 1) return null
         return top.single().first.also { consumed += it.entityId }
     }
+
+    /** `YYYY-MM-DDTHH:MM:SS`. */
+    private const val SECOND: Int = 19
 }

@@ -11,11 +11,8 @@ import dev.centraid.shared.sync.phone.PhoneOriginRef
 import dev.centraid.shared.sync.phone.PhoneRecord
 import dev.centraid.shared.sync.phone.PhoneSnapshot
 import dev.centraid.shared.sync.phone.PhoneSource
-import dev.centraid.shared.sync.phone.PhoneStore
 import dev.centraid.shared.sync.phone.PhoneSync
 import dev.centraid.shared.sync.phone.PhoneSyncPlanner
-import dev.centraid.shared.sync.phone.StoredLink
-import dev.centraid.shared.sync.phone.StoredOrigin
 import dev.centraid.shared.sync.phone.VaultRow
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldBeEmpty
@@ -361,6 +358,17 @@ class PhoneSyncSpec : StringSpec({
         plan(store, snapshot(person("uid:a", "Ada Z"))).actions.filterIsInstance<PhoneAction.Detach>().size shouldBe 1
     }
 
+    "a row the read could not have seen is neither trashed nor forgotten" {
+        val store = FakeStore()
+        PhoneSync.run(store, snapshot(person("uid:a", "Ada"), person("uid:b", "Bo")))
+        val outside = store.rows.values.first { it.fields == person("uid:a", "Ada").fields }.entityId
+        store.covered = { it.entityId != outside }
+        val report = PhoneSync.run(store, snapshot(at = "2026-10-20T11:00:00.000Z"))
+        report.trashed shouldBe 1
+        store.rows.getValue(outside).trashed shouldBe false
+        store.links.values.map { it.entityId } shouldContainExactly listOf(outside)
+    }
+
     "the engine is the same for another source: a picked folder is an origin and a file a record" {
         val store = FakeStore(PhoneSource.FILES)
         val folder = PhoneOriginRef("folder:/Documents/Taxes", "Taxes")
@@ -388,122 +396,6 @@ private fun plan(store: FakeStore, snapshot: PhoneSnapshot) = PhoneSyncPlanner.p
     store.links.values.toList(),
     store.rows,
     store.score,
+    store.covered,
 )
 
-/**
- * AN IN-MEMORY VAULT THAT KEEPS THE COMMANDS' OWN RULES: a link refreshes in place and never
- * re-attaches, a detach is set once, a forget deletes, an origin is retired only when no link
- * names it. Every write is logged (`add`, `update`, `trash`, `link`, `touch`…), reads are not.
- */
-private class FakeStore(override val source: PhoneSource = PhoneSource.CONTACTS) : PhoneStore {
-    val rows = linkedMapOf<String, VaultRow>()
-    val links = linkedMapOf<String, StoredLink>()
-    val origins = linkedMapOf<String, StoredOrigin>()
-    val writes = mutableListOf<String>()
-    var refuseAdds: Set<String> = emptySet()
-    var unreadable: Boolean = false
-    private var next = 0
-
-    private fun id(prefix: String) = "$prefix-${++next}"
-
-    /** The vault's clock: always after the snapshots' `readAt`, as the vault's is. */
-    private val now = "2026-10-20T23:59:59.000Z"
-
-    fun seed(name: String, vararg phones: String, trashed: Boolean = false): String {
-        val entity = id("row")
-        rows[entity] = VaultRow(
-            entity,
-            PhoneFields.of { text("name", name); phones("phones", phones.toList()) },
-            trashed,
-            matchKey = name.lowercase(),
-            tiebreak = phones.map(PhoneFields::phoneNumber).toSet(),
-        )
-        return entity
-    }
-
-    /** The member edits a row in Centraid: fields change, no command of the engine's runs. */
-    fun edit(entity: String, fields: PhoneFields) {
-        rows[entity] = rows.getValue(entity).copy(fields = fields)
-    }
-
-    override suspend fun links() = if (unreadable) null else links.values.toList()
-
-    override suspend fun origins() = if (unreadable) null else origins.values.toList()
-
-    override suspend fun rows() = if (unreadable) null else rows.toMap()
-
-    override suspend fun row(entityId: String) = rows[entityId]
-
-    override suspend fun origin(phoneOrigin: String, label: String): String {
-        val known = origins.values.firstOrNull { it.phoneOrigin == phoneOrigin }
-        if (known == null) {
-            val created = StoredOrigin(id("origin"), phoneOrigin, label)
-            origins[created.originId] = created
-            writes += "origin"
-            return created.originId
-        }
-        if (known.label != label) {
-            origins[known.originId] = known.copy(label = label)
-            writes += "origin"
-        }
-        return known.originId
-    }
-
-    override suspend fun link(phoneId: String, originId: String, entityId: String, fingerprint: String): String? {
-        val known = links.values.firstOrNull { it.phoneId == phoneId }
-        if (known?.detached == true) return null
-        val refreshed = (known ?: StoredLink(id("link"), phoneId, originId, entityId, fingerprint, false, now))
-            .copy(originId = originId, entityId = entityId, fingerprint = fingerprint, lastSeenAt = now)
-        if (known != refreshed) {
-            links[refreshed.linkId] = refreshed
-            writes += "link"
-        }
-        return refreshed.linkId
-    }
-
-    override suspend fun touch(phoneIds: List<String>): Boolean {
-        writes += "touch"
-        links.replaceAll { _, link -> if (link.phoneId in phoneIds) link.copy(lastSeenAt = now) else link }
-        return true
-    }
-
-    override suspend fun detach(linkId: String): Boolean {
-        val link = links[linkId] ?: return false
-        if (!link.detached) {
-            links[linkId] = link.copy(detached = true)
-            writes += "detach"
-        }
-        return true
-    }
-
-    override suspend fun forget(linkId: String): Boolean {
-        if (links.remove(linkId) != null) writes += "forget"
-        return true
-    }
-
-    override suspend fun retireOrigin(originId: String): Boolean {
-        if (links.values.any { it.originId == originId }) return false
-        if (origins.remove(originId) != null) writes += "retire"
-        return true
-    }
-
-    override suspend fun add(record: PhoneRecord): String? {
-        if (record.fields.canonical().substringAfter("name=").substringBefore('\n') in refuseAdds) return null
-        val entity = id("row")
-        rows[entity] = VaultRow(entity, record.fields, false, record.matchKey, record.tiebreak)
-        writes += "add"
-        return entity
-    }
-
-    override suspend fun update(entityId: String, record: PhoneRecord): Boolean {
-        rows[entityId] = rows.getValue(entityId).copy(fields = record.fields)
-        writes += "update"
-        return true
-    }
-
-    override suspend fun trash(entityId: String): Boolean {
-        rows[entityId] = rows.getValue(entityId).copy(trashed = true)
-        writes += "trash"
-        return true
-    }
-}
