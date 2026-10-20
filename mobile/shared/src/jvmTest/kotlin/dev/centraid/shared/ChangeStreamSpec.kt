@@ -23,6 +23,7 @@ import dev.centraid.shared.screen.ScreenHost
 import dev.centraid.shared.shell.HomeMachine
 import dev.centraid.shared.shell.HomeAgendaTile
 import dev.centraid.shared.shell.HomeMoneyTile
+import dev.centraid.shared.shell.HomeNotesTile
 import dev.centraid.shared.shell.HomeReads
 import dev.centraid.shared.sync.ChangeStream
 import io.kotest.core.spec.style.StringSpec
@@ -166,7 +167,7 @@ class ChangeStreamSpec : StringSpec({
         }
         HomeReads.TABLES shouldBe
             HomeReads.READS.flatMap { listOf(it.query.from) + it.alsoReads }.toSet() + HomeAgendaTile.TABLES +
-                HomeMoneyTile.TABLES
+                HomeNotesTile.TABLES + HomeMoneyTile.TABLES
     }
 
     "a change from the gateway never takes a member's typing" {

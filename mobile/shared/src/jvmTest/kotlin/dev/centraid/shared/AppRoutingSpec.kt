@@ -237,7 +237,7 @@ class AppRoutingSpec : StringSpec({
         TasksHomeEvent.ADAPTER.decode(opening.event).opened!!.quick_add_title shouldBe "Buy milk"
     }
 
-    "Notes: Done pops onto a Notes screen, else swaps in the library; the tile opens its note" {
+    "Notes: Done pops onto a Notes screen, else swaps in the library; the tile opens its shelf's place" {
         NotesRouting.close(NotesLibraryMachine.SCREEN_ID) shouldBe NavMove.Pop
         NotesRouting.close("") shouldBe NavMove.swap(Destination.NotesLibrary())
         NotesRouting.close(TasksHomeMachine.SCREEN_ID) shouldBe NavMove.swap(Destination.NotesLibrary())
@@ -246,6 +246,8 @@ class AppRoutingSpec : StringSpec({
         (NotesRouting.tile(tile) as Destination.NotesEditor).isNew shouldBe true
         NotesRouting.tile(HomeTile(app_id = "notes", status = TileStatus.TILE_STATUS_LOADING)).shouldBeNull()
         NotesRouting.tileOpening(tile.encode())!!.screenId shouldBe NotesEditorMachine.SCREEN_ID
+        NotesRouting.tileOpening(HomeTile(app_id = "notes", status = TileStatus.TILE_STATUS_CONTENT).encode())!!
+            .screenId shouldBe NotesLibraryMachine.SCREEN_ID
         NotesRouting.tileOpening(byteArrayOf(-1, -1)).shouldBeNull()
     }
 

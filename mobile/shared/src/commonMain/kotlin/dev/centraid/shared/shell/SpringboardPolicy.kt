@@ -46,8 +46,10 @@ public object SpringboardPolicy {
     private val TILE_SIZE: Map<String, TileSize> = mapOf(
         "agenda" to TileSize.TILE_SIZE_SMALL,
         "docs" to TileSize.TILE_SIZE_MEDIUM,
-        // Notes' body IS the Docs preview body, and the class follows the body.
-        "notes" to TileSize.TILE_SIZE_MEDIUM,
+        // A SHELF NEEDS NO MEASURE: three notebook names and one title, each a
+        // single line (`HomeNotesTile`). Half width, it also pairs the smalls
+        // evenly, where a wide Notes left the last of five on its own.
+        "notes" to TileSize.TILE_SIZE_SMALL,
         "locker" to TileSize.TILE_SIZE_SMALL,
         "money" to TileSize.TILE_SIZE_SMALL,
         "people" to TileSize.TILE_SIZE_SMALL,

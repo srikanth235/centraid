@@ -301,11 +301,16 @@ class ScreenQueryRuntimeSpec : StringSpec({
         fun home(answer: (AppQueryRequest) -> Envelope): CentraidCore =
             CentraidCore.answering(Dispatchers.Default) { envelope ->
                 val query = envelope.request.shouldNotBeNull().app_query
-                if (query == null) {
-                    Envelope(request_id = 0, response = Response(page = Page()))
-                } else {
-                    zones += query.agenda_upcoming.shouldNotBeNull().tz
-                    answer(query)
+                val agenda = query?.agenda_upcoming
+                when {
+                    query == null -> Envelope(request_id = 0, response = Response(page = Page()))
+                    // Notes' tile rides this arm too, and is not this case's
+                    // subject: an empty answer refuses it and leaves Agenda be.
+                    agenda == null -> answered(AppQueryResponse())
+                    else -> {
+                        zones += agenda.tz
+                        answer(query)
+                    }
                 }
             }
 

@@ -99,10 +99,11 @@ public class HomeRuntime(
         }
     }
 
-    /** Every tile's read, fanned out: the page reads, and Agenda's app query. */
+    /** Every tile's read, fanned out: the page reads, and the app queries. */
     public fun readAllTiles() {
         HomeReads.READS.forEach { read -> scope.launch { readTile(read) } }
         scope.launch { readAgenda() }
+        scope.launch { readNotes() }
         scope.launch { readMoney() }
     }
 
@@ -138,6 +139,28 @@ public class HomeRuntime(
             is AppQueryOutcome.Denied ->
                 refused(HomeAgendaTile.APP_ID, deniedFailure(outcome.denial))
             is AppQueryOutcome.Refused -> refused(HomeAgendaTile.APP_ID, outcome.failure)
+        }
+        host.send(event)
+    }
+
+    /**
+     * NOTES' TILE, THROUGH THE APP-QUERY ARM: the library and the spine, asked
+     * together ([HomeNotesTile]). Either one refused refuses the tile — a
+     * shelf drawn without its notebooks would say the vault has none.
+     */
+    private suspend fun readNotes() {
+        val event = when (val outcome = askCore(core(), HomeNotesTile.requests(clock.read()))) {
+            is AppQueryOutcome.Answered -> {
+                val library = outcome.answers.firstNotNullOfOrNull { it.notes_library }
+                val spine = outcome.answers.firstNotNullOfOrNull { it.notes_notebooks }
+                if (library != null && spine != null) {
+                    HomeNotesTile.arrived(library, spine)
+                } else {
+                    refused(HomeNotesTile.APP_ID, Reads.refused(WRONG_ANSWER))
+                }
+            }
+            is AppQueryOutcome.Denied -> refused(HomeNotesTile.APP_ID, deniedFailure(outcome.denial))
+            is AppQueryOutcome.Refused -> refused(HomeNotesTile.APP_ID, outcome.failure)
         }
         host.send(event)
     }

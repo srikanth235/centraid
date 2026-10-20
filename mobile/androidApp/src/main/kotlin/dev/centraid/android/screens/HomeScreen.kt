@@ -806,6 +806,61 @@ private fun ColumnScope.TileBodyView(tile: HomeTile) {
     }
 }
 
+/**
+ * NOTES' SHELF (`HomeNotesTile`): the notebooks holding notes in soft ink, each
+ * with its count, and the newest note's title alone at the foot. A vault with
+ * nothing filed draws its newest notes instead, and no foot — the first of them
+ * IS the newest. Quiet on purpose: two inks and air, every line one line.
+ * Matches SwiftUI's `NotesShelf`, which says why.
+ */
+@Composable
+private fun NotesShelf(notes: TileBody.Notes, modifier: Modifier) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (notes.notebooks.isEmpty()) {
+            notes.recent.forEach { note ->
+                Text(
+                    note.title,
+                    style = centraidType("small"),
+                    color = centraidColor("text"),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            return@Column
+        }
+        notes.notebooks.forEach { notebook ->
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    notebook.name,
+                    style = centraidType("small"),
+                    color = centraidColor("textSoft"),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    notebook.note_count.toString(),
+                    style = centraidType("mono"),
+                    color = centraidColor("textFaint"),
+                )
+            }
+        }
+        // Pinned to the foot: the shelf leaves its slack above.
+        Spacer(Modifier.weight(1f))
+        Text(
+            notes.title,
+            style = centraidType("smallStrong"),
+            color = centraidColor("text"),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
 @Composable
 private fun ColumnScope.FilledBody(body: TileBody) {
     val column = Modifier.weight(1f, fill = true).fillMaxWidth()
@@ -929,30 +984,7 @@ private fun ColumnScope.FilledBody(body: TileBody) {
             }
         }
 
-        notes != null -> Column(column, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            // PROSE — a title over an opening line. Notes and Docs shared one
-            // body shape in an early draft and the two were indistinguishable.
-            Text(
-                notes.title,
-                style = centraidType("smallStrong"),
-                color = centraidColor("text"),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            if (notes.excerpt.isNotEmpty()) {
-                // SOFT INK, NOT FULL: `readBodyCss` is `color: t.ink2`, which
-                // the handoff's role map spells `--text-soft`. At full `text`
-                // the excerpt weighed the same as its title and the tile read
-                // as two headings.
-                Text(
-                    notes.excerpt,
-                    style = centraidType("small"),
-                    color = centraidColor("textSoft"),
-                    maxLines = 3,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-        }
+        notes != null -> NotesShelf(notes, column)
 
         agenda != null -> Column(column, verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(agenda.at, style = centraidType("mono"), color = centraidColor("textSoft"))

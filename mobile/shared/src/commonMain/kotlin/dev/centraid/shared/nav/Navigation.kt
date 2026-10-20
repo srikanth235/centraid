@@ -177,7 +177,7 @@ public sealed interface Destination {
         val title: String? = null,
         /**
          * The id was minted on the phone for a note not yet written
-         * (`NotesRouting.target`): the editor opens empty and creates it on
+         * (`NotesRouting.tile`): the editor opens empty and creates it on
          * its first save.
          */
         val isNew: Boolean = false,

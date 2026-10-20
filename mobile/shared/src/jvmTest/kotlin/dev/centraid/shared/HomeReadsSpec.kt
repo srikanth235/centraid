@@ -242,9 +242,9 @@ class HomeReadsSpec : StringSpec({
 
     // --- the trash, off the other tiles ------------------------------------
 
-    "the docs, notes and tasks tiles leave the trash out, and tasks reads open work only" {
+    "the docs and tasks tiles leave the trash out, and tasks reads open work only" {
         val byApp = HomeReads.READS.associateBy { it.appId }
-        listOf("docs", "notes", "tasks").forEach { app ->
+        listOf("docs", "tasks").forEach { app ->
             val query = byApp.getValue(app).query
             withClue(app) {
                 query.where_.shouldNotBeNull() shouldContain "deleted_at IS NULL"
@@ -320,7 +320,6 @@ class HomeReadsSpec : StringSpec({
         val singular = mapOf(
             "photos" to "photo",
             "docs" to "document",
-            "notes" to "note",
             "tasks" to "task",
             "people" to "person",
             "locker" to "item",
@@ -328,7 +327,6 @@ class HomeReadsSpec : StringSpec({
         val plural = mapOf(
             "photos" to "photos",
             "docs" to "documents",
-            "notes" to "notes",
             "tasks" to "tasks",
             "people" to "people",
             "locker" to "items",

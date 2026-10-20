@@ -1155,10 +1155,31 @@ message TileBody {
     string line = 3;
   }
 
+  // THE SHELF: the notebooks that hold notes, and the newest note at the foot.
+  // A vault with no filed notes has no shelf, and draws its newest notes in
+  // `recent` instead. The tile is half width, so there is no prose here: 3 was
+  // `excerpt`, which the read never filled and the measure has no room for.
   message Notes {
+    reserved 3;
+    reserved "excerpt";
+    // The newest note, its title alone at the foot under the shelf.
     string note_id = 1;
     string title = 2;
-    string excerpt = 3;
+    // Up to three notebooks holding notes, in the member's own order.
+    repeated Notebook notebooks = 5;
+    // Only when `notebooks` is empty: the newest notes, up to three.
+    repeated Recent recent = 6;
+
+    message Notebook {
+      string notebook_id = 1;
+      string name = 2;
+      uint32 note_count = 3;
+    }
+
+    message Recent {
+      string note_id = 1;
+      string title = 2;
+    }
   }
 
   // THIS MONTH'S SPENDING, one figure per currency and nothing summed across
