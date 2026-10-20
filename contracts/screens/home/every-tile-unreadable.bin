@@ -1,15 +1,13 @@
-"è'
+"›'
 photos(0:Import your first photo%
 docs(0:Add your first document$
 notes(0:Write your first note+
-agenda(:Put something on the calendar)
-tasks(:Capture the next thing to do"
+agenda(:Put something on the calendar"
 people(:Add someone you know&
 locker(:Unlock to see your items*1Not on this phone yetCheck the connection 0:
 photos:
 docs:
-notes:
+notes:
 agenda
-tasks:
-people
+people:
 locker

@@ -325,10 +325,8 @@ class HomeMachineSpec : StringSpec({
             listOf("docs"),
             listOf("notes"),
             // Smalls pair.
-            listOf("agenda", "tasks"),
-            listOf("money", "people"),
-            // A lone small at the end is not a hole.
-            listOf("locker"),
+            listOf("agenda", "money"),
+            listOf("people", "locker"),
         )
     }
 

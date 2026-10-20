@@ -33,7 +33,6 @@ public object SpringboardPolicy {
         "docs",
         "notes",
         "agenda",
-        "tasks",
         "money",
         "people",
         "locker",
@@ -52,7 +51,6 @@ public object SpringboardPolicy {
         "money" to TileSize.TILE_SIZE_SMALL,
         "people" to TileSize.TILE_SIZE_SMALL,
         "photos" to TileSize.TILE_SIZE_LARGE,
-        "tasks" to TileSize.TILE_SIZE_SMALL,
     )
 
     /** An app with no first-party tile (a gateway app) takes the 1x1. */
@@ -142,7 +140,6 @@ public object SpringboardPolicy {
         "notes" to "Write your first note",
         "people" to "Add someone you know",
         "photos" to "Import your first photo",
-        "tasks" to "Capture the next thing to do",
     )
 
     /**

@@ -304,7 +304,7 @@ class ChatFlowSpec : StringSpec({
         rig.state.messages shouldHaveSize 2
 
         rig.door.bus.tryEmit(AssistEvent(session_id = 7, turn_id = 1, activity = AssistActivity(app = "tasks", tool = "tasks.list")))
-        rig.state.activity shouldBe "Looking in Tasks"
+        rig.state.activity shouldBe "Looking in Agenda"
         rig.door.bus.tryEmit(AssistEvent(session_id = 7, turn_id = 1, cards = AssistCards(cards = listOf(card("t1", "Pick up the dry cleaning")))))
         rig.state.messages.last().cards shouldHaveSize 1
         rig.door.bus.tryEmit(AssistEvent(session_id = 7, turn_id = 1, token = AssistToken(text = "One thing")))
