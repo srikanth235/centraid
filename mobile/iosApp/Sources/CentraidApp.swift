@@ -238,6 +238,8 @@ struct CentraidApp: App {
             .background { AppGlobals(shell: shell) }
             // IOS'S CONTACT PICKER, for an import over limited access.
             .modifier(ContactAccessPickerHost(shell: shell))
+            // THE QUESTION A HELD ACCOUNT OR CALENDAR LEAVES (#1127, R-1127-9).
+            .modifier(PhoneFollowQuestionHost(shell: shell))
             // THE 24 WORDS (#1047 E2): `words.make` and `words.enter`, one
             // sheet at the root so Locker's wall can raise it from any depth.
             // A swipe is allowed only where the machine has a way out to hear.
