@@ -133,8 +133,9 @@ class HomeReadsSpec : StringSpec({
         body.due_count shouldBe 3
         body.due_label shouldBe "3 due"
         body.due_title shouldBe "File the taxes"
-        // The header count stays EVENTS: a task is not an event in the next 7 days.
-        arrived.count.shouldNotBeNull().value_ shouldBe 1
+        // The header count is what the tile draws: the event plus the three due tasks.
+        arrived.count.shouldNotBeNull().value_ shouldBe 4
+        arrived.count_label shouldBe "on your plate"
     }
 
     "tasks due and no event coming up is a tile with content, whose headline says there is no event" {
@@ -146,6 +147,9 @@ class HomeReadsSpec : StringSpec({
         body.after shouldBe ""
         body.due_label shouldBe "1 due"
         body.due_title shouldBe "Call Mum"
+        // NOT "0" over "1 due": the count agrees with the line (#1128).
+        arrived.count.shouldNotBeNull().value_ shouldBe 1
+        arrived.count_label shouldBe "on your plate"
     }
 
     "nothing coming up and nothing due is empty, and a due read that did not land says nothing" {
@@ -175,7 +179,7 @@ class HomeReadsSpec : StringSpec({
         body.after shouldBe "then Dentist"
         arrived.count.shouldNotBeNull().value_ shouldBe 2
         arrived.count.shouldNotBeNull().capped shouldBe false
-        arrived.count_label shouldBe "events in the next 7 days"
+        arrived.count_label shouldBe "on your plate"
     }
 
     "an occurrence already under way is next — it has not ended" {
@@ -423,10 +427,10 @@ class HomeReadsSpec : StringSpec({
         }
     }
 
-    "the agenda tile says \"1 event\" for one and \"events\" for none or many" {
+    "the agenda tile's count counts events and due tasks, in one noun for none, one or many" {
         tile(timed("evt-survey", "Survey walk-through", "2026-06-15T10:00", "2026-06-15T11:00"))
-            .count_label shouldBe "event in the next 7 days"
-        HomeAgendaTile.arrived(answer()).tile.shouldNotBeNull().count_label shouldBe "events in the next 7 days"
+            .count_label shouldBe "on your plate"
+        HomeAgendaTile.arrived(answer()).tile.shouldNotBeNull().count_label shouldBe "on your plate"
     }
 
     // --- civil days: arithmetic, never a zone ------------------------------

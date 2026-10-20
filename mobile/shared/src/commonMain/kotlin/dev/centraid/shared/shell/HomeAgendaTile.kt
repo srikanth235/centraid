@@ -119,14 +119,17 @@ public object HomeAgendaTile {
         // ended is next, whether it is later today or already under way.
         val live = answer.events.filter { it.local_start.isNotEmpty() && !it.endedBy(today, now) }
         val horizon = plusDays(today, COUNT_DAYS)
-        val count = live.count { horizon == null || it.firstDay() < horizon }
         val owed = Due.of(due)
+        // THE COUNT IS WHAT THE TILE DRAWS (#1128): events in the next
+        // COUNT_DAYS plus the tasks due, because "0" over a "1 due" line
+        // contradicted itself. Its noun is "on your plate", which holds both.
+        val count = live.count { horizon == null || it.firstDay() < horizon } + owed.count
         val next = live.firstOrNull() ?: return HomeEvent(
             tile = HomeEvent.TileArrived(
                 app_id = APP_ID,
                 status = if (owed.count == 0) TileStatus.TILE_STATUS_EMPTY else TileStatus.TILE_STATUS_CONTENT,
-                count = TileCount(value_ = 0),
-                count_label = HomeReads.countNoun(0, false, AgendaCopy.TILE_COUNT_ONE, AgendaCopy.TILE_COUNT_MANY),
+                count = TileCount(value_ = owed.count),
+                count_label = HomeReads.countNoun(owed.count, false, AgendaCopy.TILE_COUNT_ONE, AgendaCopy.TILE_COUNT_MANY),
                 // Tasks alone: the headline says there is no event, and the due line is the tile.
                 body = if (owed.count == 0) null else TileBody(agenda = owed.on(TileBody.Agenda(title = AgendaCopy.TILE_NO_EVENTS))),
             ),

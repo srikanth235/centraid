@@ -28,7 +28,7 @@ data {
   # AGENDA'S TILE CARRIES TODAY'S DUE TASKS beside the next event (#1128).
   tiles {
     app_id: "agenda" status: TILE_STATUS_CONTENT size: TILE_SIZE_SMALL
-    count { value: 3 } count_label: "events in the next 7 days"
+    count { value: 5 } count_label: "on your plate"
     body { agenda {
       title: "Survey walk-through" at: "10:00" after: "then Dentist"
       due_count: 2 due_label: "2 due" due_title: "File the taxes"
