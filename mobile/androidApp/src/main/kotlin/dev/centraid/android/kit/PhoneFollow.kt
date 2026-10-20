@@ -19,12 +19,15 @@ import dev.centraid.android.screens.agenda.readPhoneEvents
 import dev.centraid.android.screens.people.readPhoneContacts
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
-import dev.centraid.shared.shell.CalendarRead
-import dev.centraid.shared.shell.ContactsRead
+import dev.centraid.shared.apps.agenda.CalendarFollow
+import dev.centraid.shared.apps.agenda.CalendarRead
+import dev.centraid.shared.apps.agenda.CalendarReader
+import dev.centraid.shared.apps.people.ContactsFollow
+import dev.centraid.shared.apps.people.ContactsRead
+import dev.centraid.shared.apps.people.ContactsReader
 import dev.centraid.shared.shell.HomeSession
 import dev.centraid.shared.shell.PhoneFollowBridge
 import dev.centraid.shared.shell.PhoneFollowQuestion
-import dev.centraid.shared.shell.PhoneFollowShell
 import dev.centraid.shared.sync.phone.PhoneSource
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -33,21 +36,21 @@ import kotlinx.coroutines.launch
 import java.util.TimeZone
 
 /**
- * ANDROID FOLLOWS THE PHONE (#1127): THE TRIGGERS AND THE SHELL'S HALF OF `PhoneFollowBridge`.
+ * ANDROID FOLLOWS THE PHONE (#1127): THE TRIGGERS, THE READERS AND THE QUESTION.
  *
  * - **Triggers.** The activity's `onStart` (the app came to the front) and a [ContentObserver] on
  *   the address book and on the events, registered from `onStart` to `onStop`, each say
  *   [requested]. The bridge coalesces a burst, runs one pass per source at a time, and does
  *   nothing for a source the member never imported.
- * - **Reads.** A pass asks [readContacts] / [readCalendar], answered off the main thread, and
+ * - **Reads.** The [ContactsReader] and [CalendarReader] below answer off the main thread, and
  *   **null when the permission is not already granted: a pass never asks the OS**, only the
  *   member's Import tap does (R-ONBOARD-4).
- * - **The question.** [ask] holds the one question the bridge is waiting on; [PhoneFollowDialog]
+ * - **The question.** [question] holds the one the bridge is waiting on; [PhoneFollowDialog]
  *   draws it and [answer] sends the member's choice back.
  *
  * Held by the activity and built on the application context, so it keeps no activity alive.
  */
-internal class AndroidPhoneFollow(context: Context) : PhoneFollowShell {
+internal class AndroidPhoneFollow(context: Context) {
     private val context: Context = context.applicationContext
     private val bridge = PhoneFollowBridge()
     private val io = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -63,7 +66,7 @@ internal class AndroidPhoneFollow(context: Context) : PhoneFollowShell {
 
     /** The foreground vault's session is open: followed from now on, and followed once at once. */
     fun attach(session: HomeSession) {
-        bridge.attach(session, this)
+        bridge.attach(session, listOf(ContactsFollow(contactsReader), CalendarFollow(calendarReader))) { question = it }
         attached = true
         if (started) requestAll()
     }
@@ -115,25 +118,25 @@ internal class AndroidPhoneFollow(context: Context) : PhoneFollowShell {
         }
     }
 
-    override fun readContacts(done: (ContactsRead?) -> Unit) {
-        if (!granted(Manifest.permission.READ_CONTACTS)) return done(null)
-        io.launch {
-            val read = readPhoneContacts(context)
-            done(ContactsRead(read.contacts, read.origins, read.complete))
+    private val contactsReader = object : ContactsReader {
+        override fun read(done: (ContactsRead?) -> Unit) {
+            if (!granted(Manifest.permission.READ_CONTACTS)) return done(null)
+            io.launch {
+                val read = readPhoneContacts(context)
+                done(ContactsRead(read.contacts, read.origins, read.complete))
+            }
         }
     }
 
-    override fun readCalendar(done: (CalendarRead?) -> Unit) {
-        if (!granted(Manifest.permission.READ_CALENDAR)) return done(null)
-        io.launch {
-            val now = System.currentTimeMillis()
-            val read = readPhoneEvents(context, now)
-            done(CalendarRead(read.events, read.origins, read.complete, TimeZone.getDefault().id, now))
+    private val calendarReader = object : CalendarReader {
+        override fun read(done: (CalendarRead?) -> Unit) {
+            if (!granted(Manifest.permission.READ_CALENDAR)) return done(null)
+            io.launch {
+                val now = System.currentTimeMillis()
+                val read = readPhoneEvents(context, now)
+                done(CalendarRead(read.events, read.origins, read.complete, TimeZone.getDefault().id, now))
+            }
         }
-    }
-
-    override fun ask(question: PhoneFollowQuestion) {
-        this.question = question
     }
 
     private fun granted(permission: String): Boolean =
