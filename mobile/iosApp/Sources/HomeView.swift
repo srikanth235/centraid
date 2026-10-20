@@ -755,6 +755,32 @@ private struct ContentBody: View {
             }
             .frame(maxWidth: .infinity, alignment: .topLeading)
 
+        case let .health(health):
+            // TODAY'S STEPS AND LAST NIGHT'S SLEEP (#1129), every word the
+            // machine's: an empty figure is a day with no steps yet, drawn as
+            // the caption alone and never as a 0, and an empty line is no sleep.
+            VStack(alignment: .leading, spacing: 2) {
+                if !health.figure.isEmpty {
+                    Text(health.figure)
+                        .centraidType("mono")
+                        .monospacedDigit()
+                        .foregroundStyle(Theme.color("text", scheme))
+                        .lineLimit(1)
+                }
+                Text(health.caption)
+                    .centraidType("small")
+                    .foregroundStyle(Theme.color("textSoft", scheme))
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+                if !health.line.isEmpty {
+                    Text(health.line)
+                        .centraidType("small")
+                        .foregroundStyle(Theme.color("text", scheme))
+                        .lineLimit(1)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+
         case .none:
             EmptyView()
         }

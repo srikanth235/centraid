@@ -137,17 +137,41 @@ final class ShellModel: ObservableObject {
         followPhone()
     }
 
-    /// THE APP CAME FORWARD, or the OS announced a change: People and Agenda
-    /// follow the phone (#1127). Cheap; the shared gate decides whether a pass runs.
+    /// THE APP CAME FORWARD, or the OS announced a change: People, Agenda, Docs
+    /// and Health follow the phone (#1127, #1129). Cheap; the shared gate decides
+    /// whether a pass runs. Health is read on coming forward only — background
+    /// delivery is a later wave — and a pass never asks HealthKit for access.
     func followPhone() {
         follow.requested(source: .contacts)
         follow.requested(source: .calendar)
         follow.requested(source: .files)
+        follow.requested(source: .health)
     }
 
     /// A folder was just followed, or picked again: read it now (#1127).
     func followFolders() {
         follow.requested(source: .files)
+    }
+
+    /// CONNECT HEALTH (#1129): the member tapped Connect with [chosen]. The OS
+    /// is asked for exactly those types, read only; then the vault is told, and
+    /// the first pass runs. [done] hears whether both answered.
+    func connectHealth(_ chosen: [String], done: @escaping (Bool) -> Void) {
+        Task { @MainActor in
+            guard await HealthAccess.request(chosen) else {
+                done(false)
+                return
+            }
+            healthConnect.connect(store: HealthDevices.shared.APPLE_HEALTH, chosen: chosen) { ok in
+                done(ok.boolValue)
+            }
+        }
+    }
+
+    /// STOP (#1129): Health stops reading the store; every day and workout stays.
+    func stopHealth() {
+        HealthAccess.stopped()
+        healthConnect.stop { _ in }
     }
 
     /// The question a held account or calendar leaves (R-1127-9), or nil. The
@@ -301,6 +325,15 @@ final class ShellModel: ObservableObject {
     /// phone holds after the member imported it. One bridge for both; the gate,
     /// the passes and the question are in `CentraidShared`.
     private let follow = PhoneFollowBridge()
+    /// HEALTHKIT, READ ONLY (#1129): the follower's reader and Connect's.
+    private let healthReader = HealthKitReader()
+    /// CONNECT AND STOP (#1129): what the vault is told after the member's
+    /// Connect tap and the OS's answer, and when they stop. Health's screens
+    /// reach it through `connectHealth` and `stopHealth`.
+    private lazy var healthConnect = HealthConnectBridge(
+        reader: healthReader,
+        clock: PlatformServices_iosKt.platformServices().clock
+    )
     private let reminders = RemindersImportBridge()
 
     /// The three app screens' bridges (#1025 S5, lane L5).
@@ -369,6 +402,13 @@ final class ShellModel: ObservableObject {
         }
         // EventKit posts only for a store that is alive.
         _ = PhoneCalendar.watcher
+        // THE PHONE'S HEALTH FACTS (#1129): the store, the units and the chosen
+        // set, stated before any Health screen opens and again whenever the
+        // member changes the region's measurement system.
+        HealthAccess.state()
+        NotificationCenter.default.addObserver(forName: NSLocale.currentLocaleDidChangeNotification, object: nil, queue: .main) { _ in
+            HealthAccess.state()
+        }
         photos.observe { [weak self] bytes in self?.photosState = bytes.data }
         home.observeHoldsNoVault { [weak self] none in self?.holdsNoVaultChanged(none.boolValue) }
         home.appearance { [weak self] stored in self?.appearance = stored }
@@ -445,10 +485,12 @@ final class ShellModel: ObservableObject {
                     ContactsFollow(reader: ContactsFollowReader()),
                     CalendarFollow(reader: CalendarFollowReader()),
                     FilesFollow(reader: FolderFollowReader()),
+                    HealthFollow(reader: self.healthReader, clock: PlatformServices_iosKt.platformServices().clock),
                 ],
                 ask: { [weak self] question in DispatchQueue.main.async { self?.followQuestion = question } }
             )
             self.reminders.attach(session: session)
+            self.healthConnect.attach(session: session)
             self.backup.attach(session: session)
             self.photoShelf.attach(session: session)
             self.photoLightbox.attach(session: session)

@@ -139,6 +139,18 @@ targets:
       properties:
         keychain-access-groups:
           - $(AppIdentifierPrefix)$(CFBundleIdentifier)
+        # HEALTH READS APPLE HEALTH, AND NOTHING ELSE (#1129, R-1129-7). The
+        # capability, and an EMPTY access list: no clinical records, no
+        # verifiable health records — the daily totals and workouts the member
+        # chooses on Connect are ordinary read types and need nothing more.
+        # There is no share type anywhere in this bundle: the usage string
+        # below is `NSHealthShareUsageDescription` alone, and
+        # `HealthKitReadOnlySpec` fails on an `NSHealthUpdateUsageDescription`,
+        # a non-empty access list, or a `toShare` that is not `[]`. The
+        # simulator seeder that writes test data is its own project
+        # (`HealthSeeder/project.yml`) and never part of this one.
+        com.apple.developer.healthkit: true
+        com.apple.developer.healthkit.access: []
     # `Resources/Info.plist` IS XCODEGEN'S OUTPUT, NOT A SOURCE FILE (#1020).
     #
     # The keys below are the source; `xcodegen generate` writes the plist from
@@ -223,6 +235,11 @@ targets:
         # app's day-one empty state. iOS 17's full-access keys; the import reads.
         NSCalendarsFullAccessUsageDescription: Centraid copies your calendar's events into Agenda, in your own vault on this phone.
         NSRemindersFullAccessUsageDescription: Centraid copies your open reminders into Tasks, in your own vault on this phone.
+        # WHY HEALTH ASKS FOR APPLE HEALTH (#1129): asked at the member's tap on
+        # Connect, never at launch, for the types they chose there, READ ONLY
+        # (R-1129-7). The sentence says both halves: what is read, and that
+        # nothing goes back.
+        NSHealthShareUsageDescription: Centraid reads the daily totals and workouts you choose from Apple Health into Health, in your own vault on this phone, and never writes anything back.
         # WHY CENTRAID ASKS FOR THE LOCAL NETWORK (#1047 E5; #1080). A gateway
         # is dialled at the addresses its pairing record keeps, which are
         # usually on the member's own Wi-Fi; iOS asks before an app reaches a
