@@ -43,6 +43,7 @@ import dev.centraid.android.screens.AppRoutes
 import dev.centraid.android.screens.RouteNav
 import dev.centraid.android.screens.agenda.AgendaRoutes
 import dev.centraid.android.screens.docs.DocsRoutes
+import dev.centraid.android.screens.health.HealthRoutes
 import dev.centraid.android.screens.locker.LockerRoutes
 import dev.centraid.android.screens.money.MoneyRoutes
 import dev.centraid.android.screens.notes.NotesRoutes
@@ -150,6 +151,7 @@ public class MainActivity : FragmentActivity() {
             PeopleRoutes(),
             TasksRoutes(),
             MoneyRoutes(),
+            HealthRoutes(health),
             locker,
             homeSearch,
         )
