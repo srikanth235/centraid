@@ -2,6 +2,7 @@ package dev.centraid.shared.shell
 
 import centraid.core.v1.Command
 import centraid.core.v1.Envelope
+import centraid.core.v1.LibraryAssetsRequest
 import centraid.core.v1.Request
 import centraid.screen.v1.BackupState
 import centraid.screen.v1.MediaPermission
@@ -60,6 +61,14 @@ import okio.ByteString.Companion.encodeUtf8
  * photographs is the one drawn ([dev.centraid.shared.apps.photos.PhotoFold]).
  * A re-offer is the same two commits and the same bytes, and the core adopts
  * both: an edit is never doubled. No adjustment data travels (A20(2)).
+ *
+ * **An item edited in place (Android)** has no camera original to stage: the
+ * editor overwrote the file. [MediaLibrary.Asset.changedInPlace] says the
+ * library reports it changed after it was walked, and the walker asks the
+ * core which asset that ref was last backed up as (`library_assets`) BEFORE it
+ * stages the new bytes. If the new bytes differ, they are committed with that
+ * asset as `source_asset_id` and the ref as the capture group, and the grid
+ * folds the earlier version under the edit exactly as for an iOS edit.
  *
  * **The platform renders the derivatives.** The core cannot decode HEIC and
  * keeps no library original to decode later, so after an original is staged
@@ -324,6 +333,9 @@ public class CameraRoll(
         var queued: Offered.Queued? = null
         // THE CAMERA ORIGINAL'S ASSET, once it is committed: the edit's lineage.
         var cameraAsset: String? = null
+        // THE VERSION THE VAULT HOLDS FOR AN ITEM EDITED IN PLACE, read BEFORE
+        // the new bytes are staged: afterwards the ref names both.
+        val prior = if (asset.changedInPlace) priorOf(handle, asset) else null
         var cameraBytes = 0L
         for (resource in asset.resources) {
             val role = resource.role
@@ -364,7 +376,17 @@ public class CameraRoll(
                 is Staging.Outcome.No -> return Offered.Refused(staged.refused.sentence)
                 is Staging.Outcome.Ok -> staged.staged
             }
-            val source = cameraAsset.takeIf { original }
+            // AN EDIT'S SOURCE: the camera's file when the library kept it
+            // (iOS), else the version the vault held for this ref (Android,
+            // where the editor overwrote the file). The SAME bytes as the
+            // vault holds are no edit at all, so a re-walk or a re-scan names
+            // nothing; and where the vault holds nothing for the ref — never
+            // walked, or in the trash — the edit is a photograph of its own.
+            val source = if (original) {
+                cameraAsset ?: prior?.takeIf { it.hash != ok.contentHash }?.assetId
+            } else {
+                null
+            }
             val committed = commit(handle, inputFor(asset, ok.contentHash, kind, source), ok.contentHash)
             committed.refusal?.let { return it }
             if (camera) {
@@ -385,6 +407,25 @@ public class CameraRoll(
             }
         }
         return queued ?: Offered.Skipped
+    }
+
+    /** The asset and bytes the vault last filed a ref as. */
+    private class Prior(val assetId: String, val hash: String)
+
+    /**
+     * WHICH ASSET THIS ITEM WAS BACKED UP AS (`library_assets`, #1127), or null
+     * when the vault has none for its ref or the core would not say — in which
+     * case the edit comes in as a photograph of its own, as it did before the
+     * lookup existed. Never an error: the lookup only ever adds a lineage.
+     */
+    private suspend fun priorOf(handle: CentraidCore, asset: MediaLibrary.Asset): Prior? {
+        val ref = asset.resources.firstOrNull { it.role == MediaLibrary.Resource.Role.ORIGINAL }?.ref ?: return null
+        val answer = handle.call(
+            Envelope(request = Request(library_assets = LibraryAssetsRequest(os_ref = listOf(ref)))),
+        )
+        val items = (answer as? CoreOutcome.Answered)?.value?.response?.library_assets?.items ?: return null
+        val found = items.firstOrNull { it.os_ref == ref } ?: return null
+        return Prior(found.asset_id, found.content_hash.hex())
     }
 
     /** What one `media.add_asset` came to: a refusal, or the asset it made or adopted. */

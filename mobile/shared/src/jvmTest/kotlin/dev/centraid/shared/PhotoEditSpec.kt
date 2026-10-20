@@ -4,6 +4,8 @@ import centraid.core.v1.Command
 import centraid.core.v1.CommandOutcome
 import centraid.core.v1.CommandStatus
 import centraid.core.v1.Envelope
+import centraid.core.v1.LibraryAsset
+import centraid.core.v1.LibraryAssetsResponse
 import centraid.core.v1.Response
 import centraid.core.v1.StageBegin
 import centraid.core.v1.StageBegun
@@ -18,10 +20,12 @@ import dev.centraid.shared.platform.MediaLibrary
 import dev.centraid.shared.shell.CameraRoll
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.runTest
+import okio.ByteString.Companion.decodeHex
 import okio.ByteString.Companion.encodeUtf8
 import java.security.MessageDigest
 
@@ -52,6 +56,11 @@ class PhotoEditSpec : StringSpec({
         private val open = mutableMapOf<String, java.io.ByteArrayOutputStream>()
         private val assetsByHash = mutableMapOf<String, String>()
 
+        /** The ledger: the hash last staged under each library ref, and the begin each open stage came from. */
+        private val lastHashOfRef = mutableMapOf<String, String>()
+        private val refOfStage = mutableMapOf<String, String>()
+        val lookups = mutableListOf<List<String>>()
+
         val core: CentraidCore = CentraidCore.answering(Dispatchers.Unconfined) { envelope ->
             val request = envelope.request!!
             val begin = request.stage?.begin
@@ -63,6 +72,7 @@ class PhotoEditSpec : StringSpec({
                     begins += begin
                     val id = "s${begins.size}"
                     open[id] = java.io.ByteArrayOutputStream()
+                    if (begin.os_ref.isNotEmpty()) refOfStage[id] = begin.os_ref
                     Envelope(response = Response(stage = StageResponse(begun = StageBegun(staging_id = id, chunk_bytes = 4))))
                 }
                 chunk != null -> {
@@ -71,6 +81,7 @@ class PhotoEditSpec : StringSpec({
                 }
                 end != null -> {
                     val bytes = open.remove(end.staging_id)!!.toByteArray()
+                    refOfStage.remove(end.staging_id)?.let { lastHashOfRef[it] = hashOf(bytes) }
                     Envelope(
                         response = Response(
                             stage = StageResponse(
@@ -91,6 +102,21 @@ class PhotoEditSpec : StringSpec({
                             command = CommandOutcome(
                                 status = CommandStatus.COMMAND_STATUS_EXECUTED,
                                 output = "{\"asset_id\":\"$made\"}".encodeUtf8(),
+                            ),
+                        ),
+                    )
+                }
+                request.library_assets != null -> {
+                    // THE CORE'S ANSWER: the asset a ref was last filed as, if one was.
+                    lookups += request.library_assets!!.os_ref
+                    Envelope(
+                        response = Response(
+                            library_assets = LibraryAssetsResponse(
+                                items = request.library_assets!!.os_ref.mapNotNull { ref ->
+                                    val hash = lastHashOfRef[ref] ?: return@mapNotNull null
+                                    val asset = assetsByHash[hash] ?: return@mapNotNull null
+                                    LibraryAsset(os_ref = ref, asset_id = asset, content_hash = hash.decodeHex())
+                                },
                             ),
                         ),
                     )
@@ -227,6 +253,89 @@ class PhotoEditSpec : StringSpec({
         }
     }
 
+    fun inPlace(ref: String) = MediaLibrary.Asset(
+        localId = ref,
+        bytes = 0,
+        capturedAtIso = "2019-08-03T10:11:12Z",
+        capturedUtcOffsetMinutes = 330,
+        // THE REF IS ITS OWN GROUP: the same file at two versions.
+        captureGroupId = ref,
+        resources = listOf(MediaLibrary.Resource(MediaLibrary.Resource.Role.ORIGINAL, ref)),
+        changedInPlace = true,
+    )
+
+    "a file edited in place is filed as an edit of the version the vault held, found before the new bytes are staged" {
+        runTest {
+            val v1 = "the file as it was walked".encodeToByteArray()
+            val v2 = "the file after the editor overwrote it".encodeToByteArray()
+            val phone = services(mapOf("image:7" to v1))
+            phone.mediaLibrary.assets = listOf(unedited("image:7"))
+            val core = Core()
+            val roll = CameraRoll(phone, core = { core.core })
+            roll.pass("vault-1").queued shouldBe 1
+            val before = core.assetOf(v1)
+
+            // THE EDITOR OVERWRITES THE FILE; the library reports it changed.
+            phone.mediaLibrary.originals = mapOf("image:7" to v2)
+            phone.mediaLibrary.reportChange(inPlace("image:7"))
+            roll.pass("vault-1").queued shouldBe 1
+
+            core.lookups shouldBe listOf(listOf("image:7"))
+            val edit = core.commands.last().input.utf8()
+            edit shouldContain "\"source_asset_id\":\"$before\""
+            edit shouldContain "\"capture_group_id\":\"image:7\""
+            edit shouldNotContain "captured_at"
+            core.assetOf(v2) shouldNotBe before
+        }
+    }
+
+    "an item rescanned with the same bytes names no source, and a file edited twice is filed over the newer version" {
+        runTest {
+            val v1 = "the file as it was walked".encodeToByteArray()
+            val v2 = "the first edit".encodeToByteArray()
+            val v3 = "the second edit".encodeToByteArray()
+            val phone = services(mapOf("image:7" to v1))
+            phone.mediaLibrary.assets = listOf(unedited("image:7"))
+            val core = Core()
+            val roll = CameraRoll(phone, core = { core.core })
+            roll.pass("vault-1")
+
+            phone.mediaLibrary.originals = mapOf("image:7" to v2)
+            phone.mediaLibrary.reportChange(inPlace("image:7"))
+            roll.pass("vault-1")
+            val firstEdit = core.assetOf(v2)
+
+            // A RENAME OR A RESCAN: the date moved and the bytes did not.
+            phone.mediaLibrary.reportChange(inPlace("image:7"))
+            roll.pass("vault-1")
+            core.commands.last().input.utf8() shouldNotContain "source_asset_id"
+            core.assetOf(v2) shouldBe firstEdit
+
+            // A SECOND EDIT names the first, so the chain folds newest-over-older.
+            phone.mediaLibrary.originals = mapOf("image:7" to v3)
+            phone.mediaLibrary.reportChange(inPlace("image:7"))
+            roll.pass("vault-1")
+            core.commands.last().input.utf8() shouldContain "\"source_asset_id\":\"$firstEdit\""
+        }
+    }
+
+    "an item the vault holds nothing for is filed as a photograph of its own" {
+        runTest {
+            val v2 = "an edited file the vault never saw before".encodeToByteArray()
+            val phone = services(mapOf("image:9" to v2))
+            phone.mediaLibrary.assets = emptyList()
+            phone.mediaLibrary.reportChange(inPlace("image:9"))
+            val core = Core()
+            CameraRoll(phone, core = { core.core }).pass("vault-1").queued shouldBe 1
+
+            core.lookups shouldBe listOf(listOf("image:9"))
+            val input = core.commands.single().input.utf8()
+            input shouldNotContain "source_asset_id"
+            // WITHOUT A SOURCE IT IS DATED BY THE PHONE, as any photograph is.
+            input shouldContain "\"captured_at\":\"2019-08-03T10:11:12Z\""
+        }
+    }
+
     "an unedited asset is one stage, one write, no lineage, and its ref is its identifier" {
         runTest {
             val phone = services(mapOf("U" to plain))
@@ -292,6 +401,9 @@ class PhotoEditSpec : StringSpec({
         val fold = PhotoFold.FOLDED
         // The text `crates/vault/tests/page_fold.rs` runs against real rows.
         fold shouldContain "n.capture_group_id = media_asset.capture_group_id"
+        // An Android file edited in place folds its ungrouped earlier version by lineage.
+        fold shouldContain "n.source_asset_id = media_asset.asset_id"
+        fold shouldContain "n.capture_group_id IS NOT NULL"
         fold shouldContain "n.kind = 'photo' AND media_asset.kind = 'photo'"
         // A trashed or archived edit un-folds the original it covered.
         fold shouldContain "n.deleted_at IS NULL AND n.archived_at IS NULL"

@@ -426,6 +426,16 @@ public interface MediaLibrary {
          * rendition's ref says which version it was.
          */
         public val edited: Boolean = false,
+        /**
+         * THE LIBRARY SAYS THIS ITEM CHANGED AFTER IT WAS WALKED, in place and
+         * under the same ref (Android's `DATE_MODIFIED`; always false on iOS,
+         * whose edits carry a [Resource.Role.CAMERA_ORIGINAL] instead). The
+         * camera's bytes are gone from the phone, so the walker asks the core
+         * which asset this ref was backed up as and, if the new bytes differ,
+         * files them as an edit of it (#1127, A20). A platform that sets this
+         * also sets [captureGroupId] to the ref, the mark the grid folds on.
+         */
+        public val changedInPlace: Boolean = false,
     )
 
     /** One file of an [Asset]. */

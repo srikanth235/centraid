@@ -285,7 +285,8 @@ public class FakeMediaLibrary(
     /**
      * What the library says changed after the walk, as iOS's change token
      * does (A20): [inserted] says the asset was ADDED, otherwise it was only
-     * UPDATED — a favourite, an album, or an edit. The walk finds these once
+     * UPDATED — a favourite, an album, or an edit (an item [MediaLibrary.Asset.changedInPlace]
+     * is an update the platform already knows is a change). The walk finds these once
      * the keyset has nothing left, offers the ones [LibraryRefs.worthOffering]
      * says are worth it, and its cursor moves past all of them.
      */
@@ -313,7 +314,7 @@ public class FakeMediaLibrary(
     private fun changePage(offered: Int, limit: Int): MediaLibrary.Page {
         val window = reported.drop(offered).take(limit)
         val offer = window.mapIndexedNotNull { at, (asset, inserted) ->
-            if (!LibraryRefs.worthOffering(inserted, asset.edited)) {
+            if (!LibraryRefs.worthOffering(inserted, asset.edited || asset.changedInPlace)) {
                 null
             } else {
                 asset.copy(after = "$CHANGE_WALK${offered + at + 1}")
