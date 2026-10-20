@@ -226,6 +226,19 @@ pub fn answer(vault: &Vault, request: &wire::AppQueryRequest) -> Result<wire::Ap
         Q::MoneyTargetSheet(asked) => money::target_sheet(vault, &door, &now, asked)?,
         Q::MoneyRecurring(asked) => money::recurring(vault, &door, &now, asked)?,
         Q::MoneySearch(asked) => money::search(vault, &door, &now, asked)?,
+        // Health (#1129): the six arms are on the wire before the app crate that answers them,
+        // so a shell can be built against them. A typed refusal, never an empty answer.
+        Q::HealthToday(_)
+        | Q::HealthSeries(_)
+        | Q::HealthTrends(_)
+        | Q::HealthWorkouts(_)
+        | Q::HealthWorkout(_)
+        | Q::HealthFollowView(_) => {
+            return Err(CoreError::NotYetAvailable {
+                what: "a Health query",
+                lands_in: "the Health app crate (#1129)",
+            });
+        }
     };
     Ok(wire::AppQueryResponse {
         answer: Some(answer),
