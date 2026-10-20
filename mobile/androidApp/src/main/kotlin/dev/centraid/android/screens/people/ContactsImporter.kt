@@ -22,7 +22,6 @@ import dev.centraid.design.copy.PeopleCopy
 import dev.centraid.shared.apps.people.ContactsImport
 import dev.centraid.shared.apps.people.PhoneContact
 import dev.centraid.shared.shell.HomeSession
-import dev.centraid.shared.sync.phone.OriginGone
 import dev.centraid.shared.sync.phone.PhoneOriginRef
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -44,20 +43,21 @@ import kotlinx.coroutines.withContext
  *
  * [onStatus] is handed each sentence: [PeopleCopy.IMPORT_CONTACTS_RUNNING]
  * while it runs (`holds` true: it stays until the outcome replaces it), then
- * the outcome's one sentence. [onGone] is handed the accounts that left the
- * phone since the last pass (R-1127-9), on the main thread.
+ * the outcome's one sentence. [onImported] is called on the main thread once an
+ * import has written, so the follower takes the next pass (and asks about an account
+ * that left the phone: R-1127-9).
  */
 @Composable
 public fun rememberContactsImport(
     session: HomeSession?,
     onStatus: (sentence: String, holds: Boolean) -> Unit,
-    onGone: (List<OriginGone>) -> Unit = {},
+    onImported: () -> Unit = {},
 ): (after: ((String?) -> Unit)?) -> Unit {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val currentSession by rememberUpdatedState(session)
     val currentStatus by rememberUpdatedState(onStatus)
-    val currentGone by rememberUpdatedState(onGone)
+    val currentImported by rememberUpdatedState(onImported)
     // ONE IMPORT AT A TIME: a second tap while the first writes would add every
     // contact twice, and the day-one roster has nothing to fold them into.
     var running by remember { mutableStateOf(false) }
@@ -87,7 +87,8 @@ public fun rememberContactsImport(
             val sentence = withContext(Dispatchers.IO) {
                 val read = readPhoneContacts(context)
                 val outcome = ContactsImport.run(core, read.contacts, read.origins, read.complete)
-                if (outcome.gone.isNotEmpty()) withContext(Dispatchers.Main) { currentGone(outcome.gone) }
+                // THE FOLLOWER TAKES IT FROM HERE: a pass asks about an origin this one found gone (R-1127-9).
+                withContext(Dispatchers.Main) { currentImported() }
                 ContactsImport.sentence(outcome)
             }
             running = false
@@ -120,7 +121,7 @@ private fun granted(context: Context): Boolean =
     ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED
 
 /** What the address book held at one read: the contacts, and every account present. */
-internal class ContactsRead(
+internal class AddressBookRead(
     val contacts: List<PhoneContact>,
     val origins: List<PhoneOriginRef>,
     /** False when the read may have missed contacts (no permission, a query that failed): nothing is then trashed (R-1127-3). */
@@ -132,12 +133,12 @@ internal class ContactsRead(
  * granted or a provider query throws. **It never asks the OS for anything**: only the member's
  * Import tap does (R-ONBOARD-4).
  */
-internal fun readPhoneContacts(context: Context): ContactsRead =
+internal fun readPhoneContacts(context: Context): AddressBookRead =
     if (!granted(context)) {
-        ContactsRead(emptyList(), emptyList(), complete = false)
+        AddressBookRead(emptyList(), emptyList(), complete = false)
     } else {
         runCatching { readContacts(context.contentResolver, accountTypeLabels(context)) }
-            .getOrElse { ContactsRead(emptyList(), emptyList(), complete = false) }
+            .getOrElse { AddressBookRead(emptyList(), emptyList(), complete = false) }
     }
 
 /**
@@ -151,7 +152,7 @@ internal fun readPhoneContacts(context: Context): ContactsRead =
  * Every account that holds a raw contact, or has a sync setting (`Settings`), is an origin, an
  * empty one included.
  */
-internal fun readContacts(resolver: ContentResolver, typeLabels: Map<String, String> = emptyMap()): ContactsRead {
+internal fun readContacts(resolver: ContentResolver, typeLabels: Map<String, String> = emptyMap()): AddressBookRead {
     // RAW CONTACTS FIRST: which account each contact is in. A throw here is the caller's incomplete read.
     val accounts = linkedMapOf<String, String>()
     val accountOfContact = HashMap<Long, String>()
@@ -243,7 +244,7 @@ internal fun readContacts(resolver: ContentResolver, typeLabels: Map<String, Str
             originLabel = accounts[entry.origin].orEmpty(),
         )
     }
-    return ContactsRead(contacts, accounts.map { (id, label) -> PhoneOriginRef(id, label) }, complete = true)
+    return AddressBookRead(contacts, accounts.map { (id, label) -> PhoneOriginRef(id, label) }, complete = true)
 }
 
 /** "Google: ada@example.com", or this phone's own contacts for a raw contact with no account. */

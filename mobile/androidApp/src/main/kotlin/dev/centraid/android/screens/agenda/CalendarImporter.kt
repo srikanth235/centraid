@@ -23,7 +23,6 @@ import dev.centraid.shared.apps.agenda.CalendarImport
 import dev.centraid.shared.apps.agenda.PhoneEvent
 import dev.centraid.shared.apps.agenda.PhoneSeries
 import dev.centraid.shared.shell.HomeSession
-import dev.centraid.shared.sync.phone.OriginGone
 import dev.centraid.shared.sync.phone.PhoneOriginRef
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -49,20 +48,21 @@ import java.util.TimeZone
  *
  * [onStatus] is handed each sentence: [AgendaCopy.IMPORT_CALENDAR_RUNNING]
  * while it runs (`holds` true: it stays until the outcome replaces it), then
- * the outcome's one sentence. [onGone] is handed the calendars that left the
- * phone since the last pass (R-1127-9), on the main thread.
+ * the outcome's one sentence. [onImported] is called on the main thread once an
+ * import has written, so the follower takes the next pass (and asks about a calendar
+ * that left the phone: R-1127-9).
  */
 @Composable
 public fun rememberCalendarImport(
     session: HomeSession?,
     onStatus: (sentence: String, holds: Boolean) -> Unit,
-    onGone: (List<OriginGone>) -> Unit = {},
+    onImported: () -> Unit = {},
 ): (after: ((String?) -> Unit)?) -> Unit {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val currentSession by rememberUpdatedState(session)
     val currentStatus by rememberUpdatedState(onStatus)
-    val currentGone by rememberUpdatedState(onGone)
+    val currentImported by rememberUpdatedState(onImported)
     // ONE IMPORT AT A TIME: a second tap while the first writes would propose
     // every event twice, and the second copy would land as a free duplicate.
     var running by remember { mutableStateOf(false) }
@@ -93,7 +93,8 @@ public fun rememberCalendarImport(
                 val now = System.currentTimeMillis()
                 val read = readPhoneEvents(context, now)
                 val outcome = CalendarImport.run(core, read.events, TimeZone.getDefault().id, now, read.origins, read.complete)
-                if (outcome.gone.isNotEmpty()) withContext(Dispatchers.Main) { currentGone(outcome.gone) }
+                // THE FOLLOWER TAKES IT FROM HERE: a pass asks about an origin this one found gone (R-1127-9).
+                withContext(Dispatchers.Main) { currentImported() }
                 CalendarImport.sentence(outcome)
             }
             running = false
@@ -126,7 +127,7 @@ private fun granted(context: Context): Boolean =
     ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CALENDAR) == PackageManager.PERMISSION_GRANTED
 
 /** What the phone's calendars held at one read: the events, and every writable calendar present. */
-internal class CalendarRead(
+internal class CalendarsRead(
     val events: List<PhoneEvent>,
     val origins: List<PhoneOriginRef>,
     /** False when the read may have missed events (no permission, a query that failed): nothing is then trashed (R-1127-3). */
@@ -138,12 +139,12 @@ internal class CalendarRead(
  * is not granted or a provider query throws. **It never asks the OS for anything**: only the
  * member's Import tap does (R-ONBOARD-4).
  */
-internal fun readPhoneEvents(context: Context, now: Long): CalendarRead =
+internal fun readPhoneEvents(context: Context, now: Long): CalendarsRead =
     if (!granted(context)) {
-        CalendarRead(emptyList(), emptyList(), complete = false)
+        CalendarsRead(emptyList(), emptyList(), complete = false)
     } else {
         runCatching { readEvents(context.contentResolver, now) }
-            .getOrElse { CalendarRead(emptyList(), emptyList(), complete = false) }
+            .getOrElse { CalendarsRead(emptyList(), emptyList(), complete = false) }
     }
 
 /** One calendar the member writes to: its origin and the name they know it by. */
@@ -167,7 +168,7 @@ private class EventMeta(val calendarId: Long, val uid: String?)
  * an empty one included. A calendar the member hides has no instances, so it reads as one that
  * left the phone, and the member is asked, with Keep the default.
  */
-internal fun readEvents(resolver: ContentResolver, now: Long): CalendarRead {
+internal fun readEvents(resolver: ContentResolver, now: Long): CalendarsRead {
     val calendars = readCalendars(resolver)
     val uri = CalendarContract.Instances.CONTENT_URI.buildUpon().also {
         ContentUris.appendId(it, CalendarImport.windowStart(now))
@@ -262,7 +263,7 @@ internal fun readEvents(resolver: ContentResolver, now: Long): CalendarRead {
             )
         }
     }
-    return CalendarRead(events, calendars.values.map { PhoneOriginRef(it.origin, it.label) }.distinctBy { it.id }, complete = true)
+    return CalendarsRead(events, calendars.values.map { PhoneOriginRef(it.origin, it.label) }.distinctBy { it.id }, complete = true)
 }
 
 /**
