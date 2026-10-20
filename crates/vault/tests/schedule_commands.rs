@@ -603,7 +603,10 @@ fn an_occurrence_exception_can_be_restored_and_the_same_override_twice_writes_no
         0
     );
     assert_eq!(
-        bench.number("SELECT COUNT(*) FROM core_entity WHERE entity_type = 'schedule.recurrence_exception'", &[]),
+        bench.number(
+            "SELECT COUNT(*) FROM core_entity WHERE entity_type = 'schedule.recurrence_exception'",
+            &[]
+        ),
         0,
         "the exception's entity went with it"
     );

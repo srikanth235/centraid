@@ -2118,7 +2118,8 @@ fn edit_important_date() -> CommandDefinition {
                     rusqlite::params![party_id, month_day],
                     |row| row.get(0),
                 )?;
-                Ok((count != 1).then(|| "the party's birth date disagrees with this row".to_owned()))
+                Ok((count != 1)
+                    .then(|| "the party's birth date disagrees with this row".to_owned()))
             },
         }],
         handler: |ctx| {

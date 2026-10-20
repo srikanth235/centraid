@@ -440,7 +440,9 @@ fn a_purge_leaves_a_tombstone_for_a_person_and_a_document_and_phone_forget_ends_
         "both links stayed, as tombstones of rows purged"
     );
     assert_eq!(
-        bench.count("SELECT COUNT(*) FROM phone_link WHERE source = 'calendar' AND entity_id IS NOT NULL"),
+        bench.count(
+            "SELECT COUNT(*) FROM phone_link WHERE source = 'calendar' AND entity_id IS NOT NULL"
+        ),
         1,
         "the event's link is untouched"
     );

@@ -266,7 +266,10 @@ fn a_purged_row_leaves_its_link_behind_as_a_tombstone_and_nothing_gives_it_a_row
         Ok(())
     });
     let error = revived.expect_err("a purge is one way");
-    assert!(error.to_string().contains("never given a row again"), "{error}");
+    assert!(
+        error.to_string().contains("never given a row again"),
+        "{error}"
+    );
     // Several tombstones coexist: NULL is not a value `UNIQUE (entity_id)` compares.
     party(&scratch.vault, "p3");
     link(&scratch.vault, "l4", "contacts", "c4", "p3").expect("a link");
@@ -344,14 +347,18 @@ fn a_links_origin_exists_is_of_its_source_and_cannot_be_deleted_while_named() {
     run("DELETE FROM phone_link WHERE link_id = 'l1'").expect("the link goes");
     run("DELETE FROM phone_origin WHERE origin_id = 'o-contacts'").expect("then the origin");
     // An origin's source and phone origin pair is unique, and its label is never blank.
-    assert!(run(
-        "INSERT INTO phone_origin (origin_id, source, phone_origin, label, created_at)
+    assert!(
+        run(
+            "INSERT INTO phone_origin (origin_id, source, phone_origin, label, created_at)
          VALUES ('dup', 'calendar', 'acct', 'Again', '2026-10-19T09:00:00.000Z')"
-    )
-    .is_err());
-    assert!(run(
-        "INSERT INTO phone_origin (origin_id, source, phone_origin, label, created_at)
+        )
+        .is_err()
+    );
+    assert!(
+        run(
+            "INSERT INTO phone_origin (origin_id, source, phone_origin, label, created_at)
          VALUES ('blank', 'files', 'folder', '  ', '2026-10-19T09:00:00.000Z')"
-    )
-    .is_err());
+        )
+        .is_err()
+    );
 }

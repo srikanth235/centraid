@@ -504,7 +504,10 @@ fn a_birthday_can_be_moved_and_removed_and_the_party_spine_follows() {
     assert_eq!(spine(&circle), Some("--09-01".to_owned()));
 
     // REMOVED: the row and the spine's day go, and removing it again is not an error.
-    let gone = circle.run("people.delete_important_date", json!({ "date_id": date_id }));
+    let gone = circle.run(
+        "people.delete_important_date",
+        json!({ "date_id": date_id }),
+    );
     assert_eq!(gone["deleted"], json!(true));
     assert_eq!(
         circle.count(&format!(
@@ -520,7 +523,10 @@ fn a_birthday_can_be_moved_and_removed_and_the_party_spine_follows() {
         "the entity row went with it"
     );
     assert_eq!(spine(&circle), None);
-    let twice = circle.run("people.delete_important_date", json!({ "date_id": date_id }));
+    let twice = circle.run(
+        "people.delete_important_date",
+        json!({ "date_id": date_id }),
+    );
     assert_eq!(twice["deleted"], json!(false));
 }
 
@@ -548,7 +554,9 @@ fn removing_one_of_two_birthday_rows_keeps_the_spine_and_another_date_never_touc
         .to_owned();
     circle.run("people.delete_important_date", json!({ "date_id": first }));
     assert_eq!(
-        circle.text(&format!("SELECT birth_date FROM core_party WHERE party_id = '{ray}'")),
+        circle.text(&format!(
+            "SELECT birth_date FROM core_party WHERE party_id = '{ray}'"
+        )),
         Some("--08-14".to_owned()),
         "a second birthday row still stands"
     );
@@ -557,7 +565,9 @@ fn removing_one_of_two_birthday_rows_keeps_the_spine_and_another_date_never_touc
         json!({ "date_id": anniversary }),
     );
     assert_eq!(
-        circle.text(&format!("SELECT birth_date FROM core_party WHERE party_id = '{ray}'")),
+        circle.text(&format!(
+            "SELECT birth_date FROM core_party WHERE party_id = '{ray}'"
+        )),
         Some("--08-14".to_owned()),
         "an anniversary is not a birthday"
     );

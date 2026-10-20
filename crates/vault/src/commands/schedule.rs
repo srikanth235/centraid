@@ -1566,7 +1566,10 @@ fn edit_series(
     action: &str,
 ) -> Result<serde_json::Value> {
     if action == "restore" {
-        return Err(invalid("action", "only an occurrence exception is restored"));
+        return Err(invalid(
+            "action",
+            "only an occurrence exception is restored",
+        ));
     }
     if action == "skip" {
         let status: String = ctx.connection().query_row(
