@@ -218,7 +218,7 @@ public object CalendarImport {
         val labels = events.filter { it.originLabel.isNotEmpty() }.associate { it.origin.ifEmpty { DEFAULT_ORIGIN } to it.originLabel }
         fun keep(id: String, event: PhoneEvent, rrule: String, series: Series?) {
             if (!PhoneIds.isValid(id) || event.title.isEmpty() || event.start.isEmpty() || event.end.isEmpty()) return
-            records.putIfAbsent(id, record(id, event, rrule, series))
+            if (id !in records) records[id] = record(id, event, rrule, series)
         }
         for (event in plan.singles) keep(event.phoneId, event, "", null)
         for (series in plan.series) {

@@ -89,13 +89,13 @@ public object PhoneSyncPlanner {
                 invalid += record.phoneId
                 continue
             }
-            records.putIfAbsent(record.phoneId, record)
+            if (record.phoneId !in records) records[record.phoneId] = record
         }
         val storedByPhone = origins.associateBy { it.phoneOrigin }
         val storedById = origins.associateBy { it.originId }
         val present = linkedMapOf<String, String>()
-        snapshot.origins.forEach { present.putIfAbsent(it.id, it.label) }
-        records.values.forEach { present.putIfAbsent(it.origin, it.origin) }
+        snapshot.origins.forEach { if (it.id !in present) present[it.id] = it.label }
+        records.values.forEach { if (it.origin !in present) present[it.origin] = it.origin }
 
         val actions = mutableListOf<PhoneAction>()
         val usedOrigins = records.values.map { it.origin }.toSet() +
@@ -202,7 +202,7 @@ public object PhoneSyncPlanner {
                     actions += PhoneAction.Detach(link, DetachReason.EDITED)
                     remaining += 1
                 }
-                row?.trashed == true -> actions += PhoneAction.Forget(link)
+                row.trashed -> actions += PhoneAction.Forget(link)
                 else -> actions += PhoneAction.Trash(link)
             }
         }
