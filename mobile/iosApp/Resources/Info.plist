@@ -44,7 +44,7 @@
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Centraid backs up your camera roll into your own vault.</string>
 	<key>NSRemindersFullAccessUsageDescription</key>
-	<string>Centraid copies your open reminders into Tasks, in your own vault on this phone.</string>
+	<string>Centraid copies your open reminders into Agenda, in your own vault on this phone.</string>
 	<key>UIAppFonts</key>
 	<array>
 		<string>InstrumentSans_470Book.ttf</string>

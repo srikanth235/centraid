@@ -1,0 +1,55 @@
+# Agenda's five places and a dated task checked off in place (#1128, R-1128-1,
+# R-1128-2): Day · Schedule · Waiting · To-do · More on the band, and a task due
+# on a day is a row of that day whose round box finishes it where it stands,
+# with the status line's Undo to take it back.
+#
+# A VAULT-HOLDING INSTALL, as `home.yaml`. Re-runnable: the check is undone
+# before the flow ends, so the vault is left as it was. The check-off steps
+# run only when Day holds a task (the starters put the first one there; a
+# vault whose tasks are all undated shows none, and the places are still
+# asserted).
+appId: dev.centraid.Centraid
+name: agenda-day
+---
+- launchApp
+- tapOn:
+    id: "home-tile-agenda"
+- assertVisible:
+    id: "agenda-band-day"
+- assertVisible:
+    id: "agenda-band-schedule"
+- assertVisible:
+    id: "agenda-band-waiting"
+- assertVisible:
+    id: "agenda-band-todo"
+- assertVisible:
+    id: "agenda-band-more"
+# Day is where the app opens; its list draws the day's events and tasks.
+- assertVisible:
+    id: "agenda-list"
+# A dated task is checked off in place: the row stays on Day, the status line
+# says so and offers Undo, and Undo puts it back.
+- runFlow:
+    when:
+      visible:
+        id: "agenda-task-row-check-.*"
+    commands:
+      - tapOn:
+          id: "agenda-task-row-check-.*"
+      - extendedWaitUntil:
+          visible:
+            id: "agenda-status-action"
+          timeout: 5000
+      - assertVisible: "Task done"
+      - tapOn:
+          id: "agenda-status-action"
+# Schedule draws the same rows over the coming days.
+- tapOn:
+    id: "agenda-band-schedule"
+- assertVisible:
+    id: "agenda-list"
+# The Plus differs per place: here it is a new event.
+- assertVisible:
+    id: "agenda-new-event"
+- tapOn:
+    id: "agenda-band-day"
