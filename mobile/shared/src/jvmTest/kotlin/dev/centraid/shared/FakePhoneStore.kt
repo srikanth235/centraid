@@ -22,12 +22,13 @@ internal class FakeStore(override val source: PhoneSource = PhoneSource.CONTACTS
     var refuse: (PhoneRecord) -> Boolean = { false }
     var covered: (VaultRow) -> Boolean = { true }
     var unreadable: Boolean = false
+    var refuseFollow: Boolean = false
     private var next = 0
 
     private fun id(prefix: String) = "$prefix-${++next}"
 
-    /** The vault's clock: always after the snapshots' `readAt`, as the vault's is. */
-    private val now = "2026-10-20T23:59:59.000Z"
+    /** The vault's clock: always after the snapshots' `readAt`, as the vault's is. A spec moves it to follow its passes. */
+    var now = "2026-10-20T23:59:59.000Z"
 
     fun seed(name: String, vararg phones: String, trashed: Boolean = false): String {
         val entity = id("row")
@@ -73,6 +74,7 @@ internal class FakeStore(override val source: PhoneSource = PhoneSource.CONTACTS
 
     override suspend fun link(phoneId: String, originId: String, entityId: String, fingerprint: String): String? {
         val known = links.values.firstOrNull { it.phoneId == phoneId }
+        if (known != null && known.entityId == null) return null
         if (known?.detached == true) return null
         val refreshed = (known ?: StoredLink(id("link"), phoneId, originId, entityId, fingerprint, false, now))
             .copy(originId = originId, entityId = entityId, fingerprint = fingerprint, lastSeenAt = now)
@@ -120,6 +122,18 @@ internal class FakeStore(override val source: PhoneSource = PhoneSource.CONTACTS
     override suspend fun update(entityId: String, record: PhoneRecord): Boolean {
         rows[entityId] = rows.getValue(entityId).copy(fields = record.fields)
         writes += "update"
+        return true
+    }
+
+    /** The member deletes a row forever: it is gone, and its link stays as the tombstone the vault leaves. */
+    fun purge(entity: String) {
+        rows.remove(entity)
+        links.replaceAll { _, link -> if (link.entityId == entity) link.copy(entityId = null) else link }
+    }
+
+    override suspend fun follow(entityId: String, record: PhoneRecord): Boolean {
+        if (refuseFollow) return false
+        writes += "follow"
         return true
     }
 
