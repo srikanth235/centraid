@@ -133,6 +133,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .boxed(".centraid.screen.v1.MoneyTargetState.content.data")
         .boxed(".centraid.screen.v1.MoneyImportState.content.data")
         .boxed(".centraid.screen.v1.MoneyCategoriesState.content.data")
+        // Health's screens (#1129): Today's and a metric's data arm dwarf their siblings.
+        .boxed(".centraid.screen.v1.HealthHomeState.content.data")
+        .boxed(".centraid.screen.v1.HealthMetricState.content.data")
         .compile_fds(descriptors)?;
     Ok(())
 }
