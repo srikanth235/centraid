@@ -752,6 +752,40 @@ message Releasable {
   string media_type = 4;
 }
 
+// WHICH VAULT ASSET A LIBRARY ITEM WAS BACKED UP AS (#1127, A20).
+//
+// An item the member edited in place (Android overwrites the file and keeps its
+// `_ID`) has bytes the vault has not seen under a ref the vault already holds:
+// the camera's version is gone from the phone, so the only way to say "this is
+// an edit of that photograph" is to ask the ledger which asset the ref was last
+// backed up as. The shell asks BEFORE staging the new bytes, then names the
+// answer as the edit's `source_asset_id` when the new hash differs from
+// `content_hash` here (the same hash is no edit at all).
+//
+// The ledger keeps, per ref, the item most recently staged (`verified_ms`); a
+// ref staged under two hashes answers the newer. Only a LIVE asset answers: a
+// ref whose bytes the vault no longer holds, or whose asset is in the trash,
+// is absent from `items`, and the shell then files the edit as a photograph of
+// its own. It reads this phone's own ledger and this core's own vault, so it
+// can name no other vault's asset. At most 100 refs; more is
+// `ERROR_CODE_INVALID_REQUEST`. Not a command: it writes nothing.
+message LibraryAssetsRequest {
+  // `Releasable.os_ref`'s spelling: what the shell staged the item under.
+  repeated string os_ref = 1;
+}
+
+message LibraryAssetsResponse {
+  // One per ref that names a live asset, in no particular order.
+  repeated LibraryAsset items = 1;
+}
+
+message LibraryAsset {
+  string os_ref = 1;
+  string asset_id = 2;
+  // 32 raw bytes: the BLAKE3 of the bytes that asset wraps.
+  bytes content_hash = 3;
+}
+
 // THE LIBRARY ITEMS THE MEMBER DELETED, after the operating system's own
 // confirmation. The core records that their bytes are no longer on this phone
 // and announces the ordinary `RowsChanged`, so a grid draws them as fetchable.

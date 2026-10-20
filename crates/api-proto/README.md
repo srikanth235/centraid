@@ -26,7 +26,7 @@ Both packages carry the same category now, and `buf.yaml` at the repository root
 | `error.proto` | `ErrorCode` (closed), `Error`, and `VaultMoved`, the one companion a refusal carries |
 | `envelope.proto` | `Envelope`, `Request`, `Response`, `Event`, `Cancel` |
 | `vault.proto` | `FoundRequest` — founding a vault over the ABI |
-| `phone.proto` | the phone's backup plane: pair, drain, hand-off, settle, reconcile, pins, fetch an original, restore, status, releasable/released ([#1080](https://github.com/srikanth235/centraid/issues/1080)) |
+| `phone.proto` | the phone's backup plane: pair, drain, hand-off, settle, reconcile, pins, fetch an original, restore, status, releasable/released, library_assets ([#1080](https://github.com/srikanth235/centraid/issues/1080)) |
 | `originals.proto` | the originals on this phone and the albums whose originals stay |
 | `screen/v1/screen.proto` | `ScreenState`, `ScreenEvent`, the per-screen states and `SeatState` — one file by design (D-1020-E3a) |
 
