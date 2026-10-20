@@ -323,9 +323,9 @@ class HomeMachineSpec : StringSpec({
             // A wide tile takes a whole line.
             listOf("photos"),
             listOf("docs"),
-            // Smalls pair, pulled forward past the wide Agenda.
-            listOf("notes", "money"),
             listOf("agenda"),
+            // Smalls pair.
+            listOf("notes", "money"),
             listOf("people", "locker"),
         )
     }

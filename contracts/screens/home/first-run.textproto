@@ -6,8 +6,8 @@ data {
   springboard: SPRINGBOARD_FIRST_RUN
   tiles { app_id: "photos" status: TILE_STATUS_EMPTY size: TILE_SIZE_LARGE wide: true empty_copy: "Import your first photo" }
   tiles { app_id: "docs" status: TILE_STATUS_EMPTY size: TILE_SIZE_MEDIUM wide: true empty_copy: "Add your first document" }
-  tiles { app_id: "notes" status: TILE_STATUS_EMPTY size: TILE_SIZE_SMALL empty_copy: "Write your first note" }
   tiles { app_id: "agenda" status: TILE_STATUS_EMPTY size: TILE_SIZE_MEDIUM wide: true empty_copy: "Put something on the calendar" }
+  tiles { app_id: "notes" status: TILE_STATUS_EMPTY size: TILE_SIZE_SMALL empty_copy: "Write your first note" }
   tiles { app_id: "people" status: TILE_STATUS_EMPTY size: TILE_SIZE_SMALL empty_copy: "Add someone you know" }
   # Every app is a tile; an empty one says what to do.
   tiles { app_id: "locker" status: TILE_STATUS_EMPTY size: TILE_SIZE_SMALL empty_copy: "Unlock to see your items" body { locker { locked: true } } }
@@ -17,7 +17,7 @@ data {
   # the end is not a hole.
   grid_rows { app_ids: "photos" }
   grid_rows { app_ids: "docs" }
-  grid_rows { app_ids: "notes" app_ids: "people" }
   grid_rows { app_ids: "agenda" }
+  grid_rows { app_ids: "notes" app_ids: "people" }
   grid_rows { app_ids: "locker" }
 }

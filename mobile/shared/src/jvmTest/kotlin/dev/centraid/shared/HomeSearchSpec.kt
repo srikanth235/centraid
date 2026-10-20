@@ -94,20 +94,20 @@ class HomeSearchSpec : StringSpec({
                 hit("tasks", "schedule.task", "t1", "Book the cabin"),
             ),
         )
-        // SPRINGBOARD_ORDER: photos, docs, notes, agenda, money, people. The task hit is
+        // SPRINGBOARD_ORDER: photos, docs, agenda, notes, money, people. The task hit is
         // grouped under the app it opens in (#1128, R-1128-7), so Agenda's group holds both.
-        data.groups.map { it.app_id } shouldContainExactly listOf("photos", "notes", "agenda")
-        data.groups.map { it.label } shouldContainExactly listOf("Photos", "Notes", "Agenda")
+        data.groups.map { it.app_id } shouldContainExactly listOf("photos", "agenda", "notes")
+        data.groups.map { it.label } shouldContainExactly listOf("Photos", "Agenda", "Notes")
         data.groups.map { it.count } shouldContainExactly listOf(1, 2, 2)
-        data.groups[1].accessibility_label shouldBe "Notes, 2 results"
+        data.groups[2].accessibility_label shouldBe "Notes, 2 results"
         data.groups[0].accessibility_label shouldBe "Photos, 1 result"
-        data.groups[1].rows.map { it.kind_label to it.title } shouldContainExactly
+        data.groups[2].rows.map { it.kind_label to it.title } shouldContainExactly
             listOf(SharedCopy.SEARCH_KIND_NOTE to "Cabin packing", SharedCopy.SEARCH_KIND_NOTE to "Cabin key")
-        data.groups[2].accessibility_label shouldBe "Agenda, 2 results"
-        data.groups[2].rows.map { it.app_id to it.title } shouldContainExactly
+        data.groups[1].accessibility_label shouldBe "Agenda, 2 results"
+        data.groups[1].rows.map { it.app_id to it.title } shouldContainExactly
             listOf("agenda" to "Cabin weekend", "tasks" to "Book the cabin")
-        data.groups[2].rows[0].kind_label shouldBe SharedCopy.SEARCH_KIND_EVENT
-        data.groups[1].rows[0].accessibility_label shouldBe "Note, Cabin packing"
+        data.groups[1].rows[0].kind_label shouldBe SharedCopy.SEARCH_KIND_EVENT
+        data.groups[2].rows[0].accessibility_label shouldBe "Note, Cabin packing"
     }
 
     "Locker never appears, even if a hit names it" {

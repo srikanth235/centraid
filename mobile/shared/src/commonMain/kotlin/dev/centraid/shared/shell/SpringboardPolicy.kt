@@ -31,8 +31,10 @@ public object SpringboardPolicy {
     public val SPRINGBOARD_ORDER: List<String> = listOf(
         "photos",
         "docs",
-        "notes",
+        // WIDE TILES FIRST, so the packer never has to pull a small forward:
+        // Agenda went wide with its due line (#1128).
         "agenda",
+        "notes",
         "money",
         "people",
         "locker",

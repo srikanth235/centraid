@@ -1,13 +1,13 @@
 "Á'
 photos(0:Import your first photo%
-docs(0:Add your first document"
-notes(:Write your first note-
+docs(0:Add your first document-
 agenda(0:Put something on the calendar"
+notes(:Write your first note"
 people(:Add someone you know&
 locker(:Unlock to see your items*Not backed up yet :
 photos:
-docs:
+docs:
+agenda:
 notes
 people:
-agenda:
 locker
