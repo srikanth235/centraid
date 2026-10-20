@@ -213,21 +213,9 @@ struct AgendaHomeView: View {
                 // ACTION (the kit's empty state draws it); "Add" stays in
                 // the header.
                 //
-                // AN EMPTY DAY THAT STILL HOLDS OVERDUE WORK OR THE ABSENCE
-                // NOTICE draws them above the empty sentence: they are not
-                // events, and the machine sends them whatever the day holds.
-                if home.hasNotice || home.hasOverdue {
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 0) {
-                            AgendaLeadBlocks(home: home, chrome: state.chrome, send: send)
-                            EmptyStateView(emptyState(home), onAction: { send(AgendaEvents.make { $0.newEvent = .init() }) })
-                        }
-                    }
-                    .refreshable { send(AgendaEvents.make { $0.refreshed = .init() }) }
-                    .accessibilityIdentifier("agenda-list")
-                } else {
-                    EmptyStateView(emptyState(home), onAction: { send(AgendaEvents.make { $0.newEvent = .init() }) })
-                }
+                // A DAY THAT HOLDS OVERDUE WORK OR THE ABSENCE NOTICE sends no
+                // empty sentence, so it is drawn by the list above.
+                EmptyStateView(emptyState(home), onAction: { send(AgendaEvents.make { $0.newEvent = .init() }) })
             }
         } else {
             AgendaList(home: home, chrome: state.chrome, send: send)

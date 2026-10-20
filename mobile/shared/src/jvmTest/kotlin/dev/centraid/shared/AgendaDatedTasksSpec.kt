@@ -196,6 +196,7 @@ class AgendaDatedTasksSpec : StringSpec({
         // IN PLACE: re-folded without a read.
         checked.state.screen.data_.shouldNotBeNull().let {
             it.days.shouldBeEmpty()
+            // GENUINELY EMPTY: the only task was just checked off, so the sentence is right here.
             it.empty shouldBe AgendaEmpty.AGENDA_EMPTY_NOTHING_ON_DAY
         }
         checked.state.screen.status.shouldNotBeNull().let {
@@ -216,6 +217,28 @@ class AgendaDatedTasksSpec : StringSpec({
         refused.screen.status.shouldNotBeNull().refused shouldBe true
         // A task that is not on screen is not checked.
         drive(home, view(AgendaHomeEvent(task_checked = AgendaHomeEvent.TaskChecked(task_id = "gone")))).effects.shouldBeEmpty()
+    }
+
+    "Day says nothing is on it only when nothing is: Overdue work or the notice alone is something" {
+        // OVERDUE ALONE: no event, no task row, and no "Nothing on this day." under the group.
+        val owed = landed(
+            day,
+            tasks = quietTasks(today = listOf(overdueGroup(task("a", "Pay rent", due = "2026-06-13", days = -2, overdue = true)))),
+        ).screen.data_.shouldNotBeNull()
+        owed.days.shouldBeEmpty()
+        owed.overdue.shouldNotBeNull()
+        owed.empty shouldBe AgendaEmpty.AGENDA_EMPTY_NONE
+        owed.empty_title shouldBe ""
+        // THE ABSENCE NOTICE ALONE is the same.
+        val away = landed(
+            day,
+            tasks = quietTasks(catchUp = TasksCatchUp(today = TODAY, away_days = 16, overdue = 34, absent = true)),
+        ).screen.data_.shouldNotBeNull()
+        away.days.shouldBeEmpty()
+        away.notice.shouldNotBeNull()
+        away.empty shouldBe AgendaEmpty.AGENDA_EMPTY_NONE
+        // A DAY WITH NEITHER (or whose only task was just checked off, below) IS GENUINELY EMPTY.
+        landed(day).screen.data_.shouldNotBeNull().empty shouldBe AgendaEmpty.AGENDA_EMPTY_NOTHING_ON_DAY
     }
 
     "an Overdue row is checked off in place too" {

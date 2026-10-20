@@ -172,8 +172,12 @@ internal object AgendaFold {
             }
             ?: AgendaLanding()
 
+        // "NOTHING ON THIS DAY" IS FOR A DAY WITH NEITHER EVENTS NOR TASKS: Day on today that
+        // draws an Overdue group or the absence notice has something on it, so it says nothing
+        // (R-1128-3). A day whose only task was just checked off draws no row and no group, and
+        // there the sentence is right.
         val empty = when {
-            sections.isNotEmpty() -> AgendaEmpty.AGENDA_EMPTY_NONE
+            sections.isNotEmpty() || overdue != null || notice != null -> AgendaEmpty.AGENDA_EMPTY_NONE
             term != null && taskHits != null -> AgendaEmpty.AGENDA_EMPTY_NONE
             term != null -> AgendaEmpty.AGENDA_EMPTY_NO_MATCH
             waitingOnly -> AgendaEmpty.AGENDA_EMPTY_NOTHING_WAITING

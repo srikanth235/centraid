@@ -305,10 +305,10 @@ private fun AgendaList(
     // THE BLOCKS DRAWN ABOVE THE DAYS (#1128): the absence notice and the
     // Overdue group (Day on today), then a search's task hits.
     val leads = data.notice != null || data.overdue != null || data.task_hits.isNotEmpty()
-    // AN EMPTY DAY THAT STILL OWES (Overdue, the notice) does not hide them
-    // behind its sentence: the sentence follows them in the list.
-    if (hasEmpty && !leads) {
-        AgendaEmptyBlock(data, onEvent, Modifier.fillMaxSize().padding(24.dp), centered = true)
+    // A DAY THAT OWES (Overdue, the notice) is never empty: the fold sends no
+    // sentence for it, so an empty state here has nothing above it.
+    if (hasEmpty) {
+        AgendaEmptyBlock(data, onEvent, Modifier.fillMaxSize().padding(24.dp))
         return
     }
 
@@ -376,28 +376,24 @@ private fun AgendaList(
             fileVerb = actions.fileVerb,
             idPrefix = AGENDA_TASK_ROW,
         )
-        if (hasEmpty) {
-            item(key = "empty") { AgendaEmptyBlock(data, onEvent, Modifier.padding(24.dp), centered = false) }
-        }
         data.days.forEach { section -> daySection(section, actions, onEvent) }
         item(key = "foot") { Spacer(Modifier.height(16.dp)) }
     }
 }
 
 /**
- * THE EMPTY STATE'S WORDS AND ITS ONE ACTION, whole-screen when nothing else is
- * drawn ([centered]) and a block in the list when Overdue or the notice is.
+ * THE EMPTY STATE'S WORDS AND ITS ONE ACTION, whole-screen: it is sent only
+ * when nothing else is drawn.
  */
 @Composable
 private fun AgendaEmptyBlock(
     data: AgendaHomeData,
     onEvent: (AgendaHomeEvent) -> Unit,
     modifier: Modifier,
-    centered: Boolean,
 ) {
     Column(
         modifier.testTag("agenda-empty-${data.empty.name.lowercase()}"),
-        verticalArrangement = if (centered) Arrangement.Center else Arrangement.Top,
+        verticalArrangement = Arrangement.Center,
     ) {
         Text(data.empty_title, style = centraidType("title"), color = centraidColor("text"))
         if (data.empty_body.isNotEmpty()) {
@@ -416,14 +412,11 @@ private fun AgendaEmptyBlock(
         val importVerb = importLabel(data.import_source)
         val door = LocalPhoneImport.current
         if (importVerb.isNotEmpty() && door != null) {
-            // In the list the same import is already its quiet first row.
-            if (centered) {
-                OutlineButton(
-                    label = importVerb,
-                    testTag = "agenda-empty-import",
-                    modifier = Modifier.padding(top = 16.dp),
-                ) { door(data.import_source) }
-            }
+            OutlineButton(
+                label = importVerb,
+                testTag = "agenda-empty-import",
+                modifier = Modifier.padding(top = 16.dp),
+            ) { door(data.import_source) }
         } else if (data.empty_action.isNotEmpty() && data.empty != AgendaEmpty.AGENDA_EMPTY_NO_MATCH) {
             // NO-MATCH'S ACTION IS ASK (#1097, R-1097-30): drawn only where the shell has a Chat tab,
             // and Android has none, so it draws the sentence without it.
