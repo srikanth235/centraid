@@ -10,6 +10,9 @@ public enum class PhoneSource(public val wire: String) {
     CONTACTS("contacts"),
     CALENDAR("calendar"),
     FILES("files"),
+
+    /** The phone's health store, into Health: its workouts follow through `phone_link`; its day totals do not (R-1129-3). */
+    HEALTH("health"),
 }
 
 /**

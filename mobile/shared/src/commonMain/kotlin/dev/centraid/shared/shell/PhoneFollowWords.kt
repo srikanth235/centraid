@@ -2,6 +2,7 @@ package dev.centraid.shared.shell
 
 import dev.centraid.design.copy.AgendaCopy
 import dev.centraid.design.copy.DocsCopy
+import dev.centraid.design.copy.HealthCopy
 import dev.centraid.design.copy.PeopleCopy
 import dev.centraid.shared.sync.phone.GoneReason
 import dev.centraid.shared.sync.phone.OriginGone
@@ -9,7 +10,7 @@ import dev.centraid.shared.sync.phone.PhoneSource
 
 /**
  * THE WORDS OF THE QUESTION AN ORIGIN HELD LEAVES (R-1127-9), from `copy/people.json`,
- * `copy/agenda.json` and `copy/docs.json`: "Google: ada@example.com is no longer on this phone" / "Keep its 214 events
+ * `copy/agenda.json`, `copy/docs.json` and `copy/health.json`: "Google: ada@example.com is no longer on this phone" / "Keep its 214 events
  * in Agenda?". A shell draws what this returns and decides nothing.
  */
 internal object PhoneFollowWords {
@@ -64,6 +65,17 @@ internal object PhoneFollowWords {
             DocsCopy.FOLDER_VANISHED_KEEP_ASK_ONE,
             DocsCopy.FOLDER_GONE_KEEP,
             DocsCopy.FOLDER_GONE_TRASH,
+        )
+        // A WORKOUT HAS NO TRASH (R-1129-2): the second answer deletes, and says so.
+        PhoneSource.HEALTH -> Words(
+            HealthCopy.FOLLOW_GONE_ASK,
+            HealthCopy.FOLLOW_GONE_KEEP_ASK,
+            HealthCopy.FOLLOW_GONE_KEEP_ASK_ONE,
+            HealthCopy.FOLLOW_VANISHED_ASK,
+            HealthCopy.FOLLOW_VANISHED_KEEP_ASK,
+            HealthCopy.FOLLOW_VANISHED_KEEP_ASK_ONE,
+            HealthCopy.FOLLOW_GONE_KEEP,
+            HealthCopy.FOLLOW_GONE_TRASH,
         )
         PhoneSource.CONTACTS -> Words(
             PeopleCopy.IMPORT_GONE_ASK,

@@ -1182,4 +1182,9 @@ public class IosDeviceClock : DeviceClock {
         epochMillis = (NSDate().timeIntervalSince1970 * 1_000.0).toLong(),
         utcOffsetMinutes = (NSTimeZone.localTimeZone.secondsFromGMTForDate(NSDate()) / 60L).toInt(),
     )
+
+    override fun offsetMinutesAt(epochMillis: Long): Int {
+        val at = NSDate.dateWithTimeIntervalSince1970(epochMillis.toDouble() / 1_000.0)
+        return (NSTimeZone.localTimeZone.secondsFromGMTForDate(at) / 60L).toInt()
+    }
 }
