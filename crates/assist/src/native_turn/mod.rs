@@ -9,7 +9,7 @@
 //! ```text
 //! user(text) ──► block + compacted observations ──► log
 //! ┌─► prompt = log.prompt() ──► decode_step (think guard, rendered call, one call) ──► message
-//! │        Activity("Looking in Tasks")                                                  │
+//! │        Activity("Looking in Agenda")                                                 │
 //! │        call_text(message) ──► {text, ends_turn, effect, obs}  ──► log (message + observation)
 //! └──────── until ends_turn, STEP_CAP, a cancel between steps, or the engine failing
 //! effect ──► cards (the kind table) + a line composed from the copy
@@ -426,7 +426,8 @@ fn first_call(text: &str) -> &str {
 
 /// The activity a call announces: the app it looks in and the tool it uses. Only a call that
 /// reads or writes rows of a known app announces anything; `ask`, `decline` and an `answer` of a
-/// value do not.
+/// value do not. The app is the one the member opens the rows in ([`App::opens_in`]): a task read
+/// is "Looking in Agenda" (R-1128-D1), while its cards keep the stored app id `tasks`.
 fn activity_of(chat: &NativeChat, call: &Value) -> Option<(App, &'static str)> {
     let name = call["tool"].as_str()?;
     let tool = TOOLS.iter().copied().find(|known| *known == name)?;
@@ -447,7 +448,7 @@ fn activity_of(chat: &NativeChat, call: &Value) -> Option<(App, &'static str)> {
             .find_map(|handle| kind_of_handle(&chat.session, &handle))
             .and_then(cards::app_of)
     };
-    by_kind.or_else(by_handle).map(|app| (app, tool))
+    by_kind.or_else(by_handle).map(|app| (app.opens_in(), tool))
 }
 
 /// The `#n` and `@n` a call argument names.
