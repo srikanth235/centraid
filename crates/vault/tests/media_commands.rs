@@ -1765,6 +1765,15 @@ fn a_derivative_the_shell_staged_is_the_tier_and_the_decoder_stays_idle() {
     );
 }
 
+/// An edit's carried columns: title, capture time, offset, place and source asset.
+type EditedRow = (
+    Option<String>,
+    Option<String>,
+    Option<i64>,
+    Option<String>,
+    Option<String>,
+);
+
 /// **AN EDIT MADE IN THE PHONE'S OWN PHOTOS APP KEEPS THE ORIGINAL'S DATE,
 /// PLACE AND CAPTION** (#1127, A20, R-1029-PH-5).
 ///
@@ -1773,6 +1782,7 @@ fn a_derivative_the_shell_staged_is_the_tier_and_the_decoder_stays_idle() {
 /// original under. The command fills what the caller left out from the
 /// source, never overrides what the caller said, and — offered again — adopts
 /// the edit it made and leaves its lineage alone.
+
 #[test]
 fn an_edit_naming_its_source_keeps_the_originals_date_place_and_caption() {
     use base64::Engine as _;
@@ -1830,13 +1840,7 @@ fn an_edit_naming_its_source_keeps_the_originals_date_place_and_caption() {
     let edit_id = first["asset_id"].as_str().expect("an id").to_owned();
     assert_ne!(edit_id, original_id);
 
-    let row = |asset_id: &str| -> (
-        Option<String>,
-        Option<String>,
-        Option<i64>,
-        Option<String>,
-        Option<String>,
-    ) {
+    let row = |asset_id: &str| -> EditedRow {
         scratch
             .vault
             .read(|connection| {
