@@ -202,6 +202,22 @@ The simulator bundle is the one route, and it is the right one: `FontRegistratio
 
 **`.xcode-version` is `26.6`, confirmed by the first real iOS compile.** The pin was `16.4` and had never been tested against anything; D-1020-E5a's rule was that the first compile confirms or replaces it. Kotlin/Native 2.4.20 **accepted** Xcode 26.6 — it refused nothing and named no other version — so 26.6 is what the file now holds, and it is a measurement rather than the guess the `16.4` was. `:shared:linkDebugFrameworkIosSimulatorArm64` links in **26 s** on an M-series Mac. **Thirteen** defects stood between the committed tree and a green test run, and a fourteenth (a `nm` invocation with GNU-only flags) kept the Rust symbol gate red on any Mac. None was visible to a machine that could not run these four steps.
 
+### Seeding the simulator's Health
+
+A simulator's Apple Health is empty, and Centraid never writes to it (R-1129-7: its bundle asks `toShare: []`, carries an empty `com.apple.developer.healthkit.access` and no `NSHealthUpdateUsageDescription`, which `HealthKitReadOnlySpec` holds). So test data comes from a **separate debug app**, `iosApp/HealthSeeder/`: its own XcodeGen spec, bundle id `dev.centraid.HealthSeeder` and entitlement with share types, never named by Centraid's `project.yml` and never linked or embedded in it.
+
+```sh
+cd mobile/iosApp && export CENTRAID_IOS_DEPLOYMENT_TARGET=$(cat ../ios-deployment-target)
+xcodegen generate --spec HealthSeeder/project.yml   # writes HealthSeeder/HealthSeeder.xcodeproj (gitignored)
+xcodebuild -project HealthSeeder/HealthSeeder.xcodeproj -scheme HealthSeeder -sdk iphonesimulator \
+  -destination 'platform=iOS Simulator,id=<udid>' -derivedDataPath build/seeder ARCHS=arm64 ONLY_ACTIVE_ARCH=YES build
+xcrun simctl install <udid> build/seeder/Build/Products/Debug-iphonesimulator/HealthSeeder.app
+maestro --udid <udid> test maestro/flows/health-seed.yaml      # launches it and answers its sheet once
+xcrun simctl launch --terminate-running-process <udid> dev.centraid.HealthSeeder -extra   # later: 2,000 more steps and a walk today
+```
+
+It writes a deterministic year: 365 days of steps, active energy, resting heart rate and weight (every third day), 90 nights of sleep in stages with an overlapping unstaged interval beside each (Centraid merges them and counts the night once), and ten runs, walks and rides with distance, energy, heart rate and elevation. Every object carries a sync identifier (a workout's own samples too), so a second run replaces the first rather than doubling it; `-extra` writes at fixed moments of today for the same reason, and a running seeder must be terminated for the argument to reach it. **Exercise minutes are Apple's alone** (`appleExerciseTime` cannot be written by an app), so a seeded simulator's exercise line reads nothing. Then Health → Connect in Centraid, and `maestro/flows/health-connect.yaml` walks Home → Connect → the sheet → Today.
+
 ## The other hand-offs
 
 | What | The command | The evidence it should produce |

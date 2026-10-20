@@ -83,6 +83,17 @@ One string per control, set with `Modifier.testTag` in Compose and `.accessibili
 | `locker-access-lede` | Locker Access history | the one-line lede under the title ("Every unlock, reveal, copy and export, newest first.") |
 | `locker-access` | Locker Access history | the list of receipts — **Android only** (an iOS container id would leak onto its rows) |
 | `locker-field-access:<receiptId>-value` | Locker Access history, and an item's own Access history | one receipt's day and minute, the value of the item page's history row (`<receiptId>` is the receipt's); **iOS**. Android tags the row `locker-field-access:<receiptId>` and its value `locker-value-access:<receiptId>`. A receipt never carries a value, so these hold a time and never a secret |
+| `health-band-<tab>` | Health | one band tab (`today`, `trends`, `workouts`, `more`, the label lowercased); `health-band` is the plate (#1129) |
+| `health-connect-open` | Health | the not-connected empty state's one action, which pushes Connect |
+| `health-hero`, `health-metric-<key>`, `health-trend-<key>` | Health | Today's steps card, a Today metric line and a Trends row, each the tap to its metric page (`<key>` is `steps`, `sleep_min`, …) |
+| `health-today-foot` | Health | Today's foot: where the numbers were read from |
+| `health-workout-<activityId>` | Health | one workout row (Today and Workouts) |
+| `health-chip-<kind>`, `health-chip-all` | Health | a Workouts kind chip, and All |
+| `health-range`, `health-metric-range` | Health, a metric | the segmented range (Trends; Week · Month · Year) |
+| `health-more-<key>`, `health-reads`, `health-reads-close` | Health | a More row (`reads`, `choose`, `stop`), the "What Health may read" sheet and its close |
+| `health-metric-page`, `health-workout-page` | a metric, a workout | the pushed page's scroll |
+| `health-connect-page`, `health-choice-<key>`, `health-connect`, `health-connect-status` | Connect | the page, one type's switch, the one Ink button ("Connect Apple Health"), the status line |
+| `kit-pushed-back` | any pushed page (iOS) | the kit's back control, named for the parent |
 | `BackButton` | any pushed page (iOS) | the navigation bar's back — UIKit's own id; Maestro's `back` is Android's system key and does nothing on iOS |
 
 Home, its Settings and vault sheets, the Backup screen, the first-launch deck and Chat set tags; the Backup screen's ids are written in both shells and selected by no flow yet. The iOS shell runs on a simulator against the real `HomeMachine` through `HomeBridge`, so the iOS half of each id renders; the Android half is compiled and unobserved, because no machine here has an Android emulator.

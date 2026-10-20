@@ -1,0 +1,24 @@
+# The simulator's Health, seeded (#1129): runs the separate HealthSeeder debug
+# app (`mobile/iosApp/HealthSeeder`, never part of Centraid) and answers its
+# HealthKit sheet, which asks to WRITE — the seeder's, never Centraid's. Run it
+# before `health-connect.yaml`; `mobile/README.md` ("Seeding the simulator's
+# Health") builds and installs the app.
+appId: dev.centraid.HealthSeeder
+name: health-seed
+---
+- launchApp
+# The sheet slides up; a tap before it settles lands on nothing.
+- extendedWaitUntil:
+    visible: "Turn On All"
+    timeout: 15000
+- waitForAnimationToEnd
+# HEALTHKIT'S SHEET IS ANOTHER PROCESS'S VIEW: a tap found by its text reports
+# COMPLETED and lands on nothing, so the two buttons are tapped where they are
+# drawn (iPhone 17 Pro, iOS 26.5): Turn On All, then Allow.
+- tapOn:
+    point: "30%,54%"
+- tapOn:
+    point: "50%,85%"
+- extendedWaitUntil:
+    visible: "Seeded.*"
+    timeout: 120000
