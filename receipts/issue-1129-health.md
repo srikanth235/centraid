@@ -54,6 +54,7 @@ The umbrella branched from `claude/phone-sync-1127` at c1a914ad8 and later merge
   - `docs/decisions.md`: the Health section, and R-1127-3, R-1127-10 and R-1099-23 marked as amended.
   - `docs/vault-ontology.md`: three rungs, 95 base tables, the `health` pack row, the phone band's fourth source, health's return under ONT-06, five commitments, R8, ONT-43, and the declared-lifecycle line recounted from the registry.
   - `CHANGELOG.md`, `README.md`, `ARCHITECTURE.md`, `docs/glossary.md`, `docs/design-machinery.md`, `mobile/README.md`, and this receipt.
+  - `crates/api-proto/build.rs`: `HealthHomeState.content.data` and `HealthMetricState.content.data` are boxed, as every other app's large data arm is. The pr gate's clippy step refused them as `large_enum_variant`.
 
 No file was deleted.
 
@@ -67,7 +68,7 @@ cargo xtask doc-links
 
 Outcome: pass, 0 findings over 118 markdown files.
 
-The gate runs from the close are recorded below, under "The gates at the close".
+The gate runs from the close are recorded in the next section.
 
 **By the lanes**, each on its own branch and target directory:
 
@@ -127,6 +128,49 @@ The screenshots, `00-seeder-done.png` to `17-after-stop.png`, are in the root's 
 - No real watch's late upload was seen. The seeder's rerun stands in for one.
 - The line naming a refused type was not exercised by hand on either shell. The specs hold its logic.
 
+## The gates at the close
+
+Run one at a time through the owner's lock, on `claude/1129-lane-z` after the merge of the umbrella at 71e6a3d47, with `CARGO_TARGET_DIR` set per lane.
+
+```sh
+cargo xtask gate --profile pr        # first run, cold tree
+```
+
+Outcome: fail, 1,037 s of a 1,500 s budget. Every step but three passed: fmt, the restore drill, rules, doc-links, ledgers, buf, ci-policy, secrets, osv, release-build (279 s), ts-static, emitters, lockfile, call-budget and fault-door. The three that failed:
+
+- **clippy**, `large_enum_variant` on Health's two screen data arms. This was new from lane K's `screen.proto`: lane R's clippy ran before those messages existed, and the mobile-jvm gate does not run clippy. Fixed in 37c75dd2a.
+- **test**, `centraid-gateway server::bonjour::tests::dns_sd_is_run_with_the_registration_and_withdrawn_when_dropped`, which read an empty args file (log `target/xtask/pr/test/stderr.log`). It is inherited, since `crates/gateway` is untouched by #1129. It is a race: the test waits for `noted.args` to exist, and the shell's redirection creates the file before `echo` writes it. Run alone, it passes 3 of 3. It is filed here as a flake to fix (wait for content, not existence), not re-run until green.
+- **deny**, RUSTSEC-2026-0382 in `rustls-webpki` 0.103.15 (via `tokio-rustls` → `centraid-gateway`). It is inherited: `main` and the base pin the same version, and the advisory is new. The fix is `cargo update -p rustls-webpki` to 0.103.16 or later, which this umbrella did not take.
+
+```sh
+cargo xtask gate --profile pr        # after 37c75dd2a
+```
+
+Outcome: fail, 299 s. clippy passed. Two steps failed:
+
+- **deny**, as above.
+- **test**, `centraid-core-ffi::spike the_c_harness_crosses_the_abi_ten_thousand_times`. The C harness links the first cdylib it finds. With no debug cdylib in the target, it took the **release** one the first run's release-build step left, and Apple's `ld` refused that file: "mis-aligned LINKEDIT string pool". On the cold first run there was no cdylib, so the test skipped. `crates/core-ffi` is untouched by #1129.
+
+```sh
+cargo build -p centraid-core-ffi && cargo nextest run --workspace --no-fail-fast
+```
+
+Outcome: pass, 3,265 tests run, 3,265 passed, 6 skipped (396 s). The spike passed against the debug cdylib, and the bonjour test passed this time.
+
+```sh
+JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home cargo xtask gate --profile mobile-jvm
+```
+
+Outcome: pass, 120.5 s of 420 s. The tree was clean afterwards.
+
+```sh
+cargo xtask rules; cargo xtask doc-links; CENTRAID_GATE_STAMPS=0 bun run check:push:static
+```
+
+Outcome: pass. rules passed all four checks, doc-links reported 0 findings, and the static tier passed 4 of 4.
+
+`node .governance/law/run.mjs` reports one red rule, `receipt-per-issue`: #1127's receipt has no `## Audit`, and this receipt's Audit records no verdict (see Audit).
+
 ## Decisions
 
 - The rulings are in [decisions.md](../docs/decisions.md#health-follows-the-phones-health-store-1129):
@@ -163,6 +207,9 @@ The screenshots, `00-seeder-done.png` to `17-after-stop.png`, are in the root's 
 | `cargo xtask rules`: `sql-confinement` in `crates/core/src/api.rs` | Upstream in #1127 (64a5e163c, merged as a6b891075) |
 | iOS did not compile at 51ed0a60c: `TileBody.health` was missing from `HomeView`'s switch | Lane I (e4864476c) |
 | `node scripts/lint-native-controls.mjs`: native alerts in #1127's Docs and onboarding views | **Not fixed.** It is not in `check:push:static` (F-A-1) |
+| `cargo deny`: RUSTSEC-2026-0382, `rustls-webpki` 0.103.15 (same on `main`) | **Not fixed.** It needs `cargo update -p rustls-webpki` |
+| The gateway's bonjour test races its own fake tool (existence before content) | **Not fixed.** It is a flake to file. It passes alone and in the full run |
+| The core-ffi spike links a release cdylib that Apple's `ld` refuses | **Not fixed.** It is environmental. It passes against the debug cdylib |
 
 ## Known gaps, for the owner
 
