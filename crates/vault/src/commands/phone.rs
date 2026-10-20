@@ -1,17 +1,17 @@
 //! The six `phone.*` commands — the write surface of the phone link (#1127).
 //!
-//! People, Agenda and Docs follow what the phone holds (R-1127-1: one way, phone → vault). A
-//! followed person, event or document is an ordinary row; `phone_link`, rung two, is the one
-//! place that says which phone record it came from. The shell's sync engine is the only caller,
-//! and it decides everything: this module stores what it is told and refuses what the schema or
-//! the rulings forbid.
+//! People, Agenda, Docs and Health follow what the phone holds (R-1127-1: one way, phone →
+//! vault). A followed person, event, document or workout is an ordinary row; `phone_link`, rung
+//! two, is the one place that says which phone record it came from. The shell's sync engine is
+//! the only caller, and it decides everything: this module stores what it is told and refuses
+//! what the schema or the rulings forbid.
 //!
 //! ## What each command is for
 //!
-//! - `phone.origin` — an account, calendar or picked folder was seen on the phone. Registers it,
-//!   or refreshes its label, and returns the `origin_id` a link names (R-1127-9). The label is
-//!   written only here and only while the origin is present, so it survives the origin leaving
-//!   the phone: the question "Keep its 214 events?" is asked after that.
+//! - `phone.origin` — an account, calendar, picked folder or health store was seen on the phone.
+//!   Registers it, or refreshes its label, and returns the `origin_id` a link names (R-1127-9).
+//!   The label is written only here and only while the origin is present, so it survives the
+//!   origin leaving the phone: the question "Keep its 214 events?" is asked after that.
 //! - `phone.retire_origin` — an origin no link names any more is dropped. Refused while any link
 //!   (attached or detached) still names it: a detached link is the tombstone that keeps a phone
 //!   record the member took over from arriving a second time.
@@ -42,7 +42,8 @@
 //!    rather than quietly ignored: the engine would otherwise write the phone's version over
 //!    the member's edit (R-1127-2). The schema backs it (`phone_link_detach_is_one_way`).
 //! 2. **A link points at a live row of the kind its source implies**: contacts → party,
-//!    calendar → event, files → document, and not in the trash. The schema holds the kind
+//!    calendar → event, files → document, health → activity (a workout, #1129), and not in the
+//!    trash (an activity has none: present is live). The schema holds the kind
 //!    (`phone_link_kind_matches_source`); liveness is the command's, because a trashed row may
 //!    keep its link (R-1127-3) but a fresh link to one is a mistake.
 //! 3. **One vault row, one link.** A row already followed from another phone record is refused,
@@ -61,7 +62,7 @@ use crate::error::{Result, VaultError};
 /// LIVE: present, and not in the trash. `?1` is the entity id.
 ///
 /// An ALLOW-LIST, not a lookup: the table name goes into SQL, so it comes from here and never
-/// from an input. The same three words are the table's own `CHECK`.
+/// from an input. The same four words are the table's own `CHECK`.
 ///
 /// **A person is trashed on its PROFILE, not on `core_party`** (`people.trash_person` stamps
 /// `people_profile.deleted_at`; `core_party.deleted_at` is not what People writes), so the
@@ -82,6 +83,12 @@ const SOURCES: &[(&str, &str)] = &[
     (
         "files",
         "SELECT COUNT(*) FROM core_document WHERE document_id = ?1 AND deleted_at IS NULL",
+    ),
+    // A workout is an activity (#1129, R-1129-2), and an activity has no trash: a delete is a
+    // purge (`health.purge_workout`), so present is live.
+    (
+        "health",
+        "SELECT COUNT(*) FROM core_activity WHERE activity_id = ?1",
     ),
 ];
 
@@ -171,7 +178,7 @@ fn origin() -> CommandDefinition {
           "required": ["source", "phone_origin", "label"],
           "additionalProperties": false,
           "properties": {
-            "source": { "enum": ["contacts", "calendar", "files"] },
+            "source": { "enum": ["contacts", "calendar", "files", "health"] },
             "phone_origin": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "\\S" },
             "label": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "\\S" }
           }
@@ -364,7 +371,7 @@ fn link() -> CommandDefinition {
           "required": ["source", "phone_id", "origin_id", "entity_id", "fingerprint"],
           "additionalProperties": false,
           "properties": {
-            "source": { "enum": ["contacts", "calendar", "files"] },
+            "source": { "enum": ["contacts", "calendar", "files", "health"] },
             "phone_id": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "\\S" },
             "origin_id": { "type": "string", "minLength": 1 },
             "entity_id": { "type": "string", "minLength": 1 },
@@ -430,7 +437,7 @@ fn touch() -> CommandDefinition {
           "required": ["source", "phone_ids"],
           "additionalProperties": false,
           "properties": {
-            "source": { "enum": ["contacts", "calendar", "files"] },
+            "source": { "enum": ["contacts", "calendar", "files", "health"] },
             "phone_ids": {
               "type": "array",
               "maxItems": 20000,

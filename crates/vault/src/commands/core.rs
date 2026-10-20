@@ -3688,7 +3688,7 @@ fn find_or_create_tags_scheme(ctx: &CommandCtx<'_, '_>) -> Result<String> {
     Ok(scheme_id)
 }
 
-fn find_or_create_concept(
+pub(crate) fn find_or_create_concept(
     ctx: &CommandCtx<'_, '_>,
     scheme_id: &str,
     label: &str,

@@ -1,4 +1,4 @@
-//! THE FOUR `phone.*` COMMANDS (#1127, lane A).
+//! THE FOUR `phone.*` COMMANDS (#1127, lane A), over all four sources (`health` since #1129).
 //!
 //! What each test holds, and the claim a port would get wrong:
 //!
@@ -185,7 +185,19 @@ fn a_link_per_source_is_written_and_a_second_run_writes_nothing() {
     assert_eq!(first["created"], json!(true));
     bench.link("calendar", "EKEvent:9", &lunch, "fp-2");
     bench.link("files", "bookmark/a.md", &spec, "fp-3");
-    assert_eq!(bench.count("SELECT COUNT(*) FROM phone_link"), 3);
+    // A workout is an activity (#1129, R-1129-2), followed like any other row.
+    let run = bench.run(
+        "health.follow_workout",
+        json!({
+            "activity_id": "wk-1", "kind": "run", "phone_kind": "running",
+            "started_at": "2026-10-19T07:00:00Z", "ended_at": "2026-10-19T07:40:00Z",
+        }),
+    )["activity_id"]
+        .as_str()
+        .expect("an activity id")
+        .to_owned();
+    bench.link("health", "HKWorkout:1", &run, "fp-4");
+    assert_eq!(bench.count("SELECT COUNT(*) FROM phone_link"), 4);
 
     // IDEMPOTENT BY STATE: the same input again changes no column, `row_version` included.
     let before = bench.links();
@@ -284,7 +296,12 @@ fn a_refusal_names_its_predicate_and_writes_nothing() {
     bench.link("contacts", "c1", &ada, "fp-1");
 
     // Not the kind the source implies (the engine's other guard is the schema's trigger).
-    for (source, entity) in [("contacts", &lunch), ("calendar", &ada), ("files", &ada)] {
+    for (source, entity) in [
+        ("contacts", &lunch),
+        ("calendar", &ada),
+        ("files", &ada),
+        ("health", &lunch),
+    ] {
         assert_eq!(
             bench.refused(
                 "phone.link",
@@ -440,7 +457,9 @@ fn a_purge_leaves_a_tombstone_for_a_person_and_a_document_and_phone_forget_ends_
         "both links stayed, as tombstones of rows purged"
     );
     assert_eq!(
-        bench.count("SELECT COUNT(*) FROM phone_link WHERE source = 'calendar' AND entity_id IS NOT NULL"),
+        bench.count(
+            "SELECT COUNT(*) FROM phone_link WHERE source = 'calendar' AND entity_id IS NOT NULL"
+        ),
         1,
         "the event's link is untouched"
     );

@@ -90,6 +90,8 @@ fn the_registry_carries_every_command_this_build_has() {
         // The phone link's six (#1127): `link`, `touch`, `detach` and `forget`, and the origin's
         // two, `origin` and `retire_origin` (R-1127-9).
         ("phone.", 6),
+        // Health's three (#1129): a batch of daily totals, a followed workout and its purge.
+        ("health.", 3),
     ];
     let total: usize = by_schema.iter().map(|(_, expected)| *expected).sum();
     assert_eq!(

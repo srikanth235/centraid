@@ -54,6 +54,7 @@ pub mod chat;
 pub mod core;
 pub mod core_links;
 mod event_time;
+pub mod health;
 pub mod knowledge;
 pub mod locker;
 pub mod media;
@@ -292,6 +293,9 @@ impl Registry {
         // registered together — the split is where a lane took it, not a second
         // owner (#1020, D-1020-N6).
         for definition in core_links::definitions() {
+            registry.register(definition)?;
+        }
+        for definition in health::definitions() {
             registry.register(definition)?;
         }
         for definition in knowledge::definitions() {
