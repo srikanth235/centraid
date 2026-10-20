@@ -36,7 +36,7 @@ enum ChatRouting {
         RowRoutes.shared.isThread(row: card.row)
     }
 
-    /// The app an opened route belongs to (`tasks.home` is Tasks), or nil. The
+    /// The app an opened route belongs to (`tasks.detail` is the `tasks` scope, a domain), or nil. The
     /// Chat tab scopes itself to the app the member last had open.
     static func app(of route: ShellModel.Route) -> String? {
         switch route {
@@ -59,6 +59,10 @@ enum ChatRouting {
     /// them: the machine's list (`ChatMachine.SCOPABLE_APPS`), which a spec ties
     /// to the core's.
     static var scopable: [String] { ChatMachine.shared.SCOPABLE_APPS }
+
+    /// The scopes the composer's menu offers: the machine's `SCOPE_MENU` (the
+    /// scopable apps a member can open, #1128), not every scope a thread may hold.
+    static var scopeMenu: [String] { ChatMachine.shared.SCOPE_MENU }
 
     private static var chatTitle: String { ChatCopy.shared.TITLE }
 }

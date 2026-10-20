@@ -6,9 +6,9 @@ import centraid.screen.v1.HomeStatus
 import centraid.screen.v1.SeatState
 import centraid.screen.v1.VaultLockup
 import dev.centraid.core.CentraidCore
-import dev.centraid.design.CentraidCatalog
 import dev.centraid.design.copy.SharedCopy
 import dev.centraid.shared.custody.DevSeed
+import dev.centraid.shared.nav.AppHomes
 import dev.centraid.shared.platform.BackgroundTasks
 import dev.centraid.shared.platform.PlatformServices
 import dev.centraid.shared.screen.ScreenEffect
@@ -1026,7 +1026,7 @@ private const val STRANDED_BUFFER: Int = 8
  * to go: the screen that could retry it has closed.
  */
 public fun strandedStatus(write: StrandedWrite): HomeStatus {
-    val app = CentraidCatalog.byId[write.appId]?.name ?: write.appId
+    val app = AppHomes.nameOf(write.appId)
     val sentence = write.sentence.trim()
     return HomeStatus(
         tone = HomeStatus.Tone.TONE_ATTENTION,

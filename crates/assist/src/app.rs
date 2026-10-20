@@ -42,7 +42,21 @@ impl App {
         }
     }
 
-    /// The app's name as a member reads it ("Looking in Notes").
+    /// THE APP A MEMBER OPENS THIS DOMAIN IN (R-1128-D1). `id` is the domain a card, a chat scope
+    /// and a search hit are stored and routed by, and `Tasks` stays that domain; but the Tasks
+    /// app is folded into Agenda (#1128), so a member never opens "Tasks". Every place the
+    /// assistant NAMES an app to the member (the activity line "Looking in Agenda", a name on a
+    /// screen) goes through here; every place it STORES or ROUTES an id keeps `id()`.
+    #[must_use]
+    pub const fn opens_in(self) -> Self {
+        match self {
+            Self::Tasks => Self::Agenda,
+            other => other,
+        }
+    }
+
+    /// The app's name as a member reads it ("Looking in Notes"): the name of the app the domain
+    /// opens in, so `Tasks` reads "Agenda" (R-1128-D1).
     #[must_use]
     pub const fn display(self) -> &'static str {
         match self {
@@ -52,7 +66,7 @@ impl App {
             Self::Notes => "Notes",
             Self::People => "People",
             Self::Photos => "Photos",
-            Self::Tasks => "Tasks",
+            Self::Tasks => "Agenda",
         }
     }
 
@@ -79,8 +93,28 @@ mod tests {
         for app in App::ALL {
             assert_eq!(App::from_id(app.id()), Some(app));
             assert!(seen.insert(app.id()), "{}", app.id());
-            assert_eq!(app.display().to_lowercase(), app.id());
+            // The name a member reads is the name of the app the domain opens in, not of the
+            // domain: it equals the id for every app but Tasks, which opens in Agenda (#1128).
+            assert_eq!(app.display().to_lowercase(), app.opens_in().id());
         }
         assert_eq!(App::from_id("NOTES"), None, "ids are the shell's, exactly");
+    }
+
+    #[test]
+    fn tasks_is_a_domain_a_member_opens_in_agenda() {
+        // The id is stored and routed (card app, chat scope, search app_id) and does not move.
+        assert_eq!(App::Tasks.id(), "tasks");
+        assert_eq!(App::from_id("tasks"), Some(App::Tasks));
+        assert_eq!(App::Tasks.opens_in(), App::Agenda);
+        assert_eq!(App::Tasks.display(), "Agenda");
+        // Every other app opens in itself, and an app that opens in another is a domain only.
+        for app in App::ALL.into_iter().filter(|app| *app != App::Tasks) {
+            assert_eq!(app.opens_in(), app, "{}", app.id());
+        }
+        assert!(
+            App::ALL
+                .iter()
+                .all(|app| app.opens_in().opens_in() == app.opens_in())
+        );
     }
 }

@@ -94,15 +94,19 @@ class HomeSearchSpec : StringSpec({
                 hit("tasks", "schedule.task", "t1", "Book the cabin"),
             ),
         )
-        // SPRINGBOARD_ORDER: photos, docs, notes, agenda, tasks, people.
-        data.groups.map { it.app_id } shouldContainExactly listOf("photos", "notes", "agenda", "tasks")
-        data.groups.map { it.label } shouldContainExactly listOf("Photos", "Notes", "Agenda", "Tasks")
-        data.groups.map { it.count } shouldContainExactly listOf(1, 2, 1, 1)
+        // SPRINGBOARD_ORDER: photos, docs, notes, agenda, money, people. The task hit is
+        // grouped under the app it opens in (#1128, R-1128-7), so Agenda's group holds both.
+        data.groups.map { it.app_id } shouldContainExactly listOf("photos", "notes", "agenda")
+        data.groups.map { it.label } shouldContainExactly listOf("Photos", "Notes", "Agenda")
+        data.groups.map { it.count } shouldContainExactly listOf(1, 2, 2)
         data.groups[1].accessibility_label shouldBe "Notes, 2 results"
         data.groups[0].accessibility_label shouldBe "Photos, 1 result"
         data.groups[1].rows.map { it.kind_label to it.title } shouldContainExactly
             listOf(SharedCopy.SEARCH_KIND_NOTE to "Cabin packing", SharedCopy.SEARCH_KIND_NOTE to "Cabin key")
-        data.groups[2].rows.single().kind_label shouldBe SharedCopy.SEARCH_KIND_EVENT
+        data.groups[2].accessibility_label shouldBe "Agenda, 2 results"
+        data.groups[2].rows.map { it.app_id to it.title } shouldContainExactly
+            listOf("agenda" to "Cabin weekend", "tasks" to "Book the cabin")
+        data.groups[2].rows[0].kind_label shouldBe SharedCopy.SEARCH_KIND_EVENT
         data.groups[1].rows[0].accessibility_label shouldBe "Note, Cabin packing"
     }
 
@@ -205,6 +209,9 @@ class HomeSearchSpec : StringSpec({
                 hit("photos", "core.content_item", "c1", "Cabin at dusk", openId = "a1"),
             ),
         )
+        // A task hit sits in Agenda's group and still opens in its own app's router (R-CHROME-6).
+        data.groups.single { it.app_id == "agenda" }.rows.map { it.target!!.app } shouldContainExactly listOf("agenda", "tasks")
+        data.groups.none { it.app_id == "tasks" } shouldBe true
         val targets = data.groups.flatMap { group -> group.rows.map { it.target!! } }
         targets.single { it.app == "photos" } shouldBe ChatCard(app = "photos", entity = "photo", id = "a1", title = "Cabin at dusk")
         targets.single { it.app == "notes" } shouldBe ChatCard(app = "notes", entity = "note", id = "n1", title = "Cabin packing")

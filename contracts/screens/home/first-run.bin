@@ -1,15 +1,13 @@
-"÷'
+"Ç'
 photos(0:Import your first photo%
 docs(0:Add your first document"
-notes(:Write your first note+
-agenda(:Put something on the calendar)
-tasks(:Capture the next thing to do"
+notes(:Write your first note-
+agenda(0:Put something on the calendar"
 people(:Add someone you know,
 locker(:Unlock to see your itemsB:*Not backed up yet :
 photos:
 docs:
 notes
-agenda:
-tasks
 people:
+agenda:
 locker

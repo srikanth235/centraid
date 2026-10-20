@@ -1055,12 +1055,16 @@ message TileBody {
   // the number and the name are never reused.
   reserved 6;
   reserved "tally";
+  // 5 was `tasks`, the Tasks tile's body; Tasks folded into Agenda (#1128,
+  // R-1128-7, R-1128-8), whose tile carries the due tasks, so the number and the
+  // name are never reused.
+  reserved 5;
+  reserved "tasks";
   oneof kind {
     Photos photos = 1;
     Docs docs = 2;
     Agenda agenda = 3;
     People people = 4;
-    Tasks tasks = 5;
     Locker locker = 7;
     Notes notes = 8;
     // Money's body: what this month's spending came to, per currency (#1099).
@@ -1105,8 +1109,17 @@ message TileBody {
     // `Wed 11 · all day` for a day and not a time.
     string at = 2;
     // What follows it: `then <title>`, `then nothing until the 14th`, or
-    // `nothing after it`. Never empty on a tile with a body.
+    // `nothing after it`. Empty only when no event is coming up (`title` then
+    // says so and `at` is empty too), the tile showing tasks alone (#1128).
     string after = 3;
+    // TODAY'S DUE TASKS (#1128, R-1128-8): the open tasks due today or already
+    // overdue, from `tasks.board` TODAY. Zero draws no line. Absent tasks (the
+    // read did not land) are zero: a tile never claims a count it did not read.
+    uint32 due_count = 4;
+    // `3 due`: the count in words, composed in Kotlin. Empty when `due_count` is 0.
+    string due_label = 5;
+    // The first due task's title, overdue before today; empty when `due_count` is 0.
+    string due_title = 6;
   }
 
   message People {
@@ -1132,16 +1145,6 @@ message TileBody {
       // literal it does not recognise — and a renderer draws its neutral disc
       // rather than substituting a hue nobody chose.
       optional string color = 3;
-    }
-  }
-
-  message Tasks {
-    repeated Row rows = 1;
-
-    message Row {
-      string task_id = 1;
-      string title = 2;
-      bool done = 3;
     }
   }
 
@@ -3785,20 +3788,25 @@ message PhotoEditorEvent {
 }
 
 // ---------------------------------------------------------------------------
-// Agenda home (#1046)
+// Agenda home (#1046, #1128)
 // ---------------------------------------------------------------------------
 //
-// Day, Schedule and Waiting over the core's `agenda.upcoming` and
-// `agenda.day-context`, and `agenda.search` while a term is typed. Everything a
-// view draws is COMPUTED BY `AgendaHomeMachine`: every label, sentence,
-// accessibility label, empty choice, hue key, status chip and "shown" flag. A
-// view lays these out and forwards `AgendaHomeEvent`s; it formats no date,
-// counts nothing and chooses no copy.
+// Day, Schedule, Waiting and To-do over the core's `agenda.upcoming` and
+// `agenda.day-context`, `agenda.search` while a term is typed, and the
+// `tasks.*` answers the person's dated and undated tasks come from (#1128): a
+// task due on a day is a ROW ON THAT DAY (`AgendaRowItem.task`), the Inbox and
+// the projects are the To-do place (`AgendaTodo`). Everything a view draws is
+// COMPUTED BY `AgendaHomeMachine`: every label, sentence, accessibility label,
+// empty choice, hue key, status chip and "shown" flag. A view lays these out
+// and forwards `AgendaHomeEvent`s; it formats no date, counts nothing and
+// chooses no copy.
 //
 // THE RAW ANSWERS NEVER CROSS. The machine folds `centraid.core.v1`'s typed
-// answers (`AgendaUpcoming`, `AgendaDayContext`, `AgendaSearch`) and keeps them
-// on a Kotlin-side state beside this message, so a local change — a calendar
-// hidden, search closed, Schedule to Waiting — re-folds without a re-read.
+// answers (`AgendaUpcoming`, `AgendaDayContext`, `AgendaSearch`, `TasksBoard`,
+// `TasksProjects`, `TasksCatchUp`, `TasksSearch`) and keeps them on a
+// Kotlin-side state beside this message, so a local change — a calendar
+// hidden, search closed, Schedule to Waiting, a task checked off — re-folds
+// without a re-read.
 // They are not an arm of `AgendaHomeEvent` because this file cannot import
 // `centraid.core.v1`: `crates/api-proto` includes the two packages as sibling
 // modules, and prost's `super::super::core` path out of `screen_v1` does not
@@ -3828,13 +3836,14 @@ message AgendaHomeState {
     AgendaHomeData data = 10;
   }
   Sheet sheet = 11;
-  // THE BAND, computed: Day, Schedule, Waiting, then More — places only
-  // (R-CHROME-5). The destination's tab stays lit while search is open,
+  // THE BAND, computed: Day, Schedule, Waiting, To-do, then More — places only
+  // (R-CHROME-5, R-1128-1). The destination's tab stays lit while search is open,
   // because search is a mode over it. EMPTY while denied: the gate has no
   // band.
   repeated AgendaBandTab band = 12;
   // The day bar. On the state and not on `data`, so stepping a day keeps the
-  // bar standing (and its buttons pressable) while the new day reads.
+  // bar standing (and its buttons pressable) while the new day reads. Not
+  // shown on To-do, which has no window.
   AgendaToolbar toolbar = 13;
   // The screen's fixed words, so a view carries no copy of its own.
   AgendaChrome chrome = 14;
@@ -3843,12 +3852,15 @@ message AgendaHomeState {
   // the editor feed. `event_id`s, because a write targets the series.
   repeated string pending_event_ids = 15;
   repeated string cancel_asked_event_ids = 16;
-  // Days whose due shelf is open, `YYYY-MM-DD`.
-  repeated string due_open_days = 17;
-  // THE MORE SHEET, as rows, in order (R-1046-5, R-CHROME-4): each calendar
-  // as a show/hide toggle under the Calendars heading, then "What Agenda may
-  // read". Computed, so both platforms draw the same list; no calendar rows
-  // until an answer has named the calendars.
+  // 17 was `due_open_days`, the days whose due shelf was open. A task due on a
+  // day is a row on that day now (`AgendaRowItem.task`, R-1128-2).
+  reserved 17;
+  reserved "due_open_days";
+  // THE MORE SHEET, as rows, in order (R-1046-5, R-CHROME-4, R-1128-6): each
+  // calendar as a show/hide toggle under the Calendars heading, then the
+  // Tasks places (Anytime, Logbook, Reminders, Trash) under a Tasks heading,
+  // then "What Agenda may read". Computed, so both platforms draw the same
+  // list; no calendar rows until an answer has named the calendars.
   repeated AgendaMoreRow more_rows = 18;
   // THE WORDS THE HITS ANSWER when the core corrected a typo in `search_term`
   // (#1097); EMPTY for an exact answer. Agenda's search is a mode of this
@@ -3860,21 +3872,47 @@ message AgendaHomeState {
   // when the hits for the current term come back wholly empty, cleared by a
   // new term, closing search and a refusal.
   string search_ask = 20;
+  // THE TASK WRITE'S STATUS LINE (#1128): "Task done" with Undo, a filing's
+  // "Filed in …", or the vault's own refusal. Empty when nothing was written.
+  StatusLine status = 21;
+  // To-do's quick-add bar (R-CHROME-1: the Plus on To-do opens it). `shown`
+  // governs whether the To-do Plus is drawn; the bar itself waits for `drawn`.
+  TasksQuickAdd quick_add = 22;
+  // SHEET_FILE: the task being filed, and where it can go.
+  string filing_task_id = 23;
+  repeated TasksChoice file_choices = 24;
+  // SHEET_NEW_PROJECT's name field.
+  string new_project_name = 25;
+  bool new_project_can_submit = 26;
+  // THE HEADER PLUS (R-CHROME-1), per place: its accessibility label — "Add
+  // task" on To-do, "Add" elsewhere (the sheet adds an event or a task) — and
+  // what a tap does. On To-do it opens the quick-add bar (`QuickAddOpened`), so
+  // `add_opens_quick_add` is true; elsewhere it is `NewEventRequested`, the add
+  // sheet (R-1128-1).
+  string add_label = 27;
+  bool add_opens_quick_add = 28;
 
   enum Destination {
     DESTINATION_UNSPECIFIED = 0;
     DESTINATION_DAY = 1;
     DESTINATION_SCHEDULE = 2;
     DESTINATION_WAITING = 3;
+    // The Inbox, then the projects by area (R-1128-1).
+    DESTINATION_TODO = 4;
   }
 
   enum Sheet {
     SHEET_UNSPECIFIED = 0;
     SHEET_NONE = 1;
-    // Calendars to show or hide, and the row to the facts sheet.
+    // Calendars to show or hide, the Tasks places, and the row to the facts
+    // sheet.
     SHEET_MORE = 2;
     // "What Agenda may read" — `AgendaChrome.reads_facts`.
     SHEET_READS = 3;
+    // The filing sheet: Inbox, projects and their sections.
+    SHEET_FILE = 4;
+    // The new-project name sheet.
+    SHEET_NEW_PROJECT = 5;
   }
 }
 
@@ -3916,8 +3954,13 @@ message AgendaChrome {
   repeated AgendaFact reads_facts = 14;
   // The band's home capsule.
   string home = 15;
-  // The due shelf toggle's accessibility label; its visible word is a count.
-  string shelf_label = 16;
+  // 16 was `shelf_label`, the due shelf toggle's accessibility label (R-1128-2).
+  reserved 16;
+  reserved "shelf_label";
+  // THE TASK WORDS Day and To-do draw: the quick-add placeholder and verb, the
+  // filing sheet's title, the new-project words, cancel, "Move to project" and
+  // "Show more". Fields a task page alone draws are empty here.
+  TasksChrome tasks = 17;
 }
 
 message AgendaFact {
@@ -3926,7 +3969,7 @@ message AgendaFact {
 }
 
 message AgendaBandTab {
-  // `day`, `schedule`, `waiting`, `more` — what `BandPicked` sends.
+  // `day`, `schedule`, `waiting`, `todo`, `more` — what `BandPicked` sends.
   string key = 1;
   string label = 2;
   // A `design/native-catalog.json` icon key.
@@ -3964,6 +4007,39 @@ message AgendaHomeData {
   // place of `empty_action` on day one, and as a quiet row above the list when
   // marks fill it. See `EmptyState.import_source`.
   ImportSource import_source = 13;
+  // DAY ON TODAY ONLY (R-1128-3): the open work whose day has passed, above
+  // the day, with the verb "Catch up" (`GroupVerb`, key `catch_up`). Absent on
+  // every other anchor and place.
+  optional TasksRowGroup overdue = 14;
+  // The absence notice on Day on today: "You were away 16 days · 34 tasks came
+  // due", with its verb (`NoticeActed`).
+  optional TasksNotice notice = 15;
+  // SEARCH (R-1128-4): the tasks the term found, one group drawn above the
+  // event days. Empty without a term.
+  repeated TasksRowGroup task_hits = 16;
+  // To-do's content; set on `DESTINATION_TODO` only.
+  AgendaTodo todo = 17;
+}
+
+// THE TO-DO PLACE (#1128, R-1128-1): the Inbox's tasks, then the projects by
+// area — named areas A→Z, then "Projects" for those in none — in one list.
+message AgendaTodo {
+  // The Inbox: open work filed in no project. A group per head the core named.
+  repeated TasksRowGroup groups = 1;
+  // One group per area, rows as the kit's `ListRow`; a tap sends `ProjectPicked`.
+  repeated TasksProjectGroup projects = 2;
+  // Nothing open: day one's words, or "all done" with the phone's reminders
+  // offered (`import_source`). `TodoEmptyActed` performs `action_label`.
+  EmptyState empty = 3;
+  // "7 tasks · 3 projects"; empty while the list is empty.
+  string count_label = 4;
+  // "500 tasks · more not shown"; empty when whole.
+  string window_label = 5;
+  // "Show more" is live: the window can widen (`NextPageRequested`).
+  bool can_show_more = 6;
+  // The verb that opens the new-project sheet, "New project" — drawn at the
+  // foot of the list whatever it holds (the sheet is reachable always).
+  string new_project_label = 7;
 }
 
 message AgendaLanding {
@@ -3984,26 +4060,24 @@ message AgendaDaySection {
   // "Dana" / "3 birthdays" — day context, never an event row.
   optional string ribbon = 8;
   repeated string ribbon_names = 9;
-  // The due shelf: every open task due, which can be more than `due` lists.
-  uint32 due_count = 10;
-  repeated AgendaDueTask due = 11;
-  // "3 due", or "Hide" while `due_open`. Empty when nothing is due.
-  string due_label = 12;
-  bool due_open = 13;
-  // All-day rows first, then by start, with the now line placed among them on
+  // 10-13 were the due shelf (`due_count`, `due`, `due_label`, `due_open`):
+  // an open task due on the day is a row now (`AgendaRowItem.task`, R-1128-2).
+  reserved 10, 11, 12, 13;
+  reserved "due_count", "due", "due_label", "due_open";
+  // All-day rows first and the day's untimed tasks right after them, then the
+  // timed rows and timed tasks by time, with the now line placed among them on
   // today.
   repeated AgendaRowItem items = 14;
-}
-
-message AgendaDueTask {
-  string task_id = 1;
-  string title = 2;
 }
 
 message AgendaRowItem {
   oneof kind {
     AgendaEventRow event = 1;
     AgendaNowLine now_line = 2;
+    // A TASK DUE ON THE DAY, finished (R-1128-2): the one row shape every Tasks
+    // list draws. Its box checks it off in place (`TaskChecked`), a tap opens
+    // it (`TaskPicked`).
+    TasksRow task = 3;
   }
 }
 
@@ -4064,9 +4138,12 @@ message AgendaCalendarChoice {
 // ONE ROW OF AGENDA'S MORE SHEET. A view draws `label` (with the `hue_key` dot
 // and `meta` on a calendar), a heading above it when `section` is set, and
 // sends `MoreRowPicked` with `key` on a tap; the machine decides what the key
-// does.
+// does. The sheet's order (R-1128-6): the calendars, then the Tasks places
+// (Anytime, Logbook, Reminders, Trash) under a "Tasks" heading, then "What
+// Agenda may read".
 message AgendaMoreRow {
-  // `calendar-<calendar_id>` or `reads`.
+  // `calendar-<calendar_id>`, a Tasks place (`anytime`, `logbook`,
+  // `reminders`, `trash`) or `reads`.
   string key = 1;
   string label = 2;
   // "Shown" / "Hidden" on a calendar row; empty on an action row.
@@ -4080,6 +4157,9 @@ message AgendaMoreRow {
   string section = 7;
   // What a screen reader says for the row: "Work, Hidden".
   string spoken = 8;
+  // A `design/native-catalog.json` icon key on a Tasks place's row; empty on
+  // a calendar row.
+  string icon_key = 9;
 }
 
 enum AgendaEmpty {
@@ -4110,23 +4190,48 @@ message AgendaHomeEvent {
     BandPicked band = 10;
     SheetOpened sheet_opened = 11;
     SheetClosed sheet_closed = 12;
-    DueShelfToggled due_toggled = 13;
     ReadRefused refused = 14;
     RowsChanged rows_changed = 15;
     SeatChanged seat_changed = 16;
     // INTENTS. The machine changes nothing on them; the shell routes them —
     // `NewEventRequested` to `agenda.editor` on the anchor day, `EventPicked`
-    // to `agenda.event`.
+    // to `agenda.event`, and (R-1128-5) `TaskPicked`, `ProjectPicked`,
+    // `GroupVerb`, `NoticeActed` and the Tasks More rows to the `tasks.*`
+    // pages.
     NewEventRequested new_event = 17;
     EventPicked event_picked = 18;
     // A More sheet row, by `AgendaMoreRow.key`.
     MoreRowPicked more_row = 19;
+    // TASKS (#1128). 13 was `DueShelfToggled`.
+    TaskChecked task_checked = 20;
+    StatusActed status_acted = 21;
+    FileRequested file_requested = 22;
+    FileChosen file_chosen = 23;
+    QuickAddOpened quick_add_opened = 24;
+    QuickAddChanged quick_add_changed = 25;
+    QuickAddSubmitted quick_add_submitted = 26;
+    QuickAddClosed quick_add_closed = 27;
+    NewProjectNameChanged new_project_name = 28;
+    NewProjectSubmitted new_project_submitted = 29;
+    TodoEmptyActed todo_empty_acted = 30;
+    WriteSettled write_settled = 31;
+    NextPageRequested next_page = 32;
+    // INTENTS (R-1128-5).
+    TaskPicked task_picked = 33;
+    ProjectPicked project_picked = 34;
+    GroupVerb group_verb = 35;
+    NoticeActed notice_acted = 36;
   }
+  reserved 13;
+  reserved "due_toggled";
 
   // The screen is on screen. Lands on `destination` (Day when unspecified) at
-  // today, with search closed.
+  // today, with search closed. `quick_add_title` opens To-do's quick add with
+  // those words in it, focused (Notes' "Send to Agenda"); empty is an empty
+  // bar.
   message Opened {
     AgendaHomeState.Destination destination = 1;
+    string quick_add_title = 2;
   }
 
   message Refreshed {}
@@ -4171,10 +4276,6 @@ message AgendaHomeEvent {
 
   message SheetClosed {}
 
-  message DueShelfToggled {
-    string day = 1;
-  }
-
   message ReadRefused {
     ReadFailure failure = 1;
   }
@@ -4187,6 +4288,65 @@ message AgendaHomeEvent {
   message SeatChanged {
     SeatState seat = 1;
   }
+
+  // A task's box: open work completes, in place.
+  message TaskChecked {
+    string task_id = 1;
+  }
+
+  // The status line's Undo.
+  message StatusActed {}
+
+  // A long press on an open task: the filing sheet.
+  message FileRequested {
+    string task_id = 1;
+  }
+
+  // A `file_choices` key.
+  message FileChosen {
+    string key = 1;
+  }
+
+  // The Plus on To-do: the bar opens on the keyboard.
+  message QuickAddOpened {}
+
+  message QuickAddChanged {
+    string title = 1;
+  }
+
+  // The bridge mints the task's id; the machine takes it from there.
+  message QuickAddSubmitted {}
+
+  // The keyboard left the bar. It closes only when its field is empty, so
+  // typed words are never thrown away.
+  message QuickAddClosed {}
+
+  message NewProjectNameChanged {
+    string name = 1;
+  }
+
+  message NewProjectSubmitted {}
+
+  // To-do's empty state action (`AgendaTodo.empty.action_label`).
+  message TodoEmptyActed {}
+
+  // "Show more" under a To-do window that is not everything open.
+  message NextPageRequested {}
+
+  message TaskPicked {
+    string task_id = 1;
+  }
+
+  message ProjectPicked {
+    string project_id = 1;
+  }
+
+  // A group's quiet verb, by `TasksRowGroup.verb_key`: `catch_up` on Overdue.
+  message GroupVerb {
+    string key = 1;
+  }
+
+  message NoticeActed {}
 
   message NewEventRequested {}
 
@@ -4473,11 +4633,22 @@ message AgendaEditorState {
   // THE EDITOR IS DONE — saved, skipped, or left with nothing to lose. The
   // shell pops.
   bool dismissed = 17;
+  // WHAT THIS SITTING ADDS (#1128): an event, or a task. CREATE opens on the
+  // kind the member last added on this device and the switch at its top moves
+  // it; an EDIT is always an event. UNSPECIFIED is only the state before
+  // `Opened`.
+  Kind kind = 18;
 
   enum Mode {
     MODE_UNSPECIFIED = 0;
     MODE_CREATE = 1;
     MODE_EDIT = 2;
+  }
+
+  enum Kind {
+    KIND_UNSPECIFIED = 0;
+    KIND_EVENT = 1;
+    KIND_TASK = 2;
   }
 
   enum Sheet {
@@ -4524,6 +4695,8 @@ message AgendaEditorChrome {
   // The words on the rows that open the platform's pickers.
   string pick_date = 22;
   string pick_time = 23;
+  // The spoken name of the Event | Task switch (#1128).
+  string kind_label = 24;
 }
 
 // THE MEMBER'S VALUES, as the pickers bind them. Days are civil `YYYY-MM-DD`,
@@ -4593,6 +4766,23 @@ message AgendaEditorData {
   string start_time_label = 25;
   string end_day_label = 26;
   string end_time_label = 27;
+  // THE EVENT | TASK SWITCH (#1128), in order: empty on an EDIT, which has
+  // none. The one selected is what this sitting adds.
+  repeated AgendaKindChoice kinds = 28;
+  // False while a TASK is being added: a task has a title and a due day (and
+  // a time, unless "All day" is on) — no end, calendar, guests, repeat,
+  // reminder, link or notes. The pickers for those are not drawn.
+  bool show_event_fields = 29;
+  // The key of the start row: "Starts" for an event, "Due" for a task.
+  string start_field_label = 30;
+}
+
+// One side of the Event | Task switch (#1128).
+message AgendaKindChoice {
+  AgendaEditorState.Kind kind = 1;
+  string label = 2;
+  bool selected = 3;
+  string accessibility_label = 4;
 }
 
 message AgendaEditorEvent {
@@ -4622,6 +4812,7 @@ message AgendaEditorEvent {
     Confirmed confirmed = 22;
     ConfirmDismissed confirm_dismissed = 23;
     WriteSettled write_settled = 24;
+    KindPicked kind_picked = 25;
   }
 
   // CREATE carries a day (the home's anchor) and no event; EDIT the
@@ -4632,6 +4823,14 @@ message AgendaEditorEvent {
     string instance_key = 3;
     optional string original_start_local = 4;
     string day = 5;
+    // CREATE's kind (#1128). UNSPECIFIED is an event; the bridge fills in the
+    // kind this device last added before the machine sees it.
+    AgendaEditorState.Kind kind = 6;
+  }
+
+  // The Event | Task switch (#1128). Ignored on an EDIT.
+  message KindPicked {
+    AgendaEditorState.Kind kind = 1;
   }
 
   message Refreshed {}
@@ -6830,16 +7029,19 @@ message PeopleEditorEvent {
 // --- Tasks ---
 // ---------------------------------------------------------------------------
 //
-// Tasks on the phone (#1029 app port): the home place (Today, Upcoming, Inbox,
-// Projects; More is a sheet and search a field), one list parameterised by
-// view (Anytime, All, Logbook, Reminders), one project, the task detail, Catch
-// up, and the kit's trash (`TrashListState`, `app_id = "tasks"`). Every screen
-// reads through the core's `tasks.*` app queries (`core/v1/tasks.proto`).
+// Tasks on the phone (#1029 app port, #1128): the pages Agenda pushes — one
+// list parameterised by view (Anytime, All, Logbook, Reminders), one project,
+// the task detail, Catch up, and the kit's trash (`TrashListState`,
+// `app_id = "tasks"`) — and the shared task shapes Agenda's home draws on Day
+// and To-do (`TasksRow`, `TasksRowGroup`, `TasksNotice`, `TasksQuickAdd`,
+// `TasksChoice`, `TasksChrome`, `TasksProjectGroup`). The task home place is
+// Agenda's To-do (`AgendaTodo`, R-1128-1). Every screen reads through the
+// core's `tasks.*` app queries (`core/v1/tasks.proto`).
 //
 // VIEWS DECIDE NOTHING. Every label, sentence, accessibility label, empty
 // choice, tone flag and enabled flag below is computed in `apps/tasks`. The
 // core's typed answers never cross — they stay on the Kotlin side beside
-// these messages (`TasksHome`, `TasksList`, …), for `AgendaHomeState`'s
+// these messages (`TasksList`, `TasksProject`, …), for `AgendaHomeState`'s
 // reason: this file cannot import `centraid.core.v1`.
 
 // A task's box.
@@ -6905,15 +7107,6 @@ message TasksFact {
   string detail = 2;
 }
 
-message TasksBandTab {
-  // `today`, `upcoming`, `inbox`, `projects`, `more` — what `BandPicked` sends.
-  string key = 1;
-  string label = 2;
-  // A `design/native-catalog.json` icon key.
-  string icon_key = 3;
-  bool current = 4;
-}
-
 // One row of a choice sheet: a filing target, a More row, a field choice.
 message TasksChoice {
   // What the choice event sends back.
@@ -6952,7 +7145,7 @@ message TasksChrome {
   // The band's home capsule.
   string home = 20;
   string show_more = 21;
-  // A pushed page's back control: the app it was pushed from, "Tasks".
+  // A pushed page's back control: the app it was pushed from, "Agenda".
   string back = 22;
   // The verbs beside the detail's subtask and tag entries.
   string add_subtask_verb = 23;
@@ -6980,7 +7173,7 @@ message TasksQuickAdd {
   // "Add to Inbox" / "Add to Garden · Beds".
   string lands_label = 3;
   // False where nothing can be added (denied, loading the first page). On
-  // Tasks' home it governs the header's Plus; the bar itself waits for `drawn`.
+  // To-do it governs the header's Plus; the bar itself waits for `drawn`.
   bool shown = 4;
   // The field takes the keyboard when drawn: the Plus opened it, or it was
   // opened with words already in it (Notes' "Send to Tasks").
@@ -6989,226 +7182,18 @@ message TasksQuickAdd {
   // screen reader says for it, "Add task". A tap opens the bar on the
   // keyboard (`QuickAddOpened`). Empty on a pushed page.
   string add_label = 6;
-  // The bar is drawn. On Tasks' home only after the Plus (or Notes' "Send
-  // to Tasks") opened it, until the keyboard leaves an empty field
+  // The bar is drawn. On Agenda's To-do only after the Plus (or Notes' "Send
+  // to Agenda") opened it, until the keyboard leaves an empty field
   // (`QuickAddClosed`); a pushed page, which has no Plus, keeps it open.
   bool drawn = 7;
 }
 
-// ---------------------------------------------------------------------------
-// tasks.home — Today · Upcoming · Inbox · Projects, More a sheet
-// ---------------------------------------------------------------------------
-
-message TasksHomeState {
-  SeatState seat = 1;
-  // Law 2: a parameter. More is a sheet and search a field, so neither is here.
-  Destination destination = 2;
-  SearchField search = 3;
-  oneof content {
-    Loading loading = 4;
-    ReadFailure failure = 5;
-    // The vault would not let Tasks read: no band, no quick add.
-    Denied denied = 6;
-    TasksHomeData data = 7;
-  }
-  Sheet sheet = 8;
-  // The band in order, computed. Empty while denied.
-  repeated TasksBandTab band = 9;
-  TasksChrome chrome = 10;
-  StatusLine status = 11;
-  TasksQuickAdd quick_add = 12;
-  // SHEET_FILE: the task being filed, and where it can go.
-  string filing_task_id = 13;
-  repeated TasksChoice file_choices = 14;
-  // SHEET_MORE's rows: Anytime, All, Logbook, Reminders, Catch up, Trash,
-  // What Tasks may read. `MoreRowPicked` sends the key. Never Search: the
-  // search bar under the title is the one way in (R-CHROME-2).
-  repeated TasksChoice more_rows = 15;
-  // SHEET_NEW_PROJECT's name field.
-  string new_project_name = 16;
-  bool new_project_can_submit = 17;
-
-  enum Destination {
-    DESTINATION_UNSPECIFIED = 0;
-    DESTINATION_TODAY = 1;
-    DESTINATION_UPCOMING = 2;
-    DESTINATION_INBOX = 3;
-    DESTINATION_PROJECTS = 4;
-  }
-
-  enum Sheet {
-    SHEET_UNSPECIFIED = 0;
-    SHEET_NONE = 1;
-    SHEET_MORE = 2;
-    // "What Tasks may read" — `TasksChrome.reads_facts`.
-    SHEET_READS = 3;
-    SHEET_FILE = 4;
-    SHEET_NEW_PROJECT = 5;
-  }
-}
-
-message TasksHomeData {
-  // `YYYY-MM-DD`, the core's.
-  string today = 1;
-  // Today, Upcoming, Inbox, and search hits (one group).
-  repeated TasksRowGroup groups = 2;
-  // Projects: one group per area, rows as the kit's `ListRow`.
-  repeated TasksProjectGroup projects = 3;
-  // The empty sentence when nothing is drawn; an empty headline draws none.
-  // `EmptyActed` performs `empty.action_label`.
-  EmptyState empty = 4;
-  // The absence notice on Today: "You were away 16 days · 34 tasks came due".
-  optional TasksNotice notice = 5;
-  // "7 tasks", "3 projects", "4 hits".
-  string count_label = 6;
-  // "500 tasks · more not shown"; empty when whole.
-  string window_label = 7;
-  // The rows are search hits.
-  bool searching = 8;  // "Show more" is live: the window can widen (`NextPageRequested`).
-  bool can_show_more = 9;
-}
-
+// One area's projects on To-do (`AgendaTodo.projects`).
 message TasksProjectGroup {
   string key = 1;
   // An area's name, or "Projects" for those in none.
   string title = 2;
   repeated ListRow rows = 3;
-}
-
-message TasksHomeEvent {
-  oneof kind {
-    Opened opened = 1;
-    Refreshed refreshed = 2;
-    BandPicked band = 3;
-    SheetOpened sheet_opened = 4;
-    SheetClosed sheet_closed = 5;
-    MoreRowPicked more_row = 6;
-    SearchOpened search_opened = 7;
-    SearchTermChanged search_term = 8;
-    SearchClosed search_closed = 9;
-    RowChecked row_checked = 10;
-    FileRequested file_requested = 11;
-    FileChosen file_chosen = 12;
-    StatusActed status_acted = 13;
-    QuickAddChanged quick_add_changed = 14;
-    QuickAddSubmitted quick_add_submitted = 15;
-    NewProjectNameChanged new_project_name = 16;
-    NewProjectSubmitted new_project_submitted = 17;
-    EmptyActed empty_acted = 18;
-    ReadRefused refused = 19;
-    RowsChanged rows_changed = 20;
-    SeatChanged seat_changed = 21;
-    WriteSettled write_settled = 22;
-    // INTENTS: nothing changes here; the shell routes them.
-    RowPicked row_picked = 23;
-    ProjectPicked project_picked = 24;
-    GroupVerb group_verb = 25;
-    NoticeActed notice_acted = 26;
-    NextPageRequested next_page = 27;
-    QuickAddOpened quick_add_opened = 28;
-    QuickAddClosed quick_add_closed = 29;
-  }
-
-  // Lands on `destination` (Today when unspecified), search closed.
-  // `quick_add_title` opens the quick add with those words in it, focused
-  // (Notes' "Send to Tasks"); empty is an empty bar.
-  message Opened {
-    TasksHomeState.Destination destination = 1;
-    string quick_add_title = 2;
-  }
-
-  message Refreshed {}
-
-  // A band tab, by `TasksBandTab.key`.
-  message BandPicked {
-    string key = 1;
-  }
-
-  message SheetOpened {
-    TasksHomeState.Sheet sheet = 1;
-  }
-
-  message SheetClosed {}
-
-  // A More row, by `TasksChoice.key`. `anytime`, `all`, `logbook`,
-  // `reminders`, `catch_up` and `trash` are intents the shell routes; `reads`
-  // opens the facts sheet.
-  message MoreRowPicked {
-    string key = 1;
-  }
-
-  message SearchOpened {}
-
-  message SearchTermChanged {
-    string term = 1;
-  }
-
-  message SearchClosed {}
-
-  message RowChecked {
-    string task_id = 1;
-  }
-
-  message FileRequested {
-    string task_id = 1;
-  }
-
-  // A `file_choices` key.
-  message FileChosen {
-    string key = 1;
-  }
-
-  message StatusActed {}
-
-  message QuickAddChanged {
-    string title = 1;
-  }
-
-  message QuickAddSubmitted {}
-
-  // The header's Plus: the bar opens on the keyboard.
-  message QuickAddOpened {}
-
-  // The keyboard left the bar. It closes only when its field is empty, so
-  // typed words are never thrown away.
-  message QuickAddClosed {}
-
-  message NewProjectNameChanged {
-    string name = 1;
-  }
-
-  message NewProjectSubmitted {}
-
-  message EmptyActed {}
-
-  message ReadRefused {
-    ReadFailure failure = 1;
-  }
-
-  message RowsChanged {
-    string table = 1;
-  }
-
-  message SeatChanged {
-    SeatState seat = 1;
-  }
-
-  message RowPicked {
-    string task_id = 1;
-  }
-
-  message ProjectPicked {
-    string project_id = 1;
-  }
-
-  message GroupVerb {
-    string key = 1;
-  }
-
-  message NoticeActed {}
-
-  // "Show more" under a window that is not everything open.
-  message NextPageRequested {}
 }
 
 // ---------------------------------------------------------------------------

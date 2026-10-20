@@ -97,6 +97,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .boxed(".centraid.screen.v1.PhotoLightboxEvent.kind.data")
         // Every app screen's `data` arm: the answer is the whole screen, and
         // its siblings (loading, empty, refused) are a line or two each.
+        .boxed(".centraid.screen.v1.AgendaHomeState.content.data")
         .boxed(".centraid.screen.v1.AgendaEventState.content.data")
         .boxed(".centraid.screen.v1.AgendaEditorState.content.data")
         .boxed(".centraid.screen.v1.PeopleHomeData.surface.touch")
@@ -104,7 +105,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .boxed(".centraid.screen.v1.PeopleHomeEvent.kind.data")
         .boxed(".centraid.screen.v1.PeoplePersonState.content.data")
         .boxed(".centraid.screen.v1.PeoplePersonEvent.kind.data")
-        .boxed(".centraid.screen.v1.TasksHomeState.content.data")
         .boxed(".centraid.screen.v1.TasksDetailState.content.data")
         .boxed(".centraid.screen.v1.DocsDriveEvent.kind.data")
         .boxed(".centraid.screen.v1.DocsDocumentState.content.data")

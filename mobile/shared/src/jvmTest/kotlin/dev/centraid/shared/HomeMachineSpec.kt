@@ -323,9 +323,9 @@ class HomeMachineSpec : StringSpec({
             // A wide tile takes a whole line.
             listOf("photos"),
             listOf("docs"),
-            // Smalls pair — six of them, so none is left on its own.
-            listOf("notes", "agenda"),
-            listOf("tasks", "money"),
+            // Smalls pair, pulled forward past the wide Agenda.
+            listOf("notes", "money"),
+            listOf("agenda"),
             listOf("people", "locker"),
         )
     }
@@ -686,7 +686,7 @@ class HomeMachineSpec : StringSpec({
         quiet.action shouldBe ""
         quiet.destination shouldBe HomeStatus.Destination.DESTINATION_NONE
         strandedStatus(StrandedWrite("tasks", "schedule.edit_task", "That task is gone.")).copy shouldBe
-            "Tasks: That task is gone."
+            "Agenda: That task is gone."
         val told = HomeMachine.reduce(named("v1", "Demo vault"), HomeEvent(status = HomeEvent.StatusChanged(status = quiet))).state
         told.data_.shouldNotBeNull().status shouldBe quiet
     }

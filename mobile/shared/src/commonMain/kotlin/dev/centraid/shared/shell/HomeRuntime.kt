@@ -3,6 +3,7 @@ package dev.centraid.shared.shell
 import centraid.core.v1.Envelope
 import centraid.core.v1.PageRequest
 import centraid.core.v1.Request
+import centraid.core.v1.TasksBoard
 import centraid.screen.v1.HomeEvent
 import centraid.screen.v1.ReadFailure
 import dev.centraid.core.CentraidCore
@@ -131,10 +132,11 @@ public class HomeRuntime(
      * send the member to first moves for an app that may be full.
      */
     private suspend fun readAgenda() {
-        val request = HomeAgendaTile.request(clock.read())
+        val now = clock.read()
+        val request = HomeAgendaTile.request(now)
         val event = when (val outcome = askCore(core(), listOf(request))) {
             is AppQueryOutcome.Answered -> outcome.answers.single().agenda_upcoming
-                ?.let(HomeAgendaTile::arrived)
+                ?.let { HomeAgendaTile.arrived(it, due = dueBoard(now)) }
                 ?: refused(HomeAgendaTile.APP_ID, Reads.refused(WRONG_ANSWER))
             is AppQueryOutcome.Denied ->
                 refused(HomeAgendaTile.APP_ID, deniedFailure(outcome.denial))
@@ -164,6 +166,17 @@ public class HomeRuntime(
         }
         host.send(event)
     }
+
+    /**
+     * THE TASKS DUE TODAY (#1128): a read of its own, so a denied or failed one
+     * leaves Agenda's tile without a due line and never refuses it. Null is "did
+     * not land", which the tile reads as nothing to say.
+     */
+    private suspend fun dueBoard(now: DeviceClock.Reading): TasksBoard? =
+        when (val outcome = askCore(core(), listOf(HomeAgendaTile.dueRequest(now)))) {
+            is AppQueryOutcome.Answered -> outcome.answers.single().tasks_board
+            is AppQueryOutcome.Denied, is AppQueryOutcome.Refused -> null
+        }
 
     /**
      * MONEY'S TILE, THROUGH THE CORE'S MONEY ARM (#1099). Same law as every other

@@ -33,7 +33,6 @@ public object SpringboardPolicy {
         "docs",
         "notes",
         "agenda",
-        "tasks",
         "money",
         "people",
         "locker",
@@ -44,17 +43,18 @@ public object SpringboardPolicy {
      * area, prose needs measure, a figure or a chip needs neither.
      */
     private val TILE_SIZE: Map<String, TileSize> = mapOf(
-        "agenda" to TileSize.TILE_SIZE_SMALL,
+        // TWO LINES OF PROSE since Tasks folded in (#1128): the next event and
+        // today's due tasks, which a half width truncated. Wide, it also leaves
+        // the four smalls to pair, where five left one on its own.
+        "agenda" to TileSize.TILE_SIZE_MEDIUM,
         "docs" to TileSize.TILE_SIZE_MEDIUM,
         // A SHELF NEEDS NO MEASURE: three notebook names and one title, each a
-        // single line (`HomeNotesTile`). Half width, it also pairs the smalls
-        // evenly, where a wide Notes left the last of five on its own.
+        // single line (`HomeNotesTile`).
         "notes" to TileSize.TILE_SIZE_SMALL,
         "locker" to TileSize.TILE_SIZE_SMALL,
         "money" to TileSize.TILE_SIZE_SMALL,
         "people" to TileSize.TILE_SIZE_SMALL,
         "photos" to TileSize.TILE_SIZE_LARGE,
-        "tasks" to TileSize.TILE_SIZE_SMALL,
     )
 
     /** An app with no first-party tile (a gateway app) takes the 1x1. */
@@ -144,7 +144,6 @@ public object SpringboardPolicy {
         "notes" to "Write your first note",
         "people" to "Add someone you know",
         "photos" to "Import your first photo",
-        "tasks" to "Capture the next thing to do",
     )
 
     /**

@@ -1,6 +1,7 @@
 package dev.centraid.shared
 
 import dev.centraid.shared.chat.ChatMachine
+import dev.centraid.shared.shell.SpringboardPolicy
 import io.kotest.assertions.withClue
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.booleans.shouldBeTrue
@@ -50,5 +51,12 @@ class ChatScopeSpec : StringSpec({
     "Locker is not among them, and the list is in the order the menu draws it" {
         ChatMachine.SCOPABLE_APPS.contains("locker") shouldBe false
         ChatMachine.SCOPABLE_APPS shouldBe ChatMachine.SCOPABLE_APPS.sorted()
+    }
+
+    "the menu offers the scopes a member can open, while a thread keeps the tasks scope it was saved under (#1128)" {
+        ChatMachine.SCOPE_MENU shouldBe listOf("agenda", "docs", "money", "notes", "people", "photos")
+        ChatMachine.SCOPABLE_APPS.contains("tasks") shouldBe true
+        // Every launchable scope is in the menu: the menu only ever DROPS folded domains.
+        ChatMachine.SCOPE_MENU.all { SpringboardPolicy.SPRINGBOARD_ORDER.contains(it) } shouldBe true
     }
 })

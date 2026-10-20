@@ -30,8 +30,15 @@ data {
       notebooks { notebook_id: "nb-2" name: "Recipes" note_count: 2 }
     } }
   }
-  tiles { app_id: "agenda" status: TILE_STATUS_EMPTY size: TILE_SIZE_SMALL empty_copy: "Put something on the calendar" }
-  tiles { app_id: "tasks" status: TILE_STATUS_EMPTY size: TILE_SIZE_SMALL empty_copy: "Capture the next thing to do" }
+  # AGENDA'S TILE CARRIES TODAY'S DUE TASKS beside the next event (#1128).
+  tiles {
+    app_id: "agenda" status: TILE_STATUS_CONTENT size: TILE_SIZE_MEDIUM wide: true
+    count { value: 5 } count_label: "on your plate"
+    body { agenda {
+      title: "Survey walk-through" at: "10:00" after: "then Dentist"
+      due_count: 2 due_label: "2 due" due_title: "File the taxes"
+    } }
+  }
   tiles { app_id: "people" status: TILE_STATUS_EMPTY size: TILE_SIZE_SMALL empty_copy: "Add someone you know" }
   # LOCKER WITHHOLDS ITS COUNT. No `count` field at all — absent is the withheld
   # glyph, and a `0` here would be a lie about how many secrets a member has.
@@ -43,7 +50,7 @@ data {
   # the end is not a hole.
   grid_rows { app_ids: "photos" }
   grid_rows { app_ids: "docs" }
-  grid_rows { app_ids: "notes" app_ids: "agenda" }
-  grid_rows { app_ids: "tasks" app_ids: "people" }
+  grid_rows { app_ids: "notes" app_ids: "people" }
+  grid_rows { app_ids: "agenda" }
   grid_rows { app_ids: "locker" }
 }

@@ -1,5 +1,6 @@
 package dev.centraid.shared.nav
 
+import centraid.screen.v1.AgendaHomeState
 import centraid.screen.v1.ChatCard
 import centraid.screen.v1.PhotoShelf
 
@@ -99,7 +100,7 @@ public object RowRoutes {
 
     /** An app's own front door, for a reference whose noun has no row route. */
     public fun appHome(app: String): Destination? = when (app) {
-        AppIds.TASKS -> Destination.TasksHome()
+        AppIds.TASKS -> Destination.AgendaHome(AgendaHomeState.Destination.DESTINATION_TODO)
         AppIds.NOTES -> Destination.NotesLibrary()
         AppIds.DOCS -> Destination.DocsHome()
         AppIds.PEOPLE -> Destination.PeopleHome()
@@ -126,7 +127,12 @@ public class RowRef(
     public val qualifier: String = "",
 )
 
-/** THE CATALOGUE IDS the apps go by: what a Home tile, a card and a screen id's prefix name. */
+/**
+ * THE IDS A HOME TILE, A CARD AND A SCREEN ID'S PREFIX GO BY. [TASKS] is the vault's task
+ * domain and the write app of the `tasks.*` pages, not an app a member launches
+ * (R-1128-7): a reference to a task opens its page, and the domain's front door
+ * ([RowRoutes.appHome]) is Agenda's To-do.
+ */
 public object AppIds {
     public const val TASKS: String = "tasks"
     public const val NOTES: String = "notes"

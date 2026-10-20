@@ -45,6 +45,9 @@ import dev.centraid.shared.screen.ScreenMachine
 import dev.centraid.shared.screen.Step
 import dev.centraid.shared.sync.ScreenQueries
 import dev.centraid.shared.sync.ScreenWrites
+import dev.centraid.shared.kit.tasks.TaskOps
+import dev.centraid.shared.kit.tasks.TaskOpsLaw
+import dev.centraid.shared.kit.tasks.TasksRows
 
 /** What `tasks.detail` holds: the state, the raw answers, and its writes. */
 public data class TasksDetail(
@@ -85,7 +88,7 @@ public sealed interface TasksDetailInput {
 public object TasksDetailMachine : ScreenMachine<TasksDetail, TasksDetailInput> {
     public const val SCREEN_ID: String = ScreenIds.TASKS_DETAIL
 
-    public val TABLES: Set<String> = TasksHomeMachine.TABLES
+    public val TABLES: Set<String> = TasksRows.TABLES
 
     public const val EDIT: String = "schedule.edit_task"
     public const val DELETE: String = "schedule.delete_task"
@@ -145,7 +148,7 @@ public object TasksDetailMachine : ScreenMachine<TasksDetail, TasksDetailInput> 
             is TasksDetailInput.View -> view(state, event.event)
             is TasksDetailInput.Answered -> answered(state, event)
             is TasksDetailInput.Denied -> Step(
-                Lens.with(state, ReadContent.Denied(TasksHomeMachine.deniedOf(event.denial))),
+                Lens.with(state, ReadContent.Denied(TasksRows.deniedOf(event.denial))),
             )
         }
         return Step(decorate(step.state), step.effects)
@@ -386,17 +389,17 @@ public object TasksDetailMachine : ScreenMachine<TasksDetail, TasksDetailInput> 
                 if (task.parent_task_id != null) return Step(closed)
                 val (projects, sections) = projectsOf(state)
                 val (projectId, sectionId) = when {
-                    key == TasksHomeMachine.FILE_INBOX -> null to null
-                    key.startsWith(TasksHomeMachine.FILE_PROJECT) ->
-                        key.removePrefix(TasksHomeMachine.FILE_PROJECT).takeIf { p -> projects.any { it.project_id == p } } to null
-                    key.startsWith(TasksHomeMachine.FILE_SECTION) -> {
-                        val section = sections.firstOrNull { it.section_id == key.removePrefix(TasksHomeMachine.FILE_SECTION) }
+                    key == TasksRows.FILE_INBOX -> null to null
+                    key.startsWith(TasksRows.FILE_PROJECT) ->
+                        key.removePrefix(TasksRows.FILE_PROJECT).takeIf { p -> projects.any { it.project_id == p } } to null
+                    key.startsWith(TasksRows.FILE_SECTION) -> {
+                        val section = sections.firstOrNull { it.section_id == key.removePrefix(TasksRows.FILE_SECTION) }
                             ?: return Step(closed)
                         section.project_id to section.section_id
                     }
                     else -> return Step(closed)
                 }
-                if (key != TasksHomeMachine.FILE_INBOX && projectId == null) return Step(closed)
+                if (key != TasksRows.FILE_INBOX && projectId == null) return Step(closed)
                 val input = TaskOpsLaw.organizeInput(task.task_id, projectId, sectionId, task.sort_order)
                 submit(closed, TaskOpsLaw.ORGANIZE, input, key(TaskOpsLaw.ORGANIZE, task, PROJECT, key, closed), PROJECT)
             }
@@ -714,12 +717,12 @@ public object TasksDetailMachine : ScreenMachine<TasksDetail, TasksDetailInput> 
         projects: List<centraid.core.v1.TasksProject>,
         sections: List<centraid.core.v1.TasksSection>,
     ): List<TasksChoice> = buildList {
-        add(TasksChoice(key = TasksHomeMachine.FILE_INBOX, label = TasksCopy.INBOX, selected = task.project_id == null, enabled = true, icon_key = "Inbox"))
+        add(TasksChoice(key = TasksRows.FILE_INBOX, label = TasksCopy.INBOX, selected = task.project_id == null, enabled = true, icon_key = "Inbox"))
         val bySection = sections.groupBy { it.project_id }
         projects.sortedWith(compareBy({ it.sort_order }, { it.name })).forEach { project ->
             add(
                 TasksChoice(
-                    key = TasksHomeMachine.FILE_PROJECT + project.project_id,
+                    key = TasksRows.FILE_PROJECT + project.project_id,
                     label = project.name,
                     selected = task.project_id == project.project_id && task.section_id == null,
                     enabled = true,
@@ -729,7 +732,7 @@ public object TasksDetailMachine : ScreenMachine<TasksDetail, TasksDetailInput> 
             bySection[project.project_id].orEmpty().sortedBy { it.sort_order }.forEach { section ->
                 add(
                     TasksChoice(
-                        key = TasksHomeMachine.FILE_SECTION + section.section_id,
+                        key = TasksRows.FILE_SECTION + section.section_id,
                         label = section.name,
                         selected = task.section_id == section.section_id,
                         enabled = true,

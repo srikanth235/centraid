@@ -593,46 +593,42 @@ private struct ContentBody: View {
 
         case let .agenda(agenda):
             VStack(alignment: .leading, spacing: 4) {
-                Text(agenda.at)
-                    .centraidType("mono")
-                    .foregroundStyle(Theme.color("textSoft", scheme))
+                if !agenda.at.isEmpty {
+                    Text(agenda.at)
+                        .centraidType("mono")
+                        .foregroundStyle(Theme.color("textSoft", scheme))
+                }
                 Text(agenda.title)
                     .centraidType("smallStrong")
                     .foregroundStyle(Theme.color("text", scheme))
                     .lineLimit(2)
                 // Pinned to the foot: the sparse tiles leave their slack above.
                 Spacer(minLength: 0)
-                Text(agenda.after)
-                    .centraidType("small")
-                    .foregroundStyle(Theme.color("textFaint", scheme))
-                    .lineLimit(1)
-            }
-            .frame(maxWidth: .infinity, alignment: .topLeading)
-
-        case let .tasks(tasks):
-            VStack(alignment: .leading, spacing: 4) {
-                ForEach(tasks.rows, id: \.taskID) { row in
-                    HStack(spacing: 8) {
-                        // INK, never the app's hue — a hue-filled circle is a
-                        // second identity. A task's mark is a circle, as in
-                        // Tasks itself; done is a filled one with NO glyph.
+                // TODAY'S DUE TASKS (#1128): the machine's words, drawn after a
+                // round mark. INK, never the app's hue — a hue-filled circle is a
+                // second identity.
+                if agenda.dueCount > 0 {
+                    HStack(spacing: 6) {
                         Circle()
-                            .fill(row.done ? Theme.color("accent", scheme) : Color.clear)
-                            .overlay(
-                                Circle()
-                                    .strokeBorder(
-                                        Theme.color(row.done ? "accent" : "lineStrong", scheme),
-                                        lineWidth: hairline
-                                    )
-                            )
+                            .strokeBorder(Theme.color("lineStrong", scheme), lineWidth: hairline)
                             .frame(width: 13, height: 13)
-                        Text(row.title)
+                        Text(agenda.dueLabel)
                             .centraidType("small")
-                            .foregroundStyle(Theme.color(row.done ? "textFaint" : "text", scheme))
-                            .strikethrough(row.done)
+                            .foregroundStyle(Theme.color("text", scheme))
+                            .lineLimit(1)
+                            .layoutPriority(1)
+                        Text(agenda.dueTitle)
+                            .centraidType("small")
+                            .foregroundStyle(Theme.color("textFaint", scheme))
                             .lineLimit(1)
                         Spacer(minLength: 0)
                     }
+                }
+                if !agenda.after.isEmpty {
+                    Text(agenda.after)
+                        .centraidType("small")
+                        .foregroundStyle(Theme.color("textFaint", scheme))
+                        .lineLimit(1)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .topLeading)

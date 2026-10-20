@@ -6,7 +6,7 @@ import centraid.screen.v1.NotesEditorState
 import centraid.screen.v1.NotesJournalEvent
 import centraid.screen.v1.NotesLibraryEvent
 import centraid.screen.v1.NotesNotebooksEvent
-import centraid.screen.v1.TasksHomeState
+import centraid.screen.v1.AgendaHomeState
 import centraid.screen.v1.TileStatus
 import dev.centraid.shared.nav.AppIds
 import dev.centraid.shared.nav.Destination
@@ -31,7 +31,7 @@ import kotlin.uuid.Uuid
  *   A blank editor opened over a vault that does have notes would be a guess.
  *
  * **The intents.** A Notes machine that emits a band tap, a note, a notebook,
- * More's Trash, History or Send to Tasks changes nothing, or only closes its
+ * More's Trash, History or Send to Agenda changes nothing, or only closes its
  * sheet; the shell moves. WHICH move lives here: Android applies the
  * [NavMove] to its stack, and iOS asks [route] for the same move spelled.
  * Notes · Notebooks · Journal are three screens under one band, so a tap on
@@ -121,10 +121,10 @@ public object NotesRouting {
                     ),
                 )
             }
-            // SEND TO TASKS: Tasks' Inbox, the words waiting in a focused quick
-            // add. Nothing is written until the member adds them.
+            // SEND TO AGENDA: To-do, the words waiting in a focused quick add
+            // (the Inbox is where it lands). Nothing is written until the member adds them.
             sent != null && sent.text.isNotBlank() -> NavMove.push(
-                Destination.TasksHome(TasksHomeState.Destination.DESTINATION_INBOX, quickAdd = sent.text),
+                Destination.AgendaHome(AgendaHomeState.Destination.DESTINATION_TODO, quickAdd = sent.text),
             )
             else -> null
         }

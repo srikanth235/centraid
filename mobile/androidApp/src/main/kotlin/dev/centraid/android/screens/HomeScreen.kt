@@ -869,7 +869,6 @@ private fun ColumnScope.FilledBody(body: TileBody) {
     val notes = body.notes
     val agenda = body.agenda
     val people = body.people
-    val tasks = body.tasks
     val locker = body.locker
     val spent = body.money
     when {
@@ -987,7 +986,9 @@ private fun ColumnScope.FilledBody(body: TileBody) {
         notes != null -> NotesShelf(notes, column)
 
         agenda != null -> Column(column, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(agenda.at, style = centraidType("mono"), color = centraidColor("textSoft"))
+            if (agenda.at.isNotEmpty()) {
+                Text(agenda.at, style = centraidType("mono"), color = centraidColor("textSoft"))
+            }
             Text(
                 agenda.title,
                 style = centraidType("smallStrong"),
@@ -997,13 +998,44 @@ private fun ColumnScope.FilledBody(body: TileBody) {
             )
             // Pinned to the foot: the sparse tiles leave their slack above.
             Spacer(Modifier.weight(1f))
-            Text(
-                agenda.after,
-                style = centraidType("small"),
-                color = centraidColor("textFaint"),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            // TODAY'S DUE TASKS (#1128): the machine's words, drawn after a round
+            // mark. INK, never the app's hue — a hue-filled circle is a second identity.
+            if (agenda.due_count > 0) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Box(
+                        Modifier
+                            .size(13.dp)
+                            .clip(CircleShape)
+                            .border(HAIRLINE, centraidColor("lineStrong"), CircleShape),
+                    )
+                    Text(
+                        agenda.due_label,
+                        style = centraidType("small"),
+                        color = centraidColor("text"),
+                        maxLines = 1,
+                    )
+                    Text(
+                        agenda.due_title,
+                        style = centraidType("small"),
+                        color = centraidColor("textFaint"),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+            if (agenda.after.isNotEmpty()) {
+                Text(
+                    agenda.after,
+                    style = centraidType("small"),
+                    color = centraidColor("textFaint"),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
 
         people != null -> Column(column, verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -1065,43 +1097,6 @@ private fun ColumnScope.FilledBody(body: TileBody) {
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-        }
-
-        tasks != null -> Column(column, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            tasks.rows.forEach { row ->
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    // INK, never the app's hue — a hue-filled circle is a
-                    // second identity. A task's mark is a circle, as in Tasks
-                    // itself; done is a filled one with NO glyph.
-                    Box(
-                        Modifier
-                            .size(13.dp)
-                            .clip(CircleShape)
-                            .background(if (row.done) centraidColor("accent") else Color.Transparent)
-                            .border(
-                                HAIRLINE,
-                                if (row.done) {
-                                    centraidColor("accent")
-                                } else {
-                                    centraidColor("lineStrong")
-                                },
-                                CircleShape,
-                            ),
-                    )
-                    Text(
-                        row.title,
-                        style = centraidType("small"),
-                        color = if (row.done) centraidColor("textFaint") else centraidColor("text"),
-                        textDecoration = if (row.done) TextDecoration.LineThrough else null,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-            }
         }
 
         // THIS MONTH'S SPENDING, one figure per currency and never a sum across them.

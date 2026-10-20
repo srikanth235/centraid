@@ -109,7 +109,8 @@ class HomeNotesTileSpec : StringSpec({
         HomeReads.READ_APP_IDS shouldContain "notes"
     }
 
-    "a shelf is half width, so the six smalls pair and no tile is left alone" {
+    "a shelf is half width, and the wide Agenda leaves the four smalls to pair" {
+        SpringboardPolicy.isWide("agenda") shouldBe true
         SpringboardPolicy.isWide("notes") shouldBe false
     }
 })

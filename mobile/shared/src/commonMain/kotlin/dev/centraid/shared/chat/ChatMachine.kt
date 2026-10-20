@@ -34,6 +34,7 @@ import dev.centraid.design.copy.SharedCopy
 import dev.centraid.shared.kit.SearchLaw
 import dev.centraid.shared.kit.SearchLens
 import dev.centraid.shared.kit.time.CivilWords
+import dev.centraid.shared.nav.AppHomes
 import okio.ByteString
 
 /**
@@ -146,6 +147,15 @@ public object ChatMachine {
      */
     public val SCOPABLE_APPS: List<String> =
         listOf("agenda", "docs", "money", "notes", "people", "photos", "tasks")
+
+    /**
+     * THE SCOPE MENU: the scopable apps a member can open (#1128, R-1128-S1). A
+     * thread keeps the `tasks` scope it was saved under (the id is the core's and
+     * the DDL's), and Agenda's tasks are asked about under it, but the menu does
+     * not offer a second line for an app that is not launchable. The shells draw
+     * their menu from here.
+     */
+    public val SCOPE_MENU: List<String> = SCOPABLE_APPS.filter(AppHomes::isLaunchable)
 
     public fun reduce(chat: Chat, input: ChatInput): ChatStep = when (input) {
         is ChatInput.View -> view(chat, input.event)
@@ -1102,8 +1112,8 @@ public object ChatMachine {
         text.replace("**", "").replace("__", "").replace("`", "")
             .lines().joinToString("\n") { it.replaceFirst(Regex("^\\s*#{1,6}\\s+"), "") }
 
-    /** An app id as a member reads it: `tasks` is Tasks. */
-    internal fun appName(id: String): String = id.replaceFirstChar { it.uppercase() }
+    /** An app id as a member reads it: the name of the app it opens in, so `tasks` is Agenda (#1128, R-1128-7). */
+    internal fun appName(id: String): String = AppHomes.nameOf(id)
 
     /** `530 MB`, `1.6 GB`: decimal units, the way a download is quoted. */
     internal fun sizeText(bytes: Long): String {
