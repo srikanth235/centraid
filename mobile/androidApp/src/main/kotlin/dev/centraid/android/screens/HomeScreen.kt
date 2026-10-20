@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
@@ -1040,12 +1041,13 @@ private fun ColumnScope.FilledBody(body: TileBody) {
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    // INK, never the app's hue — a hue-filled box is a second
-                    // identity. Done is a filled box with NO glyph.
+                    // INK, never the app's hue — a hue-filled circle is a
+                    // second identity. A task's mark is a circle, as in Tasks
+                    // itself; done is a filled one with NO glyph.
                     Box(
                         Modifier
                             .size(13.dp)
-                            .clip(RoundedCornerShape(SUB_RADIUS))
+                            .clip(CircleShape)
                             .background(if (row.done) centraidColor("accent") else Color.Transparent)
                             .border(
                                 HAIRLINE,
@@ -1054,7 +1056,7 @@ private fun ColumnScope.FilledBody(body: TileBody) {
                                 } else {
                                     centraidColor("lineStrong")
                                 },
-                                RoundedCornerShape(SUB_RADIUS),
+                                CircleShape,
                             ),
                     )
                     Text(

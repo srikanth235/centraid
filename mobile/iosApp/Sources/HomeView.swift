@@ -632,12 +632,13 @@ private struct ContentBody: View {
             VStack(alignment: .leading, spacing: 4) {
                 ForEach(tasks.rows, id: \.taskID) { row in
                     HStack(spacing: 8) {
-                        // INK, never the app's hue — a hue-filled box is a
-                        // second identity. Done is a filled box with NO glyph.
-                        RoundedRectangle(cornerRadius: subRadius)
+                        // INK, never the app's hue — a hue-filled circle is a
+                        // second identity. A task's mark is a circle, as in
+                        // Tasks itself; done is a filled one with NO glyph.
+                        Circle()
                             .fill(row.done ? Theme.color("accent", scheme) : Color.clear)
                             .overlay(
-                                RoundedRectangle(cornerRadius: subRadius)
+                                Circle()
                                     .strokeBorder(
                                         Theme.color(row.done ? "accent" : "lineStrong", scheme),
                                         lineWidth: hairline

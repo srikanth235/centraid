@@ -6854,7 +6854,7 @@ message TasksRow {
   bool pending = 11;
   bool subtask = 12;
   repeated TasksRow children = 13;
-  // The row offers "File" (open roots only).
+  // A long press offers "Move to project" (open roots only).
   bool can_file = 14;
   // The box is live. False on a pending add.
   bool can_check = 15;
@@ -6936,7 +6936,8 @@ message TasksChrome {
   // The verbs beside the detail's subtask and tag entries.
   string add_subtask_verb = 23;
   string add_tag_verb = 24;
-  // A row's visible filing verb (`TasksRow.can_file`), "File".
+  // A row's filing verb (`TasksRow.can_file`), "Move to project": a
+  // long press on the row offers it.
   string file_verb = 25;
 }
 
@@ -6954,17 +6955,23 @@ message TasksQuickAdd {
   string title = 1;
   // The Add verb is live: a title that is not blank.
   bool can_submit = 2;
-  // "Lands in Today" / "Lands in Inbox" / "Lands in Garden · Beds".
+  // Where the task lands, as the field's placeholder: "Add to Today" /
+  // "Add to Inbox" / "Add to Garden · Beds".
   string lands_label = 3;
-  // False where nothing can be added (denied, loading the first page).
+  // False where nothing can be added (denied, loading the first page). On
+  // Tasks' home it governs the header's Plus; the bar itself waits for `drawn`.
   bool shown = 4;
-  // The field takes the keyboard when drawn: the bar was opened with words
-  // already in it (Notes' "Send to Tasks").
+  // The field takes the keyboard when drawn: the Plus opened it, or it was
+  // opened with words already in it (Notes' "Send to Tasks").
   bool focused = 5;
   // The header's Plus (R-CHROME-1), drawn while the bar is `shown`: what a
-  // screen reader says for it, "Add task". A tap puts the keyboard in the
-  // bar's field; the bar stays where it is. Empty on a pushed page.
+  // screen reader says for it, "Add task". A tap opens the bar on the
+  // keyboard (`QuickAddOpened`). Empty on a pushed page.
   string add_label = 6;
+  // The bar is drawn. On Tasks' home only after the Plus (or Notes' "Send
+  // to Tasks") opened it, until the keyboard leaves an empty field
+  // (`QuickAddClosed`); a pushed page, which has no Plus, keeps it open.
+  bool drawn = 7;
 }
 
 // ---------------------------------------------------------------------------
@@ -7077,6 +7084,8 @@ message TasksHomeEvent {
     GroupVerb group_verb = 25;
     NoticeActed notice_acted = 26;
     NextPageRequested next_page = 27;
+    QuickAddOpened quick_add_opened = 28;
+    QuickAddClosed quick_add_closed = 29;
   }
 
   // Lands on `destination` (Today when unspecified), search closed.
@@ -7135,6 +7144,13 @@ message TasksHomeEvent {
   }
 
   message QuickAddSubmitted {}
+
+  // The header's Plus: the bar opens on the keyboard.
+  message QuickAddOpened {}
+
+  // The keyboard left the bar. It closes only when its field is empty, so
+  // typed words are never thrown away.
+  message QuickAddClosed {}
 
   message NewProjectNameChanged {
     string name = 1;

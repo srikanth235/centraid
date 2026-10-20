@@ -545,8 +545,7 @@ public class Shelf(
         val (core, keyed) = openCore(path, create = true, key = key)
             ?: return@withLock refuse(null, FoundRefusal.NO_CORE)
         val content = if (starters) FoundContent.FOUND_CONTENT_STARTERS else FoundContent.FOUND_CONTENT_UNSPECIFIED
-        val tz = services.clock.read().zone
-        if (!VaultRoster.found(core, displayName = name, ownerName = ownerName, content = content, tz = tz)) {
+        if (!VaultRoster.found(core, displayName = name, ownerName = ownerName, content = content)) {
             return@withLock refuse(core, FoundRefusal.NOT_FOUNDED)
         }
         val named = VaultRoster.identify(core)

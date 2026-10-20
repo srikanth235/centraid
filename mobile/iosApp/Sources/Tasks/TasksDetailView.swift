@@ -46,7 +46,7 @@ struct TasksDetailView: View {
             onDeparted: onDeparted
         ) {
             if mine, case let .data(detail)? = state.content {
-                KitCheckBox(state: detail.check.kitState, label: detail.checkLabel) {
+                KitCheckBox(state: detail.check.kitState, label: detail.checkLabel, round: detail.parentTaskID.isEmpty) {
                     send(event { $0.check = .init() })
                 }
             }

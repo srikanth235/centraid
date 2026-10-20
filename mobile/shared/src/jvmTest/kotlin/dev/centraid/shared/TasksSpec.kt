@@ -107,12 +107,12 @@ class TasksSpec : StringSpec({
         TasksHomeReads.requests(opened(projects).state, clock)!!.single().tasks_projects.shouldNotBeNull()
     }
 
-    "Today: overdue first with Catch up, then today — in the core's today, with the band computed" {
+    "Today: overdue first with Reschedule, then today — in the core's today, with the band computed" {
         val landed = homeOn(home, board(TasksView.TASKS_VIEW_TODAY, overdueGroup(task("a", "Pay rent", due = "2026-06-13", days = -2, overdue = true)), todayGroup(task("b", "Call Ana", due = "2026-06-15", time = "09:00", days = 0, landsToday = true))))
         val data = landed.screen.data_.shouldNotBeNull()
         data.today shouldBe TODAY
         data.groups.map { it.title } shouldBe listOf("Overdue", "Today")
-        data.groups[0].verb_label shouldBe "Catch up"
+        data.groups[0].verb_label shouldBe "Reschedule"
         data.groups[0].verb_key shouldBe "catch_up"
         data.groups[0].rows.single().let {
             it.due_label shouldBe "2 days ago"
@@ -121,14 +121,18 @@ class TasksSpec : StringSpec({
         }
         // THE HEAD NAMES THE DAY; the row says the time.
         data.groups[1].rows.single().due_label shouldBe "09:00"
-        data.count_label shouldBe "2 tasks"
+        // NO HEAD COUNT over groups that each carry one; the title is the place.
+        data.count_label shouldBe ""
+        landed.screen.chrome!!.title shouldBe "Today"
         landed.screen.band.map { it.key } shouldBe listOf("today", "upcoming", "inbox", "projects", "more")
         landed.screen.band.filter { it.current }.map { it.key } shouldBe listOf("today")
         landed.screen.quick_add.shouldNotBeNull().let {
             it.shown shouldBe true
-            it.lands_label shouldBe "Lands in Today"
-            // THE HEADER'S PLUS (R-CHROME-1) is the quick add's door, and says so.
+            it.lands_label shouldBe "Add to Today"
+            // THE HEADER'S PLUS (R-CHROME-1) is the quick add's door, and says
+            // so; the bar itself waits for it.
             it.add_label shouldBe "Add task"
+            it.drawn shouldBe false
         }
         landed.screen.band.last().let {
             it.key shouldBe "more"
@@ -146,7 +150,7 @@ class TasksSpec : StringSpec({
         )
         step.state.screen.data_!!.notice.shouldNotBeNull().let {
             it.sentence shouldBe "You were away 16 days · 34 tasks came due"
-            it.verb_label shouldBe "Catch up"
+            it.verb_label shouldBe "Reschedule"
         }
     }
 
@@ -216,6 +220,61 @@ class TasksSpec : StringSpec({
         }
         // The action opens the new-project sheet.
         TasksHomeMachine.reduce(noProjects, view(TasksHomeEvent(empty_acted = TasksHomeEvent.EmptyActed()))).state.screen.sheet shouldBe TasksHomeState.Sheet.SHEET_NEW_PROJECT
+    }
+
+    "an empty Today with undated work waiting points at the Inbox, and goes there" {
+        val waiting = homeOn(home, board(TasksView.TASKS_VIEW_TODAY).copy(counts = TasksCounts(open_ = 2, inbox = 2)))
+        waiting.screen.data_!!.empty!!.let {
+            it.headline shouldBe "Nothing is scheduled for today."
+            it.action_label shouldBe "Open Inbox"
+        }
+        val moved = TasksHomeMachine.reduce(waiting, view(TasksHomeEvent(empty_acted = TasksHomeEvent.EmptyActed()))).state
+        moved.screen.destination shouldBe inbox
+        moved.screen.chrome!!.title shouldBe "Inbox"
+        // Nothing waiting: the sentence alone.
+        homeOn(home, board(TasksView.TASKS_VIEW_TODAY).copy(counts = TasksCounts(open_ = 1, upcoming = 1))).screen.data_!!.empty!!.action_label shouldBe ""
+    }
+
+    "the Plus opens the quick add; the keyboard leaving an empty bar puts it away, never typed words" {
+        val landed = homeOn(home, board(TasksView.TASKS_VIEW_TODAY))
+        landed.screen.quick_add!!.drawn shouldBe false
+        val opened = TasksHomeMachine.reduce(landed, view(TasksHomeEvent(quick_add_opened = TasksHomeEvent.QuickAddOpened()))).state
+        opened.screen.quick_add!!.let {
+            it.drawn shouldBe true
+            it.focused shouldBe true
+        }
+        TasksHomeMachine.reduce(opened, view(TasksHomeEvent(quick_add_closed = TasksHomeEvent.QuickAddClosed()))).state.screen.quick_add!!.drawn shouldBe false
+
+        val typed = TasksHomeMachine.reduce(opened, view(TasksHomeEvent(quick_add_changed = TasksHomeEvent.QuickAddChanged(title = "Buy milk")))).state
+        val kept = TasksHomeMachine.reduce(typed, view(TasksHomeEvent(quick_add_closed = TasksHomeEvent.QuickAddClosed()))).state
+        kept.screen.quick_add!!.let {
+            it.drawn shouldBe true
+            it.title shouldBe "Buy milk"
+        }
+        // AN ADD KEEPS IT OPEN for the next one.
+        TasksHomeMachine.reduce(typed, TasksHomeInput.Add(ID)).state.screen.quick_add!!.let {
+            it.drawn shouldBe true
+            it.title shouldBe ""
+        }
+        // NOTES' "SEND TO TASKS" lands with the bar open and the words in it.
+        val seeded = TasksHomeMachine.reduce(
+            TasksHomeMachine.initial(),
+            view(TasksHomeEvent(opened = TasksHomeEvent.Opened(destination = inbox, quick_add_title = "Buy milk"))),
+        ).state
+        TasksHomeMachine.reduce(seeded, TasksHomeInput.Answered(board = board(TasksView.TASKS_VIEW_INBOX))).state.screen.quick_add!!.let {
+            it.drawn shouldBe true
+            it.focused shouldBe true
+            it.title shouldBe "Buy milk"
+        }
+        // ANOTHER PLACE, OR SEARCH, puts it away.
+        TasksHomeMachine.reduce(opened, view(TasksHomeEvent(band = TasksHomeEvent.BandPicked(key = "inbox")))).state.screen.quick_add!!.drawn shouldBe false
+        TasksHomeMachine.reduce(opened, view(TasksHomeEvent(search_opened = TasksHomeEvent.SearchOpened()))).state.screen.quick_add!!.drawn shouldBe false
+    }
+
+    "each place is the header's title" {
+        homeOn(upcoming, board(TasksView.TASKS_VIEW_UPCOMING)).screen.chrome!!.title shouldBe "Upcoming"
+        homeOn(inbox, board(TasksView.TASKS_VIEW_INBOX)).screen.chrome!!.title shouldBe "Inbox"
+        TasksHomeMachine.reduce(opened(projects).state, TasksHomeInput.Answered(projects = TasksProjects())).state.screen.chrome!!.title shouldBe "Projects"
     }
 
     // -----------------------------------------------------------------
@@ -628,7 +687,9 @@ class TasksSpec : StringSpec({
 
         // POINT THE QUICK ADD AT BEDS: add_task, then organize into it.
         val pointed = TasksProjectMachine.reduce(page, TasksProjectInput.View(TasksProjectEvent(group_verb = TasksProjectEvent.GroupVerb(key = "add:s1")))).state
-        pointed.screen.quick_add!!.lands_label shouldBe "Lands in Garden · Beds"
+        pointed.screen.quick_add!!.lands_label shouldBe "Add to Garden · Beds"
+        // A PUSHED PAGE HAS NO PLUS: its bar is always drawn.
+        pointed.screen.quick_add!!.drawn shouldBe true
         val typed = TasksProjectMachine.reduce(pointed, TasksProjectInput.View(TasksProjectEvent(quick_add_changed = TasksProjectEvent.QuickAddChanged(title = "Tulips")))).state
         val added = TasksProjectMachine.reduce(typed, TasksProjectInput.Add(ID))
         val add = added.effects.single() as ScreenEffect.SubmitWrite

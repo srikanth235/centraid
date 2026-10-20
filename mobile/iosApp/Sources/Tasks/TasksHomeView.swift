@@ -16,8 +16,6 @@ struct TasksHomeView: View {
     var openContainer: (Centraid_Screen_V1_ChatCard, String) -> Void = { _, _ in }
 
     @Environment(\.colorScheme) private var scheme
-    /// The header's Plus asks the quick add for the keyboard (R-CHROME-1).
-    @State private var quickAddFocus = false
     /// The quick add holds the keyboard: the band is put away while it does
     /// (as an editor's is, DESIGN.md "The seven rooms"), so the bar sits on the
     /// keyboard and not behind it, and a scroll or the Done key lets it go.
@@ -38,10 +36,12 @@ struct TasksHomeView: View {
         AppPlace(
             app: "tasks",
             title: chrome.title,
-            // THE PLUS IS THE QUICK ADD'S DOOR: the bar at the foot stays the
-            // one place a task is typed, and the Plus puts the keyboard in it.
+            // THE PLUS IS THE ONE WAY IN: it opens the bar on the keyboard,
+            // and nothing else draws the bar here (R-CHROME-1).
             trailing: state.quickAdd.shown && !state.quickAdd.addLabel.isEmpty
-                ? RoomAction(iconKey: "Plus", label: state.quickAdd.addLabel, identifier: "tasks-add", action: { quickAddFocus = true })
+                ? RoomAction(iconKey: "Plus", label: state.quickAdd.addLabel, identifier: "tasks-add", action: {
+                    send(event { $0.quickAddOpened = .init() })
+                })
                 : nil,
             search: content.isDenied ? nil : SearchSlot(
                 field: state.search,
@@ -81,10 +81,13 @@ struct TasksHomeView: View {
                         quickAdd: state.quickAdd,
                         placeholder: chrome.quickAddPlaceholder,
                         verb: chrome.quickAddVerb,
-                        focusRequested: $quickAddFocus,
                         onChange: { title in send(event { $0.quickAddChanged = .with { $0.title = title } }) },
                         onSubmit: { send(event { $0.quickAddSubmitted = .init() }) },
-                        onFocusChange: { quickAddTyping = $0 }
+                        onFocusChange: { typing in
+                            quickAddTyping = typing
+                            // THE KEYBOARD LEFT: the machine puts an empty bar away.
+                            if !typing { send(event { $0.quickAddClosed = .init() }) }
+                        }
                     )
                 }
             }

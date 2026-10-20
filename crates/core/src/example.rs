@@ -177,12 +177,6 @@ fn at(now: i64, days: i64, hour: i64, minute: i64) -> String {
 }
 
 /// The date alone, `YYYY-MM-DD`, `days` from the anchor.
-/// `now`'s UTC calendar day, `YYYY-MM-DD`: the starters' fallback when the
-/// found named no zone the bundled database knows.
-pub(crate) fn utc_day(now: i64) -> String {
-    day(now, 0)
-}
-
 fn day(now: i64, days: i64) -> String {
     iso((now / DAY_MS) * DAY_MS + days * DAY_MS)[..10].to_owned()
 }

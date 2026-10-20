@@ -551,8 +551,7 @@ pub fn found(
     }
     let founded = vault.found(&request.display_name, &request.owner_name)?;
     if content == wire::FoundContent::Starters {
-        let today = crate::starters::local_today(&request.tz, crate::example::now_ms());
-        let report = crate::starters::write(vault, registry, principal, &today);
+        let report = crate::starters::write(vault, registry, principal);
         if !report.is_whole() {
             tracing::warn!(refused = ?report.refused, "a starter row was refused");
         }

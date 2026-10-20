@@ -7,13 +7,15 @@ import SwiftUI
 // word is the row's (`TasksRow`, folded in `TasksRows.kt`); this file maps
 // fields to geometry and taps to the caller's closures.
 
-/// One task: the box, the title with its due words and priority, the clamped
-/// meta line, the project dot, the pending rule — and its family under it.
+/// One task: the circle (a subtask's box), the title with its priority, the
+/// due words and clamped meta under it, the project dot, the pending rule —
+/// and its family under it.
 struct TasksRowView: View {
     let row: Centraid_Screen_V1_TasksRow
     let onCheck: (String) -> Void
     let onPick: (String) -> Void
-    /// The row's visible filing verb ("File"); a row that can file draws it.
+    /// The row's filing verb ("Move to project"), offered on a long press by a
+    /// row that can file.
     var fileVerb: String = ""
     var onFile: ((String) -> Void)? = nil
 
@@ -31,10 +33,19 @@ struct TasksRowView: View {
 
     private var settled: Bool { row.check == .done || row.check == .wontDo }
 
+    /// The box's 44 target overhangs its 20pt mark by this much on every
+    /// side, so the mark sits on the page margin and on the title's first
+    /// line rather than mid-row; the gap to the title is the overhang.
+    private static let boxOverhang: CGFloat = (CentraidGeometry.targetMinCoarse - 20) / 2
+
     private var line: some View {
-        HStack(alignment: .top, spacing: 10) {
-            KitCheckBox(state: row.check.kitState, label: row.checkLabel) { onCheck(row.taskID) }
+        HStack(alignment: .top, spacing: Self.boxOverhang) {
+            // A TASK IS A CIRCLE, a subtask a box: the shape the starter row
+            // ("Tap the circle to finish me") and every task list teach.
+            KitCheckBox(state: row.check.kitState, label: row.checkLabel, round: !row.subtask) { onCheck(row.taskID) }
                 .disabled(!row.canCheck)
+                .padding(-Self.boxOverhang)
+                .padding(.top, 1)
             Button { onPick(row.taskID) } label: {
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
@@ -54,18 +65,24 @@ struct TasksRowView: View {
                                 .centraidType("annotLabel")
                                 .foregroundStyle(Theme.color("textSoft", scheme))
                         }
-                        if !row.dueLabel.isEmpty {
-                            Text(row.dueLabel)
-                                .centraidType("annotLabel")
-                                .monospacedDigit()
-                                .foregroundStyle(Theme.color(row.overdue ? "warning" : "textSoft", scheme))
-                        }
                     }
-                    if !row.meta.isEmpty {
-                        Text(row.meta)
-                            .centraidType("annotLabel")
-                            .foregroundStyle(Theme.color("textFaint", scheme))
-                            .lineLimit(1)
+                    // THE DUE WORDS LEAD THE SECOND LINE, so a trailing column
+                    // never squeezes the title into a wrap.
+                    if !row.dueLabel.isEmpty || !row.meta.isEmpty {
+                        HStack(alignment: .firstTextBaseline, spacing: 6) {
+                            if !row.dueLabel.isEmpty {
+                                Text(row.dueLabel)
+                                    .centraidType("annotLabel")
+                                    .monospacedDigit()
+                                    .foregroundStyle(Theme.color(row.overdue ? "warning" : "textSoft", scheme))
+                            }
+                            if !row.meta.isEmpty {
+                                Text(row.meta)
+                                    .centraidType("annotLabel")
+                                    .foregroundStyle(Theme.color("textFaint", scheme))
+                                    .lineLimit(1)
+                            }
+                        }
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -76,9 +93,17 @@ struct TasksRowView: View {
             .accessibilityLabel(row.accessibilityLabel.isEmpty ? row.title : row.accessibilityLabel)
             .accessibilityAddTraits(.isButton)
             .accessibilityIdentifier("tasks-row-\(row.taskID)")
-            if row.canFile, let onFile, !fileVerb.isEmpty {
-                KitLink(label: fileVerb, dense: true, identifier: "tasks-row-file-\(row.taskID)") {
-                    onFile(row.taskID)
+            .contextMenu {
+                if row.canFile, let onFile, !fileVerb.isEmpty {
+                    Button { onFile(row.taskID) } label: {
+                        Label(fileVerb, systemImage: "folder")
+                    }
+                    .accessibilityIdentifier("tasks-row-file-\(row.taskID)")
+                }
+            }
+            .accessibilityActions {
+                if row.canFile, let onFile, !fileVerb.isEmpty {
+                    Button(fileVerb) { onFile(row.taskID) }
                 }
             }
         }
@@ -94,7 +119,8 @@ struct TasksRowView: View {
                     .padding(.vertical, 8)
             }
         }
-        .overlay(alignment: .bottom) { KitHairline() }
+        // THE RULE STARTS WHERE THE WORDS DO, as the phone's own lists draw it.
+        .overlay(alignment: .bottom) { KitHairline(inset: CentraidGeometry.pageMargin + 20 + Self.boxOverhang) }
     }
 }
 
@@ -133,15 +159,13 @@ struct TasksGroupView: View {
     }
 }
 
-/// THE QUICK-ADD BAR: a bare title, where it lands, and Add.
+/// THE QUICK-ADD BAR: a bare title whose placeholder says where it lands, and
+/// Add once there are words. Drawn while the machine holds it `drawn` — on
+/// Tasks' home, only after the header's Plus.
 struct TasksQuickAddBar: View {
     let quickAdd: Centraid_Screen_V1_TasksQuickAdd
     let placeholder: String
     let verb: String
-    /// The header's Plus asking for the keyboard (Tasks' home). Set true by the
-    /// asker and handed back to false here once the field has it, so the next
-    /// tap asks again.
-    var focusRequested: Binding<Bool> = .constant(false)
     let onChange: (String) -> Void
     let onSubmit: () -> Void
     /// The field took or gave up the keyboard. The screen that hosts the bar
@@ -152,40 +176,33 @@ struct TasksQuickAddBar: View {
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        if quickAdd.shown {
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 8) {
-                    CentraidIconView(iconKey: "Plus", tint: Theme.color("textFaint", scheme), size: 16)
-                    // THE MACHINE SAYS WHEN THE BAR TAKES THE KEYBOARD (Notes'
-                    // "Send to Tasks" lands with words in it).
-                    MachineTextField(
-                        placeholder: placeholder,
-                        value: quickAdd.title,
-                        focusOnAppear: quickAdd.focused || focusRequested.wrappedValue,
-                        onEdit: onChange,
-                        onSubmit: { if quickAdd.canSubmit { onSubmit() } },
-                        onFocusChange: onFocusChange
-                    )
-                    .centraidType("body")
-                    .submitLabel(.done)
-                    .accessibilityLabel(placeholder)
-                    .accessibilityIdentifier("tasks-quick-add-field")
-                    .onChange(of: focusRequested.wrappedValue) { _, asked in
-                        if asked { DispatchQueue.main.async { focusRequested.wrappedValue = false } }
-                    }
+        if quickAdd.shown && quickAdd.drawn {
+            let prompt = quickAdd.landsLabel.isEmpty ? placeholder : quickAdd.landsLabel
+            HStack(spacing: 8) {
+                // THE MACHINE SAYS WHEN THE BAR TAKES THE KEYBOARD: the Plus
+                // opened it, or Notes' "Send to Tasks" landed with words in it.
+                MachineTextField(
+                    placeholder: prompt,
+                    value: quickAdd.title,
+                    focusOnAppear: quickAdd.focused,
+                    onEdit: onChange,
+                    onSubmit: { if quickAdd.canSubmit { onSubmit() } },
+                    onFocusChange: onFocusChange
+                )
+                .centraidType("body")
+                .submitLabel(.done)
+                .accessibilityLabel(prompt)
+                .accessibilityIdentifier("tasks-quick-add-field")
+                // ADD ONLY ONCE THERE ARE WORDS: a greyed verb read as a second
+                // placeholder.
+                if quickAdd.canSubmit {
                     KitLink(label: verb, identifier: "tasks-quick-add-verb", action: onSubmit)
-                        .disabled(!quickAdd.canSubmit)
-                }
-                .padding(.horizontal, 12)
-                .background(Theme.color("bgSunken", scheme))
-                .clipShape(RoundedRectangle(cornerRadius: Theme.radius("md", scheme)))
-                if !quickAdd.landsLabel.isEmpty {
-                    Text(quickAdd.landsLabel)
-                        .centraidType("annotLabel")
-                        .foregroundStyle(Theme.color("textFaint", scheme))
-                        .padding(.leading, 12)
                 }
             }
+            .frame(minHeight: CentraidGeometry.targetMinCoarse)
+            .padding(.horizontal, 12)
+            .background(Theme.color("bgSunken", scheme))
+            .clipShape(RoundedRectangle(cornerRadius: Theme.radius("md", scheme)))
             .padding(.horizontal, CentraidGeometry.pageMargin)
             .padding(.vertical, 6)
         }

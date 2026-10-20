@@ -364,15 +364,18 @@ struct ChoiceFieldRow: View {
     }
 }
 
-/// The row divider every kit row draws: a hairline inset by the page margin.
+/// The row divider every kit row draws: a hairline inset by the page margin,
+/// or by `inset` where the row's words start further in (Tasks' circle).
 struct KitHairline: View {
+    var inset: CGFloat = CentraidGeometry.pageMargin
+
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         Rectangle()
             .fill(Theme.color("line", scheme))
             .frame(height: CentraidGeometry.hairline)
-            .padding(.leading, CentraidGeometry.pageMargin)
+            .padding(.leading, inset)
     }
 }
 

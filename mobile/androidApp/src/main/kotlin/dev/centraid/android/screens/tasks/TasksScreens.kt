@@ -8,9 +8,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.unit.dp
 import centraid.screen.v1.ChatCard
 import centraid.screen.v1.SearchField
@@ -62,16 +60,15 @@ internal fun TasksHomeScreen(
     val chrome = state.chrome
     val data = state.data_
     val tabs = state.band
-    // THE PLUS PUTS THE KEYBOARD IN THE QUICK ADD (R-CHROME-1): the bar at the
-    // foot stays the one place a task is typed; the header's Plus is its door.
-    val quickAddFocus = remember { FocusRequester() }
+    // THE PLUS IS THE ONE WAY IN (R-CHROME-1): it opens the bar on the
+    // keyboard, and nothing else draws the bar here.
     val quickAdd = state.quick_add
     AppPlace(
         app = "tasks",
         title = chrome?.title.orEmpty(),
         meta = data?.count_label.orEmpty(),
         trailing = if (quickAdd != null && quickAdd.shown && quickAdd.add_label.isNotEmpty()) {
-            RoomAction("Plus", quickAdd.add_label, "tasks-add") { runCatching { quickAddFocus.requestFocus() } }
+            RoomAction("Plus", quickAdd.add_label, "tasks-add") { onEvent(TasksHomeEvent(quick_add_opened = TasksHomeEvent.QuickAddOpened())) }
         } else {
             null
         },
@@ -175,7 +172,8 @@ internal fun TasksHomeScreen(
                 verb = chrome?.quick_add_verb.orEmpty(),
                 onChange = { onEvent(TasksHomeEvent(quick_add_changed = TasksHomeEvent.QuickAddChanged(title = it))) },
                 onSubmit = { onEvent(TasksHomeEvent(quick_add_submitted = TasksHomeEvent.QuickAddSubmitted())) },
-                focus = quickAddFocus,
+                // THE KEYBOARD LEFT: the machine puts an empty bar away.
+                onBlur = { onEvent(TasksHomeEvent(quick_add_closed = TasksHomeEvent.QuickAddClosed())) },
             )
         }
     }

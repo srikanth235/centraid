@@ -294,6 +294,8 @@ public object TasksProjectMachine : ScreenMachine<TasksProjectPage, TasksProject
                     can_submit = title.isNotBlank(),
                     lands_label = "${TasksCopy.LANDS_IN} ${landsIn(state)}",
                     shown = screen.data_?.found == true,
+                    // A PUSHED PAGE HAS NO PLUS, so its bar stays drawn.
+                    drawn = screen.data_?.found == true,
                 ),
                 new_section_can_submit = screen.new_section_name.isNotBlank(),
             ),

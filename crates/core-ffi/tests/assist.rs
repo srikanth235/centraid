@@ -66,7 +66,6 @@ impl Opened {
             display_name: "Sample".to_owned(),
             owner_name: "Me".to_owned(),
             content: wire::FoundContent::Unspecified as i32,
-            tz: String::new(),
         }));
         let Some(wire::response::Kind::Found(_)) = found.kind else {
             panic!("a found answered {:?}", found.kind);

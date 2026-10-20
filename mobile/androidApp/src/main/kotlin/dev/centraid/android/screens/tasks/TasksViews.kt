@@ -3,6 +3,7 @@ package dev.centraid.android.screens.tasks
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -21,17 +22,21 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
@@ -44,7 +49,6 @@ import centraid.screen.v1.TasksRow
 import centraid.screen.v1.TasksRowGroup
 import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.CentraidRow
-import dev.centraid.android.kit.IconKey
 import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.OutlineButton
 import dev.centraid.android.kit.SectionHeader
@@ -54,12 +58,13 @@ import dev.centraid.android.kit.hueColor
 import dev.centraid.android.kit.rememberFollowedText
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
-import dev.centraid.design.copy.TasksCopy
 
 /**
  * TASKS' ONE ROW SHAPE: the box, the title over its due word and meta line,
- * the priority word, the project dot and (open roots) File. Every word is the
- * row's own; the view only lays them out. A pending write is the 2px rule.
+ * the priority word and the project dot. An open root offers "Move to project"
+ * on a long press (and to a screen reader as an action), never as a verb on
+ * every row. Every word is the row's own; the view only lays them out. A
+ * pending write is the 2px rule.
  */
 @Composable
 internal fun TaskRowView(
@@ -85,14 +90,16 @@ internal fun TaskRowView(
                 .background(if (row.pending) centraidColor("seam") else centraidColor("bg")),
         )
         TaskCheckBox(row.check, row.check_label, enabled = row.can_check) { onCheck(row.task_id) }
+        val file = if (row.can_file && onFile != null && fileVerb.isNotEmpty()) ({ onFile(row.task_id) }) else null
         Column(
             Modifier
                 .weight(1f)
-                .clickable { onPick(row.task_id) }
+                .combinedClickable(onClick = { onPick(row.task_id) }, onLongClick = file, onLongClickLabel = fileVerb.ifEmpty { null })
                 .padding(vertical = 8.dp)
                 .clearAndSetSemantics {
                     contentDescription = row.accessibility_label.ifEmpty { row.title }
                     role = Role.Button
+                    if (file != null) customActions = listOf(CustomAccessibilityAction(fileVerb) { file(); true })
                 },
         ) {
             Text(
@@ -141,19 +148,6 @@ internal fun TaskRowView(
                     .clip(CircleShape)
                     .background(hueColor(row.project_hue_key)),
             )
-        }
-        if (row.can_file && onFile != null) {
-            // THE VISIBLE VERB (`TasksChrome.file_verb`); the catalog's folder
-            // key only while the state has no word for it.
-            if (fileVerb.isNotEmpty()) {
-                OutlineButton(fileVerb, testTag = "tasks-file-${row.task_id}", modifier = Modifier.padding(start = 6.dp)) {
-                    onFile(row.task_id)
-                }
-            } else {
-                IconKey("Folder", "${TasksCopy.FILE} ${row.title}", "tasks-file-${row.task_id}", bordered = false) {
-                    onFile(row.task_id)
-                }
-            }
         }
     }
     row.children.forEach { child ->
@@ -229,7 +223,11 @@ internal fun LazyListScope.taskGroups(
     }
 }
 
-/** THE QUICK-ADD BAR: a bare title, where it lands, and Add. */
+/**
+ * THE QUICK-ADD BAR: a bare title whose placeholder says where it lands, and
+ * Add once there are words. Drawn while the machine holds it `drawn` — on
+ * Tasks' home, only after the header's Plus.
+ */
 @Composable
 internal fun TasksQuickAddBar(
     quickAdd: TasksQuickAdd?,
@@ -237,9 +235,14 @@ internal fun TasksQuickAddBar(
     verb: String,
     onChange: (String) -> Unit,
     onSubmit: () -> Unit,
-    focus: FocusRequester = remember { FocusRequester() },
+    onBlur: () -> Unit = {},
 ) {
-    if (quickAdd == null || !quickAdd.shown) return
+    if (quickAdd == null || !quickAdd.shown || !quickAdd.drawn) return
+    val focus = remember { FocusRequester() }
+    // `onFocusChanged` reports once on attach, unfocused: only a field that
+    // HAD the keyboard and lost it tells the machine.
+    val held = remember { mutableStateOf(false) }
+    val prompt = quickAdd.lands_label.ifEmpty { placeholder }
     // A LATE ECHO NEVER OVERWRITES WHAT IS TYPED NOW: the machine's title is
     // adopted only when it is not an echo of this field's typing (a clear after
     // Add, words handed in by Notes' "Send to Tasks"). Following every echo
@@ -247,9 +250,9 @@ internal fun TasksQuickAddBar(
     val editor = rememberFollowedText(quickAdd.title)
     val typed = editor.text.value
     val submit = { onSubmit() }
-    // OPENED WITH WORDS IN IT (Notes' "Send to Tasks"): the field takes the
-    // keyboard. [focus] is also the header's Plus, which asks for it.
-    LaunchedEffect(quickAdd.focused) { if (quickAdd.focused) focus.requestFocus() }
+    // THE PLUS OPENED IT, or Notes' "Send to Tasks" did with words in it: the
+    // field takes the keyboard.
+    LaunchedEffect(quickAdd.focused) { if (quickAdd.focused) runCatching { focus.requestFocus() } }
     val shape = RoundedCornerShape(KitGeometry.RADIUS)
     Column(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 6.dp)) {
         Row(
@@ -264,7 +267,7 @@ internal fun TasksQuickAddBar(
             CentraidIcon("Plus", tint = centraidColor("textFaint"), size = 16.dp, modifier = Modifier.clearAndSetSemantics { })
             Box(Modifier.weight(1f).padding(horizontal = 8.dp)) {
                 if (typed.isEmpty()) {
-                    Text(placeholder, style = centraidType("body"), color = centraidColor("textFaint"), modifier = Modifier.clearAndSetSemantics { })
+                    Text(prompt, style = centraidType("body"), color = centraidColor("textFaint"), modifier = Modifier.clearAndSetSemantics { })
                 }
                 BasicTextField(
                     value = typed,
@@ -277,16 +280,21 @@ internal fun TasksQuickAddBar(
                     modifier = Modifier
                         .fillMaxWidth()
                         .focusRequester(focus)
+                        .onFocusChanged {
+                            if (it.isFocused) {
+                                held.value = true
+                            } else if (held.value) {
+                                held.value = false
+                                onBlur()
+                            }
+                        }
                         .testTag("tasks-quick-add")
-                        .clearAndSetSemantics { contentDescription = placeholder },
+                        .clearAndSetSemantics { contentDescription = prompt },
                 )
             }
             if (quickAdd.can_submit) {
                 OutlineButton(verb, testTag = "tasks-quick-add-verb", modifier = Modifier.padding(end = 4.dp), onPress = submit)
             }
-        }
-        if (quickAdd.lands_label.isNotEmpty()) {
-            Text(quickAdd.lands_label, style = centraidType("annotLabel"), color = centraidColor("textFaint"), modifier = Modifier.padding(top = 2.dp))
         }
     }
 }

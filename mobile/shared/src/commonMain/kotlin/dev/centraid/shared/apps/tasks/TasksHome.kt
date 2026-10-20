@@ -214,7 +214,7 @@ public object TasksHomeMachine : ScreenMachine<TasksHome, TasksHomeInput> {
                             search = SearchField(),
                             sheet = NONE,
                             filing_task_id = "",
-                            quick_add = TasksQuickAdd(title = seed, focused = seed.isNotEmpty()),
+                            quick_add = TasksQuickAdd(title = seed, focused = seed.isNotEmpty(), drawn = seed.isNotEmpty()),
                             loading = Loading(first_load = true),
                             failure = null,
                             denied = null,
@@ -255,7 +255,7 @@ public object TasksHomeMachine : ScreenMachine<TasksHome, TasksHomeInput> {
                 else -> Step(state.copy(screen = screen.copy(sheet = NONE)))
             }
 
-            event.search_opened != null -> opened(state)
+            event.search_opened != null -> opened(shut(state))
 
             event.search_term != null -> {
                 val typed = SearchLaw.term(Search, state, event.search_term.term).state
@@ -297,6 +297,16 @@ public object TasksHomeMachine : ScreenMachine<TasksHome, TasksHomeInput> {
             // without one (a spec forwarding the proto event) is nothing.
             event.quick_add_submitted != null -> Step(state)
 
+            // THE PLUS OPENS THE BAR on the keyboard (R-CHROME-1); nothing
+            // else draws it on the home.
+            event.quick_add_opened != null ->
+                Step(state.copy(screen = screen.copy(quick_add = (screen.quick_add ?: TasksQuickAdd()).copy(drawn = true, focused = true))))
+
+            // THE KEYBOARD LEFT IT: an empty bar goes away; typed words keep
+            // it open, so nothing the member wrote is thrown away.
+            event.quick_add_closed != null ->
+                if (screen.quick_add?.title.isNullOrBlank()) Step(shut(state)) else Step(state)
+
             event.new_project_name != null ->
                 Step(state.copy(screen = screen.copy(new_project_name = event.new_project_name.name)))
 
@@ -320,10 +330,13 @@ public object TasksHomeMachine : ScreenMachine<TasksHome, TasksHomeInput> {
             }
 
             event.empty_acted != null ->
-                if (screen.destination == PROJECTS) {
-                    Step(state.copy(screen = screen.copy(sheet = TasksHomeState.Sheet.SHEET_NEW_PROJECT)))
-                } else {
-                    Step(state)
+                when {
+                    screen.destination == PROJECTS ->
+                        Step(state.copy(screen = screen.copy(sheet = TasksHomeState.Sheet.SHEET_NEW_PROJECT)))
+                    // AN EMPTY TODAY WITH WORK WAITING points at it.
+                    screen.destination == TODAY && screen.data_?.empty?.action_label == TasksCopy.OPEN_INBOX ->
+                        moveTo(state, INBOX)
+                    else -> Step(state)
                 }
 
             // A FAILED READ IS NOT AN EMPTY LIST.
@@ -364,11 +377,16 @@ public object TasksHomeMachine : ScreenMachine<TasksHome, TasksHomeInput> {
 
     private fun opened(state: TasksHome): Step<TasksHome> = refold(SearchLaw.opened(Search, state).state)
 
+    /** The quick-add bar put away, its words with it: another place, or search. */
+    private fun shut(state: TasksHome): TasksHome =
+        state.copy(screen = state.screen.copy(quick_add = TasksQuickAdd()))
+
     /**
      * A band destination. The tab you are on is NOTHING (the kit's band law);
      * another leaves search and reads, skeletons first.
      */
-    private fun moveTo(state: TasksHome, to: TasksHomeState.Destination): Step<TasksHome> {
+    private fun moveTo(open: TasksHome, to: TasksHomeState.Destination): Step<TasksHome> {
+        val state = shut(open)
         val searching = state.screen.search?.open_ == true
         if (!searching && state.screen.destination == to) {
             return Step(state.copy(screen = state.screen.copy(sheet = NONE)))
@@ -609,11 +627,13 @@ public object TasksHomeMachine : ScreenMachine<TasksHome, TasksHomeInput> {
                 EmptyState(
                     headline = if (ops.completed > 0) TasksCopy.TODAY_DONE else TasksCopy.TODAY_EMPTY,
                     import_source = reminders,
+                    // Undated work waits in the Inbox (a first vault's starters
+                    // among it), and an empty Today says where.
+                    action_label = if ((board.counts?.inbox ?: 0) > 0) TasksCopy.OPEN_INBOX else "",
                 )
             screen.destination == UPCOMING -> EmptyState(headline = TasksCopy.UPCOMING_EMPTY, import_source = reminders)
             else -> EmptyState(headline = TasksCopy.INBOX_EMPTY, import_source = reminders)
         }
-        val shown = TasksRows.rootCount(groups)
         val catchUp = state.catchUp
         return TasksHomeData(
             today = board.today,
@@ -629,7 +649,8 @@ public object TasksHomeMachine : ScreenMachine<TasksHome, TasksHomeInput> {
             } else {
                 null
             },
-            count_label = TasksRows.count(shown, TasksCopy.TASK_ONE, TasksCopy.TASK_MANY),
+            // NO HEAD COUNT: every group's head carries its own.
+            count_label = "",
             window_label = if (board.truncated) {
                 "${TasksRows.count(board.window, TasksCopy.TASK_ONE, TasksCopy.TASK_MANY)} · ${TasksCopy.WINDOW}"
             } else {
@@ -690,16 +711,29 @@ public object TasksHomeMachine : ScreenMachine<TasksHome, TasksHomeInput> {
     // What every state carries
     // ---------------------------------------------------------------------
 
+    private fun placeTitle(destination: TasksHomeState.Destination): String = when (destination) {
+        UPCOMING -> TasksCopy.BAND_UPCOMING
+        INBOX -> TasksCopy.BAND_INBOX
+        PROJECTS -> TasksCopy.BAND_PROJECTS
+        else -> TasksCopy.BAND_TODAY
+    }
+
     private fun decorate(state: TasksHome): TasksHome {
         val screen = state.screen
         val denied = screen.denied != null
         val title = screen.quick_add?.title.orEmpty()
         val today = todayOf(state)
         val lands = if (screen.destination == TODAY && today.isNotEmpty()) TasksCopy.GROUP_TODAY else TasksCopy.INBOX
+        val shown = !denied && screen.data_ != null && screen.destination != PROJECTS && screen.search?.open_ != true
+        // KEPT THROUGH A READ: the views draw the bar only while it is also
+        // `shown`, so a bar opened over a loading page survives the answer.
+        val drawn = screen.quick_add?.drawn == true
         return state.copy(
             screen = screen.copy(
                 band = if (denied) emptyList() else band(screen),
-                chrome = TasksRows.CHROME,
+                // THE TITLE IS THE PLACE the band has lit; pushed pages still
+                // go back to "Tasks" (`chrome.back`).
+                chrome = TasksRows.CHROME.copy(title = placeTitle(screen.destination)),
                 status = state.ops.status,
                 quick_add = TasksQuickAdd(
                     title = title,
@@ -707,9 +741,10 @@ public object TasksHomeMachine : ScreenMachine<TasksHome, TasksHomeInput> {
                     lands_label = "${TasksCopy.LANDS_IN} $lands",
                     // Hidden while search is open, term or not: the bar and its Plus
                     // would be a second verb over a field that is looking.
-                    shown = !denied && screen.data_ != null && screen.destination != PROJECTS && screen.search?.open_ != true,
-                    focused = screen.quick_add?.focused == true && title.isNotEmpty(),
+                    shown = shown,
+                    focused = drawn && screen.quick_add?.focused == true,
                     add_label = TasksCopy.ADD_TASK,
+                    drawn = drawn,
                 ),
                 file_choices = if (screen.sheet == TasksHomeState.Sheet.SHEET_FILE) fileChoices(state) else emptyList(),
                 more_rows = MORE_ROWS,
