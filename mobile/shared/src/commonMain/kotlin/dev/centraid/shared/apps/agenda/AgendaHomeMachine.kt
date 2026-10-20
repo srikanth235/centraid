@@ -224,7 +224,6 @@ public object AgendaHomeMachine : ScreenMachine<AgendaHome, AgendaInput> {
                             search_corrected = "",
                             search_ask = "",
                             sheet = AgendaHomeState.Sheet.SHEET_NONE,
-                            due_open_days = emptyList(),
                             loading = Loading(first_load = true),
                             failure = null,
                             denied = null,
@@ -316,18 +315,6 @@ public object AgendaHomeMachine : ScreenMachine<AgendaHome, AgendaInput> {
 
             event.sheet_closed != null ->
                 Step(state.copy(screen = screen.copy(sheet = AgendaHomeState.Sheet.SHEET_NONE)))
-
-            event.due_toggled != null -> {
-                val day = event.due_toggled.day
-                val open = screen.due_open_days
-                refold(
-                    state.copy(
-                        screen = screen.copy(
-                            due_open_days = if (day in open) open - day else open + day,
-                        ),
-                    ),
-                )
-            }
 
             // A FAILED READ IS NOT AN EMPTY AGENDA. No retry from here: a
             // retry is the member's (`Refreshed`) or a change event's.
@@ -681,7 +668,6 @@ public object AgendaHomeMachine : ScreenMachine<AgendaHome, AgendaInput> {
             ),
         ),
         home = AgendaCopy.BAND_HOME,
-        shelf_label = AgendaCopy.SHELF_A11Y,
     )
 
     /** `AgendaBandTab.key`s — what `BandPicked` carries. */

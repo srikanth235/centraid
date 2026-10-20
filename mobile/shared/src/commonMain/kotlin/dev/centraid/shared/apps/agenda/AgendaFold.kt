@@ -21,7 +21,6 @@ import dev.centraid.shared.kit.SearchLaw
 import dev.centraid.shared.kit.time.dayOfMonthOf
 import dev.centraid.shared.kit.time.isoWeekdayOf
 import dev.centraid.shared.kit.time.plusDays
-import centraid.screen.v1.AgendaDueTask as DueTitle
 
 /**
  * THE CORE'S ANSWERS, AS THE LIST A VIEW DRAWS (#1046).
@@ -94,9 +93,8 @@ internal object AgendaFold {
 
         // DAY CONTEXT DECORATES; it never makes a Waiting day or a search day.
         val birthdays = context.birthdays.groupBy { monthDay(it.month, it.day) }
-        val due = context.due.associateBy { it.day }
         val decorated = if (search == null && !waitingOnly) {
-            window.filter { day -> birthdays[day.drop(MONTH_DAY_FROM)] != null || due[day] != null }
+            window.filter { day -> birthdays[day.drop(MONTH_DAY_FROM)] != null }
         } else {
             emptyList()
         }
@@ -105,9 +103,6 @@ internal object AgendaFold {
         var shownMonth = anchor.take(MONTH)
         val sections = days.map { day ->
             val names = birthdays[day.drop(MONTH_DAY_FROM)]?.map { it.name }.orEmpty()
-            val dueDay = due[day]
-            val dueCount = dueDay?.count ?: 0
-            val dueOpen = dueCount > 0 && day in screen.due_open_days
             val month = day.take(MONTH)
             val monthHeading = if (month != shownMonth) monthYear(day) else null
             shownMonth = month
@@ -125,14 +120,6 @@ internal object AgendaFold {
                     else -> "${names.size} ${AgendaCopy.RIBBON_BIRTHDAYS}"
                 },
                 ribbon_names = names,
-                due_count = dueCount,
-                due = dueDay?.tasks?.map { DueTitle(task_id = it.task_id, title = it.title) }.orEmpty(),
-                due_label = when {
-                    dueCount == 0 -> ""
-                    dueOpen -> AgendaCopy.SHELF_HIDE
-                    else -> "$dueCount ${AgendaCopy.SHELF_DUE}"
-                },
-                due_open = dueOpen,
                 items = items(day, byDay[day].orEmpty(), today, now, screen, hues),
             )
         }

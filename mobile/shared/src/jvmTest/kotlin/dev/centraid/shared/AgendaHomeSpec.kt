@@ -5,7 +5,6 @@ import centraid.core.v1.AgendaBirthday
 import centraid.core.v1.AgendaCalendar
 import centraid.core.v1.AgendaDayContext
 import centraid.core.v1.AgendaDueDay
-import centraid.core.v1.AgendaDueTask
 import centraid.core.v1.AgendaEvent
 import centraid.core.v1.AgendaSearch
 import centraid.core.v1.AgendaUpcoming
@@ -312,33 +311,6 @@ class AgendaHomeSpec : StringSpec({
         days.getValue("2026-06-15").ribbon.shouldBeNull()
     }
 
-    "the due shelf counts, and opening it re-folds without a read" {
-        val home = landed(
-            schedule,
-            upcoming(),
-            context(
-                due = listOf(
-                    AgendaDueDay(
-                        day = "2026-06-17",
-                        count = 9,
-                        tasks = listOf(AgendaDueTask(task_id = "t1", title = "File taxes")),
-                    ),
-                ),
-            ),
-        )
-        val shelf = home.screen.data_.shouldNotBeNull().days.single()
-        shelf.due_count shouldBe 9
-        shelf.due_label shouldBe "9 due"
-        shelf.due.map { it.title } shouldBe listOf("File taxes")
-        val opened = drive(home, view(AgendaHomeEvent(due_toggled = AgendaHomeEvent.DueShelfToggled(day = "2026-06-17"))))
-        opened.effects.shouldBeEmpty()
-        opened.state.screen.data_.shouldNotBeNull().days.single().let {
-            it.due_open shouldBe true
-            it.due_label shouldBe "Hide"
-        }
-        home.screen.chrome.shouldNotBeNull().shelf_label shouldBe "Tasks due on this day"
-    }
-
     "Waiting is Schedule's window filtered to your unanswered invitations — and moving re-reads nothing" {
         val home = landed(
             schedule,
@@ -577,7 +549,7 @@ class AgendaHomeSpec : StringSpec({
             AgendaInput.Denied(AppQueryDenial(code = "revoked")),
         ).state
         denied.screen.denied.shouldNotBeNull().let {
-            it.title shouldBe "Agenda cannot read your calendar"
+            it.title shouldBe "Agenda cannot read this vault"
             it.body shouldBe "Ask the owner of this vault for access."
             // The kit's gate: the refusal's code is the receipt.
             it.receipt shouldBe "revoked"

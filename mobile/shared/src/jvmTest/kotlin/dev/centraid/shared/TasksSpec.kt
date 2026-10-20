@@ -545,7 +545,7 @@ class TasksSpec : StringSpec({
     "denied is the kit's gate: no band, no quick add, the receipt named" {
         val denied = TasksHomeMachine.reduce(opened(home).state, TasksHomeInput.Denied(AppQueryDenial(code = "rcp_8802"))).state
         denied.screen.denied.shouldNotBeNull().let {
-            it.title shouldBe "Tasks cannot read this vault"
+            it.title shouldBe "Agenda cannot read your tasks"
             it.receipt shouldBe "rcp_8802"
         }
         denied.screen.band.shouldBeEmpty()

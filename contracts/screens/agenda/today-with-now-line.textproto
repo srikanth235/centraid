@@ -2,6 +2,8 @@
 # an event awaiting the member's reply, and one whose write this device still
 # holds — a row status from `pending_event_ids`, never a separate list. The
 # landing is today's section, at its now line.
+# A task due today is a row on the day (R-1128-2), untimed, ahead of the timed
+# rows; its box checks it off in place.
 # The More sheet's rows ride on the state, so both platforms draw one list:
 # each calendar a toggle under the Calendars heading, then the reads row.
 seat {
@@ -21,10 +23,17 @@ data {
     heading: "Today"
     is_today: true
     is_past: false
-    due_count: 1
-    due { task_id: "task-0001" title: "Send the survey notes" }
-    due_label: "1 due"
-    due_open: false
+    items {
+      task {
+        task_id: "task-0001"
+        title: "Send the survey notes"
+        check: TASKS_CHECK_OPEN
+        check_label: "Mark Send the survey notes done"
+        accessibility_label: "Send the survey notes"
+        can_file: true
+        can_check: true
+      }
+    }
     items {
       event {
         event_id: "event-0001"
