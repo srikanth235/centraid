@@ -28,6 +28,10 @@ CREATE INDEX access_receipt_occurred_page_idx
 -- index chat_thread_recent_idx on chat_thread
 CREATE INDEX chat_thread_recent_idx ON chat_thread(updated_at DESC, thread_id DESC);
 
+-- index core_activity_started_page_idx on core_activity
+CREATE INDEX core_activity_started_page_idx
+  ON core_activity(started_at, activity_id);
+
 -- index core_attachment_target_role_page_idx on core_attachment
 CREATE INDEX core_attachment_target_role_page_idx
   ON core_attachment(target_type, role, attachment_id);
@@ -1009,6 +1013,8 @@ CREATE TABLE core_activity (
   location_place_id TEXT REFERENCES core_place(place_id),
   source_app_id     TEXT REFERENCES access_app(app_id),
   created_at        TEXT NOT NULL,
+  updated_at        TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  row_version       INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
   FOREIGN KEY (activity_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
 
@@ -1910,6 +1916,50 @@ CREATE TABLE 'fts_schedule_task_idx'(segid, term, pgno, PRIMARY KEY(segid, term)
 -- table fts_schedule_task_vocab on fts_schedule_task_vocab
 CREATE VIRTUAL TABLE fts_schedule_task_vocab USING fts5vocab(fts_schedule_task, 'row');
 
+-- table health_daily on health_daily
+CREATE TABLE health_daily (
+  subject_party_id TEXT NOT NULL REFERENCES core_party(party_id) ON DELETE CASCADE,
+  -- The phone's local calendar day as the health store reckons it at read time
+  -- (HealthKit's statistics and Health Connect's aggregate both bucket by the
+  -- device's current zone). Sleep is keyed to the day the member WOKE.
+  day              TEXT NOT NULL CHECK (day GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
+                                        AND date(day) = day),
+  -- The unit is part of the metric's name, so there is no unit column and
+  -- nothing to add across (the currency lesson: ONT-13, ONT-23).
+  metric           TEXT NOT NULL CHECK (metric IN (
+                     'steps',              -- sum
+                     'active_energy_kcal', -- sum
+                     'exercise_min',       -- sum
+                     'sleep_min',          -- sum of asleep intervals, night ending on `day`
+                     'resting_hr_bpm',     -- the store's daily average
+                     'weight_kg')),        -- the last sample of the day
+  value            REAL NOT NULL CHECK (value >= 0),
+  created_at       TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  updated_at       TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  row_version      INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
+  PRIMARY KEY (subject_party_id, day, metric)
+) STRICT;
+
+-- table health_workout on health_workout
+CREATE TABLE health_workout (
+  activity_id      TEXT PRIMARY KEY REFERENCES core_activity(activity_id) ON DELETE CASCADE,
+  -- The store's own word for the kind (`HKWorkoutActivityType.running`,
+  -- `EXERCISE_TYPE_RUNNING`), kept whole; the concept on the activity is the
+  -- vault's reading of it.
+  phone_kind       TEXT NOT NULL CHECK (length(trim(phone_kind)) > 0),
+  -- The app or device that recorded it ("Apple Watch", "Strava"); shown, never joined.
+  recorded_by      TEXT,
+  -- Active time when the store distinguishes it from the span (pauses).
+  moving_sec       INTEGER CHECK (moving_sec IS NULL OR moving_sec > 0),
+  distance_m       REAL CHECK (distance_m IS NULL OR distance_m >= 0),
+  energy_kcal      REAL CHECK (energy_kcal IS NULL OR energy_kcal >= 0),
+  avg_hr_bpm       INTEGER CHECK (avg_hr_bpm IS NULL OR avg_hr_bpm > 0),
+  elevation_gain_m REAL CHECK (elevation_gain_m IS NULL OR elevation_gain_m >= 0),
+  created_at       TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  updated_at       TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  row_version      INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1)
+) STRICT;
+
 -- table knowledge_annotation on knowledge_annotation
 CREATE TABLE knowledge_annotation (
   annotation_id   TEXT PRIMARY KEY,
@@ -2411,7 +2461,7 @@ CREATE TABLE people_profile (
 -- table phone_link on phone_link
 CREATE TABLE phone_link (
   link_id      TEXT PRIMARY KEY,
-  source       TEXT NOT NULL CHECK (source IN ('contacts', 'calendar', 'files')),
+  source       TEXT NOT NULL CHECK (source IN ('contacts', 'calendar', 'files', 'health')),
   phone_id     TEXT NOT NULL CHECK (length(trim(phone_id)) > 0),
   origin_id    TEXT NOT NULL,
   entity_id    TEXT REFERENCES core_entity(entity_id) ON DELETE SET NULL,
@@ -2429,7 +2479,7 @@ CREATE TABLE phone_link (
 -- table phone_origin on phone_origin
 CREATE TABLE phone_origin (
   origin_id    TEXT PRIMARY KEY,
-  source       TEXT NOT NULL CHECK (source IN ('contacts', 'calendar', 'files')),
+  source       TEXT NOT NULL CHECK (source IN ('contacts', 'calendar', 'files', 'health')),
   phone_origin TEXT NOT NULL CHECK (length(trim(phone_origin)) > 0),
   label        TEXT NOT NULL CHECK (length(trim(label)) > 0),
   created_at   TEXT NOT NULL,
@@ -2922,6 +2972,19 @@ BEGIN
       WHERE entity_id = NEW.activity_id AND entity_type <> 'core.activity');
   INSERT OR IGNORE INTO core_entity (entity_id, entity_type, created_at)
   VALUES (NEW.activity_id, 'core.activity', COALESCE(NEW.created_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')));
+END;
+
+-- trigger core_activity_touch_updated_at on core_activity
+CREATE TRIGGER core_activity_touch_updated_at
+AFTER UPDATE ON core_activity
+WHEN NEW.row_version = OLD.row_version
+BEGIN
+  UPDATE core_activity
+     SET updated_at = CASE WHEN NEW.updated_at = OLD.updated_at
+                           THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+                           ELSE NEW.updated_at END,
+         row_version = OLD.row_version + 1
+   WHERE activity_id = NEW.activity_id;
 END;
 
 -- trigger core_attachment_entity_delete on core_attachment
@@ -4645,6 +4708,32 @@ BEGIN
        AND p.deleted_at IS NULL;
 END;
 
+-- trigger health_daily_touch_updated_at on health_daily
+CREATE TRIGGER health_daily_touch_updated_at
+AFTER UPDATE ON health_daily
+WHEN NEW.row_version = OLD.row_version
+BEGIN
+  UPDATE health_daily
+     SET updated_at = CASE WHEN NEW.updated_at = OLD.updated_at
+                           THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+                           ELSE NEW.updated_at END,
+         row_version = OLD.row_version + 1
+   WHERE subject_party_id = NEW.subject_party_id AND day = NEW.day AND metric = NEW.metric;
+END;
+
+-- trigger health_workout_touch_updated_at on health_workout
+CREATE TRIGGER health_workout_touch_updated_at
+AFTER UPDATE ON health_workout
+WHEN NEW.row_version = OLD.row_version
+BEGIN
+  UPDATE health_workout
+     SET updated_at = CASE WHEN NEW.updated_at = OLD.updated_at
+                           THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+                           ELSE NEW.updated_at END,
+         row_version = OLD.row_version + 1
+   WHERE activity_id = NEW.activity_id;
+END;
+
 -- trigger knowledge_annotation_entity_delete on knowledge_annotation
 CREATE TRIGGER knowledge_annotation_entity_delete
 AFTER DELETE ON knowledge_annotation
@@ -5111,6 +5200,7 @@ BEGIN
                             WHEN 'contacts' THEN 'core.party'
                             WHEN 'calendar' THEN 'core.event'
                             WHEN 'files'    THEN 'core.document'
+                            WHEN 'health'   THEN 'core.activity'
                           END);
 END;
 
@@ -5127,6 +5217,7 @@ BEGIN
                             WHEN 'contacts' THEN 'core.party'
                             WHEN 'calendar' THEN 'core.event'
                             WHEN 'files'    THEN 'core.document'
+                            WHEN 'health'   THEN 'core.activity'
                           END);
 END;
 

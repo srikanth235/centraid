@@ -1,7 +1,9 @@
 -- RUNG TWO of the vault's ladder: the phone link (#1127, R-1127-1 to R-1127-3, R-1127-7).
 --
--- People, Agenda and Docs follow what the phone holds: a contact, a calendar event and a file in a
--- folder the member picked arrive as an ordinary person, event or document. This table records
+-- People, Agenda, Docs and Health follow what the phone holds: a contact, a calendar event, a file
+-- in a folder the member picked and a workout in the health store arrive as an ordinary person,
+-- event, document or activity. AMENDED IN PLACE before any release to admit the fourth source,
+-- `health` (#1129, R-1129-1): the rung lives only on unreleased builds. This table records
 -- WHICH PHONE RECORD each such row came from, so a later pass can find the row again, tell that the
 -- phone record changed or went away, and tell that the member edited the row and it stopped
 -- following (R-1127-2: detached by fingerprint, never by an edit command).
@@ -10,13 +12,15 @@
 -- `phone.detach`, `phone.forget`); the shell's engine pages the rows back through the page door.
 --
 --   source        which phone store: contacts -> a party, calendar -> an event, files -> a
---                 document. Photos is not a source here (R-1127-4): the vault is a photograph's
---                 backup and never mirrors its delete.
+--                 document, health -> an activity (a workout, #1129, R-1129-2; a health store's
+--                 daily totals carry no identity and are not linked, R-1129-3). Photos is not a
+--                 source here (R-1127-4): the vault is a photograph's backup and never mirrors
+--                 its delete.
 --   phone_id      the phone store's own id for the record, opaque to the vault.
---   origin_id     the phone account, calendar or picked folder the record came from, as a row of
---                 `phone_origin` (R-1127-9). A REAL FOREIGN KEY, so an origin that still has links
---                 cannot be deleted; the pair `(origin_id, source)` is the key, so a link's origin
---                 is always of its own source.
+--   origin_id     the phone account, calendar, picked folder or health store the record came
+--                 from, as a row of `phone_origin` (R-1127-9). A REAL FOREIGN KEY, so an origin
+--                 that still has links cannot be deleted; the pair `(origin_id, source)` is the
+--                 key, so a link's origin is always of its own source.
 --   entity_id     the vault row it became. A REAL FOREIGN KEY to `core_entity`, not a
 --                 (type, id) pair SQLite cannot see (#916, D-1020-DC6), and `ON DELETE SET NULL`:
 --                 a purged row leaves its link behind with a NULL entity, which is the
@@ -46,7 +50,7 @@
 -- table phone_origin
 CREATE TABLE phone_origin (
   origin_id    TEXT PRIMARY KEY,
-  source       TEXT NOT NULL CHECK (source IN ('contacts', 'calendar', 'files')),
+  source       TEXT NOT NULL CHECK (source IN ('contacts', 'calendar', 'files', 'health')),
   phone_origin TEXT NOT NULL CHECK (length(trim(phone_origin)) > 0),
   label        TEXT NOT NULL CHECK (length(trim(label)) > 0),
   created_at   TEXT NOT NULL,
@@ -76,7 +80,7 @@ END;
 -- table phone_link
 CREATE TABLE phone_link (
   link_id      TEXT PRIMARY KEY,
-  source       TEXT NOT NULL CHECK (source IN ('contacts', 'calendar', 'files')),
+  source       TEXT NOT NULL CHECK (source IN ('contacts', 'calendar', 'files', 'health')),
   phone_id     TEXT NOT NULL CHECK (length(trim(phone_id)) > 0),
   origin_id    TEXT NOT NULL,
   entity_id    TEXT REFERENCES core_entity(entity_id) ON DELETE SET NULL,
@@ -103,6 +107,7 @@ BEGIN
                             WHEN 'contacts' THEN 'core.party'
                             WHEN 'calendar' THEN 'core.event'
                             WHEN 'files'    THEN 'core.document'
+                            WHEN 'health'   THEN 'core.activity'
                           END);
 END;
 
@@ -119,6 +124,7 @@ BEGIN
                             WHEN 'contacts' THEN 'core.party'
                             WHEN 'calendar' THEN 'core.event'
                             WHEN 'files'    THEN 'core.document'
+                            WHEN 'health'   THEN 'core.activity'
                           END);
 END;
 

@@ -1,9 +1,10 @@
 //! RUNG TWO, `phone_link` (#1127): the schema holds what the commands lean on.
 //!
 //! 1. **The rung is a climb.** A vault founded at the head is wound back to
-//!    `user_version = 1` by undoing the rung's own statements, a row the old shape let through
-//!    is written, and the file is opened: it reaches 2, the row is intact and the table is
-//!    there (`migrations.rs`, "A rung two is proved the way a climb is").
+//!    `user_version = 1` by undoing rung three's statements and then this rung's own, a row the
+//!    old shape let through is written, and the file is opened: it climbs to the head, the row
+//!    is intact and the table is there (`migrations.rs`, "A rung two is proved the way a climb
+//!    is"). Rung three's own climb is `health_schema.rs`'s.
 //! 2. **The engine holds the three rules no command can be bypassed around**: a link points at
 //!    the kind its source implies, a detached link is never re-attached, and a purged row takes
 //!    its link with it.
@@ -77,7 +78,7 @@ fn count(vault: &Vault, sql: &str) -> i64 {
 }
 
 #[test]
-fn the_rung_is_a_climb_a_file_at_one_reaches_two_with_its_rows_intact() {
+fn the_rung_is_a_climb_a_file_at_one_reaches_the_head_with_its_rows_intact() {
     let dir = scratch_dir();
     std::fs::create_dir_all(&dir).expect("a directory");
     let path = dir.join("vault.db");
@@ -91,9 +92,10 @@ fn the_rung_is_a_climb_a_file_at_one_reaches_two_with_its_rows_intact() {
         vault.found("Test", "Test Owner").expect("an owner");
         party(&vault, "p-old");
     }
-    // WIND IT BACK: undo the rung's own statements, then the version.
+    // WIND IT BACK: undo rung three, then this rung's own statements, then the version.
     {
         let connection = rusqlite::Connection::open(&path).expect("the file opens");
+        common::undo_rung_three(&connection);
         connection
             .execute_batch(
                 "DROP TRIGGER phone_link_touch_updated_at;
@@ -108,12 +110,12 @@ fn the_rung_is_a_climb_a_file_at_one_reaches_two_with_its_rows_intact() {
             )
             .expect("the rung is undone");
     }
-    assert_eq!(head_version(), 2);
+    assert_eq!(head_version(), 3);
 
     let vault = Vault::open(&path).expect("a file at rung one opens and climbs");
     assert_eq!(
         count(&vault, "PRAGMA user_version"),
-        2,
+        3,
         "the file reached the head"
     );
     assert_eq!(
@@ -266,7 +268,10 @@ fn a_purged_row_leaves_its_link_behind_as_a_tombstone_and_nothing_gives_it_a_row
         Ok(())
     });
     let error = revived.expect_err("a purge is one way");
-    assert!(error.to_string().contains("never given a row again"), "{error}");
+    assert!(
+        error.to_string().contains("never given a row again"),
+        "{error}"
+    );
     // Several tombstones coexist: NULL is not a value `UNIQUE (entity_id)` compares.
     party(&scratch.vault, "p3");
     link(&scratch.vault, "l4", "contacts", "c4", "p3").expect("a link");
@@ -344,14 +349,18 @@ fn a_links_origin_exists_is_of_its_source_and_cannot_be_deleted_while_named() {
     run("DELETE FROM phone_link WHERE link_id = 'l1'").expect("the link goes");
     run("DELETE FROM phone_origin WHERE origin_id = 'o-contacts'").expect("then the origin");
     // An origin's source and phone origin pair is unique, and its label is never blank.
-    assert!(run(
-        "INSERT INTO phone_origin (origin_id, source, phone_origin, label, created_at)
+    assert!(
+        run(
+            "INSERT INTO phone_origin (origin_id, source, phone_origin, label, created_at)
          VALUES ('dup', 'calendar', 'acct', 'Again', '2026-10-19T09:00:00.000Z')"
-    )
-    .is_err());
-    assert!(run(
-        "INSERT INTO phone_origin (origin_id, source, phone_origin, label, created_at)
+        )
+        .is_err()
+    );
+    assert!(
+        run(
+            "INSERT INTO phone_origin (origin_id, source, phone_origin, label, created_at)
          VALUES ('blank', 'files', 'folder', '  ', '2026-10-19T09:00:00.000Z')"
-    )
-    .is_err());
+        )
+        .is_err()
+    );
 }

@@ -22,15 +22,16 @@
 //!
 //! - what v1 ADDED — the revision graph's four guards (#1020, D-1020-N2), the
 //!   collection kind's guard, the Locker's one-generation index, the chat, the
-//!   widened search indexes and their vocabularies, Money, and rung two's phone link — named in
-//!   `ADDED_OBJECTS`;
+//!   widened search indexes and their vocabularies, Money, rung two's phone link and rung
+//!   three's health pack — named in `ADDED_OBJECTS`;
 //! - what v1 DROPPED — the planes #1029 struck, Tally (#1099), the Locker's
 //!   `retired_at` index and `notifications_notice`, and `sqlite_sequence`, which
 //!   SQLite stopped keeping once the last `AUTOINCREMENT` table went — named in
 //!   `DROPPED_OBJECTS`;
 //! - the tables v1 ALTERED — `core_collection`, which gains its required `kind`,
-//!   `locker_key`, `locker_item` and `locker_item_address`, and the search
-//!   indexes that fold in attribute text — named in `ALTERED_OBJECTS`;
+//!   `locker_key`, `locker_item` and `locker_item_address`, the search
+//!   indexes that fold in attribute text, and `core_activity`, which rung three
+//!   made mutable — named in `ALTERED_OBJECTS`;
 //! - what v1 RENAMED — the command registry, the invocation journal and its four
 //!   siblings, whose v0 names say `agent` (Q-1029-3) — named in `RENAMES`, and undone on the
 //!   founded text before it is compared, so an object that only MENTIONS a
@@ -97,15 +98,18 @@ fn undo_renames(text: &str) -> String {
 /// title and what the member said (R-1097-22); and Money (#1099): six `money_*`
 /// tables with their touch and membership triggers and indexes, the unique index
 /// that lands a statement line once per account, and the three triggers that hold
-/// a Money account to one currency and an imported row to never being edited; and rung two
+/// a Money account to one currency and an imported row to never being edited; rung two
 /// (#1127): `phone_link` and its five triggers (the kind a source implies, a purge that is one way, a detach that is
-/// one way, the touch), and `phone_origin` with its touch trigger (R-1127-9).
+/// one way, the touch), and `phone_origin` with its touch trigger (R-1127-9); and rung three
+/// (#1129): `health_daily` and `health_workout` with their touch triggers, and the two objects
+/// `core_activity` gains as it becomes mutable, its touch trigger and the page index the Workouts
+/// list and the follower walk.
 ///
 /// The corpus is a v0 file and knows nothing of v1's additions, so a founded v1
 /// file legitimately carries exactly these and nothing else. Named here rather
 /// than filtered by prefix: a guard that stopped being created, or an object
 /// arriving from somewhere, both have to show up as a failure.
-const ADDED_OBJECTS: [&str; 97] = [
+const ADDED_OBJECTS: [&str; 103] = [
     "chat_message",
     "chat_message_attachment",
     "chat_message_card",
@@ -116,6 +120,8 @@ const ADDED_OBJECTS: [&str; 97] = [
     "chat_thread_entity_insert",
     "chat_thread_recent_idx",
     "chat_thread_touch_updated_at",
+    "core_activity_started_page_idx",
+    "core_activity_touch_updated_at",
     "core_collection_kind_is_immutable",
     "core_entity_revision_no_self_parent",
     "core_entity_revision_parent_is_immutable",
@@ -171,6 +177,10 @@ const ADDED_OBJECTS: [&str; 97] = [
     "fts_schedule_project_vocab",
     "fts_schedule_task_from_schedule_project_au",
     "fts_schedule_task_vocab",
+    "health_daily",
+    "health_daily_touch_updated_at",
+    "health_workout",
+    "health_workout_touch_updated_at",
     "idx_chat_attachment_asset",
     "idx_chat_attachment_document",
     "idx_chat_attachment_thumb",
@@ -548,11 +558,15 @@ const DROPPED_OBJECTS: [&str; 282] = [
 /// - `schedule_recurrence_exception`: its `target_type` CHECK loses the Tally
 ///   value `tally.recurring_expense`, which no row has carried since #1099
 ///   (2026-10-16); `people_profile` loses the same app's name from a comment.
+/// - `core_activity`: rung three (#1129, R-1129-1) rebuilds it with `updated_at` and
+///   `row_version`, because a followed workout changes. Its four indexes and two entity
+///   triggers are recreated byte for byte, so the table is the only one of them that differs.
 /// - the four `trg_fts_content_text_*` and `trg_fts_representation_*` triggers:
 ///   they re-index notes and documents when a body or a representation arrives,
 ///   and no longer carry the message block, because `fts_social_message` is
 ///   retired (#1097).
-const ALTERED_OBJECTS: [&str; 30] = [
+const ALTERED_OBJECTS: [&str; 31] = [
+    "core_activity",
     "core_collection",
     "core_content_item",
     "fts_core_event",
@@ -843,9 +857,9 @@ fn the_two_pragmas_are_written_and_the_file_is_in_wal() {
     assert_eq!(user_version, head_version());
     // Spelled out rather than left as `head_version()` alone: a rung silently
     // vanishing would still satisfy the line above. The ladder is the baseline
-    // (squashed on 2026-10-15, Q-1029-1) and rung two, the phone link (#1127); the
-    // next schema change makes this 3.
-    assert_eq!(user_version, 2);
+    // (squashed on 2026-10-15, Q-1029-1), rung two, the phone link (#1127), and rung three,
+    // the health pack (#1129); the next schema change makes this 4.
+    assert_eq!(user_version, 3);
     assert_eq!(journal, "wal");
 }
 
