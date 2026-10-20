@@ -125,6 +125,9 @@ message Request {
     // shell's foreground browse hands the core candidates, and the core keeps
     // those that answer as the pinned gateway. See `phone.proto`.
     RefreshDestinationRequest refresh_destination = 33;
+    // WHICH ASSET A LIBRARY ITEM WAS BACKED UP AS (#1127, A20): how an edit made
+    // in place finds the photograph it is an edit of. See `phone.proto`.
+    LibraryAssetsRequest library_assets = 34;
   }
 }
 
@@ -164,6 +167,7 @@ message Response {
     AssistResponse assist = 31;
     MoneyResponse money = 32;
     RefreshDestinationResponse refresh_destination = 33;
+    LibraryAssetsResponse library_assets = 34;
   }
 }
 

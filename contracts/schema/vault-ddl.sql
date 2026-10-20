@@ -2408,6 +2408,37 @@ CREATE TABLE people_profile (
   FOREIGN KEY (profile_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
 
+-- table phone_link on phone_link
+CREATE TABLE phone_link (
+  link_id      TEXT PRIMARY KEY,
+  source       TEXT NOT NULL CHECK (source IN ('contacts', 'calendar', 'files')),
+  phone_id     TEXT NOT NULL CHECK (length(trim(phone_id)) > 0),
+  origin_id    TEXT NOT NULL,
+  entity_id    TEXT REFERENCES core_entity(entity_id) ON DELETE SET NULL,
+  fingerprint  TEXT NOT NULL CHECK (length(fingerprint) > 0),
+  detached_at  TEXT,
+  last_seen_at TEXT NOT NULL,
+  created_at   TEXT NOT NULL,
+  updated_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  row_version  INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
+  UNIQUE (source, phone_id),
+  UNIQUE (entity_id),
+  FOREIGN KEY (origin_id, source) REFERENCES phone_origin (origin_id, source)
+) STRICT;
+
+-- table phone_origin on phone_origin
+CREATE TABLE phone_origin (
+  origin_id    TEXT PRIMARY KEY,
+  source       TEXT NOT NULL CHECK (source IN ('contacts', 'calendar', 'files')),
+  phone_origin TEXT NOT NULL CHECK (length(trim(phone_origin)) > 0),
+  label        TEXT NOT NULL CHECK (length(trim(label)) > 0),
+  created_at   TEXT NOT NULL,
+  updated_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  row_version  INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
+  UNIQUE (source, phone_origin),
+  UNIQUE (origin_id, source)
+) STRICT;
+
 -- table schedule_attendee on schedule_attendee
 CREATE TABLE schedule_attendee (
   attendee_id  TEXT PRIMARY KEY,
@@ -5058,6 +5089,79 @@ BEGIN
                            ELSE NEW.updated_at END,
          row_version = OLD.row_version + 1
    WHERE profile_id = NEW.profile_id;
+END;
+
+-- trigger phone_link_detach_is_one_way on phone_link
+CREATE TRIGGER phone_link_detach_is_one_way
+BEFORE UPDATE OF detached_at ON phone_link
+WHEN OLD.detached_at IS NOT NULL AND NEW.detached_at IS NOT OLD.detached_at
+BEGIN
+  SELECT RAISE(ABORT, 'a detached phone link is never re-attached: phone_link (#1127)');
+END;
+
+-- trigger phone_link_kind_matches_source on phone_link
+CREATE TRIGGER phone_link_kind_matches_source
+BEFORE INSERT ON phone_link
+BEGIN
+  SELECT RAISE(ABORT, 'a phone link points at the kind its source implies: phone_link (#1127)')
+   WHERE NOT EXISTS (
+     SELECT 1 FROM core_entity
+      WHERE entity_id = NEW.entity_id
+        AND entity_type = CASE NEW.source
+                            WHEN 'contacts' THEN 'core.party'
+                            WHEN 'calendar' THEN 'core.event'
+                            WHEN 'files'    THEN 'core.document'
+                          END);
+END;
+
+-- trigger phone_link_kind_matches_source_update on phone_link
+CREATE TRIGGER phone_link_kind_matches_source_update
+BEFORE UPDATE OF source, entity_id ON phone_link
+WHEN NEW.entity_id IS NOT NULL
+BEGIN
+  SELECT RAISE(ABORT, 'a phone link points at the kind its source implies: phone_link (#1127)')
+   WHERE NOT EXISTS (
+     SELECT 1 FROM core_entity
+      WHERE entity_id = NEW.entity_id
+        AND entity_type = CASE NEW.source
+                            WHEN 'contacts' THEN 'core.party'
+                            WHEN 'calendar' THEN 'core.event'
+                            WHEN 'files'    THEN 'core.document'
+                          END);
+END;
+
+-- trigger phone_link_purge_is_one_way on phone_link
+CREATE TRIGGER phone_link_purge_is_one_way
+BEFORE UPDATE OF entity_id ON phone_link
+WHEN OLD.entity_id IS NULL AND NEW.entity_id IS NOT NULL
+BEGIN
+  SELECT RAISE(ABORT, 'a purged phone link is never given a row again: phone_link (#1127)');
+END;
+
+-- trigger phone_link_touch_updated_at on phone_link
+CREATE TRIGGER phone_link_touch_updated_at
+AFTER UPDATE ON phone_link
+WHEN NEW.row_version = OLD.row_version
+BEGIN
+  UPDATE phone_link
+     SET updated_at = CASE WHEN NEW.updated_at = OLD.updated_at
+                           THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+                           ELSE NEW.updated_at END,
+         row_version = OLD.row_version + 1
+   WHERE link_id = NEW.link_id;
+END;
+
+-- trigger phone_origin_touch_updated_at on phone_origin
+CREATE TRIGGER phone_origin_touch_updated_at
+AFTER UPDATE ON phone_origin
+WHEN NEW.row_version = OLD.row_version
+BEGIN
+  UPDATE phone_origin
+     SET updated_at = CASE WHEN NEW.updated_at = OLD.updated_at
+                           THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+                           ELSE NEW.updated_at END,
+         row_version = OLD.row_version + 1
+   WHERE origin_id = NEW.origin_id;
 END;
 
 -- trigger schedule_attendee_entity_delete on schedule_attendee

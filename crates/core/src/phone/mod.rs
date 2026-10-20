@@ -921,6 +921,78 @@ pub fn released(
     Ok((wire::ReleasedResponse { recorded }, assets))
 }
 
+/// The most refs one `library_assets` request may name.
+pub const MAX_LIBRARY_ASSET_REFS: usize = 100;
+
+/// **WHICH ASSET A LIBRARY ITEM WAS BACKED UP AS** (`library_assets`, #1127,
+/// A20). See `LibraryAssetsRequest` for the rule: the item most recently staged
+/// under a ref, and only if a live asset wraps its bytes.
+///
+/// # Errors
+/// [`CoreError::InvalidRequest`] for more refs than
+/// [`MAX_LIBRARY_ASSET_REFS`] or a hash the ledger holds that is not 32 bytes;
+/// the ledger's refusal, or a vault that will not read.
+pub fn library_assets(
+    plane: &Plane,
+    vault: &Vault,
+    request: &wire::LibraryAssetsRequest,
+) -> Result<wire::LibraryAssetsResponse> {
+    if request.os_ref.len() > MAX_LIBRARY_ASSET_REFS {
+        return Err(CoreError::InvalidRequest {
+            detail: format!("a library_assets request names at most {MAX_LIBRARY_ASSET_REFS} refs"),
+        });
+    }
+    let wanted: BTreeSet<&str> = request
+        .os_ref
+        .iter()
+        .map(String::as_str)
+        .filter(|os_ref| !os_ref.is_empty())
+        .collect();
+    if wanted.is_empty() {
+        return Ok(wire::LibraryAssetsResponse::default());
+    }
+    // THE NEWEST ITEM STAGED UNDER EACH REF: a ref an edit re-staged holds two
+    // hashes, and the edit's source is the version before it, which is the
+    // newer of the two at the moment the shell asks (it asks before staging).
+    let mut newest: BTreeMap<&str, centraid_vault::backup::ledger::LocalBytes> = BTreeMap::new();
+    let locals = plane.ledger()?.locals().map_err(plane_error)?;
+    for local in locals {
+        if local.source != LocalSource::Os {
+            continue;
+        }
+        let Some(os_ref) = local
+            .os_ref
+            .as_deref()
+            .and_then(|os_ref| wanted.get(os_ref).copied())
+        else {
+            continue;
+        };
+        let newer = newest.get(os_ref).is_none_or(|held| {
+            (local.verified_ms, local.hash.to_hex()) > (held.verified_ms, held.hash.to_hex())
+        });
+        if newer {
+            newest.insert(os_ref, local);
+        }
+    }
+    let hashes: Vec<String> = newest.values().map(|local| local.hash.to_hex()).collect();
+    let live: BTreeMap<String, String> =
+        centraid_vault::originals::live_assets_for_hashes(vault, &hashes)?
+            .into_iter()
+            .collect();
+    let items = newest
+        .into_iter()
+        .filter_map(|(os_ref, local)| {
+            let asset_id = live.get(&local.hash.to_hex())?;
+            Some(wire::LibraryAsset {
+                os_ref: os_ref.to_owned(),
+                asset_id: asset_id.clone(),
+                content_hash: local.hash.as_bytes().to_vec(),
+            })
+        })
+        .collect();
+    Ok(wire::LibraryAssetsResponse { items })
+}
+
 #[cfg(test)]
 mod asked_tests {
     /// **THE TAP IS HELD FOR EXACTLY AS LONG AS ITS PASS** (#1080, the

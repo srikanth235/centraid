@@ -71,8 +71,9 @@ fn the_registry_carries_every_command_this_build_has() {
         // The 26 of v0's 28-command `people.*` schema that outlived Tally (the two
         // debt commands left with it, #1099) and the whole 4-command `social.*`
         // one (wave 4 lane People), plus `people.purge_person` — the destroy
-        // People's trash needed to meet #1015 D1.
-        ("people.", 27),
+        // People's trash needed to meet #1015 D1 — and `people.edit_important_date` and
+        // `people.delete_important_date`, which a followed contact's birthday needs (#1127).
+        ("people.", 29),
         ("social.", 4),
         // The whole 16-command `schedule.*` schema — events, occurrences,
         // projects, sections and tasks (wave 4 lane Schedule) — plus
@@ -86,6 +87,9 @@ fn the_registry_carries_every_command_this_build_has() {
         // category, name, void and transfer, plans, rules and their history pass,
         // the stated balance and layout, and the member's own categories.
         ("money.", 20),
+        // The phone link's six (#1127): `link`, `touch`, `detach` and `forget`, and the origin's
+        // two, `origin` and `retire_origin` (R-1127-9).
+        ("phone.", 6),
     ];
     let total: usize = by_schema.iter().map(|(_, expected)| *expected).sum();
     assert_eq!(

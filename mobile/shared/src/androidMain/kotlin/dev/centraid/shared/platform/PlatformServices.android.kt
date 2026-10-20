@@ -377,29 +377,45 @@ public class AndroidMediaLibrary(private val context: Context) : MediaLibrary {
      * v0 build wrote (a bare `_ID`, over images only) starts over too: the
      * videos below it were never offered.
      *
+     * **Then the items EDITED IN PLACE since** (#1127, A20): an editor that
+     * overwrites the file keeps the `_ID` and moves `DATE_MODIFIED`, so the key
+     * set never sees it again. Once the keyset has nothing left, the page is
+     * filled with items at or below the keyset's `_ID` whose `DATE_MODIFIED`
+     * is at or past the cursor's mark, oldest change first. The mark starts as the
+     * newest `DATE_MODIFIED` the keyset walk saw, so the first walk offers
+     * at most one item twice (the one that holds the mark). Such an item is
+     * marked [MediaLibrary.Asset.changedInPlace], with its own ref as its
+     * group: the walker asks the core which asset that ref was last backed up
+     * as, and when the bytes differ files them as an edit of it, which the grid
+     * folds the earlier version under. An item merely renamed or re-scanned
+     * has the same bytes, names no source, and the core adopts it by content
+     * (`already_held`).
+     *
      * No `LIMIT` in the sort order — Android 11 refuses the token there — so the
      * walk reads one row past the page to learn whether the roll is exhausted.
      */
     override suspend fun page(afterCursor: String?, limit: Int): MediaLibrary.Page {
         val version = storeVersion()
-        val after = afterOf(afterCursor, version)
+        val position = positionOf(afterCursor, version)
         val projection = arrayOf(
             MediaStore.Files.FileColumns._ID,
             MediaStore.Files.FileColumns.MEDIA_TYPE,
             MediaStore.MediaColumns.SIZE,
             DATE_TAKEN,
             MediaStore.MediaColumns.DATE_ADDED,
+            MediaStore.MediaColumns.DATE_MODIFIED,
         )
-        val selection = "${MediaStore.Files.FileColumns.MEDIA_TYPE} IN " +
-            "(${MediaStore.Files.FileColumns.MEDIA_TYPE_IMAGE}, ${MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO})" +
-            " AND ${MediaStore.Files.FileColumns._ID} > ?"
+        val typed = "${MediaStore.Files.FileColumns.MEDIA_TYPE} IN " +
+            "(${MediaStore.Files.FileColumns.MEDIA_TYPE_IMAGE}, ${MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO})"
         val assets = mutableListOf<MediaLibrary.Asset>()
         var more = false
+        var keysetId = position.id
+        var newest = position.modified
         context.contentResolver.query(
             MediaStore.Files.getContentUri(EXTERNAL),
             projection,
-            selection,
-            arrayOf(after.toString()),
+            "$typed AND ${MediaStore.Files.FileColumns._ID} > ?",
+            arrayOf(position.id.toString()),
             "${MediaStore.Files.FileColumns._ID} ASC",
         )?.use { cursor ->
             while (cursor.moveToNext()) {
@@ -407,33 +423,69 @@ public class AndroidMediaLibrary(private val context: Context) : MediaLibrary {
                     more = true
                     break
                 }
-                val id = cursor.getLong(0)
-                val video = cursor.getInt(1) == MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO
-                // DATE_TAKEN is the camera's; an item that never had one (a
-                // screenshot on some builds) falls back to when it was added.
-                val taken = cursor.getLong(3).takeIf { it > 0L } ?: (cursor.getLong(4) * 1_000L)
-                val ref = (if (video) VIDEO_REF else IMAGE_REF) + id
-                assets += MediaLibrary.Asset(
-                    localId = ref,
-                    // NO DIGEST HERE (#1025 S4): the core names the bytes.
-                    bytes = cursor.getLong(2),
-                    capturedAtIso = java.time.Instant.ofEpochMilli(taken).toString(),
-                    // THE SHUTTER'S ZONE, from the file's own EXIF (D-1025-S7-77).
-                    capturedUtcOffsetMinutes = if (video) 0 else captureOffsetOf(id),
-                    kind = if (video) MediaLibrary.Kind.VIDEO else MediaLibrary.Kind.PHOTO,
-                    // NO INFERRED GROUPING for motion photos, RAW or burst
-                    // members (`NATIVE_V0.md:11-19`): they pass through as
-                    // original bytes, and a guess here would invent a
-                    // relationship the owner never made.
-                    captureGroupId = null,
-                    after = cursorOf(version, id),
-                )
+                keysetId = cursor.getLong(0)
+                newest = maxOf(newest, cursor.getLong(5))
+                assets += assetOf(cursor, after = cursorOf(version, keysetId, newest, 0L))
+            }
+        }
+        if (!more && assets.size < limit) {
+            // THE KEYSET IS EXHAUSTED: the rest of the page is what changed under it.
+            context.contentResolver.query(
+                MediaStore.Files.getContentUri(EXTERNAL),
+                projection,
+                "$typed AND ${MediaStore.Files.FileColumns._ID} <= ? AND " +
+                    "(${MediaStore.MediaColumns.DATE_MODIFIED} > ? OR " +
+                    "(${MediaStore.MediaColumns.DATE_MODIFIED} = ? AND ${MediaStore.Files.FileColumns._ID} > ?))",
+                arrayOf(keysetId.toString(), newest.toString(), newest.toString(), position.modifiedId.toString()),
+                "${MediaStore.MediaColumns.DATE_MODIFIED} ASC, ${MediaStore.Files.FileColumns._ID} ASC",
+            )?.use { cursor ->
+                while (cursor.moveToNext()) {
+                    if (assets.size == limit) {
+                        more = true
+                        break
+                    }
+                    assets += assetOf(
+                        cursor,
+                        after = cursorOf(version, keysetId, cursor.getLong(5), cursor.getLong(0)),
+                        changed = true,
+                    )
+                }
             }
         }
         return MediaLibrary.Page(
             assets = assets,
-            nextCursor = assets.lastOrNull()?.after ?: afterCursor,
+            nextCursor = assets.lastOrNull()?.after ?: cursorOf(version, keysetId, newest, position.modifiedId),
             exhausted = !more,
+        )
+    }
+
+    /** One `MediaStore` row as this interface describes it. Columns as [page] projects them. */
+    private fun assetOf(cursor: android.database.Cursor, after: String, changed: Boolean = false): MediaLibrary.Asset {
+        val id = cursor.getLong(0)
+        val video = cursor.getInt(1) == MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO
+        // DATE_TAKEN is the camera's; an item that never had one (a
+        // screenshot on some builds) falls back to when it was added.
+        val taken = cursor.getLong(3).takeIf { it > 0L } ?: (cursor.getLong(4) * 1_000L)
+        val ref = (if (video) VIDEO_REF else IMAGE_REF) + id
+        return MediaLibrary.Asset(
+            localId = ref,
+            // NO DIGEST HERE (#1025 S4): the core names the bytes.
+            bytes = cursor.getLong(2),
+            capturedAtIso = java.time.Instant.ofEpochMilli(taken).toString(),
+            // THE SHUTTER'S ZONE, from the file's own EXIF (D-1025-S7-77).
+            capturedUtcOffsetMinutes = if (video) 0 else captureOffsetOf(id),
+            kind = if (video) MediaLibrary.Kind.VIDEO else MediaLibrary.Kind.PHOTO,
+            // NO INFERRED GROUPING for motion photos, RAW or burst
+            // members (`NATIVE_V0.md:11-19`): they pass through as
+            // original bytes, and a guess here would invent a
+            // relationship the owner never made. **An item the library reports
+            // changed in place is the one exception**: its own ref is its
+            // group, because it is the same file at two versions, which is not
+            // a guess — and the group is the mark the grid folds an edit on
+            // (`PhotoFold`).
+            captureGroupId = if (changed) ref else null,
+            after = after,
+            changedInPlace = changed,
         )
     }
 
@@ -588,13 +640,26 @@ public class AndroidMediaLibrary(private val context: Context) : MediaLibrary {
     private fun storeVersion(): String =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) MediaStore.getVersion(context) else ""
 
-    private fun cursorOf(version: String, id: Long): String = "$VERSIONED|$version|$id"
+    /**
+     * `v|<version>|<_ID>|<DATE_MODIFIED mark>|<_ID of the last changed item>`.
+     * The last two are absent on a cursor written before #1127; they read as
+     * zero, which offers an already-walked roll's changes from the beginning
+     * once — idempotent, because the core adopts what it holds.
+     */
+    private fun cursorOf(version: String, id: Long, modified: Long, modifiedId: Long): String =
+        "$VERSIONED|$version|$id|$modified|$modifiedId"
 
-    /** The `_ID` to walk after: 0 for no cursor, a v0 cursor, or one from another MediaStore version. */
-    private fun afterOf(cursor: String?, version: String): Long {
-        val parts = cursor?.takeIf { it.startsWith("$VERSIONED|") }?.split('|') ?: return 0L
-        if (parts.size != 3 || parts[1] != version) return 0L
-        return parts[2].toLongOrNull() ?: 0L
+    private class Position(val id: Long, val modified: Long, val modifiedId: Long)
+
+    /** Where to walk after: nothing for no cursor, a v0 cursor, or one from another MediaStore version. */
+    private fun positionOf(cursor: String?, version: String): Position {
+        val parts = cursor?.takeIf { it.startsWith("$VERSIONED|") }?.split('|') ?: return Position(0L, 0L, 0L)
+        if (parts.size < 3 || parts[1] != version) return Position(0L, 0L, 0L)
+        return Position(
+            id = parts[2].toLongOrNull() ?: 0L,
+            modified = parts.getOrNull(3)?.toLongOrNull() ?: 0L,
+            modifiedId = parts.getOrNull(4)?.toLongOrNull() ?: 0L,
+        )
     }
 
     /**
