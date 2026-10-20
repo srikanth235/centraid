@@ -216,7 +216,7 @@ struct AppBand: View {
                         label: tab.label,
                         selected: tab.selected,
                         rule: rule,
-                        identifier: "\(app)-band-\(tab.label.lowercased())",
+                        identifier: "\(app)-band-\(tab.key.isEmpty ? tab.label.lowercased() : tab.key)",
                         onPress: { onSelect(tab.event) }
                     )
                 }

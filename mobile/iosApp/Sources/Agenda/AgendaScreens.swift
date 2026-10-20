@@ -19,12 +19,25 @@ import CentraidShared
 /// pushes the detail, `NewEventRequested` the editor on the home's anchor day,
 /// and the detail's `ActionPicked{edit}` the editor on that occurrence — each
 /// answered by `AgendaRouting.route` (Android pushes the same page).
+///
+/// **AGENDA HOSTS THE TASK PAGES (#1128, R-1128-5).** `TaskPages.register`
+/// registers the `tasks.*` pages beside Agenda's own, `screenPrefixes` makes
+/// `AppRegistry.present` resolve them here, and every task intent — a task or
+/// project picked, a Tasks place in More, Catch up — goes through the same
+/// `AgendaRouting.route`.
+///
+/// **THE HOME OPENS ONCE PER PUSH.** Its route carries `OncePerPush`, so a pop
+/// back from a task, an event or the editor does not re-send `Opened` and put
+/// the member back on Day (or empty the quick add Notes' "Send to Agenda"
+/// seeded). A new push — a tile tap, a deep link — is a new nonce.
 enum AgendaScreens: AppScreens {
     static let appID = AppIds.shared.AGENDA
     /// The machines' `SCREEN_ID`s.
     static let home = AgendaHomeMachine.shared.SCREEN_ID
     static let detail = AgendaEventMachine.shared.SCREEN_ID
     static let editor = AgendaEditorMachine.shared.SCREEN_ID
+
+    static var screenPrefixes: [String] { [appID + ".", TaskPages.screenPrefix] }
 
     @MainActor
     static func register(into shell: ShellModel) {
@@ -52,13 +65,23 @@ enum AgendaScreens: AppScreens {
             observe: { onState in editorBridge.observe { onState($0.data) } },
             departed: { editorBridge.departed() }
         ))
+        TaskPages.register(into: shell)
+        let memory = OpenMemory()
         shell.route(
             home,
-            // EVERY OPEN LANDS ON TODAY, on Day — `AgendaBridge.open`'s event,
-            // sent as bytes because a Kotlin enum default does not cross into
-            // Swift.
-            open: { [weak shell] _ in
-                shell?.send(screen: home, event: AgendaEvents.make { $0.opened = .with { $0.destination = .day } })
+            // A PUSH LANDS WHERE ITS `Opened` SAYS (a destination, and words for
+            // To-do's quick add), once; a route with no event lands on Day.
+            open: { [weak shell] parameter in
+                guard let shell else { return }
+                var opened = parameter
+                if let once = OncePerPush(decoding: parameter) {
+                    guard memory.firstOpen(home, once.nonce) else { return }
+                    opened = once.opened
+                }
+                if opened.isEmpty {
+                    opened = AgendaEvents.make { $0.opened = .with { $0.destination = .day } }
+                }
+                shell.send(screen: home, event: opened)
             },
             view: { shell, _ in
                 AnyView(AgendaHomeView(
@@ -108,4 +131,10 @@ enum AgendaScreens: AppScreens {
     }
 
     static func tileRoute(_ tile: Centraid_Screen_V1_HomeTile) -> ShellModel.Route? { .home(of: appID) }
+
+    /// EVERY HOME PUSH IS ONCE PER PUSH (see the type's note); every other
+    /// screen — Agenda's and the task pages' — is pushed on its event as it stands.
+    static func present(_ screen: String, _ opened: Data) -> ShellModel.Route {
+        screen == home ? .screen(home, OncePerPush(opened: opened).encoded) : .screen(screen, opened)
+    }
 }

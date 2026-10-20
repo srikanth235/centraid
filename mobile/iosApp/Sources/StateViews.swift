@@ -35,6 +35,10 @@ struct BandView: Hashable {
     /// Whether this is the destination on screen — read off the state, never
     /// written down by the view that draws it.
     var selected: Bool = false
+    /// The destination's key, when the band's flows tap it by that and not by
+    /// its label (`agenda-band-todo` for a "To-do" label); empty falls back to
+    /// the lowercased label.
+    var key: String = ""
 }
 
 // `PhotoCellView` IS GONE, AND WITH IT THE SECOND DERIVATION (#1029, photos

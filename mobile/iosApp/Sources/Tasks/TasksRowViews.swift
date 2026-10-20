@@ -18,6 +18,13 @@ struct TasksRowView: View {
     /// row that can file.
     var fileVerb: String = ""
     var onFile: ((String) -> Void)? = nil
+    /// The row sits inside a section that already holds the page margin (a day
+    /// of Agenda's Day or Schedule, #1128): it keeps the event rows' 10pt lead
+    /// and draws neither a margin nor the hairline, so a task lines up with the
+    /// events around it.
+    var embedded: Bool = false
+    /// The ids a flow taps: `<prefix>-<task id>` on the row, `<prefix>-check-<task id>` on its box.
+    var identifierPrefix: String = "tasks-row"
 
     @Environment(\.colorScheme) private var scheme
 
@@ -25,7 +32,7 @@ struct TasksRowView: View {
         VStack(spacing: 0) {
             line
             ForEach(row.children, id: \.taskID) { child in
-                TasksRowView(row: child, onCheck: onCheck, onPick: onPick)
+                TasksRowView(row: child, onCheck: onCheck, onPick: onPick, embedded: embedded, identifierPrefix: identifierPrefix)
                     .padding(.leading, 28)
             }
         }
@@ -42,7 +49,12 @@ struct TasksRowView: View {
         HStack(alignment: .top, spacing: Self.boxOverhang) {
             // A TASK IS A CIRCLE, a subtask a box: the shape the starter row
             // ("Tap the circle to finish me") and every task list teach.
-            KitCheckBox(state: row.check.kitState, label: row.checkLabel, round: !row.subtask) { onCheck(row.taskID) }
+            KitCheckBox(
+                state: row.check.kitState,
+                label: row.checkLabel,
+                identifier: "\(identifierPrefix)-check-\(row.taskID)",
+                round: !row.subtask
+            ) { onCheck(row.taskID) }
                 .disabled(!row.canCheck)
                 .padding(-Self.boxOverhang)
                 .padding(.top, 1)
@@ -92,13 +104,13 @@ struct TasksRowView: View {
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(row.accessibilityLabel.isEmpty ? row.title : row.accessibilityLabel)
             .accessibilityAddTraits(.isButton)
-            .accessibilityIdentifier("tasks-row-\(row.taskID)")
+            .accessibilityIdentifier("\(identifierPrefix)-\(row.taskID)")
             .contextMenu {
                 if row.canFile, let onFile, !fileVerb.isEmpty {
                     Button { onFile(row.taskID) } label: {
                         Label(fileVerb, systemImage: "folder")
                     }
-                    .accessibilityIdentifier("tasks-row-file-\(row.taskID)")
+                    .accessibilityIdentifier("\(identifierPrefix)-file-\(row.taskID)")
                 }
             }
             .accessibilityActions {
@@ -107,7 +119,8 @@ struct TasksRowView: View {
                 }
             }
         }
-        .padding(.horizontal, CentraidGeometry.pageMargin)
+        .padding(.leading, embedded ? 10 : CentraidGeometry.pageMargin)
+        .padding(.trailing, embedded ? 0 : CentraidGeometry.pageMargin)
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse, alignment: .leading)
         .overlay(alignment: .leading) {
@@ -120,7 +133,9 @@ struct TasksRowView: View {
             }
         }
         // THE RULE STARTS WHERE THE WORDS DO, as the phone's own lists draw it.
-        .overlay(alignment: .bottom) { KitHairline(inset: CentraidGeometry.pageMargin + 20 + Self.boxOverhang) }
+        .overlay(alignment: .bottom) {
+            if !embedded { KitHairline(inset: CentraidGeometry.pageMargin + 20 + Self.boxOverhang) }
+        }
     }
 }
 
@@ -133,6 +148,7 @@ struct TasksGroupView: View {
     let onPick: (String) -> Void
     var fileVerb: String = ""
     var onFile: ((String) -> Void)? = nil
+    var identifierPrefix: String = "tasks-row"
 
     @Environment(\.colorScheme) private var scheme
 
@@ -153,7 +169,7 @@ struct TasksGroupView: View {
                 onVerb: group.verbKey.isEmpty ? nil : { onVerb(group.verbKey) }
             )
             ForEach(group.rows, id: \.taskID) { row in
-                TasksRowView(row: row, onCheck: onCheck, onPick: onPick, fileVerb: fileVerb, onFile: onFile)
+                TasksRowView(row: row, onCheck: onCheck, onPick: onPick, fileVerb: fileVerb, onFile: onFile, identifierPrefix: identifierPrefix)
             }
         }
     }
@@ -161,7 +177,7 @@ struct TasksGroupView: View {
 
 /// THE QUICK-ADD BAR: a bare title whose placeholder says where it lands, and
 /// Add once there are words. Drawn while the machine holds it `drawn` — on
-/// Tasks' home, only after the header's Plus.
+/// Agenda's To-do, only after the header's Plus.
 struct TasksQuickAddBar: View {
     let quickAdd: Centraid_Screen_V1_TasksQuickAdd
     let placeholder: String
@@ -172,6 +188,9 @@ struct TasksQuickAddBar: View {
     /// uses it to put its band away while the keyboard is up, so the bar sits
     /// on the keyboard and not under it.
     var onFocusChange: ((Bool) -> Void)? = nil
+    /// The field's id and its Add verb's (`agenda-quick-add` on To-do).
+    var fieldIdentifier: String = "tasks-quick-add-field"
+    var verbIdentifier: String = "tasks-quick-add-verb"
 
     @Environment(\.colorScheme) private var scheme
 
@@ -192,11 +211,11 @@ struct TasksQuickAddBar: View {
                 .centraidType("body")
                 .submitLabel(.done)
                 .accessibilityLabel(prompt)
-                .accessibilityIdentifier("tasks-quick-add-field")
+                .accessibilityIdentifier(fieldIdentifier)
                 // ADD ONLY ONCE THERE ARE WORDS: a greyed verb read as a second
                 // placeholder.
                 if quickAdd.canSubmit {
-                    KitLink(label: verb, identifier: "tasks-quick-add-verb", action: onSubmit)
+                    KitLink(label: verb, identifier: verbIdentifier, action: onSubmit)
                 }
             }
             .frame(minHeight: CentraidGeometry.targetMinCoarse)
@@ -230,18 +249,6 @@ struct TasksCountLine: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, CentraidGeometry.pageMargin)
             .padding(.top, 4)
-        }
-    }
-}
-
-extension Centraid_Screen_V1_TasksHomeState {
-    var readContent: ScreenContent<Centraid_Screen_V1_TasksHomeData> {
-        switch content {
-        case let .loading(loading)?: return .loading(loading.firstLoad)
-        case let .failure(failure)?: return .failed(failure)
-        case let .denied(denied)?: return .denied(denied)
-        case let .data(data)?: return .data(data)
-        case nil: return .loading(true)
         }
     }
 }
