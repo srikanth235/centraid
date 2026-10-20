@@ -255,6 +255,10 @@ struct AppBand: View {
         .padding(.top, BandMetrics.topGap)
         .padding(.bottom, BandMetrics.floorPadding)
         .sensoryFeedback(.selection, trigger: lit)
+        // `.contain`, as on Home's band: without it the container's identifier
+        // REPLACES each tab's own, and every tab reads `<app>-band` (#1128's
+        // flows found it).
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("\(app)-band")
     }
 }
