@@ -688,7 +688,7 @@ class HomeMachineSpec : StringSpec({
         quiet.action shouldBe ""
         quiet.destination shouldBe HomeStatus.Destination.DESTINATION_NONE
         strandedStatus(StrandedWrite("tasks", "schedule.edit_task", "That task is gone.")).copy shouldBe
-            "Tasks: That task is gone."
+            "Agenda: That task is gone."
         val told = HomeMachine.reduce(named("v1", "Demo vault"), HomeEvent(status = HomeEvent.StatusChanged(status = quiet))).state
         told.data_.shouldNotBeNull().status shouldBe quiet
     }

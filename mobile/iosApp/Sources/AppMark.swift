@@ -1,5 +1,7 @@
 import SwiftUI
 
+import CentraidShared
+
 /// The Binding Layer app mark (#1020, wave A; v0 `kit/components/AppMark.tsx`).
 ///
 /// A quiet hue wash over the page with the single-tone shared icon stroke on it.
@@ -18,7 +20,9 @@ struct AppMark: View {
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        if let app = CentraidCatalog.byID[appID], let mark = scheme.centraidMarks[appID] {
+        // A domain draws the mark of the app it opens in (`tasks` is Agenda's, #1128).
+        let opensIn = AppHomes.shared.appOf(appId: appID)
+        if let app = CentraidCatalog.byID[opensIn], let mark = scheme.centraidMarks[opensIn] {
             ZStack {
                 RoundedRectangle(cornerRadius: size * CentraidGeometry.iconChipRadiusRatio)
                     .fill(mark.chipBackground)

@@ -60,6 +60,10 @@ enum ChatRouting {
     /// to the core's.
     static var scopable: [String] { ChatMachine.shared.SCOPABLE_APPS }
 
+    /// The scopes the composer's menu offers: the machine's `SCOPE_MENU` (the
+    /// scopable apps a member can open, #1128), not every scope a thread may hold.
+    static var scopeMenu: [String] { ChatMachine.shared.SCOPE_MENU }
+
     private static var chatTitle: String { ChatCopy.shared.TITLE }
 }
 
