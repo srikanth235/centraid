@@ -37,6 +37,11 @@ internal class ScriptedCore {
         val response = when {
             request.page != null -> {
                 val query = request.page!!.query!!
+                // The vault refuses a page whose order columns are not in its projection (api.rs), and a scripted core must too.
+                val order = query.order!!
+                require(order.sort_column in query.select && order.pk_column in query.select) {
+                    "`${query.name}`: the order columns ${order.sort_column}/${order.pk_column} are not in the projection ${query.select}"
+                }
                 val rows = pages(query.name, query.bind.map { it.text.orEmpty() })
                 Response(page = Page(rows = rows.map { row -> Row(values = row.map { Value(text = it) }) }))
             }

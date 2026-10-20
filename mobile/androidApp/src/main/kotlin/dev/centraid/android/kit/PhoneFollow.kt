@@ -119,22 +119,22 @@ internal class AndroidPhoneFollow(context: Context) {
     }
 
     private val contactsReader = object : ContactsReader {
-        override fun read(done: (ContactsRead?) -> Unit) {
-            if (!granted(Manifest.permission.READ_CONTACTS)) return done(null)
+        override fun read(deliver: (ContactsRead?) -> Unit) {
+            if (!granted(Manifest.permission.READ_CONTACTS)) return deliver(null)
             io.launch {
                 val read = readPhoneContacts(context)
-                done(ContactsRead(read.contacts, read.origins, read.complete))
+                deliver(ContactsRead(read.contacts, read.origins, read.complete))
             }
         }
     }
 
     private val calendarReader = object : CalendarReader {
-        override fun read(done: (CalendarRead?) -> Unit) {
-            if (!granted(Manifest.permission.READ_CALENDAR)) return done(null)
+        override fun read(deliver: (CalendarRead?) -> Unit) {
+            if (!granted(Manifest.permission.READ_CALENDAR)) return deliver(null)
             io.launch {
                 val now = System.currentTimeMillis()
                 val read = readPhoneEvents(context, now)
-                done(CalendarRead(read.events, read.origins, read.complete, TimeZone.getDefault().id, now))
+                deliver(CalendarRead(read.events, read.origins, read.complete, TimeZone.getDefault().id, now))
             }
         }
     }

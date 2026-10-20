@@ -22,11 +22,11 @@ public data class CalendarRead(
 /** THE SHELL'S CALENDAR READER: iOS EventKit, Android `CalendarContract`. */
 public interface CalendarReader {
     /**
-     * Read the calendars over [CalendarImport]'s window and hand them to [done], off the main
+     * Read the calendars over [CalendarImport]'s window and hand them to [deliver], off the main
      * thread; **null when calendar access is not already granted**: a following pass never asks
      * the OS for permission.
      */
-    public fun read(done: (CalendarRead?) -> Unit)
+    public fun read(deliver: (CalendarRead?) -> Unit)
 }
 
 /** CALENDAR → AGENDA, FOLLOWED (#1127): the shell hands this to the follower with its [reader]. */

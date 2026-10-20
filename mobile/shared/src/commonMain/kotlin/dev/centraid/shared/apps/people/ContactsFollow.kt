@@ -19,10 +19,10 @@ public data class ContactsRead(
 /** THE SHELL'S ADDRESS-BOOK READER: iOS `CNContactStore`, Android `ContactsContract`. */
 public interface ContactsReader {
     /**
-     * Read the address book and hand it to [done], off the main thread; **null when contacts
+     * Read the address book and hand it to [deliver], off the main thread; **null when contacts
      * access is not already granted**: a following pass never asks the OS for permission.
      */
-    public fun read(done: (ContactsRead?) -> Unit)
+    public fun read(deliver: (ContactsRead?) -> Unit)
 }
 
 /** CONTACTS → PEOPLE, FOLLOWED (#1127): the shell hands this to the follower with its [reader]. */

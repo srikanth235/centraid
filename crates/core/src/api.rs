@@ -1012,6 +1012,133 @@ mod tests {
         let _ = std::fs::remove_dir_all(&scratch);
     }
 
+    /// THE TWO READS A FOLLOWED CONTACT AND A FOLLOWED SERIES ADD (#1127, lane C): a person's
+    /// birthday dates and a series' occurrence exceptions page through the door with the exact
+    /// predicates the stores write, including the `lower(...) LIKE` and the event-scoped bind.
+    #[test]
+    fn a_followed_birthday_and_a_followed_exception_page_through_the_door() {
+        let scratch = centraid_ontology::golden::scratch_dir();
+        std::fs::create_dir_all(&scratch).expect("made");
+        let vault = Vault::create(scratch.join("v.db")).expect("a vault");
+        vault.found("T", "O").expect("founded");
+        let registry = Registry::with_system_commands().expect("the registry");
+        let owner = centraid_vault::Principal::owner("test-device");
+        let run = |name: &str, input: serde_json::Value| {
+            let outcome = vault
+                .execute(&registry, &owner, &Command::new(name, input))
+                .expect("the command answers");
+            assert_eq!(
+                outcome.status,
+                CommandStatus::Executed,
+                "{name}: {:?}",
+                outcome.reason
+            );
+            outcome.output
+        };
+        let text = |value: &str| wire::Value {
+            kind: Some(wire::value::Kind::Text(value.to_owned())),
+        };
+        let cell = |value: &wire::Value| match &value.kind {
+            Some(wire::value::Kind::Text(text)) => text.clone(),
+            other => panic!("a text cell, got {other:?}"),
+        };
+
+        // A BIRTHDAY, AND A DATE THAT IS NOT ONE.
+        let person = run(
+            "people.add_person",
+            serde_json::json!({ "display_name": "Ada", "cadence_days": 30 }),
+        )["party_id"]
+            .as_str()
+            .expect("a party id")
+            .to_owned();
+        run(
+            "people.add_important_date",
+            serde_json::json!({ "party_id": person, "label": "Birthday", "month_day": "12-10" }),
+        );
+        run(
+            "people.add_important_date",
+            serde_json::json!({ "party_id": person, "label": "Anniversary", "month_day": "03-02" }),
+        );
+        let mut dates = query(&["date_id", "party_id", "month_day"], "date_id", "date_id");
+        dates.from = "people_important_date".to_owned();
+        dates.r#where =
+            Some("party_id = ? AND lower(label) LIKE '%birthday%' AND deleted_at IS NULL".to_owned());
+        dates.bind = vec![text(&person)];
+        let birthdays = page(
+            &vault,
+            &wire::PageRequest {
+                query: Some(dates),
+                limit: 10,
+                after: None,
+            },
+        )
+        .expect("the birthdays page");
+        assert_eq!(birthdays.rows.len(), 1, "only the birthday");
+        assert_eq!(cell(&birthdays.rows[0].values[2]), "12-10");
+
+        // A SERIES' EXCEPTION, scoped to the event.
+        let calendar: String = vault
+            .read(|connection| {
+                Ok(connection.query_row(
+                    "SELECT calendar_id FROM schedule_calendar LIMIT 1",
+                    [],
+                    |row| row.get(0),
+                )?)
+            })
+            .expect("a calendar");
+        let event = run(
+            "schedule.propose_event",
+            serde_json::json!({
+                "summary": "Standup", "calendar_id": calendar, "tz": "UTC",
+                "dtstart": "2026-10-05T09:00:00", "dtend": "2026-10-05T09:30:00",
+                "rrule": "FREQ=WEEKLY;BYDAY=MO",
+            }),
+        )["event_id"]
+            .as_str()
+            .expect("an event id")
+            .to_owned();
+        run(
+            "schedule.edit_event_occurrence",
+            serde_json::json!({
+                "event_id": event, "original_start_local": "2026-10-19T09:00:00",
+                "scope": "occurrence", "action": "skip",
+            }),
+        );
+        let mut exceptions = query(
+            &["exception_id", "target_id", "original_start_local", "scope", "action", "override_json"],
+            "exception_id",
+            "exception_id",
+        );
+        exceptions.from = "schedule_recurrence_exception".to_owned();
+        exceptions.r#where = Some("target_type = 'core.event' AND target_id = ?".to_owned());
+        exceptions.bind = vec![text(&event)];
+        let held = page(
+            &vault,
+            &wire::PageRequest {
+                query: Some(exceptions.clone()),
+                limit: 10,
+                after: None,
+            },
+        )
+        .expect("the exceptions page");
+        assert_eq!(held.rows.len(), 1);
+        assert_eq!(cell(&held.rows[0].values[2]), "2026-10-19T09:00:00");
+        assert_eq!(cell(&held.rows[0].values[4]), "skip");
+        // Another event's exceptions are not in it.
+        exceptions.bind = vec![text("another-event")];
+        let none = page(
+            &vault,
+            &wire::PageRequest {
+                query: Some(exceptions),
+                limit: 10,
+                after: None,
+            },
+        )
+        .expect("an event with none pages empty");
+        assert!(none.rows.is_empty());
+        let _ = std::fs::remove_dir_all(&scratch);
+    }
+
     #[test]
     fn a_query_with_no_order_is_refused() {
         let scratch = centraid_ontology::golden::scratch_dir();
