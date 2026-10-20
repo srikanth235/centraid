@@ -70,7 +70,9 @@ class PhoneSnapshotSpec : StringSpec({
     "a read with no contacts and no accounts says to add an account (R-1127-8)" {
         val none = ContactsImport.Outcome(added = 0, refused = 0, addAccount = true)
         ContactsImport.sentence(none) shouldBe PeopleCopy.IMPORT_CONTACTS_ADD_ACCOUNT
-        PeopleCopy.IMPORT_CONTACTS_ADD_ACCOUNT.contains("Accounts") shouldBe true
+        // Both shells show it, so it names the phone's Settings and no one platform's path in it.
+        PeopleCopy.IMPORT_CONTACTS_ADD_ACCOUNT.contains("Settings") shouldBe true
+        PeopleCopy.IMPORT_CONTACTS_ADD_ACCOUNT.contains("→") shouldBe false
         ContactsImport.sentence(ContactsImport.Outcome(added = 3, refused = 0)) shouldBe "3 people imported"
         ContactsImport.sentence(ContactsImport.Outcome(added = 0, refused = 0)) shouldBe PeopleCopy.IMPORT_CONTACTS_NONE
     }
@@ -143,6 +145,7 @@ class PhoneSnapshotSpec : StringSpec({
     "a read with no events and no calendars says to add an account (R-1127-8)" {
         CalendarImport.sentence(CalendarImport.Outcome(added = 0, refused = 0, addAccount = true)) shouldBe
             AgendaCopy.IMPORT_CALENDAR_ADD_ACCOUNT
+        AgendaCopy.IMPORT_CALENDAR_ADD_ACCOUNT.contains("→") shouldBe false
         CalendarImport.sentence(CalendarImport.Outcome(added = 1, refused = 0)) shouldBe AgendaCopy.IMPORT_CALENDAR_ONE
         CalendarImport.sync(FakeStore(PhoneSource.CALENDAR), emptyList(), emptyList(), complete = true, now = now).addAccount shouldBe true
         CalendarImport.sync(
