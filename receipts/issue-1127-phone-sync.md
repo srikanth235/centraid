@@ -33,6 +33,12 @@ JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home cargo x
 
 Outcome: pass. The first run at the close failed one spec, `PhoneSnapshotSpec`, which pinned the old add-your-account wording ("Accounts", iOS's Settings path); the spec now holds the new property (names the phone's Settings, no platform path), and the rerun passed.
 
+```sh
+cargo xtask rules
+```
+
+Outcome: pass, after a fix. The first run (by #1129, on this branch) found raw SQL in `crates/core/src/api.rs`'s two #1127 page tests, which `sql-confinement` keeps under `crates/{ontology,vault,search}` and `crates/apps/kit`. The head-hash subquery test moved to `crates/vault/src/page.rs` (`a_followed_folders_head_hash_subquery_answers`), and the core tests read the calendar and the document's revision through the page door instead of SQL.
+
 iOS: lane F built and launched the app on its own simulator from its branch, which is this umbrella less the add-your-account wording and the lane F core test; lane C built it before that.
 
 **Checked by hand, by the lanes, each on its own simulator:**

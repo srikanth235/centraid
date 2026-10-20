@@ -1078,15 +1078,21 @@ mod tests {
         assert_eq!(cell(&birthdays.rows[0].values[2]), "12-10");
 
         // A SERIES' EXCEPTION, scoped to the event.
-        let calendar: String = vault
-            .read(|connection| {
-                Ok(connection.query_row(
-                    "SELECT calendar_id FROM schedule_calendar LIMIT 1",
-                    [],
-                    |row| row.get(0),
-                )?)
-            })
-            .expect("a calendar");
+        let mut calendars = query(&["calendar_id"], "calendar_id", "calendar_id");
+        calendars.from = "schedule_calendar".to_owned();
+        let calendar = cell(
+            &page(
+                &vault,
+                &wire::PageRequest {
+                    query: Some(calendars),
+                    limit: 1,
+                    after: None,
+                },
+            )
+            .expect("the calendars page")
+            .rows[0]
+                .values[0],
+        );
         let event = run(
             "schedule.propose_event",
             serde_json::json!({
@@ -1147,10 +1153,10 @@ mod tests {
         let _ = std::fs::remove_dir_all(&scratch);
     }
 
-    /// THE TWO READS AND THE ONE REVISION A FOLLOWED FOLDER MAKES (#1127, lane F): `FilesStore`
-    /// pages documents and the content hash of each one's head (a subquery on `core_document`,
-    /// which the door's authorizer must let through), and a changed file is
-    /// `core.replace_document_content`: the same document, a new head, a second revision.
+    /// THE DOCUMENT READ AND THE ONE REVISION A FOLLOWED FOLDER MAKES (#1127, lane F): `FilesStore`
+    /// pages documents through the door, and a changed file is `core.replace_document_content`:
+    /// the same document, a new head, a new revision. Its head-hash subquery is held in
+    /// `crates/vault/src/page.rs` (`a_followed_folders_head_hash_subquery_answers`).
     #[test]
     fn a_followed_folder_reads_its_documents_and_a_change_is_a_revision() {
         let scratch = centraid_ontology::golden::scratch_dir();
@@ -1191,10 +1197,17 @@ mod tests {
         let notes = add("notes.txt", "data:text/plain,one");
         let other = add("other.txt", "data:text/plain,elsewhere");
 
-        // THE STORE'S TWO QUERIES, as `FilesStore.read` writes them, for one document.
+        // THE STORE'S DOCUMENT READ, as `FilesStore.read` writes it, for one document. Its
+        // head-hash subquery is held in `crates/vault/src/page.rs`, where SQL may be written.
         let documents_of = |only: &str| {
             let mut documents = query(
-                &["document_id", "title", "current_content_id", "deleted_at"],
+                &[
+                    "document_id",
+                    "title",
+                    "current_content_id",
+                    "deleted_at",
+                    "current_revision_id",
+                ],
                 "document_id",
                 "document_id",
             );
@@ -1211,74 +1224,37 @@ mod tests {
             )
             .expect("the documents page")
         };
-        let hash_of = |only: &str| {
-            let mut hashes = query(&["content_id", "content_hash"], "content_id", "content_id");
-            hashes.from = "core_content_item".to_owned();
-            hashes.r#where = Some(
-                "content_id IN (SELECT current_content_id FROM core_document WHERE document_id = ?)"
-                    .to_owned(),
-            );
-            hashes.bind = vec![text(only)];
-            let page = page(
-                &vault,
-                &wire::PageRequest {
-                    query: Some(hashes),
-                    limit: 10,
-                    after: None,
-                },
-            )
-            .expect("the hashes page");
-            assert_eq!(page.rows.len(), 1, "one head per document");
-            cell(&page.rows[0].values[1])
-        };
         let before = documents_of(&notes);
         assert_eq!(before.rows.len(), 1);
         assert_eq!(cell(&before.rows[0].values[1]), "notes.txt");
         assert_eq!(cell(&before.rows[0].values[3]), "", "live");
-        let first = hash_of(&notes);
-        assert_eq!(first.len(), 64);
+        let (head, revision) = (
+            cell(&before.rows[0].values[2]),
+            cell(&before.rows[0].values[4]),
+        );
+        assert!(!head.is_empty() && !revision.is_empty());
         assert_ne!(
-            first,
-            hash_of(&other),
+            cell(&documents_of(&other).rows[0].values[2]),
+            head,
             "another document's head is not this one's"
         );
 
-        // THE UNBOUND FORM: every document's head.
-        let mut all = query(&["content_id", "content_hash"], "content_id", "content_id");
-        all.from = "core_content_item".to_owned();
-        all.r#where =
-            Some("content_id IN (SELECT current_content_id FROM core_document)".to_owned());
-        let heads = page(
-            &vault,
-            &wire::PageRequest {
-                query: Some(all),
-                limit: 10,
-                after: None,
-            },
-        )
-        .expect("every head pages");
-        assert!(heads.rows.len() >= 2, "both documents' heads");
-
-        // A CHANGED FILE: the same document, new bytes, a second revision.
+        // A CHANGED FILE: the same document, a new head, a new revision of it.
         run(
             "core.replace_document_content",
             serde_json::json!({ "document_id": notes, "data_uri": "data:text/plain,two" }),
         );
         let after = documents_of(&notes);
         assert_eq!(after.rows.len(), 1, "still one document");
-        assert_ne!(hash_of(&notes), first, "the head moved to the new bytes");
-        let revisions: i64 = vault
-            .read(|connection| {
-                Ok(connection.query_row(
-                    "SELECT COUNT(*) FROM core_entity_revision WHERE entity_id = ?1 AND operation = 'revise'",
-                    [&notes],
-                    |row| row.get(0),
-                )?)
-            })
-            .expect("revisions counted");
-        assert_eq!(
-            revisions, 2,
-            "the change is a revision of the same document"
+        assert_ne!(
+            cell(&after.rows[0].values[2]),
+            head,
+            "the head moved to the new bytes"
+        );
+        assert_ne!(
+            cell(&after.rows[0].values[4]),
+            revision,
+            "the change is a new revision of the same document"
         );
         let _ = std::fs::remove_dir_all(&scratch);
     }
