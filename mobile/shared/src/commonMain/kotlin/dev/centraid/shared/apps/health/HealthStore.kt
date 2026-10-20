@@ -27,16 +27,25 @@ import kotlin.uuid.Uuid
  * - **add** mints the activity id here, before the first attempt, so a re-offer lands the same
  *   row, and writes it with `health.follow_workout`.
  * - **update** is the same command on the same id: it writes what moved and nothing else.
- * - **trash** is `health.purge_workout`. An activity has no trash, so the phone's delete purges;
- *   the link becomes a tombstone and the engine forgets it.
+ * - **trash KEEPS THE WORKOUT** (R-1129-14). An activity has no trash to give it thirty days in,
+ *   and the vault is the workout's backup, so a workout gone from the phone stays: the engine
+ *   forgets its link, and the member sees it in Health as before, now an ordinary workout that no
+ *   longer follows the store (a later change on the phone does not reach it). The pass counts it
+ *   as `trashed`. Only the member deletes one: from Health, or by answering "Delete them" to the
+ *   store-gone question, which is the one place [purge] is set and `health.purge_workout` runs.
+ * - **refindLost** is on (R-1129-15): a workout lost under one phone id and met under another in
+ *   the same pass (a new phone's own ids) is the same row, re-linked, never a second one.
  * - **coverage** is the window the pass read ([since]): a workout that started before it is not
  *   one the phone deleted.
  */
 internal class HealthStore(
     core: CentraidCore,
     private val since: Long? = null,
+    private val purge: Boolean = false,
     private val mintId: () -> String = ::mint,
 ) : CorePhoneStore(core, PhoneSource.HEALTH) {
+    override val refindLost: Boolean get() = true
+
     override suspend fun rows(): Map<String, VaultRow>? {
         val rows = linkedMapOf<String, VaultRow>()
         var after: HealthWorkoutsCursor? = null
@@ -66,7 +75,7 @@ internal class HealthStore(
     }
 
     override suspend fun trash(entityId: String): Boolean =
-        command(PURGE, "{\"activity_id\":${q(entityId)}}") != null
+        !purge || command(PURGE, "{\"activity_id\":${q(entityId)}}") != null
 
     override suspend fun coverage(): (VaultRow) -> Boolean {
         val from = since ?: return { true }

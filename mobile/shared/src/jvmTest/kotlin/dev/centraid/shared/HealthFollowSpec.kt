@@ -23,6 +23,7 @@ import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.collections.shouldHaveSize
+import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.shouldBe
 
 /**
@@ -236,15 +237,79 @@ class HealthFollowSpec : StringSpec({
         bench.writes shouldContainExactly listOf("health.follow_workout", "phone.link")
     }
 
-    "a workout deleted on the phone, inside the window, is purged and its link forgotten" {
+    "a workout deleted on the phone, inside the window, is kept and its link forgotten (R-1129-14)" {
         val bench = HealthBench()
         bench.pass(read(run(0), run(1)))
+        val kept = bench.links.values.first { it.phoneId == "local:run-0" }.entity
         bench.script.commands.clear()
         val outcome = bench.pass(read(run(1)))
         outcome.trashed shouldBe 1
-        bench.workouts.values.map { it.phone_kind } shouldHaveSize 1
+        bench.workouts.keys shouldContain kept!!
+        bench.workouts.size shouldBe 2
         bench.links.values.map { it.phoneId } shouldContainExactly listOf("local:run-1")
-        bench.writes shouldContainExactly listOf("health.purge_workout", "phone.forget")
+        bench.writes shouldContainExactly listOf("phone.forget")
+        // An ordinary workout now: the next pass leaves it be.
+        bench.script.commands.clear()
+        bench.pass(read(run(1)))
+        bench.writes.shouldBeEmpty()
+    }
+
+    "a new phone: every old id gone, the same workouts under new ids, are re-linked and nothing is added, held or purged" {
+        val bench = HealthBench()
+        val old = (0 until 6).map { run(it, id = "old-$it") }
+        bench.pass(read(*old.toTypedArray()))
+        val rows = bench.workouts.keys.toSet()
+        bench.script.commands.clear()
+        // The restored vault still holds the old phone's links; the new phone names the same workouts its own way,
+        // and one of them came back with a corrected distance.
+        val fresh = (0 until 6).map { run(it, id = "new-$it", distance = if (it == 2) 5_310.0 else 5_200.0) }
+        val outcome = bench.pass(read(*fresh.toTypedArray()))
+        outcome.gone.shouldBeEmpty()
+        outcome.added shouldBe 6
+        outcome.trashed shouldBe 0
+        bench.workouts.keys shouldBe rows
+        bench.links.values.map { it.phoneId }.sorted() shouldContainExactly (0 until 6).map { "local:new-$it" }
+        bench.writes.count { it == "health.follow_workout" } shouldBe 1
+        bench.writes.count { it == "phone.forget" } shouldBe 6
+        bench.writes.count { it == "phone.link" } shouldBe 6
+        bench.writes.none { it == "health.purge_workout" } shouldBe true
+        // And the next pass is quiet.
+        bench.script.commands.clear()
+        bench.pass(read(*fresh.toTypedArray()))
+        bench.writes.shouldBeEmpty()
+    }
+
+    "re-finding is Health's alone: a contacts store with the same shape adds and holds as #1127 does" {
+        fun shape(refind: Boolean): dev.centraid.shared.sync.phone.PhonePlan {
+            val names = (0 until 6).map { "Person $it" }
+            val origin = dev.centraid.shared.sync.phone.StoredOrigin("o1", "container:a", "A")
+            val rows = names.mapIndexed { i, n ->
+                "r$i" to dev.centraid.shared.sync.phone.VaultRow("r$i", dev.centraid.shared.sync.phone.PhoneFields.of { text("name", n) }, matchKey = n.lowercase())
+            }.toMap()
+            val links = names.indices.map { i ->
+                dev.centraid.shared.sync.phone.StoredLink(
+                    "l$i", "local:old-$i", "o1", "r$i",
+                    dev.centraid.shared.sync.phone.PhoneFingerprint.pack("p", dev.centraid.shared.sync.phone.PhoneFields.EMPTY.digest(), rows.getValue("r$i").fields.digest()),
+                    detached = false, lastSeenAt = "2026-10-19T00:00:00.000Z",
+                )
+            }
+            val snapshot = dev.centraid.shared.sync.phone.PhoneSnapshot(
+                PhoneSource.CONTACTS, complete = true, readAt = readAt,
+                origins = listOf(dev.centraid.shared.sync.phone.PhoneOriginRef("container:a", "A")),
+                records = names.mapIndexed { i, n ->
+                    dev.centraid.shared.sync.phone.PhoneRecord("local:new-$i", "container:a", dev.centraid.shared.sync.phone.PhoneFields.of { text("name", n) }, matchKey = n.lowercase())
+                },
+            )
+            return dev.centraid.shared.sync.phone.PhoneSyncPlanner.plan(snapshot, listOf(origin), links, rows, refindLost = refind)
+        }
+        val contacts = shape(refind = false)
+        contacts.actions.count { it is dev.centraid.shared.sync.phone.PhoneAction.Add } shouldBe 6
+        contacts.actions.none { it is dev.centraid.shared.sync.phone.PhoneAction.Refind } shouldBe true
+        contacts.gone.single().reason shouldBe GoneReason.VANISHED
+        val opted = shape(refind = true)
+        opted.actions.count { it is dev.centraid.shared.sync.phone.PhoneAction.Refind } shouldBe 6
+        opted.actions.none { it is dev.centraid.shared.sync.phone.PhoneAction.Add } shouldBe true
+        opted.gone.shouldBeEmpty()
     }
 
     "a workout that started before the window read is not one the phone deleted" {

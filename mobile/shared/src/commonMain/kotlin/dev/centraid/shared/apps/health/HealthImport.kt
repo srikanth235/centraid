@@ -31,7 +31,9 @@ import dev.centraid.shared.sync.rfc3339FromEpochMillis
  *
  * Its phone id is `local:<store id>`: the store's id means something on this phone only
  * (R-1127-10), so a new phone re-finds a workout by its [matchKey] — the vault's kind key and the
- * start to the minute, UTC — and adopts it rather than adding a second one. One origin per store:
+ * start to the minute, UTC — and relinks it rather than adding a second one: in the same pass the
+ * old phone's link is lost (R-1129-15), or later, as an unlinked row, by adoption. A workout gone
+ * from the phone is kept, unlinked (R-1129-14). One origin per store:
  * `store:apple-health` labelled "Apple Health", `store:health-connect` labelled "Health Connect".
  *
  * ## The fingerprint
@@ -43,6 +45,9 @@ import dev.centraid.shared.sync.rfc3339FromEpochMillis
  * the same fact and never reads as an edit. Instants are both spelled as the vault spells them.
  * Health has no field a member edits in Centraid, so a workout detaches only if its row moves
  * under the engine.
+ *
+ * `Outcome.added` counts rows added, adopted and re-found; `trashed` counts workouts the phone no
+ * longer has, which stay in Health unlinked.
  */
 public object HealthImport {
     /** What one pass did. [read] is false when the vault could not be read and nothing was done. */
@@ -232,7 +237,7 @@ public object HealthImport {
         val report = PhoneSync.run(HealthStore(core, window.workoutsSince), snapshot(read, window, readAt))
         return Outcome(
             days = days,
-            added = report.added + report.adopted,
+            added = report.added + report.adopted + report.refound,
             updated = report.updated,
             trashed = report.trashed,
             refused = refused + report.refused.size,
@@ -248,9 +253,12 @@ public object HealthImport {
         return run(core, read, window, rfc3339Millis(clock))
     }
 
-    /** The member's answer to the store's workouts held (R-1127-9): [GoneChoice.KEEP] is the default; the other deletes. */
+    /**
+     * The member's answer to the store's workouts held (R-1127-9): [GoneChoice.KEEP] is the default;
+     * the other is the member's own "Delete them", the one answer that purges (R-1129-14).
+     */
     public suspend fun resolveGone(core: CentraidCore, originId: String, choice: GoneChoice, seenBefore: String? = null): Outcome {
-        val report = PhoneSync.resolveGone(HealthStore(core), originId, choice, seenBefore)
+        val report = PhoneSync.resolveGone(HealthStore(core, purge = true), originId, choice, seenBefore)
         return Outcome(trashed = report.trashed, refused = report.refused.size, read = report.read)
     }
 

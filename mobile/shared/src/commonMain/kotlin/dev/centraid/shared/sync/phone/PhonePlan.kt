@@ -29,6 +29,13 @@ public sealed interface PhoneAction {
     /** Only the record's satellite changed (a series' skipped or moved occurrence): follow it, leave the row's fields, refresh the link. */
     public data class Satellite(public val link: StoredLink, public val record: PhoneRecord) : PhoneAction
 
+    /**
+     * A link lost and a new record of the same row met in ONE pass (R-1129-15): the old link is
+     * forgotten and the row is linked to the new phone id, the record's fields written onto it first
+     * when they moved. Only for a store that opts in ([PhoneStore.refindLost]).
+     */
+    public data class Refind(public val link: StoredLink, public val record: PhoneRecord) : PhoneAction
+
     /** Nothing changed but the record's origin (it moved calendar or account): re-point the link. */
     public data class Rehome(public val link: StoredLink, public val record: PhoneRecord) : PhoneAction
 
@@ -84,6 +91,7 @@ public object PhoneSyncPlanner {
         rows: Map<String, VaultRow>,
         score: PhoneScore = byTiebreakOverlap,
         covers: (VaultRow) -> Boolean = { true },
+        refindLost: Boolean = false,
     ): PhonePlan {
         val invalid = mutableListOf<String>()
         val records = linkedMapOf<String, PhoneRecord>()
@@ -115,7 +123,17 @@ public object PhoneSyncPlanner {
         val stale = mutableListOf<String>()
         val seen = mutableSetOf<String>()
 
+        // A LOST ROW RE-FOUND UNDER A NEW ID (R-1129-15), before anything is added or counted lost:
+        // a new phone's own ids for the same workouts are the same rows, not new ones, and not a vanish.
+        val refound = if (refindLost && snapshot.complete) refind(records, linkByPhone, rows, storedByPhone, storedById, present, covers) else emptyMap()
+        for ((record, link) in refound) {
+            actions += PhoneAction.Refind(link, record)
+            seen += link.phoneId
+        }
+        val refoundIds = refound.keys.map { it.phoneId }.toSet()
+
         for (record in records.values) {
+            if (record.phoneId in refoundIds) continue
             val link = linkByPhone[record.phoneId]
             if (link == null) {
                 val adopted = adoptable(record, candidates, consumed, score)
@@ -192,6 +210,42 @@ public object PhoneSyncPlanner {
         }
         if (stale.isNotEmpty()) actions += PhoneAction.Touch(stale)
         return PhonePlan(actions, left + vanishedGone, invalid)
+    }
+
+    /**
+     * LOST LINKS PAIRED WITH NEW RECORDS OF THE SAME ROW (R-1129-15). A link is lost when its
+     * record is absent from an origin still present on this (complete) read, its row is covered,
+     * live and as the engine left it (an edited row is not re-found: it detaches as before). A
+     * record is new when no link names its phone id. They pair on the row's non-blank match key and
+     * the same origin, one record to one row: rows in match-key order then link id (so the earliest
+     * start goes first), records in the snapshot's order.
+     */
+    private fun refind(
+        records: Map<String, PhoneRecord>,
+        linkByPhone: Map<String, StoredLink>,
+        rows: Map<String, VaultRow>,
+        storedByPhone: Map<String, StoredOrigin>,
+        storedById: Map<String, StoredOrigin>,
+        present: Map<String, String>,
+        covers: (VaultRow) -> Boolean,
+    ): Map<PhoneRecord, StoredLink> {
+        val lost = linkByPhone.values.filter { link ->
+            if (link.phoneId in records || link.detached || link.purged) return@filter false
+            val origin = storedById[link.originId] ?: return@filter false
+            val row = link.entityId?.let { rows[it] } ?: return@filter false
+            val parts = PhoneFingerprint.parts(link.fingerprint)
+            origin.phoneOrigin in present && !row.trashed && covers(row) && row.matchKey.isNotEmpty() &&
+                parts != null && row.fields.digest() == parts.vault
+        }.sortedWith(compareBy({ rows.getValue(it.entityId!!).matchKey }, { it.linkId })).toMutableList()
+        val paired = linkedMapOf<PhoneRecord, StoredLink>()
+        for (record in records.values) {
+            if (lost.isEmpty()) break
+            if (record.matchKey.isEmpty() || record.phoneId in linkByPhone) continue
+            val originId = storedByPhone[record.origin]?.originId ?: continue
+            val at = lost.indexOfFirst { it.originId == originId && rows.getValue(it.entityId!!).matchKey == record.matchKey }
+            if (at >= 0) paired[record] = lost.removeAt(at)
+        }
+        return paired
     }
 
     /**

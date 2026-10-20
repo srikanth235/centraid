@@ -23,6 +23,8 @@ internal class FakeStore(override val source: PhoneSource = PhoneSource.CONTACTS
     var covered: (VaultRow) -> Boolean = { true }
     var unreadable: Boolean = false
     var refuseFollow: Boolean = false
+    var refind: Boolean = false
+    override val refindLost: Boolean get() = refind
     private var next = 0
 
     private fun id(prefix: String) = "$prefix-${++next}"

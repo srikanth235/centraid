@@ -54,6 +54,14 @@ public interface PhoneStore {
     public val score: PhoneScore get() = PhoneSyncPlanner.byTiebreakOverlap
 
     /**
+     * RE-FIND A LOST ROW UNDER A NEW PHONE ID (R-1129-15): when one pass loses a link and meets a new
+     * record whose match key is that row's, the row is relinked rather than added again beside it.
+     * Off unless a source says so: a store whose match key names one thing exactly (a workout's
+     * kind and start minute) opts in; a person's or an event's name does not.
+     */
+    public val refindLost: Boolean get() = false
+
+    /**
      * WHICH ROWS A READ COULD HAVE SEEN. A source that reads a window (Agenda reads a week back
      * and two months on) must not take a row outside it for a record that went: such a row is
      * neither trashed nor forgotten. Everything is covered unless the source says otherwise.
@@ -69,6 +77,8 @@ public data class PhoneReport(
     public val updated: Int = 0,
     public val followed: Int = 0,
     public val rehomed: Int = 0,
+    /** Lost rows re-found under a new phone id (R-1129-15). */
+    public val refound: Int = 0,
     public val detached: Int = 0,
     public val trashed: Int = 0,
     public val forgotten: Int = 0,
@@ -79,7 +89,7 @@ public data class PhoneReport(
     public val gone: List<OriginGone> = emptyList(),
 ) {
     /** Rows written to, not counting sightings. */
-    public val changed: Int get() = added + adopted + updated + followed + rehomed + detached + trashed + forgotten
+    public val changed: Int get() = added + adopted + updated + followed + rehomed + refound + detached + trashed + forgotten
 }
 
 /**
@@ -99,7 +109,7 @@ public object PhoneSync {
         val origins = store.origins() ?: return PhoneReport(read = false)
         val links = store.links() ?: return PhoneReport(read = false)
         val rows = store.rows() ?: return PhoneReport(read = false)
-        val plan = PhoneSyncPlanner.plan(snapshot, origins, links, rows, store.score, store.coverage())
+        val plan = PhoneSyncPlanner.plan(snapshot, origins, links, rows, store.score, store.coverage(), store.refindLost)
         return perform(store, plan.actions, origins, rows, PhoneReport(gone = plan.gone, refused = plan.invalid))
     }
 
@@ -168,6 +178,18 @@ public object PhoneSync {
                         store.follow(entity, action.record) &&
                         link(store, action.record, origin, entity)
                     if (done) report = report.copy(followed = report.followed + 1) else refuse(action.record.phoneId)
+                }
+                is PhoneAction.Refind -> {
+                    val origin = originIds[action.record.origin]
+                    val entity = action.link.entityId
+                    val parts = PhoneFingerprint.parts(action.link.fingerprint)
+                    // Forget the old link first: a row is linked once (`phone_link.entity_id` is unique).
+                    // The record's fields are written only when they moved from what the row was left at.
+                    val done = origin != null && entity != null && store.forget(action.link.linkId) &&
+                        (parts?.phone == action.record.fields.digest() || store.update(entity, action.record)) &&
+                        store.follow(entity, action.record) &&
+                        link(store, action.record, origin, entity)
+                    if (done) report = report.copy(refound = report.refound + 1) else refuse(action.record.phoneId)
                 }
                 is PhoneAction.Rehome -> {
                     val origin = originIds[action.record.origin]
