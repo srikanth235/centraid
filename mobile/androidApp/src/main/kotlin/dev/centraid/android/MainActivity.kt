@@ -25,6 +25,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import dev.centraid.android.kit.LocalShellLine
 import dev.centraid.shared.nav.RowRoutes
+import dev.centraid.android.kit.AndroidHealth
 import dev.centraid.android.kit.AndroidPhoneFollow
 import dev.centraid.android.kit.LocalPhoneImport
 import dev.centraid.android.kit.PhoneFollowDialog
@@ -175,7 +176,13 @@ public class MainActivity : FragmentActivity() {
      * ANDROID FOLLOWS THE PHONE (#1127): the foreground and content-observer triggers and the
      * question an account that left asks. Started in `onStart`, stopped in `onStop`.
      */
-    private val phoneFollow: AndroidPhoneFollow by lazy { AndroidPhoneFollow(this) }
+    private val phoneFollow: AndroidPhoneFollow by lazy { AndroidPhoneFollow(this, health.reader) }
+
+    /**
+     * HEALTH CONNECT (#1129): the reader the follower and Health's Connect share, the member's
+     * chosen types, and the phone's facts Health's screens are stamped with. Read only.
+     */
+    private val health: AndroidHealth by lazy { AndroidHealth(this) }
 
     /** THE BACKUP SCREEN'S SHEET (#1080), over every screen. See `BackupSheets`. */
     private val backupSheet: BackupSheets by lazy { BackupSheets() }
@@ -209,9 +216,14 @@ public class MainActivity : FragmentActivity() {
     // what arriving and leaving do now is the backup's (#1080): `onResume`
     // runs a pass and `onStop` a pass with a snapshot, below.
 
-    /** THE PHONE IS FOLLOWED WHILE THE APP IS IN VIEW (#1127): see [AndroidPhoneFollow]. */
+    /**
+     * THE PHONE IS FOLLOWED WHILE THE APP IS IN VIEW (#1127): see [AndroidPhoneFollow]. Health's
+     * facts are stated first (#1129) — a locale change re-makes the activity, so this is also
+     * where a new measurement system reaches the screens.
+     */
     override fun onStart() {
         super.onStart()
+        health.state()
         phoneFollow.start()
     }
 

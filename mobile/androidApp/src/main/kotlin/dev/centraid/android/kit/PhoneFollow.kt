@@ -24,6 +24,8 @@ import dev.centraid.shared.apps.agenda.CalendarFollow
 import dev.centraid.shared.apps.agenda.CalendarRead
 import dev.centraid.shared.apps.agenda.CalendarReader
 import dev.centraid.shared.apps.docs.FilesFollow
+import dev.centraid.shared.apps.health.HealthFollow
+import dev.centraid.shared.apps.health.HealthReader
 import dev.centraid.shared.apps.people.ContactsFollow
 import dev.centraid.shared.apps.people.ContactsRead
 import dev.centraid.shared.apps.people.ContactsReader
@@ -49,12 +51,15 @@ import java.util.TimeZone
  *   member's Import tap does (R-ONBOARD-4). Docs' folders are read by `AndroidFolderReader`, over
  *   the tree grants the member gave when they picked each folder; triggers for them are the app
  *   coming forward and the picker returning (`requested(PhoneSource.FILES)`), with no watcher.
+ *   Health Connect is read by [health] (`HealthConnectReader`), over the types the member chose
+ *   on Health's Connect page; its triggers are the app coming forward and Connect itself, with no
+ *   watcher (#1129).
  * - **The question.** [question] holds the one the bridge is waiting on; [PhoneFollowDialog]
  *   draws it and [answer] sends the member's choice back.
  *
  * Held by the activity and built on the application context, so it keeps no activity alive.
  */
-internal class AndroidPhoneFollow(context: Context) {
+internal class AndroidPhoneFollow(context: Context, private val health: HealthReader) {
     private val context: Context = context.applicationContext
     private val bridge = PhoneFollowBridge()
     private val io = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -70,7 +75,13 @@ internal class AndroidPhoneFollow(context: Context) {
 
     /** The foreground vault's session is open: followed from now on, and followed once at once. */
     fun attach(session: HomeSession) {
-        bridge.attach(session, listOf(ContactsFollow(contactsReader), CalendarFollow(calendarReader), FilesFollow(AndroidFolderReader(context)))) { question = it }
+        val sources = listOf(
+            ContactsFollow(contactsReader),
+            CalendarFollow(calendarReader),
+            FilesFollow(AndroidFolderReader(context)),
+            HealthFollow(health),
+        )
+        bridge.attach(session, sources) { question = it }
         attached = true
         if (started) requestAll()
     }
@@ -115,6 +126,7 @@ internal class AndroidPhoneFollow(context: Context) {
         bridge.requested(PhoneSource.CONTACTS)
         bridge.requested(PhoneSource.CALENDAR)
         bridge.requested(PhoneSource.FILES)
+        bridge.requested(PhoneSource.HEALTH)
     }
 
     private fun observer(source: PhoneSource): ContentObserver = object : ContentObserver(main) {

@@ -16,7 +16,15 @@
   pairing QR fingerprinted (#1080 ruling 1), and the player reads local files,
   so the flag costs nothing and closes the old-device default.
 -->
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- HEALTH CONNECT'S CLIENT SAYS minSdk 26; THE APP STAYS AT 24 (#1129).
+         The floor is an owner setting, so it does not move for one library:
+         the library is admitted below its floor here, and nothing touches a
+         class of it below API 26 or while Health Connect is not available
+         (`kit/HealthConnectReader.kt`, `HealthConnectAccess`). -->
+    <uses-sdk tools:overrideLibrary="androidx.health.connect.client" />
 
     <!-- Photos, for the camera-roll backup only. The grid reads the VAULT and
          needs none of these. -->
@@ -58,6 +66,24 @@
          read once and written into the member's vault as their own events;
          nothing is synced back. -->
     <uses-permission android:name="android.permission.READ_CALENDAR" />
+    <!-- Health, READ ONLY (#1129, R-1129-7): Health Connect's daily totals
+         and workouts, asked for when the member taps Connect on Health's
+         Connect page and for exactly the types chosen there, never at launch
+         (`screens/health/HealthConnectAct.kt`). No WRITE_ permission is ever
+         declared: nothing is written back (`HealthConnectReadOnlySpec`). The
+         last three are a workout's figures; READ_HEALTH_DATA_HISTORY lets the
+         first read reach the year it keeps, not only the 30 days before the
+         grant. -->
+    <uses-permission android:name="android.permission.health.READ_STEPS" />
+    <uses-permission android:name="android.permission.health.READ_ACTIVE_CALORIES_BURNED" />
+    <uses-permission android:name="android.permission.health.READ_EXERCISE" />
+    <uses-permission android:name="android.permission.health.READ_SLEEP" />
+    <uses-permission android:name="android.permission.health.READ_RESTING_HEART_RATE" />
+    <uses-permission android:name="android.permission.health.READ_WEIGHT" />
+    <uses-permission android:name="android.permission.health.READ_DISTANCE" />
+    <uses-permission android:name="android.permission.health.READ_HEART_RATE" />
+    <uses-permission android:name="android.permission.health.READ_ELEVATION_GAINED" />
+    <uses-permission android:name="android.permission.health.READ_HEALTH_DATA_HISTORY" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- "BACK UP NOW" AND A BACKLOG (#1080, the shells; `backup/BackupNow.kt`).
@@ -70,6 +96,21 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- WHAT HEALTH ASKS THE PACKAGE MANAGER ABOUT (#1129): Health Connect
+         itself (Android 9 to 13, where it is an app), and the apps that write
+         to it — each declares one of the two rationale intents below — so a
+         workout says which app recorded it by that app's name. -->
+    <queries>
+        <package android:name="com.google.android.apps.healthdata" />
+        <intent>
+            <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW_PERMISSION_USAGE" />
+            <category android:name="android.intent.category.HEALTH_PERMISSIONS" />
+        </intent>
+    </queries>
 
     <application
         android:name=".CentraidApplication"
@@ -89,6 +130,31 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- "WHAT HEALTH MAY READ" FOR HEALTH CONNECT (#1129). Health Connect
+             shows an app's permissions only when it declares where its
+             rationale lives: the activity's own action on Android 13 and
+             below, and the alias's VIEW_PERMISSION_USAGE in the
+             HEALTH_PERMISSIONS category, guarded by the system's own
+             permission, on 14 and up. Both open Health's own words
+             (`HealthRationaleActivity`); neither reads or writes anything. -->
+        <activity
+            android:name="dev.centraid.android.screens.health.HealthRationaleActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" />
+            </intent-filter>
+        </activity>
+        <activity-alias
+            android:name="dev.centraid.android.screens.health.HealthPermissionUsage"
+            android:exported="true"
+            android:permission="android.permission.START_VIEW_PERMISSION_USAGE"
+            android:targetActivity="dev.centraid.android.screens.health.HealthRationaleActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW_PERMISSION_USAGE" />
+                <category android:name="android.intent.category.HEALTH_PERMISSIONS" />
+            </intent-filter>
+        </activity-alias>
 
         <!-- THE TWO WAYS "BACK UP NOW" KEEPS THE PROCESS ALIVE (#1080). Neither
              is exported: the job is bound only by the system's job scheduler,
