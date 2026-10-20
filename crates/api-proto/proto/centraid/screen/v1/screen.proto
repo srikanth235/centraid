@@ -6965,16 +6965,19 @@ message PeopleEditorEvent {
 // --- Tasks ---
 // ---------------------------------------------------------------------------
 //
-// Tasks on the phone (#1029 app port): the home place (Today, Upcoming, Inbox,
-// Projects; More is a sheet and search a field), one list parameterised by
-// view (Anytime, All, Logbook, Reminders), one project, the task detail, Catch
-// up, and the kit's trash (`TrashListState`, `app_id = "tasks"`). Every screen
-// reads through the core's `tasks.*` app queries (`core/v1/tasks.proto`).
+// Tasks on the phone (#1029 app port, #1128): the pages Agenda pushes — one
+// list parameterised by view (Anytime, All, Logbook, Reminders), one project,
+// the task detail, Catch up, and the kit's trash (`TrashListState`,
+// `app_id = "tasks"`) — and the shared task shapes Agenda's home draws on Day
+// and To-do (`TasksRow`, `TasksRowGroup`, `TasksNotice`, `TasksQuickAdd`,
+// `TasksChoice`, `TasksChrome`, `TasksProjectGroup`). The task home place is
+// Agenda's To-do (`AgendaTodo`, R-1128-1). Every screen reads through the
+// core's `tasks.*` app queries (`core/v1/tasks.proto`).
 //
 // VIEWS DECIDE NOTHING. Every label, sentence, accessibility label, empty
 // choice, tone flag and enabled flag below is computed in `apps/tasks`. The
 // core's typed answers never cross — they stay on the Kotlin side beside
-// these messages (`TasksHome`, `TasksList`, …), for `AgendaHomeState`'s
+// these messages (`TasksList`, `TasksProject`, …), for `AgendaHomeState`'s
 // reason: this file cannot import `centraid.core.v1`.
 
 // A task's box.
@@ -7040,15 +7043,6 @@ message TasksFact {
   string detail = 2;
 }
 
-message TasksBandTab {
-  // `today`, `upcoming`, `inbox`, `projects`, `more` — what `BandPicked` sends.
-  string key = 1;
-  string label = 2;
-  // A `design/native-catalog.json` icon key.
-  string icon_key = 3;
-  bool current = 4;
-}
-
 // One row of a choice sheet: a filing target, a More row, a field choice.
 message TasksChoice {
   // What the choice event sends back.
@@ -7087,7 +7081,7 @@ message TasksChrome {
   // The band's home capsule.
   string home = 20;
   string show_more = 21;
-  // A pushed page's back control: the app it was pushed from, "Tasks".
+  // A pushed page's back control: the app it was pushed from, "Agenda".
   string back = 22;
   // The verbs beside the detail's subtask and tag entries.
   string add_subtask_verb = 23;
@@ -7115,7 +7109,7 @@ message TasksQuickAdd {
   // "Add to Inbox" / "Add to Garden · Beds".
   string lands_label = 3;
   // False where nothing can be added (denied, loading the first page). On
-  // Tasks' home it governs the header's Plus; the bar itself waits for `drawn`.
+  // To-do it governs the header's Plus; the bar itself waits for `drawn`.
   bool shown = 4;
   // The field takes the keyboard when drawn: the Plus opened it, or it was
   // opened with words already in it (Notes' "Send to Tasks").
@@ -7124,226 +7118,18 @@ message TasksQuickAdd {
   // screen reader says for it, "Add task". A tap opens the bar on the
   // keyboard (`QuickAddOpened`). Empty on a pushed page.
   string add_label = 6;
-  // The bar is drawn. On Tasks' home only after the Plus (or Notes' "Send
-  // to Tasks") opened it, until the keyboard leaves an empty field
+  // The bar is drawn. On Agenda's To-do only after the Plus (or Notes' "Send
+  // to Agenda") opened it, until the keyboard leaves an empty field
   // (`QuickAddClosed`); a pushed page, which has no Plus, keeps it open.
   bool drawn = 7;
 }
 
-// ---------------------------------------------------------------------------
-// tasks.home — Today · Upcoming · Inbox · Projects, More a sheet
-// ---------------------------------------------------------------------------
-
-message TasksHomeState {
-  SeatState seat = 1;
-  // Law 2: a parameter. More is a sheet and search a field, so neither is here.
-  Destination destination = 2;
-  SearchField search = 3;
-  oneof content {
-    Loading loading = 4;
-    ReadFailure failure = 5;
-    // The vault would not let Tasks read: no band, no quick add.
-    Denied denied = 6;
-    TasksHomeData data = 7;
-  }
-  Sheet sheet = 8;
-  // The band in order, computed. Empty while denied.
-  repeated TasksBandTab band = 9;
-  TasksChrome chrome = 10;
-  StatusLine status = 11;
-  TasksQuickAdd quick_add = 12;
-  // SHEET_FILE: the task being filed, and where it can go.
-  string filing_task_id = 13;
-  repeated TasksChoice file_choices = 14;
-  // SHEET_MORE's rows: Anytime, All, Logbook, Reminders, Catch up, Trash,
-  // What Tasks may read. `MoreRowPicked` sends the key. Never Search: the
-  // search bar under the title is the one way in (R-CHROME-2).
-  repeated TasksChoice more_rows = 15;
-  // SHEET_NEW_PROJECT's name field.
-  string new_project_name = 16;
-  bool new_project_can_submit = 17;
-
-  enum Destination {
-    DESTINATION_UNSPECIFIED = 0;
-    DESTINATION_TODAY = 1;
-    DESTINATION_UPCOMING = 2;
-    DESTINATION_INBOX = 3;
-    DESTINATION_PROJECTS = 4;
-  }
-
-  enum Sheet {
-    SHEET_UNSPECIFIED = 0;
-    SHEET_NONE = 1;
-    SHEET_MORE = 2;
-    // "What Tasks may read" — `TasksChrome.reads_facts`.
-    SHEET_READS = 3;
-    SHEET_FILE = 4;
-    SHEET_NEW_PROJECT = 5;
-  }
-}
-
-message TasksHomeData {
-  // `YYYY-MM-DD`, the core's.
-  string today = 1;
-  // Today, Upcoming, Inbox, and search hits (one group).
-  repeated TasksRowGroup groups = 2;
-  // Projects: one group per area, rows as the kit's `ListRow`.
-  repeated TasksProjectGroup projects = 3;
-  // The empty sentence when nothing is drawn; an empty headline draws none.
-  // `EmptyActed` performs `empty.action_label`.
-  EmptyState empty = 4;
-  // The absence notice on Today: "You were away 16 days · 34 tasks came due".
-  optional TasksNotice notice = 5;
-  // "7 tasks", "3 projects", "4 hits".
-  string count_label = 6;
-  // "500 tasks · more not shown"; empty when whole.
-  string window_label = 7;
-  // The rows are search hits.
-  bool searching = 8;  // "Show more" is live: the window can widen (`NextPageRequested`).
-  bool can_show_more = 9;
-}
-
+// One area's projects on To-do (`AgendaTodo.projects`).
 message TasksProjectGroup {
   string key = 1;
   // An area's name, or "Projects" for those in none.
   string title = 2;
   repeated ListRow rows = 3;
-}
-
-message TasksHomeEvent {
-  oneof kind {
-    Opened opened = 1;
-    Refreshed refreshed = 2;
-    BandPicked band = 3;
-    SheetOpened sheet_opened = 4;
-    SheetClosed sheet_closed = 5;
-    MoreRowPicked more_row = 6;
-    SearchOpened search_opened = 7;
-    SearchTermChanged search_term = 8;
-    SearchClosed search_closed = 9;
-    RowChecked row_checked = 10;
-    FileRequested file_requested = 11;
-    FileChosen file_chosen = 12;
-    StatusActed status_acted = 13;
-    QuickAddChanged quick_add_changed = 14;
-    QuickAddSubmitted quick_add_submitted = 15;
-    NewProjectNameChanged new_project_name = 16;
-    NewProjectSubmitted new_project_submitted = 17;
-    EmptyActed empty_acted = 18;
-    ReadRefused refused = 19;
-    RowsChanged rows_changed = 20;
-    SeatChanged seat_changed = 21;
-    WriteSettled write_settled = 22;
-    // INTENTS: nothing changes here; the shell routes them.
-    RowPicked row_picked = 23;
-    ProjectPicked project_picked = 24;
-    GroupVerb group_verb = 25;
-    NoticeActed notice_acted = 26;
-    NextPageRequested next_page = 27;
-    QuickAddOpened quick_add_opened = 28;
-    QuickAddClosed quick_add_closed = 29;
-  }
-
-  // Lands on `destination` (Today when unspecified), search closed.
-  // `quick_add_title` opens the quick add with those words in it, focused
-  // (Notes' "Send to Tasks"); empty is an empty bar.
-  message Opened {
-    TasksHomeState.Destination destination = 1;
-    string quick_add_title = 2;
-  }
-
-  message Refreshed {}
-
-  // A band tab, by `TasksBandTab.key`.
-  message BandPicked {
-    string key = 1;
-  }
-
-  message SheetOpened {
-    TasksHomeState.Sheet sheet = 1;
-  }
-
-  message SheetClosed {}
-
-  // A More row, by `TasksChoice.key`. `anytime`, `all`, `logbook`,
-  // `reminders`, `catch_up` and `trash` are intents the shell routes; `reads`
-  // opens the facts sheet.
-  message MoreRowPicked {
-    string key = 1;
-  }
-
-  message SearchOpened {}
-
-  message SearchTermChanged {
-    string term = 1;
-  }
-
-  message SearchClosed {}
-
-  message RowChecked {
-    string task_id = 1;
-  }
-
-  message FileRequested {
-    string task_id = 1;
-  }
-
-  // A `file_choices` key.
-  message FileChosen {
-    string key = 1;
-  }
-
-  message StatusActed {}
-
-  message QuickAddChanged {
-    string title = 1;
-  }
-
-  message QuickAddSubmitted {}
-
-  // The header's Plus: the bar opens on the keyboard.
-  message QuickAddOpened {}
-
-  // The keyboard left the bar. It closes only when its field is empty, so
-  // typed words are never thrown away.
-  message QuickAddClosed {}
-
-  message NewProjectNameChanged {
-    string name = 1;
-  }
-
-  message NewProjectSubmitted {}
-
-  message EmptyActed {}
-
-  message ReadRefused {
-    ReadFailure failure = 1;
-  }
-
-  message RowsChanged {
-    string table = 1;
-  }
-
-  message SeatChanged {
-    SeatState seat = 1;
-  }
-
-  message RowPicked {
-    string task_id = 1;
-  }
-
-  message ProjectPicked {
-    string project_id = 1;
-  }
-
-  message GroupVerb {
-    string key = 1;
-  }
-
-  message NoticeActed {}
-
-  // "Show more" under a window that is not everything open.
-  message NextPageRequested {}
 }
 
 // ---------------------------------------------------------------------------

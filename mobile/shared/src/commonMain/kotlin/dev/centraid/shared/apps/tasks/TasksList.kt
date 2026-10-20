@@ -36,7 +36,7 @@ public data class TasksList(
     val ops: TaskOps = TaskOps(),
     val reading: Boolean = false,
     val readQueued: Boolean = false,
-    val limit: Int = TasksHomeMachine.PAGE,
+    val limit: Int = TasksRows.PAGE,
 )
 
 public sealed interface TasksListInput {
@@ -57,7 +57,7 @@ public sealed interface TasksListInput {
 public object TasksListMachine : ScreenMachine<TasksList, TasksListInput> {
     public const val SCREEN_ID: String = ScreenIds.TASKS_LIST
 
-    public val TABLES: Set<String> = TasksHomeMachine.TABLES
+    public val TABLES: Set<String> = TasksRows.TABLES
 
     private val ANYTIME = TasksListState.View.VIEW_ANYTIME
     private val ALL = TasksListState.View.VIEW_ALL
@@ -78,7 +78,7 @@ public object TasksListMachine : ScreenMachine<TasksList, TasksListInput> {
                 Step(
                     state.copy(
                         reading = false,
-                        screen = state.screen.copy(loading = null, failure = null, data_ = null, denied = TasksHomeMachine.deniedOf(event.denial)),
+                        screen = state.screen.copy(loading = null, failure = null, data_ = null, denied = TasksRows.deniedOf(event.denial)),
                     ),
                 )
             }
@@ -116,7 +116,7 @@ public object TasksListMachine : ScreenMachine<TasksList, TasksListInput> {
                     state.copy(
                         screen = screen.copy(view = to, loading = Loading(first_load = true), failure = null, denied = null, data_ = null),
                         board = null,
-                        limit = TasksHomeMachine.PAGE,
+                        limit = TasksRows.PAGE,
                     ),
                 )
             }
@@ -138,10 +138,10 @@ public object TasksListMachine : ScreenMachine<TasksList, TasksListInput> {
                 )
             }
             event.seat_changed != null -> Step(state.copy(screen = screen.copy(seat = event.seat_changed.seat)))
-            event.next_page != null -> if (state.limit >= TasksHomeMachine.MAX_WINDOW) {
+            event.next_page != null -> if (state.limit >= TasksRows.MAX_WINDOW) {
                 Step(state)
             } else {
-                read(state.copy(limit = (state.limit + TasksHomeMachine.PAGE).coerceAtMost(TasksHomeMachine.MAX_WINDOW)))
+                read(state.copy(limit = (state.limit + TasksRows.PAGE).coerceAtMost(TasksRows.MAX_WINDOW)))
             }
             // INTENT: the detail.
             else -> Step(state)
@@ -169,7 +169,7 @@ public object TasksListMachine : ScreenMachine<TasksList, TasksListInput> {
                 ),
             )
         }
-        val open = board.groups.flatMap(TasksHomeMachine::flatten).filter(TasksRows::isOpen)
+        val open = board.groups.flatMap(TasksRows::flatten).filter(TasksRows::isOpen)
         return Step(
             refold(
                 state.copy(reading = false, board = board, ops = TaskOpsLaw.answered(state.ops, open, board.today)),
@@ -216,7 +216,7 @@ public object TasksListMachine : ScreenMachine<TasksList, TasksListInput> {
             } else {
                 ""
             },
-            can_show_more = board.truncated && state.limit < TasksHomeMachine.MAX_WINDOW,
+            can_show_more = board.truncated && state.limit < TasksRows.MAX_WINDOW,
         )
     }
 
@@ -229,7 +229,7 @@ public object TasksListMachine : ScreenMachine<TasksList, TasksListInput> {
     )
 
     public fun find(state: TasksList, id: String): TasksTask? =
-        state.board?.groups?.flatMap(TasksHomeMachine::flatten)?.firstOrNull { it.task_id == id }
+        state.board?.groups?.flatMap(TasksRows::flatten)?.firstOrNull { it.task_id == id }
 
     private fun overRows(screen: TasksListState): TasksListState =
         if (screen.data_ != null) screen else screen.copy(loading = Loading(first_load = true), failure = null, denied = null)

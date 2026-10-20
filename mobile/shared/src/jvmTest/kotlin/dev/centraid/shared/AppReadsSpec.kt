@@ -109,8 +109,6 @@ import dev.centraid.shared.apps.tasks.TasksCatchUpMachine
 import dev.centraid.shared.apps.tasks.TasksCatchUpReads
 import dev.centraid.shared.apps.tasks.TasksDetailMachine
 import dev.centraid.shared.apps.tasks.TasksDetailReads
-import dev.centraid.shared.apps.tasks.TasksHomeMachine
-import dev.centraid.shared.apps.tasks.TasksHomeReads
 import dev.centraid.shared.apps.tasks.TasksListMachine
 import dev.centraid.shared.apps.tasks.TasksListReads
 import dev.centraid.shared.apps.tasks.TasksProjectMachine
@@ -323,7 +321,6 @@ class AppReadsSpec : StringSpec({
         Triple("docs.document", DocsDocumentReads, DocsDocumentMachine),
         Triple("docs.editor", DocsEditorReads, DocsEditorMachine),
         // TASKS (#1029 port). The trash is the kit's page read.
-        Triple("tasks.home", TasksHomeReads, TasksHomeMachine),
         Triple("tasks.list", TasksListReads, TasksListMachine),
         Triple("tasks.project", TasksProjectReads, TasksProjectMachine),
         Triple("tasks.detail", TasksDetailReads, TasksDetailMachine),

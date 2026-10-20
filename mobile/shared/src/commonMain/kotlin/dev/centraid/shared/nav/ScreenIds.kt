@@ -8,14 +8,13 @@ package dev.centraid.shared.nav
  * it: nothing outside `apps` may name an app's types (`PerAppLayoutSpec`), and
  * no app may name another. So the id lives here, in the one package both sides
  * may import, and the machine's own `SCREEN_ID` IS this constant. The SwiftUI
- * shell reads the machine's (`TasksHomeMachine.shared.SCREEN_ID`), never a
+ * shell reads the machine's (`AgendaHomeMachine.shared.SCREEN_ID`), never a
  * string.
  *
  * Only the ids [ScreenOpenings] spells are here; a screen no route crosses an
  * app's border to open keeps its id on its machine.
  */
 public object ScreenIds {
-    public const val TASKS_HOME: String = "tasks.home"
     public const val TASKS_LIST: String = "tasks.list"
     public const val TASKS_PROJECT: String = "tasks.project"
     public const val TASKS_DETAIL: String = "tasks.detail"

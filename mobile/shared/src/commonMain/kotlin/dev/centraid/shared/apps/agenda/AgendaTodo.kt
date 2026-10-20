@@ -76,13 +76,13 @@ public data class TasksAnswers(
  */
 public object TodoPlace {
     /** The board window, and how far "Show more" may widen it (the manifest's 20…500). */
-    public const val PAGE: Int = 100
-    public const val MAX_WINDOW: Int = 500
+    public const val PAGE: Int = TasksRows.PAGE
+    public const val MAX_WINDOW: Int = TasksRows.MAX_WINDOW
 
     /** Filing choice keys. */
-    public const val FILE_INBOX: String = "inbox"
-    public const val FILE_PROJECT: String = "project:"
-    public const val FILE_SECTION: String = "section:"
+    public const val FILE_INBOX: String = TasksRows.FILE_INBOX
+    public const val FILE_PROJECT: String = TasksRows.FILE_PROJECT
+    public const val FILE_SECTION: String = TasksRows.FILE_SECTION
 
     /**
      * THE TASK WORDS A VIEW DRAWS on To-do (and Day): the quick-add bar's
@@ -100,12 +100,9 @@ public object TodoPlace {
         file_verb = TasksCopy.FILE,
     )
 
-    /** A group's roots and their children. */
-    public fun flatten(group: TasksGroup): List<TasksTask> = group.tasks.flatMap { listOf(it) + it.children }
-
     /** Every task the held answers carry, root or child — To-do's, the dated boards' and the hits'. */
     internal fun held(tasks: AgendaTasks): List<TasksTask> =
-        listOfNotNull(tasks.inbox, tasks.today, tasks.upcoming).flatMap { it.groups }.flatMap(::flatten) +
+        listOfNotNull(tasks.inbox, tasks.today, tasks.upcoming).flatMap { it.groups }.flatMap(TasksRows::flatten) +
             tasks.search?.tasks.orEmpty()
 
     /** A task on screen, root or child, by id. */

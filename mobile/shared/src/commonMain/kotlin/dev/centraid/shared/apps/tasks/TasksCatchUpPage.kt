@@ -63,7 +63,7 @@ public sealed interface TasksCatchUpInput {
 public object TasksCatchUpMachine : ScreenMachine<TasksCatchUpPage, TasksCatchUpInput> {
     public const val SCREEN_ID: String = ScreenIds.TASKS_CATCH_UP
 
-    public val TABLES: Set<String> = TasksHomeMachine.TABLES
+    public val TABLES: Set<String> = TasksRows.TABLES
 
     public const val PILE_DATED: String = "dated"
     public const val PILE_REPEATING: String = "repeating"
@@ -83,7 +83,7 @@ public object TasksCatchUpMachine : ScreenMachine<TasksCatchUpPage, TasksCatchUp
                 Step(
                     state.copy(
                         reading = false,
-                        screen = state.screen.copy(loading = null, failure = null, data_ = null, denied = TasksHomeMachine.deniedOf(event.denial)),
+                        screen = state.screen.copy(loading = null, failure = null, data_ = null, denied = TasksRows.deniedOf(event.denial)),
                     ),
                 )
             }
