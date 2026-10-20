@@ -36,7 +36,7 @@ enum ChatRouting {
         RowRoutes.shared.isThread(row: card.row)
     }
 
-    /// The app an opened route belongs to (`tasks.home` is Tasks), or nil. The
+    /// The app an opened route belongs to (`tasks.detail` is the `tasks` scope, a domain), or nil. The
     /// Chat tab scopes itself to the app the member last had open.
     static func app(of route: ShellModel.Route) -> String? {
         switch route {
