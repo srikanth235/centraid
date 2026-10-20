@@ -12766,7 +12766,7 @@ message HealthMetricLine {
   // "kcal", "bpm", "kg"; EMPTY when the value carries its own.
   string unit = 4;
   // "So far today", "Last night", "Monday".
-  string when = 5;
+  string when_label = 5;
   // "6 h 50 m typical"; EMPTY when no day fed a typical.
   string typical = 6;
   // ABSENT when there is no range to draw.
@@ -12782,7 +12782,7 @@ message HealthWorkoutLine {
   // "5.2 km · 31 min".
   string meta = 3;
   // "07:10" today, "Sun" this week, "11 Oct" before.
-  string when = 4;
+  string when_label = 4;
   string icon_key = 5;
   string accessibility_label = 6;
 }
@@ -13108,7 +13108,7 @@ message HealthWorkoutData {
   // "Morning run".
   string title = 2;
   // "Tuesday 20 October, 07:10 to 07:41".
-  string when = 3;
+  string when_label = 3;
   // Distance, Time, Average pace, Active energy, Average heart rate,
   // Elevation gain: each only when the store measured it.
   repeated HealthFigure figures = 4;
