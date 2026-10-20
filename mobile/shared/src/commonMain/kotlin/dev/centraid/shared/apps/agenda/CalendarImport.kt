@@ -11,6 +11,16 @@ import dev.centraid.core.CentraidCore
 import dev.centraid.core.CoreOutcome
 import dev.centraid.design.copy.AgendaCopy
 import dev.centraid.shared.kit.PhoneImport
+import dev.centraid.shared.sync.phone.GoneChoice
+import dev.centraid.shared.sync.phone.OriginGone
+import dev.centraid.shared.sync.phone.PhoneFields
+import dev.centraid.shared.sync.phone.PhoneIds
+import dev.centraid.shared.sync.phone.PhoneOriginRef
+import dev.centraid.shared.sync.phone.PhoneRecord
+import dev.centraid.shared.sync.phone.PhoneSnapshot
+import dev.centraid.shared.sync.phone.PhoneSource
+import dev.centraid.shared.sync.phone.PhoneStore
+import dev.centraid.shared.sync.phone.PhoneSync
 import dev.centraid.shared.kit.time.civilDayOf
 import dev.centraid.shared.kit.time.floorDiv
 import dev.centraid.shared.shell.HomeSession
@@ -41,6 +51,12 @@ import kotlinx.coroutines.launch
  *   [start].
  * @property moved the member changed this one occurrence (iOS `isDetached`,
  *   an Android exception event): its own times and title are an override.
+ * @property phoneId the phone's most durable id for the event, kind-prefixed (`uid:` an iCal
+ *   UID, `local:` a device-scoped id; R-1127-10). An occurrence of a [series] is followed by the
+ *   series' id and ignores this one; an event with no valid id is skipped.
+ * @property origin the calendar it was read in (its id, kind-prefixed), or empty for "this
+ *   phone's calendars" (R-1127-9).
+ * @property originLabel what the member calls that calendar ("Work (Google)"); empty shows the id.
  */
 public data class PhoneEvent(
     public val title: String,
@@ -53,6 +69,9 @@ public data class PhoneEvent(
     public val series: PhoneSeries? = null,
     public val originalStart: String = "",
     public val moved: Boolean = false,
+    public val phoneId: String = "",
+    public val origin: String = "",
+    public val originLabel: String = "",
 )
 
 /**
@@ -61,7 +80,8 @@ public data class PhoneEvent(
  * [PhoneEvent.end] — never the first one in the window, which would move a
  * `COUNT` rule's last occurrence.
  *
- * @property id the phone's own id for the series: what groups its occurrences.
+ * @property id the phone's own id for the series, kind-prefixed (the series' iCal UID where the
+ *   provider fills it: R-1127-10): what groups its occurrences and what the series is followed by.
  * @property rrule its RFC 5545 rule, without the `RRULE:` prefix.
  */
 public data class PhoneSeries(
@@ -116,41 +136,154 @@ public object CalendarImport {
     /** The window's end, exclusive, for a read made at [now]. */
     public fun windowEnd(now: Long): Long = now + DAYS_ON * DAY_MS
 
+    /** What one pass did. [addAccount] is the R-1127-8 condition: the phone returned no calendars at all. */
+    public data class Outcome(
+        public val added: Int,
+        public val refused: Int,
+        public val updated: Int = 0,
+        public val trashed: Int = 0,
+        public val addAccount: Boolean = false,
+        public val gone: List<OriginGone> = emptyList(),
+    )
+
+    /** The origin of an event that names none: this phone's own calendars. */
+    public const val DEFAULT_ORIGIN: String = "local:this-phone"
+
     /**
      * What the vault holds of [events] — read at [now], over [windowStart] to
-     * [windowEnd] — and the zone a timed one without its own falls back to.
+     * [windowEnd] — and the zone a timed one without its own falls back to. This is one pass of
+     * the phone sync (#1127): the first one brings the calendar in, later ones follow it.
+     * [origins] lists every calendar present, so one with no event in the window is not mistaken
+     * for gone; [complete] is false when the read may be partial, and nothing is then trashed.
      */
-    public suspend fun run(core: CentraidCore, events: List<PhoneEvent>, deviceTz: String, now: Long): PhoneImport.Outcome {
-        val calendar = firstCalendar(core) ?: return PhoneImport.Outcome(added = 0, refused = events.size)
+    public suspend fun run(
+        core: CentraidCore,
+        events: List<PhoneEvent>,
+        deviceTz: String,
+        now: Long,
+        origins: List<PhoneOriginRef> = emptyList(),
+        complete: Boolean = true,
+    ): Outcome {
+        val calendar = firstCalendar(core) ?: return Outcome(added = 0, refused = events.size)
+        return sync(CalendarStore(core, calendar, deviceTz, now), events, origins, complete, now)
+    }
+
+    /** The member's answer to a calendar that left the phone (R-1127-9); [GoneChoice.KEEP] is the default. */
+    public suspend fun resolveGone(core: CentraidCore, originId: String, choice: GoneChoice, deviceTz: String, now: Long): Outcome {
+        val report = PhoneSync.resolveGone(CalendarStore(core, "", deviceTz, now), originId, choice)
+        return Outcome(added = 0, refused = report.refused.size, trashed = report.trashed)
+    }
+
+    /**
+     * ONE PASS over [store]. **A series the vault refuses** (a rule it will not expand) is
+     * followed as its occurrences in the window, each its own event keyed `<series id>@<start>`:
+     * the first pass finds it out (the add is refused), writes nothing for it, and runs again with
+     * the series expanded; later passes expand it from the links alone.
+     */
+    internal suspend fun sync(store: PhoneStore, events: List<PhoneEvent>, origins: List<PhoneOriginRef>, complete: Boolean, now: Long): Outcome {
+        val links = store.links() ?: return Outcome(added = 0, refused = 0)
+        val series = plan(events).series
+        val expanded = series.map { it.id }.filter { id ->
+            links.none { it.phoneId == id } && links.any { it.phoneId.startsWith("$id@") }
+        }.toSet()
+        val first = snapshot(events, origins, complete, now, expanded)
+        val one = PhoneSync.run(store, first)
+        val retry = series.map { it.id }.filter { it in one.refused && it !in expanded }.toSet()
+        val two = if (retry.isEmpty()) null else PhoneSync.run(store, snapshot(events, origins, complete, now, expanded + retry))
+        val refused = one.refused.filterNot { it in retry } + two?.refused.orEmpty()
+        return Outcome(
+            added = one.added + one.adopted + (two?.let { it.added + it.adopted } ?: 0),
+            refused = refused.size,
+            updated = one.updated + (two?.updated ?: 0),
+            trashed = one.trashed + (two?.trashed ?: 0),
+            addAccount = first.complete && first.records.isEmpty() && first.origins.isEmpty(),
+            gone = one.gone,
+        )
+    }
+
+    /**
+     * A READ OF THE CALENDAR AS A SNAPSHOT. A repeating series is ONE record keyed by its id, and
+     * every other event one record keyed by its own; an id that names no kind skips the event.
+     * [expanded] are the series followed as their occurrences instead (see [sync]).
+     */
+    public fun snapshot(
+        events: List<PhoneEvent>,
+        origins: List<PhoneOriginRef> = emptyList(),
+        complete: Boolean = true,
+        now: Long,
+        expanded: Set<String> = emptySet(),
+    ): PhoneSnapshot {
         val plan = plan(events)
-        var added = 0
-        var refused = 0
-        val tally = { made: Boolean -> if (made) added += 1 else refused += 1 }
-        for (event in plan.singles) tally(single(core, event, calendar, deviceTz))
+        val records = linkedMapOf<String, PhoneRecord>()
+        val labels = events.filter { it.originLabel.isNotEmpty() }.associate { it.origin.ifEmpty { DEFAULT_ORIGIN } to it.originLabel }
+        fun keep(id: String, event: PhoneEvent, rrule: String, series: Series?) {
+            if (!PhoneIds.isValid(id) || event.title.isEmpty() || event.start.isEmpty() || event.end.isEmpty()) return
+            if (id !in records) records[id] = record(id, event, rrule, series)
+        }
+        for (event in plan.singles) keep(event.phoneId, event, "", null)
         for (series in plan.series) {
-            val eventId = propose(core, series.event, calendar, deviceTz, series.rrule)
-            if (eventId == null) {
-                for (event in events(series.occurrences)) tally(single(core, event, calendar, deviceTz))
+            if (series.id !in expanded) {
+                keep(series.id, series.event, series.rrule, series)
                 continue
             }
-            added += 1
-            // AN UNREAD EXPANSION WRITES NOTHING MORE: without it every
-            // occurrence would look like a stray and land twice.
-            val upcoming = upcoming(core, eventId, deviceTz, now) ?: continue
-            for (edit in reconcile(series, eventId, upcoming, now, deviceTz)) {
-                if (PhoneImport.write(core, AgendaWrites.OCCURRENCE, edit.input)) continue
-                // A REFUSED SKIP leaves that occurrence as the rule has it; a
-                // refused override keeps the moved occurrence as its own event.
-                val fallback = edit.fallback
-                if (fallback == null) refused += 1 else tally(single(core, fallback, calendar, deviceTz))
+            for (occurrence in series.occurrences) {
+                // KEYED ON WHERE THE RULE PUT IT, so a moved occurrence keeps its link when it moves again.
+                val id = "${series.id}@${key(occurrence.originalStart.ifEmpty { occurrence.start }, occurrence.allDay)}"
+                tidy(occurrence)?.let { keep(id, it, "", null) }
             }
-            for (event in strays(series, upcoming, now)) tally(single(core, event, calendar, deviceTz))
         }
-        return PhoneImport.Outcome(added = added, refused = refused)
+        val present = (origins + records.values.map { PhoneOriginRef(it.origin, "") }).distinctBy { it.id }.map { ref ->
+            val label = ref.label.ifEmpty {
+                labels[ref.id] ?: if (ref.id == DEFAULT_ORIGIN) AgendaCopy.IMPORT_ORIGIN_THIS_PHONE else ref.id
+            }
+            PhoneOriginRef(ref.id, label)
+        }
+        return PhoneSnapshot(PhoneSource.CALENDAR, complete, rfc3339FromEpochMillis(now), present, records.values.toList())
+    }
+
+    /** THE FIELDS A PHONE OWNS OF AN EVENT. `free` is written when the event is added and not followed. */
+    private fun record(id: String, event: PhoneEvent, rrule: String, series: Series?): PhoneRecord = PhoneRecord(
+        phoneId = id,
+        origin = event.origin.ifEmpty { DEFAULT_ORIGIN },
+        fields = PhoneFields.of {
+            text("title", event.title)
+            text("notes", event.notes)
+            text("all_day", if (event.allDay) "1" else "0")
+            exact("start", event.start)
+            exact("end", event.end)
+            text("tz", event.tz)
+            text("rrule", rrule)
+        },
+        matchKey = PhoneFields.squash(event.title).lowercase(),
+        tiebreak = setOf(event.start),
+        attributes = EventAttributes(event, rrule, series),
+    )
+
+    /**
+     * WRITE ONE SERIES AND ITS EXCEPTIONS: the event with its rule, then a skip for an occurrence
+     * the phone cancelled, an override for one it moved, and a one-off for one the vault's reading
+     * of the rule lacks. The new `event_id`, or null when the vault refused the series (the rule
+     * is one it will not expand: the caller follows its occurrences instead).
+     */
+    internal suspend fun writeSeries(core: CentraidCore, series: Series, calendar: String, deviceTz: String, now: Long): String? {
+        val eventId = propose(core, series.event, calendar, deviceTz, series.rrule)
+        if (eventId.isNullOrEmpty()) return null
+        // AN UNREAD EXPANSION WRITES NOTHING MORE: without it every
+        // occurrence would look like a stray and land twice.
+        val upcoming = upcoming(core, eventId, deviceTz, now) ?: return eventId
+        for (edit in reconcile(series, eventId, upcoming, now, deviceTz)) {
+            if (PhoneImport.write(core, AgendaWrites.OCCURRENCE, edit.input)) continue
+            // A REFUSED SKIP leaves that occurrence as the rule has it; a
+            // refused override keeps the moved occurrence as its own event.
+            edit.fallback?.let { single(core, it, calendar, deviceTz) }
+        }
+        for (event in strays(series, upcoming, now)) single(core, event, calendar, deviceTz)
+        return eventId
     }
 
     /** One series to import: its own event, its rule, and its occurrences in the window. */
     public data class Series(
+        public val id: String,
         public val event: PhoneEvent,
         public val rrule: String,
         public val occurrences: List<PhoneEvent>,
@@ -185,6 +318,7 @@ public object CalendarImport {
             val title = pattern.title.trim()
             if (title.isEmpty()) return@mapNotNull null
             Series(
+                id = own.id,
                 event = pattern.copy(
                     title = title,
                     notes = pattern.notes.trim(),
@@ -198,7 +332,14 @@ public object CalendarImport {
                 occurrences = occurrences,
             )
         }
-        return Plan(series = series, singles = events(singles))
+        return Plan(series = series, singles = singles.mapNotNull(::tidy))
+    }
+
+    /** An event with its title and notes trimmed, or null when it has no title or no times. */
+    private fun tidy(event: PhoneEvent): PhoneEvent? {
+        val title = event.title.trim()
+        if (title.isEmpty() || event.start.isEmpty() || event.end.isEmpty()) return null
+        return event.copy(title = title, notes = event.notes.trim(), series = null, originalStart = "", moved = false)
     }
 
     /** The events a read makes: titled, trimmed, one per title and start. */
@@ -363,21 +504,21 @@ public object CalendarImport {
     internal fun key(start: String, allDay: Boolean): String = if (allDay) start.take(10) else start.take(19)
 
     /** The window's days with a day's margin each side, `YYYY-MM-DD`, inclusive. */
-    private fun inner(now: Long): Pair<String, String> = Pair(
+    internal fun inner(now: Long): Pair<String, String> = Pair(
         civilDayOf(floorDiv(windowStart(now), DAY_MS) + 1),
         civilDayOf(floorDiv(windowEnd(now), DAY_MS) - 1),
     )
 
     /** An event's zone — its own, else the device's — or null for an all-day one or none at all. */
-    private fun zoneOf(event: PhoneEvent, deviceTz: String): String? =
+    internal fun zoneOf(event: PhoneEvent, deviceTz: String): String? =
         if (event.allDay) null else event.tz.ifEmpty { deviceTz }.ifEmpty { null }
 
     /** One event on its own: busy as the phone holds it, else kept free. */
-    private suspend fun single(core: CentraidCore, event: PhoneEvent, calendar: String, deviceTz: String): Boolean =
+    internal suspend fun single(core: CentraidCore, event: PhoneEvent, calendar: String, deviceTz: String): Boolean =
         propose(core, event, calendar, deviceTz, rrule = "") != null
 
     /** Propose [event], busy then free; the new `event_id`, or null when the vault refused both. */
-    private suspend fun propose(core: CentraidCore, event: PhoneEvent, calendar: String, deviceTz: String, rrule: String): String? {
+    internal suspend fun propose(core: CentraidCore, event: PhoneEvent, calendar: String, deviceTz: String, rrule: String): String? {
         val output = PhoneImport.executed(core, AgendaWrites.PROPOSE, input(event, calendar, deviceTz, free = event.free, rrule = rrule))
             ?: if (event.free) null else PhoneImport.executed(core, AgendaWrites.PROPOSE, input(event, calendar, deviceTz, free = true, rrule = rrule))
         return output?.let { EVENT_ID.find(it)?.groupValues?.getOrNull(1).orEmpty() }
@@ -389,7 +530,7 @@ public object CalendarImport {
      * — the expansion cap, a refusal, an unparsed `event_id` — which writes no
      * exception and no stray rather than a wrong one.
      */
-    private suspend fun upcoming(core: CentraidCore, eventId: String, deviceTz: String, now: Long): Map<String, String>? {
+    internal suspend fun upcoming(core: CentraidCore, eventId: String, deviceTz: String, now: Long): Map<String, String>? {
         if (eventId.isEmpty()) return null
         val query = AppQueryRequest(
             agenda_upcoming = AgendaUpcomingRequest(
@@ -406,7 +547,8 @@ public object CalendarImport {
     }
 
     /** The one sentence the shell shows when an import ends. */
-    public fun sentence(outcome: PhoneImport.Outcome): String = when {
+    public fun sentence(outcome: Outcome): String = when {
+        outcome.addAccount -> AgendaCopy.IMPORT_CALENDAR_ADD_ACCOUNT
         outcome.added == 0 && outcome.refused == 0 -> AgendaCopy.IMPORT_CALENDAR_NONE
         outcome.added == 0 -> AgendaCopy.IMPORT_CALENDAR_FAILED
         outcome.added == 1 -> AgendaCopy.IMPORT_CALENDAR_ONE
@@ -416,7 +558,7 @@ public object CalendarImport {
     private val EVENT_ID = Regex("\"event_id\"\\s*:\\s*\"([^\"]+)\"")
 
     /** The vault's first calendar — `Vault::found` mints a private one — read through the page door. */
-    private suspend fun firstCalendar(core: CentraidCore): String? {
+    internal suspend fun firstCalendar(core: CentraidCore): String? {
         val query = PageQuery(
             name = "agenda.import.calendar",
             select = listOf("calendar_id"),
@@ -448,5 +590,30 @@ public class CalendarImportBridge {
     public fun run(events: List<PhoneEvent>, deviceTz: String, now: Long, onDone: (String) -> Unit) {
         val core = session?.shelf?.core() ?: return onDone(AgendaCopy.IMPORT_CALENDAR_NO_VAULT)
         scope.launch { onDone(CalendarImport.sentence(CalendarImport.run(core, events, deviceTz, now))) }
+    }
+
+    /**
+     * One pass of the phone sync: [events] with every calendar in [origins], and whether the read
+     * was [complete]. [onDone] is handed the typed outcome, so the shell can show the
+     * add-your-account line (`addAccount`) and ask about a calendar that left (`gone`).
+     */
+    public fun sync(
+        events: List<PhoneEvent>,
+        origins: List<PhoneOriginRef>,
+        complete: Boolean,
+        deviceTz: String,
+        now: Long,
+        onDone: (CalendarImport.Outcome) -> Unit,
+    ) {
+        val core = session?.shelf?.core() ?: return onDone(CalendarImport.Outcome(added = 0, refused = 0))
+        scope.launch { onDone(CalendarImport.run(core, events, deviceTz, now, origins, complete)) }
+    }
+
+    /** The member's answer to a calendar that left the phone. */
+    public fun resolveGone(originId: String, keep: Boolean, deviceTz: String, now: Long, onDone: (CalendarImport.Outcome) -> Unit) {
+        val core = session?.shelf?.core() ?: return onDone(CalendarImport.Outcome(added = 0, refused = 0))
+        scope.launch {
+            onDone(CalendarImport.resolveGone(core, originId, if (keep) GoneChoice.KEEP else GoneChoice.TRASH, deviceTz, now))
+        }
     }
 }

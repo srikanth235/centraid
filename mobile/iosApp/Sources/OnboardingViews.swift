@@ -132,7 +132,11 @@ enum PhoneContacts {
                     name: name,
                     phones: contact.phoneNumbers.map { $0.value.stringValue },
                     emails: contact.emailAddresses.map { $0.value as String },
-                    birthday: monthDay(contact.birthday)
+                    birthday: monthDay(contact.birthday),
+                    // R-1127-10: a device-scoped id says so; lane C swaps in the best the OS has.
+                    phoneId: "local:" + contact.identifier,
+                    origin: "",
+                    originLabel: ""
                 )
             )
         }
@@ -201,7 +205,10 @@ enum PhoneCalendar {
                     free: event.availability == .free,
                     series: master?.series,
                     originalStart: master.flatMap { m in original.map { civil($0, m.zone, "yyyy-MM-dd") } } ?? "",
-                    moved: master != nil && event.isDetached
+                    moved: master != nil && event.isDetached,
+                    phoneId: "local:" + (event.eventIdentifier ?? event.calendarItemIdentifier),
+                    origin: "",
+                    originLabel: ""
                 )
             }
             return PhoneEvent(
@@ -214,7 +221,10 @@ enum PhoneCalendar {
                 free: event.availability == .free,
                 series: master?.series,
                 originalStart: master.flatMap { m in original.map { civil($0, m.zone, "yyyy-MM-dd'T'HH:mm:ss") } } ?? "",
-                moved: master != nil && event.isDetached
+                moved: master != nil && event.isDetached,
+                phoneId: "local:" + (event.eventIdentifier ?? event.calendarItemIdentifier),
+                origin: "",
+                originLabel: ""
             )
         }
     }
@@ -248,14 +258,14 @@ enum PhoneCalendar {
             let series: PhoneSeries
             if first.isAllDay {
                 series = PhoneSeries(
-                    id: id,
+                    id: "local:" + id,
                     rrule: rrule(rules[0]),
                     start: civil(start, zone, "yyyy-MM-dd"),
                     end: civil(max(end.addingTimeInterval(-1), start), zone, "yyyy-MM-dd")
                 )
             } else {
                 series = PhoneSeries(
-                    id: id,
+                    id: "local:" + id,
                     rrule: rrule(rules[0]),
                     start: civil(start, zone, "yyyy-MM-dd'T'HH:mm:ss"),
                     end: civil(end, zone, "yyyy-MM-dd'T'HH:mm:ss")

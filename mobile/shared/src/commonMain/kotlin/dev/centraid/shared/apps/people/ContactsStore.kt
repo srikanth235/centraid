@@ -1,0 +1,144 @@
+package dev.centraid.shared.apps.people
+
+import centraid.core.v1.Value
+import dev.centraid.core.CentraidCore
+import dev.centraid.design.copy.PeopleCopy
+import dev.centraid.shared.sync.phone.CorePhoneStore
+import dev.centraid.shared.sync.phone.PhoneFields
+import dev.centraid.shared.sync.phone.PhoneRecord
+import dev.centraid.shared.sync.phone.PhoneSource
+import dev.centraid.shared.sync.phone.VaultRow
+import kotlin.uuid.ExperimentalUuidApi
+import kotlin.uuid.Uuid
+
+/**
+ * WHAT A CONTACT'S WRITER NEEDS THAT THE FINGERPRINT DOES NOT HOLD: the contact as the address
+ * book spells it (the vault keeps a number as typed), and the birthday, which is written once
+ * when the person is added and never followed (People has no command to edit an important date,
+ * and a date the member added by hand must not read as an edit of the person).
+ */
+internal data class ContactAttributes(
+    val name: String,
+    val phones: List<String>,
+    val emails: List<String>,
+    val birthday: String,
+)
+
+/**
+ * PEOPLE'S SIDE OF A CONTACTS PASS: the rows a person is made of, read through the page door, and
+ * the three writes the engine asks, through the same commands a screen uses. A person followed
+ * from the phone is an ordinary person (R-ONBOARD-4); only the link says where it came from.
+ */
+internal class ContactsStore(
+    core: CentraidCore,
+    private val mintId: () -> String = ::newId,
+) : CorePhoneStore(core, PhoneSource.CONTACTS) {
+    override suspend fun rows(): Map<String, VaultRow>? = read(partyId = null)
+
+    override suspend fun row(entityId: String): VaultRow? = read(entityId)?.get(entityId)
+
+    /** The people with a profile (a person People lists), their phone and email channels, and their trash state. */
+    private suspend fun read(partyId: String?): Map<String, VaultRow>? {
+        val only = partyId?.let { Value(text = it) }
+        val filter = if (only == null) null else "party_id = ?"
+        val binds = listOfNotNull(only)
+        val profiles = pageAll("phone.people.profiles", listOf("profile_id", "party_id", "deleted_at"), "people_profile", "profile_id", filter, binds)
+            ?: return null
+        val names = pageAll("phone.people.names", listOf("party_id", "display_name"), "core_party", "party_id", filter, binds)
+            ?: return null
+        val channels = pageAll(
+            "phone.people.channels",
+            listOf("channel_id", "party_id", "kind", "value"),
+            "social_contact_channel",
+            "channel_id",
+            listOfNotNull(filter, "kind IN ('phone', 'email')").joinToString(" AND "),
+            binds,
+        ) ?: return null
+        val nameOf = names.associate { it.text(0) to it.text(1) }
+        val phones = channels.filter { it.text(2) == "phone" }.groupBy({ it.text(1) }, { it.text(3) })
+        val emails = channels.filter { it.text(2) == "email" }.groupBy({ it.text(1) }, { it.text(3) })
+        return profiles.associate { profile ->
+            val id = profile.text(1)
+            val name = nameOf[id].orEmpty()
+            val row = VaultRow(
+                entityId = id,
+                fields = ContactsImport.fields(name, phones[id].orEmpty(), emails[id].orEmpty()),
+                trashed = profile.text(2).isNotEmpty(),
+                matchKey = ContactsImport.matchKey(name),
+                tiebreak = ContactsImport.tiebreak(phones[id].orEmpty(), emails[id].orEmpty()),
+            )
+            id to row
+        }
+    }
+
+    override suspend fun add(record: PhoneRecord): String? {
+        val person = record.attributes as? ContactAttributes ?: return null
+        val partyId = mintId()
+        val made = command(
+            "people.add_person",
+            "{\"party_id\":${q(partyId)},\"display_name\":${q(person.name)},\"cadence_days\":0}",
+        ) != null
+        if (!made) return null
+        person.phones.forEach { saveChannel(partyId, "phone", it) }
+        person.emails.forEach { saveChannel(partyId, "email", it) }
+        if (person.birthday.isNotEmpty()) {
+            command(
+                "people.add_important_date",
+                "{\"party_id\":${q(partyId)},\"label\":${q(PeopleCopy.IMPORT_BIRTHDAY)},\"month_day\":${q(person.birthday)}}",
+            )
+        }
+        return partyId
+    }
+
+    /**
+     * THE NAME AND THE CHANNELS THE PHONE NOW HOLDS. A channel the phone no longer lists is
+     * deleted; one it adds is saved; the rest are left alone. The birthday is not touched.
+     */
+    override suspend fun update(entityId: String, record: PhoneRecord): Boolean {
+        val person = record.attributes as? ContactAttributes ?: return false
+        val named = command("people.edit_person", "{\"party_id\":${q(entityId)},\"display_name\":${q(person.name)}}") != null
+        val current = pageAll(
+            "phone.people.current",
+            listOf("channel_id", "kind", "value"),
+            "social_contact_channel",
+            "channel_id",
+            "party_id = ? AND kind IN ('phone', 'email')",
+            listOf(Value(text = entityId)),
+        ) ?: return false
+        val wanted = person.phones.map { "phone" to PhoneFields.phoneNumber(it) } +
+            person.emails.map { "email" to PhoneFields.squash(it).lowercase() }
+        val present = mutableSetOf<Pair<String, String>>()
+        var clean = named
+        for (channel in current) {
+            val key = channel.text(1) to normalize(channel.text(1), channel.text(2))
+            if (key in wanted) {
+                present += key
+            } else if (command("people.delete_contact_channel", "{\"channel_id\":${q(channel.text(0))}}") == null) {
+                clean = false
+            }
+        }
+        for (phone in person.phones.filter { ("phone" to PhoneFields.phoneNumber(it)) !in present }) {
+            clean = saveChannel(entityId, "phone", phone) && clean
+        }
+        for (email in person.emails.filter { ("email" to PhoneFields.squash(it).lowercase()) !in present }) {
+            clean = saveChannel(entityId, "email", email) && clean
+        }
+        return clean
+    }
+
+    override suspend fun trash(entityId: String): Boolean =
+        command("people.trash_person", "{\"party_id\":${q(entityId)}}") != null
+
+    private suspend fun saveChannel(partyId: String, kind: String, value: String): Boolean = command(
+        "people.save_contact_channel",
+        "{\"party_id\":${q(partyId)},\"kind\":${q(kind)},\"value\":${q(value.take(ContactsImport.VALUE_MAX))}}",
+    ) != null
+
+    private fun normalize(kind: String, value: String): String =
+        if (kind == "phone") PhoneFields.phoneNumber(value) else PhoneFields.squash(value).lowercase()
+
+    private companion object {
+        @OptIn(ExperimentalUuidApi::class)
+        fun newId(): String = Uuid.random().toString()
+    }
+}

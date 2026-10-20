@@ -86,8 +86,9 @@ fn the_registry_carries_every_command_this_build_has() {
         // category, name, void and transfer, plans, rules and their history pass,
         // the stated balance and layout, and the member's own categories.
         ("money.", 20),
-        // The phone link's four (#1127): `link`, `touch`, `detach` and `forget`.
-        ("phone.", 4),
+        // The phone link's six (#1127): `link`, `touch`, `detach` and `forget`, and the origin's
+        // two, `origin` and `retire_origin` (R-1127-9).
+        ("phone.", 6),
     ];
     let total: usize = by_schema.iter().map(|(_, expected)| *expected).sum();
     assert_eq!(

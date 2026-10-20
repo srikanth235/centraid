@@ -191,6 +191,7 @@ internal fun readEvents(resolver: ContentResolver, now: Long): List<PhoneEvent> 
                 series = own?.series,
                 originalStart = if (moved) row.originalTime?.let(::utcDay).orEmpty() else "",
                 moved = moved,
+                phoneId = "local:${row.eventId}",
             )
         } else {
             // A TIMED INSTANCE IS A WALL CLOCK IN ITS OWN ZONE — the zone the
@@ -208,6 +209,8 @@ internal fun readEvents(resolver: ContentResolver, now: Long): List<PhoneEvent> 
                 series = own?.series,
                 originalStart = if (moved && own != null) row.originalTime?.let { wallClock(it, own.zone) }.orEmpty() else "",
                 moved = moved,
+                // R-1127-10: the event row id is device-scoped, so it says `local:`; lane D reads UID_2445.
+                phoneId = "local:${row.eventId}",
             )
         }
     }
@@ -259,9 +262,9 @@ private fun readSeries(resolver: ContentResolver, ids: Set<Long>, device: TimeZo
             val id = cursor.getLong(0)
             val zone = zoneOf(cursor.getString(5), device)
             val series = if (cursor.getInt(6) == 1) {
-                PhoneSeries(id = id.toString(), rrule = rule, start = utcDay(start), end = utcDay(maxOf(start, end - 1)))
+                PhoneSeries(id = "local:$id", rrule = rule, start = utcDay(start), end = utcDay(maxOf(start, end - 1)))
             } else {
-                PhoneSeries(id = id.toString(), rrule = rule, start = wallClock(start, zone), end = wallClock(maxOf(start, end), zone))
+                PhoneSeries(id = "local:$id", rrule = rule, start = wallClock(start, zone), end = wallClock(maxOf(start, end), zone))
             }
             found[id] = SeriesRow(series, zone)
         }
