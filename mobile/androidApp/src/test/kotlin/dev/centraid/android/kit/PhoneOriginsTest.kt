@@ -21,25 +21,23 @@ class PhoneOriginsTest {
 
     @Test
     fun anAccountIsTypeAndNameAndNoAccountIsLocal() {
-        assertEquals("account:com.google/ada@example.com", PhoneOrigins.accountId("com.google", "ada@example.com"))
-        assertEquals("account:local", PhoneOrigins.accountId(null, null))
-        assertEquals("account:local", PhoneOrigins.accountId("", ""))
+        assertEquals("com.google/ada@example.com", PhoneOrigins.accountKey("com.google", "ada@example.com"))
+        assertEquals("local", PhoneOrigins.accountKey(null, null))
+        assertEquals("local", PhoneOrigins.accountKey("", ""))
     }
 
     @Test
     fun aCalendarIsKeyedByItsSyncIdElseItsRowId() {
         assertEquals(
-            "calendar:com.google/ada@example.com/ada@example.com",
-            PhoneOrigins.calendarId("com.google", "ada@example.com", "ada@example.com", 3),
+            "com.google/ada@example.com/ada@example.com",
+            PhoneOrigins.calendarKey("com.google", "ada@example.com", "ada@example.com", 3),
         )
-        assertEquals("calendar:LOCAL/Me/3", PhoneOrigins.calendarId("LOCAL", "Me", null, 3))
+        assertEquals("LOCAL/Me/3", PhoneOrigins.calendarKey("LOCAL", "Me", null, 3))
     }
 
     @Test
     fun labelsNameWhatTheMemberKnows() {
         assertEquals("Google: ada@example.com", PhoneOrigins.accountLabel("Google", "ada@example.com"))
         assertEquals("ada@example.com", PhoneOrigins.accountLabel("", "ada@example.com"))
-        assertEquals("ada@example.com: Work", PhoneOrigins.calendarLabel("ada@example.com", "Work"))
-        assertEquals("Work", PhoneOrigins.calendarLabel(null, "Work"))
     }
 }

@@ -168,7 +168,7 @@ internal fun readContacts(resolver: ContentResolver, typeLabels: Map<String, Str
         "${ContactsContract.RawContacts._ID} ASC",
     )?.use { cursor ->
         while (cursor.moveToNext()) {
-            val origin = PhoneOrigins.accountId(cursor.getString(1), cursor.getString(2))
+            val origin = PhoneOrigins.accountKey(cursor.getString(1), cursor.getString(2))
             accounts.getOrPut(origin) { accountLabel(typeLabels, cursor.getString(1), cursor.getString(2)) }
             if (!cursor.isNull(0)) accountOfContact.getOrPut(cursor.getLong(0)) { origin }
         }
@@ -185,7 +185,7 @@ internal fun readContacts(resolver: ContentResolver, typeLabels: Map<String, Str
         )?.use { cursor ->
             while (cursor.moveToNext()) {
                 if (cursor.isNull(0) && cursor.isNull(1)) continue
-                val origin = PhoneOrigins.accountId(cursor.getString(0), cursor.getString(1))
+                val origin = PhoneOrigins.accountKey(cursor.getString(0), cursor.getString(1))
                 accounts.getOrPut(origin) { accountLabel(typeLabels, cursor.getString(0), cursor.getString(1)) }
             }
         }
@@ -233,6 +233,8 @@ internal fun readContacts(resolver: ContentResolver, typeLabels: Map<String, Str
             }
         }
     }
+    // THE SHARED HELPER MAKES THE ORIGIN, so both platforms key and label one the same way.
+    val refs = accounts.mapValues { (key, label) -> ContactsImport.container(key, label) }
     val contacts = gathered.map { (id, entry) ->
         PhoneContact(
             name = entry.name,
@@ -240,11 +242,11 @@ internal fun readContacts(resolver: ContentResolver, typeLabels: Map<String, Str
             emails = entry.emails,
             birthday = entry.birthday,
             phoneId = PhoneOrigins.contactId(entry.lookupKey, id),
-            origin = entry.origin,
-            originLabel = accounts[entry.origin].orEmpty(),
+            origin = refs[entry.origin]?.id.orEmpty(),
+            originLabel = refs[entry.origin]?.label.orEmpty(),
         )
     }
-    return AddressBookRead(contacts, accounts.map { (id, label) -> PhoneOriginRef(id, label) }, complete = true)
+    return AddressBookRead(contacts, refs.values.toList(), complete = true)
 }
 
 /** "Google: ada@example.com", or this phone's own contacts for a raw contact with no account. */

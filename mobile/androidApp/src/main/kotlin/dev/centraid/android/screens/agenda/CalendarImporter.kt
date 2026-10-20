@@ -148,7 +148,7 @@ internal fun readPhoneEvents(context: Context, now: Long): CalendarsRead =
     }
 
 /** One calendar the member writes to: its origin and the name they know it by. */
-private class CalendarRow(val origin: String, val label: String)
+private class CalendarRow(val ref: PhoneOriginRef)
 
 /** What an event row says about where it lives and what it is called on every device. */
 private class EventMeta(val calendarId: Long, val uid: String?)
@@ -238,8 +238,8 @@ internal fun readEvents(resolver: ContentResolver, now: Long): CalendarsRead {
                 originalStart = if (moved) row.originalTime?.let(::utcDay).orEmpty() else "",
                 moved = moved,
                 phoneId = PhoneOrigins.eventId(meta.uid, row.eventId),
-                origin = calendar.origin,
-                originLabel = calendar.label,
+                origin = calendar.ref.id,
+                originLabel = calendar.ref.label,
             )
         } else {
             // A TIMED INSTANCE IS A WALL CLOCK IN ITS OWN ZONE — the zone the
@@ -258,12 +258,12 @@ internal fun readEvents(resolver: ContentResolver, now: Long): CalendarsRead {
                 originalStart = if (moved && own != null) row.originalTime?.let { wallClock(it, own.zone) }.orEmpty() else "",
                 moved = moved,
                 phoneId = PhoneOrigins.eventId(meta.uid, row.eventId),
-                origin = calendar.origin,
-                originLabel = calendar.label,
+                origin = calendar.ref.id,
+                originLabel = calendar.ref.label,
             )
         }
     }
-    return CalendarsRead(events, calendars.values.map { PhoneOriginRef(it.origin, it.label) }.distinctBy { it.id }, complete = true)
+    return CalendarsRead(events, calendars.values.map { it.ref }.distinctBy { it.id }, complete = true)
 }
 
 /**
@@ -284,10 +284,13 @@ private fun readCalendars(resolver: ContentResolver): Map<Long, CalendarRow> {
     resolver.query(CalendarContract.Calendars.CONTENT_URI, projection, selection, null, "${CalendarContract.Calendars._ID} ASC")?.use { cursor ->
         while (cursor.moveToNext()) {
             val id = cursor.getLong(0)
-            val label = PhoneOrigins.calendarLabel(cursor.getString(2), cursor.getString(4))
+            // THE SHARED HELPER MAKES THE ORIGIN and its "{account}: {calendar}" label.
             found[id] = CalendarRow(
-                origin = PhoneOrigins.calendarId(cursor.getString(1), cursor.getString(2), cursor.getString(3), id),
-                label = label.ifEmpty { AgendaCopy.IMPORT_ORIGIN_THIS_PHONE },
+                CalendarImport.calendar(
+                    PhoneOrigins.calendarKey(cursor.getString(1), cursor.getString(2), cursor.getString(3), id),
+                    cursor.getString(2).orEmpty(),
+                    cursor.getString(4).orEmpty(),
+                ),
             )
         }
     }

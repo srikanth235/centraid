@@ -13,15 +13,15 @@ import dev.centraid.shared.sync.phone.PhoneIds
  *   is only the fallback (`local:`).
  * - **An event** is `uid:` plus its iCal UID (`uid2445`, the same on every device Google syncs
  *   to), else `local:` plus the event row id.
- * - **An account** origin is `account:<type>/<name>`, and a raw contact with no account is
- *   `account:local`.
- * - **A calendar** origin is `calendar:<type>/<name>/<key>`, the key being the sync adapter's
- *   `_sync_id` (the server's calendar id, so it survives a re-sync and a re-added account) and
+ * - **An account** is keyed `<type>/<name>` (a raw contact with no account is `local`), and
+ *   **a calendar** `<type>/<name>/<key>`; the readers hand the key to `ContactsImport.container`
+ *   and `CalendarImport.calendar`, which make the origin both platforms share. The calendar
+ *   key is the sync adapter's `_sync_id` (the server's calendar id, so it survives a re-sync and a re-added account) and
  *   the calendar row id when the adapter writes none (a local calendar never re-syncs).
  *   `CAL_SYNC1` is not used: its meaning belongs to each adapter.
  */
 internal object PhoneOrigins {
-    const val LOCAL_ACCOUNT: String = "account:local"
+    const val LOCAL_ACCOUNT: String = "local"
 
     fun contactId(lookupKey: String?, contactRowId: Long): String =
         lookupKey?.trim()?.takeIf { it.isNotEmpty() }?.let(PhoneIds::lookup) ?: PhoneIds.local(contactRowId.toString())
@@ -29,15 +29,15 @@ internal object PhoneOrigins {
     fun eventId(uid: String?, eventRowId: Long): String =
         uid?.trim()?.takeIf { it.isNotEmpty() }?.let(PhoneIds::uid) ?: PhoneIds.local(eventRowId.toString())
 
-    fun accountId(type: String?, name: String?): String {
+    fun accountKey(type: String?, name: String?): String {
         val kind = type?.trim().orEmpty()
         val who = name?.trim().orEmpty()
-        return if (kind.isEmpty() && who.isEmpty()) LOCAL_ACCOUNT else "account:$kind/$who"
+        return if (kind.isEmpty() && who.isEmpty()) LOCAL_ACCOUNT else "$kind/$who"
     }
 
-    fun calendarId(type: String?, name: String?, syncId: String?, rowId: Long): String {
+    fun calendarKey(type: String?, name: String?, syncId: String?, rowId: Long): String {
         val key = syncId?.trim()?.takeIf { it.isNotEmpty() } ?: rowId.toString()
-        return "calendar:${type?.trim().orEmpty()}/${name?.trim().orEmpty()}/$key"
+        return "${type?.trim().orEmpty()}/${name?.trim().orEmpty()}/$key"
     }
 
     /** "Google: ada@example.com": the provider as the system names it, then the account. */
@@ -47,17 +47,6 @@ internal object PhoneOrigins {
             typeLabel.isEmpty() -> who
             who.isEmpty() -> typeLabel
             else -> "$typeLabel: $who"
-        }
-    }
-
-    /** "ada@example.com: Work": the account, then the calendar's own name. */
-    fun calendarLabel(accountName: String?, displayName: String?): String {
-        val account = accountName?.trim().orEmpty()
-        val calendar = displayName?.trim().orEmpty()
-        return when {
-            account.isEmpty() -> calendar
-            calendar.isEmpty() -> account
-            else -> "$account: $calendar"
         }
     }
 }
