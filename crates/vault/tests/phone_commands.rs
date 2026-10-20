@@ -11,6 +11,10 @@
 //! 4. **`phone.forget` and a purge both end a link**, and neither touches the row it followed;
 //!    forgetting a link a purge already took is not an error.
 //! 5. **`phone.touch` moves `last_seen_at` for a batch and nothing else.**
+//! 6. **The origin (R-1127-9)**: `phone.origin` registers an account, calendar or folder once and
+//!    relabels it in place; a link names it and a re-link may move it; its label survives the
+//!    origin leaving the phone (nothing clears it); an origin a link names cannot be retired,
+//!    and one nobody names can.
 
 mod common;
 
@@ -146,11 +150,24 @@ impl Bench {
         id.to_owned()
     }
 
+    /// The origin a source's links come from in most tests: one account per source.
+    fn origin(&self, source: &str) -> String {
+        self.run(
+            "phone.origin",
+            json!({
+                "source": source, "phone_origin": format!("acct:{source}"), "label": "Main",
+            }),
+        )["origin_id"]
+            .as_str()
+            .expect("an origin id")
+            .to_owned()
+    }
+
     fn link(&self, source: &str, phone_id: &str, entity: &str, fingerprint: &str) -> Value {
         self.run(
             "phone.link",
             json!({
-                "source": source, "phone_id": phone_id,
+                "source": source, "phone_id": phone_id, "origin_id": self.origin(source),
                 "entity_id": entity, "fingerprint": fingerprint,
             }),
         )
@@ -247,7 +264,8 @@ fn a_detached_link_is_never_reattached_and_the_refusal_writes_nothing() {
     let predicate = bench.refused(
         "phone.link",
         json!({
-            "source": "contacts", "phone_id": "c1", "entity_id": ada, "fingerprint": "fp-2",
+            "source": "contacts", "phone_id": "c1", "origin_id": bench.origin("contacts"),
+            "entity_id": ada, "fingerprint": "fp-2",
         }),
     );
     assert_eq!(predicate, "link_is_attached");
@@ -271,7 +289,8 @@ fn a_refusal_names_its_predicate_and_writes_nothing() {
             bench.refused(
                 "phone.link",
                 json!({
-                    "source": source, "phone_id": "x", "entity_id": entity, "fingerprint": "f",
+                    "source": source, "phone_id": "x", "origin_id": bench.origin(source),
+                    "entity_id": entity, "fingerprint": "f",
                 }),
             ),
             "link_entity_is_live_and_of_the_sources_kind",
@@ -283,7 +302,8 @@ fn a_refusal_names_its_predicate_and_writes_nothing() {
         bench.refused(
             "phone.link",
             json!({
-                "source": "contacts", "phone_id": "x", "entity_id": "nobody", "fingerprint": "f",
+                "source": "contacts", "phone_id": "x", "origin_id": bench.origin("contacts"),
+                "entity_id": "nobody", "fingerprint": "f",
             }),
         ),
         "link_entity_is_live_and_of_the_sources_kind"
@@ -293,7 +313,8 @@ fn a_refusal_names_its_predicate_and_writes_nothing() {
         bench.refused(
             "phone.link",
             json!({
-                "source": "contacts", "phone_id": "c2", "entity_id": ada, "fingerprint": "f",
+                "source": "contacts", "phone_id": "c2", "origin_id": bench.origin("contacts"),
+                "entity_id": ada, "fingerprint": "f",
             }),
         ),
         "link_entity_is_followed_once"
@@ -304,7 +325,8 @@ fn a_refusal_names_its_predicate_and_writes_nothing() {
         bench.refused(
             "phone.link",
             json!({
-                "source": "contacts", "phone_id": "c3", "entity_id": ada, "fingerprint": "f",
+                "source": "contacts", "phone_id": "c3", "origin_id": bench.origin("contacts"),
+                "entity_id": ada, "fingerprint": "f",
             }),
         ),
         "link_entity_is_followed_once"
@@ -335,7 +357,8 @@ fn a_trashed_row_cannot_take_a_new_link_but_keeps_the_one_it_has() {
         bench.refused(
             "phone.link",
             json!({
-                "source": "contacts", "phone_id": "c2", "entity_id": grace, "fingerprint": "f",
+                "source": "contacts", "phone_id": "c2", "origin_id": bench.origin("contacts"),
+                "entity_id": grace, "fingerprint": "f",
             }),
         ),
         "link_entity_is_live_and_of_the_sources_kind",
@@ -498,4 +521,152 @@ fn input_that_the_schema_refuses_never_reaches_a_handler() {
         assert_eq!(outcome.status, CommandStatus::Failed, "{input}");
     }
     assert_eq!(bench.count("SELECT COUNT(*) FROM phone_link"), 0);
+}
+
+#[test]
+fn an_origin_is_registered_once_and_relabelled_in_place() {
+    let bench = Bench::open("origin");
+    let first = bench.run(
+        "phone.origin",
+        json!({ "source": "calendar", "phone_origin": "cal:work", "label": "Work" }),
+    );
+    assert_eq!(first["created"], json!(true));
+    let before = bench.count("SELECT row_version FROM phone_origin");
+
+    // IDEMPOTENT BY STATE: the same input writes nothing, `row_version` included.
+    let again = bench.run(
+        "phone.origin",
+        json!({ "source": "calendar", "phone_origin": "cal:work", "label": "Work" }),
+    );
+    assert_eq!(again["origin_id"], first["origin_id"]);
+    assert_eq!(again["changed"], json!(false));
+    assert_eq!(bench.count("SELECT row_version FROM phone_origin"), before);
+
+    // A rename is one write on the one row.
+    let renamed = bench.run(
+        "phone.origin",
+        json!({ "source": "calendar", "phone_origin": "cal:work", "label": "  Work (Google) " }),
+    );
+    assert_eq!(renamed["origin_id"], first["origin_id"]);
+    assert_eq!(renamed["changed"], json!(true));
+    assert_eq!(
+        bench.text("SELECT label FROM phone_origin").as_deref(),
+        Some("Work (Google)"),
+        "stored trimmed"
+    );
+    assert_eq!(bench.count("SELECT COUNT(*) FROM phone_origin"), 1);
+
+    // The same phone id in another source is another origin.
+    bench.run(
+        "phone.origin",
+        json!({ "source": "contacts", "phone_origin": "cal:work", "label": "Work" }),
+    );
+    assert_eq!(bench.count("SELECT COUNT(*) FROM phone_origin"), 2);
+}
+
+#[test]
+fn a_link_names_its_origin_may_move_and_the_label_outlives_the_origin_leaving_the_phone() {
+    let bench = Bench::open("origin-link");
+    let lunch = bench.event("evt-1");
+    let work = bench.run(
+        "phone.origin",
+        json!({ "source": "calendar", "phone_origin": "cal:work", "label": "Work" }),
+    )["origin_id"]
+        .as_str()
+        .expect("an id")
+        .to_owned();
+    let home = bench.run(
+        "phone.origin",
+        json!({ "source": "calendar", "phone_origin": "cal:home", "label": "Home" }),
+    )["origin_id"]
+        .as_str()
+        .expect("an id")
+        .to_owned();
+    let input = |origin: &str, fingerprint: &str| {
+        json!({
+            "source": "calendar", "phone_id": "uid:k1", "origin_id": origin,
+            "entity_id": lunch, "fingerprint": fingerprint,
+        })
+    };
+    bench.run("phone.link", input(&work, "fp-1"));
+    assert_eq!(
+        bench.text("SELECT origin_id FROM phone_link").as_deref(),
+        Some(work.as_str())
+    );
+
+    // Idempotent on the origin too.
+    let before = bench.links();
+    let same = bench.run("phone.link", input(&work, "fp-1"));
+    assert_eq!(same["changed"], json!(false));
+    assert_eq!(before, bench.links());
+
+    // The record moved calendar on the phone: the one link is re-homed.
+    let moved = bench.run("phone.link", input(&home, "fp-1"));
+    assert_eq!(moved["created"], json!(false));
+    assert_eq!(moved["changed"], json!(true));
+    assert_eq!(
+        bench.text("SELECT origin_id FROM phone_link").as_deref(),
+        Some(home.as_str())
+    );
+
+    // THE LABEL SURVIVES: nothing in a pass that no longer sees the origin writes it, and the
+    // origin cannot be retired out from under a link.
+    assert_eq!(
+        bench
+            .text(&format!(
+                "SELECT label FROM phone_origin WHERE origin_id = '{home}'"
+            ))
+            .as_deref(),
+        Some("Home")
+    );
+    let refused = bench.try_run("phone.retire_origin", json!({ "origin_id": home }));
+    assert_eq!(refused.status, CommandStatus::Failed);
+    assert_eq!(refused.predicate.as_deref(), Some("origin_has_no_links"));
+    // A DETACHED link still names its origin (it is the tombstone), so the origin stays.
+    let link_id = bench
+        .text("SELECT link_id FROM phone_link")
+        .expect("a link");
+    bench.run("phone.detach", json!({ "link_id": link_id }));
+    let still = bench.try_run("phone.retire_origin", json!({ "origin_id": home }));
+    assert_eq!(still.predicate.as_deref(), Some("origin_has_no_links"));
+    // The emptied origin (no link names Work any more) retires, and retiring it twice is quiet.
+    let retired = bench.run("phone.retire_origin", json!({ "origin_id": work }));
+    assert_eq!(retired["retired"], json!(true));
+    let twice = bench.run("phone.retire_origin", json!({ "origin_id": work }));
+    assert_eq!(twice["retired"], json!(false));
+    assert_eq!(bench.count("SELECT COUNT(*) FROM phone_origin"), 1);
+    // Forgetting the link frees its origin.
+    bench.run("phone.forget", json!({ "link_id": link_id }));
+    bench.run("phone.retire_origin", json!({ "origin_id": home }));
+    assert_eq!(bench.count("SELECT COUNT(*) FROM phone_origin"), 0);
+}
+
+#[test]
+fn a_link_with_an_unknown_origin_or_one_of_another_source_is_refused() {
+    let bench = Bench::open("origin-refuse");
+    let ada = bench.person("Ada");
+    let calendar_origin = bench.origin("calendar");
+    for origin in ["nobody", calendar_origin.as_str()] {
+        assert_eq!(
+            bench.refused(
+                "phone.link",
+                json!({
+                    "source": "contacts", "phone_id": "c1", "origin_id": origin,
+                    "entity_id": ada, "fingerprint": "f",
+                }),
+            ),
+            "link_origin_is_of_the_source",
+            "{origin}"
+        );
+    }
+    // An empty label or origin id is refused by the schema, not stored.
+    for input in [
+        json!({ "source": "contacts", "phone_origin": "a", "label": " " }),
+        json!({ "source": "contacts", "phone_origin": " ", "label": "A" }),
+        json!({ "source": "mail", "phone_origin": "a", "label": "A" }),
+    ] {
+        let outcome = bench.try_run("phone.origin", input);
+        assert_eq!(outcome.status, CommandStatus::Failed);
+    }
+    assert_eq!(bench.count("SELECT COUNT(*) FROM phone_origin"), 1);
 }

@@ -1,4 +1,4 @@
-//! The four `phone.*` commands — the write surface of the phone link (#1127).
+//! The six `phone.*` commands — the write surface of the phone link (#1127).
 //!
 //! People, Agenda and Docs follow what the phone holds (R-1127-1: one way, phone → vault). A
 //! followed person, event or document is an ordinary row; `phone_link`, rung two, is the one
@@ -8,8 +8,16 @@
 //!
 //! ## What each command is for
 //!
+//! - `phone.origin` — an account, calendar or picked folder was seen on the phone. Registers it,
+//!   or refreshes its label, and returns the `origin_id` a link names (R-1127-9). The label is
+//!   written only here and only while the origin is present, so it survives the origin leaving
+//!   the phone: the question "Keep its 214 events?" is asked after that.
+//! - `phone.retire_origin` — an origin no link names any more is dropped. Refused while any link
+//!   (attached or detached) still names it: a detached link is the tombstone that keeps a phone
+//!   record the member took over from arriving a second time.
 //! - `phone.link` — a record arrived or a followed record was seen again. Inserts the link, or
-//!   refreshes the one for `(source, phone_id)` with the fingerprint of what sync just wrote.
+//!   refreshes the one for `(source, phone_id)` with the origin it came from and the fingerprint
+//!   of what sync just wrote.
 //! - `phone.touch` — a followed record was seen again and nothing changed. A batch, because an
 //!   unchanged pass over a few thousand contacts through `phone.link` would be a few thousand
 //!   commits and a few thousand receipts to say "still there".
@@ -25,7 +33,8 @@
 //! A value, never a panic: a precondition's sentence and its stable predicate name come back
 //! as a `Failed` outcome, and nothing is written. The predicates a shell switches on are
 //! `link_entity_is_live_and_of_the_sources_kind`, `link_is_attached`,
-//! `link_entity_is_followed_once` and `link_exists`.
+//! `link_entity_is_followed_once`, `link_origin_is_of_the_source`, `link_exists` and
+//! `origin_has_no_links`.
 //!
 //! ## Three rules, each a bug if dropped
 //!
@@ -76,10 +85,17 @@ const SOURCES: &[(&str, &str)] = &[
 /// this size is far beyond any phone's, and a bound is how an unbounded statement is refused.
 pub const TOUCH_IDS_MAX: usize = 20_000;
 
-/// The four, in the order a pass uses them.
+/// The six, in the order a pass uses them.
 #[must_use]
 pub fn definitions() -> Vec<CommandDefinition> {
-    vec![link(), touch(), detach(), forget()]
+    vec![
+        origin(),
+        link(),
+        touch(),
+        detach(),
+        forget(),
+        retire_origin(),
+    ]
 }
 
 fn definition(
@@ -139,6 +155,103 @@ fn link_of(
 }
 
 // ---------------------------------------------------------------------------
+// phone.origin
+// ---------------------------------------------------------------------------
+
+fn origin() -> CommandDefinition {
+    definition(
+        "phone.origin",
+        r#"{
+          "type": "object",
+          "required": ["source", "phone_origin", "label"],
+          "additionalProperties": false,
+          "properties": {
+            "source": { "enum": ["contacts", "calendar", "files"] },
+            "phone_origin": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "\\S" },
+            "label": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "\\S" }
+          }
+        }"#,
+        // The same input lands the same state: a known origin with this label is not written
+        // again, so `row_version` stands still.
+        Idempotency::Idempotent,
+        &[],
+        |ctx| {
+            let source = ctx.required_str("source")?.to_owned();
+            let phone_origin = ctx.required_str("phone_origin")?.to_owned();
+            let label = ctx.required_str("label")?.trim().to_owned();
+            let known = ctx
+                .connection()
+                .query_row(
+                    "SELECT origin_id FROM phone_origin WHERE source = ?1 AND phone_origin = ?2",
+                    [&source, &phone_origin],
+                    |row| row.get::<_, String>(0),
+                )
+                .optional()?;
+            if let Some(origin_id) = known {
+                let changed = ctx.connection().execute(
+                    "UPDATE phone_origin SET label = ?2 WHERE origin_id = ?1 AND label IS NOT ?2",
+                    rusqlite::params![origin_id, label],
+                )? > 0;
+                return Ok(serde_json::json!({
+                    "origin_id": origin_id, "created": false, "changed": changed,
+                }));
+            }
+            let origin_id = ctx.next_id();
+            ctx.connection().execute(
+                "INSERT INTO phone_origin (origin_id, source, phone_origin, label, created_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5)",
+                rusqlite::params![origin_id, source, phone_origin, label, ctx.now],
+            )?;
+            Ok(serde_json::json!({ "origin_id": origin_id, "created": true, "changed": true }))
+        },
+    )
+}
+
+// ---------------------------------------------------------------------------
+// phone.retire_origin
+// ---------------------------------------------------------------------------
+
+fn retire_origin() -> CommandDefinition {
+    static PRE: &[CommandCondition] = &[CommandCondition {
+        predicate: "origin_has_no_links",
+        check: |ctx| {
+            let Some(origin_id) = str_of(ctx, "origin_id") else {
+                return Ok(None);
+            };
+            let named: i64 = ctx.connection().query_row(
+                "SELECT COUNT(*) FROM phone_link WHERE origin_id = ?1",
+                [origin_id],
+                |row| row.get(0),
+            )?;
+            Ok((named != 0).then(|| {
+                "Records from that account, calendar or folder still follow, or once followed, \
+                 the phone, so it is kept."
+                    .to_owned()
+            }))
+        },
+    }];
+    definition(
+        "phone.retire_origin",
+        r#"{
+          "type": "object",
+          "required": ["origin_id"],
+          "additionalProperties": false,
+          "properties": { "origin_id": { "type": "string", "minLength": 1 } }
+        }"#,
+        Idempotency::Idempotent,
+        PRE,
+        |ctx| {
+            // Retiring what is not there is the same end state as retiring it.
+            let retired = ctx.connection().execute(
+                "DELETE FROM phone_origin WHERE origin_id = ?1",
+                [ctx.required_str("origin_id")?],
+            )? > 0;
+            Ok(serde_json::json!({ "retired": retired }))
+        },
+    )
+}
+
+// ---------------------------------------------------------------------------
 // phone.link
 // ---------------------------------------------------------------------------
 
@@ -162,6 +275,24 @@ fn link() -> CommandDefinition {
                     "That row is not in the vault, or it is in the trash, so it cannot follow \
                      the phone."
                         .to_owned()
+                }))
+            },
+        },
+        CommandCondition {
+            predicate: "link_origin_is_of_the_source",
+            check: |ctx| {
+                let (Some(source), Some(origin)) =
+                    (str_of(ctx, "source"), str_of(ctx, "origin_id"))
+                else {
+                    return Ok(None);
+                };
+                let found: i64 = ctx.connection().query_row(
+                    "SELECT COUNT(*) FROM phone_origin WHERE origin_id = ?1 AND source = ?2",
+                    [origin, source],
+                    |row| row.get(0),
+                )?;
+                Ok((found != 1).then(|| {
+                    "That account, calendar or folder is not known for this source.".to_owned()
                 }))
             },
         },
@@ -208,11 +339,12 @@ fn link() -> CommandDefinition {
         "phone.link",
         r#"{
           "type": "object",
-          "required": ["source", "phone_id", "entity_id", "fingerprint"],
+          "required": ["source", "phone_id", "origin_id", "entity_id", "fingerprint"],
           "additionalProperties": false,
           "properties": {
             "source": { "enum": ["contacts", "calendar", "files"] },
             "phone_id": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "\\S" },
+            "origin_id": { "type": "string", "minLength": 1 },
             "entity_id": { "type": "string", "minLength": 1 },
             "fingerprint": { "type": "string", "minLength": 1, "maxLength": 512 }
           }
@@ -224,18 +356,20 @@ fn link() -> CommandDefinition {
         |ctx| {
             let source = ctx.required_str("source")?.to_owned();
             let phone_id = ctx.required_str("phone_id")?.to_owned();
+            let origin_id = ctx.required_str("origin_id")?.to_owned();
             let entity_id = ctx.required_str("entity_id")?.to_owned();
             let fingerprint = ctx.required_str("fingerprint")?.to_owned();
             if let Some((link_id, _, _)) = link_of(ctx, &source, &phone_id)? {
                 // Re-point and refresh. `detached_at` is not touched: a detached link was
-                // refused above, so this one is attached and stays so.
+                // refused above, so this one is attached and stays so. A record that moved to
+                // another account or calendar on the phone changes its origin here.
                 let changed = ctx.connection().execute(
                     "UPDATE phone_link
-                        SET entity_id = ?2, fingerprint = ?3, last_seen_at = ?4
+                        SET entity_id = ?2, fingerprint = ?3, last_seen_at = ?4, origin_id = ?5
                       WHERE link_id = ?1
                         AND (entity_id IS NOT ?2 OR fingerprint IS NOT ?3
-                             OR last_seen_at IS NOT ?4)",
-                    rusqlite::params![link_id, entity_id, fingerprint, ctx.now],
+                             OR last_seen_at IS NOT ?4 OR origin_id IS NOT ?5)",
+                    rusqlite::params![link_id, entity_id, fingerprint, ctx.now, origin_id],
                 )? > 0;
                 return Ok(serde_json::json!({
                     "link_id": link_id, "created": false, "changed": changed,
@@ -244,9 +378,18 @@ fn link() -> CommandDefinition {
             let link_id = ctx.next_id();
             ctx.connection().execute(
                 "INSERT INTO phone_link
-                   (link_id, source, phone_id, entity_id, fingerprint, last_seen_at, created_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)",
-                rusqlite::params![link_id, source, phone_id, entity_id, fingerprint, ctx.now],
+                   (link_id, source, phone_id, origin_id, entity_id, fingerprint, last_seen_at,
+                    created_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7)",
+                rusqlite::params![
+                    link_id,
+                    source,
+                    phone_id,
+                    origin_id,
+                    entity_id,
+                    fingerprint,
+                    ctx.now
+                ],
             )?;
             Ok(serde_json::json!({ "link_id": link_id, "created": true, "changed": true }))
         },

@@ -2413,6 +2413,7 @@ CREATE TABLE phone_link (
   link_id      TEXT PRIMARY KEY,
   source       TEXT NOT NULL CHECK (source IN ('contacts', 'calendar', 'files')),
   phone_id     TEXT NOT NULL CHECK (length(trim(phone_id)) > 0),
+  origin_id    TEXT NOT NULL,
   entity_id    TEXT NOT NULL REFERENCES core_entity(entity_id) ON DELETE CASCADE,
   fingerprint  TEXT NOT NULL CHECK (length(fingerprint) > 0),
   detached_at  TEXT,
@@ -2421,7 +2422,21 @@ CREATE TABLE phone_link (
   updated_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   row_version  INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
   UNIQUE (source, phone_id),
-  UNIQUE (entity_id)
+  UNIQUE (entity_id),
+  FOREIGN KEY (origin_id, source) REFERENCES phone_origin (origin_id, source)
+) STRICT;
+
+-- table phone_origin on phone_origin
+CREATE TABLE phone_origin (
+  origin_id    TEXT PRIMARY KEY,
+  source       TEXT NOT NULL CHECK (source IN ('contacts', 'calendar', 'files')),
+  phone_origin TEXT NOT NULL CHECK (length(trim(phone_origin)) > 0),
+  label        TEXT NOT NULL CHECK (length(trim(label)) > 0),
+  created_at   TEXT NOT NULL,
+  updated_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  row_version  INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
+  UNIQUE (source, phone_origin),
+  UNIQUE (origin_id, source)
 ) STRICT;
 
 -- table schedule_attendee on schedule_attendee
@@ -5125,6 +5140,19 @@ BEGIN
                            ELSE NEW.updated_at END,
          row_version = OLD.row_version + 1
    WHERE link_id = NEW.link_id;
+END;
+
+-- trigger phone_origin_touch_updated_at on phone_origin
+CREATE TRIGGER phone_origin_touch_updated_at
+AFTER UPDATE ON phone_origin
+WHEN NEW.row_version = OLD.row_version
+BEGIN
+  UPDATE phone_origin
+     SET updated_at = CASE WHEN NEW.updated_at = OLD.updated_at
+                           THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+                           ELSE NEW.updated_at END,
+         row_version = OLD.row_version + 1
+   WHERE origin_id = NEW.origin_id;
 END;
 
 -- trigger schedule_attendee_entity_delete on schedule_attendee
