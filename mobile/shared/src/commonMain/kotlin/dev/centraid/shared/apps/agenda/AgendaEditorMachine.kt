@@ -12,6 +12,7 @@ import centraid.screen.v1.AgendaEditorData
 import centraid.screen.v1.AgendaEditorEvent
 import centraid.screen.v1.AgendaEditorState
 import centraid.screen.v1.AgendaGone
+import centraid.screen.v1.AgendaKindChoice
 import centraid.screen.v1.AgendaScope
 import centraid.screen.v1.AgendaScopeChoice
 import centraid.screen.v1.Confirm
@@ -40,7 +41,9 @@ import dev.centraid.shared.nav.ScreenIds
  * the device [zone] the last read was asked in — the zone a timed save's
  * wall clock is in. [detail] is an edit's event read by id; [saveTried] is
  * whether Save was pressed, which is when a blocked draft says why even
- * before anything was typed.
+ * before anything was typed. [taskId] is the id the bridge minted for this
+ * sitting's task, held from the first Save so a second attempt carries the
+ * same one and the vault refuses a second copy (#1128).
  */
 public data class AgendaEditorScreen(
     public val screen: AgendaEditorState,
@@ -53,6 +56,7 @@ public data class AgendaEditorScreen(
     public val draft: AgendaDraft? = null,
     public val scope: AgendaScope? = null,
     public val attempt: Int = 0,
+    public val taskId: String = "",
     public val reading: Boolean = false,
     public val readQueued: Boolean = false,
 )
@@ -72,6 +76,14 @@ public sealed interface AgendaEditorInput {
     ) : AgendaEditorInput
 
     public data class Denied(public val denial: AppQueryDenial) : AgendaEditorInput
+
+    /**
+     * SAVE, WHILE A TASK IS BEING ADDED (#1128): `SaveTapped` with the id the
+     * bridge minted for it — a machine mints nothing, and an event's Save
+     * needs none. The bridge sends this in place of `SaveTapped` whenever the
+     * sheet's kind is a task, as Tasks' quick add sends its `Add`.
+     */
+    public data class SaveTask(public val taskId: String) : AgendaEditorInput
 }
 
 /**
@@ -109,6 +121,22 @@ public sealed interface AgendaEditorInput {
  * skips is refused with the core's sentence. Only while no zone is known yet
  * does a save fall back to FLOATING, the wall clock alone. An all-day event is
  * its civil days, the end INCLUSIVE (`agenda.proto`).
+ *
+ * ## The add sheet is Event | Task (#1128)
+ *
+ * A CREATE carries a switch at its top ([AgendaEditorState.Kind]); an edit of
+ * an existing event has none. The sheet opens on the kind it is handed
+ * (`Opened.kind` — the bridge reads the device's memory, [AgendaAddKind]) and
+ * `KindPicked` moves it. ONE DRAFT SERVES BOTH: the title and the day carry
+ * over a switch, and a task reads its due from the start fields — the start
+ * day, and the start time unless "All day" is on (a task opens All day, a bare
+ * date). Everything else is an event's alone: [AgendaEditorData.show_event_fields]
+ * is false for a task and the machine ignores those events then.
+ *
+ * A task saves as `schedule.add_task` (`task_id`, `title`, `due_at`): the
+ * due is the bare day, or the floating local `YYYY-MM-DDTHH:MM` — the
+ * command's own spelling of a date and of a wall clock, which Tasks' detail
+ * writes too. The sitting ends on the commit as an event's does (#1089).
  */
 public object AgendaEditorMachine : ScreenMachine<AgendaEditorScreen, AgendaEditorInput> {
     public const val SCREEN_ID: String = ScreenIds.AGENDA_EDITOR
@@ -151,6 +179,7 @@ public object AgendaEditorMachine : ScreenMachine<AgendaEditorScreen, AgendaEdit
             sheet = AgendaEditorState.Sheet.SHEET_NONE,
             asking = AgendaEditorState.Asking.ASKING_NONE,
             chrome = CHROME,
+            kind = AgendaEditorState.Kind.KIND_EVENT,
         ),
     )
 
@@ -168,6 +197,7 @@ public object AgendaEditorMachine : ScreenMachine<AgendaEditorScreen, AgendaEdit
         val step = when (event) {
             is AgendaEditorInput.View -> view(state, event.event)
             is AgendaEditorInput.Answered -> answered(state, event)
+            is AgendaEditorInput.SaveTask -> saveTask(state, event.taskId)
             is AgendaEditorInput.Denied -> if (state.readQueued) {
                 reissue(state)
             } else {
@@ -199,6 +229,12 @@ public object AgendaEditorMachine : ScreenMachine<AgendaEditorScreen, AgendaEdit
                 val o = event.opened
                 val mode = o.mode.takeUnless { it == AgendaEditorState.Mode.MODE_UNSPECIFIED }
                     ?: if (o.event_id.isEmpty()) AgendaEditorState.Mode.MODE_CREATE else AgendaEditorState.Mode.MODE_EDIT
+                // ONLY A CREATE CAN BE A TASK; anything unnamed is an event.
+                val kind = if (mode == AgendaEditorState.Mode.MODE_CREATE && o.kind == AgendaEditorState.Kind.KIND_TASK) {
+                    AgendaEditorState.Kind.KIND_TASK
+                } else {
+                    AgendaEditorState.Kind.KIND_EVENT
+                }
                 read(
                     AgendaEditorScreen(
                         screen = initial().screen.copy(
@@ -208,6 +244,7 @@ public object AgendaEditorMachine : ScreenMachine<AgendaEditorScreen, AgendaEdit
                             instance_key = o.instance_key.ifEmpty { o.event_id },
                             original_start_local = o.original_start_local,
                             day = o.day,
+                            kind = kind,
                         ),
                         reading = state.reading,
                     ),
@@ -232,6 +269,16 @@ public object AgendaEditorMachine : ScreenMachine<AgendaEditorScreen, AgendaEdit
             }
 
             event.seat_changed != null -> Step(state.copy(screen = screen.copy(seat = event.seat_changed.seat)))
+
+            // A TASK HAS NO EVENT FIELDS (#1128): their pickers are not drawn,
+            // and a stray event for one changes nothing.
+            isTask(state) && (
+                event.notes != null || event.end != null || event.calendar != null || event.guest != null ||
+                    event.repeat != null || event.reminder != null || event.link != null ||
+                    event.sheet_opened != null || event.skip != null
+                ) -> Step(state)
+
+            event.kind_picked != null -> pickKind(state, event.kind_picked.kind)
 
             event.title != null -> edit(state) { it.copy(title = event.title.text) }
             event.notes != null -> edit(state) { it.copy(notes = event.notes.text) }
@@ -285,7 +332,9 @@ public object AgendaEditorMachine : ScreenMachine<AgendaEditorScreen, AgendaEdit
 
             event.sheet_closed != null -> Step(closeSheet(state))
 
-            event.save != null -> save(state)
+            // A TASK SAVES THROUGH [AgendaEditorInput.SaveTask], which carries
+            // the id a machine cannot mint.
+            event.save != null -> if (isTask(state)) Step(state) else save(state)
 
             event.scope != null -> {
                 val scope = event.scope.scope
@@ -325,7 +374,9 @@ public object AgendaEditorMachine : ScreenMachine<AgendaEditorScreen, AgendaEdit
                             screen = screen.copy(
                                 asking = AgendaEditorState.Asking.ASKING_DISCARD,
                                 confirm = Confirm(
-                                    title = if (screen.mode == AgendaEditorState.Mode.MODE_CREATE) {
+                                    title = if (isTask(state)) {
+                                        AgendaCopy.CONFIRM_DISCARD_NEW_TASK_TITLE
+                                    } else if (screen.mode == AgendaEditorState.Mode.MODE_CREATE) {
                                         AgendaCopy.CONFIRM_DISCARD_NEW_TITLE
                                     } else {
                                         AgendaCopy.CONFIRM_DISCARD_TITLE
@@ -506,7 +557,9 @@ public object AgendaEditorMachine : ScreenMachine<AgendaEditorScreen, AgendaEdit
         if (state.draft != null) return Step(held)
         val baseline = when (state.screen.mode) {
             AgendaEditorState.Mode.MODE_EDIT -> eventOf(held)?.let(::draftOf) ?: return Step(held)
-            else -> newDraft(state.screen.day, upcoming)
+            else -> newDraft(state.screen.day, upcoming).let {
+                if (isTask(state)) shaped(it, AgendaEditorState.Kind.KIND_TASK) else it
+            }
         }
         return Step(held.copy(baseline = baseline, draft = baseline))
     }
@@ -612,6 +665,70 @@ public object AgendaEditorMachine : ScreenMachine<AgendaEditorScreen, AgendaEdit
                 submit(closed, override(state, event, AgendaEventMachine.scopeWord(scope)))
             else -> Step(state)
         }
+    }
+
+    private fun isTask(state: AgendaEditorScreen): Boolean =
+        state.screen.kind == AgendaEditorState.Kind.KIND_TASK
+
+    /**
+     * THE SWITCH. Only a CREATE has one, and not while a write is out or after
+     * it committed. The title and the day stay; the draft AND its baseline are
+     * reshaped together, so a switch alone is never a change the member is
+     * asked to discard.
+     */
+    private fun pickKind(state: AgendaEditorScreen, kind: AgendaEditorState.Kind): Step<AgendaEditorScreen> {
+        val screen = state.screen
+        val known = kind == AgendaEditorState.Kind.KIND_EVENT || kind == AgendaEditorState.Kind.KIND_TASK
+        if (screen.mode != AgendaEditorState.Mode.MODE_CREATE || !known || kind == screen.kind ||
+            busy(state) || committed(state)
+        ) {
+            return Step(state)
+        }
+        val closed = closeSheet(state)
+        // A REFUSAL BELONGS TO THE SAVE IT ANSWERED, not to the other kind.
+        val write = screen.write?.takeUnless { it.phase == WriteState.Phase.PHASE_REFUSED } ?: IDLE
+        return Step(
+            closed.copy(
+                baseline = state.baseline?.let { shaped(it, kind) },
+                draft = state.draft?.let { shaped(it, kind) },
+                screen = closed.screen.copy(kind = kind, write = write),
+            ),
+        )
+    }
+
+    /**
+     * A DRAFT AS A KIND READS IT: a task opens All day (a bare date, so it
+     * lands among the day's untimed rows); an event is timed again, with its
+     * end after its start.
+     */
+    private fun shaped(draft: AgendaDraft, kind: AgendaEditorState.Kind): AgendaDraft =
+        if (kind == AgendaEditorState.Kind.KIND_TASK) allDay(draft, true) else allDay(draft, false)
+
+    /** A task's due, as `schedule.add_task` takes it: a bare day, or a floating local time. */
+    internal fun dueOf(draft: AgendaDraft): String =
+        if (draft.all_day) draft.start_day else "${draft.start_day}T${draft.start_time}"
+
+    /**
+     * SAVE A TASK (#1128). The id the bridge minted is kept from the FIRST
+     * Save of the sitting: the vault refuses an id it already holds, so a
+     * second attempt after a lost answer is refused rather than filed twice.
+     */
+    private fun saveTask(state: AgendaEditorScreen, minted: String): Step<AgendaEditorScreen> {
+        if (!isTask(state) || state.screen.mode != AgendaEditorState.Mode.MODE_CREATE || minted.isEmpty()) {
+            return Step(state)
+        }
+        if (committed(state)) return Step(state)
+        if (!canSave(state)) return Step(state.copy(saveTried = state.draft != null))
+        val draft = state.draft ?: return Step(state)
+        val id = state.taskId.ifEmpty { minted }
+        val attempt = state.attempt + 1
+        return WriteLaw.submit(
+            LENS,
+            state.copy(attempt = attempt, taskId = id),
+            AgendaWrites.ADD_TASK,
+            AgendaWrites.addTask(id, draft.title.trim(), dueOf(draft)),
+            AgendaWrites.key(AgendaWrites.ADD_TASK, id, "try=$attempt"),
+        )
     }
 
     private fun skip(state: AgendaEditorScreen): Step<AgendaEditorScreen> {
@@ -766,6 +883,8 @@ public object AgendaEditorMachine : ScreenMachine<AgendaEditorScreen, AgendaEdit
         val draft = state.draft ?: return ""
         return when {
             draft.title.isBlank() -> AgendaCopy.BLOCK_TITLE
+            // A TASK NEEDS A TITLE AND A DAY, and the pickers only give days.
+            isTask(state) -> ""
             draft.calendar_id.isEmpty() && state.screen.mode == AgendaEditorState.Mode.MODE_CREATE ->
                 AgendaCopy.BLOCK_CALENDAR
             !rangeIsWhole(draft) -> AgendaCopy.BLOCK_RANGE
@@ -858,6 +977,7 @@ public object AgendaEditorMachine : ScreenMachine<AgendaEditorScreen, AgendaEdit
                 ),
             )
         }
+        val task = screen.kind == AgendaEditorState.Kind.KIND_TASK
         val hues = AgendaFold.calendarHues(upcoming.calendars)
         val calendar = upcoming.calendars.firstOrNull { it.calendar_id == draft.calendar_id }
         val calendarName = calendar?.name?.takeIf { it.isNotBlank() }
@@ -880,7 +1000,11 @@ public object AgendaEditorMachine : ScreenMachine<AgendaEditorScreen, AgendaEdit
         val scopes = if (screen.sheet == AgendaEditorState.Sheet.SHEET_SCOPE) scopes(state) else emptyList()
         val data = AgendaEditorData(
             draft = draft,
-            heading = if (screen.mode == AgendaEditorState.Mode.MODE_CREATE) AgendaCopy.NEW_EVENT else AgendaCopy.EDITOR_EDIT,
+            heading = when {
+                task -> AgendaCopy.NEW_TASK
+                screen.mode == AgendaEditorState.Mode.MODE_CREATE -> AgendaCopy.NEW_EVENT
+                else -> AgendaCopy.EDITOR_EDIT
+            },
             start_label = dayTime(draft.start_day, draft.start_time, draft.all_day),
             end_label = dayTime(draft.end_day, draft.end_time, draft.all_day),
             start_day_label = AgendaFold.longDay(draft.start_day),
@@ -921,10 +1045,21 @@ public object AgendaEditorMachine : ScreenMachine<AgendaEditorScreen, AgendaEdit
             blocked_reason = blocked,
             show_skip = series,
             skip_label = if (series) AgendaCopy.SCOPE_SKIP else "",
-            foot_note = if (screen.mode == AgendaEditorState.Mode.MODE_CREATE) AgendaCopy.FOOT_NEW else "",
+            foot_note = if (screen.mode == AgendaEditorState.Mode.MODE_CREATE && !task) AgendaCopy.FOOT_NEW else "",
             scope_armed = scopes.any { it.selected && it.enabled },
+            kinds = if (screen.mode == AgendaEditorState.Mode.MODE_CREATE) kinds(screen.kind) else emptyList(),
+            show_event_fields = !task,
+            start_field_label = if (task) AgendaCopy.FIELD_DUE else AgendaCopy.FIELD_STARTS,
         )
         return state.copy(screen = screen.copy(loading = null, failure = null, gone = null, data_ = data))
+    }
+
+    /** The Event | Task switch, [selected] one marked. */
+    private fun kinds(selected: AgendaEditorState.Kind): List<AgendaKindChoice> = listOf(
+        AgendaEditorState.Kind.KIND_EVENT to AgendaCopy.KIND_EVENT,
+        AgendaEditorState.Kind.KIND_TASK to AgendaCopy.KIND_TASK,
+    ).map { (kind, label) ->
+        AgendaKindChoice(kind = kind, label = label, selected = kind == selected, accessibility_label = label)
     }
 
     /** "Wednesday 11 March · 08:15", or the day alone all-day. */
@@ -967,5 +1102,6 @@ public object AgendaEditorMachine : ScreenMachine<AgendaEditorScreen, AgendaEdit
         scope_question = AgendaCopy.SCOPE_QUESTION,
         pick_date = AgendaCopy.PICK_DATE,
         pick_time = AgendaCopy.PICK_TIME,
+        kind_label = AgendaCopy.KIND_SWITCH,
     )
 }

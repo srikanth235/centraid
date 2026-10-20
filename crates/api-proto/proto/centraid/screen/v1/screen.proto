@@ -4611,11 +4611,22 @@ message AgendaEditorState {
   // THE EDITOR IS DONE — saved, skipped, or left with nothing to lose. The
   // shell pops.
   bool dismissed = 17;
+  // WHAT THIS SITTING ADDS (#1128): an event, or a task. CREATE opens on the
+  // kind the member last added on this device and the switch at its top moves
+  // it; an EDIT is always an event. UNSPECIFIED is only the state before
+  // `Opened`.
+  Kind kind = 18;
 
   enum Mode {
     MODE_UNSPECIFIED = 0;
     MODE_CREATE = 1;
     MODE_EDIT = 2;
+  }
+
+  enum Kind {
+    KIND_UNSPECIFIED = 0;
+    KIND_EVENT = 1;
+    KIND_TASK = 2;
   }
 
   enum Sheet {
@@ -4662,6 +4673,8 @@ message AgendaEditorChrome {
   // The words on the rows that open the platform's pickers.
   string pick_date = 22;
   string pick_time = 23;
+  // The spoken name of the Event | Task switch (#1128).
+  string kind_label = 24;
 }
 
 // THE MEMBER'S VALUES, as the pickers bind them. Days are civil `YYYY-MM-DD`,
@@ -4731,6 +4744,23 @@ message AgendaEditorData {
   string start_time_label = 25;
   string end_day_label = 26;
   string end_time_label = 27;
+  // THE EVENT | TASK SWITCH (#1128), in order: empty on an EDIT, which has
+  // none. The one selected is what this sitting adds.
+  repeated AgendaKindChoice kinds = 28;
+  // False while a TASK is being added: a task has a title and a due day (and
+  // a time, unless "All day" is on) — no end, calendar, guests, repeat,
+  // reminder, link or notes. The pickers for those are not drawn.
+  bool show_event_fields = 29;
+  // The key of the start row: "Starts" for an event, "Due" for a task.
+  string start_field_label = 30;
+}
+
+// One side of the Event | Task switch (#1128).
+message AgendaKindChoice {
+  AgendaEditorState.Kind kind = 1;
+  string label = 2;
+  bool selected = 3;
+  string accessibility_label = 4;
 }
 
 message AgendaEditorEvent {
@@ -4760,6 +4790,7 @@ message AgendaEditorEvent {
     Confirmed confirmed = 22;
     ConfirmDismissed confirm_dismissed = 23;
     WriteSettled write_settled = 24;
+    KindPicked kind_picked = 25;
   }
 
   // CREATE carries a day (the home's anchor) and no event; EDIT the
@@ -4770,6 +4801,14 @@ message AgendaEditorEvent {
     string instance_key = 3;
     optional string original_start_local = 4;
     string day = 5;
+    // CREATE's kind (#1128). UNSPECIFIED is an event; the bridge fills in the
+    // kind this device last added before the machine sees it.
+    AgendaEditorState.Kind kind = 6;
+  }
+
+  // The Event | Task switch (#1128). Ignored on an EDIT.
+  message KindPicked {
+    AgendaEditorState.Kind kind = 1;
   }
 
   message Refreshed {}
