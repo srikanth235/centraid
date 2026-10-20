@@ -12,6 +12,8 @@ import dev.centraid.shared.sync.phone.PhoneSource
 import dev.centraid.shared.sync.phone.PhoneStore
 import dev.centraid.shared.sync.phone.PhoneSync
 import dev.centraid.shared.sync.rfc3339FromEpochMillis
+import okio.Path.Companion.toPath
+import okio.buffer
 import kotlin.time.Clock
 
 /**
@@ -47,6 +49,27 @@ public class PhoneFile(
 ) {
     /** The name a document is filed under: the last component of the path. */
     public val name: String get() = path.substringAfterLast('/')
+}
+
+/** HOW A SHELL OPENS A FILE IT CAN NAME BY PATH (iOS, over a folder whose access it holds). */
+public object PhoneFileSources {
+    /** The bytes of the file at [path], streamed; null when it cannot be opened. */
+    public fun atPath(path: String): PhoneFileBytes? = try {
+        val source = okio.FileSystem.SYSTEM.source(path.toPath()).buffer()
+        object : PhoneFileBytes {
+            override fun read(max: Int): ByteArray {
+                if (source.exhausted()) return ByteArray(0)
+                source.request(max.toLong())
+                return source.readByteArray(minOf(source.buffer.size, max.toLong()))
+            }
+
+            override fun close() {
+                source.close()
+            }
+        }
+    } catch (failed: okio.IOException) {
+        null
+    }
 }
 
 /** A followed folder as the vault holds it: its origin id, the shell's name for it, and its documents. */

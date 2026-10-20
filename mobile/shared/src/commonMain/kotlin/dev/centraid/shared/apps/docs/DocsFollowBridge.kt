@@ -32,7 +32,7 @@ public class DocsFollowBridge {
     }
 
     /** The origin id for a newly picked folder: `folder:<uuid>`. */
-    public fun newOrigin(): String = FilesImport.origin(DocsIngestBridge.mintId())
+    public fun mintOrigin(): String = FilesImport.origin(DocsIngestBridge.mintId())
 
     /** The folder [origin], named [name] by the phone, is followed; [done] is told whether the vault took it. */
     public fun follow(origin: String, name: String, done: (Boolean) -> Unit) {
@@ -53,12 +53,21 @@ public class DocsFollowBridge {
     public fun stopTarget(actionKey: String): String? =
         actionKey.removePrefix(DocsWrites.KEY_STOP_PREFIX).takeIf { actionKey.startsWith(DocsWrites.KEY_STOP_PREFIX) && it.isNotEmpty() }
 
-    /** Tell [drive] which folders are followed now. */
+    /** Tell [drive] which folders are followed now (Compose). */
     public fun report(drive: DocsDriveBridge) {
+        publish { event -> drive.forward(event) }
+    }
+
+    /** Tell a drive page which folders are followed now: [deliver] is handed the encoded `DocsDriveEvent` (SwiftUI). */
+    public fun report(deliver: (ByteArray) -> Unit) {
+        publish { event -> deliver(event.encode()) }
+    }
+
+    private fun publish(deliver: (DocsDriveEvent) -> Unit) {
         val core = session?.shelf?.core() ?: return
         scope.launch {
             val folders = FilesImport.followed(core) ?: return@launch
-            drive.forward(
+            deliver(
                 DocsDriveEvent(
                     followed_changed = DocsDriveEvent.FollowedChanged(
                         followed = folders.map { DocsFollowed(origin_id = it.phoneOrigin, name = it.name, documents = it.documents) },
