@@ -1,11 +1,11 @@
-package dev.centraid.shared.apps.tasks
+package dev.centraid.shared.kit.tasks
 
 import centraid.core.v1.TasksGroup
 import centraid.core.v1.TasksGroupKind
 import centraid.core.v1.TasksProject
 import centraid.core.v1.TasksSection
 import centraid.core.v1.TasksTask
-import centraid.screen.v1.TasksBandTab
+import centraid.screen.v1.Denied
 import centraid.screen.v1.TasksCheck
 import centraid.screen.v1.TasksChrome
 import centraid.screen.v1.TasksFact
@@ -311,8 +311,36 @@ public object TasksRows {
         file_verb = TasksCopy.FILE,
     )
 
-    public fun tab(key: String, label: String, icon: String, current: Boolean): TasksBandTab =
-        TasksBandTab(key = key, label = label, icon_key = icon, current = current)
+    /** The gate's words on a Tasks page, and the receipt the vault named. */
+    public fun deniedOf(denial: centraid.core.v1.AppQueryDenial): Denied = Denied(
+        title = TasksCopy.DENIED_TITLE,
+        body = TasksCopy.DENIED_BODY,
+        receipt = denial.code ?: "",
+    )
+
+    /** A group's roots and their children. */
+    public fun flatten(group: TasksGroup): List<TasksTask> = group.tasks.flatMap { listOf(it) + it.children }
+
+    /**
+     * THE TABLES A TASKS PAGE'S QUERIES READ AND DRAW: tasks, their projects and
+     * sections, and the tags on a row's meta line.
+     */
+    public val TABLES: Set<String> = setOf(
+        "schedule_task",
+        "schedule_project",
+        "schedule_section",
+        "core_tag",
+        "core_concept",
+    )
+
+    /** The board window, and how far "Show more" may widen it (the manifest's 20…500). */
+    public const val PAGE: Int = 100
+    public const val MAX_WINDOW: Int = 500
+
+    /** Filing choice keys. */
+    public const val FILE_INBOX: String = "inbox"
+    public const val FILE_PROJECT: String = "project:"
+    public const val FILE_SECTION: String = "section:"
 
     public const val STATUS_NEEDS_ACTION: String = "needs-action"
     public const val STATUS_IN_PROCESS: String = "in-process"

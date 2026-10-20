@@ -29,6 +29,9 @@ import dev.centraid.shared.screen.ScreenMachine
 import dev.centraid.shared.screen.Step
 import dev.centraid.shared.sync.ScreenQueries
 import dev.centraid.shared.sync.ScreenWrites
+import dev.centraid.shared.kit.tasks.TaskOps
+import dev.centraid.shared.kit.tasks.TaskOpsLaw
+import dev.centraid.shared.kit.tasks.TasksRows
 
 /** What `tasks.catch_up` holds. */
 public data class TasksCatchUpPage(
@@ -60,7 +63,7 @@ public sealed interface TasksCatchUpInput {
 public object TasksCatchUpMachine : ScreenMachine<TasksCatchUpPage, TasksCatchUpInput> {
     public const val SCREEN_ID: String = ScreenIds.TASKS_CATCH_UP
 
-    public val TABLES: Set<String> = TasksHomeMachine.TABLES
+    public val TABLES: Set<String> = TasksRows.TABLES
 
     public const val PILE_DATED: String = "dated"
     public const val PILE_REPEATING: String = "repeating"
@@ -80,7 +83,7 @@ public object TasksCatchUpMachine : ScreenMachine<TasksCatchUpPage, TasksCatchUp
                 Step(
                     state.copy(
                         reading = false,
-                        screen = state.screen.copy(loading = null, failure = null, data_ = null, denied = TasksHomeMachine.deniedOf(event.denial)),
+                        screen = state.screen.copy(loading = null, failure = null, data_ = null, denied = TasksRows.deniedOf(event.denial)),
                     ),
                 )
             }

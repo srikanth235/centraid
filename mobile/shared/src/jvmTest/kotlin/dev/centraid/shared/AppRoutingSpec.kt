@@ -44,8 +44,6 @@ import centraid.screen.v1.PeopleHomeEvent
 import centraid.screen.v1.PeoplePersonData
 import centraid.screen.v1.PeoplePersonEvent
 import centraid.screen.v1.PeoplePersonState
-import centraid.screen.v1.TasksHomeEvent
-import centraid.screen.v1.TasksHomeState
 import centraid.screen.v1.TileStatus
 import dev.centraid.shared.apps.agenda.AgendaEditorMachine
 import dev.centraid.shared.apps.agenda.AgendaEventMachine
@@ -87,7 +85,6 @@ import dev.centraid.shared.apps.people.PeopleHomeMachine
 import dev.centraid.shared.apps.people.PeoplePersonMachine
 import dev.centraid.shared.apps.people.PeopleRouting
 import dev.centraid.shared.apps.people.PeopleTrashMachine
-import dev.centraid.shared.apps.tasks.TasksHomeMachine
 import dev.centraid.shared.nav.Destination
 import dev.centraid.shared.nav.NavMove
 import dev.centraid.shared.nav.NavStack
@@ -220,7 +217,7 @@ class AppRoutingSpec : StringSpec({
             NavMove.push(Destination.NotesEditor("j1", ""))
     }
 
-    "Notes: History re-spells the note under it as no longer new, once the note has history; Send to Tasks lands on the Inbox" {
+    "Notes: History re-spells the note under it as no longer new, once the note has history; Send to Agenda lands on To-do with the words" {
         val history = NotesEditorEvent(history = NotesEditorEvent.HistoryRequested())
         NotesRouting.editor(history, NotesEditorState(note_id = "n1")).shouldBeNull()
         val ready = NotesEditorState(note_id = "n1", chrome = NotesEditorChrome(history_enabled = true))
@@ -230,17 +227,20 @@ class AppRoutingSpec : StringSpec({
         )
         NotesRouting.editor(NotesEditorEvent(send_to_tasks = NotesEditorEvent.SendToTasks(text = "  ")), ready).shouldBeNull()
         val sent = NotesRouting.editor(NotesEditorEvent(send_to_tasks = NotesEditorEvent.SendToTasks(text = "Buy milk")), ready)
-        sent shouldBe NavMove.push(Destination.TasksHome(TasksHomeState.Destination.DESTINATION_INBOX, quickAdd = "Buy milk"))
+        sent shouldBe NavMove.push(Destination.AgendaHome(AgendaHomeState.Destination.DESTINATION_TODO, quickAdd = "Buy milk"))
         // Spelled, the words ride the home's `Opened`.
         val opening = ScreenMoves.of(sent)!!.openings.single()
-        opening.screenId shouldBe TasksHomeMachine.SCREEN_ID
-        TasksHomeEvent.ADAPTER.decode(opening.event).opened!!.quick_add_title shouldBe "Buy milk"
+        opening.screenId shouldBe AgendaHomeMachine.SCREEN_ID
+        AgendaHomeEvent.ADAPTER.decode(opening.event).opened!!.let {
+            it.destination shouldBe AgendaHomeState.Destination.DESTINATION_TODO
+            it.quick_add_title shouldBe "Buy milk"
+        }
     }
 
     "Notes: Done pops onto a Notes screen, else swaps in the library; the tile opens its note" {
         NotesRouting.close(NotesLibraryMachine.SCREEN_ID) shouldBe NavMove.Pop
         NotesRouting.close("") shouldBe NavMove.swap(Destination.NotesLibrary())
-        NotesRouting.close(TasksHomeMachine.SCREEN_ID) shouldBe NavMove.swap(Destination.NotesLibrary())
+        NotesRouting.close(AgendaHomeMachine.SCREEN_ID) shouldBe NavMove.swap(Destination.NotesLibrary())
 
         val tile = HomeTile(app_id = "notes", status = TileStatus.TILE_STATUS_EMPTY)
         (NotesRouting.tile(tile) as Destination.NotesEditor).isNew shouldBe true
@@ -259,7 +259,7 @@ class AppRoutingSpec : StringSpec({
         swap.dropsTop shouldBe true
         swap.openings.single().screenId shouldBe NotesJournalMachine.SCREEN_ID
         NotesRouting.route(NotesLibraryMachine.SCREEN_ID, byteArrayOf(-1, -1, -1), ByteArray(0)).shouldBeNull()
-        NotesRouting.route("tasks.home", ByteArray(0), ByteArray(0)).shouldBeNull()
+        NotesRouting.route("agenda.home", ByteArray(0), ByteArray(0)).shouldBeNull()
         NotesRouting.closeMove("")!!.openings.single().screenId shouldBe NotesLibraryMachine.SCREEN_ID
     }
 

@@ -3,6 +3,8 @@ package dev.centraid.shared.apps.agenda
 import centraid.core.v1.AgendaCalendar
 import centraid.core.v1.AgendaEvent
 import centraid.core.v1.AppQueryDenial
+import centraid.core.v1.TasksGroupKind
+import centraid.core.v1.TasksTask
 import centraid.screen.v1.AgendaCalendarChoice
 import centraid.screen.v1.AgendaDaySection
 import centraid.screen.v1.AgendaEmpty
@@ -15,16 +17,19 @@ import centraid.screen.v1.AgendaNowLine
 import centraid.screen.v1.AgendaRowItem
 import centraid.screen.v1.AgendaRowStatus
 import centraid.screen.v1.Denied
+import centraid.screen.v1.TasksNotice
+import centraid.screen.v1.TasksRowGroup
 import dev.centraid.design.copy.AgendaCopy
+import dev.centraid.design.copy.TasksCopy
 import dev.centraid.shared.design.PartyHueWheel
 import dev.centraid.shared.kit.SearchLaw
 import dev.centraid.shared.kit.time.dayOfMonthOf
 import dev.centraid.shared.kit.time.isoWeekdayOf
 import dev.centraid.shared.kit.time.plusDays
-import centraid.screen.v1.AgendaDueTask as DueTitle
+import dev.centraid.shared.kit.tasks.TasksRows
 
 /**
- * THE CORE'S ANSWERS, AS THE LIST A VIEW DRAWS (#1046).
+ * THE CORE'S ANSWERS, AS THE LIST A VIEW DRAWS (#1046, #1128).
  *
  * Pure, and over strings the core already placed in the device's zone
  * (`agenda.proto`'s header): every comparison is between `YYYY-MM-DD` and
@@ -36,14 +41,23 @@ import centraid.screen.v1.AgendaDueTask as DueTitle
  *
  * - **Day**: the anchor, alone.
  * - **Schedule**: every day from the anchor for [AgendaHomeMachine.LIST_DAYS]
- *   that has an event, a birthday or something due. Days before the anchor are
- *   not drawn.
+ *   that has an event, a birthday or an open task due. Days before the anchor
+ *   are not drawn.
  * - **Waiting**: the days of Schedule's window that hold an occurrence waiting
- *   on your reply, and only those occurrences.
+ *   on your reply, and only those occurrences. It draws no task.
  * - **A search term**: the days the hits fall on, wherever they are — a search
  *   finds, and a hit last month is still the answer. Search is an overlay on
  *   whichever tab was open, and it covers every event: Waiting's filter does
- *   not narrow it (#1047).
+ *   not narrow it (#1047). The tasks it found are one group above the days.
+ *
+ * ## Tasks are rows on their day (R-1128-2)
+ *
+ * An open task whose due day is the section's day is a row of it: untimed ones
+ * right after the all-day events, timed ones among the timed rows by time, the
+ * now line still placed among whatever has not started. Hidden calendars never
+ * hide a task. Undated tasks are never here (they are To-do's). Day on today
+ * also draws the Overdue group and the absence notice above the day
+ * (R-1128-3); every other anchor draws none.
  *
  * A run over several days is a row on each; the upcoming answer is padded a
  * day either side (`AgendaReads`), and `local_days` is what keeps a row to the
@@ -60,7 +74,7 @@ internal object AgendaFold {
         receipt = denial?.code ?: "",
     )
 
-    fun fold(screen: AgendaHomeState, answers: AgendaAnswers): AgendaHomeData {
+    fun fold(screen: AgendaHomeState, answers: AgendaAnswers, tasks: AgendaTasks = AgendaTasks()): AgendaHomeData {
         val upcoming = answers.upcoming
         val context = answers.context
         val today = context.today.ifEmpty { upcoming.today }
@@ -92,11 +106,19 @@ internal object AgendaFold {
                 .forEach { day -> byDay.getOrPut(day) { mutableListOf() } += event }
         }
 
+        // TASKS DUE ON A DAY of the window: Day and Schedule only, and never under a search or Waiting.
+        val dated = search == null && !waitingOnly &&
+            (
+                screen.destination == AgendaHomeState.Destination.DESTINATION_DAY ||
+                    screen.destination == AgendaHomeState.Destination.DESTINATION_SCHEDULE
+                )
+        val taskCtx = taskContext(tasks, today)
+        val dueOn = if (dated) tasksByDay(tasks, inWindow) else emptyMap()
+
         // DAY CONTEXT DECORATES; it never makes a Waiting day or a search day.
         val birthdays = context.birthdays.groupBy { monthDay(it.month, it.day) }
-        val due = context.due.associateBy { it.day }
         val decorated = if (search == null && !waitingOnly) {
-            window.filter { day -> birthdays[day.drop(MONTH_DAY_FROM)] != null || due[day] != null }
+            window.filter { day -> birthdays[day.drop(MONTH_DAY_FROM)] != null || dueOn[day] != null }
         } else {
             emptyList()
         }
@@ -105,9 +127,6 @@ internal object AgendaFold {
         var shownMonth = anchor.take(MONTH)
         val sections = days.map { day ->
             val names = birthdays[day.drop(MONTH_DAY_FROM)]?.map { it.name }.orEmpty()
-            val dueDay = due[day]
-            val dueCount = dueDay?.count ?: 0
-            val dueOpen = dueCount > 0 && day in screen.due_open_days
             val month = day.take(MONTH)
             val monthHeading = if (month != shownMonth) monthYear(day) else null
             shownMonth = month
@@ -125,17 +144,16 @@ internal object AgendaFold {
                     else -> "${names.size} ${AgendaCopy.RIBBON_BIRTHDAYS}"
                 },
                 ribbon_names = names,
-                due_count = dueCount,
-                due = dueDay?.tasks?.map { DueTitle(task_id = it.task_id, title = it.title) }.orEmpty(),
-                due_label = when {
-                    dueCount == 0 -> ""
-                    dueOpen -> AgendaCopy.SHELF_HIDE
-                    else -> "$dueCount ${AgendaCopy.SHELF_DUE}"
-                },
-                due_open = dueOpen,
-                items = items(day, byDay[day].orEmpty(), today, now, screen, hues),
+                items = items(day, byDay[day].orEmpty(), dueOn[day].orEmpty(), today, now, screen, hues, taskCtx),
             )
         }
+
+        // THE OVERDUE GROUP AND THE ABSENCE NOTICE: Day on today, and nowhere else (R-1128-3).
+        val onToday = dated && screen.destination == AgendaHomeState.Destination.DESTINATION_DAY && anchor == today
+        val overdue = if (onToday) overdueGroup(tasks, taskCtx) else null
+        val notice = if (onToday) noticeOf(tasks) else null
+        // THE TASKS THE TERM FOUND (R-1128-4): one group above the event days.
+        val taskHits = if (term != null) hitsGroup(tasks, taskCtx) else null
 
         val drawn = sections.flatMap { section -> section.items.mapNotNull { it.event?.instance_key } }
             .toSet()
@@ -156,6 +174,7 @@ internal object AgendaFold {
 
         val empty = when {
             sections.isNotEmpty() -> AgendaEmpty.AGENDA_EMPTY_NONE
+            term != null && taskHits != null -> AgendaEmpty.AGENDA_EMPTY_NONE
             term != null -> AgendaEmpty.AGENDA_EMPTY_NO_MATCH
             waitingOnly -> AgendaEmpty.AGENDA_EMPTY_NOTHING_WAITING
             screen.destination == AgendaHomeState.Destination.DESTINATION_SCHEDULE &&
@@ -216,6 +235,9 @@ internal object AgendaFold {
                     },
                 )
             },
+            overdue = overdue,
+            notice = notice,
+            task_hits = listOfNotNull(taskHits),
             waiting_count = waitingCount,
             event_count = drawn.size,
             event_count_label = "${drawn.size} ${
@@ -249,30 +271,37 @@ internal object AgendaFold {
     }
 
     /**
-     * One day's rows: all-day first, then what runs in from a day before,
-     * then by start — and on today, the now line before the first row that
-     * has not started (v0's placement: a list has no time axis, so "between
-     * the last row under way and the next" is where now is).
+     * One day's rows: all-day first, the day's untimed tasks right after them,
+     * then what runs in from a day before, then the timed events and tasks by
+     * start — and on today, the now line before the first row that has not
+     * started (v0's placement: a list has no time axis, so "between the last row
+     * under way and the next" is where now is).
      */
     private fun items(
         day: String,
         events: List<AgendaEvent>,
+        tasks: List<TasksTask>,
         today: String,
         now: String,
         screen: AgendaHomeState,
         hues: (String?) -> String,
+        taskCtx: TasksRows.Context,
     ): List<AgendaRowItem> {
-        val ordered = events.sortedBy { event ->
-            when {
-                event.all_day -> "0"
-                startDay(event) < day -> "1"
-                else -> "2" + event.local_start
+        // EVENTS FIRST in the list, so a task at the same minute sorts after them (the sort is stable).
+        val slots = events.map { Slot.Of(it, eventKey(it, day)) } + tasks.map { Slot.Task(it, taskKey(it, day)) }
+        val ordered = slots.sortedBy { it.sort }
+        val rows = ordered.map { slot ->
+            when (slot) {
+                is Slot.Of -> AgendaRowItem(event = row(day, slot.event, today, now, screen, hues))
+                is Slot.Task -> AgendaRowItem(task = TasksRows.row(slot.task, taskCtx))
             }
         }
-        val rows = ordered.map { AgendaRowItem(event = row(day, it, today, now, screen, hues)) }
         if (day != today) return rows
-        val at = ordered.indexOfFirst { event ->
-            !event.all_day && startDay(event) == day && event.local_start > now
+        val at = ordered.indexOfFirst { slot ->
+            when (slot) {
+                is Slot.Of -> !slot.event.all_day && startDay(slot.event) == day && slot.event.local_start > now
+                is Slot.Task -> slot.task.due_time.isNotEmpty() && "${day}T${slot.task.due_time}" > now
+            }
         }.let { if (it < 0) ordered.size else it }
         val clock = clockOf(now)
         val line = AgendaRowItem(
@@ -282,6 +311,93 @@ internal object AgendaFold {
             ),
         )
         return rows.take(at) + line + rows.drop(at)
+    }
+
+    /** A row on a day: an event or a task, with the key it sorts by. */
+    private sealed interface Slot {
+        val sort: String
+
+        class Of(val event: AgendaEvent, override val sort: String) : Slot
+
+        class Task(val task: TasksTask, override val sort: String) : Slot
+    }
+
+    /** All-day "0", then (see [taskKey]) "01", what runs in from before "1", the rest by start. */
+    private fun eventKey(event: AgendaEvent, day: String): String = when {
+        event.all_day -> "0"
+        startDay(event) < day -> "1"
+        else -> "2" + event.local_start
+    }
+
+    /** Untimed right after the all-day rows; timed among the timed ones, by time. */
+    private fun taskKey(task: TasksTask, day: String): String =
+        if (task.due_time.isEmpty()) "01" else "2${day}T${task.due_time}"
+
+    // ---------------------------------------------------------------------
+    // Tasks
+    // ---------------------------------------------------------------------
+
+    /** What a task row needs: the core's today, its projects and sections, the session's writes. */
+    private fun taskContext(tasks: AgendaTasks, today: String): TasksRows.Context {
+        val (projects, sections) = TodoPlace.projectsOf(tasks)
+        return TasksRows.Context(
+            today = today,
+            projects = projects.associateBy { it.project_id },
+            sections = sections.associateBy { it.section_id },
+            // THE DAY'S HEAD NAMES THE DAY, so a row says its time only.
+            dayInHead = true,
+            pending = tasks.ops.pendingIds,
+            hidden = tasks.ops.hiddenIds,
+        )
+    }
+
+    /**
+     * THE OPEN TASKS DUE ON EACH DAY OF THE WINDOW, in the core's order: the
+     * TODAY board (overdue work belongs to the day it was due, and shows there
+     * only when that day is in the window — today's own Overdue group draws it
+     * otherwise) and the UPCOMING board's days. A task checked off here is gone
+     * at once.
+     */
+    private fun tasksByDay(tasks: AgendaTasks, window: Set<String>): Map<String, List<TasksTask>> {
+        val groups = listOfNotNull(tasks.today, tasks.upcoming).flatMap { board ->
+            board.groups.filter {
+                it.kind == TasksGroupKind.TASKS_GROUP_KIND_OVERDUE ||
+                    it.kind == TasksGroupKind.TASKS_GROUP_KIND_TODAY ||
+                    it.kind == TasksGroupKind.TASKS_GROUP_KIND_DAY
+            }
+        }
+        val hidden = tasks.ops.hiddenIds
+        return groups.flatMap { it.tasks }
+            .filter { it.due_day in window && TasksRows.isOpen(it) && it.task_id !in hidden }
+            .distinctBy { it.task_id }
+            .groupBy { it.due_day }
+    }
+
+    /** The TODAY board's Overdue group, finished: its rows, its count and the "Reschedule" verb. */
+    private fun overdueGroup(tasks: AgendaTasks, ctx: TasksRows.Context): TasksRowGroup? {
+        val board = tasks.today ?: return null
+        val group = board.groups.firstOrNull { it.kind == TasksGroupKind.TASKS_GROUP_KIND_OVERDUE } ?: return null
+        // THE HEAD NAMES NO DAY, so each row says how long ago.
+        return TasksRows.groups(listOf(group), ctx.copy(dayInHead = false)).firstOrNull()
+    }
+
+    /** "You were away 16 days · 34 tasks came due", when the core names an absence. */
+    private fun noticeOf(tasks: AgendaTasks): TasksNotice? {
+        val catchUp = tasks.catchUp?.takeIf { it.absent } ?: return null
+        return TasksNotice(
+            sentence = "${TasksCopy.AWAY} ${catchUp.away_days} ${TasksCopy.DAYS} · ${catchUp.overdue} " +
+                if (catchUp.overdue == 1) TasksCopy.CAME_DUE_ONE else TasksCopy.CAME_DUE_MANY,
+            verb_label = TasksCopy.CATCH_UP,
+            verb_key = TasksRows.VERB_CATCH_UP,
+        )
+    }
+
+    /** The tasks a search term found, as one group; null when it found none. */
+    private fun hitsGroup(tasks: AgendaTasks, ctx: TasksRows.Context): TasksRowGroup? {
+        val found = tasks.search?.tasks.orEmpty().filter { it.task_id !in ctx.hidden }
+        if (found.isEmpty()) return null
+        val rows = found.map { TasksRows.row(it, ctx.copy(dayInHead = false)) }
+        return TasksRowGroup(key = "results", title = AgendaCopy.SEARCH_TASKS, meta = rows.size.toString(), rows = rows)
     }
 
     private fun row(
