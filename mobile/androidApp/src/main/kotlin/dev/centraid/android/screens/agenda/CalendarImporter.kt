@@ -17,11 +17,13 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
+import dev.centraid.android.kit.PhoneOrigins
 import dev.centraid.design.copy.AgendaCopy
 import dev.centraid.shared.apps.agenda.CalendarImport
 import dev.centraid.shared.apps.agenda.PhoneEvent
 import dev.centraid.shared.apps.agenda.PhoneSeries
 import dev.centraid.shared.shell.HomeSession
+import dev.centraid.shared.sync.phone.PhoneOriginRef
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -46,17 +48,21 @@ import java.util.TimeZone
  *
  * [onStatus] is handed each sentence: [AgendaCopy.IMPORT_CALENDAR_RUNNING]
  * while it runs (`holds` true: it stays until the outcome replaces it), then
- * the outcome's one sentence.
+ * the outcome's one sentence. [onImported] is called on the main thread once an
+ * import has written, so the follower takes the next pass (and asks about a calendar
+ * that left the phone: R-1127-9).
  */
 @Composable
 public fun rememberCalendarImport(
     session: HomeSession?,
     onStatus: (sentence: String, holds: Boolean) -> Unit,
+    onImported: () -> Unit = {},
 ): (after: ((String?) -> Unit)?) -> Unit {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val currentSession by rememberUpdatedState(session)
     val currentStatus by rememberUpdatedState(onStatus)
+    val currentImported by rememberUpdatedState(onImported)
     // ONE IMPORT AT A TIME: a second tap while the first writes would propose
     // every event twice, and the second copy would land as a free duplicate.
     var running by remember { mutableStateOf(false) }
@@ -85,8 +91,11 @@ public fun rememberCalendarImport(
             // provider query and each event is a core call.
             val sentence = withContext(Dispatchers.IO) {
                 val now = System.currentTimeMillis()
-                val events = runCatching { readEvents(context.contentResolver, now) }.getOrDefault(emptyList())
-                CalendarImport.sentence(CalendarImport.run(core, events, TimeZone.getDefault().id, now))
+                val read = readPhoneEvents(context, now)
+                val outcome = CalendarImport.run(core, read.events, TimeZone.getDefault().id, now, read.origins, read.complete)
+                // THE FOLLOWER TAKES IT FROM HERE: a pass asks about an origin this one found gone (R-1127-9).
+                withContext(Dispatchers.Main) { currentImported() }
+                CalendarImport.sentence(outcome)
             }
             running = false
             finish(after, sentence)
@@ -117,6 +126,33 @@ public fun rememberCalendarImport(
 private fun granted(context: Context): Boolean =
     ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CALENDAR) == PackageManager.PERMISSION_GRANTED
 
+/** What the phone's calendars held at one read: the events, and every writable calendar present. */
+internal class CalendarsRead(
+    val events: List<PhoneEvent>,
+    val origins: List<PhoneOriginRef>,
+    /** False when the read may have missed events (no permission, a query that failed): nothing is then trashed (R-1127-3). */
+    val complete: Boolean,
+)
+
+/**
+ * THE PHONE'S CALENDARS AS ONE PASS READS THEM, or an incomplete empty read when the permission
+ * is not granted or a provider query throws. **It never asks the OS for anything**: only the
+ * member's Import tap does (R-ONBOARD-4).
+ */
+internal fun readPhoneEvents(context: Context, now: Long): CalendarsRead =
+    if (!granted(context)) {
+        CalendarsRead(emptyList(), emptyList(), complete = false)
+    } else {
+        runCatching { readEvents(context.contentResolver, now) }
+            .getOrElse { CalendarsRead(emptyList(), emptyList(), complete = false) }
+    }
+
+/** One calendar the member writes to: its origin and the name they know it by. */
+private class CalendarRow(val ref: PhoneOriginRef)
+
+/** What an event row says about where it lives and what it is called on every device. */
+private class EventMeta(val calendarId: Long, val uid: String?)
+
 /**
  * THE PHONE'S CALENDAR, ONE [PhoneEvent] PER OCCURRENCE: `Instances` over
  * [CalendarImport]'s window, so a recurring series arrives expanded. An
@@ -126,8 +162,14 @@ private fun granted(context: Context): Boolean =
  * shared importer folds them back into one series. A cancelled occurrence
  * ([CalendarContract.Events.STATUS_CANCELED], or an `EXDATE`) is not read, which is
  * how the importer knows to skip it.
+ *
+ * **EACH EVENT IS KEYED BY ITS iCal UID** (R-1127-10) where the provider fills it, else its row
+ * id, and **belongs to its calendar**: every visible calendar the member writes to is an origin,
+ * an empty one included. A calendar the member hides has no instances, so it reads as one that
+ * left the phone, and the member is asked, with Keep the default.
  */
-internal fun readEvents(resolver: ContentResolver, now: Long): List<PhoneEvent> {
+internal fun readEvents(resolver: ContentResolver, now: Long): CalendarsRead {
+    val calendars = readCalendars(resolver)
     val uri = CalendarContract.Instances.CONTENT_URI.buildUpon().also {
         ContentUris.appendId(it, CalendarImport.windowStart(now))
         ContentUris.appendId(it, CalendarImport.windowEnd(now))
@@ -172,8 +214,12 @@ internal fun readEvents(resolver: ContentResolver, now: Long): List<PhoneEvent> 
         }
     }
     val masterIds = rows.mapNotNull { row -> row.originalId ?: row.eventId.takeIf { row.rrule.isNotEmpty() } }.toSet()
-    val series = readSeries(resolver, masterIds, device)
-    return rows.map { row ->
+    val metas = readEventMeta(resolver, masterIds + rows.map { it.eventId })
+    val series = readSeries(resolver, masterIds, device, metas)
+    val events = rows.mapNotNull { row ->
+        // AN INSTANCE WHOSE CALENDAR IS NOT ONE OF THE MEMBER'S VISIBLE, WRITABLE ONES is not read.
+        val meta = metas[row.eventId] ?: return@mapNotNull null
+        val calendar = calendars[meta.calendarId] ?: return@mapNotNull null
         val masterId = row.originalId ?: row.eventId
         val own = series[masterId]
         val moved = own != null && row.originalId != null
@@ -191,7 +237,9 @@ internal fun readEvents(resolver: ContentResolver, now: Long): List<PhoneEvent> 
                 series = own?.series,
                 originalStart = if (moved) row.originalTime?.let(::utcDay).orEmpty() else "",
                 moved = moved,
-                phoneId = "local:${row.eventId}",
+                phoneId = PhoneOrigins.eventId(meta.uid, row.eventId),
+                origin = calendar.ref.id,
+                originLabel = calendar.ref.label,
             )
         } else {
             // A TIMED INSTANCE IS A WALL CLOCK IN ITS OWN ZONE — the zone the
@@ -209,12 +257,72 @@ internal fun readEvents(resolver: ContentResolver, now: Long): List<PhoneEvent> 
                 series = own?.series,
                 originalStart = if (moved && own != null) row.originalTime?.let { wallClock(it, own.zone) }.orEmpty() else "",
                 moved = moved,
-                // R-1127-10: the event row id is device-scoped, so it says `local:`; lane D reads UID_2445.
-                phoneId = "local:${row.eventId}",
+                phoneId = PhoneOrigins.eventId(meta.uid, row.eventId),
+                origin = calendar.ref.id,
+                originLabel = calendar.ref.label,
             )
         }
     }
+    return CalendarsRead(events, calendars.values.map { it.ref }.distinctBy { it.id }, complete = true)
 }
+
+/**
+ * EVERY VISIBLE CALENDAR THE MEMBER WRITES TO, by row id: its origin and its label. Empty
+ * calendars are in it, so one with no event is not mistaken for gone (R-1127-9).
+ */
+private fun readCalendars(resolver: ContentResolver): Map<Long, CalendarRow> {
+    val projection = arrayOf(
+        CalendarContract.Calendars._ID,
+        CalendarContract.Calendars.ACCOUNT_TYPE,
+        CalendarContract.Calendars.ACCOUNT_NAME,
+        SYNC_ID,
+        CalendarContract.Calendars.CALENDAR_DISPLAY_NAME,
+    )
+    val selection = "${CalendarContract.Calendars.CALENDAR_ACCESS_LEVEL} >= ${CalendarContract.Calendars.CAL_ACCESS_CONTRIBUTOR} AND " +
+        "${CalendarContract.Calendars.VISIBLE} = 1"
+    val found = linkedMapOf<Long, CalendarRow>()
+    resolver.query(CalendarContract.Calendars.CONTENT_URI, projection, selection, null, "${CalendarContract.Calendars._ID} ASC")?.use { cursor ->
+        while (cursor.moveToNext()) {
+            val id = cursor.getLong(0)
+            // THE SHARED HELPER MAKES THE ORIGIN and its "{account}: {calendar}" label.
+            found[id] = CalendarRow(
+                CalendarImport.calendar(
+                    PhoneOrigins.calendarKey(cursor.getString(1), cursor.getString(2), cursor.getString(3), id),
+                    cursor.getString(2).orEmpty(),
+                    cursor.getString(4).orEmpty(),
+                ),
+            )
+        }
+    }
+    return found
+}
+
+/**
+ * THE CALENDAR AND THE iCAL UID OF EACH EVENT IN [ids], from the `Events` table (an `Instances`
+ * row is not promised to carry either). `uid2445` is asked by its column name, because the
+ * constant is newer than `minSdk`; a provider without the column answers the calendars alone,
+ * and its events are then keyed by row id.
+ */
+private fun readEventMeta(resolver: ContentResolver, ids: Collection<Long>): Map<Long, EventMeta> {
+    val found = mutableMapOf<Long, EventMeta>()
+    for (chunk in ids.distinct().chunked(META_CHUNK)) {
+        val selection = "${CalendarContract.Events._ID} IN (${chunk.joinToString(",")})"
+        val withUid = arrayOf(CalendarContract.Events._ID, CalendarContract.Events.CALENDAR_ID, UID_2445)
+        val cursor = runCatching { resolver.query(CalendarContract.Events.CONTENT_URI, withUid, selection, null, null) }.getOrNull()
+            ?: resolver.query(CalendarContract.Events.CONTENT_URI, arrayOf(CalendarContract.Events._ID, CalendarContract.Events.CALENDAR_ID), selection, null, null)
+        cursor?.use {
+            while (it.moveToNext()) {
+                val uid = if (it.columnCount > 2) it.getString(2) else null
+                found[it.getLong(0)] = EventMeta(it.getLong(1), uid)
+            }
+        }
+    }
+    return found
+}
+
+private const val SYNC_ID: String = "_sync_id"
+private const val UID_2445: String = "uid2445"
+private const val META_CHUNK: Int = 400
 
 /** One `Instances` row, as read. */
 private class InstanceRow(
@@ -240,7 +348,7 @@ private class SeriesRow(val series: PhoneSeries, val zone: TimeZone)
  * carries no `DTEND`). A master with no rule, or a duration that does not
  * parse, is left out, and its occurrences import one by one.
  */
-private fun readSeries(resolver: ContentResolver, ids: Set<Long>, device: TimeZone): Map<Long, SeriesRow> {
+private fun readSeries(resolver: ContentResolver, ids: Set<Long>, device: TimeZone, metas: Map<Long, EventMeta>): Map<Long, SeriesRow> {
     if (ids.isEmpty()) return emptyMap()
     val projection = arrayOf(
         CalendarContract.Events._ID,
@@ -261,10 +369,11 @@ private fun readSeries(resolver: ContentResolver, ids: Set<Long>, device: TimeZo
             val end = if (!cursor.isNull(3)) cursor.getLong(3) else durationMs(cursor.getString(4))?.let { start + it } ?: continue
             val id = cursor.getLong(0)
             val zone = zoneOf(cursor.getString(5), device)
+            val seriesId = PhoneOrigins.eventId(metas[id]?.uid, id)
             val series = if (cursor.getInt(6) == 1) {
-                PhoneSeries(id = "local:$id", rrule = rule, start = utcDay(start), end = utcDay(maxOf(start, end - 1)))
+                PhoneSeries(id = seriesId, rrule = rule, start = utcDay(start), end = utcDay(maxOf(start, end - 1)))
             } else {
-                PhoneSeries(id = "local:$id", rrule = rule, start = wallClock(start, zone), end = wallClock(maxOf(start, end), zone))
+                PhoneSeries(id = seriesId, rrule = rule, start = wallClock(start, zone), end = wallClock(maxOf(start, end), zone))
             }
             found[id] = SeriesRow(series, zone)
         }
