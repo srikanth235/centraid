@@ -451,4 +451,32 @@ class HealthScreensSpec : StringSpec({
             dev.centraid.shared.shell.SpringboardPolicy.SPRINGBOARD_ORDER.indexOf("money") + 1
         dev.centraid.shared.shell.SpringboardPolicy.tileSize("health") shouldBe centraid.screen.v1.TileSize.TILE_SIZE_SMALL
     }
+
+    "each workout kind has its own mark from the registry, and a kind with none keeps the workout mark" {
+        val kinds = listOf("run", "walk", "cycle", "swim", "hike", "yoga")
+        val marks = kinds.map { dev.centraid.shared.apps.health.HealthFold.kindIcon(it) }
+        marks.toSet().size shouldBe kinds.size
+        (marks + listOf("strength", "other", "EXERCISE_TYPE_TENNIS").map { dev.centraid.shared.apps.health.HealthFold.kindIcon(it) }).forEach {
+            dev.centraid.design.CentraidCatalog.icons.containsKey(it) shouldBe true
+        }
+        dev.centraid.shared.apps.health.HealthFold.kindIcon("strength") shouldBe "Gym"
+        dev.centraid.shared.apps.health.HealthFold.kindIcon("EXERCISE_TYPE_TENNIS") shouldBe "Gym"
+        dev.centraid.shared.apps.health.HealthFold.line(run, "2026-10-20T07:10", today, HealthDevice.Units.UNITS_METRIC).icon_key shouldBe "Activity"
+    }
+
+    "a chart's ticks are marked back from today at one step, so the last two never collide" {
+        fun days(n: Int) = (n - 1 downTo 0).map { back ->
+            val day = dev.centraid.shared.kit.time.plusDays("2026-10-21", -back)!!
+            HealthBucket(start = day, end = day)
+        }
+        val month = HealthMetricMachine.ticks(HealthMetricState.Range.RANGE_MONTH, days(30))
+        month shouldContainExactly listOf("23 Sep", "30 Sep", "7 Oct", "14 Oct", "21 Oct")
+        val months = (0 until 12).map { i ->
+            val m = ((10 + i) % 12) + 1
+            val y = if (m >= 11) 2025 else 2026
+            HealthBucket(start = "$y-${m.toString().padStart(2, '0')}-01")
+        }
+        HealthMetricMachine.ticks(HealthMetricState.Range.RANGE_YEAR, months) shouldContainExactly listOf("Jan", "Apr", "Jul", "Oct")
+        HealthMetricMachine.ticks(HealthMetricState.Range.RANGE_WEEK, days(7)).size shouldBe 7
+    }
 })

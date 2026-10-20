@@ -186,14 +186,21 @@ public object HealthMetricMachine :
     private fun bucketWords(range: HealthMetricState.Range, bucket: HealthBucket): String =
         if (range == HealthMetricState.Range.RANGE_YEAR) monthOf(bucket.start) else CivilWords.dayMonth(bucket.start)
 
-    /** Under the chart: weekday initials for a week, five dates for a month, every third month for a year. */
-    private fun ticks(range: HealthMetricState.Range, buckets: List<HealthBucket>): List<String> = when (range) {
-        HealthMetricState.Range.RANGE_MONTH -> buckets.indices.filter { it % WEEK == 0 || it == buckets.lastIndex }
-            .map { HealthFold.shortDate(buckets[it].start) }
-        HealthMetricState.Range.RANGE_YEAR -> buckets.indices.filter { it % QUARTER == 0 || it == buckets.lastIndex }
-            .map { monthOf(buckets[it].start).take(3) }
+    /**
+     * Under the chart: weekday initials for a week, a date a week for a month, a month a quarter for
+     * a year. **Marked back from the bucket today falls in**, at one even step, so the last tick is
+     * today's and no two ticks are ever closer than the step (counting forwards from the first bucket
+     * and then adding today put two dates a day apart). Oldest first.
+     */
+    internal fun ticks(range: HealthMetricState.Range, buckets: List<HealthBucket>): List<String> = when (range) {
+        HealthMetricState.Range.RANGE_MONTH -> back(buckets, WEEK).map { HealthFold.shortDate(it.start) }
+        HealthMetricState.Range.RANGE_YEAR -> back(buckets, QUARTER).map { monthOf(it.start).take(3) }
         else -> buckets.map { CivilWords.weekdayShort(it.start).take(1) }
     }
+
+    /** Every [step]th bucket counting back from the last, oldest first. */
+    private fun back(buckets: List<HealthBucket>, step: Int): List<HealthBucket> =
+        (buckets.lastIndex downTo 0 step step).reversed().map { buckets[it] }
 
     private const val MONTH_AT: Int = 5
     private const val WEEK: Int = 7

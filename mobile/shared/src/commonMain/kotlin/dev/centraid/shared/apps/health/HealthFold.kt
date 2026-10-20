@@ -242,9 +242,24 @@ public object HealthFold {
             title = title,
             meta = meta,
             when_label = whenWords,
-            icon_key = WORKOUT_ICON,
+            icon_key = kindIcon(row.kind_key),
             accessibility_label = listOf(title, meta, whenWords).filter { it.isNotEmpty() }.joinToString(", "),
         )
+    }
+
+    /**
+     * A KIND'S MARK, from the icon registry (`packages/design/src/icons.ts`), so a list of runs,
+     * rides and swims is not one glyph repeated. The registry has no runner, cyclist or mountain:
+     * each kind takes the nearest mark it does have, and a kind with none takes [WORKOUT_ICON].
+     */
+    public fun kindIcon(key: String): String = when (key) {
+        HealthKinds.RUN -> "Activity"
+        HealthKinds.WALK -> "MapPin"
+        HealthKinds.CYCLE -> "Compass"
+        HealthKinds.SWIM -> "Water"
+        HealthKinds.HIKE -> "Plant"
+        HealthKinds.YOGA -> "Mood"
+        else -> WORKOUT_ICON
     }
 
     public const val WORKOUT_ICON: String = "Gym"
