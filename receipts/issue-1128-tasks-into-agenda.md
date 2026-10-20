@@ -1,7 +1,7 @@
 # Receipt — Tasks folds into Agenda ([#1128](https://github.com/srikanth235/centraid/issues/1128))
 
 <!-- governance:front-page start -->
-**Law** · window door · range `f90f473c..a15344bd` · law digest `2549cef4cd1f` → `2549cef4cd1f`
+**Law** · window door · range `f90f473c..6c7478fd` · law digest `2549cef4cd1f` → `2549cef4cd1f`
 
 | Rule | Door | Verdict | Findings |
 | --- | --- | --- | --- |
@@ -9,7 +9,7 @@
 | `commit-message-format` | hook | ✓ pass | 0 |
 | `constitution-coverage` | window | ✓ pass | 0 |
 | `doc-integrity` | hook | ✓ pass | 0 |
-| `doctrine-citation` | window | ✗ fail | 1 |
+| `doctrine-citation` | window | ✓ pass | 0 |
 | `estate-separation` | hook | ✓ pass | 0 |
 | `managed-tree-integrity` | hook | ✓ pass | 0 |
 | `receipt-per-issue` | window | ✗ fail | 1 |
@@ -18,8 +18,7 @@
 
 ### Findings
 
-- `.governance/law/out/arrival.json:2187` **law/doctrine-citation** (warn) — this change touches the 'design-tokens' domain (packages/design/src/apps.ts) and cites neither docs/decisions.md#typography-and-design-contracts nor its issue. The doctrine for that domain is already settled; name it in the receipt or in a commit body so a reader can tell a change made under it from one that did not know it existed.
-- `.governance/law/out/arrival.json:6966` **law/receipt-per-issue** (error) — receipts/issue-1130-tasks-today.md — missing a '## Audit' section. Mechanical checks record that outcome and verification text exist; they do not prove the receipt matches the diff or that a command ran.
+- `.governance/law/out/arrival.json:7026` **law/receipt-per-issue** (error) — receipts/issue-1130-tasks-today.md — missing a '## Audit' section. Mechanical checks record that outcome and verification text exist; they do not prove the receipt matches the diff or that a command ran.
 
 law estate: 11 paths, CODEOWNERS in sync
 
@@ -237,7 +236,7 @@ Measured by running the same law over the base: `node .governance/law/run.mjs --
 
 ### Law, final
 
-Run on the committed tree before this receipt was added: `receipt-per-issue` fails on `issue-1130` only; `doctrine-citation`'s warning for `packages/design/src/apps.ts` is answered by this receipt (Decisions, below). The front page above is regenerated after this file is committed and is the final word.
+The front page above is the law's answer on the committed tree after this receipt landed: nine rules pass, and `receipt-per-issue` fails on `receipts/issue-1130-tasks-today.md` alone (the inherited finding). The earlier `doctrine-citation` warning for `packages/design/src/apps.ts` cleared once this receipt cited its domain.
 
 ## Decisions
 
