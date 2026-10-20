@@ -51,13 +51,13 @@ internal class CalendarStore(
     private suspend fun exceptions(eventId: String?): Map<String, List<List<centraid.core.v1.Value>>>? {
         val rows = pageAll(
             name = "phone.agenda.exceptions",
-            select = listOf("target_id", "original_start_local", "scope", "action", "override_json"),
+            select = listOf("exception_id", "target_id", "original_start_local", "scope", "action", "override_json"),
             from = "schedule_recurrence_exception",
             key = "exception_id",
             where = if (eventId == null) "target_type = 'core.event'" else "target_type = 'core.event' AND target_id = ?",
             bind = listOfNotNull(eventId?.let { centraid.core.v1.Value(text = it) }),
         ) ?: return null
-        return rows.groupBy { it.text(0) }
+        return rows.groupBy { it.text(1) }
     }
 
     private suspend fun read(eventId: String?): Map<String, VaultRow>? {
@@ -87,7 +87,7 @@ internal class CalendarStore(
                     text("rrule", row.text(7))
                     // A SERIES' EXCEPTIONS ARE PART OF THE ROW: a member who skips or moves an
                     // occurrence here has edited the event, and it stops following the phone.
-                    set("exceptions", held[id].orEmpty().map { it.drop(1).joinToString("|") { value -> value.text.orEmpty() } })
+                    set("exceptions", held[id].orEmpty().map { it.drop(2).joinToString("|") { value -> value.text.orEmpty() } })
                 },
                 trashed = row.text(8).isNotEmpty(),
                 matchKey = PhoneFields.squash(row.text(1)).lowercase(),
@@ -181,9 +181,9 @@ internal class CalendarStore(
         val series = (record.attributes as? EventAttributes)?.series ?: return true
         val upcoming = CalendarImport.upcoming(core, entityId, deviceTz, now) ?: return false
         val held = exceptions(entityId) ?: return false
-        val byKey = held[entityId].orEmpty().filter { it.text(2) == "occurrence" }.associate { row ->
-            val local = row.text(1)
-            CalendarImport.key(local, local.length == DAY) to CalendarImport.HeldException(row.text(3), local)
+        val byKey = held[entityId].orEmpty().filter { it.text(3) == "occurrence" }.associate { row ->
+            val local = row.text(2)
+            CalendarImport.key(local, local.length == DAY) to CalendarImport.HeldException(row.text(4), local)
         }
         var clean = true
         for (edit in CalendarImport.followEdits(series, entityId, upcoming, byKey, now, deviceTz)) {

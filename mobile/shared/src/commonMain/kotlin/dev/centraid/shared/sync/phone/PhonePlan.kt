@@ -101,10 +101,10 @@ public object PhoneSyncPlanner {
         records.values.forEach { if (it.origin !in present) present[it.origin] = it.origin }
 
         val actions = mutableListOf<PhoneAction>()
-        val usedOrigins = records.values.map { it.origin }.toSet() +
-            links.mapNotNull { storedById[it.originId]?.phoneOrigin }
+        // EVERY ORIGIN PRESENT IS REGISTERED, empty ones too: a calendar with no event yet is still
+        // what the member imported, and it is what makes the source followed (a vault holds an
+        // origin for the sources the member brought in).
         for ((id, label) in present) {
-            if (id !in usedOrigins) continue
             val stored = storedByPhone[id]
             if (stored == null || stored.label != label) actions += PhoneAction.UpsertOrigin(id, label)
         }

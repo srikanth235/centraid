@@ -234,7 +234,7 @@ class PhoneStoresSpec : StringSpec({
 
     "the store writes the exceptions through schedule.edit_event_occurrence, one command each" {
         val script = calendarScript(
-            held = listOf(listOf("ev1", "2026-11-02T09:00:00", "occurrence", "skip", "")),
+            held = listOf(listOf("x1", "ev1", "2026-11-02T09:00:00", "occurrence", "skip", "")),
             upcoming = listOf(vaultOccurrence("2026-10-19"), vaultOccurrence("2026-10-26")),
         )
         val followed = snapshotOf(occurrence("2026-10-19"), occurrence("2026-11-02"))

@@ -217,6 +217,17 @@ class PhoneGapsSpec : StringSpec({
         store.rows.values.none { it.trashed } shouldBe true
     }
 
+    "an origin present with no record is registered, so a source imported while empty is followed once it fills" {
+        val store = FakeStore()
+        PhoneSync.run(store, snapshot(origins = listOf(google, PhoneOriginRef("account:icloud", "iCloud"))))
+        store.origins.values.map { it.label }.sorted() shouldContainExactly listOf("Google: ada@example.com", "iCloud")
+        store.links.isEmpty() shouldBe true
+        // And it is the same two rows next pass: nothing is written twice.
+        store.writes.clear()
+        PhoneSync.run(store, snapshot(origins = listOf(google, PhoneOriginRef("account:icloud", "iCloud")), at = t2))
+        store.writes.shouldBeEmpty()
+    }
+
     // -----------------------------------------------------------------------------------------
     // Gap 2's engine half: the satellite
     // -----------------------------------------------------------------------------------------
