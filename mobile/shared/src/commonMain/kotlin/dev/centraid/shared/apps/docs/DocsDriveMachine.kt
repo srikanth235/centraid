@@ -332,8 +332,12 @@ public object DocsDriveMachine : ScreenMachine<DocsDriveState, DocsDriveEvent> {
 
         event.permission != null -> Step(permission(state, event.permission))
 
+        event.followed_changed != null -> Step(state.copy(followed = event.followed_changed.followed))
+
         // INTENTS: the shell routes them. The sheet a row was on goes away.
-        event.add_requested != null || event.trash_opened != null -> Step(state.copy(sheet = none()))
+        event.add_requested != null || event.trash_opened != null ||
+            event.follow_folder_requested != null || event.stop_following_requested != null ->
+            Step(state.copy(sheet = none()))
 
         else -> Step(state)
     }
@@ -416,6 +420,7 @@ public object DocsDriveMachine : ScreenMachine<DocsDriveState, DocsDriveEvent> {
         return when (sheet.kind) {
             DocsSheet.Kind.KIND_MORE -> when (key) {
                 DocsWrites.KEY_RECENT -> toDestination(state, DocsDriveState.Destination.DESTINATION_RECENT)
+                DocsWrites.KEY_FOLLOWED -> Step(openSheet(state, DocsSheet.Kind.KIND_FOLLOWED, documentId = ""))
                 // `trash_shelf` is the shell's route; the sheet goes.
                 else -> Step(state.copy(sheet = none()))
             }
@@ -425,6 +430,8 @@ public object DocsDriveMachine : ScreenMachine<DocsDriveState, DocsDriveEvent> {
                 else -> Step(state.copy(sheet = none()))
             }
             DocsSheet.Kind.KIND_ROW_MENU -> rowAction(state, sheet.document_id, key)
+            // A followed folder's "Stop following" is the shell's route (`StopFollowingRequested`); the sheet goes.
+            DocsSheet.Kind.KIND_FOLLOWED -> Step(state.copy(sheet = none()))
             else -> Step(state)
         }
     }
@@ -800,6 +807,9 @@ public object DocsDriveMachine : ScreenMachine<DocsDriveState, DocsDriveEvent> {
                 actions = DocsActionList(
                     actions = listOf(
                         DocsFold.action(DocsWrites.KEY_RECENT, DocsCopy.MORE_RECENT, "Clock"),
+                    ) + listOfNotNull(
+                        if (state.followed.isEmpty()) null else DocsFold.action(DocsWrites.KEY_FOLLOWED, DocsCopy.MORE_FOLLOWED, "Folder"),
+                    ) + listOf(
                         DocsFold.action(
                             DocsWrites.KEY_TRASH_SHELF,
                             DocsCopy.MORE_TRASH,
@@ -807,6 +817,24 @@ public object DocsDriveMachine : ScreenMachine<DocsDriveState, DocsDriveEvent> {
                             detail = state.rail?.trash_count?.takeIf { it > 0 }?.let(DocsFold::countLabel) ?: "",
                         ),
                     ),
+                ),
+            )
+            DocsSheet.Kind.KIND_FOLLOWED -> base.copy(
+                title = DocsCopy.FOLLOWED_TITLE,
+                actions = DocsActionList(
+                    actions = state.followed.map { folder ->
+                        DocsFold.action(
+                            DocsWrites.KEY_STOP_PREFIX + folder.origin_id,
+                            DocsCopy.FOLLOWED_STOP.replace("{name}", folder.name),
+                            "Folder",
+                            detail = if (folder.documents == 1) {
+                                DocsCopy.FOLLOWED_DETAIL_ONE
+                            } else {
+                                DocsCopy.FOLLOWED_DETAIL.replace("{count}", folder.documents.toString())
+                            },
+                        )
+                    },
+                    footer = DocsCopy.FOLLOWED_FOOTER,
                 ),
             )
             DocsSheet.Kind.KIND_ADD -> base.copy(title = DocsCopy.ADD_TITLE, actions = DocsActionList(actions = addRows(state)))
@@ -894,6 +922,7 @@ public object DocsDriveMachine : ScreenMachine<DocsDriveState, DocsDriveEvent> {
         }
         return listOfNotNull(
             gated(DocsWrites.KEY_UPLOAD, DocsCopy.ADD_UPLOAD, "Upload", capture.files, DocsCopy.FILES_DENIED, DocsCopy.FILES_RESTRICTED),
+            DocsFold.action(DocsWrites.KEY_FOLLOW_FOLDER, DocsCopy.ADD_FOLLOW, "Folder"),
             gated(DocsWrites.KEY_SCAN, DocsCopy.ADD_SCAN, "Camera", capture.camera, DocsCopy.CAMERA_DENIED, DocsCopy.CAMERA_RESTRICTED),
             DocsFold.action(DocsWrites.KEY_TEXT, DocsCopy.ADD_TEXT, "FileText"),
             DocsFold.action(DocsWrites.KEY_NEW_FOLDER, DocsCopy.ADD_FOLDER, "FolderPlus"),

@@ -7778,6 +7778,8 @@ message DocsDriveState {
   // A FOLDER PAGE's parent, by its title (#1047): `chrome.back` is it, else
   // "Docs" — never a bare "Back". Rides along with `Opened`.
   string parent = 27;
+  // The folders Docs follows on this phone, as the shell last reported them (#1127, law 4).
+  repeated DocsFollowed followed = 28;
 
   enum Destination {
     DESTINATION_UNSPECIFIED = 0;
@@ -8034,6 +8036,14 @@ message DocsAction {
   string detail = 6;
 }
 
+// A FOLDER DOCS FOLLOWS ON THIS PHONE (#1127): its origin (`folder:<uuid>`), the name the phone
+// gives it, and how many documents it holds.
+message DocsFollowed {
+  string origin_id = 1;
+  string name = 2;
+  int32 documents = 3;
+}
+
 // A choice on a choices sheet (#1015 D4: choices sheet, content pushes).
 message DocsChoice {
   string key = 1;
@@ -8071,6 +8081,8 @@ message DocsSheet {
     KIND_MOVE = 9;
     KIND_LABELS = 10;
     KIND_NEW_FOLDER = 11;
+    // The folders Docs follows on this phone (#1127): one "Stop following" row each.
+    KIND_FOLLOWED = 12;
   }
 }
 
@@ -8161,6 +8173,10 @@ message DocsDriveEvent {
     DocumentPicked document_picked = 33;
     AddRequested add_requested = 34;
     TrashOpened trash_opened = 35;
+    FollowFolderRequested follow_folder_requested = 36;
+    StopFollowingRequested stop_following_requested = 37;
+    // The shell's report of the folders followed now (law 4, like `permission`).
+    FollowedChanged followed_changed = 38;
   }
 
   // Lands on `destination` (All when unspecified); FOLDERS opens `folder_id`.
@@ -8307,6 +8323,20 @@ message DocsDriveEvent {
   }
 
   message TrashOpened {}
+
+  // "Follow a folder" (#1127). The shell opens its folder picker; the sheet goes.
+  message FollowFolderRequested {}
+
+  // A followed folder's "Stop following" (#1127). The shell forgets its access and tells the
+  // core to forget its links; every document stays. `origin_id` is the folder's phone origin
+  // (`folder:<uuid>`), the sheet row's key.
+  message StopFollowingRequested {
+    string origin_id = 1;
+  }
+
+  message FollowedChanged {
+    repeated DocsFollowed followed = 1;
+  }
 }
 
 // ---------------------------------------------------------------------------

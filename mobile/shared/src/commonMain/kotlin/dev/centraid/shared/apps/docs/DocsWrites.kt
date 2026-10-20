@@ -28,6 +28,7 @@ public object DocsWrites {
     public const val ADD: String = "core.add_document"
     public const val CREATE_TEXT: String = "core.create_text_document"
     public const val EDIT: String = "core.edit_document"
+    public const val REPLACE_CONTENT: String = "core.replace_document_content"
     public const val RESTORE_VERSION: String = "core.restore_document_version"
     public const val CREATE_FOLDER: String = "core.create_folder"
     public const val TAG: String = "core.tag_item"
@@ -56,6 +57,12 @@ public object DocsWrites {
     public const val KEY_TEXT: String = "text"
     public const val KEY_NEW_FOLDER: String = "new_folder"
 
+    // Following folders on the phone (#1127): the Add sheet's row, More's row, and a followed
+    // folder's row on the Followed sheet (`stop:` and the folder's origin id).
+    public const val KEY_FOLLOW_FOLDER: String = "follow_folder"
+    public const val KEY_FOLLOWED: String = "followed"
+    public const val KEY_STOP_PREFIX: String = "stop:"
+
     /** The move sheet's key for the drive's top level (a folder id is never empty). */
     public const val KEY_TOP_LEVEL: String = "top"
 
@@ -78,6 +85,10 @@ public object DocsWrites {
         } else {
             obj("document_id" to documentId, "body_text" to body, "title" to title)
         }
+
+    /** `core.replace_document_content` over staged bytes: a NEW REVISION of the same document (ONT-22). */
+    public fun replaceContent(documentId: String, stagedSha: String): String =
+        obj("document_id" to documentId, "staged_sha" to stagedSha)
 
     public fun restoreVersion(documentId: String, contentId: String): String =
         obj("document_id" to documentId, "content_id" to contentId)

@@ -554,7 +554,7 @@ class DocsSpec : StringSpec({
     "the Add sheet: capture rows follow the OS grants, as state" {
         var s = onScreen()
         s = drive(DocsDriveEvent(sheet_opened = DocsDriveEvent.SheetOpened(kind = DocsSheet.Kind.KIND_ADD)), s).state
-        s.sheet!!.actions!!.actions.map { it.key } shouldBe listOf("upload", "scan", "text", "new_folder")
+        s.sheet!!.actions!!.actions.map { it.key } shouldBe listOf("upload", "follow_folder", "scan", "text", "new_folder")
         s = drive(
             DocsDriveEvent(
                 permission = DocsDriveEvent.PermissionChanged(
@@ -577,7 +577,7 @@ class DocsSpec : StringSpec({
             ),
             s,
         ).state
-        s.sheet!!.actions!!.actions.map { it.key } shouldBe listOf("upload", "text", "new_folder")
+        s.sheet!!.actions!!.actions.map { it.key } shouldBe listOf("upload", "follow_folder", "text", "new_folder")
         // Capture is an intent: nothing is written, the sheet goes.
         drive(DocsDriveEvent(add_requested = DocsDriveEvent.AddRequested()), s).let {
             it.effects.shouldBeEmpty()

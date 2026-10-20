@@ -32,6 +32,9 @@ internal class ScriptedCore {
     /** Commands to refuse, by name. */
     var refuses: (String) -> Boolean = { false }
 
+    /** What an executed command answers (its output JSON), given its name and input; null for the default. */
+    var answers: (name: String, input: String) -> String? = { _, _ -> null }
+
     fun core(): CentraidCore = CentraidCore.answering(Dispatchers.Unconfined) { envelope ->
         val request = envelope.request!!
         val response = when {
@@ -49,7 +52,8 @@ internal class ScriptedCore {
                 val command = request.command!!
                 commands += command.name to command.input.utf8()
                 val status = if (refuses(command.name)) CommandStatus.COMMAND_STATUS_FAILED else CommandStatus.COMMAND_STATUS_EXECUTED
-                Response(command = CommandOutcome(status = status, output = "{\"event_id\":\"e\"}".encodeUtf8()))
+                val output = if (status == CommandStatus.COMMAND_STATUS_EXECUTED) answers(command.name, command.input.utf8()) else null
+                Response(command = CommandOutcome(status = status, output = (output ?: "{\"event_id\":\"e\"}").encodeUtf8()))
             }
             request.app_query?.agenda_upcoming != null ->
                 upcoming?.let { Response(app_query = AppQueryResponse(agenda_upcoming = AgendaUpcoming(events = it))) } ?: Response()
