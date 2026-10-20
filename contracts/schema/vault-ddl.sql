@@ -2414,7 +2414,7 @@ CREATE TABLE phone_link (
   source       TEXT NOT NULL CHECK (source IN ('contacts', 'calendar', 'files')),
   phone_id     TEXT NOT NULL CHECK (length(trim(phone_id)) > 0),
   origin_id    TEXT NOT NULL,
-  entity_id    TEXT NOT NULL REFERENCES core_entity(entity_id) ON DELETE CASCADE,
+  entity_id    TEXT REFERENCES core_entity(entity_id) ON DELETE SET NULL,
   fingerprint  TEXT NOT NULL CHECK (length(fingerprint) > 0),
   detached_at  TEXT,
   last_seen_at TEXT NOT NULL,
@@ -5117,6 +5117,7 @@ END;
 -- trigger phone_link_kind_matches_source_update on phone_link
 CREATE TRIGGER phone_link_kind_matches_source_update
 BEFORE UPDATE OF source, entity_id ON phone_link
+WHEN NEW.entity_id IS NOT NULL
 BEGIN
   SELECT RAISE(ABORT, 'a phone link points at the kind its source implies: phone_link (#1127)')
    WHERE NOT EXISTS (
@@ -5127,6 +5128,14 @@ BEGIN
                             WHEN 'calendar' THEN 'core.event'
                             WHEN 'files'    THEN 'core.document'
                           END);
+END;
+
+-- trigger phone_link_purge_is_one_way on phone_link
+CREATE TRIGGER phone_link_purge_is_one_way
+BEFORE UPDATE OF entity_id ON phone_link
+WHEN OLD.entity_id IS NULL AND NEW.entity_id IS NOT NULL
+BEGIN
+  SELECT RAISE(ABORT, 'a purged phone link is never given a row again: phone_link (#1127)');
 END;
 
 -- trigger phone_link_touch_updated_at on phone_link

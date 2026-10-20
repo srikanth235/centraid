@@ -129,6 +129,7 @@ public object CalendarImport {
     public const val DAYS_BACK: Long = 7
     public const val DAYS_ON: Long = 62
     private const val DAY_MS: Long = 24L * 60 * 60 * 1000
+    private const val DAY: Int = 10
 
     /** The window's first instant, epoch milliseconds, for a read made at [now]. */
     public fun windowStart(now: Long): Long = now - DAYS_BACK * DAY_MS
@@ -145,6 +146,23 @@ public object CalendarImport {
         public val addAccount: Boolean = false,
         public val gone: List<OriginGone> = emptyList(),
     )
+
+    /**
+     * A CALENDAR AS THE MEMBER KNOWS IT. The origin is `calendar:<id>` (R-1127-10), labelled
+     * "{source}: {calendar}" ("iCloud: Home", "Gmail: Work"); a calendar named for its source, or a
+     * source with no name, is just the one that says something.
+     */
+    public fun calendar(id: String, sourceTitle: String, calendarTitle: String): PhoneOriginRef {
+        val source = PhoneFields.squash(sourceTitle)
+        val title = PhoneFields.squash(calendarTitle)
+        val label = when {
+            source.isEmpty() && title.isEmpty() -> AgendaCopy.IMPORT_ORIGIN_THIS_PHONE
+            source.isEmpty() -> title
+            title.isEmpty() || title == source -> source
+            else -> "$source: $title"
+        }
+        return PhoneOriginRef("calendar:$id", label)
+    }
 
     /** The origin of an event that names none: this phone's own calendars. */
     public const val DEFAULT_ORIGIN: String = "local:this-phone"
@@ -168,9 +186,19 @@ public object CalendarImport {
         return sync(CalendarStore(core, calendar, deviceTz, now), events, origins, complete, now)
     }
 
-    /** The member's answer to a calendar that left the phone (R-1127-9); [GoneChoice.KEEP] is the default. */
-    public suspend fun resolveGone(core: CentraidCore, originId: String, choice: GoneChoice, deviceTz: String, now: Long): Outcome {
-        val report = PhoneSync.resolveGone(CalendarStore(core, "", deviceTz, now), originId, choice)
+    /**
+     * The member's answer to a calendar that left the phone (R-1127-9); [GoneChoice.KEEP] is the
+     * default. [seenBefore] is the question's own, for a calendar that only lost most of its events.
+     */
+    public suspend fun resolveGone(
+        core: CentraidCore,
+        originId: String,
+        choice: GoneChoice,
+        deviceTz: String,
+        now: Long,
+        seenBefore: String? = null,
+    ): Outcome {
+        val report = PhoneSync.resolveGone(CalendarStore(core, "", deviceTz, now), originId, choice, seenBefore)
         return Outcome(added = 0, refused = report.refused.size, trashed = report.trashed)
     }
 
@@ -194,7 +222,7 @@ public object CalendarImport {
         return Outcome(
             added = one.added + one.adopted + (two?.let { it.added + it.adopted } ?: 0),
             refused = refused.size,
-            updated = one.updated + (two?.updated ?: 0),
+            updated = one.updated + one.followed + (two?.let { it.updated + it.followed } ?: 0),
             trashed = one.trashed + (two?.trashed ?: 0),
             addAccount = first.complete && first.records.isEmpty() && first.origins.isEmpty(),
             gone = one.gone,
@@ -218,7 +246,7 @@ public object CalendarImport {
         val labels = events.filter { it.originLabel.isNotEmpty() }.associate { it.origin.ifEmpty { DEFAULT_ORIGIN } to it.originLabel }
         fun keep(id: String, event: PhoneEvent, rrule: String, series: Series?) {
             if (!PhoneIds.isValid(id) || event.title.isEmpty() || event.start.isEmpty() || event.end.isEmpty()) return
-            if (id !in records) records[id] = record(id, event, rrule, series)
+            if (id !in records) records[id] = record(id, event, rrule, series, now)
         }
         for (event in plan.singles) keep(event.phoneId, event, "", null)
         for (series in plan.series) {
@@ -242,7 +270,7 @@ public object CalendarImport {
     }
 
     /** THE FIELDS A PHONE OWNS OF AN EVENT. `free` is written when the event is added and not followed. */
-    private fun record(id: String, event: PhoneEvent, rrule: String, series: Series?): PhoneRecord = PhoneRecord(
+    private fun record(id: String, event: PhoneEvent, rrule: String, series: Series?, now: Long): PhoneRecord = PhoneRecord(
         phoneId = id,
         origin = event.origin.ifEmpty { DEFAULT_ORIGIN },
         fields = PhoneFields.of {
@@ -256,8 +284,31 @@ public object CalendarImport {
         },
         matchKey = PhoneFields.squash(event.title).lowercase(),
         tiebreak = setOf(event.start),
+        satellite = series?.let { satellite(it, now) } ?: PhoneFields.EMPTY,
         attributes = EventAttributes(event, rrule, series),
     )
+
+    /**
+     * WHAT THE PHONE SAYS OF A SERIES' OCCURRENCES, as a digest to compare pass to pass (gap 2 of
+     * #1127): the occurrences it shows inside the window, unmoved, by the key the rule put them at,
+     * and each moved one with its own times and words. A key the vault expands that is missing from
+     * this was cancelled on the phone; one that was missing and is back was restored. The window
+     * moves a day at a time, so the digest does, and a pass that finds it changed reconciles.
+     */
+    private fun satellite(series: Series, now: Long): PhoneFields {
+        val allDay = series.event.allDay
+        val (first, last) = inner(now)
+        fun keyOf(occurrence: PhoneEvent): String = key(occurrence.originalStart.ifEmpty { occurrence.start }, allDay)
+        return PhoneFields.of {
+            set("shown", series.occurrences.filter { !it.moved }.map(::keyOf).filter { it.take(DAY) in first..last })
+            set(
+                "moved",
+                series.occurrences.filter { it.moved }.map {
+                    listOf(keyOf(it), it.start, it.end, it.title.trim(), it.notes.trim()).joinToString("|")
+                },
+            )
+        }
+    }
 
     /**
      * WRITE ONE SERIES AND ITS EXCEPTIONS: the event with its rule, then a skip for an occurrence
@@ -456,6 +507,39 @@ public object CalendarImport {
             writes += OccurrenceEdit(occurrence(eventId, local, "override", fields), fallback = events(listOf(moved)).firstOrNull())
         }
         return writes
+    }
+
+    /** An exception the vault holds on a series: what it does, and the key it is stored under (`original_start_local`). */
+    internal data class HeldException(val action: String, val local: String)
+
+    /**
+     * THE EXCEPTIONS A FOLLOWED SERIES NEEDS NOW (gap 2 of #1127): [reconcile]'s skips for an
+     * occurrence the phone no longer shows and overrides for ones it moved, and **a restore** for
+     * an occurrence the phone shows as the rule has it that the vault still holds an exception on
+     * (the phone un-cancelled it or put it back). Only inside the window, as [reconcile] is. An
+     * occurrence that is not a skip or a move on either side is untouched, and a stray (one the
+     * phone shows and the vault's reading of the rule lacks) is not written again: it was written
+     * when the series was added.
+     */
+    internal fun followEdits(
+        series: Series,
+        eventId: String,
+        upcoming: Map<String, String>,
+        held: Map<String, HeldException>,
+        now: Long,
+        deviceTz: String,
+    ): List<OccurrenceEdit> {
+        val allDay = series.event.allDay
+        val (first, last) = inner(now)
+        val edits = reconcile(series, eventId, upcoming, now, deviceTz).toMutableList()
+        val moved = series.occurrences.filter { it.moved }.map { key(it.originalStart.ifEmpty { it.start }, allDay) }.toSet()
+        for (occurrence in series.occurrences.filter { !it.moved }) {
+            val key = key(occurrence.originalStart.ifEmpty { occurrence.start }, allDay)
+            if (key in moved || key.take(DAY) < first || key.take(DAY) > last) continue
+            val exception = held[key] ?: continue
+            edits += OccurrenceEdit(occurrence(eventId, exception.local, "restore"), fallback = null)
+        }
+        return edits
     }
 
     /**

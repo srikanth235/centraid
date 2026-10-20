@@ -97,6 +97,7 @@ fn the_rung_is_a_climb_a_file_at_one_reaches_two_with_its_rows_intact() {
         connection
             .execute_batch(
                 "DROP TRIGGER phone_link_touch_updated_at;
+                 DROP TRIGGER phone_link_purge_is_one_way;
                  DROP TRIGGER phone_link_detach_is_one_way;
                  DROP TRIGGER phone_link_kind_matches_source_update;
                  DROP TRIGGER phone_link_kind_matches_source;
@@ -216,12 +217,15 @@ fn a_detached_link_is_never_reattached() {
 }
 
 #[test]
-fn a_purged_row_takes_its_link_with_it() {
+fn a_purged_row_leaves_its_link_behind_as_a_tombstone_and_nothing_gives_it_a_row_again() {
     let scratch = common::Scratch::founded("purge").expect("a vault");
     party(&scratch.vault, "p1");
+    party(&scratch.vault, "p2");
     event(&scratch.vault, "e1");
     link(&scratch.vault, "l1", "contacts", "c1", "p1").expect("a link");
     link(&scratch.vault, "l2", "calendar", "k1", "e1").expect("a link");
+    // The kind trigger watches an update of `entity_id`; the foreign key's SET NULL is one, and
+    // must pass it.
     scratch
         .vault
         .commit(|tx| {
@@ -234,19 +238,66 @@ fn a_purged_row_takes_its_link_with_it() {
     assert_eq!(
         count(
             &scratch.vault,
-            "SELECT COUNT(*) FROM phone_link WHERE link_id = 'l1'"
+            "SELECT COUNT(*) FROM phone_link WHERE link_id = 'l1' AND entity_id IS NULL"
         ),
-        0,
-        "the link went with the row"
+        1,
+        "the link stayed, with no row: the tombstone"
     );
     assert_eq!(
         count(
             &scratch.vault,
-            "SELECT COUNT(*) FROM phone_link WHERE link_id = 'l2'"
+            "SELECT COUNT(*) FROM phone_link WHERE link_id = 'l2' AND entity_id = 'e1'"
         ),
         1,
         "the other link is untouched"
     );
+    // A tombstone still holds its phone id: the record cannot be linked to a new row.
+    assert!(
+        link(&scratch.vault, "l3", "contacts", "c1", "p2").is_err(),
+        "one phone record, one link, tombstone included"
+    );
+    // And it is never given a row again, even by a direct write.
+    let revived = scratch.vault.commit(|tx| {
+        tx.set_producer("test.phone_link");
+        tx.connection().execute(
+            "UPDATE phone_link SET entity_id = 'p2' WHERE link_id = 'l1'",
+            [],
+        )?;
+        Ok(())
+    });
+    let error = revived.expect_err("a purge is one way");
+    assert!(error.to_string().contains("never given a row again"), "{error}");
+    // Several tombstones coexist: NULL is not a value `UNIQUE (entity_id)` compares.
+    party(&scratch.vault, "p3");
+    link(&scratch.vault, "l4", "contacts", "c4", "p3").expect("a link");
+    scratch
+        .vault
+        .commit(|tx| {
+            tx.set_producer("test.phone_link");
+            tx.connection()
+                .execute("DELETE FROM core_party WHERE party_id = 'p3'", [])?;
+            Ok(())
+        })
+        .expect("the party is purged");
+    assert_eq!(
+        count(
+            &scratch.vault,
+            "SELECT COUNT(*) FROM phone_link WHERE entity_id IS NULL"
+        ),
+        2
+    );
+    // A link cannot be written with no row at all: a tombstone is only ever what a purge leaves.
+    let bare = scratch.vault.commit(|tx| {
+        tx.set_producer("test.phone_link");
+        tx.connection().execute(
+            "INSERT INTO phone_link
+               (link_id, source, phone_id, origin_id, entity_id, fingerprint, last_seen_at, created_at)
+             VALUES ('lz', 'contacts', 'cz', 'o-contacts', NULL, 'f', 'x', 'x')",
+            [],
+        )?;
+        Ok(())
+    });
+    assert!(bare.is_err(), "a link with no row is not written");
 }
 
 #[test]

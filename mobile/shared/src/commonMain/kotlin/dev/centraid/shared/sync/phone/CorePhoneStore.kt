@@ -32,7 +32,7 @@ public abstract class CorePhoneStore(
             linkId = row.text(0),
             phoneId = row.text(1),
             originId = row.text(2),
-            entityId = row.text(3),
+            entityId = row.text(3).ifEmpty { null },
             fingerprint = row.text(4),
             detached = row.text(5).isNotEmpty(),
             lastSeenAt = row.text(6),

@@ -47,7 +47,21 @@ internal class CalendarStore(
 
     override suspend fun row(entityId: String): VaultRow? = read(entityId)?.get(entityId)
 
+    /** A series' exceptions (`scope` occurrence), by event: `key → what it does and where it is stored`. */
+    private suspend fun exceptions(eventId: String?): Map<String, List<List<centraid.core.v1.Value>>>? {
+        val rows = pageAll(
+            name = "phone.agenda.exceptions",
+            select = listOf("target_id", "original_start_local", "scope", "action", "override_json"),
+            from = "schedule_recurrence_exception",
+            key = "exception_id",
+            where = if (eventId == null) "target_type = 'core.event'" else "target_type = 'core.event' AND target_id = ?",
+            bind = listOfNotNull(eventId?.let { centraid.core.v1.Value(text = it) }),
+        ) ?: return null
+        return rows.groupBy { it.text(0) }
+    }
+
     private suspend fun read(eventId: String?): Map<String, VaultRow>? {
+        val held = exceptions(eventId) ?: return null
         val rows = pageAll(
             name = "phone.agenda.events",
             select = listOf(
@@ -71,6 +85,9 @@ internal class CalendarStore(
                     text("start_tz", row.text(5))
                     text("recurrence_semantics", row.text(6))
                     text("rrule", row.text(7))
+                    // A SERIES' EXCEPTIONS ARE PART OF THE ROW: a member who skips or moves an
+                    // occurrence here has edited the event, and it stops following the phone.
+                    set("exceptions", held[id].orEmpty().map { it.drop(1).joinToString("|") { value -> value.text.orEmpty() } })
                 },
                 trashed = row.text(8).isNotEmpty(),
                 matchKey = PhoneFields.squash(row.text(1)).lowercase(),
@@ -128,7 +145,7 @@ internal class CalendarStore(
 
     /**
      * THE FIELDS THE PHONE NOW HOLDS, onto the event. Its exceptions (a skipped or moved
-     * occurrence) were written when the series was added and are not followed.
+     * occurrence) are followed by [follow].
      */
     override suspend fun update(entityId: String, record: PhoneRecord): Boolean {
         val attributes = record.attributes as? EventAttributes ?: return false
@@ -151,6 +168,28 @@ internal class CalendarStore(
             fields += "\"clear_rrule\":true"
         }
         return command(AgendaWrites.EDIT, fields.joinToString(",", prefix = "{", postfix = "}")) != null
+    }
+
+    /**
+     * THE SERIES' EXCEPTIONS THE PHONE NOW HOLDS (gap 2 of #1127): a newly skipped occurrence is
+     * skipped, a newly moved one overridden, and one the phone put back restored, through
+     * `schedule.edit_event_occurrence`. False when the vault's expansion or its exceptions cannot
+     * be read or a write is refused, so the pass tries again; it writes nothing on a read it
+     * could not make.
+     */
+    override suspend fun follow(entityId: String, record: PhoneRecord): Boolean {
+        val series = (record.attributes as? EventAttributes)?.series ?: return true
+        val upcoming = CalendarImport.upcoming(core, entityId, deviceTz, now) ?: return false
+        val held = exceptions(entityId) ?: return false
+        val byKey = held[entityId].orEmpty().filter { it.text(2) == "occurrence" }.associate { row ->
+            val local = row.text(1)
+            CalendarImport.key(local, local.length == DAY) to CalendarImport.HeldException(row.text(3), local)
+        }
+        var clean = true
+        for (edit in CalendarImport.followEdits(series, entityId, upcoming, byKey, now, deviceTz)) {
+            if (!PhoneImport.write(core, AgendaWrites.OCCURRENCE, edit.input)) clean = false
+        }
+        return clean
     }
 
     override suspend fun trash(entityId: String): Boolean =

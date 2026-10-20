@@ -98,14 +98,14 @@ fn undo_renames(text: &str) -> String {
 /// tables with their touch and membership triggers and indexes, the unique index
 /// that lands a statement line once per account, and the three triggers that hold
 /// a Money account to one currency and an imported row to never being edited; and rung two
-/// (#1127): `phone_link` and its four triggers (the kind a source implies, a detach that is
+/// (#1127): `phone_link` and its five triggers (the kind a source implies, a purge that is one way, a detach that is
 /// one way, the touch), and `phone_origin` with its touch trigger (R-1127-9).
 ///
 /// The corpus is a v0 file and knows nothing of v1's additions, so a founded v1
 /// file legitimately carries exactly these and nothing else. Named here rather
 /// than filtered by prefix: a guard that stopped being created, or an object
 /// arriving from somewhere, both have to show up as a failure.
-const ADDED_OBJECTS: [&str; 96] = [
+const ADDED_OBJECTS: [&str; 97] = [
     "chat_message",
     "chat_message_attachment",
     "chat_message_card",
@@ -199,6 +199,7 @@ const ADDED_OBJECTS: [&str; 96] = [
     "phone_link_detach_is_one_way",
     "phone_link_kind_matches_source",
     "phone_link_kind_matches_source_update",
+    "phone_link_purge_is_one_way",
     "phone_link_touch_updated_at",
     "phone_origin",
     "phone_origin_touch_updated_at",

@@ -1369,7 +1369,7 @@ fn edit_event_occurrence() -> CommandDefinition {
             "event_id": { "type": "string", "minLength": 1 },
             "original_start_local": { "type": "string", "minLength": 1 },
             "scope": { "type": "string", "enum": ["occurrence", "future", "series"] },
-            "action": { "type": "string", "enum": ["skip", "override"] },
+            "action": { "type": "string", "enum": ["skip", "override", "restore"], "description": "restore removes the occurrence exception (a skip or an override), so the occurrence is the series' own again; scope occurrence only" },
             "dtstart": { "type": "string", "minLength": 1 },
             "dtend": { "type": "string", "minLength": 1 },
             "tz": { "type": "string", "minLength": 1, "description": "IANA zone: dtstart/dtend are then wall clocks in it (YYYY-MM-DDTHH:MM[:SS], no Z or offset), stored as instants zoned in it; exclusive with start_tz/end_tz (commands/event_time.rs)" },
@@ -1412,6 +1412,25 @@ fn edit_event_occurrence() -> CommandDefinition {
                     "original_start_local is not an occurrence of this series",
                 ));
             };
+            if action == "restore" {
+                // THE OCCURRENCE IS THE SERIES' OWN AGAIN (#1127: the phone un-cancelled or
+                // un-moved it). Removing what is not there lands the same state.
+                if scope != "occurrence" {
+                    return Err(invalid("scope", "only an occurrence exception is restored"));
+                }
+                let restored = ctx.connection().execute(
+                    &format!(
+                        "DELETE FROM core_entity WHERE entity_id IN
+                           (SELECT exception_id FROM schedule_recurrence_exception
+                             WHERE target_type = 'core.event' AND target_id = ?1
+                               AND {OCCURRENCE_LOCAL_START_COLUMN} = ?2 AND scope = 'occurrence')"
+                    ),
+                    rusqlite::params![event_id, wall_start],
+                )? > 0;
+                return Ok(serde_json::json!({
+                    "event_id": event_id, "scope": scope, "restored": restored,
+                }));
+            }
             let override_json = occurrence_override_json(ctx, &scope, &action)?;
             let semantics = event_series(ctx.connection(), &event_id)?.semantics;
             let exception_id = ctx.next_id();
@@ -1425,7 +1444,9 @@ fn edit_event_occurrence() -> CommandDefinition {
                      ON CONFLICT(target_type, target_id, {OCCURRENCE_LOCAL_START_COLUMN}, scope)
                        DO UPDATE SET action = excluded.action,
                          override_json = excluded.override_json,
-                         updated_at = excluded.updated_at"
+                         updated_at = excluded.updated_at
+                       WHERE action IS NOT excluded.action
+                          OR override_json IS NOT excluded.override_json"
                 ),
                 rusqlite::params![
                     exception_id,
@@ -1544,6 +1565,9 @@ fn edit_series(
     event_id: &str,
     action: &str,
 ) -> Result<serde_json::Value> {
+    if action == "restore" {
+        return Err(invalid("action", "only an occurrence exception is restored"));
+    }
     if action == "skip" {
         let status: String = ctx.connection().query_row(
             "SELECT status FROM core_event WHERE event_id = ?1",

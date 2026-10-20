@@ -26,15 +26,15 @@
 //! - `phone.forget` — the link has done its job: the phone record is gone and the row went to
 //!   trash (R-1127-3), or the member stopped following the source. Deletes the link row, and
 //!   nothing else: the engine trashes the row itself, so forgetting is the same command whether
-//!   the row is kept, trashed or already purged (a purge deletes the link with it).
+//!   the row is kept, trashed or already purged (a purge leaves a tombstone link, which this ends).
 //!
 //! ## What a refusal looks like
 //!
 //! A value, never a panic: a precondition's sentence and its stable predicate name come back
 //! as a `Failed` outcome, and nothing is written. The predicates a shell switches on are
 //! `link_entity_is_live_and_of_the_sources_kind`, `link_is_attached`,
-//! `link_entity_is_followed_once`, `link_origin_is_of_the_source`, `link_exists` and
-//! `origin_has_no_links`.
+//! `link_entity_is_followed_once`, `link_origin_is_of_the_source`, `link_row_was_not_purged`,
+//! `link_exists` and `origin_has_no_links`.
 //!
 //! ## Three rules, each a bug if dropped
 //!
@@ -47,6 +47,10 @@
 //!    keep its link (R-1127-3) but a fresh link to one is a mistake.
 //! 3. **One vault row, one link.** A row already followed from another phone record is refused,
 //!    not stolen.
+//! 4. **A purged row is not brought back.** Purging the row leaves its link behind with a NULL
+//!    `entity_id` (`ON DELETE SET NULL`): the tombstone that stops the next pass adding the
+//!    phone record again. `phone.link` on it is refused (`link_row_was_not_purged`); the engine
+//!    ends it with `phone.forget` once the phone record has gone too.
 
 use rusqlite::OptionalExtension;
 
@@ -137,12 +141,13 @@ fn str_of<'a>(ctx: &'a CommandCtx<'_, '_>, key: &str) -> Option<&'a str> {
     ctx.input.get(key).and_then(serde_json::Value::as_str)
 }
 
-/// The link a `(source, phone_id)` pair holds, with whether it is detached and the row it follows.
+/// The link a `(source, phone_id)` pair holds, with the row it follows (`None` for the tombstone a
+/// purge leaves) and whether it is detached.
 fn link_of(
     ctx: &CommandCtx<'_, '_>,
     source: &str,
     phone_id: &str,
-) -> Result<Option<(String, String, bool)>> {
+) -> Result<Option<(String, Option<String>, bool)>> {
     Ok(ctx
         .connection()
         .query_row(
@@ -257,6 +262,23 @@ fn retire_origin() -> CommandDefinition {
 
 fn link() -> CommandDefinition {
     static PRE: &[CommandCondition] = &[
+        CommandCondition {
+            predicate: "link_row_was_not_purged",
+            check: |ctx| {
+                let (Some(source), Some(phone_id)) =
+                    (str_of(ctx, "source"), str_of(ctx, "phone_id"))
+                else {
+                    return Ok(None);
+                };
+                Ok(link_of(ctx, source, phone_id)?
+                    .is_some_and(|(_, entity, _)| entity.is_none())
+                    .then(|| {
+                        "That record's row was deleted forever here, so it does not come back \
+                         from the phone."
+                            .to_owned()
+                    }))
+            },
+        },
         CommandCondition {
             predicate: "link_entity_is_live_and_of_the_sources_kind",
             check: |ctx| {
