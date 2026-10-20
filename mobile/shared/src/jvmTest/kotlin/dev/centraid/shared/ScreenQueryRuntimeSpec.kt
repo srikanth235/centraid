@@ -301,11 +301,14 @@ class ScreenQueryRuntimeSpec : StringSpec({
         fun home(answer: (AppQueryRequest) -> Envelope): CentraidCore =
             CentraidCore.answering(Dispatchers.Default) { envelope ->
                 val query = envelope.request.shouldNotBeNull().app_query
-                if (query == null) {
-                    Envelope(request_id = 0, response = Response(page = Page()))
-                } else {
-                    zones += query.agenda_upcoming.shouldNotBeNull().tz
-                    answer(query)
+                when {
+                    query == null -> Envelope(request_id = 0, response = Response(page = Page()))
+                    // Health's tile is Home's other app query (#1129); it is not this case's.
+                    query.health_today != null -> Envelope(request_id = 0, response = Response(app_query = AppQueryResponse()))
+                    else -> {
+                        zones += query.agenda_upcoming.shouldNotBeNull().tz
+                        answer(query)
+                    }
                 }
             }
 

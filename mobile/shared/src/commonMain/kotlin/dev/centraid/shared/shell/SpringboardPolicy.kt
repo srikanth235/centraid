@@ -35,6 +35,7 @@ public object SpringboardPolicy {
         "agenda",
         "tasks",
         "money",
+        "health",
         "people",
         "locker",
     )
@@ -46,6 +47,7 @@ public object SpringboardPolicy {
     private val TILE_SIZE: Map<String, TileSize> = mapOf(
         "agenda" to TileSize.TILE_SIZE_SMALL,
         "docs" to TileSize.TILE_SIZE_MEDIUM,
+        "health" to TileSize.TILE_SIZE_SMALL,
         // Notes' body IS the Docs preview body, and the class follows the body.
         "notes" to TileSize.TILE_SIZE_MEDIUM,
         "locker" to TileSize.TILE_SIZE_SMALL,
@@ -137,6 +139,7 @@ public object SpringboardPolicy {
     public val TILE_EMPTY_COPY: Map<String, String> = mapOf(
         "agenda" to "Put something on the calendar",
         "docs" to "Add your first document",
+        "health" to "Connect your health app",
         "locker" to "Unlock to see your items",
         "money" to "Import your first statement",
         "notes" to "Write your first note",

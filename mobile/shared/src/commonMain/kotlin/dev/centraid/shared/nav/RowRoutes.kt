@@ -106,6 +106,7 @@ public object RowRoutes {
         AppIds.AGENDA -> Destination.AgendaHome()
         AppIds.PHOTOS -> Destination.PhotosHome()
         AppIds.MONEY -> Destination.MoneyHome()
+        AppIds.HEALTH -> Destination.HealthHome()
         else -> null
     }
 
@@ -135,6 +136,7 @@ public object AppIds {
     public const val AGENDA: String = "agenda"
     public const val PHOTOS: String = "photos"
     public const val MONEY: String = "money"
+    public const val HEALTH: String = "health"
     public const val LOCKER: String = "locker"
 
     /** Not an app: the Chat tab, which a card's reference can name (a conversation). */

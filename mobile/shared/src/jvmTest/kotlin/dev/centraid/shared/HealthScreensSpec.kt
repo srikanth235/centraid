@@ -422,4 +422,33 @@ class HealthScreensSpec : StringSpec({
         HealthHomeMachine.rowsChanged("core_party", emptyList()).shouldBeNull()
         HealthMetricMachine.rowsChanged("health_workout", emptyList()).shouldBeNull()
     }
+
+    "Home's tile: today's steps and last night's sleep, connect when nothing is, and never a zero it was not told" {
+        val tile = dev.centraid.shared.shell.HomeHealthTile.arrived(connectedToday).tile.shouldNotBeNull()
+        tile.status shouldBe centraid.screen.v1.TileStatus.TILE_STATUS_CONTENT
+        tile.body!!.health.shouldNotBeNull().let {
+            it.figure shouldBe "8,412"
+            it.caption shouldBe "steps today"
+            it.line shouldBe "Slept 7 h 12 m"
+        }
+        val spoken = dev.centraid.shared.shell.HomeTileWords.spoken(
+            centraid.screen.v1.HomeTile(app_id = "health", status = tile.status, body = tile.body),
+        )
+        spoken.second shouldBe "Open Health, 8,412 steps today, Slept 7 h 12 m"
+        val quiet = dev.centraid.shared.shell.HomeHealthTile.arrived(connectedToday.copy(metrics = emptyList())).tile!!.body!!.health!!
+        quiet.figure shouldBe ""
+        quiet.caption shouldBe "Nothing yet today"
+        quiet.line shouldBe ""
+        dev.centraid.shared.shell.HomeHealthTile.arrived(HealthToday(today = today, connected = false)).tile!!.status shouldBe
+            centraid.screen.v1.TileStatus.TILE_STATUS_EMPTY
+        val clock = dev.centraid.shared.platform.FakeDeviceClock(epochMillis = LocalDays.epochMillisOf("2026-10-20T10:00:00Z")!!, utcOffsetMinutes = -240)
+        dev.centraid.shared.shell.HomeHealthTile.request(clock)!!.health_today!!.let {
+            it.today shouldBe "2026-10-20"
+            it.day_start shouldBe "2026-10-20T04:00:00Z"
+            it.day_end shouldBe "2026-10-21T04:00:00Z"
+        }
+        dev.centraid.shared.shell.SpringboardPolicy.SPRINGBOARD_ORDER.indexOf("health") shouldBe
+            dev.centraid.shared.shell.SpringboardPolicy.SPRINGBOARD_ORDER.indexOf("money") + 1
+        dev.centraid.shared.shell.SpringboardPolicy.tileSize("health") shouldBe centraid.screen.v1.TileSize.TILE_SIZE_SMALL
+    }
 })

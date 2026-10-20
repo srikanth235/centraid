@@ -64,6 +64,10 @@ import dev.centraid.shared.apps.locker.LockerImportMachine
 import dev.centraid.shared.apps.locker.LockerItemMachine
 import dev.centraid.shared.apps.locker.LockerRouting
 import dev.centraid.shared.apps.locker.LockerTrashMachine
+import dev.centraid.shared.apps.health.HealthConnectMachine
+import dev.centraid.shared.apps.health.HealthHomeMachine
+import dev.centraid.shared.apps.health.HealthMetricMachine
+import dev.centraid.shared.apps.health.HealthWorkoutMachine
 import dev.centraid.shared.apps.money.MoneyAccountsMachine
 import dev.centraid.shared.apps.money.MoneyCategoriesMachine
 import dev.centraid.shared.apps.money.MoneyHomeMachine
@@ -150,6 +154,10 @@ class AppRoutingSpec : StringSpec({
             Destination.MoneyRules() to MoneyRulesMachine.SCREEN_ID,
             Destination.MoneyCategories() to MoneyCategoriesMachine.SCREEN_ID,
             Destination.MoneySearch to MoneySearchMachine.SCREEN_ID,
+            Destination.HealthHome() to HealthHomeMachine.SCREEN_ID,
+            Destination.HealthMetric("steps") to HealthMetricMachine.SCREEN_ID,
+            Destination.HealthWorkout("a") to HealthWorkoutMachine.SCREEN_ID,
+            Destination.HealthConnect() to HealthConnectMachine.SCREEN_ID,
             Destination.LockerHome() to LockerHomeMachine.SCREEN_ID,
             Destination.LockerItem("i") to LockerItemMachine.SCREEN_ID,
             Destination.LockerEditor() to LockerEditorMachine.SCREEN_ID,

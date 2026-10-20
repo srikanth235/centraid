@@ -22,6 +22,7 @@ import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.ScreenHost
 import dev.centraid.shared.shell.HomeMachine
 import dev.centraid.shared.shell.HomeAgendaTile
+import dev.centraid.shared.shell.HomeHealthTile
 import dev.centraid.shared.shell.HomeMoneyTile
 import dev.centraid.shared.shell.HomeReads
 import dev.centraid.shared.sync.ChangeStream
@@ -159,6 +160,10 @@ class ChangeStreamSpec : StringSpec({
         HomeMoneyTile.TABLES.forEach { table ->
             HomeMachine.rowsChanged(table, listOf("x")).shouldNotBeNull()
         }
+        // HEALTH'S TILE IS AN APP QUERY TOO (#1129): the days and the store's origin.
+        HomeHealthTile.TABLES.forEach { table ->
+            HomeMachine.rowsChanged(table, listOf("x")).shouldNotBeNull()
+        }
         // A FILTER'S SUBQUERY TABLE REDRAWS TOO: trashing a person moves
         // `people_profile`, never `core_party` (#1047).
         HomeReads.READS.flatMap { it.alsoReads }.forEach { table ->
@@ -166,7 +171,7 @@ class ChangeStreamSpec : StringSpec({
         }
         HomeReads.TABLES shouldBe
             HomeReads.READS.flatMap { listOf(it.query.from) + it.alsoReads }.toSet() + HomeAgendaTile.TABLES +
-                HomeMoneyTile.TABLES
+                HomeMoneyTile.TABLES + HomeHealthTile.TABLES
     }
 
     "a change from the gateway never takes a member's typing" {
