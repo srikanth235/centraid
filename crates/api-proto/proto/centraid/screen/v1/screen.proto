@@ -3864,9 +3864,10 @@ message AgendaHomeState {
   string new_project_name = 25;
   bool new_project_can_submit = 26;
   // THE HEADER PLUS (R-CHROME-1), per place: its accessibility label — "Add
-  // task" on To-do, "New event" elsewhere — and what a tap does. On To-do it
-  // opens the quick-add bar (`QuickAddOpened`), so `add_opens_quick_add` is
-  // true; elsewhere it is `NewEventRequested`, the add sheet (R-1128-1).
+  // task" on To-do, "Add" elsewhere (the sheet adds an event or a task) — and
+  // what a tap does. On To-do it opens the quick-add bar (`QuickAddOpened`), so
+  // `add_opens_quick_add` is true; elsewhere it is `NewEventRequested`, the add
+  // sheet (R-1128-1).
   string add_label = 27;
   bool add_opens_quick_add = 28;
 

@@ -158,7 +158,7 @@ struct AgendaHomeView: View {
     }
 
     /// THE HEADER'S ONE ACTION (R-CHROME-1), per place: the Plus glyph, spoken
-    /// as the state's `add_label` ("New event", "Add task" on To-do). What a
+    /// as the state's `add_label` ("Add", "Add task" on To-do). What a
     /// tap sends is the state's flag: To-do opens the quick-add bar on the
     /// keyboard, every other place the add sheet. None on the gate, which can
     /// make nothing, and on To-do while the bar cannot be drawn.
@@ -210,7 +210,7 @@ struct AgendaHomeView: View {
                 SearchEmptyView(emptyState(home), ask: state.searchAsk)
             } else {
                 // WHERE THE PHONE HOLDS A CALENDAR, ITS IMPORT IS DAY ONE'S
-                // ACTION (the kit's empty state draws it); "New event" stays in
+                // ACTION (the kit's empty state draws it); "Add" stays in
                 // the header.
                 //
                 // AN EMPTY DAY THAT STILL HOLDS OVERDUE WORK OR THE ABSENCE

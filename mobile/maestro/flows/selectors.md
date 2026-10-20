@@ -30,7 +30,7 @@ One string per control, set with `Modifier.testTag` in Compose and `.accessibili
 | `agenda-task-row-<taskId>` | Agenda (Day, Schedule, To-do, Overdue, a search's task hits) | one task row; a tap opens the task, a long press offers "Move to project" |
 | `agenda-task-row-check-<taskId>` | the same | the row's round box: checks the task off in place, and the status line (`agenda-status-action`, "Undo") takes it back |
 | `agenda-task-row-file-<taskId>` | the same | the long-press menu's "Move to project" (iOS) |
-| `agenda-new-event` / `agenda-add-task` | Agenda | the header Plus: "New event" on Day, Schedule and Waiting, "Add task" on To-do (it opens the quick-add bar) |
+| `agenda-new-event` / `agenda-add-task` | Agenda | the header Plus: "Add" on Day, Schedule and Waiting, "Add task" on To-do (it opens the quick-add bar) |
 | `agenda-quick-add` | Agenda (To-do) | the quick-add bar's field, drawn only after `agenda-add-task`; Add is `agenda-quick-add-verb`, and appears once there are words |
 | `agenda-project-<projectId>` | Agenda (To-do) | one project row; a tap pushes the project's page (`tasks-project`) |
 | `agenda-new-project` | Agenda (To-do) | the foot-of-list verb that opens the new-project sheet, whose field is `tasks-new-project-field` |

@@ -142,7 +142,7 @@ class AgendaTodoSpec : StringSpec({
         }
         // OTHER PLACES: the Plus is the add sheet.
         val day = drive(landed, view(AgendaHomeEvent(band = AgendaHomeEvent.BandPicked(key = "day")))).state
-        day.screen.add_label shouldBe "New event"
+        day.screen.add_label shouldBe "Add"
         day.screen.add_opens_quick_add shouldBe false
         day.screen.quick_add.shouldNotBeNull().shown shouldBe false
     }

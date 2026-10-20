@@ -88,6 +88,10 @@ class AgendaHomeSpec : StringSpec({
         landed.screen.band.map { it.icon_key } shouldBe listOf("Clock", "List", "Inbox", "Todo", "MoreHoriz")
         landed.screen.band.filter { it.current }.map { it.key } shouldBe listOf("day")
         landed.screen.chrome.shouldNotBeNull().new_event shouldBe "New event"
+        // THE HEADER PLUS says Add: its sheet adds an event or a task (R-1128-Z1), and Day's
+        // Plus opens that sheet, not the quick-add bar.
+        landed.screen.add_label shouldBe "Add"
+        landed.screen.add_opens_quick_add shouldBe false
     }
 
     "a destination opened from the shell lands there" {

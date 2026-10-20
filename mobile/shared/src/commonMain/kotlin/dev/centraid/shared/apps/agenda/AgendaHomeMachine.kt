@@ -870,7 +870,9 @@ public object AgendaHomeMachine : ScreenMachine<AgendaHome, AgendaInput> {
                     emptyList()
                 },
                 new_project_can_submit = screen.new_project_name.isNotBlank(),
-                add_label = if (todo) TasksCopy.ADD_TASK else AgendaCopy.NEW_EVENT,
+                // "Add", not "New event": on Day, Schedule and Waiting the Plus opens the sheet that adds
+                // an event or a task (R-1128-Z1).
+                add_label = if (todo) TasksCopy.ADD_TASK else AgendaCopy.QUICK_ADD,
                 add_opens_quick_add = todo,
             ),
         )
