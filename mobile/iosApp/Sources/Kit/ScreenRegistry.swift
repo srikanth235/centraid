@@ -54,6 +54,7 @@ enum AppRegistry {
         DocsScreens.self,
         LockerScreens.self,
         MoneyScreens.self,
+        HealthScreens.self,
     ]
 
     static func tileRoute(_ tile: Centraid_Screen_V1_HomeTile) -> ShellModel.Route? {
