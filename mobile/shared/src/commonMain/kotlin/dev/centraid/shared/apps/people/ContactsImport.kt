@@ -79,12 +79,17 @@ public object ContactsImport {
     /** The origin of a contact that names none: this phone's own address book. */
     public const val DEFAULT_ORIGIN: String = "local:this-phone"
 
-    /** THE FIELDS A PHONE OWNS OF A PERSON: a name and its numbers and addresses. */
-    internal fun fields(name: String, phones: List<String>, emails: List<String>): PhoneFields = PhoneFields.of {
-        text("name", name)
-        phones("phones", phones.map { it.take(VALUE_MAX) })
-        emails("emails", emails.map { it.take(VALUE_MAX) })
-    }
+    /**
+     * THE FIELDS A PHONE OWNS OF A PERSON: a name, its numbers and addresses, and its birthday
+     * (`MM-DD`, or none). A member who changes any of them in People stops the person following.
+     */
+    internal fun fields(name: String, phones: List<String>, emails: List<String>, birthday: String = ""): PhoneFields =
+        PhoneFields.of {
+            text("name", name)
+            phones("phones", phones.map { it.take(VALUE_MAX) })
+            emails("emails", emails.map { it.take(VALUE_MAX) })
+            text("birthday", birthday)
+        }
 
     internal fun matchKey(name: String): String = PhoneFields.squash(name).lowercase()
 
@@ -106,18 +111,19 @@ public object ContactsImport {
         readAt: String,
     ): PhoneSnapshot {
         val seen = mutableSetOf<String>()
-        val records = contacts.mapNotNull { contact ->
+        val records = oneEach(contacts).mapNotNull { contact ->
             val name = PhoneFields.squash(contact.name)
             if (name.isEmpty() || !PhoneIds.isValid(contact.phoneId) || !seen.add(contact.phoneId)) return@mapNotNull null
             val phones = contact.phones.map(String::trim).filter(String::isNotEmpty).distinct()
             val emails = contact.emails.map(String::trim).filter(String::isNotEmpty).distinctBy(String::lowercase)
+            val birthday = contact.birthday.takeIf { MONTH_DAY.matches(it) }.orEmpty()
             PhoneRecord(
                 phoneId = contact.phoneId,
                 origin = contact.origin.ifEmpty { DEFAULT_ORIGIN },
-                fields = fields(name, phones, emails),
+                fields = fields(name, phones, emails, birthday),
                 matchKey = matchKey(name),
                 tiebreak = tiebreak(phones, emails),
-                attributes = ContactAttributes(name, phones, emails, contact.birthday.takeIf { MONTH_DAY.matches(it) }.orEmpty()),
+                attributes = ContactAttributes(name, phones, emails, birthday),
             )
         }
         val labels = contacts.filter { it.originLabel.isNotEmpty() }.associate { it.origin.ifEmpty { DEFAULT_ORIGIN } to it.originLabel }
@@ -128,6 +134,33 @@ public object ContactsImport {
             }
         return PhoneSnapshot(PhoneSource.CONTACTS, complete, readAt, present, records)
     }
+
+    /**
+     * ONE CONTACT, ONE ORIGIN. A shell that reads per container (iOS reads each `CNContainer`)
+     * meets a unified contact once for every container it is in; it is one person, so one record,
+     * and the origin it is kept under must not depend on the order the containers were read in,
+     * or a person would hop between accounts from one pass to the next. **The lowest origin id
+     * wins** (compared as text), and a contact that names none counts as [DEFAULT_ORIGIN].
+     */
+    internal fun oneEach(contacts: List<PhoneContact>): List<PhoneContact> {
+        val chosen = linkedMapOf<String, PhoneContact>()
+        for (contact in contacts) {
+            val held = chosen[contact.phoneId]
+            if (held == null || contact.origin.ifEmpty { DEFAULT_ORIGIN } < held.origin.ifEmpty { DEFAULT_ORIGIN }) {
+                chosen[contact.phoneId] = contact
+            }
+        }
+        // A phone id that is no id keeps every row (the snapshot skips them), so nothing is merged by accident.
+        return contacts.filter { !PhoneIds.isValid(it.phoneId) } + chosen.values
+    }
+
+    /**
+     * A CONTAINER AS THE MEMBER KNOWS IT. The origin is `container:<id>` (R-1127-10); its label is
+     * the name the OS shows ("iCloud", "Gmail"), and a container with no name is the phone's own
+     * ("This phone's contacts").
+     */
+    public fun container(id: String, name: String): PhoneOriginRef =
+        PhoneOriginRef("container:$id", PhoneFields.squash(name).ifEmpty { PeopleCopy.IMPORT_ORIGIN_THIS_PHONE })
 
     /** ONE PASS over [store] with [snapshot]; the outcome the shell shows. */
     internal suspend fun sync(store: PhoneStore, snapshot: PhoneSnapshot): Outcome {
@@ -147,9 +180,17 @@ public object ContactsImport {
         complete: Boolean = true,
     ): Outcome = sync(ContactsStore(core), snapshot(contacts, origins, complete, readAt()))
 
-    /** The member's answer to a held account (R-1127-9): [GoneChoice.KEEP] is the default. */
-    public suspend fun resolveGone(core: CentraidCore, originId: String, choice: GoneChoice): Outcome {
-        val report = PhoneSync.resolveGone(ContactsStore(core), originId, choice)
+    /**
+     * The member's answer to a held account (R-1127-9): [GoneChoice.KEEP] is the default.
+     * [seenBefore] is the question's own, for an account that only lost most of its contacts.
+     */
+    public suspend fun resolveGone(
+        core: CentraidCore,
+        originId: String,
+        choice: GoneChoice,
+        seenBefore: String? = null,
+    ): Outcome {
+        val report = PhoneSync.resolveGone(ContactsStore(core), originId, choice, seenBefore)
         return Outcome(added = 0, refused = report.refused.size, trashed = report.trashed)
     }
 

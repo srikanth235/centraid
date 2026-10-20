@@ -346,10 +346,11 @@ class PhoneSyncSpec : StringSpec({
         PhoneFields.phoneNumber("+1 555") shouldNotBe PhoneFields.phoneNumber("1 555")
     }
 
-    "a fingerprint packs two digests and reads them back, and refuses what is not one" {
-        PhoneFingerprint.parts(PhoneFingerprint.pack("aa", "bb")) shouldBe PhoneFingerprint.Parts("aa", "bb")
+    "a fingerprint packs three digests and reads them back, and refuses what is not one" {
+        PhoneFingerprint.parts(PhoneFingerprint.pack("aa", "ss", "bb")) shouldBe PhoneFingerprint.Parts("aa", "ss", "bb")
         PhoneFingerprint.parts("fp-1") shouldBe null
-        PhoneFingerprint.parts("v1..bb") shouldBe null
+        PhoneFingerprint.parts("v2..ss.bb") shouldBe null
+        PhoneFingerprint.parts("v1.aa.bb") shouldBe null
         // A link in a shape no engine wrote is treated as edited, so it is never written over.
         val store = FakeStore()
         PhoneSync.run(store, snapshot(person("uid:a", "Ada")))

@@ -8,8 +8,8 @@
 //! 2. **A detached link is never re-attached** (R-1127-2): `phone.link` is REFUSED, not ignored,
 //!    and the refusal writes nothing. `phone.detach` keeps the first `detached_at`.
 //! 3. **A refusal is a value**: the predicate a shell switches on, and no half-write.
-//! 4. **`phone.forget` and a purge both end a link**, and neither touches the row it followed;
-//!    forgetting a link a purge already took is not an error.
+//! 4. **A purge leaves a tombstone, `phone.forget` ends it** (gap 3 of #1127): the purged record
+//!    is not linked to another row, and forgetting a link twice is not an error.
 //! 5. **`phone.touch` moves `last_seen_at` for a batch and nothing else.**
 //! 6. **The origin (R-1127-9)**: `phone.origin` registers an account, calendar or folder once and
 //!    relabels it in place; a link names it and a re-link may move it; its label survives the
@@ -405,7 +405,7 @@ fn forgetting_a_link_leaves_its_row_and_forgetting_it_twice_is_not_an_error() {
 }
 
 #[test]
-fn a_purge_takes_the_link_with_the_row_for_a_person_and_a_document() {
+fn a_purge_leaves_a_tombstone_for_a_person_and_a_document_and_phone_forget_ends_it() {
     let bench = Bench::open("purge");
     let ada = bench.person("Ada");
     let spec = bench.document("01920000-0000-7000-8000-0000000000d2");
@@ -432,21 +432,50 @@ fn a_purge_takes_the_link_with_the_row_for_a_person_and_a_document() {
     bench.run("core.purge_document", json!({ "document_id": spec }));
 
     assert_eq!(
-        bench.count("SELECT COUNT(*) FROM phone_link WHERE source IN ('contacts', 'files')"),
-        0,
-        "both links went with their rows"
+        bench.count(
+            "SELECT COUNT(*) FROM phone_link
+              WHERE source IN ('contacts', 'files') AND entity_id IS NULL"
+        ),
+        2,
+        "both links stayed, as tombstones of rows purged"
     );
     assert_eq!(
-        bench.count("SELECT COUNT(*) FROM phone_link WHERE source = 'calendar'"),
+        bench.count("SELECT COUNT(*) FROM phone_link WHERE source = 'calendar' AND entity_id IS NOT NULL"),
         1,
         "the event's link is untouched"
     );
-    // The engine's `phone.forget` of a link a purge already took is a quiet no-op.
-    let gone = bench.run(
-        "phone.forget",
-        json!({ "link_id": person_link["link_id"].as_str().expect("an id") }),
+    // THE PURGED RECORD DOES NOT COME BACK: a fresh row cannot take over the tombstone's phone id.
+    let grace = bench.person("Grace");
+    assert_eq!(
+        bench.refused(
+            "phone.link",
+            json!({
+                "source": "contacts", "phone_id": "c1", "origin_id": bench.origin("contacts"),
+                "entity_id": grace, "fingerprint": "fp-9",
+            }),
+        ),
+        "link_row_was_not_purged"
     );
-    assert_eq!(gone["forgotten"], json!(false));
+    // The origin stays named while a tombstone does.
+    assert_eq!(
+        bench.refused(
+            "phone.retire_origin",
+            json!({ "origin_id": bench.origin("contacts") }),
+        ),
+        "origin_has_no_links"
+    );
+    // The engine ends a tombstone with `phone.forget`; a second forget is a quiet no-op.
+    let link_id = person_link["link_id"].as_str().expect("an id");
+    assert_eq!(
+        bench.run("phone.forget", json!({ "link_id": link_id }))["forgotten"],
+        json!(true)
+    );
+    assert_eq!(
+        bench.run("phone.forget", json!({ "link_id": link_id }))["forgotten"],
+        json!(false)
+    );
+    // Once forgotten, the phone id is free again (the phone record itself is gone).
+    bench.link("contacts", "c1", &grace, "fp-9");
 }
 
 #[test]

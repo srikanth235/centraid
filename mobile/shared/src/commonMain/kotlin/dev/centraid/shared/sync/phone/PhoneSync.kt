@@ -40,6 +40,13 @@ public interface PhoneStore {
     /** Write [record]'s fields onto [entityId]. */
     public suspend fun update(entityId: String, record: PhoneRecord): Boolean
 
+    /**
+     * Follow [record]'s satellite on [entityId] (a series' skipped and moved occurrences), without
+     * touching the row's own fields. Called when the satellite alone changed, and after every
+     * [update]. A source with no satellite does nothing.
+     */
+    public suspend fun follow(entityId: String, record: PhoneRecord): Boolean = true
+
     /** Move [entityId] to the trash (restorable, R-1127-3). */
     public suspend fun trash(entityId: String): Boolean
 
@@ -60,6 +67,7 @@ public data class PhoneReport(
     public val added: Int = 0,
     public val adopted: Int = 0,
     public val updated: Int = 0,
+    public val followed: Int = 0,
     public val rehomed: Int = 0,
     public val detached: Int = 0,
     public val trashed: Int = 0,
@@ -71,7 +79,7 @@ public data class PhoneReport(
     public val gone: List<OriginGone> = emptyList(),
 ) {
     /** Rows written to, not counting sightings. */
-    public val changed: Int get() = added + adopted + updated + rehomed + detached + trashed + forgotten
+    public val changed: Int get() = added + adopted + updated + followed + rehomed + detached + trashed + forgotten
 }
 
 /**
@@ -95,12 +103,20 @@ public object PhoneSync {
         return perform(store, plan.actions, origins, rows, PhoneReport(gone = plan.gone, refused = plan.invalid))
     }
 
-    /** The member's answer to an [OriginGone]. */
-    public suspend fun resolveGone(store: PhoneStore, originId: String, choice: GoneChoice): PhoneReport {
+    /**
+     * The member's answer to an [OriginGone]. [seenBefore] is its `seenBefore` for an origin that
+     * only lost most of its rows, so the answer reaches those and no others.
+     */
+    public suspend fun resolveGone(
+        store: PhoneStore,
+        originId: String,
+        choice: GoneChoice,
+        seenBefore: String? = null,
+    ): PhoneReport {
         val origins = store.origins() ?: return PhoneReport(read = false)
         val links = store.links() ?: return PhoneReport(read = false)
         val rows = store.rows() ?: return PhoneReport(read = false)
-        return perform(store, PhoneSyncPlanner.resolve(originId, choice, links, rows), origins, rows, PhoneReport())
+        return perform(store, PhoneSyncPlanner.resolve(originId, choice, links, rows, seenBefore), origins, rows, PhoneReport())
     }
 
     private suspend fun perform(
@@ -132,23 +148,34 @@ public object PhoneSync {
                             action.record.phoneId,
                             origin,
                             action.entityId,
-                            PhoneFingerprint.pack(action.record.fields.digest(), row.fields.digest()),
+                            PhoneFingerprint.pack(action.record.fields.digest(), action.record.satellite.digest(), row.fields.digest()),
                         ) != null
                     if (linked) report = report.copy(adopted = report.adopted + 1) else refuse(action.record.phoneId)
                 }
                 is PhoneAction.Update -> {
                     val origin = originIds[action.record.origin]
-                    val done = origin != null &&
-                        store.update(action.link.entityId, action.record) &&
-                        link(store, action.record, origin, action.link.entityId)
+                    val entity = action.link.entityId
+                    val done = origin != null && entity != null &&
+                        store.update(entity, action.record) &&
+                        store.follow(entity, action.record) &&
+                        link(store, action.record, origin, entity)
                     if (done) report = report.copy(updated = report.updated + 1) else refuse(action.record.phoneId)
+                }
+                is PhoneAction.Satellite -> {
+                    val origin = originIds[action.record.origin]
+                    val entity = action.link.entityId
+                    val done = origin != null && entity != null &&
+                        store.follow(entity, action.record) &&
+                        link(store, action.record, origin, entity)
+                    if (done) report = report.copy(followed = report.followed + 1) else refuse(action.record.phoneId)
                 }
                 is PhoneAction.Rehome -> {
                     val origin = originIds[action.record.origin]
-                    val done = origin != null && store.link(
+                    val entity = action.link.entityId
+                    val done = origin != null && entity != null && store.link(
                         action.link.phoneId,
                         origin,
-                        action.link.entityId,
+                        entity,
                         action.link.fingerprint,
                     ) != null
                     if (done) report = report.copy(rehomed = report.rehomed + 1) else refuse(action.link.phoneId)
@@ -160,7 +187,7 @@ public object PhoneSync {
                         refuse(action.link.phoneId)
                     }
                 is PhoneAction.Trash ->
-                    if (store.trash(action.link.entityId) && store.forget(action.link.linkId)) {
+                    if (action.link.entityId?.let { store.trash(it) } == true && store.forget(action.link.linkId)) {
                         report = report.copy(trashed = report.trashed + 1)
                     } else {
                         refuse(action.link.phoneId)
@@ -182,7 +209,7 @@ public object PhoneSync {
     /** Link [record] to [entity], held against the row as the vault reads it NOW. */
     private suspend fun link(store: PhoneStore, record: PhoneRecord, origin: String, entity: String): Boolean {
         val row = store.row(entity) ?: return false
-        val fingerprint = PhoneFingerprint.pack(record.fields.digest(), row.fields.digest())
+        val fingerprint = PhoneFingerprint.pack(record.fields.digest(), record.satellite.digest(), row.fields.digest())
         return store.link(record.phoneId, origin, entity, fingerprint) != null
     }
 }
