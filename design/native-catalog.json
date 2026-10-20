@@ -31,13 +31,6 @@
       "name": "Locker"
     },
     {
-      "colorKey": "ochre",
-      "desc": "Capture the next thing to do.",
-      "iconKey": "Check",
-      "id": "tasks",
-      "name": "Tasks"
-    },
-    {
       "colorKey": "teal",
       "desc": "Read and organize your documents.",
       "iconKey": "Folder",
@@ -1125,11 +1118,6 @@
         "hue": "#8c4c61",
         "markColor": "#894a5f"
       },
-      "tasks": {
-        "chipBackground": "#ede8e0",
-        "hue": "#845922",
-        "markColor": "#7c5420"
-      },
       "docs": {
         "chipBackground": "#dcebec",
         "hue": "#00707e",
@@ -1166,11 +1154,6 @@
         "chipBackground": "#36272c",
         "hue": "#d48da2",
         "markColor": "#d48da2"
-      },
-      "tasks": {
-        "chipBackground": "#332a1f",
-        "hue": "#c99b65",
-        "markColor": "#c99b65"
       },
       "docs": {
         "chipBackground": "#1d2f32",

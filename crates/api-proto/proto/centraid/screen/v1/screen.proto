@@ -1055,12 +1055,16 @@ message TileBody {
   // the number and the name are never reused.
   reserved 6;
   reserved "tally";
+  // 5 was `tasks`, the Tasks tile's body; Tasks folded into Agenda (#1128,
+  // R-1128-7, R-1128-8), whose tile carries the due tasks, so the number and the
+  // name are never reused.
+  reserved 5;
+  reserved "tasks";
   oneof kind {
     Photos photos = 1;
     Docs docs = 2;
     Agenda agenda = 3;
     People people = 4;
-    Tasks tasks = 5;
     Locker locker = 7;
     Notes notes = 8;
     // Money's body: what this month's spending came to, per currency (#1099).
@@ -1105,8 +1109,17 @@ message TileBody {
     // `Wed 11 · all day` for a day and not a time.
     string at = 2;
     // What follows it: `then <title>`, `then nothing until the 14th`, or
-    // `nothing after it`. Never empty on a tile with a body.
+    // `nothing after it`. Empty only when no event is coming up (`title` then
+    // says so and `at` is empty too), the tile showing tasks alone (#1128).
     string after = 3;
+    // TODAY'S DUE TASKS (#1128, R-1128-8): the open tasks due today or already
+    // overdue, from `tasks.board` TODAY. Zero draws no line. Absent tasks (the
+    // read did not land) are zero: a tile never claims a count it did not read.
+    uint32 due_count = 4;
+    // `3 due`: the count in words, composed in Kotlin. Empty when `due_count` is 0.
+    string due_label = 5;
+    // The first due task's title, overdue before today; empty when `due_count` is 0.
+    string due_title = 6;
   }
 
   message People {
@@ -1132,16 +1145,6 @@ message TileBody {
       // literal it does not recognise — and a renderer draws its neutral disc
       // rather than substituting a hue nobody chose.
       optional string color = 3;
-    }
-  }
-
-  message Tasks {
-    repeated Row rows = 1;
-
-    message Row {
-      string task_id = 1;
-      string title = 2;
-      bool done = 3;
     }
   }
 

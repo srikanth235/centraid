@@ -20,7 +20,13 @@ import centraid.core.v1.NotesTrashRequest
 import centraid.core.v1.Page
 import centraid.core.v1.PeopleTouchRequest
 import centraid.core.v1.Response
+import centraid.core.v1.TasksBoard
 import centraid.core.v1.TasksBoardRequest
+import centraid.core.v1.TasksCounts
+import centraid.core.v1.TasksGroup
+import centraid.core.v1.TasksGroupKind
+import centraid.core.v1.TasksTask
+import centraid.core.v1.TasksView
 import centraid.core.v1.TasksSearch
 import centraid.core.v1.TasksSearchRequest
 import centraid.screen.v1.HomeEvent
@@ -304,7 +310,8 @@ class ScreenQueryRuntimeSpec : StringSpec({
                 if (query == null) {
                     Envelope(request_id = 0, response = Response(page = Page()))
                 } else {
-                    zones += query.agenda_upcoming.shouldNotBeNull().tz
+                    // Home asks two arms for Agenda's tile (#1128): the events, then the due tasks.
+                    zones += (query.agenda_upcoming?.tz ?: query.tasks_board.shouldNotBeNull().tz)
                     answer(query)
                 }
             }
@@ -326,7 +333,25 @@ class ScreenQueryRuntimeSpec : StringSpec({
             }
         }
 
-        val content = home {
+        val content = home { query ->
+            if (query.tasks_board != null) {
+                return@home answered(
+                    AppQueryResponse(
+                        tasks_board = TasksBoard(
+                            today = "2026-06-15",
+                            view = TasksView.TASKS_VIEW_TODAY,
+                            groups = listOf(
+                                TasksGroup(
+                                    kind = TasksGroupKind.TASKS_GROUP_KIND_TODAY,
+                                    key = "today",
+                                    tasks = listOf(TasksTask(task_id = "t1", title = "Call Mum", status = "needs-action")),
+                                ),
+                            ),
+                            counts = TasksCounts(today = 1),
+                        ),
+                    ),
+                )
+            }
             answered(
                 AppQueryResponse(
                     agenda_upcoming = AgendaUpcoming(
@@ -348,8 +373,39 @@ class ScreenQueryRuntimeSpec : StringSpec({
         val tile = agendaTile(content)
         tile.status shouldBe TileStatus.TILE_STATUS_CONTENT
         tile.body.shouldNotBeNull().agenda.shouldNotBeNull().at shouldBe "Wed 17 · 08:15"
+        tile.body.agenda.shouldNotBeNull().due_label shouldBe "1 due"
+        tile.body.agenda.shouldNotBeNull().due_title shouldBe "Call Mum"
         zones.toList().last() shouldBe "Asia/Tokyo"
         content.close()
+
+        // A DENIED DUE READ costs the tile its due line and nothing else (#1128).
+        val noTasks = home { query ->
+            if (query.tasks_board != null) {
+                answered(AppQueryResponse(denied = AppQueryDenial()))
+            } else {
+                answered(
+                    AppQueryResponse(
+                        agenda_upcoming = AgendaUpcoming(
+                            events = listOf(
+                                AgendaEvent(
+                                    event_id = "evt-1",
+                                    summary = "Survey walk-through",
+                                    instance_key = "evt-1",
+                                    local_start = "2026-06-17T08:15",
+                                    local_days = listOf("2026-06-17"),
+                                ),
+                            ),
+                            today = "2026-06-15",
+                            now_local = "2026-06-15T09:00",
+                        ),
+                    ),
+                )
+            }
+        }
+        val kept = agendaTile(noTasks)
+        kept.status shouldBe TileStatus.TILE_STATUS_CONTENT
+        kept.body.shouldNotBeNull().agenda.shouldNotBeNull().due_count shouldBe 0
+        noTasks.close()
 
         val denied = home { answered(AppQueryResponse(denied = AppQueryDenial())) }
         val refused = agendaTile(denied)

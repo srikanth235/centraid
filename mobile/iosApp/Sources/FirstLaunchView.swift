@@ -203,7 +203,7 @@ private struct FirstLaunchSlip<Scene: View>: View {
 
 /// THE SEVEN APP MARKS AS ONE HOUSE: rooms in one place, not seven products.
 private struct HouseScene: View {
-    private static let apps = ["photos", "docs", "notes", "agenda", "tasks", "people", "locker"]
+    private static let apps = ["photos", "docs", "notes", "agenda", "money", "people", "locker"]
 
     var body: some View {
         LazyVGrid(columns: Array(repeating: GridItem(.fixed(52), spacing: 8), count: 4),
@@ -233,7 +233,7 @@ private struct AssistantScene: View {
                 Spacer(minLength: 0)
             }
             HStack(spacing: 6) {
-                AppMark(appID: "tasks", size: 22)
+                AppMark(appID: "agenda", size: 22)
                 Capsule()
                     .fill(Theme.color("line", scheme))
                     .frame(width: 70, height: 5)

@@ -30,5 +30,7 @@ class PhoneImportSpec : StringSpec({
         PhoneImport.madeOpens(listOf("people"), listOf(PeopleCopy.IMPORT_CONTACTS_NONE)) shouldBe ""
         PhoneImport.openLabel("people") shouldBe "Open People"
         PhoneImport.openLabel("") shouldBe ""
+        // Reminders land in the tasks domain, which opens in Agenda (#1128, R-1128-7).
+        PhoneImport.openLabel("tasks") shouldBe "Open Agenda"
     }
 })

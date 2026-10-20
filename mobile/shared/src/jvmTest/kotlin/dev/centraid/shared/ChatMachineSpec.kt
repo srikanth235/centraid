@@ -281,7 +281,7 @@ class ChatMachineSpec : StringSpec({
     "a turn draws its activity, then its cards, then its sentence as it comes, then the answer" {
         var chat = asked()
         chat = reduce(chat, coreEvent(1) { it.copy(activity = AssistActivity(app = "tasks", tool = "tasks.list")) }).chat
-        chat.state.activity shouldBe "Looking in Tasks"
+        chat.state.activity shouldBe "Looking in Agenda"
 
         chat = reduce(
             chat,
@@ -321,7 +321,7 @@ class ChatMachineSpec : StringSpec({
             asked(),
             coreEvent(1) { it.copy(activity = AssistActivity(app = "tasks", tool = "tasks.find")) },
         ).chat
-        chat.state.activity shouldBe "Looking in Tasks"
+        chat.state.activity shouldBe "Looking in Agenda"
     }
 
     "the answer to the send call settles the turn exactly as the terminal event does, whichever comes first" {
@@ -514,7 +514,9 @@ class ChatMachineSpec : StringSpec({
     }
 
     "an app id reads as its name" {
-        ChatMachine.appName("tasks") shouldBe "Tasks"
+        ChatMachine.appName("money") shouldBe "Money"
+        // A domain reads as the app it opens in (#1128, R-1128-7).
+        ChatMachine.appName("tasks") shouldBe "Agenda"
         ChatMachine.appName("") shouldBe ""
     }
 

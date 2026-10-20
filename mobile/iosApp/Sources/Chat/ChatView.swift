@@ -34,7 +34,7 @@ import CentraidShared
 ///
 /// **THE COMPOSER IS ONE CARD** (`ChatComposerCard`): the waiting attachments
 /// and any notice about them on top, the field, and one row of controls — attach,
-/// the chat's scope, send. The status line ("Looking in Tasks…") sits just above
+/// the chat's scope, send. The status line ("Looking in Agenda…") sits just above
 /// it while a turn runs.
 struct ChatView: View {
     @ObservedObject var chat: ChatModel
@@ -810,7 +810,7 @@ private struct ChatCardRow: View {
     let onOpen: () -> Void
     @Environment(\.colorScheme) private var scheme
 
-    private var appName: String { CentraidCatalog.byID[card.app]?.name ?? card.app.capitalized }
+    private var appName: String { AppHomes.shared.nameOf(appId: card.app) }
 
     private var spoken: String {
         [card.title, card.subtitle, card.meta, appName].filter { !$0.isEmpty }.joined(separator: ", ")
@@ -1110,14 +1110,14 @@ private struct ChatScopePill: View {
     @Environment(\.colorScheme) private var scheme
 
     private func name(_ id: String) -> String {
-        id.isEmpty ? ChatCopy.shared.SCOPE_ALL : (CentraidCatalog.byID[id]?.name ?? id.capitalized)
+        id.isEmpty ? ChatCopy.shared.SCOPE_ALL : AppHomes.shared.nameOf(appId: id)
     }
 
     var body: some View {
         Menu {
             Button(ChatCopy.shared.SCOPE_ALL) { onSetScope("") }
                 .accessibilityIdentifier("chat-scope-all")
-            ForEach(ChatRouting.scopable, id: \.self) { id in
+            ForEach(ChatRouting.scopeMenu, id: \.self) { id in
                 Button(name(id)) { onSetScope(id) }
                     .accessibilityIdentifier("chat-scope-\(id)")
             }
