@@ -429,6 +429,141 @@ fn a_birthday_auto_reminds_and_writes_through_to_the_party_spine() {
 }
 
 #[test]
+fn a_birthday_can_be_moved_and_removed_and_the_party_spine_follows() {
+    let circle = Circle::open("people-birthday-edit");
+    let ray = circle.person("Grandpa Ray", 7);
+    let date_id = circle.run(
+        "people.add_important_date",
+        json!({ "party_id": ray, "label": "Birthday", "month_day": "08-14" }),
+    )["date_id"]
+        .as_str()
+        .expect("a date id")
+        .to_owned();
+    let spine = |circle: &Circle| {
+        circle.text(&format!(
+            "SELECT birth_date FROM core_party WHERE party_id = '{ray}'"
+        ))
+    };
+
+    // MOVED: the row and the spine agree on the new day.
+    let moved = circle.run(
+        "people.edit_important_date",
+        json!({ "date_id": date_id, "month_day": "09-01" }),
+    );
+    assert_eq!(moved["changed"], json!(true));
+    assert_eq!(
+        circle.text(&format!(
+            "SELECT month_day FROM people_important_date WHERE date_id = '{date_id}'"
+        )),
+        Some("09-01".to_owned())
+    );
+    assert_eq!(spine(&circle), Some("--09-01".to_owned()));
+
+    // IDEMPOTENT BY STATE: the same edit again writes nothing.
+    let version = circle.count(&format!(
+        "SELECT row_version FROM people_important_date WHERE date_id = '{date_id}'"
+    ));
+    let again = circle.run(
+        "people.edit_important_date",
+        json!({ "date_id": date_id, "month_day": "09-01" }),
+    );
+    assert_eq!(again["changed"], json!(false));
+    assert_eq!(
+        circle.count(&format!(
+            "SELECT row_version FROM people_important_date WHERE date_id = '{date_id}'"
+        )),
+        version
+    );
+
+    // REFUSALS are values with a predicate: no such date, a day no year has, an edit that names nothing.
+    let missing = circle.try_run(
+        "people.edit_important_date",
+        json!({ "date_id": "nobody", "month_day": "01-01" }),
+    );
+    assert_eq!(missing.predicate.as_deref(), Some("date_exists"));
+    let unreal = circle.try_run(
+        "people.edit_important_date",
+        json!({ "date_id": date_id, "month_day": "02-31" }),
+    );
+    assert_eq!(unreal.predicate.as_deref(), Some("month_day_is_a_real_day"));
+    let nothing = circle.try_run("people.edit_important_date", json!({ "date_id": date_id }));
+    assert_eq!(nothing.status, CommandStatus::Failed);
+    assert_eq!(spine(&circle), Some("--09-01".to_owned()));
+
+    // RELABELLED away from a birthday: its day leaves the spine.
+    circle.run(
+        "people.edit_important_date",
+        json!({ "date_id": date_id, "label": "Anniversary" }),
+    );
+    assert_eq!(spine(&circle), None);
+    // ...and back to one: it returns.
+    circle.run(
+        "people.edit_important_date",
+        json!({ "date_id": date_id, "label": "Birthday" }),
+    );
+    assert_eq!(spine(&circle), Some("--09-01".to_owned()));
+
+    // REMOVED: the row and the spine's day go, and removing it again is not an error.
+    let gone = circle.run("people.delete_important_date", json!({ "date_id": date_id }));
+    assert_eq!(gone["deleted"], json!(true));
+    assert_eq!(
+        circle.count(&format!(
+            "SELECT COUNT(*) FROM people_important_date WHERE date_id = '{date_id}'"
+        )),
+        0
+    );
+    assert_eq!(
+        circle.count(&format!(
+            "SELECT COUNT(*) FROM core_entity WHERE entity_id = '{date_id}'"
+        )),
+        0,
+        "the entity row went with it"
+    );
+    assert_eq!(spine(&circle), None);
+    let twice = circle.run("people.delete_important_date", json!({ "date_id": date_id }));
+    assert_eq!(twice["deleted"], json!(false));
+}
+
+#[test]
+fn removing_one_of_two_birthday_rows_keeps_the_spine_and_another_date_never_touches_it() {
+    let circle = Circle::open("people-birthday-delete-one");
+    let ray = circle.person("Grandpa Ray", 7);
+    let first = circle.run(
+        "people.add_important_date",
+        json!({ "party_id": ray, "label": "Birthday", "month_day": "08-14" }),
+    )["date_id"]
+        .as_str()
+        .expect("a date id")
+        .to_owned();
+    circle.run(
+        "people.add_important_date",
+        json!({ "party_id": ray, "label": "His birthday", "month_day": "08-14" }),
+    );
+    let anniversary = circle.run(
+        "people.add_important_date",
+        json!({ "party_id": ray, "label": "Anniversary", "month_day": "03-02" }),
+    )["date_id"]
+        .as_str()
+        .expect("a date id")
+        .to_owned();
+    circle.run("people.delete_important_date", json!({ "date_id": first }));
+    assert_eq!(
+        circle.text(&format!("SELECT birth_date FROM core_party WHERE party_id = '{ray}'")),
+        Some("--08-14".to_owned()),
+        "a second birthday row still stands"
+    );
+    circle.run(
+        "people.delete_important_date",
+        json!({ "date_id": anniversary }),
+    );
+    assert_eq!(
+        circle.text(&format!("SELECT birth_date FROM core_party WHERE party_id = '{ray}'")),
+        Some("--08-14".to_owned()),
+        "an anniversary is not a birthday"
+    );
+}
+
+#[test]
 fn a_second_birthday_row_is_kept_in_step_so_no_two_surfaces_disagree() {
     let circle = Circle::open("people-birthday-single");
     let ray = circle.person("Grandpa Ray", 7);
