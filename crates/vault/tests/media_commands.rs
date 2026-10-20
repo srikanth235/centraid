@@ -1830,13 +1830,15 @@ fn an_edit_naming_its_source_keeps_the_originals_date_place_and_caption() {
     let edit_id = first["asset_id"].as_str().expect("an id").to_owned();
     assert_ne!(edit_id, original_id);
 
-    let row = |asset_id: &str| -> (
+    // title, captured_at, tz_offset_min, place_id, source_asset_id
+    type AssetRow = (
         Option<String>,
         Option<String>,
         Option<i64>,
         Option<String>,
         Option<String>,
-    ) {
+    );
+    let row = |asset_id: &str| -> AssetRow {
         scratch
             .vault
             .read(|connection| {
