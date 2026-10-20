@@ -5,7 +5,9 @@
 // palette.ts). The Binding Layer assigns them by content character, not by
 // taste: locker 0 (rose), photos 28 (amber), tasks 70 (ochre), agenda 150
 // (forest), docs 210 (teal), notes 255 (slate), people 320 (violet), money 290
-// (indigo, taken from the freed Tally slot, #1099). Home takes no hue at all — it renders in `--text-soft`.
+// (indigo, taken from the freed Tally slot, #1099), health 110 (olive, the
+// widest free gap between ochre and forest, #1129, R-1129-10). Home takes no
+// hue at all — it renders in `--text-soft`.
 
 import type { IconName } from "./icons";
 import { palette } from "./palette";
@@ -79,6 +81,13 @@ const BUILTIN_APPS: readonly AppMeta[] = [
     iconKey: "Coin",
     id: "money",
     name: "Money",
+  },
+  {
+    colorKey: "olive",
+    desc: "Daily totals and workouts from your phone.",
+    iconKey: "Activity",
+    id: "health",
+    name: "Health",
   },
 ];
 

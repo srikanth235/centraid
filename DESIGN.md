@@ -47,6 +47,7 @@ colors:
   c-forest: "#397247"
   c-indigo: "#635a93"
   c-ochre: "#845922"
+  c-olive: "#666723"
   c-rose: "#8c4c61"
   c-slate: "#3e6596"
   c-teal: "#00707e"
@@ -55,6 +56,7 @@ colors:
   c-forest-dark: "#7bb587"
   c-indigo-dark: "#a39bda"
   c-ochre-dark: "#c99b65"
+  c-olive-dark: "#a8aa66"
   c-rose-dark: "#d48da2"
   c-slate-dark: "#7ea7dc"
   c-teal-dark: "#58b4c4"
@@ -63,6 +65,7 @@ colors:
   c-forest-text: "#346841"
   c-indigo-text: "#5f568d"
   c-ochre-text: "#7c5420"
+  c-olive-text: "#5e5f20"
   c-rose-text: "#894a5f"
   c-slate-text: "#3a5e8b"
   c-teal-text: "#006774"
@@ -71,6 +74,7 @@ colors:
   c-forest-text-dark: "#7bb587"
   c-indigo-text-dark: "#a39bda"
   c-ochre-text-dark: "#c99b65"
+  c-olive-text-dark: "#a8aa66"
   c-rose-text-dark: "#d48da2"
   c-slate-text-dark: "#7ea7dc"
   c-teal-text-dark: "#58b4c4"
@@ -398,6 +402,7 @@ Retired with the flip: the teal brand hue, the five-accent `ACCENT_PALETTE` and 
 | photos | 28  | `amber`  | notes  | 255 | `slate`  |
 | tasks  | 70  | `ochre`  | money  | 290 | `indigo` |
 | agenda | 150 | `forest` | people | 320 | `violet` |
+| health | 110 | `olive`  |        |     |          |
 
 Home takes no hue: it renders in `--text-soft`. Colour is never the only channel — every app mark is distinguishable by silhouette alone at 14px, which is what makes the hue system safe for colour-blind readers.
 

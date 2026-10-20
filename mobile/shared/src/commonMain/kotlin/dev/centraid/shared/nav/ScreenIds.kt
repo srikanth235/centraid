@@ -58,6 +58,12 @@ public object ScreenIds {
     public const val MONEY_CATEGORIES: String = "money.categories"
     public const val MONEY_SEARCH: String = "money.search"
 
+    /** Health's home place: Today, Trends and Workouts are its band's parameter (#1129). */
+    public const val HEALTH_HOME: String = "health.home"
+    public const val HEALTH_METRIC: String = "health.metric"
+    public const val HEALTH_WORKOUT: String = "health.workout"
+    public const val HEALTH_CONNECT: String = "health.connect"
+
     public const val LOCKER_HOME: String = "locker.home"
     public const val LOCKER_ITEM: String = "locker.item"
     public const val LOCKER_EDITOR: String = "locker.editor"

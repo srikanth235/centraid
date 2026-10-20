@@ -57,6 +57,13 @@
       "iconKey": "Coin",
       "id": "money",
       "name": "Money"
+    },
+    {
+      "colorKey": "olive",
+      "desc": "Daily totals and workouts from your phone.",
+      "iconKey": "Activity",
+      "id": "health",
+      "name": "Health"
     }
   ],
   "geometry": {
@@ -1144,6 +1151,11 @@
         "chipBackground": "#e9e8ee",
         "hue": "#635a93",
         "markColor": "#5f568d"
+      },
+      "health": {
+        "chipBackground": "#e9eae0",
+        "hue": "#666723",
+        "markColor": "#5e5f20"
       }
     },
     "dark": {
@@ -1186,6 +1198,11 @@
         "chipBackground": "#2c2a37",
         "hue": "#a39bda",
         "markColor": "#a39bda"
+      },
+      "health": {
+        "chipBackground": "#2d2d20",
+        "hue": "#a8aa66",
+        "markColor": "#a8aa66"
       }
     }
   }
