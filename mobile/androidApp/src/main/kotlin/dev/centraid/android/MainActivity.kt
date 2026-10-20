@@ -209,6 +209,12 @@ public class MainActivity : FragmentActivity() {
     // what arriving and leaving do now is the backup's (#1080): `onResume`
     // runs a pass and `onStop` a pass with a snapshot, below.
 
+    /** THE PHONE IS FOLLOWED WHILE THE APP IS IN VIEW (#1127): see [AndroidPhoneFollow]. */
+    override fun onStart() {
+        super.onStart()
+        phoneFollow.start()
+    }
+
     /**
      * THE FOREGROUND TRIGGER (#1029 W18-6).
      *
@@ -222,11 +228,6 @@ public class MainActivity : FragmentActivity() {
      * Fire-and-forget on the IO dispatcher. `ShelfDrain` refuses a second pass
      * while one runs, so a rotation or a permission dialog costs nothing.
      */
-    override fun onStart() {
-        super.onStart()
-        phoneFollow.start()
-    }
-
     override fun onResume() {
         super.onResume()
         val open = session ?: return
