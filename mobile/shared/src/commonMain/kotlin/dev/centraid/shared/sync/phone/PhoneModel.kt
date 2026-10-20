@@ -239,10 +239,21 @@ public data class VaultRow(
     public val attributes: Any? = null,
 )
 
+/** WHY AN ORIGIN'S ROWS ARE HELD FOR A QUESTION (R-1127-9). */
+public enum class GoneReason {
+    /** The account, calendar or folder is no longer on the phone at all. */
+    LEFT,
+
+    /** It is still listed, but a complete read lost most of its followed rows in one pass: a glitch looks like this. */
+    VANISHED,
+}
+
 /**
  * THE QUESTION A VANISHED ORIGIN LEAVES (R-1127-9): "Your Google calendar is no longer on this
  * phone. Keep its 214 events?". Asked after the origin is gone, so [label] is the one the vault
  * stored while it was present. Its rows are held, not trashed, until [PhoneSync.resolveGone].
+ * [reason] says whether the origin left ([GoneReason.LEFT]) or only lost most of its rows
+ * ([GoneReason.VANISHED]); the question and its answer are the same.
  */
 public data class OriginGone(
     public val source: PhoneSource,
@@ -250,6 +261,7 @@ public data class OriginGone(
     public val phoneOrigin: String,
     public val label: String,
     public val count: Int,
+    public val reason: GoneReason = GoneReason.LEFT,
 )
 
 /** What a member answers to [OriginGone]. Keeping detaches the rows (R-1127-2) and is the default. */
