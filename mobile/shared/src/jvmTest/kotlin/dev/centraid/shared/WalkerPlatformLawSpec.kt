@@ -23,7 +23,7 @@ import java.io.File
  * | Android sizes from the descriptor | `available()` is what reads without blocking, not the length |
  * | Android asks for the original | the camera's GPS tags are redacted from the backed-up bytes |
  * | iOS names an edited asset's version in the render's ref, and stages the camera's file beside it | the deleter has no witness (A20(3)) and either keeps every edited photograph or deletes one whose latest edit is on no gateway |
- * | iOS finds the assets UPDATED since the token, and Android those with a later `DATE_MODIFIED` | an edit made after the import is never backed up (A20, R-1127-5) |
+ * | iOS finds the assets UPDATED since the token, and Android those with a later `DATE_MODIFIED`, marked so the walker names what they replace | an edit made after the import is never backed up, or arrives as a second photograph with no lineage and nothing folds (A20, R-1127-5) |
  * | neither platform reads a deletion as news | Photos mirrors a camera-roll deletion into the vault (R-1127-4) |
  * | both read the capture's EXIF `OffsetTimeOriginal` through `ExifOffset`, and neither reads `OffsetTime` | every photograph is filed at a zero offset again (D-1025-S7-77), and a late-evening shot in Kathmandu lands on the next day; or the file's last-change zone moves the wall clock off the shutter's |
  */
@@ -106,6 +106,10 @@ class WalkerPlatformLawSpec : StringSpec({
         android shouldContain "MediaStore.MediaColumns.DATE_MODIFIED"
         // The keyset still walks additions by `_ID`; the modified walk stays at or below it.
         android shouldContain "_ID} <= ?"
+        // The edit is marked, so the walker looks up what the vault held for the
+        // ref (`library_assets`) and the grid can fold the earlier version.
+        android shouldContain "changedInPlace = changed"
+        android shouldContain "captureGroupId = if (changed) ref else null"
     }
 
     "Android walks photographs and videos, sizes from the descriptor, and keeps the location" {

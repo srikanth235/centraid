@@ -228,3 +228,53 @@ fn a_live_photos_movie_is_not_folded_by_its_still() {
     // The grid folds the movie into its still itself (`PhotosGridMachine.live`).
     assert_eq!(library.drawn(), vec!["movie", "still"]);
 }
+
+#[test]
+fn a_file_edited_in_place_folds_its_ungrouped_earlier_version_by_lineage() {
+    let library = Library::new("fold-android");
+    // THE EARLIER VERSION WAS BACKED UP BEFORE THE EDIT EXISTED, so it has no
+    // group; the edit carries one and names it as its source.
+    library.add("before", "photo", None, None, "2026-01-01T00:00:00.000Z");
+    library.add(
+        "after",
+        "photo",
+        Some("image:7"),
+        Some("before"),
+        "2026-01-02T00:00:00.000Z",
+    );
+    assert_eq!(library.drawn(), vec!["after"]);
+    // A SECOND EDIT, whose source is the first (the lookup answers the newest).
+    library.add(
+        "again",
+        "photo",
+        Some("image:7"),
+        Some("after"),
+        "2026-01-03T00:00:00.000Z",
+    );
+    assert_eq!(library.drawn(), vec!["again"]);
+    // Trashing the newest brings the one before it back, and no further.
+    library.set("again", "deleted_at");
+    assert_eq!(library.drawn(), vec!["after"]);
+}
+
+#[test]
+fn a_crop_of_an_edit_folds_nothing() {
+    let library = Library::new("fold-crop-of-edit");
+    library.add("before", "photo", None, None, "2026-01-01T00:00:00.000Z");
+    library.add(
+        "edit",
+        "photo",
+        Some("image:7"),
+        Some("before"),
+        "2026-01-02T00:00:00.000Z",
+    );
+    // The editor's save of the edit: lineage, no group.
+    library.add(
+        "crop",
+        "photo",
+        None,
+        Some("edit"),
+        "2026-01-03T00:00:00.000Z",
+    );
+    assert_eq!(library.drawn(), vec!["crop", "edit"]);
+}

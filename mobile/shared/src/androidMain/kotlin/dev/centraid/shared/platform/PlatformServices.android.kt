@@ -383,13 +383,13 @@ public class AndroidMediaLibrary(private val context: Context) : MediaLibrary {
      * filled with items at or below the keyset's `_ID` whose `DATE_MODIFIED`
      * is at or past the cursor's mark, oldest change first. The mark starts as the
      * newest `DATE_MODIFIED` the keyset walk saw, so the first walk offers
-     * at most one item twice (the one that holds the mark). An item merely renamed or re-scanned is offered again and
-     * the core adopts it by content (`already_held`); the edit's bytes are new
-     * content and come in as a photograph of their own. **No lineage and no
-     * fold on Android**: the camera's bytes are gone from the phone, and the
-     * only way to name the vault's asset for them is a lookup by `os_ref` the
-     * core does not offer, so the earlier version stays a photograph of its
-     * own beside the edit.
+     * at most one item twice (the one that holds the mark). Such an item is
+     * marked [MediaLibrary.Asset.changedInPlace], with its own ref as its
+     * group: the walker asks the core which asset that ref was last backed up
+     * as, and when the bytes differ files them as an edit of it, which the grid
+     * folds the earlier version under. An item merely renamed or re-scanned
+     * has the same bytes, names no source, and the core adopts it by content
+     * (`already_held`).
      *
      * No `LIMIT` in the sort order — Android 11 refuses the token there — so the
      * walk reads one row past the page to learn whether the roll is exhausted.
@@ -447,6 +447,7 @@ public class AndroidMediaLibrary(private val context: Context) : MediaLibrary {
                     assets += assetOf(
                         cursor,
                         after = cursorOf(version, keysetId, cursor.getLong(5), cursor.getLong(0)),
+                        changed = true,
                     )
                 }
             }
@@ -459,7 +460,7 @@ public class AndroidMediaLibrary(private val context: Context) : MediaLibrary {
     }
 
     /** One `MediaStore` row as this interface describes it. Columns as [page] projects them. */
-    private fun assetOf(cursor: android.database.Cursor, after: String): MediaLibrary.Asset {
+    private fun assetOf(cursor: android.database.Cursor, after: String, changed: Boolean = false): MediaLibrary.Asset {
         val id = cursor.getLong(0)
         val video = cursor.getInt(1) == MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO
         // DATE_TAKEN is the camera's; an item that never had one (a
@@ -477,9 +478,14 @@ public class AndroidMediaLibrary(private val context: Context) : MediaLibrary {
             // NO INFERRED GROUPING for motion photos, RAW or burst
             // members (`NATIVE_V0.md:11-19`): they pass through as
             // original bytes, and a guess here would invent a
-            // relationship the owner never made.
-            captureGroupId = null,
+            // relationship the owner never made. **An item the library reports
+            // changed in place is the one exception**: its own ref is its
+            // group, because it is the same file at two versions, which is not
+            // a guess — and the group is the mark the grid folds an edit on
+            // (`PhotoFold`).
+            captureGroupId = if (changed) ref else null,
             after = after,
+            changedInPlace = changed,
         )
     }
 
