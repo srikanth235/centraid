@@ -40,6 +40,7 @@ import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import centraid.screen.v1.SectionHead
 import centraid.screen.v1.TasksCheck
@@ -65,6 +66,12 @@ import dev.centraid.android.theme.centraidType
  * on a long press (and to a screen reader as an action), never as a verb on
  * every row. Every word is the row's own; the view only lays them out. A
  * pending write is the 2px rule.
+ *
+ * ONE SHAPE IN TWO HOMES (#1128): the pushed Tasks pages draw it at the page
+ * margin under `tasks-row`, and Agenda's Day, Schedule and To-do draw it under
+ * `agenda-task-row`, indented past the date column on a day. The ids a flow
+ * taps are `<idPrefix>-<task id>` on the row and `<idPrefix>-check-<task id>`
+ * on its box, the same strings iOS sets.
  */
 @Composable
 internal fun TaskRowView(
@@ -74,13 +81,14 @@ internal fun TaskRowView(
     onFile: ((String) -> Unit)? = null,
     fileVerb: String = "",
     depth: Int = 0,
+    idPrefix: String = "tasks-row",
+    indent: Dp = 0.dp,
 ) {
     Row(
         Modifier
             .fillMaxWidth()
             .heightIn(min = KitGeometry.ROW_MIN)
-            .padding(start = KitGeometry.GUTTER / 2 + (depth * 24).dp, end = 4.dp)
-            .testTag("tasks-row-${row.task_id}"),
+            .padding(start = KitGeometry.GUTTER / 2 + indent + (depth * 24).dp, end = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
@@ -89,13 +97,14 @@ internal fun TaskRowView(
                 .height(28.dp)
                 .background(if (row.pending) centraidColor("seam") else centraidColor("bg")),
         )
-        TaskCheckBox(row.check, row.check_label, enabled = row.can_check) { onCheck(row.task_id) }
+        TaskCheckBox(row.check, row.check_label, enabled = row.can_check, tag = "$idPrefix-check-${row.task_id}") { onCheck(row.task_id) }
         val file = if (row.can_file && onFile != null && fileVerb.isNotEmpty()) ({ onFile(row.task_id) }) else null
         Column(
             Modifier
                 .weight(1f)
                 .combinedClickable(onClick = { onPick(row.task_id) }, onLongClick = file, onLongClickLabel = fileVerb.ifEmpty { null })
                 .padding(vertical = 8.dp)
+                .testTag("$idPrefix-${row.task_id}")
                 .clearAndSetSemantics {
                     contentDescription = row.accessibility_label.ifEmpty { row.title }
                     role = Role.Button
@@ -151,18 +160,18 @@ internal fun TaskRowView(
         }
     }
     row.children.forEach { child ->
-        TaskRowView(child, onCheck, onPick, onFile = null, depth = depth + 1)
+        TaskRowView(child, onCheck, onPick, onFile = null, depth = depth + 1, idPrefix = idPrefix, indent = indent)
     }
 }
 
 /** THE BOX: open is a ring, done a check, released a dash. */
 @Composable
-internal fun TaskCheckBox(check: TasksCheck, label: String, enabled: Boolean, onTap: () -> Unit) {
+internal fun TaskCheckBox(check: TasksCheck, label: String, enabled: Boolean, tag: String = "tasks-check", onTap: () -> Unit) {
     Box(
         Modifier
             .size(KitGeometry.ROW_MIN)
             .then(if (enabled) Modifier.clickable(onClick = onTap) else Modifier)
-            .testTag("tasks-check")
+            .testTag(tag)
             .clearAndSetSemantics {
                 contentDescription = label
                 role = Role.Checkbox
@@ -196,6 +205,7 @@ internal fun LazyListScope.taskGroups(
     onVerb: (String) -> Unit,
     onFile: ((String) -> Unit)? = null,
     fileVerb: String = "",
+    idPrefix: String = "tasks-row",
 ) {
     groups.forEach { group ->
         item(key = "group-${group.key}") {
@@ -217,16 +227,25 @@ internal fun LazyListScope.taskGroups(
         }
         group.rows.forEach { row ->
             item(key = "row-${group.key}-${row.task_id}") {
-                TaskRowView(row, onCheck, onPick, onFile, fileVerb)
+                TaskRowView(row, onCheck, onPick, onFile, fileVerb, idPrefix = idPrefix)
             }
         }
     }
 }
 
 /**
+ * THE ITEM KEYS [taskGroups] DRAWS, IN ORDER: a list that scrolls to an item
+ * by its key (Agenda's landing) counts the blocks above its days with this, so
+ * the two never drift apart.
+ */
+internal fun taskGroupKeys(groups: List<TasksRowGroup>): List<String> =
+    groups.flatMap { group -> listOf("group-${group.key}") + group.rows.map { "row-${group.key}-${it.task_id}" } }
+
+/**
  * THE QUICK-ADD BAR: a bare title whose placeholder says where it lands, and
  * Add once there are words. Drawn while the machine holds it `drawn` — on
- * Tasks' home, only after the header's Plus.
+ * Agenda's To-do, only after the header's Plus (the project page, which has no
+ * Plus, keeps it open).
  */
 @Composable
 internal fun TasksQuickAddBar(
@@ -236,6 +255,7 @@ internal fun TasksQuickAddBar(
     onChange: (String) -> Unit,
     onSubmit: () -> Unit,
     onBlur: () -> Unit = {},
+    testTag: String = "tasks-quick-add",
 ) {
     if (quickAdd == null || !quickAdd.shown || !quickAdd.drawn) return
     val focus = remember { FocusRequester() }
@@ -288,12 +308,12 @@ internal fun TasksQuickAddBar(
                                 onBlur()
                             }
                         }
-                        .testTag("tasks-quick-add")
+                        .testTag(testTag)
                         .clearAndSetSemantics { contentDescription = prompt },
                 )
             }
             if (quickAdd.can_submit) {
-                OutlineButton(verb, testTag = "tasks-quick-add-verb", modifier = Modifier.padding(end = 4.dp), onPress = submit)
+                OutlineButton(verb, testTag = "$testTag-verb", modifier = Modifier.padding(end = 4.dp), onPress = submit)
             }
         }
     }
