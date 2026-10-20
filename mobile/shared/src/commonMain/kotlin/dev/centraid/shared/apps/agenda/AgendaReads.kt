@@ -6,10 +6,17 @@ import centraid.core.v1.AgendaUpcomingRequest
 import centraid.core.v1.AppQueryDenial
 import centraid.core.v1.AppQueryRequest
 import centraid.core.v1.AppQueryResponse
+import centraid.core.v1.CommandStatus
+import centraid.core.v1.TasksBoardRequest
+import centraid.core.v1.TasksProjectsRequest
+import centraid.core.v1.TasksView
 import centraid.screen.v1.AgendaHomeEvent
+import centraid.screen.v1.AgendaHomeState
 import centraid.screen.v1.ReadFailure
+import dev.centraid.shared.kit.WriteLaw
 import dev.centraid.shared.platform.DeviceClock
 import dev.centraid.shared.sync.ScreenQueries
+import dev.centraid.shared.sync.ScreenWrites
 import dev.centraid.shared.kit.time.civilDayOf
 import dev.centraid.shared.kit.time.epochDayOf
 import dev.centraid.shared.kit.time.floorDiv
@@ -17,9 +24,10 @@ import dev.centraid.shared.kit.time.plusDays
 import dev.centraid.shared.sync.rfc3339FromEpochMillis
 
 /**
- * WHAT AGENDA'S HOME ASKS THE CORE (#1046).
+ * WHAT AGENDA'S HOME ASKS THE CORE (#1046, #1128).
  *
- * Two queries for a window, and a third while a term is typed:
+ * To-do asks `tasks.board` (INBOX) and `tasks.projects` and no event. Every
+ * other place asks two queries for a window, and a third while a term is typed:
  *
  * - **Day**: `agenda.upcoming` over the anchor day, and `agenda.day-context`
  *   over the same day.
@@ -45,11 +53,14 @@ import dev.centraid.shared.sync.rfc3339FromEpochMillis
  *
  * `agenda.day-context` takes civil days, so it is asked for the window exactly.
  */
-public object AgendaReads : ScreenQueries<AgendaHome, AgendaInput> {
+public object AgendaReads : ScreenQueries<AgendaHome, AgendaInput>, ScreenWrites<AgendaHome, AgendaInput> {
     override val screenId: String = AgendaHomeMachine.SCREEN_ID
 
     /** `AgendaHomeMachine.rowsChanged` answers for exactly these. */
     override val tables: Set<String> = AgendaHomeMachine.TABLES
+
+    /** The task writes (`schedule.*`) are Agenda's: it is the app the member is in (R-1128-5). */
+    override val appId: String = "agenda"
 
     /** `agenda.search`'s own ceiling. */
     public const val SEARCH_LIMIT: Int = 100
@@ -58,6 +69,23 @@ public object AgendaReads : ScreenQueries<AgendaHome, AgendaInput> {
 
     override fun requests(state: AgendaHome, now: DeviceClock.Reading): List<AppQueryRequest>? {
         val screen = state.screen
+        val zone = now.zone
+        // TO-DO READS TASKS ALONE, unless a term is typed: then it is search,
+        // which asks the events too.
+        if (screen.destination == AgendaHomeState.Destination.DESTINATION_TODO &&
+            AgendaHomeMachine.activeTerm(screen) == null
+        ) {
+            return listOf(
+                AppQueryRequest(
+                    tasks_board = TasksBoardRequest(
+                        tz = zone,
+                        limit = state.tasks.limit,
+                        view = TasksView.TASKS_VIEW_INBOX,
+                    ),
+                ),
+                AppQueryRequest(tasks_projects = TasksProjectsRequest(tz = zone)),
+            )
+        }
         val span = AgendaHomeMachine.spanOf(screen.destination)
         val anchor = screen.anchor_day
         val upcoming: AgendaUpcomingRequest
@@ -111,6 +139,10 @@ public object AgendaReads : ScreenQueries<AgendaHome, AgendaInput> {
         upcoming = answers.firstNotNullOfOrNull { it.agenda_upcoming },
         context = answers.firstNotNullOfOrNull { it.agenda_day_context },
         search = answers.firstNotNullOfOrNull { it.agenda_search },
+        tasks = TasksAnswers(
+            inbox = answers.firstNotNullOfOrNull { it.tasks_board?.takeIf { board -> board.view == TasksView.TASKS_VIEW_INBOX } },
+            projects = answers.firstNotNullOfOrNull { it.tasks_projects },
+        ),
     )
 
     override fun refused(failure: ReadFailure): AgendaInput = AgendaInput.View(
@@ -119,6 +151,10 @@ public object AgendaReads : ScreenQueries<AgendaHome, AgendaInput> {
 
     /** The handoff's denied gate, not a refusal (`AgendaHomeState.denied`). */
     override fun denied(denial: AppQueryDenial): AgendaInput = AgendaInput.Denied(denial)
+
+    /** A task write's outcome, as the machine's own settle event. */
+    override fun settled(status: CommandStatus, sentence: String, invokeKey: String): AgendaInput =
+        AgendaInput.View(AgendaHomeEvent(write_settled = WriteLaw.settledOf(status, sentence, invokeKey)))
 
     /** UTC midnight opening [day], in the vault's instant spelling. */
     private fun instantOf(day: String?): String? =

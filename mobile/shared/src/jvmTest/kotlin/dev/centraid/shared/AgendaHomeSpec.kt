@@ -80,8 +80,8 @@ class AgendaHomeSpec : StringSpec({
         toolbar.at_today shouldBe true
         // THE BAND, computed: places only, then More (R-CHROME-5) — no Search
         // tab, because search is the bar under the title.
-        landed.screen.band.map { it.key } shouldBe listOf("day", "schedule", "waiting", "more")
-        landed.screen.band.map { it.icon_key } shouldBe listOf("Clock", "List", "Inbox", "MoreHoriz")
+        landed.screen.band.map { it.key } shouldBe listOf("day", "schedule", "waiting", "todo", "more")
+        landed.screen.band.map { it.icon_key } shouldBe listOf("Clock", "List", "Inbox", "Todo", "MoreHoriz")
         landed.screen.band.filter { it.current }.map { it.key } shouldBe listOf("day")
         landed.screen.chrome.shouldNotBeNull().new_event shouldBe "New event"
     }
@@ -360,7 +360,7 @@ class AgendaHomeSpec : StringSpec({
         drive(hidden.state, view(opened())).state.screen.hidden_calendar_ids shouldBe listOf("cal-2")
     }
 
-    "More is rows on the state — Calendars and What Agenda may read, never Search — and a row's key does the rest" {
+    "More is rows on the state — Calendars, the Tasks places, What Agenda may read, never Search — and a row's key does the rest" {
         val home = landed(
             schedule,
             upcoming(
@@ -371,11 +371,13 @@ class AgendaHomeSpec : StringSpec({
         val more = drive(home, band("more")).state
         more.screen.sheet shouldBe AgendaHomeState.Sheet.SHEET_MORE
         more.screen.band.single { it.key == "more" }.current shouldBe true
-        more.screen.more_rows.map { it.key } shouldBe listOf("calendar-cal-1", "calendar-cal-2", "reads")
-        more.screen.more_rows.map { it.label } shouldBe listOf("Personal", "Work", "What Agenda may read")
-        // THE HEADING RIDES ON THE FIRST CALENDAR ROW, and only there.
-        more.screen.more_rows.map { it.section } shouldBe listOf("Calendars", "", "")
-        more.screen.more_rows.map { it.toggle } shouldBe listOf(true, true, false)
+        more.screen.more_rows.map { it.key } shouldBe
+            listOf("calendar-cal-1", "calendar-cal-2", "anytime", "logbook", "reminders", "trash", "reads")
+        more.screen.more_rows.map { it.label } shouldBe
+            listOf("Personal", "Work", "Anytime", "Logbook", "Reminders", "Trash", "What Agenda may read")
+        // THE HEADINGS RIDE ON THE FIRST ROW OF EACH GROUP, and only there (R-1128-6).
+        more.screen.more_rows.map { it.section } shouldBe listOf("Calendars", "", "Tasks", "", "", "", "")
+        more.screen.more_rows.map { it.toggle } shouldBe listOf(true, true, false, false, false, false, false)
         more.screen.more_rows.first().let {
             it.on shouldBe true
             it.meta shouldBe "Shown"
@@ -399,10 +401,15 @@ class AgendaHomeSpec : StringSpec({
         // THE READS ROW opens the facts sheet; a key the sheet does not hold does nothing.
         drive(more, moreRow("reads")).state.screen.sheet shouldBe AgendaHomeState.Sheet.SHEET_READS
         drive(more, moreRow("calendar-gone")).state shouldBe more
+        // A TASKS PLACE is an intent: the sheet closes and nothing is read or written here.
+        drive(more, moreRow("logbook")).let {
+            it.effects.shouldBeEmpty()
+            it.state.screen.sheet shouldBe AgendaHomeState.Sheet.SHEET_NONE
+        }
 
-        // BEFORE AN ANSWER NAMES A CALENDAR, the sheet is the reads row alone.
+        // BEFORE AN ANSWER NAMES A CALENDAR, the sheet is the Tasks places and the reads row.
         AgendaHomeMachine.reduce(AgendaHomeMachine.initial(), view(opened())).state.screen.more_rows
-            .map { it.key } shouldBe listOf("reads")
+            .map { it.key } shouldBe listOf("anytime", "logbook", "reminders", "trash", "reads")
     }
 
     "search: opening reads nothing, a term reads over the rows, closing CLEARS it and re-reads nothing" {
