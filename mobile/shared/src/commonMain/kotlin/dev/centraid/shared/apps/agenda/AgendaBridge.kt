@@ -2,7 +2,7 @@ package dev.centraid.shared.apps.agenda
 
 import centraid.screen.v1.AgendaHomeEvent
 import centraid.screen.v1.AgendaHomeState
-import dev.centraid.shared.apps.tasks.TasksBridge
+import dev.centraid.shared.kit.tasks.TaskOpsLaw
 import dev.centraid.shared.screen.ScreenHost
 import dev.centraid.shared.shell.HomeSession
 import kotlinx.coroutines.CoroutineScope
@@ -60,7 +60,7 @@ public class AgendaBridge(
      * The one a shell uses (Kotlin's default arguments do not reach Swift):
      * quick-add ids are minted here.
      */
-    public constructor(marks: AgendaMarks = AgendaMarks()) : this(marks, { TasksBridge.mintTaskId() })
+    public constructor(marks: AgendaMarks = AgendaMarks()) : this(marks, { TaskOpsLaw.mintId() })
 
     /**
      * The host. One per bridge and never re-created: `ChangeStream.route`

@@ -11,6 +11,7 @@ import centraid.screen.v1.TasksProjectEvent
 import dev.centraid.shared.nav.Destination
 import dev.centraid.shared.nav.ScreenOpening
 import dev.centraid.shared.nav.ScreenOpenings
+import dev.centraid.shared.kit.tasks.TasksRows
 
 /**
  * WHERE TASKS' INTENTS GO, ONCE (#1029 port).

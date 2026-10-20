@@ -8,7 +8,9 @@ import centraid.core.v1.AppQueryRequest
 import centraid.core.v1.AppQueryResponse
 import centraid.core.v1.CommandStatus
 import centraid.core.v1.TasksBoardRequest
+import centraid.core.v1.TasksCatchUpRequest
 import centraid.core.v1.TasksProjectsRequest
+import centraid.core.v1.TasksSearchRequest
 import centraid.core.v1.TasksView
 import centraid.screen.v1.AgendaHomeEvent
 import centraid.screen.v1.AgendaHomeState
@@ -34,10 +36,17 @@ import dev.centraid.shared.sync.rfc3339FromEpochMillis
  * - **Schedule and Waiting**: the same two over [AgendaHomeMachine.LIST_DAYS]
  *   days from the anchor. Waiting is a filter over Schedule's window, so the
  *   two share one read and moving between them re-reads nothing.
+ * - **Tasks on their days (R-1128-4)**: Day and Schedule also ask `tasks.board`
+ *   TODAY (its Overdue group, then today) and UPCOMING (a group per later day),
+ *   at the board's ceiling so a window is not cut short, and Day asks
+ *   `tasks.catch-up` for the absence notice while its window holds today.
+ *   Waiting asks no task. The boards do not depend on the anchor, but they are
+ *   asked with every window read, so a day step never draws a stale one.
  * - **Search** with a term: `agenda.search` ([SEARCH_LIMIT] hits) replaces the
- *   upcoming list, and the day context still decorates. The upcoming answer is
- *   asked again only when the one the machine holds is not for this window —
- *   so a keystroke is two queries, and closing search re-folds what is held.
+ *   upcoming list, `tasks.search` adds the tasks it found, and the day context
+ *   still decorates. The upcoming answer (and the boards) are asked again only
+ *   when the ones the machine holds are not for this window — so a keystroke is
+ *   three queries, and closing search re-folds what is held.
  *
  * ## The window is padded, and the fold cuts it
  *
@@ -64,6 +73,9 @@ public object AgendaReads : ScreenQueries<AgendaHome, AgendaInput>, ScreenWrites
 
     /** `agenda.search`'s own ceiling. */
     public const val SEARCH_LIMIT: Int = 100
+
+    /** The dated boards' window: the board's own ceiling (`TodoPlace.MAX_WINDOW`). */
+    public const val BOARD_LIMIT: Int = TodoPlace.MAX_WINDOW
 
     private const val MILLIS_PER_DAY: Long = 86_400_000
 
@@ -114,13 +126,26 @@ public object AgendaReads : ScreenQueries<AgendaHome, AgendaInput>, ScreenWrites
             )
         }
         val term = AgendaHomeMachine.activeTerm(screen)
+        val key = AgendaHomeMachine.windowKey(screen)
         val needUpcoming = term == null ||
             state.answers?.upcoming == null ||
-            state.heldWindow != AgendaHomeMachine.windowKey(screen)
+            state.heldWindow != key
+        // DAY AND SCHEDULE DRAW TASKS; WAITING AND TO-DO'S SEARCH DO NOT.
+        val dated = screen.destination == AgendaHomeState.Destination.DESTINATION_DAY ||
+            screen.destination == AgendaHomeState.Destination.DESTINATION_SCHEDULE
+        val needBoards = dated && (term == null || state.tasks.today == null || state.tasks.heldDated != key)
         return buildList {
             if (needUpcoming) add(AppQueryRequest(agenda_upcoming = upcoming))
             add(AppQueryRequest(agenda_day_context = context))
+            if (needBoards) {
+                add(AppQueryRequest(tasks_board = TasksBoardRequest(tz = zone, limit = BOARD_LIMIT, view = TasksView.TASKS_VIEW_TODAY)))
+                add(AppQueryRequest(tasks_board = TasksBoardRequest(tz = zone, limit = BOARD_LIMIT, view = TasksView.TASKS_VIEW_UPCOMING)))
+                if (screen.destination == AgendaHomeState.Destination.DESTINATION_DAY && windowHoldsToday(state, span)) {
+                    add(AppQueryRequest(tasks_catch_up = TasksCatchUpRequest(tz = zone)))
+                }
+            }
             if (term != null) {
+                add(AppQueryRequest(tasks_search = TasksSearchRequest(term = term, limit = SEARCH_LIMIT, tz = zone)))
                 add(
                     AppQueryRequest(
                         agenda_search = AgendaSearchRequest(
@@ -134,6 +159,17 @@ public object AgendaReads : ScreenQueries<AgendaHome, AgendaInput>, ScreenWrites
         }
     }
 
+    /**
+     * DOES THE WINDOW HOLD TODAY? Before the first answer the anchor is empty and
+     * IS today; after it, today is the one the answers name.
+     */
+    private fun windowHoldsToday(state: AgendaHome, span: Int): Boolean {
+        val anchor = state.screen.anchor_day
+        if (anchor.isEmpty()) return true
+        val today = state.answers?.let { it.context.today.ifEmpty { it.upcoming.today } }.orEmpty()
+        return today.isNotEmpty() && today >= anchor && today <= (plusDays(anchor, span - 1) ?: anchor)
+    }
+
     /** The answers BY ARM, not by position: which were asked depends on the state. */
     override fun arrived(answers: List<AppQueryResponse>): AgendaInput = AgendaInput.Answered(
         upcoming = answers.firstNotNullOfOrNull { it.agenda_upcoming },
@@ -142,6 +178,10 @@ public object AgendaReads : ScreenQueries<AgendaHome, AgendaInput>, ScreenWrites
         tasks = TasksAnswers(
             inbox = answers.firstNotNullOfOrNull { it.tasks_board?.takeIf { board -> board.view == TasksView.TASKS_VIEW_INBOX } },
             projects = answers.firstNotNullOfOrNull { it.tasks_projects },
+            today = answers.firstNotNullOfOrNull { it.tasks_board?.takeIf { board -> board.view == TasksView.TASKS_VIEW_TODAY } },
+            upcoming = answers.firstNotNullOfOrNull { it.tasks_board?.takeIf { board -> board.view == TasksView.TASKS_VIEW_UPCOMING } },
+            catchUp = answers.firstNotNullOfOrNull { it.tasks_catch_up },
+            search = answers.firstNotNullOfOrNull { it.tasks_search },
         ),
     )
 

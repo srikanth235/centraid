@@ -733,14 +733,14 @@ class ScreenFixtureSpec : StringSpec({
     "agenda: a denied Agenda is the gate — no band, no day bar — and not a failure" {
         val denied = agenda("denied")
         val refused = agenda("read-refused")
-        denied.denied.shouldNotBeNull().title shouldBe "Agenda cannot read your calendar"
+        denied.denied.shouldNotBeNull().title shouldBe "Agenda cannot read this vault"
         denied.failure.shouldBeNull()
         denied.band.shouldContainExactly()
         denied.toolbar.shouldNotBeNull().shown.shouldBeFalse()
         // A failed READ keeps the band and its retry: the next read may land.
         refused.failure.shouldNotBeNull().kind shouldBe ReadFailureKind.READ_FAILURE_KIND_UNAVAILABLE
         refused.denied.shouldBeNull()
-        refused.band.size shouldBe 4
+        refused.band.size shouldBe 5
     }
 
     "agenda: the first load anchors on no day, so the day bar is not shown" {
@@ -749,18 +749,19 @@ class ScreenFixtureSpec : StringSpec({
         // Empty until an answer says which day today is: never a device-clock guess.
         loading.anchor_day shouldBe ""
         loading.toolbar.shouldNotBeNull().shown.shouldBeFalse()
-        loading.band.map { it.key } shouldBe listOf("day", "schedule", "waiting", "more")
+        loading.band.map { it.key } shouldBe listOf("day", "schedule", "waiting", "todo", "more")
     }
 
     "agenda: the now line is a row among the events, and a pending write is a row status" {
         val state = agenda("today-with-now-line")
         val today = state.data_.shouldNotBeNull().days.single()
         today.is_today.shouldBeTrue()
-        // Before, the line, after: the line is placed, not drawn over the list.
-        today.items.map { it.event?.event_id ?: "now" } shouldBe
-            listOf("event-0001", "now", "event-0002")
-        today.items[0].event.shouldNotBeNull().status shouldBe AgendaRowStatus.AGENDA_ROW_STATUS_NEEDS_REPLY
-        val pending = today.items[2].event.shouldNotBeNull()
+        // A task due today is a row of the day (R-1128-2), ahead of the timed rows; then
+        // before, the line, after: the line is placed, not drawn over the list.
+        today.items.map { it.event?.event_id ?: it.task?.task_id ?: "now" } shouldBe
+            listOf("task-0001", "event-0001", "now", "event-0002")
+        today.items[1].event.shouldNotBeNull().status shouldBe AgendaRowStatus.AGENDA_ROW_STATUS_NEEDS_REPLY
+        val pending = today.items[3].event.shouldNotBeNull()
         pending.status shouldBe AgendaRowStatus.AGENDA_ROW_STATUS_PENDING
         state.pending_event_ids shouldContainExactly listOf(pending.event_id)
         state.data_.landing.shouldNotBeNull().now_line.shouldBeTrue()

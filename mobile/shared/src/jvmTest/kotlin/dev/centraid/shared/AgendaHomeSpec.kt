@@ -13,6 +13,9 @@ import centraid.core.v1.AppQueryRequest
 import centraid.core.v1.AppQueryResponse
 import centraid.core.v1.Envelope
 import centraid.core.v1.Response
+import centraid.core.v1.TasksCatchUp
+import centraid.core.v1.TasksGroup
+import centraid.core.v1.TasksView
 import centraid.screen.v1.AgendaEmpty
 import centraid.screen.v1.AgendaEventRow
 import centraid.screen.v1.AgendaHomeEvent
@@ -25,6 +28,7 @@ import dev.centraid.shared.apps.agenda.AgendaHome
 import dev.centraid.shared.apps.agenda.AgendaHomeMachine
 import dev.centraid.shared.apps.agenda.AgendaInput
 import dev.centraid.shared.apps.agenda.AgendaReads
+import dev.centraid.shared.apps.agenda.TasksAnswers
 import dev.centraid.shared.design.PartyHueWheel
 import dev.centraid.shared.nav.Destination
 import dev.centraid.shared.nav.NavStack
@@ -95,7 +99,14 @@ class AgendaHomeSpec : StringSpec({
 
     "before the first answer the core names today; after it, the window is padded UTC midnights" {
         val first = AgendaReads.requests(AgendaHomeMachine.initial(), clock).shouldNotBeNull()
-        first.size shouldBe 2
+        // DAY ASKS ITS TASKS TOO (R-1128-4): both dated boards, and the absence notice's catch-up
+        // while the window holds today — and before the first answer the anchor IS today.
+        first.map { it.kind() } shouldBe listOf("upcoming", "context", "tasks-today", "tasks-upcoming", "tasks-catch-up")
+        first[2].tasks_board.shouldNotBeNull().let {
+            it.tz shouldBe "Europe/London"
+            it.limit shouldBe 500
+        }
+        first[4].tasks_catch_up.shouldNotBeNull().tz shouldBe "Europe/London"
         val firstUpcoming = first[0].agenda_upcoming.shouldNotBeNull()
         firstUpcoming.from shouldBe ""
         firstUpcoming.to shouldBe "2026-06-17T09:42:00Z"
@@ -108,6 +119,7 @@ class AgendaHomeSpec : StringSpec({
 
         val onDay = landed(day)
         val dayReads = AgendaReads.requests(onDay, clock).shouldNotBeNull()
+        dayReads.map { it.kind() } shouldBe listOf("upcoming", "context", "tasks-today", "tasks-upcoming", "tasks-catch-up")
         dayReads[0].agenda_upcoming.shouldNotBeNull().let {
             it.from shouldBe "2026-06-14T00:00:00Z"
             it.to shouldBe "2026-06-17T00:00:00Z"
@@ -121,18 +133,21 @@ class AgendaHomeSpec : StringSpec({
         val listReads = AgendaReads.requests(onSchedule, clock).shouldNotBeNull()
         listReads[0].agenda_upcoming.shouldNotBeNull().to shouldBe "2026-10-14T00:00:00Z"
         listReads[1].agenda_day_context.shouldNotBeNull().to shouldBe "2026-10-12"
-        // WAITING IS SCHEDULE'S WINDOW: the same two queries.
+        // SCHEDULE DRAWS TASKS BUT NO ABSENCE NOTICE: that is Day's, on today.
+        listReads.map { it.kind() } shouldBe listOf("upcoming", "context", "tasks-today", "tasks-upcoming")
+        // WAITING IS SCHEDULE'S WINDOW: the same two event queries, and no task query.
         AgendaReads.requests(
             onSchedule.copy(screen = onSchedule.screen.copy(destination = waiting)),
             clock,
-        ) shouldBe listReads
+        ) shouldBe listReads.take(2)
     }
 
     "a search term replaces the upcoming list, and asks for it again only when it is not held" {
         val typed = drive(landed(schedule), searchOpened(), term("dentist"))
         val reads = AgendaReads.requests(typed.state, clock).shouldNotBeNull()
-        reads.map { it.kind() } shouldBe listOf("context", "search")
-        reads[1].agenda_search.shouldNotBeNull().let {
+        // THE HELD LIST AND BOARDS ARE NOT ASKED AGAIN: a keystroke is the context and the hits.
+        reads.map { it.kind() } shouldBe listOf("context", "tasks-search", "search")
+        reads[2].agenda_search.shouldNotBeNull().let {
             it.term shouldBe "dentist"
             it.limit shouldBe 100
             it.tz shouldBe "Europe/London"
@@ -140,7 +155,11 @@ class AgendaHomeSpec : StringSpec({
         // A ROW MOVED: the held list is stale, so it is read again too.
         val stale = drive(typed.state, AgendaHomeMachine.rowsChanged("core_event", emptyList())!!)
         AgendaReads.requests(stale.state, clock).shouldNotBeNull().map { it.kind() } shouldBe
-            listOf("upcoming", "context", "search")
+            listOf("upcoming", "context", "tasks-today", "tasks-upcoming", "tasks-search", "search")
+        reads[1].tasks_search.shouldNotBeNull().let {
+            it.term shouldBe "dentist"
+            it.tz shouldBe "Europe/London"
+        }
     }
 
     "the sections, in day order, with the month named where the list reaches a new one" {
@@ -643,6 +662,8 @@ class AgendaHomeSpec : StringSpec({
                         query.agenda_upcoming != null -> AppQueryResponse(
                             agenda_upcoming = upcoming(timed("a", "Stand-up", "2026-06-15T10:00")),
                         )
+                        query.tasks_board != null -> AppQueryResponse(tasks_board = TasksSpec.board(query.tasks_board!!.view))
+                        query.tasks_catch_up != null -> AppQueryResponse(tasks_catch_up = TasksCatchUp(today = TODAY))
                         else -> AppQueryResponse(agenda_day_context = context())
                     },
                 ),
@@ -662,7 +683,7 @@ class AgendaHomeSpec : StringSpec({
             val landed = withTimeout(5_000) { host.state.first { it.screen.data_ != null } }
             landed.screen.anchor_day shouldBe TODAY
             rows(landed.screen.data_.shouldNotBeNull().days.single()).single().title shouldBe "Stand-up"
-            asked.map { it.kind() } shouldBe listOf("upcoming", "context")
+            asked.map { it.kind() } shouldBe listOf("upcoming", "context", "tasks-today", "tasks-upcoming", "tasks-catch-up")
             asked.first().agenda_upcoming.shouldNotBeNull().tz shouldBe "America/New_York"
         } finally {
             scope.cancel()
@@ -707,18 +728,35 @@ class AgendaHomeSpec : StringSpec({
             return Driven(current, effects)
         }
 
-        fun answer(state: AgendaHome, upcoming: AgendaUpcoming, context: AgendaDayContext): AgendaHome =
-            drive(state, AgendaInput.Answered(upcoming, context, null)).state
+        fun answer(
+            state: AgendaHome,
+            upcoming: AgendaUpcoming,
+            context: AgendaDayContext,
+            tasks: TasksAnswers = quietTasks(),
+        ): AgendaHome = drive(state, AgendaInput.Answered(upcoming, context, null, tasks)).state
 
-        /** Opened on [destination] and answered with [upcoming] and [context]. */
+        /** The `tasks.*` arms of a Day or Schedule read with nothing due: the two dated boards, whole. */
+        fun quietTasks(
+            today: List<TasksGroup> = emptyList(),
+            later: List<TasksGroup> = emptyList(),
+            catchUp: TasksCatchUp? = null,
+        ): TasksAnswers = TasksAnswers(
+            today = TasksSpec.board(TasksView.TASKS_VIEW_TODAY, *today.toTypedArray()),
+            upcoming = TasksSpec.board(TasksView.TASKS_VIEW_UPCOMING, *later.toTypedArray()),
+            catchUp = catchUp,
+        )
+
+        /** Opened on [destination] and answered with [upcoming], [context] and [tasks]. */
         fun landed(
             destination: AgendaHomeState.Destination,
             upcoming: AgendaUpcoming = upcoming(),
             context: AgendaDayContext = context(),
+            tasks: TasksAnswers = quietTasks(),
         ): AgendaHome = answer(
             drive(AgendaHomeMachine.initial(), view(opened(destination))).state,
             upcoming,
             context,
+            tasks,
         )
 
         fun upcoming(vararg events: AgendaEvent): AgendaUpcoming = AgendaUpcoming(
@@ -784,6 +822,9 @@ class AgendaHomeSpec : StringSpec({
             agenda_upcoming != null -> "upcoming"
             agenda_day_context != null -> "context"
             agenda_search != null -> "search"
+            tasks_board != null -> if (tasks_board!!.view == TasksView.TASKS_VIEW_TODAY) "tasks-today" else "tasks-upcoming"
+            tasks_catch_up != null -> "tasks-catch-up"
+            tasks_search != null -> "tasks-search"
             else -> "other"
         }
     }

@@ -1,4 +1,4 @@
-package dev.centraid.shared.apps.tasks
+package dev.centraid.shared.kit.tasks
 
 import centraid.core.v1.TasksGroup
 import centraid.core.v1.TasksGroupKind

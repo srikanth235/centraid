@@ -1,10 +1,12 @@
 package dev.centraid.shared.apps.agenda
 
 import centraid.core.v1.TasksBoard
+import centraid.core.v1.TasksCatchUp
 import centraid.core.v1.TasksGroup
 import centraid.core.v1.TasksGroupKind
 import centraid.core.v1.TasksProject
 import centraid.core.v1.TasksProjects
+import centraid.core.v1.TasksSearch
 import centraid.core.v1.TasksSection
 import centraid.core.v1.TasksTask
 import centraid.screen.v1.AgendaHomeData
@@ -17,10 +19,10 @@ import centraid.screen.v1.TasksChrome
 import centraid.screen.v1.TasksProjectGroup
 import centraid.screen.v1.TasksRowGroup
 import dev.centraid.design.copy.TasksCopy
-import dev.centraid.shared.apps.tasks.PendingAdd
-import dev.centraid.shared.apps.tasks.TaskOps
-import dev.centraid.shared.apps.tasks.TaskOpsLaw
-import dev.centraid.shared.apps.tasks.TasksRows
+import dev.centraid.shared.kit.tasks.PendingAdd
+import dev.centraid.shared.kit.tasks.TaskOps
+import dev.centraid.shared.kit.tasks.TaskOpsLaw
+import dev.centraid.shared.kit.tasks.TasksRows
 
 /**
  * THE TASKS HALF OF AGENDA'S HOME (#1128): what is held beside the events.
@@ -29,24 +31,37 @@ import dev.centraid.shared.apps.tasks.TasksRows
  * here so a task checked off or filed re-folds without a read:
  *
  * - [inbox] and [projects] are To-do's (`tasks.board` INBOX, `tasks.projects`).
+ * - [today] and [upcoming] are the dated boards Day and Schedule draw on their
+ *   days (`tasks.board` TODAY — its Overdue group, then today — and UPCOMING),
+ *   [catchUp] is the absence notice's, and [search] is the term's task hits.
  * - [ops] are the writes this phone has out and the rows it hides or draws
  *   until the vault's answer carries them (`TaskOpsLaw`).
  * - [limit] is To-do's window, widened by "Show more".
- * - [heldTodo] says the answers above are for the vault as it is now; a change
- *   event clears it, so leaving To-do and coming back reads again.
+ * - [heldTodo] and [heldDated] say the answers above are for the vault as it
+ *   is now — To-do's, and the dated boards' for the window named — and a change
+ *   event clears both, so coming back to a place reads again.
  */
 public data class AgendaTasks(
     public val inbox: TasksBoard? = null,
     public val projects: TasksProjects? = null,
+    public val today: TasksBoard? = null,
+    public val upcoming: TasksBoard? = null,
+    public val catchUp: TasksCatchUp? = null,
+    public val search: TasksSearch? = null,
     public val ops: TaskOps = TaskOps(),
     public val limit: Int = TodoPlace.PAGE,
     public val heldTodo: Boolean = false,
+    public val heldDated: String? = null,
 )
 
 /** The `tasks.*` answers to one read, BY ARM; null where the arm was not asked. */
 public data class TasksAnswers(
     public val inbox: TasksBoard? = null,
     public val projects: TasksProjects? = null,
+    public val today: TasksBoard? = null,
+    public val upcoming: TasksBoard? = null,
+    public val catchUp: TasksCatchUp? = null,
+    public val search: TasksSearch? = null,
 )
 
 /**
@@ -88,9 +103,10 @@ public object TodoPlace {
     /** A group's roots and their children. */
     public fun flatten(group: TasksGroup): List<TasksTask> = group.tasks.flatMap { listOf(it) + it.children }
 
-    /** Every task To-do holds, root or child. */
+    /** Every task the held answers carry, root or child — To-do's, the dated boards' and the hits'. */
     internal fun held(tasks: AgendaTasks): List<TasksTask> =
-        tasks.inbox?.groups.orEmpty().flatMap(::flatten)
+        listOfNotNull(tasks.inbox, tasks.today, tasks.upcoming).flatMap { it.groups }.flatMap(::flatten) +
+            tasks.search?.tasks.orEmpty()
 
     /** A task on screen, root or child, by id. */
     internal fun find(tasks: AgendaTasks, id: String): TasksTask? =
@@ -99,7 +115,7 @@ public object TodoPlace {
     /** Projects and sections from whichever answer holds them. */
     internal fun projectsOf(tasks: AgendaTasks): Pair<List<TasksProject>, List<TasksSection>> {
         val projects = tasks.projects
-        val board = tasks.inbox
+        val board = listOfNotNull(tasks.inbox, tasks.today, tasks.upcoming).firstOrNull()
         return when {
             projects != null -> projects.projects to projects.sections
             board != null -> board.projects to board.sections
@@ -109,6 +125,11 @@ public object TodoPlace {
 
     /** The tasks an answer carries that are still open, for `TaskOpsLaw.answered`. */
     internal fun openIn(tasks: AgendaTasks): List<TasksTask> = held(tasks).filter(TasksRows::isOpen)
+
+    /** The day the core named, from whichever held board has one. */
+    internal fun todayOf(tasks: AgendaTasks): String =
+        listOfNotNull(tasks.inbox?.today, tasks.today?.today, tasks.upcoming?.today, tasks.catchUp?.today)
+            .firstOrNull { it.isNotEmpty() }.orEmpty()
 
     /**
      * TO-DO'S DATA, or null when the held answers are not for this state — the

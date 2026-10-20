@@ -17,7 +17,6 @@ import centraid.screen.v1.SeatState
 import centraid.screen.v1.TasksQuickAdd
 import dev.centraid.design.copy.AgendaCopy
 import dev.centraid.design.copy.TasksCopy
-import dev.centraid.shared.apps.tasks.TaskOpsLaw
 import dev.centraid.shared.kit.SearchLaw
 import dev.centraid.shared.kit.jsonString
 import dev.centraid.shared.nav.ScreenIds
@@ -26,6 +25,7 @@ import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.ScreenMachine
 import dev.centraid.shared.screen.Step
 import dev.centraid.shared.kit.time.plusDays
+import dev.centraid.shared.kit.tasks.TaskOpsLaw
 
 /**
  * WHAT THE MACHINE HOLDS: the state a view draws, and what never reaches one.
@@ -274,7 +274,7 @@ public object AgendaHomeMachine : ScreenMachine<AgendaHome, AgendaInput> {
                 state.copy(
                     screen = overRowsOrSkeleton(screen),
                     heldWindow = null,
-                    tasks = state.tasks.copy(heldTodo = false),
+                    tasks = state.tasks.copy(heldTodo = false, heldDated = null),
                 ),
             )
 
@@ -320,7 +320,7 @@ public object AgendaHomeMachine : ScreenMachine<AgendaHome, AgendaInput> {
                 )
                 if (activeTerm(typed.screen) == null) {
                     // NO TERM, NO SEARCH: the window's own list, re-folded.
-                    refold(typed.copy(answers = typed.answers?.copy(search = null)))
+                    refold(withoutSearch(typed))
                 } else {
                     // THE ROWS STAY while the hits read: a keystroke that
                     // blanked the list would flash on every letter.
@@ -562,9 +562,16 @@ public object AgendaHomeMachine : ScreenMachine<AgendaHome, AgendaInput> {
     )
 
     /** Search shut, and its term CLEARED (v0 kept it — a defect not carried). */
-    private fun closedSearch(state: AgendaHome): AgendaHome = state.copy(
-        screen = state.screen.copy(search_open = false, search_term = "", search_corrected = "", search_ask = ""),
+    private fun closedSearch(state: AgendaHome): AgendaHome = withoutSearch(
+        state.copy(
+            screen = state.screen.copy(search_open = false, search_term = "", search_corrected = "", search_ask = ""),
+        ),
+    )
+
+    /** The hits dropped, the events' and the tasks'. */
+    private fun withoutSearch(state: AgendaHome): AgendaHome = state.copy(
         answers = state.answers?.copy(search = null),
+        tasks = state.tasks.copy(search = null),
     )
 
     private fun closeSearch(state: AgendaHome): Step<AgendaHome> {
@@ -574,14 +581,19 @@ public object AgendaHomeMachine : ScreenMachine<AgendaHome, AgendaInput> {
 
     /**
      * DO THE HELD ANSWERS DRAW THIS PLACE? To-do's are its own (the Inbox and
-     * the projects, current); every other place's is the held upcoming list for
-     * its window.
+     * the projects, current); Waiting's is the held upcoming list for its
+     * window; Day's and Schedule's also need the dated task boards for it.
      */
     private fun holdsWindow(state: AgendaHome): Boolean =
-        if (state.screen.destination == TODO) {
-            state.tasks.heldTodo
-        } else {
-            state.answers != null && state.heldWindow == windowKey(state.screen)
+        when (state.screen.destination) {
+            TODO -> state.tasks.heldTodo
+            // WAITING DRAWS NO TASK, so the events are all it needs; Day and Schedule draw both.
+            AgendaHomeState.Destination.DESTINATION_WAITING ->
+                state.answers != null && state.heldWindow == windowKey(state.screen)
+            else ->
+                state.answers != null &&
+                    state.heldWindow == windowKey(state.screen) &&
+                    state.tasks.heldDated == windowKey(state.screen)
         }
 
     /** The quick-add bar put away, its words with it: another place, or search. */
@@ -664,7 +676,20 @@ public object AgendaHomeMachine : ScreenMachine<AgendaHome, AgendaInput> {
         if (state.screen.destination == TODO && activeTerm(state.screen) == null) return answeredTodo(state, answer)
         val upcoming = answer.upcoming ?: state.answers?.upcoming
         val context = answer.context ?: state.answers?.context
-        if (upcoming == null || context == null) {
+        val searching = activeTerm(state.screen) != null
+        // THE TASK ARMS, merged over the ones held (a search keystroke asks only the hits).
+        val incoming = answer.tasks
+        val merged = state.tasks.copy(
+            inbox = incoming.inbox ?: state.tasks.inbox,
+            projects = incoming.projects ?: state.tasks.projects,
+            today = incoming.today ?: state.tasks.today,
+            upcoming = incoming.upcoming ?: state.tasks.upcoming,
+            catchUp = incoming.catchUp ?: state.tasks.catchUp,
+            // A SEARCH CLOSED WHILE ITS HITS WERE READING IS NOT REOPENED.
+            search = if (searching) incoming.search ?: state.tasks.search else null,
+        )
+        val needsBoards = !searching && state.screen.destination in DATED
+        if (upcoming == null || context == null || (needsBoards && (merged.today == null || merged.upcoming == null))) {
             // A SHORT ANSWER IS NOT A WHOLE ONE. Neither can be made up.
             return Step(
                 state.copy(
@@ -679,15 +704,21 @@ public object AgendaHomeMachine : ScreenMachine<AgendaHome, AgendaInput> {
             )
         }
         val today = context.today.ifEmpty { upcoming.today }
-        val searching = activeTerm(state.screen) != null
         val screen = state.screen.copy(
             anchor_day = state.screen.anchor_day.ifEmpty { today },
             // THE WORDS THE HITS ANSWER: kept only while a term is, and only
-            // when this answer is a search's.
-            search_corrected = if (searching) answer.search?.corrected ?: "" else "",
+            // when this answer is a search's. The events' correction wins; the
+            // tasks' stands when only they were corrected.
+            search_corrected = if (searching) {
+                answer.search?.corrected?.ifEmpty { null } ?: incoming.search?.corrected ?: ""
+            } else {
+                ""
+            },
             // THE QUESTION THE NO-MATCH STATE OFFERS (#1097, R-1097-28): for a search's own answer to the
-            // term on screen, with no event in it. Agenda keeps flat fields, so this is the law by hand.
-            search_ask = if (searching && answer.search != null && answer.search.events.isEmpty()) {
+            // term on screen, with no event or task in it. Agenda keeps flat fields, so this is the law by hand.
+            search_ask = if (searching && answer.search != null &&
+                answer.search.events.isEmpty() && incoming.search?.tasks.isNullOrEmpty()
+            ) {
                 SearchLaw.question(state.screen.search_term)
             } else {
                 ""
@@ -699,12 +730,24 @@ public object AgendaHomeMachine : ScreenMachine<AgendaHome, AgendaInput> {
             // A SEARCH CLOSED WHILE ITS HITS WERE READING IS NOT REOPENED.
             search = answer.search.takeIf { activeTerm(screen) != null },
         )
+        val key = windowKey(screen)
+        val writes = if (incoming.today != null) {
+            // WRITES THE VAULT HAS NOW ANSWERED are the vault's to draw (`TaskOpsLaw.answered`), but only
+            // by an answer that carries the boards: a search keystroke's does not.
+            TaskOpsLaw.answered(merged.ops, TodoPlace.openIn(merged), TodoPlace.todayOf(merged).ifEmpty { today })
+        } else {
+            merged.ops
+        }
         return refold(
             state.copy(
                 screen = screen,
                 answers = held,
                 reading = false,
-                heldWindow = if (answer.upcoming != null) windowKey(screen) else state.heldWindow,
+                heldWindow = if (answer.upcoming != null) key else state.heldWindow,
+                tasks = merged.copy(
+                    ops = writes,
+                    heldDated = if (incoming.today != null) key else state.tasks.heldDated,
+                ),
             ),
             force = true,
         )
@@ -786,7 +829,7 @@ public object AgendaHomeMachine : ScreenMachine<AgendaHome, AgendaInput> {
         if (state.screen.destination == TODO && activeTerm(state.screen) == null) {
             TodoPlace.fold(state.tasks)
         } else {
-            state.answers?.let { AgendaFold.fold(state.screen, it) }
+            state.answers?.let { AgendaFold.fold(state.screen, it, state.tasks) }
         }
 
     private fun heldToday(state: AgendaHome): String =
@@ -987,4 +1030,10 @@ public object AgendaHomeMachine : ScreenMachine<AgendaHome, AgendaInput> {
     private val TASK_PLACES: Set<String> = setOf(MORE_ANYTIME, MORE_LOGBOOK, MORE_REMINDERS, MORE_TRASH)
 
     private val TODO = AgendaHomeState.Destination.DESTINATION_TODO
+
+    /** The places that draw tasks on their days. */
+    private val DATED: Set<AgendaHomeState.Destination> = setOf(
+        AgendaHomeState.Destination.DESTINATION_DAY,
+        AgendaHomeState.Destination.DESTINATION_SCHEDULE,
+    )
 }

@@ -50,6 +50,10 @@ import dev.centraid.shared.screen.ScreenMachine
 import dev.centraid.shared.screen.Step
 import dev.centraid.shared.sync.ScreenQueries
 import dev.centraid.shared.sync.ScreenWrites
+import dev.centraid.shared.kit.tasks.PendingAdd
+import dev.centraid.shared.kit.tasks.TaskOps
+import dev.centraid.shared.kit.tasks.TaskOpsLaw
+import dev.centraid.shared.kit.tasks.TasksRows
 
 /**
  * WHAT TASKS' HOME HOLDS: the state a view draws, and the core's raw answers

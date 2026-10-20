@@ -50,7 +50,6 @@ import dev.centraid.shared.apps.tasks.TasksProjectInput
 import dev.centraid.shared.apps.tasks.TasksProjectMachine
 import dev.centraid.shared.apps.tasks.TasksProjectPage
 import dev.centraid.shared.apps.tasks.TasksProjectReads
-import dev.centraid.shared.apps.tasks.TasksRows
 import dev.centraid.shared.apps.tasks.TasksTrashMachine
 import dev.centraid.shared.kit.AutosaveLaw
 import dev.centraid.shared.kit.WriteLaw
@@ -68,6 +67,7 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
+import dev.centraid.shared.kit.tasks.TasksRows
 
 /**
  * TASKS ON THE PHONE (#1029 port): from the core's typed answers to what a
@@ -198,7 +198,7 @@ class TasksSpec : StringSpec({
     }
 
     "a project's hue is a colour role like People's and Agenda's — cTeal, never the wheel's word (#1047)" {
-        val rows = dev.centraid.shared.apps.tasks.TasksRows
+        val rows = TasksRows
         rows.hueOf("p1", TasksProject(project_id = "p1", color = "var(--c-teal)")) shouldBe "cTeal"
         // No stored hue: the id's own, still a role.
         val own = rows.hueOf("p1", TasksProject(project_id = "p1"))

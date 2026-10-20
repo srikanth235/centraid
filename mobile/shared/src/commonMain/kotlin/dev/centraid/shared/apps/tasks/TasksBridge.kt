@@ -12,6 +12,7 @@ import centraid.screen.v1.TasksProjectEvent
 import centraid.screen.v1.TasksProjectState
 import com.squareup.wire.Message
 import com.squareup.wire.ProtoAdapter
+import dev.centraid.shared.kit.tasks.TaskOpsLaw
 import dev.centraid.shared.screen.ScreenHost
 import dev.centraid.shared.screen.ScreenMachine
 import dev.centraid.shared.shell.HomeSession
@@ -24,8 +25,6 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
-import kotlin.uuid.ExperimentalUuidApi
-import kotlin.uuid.Uuid
 
 /**
  * WHAT BOTH SHELLS HOLD FOR ONE TASKS SCREEN (#1029 port).
@@ -112,8 +111,7 @@ public open class TasksBridge<W, I, S : Message<S, *>, E : Message<E, *>>(
 
     public companion object {
         /** A fresh task id: a v4 UUID, the shape `add_task` honours. */
-        @OptIn(ExperimentalUuidApi::class)
-        public fun mintTaskId(): String = Uuid.random().toString()
+        public fun mintTaskId(): String = TaskOpsLaw.mintId()
     }
 }
 
