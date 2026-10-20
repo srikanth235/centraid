@@ -142,6 +142,12 @@ final class ShellModel: ObservableObject {
     func followPhone() {
         follow.requested(source: .contacts)
         follow.requested(source: .calendar)
+        follow.requested(source: .files)
+    }
+
+    /// A folder was just followed, or picked again: read it now (#1127).
+    func followFolders() {
+        follow.requested(source: .files)
     }
 
     /// The question a held account or calendar leaves (R-1127-9), or nil. The
@@ -291,7 +297,7 @@ final class ShellModel: ObservableObject {
     private let home = HomeBridge()
     private let contacts = ContactsImportBridge()
     private let calendar = CalendarImportBridge()
-    /// THE PHONE FOLLOWED (#1127): People and Agenda keep following what the
+    /// THE PHONE FOLLOWED (#1127): People, Agenda and Docs keep following what the
     /// phone holds after the member imported it. One bridge for both; the gate,
     /// the passes and the question are in `CentraidShared`.
     private let follow = PhoneFollowBridge()
@@ -435,7 +441,11 @@ final class ShellModel: ObservableObject {
             self.calendar.attach(session: session)
             self.follow.attach(
                 session: session,
-                sources: [ContactsFollow(reader: ContactsFollowReader()), CalendarFollow(reader: CalendarFollowReader())],
+                sources: [
+                    ContactsFollow(reader: ContactsFollowReader()),
+                    CalendarFollow(reader: CalendarFollowReader()),
+                    FilesFollow(reader: FolderFollowReader()),
+                ],
                 ask: { [weak self] question in DispatchQueue.main.async { self?.followQuestion = question } }
             )
             self.reminders.attach(session: session)

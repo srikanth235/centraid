@@ -16,12 +16,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
 import dev.centraid.android.screens.agenda.readPhoneEvents
+import dev.centraid.android.screens.docs.AndroidFolderReader
 import dev.centraid.android.screens.people.readPhoneContacts
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 import dev.centraid.shared.apps.agenda.CalendarFollow
 import dev.centraid.shared.apps.agenda.CalendarRead
 import dev.centraid.shared.apps.agenda.CalendarReader
+import dev.centraid.shared.apps.docs.FilesFollow
 import dev.centraid.shared.apps.people.ContactsFollow
 import dev.centraid.shared.apps.people.ContactsRead
 import dev.centraid.shared.apps.people.ContactsReader
@@ -44,7 +46,9 @@ import java.util.TimeZone
  *   nothing for a source the member never imported.
  * - **Reads.** The [ContactsReader] and [CalendarReader] below answer off the main thread, and
  *   **null when the permission is not already granted: a pass never asks the OS**, only the
- *   member's Import tap does (R-ONBOARD-4).
+ *   member's Import tap does (R-ONBOARD-4). Docs' folders are read by `AndroidFolderReader`, over
+ *   the tree grants the member gave when they picked each folder; triggers for them are the app
+ *   coming forward and the picker returning (`requested(PhoneSource.FILES)`), with no watcher.
  * - **The question.** [question] holds the one the bridge is waiting on; [PhoneFollowDialog]
  *   draws it and [answer] sends the member's choice back.
  *
@@ -66,7 +70,7 @@ internal class AndroidPhoneFollow(context: Context) {
 
     /** The foreground vault's session is open: followed from now on, and followed once at once. */
     fun attach(session: HomeSession) {
-        bridge.attach(session, listOf(ContactsFollow(contactsReader), CalendarFollow(calendarReader))) { question = it }
+        bridge.attach(session, listOf(ContactsFollow(contactsReader), CalendarFollow(calendarReader), FilesFollow(AndroidFolderReader(context)))) { question = it }
         attached = true
         if (started) requestAll()
     }
@@ -110,6 +114,7 @@ internal class AndroidPhoneFollow(context: Context) {
     private fun requestAll() {
         bridge.requested(PhoneSource.CONTACTS)
         bridge.requested(PhoneSource.CALENDAR)
+        bridge.requested(PhoneSource.FILES)
     }
 
     private fun observer(source: PhoneSource): ContentObserver = object : ContentObserver(main) {

@@ -145,7 +145,7 @@ public class MainActivity : FragmentActivity() {
             AgendaRoutes(),
             PhotosRoutes(cacheDir),
             NotesRoutes(),
-            DocsRoutes(),
+            DocsRoutes(onFollowed = { phoneFollow.requested(PhoneSource.FILES) }),
             PeopleRoutes(),
             TasksRoutes(),
             MoneyRoutes(),
