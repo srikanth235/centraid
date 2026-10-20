@@ -86,7 +86,7 @@
     "HUE_A11Y": "Colour {hue}",
     "IMPORT_BIRTHDAY": "Birthday",
     "IMPORT_CONTACTS": "Import contacts",
-    "IMPORT_CONTACTS_ADD_ACCOUNT": "No contacts found. Add your Google or other account in Settings \u2192 Contacts \u2192 Accounts, then come back.",
+    "IMPORT_CONTACTS_ADD_ACCOUNT": "No contacts found. Add your Google or other account in your phone's Settings, then come back.",
     "IMPORT_CONTACTS_DENIED": "Contacts access is off. Turn it on in Settings.",
     "IMPORT_CONTACTS_DONE": "{count} people imported",
     "IMPORT_CONTACTS_FAILED": "Contacts did not import.",
