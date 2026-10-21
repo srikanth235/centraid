@@ -1,7 +1,7 @@
 # Receipt — Tasks folds into Agenda ([#1128](https://github.com/srikanth235/centraid/issues/1128))
 
 <!-- governance:front-page start -->
-**Law** · window door · range `f90f473c..fa861727` · law digest `2549cef4cd1f` → `2549cef4cd1f`
+**Law** · window door · range `f90f473c..2774837e` · law digest `2549cef4cd1f` → `2549cef4cd1f`
 
 | Rule | Door | Verdict | Findings |
 | --- | --- | --- | --- |
@@ -18,7 +18,7 @@
 
 ### Findings
 
-- `.governance/law/out/arrival.json:7660` **law/receipt-per-issue** (error) — receipts/issue-1130-tasks-today.md — missing a '## Audit' section. Mechanical checks record that outcome and verification text exist; they do not prove the receipt matches the diff or that a command ran.
+- `.governance/law/out/arrival.json:7712` **law/receipt-per-issue** (error) — receipts/issue-1130-tasks-today.md — missing a '## Audit' section. Mechanical checks record that outcome and verification text exist; they do not prove the receipt matches the diff or that a command ran.
 
 law estate: 11 paths, CODEOWNERS in sync
 
