@@ -19,8 +19,8 @@ public enum class PhoneSource(public val wire: String) {
  * THE PHONE'S OWN ID FOR A RECORD, WITH ITS KIND AS A PREFIX (R-1127-10), so a portable id is never
  * mistaken for a local fallback: `uid:` an iCal UID (the same on every device Google syncs to),
  * `lookup:` an Android `LOOKUP_KEY`, `local:` an id that means something on this device only (an
- * iOS contact identifier, an Android `CONTACT_ID`, an EventKit item id). A `file:` kind for the
- * Docs lane is just another prefix: the engine reads only that one is there.
+ * iOS contact identifier, an Android `CONTACT_ID`, an EventKit item id, a followed file's
+ * `<folder>/<path>`, a health store's workout id). The engine reads only that a prefix is there.
  */
 public object PhoneIds {
     public const val UID: String = "uid"
