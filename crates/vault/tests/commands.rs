@@ -82,10 +82,15 @@ fn the_registry_carries_the_shared_verbs_and_lockers_and_nothing_else() {
         "follow.statement",
         "locker.add_item",
         "locker.reveal_receipt",
+        "note.create",
+        "note.edit",
+        "note.move",
+        "note.restore_version",
     ] {
         assert!(names.contains(&expected), "`{expected}` is not registered");
     }
-    // A per-kind verb belongs to its app's lane; none is registered here.
+    // A per-kind verb belongs to its app's lane; a lane's schema joins this list
+    // when its commands land (`note` is lane 2's).
     for name in &names {
         let schema = name.split('.').next().unwrap_or_default();
         assert!(
@@ -99,7 +104,8 @@ fn the_registry_carries_the_shared_verbs_and_lockers_and_nothing_else() {
                 "derivative",
                 "person",
                 "follow",
-                "locker"
+                "locker",
+                "note"
             ]
             .contains(&schema),
             "`{name}` is not a shared verb or Locker's"
@@ -217,7 +223,7 @@ fn an_unknown_command_is_an_error_and_leaves_no_journal_row() {
         .execute(
             &registry(),
             &owner(),
-            &Command::new("note.create", serde_json::json!({})),
+            &Command::new("task.add", serde_json::json!({})),
         )
         .expect_err("not registered");
     assert!(matches!(error, VaultError::UnknownCommand { .. }));

@@ -635,6 +635,26 @@ fn script_every_search_relevant_command(scratch: &common::Scratch, registry: &Re
             tx.touch("n1", AT)
         })
         .expect("edits");
+    // The note verbs: an edit that changes the words, a restore of the words it
+    // replaced, and a note born with words that link.
+    run(
+        vault,
+        registry,
+        "note.edit",
+        json!({"id": "n2", "body": "sandwiches and soup"}),
+    );
+    run(
+        vault,
+        registry,
+        "note.restore_version",
+        json!({"id": "n2", "seq": 1}),
+    );
+    run(
+        vault,
+        registry,
+        "note.create",
+        json!({"title": "Ledger", "body": "[[Lunch]] on the ledger"}),
+    );
     run(
         vault,
         registry,
