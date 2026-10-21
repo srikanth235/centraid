@@ -20,7 +20,8 @@ public enum class PhoneSource(public val wire: String) {
  * mistaken for a local fallback: `uid:` an iCal UID (the same on every device Google syncs to),
  * `lookup:` an Android `LOOKUP_KEY`, `local:` an id that means something on this device only (an
  * iOS contact identifier, an Android `CONTACT_ID`, an EventKit item id, a followed file's
- * `<folder>/<path>`, a health store's workout id). The engine reads only that a prefix is there.
+ * `<folder>/<path>`, a health store's workout id). The engine reads only that a prefix is there,
+ * and that a `local:` id is the device's own: its link names the [PhoneDevice] that made it.
  */
 public object PhoneIds {
     public const val UID: String = "uid"
@@ -155,19 +156,37 @@ public class PhoneFields private constructor(private val entries: Map<String, Li
  * against itself and "did the phone change" is the phone held against itself; neither has to
  * convert the one into the other. The satellite is held apart from `phone` because its change is
  * a reason to write the satellite alone, not to rewrite the row.
+ *
+ * A fourth piece, `key`, is the digest of the record's match key when the engine last wrote it
+ * ([NO_KEY] for a record with none). It is how another phone re-finds the row (F-K-1): a
+ * restored vault's `local:` links name the old phone's ids, and the new phone pairs each with its
+ * own record by the key the link remembers, which a tombstone (no row left) and a detached row
+ * (the member renamed it) still carry.
  */
 public object PhoneFingerprint {
-    public data class Parts(public val phone: String, public val satellite: String, public val vault: String)
+    public data class Parts(
+        public val phone: String,
+        public val satellite: String,
+        public val vault: String,
+        public val key: String = NO_KEY,
+    )
 
-    public fun pack(phone: String, satellite: String, vault: String): String = "v2.$phone.$satellite.$vault"
+    public fun pack(phone: String, satellite: String, vault: String, key: String = NO_KEY): String =
+        "v3.$phone.$satellite.$vault.$key"
 
     public fun parts(fingerprint: String): Parts? {
         val pieces = fingerprint.split('.')
-        if (pieces.size != PIECES || pieces[0] != "v2" || pieces.drop(1).any { it.isEmpty() }) return null
-        return Parts(phone = pieces[1], satellite = pieces[2], vault = pieces[3])
+        if (pieces.size != PIECES || pieces[0] != "v3" || pieces.drop(1).any { it.isEmpty() }) return null
+        return Parts(phone = pieces[1], satellite = pieces[2], vault = pieces[3], key = pieces[4])
     }
 
-    private const val PIECES: Int = 4
+    /** The `key` piece for a record's [PhoneRecord.matchKey]: its digest, or [NO_KEY] for none. */
+    public fun key(matchKey: String): String = if (matchKey.isEmpty()) NO_KEY else matchKey.encodeUtf8().sha256().hex()
+
+    /** The `key` piece of a record that matches nothing. */
+    public const val NO_KEY: String = "-"
+
+    private const val PIECES: Int = 5
 }
 
 /** A phone account, calendar or picked folder, as the phone names it now. */
@@ -219,17 +238,22 @@ public data class PhoneSnapshot(
     public val records: List<PhoneRecord>,
 )
 
-/** An origin as the vault holds it: its row id, the phone's id for it, and the label last written. */
+/**
+ * An origin as the vault holds it: its row id, the phone's id for it, the label last written, and
+ * the [PhoneDevice] that last read it present (null when the vault did not say).
+ */
 public data class StoredOrigin(
     public val originId: String,
     public val phoneOrigin: String,
     public val label: String,
+    public val deviceId: String? = null,
 )
 
 /**
  * A `phone_link` row. [entityId] is null for the tombstone a purge leaves (the member deleted the
  * row forever): the phone record must not be added again, and the link goes once the phone record
- * does.
+ * does. [deviceId] is the [PhoneDevice] that made a `local:` link, and null for a `uid:` or
+ * `lookup:` link, which is the same record on every device (F-K-1).
  */
 public data class StoredLink(
     public val linkId: String,
@@ -239,6 +263,7 @@ public data class StoredLink(
     public val fingerprint: String,
     public val detached: Boolean,
     public val lastSeenAt: String,
+    public val deviceId: String? = null,
 ) {
     public val purged: Boolean get() = entityId == null
 }

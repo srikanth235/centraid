@@ -254,7 +254,7 @@ fn today_compares_today_with_the_whole_days_before_it() {
     assert!(!today.connected);
     scratch.run(
         "phone.origin",
-        json!({ "source": "health", "phone_origin": "store:apple-health", "label": "Apple Health" }),
+        json!({ "source": "health", "device_id": "device-a", "phone_origin": "store:apple-health", "label": "Apple Health" }),
     );
     assert!(scratch.today().connected);
 }

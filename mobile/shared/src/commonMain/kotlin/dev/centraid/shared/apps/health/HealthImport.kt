@@ -11,6 +11,7 @@ import dev.centraid.shared.kit.PhoneImport
 import dev.centraid.shared.platform.DeviceClock
 import dev.centraid.shared.sync.phone.GoneChoice
 import dev.centraid.shared.sync.phone.OriginGone
+import dev.centraid.shared.sync.phone.PhoneDevice
 import dev.centraid.shared.sync.phone.PhoneFields
 import dev.centraid.shared.sync.phone.PhoneFollowReads
 import dev.centraid.shared.sync.phone.PhoneIds
@@ -220,7 +221,7 @@ public object HealthImport {
      * longer on the phone sends no days (there is nothing to read them from) and holds its
      * workouts for the member's answer.
      */
-    public suspend fun run(core: CentraidCore, read: HealthRead, window: HealthWindow, readAt: String): Outcome {
+    public suspend fun run(core: CentraidCore, read: HealthRead, window: HealthWindow, readAt: String, device: String? = null): Outcome {
         var days = 0
         var refused = 0
         if (read.storePresent) {
@@ -228,7 +229,7 @@ public object HealthImport {
                 if (PhoneImport.executed(core, HealthStore.RECORD, recordInput(batch)) != null) days += batch.size else refused += batch.size
             }
         }
-        val report = PhoneSync.run(HealthStore(core, window.workoutsSince), snapshot(read, window, readAt))
+        val report = PhoneSync.run(HealthStore(core, device ?: PhoneDevice.id(), window.workoutsSince), snapshot(read, window, readAt))
         return Outcome(
             days = days,
             added = report.added + report.adopted + report.refound,
@@ -251,8 +252,8 @@ public object HealthImport {
      * The member's answer to the store's workouts held (R-1127-9): [GoneChoice.KEEP] is the default;
      * the other is the member's own "Delete them", the one answer that purges (R-1129-14).
      */
-    public suspend fun resolveGone(core: CentraidCore, originId: String, choice: GoneChoice, seenBefore: String? = null): Outcome {
-        val report = PhoneSync.resolveGone(HealthStore(core, purge = true), originId, choice, seenBefore)
+    public suspend fun resolveGone(core: CentraidCore, originId: String, choice: GoneChoice, seenBefore: String? = null, device: String? = null): Outcome {
+        val report = PhoneSync.resolveGone(HealthStore(core, device ?: PhoneDevice.id(), purge = true), originId, choice, seenBefore)
         return Outcome(trashed = report.trashed, refused = report.refused.size, read = report.read)
     }
 
@@ -263,7 +264,7 @@ public object HealthImport {
      */
     public suspend fun connect(core: CentraidCore, store: HealthStoreKind, reader: HealthReader, clock: DeviceClock): Outcome? {
         val origin = origin(store)
-        HealthStore(core).origin(origin.id, origin.label) ?: return null
+        HealthStore(core, PhoneDevice.id()).origin(origin.id, origin.label) ?: return null
         return pass(core, reader, clock) ?: Outcome()
     }
 
@@ -273,7 +274,7 @@ public object HealthImport {
      * it (the rest is done, and stopping again finishes it).
      */
     public suspend fun stop(core: CentraidCore): Boolean {
-        val store = HealthStore(core)
+        val store = HealthStore(core, PhoneDevice.id())
         val links = store.links() ?: return false
         val origins = store.origins() ?: return false
         var clean = true

@@ -13,6 +13,7 @@ import dev.centraid.design.copy.AgendaCopy
 import dev.centraid.shared.kit.PhoneImport
 import dev.centraid.shared.sync.phone.GoneChoice
 import dev.centraid.shared.sync.phone.OriginGone
+import dev.centraid.shared.sync.phone.PhoneDevice
 import dev.centraid.shared.sync.phone.PhoneFields
 import dev.centraid.shared.sync.phone.PhoneIds
 import dev.centraid.shared.sync.phone.PhoneOriginRef
@@ -173,6 +174,7 @@ public object CalendarImport {
      * the phone sync (#1127): the first one brings the calendar in, later ones follow it.
      * [origins] lists every calendar present, so one with no event in the window is not mistaken
      * for gone; [complete] is false when the read may be partial, and nothing is then trashed.
+     * [device] is this install's [PhoneDevice] unless a caller names another.
      */
     public suspend fun run(
         core: CentraidCore,
@@ -181,9 +183,10 @@ public object CalendarImport {
         now: Long,
         origins: List<PhoneOriginRef> = emptyList(),
         complete: Boolean = true,
+        device: String? = null,
     ): Outcome {
         val calendar = firstCalendar(core) ?: return Outcome(added = 0, refused = events.size)
-        return sync(CalendarStore(core, calendar, deviceTz, now), events, origins, complete, now)
+        return sync(CalendarStore(core, calendar, deviceTz, now, device ?: PhoneDevice.id()), events, origins, complete, now)
     }
 
     /**
@@ -197,8 +200,9 @@ public object CalendarImport {
         deviceTz: String,
         now: Long,
         seenBefore: String? = null,
+        device: String? = null,
     ): Outcome {
-        val report = PhoneSync.resolveGone(CalendarStore(core, "", deviceTz, now), originId, choice, seenBefore)
+        val report = PhoneSync.resolveGone(CalendarStore(core, "", deviceTz, now, device ?: PhoneDevice.id()), originId, choice, seenBefore)
         return Outcome(added = 0, refused = report.refused.size, trashed = report.trashed)
     }
 

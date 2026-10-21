@@ -557,6 +557,14 @@ CREATE INDEX people_profile_deleted_page_idx
 -- index people_profile_purge_idx on people_profile
 CREATE INDEX people_profile_purge_idx ON people_profile(purge_at);
 
+-- index phone_link_device_record_idx on phone_link
+CREATE UNIQUE INDEX phone_link_device_record_idx
+  ON phone_link(source, device_id, phone_id) WHERE device_id IS NOT NULL;
+
+-- index phone_link_record_idx on phone_link
+CREATE UNIQUE INDEX phone_link_record_idx
+  ON phone_link(source, phone_id) WHERE device_id IS NULL;
+
 -- index schedule_project_owner_idx on schedule_project
 CREATE INDEX schedule_project_owner_idx
   ON schedule_project(owner_party_id, archived_at, sort_order);
@@ -2465,6 +2473,7 @@ CREATE TABLE phone_link (
   link_id      TEXT PRIMARY KEY,
   source       TEXT NOT NULL CHECK (source IN ('contacts', 'calendar', 'files', 'health')),
   phone_id     TEXT NOT NULL CHECK (length(trim(phone_id)) > 0),
+  device_id    TEXT CHECK (device_id IS NULL OR length(trim(device_id)) > 0),
   origin_id    TEXT NOT NULL,
   entity_id    TEXT REFERENCES core_entity(entity_id) ON DELETE SET NULL,
   fingerprint  TEXT NOT NULL CHECK (length(fingerprint) > 0),
@@ -2473,7 +2482,6 @@ CREATE TABLE phone_link (
   created_at   TEXT NOT NULL,
   updated_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   row_version  INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
-  UNIQUE (source, phone_id),
   UNIQUE (entity_id),
   FOREIGN KEY (origin_id, source) REFERENCES phone_origin (origin_id, source)
 ) STRICT;
@@ -2484,6 +2492,7 @@ CREATE TABLE phone_origin (
   source       TEXT NOT NULL CHECK (source IN ('contacts', 'calendar', 'files', 'health')),
   phone_origin TEXT NOT NULL CHECK (length(trim(phone_origin)) > 0),
   label        TEXT NOT NULL CHECK (length(trim(label)) > 0),
+  device_id    TEXT NOT NULL CHECK (length(trim(device_id)) > 0),
   created_at   TEXT NOT NULL,
   updated_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   row_version  INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),

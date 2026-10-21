@@ -125,7 +125,7 @@ impl Bench {
     fn origin(&self) -> String {
         self.run(
             "phone.origin",
-            json!({ "source": "health", "phone_origin": "store:apple-health", "label": "Apple Health" }),
+            json!({ "source": "health", "device_id": "device-a", "phone_origin": "store:apple-health", "label": "Apple Health" }),
         )["origin_id"]
             .as_str()
             .expect("an origin id")
@@ -464,7 +464,7 @@ fn a_purge_cascades_and_leaves_a_tombstone_that_phone_link_refuses() {
     let origin = bench.origin();
     let link = |entity: &str, phone_id: &str| {
         json!({
-            "source": "health", "phone_id": phone_id, "origin_id": origin,
+            "source": "health", "phone_id": phone_id, "device_id": "device-a", "origin_id": origin,
             "entity_id": entity, "fingerprint": "fp-1",
         })
     };

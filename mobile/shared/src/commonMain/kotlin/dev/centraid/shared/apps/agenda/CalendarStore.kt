@@ -42,7 +42,8 @@ internal class CalendarStore(
     private val calendarId: String,
     private val deviceTz: String,
     private val now: Long,
-) : CorePhoneStore(core, PhoneSource.CALENDAR) {
+    device: String,
+) : CorePhoneStore(core, PhoneSource.CALENDAR, device) {
     override suspend fun rows(): Map<String, VaultRow>? = read(eventId = null)
 
     override suspend fun row(entityId: String): VaultRow? = read(entityId)?.get(entityId)
