@@ -3,6 +3,11 @@
 //!
 //! [`App`] has no `Locker` variant, so no card can name it and no chat can be scoped to it. A
 //! secret that was never in a prompt cannot be in an answer (R-1088-3).
+//!
+//! A CARD NAMES A DOMAIN; A CHAT IS SCOPED TO AN APP (R-1128-F2, #1128). `Tasks` is a domain —
+//! a card, a search hit and a write say `tasks` — that opens in Agenda, so it is no chat scope:
+//! [`App::SCOPES`] leaves it out, [`App::scope_from_id`] refuses `tasks`, and a chat scoped to
+//! Agenda covers task rows as well as events ([`App::covers`]).
 
 /// An app the assistant can read. Locker is deliberately absent.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -55,6 +60,34 @@ impl App {
         }
     }
 
+    /// THE APPS A CHAT CAN BE SCOPED TO (R-1128-F2): every app a member opens, which is every
+    /// domain that opens in itself. `Tasks` opens in Agenda, so it is not one; the vault's
+    /// `chat_thread.scope_app` CHECK holds the same six (`contracts/migrations/002_*`).
+    pub const SCOPES: [Self; 6] = [
+        Self::Agenda,
+        Self::Docs,
+        Self::Money,
+        Self::Notes,
+        Self::People,
+        Self::Photos,
+    ];
+
+    /// Whether a chat can be scoped to this app: it opens in itself (R-1128-F2).
+    #[must_use]
+    pub fn is_scope(self) -> bool {
+        self.opens_in() == self
+    }
+
+    /// THE DOMAINS A CHAT SCOPED TO THIS APP READS, in registry order: every domain that opens
+    /// in the same app. Agenda covers Agenda and Tasks; every other app covers itself
+    /// (R-1128-F2, #1128).
+    pub fn covers(self) -> impl Iterator<Item = Self> {
+        let app = self.opens_in();
+        Self::ALL
+            .into_iter()
+            .filter(move |domain| domain.opens_in() == app)
+    }
+
     /// The app's name as a member reads it ("Looking in Notes"): the name of the app the domain
     /// opens in, so `Tasks` reads "Agenda" (R-1128-D1).
     #[must_use]
@@ -74,6 +107,14 @@ impl App {
     #[must_use]
     pub fn from_id(id: &str) -> Option<Self> {
         Self::ALL.into_iter().find(|app| app.id() == id)
+    }
+
+    /// The chat scope a shell named, or `None` — which includes `locker` and `tasks`: a domain
+    /// that opens in another app is read through that app's scope, never named as one of its
+    /// own, so a thread has exactly one name for "Agenda" (R-1128-F2).
+    #[must_use]
+    pub fn scope_from_id(id: &str) -> Option<Self> {
+        Self::SCOPES.into_iter().find(|app| app.id() == id)
     }
 }
 
@@ -102,7 +143,7 @@ mod tests {
 
     #[test]
     fn tasks_is_a_domain_a_member_opens_in_agenda() {
-        // The id is stored and routed (card app, chat scope, search app_id) and does not move.
+        // The id is stored and routed (card app, search app_id, write app) and does not move.
         assert_eq!(App::Tasks.id(), "tasks");
         assert_eq!(App::from_id("tasks"), Some(App::Tasks));
         assert_eq!(App::Tasks.opens_in(), App::Agenda);
@@ -116,5 +157,35 @@ mod tests {
                 .iter()
                 .all(|app| app.opens_in().opens_in() == app.opens_in())
         );
+    }
+
+    #[test]
+    fn a_scope_is_an_app_a_member_opens_and_agenda_covers_tasks() {
+        // SCOPES is exactly the apps that open in themselves, in registry order.
+        let opened: Vec<App> = App::ALL.into_iter().filter(|app| app.is_scope()).collect();
+        assert_eq!(opened, App::SCOPES);
+        // `tasks` is a domain and a card app, never a scope (R-1128-F2).
+        assert_eq!(App::scope_from_id("tasks"), None);
+        assert_eq!(App::scope_from_id("locker"), None);
+        assert_eq!(App::scope_from_id("agenda"), Some(App::Agenda));
+        for app in App::SCOPES {
+            assert_eq!(App::scope_from_id(app.id()), Some(app));
+        }
+        // Agenda's scope reads events and tasks; every other scope reads itself.
+        assert_eq!(
+            App::Agenda.covers().collect::<Vec<_>>(),
+            [App::Agenda, App::Tasks]
+        );
+        for app in App::SCOPES.into_iter().filter(|app| *app != App::Agenda) {
+            assert_eq!(app.covers().collect::<Vec<_>>(), [app], "{}", app.id());
+        }
+        // Every domain is covered by exactly one scope.
+        for domain in App::ALL {
+            let covering = App::SCOPES
+                .into_iter()
+                .filter(|scope| scope.covers().any(|covered| covered == domain))
+                .count();
+            assert_eq!(covering, 1, "{}", domain.id());
+        }
     }
 }

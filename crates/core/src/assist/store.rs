@@ -429,7 +429,8 @@ pub fn reopen(handle: &Handle, thread_id: &str) -> crate::error::Result<Option<R
         let Some(stored) = vault.chat_thread(thread_id)? else {
             return Ok(None);
         };
-        let scope = stored.thread.scope_app.as_deref().and_then(App::from_id);
+        // The vault's CHECK holds a stored scope to the six apps (R-1128-F2).
+        let scope = stored.thread.scope_app.as_deref().and_then(App::scope_from_id);
         let history: Vec<Turn> = vault
             .chat_history(thread_id, REHYDRATE_TURNS)?
             .iter()
@@ -554,14 +555,14 @@ mod tests {
             key: "k",
             thread: None,
             replace_last: false,
-            scope: Some(App::Tasks),
+            scope: Some(App::Agenda),
             question: "what is due?",
             attachments: &[],
             said: &said,
             record: None,
         };
         let fresh = command_input(&turned, None, false);
-        assert_eq!(fresh["scope_app"], "tasks");
+        assert_eq!(fresh["scope_app"], "agenda");
         assert!(fresh.get("thread_id").is_none());
         let again = command_input(&turned, Some("t-1"), true);
         assert_eq!(again["thread_id"], "t-1");

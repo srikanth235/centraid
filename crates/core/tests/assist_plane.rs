@@ -294,7 +294,7 @@ fn locker_is_in_no_prompt_a_session_ever_builds() {
     ]);
     sample.install(Arc::clone(&model) as Arc<dyn Model>);
     // Every scope a chat can have, asked a question a vault's secrets answer.
-    for app in ["", "tasks"] {
+    for app in ["", "agenda"] {
         let session = sample.start(app);
         sample.send(session, 1, "What is my wifi password?");
     }
@@ -429,14 +429,18 @@ fn suggestions_are_three_questions_this_vault_can_answer() {
     use centraid_assist::suggest::{SUGGESTIONS, suggest};
     let sample = common::chat::sample();
     let door = sample.handle.assist_door();
-    for scope in std::iter::once(None).chain(App::ALL.into_iter().map(Some)) {
+    for scope in std::iter::once(None).chain(App::SCOPES.into_iter().map(Some)) {
         let got = suggest(&door, common::chat::TZ, scope);
         assert_eq!(got.len(), SUGGESTIONS, "{scope:?}");
         // Deterministic: the same vault, the same three, in the same order.
         assert_eq!(got, suggest(&door, common::chat::TZ, scope), "{scope:?}");
-        // Opened from an app, all three are about it.
+        // Opened from an app, all three are about it — Agenda's about its events or its tasks
+        // (R-1128-F2).
         if let Some(app) = scope {
-            assert!(got.iter().all(|s| s.app == app), "{app:?}: {got:?}");
+            assert!(
+                got.iter().all(|s| s.app.opens_in() == app),
+                "{app:?}: {got:?}"
+            );
         }
         let texts: std::collections::BTreeSet<_> = got.iter().map(|s| &s.text).collect();
         assert_eq!(texts.len(), SUGGESTIONS, "{scope:?}: no repeats");
@@ -464,8 +468,34 @@ fn suggestions_name_things_from_this_vault() {
         Some(wire::assist_response::Kind::Suggestions(s)) => s.prompts,
         other => panic!("{other:?}"),
     };
-    let tasks = prompts("tasks");
-    assert!(tasks.iter().any(|p| p.contains("Tahoe trip")), "{tasks:?}");
+    // A scoped chat's first suggestion names a row this vault holds: the newest note.
+    let notes = prompts("notes");
+    assert!(notes[0].starts_with("Find my note on "), "{notes:?}");
+    // AGENDA'S SCOPE READS ITS TASKS TOO (R-1128-F2): the wire answers what the crate offers,
+    // and a backed question about a task is among the three whatever day the test runs on —
+    // the backed questions of events and tasks come in turn.
+    use centraid_assist::App;
+    let offered = centraid_assist::suggest::suggest(
+        &sample.handle.assist_door(),
+        common::chat::TZ,
+        Some(App::Agenda),
+    );
+    let agenda = prompts("agenda");
+    assert_eq!(
+        agenda,
+        offered.iter().map(|s| s.text.clone()).collect::<Vec<_>>()
+    );
+    assert!(offered.iter().any(|s| s.app == App::Tasks), "{offered:?}");
+    // THE TASK DOMAIN IS NO SCOPE: refused, naming the scope that covers it.
+    match sample.assist(Ask::Suggest(wire::AssistSuggestRequest {
+        app: "tasks".to_owned(),
+        tz: common::chat::TZ.to_owned(),
+    })) {
+        Err(CoreError::InvalidRequest { detail }) => {
+            assert!(detail.contains("`agenda` covers it"), "{detail}");
+        }
+        other => panic!("the task domain was taken as a scope: {other:?}"),
+    }
     assert!(matches!(
         sample.assist(Ask::Suggest(wire::AssistSuggestRequest {
             app: "locker".to_owned(),
