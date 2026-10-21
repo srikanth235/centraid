@@ -34,16 +34,18 @@ import kotlin.uuid.Uuid
  *   as `trashed`. Only the member deletes one: from Health, or by answering "Delete them" to the
  *   store-gone question, which is the one place [purge] is set and `health.purge_workout` runs.
  * - **refindLost** is on (R-1129-15): a workout lost under one phone id and met under another in
- *   the same pass (a new phone's own ids) is the same row, re-linked, never a second one.
+ *   the same pass on THIS device (a store that re-issued its ids) is the same row, re-linked, never
+ *   a second one. A new phone's own ids are another device's re-find (F-K-1), which every source has.
  * - **coverage** is the window the pass read ([since]): a workout that started before it is not
  *   one the phone deleted.
  */
 internal class HealthStore(
     core: CentraidCore,
+    device: String,
     private val since: Long? = null,
     private val purge: Boolean = false,
     private val mintId: () -> String = ::mint,
-) : CorePhoneStore(core, PhoneSource.HEALTH) {
+) : CorePhoneStore(core, PhoneSource.HEALTH, device) {
     override val refindLost: Boolean get() = true
 
     override suspend fun rows(): Map<String, VaultRow>? {

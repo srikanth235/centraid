@@ -14,15 +14,18 @@ import dev.centraid.shared.kit.PhoneImport
 /**
  * THE LINK AND ORIGIN HALF OF A [PhoneStore], OVER THE CORE: `phone.*` commands to write,
  * `phone_link` and `phone_origin` through the page door to read. A source extends it with its own
- * rows and its own add, update and trash.
+ * rows and its own add, update and trash. [device] is this install's [PhoneDevice]: a `local:` link
+ * is written under it and a portable one under none, and every origin this pass registers is
+ * stamped with it.
  */
 public abstract class CorePhoneStore(
     protected val core: CentraidCore,
     final override val source: PhoneSource,
+    final override val device: String,
 ) : PhoneStore {
     override suspend fun links(): List<StoredLink>? = pageAll(
         name = "phone.links",
-        select = listOf("link_id", "phone_id", "origin_id", "entity_id", "fingerprint", "detached_at", "last_seen_at"),
+        select = listOf("link_id", "phone_id", "origin_id", "entity_id", "fingerprint", "detached_at", "last_seen_at", "device_id"),
         from = "phone_link",
         where = "source = ?",
         bind = listOf(Value(text = source.wire)),
@@ -36,36 +39,50 @@ public abstract class CorePhoneStore(
             fingerprint = row.text(4),
             detached = row.text(5).isNotEmpty(),
             lastSeenAt = row.text(6),
+            deviceId = row.text(7).ifEmpty { null },
         )
     }
 
     override suspend fun origins(): List<StoredOrigin>? = pageAll(
         name = "phone.origins",
-        select = listOf("origin_id", "phone_origin", "label"),
+        select = listOf("origin_id", "phone_origin", "label", "device_id"),
         from = "phone_origin",
         where = "source = ?",
         bind = listOf(Value(text = source.wire)),
         key = "origin_id",
-    )?.map { row -> StoredOrigin(originId = row.text(0), phoneOrigin = row.text(1), label = row.text(2)) }
+    )?.map { row ->
+        StoredOrigin(originId = row.text(0), phoneOrigin = row.text(1), label = row.text(2), deviceId = row.text(3).ifEmpty { null })
+    }
 
     override suspend fun origin(phoneOrigin: String, label: String): String? =
         command(
             "phone.origin",
-            "{\"source\":${q(source.wire)},\"phone_origin\":${q(phoneOrigin)},\"label\":${q(label)}}",
+            "{\"source\":${q(source.wire)},\"phone_origin\":${q(phoneOrigin)},\"label\":${q(label)},\"device_id\":${q(device)}}",
         )?.let { field(it, "origin_id") }
 
     override suspend fun link(phoneId: String, originId: String, entityId: String, fingerprint: String): String? =
         command(
             "phone.link",
-            "{\"source\":${q(source.wire)},\"phone_id\":${q(phoneId)},\"origin_id\":${q(originId)}," +
-                "\"entity_id\":${q(entityId)},\"fingerprint\":${q(fingerprint)}}",
+            "{\"source\":${q(source.wire)},\"phone_id\":${q(phoneId)},\"device_id\":${deviceOf(phoneId)}," +
+                "\"origin_id\":${q(originId)},\"entity_id\":${q(entityId)},\"fingerprint\":${q(fingerprint)}}",
         )?.let { field(it, "link_id") }
+
+    override suspend fun relink(linkId: String, phoneId: String, originId: String): Boolean =
+        command(
+            "phone.relink",
+            "{\"link_id\":${q(linkId)},\"phone_id\":${q(phoneId)},\"device_id\":${deviceOf(phoneId)}," +
+                "\"origin_id\":${q(originId)}}",
+        ) != null
+
+    /** The `device_id` a link for [phoneId] is written under, as JSON: none for an id every device shares. */
+    private fun deviceOf(phoneId: String): String = if (PhoneIds.isPortable(phoneId)) "null" else q(device)
 
     override suspend fun touch(phoneIds: List<String>): Boolean {
         // The command's own ceiling is TOUCH_IDS_MAX; a bigger book is touched in slices.
         for (slice in phoneIds.chunked(TOUCH_SLICE)) {
             val ids = slice.joinToString(",") { q(it) }
-            if (command("phone.touch", "{\"source\":${q(source.wire)},\"phone_ids\":[$ids]}") == null) return false
+            val input = "{\"source\":${q(source.wire)},\"device_id\":${q(device)},\"phone_ids\":[$ids]}"
+            if (command("phone.touch", input) == null) return false
         }
         return true
     }

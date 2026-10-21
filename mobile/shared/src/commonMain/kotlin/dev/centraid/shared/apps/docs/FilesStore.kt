@@ -45,9 +45,10 @@ internal class CoreFileStager(private val core: CentraidCore) : FileStager {
  */
 internal class FilesStore(
     core: CentraidCore,
+    device: String,
     private val stager: FileStager = CoreFileStager(core),
     private val mintId: () -> String = { DocsIngestBridge.mintId() },
-) : CorePhoneStore(core, PhoneSource.FILES) {
+) : CorePhoneStore(core, PhoneSource.FILES, device) {
     /** Unlinked live documents by (title, content hash): what a new file may be adopted into. Built once, on the first add. */
     private var pool: MutableMap<Pair<String, String>, MutableList<String>>? = null
 

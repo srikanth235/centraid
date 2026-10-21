@@ -32,7 +32,13 @@ import io.kotest.matchers.shouldBe
  * [HealthImport] and its `HealthStore` run over it.
  */
 private class HealthBench {
-    class Link(val id: String, val phoneId: String, var origin: String, var entity: String?, var fingerprint: String, var detachedAt: String?)
+    class Link(val id: String, var phoneId: String, var origin: String, var entity: String?, var fingerprint: String, var detachedAt: String?) {
+        /** The device a `local:` link was made on (F-K-1); null for a portable id. */
+        var device: String? = null
+    }
+
+    /** The device each origin was last read on. */
+    val originDevice = mutableMapOf<String, String>()
 
     val script = ScriptedCore()
     val workouts = linkedMapOf<String, HealthWorkoutRow>()
@@ -41,6 +47,9 @@ private class HealthBench {
     val links = linkedMapOf<String, Link>()
     val zones = mutableListOf<String>()
     private var next = 0
+
+    /** The phone the passes run on; a spec moves it to restore the vault onto a new phone. */
+    var device: String = kotlinx.coroutines.runBlocking { dev.centraid.shared.sync.phone.PhoneDevice.id() }
 
     /** What the vault holds in the totals' window, as `health.follow_view` hands it to a pass. */
     val held: List<HealthDayTotal> get() = days.filter { it.key.first >= TOTALS_FROM }.map { HealthDayTotal(it.key.first, it.key.second, it.value) }
@@ -52,9 +61,9 @@ private class HealthBench {
         script.pages = { name, _ ->
             when (name) {
                 "phone.links" -> links.values.map {
-                    listOf(it.id, it.phoneId, it.origin, it.entity.orEmpty(), it.fingerprint, it.detachedAt.orEmpty(), SIGHTED)
+                    listOf(it.id, it.phoneId, it.origin, it.entity.orEmpty(), it.fingerprint, it.detachedAt.orEmpty(), SIGHTED, it.device.orEmpty())
                 }
-                "phone.origins" -> origins.map { (id, o) -> listOf(id, o.first, o.second) }
+                "phone.origins" -> origins.map { (id, o) -> listOf(id, o.first, o.second, originDevice[id].orEmpty()) }
                 "phone.follow.imported" -> origins.keys.take(1).map { listOf(it) }
                 else -> emptyList()
             }
@@ -101,11 +110,24 @@ private class HealthBench {
                 val phone = text(input, "phone_origin")!!
                 val id = origins.entries.firstOrNull { it.value.first == phone }?.key ?: "o${++next}"
                 origins[id] = phone to text(input, "label")!!
+                originDevice[id] = text(input, "device_id")!!
                 return "{\"origin_id\":\"$id\"}"
+            }
+            "phone.relink" -> {
+                val phone = text(input, "phone_id")!!
+                val on = text(input, "device_id")
+                val link = links[text(input, "link_id")] ?: return null
+                if (links.values.any { it !== link && it.phoneId == phone && it.device == on }) return null
+                link.phoneId = phone
+                link.device = on
+                link.origin = text(input, "origin_id")!!
+                return "{\"link_id\":\"${link.id}\"}"
             }
             "phone.link" -> {
                 val phone = text(input, "phone_id")!!
-                val link = links.values.firstOrNull { it.phoneId == phone } ?: Link("l${++next}", phone, "", null, "", null).also { links[it.id] = it }
+                val on = text(input, "device_id")
+                val link = links.values.firstOrNull { it.phoneId == phone && it.device == on }
+                    ?: Link("l${++next}", phone, "", null, "", null).also { it.device = on; links[it.id] = it }
                 link.origin = text(input, "origin_id")!!
                 link.entity = text(input, "entity_id")
                 link.fingerprint = text(input, "fingerprint")!!
@@ -196,7 +218,7 @@ class HealthFollowSpec : StringSpec({
         workoutsComplete = complete,
     )
 
-    suspend fun HealthBench.pass(read: HealthRead) = HealthImport.run(script.core(), read, window.copy(held = held), readAt)
+    suspend fun HealthBench.pass(read: HealthRead) = HealthImport.run(script.core(), read, window.copy(held = held), readAt, device)
 
     "a new workout is added as an activity, linked under the store's one origin" {
         val bench = HealthBench()
@@ -265,24 +287,26 @@ class HealthFollowSpec : StringSpec({
         bench.writes.shouldBeEmpty()
     }
 
-    "a new phone: every old id gone, the same workouts under new ids, are re-linked and nothing is added, held or purged" {
+    "a store that re-issues every id on this phone: the same workouts under new ids are re-linked, nothing added, held or purged" {
         val bench = HealthBench()
         val old = (0 until 6).map { run(it, id = "old-$it") }
         bench.pass(read(*old.toTypedArray()))
         val rows = bench.workouts.keys.toSet()
         bench.script.commands.clear()
-        // The restored vault still holds the old phone's links; the new phone names the same workouts its own way,
-        // and one of them came back with a corrected distance.
+        // The same phone names the same workouts a new way (R-1129-15), and one of them came back
+        // with a corrected distance. (A new phone's ids are another device's: NewPhoneSpec.)
         val fresh = (0 until 6).map { run(it, id = "new-$it", distance = if (it == 2) 5_310.0 else 5_200.0) }
         val outcome = bench.pass(read(*fresh.toTypedArray()))
         outcome.gone.shouldBeEmpty()
         outcome.added shouldBe 6
+        outcome.updated shouldBe 1
         outcome.trashed shouldBe 0
         bench.workouts.keys shouldBe rows
         bench.links.values.map { it.phoneId }.sorted() shouldContainExactly (0 until 6).map { "local:new-$it" }
         bench.writes.count { it == "health.follow_workout" } shouldBe 1
-        bench.writes.count { it == "phone.forget" } shouldBe 6
-        bench.writes.count { it == "phone.link" } shouldBe 6
+        bench.writes.count { it == "phone.relink" } shouldBe 6
+        bench.writes.count { it == "phone.forget" } shouldBe 0
+        bench.writes.count { it == "phone.link" } shouldBe 1
         bench.writes.none { it == "health.purge_workout" } shouldBe true
         // And the next pass is quiet.
         bench.script.commands.clear()
@@ -328,7 +352,7 @@ class HealthFollowSpec : StringSpec({
         val old = run(0).copy(id = "old", startedAt = "2026-09-01T07:00:00Z", endedAt = "2026-09-01T07:30:00Z")
         // A first pass, whose window reached back further, brought the old one in.
         val wide = window.copy(workoutsFrom = "2026-08-01", workoutsSince = epochMillisFromRfc3339("2026-08-01T00:00:00Z")!!)
-        HealthImport.run(bench.script.core(), read(old, run(1)), wide, readAt)
+        HealthImport.run(bench.script.core(), read(old, run(1)), wide, readAt, bench.device)
         bench.workouts.size shouldBe 2
         bench.script.commands.clear()
         bench.pass(read(run(1)))
@@ -383,7 +407,7 @@ class HealthFollowSpec : StringSpec({
         gone.count shouldBe 2
         gone.label shouldBe "Apple Health"
         bench.workouts.size shouldBe 2
-        HealthImport.resolveGone(bench.script.core(), gone.originId, GoneChoice.TRASH)
+        HealthImport.resolveGone(bench.script.core(), gone.originId, GoneChoice.TRASH, device = bench.device)
         bench.workouts.size shouldBe 0
         bench.origins.isEmpty() shouldBe true
     }
@@ -452,5 +476,62 @@ class HealthFollowSpec : StringSpec({
         HealthImport.number(5_234.5671) shouldBe "5234.567"
         HealthImport.number(5_234.5670000001) shouldBe "5234.567"
         HealthImport.number(0.0004) shouldBe "0"
+    }
+
+    "a vault restored onto a new phone: the same workouts under the new phone's ids are re-found, none added, purged or asked about (F-K-1)" {
+        val bench = HealthBench()
+        bench.pass(read(*(0 until 6).map { run(it, id = "a-$it") }.toTypedArray()))
+        val rows = bench.workouts.keys.toSet()
+        bench.device = "device-b"
+        bench.script.commands.clear()
+        val fresh = (0 until 6).map { run(it, id = "b-$it", distance = if (it == 2) 5_310.0 else 5_200.0) }
+        val outcome = bench.pass(read(*fresh.toTypedArray()))
+        outcome.gone.shouldBeEmpty()
+        outcome.trashed shouldBe 0
+        outcome.updated shouldBe 1
+        bench.workouts.keys shouldBe rows
+        bench.links.values.map { it.phoneId }.sorted() shouldContainExactly (0 until 6).map { "local:b-$it" }
+        bench.links.values.map { it.device }.toSet() shouldBe setOf("device-b")
+        bench.writes.count { it == "phone.relink" } shouldBe 6
+        bench.writes.count { it == "health.follow_workout" } shouldBe 1
+        bench.writes.none { it == "phone.forget" || it == "health.purge_workout" } shouldBe true
+        bench.script.commands.clear()
+        bench.pass(read(*fresh.toTypedArray()))
+        bench.writes.shouldBeEmpty()
+    }
+
+    "on the new phone a workout the old one linked and this one does not hold is forgotten and kept" {
+        val bench = HealthBench()
+        bench.pass(read(run(0, id = "a-0"), run(1, id = "a-1")))
+        val kept = bench.links.values.single { it.phoneId == "local:a-1" }.entity!!
+        bench.device = "device-b"
+        bench.script.commands.clear()
+        val outcome = bench.pass(read(run(0, id = "b-0")))
+        outcome.gone.shouldBeEmpty()
+        bench.workouts.keys shouldContain kept
+        bench.links.values.map { it.phoneId } shouldContainExactly listOf("local:b-0")
+        bench.writes shouldContainExactly listOf("phone.origin", "phone.relink", "phone.forget")
+    }
+
+    "on the new phone two workouts of one kind and minute are not guessed at" {
+        val bench = HealthBench()
+        bench.pass(read(run(0, id = "a-x"), run(0, id = "a-y")))
+        bench.workouts.size shouldBe 2
+        bench.device = "device-b"
+        bench.script.commands.clear()
+        bench.pass(read(run(0, id = "b-x"), run(0, id = "b-y")))
+        bench.writes.none { it == "phone.relink" } shouldBe true
+        bench.workouts.size shouldBe 4
+        bench.links.values.map { it.entity }.toSet().size shouldBe 2
+    }
+
+    "a new phone not yet connected to the store is not asked about the old phone's store" {
+        val bench = HealthBench()
+        bench.pass(read(run(0, id = "a-0"), run(1, id = "a-1")))
+        bench.device = "device-b"
+        val outcome = bench.pass(read().copy(storePresent = false))
+        outcome.gone.shouldBeEmpty()
+        bench.workouts.size shouldBe 2
+        bench.links.size shouldBe 0
     }
 })

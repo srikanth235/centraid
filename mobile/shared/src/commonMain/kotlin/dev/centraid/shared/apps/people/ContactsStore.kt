@@ -30,8 +30,9 @@ internal data class ContactAttributes(
  */
 internal class ContactsStore(
     core: CentraidCore,
+    device: String,
     private val mintId: () -> String = ::newId,
-) : CorePhoneStore(core, PhoneSource.CONTACTS) {
+) : CorePhoneStore(core, PhoneSource.CONTACTS, device) {
     override suspend fun rows(): Map<String, VaultRow>? = read(partyId = null)
 
     override suspend fun row(entityId: String): VaultRow? = read(entityId)?.get(entityId)

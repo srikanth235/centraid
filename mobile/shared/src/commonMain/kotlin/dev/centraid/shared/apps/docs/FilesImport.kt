@@ -2,6 +2,7 @@ package dev.centraid.shared.apps.docs
 
 import dev.centraid.core.CentraidCore
 import dev.centraid.shared.sync.phone.GoneChoice
+import dev.centraid.shared.sync.phone.PhoneDevice
 import dev.centraid.shared.sync.phone.PhoneFields
 import dev.centraid.shared.sync.phone.PhoneIds
 import dev.centraid.shared.sync.phone.PhoneOriginRef
@@ -124,6 +125,15 @@ public object FilesImport {
     public fun phoneId(origin: String, path: String): String =
         PhoneIds.local("${origin.removePrefix("$FOLDER:")}/$path")
 
+    /**
+     * WHAT RE-FINDS A FILE ON ANOTHER PHONE (F-K-1): the same path in the same followed folder. A
+     * restored phone whose shell still resolves the folder lists the file under the folder's own
+     * id, so its link is re-found; a folder picked again is a new id, and its files are adopted by
+     * title and bytes ([FilesStore.add]) once the old phone's links have been forgotten. Never a
+     * key for adopting an unlinked document: a document holds no path.
+     */
+    internal fun matchKey(origin: String, path: String): String = "$origin/$path"
+
     /** The phone's half of a link's fingerprint: the pre-check and the title. */
     internal fun fields(size: Long, modifiedMs: Long, title: String): PhoneFields = PhoneFields.of {
         exact("stat", "$size:$modifiedMs")
@@ -158,6 +168,7 @@ public object FilesImport {
                 phoneId = id,
                 origin = file.origin,
                 fields = fields(file.size, file.modifiedMs, title),
+                matchKey = matchKey(file.origin, file.path),
                 attributes = FileAttributes(file, title),
             )
         }
@@ -170,13 +181,14 @@ public object FilesImport {
         return outcome(report)
     }
 
-    /** One pass over [files] in the vault [core] holds. */
+    /** One pass over [files] in the vault [core] holds, on [device] (this install's [PhoneDevice] unless named). */
     public suspend fun run(
         core: CentraidCore,
         files: List<PhoneFile>,
         origins: List<PhoneOriginRef>,
         complete: Boolean,
-    ): Outcome = sync(FilesStore(core), snapshot(files, origins, complete, readAt()))
+        device: String? = null,
+    ): Outcome = sync(FilesStore(core, device ?: PhoneDevice.id()), snapshot(files, origins, complete, readAt()))
 
     /** The member's answer to a folder held (R-1127-9): [GoneChoice.KEEP] is the default. */
     public suspend fun resolveGone(
@@ -184,17 +196,18 @@ public object FilesImport {
         originId: String,
         choice: GoneChoice,
         seenBefore: String? = null,
+        device: String? = null,
     ): Outcome {
-        val report = PhoneSync.resolveGone(FilesStore(core), originId, choice, seenBefore)
+        val report = PhoneSync.resolveGone(FilesStore(core, device ?: PhoneDevice.id()), originId, choice, seenBefore)
         return Outcome(added = 0, refused = report.refused.size, trashed = report.trashed)
     }
 
     /** The folders the vault follows, with the documents each holds; null when the vault would not say. */
-    public suspend fun followed(core: CentraidCore): List<FollowedFolder>? = FilesStore(core).followed()
+    public suspend fun followed(core: CentraidCore): List<FollowedFolder>? = FilesStore(core, PhoneDevice.id()).followed()
 
     /** Follow a folder the member just picked: its origin, so the next pass reads it. False when refused. */
     public suspend fun follow(core: CentraidCore, folder: PhoneOriginRef): Boolean =
-        FilesStore(core).origin(folder.id, folder.label) != null
+        FilesStore(core, PhoneDevice.id()).origin(folder.id, folder.label) != null
 
     /**
      * STOP FOLLOWING [originId]: its links are forgotten and the origin retired. **Every document
@@ -202,7 +215,7 @@ public object FilesImport {
      * part of it (the rest is done, and stopping again finishes it).
      */
     public suspend fun stop(core: CentraidCore, originId: String): Boolean {
-        val store = FilesStore(core)
+        val store = FilesStore(core, PhoneDevice.id())
         val links = store.links() ?: return false
         var clean = true
         for (link in links.filter { it.originId == originId }) clean = store.forget(link.linkId) && clean

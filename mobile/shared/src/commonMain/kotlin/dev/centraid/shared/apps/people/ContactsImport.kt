@@ -4,6 +4,7 @@ import dev.centraid.core.CentraidCore
 import dev.centraid.design.copy.PeopleCopy
 import dev.centraid.shared.sync.phone.GoneChoice
 import dev.centraid.shared.sync.phone.OriginGone
+import dev.centraid.shared.sync.phone.PhoneDevice
 import dev.centraid.shared.sync.phone.PhoneFields
 import dev.centraid.shared.sync.phone.PhoneIds
 import dev.centraid.shared.sync.phone.PhoneOriginRef
@@ -171,14 +172,16 @@ public object ContactsImport {
     /**
      * WRITE [contacts] INTO THE VAULT [core] HOLDS, as one pass of the phone sync (the one-tap
      * import). [complete] is false when the read may be partial; [origins] lists every account
-     * present, so one with no contact is not mistaken for gone.
+     * present, so one with no contact is not mistaken for gone. [device] is this install's
+     * [PhoneDevice] unless a caller names another.
      */
     public suspend fun run(
         core: CentraidCore,
         contacts: List<PhoneContact>,
         origins: List<PhoneOriginRef> = emptyList(),
         complete: Boolean = true,
-    ): Outcome = sync(ContactsStore(core), snapshot(contacts, origins, complete, readAt()))
+        device: String? = null,
+    ): Outcome = sync(ContactsStore(core, device ?: PhoneDevice.id()), snapshot(contacts, origins, complete, readAt()))
 
     /**
      * The member's answer to a held account (R-1127-9): [GoneChoice.KEEP] is the default.
@@ -189,8 +192,9 @@ public object ContactsImport {
         originId: String,
         choice: GoneChoice,
         seenBefore: String? = null,
+        device: String? = null,
     ): Outcome {
-        val report = PhoneSync.resolveGone(ContactsStore(core), originId, choice, seenBefore)
+        val report = PhoneSync.resolveGone(ContactsStore(core, device ?: PhoneDevice.id()), originId, choice, seenBefore)
         return Outcome(added = 0, refused = report.refused.size, trashed = report.trashed)
     }
 
