@@ -26,7 +26,6 @@ use centraid_apps_kit::error::KitResult;
 use centraid_apps_kit::row::{Row, text_of};
 use centraid_apps_kit::statement::{PageBindValue, PageOrder, PageQuery};
 
-
 /// THE BROWSABLE HALF OF A LOCKER ITEM (#996 wave 4, R8 and W6-D2).
 ///
 /// A statement names its columns, and **no sealed cell is on this list**.
@@ -53,7 +52,6 @@ pub const TRASH_ROWS: usize = 2_000;
 /// `access.ts:20`-`:21` — the default and the ceiling of the audit window.
 pub const ACCESS_DEFAULT: usize = 200;
 pub const ACCESS_MAX: usize = 2_000;
-
 
 /// Clamp a caller's `limit` the way v0 does: `min(max(limit || default, min), max)`.
 #[must_use]
@@ -89,10 +87,9 @@ pub fn access_statement(item_id: Option<&str>) -> KitResult<PageQuery> {
         PageOrder::desc("at", "seq"),
     );
     Ok(match item_id {
-        Some(id) if !id.is_empty() => query.filter(
-            "item_id = ?",
-            vec![PageBindValue::Text(id.to_owned())],
-        ),
+        Some(id) if !id.is_empty() => {
+            query.filter("item_id = ?", vec![PageBindValue::Text(id.to_owned())])
+        }
         _ => query,
     })
 }
@@ -414,7 +411,12 @@ mod tests {
         assert_eq!(pinned.r#where.as_deref(), Some("item_id = ?"));
         assert_eq!(pinned.bind.len(), 1);
         // An empty id is not a filter, it is no filter.
-        assert!(access_statement(Some("")).expect("builds").r#where.is_none());
+        assert!(
+            access_statement(Some(""))
+                .expect("builds")
+                .r#where
+                .is_none()
+        );
     }
 
     #[test]
@@ -547,14 +549,22 @@ mod tests {
     #[test]
     fn an_auth_receipt_names_no_item_and_a_reveal_names_its_cell() {
         let rows = vec![
-            receipt("2", "2026-01-02T00:00:00.000Z", Some("item-1"), "reveal password"),
+            receipt(
+                "2",
+                "2026-01-02T00:00:00.000Z",
+                Some("item-1"),
+                "reveal password",
+            ),
             receipt("1", "2026-01-01T00:00:00.000Z", None, "unlock"),
         ];
         let answer = access_answer(200, &rows);
         let reveal = &answer.entries[0];
         assert_eq!(reveal.kind, AccessKind::Reveal);
         assert_eq!(reveal.item_id.as_deref(), Some("item-1"));
-        assert_eq!(reveal.columns.as_deref(), Some(&["password".to_owned()][..]));
+        assert_eq!(
+            reveal.columns.as_deref(),
+            Some(&["password".to_owned()][..])
+        );
         assert!(reveal.allowed && !reveal.copied);
         let unlock = &answer.entries[1];
         assert_eq!(unlock.kind, AccessKind::Auth);
@@ -569,10 +579,30 @@ mod tests {
     #[test]
     fn a_code_a_copy_and_a_field_are_read_off_the_receipt() {
         let rows = vec![
-            receipt("4", "2026-01-04T00:00:00.000Z", Some("item-1"), "code_copy otp_seed"),
-            receipt("3", "2026-01-03T00:00:00.000Z", Some("item-1"), "copy value_sealed field-1"),
-            receipt("2", "2026-01-02T00:00:00.000Z", Some("item-1"), "code otp_seed"),
-            receipt("1", "2026-01-01T00:00:00.000Z", Some("item-1"), "reveal_refused password"),
+            receipt(
+                "4",
+                "2026-01-04T00:00:00.000Z",
+                Some("item-1"),
+                "code_copy otp_seed",
+            ),
+            receipt(
+                "3",
+                "2026-01-03T00:00:00.000Z",
+                Some("item-1"),
+                "copy value_sealed field-1",
+            ),
+            receipt(
+                "2",
+                "2026-01-02T00:00:00.000Z",
+                Some("item-1"),
+                "code otp_seed",
+            ),
+            receipt(
+                "1",
+                "2026-01-01T00:00:00.000Z",
+                Some("item-1"),
+                "reveal_refused password",
+            ),
         ];
         let answer = access_answer(200, &rows);
         let by_id = |id: &str| {
@@ -588,7 +618,10 @@ mod tests {
         assert!(!by_id("2").copied, "a shown code");
         assert_eq!(by_id("3").field_id.as_deref(), Some("field-1"));
         assert!(by_id("3").copied);
-        assert_eq!(by_id("3").columns.as_deref(), Some(&["value_sealed".to_owned()][..]));
+        assert_eq!(
+            by_id("3").columns.as_deref(),
+            Some(&["value_sealed".to_owned()][..])
+        );
         assert!(!by_id("1").allowed, "a refused reveal reads as a refusal");
     }
 
@@ -619,10 +652,12 @@ mod tests {
         assert_eq!(export.item_id, None);
         assert_eq!(export.derivation.as_deref(), Some("export"));
         // A fold over receipts alone holds ids, never names.
-        assert!(access_answer(200, &rows)
-            .entries
-            .iter()
-            .all(|entry| entry.item_title.is_none() && entry.field_label.is_none()));
+        assert!(
+            access_answer(200, &rows)
+                .entries
+                .iter()
+                .all(|entry| entry.item_title.is_none() && entry.field_label.is_none())
+        );
     }
 
     #[test]

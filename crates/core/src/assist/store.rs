@@ -53,7 +53,10 @@ pub const THUMBNAIL_EDGE: u32 = 256;
 /// How many stored turns a reopened session is rebuilt from. The prompt shows
 /// only its last two, so more is for the Retry that drops one and the router
 /// that skips a refusal.
-#[expect(dead_code, reason = "the chat lane rebuilds a session from its stored turns (#1135, lane 7)")]
+#[expect(
+    dead_code,
+    reason = "the chat lane rebuilds a session from its stored turns (#1135, lane 7)"
+)]
 const REHYDRATE_TURNS: usize = 8;
 
 /// What a saved attachment names.

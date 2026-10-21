@@ -40,7 +40,10 @@ pub(super) fn card(_vault: &Vault, _asked: &wire::ChatCardRequest) -> Result<Ans
 /// A stored refusal word as the plane's reason. The words are the schema's
 /// CHECK list, so a word this does not know is a build that is older than its
 /// file, and it reads as the generic failure rather than as nothing.
-#[expect(dead_code, reason = "the chat lane reads history again (#1135, lane 7)")]
+#[expect(
+    dead_code,
+    reason = "the chat lane reads history again (#1135, lane 7)"
+)]
 pub(crate) fn refusal_of(word: &str) -> wire::AssistRefusalReason {
     use wire::AssistRefusalReason as R;
     match word {
@@ -60,7 +63,10 @@ pub(crate) fn refusal_of(word: &str) -> wire::AssistRefusalReason {
 /// A stored outcome word as the wire's. The words are the schema's CHECK list (a proposal's five
 /// beside the three a told answer has), so a word this does not know is a build that is older than its
 /// file, and it reads as unspecified rather than as one of the others.
-#[expect(dead_code, reason = "the chat lane reads history again (#1135, lane 7)")]
+#[expect(
+    dead_code,
+    reason = "the chat lane reads history again (#1135, lane 7)"
+)]
 pub(crate) fn outcome_of(word: &str) -> wire::ChatStoredOutcome {
     use wire::ChatStoredOutcome as O;
     match word {

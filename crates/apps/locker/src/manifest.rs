@@ -167,13 +167,13 @@ mod tests {
     /// scopes are the manifest's declaration of what the app may ask the core
     /// to open, and they are still exactly three.
     #[test]
-    fn it_declares_thirty_three_scopes_and_the_three_reveals_are_lockers_own() {
+    fn it_declares_twenty_seven_scopes_and_the_three_reveals_are_lockers_own() {
         let manifest = manifest();
         let vault = manifest
             .vault
             .as_ref()
             .expect("Locker declares its vault reach");
-        assert_eq!(vault.scopes.len(), 33);
+        assert_eq!(vault.scopes.len(), 27);
 
         let reveals: Vec<String> = vault
             .scopes
@@ -193,18 +193,20 @@ mod tests {
             ]
         );
 
-        // The audit wall, declared: the OUTER of the two walls `access` has.
+        // The audit reach, declared: Locker's own `receipt` table, which is the
+        // wall (nothing else writes it), so no row filter rides with it. And
+        // nothing of the vault's shared model is in Locker's reach: an item is not
+        // an entity.
         let receipts = vault
             .scopes
             .iter()
             .find(|scope| scope.table.as_deref() == Some("receipt"))
-            .expect("Locker declares its reach over access.receipt");
-        assert_eq!(receipts.row_filter.len(), 1);
-        assert_eq!(receipts.row_filter[0].column, "object_type");
-        assert_eq!(receipts.row_filter[0].op, "in");
-        assert_eq!(
-            receipts.row_filter[0].value,
-            Some(serde_json::json!(["locker.item", "locker.auth"]))
+            .expect("Locker declares its reach over its own receipt table");
+        assert_eq!(receipts.schema, "locker");
+        assert!(receipts.row_filter.is_empty());
+        assert!(
+            vault.scopes.iter().all(|scope| scope.schema == "locker"),
+            "Locker reaches only Locker's own tables"
         );
 
         assert!(

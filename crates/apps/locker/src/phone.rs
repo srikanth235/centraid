@@ -22,8 +22,7 @@ use centraid_apps_kit::statement::{PageBindValue, PageOrder, PageQuery};
 
 use crate::queries::{
     AccessAnswer, ITEM_COLUMNS, ITEMS_MAX, ItemRow, SEALED_ITEM_COLUMNS, SEARCH_ROWS, TRASH_ROWS,
-    access_answer,
-    access_statement, access_window, items_window, subtitle_of,
+    access_answer, access_statement, access_window, items_window, subtitle_of,
 };
 use crate::transfer::{Entry, EntryField, EntryPasskey, Existing, type_columns};
 use crate::types::{ITEM_TYPES, degrade_type, degraded_from};

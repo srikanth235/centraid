@@ -45,12 +45,7 @@ pub(super) fn app_of(kind: &str) -> &'static str {
 /// and the containers that open in it.
 pub(super) fn entities_of(domain_entity: &'static str, app: &str) -> Vec<&'static str> {
     let mut entities = vec![domain_entity];
-    entities.extend(
-        NAMED
-            .iter()
-            .filter(|kind| app_of(kind) == app)
-            .copied(),
-    );
+    entities.extend(NAMED.iter().filter(|kind| app_of(kind) == app).copied());
     entities
 }
 
