@@ -1,5 +1,4 @@
-// Shared person-identity derivation (#708): a stable hue per person, inverse
-// ink clearing AA in BOTH themes.
+// Stable person hues with AA inverse ink in both themes (#708).
 
 import { describe, expect, test } from "vitest";
 
@@ -22,10 +21,8 @@ const AA = 4.5;
 describe(identityHueKey, () => {
   test("every key is a real point on the shipped hue wheel", () => {
     for (const key of IDENTITY_HUE_KEYS) expect(APP_HUES).toHaveProperty(key);
-    // The BRAND ink default is deliberately absent. The person wheel is the
-    // EIGHT hues it shipped with, named: a person's hue is the id's hash modulo
-    // the wheel's length, so a ninth app hue (`olive`, Health, #1129) joining
-    // the wheel would repaint every face a member already knows.
+    // Freeze the eight person hues: adding Health's olive changes hash moduli
+    // and repaints existing identities (#1129). Brand ink stays excluded.
     expect([...IDENTITY_HUE_KEYS].sort()).toStrictEqual([
       "amber",
       "forest",
@@ -36,7 +33,7 @@ describe(identityHueKey, () => {
       "teal",
       "violet",
     ]);
-    // Every app hue is on the wheel but the ones added after it froze.
+    // Later app hues stay outside the frozen person wheel.
     expect(
       Object.keys(APP_HUES)
         .filter(
@@ -101,9 +98,7 @@ describe(identityFill, () => {
 });
 
 describe(partyHueKey, () => {
-  // ONE HUE PER PARTY (O-identity): the person and VAULT wheels are one hash
-  // under different moduli, so the wrong one moves the person — and its extra
-  // place can draw them as a black disc.
+  // O-identity: the vault modulus can move a person onto brand ink.
   const PARTIES = [
     "01JQ7Z0000000000000000000A",
     "01JQ7Z0000000000000000000B",
@@ -125,8 +120,7 @@ describe(partyHueKey, () => {
   });
 
   test("the vault wheel is a DIFFERENT question and stays different", () => {
-    // Not to be unified: `identityColor` colours a vault, which is allowed
-    // the ink default.
+    // Vaults permit brand ink; people do not.
     expect(IDENTITY_COLORS).not.toHaveLength(IDENTITY_HUE_KEYS.length);
     expect(IDENTITY_COLORS).toContain(identityColor("any-vault", "brand"));
   });
@@ -138,8 +132,7 @@ describe(partyHueKey, () => {
   });
 
   test("a stored literal the wheel does not name answers null, not a guess", () => {
-    // The cue to use it verbatim: an imported hex is the member's choice, and
-    // a KEY cannot carry it.
+    // Null preserves a literal member choice that no hue key can carry.
     expect(partyHueKey("whoever", "#8c4c61")).toBeNull();
     expect(partyHueKey("whoever", "var(--c-not-a-hue)")).toBeNull();
   });
