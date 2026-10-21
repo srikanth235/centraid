@@ -33,9 +33,9 @@ use centraid_core::api_proto as wire;
 use centraid_vault::commands::{Idempotency, Registry};
 use common::chat::{Sample, sample};
 
-/// `schedule.add_task` with no `task_id`: it mints a fresh row every run, and
+/// `task.add` with no `id`: it mints a fresh row every run, and
 /// nothing in its gate order notices a title it has already filed.
-const COMMAND: &str = "schedule.add_task";
+const COMMAND: &str = "task.add";
 
 fn send(
     sample: &Sample,
@@ -56,8 +56,8 @@ fn send(
     }
 }
 
-/// Every `schedule_task` row with this title, through the page door a screen
-/// reads by: `(task_id)`.
+/// Every task with this title, through the page door a screen reads by: `(id)`
+/// over `entity`, which holds the title.
 fn tasks_titled(sample: &Sample, title: &str) -> Vec<String> {
     let answer = sample
         .handle
@@ -65,19 +65,15 @@ fn tasks_titled(sample: &Sample, title: &str) -> Vec<String> {
             kind: Some(wire::request::Kind::Page(wire::PageRequest {
                 query: Some(wire::PageQuery {
                     name: "replay-tasks".to_owned(),
-                    select: vec![
-                        "task_id".to_owned(),
-                        "created_at".to_owned(),
-                        "title".to_owned(),
-                    ],
-                    from: "schedule_task".to_owned(),
-                    r#where: Some("title = ?".to_owned()),
+                    select: vec!["id".to_owned(), "created_at".to_owned(), "title".to_owned()],
+                    from: "entity".to_owned(),
+                    r#where: Some("kind = 'task' AND title = ?".to_owned()),
                     bind: vec![wire::Value {
                         kind: Some(wire::value::Kind::Text(title.to_owned())),
                     }],
                     order: Some(wire::PageOrder {
                         sort_column: "created_at".to_owned(),
-                        pk_column: "task_id".to_owned(),
+                        pk_column: "id".to_owned(),
                         descending: false,
                     }),
                     with_held_thumbnail: false,

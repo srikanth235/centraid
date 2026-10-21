@@ -1170,13 +1170,14 @@ fn the_app_queries_round_trip_through_call() {
         &envelope(
             42,
             wire::request::Kind::Command(wire::Command {
-                name: "schedule.propose_event".to_owned(),
+                name: "event.propose".to_owned(),
                 input: serde_json::to_vec(&serde_json::json!({
-                    "summary": "Morning run",
-                    "dtstart": "2099-06-01T07:00:00.000Z",
-                    "dtend": "2099-06-01T08:00:00.000Z",
+                    "title": "Morning run",
+                    "starts": "2099-06-01T07:00:00",
+                    "ends": "2099-06-01T08:00:00",
+                    "timing": "floating",
                     "calendar_id": calendar_id,
-                    "rrule": "FREQ=WEEKLY",
+                    "rule": "FREQ=WEEKLY",
                 }))
                 .expect("json"),
                 invoke_key: "contract-4e".to_owned(),

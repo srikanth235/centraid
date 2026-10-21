@@ -1,6 +1,6 @@
 //! # Agenda — four queries, seven actions, and the one recurrence engine
 //!
-//! 7,818 lines of v0 TypeScript, 4 queries, 7 actions, **14 scopes — the
+//! 7,818 lines of v0 TypeScript, 4 queries, 7 actions, **17 scopes — the
 //! smallest scope set of any app** (#1020, wave 4 census §A6). Its doctrine,
 //! from the manifest's own description (`manifest.json`, copied verbatim from
 //! v0's `app.json`):

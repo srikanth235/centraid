@@ -1068,7 +1068,7 @@ pub fn year3_tasks(
             status,
             (index % 10).min(9) as i64,
             (dated || (status == "done" && index % 2 == 0))
-                .then(|| format!("{}", &at(index.saturating_sub(1))[..10])),
+                .then(|| at(index.saturating_sub(1))[..10].to_owned()),
             (status == "done").then(|| at(index)),
             repeating.then_some("FREQ=WEEKLY"),
             subtask.then(|| last_open.clone()).flatten(),

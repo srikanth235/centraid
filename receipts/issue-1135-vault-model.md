@@ -433,3 +433,56 @@ The follow engine's per-field merge had no place for rows that hang off the kind
 #### Left for later lanes
 
 `task.complete`, `task.reopen` and `event.edit` (People's `complete-task`, `reopen-task` and `set-reminder`) are Agenda's; Home's search shell still maps other apps' old entity words (`core.event`, `schedule.task`, `core.content_item`, `core.document`) and `PAGE_TABLES` still lists their old tables; the phone engine (`PhoneSync`, `CorePhoneStore`, the fingerprint and `phone.*`) stays for calendar, files and health until their lanes move them to `follow.<system>`; the commit subjects of `c6988a1c`, `208e96a9`, `af379278` and `52499d79` are over 100 characters (the law's window rule lists them beside lanes 1 and 2's).
+
+### Lane 4 — Agenda
+
+- **Commands** (`crates/vault/src/commands/{event,task}.rs`): `event.propose`, `event.edit`, `event.cancel`, `event.respond`, `event.edit_occurrence`; `task.add`, `task.edit`, `task.organize`, `task.complete`, `task.reopen`, `task.cancel`. Both modules own `found` (`event::found`, `task::found`) and the model's checks; containers, tags, attachments and the trash are the shared verbs. `occurrence` gains `scope` (R-1135-4-1); the baseline and the fixture move with it.
+- **The calendar follower**: the `calendar` map (`description`, `starts`, `ends`, `timing`, `zone`, `rule`, `busy`) plus the `overrides` child with a three-way merge over a series' days; the engine gains `shape` and `settle` hooks so a record's times are resolved by the command's own code. Kotlin's `CalendarImport.run` sends `follow.calendar` per origin; `CalendarStore`, `resolveGone` and `PhoneStoresSpec` are deleted, `CalendarFollowSpec` is new.
+- **Reads** (`crates/apps/{agenda,tasks}`): `queries` rewritten one table at a time over the new tables with the recurrence engine unchanged; Agenda 7 actions, 17 scopes, Tasks 15 actions, 21 scopes; `kit::attached` is the shared "what is attached" read; the core's arms answer the same messages (`ical_uid` and the unfillable fields reserved), and `tasks.trash` is a new app query (field 16).
+- **Shell**: the editor, event, home, todo, project, detail and trash machines send the new commands; a repeat, a reminder, a guest or a link change is offered for the series only (`SCOPE_SERIES_NOTE`); `TaskOpsLaw` has `complete`, `reopen`, `cancel`, `add`, `organize`.
+- **Scale**: `kit::fixtures::{year3_events,year3_tasks}` and `crates/apps/{agenda,tasks}/tests/year3.rs`. Declared profiles: 10,000 events (60 series) and 15,000 tasks. The default 45-day window expands to 725 instances in 51 ms; the board walks its 500-row window in 56 ms (debug, `ci-linux-x64-4c`, projected). The two journey rows return in their own estate commit (`99c674f92`).
+- **Docs**: `docs/decisions.md` records R-1135-4-1 to 12; `docs/vault-ontology.md` gains Agenda's verbs and the calendar's `overrides` child; the two app READMEs and `lib.rs` headers are current; `mobile/README.md` says the calendar leaves `PhoneSync`.
+
+Files: `/home/user/centraid/crates/vault/src/commands/{event,task,follow,entity,index,mod,person}.rs`, `/home/user/centraid/crates/vault/tests/{agenda,commitments,shared_verbs,commands}.rs`, `/home/user/centraid/contracts/migrations/001_baseline.sql`, `/home/user/centraid/contracts/schema/vault-ddl.sql`, `/home/user/centraid/crates/apps/{agenda,tasks}/**`, `/home/user/centraid/crates/apps/kit/src/{attached,fixtures,lib}.rs`, `/home/user/centraid/crates/core/src/{app_query,api,example,starters}.rs`, `/home/user/centraid/crates/core/src/app_query/{tasks,vault,tasks_tests}.rs`, `/home/user/centraid/crates/api-proto/proto/centraid/core/v1/{agenda,tasks,app_query}.proto`, `/home/user/centraid/crates/core/tests/{replay,records_backup}.rs`, `/home/user/centraid/crates/core-ffi/tests/contract.rs`, `/home/user/centraid/mobile/shared/src/commonMain/kotlin/dev/centraid/shared/{apps/agenda,apps/tasks,kit/tasks,kit,shell,sync}/**`, `/home/user/centraid/mobile/shared/src/jvmTest/kotlin/dev/centraid/shared/*Spec.kt`, `/home/user/centraid/mobile/core/src/jvmTest/kotlin/dev/centraid/core/{Agenda,Tasks}QueryRoundTripSpec.kt`, `/home/user/centraid/tests/journeys.json`, `/home/user/centraid/copy/agenda.json`, `/home/user/centraid/docs/{decisions,vault-ontology}.md`, `/home/user/centraid/mobile/README.md`.
+
+#### Rulings
+
+R-1135-4-1 to R-1135-4-12 are in [docs/decisions.md](../docs/decisions.md#lane-4--agenda-1135), each with its choice and reason. In one line each: **1** an override on "this and the following" is a row of its own (`occurrence.scope`); **2** completion is one operation and its successor inherits the series; **3** an instant needs a zone, a wall clock is floating or zoned; **4** the calendar follower sends records and the vault merges; **5** an event's search text is its description and place, a task's its description and project; **6** an override carries the day's times and words only; **7** a series is one record, and a rule the vault cannot expand is kept and flagged; **8** a read keyed by a window's ids names them and does not walk the table; **9** the trash shelf is an app query; **10** unfillable wire fields are reserved and `ical_uid` goes; **11** the table-count floor in `AppReadsSpec` follows the model (50 to 35); **12** the declared Agenda profile is sixty series.
+
+#### Falsification
+
+1. **"A repeating task's successor is still about, and still tagged with, what its predecessor was."** Check: the successor's edge copy narrowed from `rel IN ('about', 'tagged')` to `('about')` (throwaway, restored). Red: `completion_is_one_operation_and_its_successor_carries_the_series` (`agenda.rs:305`).
+2. **"A day the member changed is not undone by the next read of the calendar."** Check: `overrides_merge`'s `ours` test replaced by `true`, so the phone's statement always wins (throwaway, restored). Red: `the_phone_does_not_undo_a_day_the_member_changed_and_a_slid_window_forgets_nothing` (`agenda.rs:656`).
+
+Two claims the first run got wrong, found by running them: the declared Agenda profile failed with `FanOutExceeded agenda.events.entity cap 4000` (`Read::among` walks the whole `entity` table past 64 ids; fixed, R-1135-4-8), and with 120 series the default window passed the 1,500-instance bound (the profile is 60, R-1135-4-12). The Tasks board's 475 roots of a 500-row window are the fold of 25 subtasks under their parents, not a lost row.
+
+#### Verification
+
+| Command | Result |
+| --- | --- |
+| `cargo build --workspace --all-targets --locked` | pass |
+| `cargo test -p centraid-vault -p centraid-apps-agenda -p centraid-apps-tasks -p centraid-apps-people -p centraid-apps-notes -p centraid-search` | pass (502 run: vault `agenda` 13, `commitments`, `shared_verbs`; agenda 2 `year3` and `lower_bound`, `monthly_positions`, `trash`; tasks 5 `reads` and 2 `year3`) |
+| `cargo test -p centraid-core --no-fail-fast` | 163 red (lane 3 reported 198); every Agenda and Tasks test passes, `call_budget` passes |
+| `cargo clippy -p centraid-vault -p centraid-apps-agenda -p centraid-apps-tasks -p centraid-core -p centraid-apps-kit --all-targets -- -D warnings` | clean |
+| `cargo xtask rules` | clean |
+| `export-ladder-ddl` against `contracts/schema/vault-ddl.sql` | identical |
+| `./gradlew -p mobile :shared:jvmTest --tests '*Agenda*' --tests '*Task*' --tests '*Calendar*' --tests '*Phone*'` | pass; the whole `:shared:jvmTest`: 1,637 run, 10 red (none Agenda's or Tasks') |
+| `./gradlew -p mobile :core:jvmTest` | 36 run, 2 red (`DocsQueryRoundTripSpec`, the Photos `AbiRoundTripSpec` call budget); `AgendaQueryRoundTripSpec` and `TasksQueryRoundTripSpec` pass |
+| `git push -u origin claude/amazing-fermat-9nt6tr` | pass |
+
+#### Inherited red this lane leaves
+
+| Crate / target | Red | Why, and who |
+| --- | --- | --- |
+| `crates/core` | 163 | `--lib` Docs 15, Money 12, Health 7, `app_query::vault` 3 (they seed `media.*`), `api` 4 (`core_account`, `money.add_account`, `core.add_document`, the empty-name vault), `handle` 2; the seeded-scenario tests (`replay`, `chat_*`) fail on `core.*`, `media.*` and `money.*` refusals only; `assist_*` and the backup tests (lane 7, they name `schedule.*`) |
+| `crates/nativetools`, `crates/assist`, `crates/core-ffi` `assist` | as lane 1's table | they name `schedule.*` (lane 7) |
+| `mobile/shared` `:jvmTest` | 10 | `ChatScopeSpec` 4 (lane 7), `ShellCommandsExistSpec` 4 (it finds Money, Docs, Photos, Health, Chat and `phone.*` names, no Agenda or Tasks one), `HomeMachineSpec` 1 (the tile packing), `AppReadsSpec` 1 (`HomeReads.TABLES` holds Money's and Health's old tables) |
+| `mobile/core` `:core:jvmTest` | 2 | `DocsQueryRoundTripSpec` (Docs), `AbiRoundTripSpec` (Photos pages `media_asset`) |
+
+#### Where the kernel and the earlier lanes were awkward
+
+`Read::among` is a trap that reads as a convenience: past 64 ids it walks the table under the read's own predicate with a 4,000-row bound, which is correct for a roster and wrong for a window's ids over a table of every event (R-1135-4-8); a read that names ids from a bounded window should say `within`. The follow engine's `Child` (lane 3) fit a calendar's overrides with one more hook (`shape`), but its `refused` tally had no place to report a record whose times the command would not resolve; it is a field of the pass now. The disk of the build host filled once with 24 GB of incremental artefacts; `CARGO_INCREMENTAL=0` is the working setting for this workspace.
+
+#### Left for later lanes
+
+Lane 7 owns `schedule.*` in `assist`, `nativetools`, `core/tests/assist_*` and the backup tests (`replay.rs`, `records_backup.rs` and `contract.rs` here carry the Agenda ports only; they stay red on Docs, Photos and Money). `ShellCommandsExistSpec` goes green when the last app lane leaves no old command name in `commonMain`.

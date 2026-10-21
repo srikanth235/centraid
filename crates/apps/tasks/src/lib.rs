@@ -1,6 +1,6 @@
 //! # Tasks — two queries, thirteen actions, and one promotion rule
 //!
-//! 8,005 lines of v0 TypeScript, **2 queries**, 11 actions, 22 scopes — the
+//! 8,005 lines of v0 TypeScript, **2 queries**, 15 actions, 21 scopes — the
 //! smallest surface of any app (#1020, wave 4 census §A7). Its doctrine, from
 //! the board's own header:
 //!

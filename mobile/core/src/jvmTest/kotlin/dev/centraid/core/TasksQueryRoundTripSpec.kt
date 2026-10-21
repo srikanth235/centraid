@@ -51,30 +51,30 @@ class TasksQueryRoundTripSpec : StringSpec({
             val zone = ZoneId.of(TZ)
             val today = LocalDate.now(zone)
             val late = core.write(
-                "schedule.add_task",
-                """{"title":"Tasks spec late","due_at":"${today.minusDays(3)}"}""",
+                "task.add",
+                """{"title":"Tasks spec late","due":"${today.minusDays(3)}"}""",
                 key = "tasks-round-trip-late",
             )
             val later = core.write(
-                "schedule.add_task",
-                """{"title":"Tasks spec later","due_at":"${today.plusDays(5)}",""" +
+                "task.add",
+                """{"title":"Tasks spec later","due":"${today.plusDays(5)}",""" +
                     """"remind_before_min":15}""",
                 key = "tasks-round-trip-later",
             )
             val daily = core.write(
-                "schedule.add_task",
-                """{"title":"Tasks spec daily","due_at":"${today.minusDays(4)}",""" +
-                    """"rrule":"FREQ=DAILY"}""",
+                "task.add",
+                """{"title":"Tasks spec daily","due":"${today.minusDays(4)}",""" +
+                    """"rule":"FREQ=DAILY"}""",
                 key = "tasks-round-trip-daily",
             )
             val trashed = core.write(
-                "schedule.add_task",
-                """{"title":"Tasks spec trashed","due_at":"${today.minusDays(1)}"}""",
+                "task.add",
+                """{"title":"Tasks spec trashed","due":"${today.minusDays(1)}"}""",
                 key = "tasks-round-trip-trashed",
             )
             core.write(
-                "schedule.delete_task",
-                """{"task_id":"$trashed"}""",
+                "entity.trash",
+                """{"id":"$trashed"}""",
                 key = "tasks-round-trip-delete",
             )
 
@@ -176,7 +176,7 @@ class TasksQueryRoundTripSpec : StringSpec({
             return answer!!
         }
 
-        /** One command through the command plane; answers its `task_id`. */
+        /** One command through the command plane; answers its `id` (a trash has none). */
         suspend fun CentraidCore.write(name: String, input: String, key: String): String {
             var taskId = ""
             call(
@@ -193,11 +193,11 @@ class TasksQueryRoundTripSpec : StringSpec({
             ).shouldBeAnsweredWith { envelope ->
                 val outcome = envelope.response?.command ?: error("a CommandOutcome")
                 outcome.status shouldBe CommandStatus.COMMAND_STATUS_EXECUTED
-                taskId = Regex("\"task_id\":\"([^\"]+)\"")
+                taskId = Regex("\"id\":\"([^\"]+)\"")
                     .find(outcome.output.utf8())
                     ?.groupValues
                     ?.get(1)
-                    ?: error("no task_id in ${outcome.output.utf8()}")
+                    ?: ""
             }
             return taskId
         }

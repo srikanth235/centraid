@@ -107,39 +107,39 @@ fn every_apps_records_come_back_row_for_row() {
             id_of(
                 &run(
                     &phone,
-                    "schedule.add_task",
+                    "task.add",
                     &json!({ "title": format!("Task {index}") }),
                     &format!("task-{index}"),
                 ),
-                "task_id",
+                "id",
             )
         })
         .collect();
     run(
         &phone,
-        "schedule.set_task_status",
-        &json!({ "task_id": tasks[0], "status": "completed" }),
+        "task.complete",
+        &json!({ "id": tasks[0] }),
         "complete-task-0",
     );
     run(
         &phone,
-        "schedule.edit_task",
-        &json!({ "task_id": tasks[1], "title": "Task 1, renamed" }),
+        "task.edit",
+        &json!({ "id": tasks[1], "title": "Task 1, renamed" }),
         "edit-task-1",
     );
     run(
         &phone,
-        "schedule.delete_task",
-        &json!({ "task_id": tasks[2] }),
+        "entity.trash",
+        &json!({ "id": tasks[2] }),
         "delete-task-2",
     );
     // AN EVENT on the calendar founding seeded.
     run(
         &phone,
-        "schedule.propose_event",
+        "event.propose",
         &json!({
-            "summary": "Dentist", "dtstart": "2026-11-02", "dtend": "2026-11-02",
-            "recurrence_semantics": "all-day", "calendar_id": calendar,
+            "title": "Dentist", "starts": "2026-11-02", "ends": "2026-11-02",
+            "timing": "all-day", "calendar_id": calendar,
         }),
         "event-0",
     );
