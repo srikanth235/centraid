@@ -170,7 +170,7 @@ fn members(door: &dyn PageDoor, entities: &[Row]) -> KitResult<Vec<PersonRow>> {
         order: ("id", "id"),
         column: "id",
     }
-    .within(WIDE, door, &ids, None)?;
+    .among(WIDE, door, &ids, None)?;
     let by_id: BTreeMap<String, &Row> = rows
         .iter()
         .filter_map(|row| text_of(row, "id").map(|id| (id, row)))
@@ -218,7 +218,7 @@ pub(crate) fn people_among(
         order: ("id", "id"),
         column: "id",
     }
-    .within(
+    .among(
         WIDE,
         door,
         ids,
@@ -300,7 +300,7 @@ fn edges(name: &'static str, order: (&'static str, &'static str), column: &'stat
 /// The people carrying the star.
 pub(crate) fn starred(door: &dyn PageDoor, ids: &[String]) -> KitResult<BTreeSet<String>> {
     Ok(edges("people.starred", ("from_id", "to_id"), "from_id")
-        .within(
+        .among(
             WIDE,
             door,
             ids,
@@ -344,7 +344,7 @@ pub(crate) fn list_of(
     ids: &[String],
     lists: &[ListEntry],
 ) -> KitResult<BTreeMap<String, String>> {
-    let held = edges("people.filed", ("to_id", "from_id"), "to_id").within(
+    let held = edges("people.filed", ("to_id", "from_id"), "to_id").among(
         WIDE,
         door,
         ids,
@@ -380,7 +380,7 @@ pub struct TouchStub {
 /// activities those edges start at. **Last contacted is the newest of these**;
 /// nothing stores it.
 pub(crate) fn touch_stubs(door: &dyn PageDoor, ids: &[String]) -> KitResult<Vec<TouchStub>> {
-    let with = edges("people.touches.with", ("to_id", "from_id"), "to_id").within(
+    let with = edges("people.touches.with", ("to_id", "from_id"), "to_id").among(
         WIDE,
         door,
         ids,
@@ -398,7 +398,12 @@ pub(crate) fn touch_stubs(door: &dyn PageDoor, ids: &[String]) -> KitResult<Vec<
         order: ("id", "id"),
         column: "id",
     }
-    .within(WIDE, door, &activity_ids, None)?
+    .among(
+        WIDE,
+        door,
+        &activity_ids,
+        Some(("type_kind = ?", vec![text("activity_kind")])),
+    )?
     .iter()
     .filter_map(|row| {
         let id = text_of(row, "id")?;
@@ -622,68 +627,74 @@ pub(crate) fn dates(door: &dyn PageDoor, people: &[&PersonRow]) -> KitResult<Vec
             })
         })
         .collect();
-    let yearly = read_pages(
-        door,
-        &PageQuery::new(
-            "people.dates.events",
-            "id, starts, reminders",
-            "event",
-            PageOrder::asc("id", "id"),
-        )
-        .filter(
-            "rule LIKE ? AND timing = ?",
-            vec![text("FREQ=YEARLY%"), text("all-day")],
-        ),
-        WIDE,
-    )?;
-    let event_ids: Vec<String> = yearly.iter().filter_map(|row| text_of(row, "id")).collect();
     let ids: BTreeSet<&str> = people.iter().map(|person| person.id.as_str()).collect();
-    let about = edges("people.dates.about", ("from_id", "to_id"), "from_id").within(
+    let person_ids: Vec<String> = ids.iter().map(|id| (*id).to_owned()).collect();
+    // The events about these people, then the yearly all-day ones among them.
+    let about = edges("people.dates.about", ("to_id", "from_id"), "to_id").among(
+        WIDE,
+        door,
+        &person_ids,
+        Some(("rel = ?", vec![text("about")])),
+    )?;
+    let event_ids: Vec<String> = about
+        .iter()
+        .filter_map(|row| text_of(row, "from_id"))
+        .collect();
+    let yearly = Read {
+        name: "people.dates.events",
+        table: "event",
+        select: "id, starts, reminders",
+        order: ("id", "id"),
+        column: "id",
+    }
+    .among(
         WIDE,
         door,
         &event_ids,
-        Some(("rel = ?", vec![text("about")])),
+        Some((
+            "rule LIKE ? AND timing = ?",
+            vec![text("FREQ=YEARLY%"), text("all-day")],
+        )),
     )?;
-    let live = Read {
+    let yearly_ids: Vec<String> = yearly.iter().filter_map(|row| text_of(row, "id")).collect();
+    let titles: BTreeMap<String, String> = Read {
         name: "people.dates.entity",
         table: "entity",
         select: "id, title",
         order: ("id", "id"),
         column: "id",
     }
-    .within(
+    .among(
         WIDE,
         door,
-        &event_ids,
+        &yearly_ids,
         Some(("kind = ? AND deleted_at IS NULL", vec![text("event")])),
-    )?;
-    let titles: BTreeMap<String, String> = live
-        .iter()
-        .filter_map(|row| Some((text_of(row, "id")?, text_of(row, "title")?)))
-        .collect();
+    )?
+    .iter()
+    .filter_map(|row| Some((text_of(row, "id")?, text_of(row, "title")?)))
+    .collect();
+    let mut about_by_event: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for row in &about {
+        if let (Some(event), Some(person)) = (text_of(row, "from_id"), text_of(row, "to_id")) {
+            about_by_event.entry(event).or_default().push(person);
+        }
+    }
     for event in &yearly {
         let (Some(id), Some(starts)) = (text_of(event, "id"), text_of(event, "starts")) else {
             continue;
         };
-        let Some(label) = titles.get(&id) else {
+        let (Some(label), Some(month_day)) = (titles.get(&id), starts.get(5..10)) else {
             continue;
         };
         let reminder_on = text_of(event, "reminders").is_some_and(|set| set != "[]");
-        for person in about
-            .iter()
-            .filter(|row| text_of(row, "from_id").as_deref() == Some(id.as_str()))
-            .filter_map(|row| text_of(row, "to_id"))
-            .filter(|person| ids.contains(person.as_str()))
-        {
-            if let Some(month_day) = starts.get(5..10) {
-                found.push(DateRow {
-                    person_id: person,
-                    date_id: id.clone(),
-                    label: label.clone(),
-                    month_day: month_day.to_owned(),
-                    reminder_on,
-                });
-            }
+        for person in about_by_event.get(&id).into_iter().flatten() {
+            found.push(DateRow {
+                person_id: person.clone(),
+                date_id: id.clone(),
+                label: label.clone(),
+                month_day: month_day.to_owned(),
+                reminder_on,
+            });
         }
     }
     found.sort_by(|left, right| {

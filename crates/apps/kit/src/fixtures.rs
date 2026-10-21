@@ -11,8 +11,8 @@
 //! vault's, kept by the writer; a test that searches rebuilds it). A generator
 //! is deterministic — a named LCG, so the bytes of a fixture never move.
 //!
-//! The only generator today is Notes'; the next lane that needs a volume adds
-//! its own beside it.
+//! The generators today are Notes' and People's; the next lane that needs a
+//! volume adds its own beside them.
 
 use rusqlite::{Connection, params};
 
@@ -355,6 +355,301 @@ pub fn year3_notes(
             )
             .map_err(door)?;
         counts.revisions += 1;
+    }
+    Ok(counts)
+}
+
+// ---------------------------------------------------------------------------
+// People
+// ---------------------------------------------------------------------------
+
+/// The volume a People roster is stated at.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Year3PeopleShape {
+    /// People, live and trashed together (pets are besides these).
+    pub people: usize,
+    pub trashed: usize,
+    /// Pets: persons of form `pet`, which the circle leaves out.
+    pub pets: usize,
+    /// People carrying the star.
+    pub starred: usize,
+    /// Lists, and how many people are filed in one.
+    pub lists: usize,
+    pub filed: usize,
+    /// People who carry a birthday column.
+    pub birthdays: usize,
+    /// Yearly all-day events about a person (an anniversary and the like), and
+    /// how many of them have a reminder on.
+    pub dates: usize,
+    pub reminded: usize,
+    /// Touches (an activity `with` a person), and how many have a note about them.
+    pub touches: usize,
+    pub touch_notes: usize,
+    /// Notes about a person, and contact points.
+    pub notes: usize,
+    pub contact_points: usize,
+}
+
+/// THE YEAR-3 PEOPLE PROFILE: 5,000 people, 12,000 important dates (2,000 of
+/// them birthdays, the rest yearly events), 20,000 touches.
+///
+/// * **5,000 against a 10,000-row window**: the roster is declared that wide,
+///   so a year-3 roster fits and the walk is ten pages of 500.
+/// * **20,000 touches**: last-contacted is computed from them, so the roster's
+///   cost is the activities `with` its people.
+/// * **8,000 touch notes and 3,000 notes about people**: the notes the search
+///   folds into a person's text and the sheet lists.
+pub const YEAR3_PEOPLE: Year3PeopleShape = Year3PeopleShape {
+    people: 5_000,
+    trashed: 250,
+    pets: 100,
+    starred: 400,
+    lists: 12,
+    filed: 3_000,
+    birthdays: 2_000,
+    dates: 10_000,
+    reminded: 6_000,
+    touches: 20_000,
+    touch_notes: 8_000,
+    notes: 3_000,
+    contact_points: 8_000,
+};
+
+/// What one People seeding wrote.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Year3PeopleCounts {
+    /// Live people the circle holds (not trashed, not the owner, not a pet).
+    pub live: usize,
+    pub trashed: usize,
+    pub pets: usize,
+    pub starred: usize,
+    pub filed: usize,
+    pub birthdays: usize,
+    pub dates: usize,
+    pub reminded: usize,
+    pub touches: usize,
+    pub touch_notes: usize,
+    pub notes: usize,
+    pub contact_points: usize,
+}
+
+/// Write the profile into a founded vault's connection. Deterministic in `seed`.
+///
+/// People are numbered oldest first, so the trashed are the low indexes and the
+/// window (newest first) is the rest. Every touch and date is aimed at a live
+/// person, because a trashed one carries their own words to the trash.
+///
+/// # Errors
+///
+/// Whatever the vault refuses a row for; the generator writes only rows the
+/// baseline's own constraints accept.
+pub fn year3_people(
+    connection: &Connection,
+    shape: Year3PeopleShape,
+    seed: u64,
+) -> KitResult<Year3PeopleCounts> {
+    let mut random = Seeded::new(seed);
+    let at = |index: usize| instant(index, shape.people);
+    let mut counts = Year3PeopleCounts::default();
+    let mut entity = connection
+        .prepare_cached(
+            "INSERT INTO entity (id, kind, title, created_at, updated_at, deleted_at, purge_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        )
+        .map_err(door)?;
+    let mut edge = connection
+        .prepare_cached(
+            "INSERT OR IGNORE INTO edge (from_id, rel, to_id, position, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+        )
+        .map_err(door)?;
+    let plain = |kind: &str, id: &str, title: String, created: String| -> KitResult<()> {
+        connection
+            .prepare_cached(
+                "INSERT INTO entity (id, kind, title, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?4)",
+            )
+            .map_err(door)?
+            .execute(params![id, kind, title, created])
+            .map_err(door)?;
+        Ok(())
+    };
+
+    for index in 0..shape.lists {
+        let list = id("list", index);
+        plain("list", &list, format!("List {index}"), at(0))?;
+        connection
+            .execute(
+                "INSERT INTO container (id, kind, position) VALUES (?1, 'list', ?2)",
+                params![list, index as f64],
+            )
+            .map_err(door)?;
+    }
+    let roles = ["Friend", "Colleague", "Family", "Neighbour", "Mentor"];
+    let total = shape.people + shape.pets;
+    let filed_every = shape.people / shape.filed.max(1);
+    for index in 0..total {
+        let pet = index >= shape.people;
+        let person = id("person", index);
+        let trashed = !pet && index < shape.trashed;
+        let created = at(index.min(shape.people));
+        entity
+            .execute(params![
+                person,
+                "person",
+                format!("Person {index} of {}", random.upto(900)),
+                created,
+                created,
+                trashed.then(|| at(index)),
+                trashed.then(|| at(index + shape.people)),
+            ])
+            .map_err(door)?;
+        let birthday = (!pet
+            && index % (shape.people / shape.birthdays.max(1)).max(1) == 0
+            && counts.birthdays < shape.birthdays)
+            .then(|| format!("{:02}-{:02}", 1 + random.upto(12), 1 + random.upto(28)));
+        connection
+            .execute(
+                "INSERT INTO person (id, form, role, birthday, cadence_days) VALUES (?1, ?2, ?3, ?4, ?5)",
+                params![
+                    person,
+                    if pet { "pet" } else { "person" },
+                    if pet { "dog".to_owned() } else { roles[index % roles.len()].to_owned() },
+                    birthday,
+                    (!pet && index % 3 != 0).then(|| [7_i64, 14, 30, 90][index % 4]),
+                ],
+            )
+            .map_err(door)?;
+        if birthday.is_some() {
+            counts.birthdays += 1;
+        }
+        if pet {
+            counts.pets += 1;
+            continue;
+        }
+        if trashed {
+            counts.trashed += 1;
+            continue;
+        }
+        counts.live += 1;
+        if index % filed_every == 0 && counts.filed < shape.filed {
+            edge.execute(params![
+                id("list", random.upto(shape.lists.max(1))),
+                "contains",
+                person,
+                counts.filed as f64,
+                created
+            ])
+            .map_err(door)?;
+            counts.filed += 1;
+        }
+    }
+    let live = |k: usize| id("person", shape.trashed + k % (shape.people - shape.trashed));
+    for k in 0..shape.starred {
+        edge.execute(params![
+            live(k * 11),
+            "tagged",
+            "flag:starred",
+            None::<f64>,
+            at(k)
+        ])
+        .map_err(door)?;
+        counts.starred += 1;
+    }
+    for k in 0..shape.dates {
+        let date = id("date", k);
+        plain("event", &date, format!("Anniversary {k}"), at(k))?;
+        let reminded = k < shape.reminded;
+        connection
+            .execute(
+                "INSERT INTO event (id, starts, timing, rule, calendar_id, reminders)
+                 VALUES (?1, ?2, 'all-day', 'FREQ=YEARLY', 'calendar:default', ?3)",
+                params![
+                    date,
+                    format!("2024-{:02}-{:02}", 1 + k % 12, 1 + k % 28),
+                    reminded.then_some("[0]")
+                ],
+            )
+            .map_err(door)?;
+        edge.execute(params![date, "about", live(k * 7), None::<f64>, at(k)])
+            .map_err(door)?;
+        counts.dates += 1;
+        counts.reminded += usize::from(reminded);
+    }
+    let kinds = ["call", "message", "met-up", "note"];
+    for k in 0..shape.touches {
+        let touch = id("touch", k);
+        plain("activity", &touch, "Touch".to_owned(), at(k))?;
+        connection
+            .execute(
+                "INSERT INTO activity (id, type_id, type_kind, starts) VALUES (?1, ?2, 'activity_kind', ?3)",
+                params![touch, format!("activity_kind:{}", kinds[k % kinds.len()]), at(k * shape.people / shape.touches.max(1))],
+            )
+            .map_err(door)?;
+        edge.execute(params![
+            touch,
+            "with",
+            live(random.upto(shape.people)),
+            None::<f64>,
+            at(k)
+        ])
+        .map_err(door)?;
+        counts.touches += 1;
+        if k < shape.touch_notes {
+            let note = id("touch-note", k);
+            plain("note", &note, "Touch".to_owned(), at(k))?;
+            connection
+                .execute(
+                    "INSERT INTO note (id, body, format) VALUES (?1, ?2, 'plain')",
+                    params![note, format!("talked about topic {}", random.upto(500))],
+                )
+                .map_err(door)?;
+            edge.execute(params![note, "about", touch, None::<f64>, at(k)])
+                .map_err(door)?;
+            counts.touch_notes += 1;
+        }
+    }
+    for k in 0..shape.notes {
+        let note = id("person-note", k);
+        plain("note", &note, format!("Note {k}"), at(k))?;
+        connection
+            .execute(
+                "INSERT INTO note (id, body, format) VALUES (?1, ?2, 'plain')",
+                params![note, format!("a thing to remember, number {k}")],
+            )
+            .map_err(door)?;
+        edge.execute(params![
+            note,
+            "about",
+            live(random.upto(shape.people)),
+            None::<f64>,
+            at(k)
+        ])
+        .map_err(door)?;
+        counts.notes += 1;
+    }
+    let mut point = connection
+        .prepare_cached(
+            "INSERT OR IGNORE INTO contact_point (id, person_id, kind, value, normalized, position)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        )
+        .map_err(door)?;
+    for k in 0..shape.contact_points {
+        let (kind, value) = if k % 2 == 0 {
+            ("phone", format!("+1555{k:07}"))
+        } else {
+            ("email", format!("person{k}@example.test"))
+        };
+        point
+            .execute(params![
+                id("point", k),
+                live(k),
+                kind,
+                value.clone(),
+                value,
+                k as f64
+            ])
+            .map_err(door)?;
+        counts.contact_points += 1;
     }
     Ok(counts)
 }

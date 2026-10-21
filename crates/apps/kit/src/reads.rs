@@ -85,6 +85,9 @@ pub fn in_list(column: &str, ids: &[String]) -> KitResult<InListFragment> {
     })
 }
 
+/// The most ids [`Read::among`] names in an `IN` list.
+pub const AMONG_LIMIT: usize = 64;
+
 /// How far a fan-out may walk before it is a question about an unbounded set.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FanOutBound {
@@ -163,6 +166,42 @@ impl Read {
         extra: Option<(&str, Vec<PageBindValue>)>,
     ) -> KitResult<Vec<Row>> {
         self.within(JOIN_FAN_OUT, door, ids, extra)
+    }
+
+    /// The rows whose `column` is among `ids`, however many ids there are.
+    ///
+    /// A keyset page re-binds the whole `IN` list on every page, so a list of
+    /// thousands over a table of tens of thousands of rows costs the list times
+    /// the pages. Up to [`AMONG_LIMIT`] ids the read names them; past it the read
+    /// takes the table (under the caller's predicate, which should already be
+    /// narrow) and keeps the rows whose `column` is among them. The answer is
+    /// the same either way.
+    pub fn among(
+        &self,
+        bound: FanOutBound,
+        door: &dyn PageDoor,
+        ids: &[String],
+        extra: Option<(&str, Vec<PageBindValue>)>,
+    ) -> KitResult<Vec<Row>> {
+        if ids.len() <= AMONG_LIMIT {
+            return self.within(bound, door, ids, extra);
+        }
+        let mut query = PageQuery::new(
+            self.name,
+            self.select,
+            self.table,
+            crate::statement::PageOrder::asc(self.order.0, self.order.1),
+        );
+        if let Some((clause, bind)) = extra {
+            query = query.filter(clause, bind);
+        }
+        let wanted: std::collections::BTreeSet<&str> = ids.iter().map(String::as_str).collect();
+        Ok(read_pages(door, &query, bound)?
+            .into_iter()
+            .filter(|row| {
+                crate::row::text_of(row, self.column).is_some_and(|id| wanted.contains(id.as_str()))
+            })
+            .collect())
     }
 
     /// [`Self::of`] over a fan-out the caller states, for a window wider than

@@ -326,3 +326,26 @@ fn the_trash_shelf_and_the_search_answer_in_the_roster_s_shape() {
         Some(format!("about {ada}").as_str())
     );
 }
+
+#[test]
+fn an_empty_vault_answers_every_read_empty() {
+    let w = World::new();
+    let now = parse_instant("2026-06-01T00:00:00.000Z").unwrap();
+    let (roster, denial) = w.read(|door| load_people(door, PeopleInput::default()).expect("reads"));
+    assert!(denial.is_none() && roster.people.is_empty() && !roster.truncated);
+    let (dash, _) =
+        w.read(|door| load_dashboard(door, CivilDate::new(2026, 6, 1), now).expect("reads"));
+    assert!(dash.reconnect.is_empty() && dash.upcoming.is_empty() && dash.recent.is_empty());
+    assert!(
+        w.read(|door| load_trash(door).expect("reads"))
+            .0
+            .people
+            .is_empty()
+    );
+    assert!(
+        w.read(|door| load_search(door, &[]).expect("reads"))
+            .0
+            .people
+            .is_empty()
+    );
+}
