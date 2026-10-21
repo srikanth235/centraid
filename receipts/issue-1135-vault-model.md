@@ -326,3 +326,57 @@ Deleted:
 | `cargo xtask rules` | clean |
 | `export-ladder-ddl` against `contracts/schema/vault-ddl.sql` | identical |
 | `cargo test --workspace --no-fail-fast` | 981 red, all inherited (table above) |
+
+### Lane 2 — Notes
+
+- **Commands** (`crates/vault/src/commands/note.rs`): `note.create`, `note.edit` (title, body, format), `note.move`, `note.restore_version`. An edit that changes the body writes the replaced body as a `revision`; a restore swaps one in and keeps what it replaced; an edit or a restore onto the words already there writes nothing. A body's `[[title]]` links compile to `links` edges in the same commit, owned by the compile alone (anchor `{"wikilink": title}`). `note::found` is the one birth of a note, public so People's journal entry founds it the same way and adds its `about` edge. `note::LINKABLE` is the one list of kinds a title resolves to, shared with the powerbox. A pin, a trash, a notebook, a tag and a hand link are the shared verbs, not wrapped.
+- **Reads** (`crates/apps/notes`): the six queries rewritten one table at a time over `entity` / `note` / `container` / `edge` / `revision` (a window, then the ids it returned). The memo set (`journal.rs`) is every `about` edge; `cards` is one read of `entity` plus one per kind that adds a subtitle or a thumbnail; `commands` is the seventeen-action table over the shared verbs; the manifest's inputs are its commands' inputs. `version_chain`, `CardDoor`, the data-URI body decode and the six-table join constants are gone.
+- **Core and proto**: the Notes arms answer the same messages with no card door; `knowledge_note` leaves `PAGE_TABLES`; starter notes and the Tahoe seeder found notes through `note.create`. Additive proto changes only: `NotesVersion.seq` and `NotesHistory.truncated` added; `NotesNote.body_content_id` / `current_revision_id`, `NotesTag.tag_id`, `NotesAttachment.role` / `is_primary`, `NotesReference.link_id`, `NotesBacklink.link_id`, `NotesVersion.content_id` / `media_type`, `PageQuery.with_note_body`, `NoteDraft.body_unavailable` and `Format.FORMAT_HTML` are `reserved` (R-1135-2-10).
+- **Shell**: the machines send `note.create`, `note.edit`, `note.move`, `note.restore_version` (by `seq`), `flag.set` / `flag.clear` (a pin, from the library and from the editor, which no longer folds it into a save), `entity.trash`, `entity.restore`, `container.create`; the editor reads through `notes.note` (an app query) instead of paging a table; change events name `entity`, `note`, `edge`, `container` (and `revision`). The powerbox names kinds, not `core.party`-style entities.
+- **Scale** (kit + test + estate): `crates/apps/kit/src/fixtures.rs` writes the year-3 Notes profile as rows of the model; `crates/apps/notes/tests/year3.rs` asserts that the pinned shelf outlives the window and a memo is on no shelf, and the declared profile (`--ignored`) prints: seeded 10,000 notes in ~0.9 s; `library(limit=2000)` folds 1,943 live rows plus 200 trashed in ~370 ms (debug, `ci-linux-x64-4c`); `note()` over a 48 KiB body in ~1.5 ms. `cargo xtask call-budget` needs no Notes volume (its rows are People's). The Notes journey row returns in its own estate commit (`10ebec18`), numbers parked under underscores.
+- **Docs**: `crates/apps/notes/README.md` rewritten as current state; `docs/vault-ontology.md` gains Notes' own verbs; `docs/decisions.md` records R-1135-2-1 to 10.
+
+Files: `/home/user/centraid/crates/vault/src/commands/note.rs`, `/home/user/centraid/crates/vault/tests/notes.rs`, `/home/user/centraid/crates/vault/tests/commitments.rs`, `/home/user/centraid/crates/apps/notes/src/{queries,cards,journal,shelves,editor,commands,manifest,derive,lib}.rs`, `/home/user/centraid/crates/apps/notes/manifest.json`, `/home/user/centraid/crates/apps/notes/tests/year3.rs`, `/home/user/centraid/crates/apps/kit/src/fixtures.rs`, `/home/user/centraid/crates/core/src/app_query/notes.rs`, `/home/user/centraid/crates/core/src/{api,starters,example}.rs`, `/home/user/centraid/crates/api-proto/proto/centraid/core/v1/{notes,query}.proto`, `/home/user/centraid/crates/api-proto/proto/centraid/screen/v1/screen.proto`, `/home/user/centraid/mobile/shared/src/commonMain/kotlin/dev/centraid/shared/apps/notes/*`, `/home/user/centraid/tests/journeys.json`.
+
+#### Rulings
+
+R-1135-2-1 to R-1135-2-10 are in [docs/decisions.md](../docs/decisions.md#lane-2--notes-1135), each with its choice and reason. In one line each: **1** a memo is a note with an `about` edge, the shelf is the notes about nothing; **2** `note.edit` carries the title (one atomic autosave); **3** a compiled wikilink is a `links` edge anchored `{"wikilink": title}`; **4** a version is a `revision` named by its `seq`; **5** deleting a notebook trashes its notes with it; **6** the body budget stays 64 KiB and `html` is not a format; **7** an action's input is its command's, seventeen actions; **8** Notes reads one table at a time and the editor reads through the app query; **9** the powerbox offers the six `LINKABLE` kinds; **10** fields nothing can fill are reserved.
+
+#### Falsification
+
+1. **"A note verb that forgets to touch is red."** Check: removed `ctx.touch(id)` from `note.edit` (marked `FALSIFY`, restored). With the lane 1 script it stayed green, because a later `entity.restore` of the same note re-indexed it and hid the omission; the script's last word is now a `note.edit` of a note nothing re-indexes afterwards. Second result: red (`a command changed searchable text and did not touch`); restored, green.
+2. **"The compile owns its edges and no others, and a memo or a trashed note is never a target."** Check: made the compile delete every `links` edge of the note and dropped the memo filter from the title resolution (restored). Two tests went red (`a_wikilink_compiles_to_an_edge_and_the_edge_follows_the_words`: the hand link was ended; `a_memo_a_trashed_note_and_the_note_itself_are_not_wikilink_targets`: the memo was linked); restored, 7 of 7 green.
+
+A claim the year-3 generator first got wrong, found by the volume test: memos spread by a fixed step ran out before the newest notes (the library then held 2,057 rows where the profile says 1,943); the spread is exact now and the assertion is the memo count.
+
+#### Verification
+
+| Command | Result |
+| --- | --- |
+| `cargo build --workspace --all-targets --locked` | pass |
+| `cargo test -p centraid-vault -p centraid-apps-notes -p centraid-search` | pass (373: vault 200 lib + `notes` 7 + `commitments` 9 + `shared_verbs` 24 + the rest; notes 33 lib + 2 year3 + 1 ignored) |
+| `cargo test -p centraid-core --lib app_query::notes` | pass (12 Notes tests; 4 of them new on the new model) |
+| `cargo test -p centraid-core --no-fail-fast` | 204 red (lane 1 reported 219; lib 93 to 84), none a Notes test |
+| `cargo clippy -p centraid-vault -p centraid-apps-notes -p centraid-core -p centraid-apps-kit --all-targets -- -D warnings` | clean |
+| `cargo xtask rules` | clean |
+| `export-ladder-ddl` against `contracts/schema/vault-ddl.sql` | identical |
+| `./gradlew -p mobile :shared:jvmTest --tests '*Notes*'` | pass (50 tests, with `HomeNotesTileSpec`); the whole `:shared:jvmTest`: 1,650 run, 10 red, none Notes' |
+| `./gradlew -p mobile :core:jvmTest` | blocked: `spike-fixture` seeds `core.add_party` (People's lane) |
+
+Gradle first answered `429 Too Many Requests` from Maven Central through the agent proxy for the dependency lock state; retries filled the module cache over a few attempts and everything after resolved.
+
+#### Inherited red this lane leaves
+
+| Crate / target | Red | Why, and who |
+| --- | --- | --- |
+| `crates/core` | 204 | `--lib` 84 (People, Tasks, Docs, Money, Health arms and Home's cross-app search tests, whose `people.*`, `schedule.*`, `media.*`, `core.*` commands are other lanes'), `assist_*` 53 and `backup_edges` / `restore_edges` / `phone_backup` / `records_backup` 61 (lane 7), `library_assets`, `replay`, `call_budget` (People's `core_party` page) |
+| `crates/nativetools`, `crates/core-ffi`, `crates/centraid`, `crates/apps/{agenda,tasks,health}` | as lane 1's table | unchanged by this lane; `core-ffi`'s `spike-fixture` also blocks `:core:jvmTest` |
+| `mobile/shared` `:jvmTest` | 10 | `ChatScopeSpec` 4 (reads `crates/vault/src/chat.rs`, deleted by lane 1: lane 7), `ShellCommandsExistSpec` 4 (its floors count the old registry, and it names every other app's old commands and entity words: it goes green as lanes 3 to 7 land; it now reads `CommandDefinition::plain` and finds every Notes name), `AppReadsSpec` 1 (its table-universe floor of 50 and Home's table names), `HomeMachineSpec` 1 (the grid) |
+
+#### Where the kernel was awkward
+
+This lane was the kernel's first real consumer and three things were awkward, none wrong. The paged door's one shape is a keyset page of one table, so every Notes read is a window plus `IN`-bounded decorations and a join is an app query; this is a property of the door, stated in R-1135-2-8. The shared page door still carried `with_note_body` and the page list still named `knowledge_note`, and the shell's Gradle test input still named the deleted `chat.rs`: three stale references the kernel lane left for the first consumer to find. The title-only search hit has no snippet (`snippet_of` returns `None` on a title match), which changes a container hit's snippet from a highlighted name to empty; the shell draws the title, and the core test now says so.
+
+#### Left for later lanes
+
+`people.add_journal_entry` (the Journal sheet's save) is People's command and must found its note through `note::found` plus an `about` edge; `send-to-tasks` names Agenda's `task.add`; Home's search shell still maps other apps' old entity words (`core.party`, `schedule.task`, `core.collection` for albums, `core.concept` for folders) and goes with their lanes; the editor's `body_editable` and `body_notice` state fields are constants now and the views still read them (removing them needs the iOS and Android builds this container has not).
