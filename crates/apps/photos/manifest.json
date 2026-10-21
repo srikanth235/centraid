@@ -146,109 +146,63 @@
           },
           "form": {
             "type": "string",
-            "enum": [
-              "photo",
-              "video",
-              "scan"
-            ]
+            "enum": ["photo", "video", "scan"]
           },
           "title": {
             "type": "string"
           },
           "taken_at": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "offset_min": {
-            "type": [
-              "integer",
-              "null"
-            ],
+            "type": ["integer", "null"],
             "minimum": -1080,
             "maximum": 1080
           },
           "width": {
-            "type": [
-              "integer",
-              "null"
-            ],
+            "type": ["integer", "null"],
             "minimum": 1
           },
           "height": {
-            "type": [
-              "integer",
-              "null"
-            ],
+            "type": ["integer", "null"],
             "minimum": 1
           },
           "duration_s": {
-            "type": [
-              "number",
-              "null"
-            ],
+            "type": ["number", "null"],
             "minimum": 0
           },
           "exif": {
-            "type": [
-              "object",
-              "null"
-            ]
+            "type": ["object", "null"]
           },
           "burst": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "edited_from": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "lat": {
-            "type": [
-              "number",
-              "null"
-            ],
+            "type": ["number", "null"],
             "minimum": -90,
             "maximum": 90
           },
           "lon": {
-            "type": [
-              "number",
-              "null"
-            ],
+            "type": ["number", "null"],
             "minimum": -180,
             "maximum": 180
           },
           "place_id": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "phash": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "maxLength": 128
           },
           "thumbhash": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "maxLength": 512
           }
         },
-        "required": [
-          "blob",
-          "media_type"
-        ],
+        "required": ["blob", "media_type"],
         "additionalProperties": false
       },
       "output": {
@@ -278,29 +232,18 @@
             "minLength": 1
           },
           "taken_at": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "offset_min": {
-            "type": [
-              "integer",
-              "null"
-            ],
+            "type": ["integer", "null"],
             "minimum": -1080,
             "maximum": 1080
           },
           "edited_from": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           }
         },
-        "required": [
-          "id"
-        ],
+        "required": ["id"],
         "additionalProperties": false
       },
       "output": {
@@ -333,10 +276,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "id",
-          "title"
-        ],
+        "required": ["id", "title"],
         "additionalProperties": false
       },
       "output": {
@@ -367,16 +307,10 @@
           },
           "flag": {
             "type": "string",
-            "enum": [
-              "starred",
-              "archived"
-            ]
+            "enum": ["starred", "archived"]
           }
         },
-        "required": [
-          "id",
-          "flag"
-        ],
+        "required": ["id", "flag"],
         "additionalProperties": false
       },
       "output": {
@@ -407,16 +341,10 @@
           },
           "flag": {
             "type": "string",
-            "enum": [
-              "starred",
-              "archived"
-            ]
+            "enum": ["starred", "archived"]
           }
         },
-        "required": [
-          "id",
-          "flag"
-        ],
+        "required": ["id", "flag"],
         "additionalProperties": false
       },
       "output": {
@@ -446,9 +374,7 @@
             "minLength": 1
           }
         },
-        "required": [
-          "id"
-        ],
+        "required": ["id"],
         "additionalProperties": false
       },
       "output": {
@@ -478,9 +404,7 @@
             "minLength": 1
           }
         },
-        "required": [
-          "id"
-        ],
+        "required": ["id"],
         "additionalProperties": false
       },
       "output": {
@@ -510,9 +434,7 @@
             "minLength": 1
           }
         },
-        "required": [
-          "id"
-        ],
+        "required": ["id"],
         "additionalProperties": false
       },
       "output": {
@@ -544,19 +466,14 @@
           },
           "kind": {
             "type": "string",
-            "enum": [
-              "album"
-            ]
+            "enum": ["album"]
           },
           "title": {
             "type": "string",
             "minLength": 1
           }
         },
-        "required": [
-          "kind",
-          "title"
-        ],
+        "required": ["kind", "title"],
         "additionalProperties": false
       },
       "output": {
@@ -590,10 +507,7 @@
             "minLength": 1
           }
         },
-        "required": [
-          "id",
-          "title"
-        ],
+        "required": ["id", "title"],
         "additionalProperties": false
       },
       "output": {
@@ -623,16 +537,11 @@
             "minLength": 1
           },
           "photo_id": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "minLength": 1
           }
         },
-        "required": [
-          "id"
-        ],
+        "required": ["id"],
         "additionalProperties": false
       },
       "output": {
@@ -662,9 +571,7 @@
             "minLength": 1
           }
         },
-        "required": [
-          "id"
-        ],
+        "required": ["id"],
         "additionalProperties": false
       },
       "output": {
@@ -694,9 +601,7 @@
             "minLength": 1
           }
         },
-        "required": [
-          "id"
-        ],
+        "required": ["id"],
         "additionalProperties": false
       },
       "output": {
@@ -727,26 +632,17 @@
           },
           "rel": {
             "type": "string",
-            "enum": [
-              "contains"
-            ]
+            "enum": ["contains"]
           },
           "to": {
             "type": "string",
             "minLength": 1
           },
           "position": {
-            "type": [
-              "number",
-              "null"
-            ]
+            "type": ["number", "null"]
           }
         },
-        "required": [
-          "from",
-          "rel",
-          "to"
-        ],
+        "required": ["from", "rel", "to"],
         "additionalProperties": false
       },
       "output": {
@@ -777,20 +673,14 @@
           },
           "rel": {
             "type": "string",
-            "enum": [
-              "contains"
-            ]
+            "enum": ["contains"]
           },
           "to": {
             "type": "string",
             "minLength": 1
           }
         },
-        "required": [
-          "from",
-          "rel",
-          "to"
-        ],
+        "required": ["from", "rel", "to"],
         "additionalProperties": false
       },
       "output": {
@@ -820,16 +710,11 @@
             "minLength": 1
           },
           "place_id": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "minLength": 1
           }
         },
-        "required": [
-          "id"
-        ],
+        "required": ["id"],
         "additionalProperties": false
       },
       "output": {
@@ -864,10 +749,7 @@
             "maxLength": 120
           }
         },
-        "required": [
-          "id",
-          "title"
-        ],
+        "required": ["id", "title"],
         "additionalProperties": false
       },
       "output": {
@@ -901,10 +783,7 @@
             "minLength": 1
           }
         },
-        "required": [
-          "id",
-          "label"
-        ],
+        "required": ["id", "label"],
         "additionalProperties": false
       },
       "output": {
@@ -938,10 +817,7 @@
             "minLength": 1
           }
         },
-        "required": [
-          "id",
-          "label"
-        ],
+        "required": ["id", "label"],
         "additionalProperties": false
       },
       "output": {
@@ -1001,10 +877,7 @@
             "type": "integer"
           },
           "tail": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "vaultDenied": {
             "type": "object"
@@ -1120,9 +993,7 @@
   ],
   "seats": {
     "byteBearing": true,
-    "originActs": [
-      "camera"
-    ],
+    "originActs": ["camera"],
     "disabledOn": [],
     "northStar": "google-photos"
   },

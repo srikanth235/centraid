@@ -197,8 +197,8 @@ class CameraRollStreamSpec : StringSpec({
             core.landed.first().contentEquals(still) shouldBe true
 
             val hash = hashOf(still)
-            core.commands.single().invoke_key shouldBe "media.add_asset:$hash"
-            core.commands.single().input.utf8() shouldContain "\"staged_sha\":\"$hash\""
+            core.commands.single().invoke_key shouldBe "photo.add:$hash"
+            core.commands.single().input.utf8() shouldContain "\"blob\":\"$hash\""
 
             // THE PLATFORM DREW THEM; the core files them under the original.
             val derivatives = core.begins.drop(1)
@@ -223,9 +223,9 @@ class CameraRollStreamSpec : StringSpec({
                 listOf("L", "L#pairedVideo")
             val inputs = core.commands.map { it.input.utf8() }
             inputs.size shouldBe 2
-            inputs[0] shouldContain "\"kind\":\"photo\""
-            inputs[1] shouldContain "\"kind\":\"video\""
-            inputs.forEach { it shouldContain "\"capture_group_id\":\"L\"" }
+            inputs[0] shouldContain "\"form\":\"photo\""
+            inputs[1] shouldContain "\"form\":\"video\""
+            inputs.forEach { it shouldContain "\"burst\":\"L\"" }
             services.mediaLibrary.rendered.map { it.first }.toSet() shouldBe setOf("L")
         }
     }
@@ -295,7 +295,7 @@ class CameraRollStreamSpec : StringSpec({
             val services = library(asset("L", live = true), bytes = mapOf("L" to still))
             val core = StagingCore()
             CameraRoll(services, core = { core.core }).pass("vault-1").queued shouldBe 1
-            core.commands.single().input.utf8() shouldContain "\"kind\":\"photo\""
+            core.commands.single().input.utf8() shouldContain "\"form\":\"photo\""
         }
     }
 

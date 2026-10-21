@@ -39,24 +39,21 @@ import io.kotest.matchers.shouldBe
  */
 class PendingWriteSpec : StringSpec({
 
-    "files landing are a row change on the assets that own them" {
-        // A LANDED BYTE IS A ROW (D-1025-S7-20). The core names `media_asset`
-        // and carries ASSET ids, because the join from hash back to row happens
-        // before the event — so this is the grid's ordinary `RowsChanged` and
-        // there is no second event kind. It used to name `core_content_item`
-        // and carry content ids, which matched nothing the grid was showing;
-        // the only honest reduction was "re-read everything", and that is what
-        // the deleted `BytesArrived` case was.
+    "files landing are a row change on the photographs that own them" {
+        // A LANDED BYTE IS A ROW (D-1025-S7-20). The core names `photo` and
+        // carries PHOTOGRAPH ids, because the join from hash back to row happens
+        // before the event, so this is the grid's ordinary `RowsChanged` and
+        // there is no second event kind.
         val event: PhotosGridEvent? = PhotosGridMachine.rowsChanged(
-            table = "media_asset",
+            table = "photo",
             keys = listOf("a-1", "a-2"),
         )
         event.shouldNotBeNull()
         event.rows_changed.shouldNotBeNull()
         event.rows_changed.asset_ids shouldBe listOf("a-1", "a-2")
-        // AND A TABLE THIS SCREEN DOES NOT READ IS NOT ITS EVENT — including
-        // the one the byte plane used to name.
-        PhotosGridMachine.rowsChanged("core_content_item", listOf("c-1")).shouldBeNull()
-        PhotosGridMachine.rowsChanged("knowledge_note", listOf("n-1")).shouldBeNull()
+        // AND A TABLE THIS SCREEN DOES NOT READ IS NOT ITS EVENT: a blob landing
+        // is a `blob` change, and the join to the photograph is the core's.
+        PhotosGridMachine.rowsChanged("blob", listOf("c-1")).shouldBeNull()
+        PhotosGridMachine.rowsChanged("note", listOf("n-1")).shouldBeNull()
     }
 })

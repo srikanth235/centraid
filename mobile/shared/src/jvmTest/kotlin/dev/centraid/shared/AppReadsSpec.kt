@@ -92,6 +92,7 @@ import centraid.screen.v1.PhotoLightboxEvent
 import centraid.screen.v1.PhotoPickerEvent
 import centraid.screen.v1.DuplicateReviewEvent
 import dev.centraid.shared.apps.photos.DuplicateReviewMachine
+import dev.centraid.shared.apps.photos.DuplicateClusterMembers
 import dev.centraid.shared.apps.photos.DuplicateReviewReads
 import dev.centraid.shared.apps.photos.DuplicatesMachine
 import dev.centraid.shared.apps.photos.DuplicatesReads
@@ -102,8 +103,6 @@ import dev.centraid.shared.apps.photos.PhotoPickerReads
 import dev.centraid.shared.apps.photos.PhotoShelfMachine
 import dev.centraid.shared.apps.photos.PhotoShelfReads
 import dev.centraid.shared.apps.photos.PhotosGridMachine
-import dev.centraid.shared.apps.photos.PhotosMemoriesMachine
-import dev.centraid.shared.apps.photos.PhotosMemoriesReads
 import dev.centraid.shared.apps.photos.PhotosReads
 import dev.centraid.shared.apps.photos.PlacesMachine
 import dev.centraid.shared.apps.photos.PlacesReads
@@ -166,12 +165,8 @@ class AppReadsSpec : StringSpec({
         Triple("photos.picker", PhotoPickerReads, PhotoPickerMachine),
         Triple("photos.lightbox", PhotoLightboxReads, PhotoLightboxMachine),
         Triple("photos.places", PlacesReads, PlacesMachine),
-        // MEMORIES IS SERVED BY ITS OWN BRIDGE — the shelf, then a trip's
-        // route legs, folded into one page (`PhotosMemoriesBridge`) — but its
-        // SHELF is still one `ScreenReads` statement, and that statement is
-        // what this list asserts. The route fold is `PhotosMemoriesSpec`'s.
-        Triple("photos.memories", PhotosMemoriesReads, PhotosMemoriesMachine),
-        Triple("photos.duplicates", DuplicatesReads, DuplicatesMachine),
+        // THE DUPLICATES SHELF IS AN APP QUERY (`photos.duplicates`, the core's
+        // clustering), and is in `queryScreens`.
         Triple("photos.duplicate", DuplicateReviewReads, DuplicateReviewMachine),
         Triple("docs.trash", DocsTrashReads, DocsTrashMachine),
         // LOCKER (#1047): the kit's trash over `locker_item`. The statement is
@@ -223,19 +218,22 @@ class AppReadsSpec : StringSpec({
             null,
         )
         "photos.places" -> PlacesReads.query(PlacesMachine.initial(), null)
-        "photos.memories" -> PhotosMemoriesReads.query(PhotosMemoriesMachine.initial(), null)
-        "photos.duplicates" -> DuplicatesReads.query(DuplicatesMachine.initial(), null)
         "docs.trash" -> DocsTrashReads.query(DocsTrashMachine.initial(), null)
         "locker.trash" -> TrashReads(LOCKER_TRASH).query(LockerTrashMachine.initial(), null)
-        else -> DuplicateReviewReads.query(
-            DuplicateReviewMachine.reduce(
-                DuplicateReviewMachine.initial(),
-                DuplicateReviewEvent(
-                    opened = DuplicateReviewEvent.Opened(cluster_id = "dup-1"),
-                ),
-            ).state,
-            null,
-        )
+        else -> {
+            // THE CLUSTER'S MEMBERS ARE THE CORE'S, asked as the screen opens; a
+            // cluster the core did not answer has no members to read.
+            DuplicateClusterMembers.remember("dup-1", listOf("ast-1", "ast-2"))
+            DuplicateReviewReads.query(
+                DuplicateReviewMachine.reduce(
+                    DuplicateReviewMachine.initial(),
+                    DuplicateReviewEvent(
+                        opened = DuplicateReviewEvent.Opened(cluster_id = "dup-1"),
+                    ),
+                ).state,
+                null,
+            )
+        }
     }
 
     "every screen's select carries both order columns" {
@@ -322,6 +320,8 @@ class AppReadsSpec : StringSpec({
         Triple("docs.drive", DocsDriveReads, DocsDriveMachine),
         Triple("docs.document", DocsDocumentReads, DocsDocumentMachine),
         Triple("docs.editor", DocsEditorReads, DocsEditorMachine),
+        // PHOTOS' DUPLICATES (#1135): the core's clustering, asked as an app query.
+        Triple("photos.duplicates", DuplicatesReads, DuplicatesMachine),
         // TASKS (#1029 port). The trash is `tasks.trash`, an app query: the trash is the entity's.
         Triple("tasks.trash", TasksTrashMachine.reads, TasksTrashMachine.machine),
         Triple("tasks.list", TasksListReads, TasksListMachine),
@@ -367,10 +367,14 @@ class AppReadsSpec : StringSpec({
         // has one table, an app query several, and a table read and not
         // re-read on is a screen that goes stale on sync with nothing red.
         vaultTables.size shouldBeGreaterThan 35
-        vaultTables.containsAll(HomeReads.TABLES) shouldBe true
+        withClue("home reads ${HomeReads.TABLES - vaultTables}") {
+            vaultTables.containsAll(HomeReads.TABLES) shouldBe true
+        }
         queryScreens.forEach { (name, queries, machine) ->
             withClue(name) {
-                vaultTables.containsAll(queries.tables) shouldBe true
+                withClue("absent from the DDL: ${queries.tables - vaultTables}") {
+                    vaultTables.containsAll(queries.tables) shouldBe true
+                }
                 reactsTo(machine) shouldBe queries.tables
             }
         }

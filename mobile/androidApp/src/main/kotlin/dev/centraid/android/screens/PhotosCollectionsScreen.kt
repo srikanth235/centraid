@@ -70,7 +70,7 @@ import dev.centraid.shared.kit.CappedCount
  * reached from here.
  *
  * **LAID OUT AS THE SYSTEM PHOTOS APP LAYS OUT ITS COLLECTIONS TAB** (iOS 26):
- * titled, foldable sections — Memories as one wide card, Pinned as a strip of
+ * titled, foldable sections — Pinned as a strip of
  * square covers with the name on the picture, Albums as covers with the name
  * and count beneath, and Utilities as a grouped list. Which section a
  * row lands in is read off what the row already is (`member_owned`, the
@@ -158,11 +158,6 @@ public fun PhotosCollectionsScreen(
             data != null -> {
                 val layout = CollectionsLayout(data.shelves, data.doors)
                 val toggle = { key: String -> folded = if (key in folded) folded - key else folded + key }
-                layout.memories?.let { memories ->
-                    Section(PhotosCopy.PHOTOS_MEMORIES, "memories" in folded, { toggle("memories") }) {
-                        MemoriesCard(memories, onOpenDoor)
-                    }
-                }
                 if (layout.pinned.isNotEmpty()) {
                     Section(PhotosCopy.PHOTOS_PINNED, "pinned" in folded, { toggle("pinned") }) {
                         Strip {
@@ -222,7 +217,7 @@ public fun PhotosCollectionsScreen(
 }
 
 /** Every section's fold key — what "Collapse all" folds. */
-private val SECTION_KEYS: Set<String> = setOf("memories", "pinned", "albums", "utilities")
+private val SECTION_KEYS: Set<String> = setOf("pinned", "albums", "utilities")
 
 // --- the measures, and where each came from (iOS's `PhotosCollectionsView`) ---
 
@@ -250,7 +245,6 @@ private sealed interface CollectionsItem {
  * Duplicates, Archive and Trash; members' own albums are Albums.
  */
 private class CollectionsLayout(shelves: List<ShelfRow>, doors: List<CollectionsDoor>) {
-    var memories: CollectionsDoor? = null
     val pinned = mutableListOf<CollectionsItem>()
     val albums = mutableListOf<ShelfRow>()
     val utilities = mutableListOf<CollectionsItem>()
@@ -260,7 +254,6 @@ private class CollectionsLayout(shelves: List<ShelfRow>, doors: List<Collections
         var duplicates: CollectionsDoor? = null
         doors.forEach { door ->
             when (door.kind) {
-                CollectionsDoor.Kind.KIND_MEMORIES -> memories = door
                 CollectionsDoor.Kind.KIND_PLACES -> places = door
                 CollectionsDoor.Kind.KIND_DUPLICATES -> duplicates = door
                 CollectionsDoor.Kind.KIND_UNSPECIFIED -> Unit
@@ -459,47 +452,6 @@ private fun AlbumCard(row: ShelfRow, onOpen: (PhotoShelf) -> Unit, onDelete: () 
     }
 }
 
-/** The wide card Memories is drawn on: icon at the top, sentence at the foot. */
-@Composable
-private fun WideCard(iconKey: String, title: String, caption: String?, urgent: Boolean, spoken: String, onClick: () -> Unit) {
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .heightIn(min = WIDE_CARD_HEIGHT)
-            .clip(RoundedCornerShape(CARD_RADIUS))
-            .background(centraidColor("bgElev"))
-            .clickable(onClick = onClick)
-            .semantics(mergeDescendants = true) { contentDescription = spoken; role = Role.Button }
-            .padding(18.dp),
-    ) {
-        CentraidIcon(iconKey = iconKey, tint = centraidColor("textFaint"), size = 28.dp)
-        Spacer(Modifier.weight(1f).heightIn(min = 12.dp))
-        Text(title, style = centraidType("smallStrong"), color = centraidColor(if (urgent) "accent" else "text"))
-        if (caption != null) {
-            Text(caption, style = centraidType("small"), color = centraidColor("textFaint"))
-        }
-    }
-}
-
-/**
- * MEMORIES. "None yet", never "none": nothing in this build computes a memory
- * (`docs/photos/derived-ledger.md`), so a zero is a projection nobody wrote.
- */
-@Composable
-private fun MemoriesCard(door: CollectionsDoor, onOpen: (CollectionsDoor.Kind) -> Unit) {
-    val count = doorCount(door)
-    WideCard(
-        iconKey = "Sparkle",
-        title = count?.let { PhotosCopy.PHOTOS_MEMORIES_COUNT.replace("{count}", it.first) }
-            ?: PhotosCopy.PHOTOS_COLLECTIONS_NO_MEMORIES,
-        caption = if (count == null) PhotosCopy.PHOTOS_COLLECTIONS_NO_MEMORIES_CAPTION else null,
-        urgent = count?.third ?: false,
-        spoken = count?.let { PhotosCopy.PHOTOS_MEMORIES_SPOKEN.replace("{count}", it.second) }
-            ?: PhotosCopy.PHOTOS_MEMORIES_SPOKEN_NONE,
-        onClick = { onOpen(CollectionsDoor.Kind.KIND_MEMORIES) },
-    )
-}
-
 /** An empty section's card: icon and verb across the top, the sentence at the foot. */
 @Composable
 private fun EmptySectionCard(iconKey: String, title: String, caption: String, verb: String, onVerb: () -> Unit) {
@@ -656,7 +608,6 @@ private fun iconKeyOf(shelf: PhotoShelf): String {
     val album = shelf.album
     if (album != null) return "album"
     if (shelf.place != null) return "place"
-    if (shelf.memory != null) return "Sparkle"
     val view = shelf.state_view
     return when (view?.mode?.kind) {
         PhotoStateView.Mode.Kind.KIND_FAVORITES -> "heart"
@@ -669,7 +620,6 @@ private fun iconKeyOf(shelf: PhotoShelf): String {
 
 private fun iconKeyOf(kind: CollectionsDoor.Kind): String = when (kind) {
     CollectionsDoor.Kind.KIND_PLACES -> "place"
-    CollectionsDoor.Kind.KIND_MEMORIES -> "Sparkle"
     CollectionsDoor.Kind.KIND_DUPLICATES -> "dupe"
     CollectionsDoor.Kind.KIND_UNSPECIFIED -> "album"
 }
@@ -683,7 +633,6 @@ private fun iconKeyOf(kind: CollectionsDoor.Kind): String = when (kind) {
  */
 private fun doorTitle(kind: CollectionsDoor.Kind): String = when (kind) {
     CollectionsDoor.Kind.KIND_PLACES -> PhotosCopy.PHOTOS_PLACES
-    CollectionsDoor.Kind.KIND_MEMORIES -> PhotosCopy.PHOTOS_MEMORIES
     CollectionsDoor.Kind.KIND_DUPLICATES -> PhotosCopy.PHOTOS_DUPLICATES
     CollectionsDoor.Kind.KIND_UNSPECIFIED -> ""
 }

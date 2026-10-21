@@ -50,8 +50,8 @@ public object SearchContainers {
 
     private val KINDS: Map<Pair<String, String>, Kind> = mapOf(
         ("notebook" to "notes") to Kind(SharedCopy.SEARCH_KIND_NOTEBOOK, "notebook", "Book"),
-        ("core.collection" to "photos") to Kind(SharedCopy.SEARCH_KIND_ALBUM, "album", "Image"),
+        ("album" to "photos") to Kind(SharedCopy.SEARCH_KIND_ALBUM, "album", "Image"),
         ("project" to "tasks") to Kind(SharedCopy.SEARCH_KIND_PROJECT, "project", "List"),
-        ("core.concept" to "docs") to Kind(SharedCopy.SEARCH_KIND_FOLDER, "folder", "Folder"),
+        ("folder" to "docs") to Kind(SharedCopy.SEARCH_KIND_FOLDER, "folder", "Folder"),
     )
 }

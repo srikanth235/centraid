@@ -265,8 +265,8 @@ public object HomeSearchMachine : ScreenMachine<HomeSearchState, HomeSearchEvent
         "person" -> SharedCopy.SEARCH_KIND_PERSON
         "event" -> SharedCopy.SEARCH_KIND_EVENT
         "task" -> SharedCopy.SEARCH_KIND_TASK
-        "core.content_item", "media.asset" -> SharedCopy.SEARCH_KIND_PHOTO
-        "core.document" -> SharedCopy.SEARCH_KIND_DOCUMENT
+        "photo" -> SharedCopy.SEARCH_KIND_PHOTO
+        "document" -> SharedCopy.SEARCH_KIND_DOCUMENT
         CHAT_THREAD -> SharedCopy.SEARCH_KIND_CHAT
         else -> ""
     }
@@ -281,8 +281,8 @@ public object HomeSearchMachine : ScreenMachine<HomeSearchState, HomeSearchEvent
         "person" -> "person"
         "event" -> "event"
         "task" -> "task"
-        "core.content_item", "media.asset" -> "photo"
-        "core.document" -> "document"
+        "photo" -> "photo"
+        "document" -> "document"
         CHAT_THREAD -> CHAT_THREAD_NOUN
         else -> ""
     }

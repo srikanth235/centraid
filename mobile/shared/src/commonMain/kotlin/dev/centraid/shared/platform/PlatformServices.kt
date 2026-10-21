@@ -379,7 +379,7 @@ public interface MediaLibrary {
      *
      * **There is no digest here** (#1025 S4, D-1025-S4-6). This carried a
      * `sha256` documented as "THE identity", and it was not one: the identity of
-     * a member's bytes is `core_content_item.content_hash`, which is BLAKE3 and
+     * a member's bytes is `blob.hash`, which is BLAKE3 and
      * is UNIQUE — and neither `CryptoKit` nor `MessageDigest` offers BLAKE3, so
      * the shell was computing a different function and calling it by the vault's
      * name. Enrolling an asset means streaming its bytes into the core through
@@ -471,7 +471,7 @@ public interface MediaLibrary {
     }
 
     /**
-     * `media_asset.kind`'s two values a camera roll can produce.
+     * `photo.form`'s two values a camera roll can produce.
      *
      * `audio` and `scan` are not here because a camera roll does not make them:
      * they reach the vault through the voice memo and document doors.

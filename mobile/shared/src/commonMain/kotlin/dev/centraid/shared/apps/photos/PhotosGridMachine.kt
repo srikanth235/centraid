@@ -13,7 +13,6 @@ import centraid.screen.v1.PhotosGridEvent
 import centraid.screen.v1.PhotosGridState
 import centraid.screen.v1.PhotosImportBanner
 import dev.centraid.design.copy.PhotosCopy
-import dev.centraid.shared.kit.jsonString
 import dev.centraid.shared.nav.ScreenIds
 import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.screen.ScreenEffect
@@ -528,7 +527,7 @@ public object PhotosGridMachine : ScreenMachine<PhotosGridState, PhotosGridEvent
                     picked.map { assetId ->
                         ScreenEffect.SubmitWrite(
                             command = PhotoLightboxMachine.DELETE_COMMAND,
-                            inputJson = "{\"asset_id\":" + jsonString(assetId) + "}",
+                            inputJson = PhotoWrites.idOnly(assetId),
                             invokeKey = PhotoLightboxMachine.DELETE_COMMAND + ":" + assetId,
                         )
                     },
@@ -824,27 +823,27 @@ public object PhotosGridMachine : ScreenMachine<PhotosGridState, PhotosGridEvent
     }
 
     /**
-     * WHAT A TABLE MOVING MEANS HERE. `media_asset` is the library; `core_tag`
-     * is the star, which only the Favorites filter reads; the collection
-     * tables are the album sheet's list, which only matters while it is open.
+     * WHAT A TABLE MOVING MEANS HERE. `photo` is the library; `entity` is a
+     * photograph's trash and `edge` its archive and its star (and an album's
+     * members), so each moves the grid too; `container` is the album sheet's list,
+     * which only matters while it is open.
      */
     private fun changed(
         state: PhotosGridState,
         rows: PhotosGridEvent.RowsChanged,
-    ): Step<PhotosGridState> = when {
-        rows.table == STAR_TABLE ->
-            if (state.filter == PhotosGridState.Filter.FILTER_FAVORITES) {
-                request(state, REFRESH)
-            } else {
-                Step(state)
-            }
+    ): Step<PhotosGridState> {
+        val choices = if (state.album_choice_open && AlbumChoice.movesChoices(rows.table)) {
+            AlbumChoice.openEffects()
+        } else {
+            emptyList()
+        }
+        return when {
+            rows.table == ALBUM_TABLE -> Step(state, choices)
 
-        AlbumChoice.movesChoices(rows.table) ->
-            if (state.album_choice_open) Step(state, AlbumChoice.openEffects()) else Step(state)
+            rows.asset_ids.isNotEmpty() && rows.asset_ids.none { it in shownIds(state) } -> Step(state, choices)
 
-        rows.asset_ids.isNotEmpty() && rows.asset_ids.none { it in shownIds(state) } -> Step(state)
-
-        else -> request(state, if (state.data_ == null) FIRST else REFRESH)
+            else -> request(state, if (state.data_ == null) FIRST else REFRESH).let { it.copy(effects = it.effects + choices) }
+        }
     }
 
     /**
@@ -865,18 +864,16 @@ public object PhotosGridMachine : ScreenMachine<PhotosGridState, PhotosGridEvent
     )
 
     /**
-     * `media.set_favorite`, the lightbox's own verb — keyed on the value AND
-     * the asset, with the asset LAST so a settle names the photograph it was
-     * about ([PhotosReads.settled]).
+     * The shared `flag.set` / `flag.clear` of the `starred` flag, the lightbox's own
+     * verb — keyed on the command, the flag AND the photograph, with the photograph
+     * LAST so a settle names the one it was about ([PhotosReads.settled]).
      */
-    private fun favoriteWrite(assetId: String, on: Boolean): ScreenEffect.SubmitWrite {
-        val value = if (on) "1" else "0"
-        return ScreenEffect.SubmitWrite(
-            command = PhotoLightboxMachine.FAVORITE_COMMAND,
-            inputJson = "{\"asset_id\":" + jsonString(assetId) + ",\"favorite\":" + value + "}",
-            invokeKey = PhotoLightboxMachine.FAVORITE_COMMAND + ":" + value + ":" + assetId,
+    private fun favoriteWrite(assetId: String, on: Boolean): ScreenEffect.SubmitWrite =
+        ScreenEffect.SubmitWrite(
+            command = PhotoWrites.flagCommand(on),
+            inputJson = PhotoWrites.flag(assetId, PhotoWrites.STARRED),
+            invokeKey = PhotoWrites.flagCommand(on) + ":" + PhotoWrites.STARRED + ":" + assetId,
         )
-    }
 
     /**
      * One cell's [PhotoCell.Held], changed in place.
@@ -951,12 +948,10 @@ public object PhotosGridMachine : ScreenMachine<PhotosGridState, PhotosGridEvent
     }
 
     /**
-     * `media_asset` — the roll's rows. Not `media_asset_phash`, which is a
-     * duplicates hint nothing on this grid draws.
-     *
-     * `core_tag` and the collection tables are passed on with their NAME and
-     * no ids: the star is the Favorites filter's business and the albums the
-     * sheet's, and only the reducer knows whether either is on screen.
+     * `photo` — the roll's rows — and the tables a photograph is also: `entity`
+     * (its trash) and `edge` (its archive, its star and its albums), passed on with
+     * their NAME and no ids: only the reducer knows whether either is on screen.
+     * `container` is the albums, the sheet's business.
      */
     override fun rowsChanged(
         table: String,
@@ -964,7 +959,7 @@ public object PhotosGridMachine : ScreenMachine<PhotosGridState, PhotosGridEvent
     ): PhotosGridEvent? = when {
         table == TABLE ->
             PhotosGridEvent(rows_changed = PhotosGridEvent.RowsChanged(asset_ids = keys, table = table))
-        table == STAR_TABLE || AlbumChoice.movesChoices(table) ->
+        table in MOVING_TABLES || table == ALBUM_TABLE ->
             PhotosGridEvent(rows_changed = PhotosGridEvent.RowsChanged(table = table))
         else -> null
     }
@@ -972,7 +967,7 @@ public object PhotosGridMachine : ScreenMachine<PhotosGridState, PhotosGridEvent
     /**
      * THE MEMBER'S RULE CHANGED (#1080): every cell's [PhotoCell.Held] was
      * derived under the old one, so the grid reads its page again — the
-     * `media_asset` re-read with no ids, which no cell can be excluded from.
+     * `photo` re-read with no ids, which no cell can be excluded from.
      * What the labels say is `LinkConditions`, which the rule's writer updated
      * before this was asked.
      */
@@ -980,20 +975,23 @@ public object PhotosGridMachine : ScreenMachine<PhotosGridState, PhotosGridEvent
         PhotosGridEvent(rows_changed = PhotosGridEvent.RowsChanged(table = TABLE))
 
     /**
-     * `media_asset` — the roll's rows, AND the table the core names when a
-     * window's files land (D-1025-S7-20).
+     * `photo` — the roll's rows, AND the table the core names when a window's
+     * files land (D-1025-S7-20).
      *
      * There used to be a second table here, `core_content_item`, with an event
      * kind of its own: the core had content ids to give and this grid is keyed
-     * by asset ids, so the ids matched nothing and the only honest reduction
+     * by photograph ids, so the ids matched nothing and the only honest reduction
      * was "re-read everything". The seat does the join now — a landed byte is a
      * row — so there is one table, one event, and a cell that fills in because
      * its own row changed.
      */
-    private const val TABLE: String = "media_asset"
+    private const val TABLE: String = "photo"
 
-    /** Where a star lives (#916): a `core_tag` row on the flags scheme. */
-    private const val STAR_TABLE: String = "core_tag"
+    /** A photograph's trash, archive, star and albums move the grid without moving `photo`. */
+    private val MOVING_TABLES: Set<String> = setOf("entity", "edge")
+
+    /** The albums themselves. */
+    private const val ALBUM_TABLE: String = "container"
 
     private fun shownIds(state: PhotosGridState): Set<String> =
         state.data_?.cells?.map { it.asset_id }?.toSet() ?: emptySet()

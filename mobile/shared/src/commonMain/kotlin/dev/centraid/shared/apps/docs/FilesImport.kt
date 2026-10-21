@@ -253,12 +253,12 @@ public object FilesImport {
      * vault would not say, and then nothing is trashed (a read planned against a half-read table).
      */
     private suspend fun statsOf(core: CentraidCore): Map<String, Map<String, String>>? {
-        val origins = PhonePages.all(core, "files.origins", listOf("id", "ref"), "origin", "id", "system = ?", listOf(Value(text = "files")))
+        val origins = PhonePages.all(core, name = "files.origins", select = listOf("id", "ref"), "origin", "id", "system = ?", listOf(Value(text = "files")))
             ?: return null
         val refOf = origins.associate { it.text(0) to it.text(1) }
         val sources = PhonePages.all(
             core,
-            "files.sources",
+            name = "files.sources",
             listOf("id", "origin_id", "external_id", "stated"),
             "source",
             "id",
@@ -282,7 +282,7 @@ public object FilesImport {
     public suspend fun followed(core: CentraidCore): List<FollowedFolder>? {
         val origins = PhonePages.all(
             core,
-            "files.followed",
+            name = "files.followed",
             listOf("id", "ref", "label"),
             "origin",
             "id",

@@ -44,7 +44,7 @@ enum ChatRouting {
             let app = identifier.split(separator: ".").first.map(String.init) ?? ""
             return app.isEmpty ? nil : app
         case .photos, .photoShelf, .photoLightbox, .photoPicker, .places,
-             .photosMemories, .photoDuplicates, .photoDuplicateReview, .photoEditor:
+             .photoDuplicates, .photoDuplicateReview, .photoEditor:
             return AppIds.shared.PHOTOS
         }
     }

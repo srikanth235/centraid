@@ -168,11 +168,7 @@
             "maxLength": 200000
           }
         },
-        "required": [
-          "title",
-          "blob",
-          "media_type"
-        ],
+        "required": ["title", "blob", "media_type"],
         "additionalProperties": false
       },
       "output": {
@@ -211,19 +207,14 @@
           },
           "media_type": {
             "type": "string",
-            "enum": [
-              "text/plain",
-              "text/markdown"
-            ]
+            "enum": ["text/plain", "text/markdown"]
           },
           "folder_id": {
             "type": "string",
             "minLength": 1
           }
         },
-        "required": [
-          "title"
-        ],
+        "required": ["title"],
         "additionalProperties": false
       },
       "output": {
@@ -257,10 +248,7 @@
             "minLength": 1
           }
         },
-        "required": [
-          "id",
-          "title"
-        ],
+        "required": ["id", "title"],
         "additionalProperties": false
       },
       "output": {
@@ -294,9 +282,7 @@
             "minLength": 1
           }
         },
-        "required": [
-          "id"
-        ],
+        "required": ["id"],
         "additionalProperties": false
       },
       "output": {
@@ -326,9 +312,7 @@
             "minLength": 1
           }
         },
-        "required": [
-          "id"
-        ],
+        "required": ["id"],
         "additionalProperties": false
       },
       "output": {
@@ -358,9 +342,7 @@
             "minLength": 1
           }
         },
-        "required": [
-          "id"
-        ],
+        "required": ["id"],
         "additionalProperties": false
       },
       "output": {
@@ -390,9 +372,7 @@
             "minLength": 1
           }
         },
-        "required": [
-          "id"
-        ],
+        "required": ["id"],
         "additionalProperties": false
       },
       "output": {
@@ -419,9 +399,7 @@
         "properties": {
           "kind": {
             "type": "string",
-            "enum": [
-              "document"
-            ]
+            "enum": ["document"]
           },
           "due_only": {
             "type": "boolean"
@@ -458,15 +436,10 @@
           },
           "flag": {
             "type": "string",
-            "enum": [
-              "starred"
-            ]
+            "enum": ["starred"]
           }
         },
-        "required": [
-          "id",
-          "flag"
-        ],
+        "required": ["id", "flag"],
         "additionalProperties": false
       },
       "output": {
@@ -497,15 +470,10 @@
           },
           "flag": {
             "type": "string",
-            "enum": [
-              "starred"
-            ]
+            "enum": ["starred"]
           }
         },
-        "required": [
-          "id",
-          "flag"
-        ],
+        "required": ["id", "flag"],
         "additionalProperties": false
       },
       "output": {
@@ -539,10 +507,7 @@
             "minLength": 1
           }
         },
-        "required": [
-          "id",
-          "label"
-        ],
+        "required": ["id", "label"],
         "additionalProperties": false
       },
       "output": {
@@ -576,10 +541,7 @@
             "minLength": 1
           }
         },
-        "required": [
-          "id",
-          "label"
-        ],
+        "required": ["id", "label"],
         "additionalProperties": false
       },
       "output": {
@@ -616,9 +578,7 @@
             "minLength": 1
           }
         },
-        "required": [
-          "id"
-        ],
+        "required": ["id"],
         "additionalProperties": false
       },
       "output": {
@@ -666,10 +626,7 @@
             "maxLength": 200000
           }
         },
-        "required": [
-          "id",
-          "blob"
-        ],
+        "required": ["id", "blob"],
         "additionalProperties": false
       },
       "output": {
@@ -703,10 +660,7 @@
             "minimum": 1
           }
         },
-        "required": [
-          "id",
-          "seq"
-        ],
+        "required": ["id", "seq"],
         "additionalProperties": false
       },
       "output": {
@@ -738,9 +692,7 @@
           },
           "kind": {
             "type": "string",
-            "enum": [
-              "folder"
-            ]
+            "enum": ["folder"]
           },
           "title": {
             "type": "string",
@@ -751,10 +703,7 @@
             "minLength": 1
           }
         },
-        "required": [
-          "kind",
-          "title"
-        ],
+        "required": ["kind", "title"],
         "additionalProperties": false
       },
       "output": {
@@ -788,10 +737,7 @@
             "minLength": 1
           }
         },
-        "required": [
-          "id",
-          "title"
-        ],
+        "required": ["id", "title"],
         "additionalProperties": false
       },
       "output": {
@@ -821,9 +767,7 @@
             "minLength": 1
           }
         },
-        "required": [
-          "id"
-        ],
+        "required": ["id"],
         "additionalProperties": false
       },
       "output": {
@@ -867,10 +811,7 @@
             "type": "array"
           },
           "root_folder_id": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "truncated": {
             "type": "boolean"
@@ -894,9 +835,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "term"
-        ],
+        "required": ["term"],
         "additionalProperties": false
       },
       "output": {
@@ -922,9 +861,7 @@
             "minLength": 1
           }
         },
-        "required": [
-          "document_id"
-        ],
+        "required": ["document_id"],
         "additionalProperties": false
       },
       "output": {
@@ -950,9 +887,7 @@
             "minLength": 1
           }
         },
-        "required": [
-          "document_id"
-        ],
+        "required": ["document_id"],
         "additionalProperties": false
       },
       "output": {
@@ -1036,9 +971,7 @@
   ],
   "seats": {
     "byteBearing": true,
-    "originActs": [
-      "scanner"
-    ],
+    "originActs": ["scanner"],
     "disabledOn": [],
     "northStar": "google-drive"
   },

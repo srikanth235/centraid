@@ -374,27 +374,6 @@
       "binary": "contracts/screens/photos-lightbox/withheld-by-rule.bin"
     },
     {
-      "case": "computed-and-empty",
-      "screen": "photos-memories",
-      "type": "centraid.screen.v1.PhotosMemoriesState",
-      "textproto": "contracts/screens/photos-memories/computed-and-empty.textproto",
-      "binary": "contracts/screens/photos-memories/computed-and-empty.bin"
-    },
-    {
-      "case": "not-yet-computed",
-      "screen": "photos-memories",
-      "type": "centraid.screen.v1.PhotosMemoriesState",
-      "textproto": "contracts/screens/photos-memories/not-yet-computed.textproto",
-      "binary": "contracts/screens/photos-memories/not-yet-computed.bin"
-    },
-    {
-      "case": "title-hint-absent",
-      "screen": "photos-memories",
-      "type": "centraid.screen.v1.PhotosMemoriesState",
-      "textproto": "contracts/screens/photos-memories/title-hint-absent.textproto",
-      "binary": "contracts/screens/photos-memories/title-hint-absent.bin"
-    },
-    {
       "case": "already-in-album",
       "screen": "photos-picker",
       "type": "centraid.screen.v1.PhotoPickerState",
@@ -463,13 +442,6 @@
       "type": "centraid.screen.v1.PhotoShelfState",
       "textproto": "contracts/screens/photos-shelf/album-selecting.textproto",
       "binary": "contracts/screens/photos-shelf/album-selecting.bin"
-    },
-    {
-      "case": "memory-empty-but-titled",
-      "screen": "photos-shelf",
-      "type": "centraid.screen.v1.PhotoShelfState",
-      "textproto": "contracts/screens/photos-shelf/memory-empty-but-titled.textproto",
-      "binary": "contracts/screens/photos-shelf/memory-empty-but-titled.bin"
     },
     {
       "case": "trash-states-its-window",

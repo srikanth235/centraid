@@ -123,7 +123,7 @@ class AbiContractSpec : StringSpec({
                         request_id = 1,
                         error = Error(
                             code = ErrorCode.ERROR_CODE_INTERNAL,
-                            detail = "UNIQUE constraint failed: media_asset.content_id",
+                            detail = "UNIQUE constraint failed: photo.blob",
                             diagnostic_id = "diag-2",
                             sentence = "",
                         ),

@@ -52,15 +52,16 @@ public class DuplicatesBridge {
     /**
      * Put this screen on the session's core, and start publishing.
      *
-     * The attach is the session's ([HomeSession.attachScreen]) because the core
+     * The attach is the session's ([HomeSession.attachQueries]) because the core
      * is: R-1020-24 is one core per process, so a bridge that opened its own
      * would be refused by `SingleHandleGuard`.
      */
     public fun attach(session: HomeSession) {
-        // THE FOLD, AND THE ONE THING THAT ROUTES SYNC. `attachScreen` does two
-        // jobs — serve this screen's `ReadPage` effects, and `changes.route`
-        // the host so a vault change moves the shelf without a tap.
-        session.attachScreen(host, DuplicatesReads)
+        // THE FOLD, AND THE ONE THING THAT ROUTES SYNC. `attachQueries` does two
+        // jobs — serve this screen's `ReadPage` effects through the core's
+        // `photos.duplicates`, and `changes.route` the host so a vault change moves
+        // the shelf without a tap.
+        session.attachQueries(host, DuplicatesReads)
         // THE SECOND STATEMENT, THROUGH `attachReads` AND NOT A SECOND
         // `attachScreen`. The route is registration with no removal by design,
         // so a host routed twice answers every change event with two re-reads

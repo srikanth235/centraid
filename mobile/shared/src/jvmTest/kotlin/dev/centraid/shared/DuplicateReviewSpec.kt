@@ -8,6 +8,7 @@ import centraid.screen.v1.DuplicateReviewData
 import centraid.screen.v1.DuplicateReviewEvent
 import centraid.screen.v1.DuplicateReviewState
 import centraid.screen.v1.PhotoCell
+import dev.centraid.shared.apps.photos.DuplicateClusterMembers
 import dev.centraid.shared.apps.photos.DuplicateReviewLeg
 import dev.centraid.shared.apps.photos.DuplicateReviewMachine
 import dev.centraid.shared.apps.photos.DuplicateReviewReads
@@ -169,28 +170,28 @@ class DuplicateReviewSpec : StringSpec({
             DuplicateReviewEvent(resolve = DuplicateReviewEvent.ResolveRequested()),
         )
         val writes = step.effects.map { it as ScreenEffect.SubmitWrite }
-        // ONE COMMAND PER ASSET. The vault registers `media.delete_asset` over
-        // one `asset_id`; a bulk verb composed here would be a shell naming a
+        // ONE COMMAND PER ASSET. The vault registers `entity.trash` over
+        // one `id`; a bulk verb composed here would be a shell naming a
         // command the vault does not hold, which is how `notes.save` reached a
         // member's screen as "That request does not make sense to this build".
         writes.map { it.inputJson } shouldBe listOf(
-            "{\"asset_id\":\"a-1\"}",
-            "{\"asset_id\":\"a-3\"}",
+            "{\"id\":\"a-1\"}",
+            "{\"id\":\"a-3\"}",
         )
         // TRASH, NEVER PURGE. A duplicate sweep sends copies where the member
-        // can change their mind; `media.purge_asset` is the permanent one and
+        // can change their mind; `entity.purge` is the permanent one and
         // this screen does not offer it.
         withClue(writes.map { it.command }) {
             writes.all { it.command == DuplicateReviewMachine.TRASH_COMMAND } shouldBe true
             writes.none { it.command.contains("purge") } shouldBe true
         }
-        DuplicateReviewMachine.TRASH_COMMAND shouldBe "media.delete_asset"
+        DuplicateReviewMachine.TRASH_COMMAND shouldBe "entity.trash"
         // THE INVOKE KEY IS THE ASSET, NOT AN ORDINAL. The key is the
         // correlation key an answer is paired with; an ordinal is only stable
         // for a caller that makes the same sequence every time.
         writes.map { it.invokeKey } shouldBe listOf(
-            "media.delete_asset:a-1",
-            "media.delete_asset:a-3",
+            "entity.trash:a-1",
+            "entity.trash:a-3",
         )
         // The kept copy is not in the list, by ID and not by position: a list
         // re-read between the pick and the press can be in a different order,
@@ -455,8 +456,9 @@ class DuplicateReviewSpec : StringSpec({
             null,
         ).shouldNotBeNull()
         query.from shouldBe leg.table
-        query.from shouldBe "core_collection_entry"
-        query.bind.map { it.text } shouldBe listOf("media.asset", "a-1", "a-2")
+        query.from shouldBe "edge"
+        // Both halves of "placed": filed in an album (`contains`) and starred.
+        query.bind.map { it.text } shouldBe listOf("a-1", "a-2", "a-1", "a-2")
         query.where_.shouldNotBeNull() shouldNotContain "a-1"
         val order = query.order.shouldNotBeNull()
         withClue(query.select) {
@@ -467,12 +469,13 @@ class DuplicateReviewSpec : StringSpec({
         // screen's question has a single answer per photograph.
         val placed = leg.arrived(
             listOf(
-                Row(values = listOf(Value(text = "e-1"), Value(text = "a-1"))),
-                Row(values = listOf(Value(text = "e-2"), Value(text = "a-1"))),
+                Row(values = listOf(Value(text = "alb-1"), Value(text = "a-1"), Value(text = "contains"))),
+                Row(values = listOf(Value(text = "alb-2"), Value(text = "a-1"), Value(text = "contains"))),
+                Row(values = listOf(Value(text = "a-2"), Value(text = "flag:starred"), Value(text = "tagged"))),
             ),
             nextCursor = null,
         ).placements.shouldNotBeNull()
-        placed.placed_asset_ids shouldBe listOf("a-1")
+        placed.placed_asset_ids shouldBe listOf("a-1", "a-2")
     }
 
     // --- The read law -----------------------------------------------------
@@ -535,13 +538,17 @@ class DuplicateReviewSpec : StringSpec({
     }
 
     "rowsChanged answers for its own table, and only for members on the screen" {
-        DuplicateReviewMachine.rowsChanged("media_asset_phash", listOf("a-1")).shouldBeNull()
+        DuplicateReviewMachine.rowsChanged("derivative", listOf("a-1")).shouldBeNull()
+        DuplicateReviewMachine.rowsChanged("media_asset", listOf("a-1")).shouldBeNull()
         val state = loaded(listOf(member("a-1"), member("a-2")))
-        val foreign = DuplicateReviewMachine.rowsChanged("media_asset", listOf("z-9"))
+        val foreign = DuplicateReviewMachine.rowsChanged("photo", listOf("z-9"))
             .shouldNotBeNull()
         DuplicateReviewMachine.reduce(state, foreign).effects.shouldBeEmpty()
-        val mine = DuplicateReviewMachine.rowsChanged("media_asset", listOf("a-2"))
+        val mine = DuplicateReviewMachine.rowsChanged("photo", listOf("a-2"))
             .shouldNotBeNull()
+        // A trash is an `entity` change, and so is a placement an `edge` one.
+        DuplicateReviewMachine.rowsChanged("entity", listOf("a-2")).shouldNotBeNull()
+        DuplicateReviewMachine.rowsChanged("edge", emptyList()).shouldNotBeNull()
         DuplicateReviewMachine.reduce(state, mine).effects shouldBe listOf(
             ScreenEffect.ReadPage(DuplicateReviewMachine.SCREEN_ID, afterCursor = null),
         )
@@ -554,15 +561,22 @@ class DuplicateReviewSpec : StringSpec({
         // An unbound read here would offer a member their whole library as one
         // set to delete from.
         DuplicateReviewReads.query(DuplicateReviewMachine.initial(), null).shouldBeNull()
+        // A cluster the core has not named any members for is no statement either.
+        DuplicateReviewReads.query(
+            DuplicateReviewMachine.initial().copy(cluster_id = "cluster-0"),
+            null,
+        ).shouldBeNull()
+        // The members are the core's (`photos.duplicates`), handed over by the bridge.
+        DuplicateClusterMembers.remember("cluster-1", listOf("a-2", "a-1"))
         val query = DuplicateReviewReads.query(
             DuplicateReviewMachine.initial().copy(cluster_id = "cluster-1"),
             null,
         ).shouldNotBeNull()
         query.from shouldBe DuplicateReviewReads.table
-        query.from shouldBe "media_asset"
-        query.bind.map { it.text } shouldBe listOf("cluster-1")
+        query.from shouldBe "photo"
+        query.bind.map { it.text } shouldBe listOf("a-1", "a-2")
         val predicate = query.where_.shouldNotBeNull()
-        predicate shouldNotContain "cluster-1"
+        predicate shouldNotContain "a-1"
         // ONLY LIVE ASSETS RIDE A CLUSTER CARD. A trashed member of an old
         // cluster is not something to offer trashing again — and after a
         // resolve it is exactly what the re-read must not bring back.

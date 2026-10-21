@@ -444,7 +444,7 @@ public class HomeSession private constructor(
      * A SECOND READ FOR A SCREEN THAT IS ALREADY ATTACHED (#1029, photos port).
      *
      * **The read door has no join clause**, and two screens need one. A place
-     * card is `core_place`'s name, pin and zone beside `media_asset`'s count
+     * card is `place`'s pin and zone and `entity`'s name beside `photo`'s count
      * and cover; a person row is `core_party`'s display name beside
      * `media_face_region`'s count. Neither is answerable in one statement, so
      * those screens run two passes and merge the answers into one state.

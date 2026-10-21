@@ -15,18 +15,13 @@ import centraid.screen.v1.SearchMatch
 import centraid.screen.v1.SearchResting
 import centraid.screen.v1.SearchTopHit
 import dev.centraid.shared.sync.LinkConditions
-import kotlin.math.asin
-import kotlin.math.cos
-import kotlin.math.min
-import kotlin.math.sin
-import kotlin.math.sqrt
 
 /**
  * WHAT SEARCH READS, AND WHAT IT MAKES OF THE ROWS (#1029, the photos port).
  *
  * v0's `search-hits.ts` is the spec: a query reaches **places** (the member's
- * name, the gazetteer's, and the home band), **albums**, **labels** (concepts
- * tagged on a photograph) and **text** (the caption, and now the words
+ * name and the gazetteer's), **albums**, **labels** (tags
+ * on a photograph) and **text** (the caption, and now the words
  * recognised in the picture and a video's transcript), and the answer is two
  * things — the places and albums it NAMED, as doors above the grid, and the
  * photographs all of them REACH, as the grid. Typing "Tahoe" returns the
@@ -49,7 +44,7 @@ import kotlin.math.sqrt
  * rows of two different tables with a count each, and a place is matched on
  * words the vault does not store as a column (the home band is arithmetic on
  * two coordinates). So `PhotosSearchBridge` runs the legs here in order — the
- * entities, their counts, then ONE `media_asset` page whose predicate reaches
+ * entities, their counts, then ONE `photo` page whose predicate reaches
  * every entity it matched through `IN (SELECT …)`, and the photographs the core
  * named by id — and folds them into one `DataArrived`. Everything that is DATA
  * stays in this file, provable with no vault; the bridge is only the trip.
@@ -78,10 +73,9 @@ public object PhotosSearchReads {
     public const val ENTITY_LIMIT: Int = 50
 
     /**
-     * Every place row, for the vocabulary. The home anchor can be a place with
-     * no photograph behind it, so this leg is NOT narrowed to places with
-     * photographs — a narrowed read would lose "near home" the day the member
-     * has not photographed their own house.
+     * Every place, for the vocabulary: a place with no photograph behind it is
+     * still a name a member typed once, and the shelf it opens is empty, not
+     * missing.
      */
     public const val PLACE_LIMIT: Int = 500
 
@@ -163,59 +157,58 @@ public object PhotosSearchReads {
      */
     private const val LIVE: String = PhotoFold.LIVE
 
-    private const val LIVE_ASSETS: String = "SELECT asset_id FROM media_asset WHERE $LIVE"
+    private const val LIVE_ASSETS: String = "SELECT id FROM photo WHERE $LIVE"
 
     /**
-     * `photos.search.places` — EVERY place row, because the words a place
-     * answers to are not all columns: the gazetteer name lives inside
-     * `address_json` and the home band is a distance from the Home place.
-     * [matchPlaces] decides, the way v0's `placeVocabulary` did.
+     * `photos.search.places` — the places' NAMES, from their `entity`: the member's
+     * own word is the title, and the trash is the entity's. The gazetteer's
+     * nearest city is the `place` row's ([placeGeoQuery]); the words a place
+     * answers to are decided by [matchPlaces], the way v0's `placeVocabulary` did.
      */
     public fun placesQuery(): PageQuery = PageQuery(
         name = "photos.search.places",
-        select = listOf(
-            "place_id",
-            "name",
-            "kind",
-            "geo_lat",
-            "geo_lng",
-            // THE GAZETTEER'S NAME, read by the vault rather than parsed here:
-            // `commonMain` carries no JSON dependency, and `address_json` is
-            // `json_valid` by its own CHECK.
-            "json_extract(address_json, '$.gazetteer.name') AS gazetteer",
-        ),
-        from = "core_place",
-        order = PageOrder(sort_column = "place_id", pk_column = "place_id"),
+        select = listOf("id", "title"),
+        from = "entity",
+        where_ = "kind = 'place' AND deleted_at IS NULL",
+        order = PageOrder(sort_column = "id", pk_column = "id"),
     )
 
     /**
-     * FLAGS ARE NOT LABELS. The star is the `starred` concept in the flags
-     * scheme (#916), and a member searching "star" meant a word, not every
-     * favourite they own.
+     * `photos.search.placeGeo` — each place's gazetteer name (`locality`, written by
+     * `place.locate`) beside the name. The model keeps no home place (R-1135-5-15),
+     * so no home words are vocabulary.
      */
-    private const val NOT_A_FLAG: String =
-        "scheme_id NOT IN (SELECT scheme_id FROM core_concept_scheme WHERE uri = ?)"
-
-    private const val TAGGED_ON_A_LIVE_PHOTO: String =
-        "concept_id IN (SELECT concept_id FROM core_tag WHERE target_type = ? " +
-            "AND target_id IN ($LIVE_ASSETS))"
+    public fun placeGeoQuery(): PageQuery = PageQuery(
+        name = "photos.search.placeGeo",
+        select = listOf("id", "locality"),
+        from = "place",
+        order = PageOrder(sort_column = "id", pk_column = "id"),
+    )
 
     /**
-     * `photos.search.labels` — concepts ACTUALLY on a photograph whose label
+     * `photos.search.labels` — tags ACTUALLY on a live photograph whose title
      * holds a word of the query. A label is a reason under the grid and never
      * a door above it: there is no shelf of one label's photographs.
+     *
+     * FLAGS ARE NOT LABELS: the star and the archive are entities of kind `flag`
+     * and a tag is one of kind `tag`, so `kind = 'tag'` is the whole of the rule
+     * (#916), and a member searching "star" meant a word, not every favourite they
+     * own.
      */
     public fun labelsQuery(words: List<String>): PageQuery {
-        val (labels, binds) = anyWord("pref_label", words)
+        val (labels, binds) = anyWord("title", words)
         return PageQuery(
             name = "photos.search.labels",
-            select = listOf("concept_id", "pref_label"),
-            from = "core_concept",
-            where_ = "$labels AND $NOT_A_FLAG AND $TAGGED_ON_A_LIVE_PHOTO",
-            bind = binds + Value(text = FLAGS_SCHEME_URI) + Value(text = ASSET_TARGET_TYPE),
-            order = PageOrder(sort_column = "pref_label", pk_column = "concept_id"),
+            select = listOf("id", "title"),
+            from = "entity",
+            where_ = "kind = 'tag' AND deleted_at IS NULL AND $labels AND $TAGGED_ON_A_LIVE_PHOTO",
+            bind = binds,
+            order = PageOrder(sort_column = "title", pk_column = "id"),
         )
     }
+
+    private const val TAGGED_ON_A_LIVE_PHOTO: String =
+        "id IN (SELECT to_id FROM edge WHERE rel = 'tagged' AND from_id IN ($LIVE_ASSETS))"
 
     // -----------------------------------------------------------------------
     // The count legs, one per kind of door.
@@ -230,27 +223,30 @@ public object PhotosSearchReads {
         if (arms.isEmpty()) return null
         return PageQuery(
             name = "photos.search.placeCounts",
-            select = listOf("asset_id", "place_id"),
+            select = listOf("id", "place_id"),
             from = PhotosSearchMachine.TABLE,
             where_ = "$LIVE AND " + arms.joinToString(" OR ", prefix = "(", postfix = ")"),
             bind = placeIds.map { Value(text = it) },
-            order = PageOrder(sort_column = "asset_id", pk_column = "asset_id"),
+            order = PageOrder(sort_column = "id", pk_column = "id"),
         )
     }
 
     /**
-     * Photographs in these albums. Archived ones count: an album keeps what a
-     * member curated whether or not it is on the timeline (`PhotoShelfReads`).
+     * Photographs in these albums: the `contains` edges, album first. Archived ones
+     * count: an album keeps what a member curated whether or not it is on the
+     * timeline (`PhotoShelfReads`); trashed ones do not, for they keep their
+     * membership only so a restore can bring it back.
      */
     public fun albumCountsQuery(albumIds: List<String>): PageQuery? {
         if (albumIds.isEmpty()) return null
         return PageQuery(
             name = "photos.search.albumCounts",
-            select = listOf("entry_id", "collection_id"),
-            from = "core_collection_entry",
-            where_ = "target_type = ? AND ${inList("collection_id", albumIds.size)}",
-            bind = listOf(Value(text = ASSET_TARGET_TYPE)) + albumIds.map { Value(text = it) },
-            order = PageOrder(sort_column = "entry_id", pk_column = "entry_id"),
+            select = listOf("from_id", "to_id"),
+            from = "edge",
+            where_ = "rel = 'contains' AND ${inList("from_id", albumIds.size)} AND " +
+                "to_id IN (SELECT id FROM entity WHERE kind = 'photo' AND deleted_at IS NULL)",
+            bind = albumIds.map { Value(text = it) },
+            order = PageOrder(sort_column = "from_id", pk_column = "to_id"),
         )
     }
 
@@ -296,7 +292,7 @@ public object PhotosSearchReads {
         val arms = mutableListOf<String>()
         val binds = mutableListOf<Value>()
         if (reach.assetIds.isNotEmpty()) {
-            arms += inList("asset_id", reach.assetIds.size)
+            arms += inList("id", reach.assetIds.size)
             binds += reach.assetIds.map { Value(text = it) }
         }
         if (reach.placeIds.isNotEmpty()) {
@@ -305,40 +301,54 @@ public object PhotosSearchReads {
         }
         if (reach.unplaced) arms += "place_id IS NULL"
         if (reach.albumIds.isNotEmpty()) {
-            arms += "asset_id IN (SELECT target_id FROM core_collection_entry WHERE target_type = ? " +
-                "AND ${inList("collection_id", reach.albumIds.size)})"
-            binds += Value(text = ASSET_TARGET_TYPE)
+            arms += "id IN (SELECT to_id FROM edge WHERE rel = 'contains' " +
+                "AND ${inList("from_id", reach.albumIds.size)})"
             binds += reach.albumIds.map { Value(text = it) }
         }
         if (reach.conceptIds.isNotEmpty()) {
-            arms += "asset_id IN (SELECT target_id FROM core_tag WHERE target_type = ? " +
-                "AND ${inList("concept_id", reach.conceptIds.size)})"
-            binds += Value(text = ASSET_TARGET_TYPE)
+            arms += "id IN (SELECT from_id FROM edge WHERE rel = 'tagged' " +
+                "AND ${inList("to_id", reach.conceptIds.size)})"
             binds += reach.conceptIds.map { Value(text = it) }
         }
         return PageQuery(
             name = "photos.search.hits",
-            // `title` IS PROJECTED FOR THE MATCH AND NOT FOR THE CELL: a
-            // `PhotoCell` has no title, but "why this matched" for a caption is
-            // the caption. Last of the named columns, so the door's three
-            // computed ones stay where [THUMBNAIL] says they are.
+            // THE CELL'S FIVE, in `PhotosReads`' order. A caption is the entity's
+            // title, so "why this matched" for a caption is a second read
+            // ([titlesQuery]) the bridge makes over the page that landed.
             select = listOf(
-                "asset_id",
-                "captured_at",
-                "tz_offset_min",
-                "kind",
-                "capture_group_id",
-                "title",
+                "id",
+                "taken_at",
+                "offset_min",
+                "form",
+                "burst",
             ),
             from = PhotosSearchMachine.TABLE,
             where_ = "$LIVE AND " + arms.joinToString(" OR ", prefix = "(", postfix = ")"),
             bind = binds,
             order = PageOrder(
-                sort_column = "captured_at",
-                pk_column = "asset_id",
+                sort_column = "taken_at",
+                pk_column = "id",
                 descending = true,
             ),
             with_held_thumbnail = true,
+        )
+    }
+
+    /**
+     * `photos.search.titles` — the captions of the photographs a hits page landed
+     * on, from their `entity`, so a caption that matched can be said as the reason.
+     * Null when there are none.
+     */
+    public fun titlesQuery(assetIds: List<String>): PageQuery? {
+        val ids = assetIds.filter { it.isNotEmpty() }.distinct()
+        if (ids.isEmpty()) return null
+        return PageQuery(
+            name = "photos.search.titles",
+            select = listOf("id", "title"),
+            from = "entity",
+            where_ = inList("id", ids.size),
+            bind = ids.map { Value(text = it) },
+            order = PageOrder(sort_column = "id", pk_column = "id"),
         )
     }
 
@@ -373,25 +383,31 @@ public object PhotosSearchReads {
 
     /**
      * WHAT A PLACE ANSWERS TO (v0's `search-place-vocabulary.ts`): the member's
-     * own name for it, the gazetteer's settlement, and — for a place within a
-     * town's span of Home — "home", "at home", "near home" and its band.
-     * **Never a coordinate**, and no home words at all when no Home is
-     * declared: a guess at where the member lives is not vocabulary.
-     *
-     * "Away" is deliberately not a word: 250 km from home is not near home.
+     * own name for it and the gazetteer's settlement. **Never a coordinate.** The
+     * model keeps no home place (R-1135-5-15), so "home", "at home" and "near home"
+     * are no words: a guess at where the member lives is not vocabulary.
      *
      * The printed label is the member's name, else the gazetteer's; a place
      * with neither has nothing a member could read and is not a door.
      *
      * The no-location bucket is matched as a PHRASE ("no location", "no
      * place", "unlocated"): "place" as a bare word would hit every place row.
+     *
+     * [names] are the places' `entity` rows (`id, title`) and [geo] their `place`
+     * rows (`id, locality`), joined by id.
      */
-    public fun matchPlaces(rows: List<Row>, query: String): PlaceMatch {
+    public fun matchPlaces(names: List<Row>, geo: List<Row>, query: String): PlaceMatch {
         val words = tokens(query)
-        val places = rows.map(::placeOf)
-        val home = places.firstOrNull { it.isHome && it.latitude != null && it.longitude != null }
+        val gazetteer = geo.associate { it.text(0) to it.text(1).trim().ifEmpty { null } }
+        val places = names.map { row ->
+            PlaceWords(
+                id = row.text(0),
+                name = PlacesReads.readableName(row.text(1)),
+                gazetteer = gazetteer[row.text(0)],
+            )
+        }
         val matched = places
-            .filter { place -> vocabulary(place, home).any { matchesAny(it, words) } }
+            .filter { place -> vocabulary(place).any { matchesAny(it, words) } }
             .mapNotNull { place -> place.label?.let { Named(place.id, it) } }
             .sortedWith(compareBy({ it.label.lowercase() }, { it.id }))
         return PlaceMatch(places = matched, unplaced = noLocationAsked(query))
@@ -401,52 +417,17 @@ public object PhotosSearchReads {
         val id: String,
         val name: String?,
         val gazetteer: String?,
-        val isHome: Boolean,
-        val latitude: Double?,
-        val longitude: Double?,
     ) {
         val label: String? get() = name ?: gazetteer
     }
 
-    private fun placeOf(row: Row): PlaceWords = PlaceWords(
-        id = row.text(0),
-        name = PlacesReads.readableName(row.text(1)),
-        gazetteer = row.text(5).trim().ifEmpty { null },
-        isHome = row.text(2) == "home",
-        latitude = row.values.getOrNull(3)?.real,
-        longitude = row.values.getOrNull(4)?.real,
-    )
-
-    private fun vocabulary(place: PlaceWords, home: PlaceWords?): List<String> = buildList {
+    private fun vocabulary(place: PlaceWords): List<String> = buildList {
         place.name?.let(::add)
         place.gazetteer?.let(::add)
-        val lat = place.latitude
-        val lng = place.longitude
-        val homeLat = home?.latitude
-        val homeLng = home?.longitude
-        if (lat != null && lng != null && homeLat != null && homeLng != null) {
-            val km = distanceKm(lat, lng, homeLat, homeLng)
-            val band = when {
-                km <= AT_HOME_KM -> "at home"
-                km <= AROUND_TOWN_KM -> "around town"
-                else -> null
-            }
-            if (band != null) {
-                addAll(HOME_TERMS)
-                add(band)
-            }
-        }
     }
-
-    /** v0's `PLACE_HOME_TERMS`. */
-    private val HOME_TERMS: List<String> = listOf("home", "at home", "near home")
 
     /** v0's `PLACE_NO_LOCATION_TERMS`. */
     private val NO_LOCATION_TERMS: List<String> = listOf("no location", "no place", "unlocated")
-
-    /** v0's `place-phrase.ts` bands, in kilometres. */
-    private const val AT_HOME_KM: Double = 0.5
-    private const val AROUND_TOWN_KM: Double = 25.0
 
     /** Matched as a phrase, either way round, as v0's `noLocationAsked` was. */
     internal fun noLocationAsked(query: String): Boolean {
@@ -454,19 +435,6 @@ public object PhotosSearchReads {
         if (asked.isEmpty()) return false
         return NO_LOCATION_TERMS.any { term -> term.contains(asked) || asked.contains(term) }
     }
-
-    /** Great-circle distance, v0's `distanceKm`. */
-    private fun distanceKm(aLat: Double, aLng: Double, bLat: Double, bLng: Double): Double {
-        val dLat = radians(bLat - aLat)
-        val dLng = radians(bLng - aLng)
-        val h = sin(dLat / 2) * sin(dLat / 2) +
-            cos(radians(aLat)) * cos(radians(bLat)) * sin(dLng / 2) * sin(dLng / 2)
-        return 2 * EARTH_RADIUS_KM * asin(min(1.0, sqrt(h)))
-    }
-
-    private fun radians(degrees: Double): Double = degrees * kotlin.math.PI / 180.0
-
-    private const val EARTH_RADIUS_KM: Double = 6371.0088
 
     /** v0's `PLACE_NO_LOCATION`, the name of the bucket's door. */
     public const val NO_LOCATION_NAME: String = PlacesMachine.NO_LOCATION_NAME
@@ -589,6 +557,9 @@ public object PhotosSearchReads {
      * reason here: the caption is the one text the row holds. How many of them
      * FIT is the view's decision, not this one.
      *
+     * [titles] are the captions of the photographs on the page (`id` to title), the
+     * entity's and a read of their own ([titlesQuery]).
+     *
      * [query] is the query the legs were run for, carried so a reducer whose
      * field has moved on can tell a late page from a current one. [corrected]
      * is the words the answer searched when the typed ones were corrected
@@ -602,12 +573,13 @@ public object PhotosSearchReads {
         topHits: List<SearchTopHit>,
         labels: List<Named>,
         corrected: String = "",
+        titles: Map<String, String> = emptyMap(),
     ): PhotosSearchEvent {
         val words = tokens(corrected.ifEmpty { query })
         val doors = topHits.map { SearchMatch(kind = it.kind, value_ = it.label) }
         val labelled = labels.map { SearchMatch(kind = SearchMatch.Kind.KIND_LABEL, value_ = it.label) }
         val captions = rows
-            .map { it.text(TITLE).trim() }
+            .map { titles[it.text(0)].orEmpty().trim() }
             .filter { it.isNotEmpty() && matchesAny(it, words) }
             .map { SearchMatch(kind = SearchMatch.Kind.KIND_TITLE, value_ = it) }
         return PhotosSearchEvent(
@@ -631,30 +603,25 @@ public object PhotosSearchReads {
     // The resting page: what there is to search FOR.
     // -----------------------------------------------------------------------
 
-    /** `photos.search.resting.places` — places with a live photograph behind them. */
+    /** `photos.search.resting.places` — places with a live photograph behind them, by name. */
     public fun restingPlacesQuery(): PageQuery = PageQuery(
         name = "photos.search.resting.places",
-        select = listOf(
-            "place_id",
-            "name",
-            "json_extract(address_json, '$.gazetteer.name') AS gazetteer",
-        ),
-        from = "core_place",
-        where_ = "place_id IN (SELECT place_id FROM media_asset WHERE $LIVE AND place_id IS NOT NULL)",
-        order = PageOrder(sort_column = "name", pk_column = "place_id"),
+        select = listOf("id", "title"),
+        from = "entity",
+        where_ = "kind = 'place' AND deleted_at IS NULL AND id IN (SELECT place_id FROM photo WHERE $LIVE AND place_id IS NOT NULL)",
+        order = PageOrder(sort_column = "title", pk_column = "id"),
     )
 
     /**
-     * `photos.search.resting.labels` — concepts the vault has actually put on
-     * a live photograph, never a list of words the product hopes are there.
+     * `photos.search.resting.labels` — tags the vault has actually put on a live
+     * photograph, never a list of words the product hopes are there.
      */
     public fun restingLabelsQuery(): PageQuery = PageQuery(
         name = "photos.search.resting.labels",
-        select = listOf("concept_id", "pref_label"),
-        from = "core_concept",
-        where_ = "$NOT_A_FLAG AND $TAGGED_ON_A_LIVE_PHOTO",
-        bind = listOf(Value(text = FLAGS_SCHEME_URI), Value(text = ASSET_TARGET_TYPE)),
-        order = PageOrder(sort_column = "pref_label", pk_column = "concept_id"),
+        select = listOf("id", "title"),
+        from = "entity",
+        where_ = "kind = 'tag' AND deleted_at IS NULL AND $TAGGED_ON_A_LIVE_PHOTO",
+        order = PageOrder(sort_column = "title", pk_column = "id"),
     )
 
     /**
@@ -672,7 +639,6 @@ public object PhotosSearchReads {
                 places = placeRows.mapNotNull { row ->
                     val id = row.text(0)
                     val label = PlacesReads.readableName(row.text(1))
-                        ?: row.text(2).trim().ifEmpty { null }
                     if (id.isEmpty() || label == null) {
                         null
                     } else {
@@ -704,7 +670,7 @@ public object PhotosSearchReads {
      * gets the download arrow" is a second answer waiting to disagree.
      */
     private fun cellOf(row: Row): PhotoCell {
-        val kind = kindOf(row.text(3))
+        val kind = PhotosReads.kindOf(row.text(3))
         val thumbnail = row.text(THUMBNAIL)
         val originalHash = row.text(ORIGINAL_HASH)
         return PhotoCell(
@@ -726,34 +692,16 @@ public object PhotosSearchReads {
         )
     }
 
-    private fun kindOf(kind: String): PhotoCell.Kind = when (kind) {
-        "photo" -> PhotoCell.Kind.KIND_PHOTO
-        "video" -> PhotoCell.Kind.KIND_VIDEO
-        "audio" -> PhotoCell.Kind.KIND_AUDIO
-        "scan" -> PhotoCell.Kind.KIND_SCAN
-        // An unrecognised value is UNSPECIFIED and not a photograph.
-        else -> PhotoCell.Kind.KIND_UNSPECIFIED
-    }
-
     private fun inList(column: String, count: Int): String =
         column + " IN (" + List(count) { "?" }.joinToString(", ") + ")"
 
-    /** The caption, last of the SIX named columns of [hitsQuery]. */
-    private const val TITLE: Int = 5
-
     /**
-     * After the six named columns; see [hitsQuery]'s `with_held_thumbnail`.
+     * After the five named columns; see [hitsQuery]'s `with_held_thumbnail`.
      * They move together with its `select` list and nowhere else.
      */
-    private const val THUMBNAIL: Int = 6
-    private const val ORIGINAL_HASH: Int = 7
-    private const val ORIGINAL_HELD: Int = 8
-
-    /** `crates/apps/photos`' `TAG_TARGET_TYPE`, spelled the same. */
-    private const val ASSET_TARGET_TYPE: String = "media.asset"
-
-    /** The flags scheme, as `PhotoShelfReads` names it. */
-    private const val FLAGS_SCHEME_URI: String = "https://centraid.dev/schemes/flags"
+    private const val THUMBNAIL: Int = 5
+    private const val ORIGINAL_HASH: Int = 6
+    private const val ORIGINAL_HELD: Int = 7
 
     /** Positional, as the door states. See `HomeReads.text` for why only TEXT. */
     private fun Row.text(index: Int): String = values.getOrNull(index)?.text ?: ""

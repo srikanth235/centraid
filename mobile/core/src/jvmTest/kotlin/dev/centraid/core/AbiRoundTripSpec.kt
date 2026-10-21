@@ -414,7 +414,7 @@ class AbiRoundTripSpec : StringSpec({
 
         /**
          * THE SCREEN READS, over the real tables
-         * (`contracts/schema/vault-ddl.sql`): `media_asset`. (Notes' editor is the
+         * (`contracts/schema/vault-ddl.sql`): `photo`. (Notes' editor is the
          * `notes.note` app query now, #1135.) The fixture vault has rows in
          * `entity` and none in this one, so these numbers are a **bounded read's floor** — the
          * SQL plan, the protobuf round trip and the JNA marshalling are real and
@@ -424,10 +424,10 @@ class AbiRoundTripSpec : StringSpec({
         private val SCREEN_READS = mapOf(
             "photos.grid" to ScreenRead(
                 name = "photos.grid",
-                select = listOf("asset_id", "kind", "captured_at"),
-                from = "media_asset",
-                sortColumn = "captured_at",
-                pkColumn = "asset_id",
+                select = listOf("id", "form", "taken_at"),
+                from = "photo",
+                sortColumn = "taken_at",
+                pkColumn = "id",
                 limit = 120,
             ),
         )

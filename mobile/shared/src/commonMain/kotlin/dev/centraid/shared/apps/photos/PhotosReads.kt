@@ -4,7 +4,6 @@ import centraid.core.v1.CommandStatus
 import centraid.core.v1.PageOrder
 import centraid.core.v1.PageQuery
 import centraid.core.v1.Row
-import centraid.core.v1.Value
 import centraid.screen.v1.PhotoCell
 import centraid.screen.v1.PhotosGridData
 import centraid.screen.v1.PhotosGridEvent
@@ -16,34 +15,33 @@ import dev.centraid.shared.sync.ScreenWrites
 import dev.centraid.shared.sync.TransferRule
 
 /**
- * WHAT THE PHOTOS GRID READS, AND WHAT IT MAKES OF THE ROWS (#1025 S5, lane L5).
+ * WHAT THE PHOTOS GRID READS, AND WHAT IT MAKES OF THE ROWS (#1025 S5, lane L5;
+ * #1135).
  *
- * The statement is `crates/apps/photos`'s own — `photos.library.live` in
- * `queries.rs`: `media_asset`, the live and unarchived rows, ordered
- * `captured_at DESC, asset_id DESC`. Followed rather than re-derived, for the
- * reason the retired Tally reads gave: a grid in a different order from the desktop's
- * over the same assets is two libraries.
+ * The statement is the library's, on the `photo` table: the live, unarchived
+ * photographs (an `entity` not in the trash, no `archived` flag edge, not
+ * folded under an edit, [PhotoFold]), ordered `taken_at DESC, id DESC`. A grid
+ * in a different order from the app's over the same photographs is two libraries.
  *
  * **THE LIBRARY IS TWO WALKS, AND THE SECOND ONE IS THE UNDATED TAIL** (#1029,
- * photos port). An undated asset has no place in a capture-time keyset — the
- * comparison `(captured_at, asset_id) < (?, ?)` is never true for NULL — so a
+ * photos port). An undated photograph has no place in a capture-time keyset — the
+ * comparison `(taken_at, id) < (?, ?)` is never true for NULL — so a
  * single walk ordered on capture time silently lost every undated photograph
  * behind the first window, which on a library past one page was all of them.
- * The first walk is therefore `captured_at IS NOT NULL`, newest first, exactly
- * the app's order; when it ends, the machine starts the second over
- * `captured_at IS NULL`, keyed on the primary key alone, and v0's "Undated"
- * section is its tail (`timeline-model.ts`'s `UNDATED_SECTION_DAY`). No
- * coalesce is invented: an undated photograph is placed after every dated one,
- * which is where v0 sank it, rather than in whatever order a fallback column
- * happened to give it.
+ * The first walk is therefore `taken_at IS NOT NULL`, newest first; when it
+ * ends, the machine starts the second over `taken_at IS NULL`, keyed on the
+ * primary key alone, and v0's "Undated" section is its tail
+ * (`timeline-model.ts`'s `UNDATED_SECTION_DAY`). No coalesce is invented: an
+ * undated photograph is placed after every dated one, which is where v0 sank it,
+ * rather than in whatever order a fallback column happened to give it.
  */
 public object PhotosReads :
     ScreenReads<PhotosGridState, PhotosGridEvent>,
     ScreenWrites<PhotosGridState, PhotosGridEvent> {
     override val screenId: String = PhotosGridMachine.SCREEN_ID
 
-    /** `media_asset`, the same table the machine's `rowsChanged` declares. */
-    override val table: String = "media_asset"
+    /** `photo`, the table the grid pages; the machine's `rowsChanged` also declares the tables a verdict reads. */
+    override val table: String = "photo"
 
     /**
      * A mosaic's page is bigger than a list's.
@@ -56,18 +54,17 @@ public object PhotosReads :
     override val limit: Int = 120
 
     /**
-     * THE SELECT CARRIES BOTH ORDER COLUMNS — `captured_at` and `asset_id` —
+     * THE SELECT CARRIES BOTH ORDER COLUMNS — `taken_at` and `id` —
      * because the door has no `key_of` callback and reads the cursor off the
      * row (`statement.ts:43-48`).
      *
-     * `archived_at IS NULL` beside `deleted_at IS NULL` is the app's predicate
-     * and both are needed: they are different shelves, the DDL's own CHECK
-     * keeps a row out of both at once, and a library that showed archived
-     * assets would be showing a member the photos they put away.
+     * Not trashed AND not archived is the app's predicate and both are needed:
+     * they are different shelves, and a library that showed archived
+     * photographs would be showing a member the photos they put away.
      *
-     * `content_id` IS NOT SELECTED, and `thumbnail_path` still arrives: it is
-     * the door's own appended column, resolved from `seat_blob_held` against
-     * the row's content in the SAME statement (`with_held_thumbnail`,
+     * `blob` IS NOT SELECTED, and `thumbnail_path` still arrives: it is
+     * the door's own appended column, resolved from the content store against
+     * the row's blob in the SAME statement (`with_held_thumbnail`,
      * D-1025-S7-20). The join is the vault's SQL and the "may this path be
      * handed out at all" rule is the seat's; this side asks for the answer and
      * cannot spell either, which is the point — a media-type predicate written
@@ -90,14 +87,14 @@ public object PhotosReads :
      * its effect is served, so this reads the walk that was asked for. The
      * Favorites filter is the favourites shelf's own predicate
      * ([PhotoShelfReads]' `STARRED`), restated here because a star is a
-     * `core_tag` row and not a column, and the door pages one table.
+     * `tagged` edge and not a column, and the door pages one table.
      */
     override fun query(state: PhotosGridState, afterCursor: String?): PageQuery {
         val undated = state.reading_undated
         val favorites = state.filter == PhotosGridState.Filter.FILTER_FAVORITES
         val where = buildList {
             add(LIVE)
-            add(if (undated) "captured_at IS NULL" else "captured_at IS NOT NULL")
+            add(if (undated) "taken_at IS NULL" else "taken_at IS NOT NULL")
             if (favorites) add(STARRED)
         }.joinToString(" AND ")
         return PageQuery(
@@ -110,12 +107,11 @@ public object PhotosReads :
             select = SELECT,
             from = table,
             where_ = where,
-            bind = if (favorites) STARRED_BINDS else emptyList(),
             order = PageOrder(
                 // THE UNDATED TAIL IS KEYED ON THE PRIMARY KEY ALONE: it has no
                 // capture time to sort on, and a keyset must be total.
-                sort_column = if (undated) "asset_id" else "captured_at",
-                pk_column = "asset_id",
+                sort_column = if (undated) "id" else "taken_at",
+                pk_column = "id",
                 descending = true,
             ),
             with_held_thumbnail = true,
@@ -127,11 +123,11 @@ public object PhotosReads :
      * positional and moves with [cellOf]'s indices and nowhere else.
      */
     private val SELECT: List<String> = listOf(
-        "asset_id",
-        "captured_at",
-        "tz_offset_min",
-        "kind",
-        "capture_group_id",
+        "id",
+        "taken_at",
+        "offset_min",
+        "form",
+        "burst",
         "width",
         "height",
         "duration_s",
@@ -140,21 +136,8 @@ public object PhotosReads :
     /** The live library: not trashed, not put away, not folded under an edit ([PhotoFold]). The app's own predicate. */
     private const val LIVE: String = PhotoFold.LIVE
 
-    /**
-     * A STAR IS A TAG, NOT A COLUMN (#916). The favourites shelf's predicate,
-     * three nested single-table subqueries, every literal bound. See
-     * `PhotoShelfReads.STARRED` for why the flags scheme is an `https` URI.
-     */
-    private const val STARRED: String = "asset_id IN (SELECT target_id FROM core_tag " +
-        "WHERE target_type = ? AND concept_id IN (SELECT concept_id FROM core_concept " +
-        "WHERE notation = ? AND scheme_id IN (SELECT scheme_id FROM core_concept_scheme " +
-        "WHERE uri = ?)))"
-
-    private val STARRED_BINDS: List<Value> = listOf(
-        Value(text = "media.asset"),
-        Value(text = "starred"),
-        Value(text = "https://centraid.dev/schemes/flags"),
-    )
+    /** A STAR IS A FLAG EDGE: the favourites shelf's predicate ([PhotoFold.STARRED]). */
+    private const val STARRED: String = PhotoFold.STARRED
 
     override fun arrived(rows: List<Row>, nextCursor: String?): PhotosGridEvent = PhotosGridEvent(
         data_ = PhotosGridEvent.DataArrived(
@@ -223,7 +206,7 @@ public object PhotosReads :
      * about the replica, so `PhotosGridMachine` owns it and paints it over the
      * cell the member touched.
      *
-     * `favorite` is FALSE because `media_asset` has no such column: a favourite
+     * `favorite` is FALSE because `photo` has no such column: a favourite
      * is a mirror kept elsewhere (#916), and a flag guessed here would be a
      * star a member never put on a photograph.
      */
@@ -350,7 +333,7 @@ public object PhotosReads :
      * window" from "your rule is holding this" shows the wrong one of two.
      *
      * A VIDEO IS THE ONE KIND THE CELLULAR RULE STILL WITHHOLDS. `kind` is
-     * `media_asset`'s and the core reads `core_content_representation`; they
+     * `photo`'s and the core reads the media type; they
      * agree for a camera roll, and where they do not the core is the authority
      * — the cost of a disagreement is a label, never a byte.
      */
@@ -383,21 +366,21 @@ public object PhotosReads :
     private const val DURATION: Int = 7
 
     /**
-     * The DDL's four `kind` values, as the proto's four.
+     * The DDL's three `form` values, as the proto's. A photograph has no audio:
+     * an audio file is a Docs document (R-1135-5-3).
      *
      * An unrecognised value is `KIND_UNSPECIFIED` and not `KIND_PHOTO`: the
-     * CHECK constraint admits exactly these four today, and a fifth arriving
+     * CHECK constraint admits exactly these three today, and a fourth arriving
      * from a newer gateway must not be drawn as a photograph.
      *
      * `internal` rather than private because every Photos surface that reads
-     * `media_asset` owes the same answer, and a second copy of this `when` is a
-     * second place a fifth `kind` gets drawn as a still image
+     * `photo` owes the same answer, and a second copy of this `when` is a
+     * second place a fourth `form` gets drawn as a still image
      * (`PhotoLightboxReads`, #1029 photos port).
      */
     internal fun kindOf(kind: String): PhotoCell.Kind = when (kind) {
         "photo" -> PhotoCell.Kind.KIND_PHOTO
         "video" -> PhotoCell.Kind.KIND_VIDEO
-        "audio" -> PhotoCell.Kind.KIND_AUDIO
         "scan" -> PhotoCell.Kind.KIND_SCAN
         else -> PhotoCell.Kind.KIND_UNSPECIFIED
     }

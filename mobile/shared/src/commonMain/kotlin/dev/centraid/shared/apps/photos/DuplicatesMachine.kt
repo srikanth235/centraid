@@ -12,7 +12,7 @@ import dev.centraid.shared.screen.Step
 /**
  * The shelf of near-duplicate clusters (#1029, photos port).
  *
- * One card per `media_asset_phash.cluster_id`, and the card is a DECISION and
+ * One card per the core's cluster (`photos.duplicates`), and the card is a DECISION and
  * not a browse: the way in is `photos.duplicate`, where a member picks the copy
  * that survives. Nothing on this screen deletes anything, which is deliberate —
  * v0's shelf carried a selection bar with Trash on it
@@ -23,22 +23,20 @@ import dev.centraid.shared.screen.Step
  *
  * ## What a cluster is, and who decided it
  *
- * `cluster_id` is a REBUILDABLE PROJECTION written wholesale by a sweep —
- * union-find over phash Hamming distance ≤ 6 with the group's lowest `asset_id`
- * as its id (`crates/media/src/duplicates.rs`, D-1020-P3). This screen reads it
- * and stops. It does not re-derive the clustering, for the reason that module's
- * own header gives: a second implementation would agree with the sweep until
- * the threshold moved and then disagree silently at exactly the boundary where
- * a member is deciding what to delete.
+ * A cluster is a PROJECTION of the photographs' perceptual hashes, computed
+ * where the grouping lives — union-find over phash Hamming distance ≤ 6 with the
+ * group's lowest photograph id as its key
+ * (`crates/media/src/duplicates.rs`, D-1020-P3) — and asked of the core as
+ * `photos.duplicates`. This screen reads it and stops. It does not re-derive the
+ * clustering, for the reason that module's own header gives: a second
+ * implementation would agree with the core until the threshold moved and then
+ * disagree silently at exactly the boundary where a member is deciding what to
+ * delete.
  *
- * ## One page, and it is not this screen's choice
+ * ## One answer, and it is the whole shelf
  *
- * `cluster_id` is nullable, and the door REFUSES a continued page over a
- * nullable sort key (`KitError::NullableSortKey`, D-1020-P11): SQLite's
- * row-value comparison puts every NULL on one side of the keyset and the walk
- * silently drops them. So this shelf reads ONE page and never hands out a
- * cursor — see [DuplicatesReads] for what that costs and how it is reported
- * rather than hidden.
+ * The core answers every cluster, so this shelf hands out no cursor — see
+ * [DuplicatesReads].
  */
 public object DuplicatesMachine : ScreenMachine<DuplicatesState, DuplicatesEvent> {
     public const val SCREEN_ID: String = "photos.duplicates"
@@ -53,15 +51,14 @@ public object DuplicatesMachine : ScreenMachine<DuplicatesState, DuplicatesEvent
      * would race applies here unchanged.
      *
      * There is one leg and not three, and the ceiling is stated rather than
-     * discovered: `cluster_id` lives only on `media_asset_phash`, which has no
-     * `content_id`, so the cover has to come from `media_asset` keyed on
+     * discovered: the core's answer names photographs and nothing a card
+     * draws, so the cover has to come from `photo` keyed on
      * `DuplicateCluster.member_asset_ids`. The BYTES are one hop further —
-     * `core_content_item.byte_size`, reached through a content id this shelf
-     * has nowhere to put — and that hop is named in this lane's report rather
-     * than faked.
+     * the blobs' sizes, reached through a hash this shelf has nowhere to put —
+     * and that hop is named in [DuplicatesReads] rather than faked.
      */
     public enum class Leg {
-        /** `media_asset`, for each cluster's [DuplicateCluster.cover_thumbnail_path]. */
+        /** `photo`, for each cluster's [DuplicateCluster.cover_thumbnail_path]. */
         ASSETS,
     }
 
@@ -108,9 +105,9 @@ public object DuplicatesMachine : ScreenMachine<DuplicatesState, DuplicatesEvent
             // `DuplicatesEvent` has one `DataArrived`, so the fold and the
             // cover read both land here. **A cluster with an EMPTY
             // `cluster_id` is an AMENDMENT and never a cluster**: the leg reads
-            // `media_asset`, a table on which nothing knows what
-            // `media_asset_phash.cluster_id` groups by, so it has no cluster id
-            // to give and would have to invent one to be mistaken for the fold.
+            // `photo`, a table on which nothing knows what the core's
+            // clusters group by, so it has no cluster id to give and would have
+            // to invent one to be mistaken for the fold.
             // That is the same shape `PhotoLightboxMachine` uses ("a detail
             // with no `asset_id` is an amendment") and it is chosen for the
             // same reason: the discriminator is an absence the producer cannot
@@ -175,7 +172,7 @@ public object DuplicatesMachine : ScreenMachine<DuplicatesState, DuplicatesEvent
      *
      * [DuplicatesLeg] returns one amendment per ASSET — a `DuplicateCluster`
      * with no cluster id, one entry in `member_asset_ids`, and that asset's
-     * held thumbnail — because a read of `media_asset` knows assets and knows
+     * held thumbnail — because a read of `photo` knows assets and knows
      * nothing about clusters. The match back is `member_asset_ids`, which is
      * exactly why the field is on the wire.
      *
@@ -227,27 +224,21 @@ public object DuplicatesMachine : ScreenMachine<DuplicatesState, DuplicatesEvent
     )
 
     /**
-     * `media_asset_phash` — the fingerprints and the cluster the sweep put them
-     * in. Not `media_asset`: a photograph's title changing is not a change to
-     * which photographs are near-identical, and a library that redrew this
-     * shelf on every capture-time edit would re-fold five hundred fingerprints
-     * to produce the same cards.
+     * What a cluster is made of: the hashes (`derivative`), the photographs that
+     * carry them (`photo`) and whether each is live (`entity`). A photograph's title changing is not a change to which
+     * photographs are near-identical, but the change events name tables and not
+     * columns, so each of the four re-reads.
      *
-     * **THE KEYS RIDE ALONG NOW THAT THE FIELD IS NAMED FOR THEM.** The event
-     * said `cluster_ids`, which no producer could fill — the change stream
-     * reports a table's PRIMARY KEY and `media_asset_phash`'s is `asset_id`
-     * (`001_baseline.sql:1623`) — so this emitted an EMPTY list rather than put
-     * asset ids in a field named for cluster ids, which would have been a shell
-     * lying in a field name. The field is `asset_ids` and carries what the
-     * stream actually said. [reduce] still re-reads on the event's presence
-     * rather than on its contents, and says why.
+     * [reduce] re-reads on the event's presence rather than on its contents, and
+     * says why.
      */
     override fun rowsChanged(table: String, keys: List<String>): DuplicatesEvent? = when (table) {
-        TABLE -> DuplicatesEvent(rows_changed = DuplicatesEvent.RowsChanged(asset_ids = keys))
+        in TABLES -> DuplicatesEvent(rows_changed = DuplicatesEvent.RowsChanged(asset_ids = keys))
         else -> null
     }
 
-    private const val TABLE: String = "media_asset_phash"
+    /** The tables [DuplicatesReads] reads, and exactly the ones [rowsChanged] names. */
+    public val TABLES: Set<String> = setOf("derivative", "photo", "entity")
 
     override fun seatChanged(seat: SeatState): DuplicatesEvent =
         DuplicatesEvent(seat_changed = DuplicatesEvent.SeatChanged(seat = seat))

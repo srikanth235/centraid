@@ -137,7 +137,11 @@ class ChangeStreamSpec : StringSpec({
         // machine: a stream holding its own table map would be a second place
         // every screen's reads are written down.
         NotesTrashMachine.rowsChanged("media_asset", listOf("ast-1")).shouldBeNull()
-        PhotosGridMachine.rowsChanged("entity", listOf("t-1")).shouldBeNull()
+        // A grid is the library: `photo`, and the `entity` and `edge` a photograph
+        // is live by. A note is none of them.
+        PhotosGridMachine.rowsChanged("note", listOf("t-1")).shouldBeNull()
+        PhotosGridMachine.rowsChanged("media_asset", listOf("ast-1")).shouldBeNull()
+        PhotosGridMachine.rowsChanged("entity", listOf("t-1")).shouldNotBeNull()
         NotesEditorMachine.rowsChanged("media_asset", listOf("ast-1")).shouldBeNull()
         // Home COUNTS Locker's items since #1047 (ids only), so `locker_item`
         // is Home's table now; a Locker sidecar is not.
@@ -224,7 +228,7 @@ class ChangeStreamSpec : StringSpec({
         val watcher = watch(host, effects)
         val stream = ChangeStream()
         stream.route(host)
-        stream.deliver(change("media_asset", "ast-1"))
+        stream.deliver(change("photo", "ast-1"))
         // The FIRST page, with a null cursor: a grid ordered by capture time
         // cannot patch a cell whose position in that order may have moved.
         effects shouldBe listOf(ScreenEffect.ReadPage(PhotosGridMachine.SCREEN_ID, null))
@@ -232,7 +236,7 @@ class ChangeStreamSpec : StringSpec({
     }
 
     "a changed rule makes the grid read its page again, and a list does not" {
-        // THE RULE IS NOT A ROW (#1080). No `media_asset` row moved when the
+        // THE RULE IS NOT A ROW (#1080). No `photo` row moved when the
         // member chose a rule, yet every cell's download arrow was derived
         // under the old one; the grid is offered the change through its
         // machine, and a screen whose rows say nothing about what this phone
@@ -269,7 +273,7 @@ class ChangeStreamSpec : StringSpec({
         val stream = ChangeStream()
         stream.route(list)
         stream.route(photos)
-        stream.deliver(change("media_asset", "ast-1"))
+        stream.deliver(change("photo", "ast-1"))
 
         seen shouldBe listOf("photos")
         a.cancel()

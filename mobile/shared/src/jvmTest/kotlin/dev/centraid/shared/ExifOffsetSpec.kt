@@ -73,7 +73,7 @@ class ExifOffsetSpec : StringSpec({
     }
 
     "a value the vault would refuse is refused here, so one bad tag never costs the photograph" {
-        // `media.add_asset` bounds `tz_offset_min` at +-1080 and rejects the
+        // `photo.add` bounds `offset_min` at +-1080 and rejects the
         // WHOLE write beyond it; an offset that was clamped would be a lie and
         // one that was sent would lose the photograph.
         ExifOffset.LIMIT_MINUTES shouldBe 1080
@@ -115,12 +115,12 @@ class ExifOffsetSpec : StringSpec({
             localId = "9F1B2C3D-0000/L0/001",
             bytes = 0,
             // 09:41 UTC is 15:11 at +05:30: the DAY the shutter fired is the
-            // instant plus this offset, which is what `tz_offset_min` is for.
+            // instant plus this offset, which is what `offset_min` is for.
             capturedAtIso = "2026-02-03T09:41:00Z",
             capturedUtcOffsetMinutes = ExifOffset.of("+05:30"),
         )
-        roll.inputFor(asset, "ab".repeat(32)) shouldContain "\"tz_offset_min\":330"
+        roll.inputFor(asset, "ab".repeat(32), 1L, "image/jpeg") shouldContain "\"offset_min\":330"
         val west = asset.copy(capturedUtcOffsetMinutes = ExifOffset.of("-08:00"))
-        roll.inputFor(west, "ab".repeat(32)) shouldContain "\"tz_offset_min\":-480"
+        roll.inputFor(west, "ab".repeat(32), 1L, "image/jpeg") shouldContain "\"offset_min\":-480"
     }
 })

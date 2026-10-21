@@ -8,6 +8,7 @@ import centraid.screen.v1.PhotoCell
 import centraid.screen.v1.PhotoPickerEvent
 import centraid.screen.v1.PhotoPickerState
 import centraid.screen.v1.PhotosGridData
+import dev.centraid.shared.apps.photos.PhotoFold
 import dev.centraid.shared.apps.photos.PhotoPickerMachine
 import dev.centraid.shared.apps.photos.PhotoPickerReads
 import dev.centraid.shared.apps.photos.PhotoShelfMachine
@@ -136,9 +137,13 @@ class PhotoPickerSpec : StringSpec({
     }
 
     "rowsChanged on a foreign table answers null" {
-        PhotoPickerMachine.rowsChanged("core_collection_entry", listOf("e1")) shouldBe null
-        PhotoPickerMachine.rowsChanged("knowledge_note", listOf("n1")) shouldBe null
-        PhotoPickerMachine.rowsChanged("media_asset", listOf("a1")).shouldNotBeNull()
+        PhotoPickerMachine.rowsChanged("note", listOf("n1")) shouldBe null
+        PhotoPickerMachine.rowsChanged("container", listOf("c1")) shouldBe null
+        PhotoPickerMachine.rowsChanged("media_asset", listOf("a1")) shouldBe null
+        // THE LIBRARY, AND THE TWO TABLES A PHOTOGRAPH IS LIVE BY.
+        PhotoPickerMachine.rowsChanged("photo", listOf("a1")).shouldNotBeNull()
+        PhotoPickerMachine.rowsChanged("entity", listOf("a1")).shouldNotBeNull()
+        PhotoPickerMachine.rowsChanged("edge", emptyList()).shouldNotBeNull()
     }
 
     "a change over assets this picker is not showing moves nothing" {
@@ -176,13 +181,13 @@ class PhotoPickerSpec : StringSpec({
         step.effects.size shouldBe 2
         step.effects.forEach { effect ->
             val write = effect as ScreenEffect.SubmitWrite
-            write.command shouldBe "media.add_to_album"
-            write.inputJson shouldContain "\"album_id\":\"album-1\""
+            write.command shouldBe "edge.add"
+            write.inputJson shouldContain "\"from\":\"album-1\""
+            write.inputJson shouldContain "\"rel\":\"contains\""
             // v0 SENT A `position` AND THE VAULT WOULD REFUSE IT.
-            // `media.add_to_album`'s schema is `additionalProperties: false`
-            // over `album_id` and `asset_id`, so the whole add would fail on a
-            // field that was only ever there to preserve an ordering the vault
-            // assigns itself.
+            // `edge.add`'s schema is closed over `from`, `rel` and `to`, so the
+            // whole add would fail on a field that was only ever there to
+            // preserve an ordering the vault assigns itself.
             write.inputJson shouldNotContain "position"
             // THE KEY IS THE PAIR, because the intent is the pair.
             write.invokeKey shouldContain "album-1"
@@ -351,10 +356,10 @@ class PhotoPickerSpec : StringSpec({
         // sweep would take the entry away again. An archived one is not
         // offered because the member put it away.
         val query = PhotoPickerReads.query(PhotoPickerMachine.initial(), null)
-        query.where_ shouldBe "deleted_at IS NULL AND archived_at IS NULL"
+        query.where_ shouldBe "${PhotoFold.NOT_TRASHED} AND ${PhotoFold.NOT_ARCHIVED}"
         val order = query.order.shouldNotBeNull()
-        order.sort_column shouldBe "captured_at"
-        order.pk_column shouldBe "asset_id"
+        order.sort_column shouldBe "taken_at"
+        order.pk_column shouldBe "id"
         order.descending shouldBe true
         // THE CURSOR IS READ OFF THE ROW by the two columns the ORDER BY names,
         // so both have to be projected.

@@ -9,6 +9,7 @@ import centraid.screen.v1.PhotosCollectionsData
 import centraid.screen.v1.PhotosCollectionsEvent
 import centraid.screen.v1.PhotosCollectionsState
 import dev.centraid.shared.apps.photos.AlbumChoice
+import dev.centraid.shared.apps.photos.PhotoFold
 import dev.centraid.shared.apps.photos.PhotosCollectionsMachine
 import dev.centraid.shared.apps.photos.PhotosCollectionsReads
 import dev.centraid.shared.apps.photos.PhotosCollectionsReads.Scan
@@ -25,7 +26,7 @@ import io.kotest.matchers.shouldBe
  * COLLECTIONS, AS A PURE FUNCTION (#1029, the photos port).
  *
  * Everything here runs on the JVM with no ABI, because everything here is the
- * part of a screen that is DATA: the ten statements, the fold that turns their
+ * part of a screen that is DATA: the statements, the fold that turns their
  * rows into one screen, the effects a reduce decided on, and the JSON a write
  * carries. What needs a real vault — that the door answers these statements at
  * all — is the device contract's job, and a test that mocked a core to assert
@@ -40,38 +41,37 @@ class PhotosCollectionsSpec : StringSpec({
     /** An album row: `collection_id, name`. */
     fun albumRow(id: String, name: String) = row(id, name)
 
-    /** An entry row: `entry_id, collection_id`. */
-    fun entryRow(id: String, collectionId: String) = row(id, collectionId)
+    /** A membership edge: `from_id` is the album, `to_id` the photograph. */
+    fun entryRow(albumId: String, photoId: String) = row(albumId, photoId)
 
     /** A shelf row: the two named columns, then the door's appended thumbnail. */
     fun shelfRow(assetId: String, sortKey: String, thumbnail: String = "") =
         row(assetId, sortKey, thumbnail)
 
-    /** A phash row: `asset_id, cluster_id`. */
-    fun phashRow(assetId: String, clusterId: String) = row(assetId, clusterId)
-
     fun fold(
         albums: Scan = Scan(),
         albumsNextCursor: String? = null,
+        coverBlob: Map<String, String> = emptyMap(),
         entries: Scan = Scan(),
         archive: Scan = Scan(),
         trash: Scan = Scan(),
         videos: Scan = Scan(),
         starred: Scan = Scan(),
         places: Scan = Scan(),
-        memories: Scan = Scan(),
-        duplicates: Scan = Scan(),
+        duplicateClusters: Int = 0,
+        covers: Scan = Scan(),
     ): PhotosCollectionsData = PhotosCollectionsReads.fold(
         albums = albums,
         albumsNextCursor = albumsNextCursor,
+        coverBlob = coverBlob,
         entries = entries,
         archive = archive,
         trash = trash,
         videos = videos,
         starred = starred,
         places = places,
-        memories = memories,
-        duplicates = duplicates,
+        duplicateClusters = duplicateClusters,
+        covers = covers,
     )
 
     "the first open asks for a page, and the screen is loading until it lands" {
@@ -158,10 +158,15 @@ class PhotosCollectionsSpec : StringSpec({
         }
     }
 
-    "rowsChanged answers for core_collection and null for any other table" {
-        machine.rowsChanged("core_collection", listOf("col-1")).shouldNotBeNull()
+    "rowsChanged answers for the four tables the shelves are made of and null for any other" {
+        listOf("entity", "container", "edge", "photo").forEach { table ->
+            withClue(table) { machine.rowsChanged(table, listOf("col-1")).shouldNotBeNull() }
+            // A TRASH names the table with an EMPTY key list: that is a re-read.
+            withClue(table) { machine.rowsChanged(table, emptyList()).shouldNotBeNull() }
+        }
         machine.rowsChanged("media_asset", listOf("asset-1")) shouldBe null
-        machine.rowsChanged("core_collection_entry", listOf("entry-1")) shouldBe null
+        machine.rowsChanged("core_collection", listOf("col-1")) shouldBe null
+        PhotosCollectionsMachine.TABLES shouldBe setOf("entity", "container", "edge", "photo")
     }
 
     "every statement selects both of the columns its cursor is read off" {
@@ -175,12 +180,10 @@ class PhotosCollectionsSpec : StringSpec({
             PhotosCollectionsReads.archiveQuery(),
             PhotosCollectionsReads.trashQuery(),
             PhotosCollectionsReads.videosQuery(),
-            PhotosCollectionsReads.flagsSchemeQuery(),
-            PhotosCollectionsReads.starredConceptQuery("scheme-1"),
-            PhotosCollectionsReads.starredTagsQuery("concept-1"),
+            PhotosCollectionsReads.starredQuery(),
             PhotosCollectionsReads.placesQuery(),
-            PhotosCollectionsReads.memoriesQuery(),
-            PhotosCollectionsReads.duplicatesQuery(),
+            PhotosCollectionsReads.albumCoverBlobsQuery(listOf("alb-1")).shouldNotBeNull(),
+            PhotosCollectionsReads.albumCoversQuery(listOf("b-1"), listOf("p-1")).shouldNotBeNull(),
         ).forEach { query ->
             withClue("${query.name} selects ${query.select}") {
                 val order = query.order.shouldNotBeNull()
@@ -192,22 +195,20 @@ class PhotosCollectionsSpec : StringSpec({
 
     "the albums statement is the table the machine re-reads on, and asks for no thumbnail" {
         // THE PAIRING, ASSERTED MECHANICALLY. When the two part company nothing
-        // fails — the screen simply stops redrawing on sync, and the symptom is
-        // a list that is right only after a relaunch.
+        // fails: the screen simply stops redrawing on sync, and the symptom is a
+        // list that is right only after a relaunch.
         val query = PhotosCollectionsReads.albumsQuery()
         query.from shouldBe PhotosCollectionsReads.TABLE
         machine.rowsChanged(query.from, listOf("col-1")).shouldNotBeNull()
-        // `core_collection` CARRIES `cover_content_id` AND NOT `content_id`,
-        // and `with_held_thumbnail` correlates on `{from}.content_id` — a table
-        // without one is REFUSED at prepare, which would take the whole page
-        // down rather than return a blank column.
+        // The albums are `entity` rows, which carry no `blob`: the door's
+        // thumbnail subquery correlates on `{from}.blob` and a table without one
+        // is REFUSED at prepare, which would take the whole page down.
         query.with_held_thumbnail shouldBe false
     }
 
     "every album read in the app is kind = 'album', and binds it first" {
-        // `core_collection` HOLDS NOTES' NOTEBOOKS TOO (rung six). A read that
-        // lost its kind would list every notebook as an album, and the add
-        // sheet would offer a notebook the vault then refuses.
+        // `entity` HOLDS EVERY KIND. A read that lost its kind would list every
+        // note, document and place as an album.
         listOf(
             PhotosCollectionsReads.albumsQuery(),
             AlbumChoice.albumsQuery(),
@@ -215,6 +216,7 @@ class PhotosCollectionsSpec : StringSpec({
             withClue(query.name) {
                 query.from shouldBe PhotosCollectionsReads.TABLE
                 query.where_.shouldNotBeNull().startsWith("kind = ?") shouldBe true
+                query.where_.shouldNotBeNull().contains("deleted_at IS NULL") shouldBe true
                 query.bind.first() shouldBe Value(text = PhotosCollectionsReads.ALBUM_KIND)
             }
         }
@@ -232,46 +234,74 @@ class PhotosCollectionsSpec : StringSpec({
         ).forEach { withClue(it.name) { it.with_held_thumbnail shouldBe true } }
         listOf(
             PhotosCollectionsReads.albumEntriesQuery(),
-            PhotosCollectionsReads.starredTagsQuery("c"),
+            PhotosCollectionsReads.starredQuery(),
+            PhotosCollectionsReads.albumsQuery(),
         ).forEach { withClue(it.name) { it.with_held_thumbnail shouldBe false } }
     }
 
     "an album's entries are counted as PHOTOGRAPHS and not as whatever was filed there" {
-        // `core_collection_entry` IS POLYMORPHIC — `(target_type, target_id)` —
-        // so a notebook's notes live in the same table. An album's size counted
-        // without the predicate would be the size of everything a member had
-        // filed under that collection.
+        // An `edge` is `(from_id, rel, to_id)` for every kind of entity, so a
+        // notebook's notes live in the same table. An album's size counted
+        // without the predicate would be the size of everything filed anywhere.
+        // And a TRASHED photograph is no longer in the album's count.
         val query = PhotosCollectionsReads.albumEntriesQuery()
-        query.where_ shouldBe "target_type = ?"
-        query.bind.map { it.text } shouldBe listOf("media.asset")
+        val where = query.where_.shouldNotBeNull()
+        where.contains("rel = 'contains'") shouldBe true
+        where.contains("kind = 'photo'") shouldBe true
+        where.contains("deleted_at IS NULL") shouldBe true
     }
 
     "the archive and the trash are different shelves, and neither counts the other" {
-        // #419: archived and trashed are different answers and the table's own
-        // CHECK refuses a row claiming both, so a shelf that counted the
-        // overlap would be counting a row that cannot exist.
+        // Archived is a flag edge and trashed is the entity's own stamp; a
+        // photograph can be both, and the trash shelf must not hide behind the
+        // archive. The archive shelf holds the LIVE archived ones only.
         PhotosCollectionsReads.archiveQuery().where_ shouldBe
-            "archived_at IS NOT NULL AND deleted_at IS NULL"
-        PhotosCollectionsReads.trashQuery().where_ shouldBe "deleted_at IS NOT NULL"
+            "${PhotoFold.NOT_TRASHED} AND ${PhotoFold.ARCHIVED}"
+        PhotosCollectionsReads.trashQuery().where_ shouldBe PhotoFold.TRASHED
         // VIDEOS IS A SHELF OF THE LIVE LIBRARY: a video in the trash is in the
-        // trash, and counting it here would put one photograph on two shelves
-        // whose whole point is that they are different places.
-        PhotosCollectionsReads.videosQuery().where_ shouldBe
-            "kind = ? AND deleted_at IS NULL AND archived_at IS NULL"
+        // trash, and counting it here would put one photograph on two shelves.
+        PhotosCollectionsReads.videosQuery().where_ shouldBe "form = ? AND ${PhotoFold.LIVE}"
         PhotosCollectionsReads.videosQuery().bind.map { it.text } shouldBe listOf("video")
+        // The trash is sorted by id (the entity's deletion stamp is not on `photo`).
+        PhotosCollectionsReads.trashQuery().order.shouldNotBeNull().sort_column shouldBe "id"
     }
 
-    "the star is three reads, because a favourite is not a column" {
-        // #916, ONT-03: `media_asset.favorite` does not exist. The star is the
-        // `starred` concept in the flags scheme, and the URI is spelled `https`
-        // deliberately — a `urn:`-style `:flags` reads as a NAMED PARAMETER in
-        // condition SQL (#258, the colon-literal trap).
-        PhotosCollectionsReads.flagsSchemeQuery().bind.map { it.text } shouldBe
-            listOf("https://centraid.dev/schemes/flags")
-        PhotosCollectionsReads.starredConceptQuery("scheme-1").bind.map { it.text } shouldBe
-            listOf("scheme-1", "starred")
-        PhotosCollectionsReads.starredTagsQuery("concept-1").bind.map { it.text } shouldBe
-            listOf("media.asset", "concept-1")
+    "the star is one read over the flag edges of live photographs" {
+        // #916, ONT-03: a favourite is not a column. It is a `tagged` edge to the
+        // `flag:starred` entity, and a trashed photograph's star is not counted.
+        val where = PhotosCollectionsReads.starredQuery().where_.shouldNotBeNull()
+        where.contains("rel = 'tagged'") shouldBe true
+        where.contains("to_id = 'flag:starred'") shouldBe true
+        where.contains("deleted_at IS NULL") shouldBe true
+        PhotosCollectionsReads.starredQuery().from shouldBe "edge"
+    }
+
+    "an album's cover is the cover blob it was given, else its first member" {
+        val albums = Scan(rows = listOf(albumRow("alb-1", "Chosen"), albumRow("alb-2", "Plain")))
+        val entries = Scan(
+            rows = listOf(
+                entryRow("alb-1", "p-1"),
+                entryRow("alb-2", "p-2"),
+                entryRow("alb-2", "p-3"),
+            ),
+        )
+        // `albumCoversQuery` projects `(id, blob)` and then the door's thumbnail.
+        val data = fold(
+            albums = albums,
+            coverBlob = mapOf("alb-1" to "blob-9"),
+            entries = entries,
+            covers = Scan(
+                rows = listOf(
+                    row("p-9", "blob-9", "/store/9.data"),
+                    row("p-2", "blob-2", "/store/2.data"),
+                ),
+            ),
+        )
+        val byTitle = data.shelves.associateBy { it.title }
+        byTitle.getValue("Chosen").cover_thumbnail_path shouldBe "/store/9.data"
+        byTitle.getValue("Plain").cover_thumbnail_path shouldBe "/store/2.data"
+        byTitle.getValue("Chosen").item_count shouldBe 1
+        byTitle.getValue("Plain").item_count shouldBe 2
     }
 
     "the four standing shelves come first, in the order a member reads them" {
@@ -296,19 +326,18 @@ class PhotosCollectionsSpec : StringSpec({
 
         data.doors.map { it.kind } shouldContainExactly listOf(
             CollectionsDoor.Kind.KIND_PLACES,
-            CollectionsDoor.Kind.KIND_MEMORIES,
             CollectionsDoor.Kind.KIND_DUPLICATES,
         )
     }
 
-    "a vault with nothing in it is four shelves and three doors, never a refusal" {
+    "a vault with nothing in it is four shelves and two doors, never a refusal" {
         // AN EMPTY VAULT IS A REAL ANSWER, unlike the Notes editor's empty page:
         // a member with no albums and no photographs has a Collections screen
-        // with four standing shelves and three doors on it, which is a screen
+        // with four standing shelves and two doors on it, which is a screen
         // and not an absence.
         val data = fold()
         data.shelves.size shouldBe 4
-        data.doors.size shouldBe 3
+        data.doors.size shouldBe 2
         data.shelves.forEach {
             withClue(it.title) {
                 it.item_count shouldBe 0
@@ -319,7 +348,7 @@ class PhotosCollectionsSpec : StringSpec({
 
     "each shelf is counted from its own rows, and its cover is its newest" {
         val data = fold(
-            starred = Scan(rows = listOf(row("tag-1", "a-1"), row("tag-2", "a-2"))),
+            starred = Scan(rows = listOf(row("a-1", "flag:starred"), row("a-2", "flag:starred"))),
             archive = Scan(rows = listOf(shelfRow("a-9", "2026-02-03", "/store/a-9.data"))),
             trash = Scan(
                 rows = listOf(
@@ -336,7 +365,7 @@ class PhotosCollectionsSpec : StringSpec({
         )
         val byTitle = data.shelves.associateBy { it.title }
         byTitle.getValue("Favorites").item_count shouldBe 2
-        // NO COVER FOR FAVORITES: a favourite is a `core_tag` row and that read
+        // NO COVER FOR FAVORITES: a favourite is an edge and that read
         // never reaches the photograph behind it.
         byTitle.getValue("Favorites").cover_thumbnail_path shouldBe null
         byTitle.getValue("Archive").item_count shouldBe 1
@@ -355,7 +384,7 @@ class PhotosCollectionsSpec : StringSpec({
         // views render as "at least N".
         val data = fold(
             albums = Scan(rows = listOf(albumRow("col-1", "Portugal"))),
-            entries = Scan(rows = listOf(entryRow("e-1", "col-1")), capped = true),
+            entries = Scan(rows = listOf(entryRow("col-1", "a-1")), capped = true),
             trash = Scan(rows = listOf(shelfRow("a-1", "2026-02-02")), capped = true),
             archive = Scan(rows = listOf(shelfRow("a-2", "2026-02-02")), capped = false),
             places = Scan(rows = listOf(row("pl-1", "Lisbon")), capped = true),
@@ -373,22 +402,12 @@ class PhotosCollectionsSpec : StringSpec({
             .count_capped shouldBe true
     }
 
-    "Duplicates counts GROUPS of look-alikes, never rows" {
-        // A cluster of one is not a duplicate of anything, and counting rows
-        // would tell a member they have hundreds of duplicates when they have
-        // one. The badge and the count are the same number here: every cluster
-        // on this door is one decision still owed.
-        val data = fold(
-            duplicates = Scan(
-                rows = listOf(
-                    phashRow("a-1", "c-1"),
-                    phashRow("a-2", "c-1"),
-                    phashRow("a-3", "c-2"),
-                    phashRow("a-4", "c-3"),
-                    phashRow("a-5", "c-3"),
-                ),
-            ),
-        )
+    "Duplicates counts the core's clusters, never rows" {
+        // The core answers whole clusters of two or more, so the count is the
+        // number of groups. A count of rows would tell a member they have
+        // hundreds of duplicates when they have one. The badge and the count are
+        // the same number: every cluster on this door is one decision owed.
+        val data = fold(duplicateClusters = 2)
         val door = data.doors.single { it.kind == CollectionsDoor.Kind.KIND_DUPLICATES }
         door.count shouldBe 2
         door.needs_attention shouldBe 2
@@ -416,7 +435,7 @@ class PhotosCollectionsSpec : StringSpec({
         shelves.count { it.title == "Favorites" } shouldBe 1
         shelves.filter { it.member_owned }.map { it.title } shouldContainExactly
             listOf("Portugal", "Rooftops")
-        second.data_.shouldNotBeNull().doors.size shouldBe 3
+        second.data_.shouldNotBeNull().doors.size shouldBe 2
     }
 
     "creating an album is the VAULT's command, keyed on what it is for" {
@@ -437,12 +456,12 @@ class PhotosCollectionsSpec : StringSpec({
         // THE COMMAND NAME IS THE VAULT'S, never the app action. `notes.save`
         // did not exist and a member read "That request does not make sense to
         // this build" on every window for ever.
-        write.command shouldBe "media.create_album"
-        write.inputJson shouldBe "{\"title\":\"Portugal\"}"
+        write.command shouldBe "container.create"
+        write.inputJson shouldBe "{\"kind\":\"album\",\"title\":\"Portugal\"}"
         // CONTENT-DERIVED, NEVER AN ORDINAL: an ordinal is stable only for a
         // caller that makes the same calls every time, which is the v0 fallback
         // `crates/core`'s `invoke` refuses outright.
-        write.invokeKey shouldBe "media.create_album:Portugal"
+        write.invokeKey shouldBe "album-create:Portugal"
         // THE SHEET STAYS OPEN UNTIL THE WRITE COMMITS. Closing it here would
         // be the screen claiming an album exists because a button was pressed.
         step.state.sheet shouldBe PhotosCollectionsState.Sheet.SHEET_NEW_ALBUM
@@ -530,7 +549,7 @@ class PhotosCollectionsSpec : StringSpec({
     }
 
     "an empty album name is not a write" {
-        // `media.create_album`'s schema has `"title": { "minLength": 1 }`, so
+        // `container.create`'s schema has `"title": { "minLength": 1 }`, so
         // the vault would refuse it — and a command a screen KNOWS will be
         // refused is a round trip a member waits through for nothing.
         machine.reduce(
@@ -547,8 +566,8 @@ class PhotosCollectionsSpec : StringSpec({
         // cannot parse — landing as a command that never ran rather than as
         // anything a member could read.
         PhotosCollectionsMachine.createInput("He said \"hi\"") shouldBe
-            "{\"title\":\"He said \\\"hi\\\"\"}"
-        PhotosCollectionsMachine.deleteInput("col-1") shouldBe "{\"album_id\":\"col-1\"}"
+            "{\"kind\":\"album\",\"title\":\"He said \\\"hi\\\"\"}"
+        PhotosCollectionsMachine.deleteInput("col-1") shouldBe "{\"id\":\"col-1\"}"
     }
 
     "deleting an album names the album and nothing else" {
@@ -558,8 +577,11 @@ class PhotosCollectionsSpec : StringSpec({
                 album_deleted = PhotosCollectionsEvent.AlbumDeleted(collection_id = "col-9"),
             ),
         ).effects.single() as ScreenEffect.SubmitWrite
-        write.command shouldBe "media.delete_album"
-        write.invokeKey shouldBe "media.delete_album:col-9"
+        // A deletion is the entity's own trash: the album goes to the shelf it
+        // can be restored from, and its photographs are untouched.
+        write.command shouldBe "entity.trash"
+        write.inputJson shouldBe "{\"id\":\"col-9\"}"
+        write.invokeKey shouldBe "album-delete:col-9"
     }
 
     "only a committed write closes the sheet, and a refused one keeps the list" {

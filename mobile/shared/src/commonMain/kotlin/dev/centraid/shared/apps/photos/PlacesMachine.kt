@@ -19,7 +19,7 @@ import kotlin.math.sqrt
  * PLACES — WHERE THE PHOTOGRAPHS WERE TAKEN, AS CARDS OR AS A PLOT (#1029, photos port).
  *
  * v0 had two routes over one read (`PlacesView.tsx` and `PlacesMap.tsx`): the
- * shelf and the map read the same `core_place` rows and differed only in the
+ * shelf and the map read the same `place` rows and differed only in the
  * draw, which meant two reads, two empty states and two ways to be out of date.
  * The contract collapses them into one screen with a `Presentation`, so
  * [PlacesEvent.PresentationChanged] changes a parameter and **emits no read** —
@@ -27,8 +27,8 @@ import kotlin.math.sqrt
  *
  * ## TWO PASSES, BECAUSE THE DOOR HAS NO JOIN AND NO `COUNT(*)`
  *
- * A place card is two facts from two tables. `core_place` knows a place's name,
- * its pin and its zone; only `media_asset` knows how many photographs are AT it
+ * A place card is two facts from two tables. `place` knows a place's name,
+ * its pin and its zone; only `photo` knows how many photographs are AT it
  * and which one is its cover, and `PlacesData.unplaced_count` — the number a
  * member needs to judge whether the plot is their library or a corner of it —
  * is a fact about assets with no place at all. `centraid.core.v1.PageQuery` has
@@ -67,15 +67,19 @@ public object PlacesMachine : ScreenMachine<PlacesState, PlacesEvent> {
      */
     public const val ASSETS_SCREEN_ID: String = "photos.places.assets"
 
+    /** The names pass's own screen id: a place's name is its entity's, a third table. */
+    public const val NAMES_SCREEN_ID: String = "photos.places.names"
+
     /**
-     * THE VAULT COMMAND, NOT THE APP ACTION (`crates/vault/src/commands/media.rs`).
+     * THE VAULT COMMAND, NOT THE APP ACTION: `entity.retitle`, the shared verb.
      *
-     * `media.name_place` writes `name` and `kind` and nothing else; it cannot
-     * reach the derived gazetteer name, which is what keeps a member's own word
-     * for a place authoritative by construction rather than by convention
+     * A place's name is its entity's title, and the gazetteer's name is the
+     * `locality` column, written by `place.locate` alone — so a rename cannot reach
+     * the derived name, which is what keeps a member's own word for a place
+     * authoritative by construction rather than by convention
      * (`docs/photos/places.md`, layer 1).
      */
-    public const val RENAME_COMMAND: String = "media.name_place"
+    public const val RENAME_COMMAND: String = PhotoWrites.RETITLE
 
     /**
      * WHAT A PLACE WITH NO READABLE NAME IS CALLED.
@@ -124,7 +128,7 @@ public object PlacesMachine : ScreenMachine<PlacesState, PlacesEvent> {
                 Step(state.copy(presentation = event.presentation.presentation))
 
             // THE PLACE WALK CONTINUES; THE COUNTING PASS DOES NOT.
-            // `PlacesData.next_cursor` is the `core_place` cursor and nothing
+            // `PlacesData.next_cursor` is the `place` cursor and nothing
             // else — see [merge], which keeps it from the places pass alone.
             event.next_page != null -> Step(
                 state,
@@ -134,9 +138,9 @@ public object PlacesMachine : ScreenMachine<PlacesState, PlacesEvent> {
             // A ROW MOVED, AND THIS SCREEN IS AN AGGREGATE OVER BOTH TABLES.
             //
             // The keys are NOT consulted, and that is deliberate rather than
-            // lazy: a change to one `media_asset` row changes the count of the
+            // lazy: a change to one `photo` row changes the count of the
             // place it left and the place it joined, and the event that carries
-            // it names ASSET ids while `RowsChanged.place_ids` is a list of
+            // it names PHOTOGRAPH ids while `RowsChanged.place_ids` is a list of
             // PLACE ids. There is no key subset that decides an aggregate, so
             // the honest reduction is to read both passes again.
             //
@@ -261,6 +265,7 @@ public object PlacesMachine : ScreenMachine<PlacesState, PlacesEvent> {
         listOf(
             ScreenEffect.ReadPage(SCREEN_ID, afterCursor = null),
             ScreenEffect.ReadPage(ASSETS_SCREEN_ID, afterCursor = null),
+            ScreenEffect.ReadPage(NAMES_SCREEN_ID, afterCursor = null),
         ),
     )
 
@@ -275,19 +280,19 @@ public object PlacesMachine : ScreenMachine<PlacesState, PlacesEvent> {
      *
      * `next_cursor` is the exception worth stating: the counting pass always
      * reports `null` (it does not walk — see [PlacesAssetReads]), so `?:` keeps
-     * the `core_place` walk's cursor rather than letting the other pass erase
+     * the `place` walk's cursor rather than letting the other pass erase
      * it.
      */
     internal fun merge(existing: PlacesData?, arriving: PlacesData?): PlacesData? {
         if (arriving == null) return existing
-        if (existing == null) return arriving.copy(places = sorted(arriving.places))
+        if (existing == null) return arriving.copy(places = sorted(named(arriving.places)))
         val byId = existing.places.associateBy { it.place_id }.toMutableMap()
         arriving.places.forEach { row ->
             val held = byId[row.place_id]
             byId[row.place_id] = if (held == null) row else join(held, row)
         }
         return PlacesData(
-            places = sorted(byId.values.toList()),
+            places = sorted(named(byId.values.toList())),
             next_cursor = arriving.next_cursor ?: existing.next_cursor,
             // The counting pass is the only one that can see this, and it
             // reports 0 when it has not run; `maxOf` is how "no answer" loses
@@ -303,10 +308,18 @@ public object PlacesMachine : ScreenMachine<PlacesState, PlacesEvent> {
         )
     }
 
+    /**
+     * A PLACE WITH NO READABLE NAME IS [NO_NAME], and only once the passes that could
+     * name it have had their say: the names pass says nothing for an unnamed place, so
+     * the sentence is put in by the join, where a name that arrives later still wins.
+     */
+    private fun named(rows: List<PlaceRow>): List<PlaceRow> =
+        rows.map { if (it.name.isEmpty()) it.copy(name = NO_NAME) else it }
+
     private fun join(held: PlaceRow, arriving: PlaceRow): PlaceRow = PlaceRow(
         place_id = held.place_id,
-        // An empty name is the counting pass saying nothing, never a place
-        // called "". [PlacesReads] resolves a readable name or [NO_NAME].
+        // An empty name is a pass saying nothing, never a place called "".
+        // [PlacesNameReads] resolves a readable name and [named] fills [NO_NAME].
         name = arriving.name.ifEmpty { held.name },
         asset_count = maxOf(held.asset_count, arriving.asset_count),
         asset_count_capped = held.asset_count_capped || arriving.asset_count_capped,
@@ -469,37 +482,33 @@ public object PlacesMachine : ScreenMachine<PlacesState, PlacesEvent> {
     private const val MIDDLE: Double = 0.5
 
     /**
-     * `media.name_place`'s input.
-     *
-     * `kind` is deliberately NOT sent. It is optional on the command and it is
-     * how the phrase ladder learns which place is Home, so writing one from a
-     * rename sheet that never asked would be this screen answering a question
-     * the member was not shown.
+     * `entity.retitle`'s input: the place's id and the member's word for it.
      *
      * Hand-built for `NotesEditorMachine.saveInput`'s reason: `commonMain`
      * carries no JSON dependency, the shape is two fields, and the escaping is
      * the only hard part.
      */
-    internal fun renameInput(placeId: String, name: String): String =
-        "{\"place_id\":${jsonString(placeId)},\"name\":${jsonString(name)}}"
+    internal fun renameInput(placeId: String, name: String): String = PhotoWrites.retitle(placeId, name)
 
     /**
-     * `core_place` AND `media_asset` — both halves of a card.
+     * `place`, `photo` AND `entity` — the three parts of a card: its pin, its count
+     * and its name.
      *
-     * Two tables on one machine because the screen is a join the door will not
-     * do. The keys are handed on for `core_place`, where they genuinely are
-     * place ids; for `media_asset` they are asset ids and the event's field is
-     * `place_ids`, so they are dropped rather than mislabelled — [reduce]
-     * ignores the list either way, for the reason stated there.
+     * Three tables on one machine because the screen is a join the door will not
+     * do. The keys are handed on for `place`, where they genuinely are place ids;
+     * for the others they are photograph or entity ids and the event's field is
+     * `place_ids`, so they are dropped rather than mislabelled — [reduce] ignores
+     * the list either way, for the reason stated there. `edge` moves a card too (a
+     * photograph put away leaves its place's count).
      */
     override fun rowsChanged(table: String, keys: List<String>): PlacesEvent? = when (table) {
         PLACES_TABLE -> PlacesEvent(rows_changed = PlacesEvent.RowsChanged(place_ids = keys))
-        ASSETS_TABLE -> PlacesEvent(rows_changed = PlacesEvent.RowsChanged())
+        ASSETS_TABLE, "entity", "edge" -> PlacesEvent(rows_changed = PlacesEvent.RowsChanged())
         else -> null
     }
 
-    internal const val PLACES_TABLE: String = "core_place"
-    internal const val ASSETS_TABLE: String = "media_asset"
+    internal const val PLACES_TABLE: String = "place"
+    internal const val ASSETS_TABLE: String = "photo"
 
     override fun seatChanged(seat: SeatState): PlacesEvent =
         PlacesEvent(seat_changed = PlacesEvent.SeatChanged(seat = seat))

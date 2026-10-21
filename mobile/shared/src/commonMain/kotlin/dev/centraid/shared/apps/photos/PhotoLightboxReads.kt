@@ -18,9 +18,9 @@ import dev.centraid.shared.sync.ScreenReads
 import dev.centraid.shared.sync.ScreenWrites
 
 /**
- * WHAT THE LIGHTBOX READS (#1029, photos port, lane 2).
+ * WHAT THE LIGHTBOX READS (#1029, photos port, lane 2; #1135).
  *
- * This object is the ASSET — one row of `media_asset`, bound by id — and the
+ * This object is the PHOTOGRAPH — one row of `photo`, bound by id — and the
  * screen's writes. [PhotoLightboxLeg] is the other four statements.
  *
  * ## Why this is five reads and not one
@@ -32,19 +32,24 @@ import dev.centraid.shared.sync.ScreenWrites
  * `with_held_thumbnail`, `with_note_body`, `with_document_size` — are the only
  * cross-table answers on it, and none of them is a place or a word.
  *
- * So the photograph is assembled from five statements, each bound to an id it
- * learned from the one before. The machine sequences them; the state is what
- * carries the intermediate ids, which is why [query] takes a state at all.
+ * A photograph is several tables in the model: its bytes, size and capture are
+ * the `photo` row; its title and its trash are its `entity`; a star, the
+ * archive and its labels are `tagged` edges; its place is a `place` row and its
+ * name another entity's. So the photograph is assembled from five statements,
+ * each bound to an id it learned from the one before. The machine sequences
+ * them; the state is what carries the intermediate ids, which is why [query]
+ * takes a state at all.
  *
  * ## The predicate is NOT the library's
  *
- * `PhotosReads` reads `deleted_at IS NULL AND archived_at IS NULL`, because a
- * library that showed archived assets would be showing a member the photos they
- * put away. **The lightbox binds the asset id and nothing else**, deliberately:
- * it is opened from the trash shelf and from the archive as well as from the
- * library, and a predicate that excluded those two would open the trash onto
- * "Centraid could not find this photograph". `archived` and `trashed` ride on
- * the detail instead, so the toolbar can say Unarchive rather than Archive.
+ * `PhotosReads` reads the live, unarchived, unfolded photographs, because a
+ * library that showed archived photographs would be showing a member the photos
+ * they put away. **The lightbox binds the photograph id and nothing else**,
+ * deliberately: it is opened from the trash shelf and from the archive as well
+ * as from the library, and a predicate that excluded those two would open the
+ * trash onto "Centraid could not find this photograph". `archived` and `trashed`
+ * ride on the detail instead (the edge leg and the entity leg answer them), so
+ * the toolbar can say Unarchive rather than Archive.
  *
  * ## What this read CANNOT answer, and does not pretend to
  *
@@ -55,12 +60,11 @@ import dev.centraid.shared.sync.ScreenWrites
  *   `page.rs` says, "this column hands out no path". The path of the original
  *   is only reachable through the BYTE door (`api::content_urls` →
  *   `Vault::content_location`), so this read leaves it ABSENT and
- *   `PhotoLightboxBridge` asks the byte door by the content id the CONTENT leg
+ *   `PhotoLightboxBridge` asks the byte door by the blob hash the CONTENT leg
  *   brings, landing the answer as `OriginalLocated`. Nothing here fabricates a
  *   path.
- * - **`camera`.** No column of `media_asset` names a camera model, and
- *   `exif_json` is a JSON blob that a reducer must not parse. Left empty rather
- *   than guessed.
+ * - **`camera`.** No column of `photo` names a camera model, and `exif` is a
+ *   JSON blob that a reducer must not parse. Left empty rather than guessed.
  *   The shells read the make and model out of the ORIGINAL's own header once
  *   it is located, which is where a camera wrote them.
  */
@@ -69,8 +73,8 @@ public object PhotoLightboxReads :
     ScreenWrites<PhotoLightboxState, PhotoLightboxEvent> {
     override val screenId: String = PhotoLightboxMachine.SCREEN_ID
 
-    /** `media_asset`, the same table the machine's `rowsChanged` declares. */
-    override val table: String = "media_asset"
+    /** `photo`, the table the machine's `rowsChanged` answers in photograph ids for. */
+    override val table: String = "photo"
 
     /** One photograph. The lightbox is open on exactly one. */
     override val limit: Int = 1
@@ -88,7 +92,7 @@ public object PhotoLightboxReads :
      * door reads the cursor off the row by the two columns the `ORDER BY`
      * names, there is no `key_of` callback, and a statement that dropped them
      * because "it is only one row" breaks the moment its predicate widens. The
-     * pair is the library's own — `captured_at DESC, asset_id DESC` — so this
+     * pair is the library's own — `taken_at DESC, id DESC` — so this
      * statement sorts the way every other Photos read sorts.
      */
     override fun query(state: PhotoLightboxState, afterCursor: String?): PageQuery? {
@@ -96,24 +100,21 @@ public object PhotoLightboxReads :
         return PageQuery(
             name = "photos.lightbox.asset",
             select = listOf(
-                "asset_id",
-                "kind",
-                "title",
-                "captured_at",
-                "tz_offset_min",
+                "id",
+                "form",
+                "taken_at",
+                "offset_min",
                 "place_id",
                 "width",
                 "height",
                 "duration_s",
-                "archived_at",
-                "deleted_at",
             ),
             from = table,
-            where_ = "asset_id = ?",
+            where_ = "id = ?",
             bind = listOf(Value(text = assetId)),
             order = PageOrder(
-                sort_column = "captured_at",
-                pk_column = "asset_id",
+                sort_column = "taken_at",
+                pk_column = "id",
                 descending = true,
             ),
             // THE SAME THREE COMPUTED COLUMNS THE GRID ASKS FOR, and for the
@@ -138,7 +139,7 @@ public object PhotoLightboxReads :
         val row = rows.firstOrNull() ?: return refused(
             Reads.refused("Centraid could not find this photo on this phone."),
         )
-        val kind = PhotosReads.kindOf(row.text(KIND))
+        val kind = PhotosReads.kindOf(row.text(FORM))
         return PhotoLightboxEvent(
             data_ = PhotoLightboxEvent.DataArrived(
                 // NOT an amendment: this read REPLACES the photograph, which is
@@ -153,7 +154,9 @@ public object PhotoLightboxReads :
                     // byte door answers for the original's path, and the
                     // bridge asks it.
                     original_path = null,
-                    title = row.text(TITLE),
+                    // THE TITLE, THE TRASH, THE STAR AND THE ARCHIVE ARE NOT THIS
+                    // ROW'S: the entity leg and the edge leg answer them.
+                    title = "",
                     captured_at = row.text(CAPTURED_AT),
                     // A CAPTURE-LOCAL OFFSET, NOT THE READER'S. `tz_offset_min`
                     // is nullable and a missing offset reads as zero, so a
@@ -171,17 +174,15 @@ public object PhotoLightboxReads :
                         metered = LinkConditions.metered,
                     ),
                     original_hash = row.text(ORIGINAL_HASH),
-                    // FILLED BY THE CONCEPTS LEG, which is the only read that
-                    // can see the flags scheme's `starred` notation. A star
-                    // guessed here would be one a member never put on a
-                    // photograph.
+                    // FILLED BY THE TAGS LEG, which is the only read that can see
+                    // the `starred` flag's edge. A star guessed here would be one
+                    // a member never put on a photograph.
                     favorite = false,
-                    // A TIMESTAMP COLUMN IS A BOOLEAN TO THIS SCREEN. The DDL's
-                    // own CHECK keeps a row out of both at once
-                    // (`archived_at IS NULL OR deleted_at IS NULL`), so these
-                    // two are exclusive by construction and not by convention.
-                    archived = row.text(ARCHIVED_AT).isNotEmpty(),
-                    trashed = row.text(DELETED_AT).isNotEmpty(),
+                    // THE ARCHIVE IS A FLAG EDGE AND THE TRASH THE ENTITY'S
+                    // STAMP: the tags leg and the entities leg say which, and
+                    // both reset here with the rest of the detail.
+                    archived = false,
+                    trashed = false,
                     width = row.integer(WIDTH).toInt(),
                     height = row.integer(HEIGHT).toInt(),
                     // `duration_s` IS `REAL` IN THE DDL, so it arrives on the
@@ -209,25 +210,22 @@ public object PhotoLightboxReads :
         )
 
     private const val ASSET_ID: Int = 0
-    private const val KIND: Int = 1
-    private const val TITLE: Int = 2
-    private const val CAPTURED_AT: Int = 3
-    private const val TZ_OFFSET: Int = 4
-    private const val PLACE_ID: Int = 5
-    private const val WIDTH: Int = 6
-    private const val HEIGHT: Int = 7
-    private const val DURATION: Int = 8
-    private const val ARCHIVED_AT: Int = 9
-    private const val DELETED_AT: Int = 10
+    private const val FORM: Int = 1
+    private const val CAPTURED_AT: Int = 2
+    private const val TZ_OFFSET: Int = 3
+    private const val PLACE_ID: Int = 4
+    private const val WIDTH: Int = 5
+    private const val HEIGHT: Int = 6
+    private const val DURATION: Int = 7
 
     /**
      * The three computed columns, in the order `crates/core`'s `api::page`
-     * appends them — after the eleven this statement named. They move together
+     * appends them — after the eight this statement named. They move together
      * with the `select` list above and nowhere else.
      */
-    private const val THUMBNAIL: Int = 11
-    private const val ORIGINAL_HASH: Int = 12
-    private const val ORIGINAL_HELD: Int = 13
+    private const val THUMBNAIL: Int = 8
+    private const val ORIGINAL_HASH: Int = 9
+    private const val ORIGINAL_HELD: Int = 10
 
     override val appId: String = "photos"
 
@@ -279,7 +277,7 @@ public object PhotoLightboxReads :
  * that cannot come apart.
  *
  * **EVERY ONE OF THESE SETS `DataArrived.amendment`.** It is a flag and not an
- * inference from an empty `asset_id`: `core_tag` carries the asset in a column,
+ * inference from an empty `asset_id`: an `edge` carries the photograph in a column,
  * so the day a leg projects it the inference would start replacing the
  * photograph with a tag — silently, because both shapes typecheck.
  *
@@ -294,10 +292,10 @@ public class PhotoLightboxLeg internal constructor(
     override val screenId: String = PhotoLightboxMachine.readId(leg)
 
     override val table: String = when (leg) {
-        PhotoLightboxMachine.Leg.PLACE -> "core_place"
-        PhotoLightboxMachine.Leg.TAGS -> "core_tag"
-        PhotoLightboxMachine.Leg.CONCEPTS -> "core_concept"
-        PhotoLightboxMachine.Leg.CONTENT -> "core_content_item"
+        PhotoLightboxMachine.Leg.PLACE -> "place"
+        PhotoLightboxMachine.Leg.TAGS -> "edge"
+        PhotoLightboxMachine.Leg.CONCEPTS -> "entity"
+        PhotoLightboxMachine.Leg.CONTENT -> "blob"
     }
 
     /**
@@ -311,7 +309,9 @@ public class PhotoLightboxLeg internal constructor(
      */
     override val limit: Int = when (leg) {
         PhotoLightboxMachine.Leg.PLACE, PhotoLightboxMachine.Leg.CONTENT -> 1
-        PhotoLightboxMachine.Leg.TAGS, PhotoLightboxMachine.Leg.CONCEPTS -> 64
+        PhotoLightboxMachine.Leg.TAGS -> 64
+        // THE PHOTOGRAPH'S OWN ENTITY, ITS PLACE'S, AND ONE PER TAG.
+        PhotoLightboxMachine.Leg.CONCEPTS -> 66
     }
 
     /**
@@ -322,11 +322,11 @@ public class PhotoLightboxLeg internal constructor(
      * into silence. The machine does not emit these reads before the asset has
      * landed, so a null here means the member moved on mid-read.
      *
-     * **SORT AND PRIMARY KEY ARE THE SAME COLUMN** on every one of the four. That is
-     * `crates/apps/photos`' own idiom for a set read by id
-     * (`content_statement`, `concepts_statement`, `custody_statement` all use
-     * `PageOrder::asc("content_id", "content_id")`), and it is what keeps these
-     * off `captured_at` — the nullable sort key whose CONTINUED page the door
+     * **SORT AND PRIMARY KEY ARE THE SAME COLUMN** on three of the four, and the
+     * edge leg's are its two ends (`to_id`, `from_id`: an edge has no id of its
+     * own, and one photograph has one edge to each thing). That is
+     * `crates/apps/photos`' own idiom for a set read by id, and it is what keeps
+     * these off `taken_at` — the nullable sort key whose CONTINUED page the door
      * refuses. None of these walks, so none of them can hit that.
      */
     override fun query(state: PhotoLightboxState, afterCursor: String?): PageQuery? {
@@ -339,51 +339,55 @@ public class PhotoLightboxLeg internal constructor(
                     name = "photos.lightbox.place",
                     // THE COORDINATE RIDES ALONG FOR "Copy exact location"
                     // ONLY — it is never printed (`docs/photos/places.md`).
-                    select = listOf("place_id", "name", "geo_lat", "geo_lng"),
+                    select = listOf("id", "lat", "lon"),
                     from = table,
-                    where_ = "place_id = ?",
+                    where_ = "id = ?",
                     bind = listOf(Value(text = placeId)),
-                    order = PageOrder("place_id", "place_id", descending = false),
+                    order = PageOrder("id", "id", descending = false),
                 )
             }
 
+            // WHAT IS `tagged` ON THIS PHOTOGRAPH: its labels (tag entities) and
+            // its two flags, the star and the archive.
             PhotoLightboxMachine.Leg.TAGS -> PageQuery(
                 name = "photos.lightbox.tags",
-                select = listOf("tag_id", "concept_id", "tagged_by_party_id"),
+                select = listOf("to_id", "from_id"),
                 from = table,
-                where_ = "target_type = ? AND target_id = ?",
-                bind = listOf(Value(text = TAG_TARGET_TYPE), Value(text = assetId)),
-                order = PageOrder("tag_id", "tag_id", descending = false),
+                where_ = "from_id = ? AND rel = 'tagged'",
+                bind = listOf(Value(text = assetId)),
+                order = PageOrder("to_id", "from_id", descending = false),
             )
 
+            // THE WORDS AND THE TRASH: the photograph's own entity (its title and
+            // its trash stamp), its place's (the name) and each label's (its
+            // word), in one statement bound to every id the photograph knows.
             PhotoLightboxMachine.Leg.CONCEPTS -> {
-                val ids = detail?.labels?.map { it.concept_id }?.filter { it.isNotEmpty() }
-                    ?: return null
-                if (ids.isEmpty()) return null
+                val ids = buildList {
+                    add(assetId)
+                    detail?.place_id?.takeIf { it.isNotEmpty() }?.let { add(it) }
+                    detail?.labels?.map { it.concept_id }?.filter { it.isNotEmpty() }?.let { addAll(it) }
+                }.distinct()
                 PageQuery(
-                    name = "photos.lightbox.concepts",
-                    select = listOf("concept_id", "pref_label", "notation"),
+                    name = "photos.lightbox.entities",
+                    select = listOf("id", "title", "kind", "deleted_at"),
                     from = table,
-                    where_ = inList("concept_id", ids.size),
+                    where_ = inList("id", ids.size),
                     bind = ids.map { Value(text = it) },
-                    order = PageOrder("concept_id", "concept_id", descending = false),
+                    order = PageOrder("id", "id", descending = false),
                 )
             }
 
-            // BY HASH, AND THE HASH IS AN IDENTITY HERE. `PhotoDetail` carries
-            // no `content_id`, and `core_content_item.content_hash` is `NOT
-            // NULL UNIQUE` — so the hash the thumbnail column already handed
-            // this screen addresses exactly one item. `deleted_at IS NULL`
-            // because a tombstoned item is not bytes a member has.
+            // BY HASH, AND THE HASH IS AN IDENTITY HERE: `blob.hash` is the key,
+            // and the thumbnail column already handed this screen the original's.
             PhotoLightboxMachine.Leg.CONTENT -> {
                 val hash = detail?.original_hash?.takeIf { it.isNotEmpty() } ?: return null
                 PageQuery(
                     name = "photos.lightbox.content",
-                    select = listOf("content_id", "byte_size"),
+                    select = listOf("hash", "size"),
                     from = table,
-                    where_ = "content_hash = ? AND deleted_at IS NULL",
+                    where_ = "hash = ?",
                     bind = listOf(Value(text = hash)),
-                    order = PageOrder("content_id", "content_id", descending = false),
+                    order = PageOrder("hash", "hash", descending = false),
                 )
             }
         }
@@ -401,74 +405,30 @@ public class PhotoLightboxLeg internal constructor(
         PhotoLightboxEvent(
             data_ = PhotoLightboxEvent.DataArrived(
                 // AN AMENDMENT SAYS SO, and is never inferred from an empty
-                // `asset_id`. `core_tag` COULD carry one — it has the asset in a
+                // `asset_id`. an `edge` COULD carry one — it has the photograph in a
                 // column — and a reducer that read absence as "satellite" would
                 // start replacing the photograph with a tag the day it did.
                 // Both shapes typecheck; only one is right.
                 amendment = true,
                 detail = when (leg) {
+                    // BOTH OR NEITHER. A `REAL` column that is NULL is absent on
+                    // the wire, never zero — a coordinate coerced from nothing is
+                    // a pin on the equator. The NAME is the entities leg's.
                     PhotoLightboxMachine.Leg.PLACE -> PhotoDetail(
-                        // WHERE, AS THE VAULT NAMES IT — never a coordinate
-                        // formatted into a sentence. `core_place.name` is `NOT
-                        // NULL`, so a row means a name.
-                        // A PLACE NAME IS NEVER COORDINATE-SHAPED, FOR ANY
-                        // INPUT (`docs/photos/places.md`, layer 2).
-                        //
-                        // `core_place.name` is the RAW column, and a row
-                        // minted from a photograph's GPS is literally named
-                        // after its own coordinates ("39.0021, -120.1131") —
-                        // rung 3 of `find_or_create_place`. Passed through, the
-                        // capture stamp printed a member's coordinates over
-                        // their own photograph, with no action on their part.
-                        // `exact_location` is the ONE function allowed to print
-                        // digits and it sits behind an explicit member action;
-                        // `printable_name` refuses a coordinate-shaped label at
-                        // every rung, and this is that refusal, shared with
-                        // `PlacesReads` so the two surfaces cannot disagree
-                        // about the same row.
-                        //
-                        // Empty rather than a stand-in sentence: the stamp
-                        // simply omits the place, which is what a photograph
-                        // with no readable place has always drawn.
-                        place_name = PlacesReads
-                            .readableName(rows.firstOrNull()?.text(1).orEmpty())
-                            .orEmpty(),
-                        // BOTH OR NEITHER. A `REAL` column that is NULL is
-                        // absent on the wire, never zero — a coordinate
-                        // coerced from nothing is a pin on the equator.
-                        place_latitude = rows.firstOrNull()?.real(2) ?: 0.0,
-                        place_longitude = rows.firstOrNull()?.real(3) ?: 0.0,
+                        place_latitude = rows.firstOrNull()?.real(1) ?: 0.0,
+                        place_longitude = rows.firstOrNull()?.real(2) ?: 0.0,
                         place_has_coordinate = rows.firstOrNull()?.let {
-                            it.real(2) != null && it.real(3) != null
+                            it.real(1) != null && it.real(2) != null
                         } ?: false,
                     )
 
-                    PhotoLightboxMachine.Leg.TAGS -> PhotoDetail(
-                        labels = rows.map {
-                            PhotoLabel(
-                                concept_id = it.text(1),
-                                // THE EDGE, so a remove takes THIS tag off.
-                                tag_id = it.text(0),
-                                // WHO PUT IT THERE, STRUCTURALLY. The DDL's own
-                                // CHECK is `tagged_by_party_id IS NULL OR
-                                // (derivation_id IS NULL AND input_revision_id
-                                // IS NULL)` — a member's tag and a derivation's
-                                // proposal are mutually exclusive by
-                                // construction, so the presence of a tagger IS
-                                // the answer. `confidence` deliberately is not
-                                // consulted: a derivation at 0.99 is still a
-                                // proposal, and a threshold here would be this
-                                // shell deciding what the enrichment plane meant.
-                                confirmed = it.text(2).isNotEmpty(),
-                            )
-                        }.filter { it.concept_id.isNotEmpty() },
-                    )
+                    PhotoLightboxMachine.Leg.TAGS -> tags(rows)
 
-                    PhotoLightboxMachine.Leg.CONCEPTS -> concepts(rows)
+                    PhotoLightboxMachine.Leg.CONCEPTS -> entities(rows)
 
                     PhotoLightboxMachine.Leg.CONTENT -> PhotoDetail(
                         byte_size = rows.firstOrNull()?.integer(1) ?: 0L,
-                        // The id the byte door is asked by — see
+                        // The id the byte door is asked by — the blob's hash; see
                         // `PhotoLightboxReads`' doc on `original_path`.
                         content_id = rows.firstOrNull()?.text(0).orEmpty(),
                     )
@@ -477,32 +437,46 @@ public class PhotoLightboxLeg internal constructor(
         )
 
     /**
-     * THE STAR IS A TAG, AND THIS IS WHERE IT STOPS BEING ONE.
+     * WHAT IS `tagged` ON THE PHOTOGRAPH: the star and the archive are the two
+     * FLAGS, and every other target is a label.
      *
-     * `media.set_favorite` writes a `core_tag` against the flags scheme's
-     * `starred` concept (`crates/vault/src/commands/media.rs`, `is_starred`),
-     * so a favourite arrives at this screen as one more concept id among the
-     * member's own words — and it must not be drawn as a chip saying "starred".
-     * A concept notated `starred` turns into [PhotoDetail.favorite] and is left
-     * out of the labels.
-     *
-     * **THE SCHEME IS NOT CHECKED, AND THE GAP IS REAL.** The vault's own
-     * `is_starred` joins `core_concept_scheme` and matches its `uri`; this
-     * cannot, because a scheme row has nowhere to live — `PhotoDetail` carries
-     * no field a scheme could ride in, so there is no way for a fourth leg to
-     * hand one to the reducer. The consequence is bounded and stated: a concept
-     * in ANOTHER scheme whose notation is the literal word `starred`, tagged on
-     * this photograph, would light the heart. `core_concept` is `UNIQUE (scheme_id,
-     * notation)`, so that is one extra row in one other scheme, and the WRITE
-     * behind the heart still goes through the vault's own scheme-checked
-     * command. Closing it properly needs a place to put a scheme id — the
-     * root's to decide.
+     * A flag is an entity of its own (`flag:starred`, `flag:archived`) and is
+     * drawn as a button, never as a chip saying "starred": the star becomes
+     * [PhotoDetail.favorite] and the archive [PhotoDetail.archived], and neither
+     * is left in the labels. A label is a tag entity, and its id is both the
+     * edge a remove names and the key its word is read by.
      */
-    private fun concepts(rows: List<Row>): PhotoDetail {
-        val starred = rows.any { it.text(2) == STARRED_NOTATION }
+    private fun tags(rows: List<Row>): PhotoDetail {
+        val targets = rows.map { it.text(0) }.filter { it.isNotEmpty() }
         return PhotoDetail(
-            favorite = starred,
-            labels = rows.filterNot { it.text(2) == STARRED_NOTATION }
+            favorite = STARRED_FLAG in targets,
+            archived = ARCHIVED_FLAG in targets,
+            labels = targets.filterNot { it.startsWith(FLAG_PREFIX) }.map {
+                // A MEMBER'S OWN WORD: the model keeps no proposal in a tag.
+                PhotoLabel(concept_id = it, tag_id = it, confirmed = true)
+            },
+        )
+    }
+
+    /**
+     * THE WORDS AND THE TRASH, off the entities the photograph names: its own
+     * (the title, and the trash stamp), its place's (the name, never
+     * coordinate-shaped) and each label's (the word).
+     */
+    private fun entities(rows: List<Row>): PhotoDetail {
+        val own = rows.firstOrNull { it.text(KIND_COLUMN) == PhotoWrites.PHOTO_KIND }
+        val place = rows.firstOrNull { it.text(KIND_COLUMN) == PLACE_KIND }
+        return PhotoDetail(
+            title = own?.text(1).orEmpty(),
+            trashed = own?.text(DELETED_COLUMN)?.isNotEmpty() ?: false,
+            // A PLACE NAME IS NEVER COORDINATE-SHAPED, FOR ANY INPUT
+            // (`docs/photos/places.md`, layer 2). A place minted from a
+            // photograph's GPS is titled after its own coordinates until a member
+            // names it, and `readableName` refuses one at every rung; the stamp
+            // simply omits the place, which is what a photograph with no readable
+            // place has always drawn.
+            place_name = place?.text(1)?.let { PlacesReads.readableName(it) }.orEmpty(),
+            labels = rows.filter { it.text(KIND_COLUMN) == TAG_KIND }
                 .map { PhotoLabel(concept_id = it.text(0), label = it.text(1)) }
                 .filter { it.concept_id.isNotEmpty() && it.label.isNotEmpty() },
         )
@@ -559,11 +533,16 @@ public class PhotoLightboxLeg internal constructor(
     private fun Row.real(index: Int): Double? = values.getOrNull(index)?.real
 
     private companion object {
-        /** `crates/apps/photos`' `TAG_TARGET_TYPE`, spelled the same. */
-        const val TAG_TARGET_TYPE: String = "media.asset"
+        /** The flags a photograph carries, as the entities the `tagged` edges point at. */
+        const val FLAG_PREFIX: String = "flag:"
+        const val STARRED_FLAG: String = "flag:starred"
+        const val ARCHIVED_FLAG: String = "flag:archived"
 
-        /** `crates/apps/photos`' `STARRED_NOTATION`. */
-        const val STARRED_NOTATION: String = "starred"
+        /** The entities leg's columns and the kinds it tells apart. */
+        const val KIND_COLUMN: Int = 2
+        const val DELETED_COLUMN: Int = 3
+        const val PLACE_KIND: String = "place"
+        const val TAG_KIND: String = "tag"
 
         /**
          * `column IN (?, ?, ?)`, with a placeholder per bind.
@@ -596,8 +575,9 @@ public class PhotoLightboxSideRead internal constructor(
     override val screenId: String = PhotoLightboxMachine.readId(side)
 
     override val table: String = when (side) {
-        PhotoLightboxMachine.Side.FILM, PhotoLightboxMachine.Side.LIVE -> "media_asset"
-        PhotoLightboxMachine.Side.PLACES -> "core_place"
+        PhotoLightboxMachine.Side.FILM, PhotoLightboxMachine.Side.LIVE -> "photo"
+        // A PLACE'S NAME IS ITS ENTITY'S TITLE.
+        PhotoLightboxMachine.Side.PLACES -> "entity"
     }
 
     /**
@@ -623,11 +603,11 @@ public class PhotoLightboxSideRead internal constructor(
                 } else {
                     PageQuery(
                         name = "photos.lightbox.film",
-                        select = listOf("asset_id", "kind", "captured_at"),
+                        select = listOf("id", "form", "taken_at"),
                         from = table,
-                        where_ = "asset_id IN (" + ids.joinToString(", ") { "?" } + ")",
+                        where_ = "id IN (" + ids.joinToString(", ") { "?" } + ")",
                         bind = ids.map { Value(text = it) },
-                        order = PageOrder("asset_id", "asset_id", descending = false),
+                        order = PageOrder("id", "id", descending = false),
                         // The grid's own three computed columns, so a frame
                         // draws what its cell draws.
                         with_held_thumbnail = true,
@@ -637,9 +617,10 @@ public class PhotoLightboxSideRead internal constructor(
 
             PhotoLightboxMachine.Side.PLACES -> PageQuery(
                 name = "photos.lightbox.places",
-                select = listOf("place_id", "name"),
+                select = listOf("id", "title"),
                 from = table,
-                order = PageOrder("place_id", "place_id", descending = false),
+                where_ = "kind = 'place' AND deleted_at IS NULL",
+                order = PageOrder("id", "id", descending = false),
             )
 
             // THE WHOLE CAPTURE GROUP, THE STILL INCLUDED. The answer then
@@ -654,12 +635,11 @@ public class PhotoLightboxSideRead internal constructor(
                 } else {
                     PageQuery(
                         name = "photos.lightbox.live",
-                        select = listOf("asset_id", "content_id", "kind", "created_at"),
+                        select = listOf("id", "blob", "form"),
                         from = table,
-                        where_ = "capture_group_id = (SELECT capture_group_id FROM media_asset " +
-                            "WHERE asset_id = ?) AND deleted_at IS NULL",
+                        where_ = "burst = (SELECT burst FROM photo WHERE id = ?) AND ${PhotoFold.NOT_TRASHED}",
                         bind = listOf(Value(text = assetId)),
-                        order = PageOrder("asset_id", "asset_id", descending = false),
+                        order = PageOrder("id", "id", descending = false),
                     )
                 }
             }
@@ -699,8 +679,9 @@ public class PhotoLightboxSideRead internal constructor(
         // An EDITED Live Photo has two stills and may have two movies, one per
         // version of the capture (A20): the newest of each is the one drawn.
         PhotoLightboxMachine.Side.LIVE -> {
-            val still = rows.filter { it.text(2) == "photo" }.maxByOrNull { it.text(3) }
-            val movie = rows.filter { it.text(2) == "video" }.maxByOrNull { it.text(3) }
+            // THE NEWEST, BY ID: an id is minted in time order.
+            val still = rows.filter { it.text(2) == "photo" }.maxByOrNull { it.text(0) }
+            val movie = rows.filter { it.text(2) == "video" }.maxByOrNull { it.text(0) }
             PhotoLightboxEvent(
                 live = PhotoLightboxEvent.LiveArrived(
                     asset_id = if (still != null && movie != null) still.text(0) else "",

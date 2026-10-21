@@ -75,18 +75,19 @@ class PhotoLightboxSpec : StringSpec({
             ),
         )
 
-    /** The asset leg's own row: eleven named columns, then the door's three. */
+    /**
+     * The asset read's own row: eight named columns, then the door's three.
+     * The photograph's title, its trash and its flags are NOT on it: they are the
+     * entity's and the edges', and arrive on the legs below.
+     */
     fun assetRow(
         capturedAt: String = "2026-07-30T17:42:00.000Z",
-        archivedAt: String = "",
-        deletedAt: String = "",
         placeId: String = "place-1",
         kind: String = "photo",
     ) = Row(
         values = listOf(
             Value(text = asset),
             Value(text = kind),
-            Value(text = "Lyme Regis"),
             Value(text = capturedAt),
             Value(integer = 60L),
             Value(text = placeId),
@@ -94,12 +95,20 @@ class PhotoLightboxSpec : StringSpec({
             Value(integer = 3024L),
             // `duration_s` IS `REAL` IN THE DDL and arrives on the real arm.
             Value(real = 24.5),
-            if (archivedAt.isEmpty()) Value(null_ = NullValue()) else Value(text = archivedAt),
-            if (deletedAt.isEmpty()) Value(null_ = NullValue()) else Value(text = deletedAt),
             // The door's three computed columns, appended in this order.
             Value(text = "/store/data/thumb.data"),
             Value(text = "a0b1"),
             Value(integer = 0L),
+        ),
+    )
+
+    /** The entity leg's rows: `id, title, kind, deleted_at`. */
+    fun entityRow(id: String, title: String, kind: String, deletedAt: String = "") = Row(
+        values = listOf(
+            Value(text = id),
+            Value(text = title),
+            Value(text = kind),
+            if (deletedAt.isEmpty()) Value(null_ = NullValue()) else Value(text = deletedAt),
         ),
     )
 
@@ -160,7 +169,7 @@ class PhotoLightboxSpec : StringSpec({
         val query = PhotoLightboxReads.query(opened().state, null).shouldNotBeNull()
         query.from shouldBe PhotoLightboxReads.table
         query.bind.map { it.text } shouldBe listOf(asset)
-        query.where_.shouldNotBeNull() shouldBe "asset_id = ?"
+        query.where_.shouldNotBeNull() shouldBe "id = ?"
         val order = query.order.shouldNotBeNull()
         query.select shouldContain order.sort_column
         query.select shouldContain order.pk_column
@@ -182,7 +191,9 @@ class PhotoLightboxSpec : StringSpec({
     "the row is projected off the columns it selected" {
         val detail = detailOf()
         detail.asset_id shouldBe asset
-        detail.title shouldBe "Lyme Regis"
+        // THE TITLE IS THE ENTITY'S, NOT THE PHOTOGRAPH'S: it arrives on the
+        // entity leg, and the asset read has none to give.
+        detail.title shouldBe ""
         detail.captured_at shouldBe "2026-07-30T17:42:00.000Z"
         detail.captured_utc_offset_minutes shouldBe 60
         detail.kind shouldBe PhotoCell.Kind.KIND_PHOTO
@@ -200,11 +211,31 @@ class PhotoLightboxSpec : StringSpec({
         detail.held shouldBe PhotoCell.Held.HELD_THUMBNAIL_ONLY
     }
 
-    "a timestamp column is a boolean to this screen, and nothing else fills it" {
+    "a photograph's trash and flags are read off the entity and the edges, and nothing else fills them" {
         detailOf().archived shouldBe false
         detailOf().trashed shouldBe false
-        detailOf(assetRow(archivedAt = "2026-08-01T00:00:00.000Z")).archived shouldBe true
-        detailOf(assetRow(deletedAt = "2026-08-01T00:00:00.000Z")).trashed shouldBe true
+        val entities = PhotoLightboxLeg(PhotoLightboxMachine.Leg.CONCEPTS)
+        // The photograph's own entity row carries the title and the trash stamp.
+        val live = entities.arrived(listOf(entityRow(asset, "Lyme Regis", "photo")), null)
+            .data_.shouldNotBeNull().detail.shouldNotBeNull()
+        live.title shouldBe "Lyme Regis"
+        live.trashed shouldBe false
+        entities.arrived(
+            listOf(entityRow(asset, "Lyme Regis", "photo", deletedAt = "2026-08-01T00:00:00.000Z")),
+            null,
+        ).data_.shouldNotBeNull().detail.shouldNotBeNull().trashed shouldBe true
+        // The star and the archive are `tagged` edges to the flag entities.
+        val tags = PhotoLightboxLeg(PhotoLightboxMachine.Leg.TAGS)
+        val flagged = tags.arrived(
+            listOf(
+                Row(values = listOf(Value(text = "flag:archived"), Value(text = asset))),
+                Row(values = listOf(Value(text = "flag:starred"), Value(text = asset))),
+            ),
+            null,
+        ).data_.shouldNotBeNull().detail.shouldNotBeNull()
+        flagged.archived shouldBe true
+        flagged.favorite shouldBe true
+        flagged.labels.shouldBeEmpty()
     }
 
     "the asset read answers for neither the original's path nor its size" {
@@ -332,12 +363,23 @@ class PhotoLightboxSpec : StringSpec({
         val named = PhotoLightboxMachine.reduce(
             refused,
             PhotoLightboxLeg(PhotoLightboxMachine.Leg.PLACE).arrived(
-                listOf(Row(values = listOf(Value(text = "place-1"), Value(text = "Lyme Regis")))),
+                listOf(
+                    Row(values = listOf(Value(text = "place-1"), Value(real = 50.72), Value(real = -2.94))),
+                ),
                 null,
             ),
         ).state
-        named.detail.shouldNotBeNull().place_name shouldBe "Lyme Regis"
+        named.detail.shouldNotBeNull().place_has_coordinate shouldBe true
         named.detail.shouldNotBeNull().unread_parts.shouldBeEmpty()
+        // The NAME is the entity's, on the entity leg.
+        val worded = PhotoLightboxMachine.reduce(
+            named,
+            PhotoLightboxLeg(PhotoLightboxMachine.Leg.CONCEPTS).arrived(
+                listOf(entityRow("place-1", "Lyme Regis", "place")),
+                null,
+            ),
+        ).state
+        worded.detail.shouldNotBeNull().place_name shouldBe "Lyme Regis"
     }
 
     "a photograph whose every part answered carries no unread marks" {
@@ -345,19 +387,11 @@ class PhotoLightboxSpec : StringSpec({
         loaded().state.detail.shouldNotBeNull().unread_parts.shouldBeEmpty()
     }
 
+    /** A `tagged` edge as the tags leg selects it: `to_id, from_id`. */
+    fun tagRow(to: String) = Row(values = listOf(Value(text = to), Value(text = asset)))
+
     "tags bring ids and the concept read brings words, in two hops that terminate" {
-        val tags = PhotoLightboxLeg(PhotoLightboxMachine.Leg.TAGS).arrived(
-            listOf(
-                Row(
-                    values = listOf(
-                        Value(text = "tag-1"),
-                        Value(text = "concept-beach"),
-                        Value(text = "party-me"),
-                    ),
-                ),
-            ),
-            null,
-        )
+        val tags = PhotoLightboxLeg(PhotoLightboxMachine.Leg.TAGS).arrived(listOf(tagRow("concept-beach")), null)
         val withIds = PhotoLightboxMachine.reduce(loaded().state, tags)
         withIds.state.detail.shouldNotBeNull().labels.map { it.concept_id } shouldBe
             listOf("concept-beach")
@@ -367,94 +401,43 @@ class PhotoLightboxSpec : StringSpec({
         )
 
         val concepts = PhotoLightboxLeg(PhotoLightboxMachine.Leg.CONCEPTS).arrived(
-            listOf(
-                Row(
-                    values = listOf(
-                        Value(text = "concept-beach"),
-                        Value(text = "Beach"),
-                        Value(text = "beach"),
-                    ),
-                ),
-            ),
+            listOf(entityRow("concept-beach", "Beach", "tag")),
             null,
         )
         val worded = PhotoLightboxMachine.reduce(withIds.state, concepts)
         worded.state.detail.shouldNotBeNull().labels.single().label shouldBe "Beach"
         // AND IT STOPS. The follow-up fires only for ids the arrival
-        // INTRODUCED, so an answer that words everything asks for nothing — and
-        // a rule of "read while anything is unworded" would ask for ever.
+        // INTRODUCED, so an answer that words everything asks for nothing: a
+        // rule of "read while anything is unworded" would ask for ever.
         worded.effects.shouldBeEmpty()
     }
 
     "a concept the read could not word asks again about nothing" {
-        val tags = PhotoLightboxLeg(PhotoLightboxMachine.Leg.TAGS).arrived(
-            listOf(
-                Row(
-                    values = listOf(
-                        Value(text = "tag-1"),
-                        Value(text = "ghost"),
-                        Value(text = "party-me"),
-                    ),
-                ),
-            ),
-            null,
-        )
+        val tags = PhotoLightboxLeg(PhotoLightboxMachine.Leg.TAGS).arrived(listOf(tagRow("ghost")), null)
         val withIds = PhotoLightboxMachine.reduce(loaded().state, tags)
-        // The concept was purged between the two reads: an empty page.
+        // The tag was purged between the two reads: an empty page.
         val nothing = PhotoLightboxLeg(PhotoLightboxMachine.Leg.CONCEPTS).arrived(emptyList(), null)
         val after = PhotoLightboxMachine.reduce(withIds.state, nothing)
         after.effects.shouldBeEmpty()
         after.state.detail.shouldNotBeNull().labels.single().label shouldBe ""
     }
 
-    "a tag says who put it there, structurally" {
-        // THE DDL'S OWN CHECK is `tagged_by_party_id IS NULL OR (derivation_id
-        // IS NULL AND input_revision_id IS NULL)`, so a member's tag and a
-        // derivation's proposal are mutually exclusive by construction and the
-        // presence of a tagger IS the answer. `confidence` is deliberately not
-        // consulted: a derivation at 0.99 is still a proposal.
+    "every tag is the member's: the model has no proposal to confirm" {
+        // An edge carries no tagger and no derivation, so a label on this screen
+        // is one a member put there (R-1135-5-16 reserves the wire field for the
+        // day a proposal exists). The concept id and the tag id are the one id.
         val tags = PhotoLightboxLeg(PhotoLightboxMachine.Leg.TAGS).arrived(
-            listOf(
-                Row(
-                    values = listOf(
-                        Value(text = "tag-1"),
-                        Value(text = "concept-1"),
-                        Value(text = "party-me"),
-                    ),
-                ),
-                Row(
-                    values = listOf(
-                        Value(text = "tag-2"),
-                        Value(text = "concept-2"),
-                        Value(null_ = NullValue()),
-                    ),
-                ),
-            ),
+            listOf(tagRow("concept-1"), tagRow("concept-2")),
             null,
         )
         val labels = tags.data_.shouldNotBeNull().detail.shouldNotBeNull().labels
-        labels.single { it.concept_id == "concept-1" }.confirmed shouldBe true
-        labels.single { it.concept_id == "concept-2" }.confirmed shouldBe false
+        labels.map { it.concept_id } shouldBe listOf("concept-1", "concept-2")
+        labels.all { it.confirmed && it.tag_id == it.concept_id } shouldBe true
     }
 
-    "the star is a tag, and the concepts read is where it stops being one" {
+    "the star is a flag edge, and it never becomes a chip" {
         val tags = PhotoLightboxLeg(PhotoLightboxMachine.Leg.TAGS).arrived(
-            listOf(
-                Row(
-                    values = listOf(
-                        Value(text = "tag-1"),
-                        Value(text = "concept-star"),
-                        Value(text = "party-me"),
-                    ),
-                ),
-                Row(
-                    values = listOf(
-                        Value(text = "tag-2"),
-                        Value(text = "concept-beach"),
-                        Value(text = "party-me"),
-                    ),
-                ),
-            ),
+            listOf(tagRow("flag:starred"), tagRow("concept-beach")),
             null,
         )
         val tagged = PhotoLightboxMachine.reduce(loaded().state, tags)
@@ -463,45 +446,28 @@ class PhotoLightboxSpec : StringSpec({
             null,
         )
         val concepts = PhotoLightboxLeg(PhotoLightboxMachine.Leg.CONCEPTS).arrived(
-            listOf(
-                Row(
-                    values = listOf(
-                        Value(text = "concept-star"),
-                        Value(text = "Starred"),
-                        Value(text = "starred"),
-                    ),
-                ),
-                Row(
-                    values = listOf(
-                        Value(text = "concept-beach"),
-                        Value(text = "Beach"),
-                        Value(text = "beach"),
-                    ),
-                ),
-            ),
+            listOf(entityRow("concept-beach", "Beach", "tag")),
             null,
         )
-        val worded = PhotoLightboxMachine.reduce(tagged.state, concepts).state
-        val detail = worded.detail.shouldNotBeNull()
+        val detail = PhotoLightboxMachine.reduce(tagged.state, concepts).state.detail.shouldNotBeNull()
         detail.favorite shouldBe true
-        // AND THE STAR IS NOT A CHIP. The flags scheme's concept is the heart,
-        // never a label reading "Starred" beside the member's own words.
-        detail.labels.single { it.concept_id == "concept-beach" }.label shouldBe "Beach"
-        detail.labels.none { it.label == "Starred" } shouldBe true
+        // THE FLAG IS THE HEART, never a label beside the member's own words.
+        detail.labels.map { it.label } shouldBe listOf("Beach")
+        detail.labels.none { it.concept_id.startsWith("flag:") } shouldBe true
     }
 
     "the byte size arrives through the hash, because the detail carries no content id" {
         val content = PhotoLightboxLeg(PhotoLightboxMachine.Leg.CONTENT).arrived(
-            listOf(Row(values = listOf(Value(text = "content-1"), Value(integer = 4_200_000L)))),
+            listOf(Row(values = listOf(Value(text = "a0b1"), Value(integer = 4_200_000L)))),
             null,
         )
         val sized = PhotoLightboxMachine.reduce(loaded().state, content).state
         sized.detail.shouldNotBeNull().byte_size shouldBe 4_200_000L
-        // `core_content_item.content_hash` IS `NOT NULL UNIQUE`, so the hash
-        // the thumbnail column already handed this screen addresses exactly one
-        // item — which is what makes the identity honest.
+        // `blob.hash` IS THE KEY, so the hash the thumbnail column already
+        // handed this screen addresses exactly one blob.
         val query = PhotoLightboxLeg(PhotoLightboxMachine.Leg.CONTENT)
             .query(loaded().state, null).shouldNotBeNull()
+        query.from shouldBe "blob"
         query.bind.map { it.text } shouldBe listOf("a0b1")
     }
 
@@ -711,30 +677,32 @@ class PhotoLightboxSpec : StringSpec({
         val favorite = writeOf(
             PhotoLightboxEvent(favorite = PhotoLightboxEvent.FavoriteToggled(favorite = true)),
         )
-        favorite.command shouldBe "media.set_favorite"
-        favorite.inputJson shouldBe """{"asset_id":"asset-1","favorite":1}"""
+        favorite.command shouldBe "flag.set"
+        favorite.inputJson shouldBe """{"id":"asset-1","flag":"starred"}"""
         // THE KEY IS CONTENT-DERIVED AND NEVER AN ORDINAL: it is the
         // correlation key an answer is paired with, so it must name the same
-        // write the same way. It carries the VALUE as well as the id, so
+        // write the same way. The set and the clear are two commands, so
         // favourite-then-unfavourite are two intents and not one.
-        favorite.invokeKey shouldBe "media.set_favorite:asset-1:1"
-        writeOf(
+        favorite.invokeKey shouldBe "flag.set:starred:asset-1"
+        val unfavorite = writeOf(
             PhotoLightboxEvent(favorite = PhotoLightboxEvent.FavoriteToggled(favorite = false)),
-        ).invokeKey shouldBe "media.set_favorite:asset-1:0"
+        )
+        unfavorite.command shouldBe "flag.clear"
+        unfavorite.invokeKey shouldBe "flag.clear:starred:asset-1"
 
         val archive = writeOf(
             PhotoLightboxEvent(archive = PhotoLightboxEvent.ArchiveToggled(archived = true)),
         )
-        archive.command shouldBe "media.update_asset"
-        archive.inputJson shouldBe """{"asset_id":"asset-1","archived":1}"""
+        archive.command shouldBe "flag.set"
+        archive.inputJson shouldBe """{"id":"asset-1","flag":"archived"}"""
 
         // TWO COMMANDS, ONE TAP APART, AND ONLY ONE OF THEM IS REVERSIBLE.
         writeOf(
             PhotoLightboxEvent(delete = PhotoLightboxEvent.DeleteRequested(permanent = false)),
-        ).command shouldBe "media.delete_asset"
+        ).command shouldBe "entity.trash"
         writeOf(
             PhotoLightboxEvent(delete = PhotoLightboxEvent.DeleteRequested(permanent = true)),
-        ).command shouldBe "media.purge_asset"
+        ).command shouldBe "entity.purge"
     }
 
     "a committed write re-reads; a refused one leaves the photograph alone" {
@@ -940,12 +908,14 @@ class PhotoLightboxSpec : StringSpec({
     // --- Sync --------------------------------------------------------------
 
     "this photograph's own row moves the screen and no other's does" {
-        PhotoLightboxMachine.rowsChanged("media_asset", listOf(asset)).shouldNotBeNull()
-        // NOT `core_tag`, although a favourite IS a tag row: the change stream
-        // would hand over TAG ids and `RowsChanged` carries `asset_ids`, so the
-        // reducer would match them against its own id and never hit.
+        PhotoLightboxMachine.rowsChanged("photo", listOf(asset)).shouldNotBeNull()
+        // THE TITLE AND THE TRASH ARE THE ENTITY'S AND THE STAR AND THE LABELS
+        // ARE EDGES: a commit on any of the three can be this photograph's.
+        PhotoLightboxMachine.rowsChanged("entity", listOf(asset)).shouldNotBeNull()
+        PhotoLightboxMachine.rowsChanged("edge", emptyList()).shouldNotBeNull()
+        PhotoLightboxMachine.rowsChanged("media_asset", listOf(asset)).shouldBeNull()
         PhotoLightboxMachine.rowsChanged("core_tag", listOf("tag-1")).shouldBeNull()
-        PhotoLightboxMachine.rowsChanged("media_asset_other", listOf(asset)).shouldBeNull()
+        PhotoLightboxMachine.rowsChanged("derivative", listOf(asset)).shouldBeNull()
 
         val mine = PhotoLightboxMachine.reduce(
             loaded().state,

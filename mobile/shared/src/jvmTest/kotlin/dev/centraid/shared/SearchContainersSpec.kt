@@ -33,9 +33,9 @@ class SearchContainersSpec : StringSpec({
     "the four kinds are named once, each with its word, its glyph and the key it opens by" {
         val hits = listOf(
             ContainerHit(entity = "notebook", id = "nb", title = "Cabin", app_id = "notes"),
-            ContainerHit(entity = "core.collection", id = "al", title = "Summer", app_id = "photos"),
+            ContainerHit(entity = "album", id = "al", title = "Summer", app_id = "photos"),
             ContainerHit(entity = "project", id = "pr", title = "Garden", app_id = "tasks"),
-            ContainerHit(entity = "core.concept", id = "fo", title = "Taxes", app_id = "docs"),
+            ContainerHit(entity = "folder", id = "fo", title = "Taxes", app_id = "docs"),
         )
         val rows = SearchContainers.fold(hits)
         rows.map { it.kind_label } shouldContainExactly listOf(
@@ -51,7 +51,7 @@ class SearchContainersSpec : StringSpec({
         rows.map { it.id } shouldContainExactly listOf("nb", "al", "pr", "fo")
         rows[0].accessibility_label shouldBe "Notebook, Cabin"
         // An entity this table does not name is no container.
-        SearchContainers.fold(listOf(ContainerHit(entity = "core.collection", id = "x", title = "X", app_id = "agenda"))).shouldBeEmpty()
+        SearchContainers.fold(listOf(ContainerHit(entity = "album", id = "x", title = "X", app_id = "agenda"))).shouldBeEmpty()
     }
 
     "Home puts an app's containers before its rows, counts both, and a container-only app still has its group" {
@@ -60,7 +60,7 @@ class SearchContainersSpec : StringSpec({
                 hit("notes", "note", "n1", "Cabin packing"),
                 hit("notes", "note", "n2", "Cabin key"),
                 hit("notes", "notebook", "nb", "Cabin"),
-                hit("docs", "core.concept", "fo", "Cabin papers"),
+                hit("docs", "folder", "fo", "Cabin papers"),
             ),
         )
         // GROUPED IN HOME'S TILE ORDER: Docs' tile comes before Notes'.

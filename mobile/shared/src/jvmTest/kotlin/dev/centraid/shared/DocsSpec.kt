@@ -296,7 +296,7 @@ class DocsSpec : StringSpec({
         var s = onScreen(driveAnswer(folders = listOf(DocsFolder(folder_id = "f", name = "Taxes"))))
         s = drive(DocsDriveEvent(search_opened = DocsDriveEvent.SearchOpened()), s).state
         val typed = drive(DocsDriveEvent(search_term = DocsDriveEvent.SearchTermChanged(term = "taxes")), s)
-        val folder = centraid.core.v1.ContainerHit(entity = "core.concept", id = "f", title = "Taxes", app_id = "docs")
+        val folder = centraid.core.v1.ContainerHit(entity = "folder", id = "f", title = "Taxes", app_id = "docs")
         val answer = AppQueryResponse(docs_search = DocsSearch(today = TODAY, containers = listOf(folder)))
         val found = drive(DocsDriveReads.arrived(listOf(answer)), typed.state).state
         val container = found.search!!.containers.single()
@@ -323,7 +323,7 @@ class DocsSpec : StringSpec({
         // The data's own action stays none: the shell draws and sends Ask.
         none.data_.empty_action shouldBe DocsDriveData.EmptyAction.EMPTY_ACTION_NONE
         // Anything found is no Ask: a document, or a folder.
-        val folder = centraid.core.v1.ContainerHit(entity = "core.concept", id = "f", title = "Taxes", app_id = "docs")
+        val folder = centraid.core.v1.ContainerHit(entity = "folder", id = "f", title = "Taxes", app_id = "docs")
         drive(answer(DocsSearch(today = TODAY, containers = listOf(folder))), typed.state).state.search!!.ask shouldBe ""
         // A new term, a close and a denial clear it; an answer for a closed search sets none.
         drive(DocsDriveEvent(search_term = DocsDriveEvent.SearchTermChanged(term = "zzq")), none).state.search!!.ask shouldBe ""

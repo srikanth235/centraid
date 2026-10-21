@@ -24,7 +24,7 @@ import dev.centraid.shared.shell.HomeSession
  *
  * The page door answers for hashes and never for paths, so it is two trips,
  * the lightbox's (`PhotoLightboxBridge.locate`) generalised to a pick of many:
- * `media_asset` for each photograph's content item, then the byte door
+ * `photo` for each photograph's content item, then the byte door
  * (`ContentUrlRequest`) for where that item's bytes are on this device. A
  * photograph whose original is not here comes back WITHOUT a path, and is
  * counted rather than silently dropped — a member who sent twelve and whose
@@ -41,7 +41,7 @@ public object ShelfCopies {
     /** `ContentUrlRequest`'s own ceiling (`MAX_CONTENT_URLS`), asked in slices. */
     private const val URL_BATCH: Int = 100
 
-    private const val OWNER_TYPE: String = "media.asset"
+    private const val OWNER_TYPE: String = "photo"
 
     /**
      * WHERE EACH PICKED ORIGINAL IS ON THIS DEVICE, in the pick's order, and

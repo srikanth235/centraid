@@ -34,7 +34,7 @@ struct PhotosMoreSheet: View {
     var body: some View {
         // ONE CLAUSE ONLY in the foot. It said "Everything Photos can show."
         // over one row, and Photos has a dozen other surfaces — Places,
-        // Memories, Duplicates, Trash, Archive, Favorites, Albums — every one of
+        // Duplicates, Trash, Archive, Favorites, Albums — every one of
         // them reached from Collections, so the claim was false as printed.
         OptionSheet(title: PhotosCopy.shared.PHOTOS_MORE_TITLE, status: PhotosCopy.shared.PHOTOS_MORE_FOOT) {
             SheetRow(iconKey: "Archive", label: PhotosCopy.shared.PHOTOS_CAMERA_ROLL, identifier: "photos.more.cameraRoll") {

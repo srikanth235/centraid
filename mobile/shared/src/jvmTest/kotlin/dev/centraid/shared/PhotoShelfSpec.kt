@@ -11,6 +11,7 @@ import centraid.screen.v1.PhotoShelfState
 import centraid.screen.v1.PhotoStateView
 import centraid.screen.v1.PhotosGridData
 import dev.centraid.shared.apps.photos.AlbumChoice
+import dev.centraid.shared.apps.photos.PhotoFold
 import dev.centraid.shared.apps.photos.PhotoShelfMachine
 import dev.centraid.shared.apps.photos.PhotoShelfReads
 import dev.centraid.shared.apps.photos.PhotosGridMachine
@@ -121,7 +122,7 @@ class PhotoShelfSpec : StringSpec({
 
     "rowsChanged on a foreign table answers null" {
         PhotoShelfMachine.rowsChanged("locker_item", listOf("k")) shouldBe null
-        PhotoShelfMachine.rowsChanged("media_asset_phash", listOf("k")) shouldBe null
+        PhotoShelfMachine.rowsChanged("derivative", listOf("k")) shouldBe null
     }
 
     "a change over assets this shelf is not showing moves nothing" {
@@ -145,13 +146,13 @@ class PhotoShelfSpec : StringSpec({
     }
 
     "a membership table moves the shelf although its keys are not asset ids" {
-        // `media.add_to_album` writes `core_collection_entry` AND NOTHING ELSE,
-        // so a shelf listening to `media_asset` alone would be right only after
-        // a relaunch. The keys are entry ids, which match nothing this shelf
-        // holds, so the machine answers an EMPTY list — this screen's own
-        // spelling of "the membership moved and I cannot tell whose" — and the
-        // reducer reads that as "read again".
-        listOf("core_collection_entry", "core_tag", "media_memory_member")
+        // `edge.add` writes an `edge` AND NOTHING ELSE, and a trash writes the
+        // `entity`, so a shelf listening to `photo` alone would be right only
+        // after a relaunch. The keys are entity and edge ids, which match
+        // nothing this shelf holds, so the machine answers an EMPTY list — this
+        // screen's own spelling of "the membership moved and I cannot tell
+        // whose" — and the reducer reads that as "read again".
+        listOf("edge", "entity")
             .forEach { table ->
                 val event = PhotoShelfMachine.rowsChanged(table, listOf("entry-1"))
                     .shouldNotBeNull()
@@ -263,11 +264,11 @@ class PhotoShelfSpec : StringSpec({
             // `NotesEditorMachine.SAVE_COMMAND` said `knowledge.save_note` and
             // no such command exists; every member read "That request does not
             // make sense to this build", for ever.
-            write.command shouldBe "media.restore_asset"
+            write.command shouldBe "entity.restore"
             // A KEY THAT IS NOT AN ORDINAL. v0's fallback was the call's
             // ordinal and was stable only for a handler making the same call
             // sequence every time.
-            write.invokeKey shouldContain write.inputJson.substringAfter("\"asset_id\":\"")
+            write.invokeKey shouldContain write.inputJson.substringAfter("\"id\":\"")
                 .substringBefore('"')
         }
         // AND THE SELECTION DOES NOT CLEAR ON THE REQUEST. Twelve writes are
@@ -353,10 +354,9 @@ class PhotoShelfSpec : StringSpec({
         settled.selected_asset_ids shouldBe listOf("a1")
     }
 
-    "the archive's Restore is an un-archive, not a restore_asset" {
-        // `media.restore_asset`'s precondition is
-        // `asset_is_trashed_within_its_window`, so sending it for a photograph
-        // that was only ARCHIVED is refused with "that photograph is not in the
+    "the archive's Restore is an un-archive, not an entity.restore" {
+        // `entity.restore` refuses what is not in the trash, so sending it for a
+        // photograph that was only ARCHIVED is refused with "that is not in the
         // trash" — which a member unarchiving would read as a failure.
         val picked = PhotoShelfMachine.reduce(
             loaded(archive, "a1"),
@@ -366,8 +366,8 @@ class PhotoShelfSpec : StringSpec({
             picked,
             PhotoShelfEvent(restore = PhotoShelfEvent.RestoreRequested()),
         ).effects.single() as ScreenEffect.SubmitWrite
-        write.command shouldBe "media.update_asset"
-        write.inputJson shouldContain "\"archived\":0"
+        write.command shouldBe "flag.clear"
+        write.inputJson shouldBe "{\"id\":\"a1\",\"flag\":\"archived\"}"
     }
 
     "permanent is the screen's word, and it picks a different command" {
@@ -379,13 +379,13 @@ class PhotoShelfSpec : StringSpec({
             picked,
             PhotoShelfEvent(delete = PhotoShelfEvent.DeleteRequested(permanent = false)),
         ).effects.single() as ScreenEffect.SubmitWrite
-        trashed.command shouldBe "media.delete_asset"
+        trashed.command shouldBe "entity.trash"
 
         val purged = PhotoShelfMachine.reduce(
             picked,
             PhotoShelfEvent(delete = PhotoShelfEvent.DeleteRequested(permanent = true)),
         ).effects.single() as ScreenEffect.SubmitWrite
-        purged.command shouldBe "media.purge_asset"
+        purged.command shouldBe "entity.purge"
         // TWO INTENTS OVER ONE ROW MUST NOT SHARE A KEY: trashing and purging
         // one photograph are one tap apart and only one of them is reversible.
         (purged.invokeKey == trashed.invokeKey) shouldBe false
@@ -404,8 +404,10 @@ class PhotoShelfSpec : StringSpec({
             picked,
             PhotoShelfEvent(archive = PhotoShelfEvent.ArchiveToggled(archived = false)),
         ).effects.single() as ScreenEffect.SubmitWrite
-        on.inputJson shouldContain "\"archived\":1"
-        off.inputJson shouldContain "\"archived\":0"
+        on.command shouldBe "flag.set"
+        off.command shouldBe "flag.clear"
+        on.inputJson shouldContain "\"flag\":\"archived\""
+        off.inputJson shouldContain "\"flag\":\"archived\""
         (on.invokeKey == off.invokeKey) shouldBe false
     }
 
@@ -518,11 +520,8 @@ class PhotoShelfSpec : StringSpec({
             PhotoShelfMachine.emptySentence(
                 PhotoShelf(place = PhotoShelf.Place(place_id = "p1", place_name = "Lisbon")),
             ),
-            PhotoShelfMachine.emptySentence(
-                PhotoShelf(memory = PhotoShelf.Memory(memory_id = "m1", title = "Last June")),
-            ),
         )
-        // SEVEN SHELVES, SEVEN SENTENCES. v0 had four screens and three
+        // SIX SHELVES, SIX SENTENCES. v0 had four screens and three
         // sentences between them, which is how `PlaceDetail` ended up with copy
         // the state views did not have.
         sentences.toSet().size shouldBe sentences.size
@@ -547,15 +546,15 @@ class PhotoShelfSpec : StringSpec({
         // `PhotosReads` reads a cell's five by position and the appended three
         // from the END of the row. The grid alone names three more after the
         // five — `width`, `height`, `duration_s` — so a shelf shares the FIVE,
-        // not the whole list. `PhotoShelfReads` names a sixth of its own —
-        // `deleted_at`, so the trash can order by it — and reshapes each row
-        // before delegating. If the five ever stopped matching, every cell on
-        // every shelf would come back with the wrong column in it, silently.
+        // not the whole list. `PhotoShelfReads` reshapes each row before
+        // delegating, from its own `select`'s length. If the five ever stopped
+        // matching, every cell on every shelf would come back with the wrong
+        // column in it, silently.
         val shelfQuery = PhotoShelfReads.query(opened(trash).state, null).shouldNotBeNull()
         val gridQuery = PhotosReads.query(PhotosGridMachine.initial(), null)
         val cellFive = gridQuery.select.take(5)
-        cellFive shouldBe listOf("asset_id", "captured_at", "tz_offset_min", "kind", "capture_group_id")
-        shelfQuery.select shouldBe cellFive + "deleted_at"
+        cellFive shouldBe listOf("id", "taken_at", "offset_min", "form", "burst")
+        shelfQuery.select shouldBe cellFive
         shelfQuery.with_held_thumbnail shouldBe gridQuery.with_held_thumbnail
     }
 
@@ -571,7 +570,6 @@ class PhotoShelfSpec : StringSpec({
             mode(PhotoStateView.Mode.Kind.KIND_VIDEOS),
             PhotoShelf(album = PhotoShelf.Album(collection_id = "c1", name = "Portugal")),
             PhotoShelf(place = PhotoShelf.Place(place_id = "p1", place_name = "Lisbon")),
-            PhotoShelf(memory = PhotoShelf.Memory(memory_id = "m1", title = "Last June")),
         )
         shelves.forEach { shelf ->
             val query = PhotoShelfReads.query(opened(shelf).state, null).shouldNotBeNull()
@@ -602,8 +600,6 @@ class PhotoShelfSpec : StringSpec({
                 "collection-7f3",
             PhotoShelf(place = PhotoShelf.Place(place_id = "place-7f3", place_name = "Lisbon")) to
                 "place-7f3",
-            PhotoShelf(memory = PhotoShelf.Memory(memory_id = "memory-7f3", title = "Last June")) to
-                "memory-7f3",
         ).forEach { (shelf, id) ->
             val query = PhotoShelfReads.query(opened(shelf).state, null).shouldNotBeNull()
             withClue(query.name) {
@@ -613,54 +609,47 @@ class PhotoShelfSpec : StringSpec({
         }
     }
 
-    "favourites reads the column the favourite WRITE writes" {
-        // `media_asset` HAS NO `favorite` COLUMN. `media.update_asset`'s
-        // `favorite` input calls `set_starred`, which writes one `core_tag` row
-        // against the `starred` concept of the flags scheme. A shelf that read
-        // a column would read nothing, for ever, and show an empty favourites
+    "favourites reads the edge the favourite WRITE writes" {
+        // A PHOTOGRAPH HAS NO `favorite` COLUMN. `flag.set` of `starred` writes
+        // one `tagged` edge to the `flag:starred` entity. A shelf that read a
+        // column would read nothing, for ever, and show an empty favourites
         // shelf to a member who had starred a hundred photographs.
         val query = PhotoShelfReads.query(opened(favorites).state, null).shouldNotBeNull()
         val predicate = query.where_.shouldNotBeNull()
-        predicate shouldContain "core_tag"
+        predicate shouldContain "edge"
+        predicate shouldContain "flag:starred"
         // NO JOIN. The door pages one table and joins none, so the membership
         // is a sub-select per table — which is the door's own idiom
-        // (`with_held_thumbnail` is three correlated subqueries).
-        predicate shouldNotContain "JOIN"
-        query.bind.map { it.text } shouldContain "starred"
-        query.bind.map { it.text } shouldContain "https://centraid.dev/schemes/flags"
-        query.bind.map { it.text } shouldContain "media.asset"
+        // (`with_held_thumbnail` is correlated subqueries).
+        predicate shouldNotContain "JOIN WHERE"
     }
 
-    "the trash sorts by WHEN IT WAS DELETED, as the desktop does" {
-        // `crates/apps/photos`' `trash_statement` orders `deleted_at DESC,
-        // asset_id DESC`, and a shelf in a different order from the desktop's
-        // over the same assets is two libraries. It matters most here: "what
-        // did I just delete" is the question a trash shelf exists to answer,
-        // and a capture-time order scatters a batch deleted together across
-        // however many years those photographs were taken in.
+    "the trash sorts by id, newest added first, and no other arm leaves the timeline" {
+        // THE TRASH STAMP IS THE ENTITY'S and the door pages one table
+        // (R-1135-5-17), so the trash orders by the id, which is minted in time
+        // order and has no NULL in it.
         val trashOrder = PhotoShelfReads.query(opened(trash).state, null)
             .shouldNotBeNull().order.shouldNotBeNull()
-        trashOrder.sort_column shouldBe "deleted_at"
-        trashOrder.pk_column shouldBe "asset_id"
+        trashOrder.sort_column shouldBe "id"
+        trashOrder.pk_column shouldBe "id"
         trashOrder.descending shouldBe true
 
         // AND NO OTHER ARM LEAVES THE TIMELINE.
         listOf(favorites, archive, mode(PhotoStateView.Mode.Kind.KIND_VIDEOS)).forEach { shelf ->
             withClue(PhotoShelfMachine.title(shelf)) {
                 PhotoShelfReads.query(opened(shelf).state, null)
-                    .shouldNotBeNull().order.shouldNotBeNull().sort_column shouldBe "captured_at"
+                    .shouldNotBeNull().order.shouldNotBeNull().sort_column shouldBe "taken_at"
             }
         }
     }
 
-    "the trash is every deleted row and the archive is neither trashed nor live" {
+    "the trash is every trashed photograph and the archive is neither trashed nor live" {
         PhotoShelfReads.query(opened(trash).state, null)
-            .shouldNotBeNull().where_ shouldBe "deleted_at IS NOT NULL"
-        // BOTH HALVES. A shelf that asked only for `archived_at IS NOT NULL`
-        // would show a member every photograph they had archived AND then
-        // thrown away.
+            .shouldNotBeNull().where_ shouldBe PhotoFold.TRASHED
+        // BOTH HALVES. A shelf that asked only for the `archived` flag would
+        // show a member every photograph they had archived AND then thrown away.
         PhotoShelfReads.query(opened(archive).state, null)
-            .shouldNotBeNull().where_ shouldBe "deleted_at IS NULL AND archived_at IS NOT NULL"
+            .shouldNotBeNull().where_ shouldBe "${PhotoFold.NOT_TRASHED} AND ${PhotoFold.ARCHIVED}"
     }
 
     "the cells are PhotosReads' cells, held derivation and all" {
@@ -680,13 +669,13 @@ class PhotoShelfSpec : StringSpec({
             Value(text = "a0b1"),
             Value(integer = 0L),
         )
-        // THE SHELF'S ROW CARRIES `deleted_at` BETWEEN THE TWO, because its
-        // select names six columns and the door appends the computed ones
-        // behind whatever was named. The grid's does not. Both must project the
-        // same cell, which is what the reshape is for — and a shelf that handed
-        // its row over unchanged would read the hash as the path.
+        // THE SHELF'S ROW IS THE FIVE AND THE COMPUTED THREE: its select names
+        // five columns and the door appends the computed ones behind whatever
+        // was named. The grid's names eight, and both must project the same
+        // cell, which is what the reshape is for — and a shelf that handed its
+        // row over unchanged would read the hash as the path.
         val shelfCell = PhotoShelfReads
-            .arrived(listOf(Row(values = named + Value(text = "") + computed)), "c1")
+            .arrived(listOf(Row(values = named + computed)), "c1")
             .data_.shouldNotBeNull().data_.shouldNotBeNull().cells.single()
         val gridCell = PhotosReads.arrived(listOf(Row(values = named + computed)), "c1")
             .data_.shouldNotBeNull().data_.shouldNotBeNull().cells.single()
@@ -699,7 +688,7 @@ class PhotoShelfSpec : StringSpec({
     "the window is a fact about the shelf, known the moment the shelf is" {
         // NO READ AND NO CLOCK. `purge_window_days` is what v0's trash meta
         // line said — "purged 30 days after deletion" — and the constant is
-        // `PURGE_AFTER_DAYS` in `crates/vault/src/commands/media.rs`, not
+        // `TRASH_DAYS` in `crates/vault/src/commands/entity.rs`, not
         // `retentionWindows` in `v0-registries.json`, which holds only `audit`
         // and `ledger`.
         opened(trash).state.purge_window_days shouldBe PhotoShelfMachine.PURGE_WINDOW_DAYS

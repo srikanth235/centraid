@@ -45,7 +45,7 @@ class PhotoEditSpec : StringSpec({
         MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
 
     /**
-     * A core that stages for real and ANSWERS `media.add_asset` the way the
+     * A core that stages for real and ANSWERS `photo.add` the way the
      * vault does: the asset id is a function of the bytes, so the same hash
      * committed twice is the same asset (`deduped`), which is the property a
      * re-walk's safety rests on.
@@ -95,13 +95,13 @@ class PhotoEditSpec : StringSpec({
                 }
                 command != null -> {
                     commands += command
-                    val sha = Regex("\"staged_sha\":\"([0-9a-f]+)\"").find(command.input.utf8())!!.groupValues[1]
+                    val sha = Regex("\"blob\":\"([0-9a-f]+)\"").find(command.input.utf8())!!.groupValues[1]
                     val made = assetsByHash.getOrPut(sha) { "asset-${assetsByHash.size + 1}" }
                     Envelope(
                         response = Response(
                             command = CommandOutcome(
                                 status = CommandStatus.COMMAND_STATUS_EXECUTED,
-                                output = "{\"asset_id\":\"$made\"}".encodeUtf8(),
+                                output = "{\"id\":\"$made\"}".encodeUtf8(),
                             ),
                         ),
                     )
@@ -185,15 +185,15 @@ class PhotoEditSpec : StringSpec({
 
             val (original, edit) = core.commands.map { it.input.utf8() }
             // THE ORIGINAL COMES IN AS ITSELF: dated, grouped with its edit, no lineage.
-            original shouldContain "\"captured_at\":\"2019-08-03T10:11:12Z\""
-            original shouldContain "\"capture_group_id\":\"E\""
-            original shouldNotContain "source_asset_id"
+            original shouldContain "\"taken_at\":\"2019-08-03T10:11:12Z\""
+            original shouldContain "\"burst\":\"E\""
+            original shouldNotContain "edited_from"
             // THE EDIT NAMES THE ASSET THE CORE ANSWERED — never the phone's id —
             // and leaves the moment to the core, which keeps the original's.
-            edit shouldContain "\"source_asset_id\":\"${core.assetOf(camera)}\""
-            edit shouldContain "\"capture_group_id\":\"E\""
-            edit shouldNotContain "captured_at"
-            edit shouldNotContain "tz_offset_min"
+            edit shouldContain "\"edited_from\":\"${core.assetOf(camera)}\""
+            edit shouldContain "\"burst\":\"E\""
+            edit shouldNotContain "taken_at"
+            edit shouldNotContain "offset_min"
             // NO ADJUSTMENT DATA travels (A20(2)): two photographs and nothing else.
             core.commands.size shouldBe 2
         }
@@ -217,7 +217,7 @@ class PhotoEditSpec : StringSpec({
             // THE CAMERA ORIGINAL IS THE BYTES ALREADY IN THE VAULT: same hash,
             // so the core's answer for it is the asset the first import made.
             core.assetOf(camera) shouldBe imported
-            commit shouldContain "\"source_asset_id\":\"$imported\""
+            commit shouldContain "\"edited_from\":\"$imported\""
         }
     }
 
@@ -247,9 +247,9 @@ class PhotoEditSpec : StringSpec({
             CameraRoll(phone, core = { core.core }).pass("vault-1").queued shouldBe 1
 
             val edit = core.commands.single().input.utf8()
-            edit shouldNotContain "source_asset_id"
+            edit shouldNotContain "edited_from"
             // WITHOUT A SOURCE THE EDIT IS DATED BY THE PHONE, as any photograph is.
-            edit shouldContain "\"captured_at\":\"2019-08-03T10:11:12Z\""
+            edit shouldContain "\"taken_at\":\"2019-08-03T10:11:12Z\""
         }
     }
 
@@ -282,9 +282,9 @@ class PhotoEditSpec : StringSpec({
 
             core.lookups shouldBe listOf(listOf("image:7"))
             val edit = core.commands.last().input.utf8()
-            edit shouldContain "\"source_asset_id\":\"$before\""
-            edit shouldContain "\"capture_group_id\":\"image:7\""
-            edit shouldNotContain "captured_at"
+            edit shouldContain "\"edited_from\":\"$before\""
+            edit shouldContain "\"burst\":\"image:7\""
+            edit shouldNotContain "taken_at"
             core.assetOf(v2) shouldNotBe before
         }
     }
@@ -308,14 +308,14 @@ class PhotoEditSpec : StringSpec({
             // A RENAME OR A RESCAN: the date moved and the bytes did not.
             phone.mediaLibrary.reportChange(inPlace("image:7"))
             roll.pass("vault-1")
-            core.commands.last().input.utf8() shouldNotContain "source_asset_id"
+            core.commands.last().input.utf8() shouldNotContain "edited_from"
             core.assetOf(v2) shouldBe firstEdit
 
             // A SECOND EDIT names the first, so the chain folds newest-over-older.
             phone.mediaLibrary.originals = mapOf("image:7" to v3)
             phone.mediaLibrary.reportChange(inPlace("image:7"))
             roll.pass("vault-1")
-            core.commands.last().input.utf8() shouldContain "\"source_asset_id\":\"$firstEdit\""
+            core.commands.last().input.utf8() shouldContain "\"edited_from\":\"$firstEdit\""
         }
     }
 
@@ -330,9 +330,9 @@ class PhotoEditSpec : StringSpec({
 
             core.lookups shouldBe listOf(listOf("image:9"))
             val input = core.commands.single().input.utf8()
-            input shouldNotContain "source_asset_id"
+            input shouldNotContain "edited_from"
             // WITHOUT A SOURCE IT IS DATED BY THE PHONE, as any photograph is.
-            input shouldContain "\"captured_at\":\"2019-08-03T10:11:12Z\""
+            input shouldContain "\"taken_at\":\"2019-08-03T10:11:12Z\""
         }
     }
 
@@ -343,7 +343,7 @@ class PhotoEditSpec : StringSpec({
             val core = Core()
             CameraRoll(phone, core = { core.core }).pass("vault-1").queued shouldBe 1
             core.begins.map { it.os_ref } shouldBe listOf("U")
-            core.commands.single().input.utf8() shouldNotContain "source_asset_id"
+            core.commands.single().input.utf8() shouldNotContain "edited_from"
         }
     }
 
@@ -400,15 +400,18 @@ class PhotoEditSpec : StringSpec({
     "the grid draws the newest photograph of a capture group and never folds an ungrouped one" {
         val fold = PhotoFold.FOLDED
         // The text `crates/vault/tests/page_fold.rs` runs against real rows.
-        fold shouldContain "n.capture_group_id = media_asset.capture_group_id"
-        // An Android file edited in place folds its ungrouped earlier version by lineage.
-        fold shouldContain "n.source_asset_id = media_asset.asset_id"
-        fold shouldContain "n.capture_group_id IS NOT NULL"
-        fold shouldContain "n.kind = 'photo' AND media_asset.kind = 'photo'"
+        // An edit covers the original it was made from, inside one capture group.
+        fold shouldContain "e.edited_from IS NOT NULL"
+        fold shouldContain "e.burst IS NOT NULL"
+        // And the newest of a group covers the older ones (ids are time-ordered).
+        fold shouldContain "o.burst = n.burst"
+        fold shouldContain "n.id > o.id"
+        fold shouldContain "n.form = 'photo'"
         // A trashed or archived edit un-folds the original it covered.
-        fold shouldContain "n.deleted_at IS NULL AND n.archived_at IS NULL"
+        fold shouldContain "n.id IN (SELECT id FROM entity WHERE deleted_at IS NULL)"
+        fold shouldContain "n.id NOT IN (SELECT from_id FROM edge WHERE rel = 'tagged' AND to_id = 'flag:archived')"
         // An editor crop has no group, so R-1029-PH-5's two photographs both draw.
-        fold shouldNotContain "source_asset_id IS NOT NULL"
+        fold shouldNotContain "e.burst IS NULL"
         PhotoFold.LIVE shouldContain fold
     }
 })

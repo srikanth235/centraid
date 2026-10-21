@@ -158,18 +158,6 @@ struct CentraidApp: App {
                                     onOpenShelf: { shell.path.append(.photoShelf($0)) }
                                 )
 
-                            case .photosMemories:
-                                PhotosMemoriesView(
-                                    data: shell.photosMemoriesState,
-                                    send: { shell.send(screen: PhotosScreens.memories, event: $0) },
-                                    onOpenMemory: { identifier, title in
-                                        shell.path.append(.photoShelf(shell.memoryShelf(
-                                            identifier: identifier,
-                                            title: title
-                                        )))
-                                    }
-                                )
-
                             case .photoDuplicates:
                                 DuplicatesView(
                                     data: shell.duplicatesState,

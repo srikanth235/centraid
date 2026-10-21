@@ -11,7 +11,7 @@ import CentraidShared
 /// search is reached from this list.
 ///
 /// **LAID OUT AS THE SYSTEM PHOTOS APP LAYS OUT ITS COLLECTIONS TAB** (iOS 26):
-/// a run of titled sections, each foldable — Memories as one wide card, Pinned
+/// a run of titled sections, each foldable — Pinned
 /// as a strip of square covers with the name printed on the photograph, Albums
 /// as covers with the name and count beneath, and Utilities as a grouped list.
 /// A member who knows that screen knows this one. What is NOT borrowed is the
@@ -80,11 +80,6 @@ struct PhotosCollectionsView: View {
                         ) { fold(nothing: everyFolded) }
                     }
                     .padding(.top, 4)
-                }
-                if let memories = layout.memories {
-                    section(.memories) {
-                        MemoriesCard(door: memories, onOpen: onOpenDoor)
-                    }
                 }
                 if !layout.pinned.isEmpty {
                     section(.pinned) { pinnedStrip(layout.pinned) }
@@ -241,17 +236,16 @@ private let pinnedSide: CGFloat = 110
 /// An album cover's side: larger than Pinned's, because an album is read by
 /// its picture and a pinned shelf by its name.
 private let albumSide: CGFloat = 150
-/// The Memories card's height — the system's Memories card.
+/// An empty section's card height.
 private let wideCardHeight: CGFloat = 150
 
 // MARK: - which row goes in which section
 
 enum CollectionsSection: Hashable, CaseIterable {
-    case memories, pinned, albums, utilities
+    case pinned, albums, utilities
 
     var title: String {
         switch self {
-        case .memories: return PhotosCopy.shared.PHOTOS_MEMORIES
         case .pinned: return PhotosCopy.shared.PHOTOS_PINNED
         case .albums: return PhotosCopy.shared.PHOTOS_ALBUMS
         case .utilities: return PhotosCopy.shared.PHOTOS_UTILITIES
@@ -272,7 +266,6 @@ enum CollectionsItem {
 /// Duplicates, Archive, Trash — where the system keeps Duplicates and Recently
 /// Deleted. Anything else a standing shelf turns out to be lands in Pinned.
 struct CollectionsLayout {
-    var memories: Centraid_Screen_V1_CollectionsDoor?
     var pinned: [CollectionsItem] = []
     var albums: [Centraid_Screen_V1_ShelfRow] = []
     var utilities: [CollectionsItem] = []
@@ -282,7 +275,6 @@ struct CollectionsLayout {
         var duplicates: Centraid_Screen_V1_CollectionsDoor?
         for door in doors {
             switch door.kind {
-            case .memories: memories = door
             case .places: places = door
             case .duplicates: duplicates = door
             case .unspecified, .UNRECOGNIZED: break
@@ -510,68 +502,6 @@ private struct AlbumCard: View {
         .accessibilityLabel("\(Counted.title(row)), \(Counted.shelf(row).spoken)")
         .accessibilityIdentifier("photos.collections.shelf")
         .accessibilityAction(named: PhotosCopy.shared.PHOTOS_DELETE_ALBUM, onDelete)
-    }
-}
-
-/// THE WIDE CARD Memories is drawn on: an icon at the top, the sentence at the
-/// foot, the whole card a door.
-private struct WideCard: View {
-    let iconKey: String
-    let title: String
-    let caption: String?
-    let urgent: Bool
-    let spoken: String
-    let action: () -> Void
-    @Environment(\.colorScheme) private var scheme
-
-    var body: some View {
-        Button(action: action) {
-            VStack(alignment: .leading, spacing: 4) {
-                CentraidIconView(iconKey: iconKey, tint: Theme.color("textFaint", scheme), size: 28)
-                Spacer(minLength: 12)
-                Text(title)
-                    .centraidType("smallStrong")
-                    .foregroundStyle(Theme.color(urgent ? "accent" : "text", scheme))
-                if let caption {
-                    Text(caption)
-                        .centraidType("small")
-                        .foregroundStyle(Theme.color("textFaint", scheme))
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            .padding(18)
-            .frame(maxWidth: .infinity, minHeight: wideCardHeight, alignment: .topLeading)
-            .background(
-                RoundedRectangle(cornerRadius: cardRadius(scheme)).fill(Theme.color("bgElev", scheme))
-            )
-            .contentShape(RoundedRectangle(cornerRadius: cardRadius(scheme)))
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(spoken)
-        .accessibilityIdentifier("photos.collections.door")
-    }
-}
-
-/// MEMORIES, AS THE SYSTEM'S WIDE CARD.
-///
-/// "None yet", never "none": nothing in this build computes a memory
-/// (`docs/photos/derived-ledger.md`), so a zero is a projection nobody has
-/// written, and a card that said there were no memories would be stating a
-/// finding nothing made.
-private struct MemoriesCard: View {
-    let door: Centraid_Screen_V1_CollectionsDoor
-    let onOpen: (Centraid_Screen_V1_CollectionsDoor.Kind) -> Void
-
-    var body: some View {
-        let count = Counted.door(door)
-        WideCard(
-            iconKey: "Sparkle",
-            title: count.map { copyFill(PhotosCopy.shared.PHOTOS_MEMORIES_COUNT, "count", $0.shown) } ?? PhotosCopy.shared.PHOTOS_COLLECTIONS_NO_MEMORIES,
-            caption: count == nil ? PhotosCopy.shared.PHOTOS_COLLECTIONS_NO_MEMORIES_CAPTION : nil,
-            urgent: count?.urgent ?? false,
-            spoken: count.map { copyFill(PhotosCopy.shared.PHOTOS_MEMORIES_SPOKEN, "count", $0.spoken) } ?? PhotosCopy.shared.PHOTOS_MEMORIES_SPOKEN_NONE,
-            action: { onOpen(.memories) }
-        )
     }
 }
 
@@ -841,14 +771,12 @@ struct PhotosCollectionsStateView {
             }
         case .album, .none: return "album"
         case .place: return "place"
-        case .memory: return "Sparkle"
         }
     }
 
     static func iconKey(for kind: Centraid_Screen_V1_CollectionsDoor.Kind) -> String {
         switch kind {
         case .places: return "place"
-        case .memories: return "Sparkle"
         case .duplicates: return "dupe"
         case .unspecified, .UNRECOGNIZED: return "album"
         }
@@ -862,7 +790,6 @@ struct PhotosCollectionsStateView {
     static func title(for kind: Centraid_Screen_V1_CollectionsDoor.Kind) -> String {
         switch kind {
         case .places: return PhotosCopy.shared.PHOTOS_PLACES
-        case .memories: return PhotosCopy.shared.PHOTOS_MEMORIES
         case .duplicates: return PhotosCopy.shared.PHOTOS_DUPLICATES
         case .unspecified, .UNRECOGNIZED: return ""
         }

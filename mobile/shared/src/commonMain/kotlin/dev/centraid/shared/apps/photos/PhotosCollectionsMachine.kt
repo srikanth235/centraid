@@ -26,7 +26,7 @@ import dev.centraid.shared.screen.Step
  *   drew two component families here and had to keep their covers, counts and
  *   empty states in step by hand (`PhotosCollectionsView.tsx`,
  *   `CollectionShelfBody.tsx`).
- * * **`CollectionsDoor`** — Places, Memories and Duplicates, whose tap
+ * * **`CollectionsDoor`** — Places and Duplicates, whose tap
  *   lands somewhere else entirely.
  *
  * ## THIS MACHINE HOLDS NO SHELF AND MAKES NO COUNT
@@ -43,11 +43,15 @@ public object PhotosCollectionsMachine :
     ScreenMachine<PhotosCollectionsState, PhotosCollectionsEvent> {
     public const val SCREEN_ID: String = "photos.collections"
 
-    /** `media.create_album`, as the VAULT registers it — never the app action. */
-    public const val CREATE_COMMAND: String = "media.create_album"
+    /** `container.create` of an album, as the VAULT registers it — never the app action. */
+    public const val CREATE_COMMAND: String = PhotoWrites.CREATE_CONTAINER
 
-    /** `media.delete_album`. */
-    public const val DELETE_COMMAND: String = "media.delete_album"
+    /** `entity.trash` of an album: its photographs stay in the library. */
+    public const val DELETE_COMMAND: String = PhotoWrites.TRASH
+
+    /** The keys' first words: the album's own verbs, one of which shares a command with a photograph's. */
+    private const val CREATE_KEY: String = PhotoWrites.KEY_CREATE_ALBUM
+    private const val DELETE_KEY: String = PhotoWrites.KEY_DELETE_ALBUM
 
     /**
      * What a member reads when the core refused and said nothing.
@@ -88,12 +92,12 @@ public object PhotosCollectionsMachine :
         // A COLLECTION MOVED — RE-READ, WHATEVER THE KEYS SAY.
         //
         // The grid filters this event against the ids it is showing, because a
-        // camera roll gains `media_asset` rows all day during a backup and a
+        // camera roll gains `photo` rows all day during a backup and a
         // library that redrew on each would never settle. **Collections is the
-        // opposite case in both halves.** A `core_collection` row changes when
-        // the member makes, renames or deletes an album — which is exactly when
-        // this list has to move — and a NEW album's id is by construction not in
-        // the set this screen is showing, so a filter on shown ids would drop
+        // opposite case in both halves.** An `entity` or a `container` row changes
+        // when the member makes, renames or deletes an album — which is exactly
+        // when this list has to move — and a NEW album's id is by construction not
+        // in the set this screen is showing, so a filter on shown ids would drop
         // precisely the event the member is waiting for.
         //
         // And the keys can be EMPTY. `ChangeFeed::tables_changed` — the producer
@@ -147,13 +151,13 @@ public object PhotosCollectionsMachine :
                 // commit, so a double tap reaches here twice. The answer frees it.
                 Step(state)
             } else if (title.isEmpty()) {
-                // AN EMPTY NAME IS NOT A WRITE. `media.create_album`'s schema
-                // has `"title": { "minLength": 1 }`, so this would be refused
-                // by the vault — and a command a screen KNOWS will be refused
-                // is a round trip a member waits through for nothing.
+                // AN EMPTY NAME IS NOT A WRITE. `container.create` refuses an
+                // album with no name, so this would be refused by the vault —
+                // and a command a screen KNOWS will be refused is a round trip
+                // a member waits through for nothing.
                 Step(state)
             } else {
-                val key = "$CREATE_COMMAND:$title"
+                val key = "$CREATE_KEY:$title"
                 Step(
                     // THE LAST REFUSAL GOES WHEN A NEW ATTEMPT IS MADE. A
                     // sentence about the previous try, sitting under a name
@@ -189,7 +193,7 @@ public object PhotosCollectionsMachine :
                 ScreenEffect.SubmitWrite(
                     command = DELETE_COMMAND,
                     inputJson = deleteInput(event.album_deleted.collection_id),
-                    invokeKey = "$DELETE_COMMAND:${event.album_deleted.collection_id}",
+                    invokeKey = "$DELETE_KEY:${event.album_deleted.collection_id}",
                 ),
             ),
         )
@@ -306,47 +310,42 @@ public object PhotosCollectionsMachine :
         if (mode != null) return "mode:${mode.kind.name}"
         val place = shelf.place
         if (place != null) return "place:${place.place_id}"
-        val memory = shelf.memory
-        if (memory != null) return "memory:${memory.memory_id}"
         return "?:${row.title}"
     }
 
     /**
-     * `media.create_album`'s input, as JSON bytes.
+     * `container.create`'s input, as JSON bytes.
      *
      * Hand-built for `NotesEditorMachine.saveInput`'s reason: `commonMain`
-     * carries no JSON dependency, the shape is one field, and the escaping is
+     * carries no JSON dependency, the shape is two fields, and the escaping is
      * the only hard part. The schema is `additionalProperties: false`, so
-     * `title` and the optional `album_id` are the only keys it admits — and
-     * `album_id` is deliberately absent (see the invoke key's note).
+     * `kind`, `title` and the optional `id` are among the keys it admits — and
+     * `id` is deliberately absent (see the invoke key's note).
      */
-    internal fun createInput(title: String): String = "{\"title\":${jsonString(title)}}"
+    internal fun createInput(title: String): String = PhotoWrites.createAlbum(title)
 
-    internal fun deleteInput(collectionId: String): String =
-        "{\"album_id\":${jsonString(collectionId)}}"
+    internal fun deleteInput(collectionId: String): String = PhotoWrites.idOnly(collectionId)
 
     /**
-     * `core_collection` — the member's own albums, and the table this screen's
-     * one statement reads.
-     *
-     * Not `media_asset`: nothing on this screen is keyed by an asset, and a
-     * library that gains rows all day during a camera-roll backup would redraw
-     * a list of shelves on every one of them. Not `core_collection_entry`
-     * either — an entry moving changes an album's SIZE, which is the count this
-     * screen cannot show anyway.
+     * The tables this screen's statements read: an album's name and the trash are
+     * the `entity`'s, its cover the `container`'s, its size and the star `edge`s,
+     * and the archive, trash and videos counts `photo`'s. A camera roll gains
+     * `photo` rows all day during a backup, and a list of shelves that redrew on
+     * each would settle for no one — but the change events are coalesced per
+     * table and a re-read is a handful of local reads, so each of the four re-reads.
      */
     override fun rowsChanged(
         table: String,
         keys: List<String>,
     ): PhotosCollectionsEvent? = when (table) {
-        TABLE -> PhotosCollectionsEvent(
+        in TABLES -> PhotosCollectionsEvent(
             rows_changed = PhotosCollectionsEvent.RowsChanged(collection_ids = keys),
         )
 
         else -> null
     }
 
-    internal const val TABLE: String = PhotosCollectionsReads.TABLE
+    internal val TABLES: Set<String> = setOf(PhotosCollectionsReads.TABLE, "container", "edge", "photo")
 
     override fun seatChanged(seat: SeatState): PhotosCollectionsEvent =
         PhotosCollectionsEvent(seat_changed = PhotosCollectionsEvent.SeatChanged(seat = seat))

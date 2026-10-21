@@ -162,8 +162,6 @@ public sealed interface Destination {
             PlacesState.Presentation.PRESENTATION_CARDS,
     ) : Destination
 
-    public data object PhotosMemories : Destination
-
     public data object PhotoDuplicates : Destination
 
     public data class PhotoDuplicateReview(val clusterId: String) : Destination

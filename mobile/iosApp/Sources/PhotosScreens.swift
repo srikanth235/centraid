@@ -16,6 +16,5 @@ enum PhotosScreens {
     static let places = PlacesMachine.shared.SCREEN_ID
     static let duplicates = DuplicatesMachine.shared.SCREEN_ID
     static let duplicateReview = DuplicateReviewMachine.shared.SCREEN_ID
-    static let memories = PhotosMemoriesMachine.shared.SCREEN_ID
     static let editor = PhotoEditorMachine.shared.SCREEN_ID
 }

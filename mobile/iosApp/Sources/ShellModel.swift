@@ -59,7 +59,6 @@ final class ShellModel: ObservableObject {
         case photoLightbox(String, [String], album: String = "")
         case photoPicker(String, String)
         case places
-        case photosMemories
         case photoDuplicates
         case photoDuplicateReview(String)
         /// The editor over one photograph, with the lightbox's neighbours so a
@@ -300,7 +299,6 @@ final class ShellModel: ObservableObject {
     @Published var placesState = Data()
     @Published var duplicatesState = Data()
     @Published var duplicateReviewState = Data()
-    @Published var photosMemoriesState = Data()
     @Published var photoEditorState = Data()
 
     /// The shelf's own sentences, read off the bridge when it opens.
@@ -384,7 +382,6 @@ final class ShellModel: ObservableObject {
     private let places = PlacesBridge()
     private let duplicates = DuplicatesBridge()
     private let duplicateReview = DuplicateReviewBridge()
-    private let photosMemories = PhotosMemoriesBridge()
     private let photoEditor = PhotoEditorBridge()
 
     init() {
@@ -456,7 +453,6 @@ final class ShellModel: ObservableObject {
         places.observe { [weak self] bytes in self?.placesState = bytes.data }
         duplicates.observe { [weak self] bytes in self?.duplicatesState = bytes.data }
         duplicateReview.observe { [weak self] bytes in self?.duplicateReviewState = bytes.data }
-        photosMemories.observe { [weak self] bytes in self?.photosMemoriesState = bytes.data }
         photoEditor.observe { [weak self] bytes in self?.photoEditorState = bytes.data }
         // THE EDITOR'S SAVE RENDERS ON THIS SHELL'S OWN DECODER and ingests
         // through the bridge — the camera roll's path (#1029).
@@ -500,7 +496,6 @@ final class ShellModel: ObservableObject {
             self.places.attach(session: session)
             self.duplicates.attach(session: session)
             self.duplicateReview.attach(session: session)
-            self.photosMemories.attach(session: session)
             self.photoEditor.attach(session: session)
             self.chat.attach(session: session)
             // THE BACKGROUND WINDOWS NOW HAVE SOMETHING TO RUN (#1029 W18-6).
@@ -1391,15 +1386,6 @@ final class ShellModel: ObservableObject {
         return (try? shelf.serializedData()) ?? Data()
     }
 
-    func memoryShelf(identifier: String, title: String) -> Data {
-        var shelf = Centraid_Screen_V1_PhotoShelf()
-        shelf.memory = .with {
-            $0.memoryID = identifier
-            $0.title = title
-        }
-        return (try? shelf.serializedData()) ?? Data()
-    }
-
     /// The four standing shelves, for Collections and for anything else that
     /// names one. A `Mode` and never a string.
     func modeShelf(_ kind: Centraid_Screen_V1_PhotoStateView.Mode.Kind) -> Data {
@@ -1433,7 +1419,6 @@ final class ShellModel: ObservableObject {
         case PhotosScreens.places: places.send(event: event.kotlin)
         case PhotosScreens.duplicates: duplicates.send(event: event.kotlin)
         case PhotosScreens.duplicateReview: duplicateReview.send(event: event.kotlin)
-        case PhotosScreens.memories: photosMemories.send(event: event.kotlin)
         case PhotosScreens.editor: photoEditor.send(event: event.kotlin)
         // EVERY REGISTERED SCREEN: a lookup, not a case (K5).
         default: ports[screen]?.send(event)
@@ -1579,7 +1564,6 @@ final class ShellModel: ObservableObject {
             )
 
         case .places: places.opened()
-        case .photosMemories: photosMemories.opened()
         case .photoDuplicates: duplicates.opened()
         case let .photoEditor(identifier, _):
             photoEditor.opened(assetId: identifier)

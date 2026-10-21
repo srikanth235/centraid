@@ -1801,15 +1801,15 @@ message HomeSearchEvent {
 // ---------------------------------------------------------------------------
 //
 // v0 shipped FOURTEEN photos routes (`navigation.ts`, `PhotosStackParamList`).
-// This package declares TEN screens for them, and the seven that collapsed did
+// This package declares NINE screens for them, and the seven that collapsed did
 // so under law 2 — *a band destination is a parameter, not a screen* — read one
 // step further than wave 3 read it.
 //
-// `PhotoStateView`, `AlbumDetail`, `PlaceDetail` and a memory's members are
-// **the library under a predicate**. Each one is a page of `media_asset` in
-// `captured_at DESC` order with a different `WHERE`, drawing the same
+// `PhotoStateView`, `AlbumDetail` and `PlaceDetail` are
+// **the library under a predicate**. Each one is a page of `photo` in
+// `taken_at DESC` order with a different `WHERE`, drawing the same
 // `PhotoCell` with the same held states and the same download arrow. v0 wrote
-// four screens for them and they drifted: `AlbumDetail.tsx` grew a selection
+// four screens for them (a memory's members were the fourth) and they drifted: `AlbumDetail.tsx` grew a selection
 // mode the state views never got, `PlaceDetail.tsx` its own empty sentence, and
 // `PhotoStateView`'s trash a countdown none of the others could show. One
 // message with a `Shelf` oneof is the same doctrine a destination parameter
@@ -1828,7 +1828,6 @@ message HomeSearchEvent {
 // - **`DuplicatesState`** / **`DuplicateReviewState`** — a shelf of clusters,
 //   and one cluster with a keep decision. Two, for the reason v0 gave: listing
 //   clusters and choosing within one are different jobs with different writes.
-// - **`PhotosMemoriesState`** — computed memories; their MEMBERS are a shelf.
 // - **`PhotoPickerState`** — a grid with a picked set and a destination album.
 //   Not a shelf: the picked set is the screen's own state (§10) and a shelf
 //   that could be picked from would carry it on every other surface too.
@@ -1844,8 +1843,12 @@ message PhotoShelf {
     PhotoStateView state_view = 1;
     Album album = 2;
     Place place = 3;
-    Memory memory = 4;
   }
+
+  // 4 was `Memory`: the shelf of one computed memory's members. Nothing
+  // computes memories, so the surface left (R-FP-10, Q-1047-2).
+  reserved 4;
+  reserved "memory";
 
   // NAMES RIDE ALONG (law 2's sibling, `navigation.ts:63-69`): every one of
   // these carries the title its app bar shows, so a head never waits for the
@@ -1863,11 +1866,6 @@ message PhotoShelf {
     // an empty id is also what a place row with a missing key would send, and
     // the two must not open the same shelf.
     bool unplaced = 3;
-  }
-
-  message Memory {
-    string memory_id = 1;
-    string title = 2;
   }
 }
 
@@ -2648,7 +2646,7 @@ message PhotoLightboxEvent {
 // v0 drew two component families here and had to keep their covers, counts and
 // empty states in step by hand.
 //
-// The DOORS that are not shelves — Places, Memories, Duplicates — are
+// The DOORS that are not shelves — Places and Duplicates — are
 // [CollectionsDoor] below, because their tap lands somewhere else.
 message ShelfRow {
   PhotoShelf shelf = 1;
@@ -2696,7 +2694,10 @@ message CollectionsDoor {
     reserved 1;
     reserved "KIND_PEOPLE";
     KIND_PLACES = 2;
-    KIND_MEMORIES = 3;
+    // 3 was `KIND_MEMORIES`, the door to computed memories: nothing computes
+    // them, so the surface left (R-FP-10, Q-1047-2).
+    reserved 3;
+    reserved "KIND_MEMORIES";
     KIND_DUPLICATES = 4;
   }
 }
@@ -3378,119 +3379,6 @@ message DuplicateReviewEvent {
   message WriteSettled {
     bool committed = 1;
     string sentence = 2;
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Memories
-// ---------------------------------------------------------------------------
-
-message MemoryRow {
-  string memory_id = 1;
-  Kind kind = 2;
-  // What the pass called it, empty when it had nothing to call it. The view
-  // composes a title from the day and the place in that case, rather than
-  // storing one the vault never wrote.
-  string title_hint = 3;
-  // THE VAULT'S OWN KEY FOR THIS MEMORY'S DAY, PASSED THROUGH AND NEVER
-  // PARSED.
-  //
-  // It said `YYYY-MM-DD`, and that is not what the column holds: the shape
-  // differs by kind, and an on-this-day row keys by MONTH AND DAY — it is the
-  // same date in other years, so a year in the key would defeat it. The
-  // deterministic ids are built from it (`otd:<day_key>`,
-  // `docs/photos/derived-ledger.md`), which is why it travels at all.
-  //
-  // **A view takes its dates from `started_at` and `ended_at`, not from
-  // here.** Those are unambiguous instants; this is a key whose format is the
-  // projection's business.
-  string day_key = 4;
-  string place_name = 5;
-  uint32 member_count = 6;
-  optional string cover_thumbnail_path = 7;
-  string started_at = 8;
-  string ended_at = 9;
-  // A TRIP'S ROUTE: the places its photographs were taken at, in the order
-  // they were taken, a repeat of the stop before collapsed. Only stops with a
-  // coordinate — a place with no pin cannot be sketched. Empty on every other
-  // kind, and on a trip whose photographs carry no place.
-  //
-  // Drawn as a private sketch from the member's own coordinates and never over
-  // a basemap: a tile is a request that tells a server where the member has
-  // been (`docs/photos/places.md`).
-  repeated MemoryStop route = 10;
-
-  enum Kind {
-    KIND_UNSPECIFIED = 0;
-    // This day, in other years.
-    KIND_ON_THIS_DAY = 1;
-    // A run of days away from home.
-    KIND_TRIP = 2;
-    // Photographs that look like each other.
-    KIND_SIMILAR = 3;
-  }
-}
-
-// ONE STOP ON A TRIP'S ROUTE.
-message MemoryStop {
-  string place_id = 1;
-  double latitude = 2;
-  double longitude = 3;
-  // WHERE THE STOP FALLS IN THE ROUTE'S SKETCH, in a box 1 high and as wide as
-  // the sketch's plate: 0,0 top left, 1,1 bottom right, y growing SOUTH. The
-  // machine projects the route (`PhotosMemoriesMachine.sketch`) so neither
-  // shell does; a view multiplies by its own box. Set with the route.
-  double sketch_x = 4;
-  double sketch_y = 5;
-}
-
-message PhotosMemoriesState {
-  SeatState seat = 1;
-  oneof content {
-    Loading loading = 2;
-    ReadFailure failure = 3;
-    PhotosMemoriesData data = 4;
-  }
-}
-
-message PhotosMemoriesData {
-  repeated MemoryRow memories = 1;
-  optional string next_cursor = 2;
-  // Memories are COMPUTED, by a pass that may not have run. An empty list with
-  // this false is "not yet"; with it true it is "there are none".
-  bool computed = 3;
-}
-
-message PhotosMemoriesEvent {
-  oneof kind {
-    Opened opened = 1;
-    NextPageRequested next_page = 2;
-    DataArrived data = 3;
-    ReadRefused refused = 4;
-    RowsChanged rows_changed = 5;
-    SeatChanged seat_changed = 6;
-  }
-
-  message Opened {}
-
-  message NextPageRequested {
-    string after_cursor = 1;
-  }
-
-  message DataArrived {
-    PhotosMemoriesData data = 1;
-  }
-
-  message ReadRefused {
-    ReadFailure failure = 1;
-  }
-
-  message RowsChanged {
-    repeated string memory_ids = 1;
-  }
-
-  message SeatChanged {
-    SeatState seat = 1;
   }
 }
 
@@ -5029,8 +4917,8 @@ message SearchField {
 // search and the three owning apps' own searches draw the same row and open it
 // through the one router a row reference has.
 message SearchContainer {
-  // The index's entity (`core.collection`, `schedule.project`,
-  // `core.concept`) and the row's own id.
+  // The index's entity kind (`notebook`, `album`, `project`, `folder`) and the
+  // row's own id.
   string entity = 1;
   string id = 2;
   // The app it opens in: `notes`, `photos`, `tasks`, `docs`.

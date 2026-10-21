@@ -16,7 +16,7 @@ import centraid.screen.v1.ShelfRow
 import dev.centraid.shared.sync.ScreenWrites
 
 /**
- * WHAT COLLECTIONS READS (#1029, the photos port).
+ * WHAT COLLECTIONS READS (#1029, the photos port; #1135).
  *
  * ## THIS IS NOT A `ScreenReads`, AND THE REASON IS A CONTRACT FINDING
  *
@@ -29,18 +29,18 @@ import dev.centraid.shared.sync.ScreenWrites
  *
  * | what | where it comes from |
  * | --- | --- |
- * | the albums | `core_collection` |
- * | an album's size | `core_collection_entry` |
- * | Archive, Trash, Videos | `media_asset` under three predicates |
- * | Favorites | `core_concept_scheme` → `core_concept` → `core_tag` |
- * | Places | `core_place` |
- * | Memories | `media_memory` |
- * | Duplicates | `media_asset_phash` |
+ * | the albums' names | `entity` of kind `album` |
+ * | an album's cover | `container.cover` |
+ * | an album's size | `edge` (`contains`) |
+ * | Archive, Trash, Videos | `photo` under three predicates |
+ * | Favorites | `edge` (`tagged` to `flag:starred`) |
+ * | Places | `entity` of kind `place` |
+ * | Duplicates | the `photos.duplicates` app query |
  *
  * Those answers cannot be chained through the reducer, and the type system is
  * what says so: **`PhotosCollectionsState`'s content is a protobuf `oneof`**,
- * so `loading` and `data` cannot both be set and there is nowhere to hold eight
- * answers while the ninth is in flight. Wire enforces it in the constructor,
+ * so `loading` and `data` cannot both be set and there is nowhere to hold seven
+ * answers while the eighth is in flight. Wire enforces it in the constructor,
  * which is the three-state read law made structural and exactly what forbids a
  * half-composed screen.
  *
@@ -64,23 +64,22 @@ import dev.centraid.shared.sync.ScreenWrites
  * Archive, Trash and Videos each read their own shelf in the shelf's own
  * order, so the newest row on each IS the cover and its thumbnail comes down
  * the same statement (`with_held_thumbnail`). Favorites get none: a favourite
- * is a `core_tag` row and this read never touches the asset behind it. An
- * album's cover is `core_collection.cover_content_id` — a column
- * `with_held_thumbnail` cannot correlate on, because it joins
- * `{from}.content_id` and a table without one is REFUSED at prepare — so the
- * albums get theirs from a second read over `media_asset`
- * ([albumCoversQuery]). Absent is still a real answer; the views draw the empty
- * cover themselves, which is what the field says to do.
+ * is an edge and this read never touches the photograph behind it. An album's
+ * cover is `container.cover` — a blob hash, and a column `with_held_thumbnail`
+ * cannot correlate on, because it joins `{from}.blob` and a table without one
+ * is REFUSED at prepare — so the albums get theirs from a second read over
+ * `photo` ([albumCoversQuery]): the chosen photograph, else the album's first
+ * member. Absent is still a real answer; the views draw the empty cover
+ * themselves, which is what the field says to do.
  */
 public object PhotosCollectionsReads :
     ScreenWrites<PhotosCollectionsState, PhotosCollectionsEvent> {
-    /** `core_collection`, the same table the machine's `rowsChanged` declares. */
-    public const val TABLE: String = "core_collection"
+    /** `entity`, the table the albums' names live on and the machine's `rowsChanged` declares first. */
+    public const val TABLE: String = "entity"
 
     /**
-     * `core_collection.kind` for an album (rung six). The table holds Notes'
-     * notebooks too, and every album read in this app binds this — the vault's
-     * own word, spelled once.
+     * `entity.kind` for an album. The table holds every kind, and every album read
+     * in this app binds this — the vault's own word, spelled once.
      */
     public const val ALBUM_KIND: String = "album"
 
@@ -105,7 +104,7 @@ public object PhotosCollectionsReads :
     /**
      * ONE PAGE EACH, AND NEVER A WALK.
      *
-     * `captured_at`, `deleted_at` and `media_asset_phash.cluster_id` are all
+     * `captured_at`, `deleted_at` and the core's cluster are all
      * nullable, and the door **refuses a CONTINUED page over a nullable sort
      * key** (`KitError::NullableSortKey`) because SQLite's row-value comparison
      * puts every NULL on one side of the keyset and the walk silently drops
@@ -120,81 +119,70 @@ public object PhotosCollectionsReads :
     // -----------------------------------------------------------------------
 
     /**
-     * `photos.collections.albums` — the member's own albums.
+     * `photos.collections.albums` — the member's own albums, by name.
      *
-     * The desktop's `albums_statement`: `core_collection`, projected
-     * `collection_id, name`, ordered `collection_id ASC`. Followed rather than
-     * re-derived, for the reason `PhotosReads` gives about the grid — a list in
-     * a different order from the desktop's over the same rows is two products.
-     *
-     * Ordering a collection list by its own primary key is also the one sort on
-     * this screen that is NOT nullable, which is what makes it the one read
+     * An album's name is its `entity`'s title and the trash is the entity's, so
+     * this pages `entity` rows of kind `album` that are not in the trash, ordered
+     * `title, id`. A title is `NOT NULL`, which is what makes this the one read
      * here that can honestly be walked for a second page.
-     *
-     * **`kind = 'album'` AND NOTHING ELSE**, as the desktop's statement does.
-     * `core_collection` holds Notes' notebooks too, and the vault says which a
-     * row is (rung six) — so no shape heuristic (a parent, an entry type) is
-     * invented here to guess at it.
      */
     public fun albumsQuery(): PageQuery = PageQuery(
         name = "photos.collections.albums",
-        select = listOf("collection_id", "name", "cover_content_id"),
+        select = listOf("id", "title"),
         from = TABLE,
-        where_ = "kind = ?",
+        where_ = "kind = ? AND deleted_at IS NULL",
         bind = listOf(Value(text = ALBUM_KIND)),
-        order = PageOrder(sort_column = "collection_id", pk_column = "collection_id"),
+        order = PageOrder(sort_column = "title", pk_column = "id"),
     )
 
-    /** `photos.collections.albumEntries` — how many assets each album holds. */
-    public fun albumEntriesQuery(): PageQuery = PageQuery(
-        name = "photos.collections.albumEntries",
-        select = listOf("entry_id", "collection_id", "target_id"),
-        from = "core_collection_entry",
-        // A COLLECTION HOLDS MORE THAN PHOTOGRAPHS. `core_collection_entry` is
-        // polymorphic — `(target_type, target_id)` — so a notebook's notes live
-        // in the same table, and an album's size counted without this predicate
-        // would be the size of whatever else a member had filed there.
-        where_ = "target_type = ?",
-        bind = listOf(Value(text = TAG_TARGET_TYPE)),
-        order = PageOrder(sort_column = "entry_id", pk_column = "entry_id"),
-    )
+    /** `photos.collections.albumEntries` — how many live photographs each album holds. */
+    public fun albumEntriesQuery(): PageQuery = AlbumChoice.entriesQuery().copy(name = "photos.collections.albumEntries")
+
+    /**
+     * `photos.collections.albumCoverBlobs` — each album's chosen key photo, a
+     * photograph's blob, from the `container`. A second read because the cover is
+     * the container's and the name is the entity's.
+     */
+    public fun albumCoverBlobsQuery(albumIds: List<String>): PageQuery? =
+        AlbumChoice.coversOfQuery(albumIds)?.copy(name = "photos.collections.albumCoverBlobs")
 
     /**
      * `photos.collections.archive` — the shelf, in the shelf's own order.
      *
-     * A read PER SHELF rather than one scan of `media_asset` partitioned
-     * afterwards, and the difference is the quality of the floor: five hundred
-     * rows of the archive counts five hundred archived photographs, where five
-     * hundred rows of the whole library might contain three. The cover comes
-     * free with it — the newest row on the shelf is the shelf's cover, and its
-     * thumbnail rides the same statement.
+     * A read PER SHELF rather than one scan of `photo` partitioned afterwards, and
+     * the difference is the quality of the floor: five hundred rows of the archive
+     * counts five hundred archived photographs, where five hundred rows of the
+     * whole library might contain three. The cover comes free with it — the newest
+     * row on the shelf is the shelf's cover, and its thumbnail rides the same
+     * statement.
      *
-     * `deleted_at IS NULL` beside `archived_at IS NOT NULL` is the app's own
-     * pairing (#419): archived and trashed are different answers and the
-     * table's CHECK refuses a row claiming both, so a shelf that counted the
-     * overlap would be counting a row that cannot exist.
+     * Not trashed beside `archived` is the app's own pairing (#419): a photograph
+     * archived and then thrown away is on the trash shelf only.
      */
     public fun archiveQuery(): PageQuery = PageQuery(
         name = "photos.collections.archive",
-        select = listOf("asset_id", "archived_at"),
+        select = listOf("id", "taken_at"),
         from = ASSETS,
-        where_ = "archived_at IS NOT NULL AND deleted_at IS NULL",
-        order = PageOrder(sort_column = "archived_at", pk_column = "asset_id", descending = true),
-        with_held_thumbnail = true,
-    )
-
-    /** `photos.collections.trash` — the desktop's `trash_statement`, counted. */
-    public fun trashQuery(): PageQuery = PageQuery(
-        name = "photos.collections.trash",
-        select = listOf("asset_id", "deleted_at"),
-        from = ASSETS,
-        where_ = "deleted_at IS NOT NULL",
-        order = PageOrder(sort_column = "deleted_at", pk_column = "asset_id", descending = true),
+        where_ = "${PhotoFold.NOT_TRASHED} AND ${PhotoFold.ARCHIVED}",
+        order = PageOrder(sort_column = "taken_at", pk_column = "id", descending = true),
         with_held_thumbnail = true,
     )
 
     /**
-     * `photos.collections.videos` — the library predicate, narrowed to one kind.
+     * `photos.collections.trash` — the trash shelf, counted. It sorts by id, as the
+     * shelf does (R-1135-5-17: the trash stamp is the entity's).
+     */
+    public fun trashQuery(): PageQuery = PageQuery(
+        name = "photos.collections.trash",
+        select = listOf("id", "taken_at"),
+        from = ASSETS,
+        where_ = PhotoFold.TRASHED,
+        order = PageOrder(sort_column = "id", pk_column = "id", descending = true),
+        with_held_thumbnail = true,
+    )
+
+    /**
+     * `photos.collections.videos` — the library predicate, narrowed to one form.
      *
      * Videos is a shelf of the LIVE library and not of everything: a video in
      * the trash is in the trash, and counting it here would put one photograph
@@ -202,176 +190,85 @@ public object PhotosCollectionsReads :
      */
     public fun videosQuery(): PageQuery = PageQuery(
         name = "photos.collections.videos",
-        select = listOf("asset_id", "captured_at"),
+        select = listOf("id", "taken_at"),
         from = ASSETS,
-        where_ = "kind = ? AND deleted_at IS NULL AND archived_at IS NULL",
+        where_ = "form = ? AND ${PhotoFold.LIVE}",
         bind = listOf(Value(text = "video")),
-        order = PageOrder(sort_column = "captured_at", pk_column = "asset_id", descending = true),
+        order = PageOrder(sort_column = "taken_at", pk_column = "id", descending = true),
         with_held_thumbnail = true,
     )
 
     /**
-     * `photos.collections.flagsScheme` — the first hop to the star.
+     * `photos.collections.starred` — one row per starred live photograph: the
+     * `tagged` edges to `flag:starred` whose photograph is not in the trash.
      *
-     * **THE FAVOURITE IS DERIVED, NEVER A COLUMN** (#916, ONT-03):
-     * `media_asset.favorite` does not exist, and the star is the `starred`
-     * concept in the flags scheme. So counting Favorites is three reads —
-     * scheme, concept, tags — and the alternative would be a four-table join
-     * written into `where_` from a shell, which is the vault's SQL living in a
-     * Kotlin string.
-     *
-     * **NO SCHEME OR NO CONCEPT MEANS NOTHING IS STARRED, AND THAT IS NOT AN
-     * ERROR** (`queries.rs`'s own words): a vault mints both the first time
-     * something is starred, so a vault that has never starred anything simply
-     * has neither row.
-     *
-     * The URI is spelled `https` deliberately and is not drift to tidy — a
-     * `urn:`-style `:flags` reads as a NAMED PARAMETER in condition SQL (#258,
-     * the colon-literal trap).
+     * **THE FAVOURITE IS DERIVED, NEVER A COLUMN** (#916, ONT-03): a star is an
+     * edge, and rows counted are photographs counted. An edge has no id of its own
+     * and `(from_id, to_id)` is unique, so the photograph and the flag are the
+     * keyset.
      */
-    public fun flagsSchemeQuery(): PageQuery = PageQuery(
-        name = "photos.collections.flagsScheme",
-        select = listOf("scheme_id", "uri"),
-        from = "core_concept_scheme",
-        where_ = "uri = ?",
-        bind = listOf(Value(text = FLAGS_SCHEME_URI)),
-        order = PageOrder(sort_column = "scheme_id", pk_column = "scheme_id"),
+    public fun starredQuery(): PageQuery = PageQuery(
+        name = "photos.collections.starred",
+        select = listOf("from_id", "to_id"),
+        from = "edge",
+        where_ = "rel = 'tagged' AND to_id = 'flag:starred' AND " +
+            "from_id IN (SELECT id FROM entity WHERE kind = 'photo' AND deleted_at IS NULL)",
+        order = PageOrder(sort_column = "from_id", pk_column = "to_id"),
     )
 
-    /** `photos.collections.starredConcept` — the second hop. */
-    public fun starredConceptQuery(schemeId: String): PageQuery = PageQuery(
-        name = "photos.collections.starredConcept",
-        select = listOf("concept_id", "notation"),
-        from = "core_concept",
-        where_ = "scheme_id = ? AND notation = ?",
-        bind = listOf(Value(text = schemeId), Value(text = STARRED_NOTATION)),
-        order = PageOrder(sort_column = "concept_id", pk_column = "concept_id"),
-    )
-
-    /**
-     * `photos.collections.starredTags` — one row per starred photograph.
-     *
-     * The tag rows ARE the count: a tag targets the ASSET and never the content
-     * item, and `(target_type, target_id, concept_id)` is unique, so counting
-     * rows counts photographs without touching `media_asset` at all.
-     */
-    public fun starredTagsQuery(conceptId: String): PageQuery = PageQuery(
-        name = "photos.collections.starredTags",
-        select = listOf("tag_id", "target_id"),
-        from = "core_tag",
-        where_ = "target_type = ? AND concept_id = ?",
-        bind = listOf(Value(text = TAG_TARGET_TYPE), Value(text = conceptId)),
-        order = PageOrder(sort_column = "tag_id", pk_column = "tag_id"),
-    )
-
-    /** `photos.collections.places`. */
+    /** `photos.collections.places` — the places that are not in the trash. */
     public fun placesQuery(): PageQuery = PageQuery(
         name = "photos.collections.places",
-        select = listOf("place_id", "name"),
-        from = "core_place",
-        order = PageOrder(sort_column = "place_id", pk_column = "place_id"),
+        select = listOf("id", "title"),
+        from = TABLE,
+        where_ = "kind = 'place' AND deleted_at IS NULL",
+        order = PageOrder(sort_column = "id", pk_column = "id"),
     )
 
     /**
      * `photos.collections.albumCovers` — the thumbnails an album's card stands
-     * on, or null when there is nothing to look up.
-     *
-     * TWO WAYS IN, ONE STATEMENT. An album with a key photo names it by CONTENT
-     * (`core_collection.cover_content_id`); one without falls back to its newest
-     * entry, which names an ASSET — Apple Photos' rule, so an album a member
-     * has just filled does not stand on an empty ground. `media_asset` and not
-     * `core_collection`, because `with_held_thumbnail` correlates on
-     * `{from}.content_id` and a table without one is refused at prepare.
+     * on, or null when there is nothing to look up: the chosen key photographs'
+     * blobs, and the first member of an album that has none.
      */
-    public fun albumCoversQuery(contentIds: List<String>, assetIds: List<String>): PageQuery? {
-        val contents = contentIds.filter { it.isNotEmpty() }.distinct()
-        val assets = assetIds.filter { it.isNotEmpty() }.distinct()
-        if (contents.isEmpty() && assets.isEmpty()) return null
-        val clauses = buildList {
-            if (contents.isNotEmpty()) add("content_id IN (" + contents.joinToString(", ") { "?" } + ")")
-            if (assets.isNotEmpty()) add("asset_id IN (" + assets.joinToString(", ") { "?" } + ")")
-        }
-        return PageQuery(
-            name = "photos.collections.albumCovers",
-            select = listOf("asset_id", "content_id"),
-            from = ASSETS,
-            where_ = clauses.joinToString(" OR "),
-            bind = (contents + assets).map { Value(text = it) },
-            order = PageOrder(sort_column = "asset_id", pk_column = "asset_id"),
-            with_held_thumbnail = true,
-        )
-    }
-
-    /** The key photos' contents and the newest entries' assets, for [albumCoversQuery]. */
-    public fun albumCoverKeys(albums: Scan, entries: Scan): Pair<List<String>, List<String>> {
-        val keyed = albums.rows.map { it.text(ALBUM_COVER) }.filter { it.isNotEmpty() }
-        val unkeyed = albums.rows.filter { it.text(ALBUM_COVER).isEmpty() }.map { it.text(0) }.toSet()
-        val newest = newestEntries(entries.rows).filterKeys { it in unkeyed }.values.toList()
-        return keyed to newest
-    }
-
-    /**
-     * `photos.collections.memories`.
-     *
-     * Ordered by the primary key and not by `computed_at`, which is the same
-     * decision the album list makes: this read counts, it does not display, and
-     * the pk is the one column on the table that cannot be NULL.
-     */
-    public fun memoriesQuery(): PageQuery = PageQuery(
-        name = "photos.collections.memories",
-        select = listOf("memory_id"),
-        from = "media_memory",
-        order = PageOrder(sort_column = "memory_id", pk_column = "memory_id"),
-    )
-
-    /**
-     * `photos.collections.duplicates` — the near-duplicate projection.
-     *
-     * `cluster_id IS NOT NULL` is the whole predicate: a phash with no cluster
-     * is a photograph that looks like nothing else, which is the normal case
-     * and not a duplicate. What a member resolves is a CLUSTER and not a row,
-     * so the fold groups them — see [fold].
-     */
-    public fun duplicatesQuery(): PageQuery = PageQuery(
-        name = "photos.collections.duplicates",
-        select = listOf("asset_id", "cluster_id"),
-        from = "media_asset_phash",
-        where_ = "cluster_id IS NOT NULL",
-        order = PageOrder(sort_column = "asset_id", pk_column = "asset_id"),
-    )
+    public fun albumCoversQuery(coverBlobs: List<String>, firstMembers: List<String>): PageQuery? =
+        AlbumChoice.coversQuery(coverBlobs, firstMembers)?.copy(name = "photos.collections.albumCovers")
 
     // -----------------------------------------------------------------------
     // The fold.
     // -----------------------------------------------------------------------
 
     /**
-     * NINE ANSWERS, ONE SCREEN. Pure, so every line of it is provable with no
+     * EIGHT ANSWERS, ONE SCREEN. Pure, so every line of it is provable with no
      * vault.
      *
      * The shelves come out in the order a member reads them — the standing four
      * first, then the albums — and that order is DECLARED here rather than
      * arriving from a read, because the four exist in a vault with no rows at
      * all and no statement can produce them.
+     *
+     * [coverBlob] is each album's chosen key photograph (an album with none is
+     * absent); [duplicateClusters] is how many groups of look-alikes the app query
+     * answered, and [duplicatesCapped] says whether it stopped at its ceiling.
      */
     @Suppress("LongParameterList")
     public fun fold(
         albums: Scan,
         albumsNextCursor: String?,
+        coverBlob: Map<String, String>,
         entries: Scan,
         archive: Scan,
         trash: Scan,
         videos: Scan,
         starred: Scan,
         places: Scan,
-        memories: Scan,
-        duplicates: Scan,
+        duplicateClusters: Int,
+        duplicatesCapped: Boolean = false,
         covers: Scan = Scan(),
     ): PhotosCollectionsData {
         val sizes = albumSizes(entries.rows)
-        val newest = newestEntries(entries.rows)
-        val byContent = covers.rows.associate { it.text(COVER_CONTENT) to it.text(SHELF_THUMBNAIL) }
-        val byAsset = covers.rows.associate { it.text(0) to it.text(SHELF_THUMBNAIL) }
-        val clusters = duplicateClusters(duplicates.rows)
+        val first = AlbumChoice.firstMembers(entries.rows)
+        val byBlob = covers.rows.associate { it.text(COVER_BLOB) to it.text(SHELF_THUMBNAIL) }
+        val byId = covers.rows.associate { it.text(0) to it.text(SHELF_THUMBNAIL) }
 
         return PhotosCollectionsData(
             shelves = listOf(
@@ -380,8 +277,8 @@ public object PhotosCollectionsReads :
                     "Favorites",
                     starred.rows.size,
                     starred.capped,
-                    // NO COVER: a favourite is a `core_tag` row and this read
-                    // never reaches the photograph behind it.
+                    // NO COVER: a favourite is an edge and this read never
+                    // reaches the photograph behind it.
                     cover = null,
                 ),
                 standing(
@@ -406,17 +303,17 @@ public object PhotosCollectionsReads :
                     cover = coverOf(videos.rows),
                 ),
             ) + albums.rows.map { row ->
-                val keyed = row.text(ALBUM_COVER)
-                val cover = if (keyed.isNotEmpty()) byContent[keyed] else newest[row.text(0)]?.let { byAsset[it] }
+                val id = row.text(0)
+                // THE CHOSEN KEY PHOTOGRAPH, else the album's first member.
+                val cover = coverBlob[id]?.let { byBlob[it] } ?: first[id]?.let { byId[it] }
                 albumOf(row, sizes, entries.capped, cover?.ifEmpty { null })
             },
             doors = listOf(
                 door(CollectionsDoor.Kind.KIND_PLACES, places.rows.size, places.capped, 0),
-                door(CollectionsDoor.Kind.KIND_MEMORIES, memories.rows.size, memories.capped, 0),
                 // A CLUSTER IS THE THING A MEMBER RESOLVES, so the badge and
                 // the count are the same number here — every cluster on this
                 // door is one decision still owed.
-                door(CollectionsDoor.Kind.KIND_DUPLICATES, clusters, duplicates.capped, clusters),
+                door(CollectionsDoor.Kind.KIND_DUPLICATES, duplicateClusters, duplicatesCapped, duplicateClusters),
             ),
             next_cursor = albumsNextCursor,
         )
@@ -494,46 +391,14 @@ public object PhotosCollectionsReads :
         )
     }
 
-    /**
-     * Each album's newest photograph, by the entry that filed it last. Entry
-     * ids are minted in time order, so the greatest is the latest filing.
-     */
-    private fun newestEntries(entryRows: List<Row>): Map<String, String> {
-        val newest = mutableMapOf<String, Pair<String, String>>()
-        entryRows.forEach { row ->
-            val collectionId = row.text(ENTRY_COLLECTION)
-            val entryId = row.text(0)
-            val target = row.text(ENTRY_TARGET)
-            if (collectionId.isEmpty() || target.isEmpty()) return@forEach
-            val held = newest[collectionId]
-            if (held == null || entryId > held.first) newest[collectionId] = entryId to target
-        }
-        return newest.mapValues { it.value.second }
-    }
-
     private fun albumSizes(entryRows: List<Row>): Map<String, Int> {
         val sizes = mutableMapOf<String, Int>()
         entryRows.forEach { row ->
-            val collectionId = row.text(ENTRY_COLLECTION)
+            val collectionId = row.text(ENTRY_ALBUM)
             if (collectionId.isNotEmpty()) sizes[collectionId] = (sizes[collectionId] ?: 0) + 1
         }
         return sizes
     }
-
-    /**
-     * HOW MANY GROUPS OF LOOK-ALIKES, NOT HOW MANY PHOTOGRAPHS.
-     *
-     * A cluster of one is not a duplicate of anything — `media_asset_phash`
-     * carries the projection and a lone row in a cluster is a photograph that
-     * happens to have been hashed — so a count of rows would tell a member they
-     * have hundreds of duplicates when they have none.
-     */
-    private fun duplicateClusters(rows: List<Row>): Int = rows
-        .map { it.text(PHASH_CLUSTER) }
-        .filter { it.isNotEmpty() }
-        .groupingBy { it }
-        .eachCount()
-        .count { it.value > 1 }
 
     /**
      * The newest row on a shelf that has a thumbnail, as the shelf's cover.
@@ -589,27 +454,15 @@ public object PhotosCollectionsReads :
         )
 
     // -----------------------------------------------------------------------
-    // The vocabulary these statements bind, restated from `crates/apps/photos`.
+    // The vocabulary these statements bind.
     // -----------------------------------------------------------------------
 
-    /** Tags and album entries target the ASSET, never the content item. */
-    public const val TAG_TARGET_TYPE: String = "media.asset"
+    private const val ASSETS: String = "photo"
 
-    public const val FLAGS_SCHEME_URI: String = "https://centraid.dev/schemes/flags"
+    private const val ENTRY_ALBUM: Int = 0
 
-    public const val STARRED_NOTATION: String = "starred"
-
-    private const val ASSETS: String = "media_asset"
-
-    private const val ENTRY_COLLECTION: Int = 1
-
-    private const val ENTRY_TARGET: Int = 2
-
-    private const val ALBUM_COVER: Int = 2
-
-    private const val COVER_CONTENT: Int = 1
-
-    private const val PHASH_CLUSTER: Int = 1
+    /** The blob of a cover row: `id, blob`, then the door's appended thumbnail. */
+    private const val COVER_BLOB: Int = 1
 
     /**
      * After the two named columns of every shelf statement.

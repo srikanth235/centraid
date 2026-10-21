@@ -104,6 +104,13 @@ public object HomeReads {
          * subquery's — so a change on them redraws the tile too (#1047).
          */
         val alsoReads: Set<String> = emptySet(),
+        /**
+         * True when a row's NAME is its `entity`'s title and the query's `from` is the
+         * kind's own table (a document, #1135): the runtime reads the titles of the rows
+         * that landed in a second page read and [arrived] is told them. The door pages one
+         * table, and the size ([PageQuery.with_document_size]) is the document's.
+         */
+        val titled: Boolean = false,
     ) {
         /** The noun for [count] rows: singular at exactly one uncapped row. */
         public fun countLabel(count: Int, capped: Boolean): String = countNoun(count, capped, countOne, countMany)
@@ -147,36 +154,46 @@ public object HomeReads {
                 // mosaic used to be the ONE place in the product that made
                 // that trip, which is why the photo GRID drew placeholders
                 // over the same photographs the tile was drawing.
-                select = listOf("asset_id", "title", "captured_at"),
-                from = "media_asset",
+                select = listOf("id", "form", "taken_at"),
+                from = "photo",
+                // THE LIVE LIBRARY: not in the trash, not put away (the entity's
+                // stamp and an `archived` flag edge).
+                where_ = "id IN (SELECT id FROM entity WHERE deleted_at IS NULL) AND " +
+                    "id NOT IN (SELECT from_id FROM edge WHERE rel = 'tagged' AND to_id = 'flag:archived')",
                 // Newest first: a launcher shows what just happened.
-                order = order("captured_at", "asset_id"),
+                order = order("taken_at", "id"),
                 with_held_thumbnail = true,
             ),
             countOne = PhotosCopy.TILE_COUNT_ONE,
             countMany = PhotosCopy.TILE_COUNT_MANY,
+            alsoReads = setOf("entity", "edge"),
         ),
         TileRead(
             appId = "docs",
             query = PageQuery(
                 name = "home.docs",
-                select = listOf("document_id", "title", "updated_at"),
-                from = "core_document",
+                select = listOf("id", "media_type", "folder_id"),
+                from = "document",
                 // THE TRASH IS NOT THE LIBRARY (#1046's audit). A deleted
                 // document keeps its row for the restore window, and a
                 // launcher that counted it would tell a member they hold a
-                // file they threw away.
-                where_ = NOT_TRASHED,
-                order = order("updated_at", "document_id"),
+                // file they threw away. The stamp is the entity's.
+                where_ = "id IN (SELECT id FROM entity WHERE deleted_at IS NULL)",
+                // NEWEST ADDED FIRST: a document's id is minted in time order, and
+                // `document` carries no timestamp of its own (the entity's is the
+                // other table's).
+                order = order("id", "id"),
                 // THE SIZE IS A COMPUTED COLUMN THE VAULT APPENDS, and asking
-                // for it is the whole of what this tile had to do. `core_document`
-                // carries `current_content_id`, which is what the correlated
-                // subquery correlates on — set this flag on a table that does not
-                // and the page is REFUSED at prepare, never answered with nulls.
+                // for it is the whole of what this tile had to do. `document`
+                // carries a `blob`, which is what the correlated subquery
+                // correlates on — set this flag on a table that does not and the
+                // page is REFUSED at prepare, never answered with nulls.
                 with_document_size = true,
             ),
             countOne = DocsCopy.DOCUMENT_ONE,
             countMany = DocsCopy.DOCUMENT_MANY,
+            alsoReads = setOf("entity"),
+            titled = true,
         ),
         // NOTES AND AGENDA ARE NOT PAGE READS. Notes' tile is a shelf of
         // notebooks with their counts, which only the Notes app's own reads
@@ -281,6 +298,7 @@ public object HomeReads {
         appId: String,
         rows: List<Row>,
         capped: Boolean,
+        titles: Map<String, String> = emptyMap(),
     ): HomeEvent {
         val read = READS.firstOrNull { it.appId == appId }
         val label = read?.countLabel(rows.size, capped) ?: ""
@@ -303,7 +321,7 @@ public object HomeReads {
                 status = TileStatus.TILE_STATUS_CONTENT,
                 count = TileCount(value_ = rows.size, capped = capped),
                 count_label = label,
-                body = bodyFor(appId, rows, capped),
+                body = bodyFor(appId, rows, capped, titles),
             ),
         )
     }
@@ -339,6 +357,7 @@ public object HomeReads {
         appId: String,
         rows: List<Row>,
         capped: Boolean,
+        titles: Map<String, String>,
     ): TileBody? {
         val preview = rows.take(PREVIEW)
         return when (appId) {
@@ -369,7 +388,7 @@ public object HomeReads {
                     rows = preview.map { row ->
                         TileBody.Docs.Row(
                             document_id = row.text(0),
-                            name = row.text(1),
+                            name = titles[row.text(0)].orEmpty(),
                             // A PHRASE THE VAULT SAID, NEVER A NUMBER THIS TILE
                             // TURNED INTO ONE. This used to read `size = ""`
                             // with a comment explaining that the size "is not

@@ -36,7 +36,7 @@ public class PhotoPickerBridge {
      * Put this screen on the session's core, and start publishing.
      *
      * [PhotoPickerReads] is passed twice: the picker reads the library and
-     * writes `media.add_to_album`, so a null `writes` would make Confirm an
+     * writes `edge.add`, so a null `writes` would make Confirm an
      * effect nothing served — which is the defect `ScreenRuntime`'s own file
      * comment describes for reads, applied to the other half of the door.
      */
@@ -59,8 +59,8 @@ public class PhotoPickerBridge {
     }
 
     /**
-     * EVERY PHOTOGRAPH THE ALBUM HOLDS, WALKED. `entry_id` is the entry's own
-     * primary key, so the walk continues past a page the way no nullable
+     * EVERY PHOTOGRAPH THE ALBUM HOLDS, WALKED. the photograph is the sort and the
+     * album the key of an edge, so the walk continues past a page the way no nullable
      * timestamp can. A refusal part way sends what was read — the taken set is
      * a union, so a partial list marks fewer cells taken and never marks a
      * wrong one, and the add's own precondition refuses the rest by name.
@@ -75,7 +75,7 @@ public class PhotoPickerBridge {
                 limit = MEMBERS_PAGE,
                 after = ScreenRuntime.decodeCursor(after),
             ) as? PhotosPage.Rows ?: break
-            page.rows.mapNotNullTo(ids) { row -> row.values.getOrNull(1)?.text?.takeIf { it.isNotEmpty() } }
+            page.rows.mapNotNullTo(ids) { row -> row.values.getOrNull(0)?.text?.takeIf { it.isNotEmpty() } }
             after = page.nextCursor
         } while (after != null)
         host.send(

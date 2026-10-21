@@ -17,12 +17,11 @@
 #     placeholder. The view draws the empty cover; a path to an asset the
 #     product ships is a path that will one day be loaded.
 #
-# The three DOORS are the taps that do not land on `photos.shelf`, which is why
+# The two DOORS are the taps that do not land on `photos.shelf`, which is why
 # they are a separate list and not a fifth shelf. `needs_attention` is what
 # draws the badge and it is separate from `count`: a door can have a count and
 # nothing waiting (Places) or a count and a decision still owed on every one of
-# them (Duplicates), and a single number could only say one. Memories has
-# neither, and is still a door.
+# them (Duplicates), and a single number could only say one.
 seat {
   availability: AVAILABILITY_READY
   durability: DURABILITY_AUTHORITATIVE
@@ -66,9 +65,6 @@ data {
   doors {
     kind: KIND_PLACES
     count: 41
-  }
-  doors {
-    kind: KIND_MEMORIES
   }
   doors {
     kind: KIND_DUPLICATES

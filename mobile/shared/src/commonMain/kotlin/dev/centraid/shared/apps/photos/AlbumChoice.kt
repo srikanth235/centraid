@@ -6,7 +6,6 @@ import centraid.core.v1.PageQuery
 import centraid.core.v1.Row
 import centraid.core.v1.Value
 import centraid.screen.v1.AlbumChoiceEntry
-import dev.centraid.shared.kit.jsonString
 import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.ScreenHost
 import dev.centraid.shared.shell.HomeSession
@@ -39,23 +38,23 @@ import kotlinx.coroutines.launch
  *
  * ## "NEW ALBUM…" IS TWO TAPS, AND THAT IS THE HONEST COST
  *
- * `media.create_album` takes an optional seat-minted `album_id` (#922 G2), and
+ * `container.create` takes an optional `id` (#922 G2), and
  * a pure reducer has no clock and no randomness to mint one with. The vault
  * mints it, and `ScreenWrites.settled` is `(status, sentence, invokeKey)` —
  * **the command's output never reaches a screen** — so the id the pick would
  * go into is not known when the create settles. The create's own commit moves
- * `core_collection`, the host re-reads the list, and the new album is there for
+ * `entity` and `container`, the host re-reads the list, and the new album is there for
  * the tap that finishes the job.
  *
  * Emitting the create and the adds together would not work either: the runner
  * launches one coroutine per write, so the adds would race the album they need
- * and lose on `album_exists`.
+ * and lose on `edge_joins_what_it_may`.
  *
  * ## WHAT A PICK OF MANY DOES
  *
- * One `media.add_to_album` per asset — the vault registers it over a single
- * `asset_id` — keyed on the album and the asset. A photograph already in the
- * album is REFUSED by `not_already_in_album` with the vault's own sentence,
+ * One `edge.add` per photograph — the vault registers it over a single
+ * `from`/`to` pair — keyed on the album and the photograph. A photograph already in the
+ * album is a no-op (an edge is idempotent), and a refused one carries the vault's own sentence,
  * which the host's `write_failure` shows; the others land.
  */
 public object AlbumChoice {
@@ -76,11 +75,14 @@ public object AlbumChoice {
      */
     public const val READ_ID: String = "photos.albumChoice"
 
-    /** `media.add_to_album`, as the VAULT registers it — never the app action. */
-    public const val ADD_COMMAND: String = "media.add_to_album"
+    /** `edge.add` of a `contains` edge, as the VAULT registers it — never the app action. */
+    public const val ADD_COMMAND: String = PhotoWrites.EDGE_ADD
 
-    /** `media.create_album`. */
-    public const val CREATE_COMMAND: String = "media.create_album"
+    /** `container.create` of an album. */
+    public const val CREATE_COMMAND: String = PhotoWrites.CREATE_CONTAINER
+
+    /** The create's key: it is about no photograph, and `container.create` is shared. */
+    public const val CREATE_KEY: String = PhotoWrites.KEY_CREATE_ALBUM
 
     /**
      * Albums are "owner-curated and small" (`crates/apps/photos`' own
@@ -94,114 +96,158 @@ public object AlbumChoice {
     /** The door's own ceiling (`MAX_PAGE_ROWS`); the counts are floors past it. */
     public const val ENTRY_LIMIT: Int = 500
 
-    private const val COLLECTION_TABLE: String = "core_collection"
-    private const val ENTRY_TABLE: String = "core_collection_entry"
-    private const val ASSET_TABLE: String = "media_asset"
-    private const val ASSET_TARGET_TYPE: String = "media.asset"
+    private const val ASSET_TABLE: String = "photo"
+    private const val ENTITY_TABLE: String = "entity"
+    private const val CONTAINER_TABLE: String = "container"
+    private const val EDGE_TABLE: String = "edge"
+    private val CHOICE_TABLES: Set<String> = setOf(ENTITY_TABLE, CONTAINER_TABLE, EDGE_TABLE)
+
+    /** `photos.albumChoice.coverBlobs` — each album's chosen cover. */
+    public const val COVER_BLOBS_QUERY_NAME: String = "photos.albumChoice.coverBlobs"
 
     /**
      * THE MEMBER'S ALBUMS, BY NAME.
      *
-     * By `name` because a member finds an album by reading its name, and
-     * `core_collection.name` is `NOT NULL` — so this is a sort the door can
-     * continue, unlike every nullable timestamp on this app's tables. The
-     * primary key breaks ties between two albums called "Trip".
+     * An album's name is its `entity`'s title, and the entity is where the trash
+     * lives too, so this pages `entity` rows of kind `album` that are not in the
+     * trash. By `title` because a member finds an album by reading its name, and
+     * `title` is `NOT NULL` — so this is a sort the door can continue, unlike
+     * every nullable timestamp on this app's tables. The id breaks ties between
+     * two albums called "Trip".
      *
-     * `cover_content_id` rides along for [coversQuery]: it names a CONTENT
-     * item, and the asset behind it is a second read.
-     *
-     * `kind = 'album'`: `core_collection` holds Notes' notebooks too, and a
-     * photograph offered a notebook here would be refused by the vault anyway
-     * (`media.add_to_album`'s `album_exists`, rung six).
+     * `kind = 'album'`: `entity` holds every kind of thing, and a photograph
+     * offered a notebook here would be refused by the vault anyway
+     * (`edge_joins_what_it_may`).
      */
     public fun albumsQuery(): PageQuery = PageQuery(
         name = ALBUMS_QUERY_NAME,
-        select = listOf("collection_id", "name", "cover_content_id"),
-        from = COLLECTION_TABLE,
-        where_ = "kind = ?",
+        select = listOf("id", "title"),
+        from = ENTITY_TABLE,
+        where_ = "kind = ? AND deleted_at IS NULL",
         bind = listOf(Value(text = PhotosCollectionsReads.ALBUM_KIND)),
-        order = PageOrder(sort_column = "name", pk_column = "collection_id"),
+        order = PageOrder(sort_column = "title", pk_column = "id"),
     )
 
     /**
-     * Every album's photographs, as rows to count.
+     * Each album's cover: the photograph's blob a member chose, or none. A second
+     * read because the cover is the `container`'s and the name is the `entity`'s.
+     */
+    public fun coversOfQuery(albumIds: List<String>): PageQuery? {
+        val ids = albumIds.filter { it.isNotEmpty() }.distinct()
+        if (ids.isEmpty()) return null
+        return PageQuery(
+            name = COVER_BLOBS_QUERY_NAME,
+            select = listOf("id", "cover"),
+            from = CONTAINER_TABLE,
+            where_ = "id IN (" + ids.joinToString(", ") { "?" } + ")",
+            bind = ids.map { Value(text = it) },
+            order = PageOrder(sort_column = "id", pk_column = "id"),
+        )
+    }
+
+    /**
+     * Every album's live photographs, as rows to count: the `contains` edges whose
+     * photograph is not in the trash. A trashed photograph keeps its membership
+     * (a restore brings it back) and is not counted while it is in the trash.
      *
-     * `target_type = 'media.asset'` because `core_collection_entry` is
-     * polymorphic and a notebook's notes live in it too.
+     * An edge has no id of its own, and `(from_id, to_id)` is unique under one
+     * `rel`, so the album and the photograph are the keyset.
      */
     public fun entriesQuery(): PageQuery = PageQuery(
         name = ENTRIES_QUERY_NAME,
-        select = listOf("entry_id", "collection_id", "target_id"),
-        from = ENTRY_TABLE,
-        where_ = "target_type = ?",
-        bind = listOf(Value(text = ASSET_TARGET_TYPE)),
-        order = PageOrder(sort_column = "entry_id", pk_column = "entry_id"),
+        select = listOf("from_id", "to_id", "position"),
+        from = EDGE_TABLE,
+        where_ = "rel = 'contains' AND to_id IN (SELECT id FROM entity WHERE kind = 'photo' AND deleted_at IS NULL)",
+        order = PageOrder(sort_column = "from_id", pk_column = "to_id"),
     )
 
     /**
-     * The assets behind the covers, with their thumbnails, or null when no
-     * album has a cover.
+     * The photographs behind the covers, with their thumbnails, or null when no
+     * album has one: a chosen cover is a photograph's blob, and an album with none
+     * draws its first member.
      *
-     * `media_asset` and not `core_collection`, because `with_held_thumbnail`
-     * correlates on `{from}.content_id` and a table without one is refused at
-     * prepare.
+     * `photo` and not `container`, because `with_held_thumbnail` correlates on
+     * `{from}.blob` and a table without one is refused at prepare.
      */
-    public fun coversQuery(coverContentIds: List<String>): PageQuery? {
-        val ids = coverContentIds.filter { it.isNotEmpty() }.distinct()
-        if (ids.isEmpty()) return null
+    public fun coversQuery(coverBlobs: List<String>, firstMembers: List<String>): PageQuery? {
+        val blobs = coverBlobs.filter { it.isNotEmpty() }.distinct()
+        val members = firstMembers.filter { it.isNotEmpty() }.distinct()
+        if (blobs.isEmpty() && members.isEmpty()) return null
+        val clauses = buildList {
+            if (blobs.isNotEmpty()) add("blob IN (" + blobs.joinToString(", ") { "?" } + ")")
+            if (members.isNotEmpty()) add("id IN (" + members.joinToString(", ") { "?" } + ")")
+        }
         return PageQuery(
             name = COVERS_QUERY_NAME,
-            select = listOf("asset_id", "content_id"),
+            select = listOf("id", "blob"),
             from = ASSET_TABLE,
-            where_ = "content_id IN (" + ids.joinToString(", ") { "?" } + ")",
-            bind = ids.map { Value(text = it) },
-            order = PageOrder(sort_column = "asset_id", pk_column = "asset_id"),
+            where_ = clauses.joinToString(" OR "),
+            bind = (blobs + members).map { Value(text = it) },
+            order = PageOrder(sort_column = "id", pk_column = "id"),
             with_held_thumbnail = true,
         )
     }
 
     /** The albums page alone: names, no counts, no covers. */
-    public fun rows(page: Page): List<AlbumChoiceRow> = rows(page.rows, emptyList(), emptyList())
+    public fun rows(page: Page): List<AlbumChoiceRow> = rows(page.rows, emptyMap(), emptyList(), emptyList())
 
     /**
      * THREE READS, ONE LIST, pure — so all of it is provable with no vault.
      *
+     * [coverBlob] is each album's chosen cover (an album with none is absent).
      * Every count is capped when the entry page was: one read counts every
      * album's entries at once, so a page that filled may have stopped before
      * this album's rows entirely, and "0" would then be a claim.
      */
     public fun rows(
         albumRows: List<Row>,
+        coverBlob: Map<String, String>,
         entryRows: List<Row>,
         coverRows: List<Row>,
         entriesCapped: Boolean = false,
     ): List<AlbumChoiceRow> {
         val sizes = mutableMapOf<String, Long>()
+        val first = firstMembers(entryRows)
         entryRows.forEach { row ->
-            val album = row.text(ENTRY_COLLECTION)
+            val album = row.text(ENTRY_ALBUM)
             if (album.isNotEmpty()) sizes[album] = (sizes[album] ?: 0L) + 1L
         }
-        val coverAsset = mutableMapOf<String, String>()
-        val coverThumbnail = mutableMapOf<String, String>()
+        val byBlob = mutableMapOf<String, Row>()
+        val byId = mutableMapOf<String, Row>()
         coverRows.forEach { row ->
-            val content = row.text(COVER_CONTENT)
-            if (content.isEmpty()) return@forEach
-            coverAsset[content] = row.text(COVER_ASSET)
-            val thumbnail = row.text(COVER_THUMBNAIL)
-            if (thumbnail.isNotEmpty()) coverThumbnail[content] = thumbnail
+            byBlob[row.text(COVER_BLOB)] = row
+            byId[row.text(COVER_ASSET)] = row
         }
         return albumRows.map { row ->
             val albumId = row.text(ALBUM_ID)
-            val cover = row.text(ALBUM_COVER)
+            // THE CHOSEN COVER, else the album's first member.
+            val cover = coverBlob[albumId]?.let { byBlob[it] } ?: first[albumId]?.let { byId[it] }
+            val thumbnail = cover?.text(COVER_THUMBNAIL).orEmpty()
             AlbumChoiceRow(
                 albumId = albumId,
-                title = row.text(ALBUM_NAME),
+                title = row.text(ALBUM_TITLE),
                 count = sizes[albumId] ?: 0L,
-                coverAssetId = coverAsset[cover]?.ifEmpty { null },
-                coverThumbnailPath = coverThumbnail[cover],
+                coverAssetId = cover?.text(COVER_ASSET)?.ifEmpty { null },
+                coverThumbnailPath = thumbnail.ifEmpty { null },
                 countCapped = entriesCapped,
             )
         }
+    }
+
+    /** Each album's first member: the lowest position, ties by id. */
+    internal fun firstMembers(entryRows: List<Row>): Map<String, String> {
+        val best = mutableMapOf<String, Triple<Double, String, String>>()
+        entryRows.forEach { row ->
+            val album = row.text(ENTRY_ALBUM)
+            val photo = row.text(ENTRY_PHOTO)
+            if (album.isEmpty() || photo.isEmpty()) return@forEach
+            val position = row.values.getOrNull(ENTRY_POSITION)?.let { it.real ?: it.integer?.toDouble() } ?: 0.0
+            val held = best[album]
+            if (held == null || position < held.first || (position == held.first && photo < held.third)) {
+                best[album] = Triple(position, album, photo)
+            }
+        }
+        return best.mapValues { it.value.third }
     }
 
     /** The rows, as the wire carries them on every host screen's state. */
@@ -221,14 +267,14 @@ public object AlbumChoice {
         listOf(ScreenEffect.ReadPage(READ_ID, afterCursor = null))
 
     /**
-     * Does a change on [table] move the list? The albums themselves, and their
-     * entries — which is what a count is made of.
+     * Does a change on [table] move the list? The albums themselves (`entity` for a
+     * name, `container` for a cover), and their members (`edge`) — which is what a
+     * count is made of.
      */
-    public fun movesChoices(table: String): Boolean =
-        table == COLLECTION_TABLE || table == ENTRY_TABLE
+    public fun movesChoices(table: String): Boolean = table in CHOICE_TABLES
 
     /**
-     * ONE `media.add_to_album` PER PICKED ASSET.
+     * ONE `edge.add` PER PICKED PHOTOGRAPH.
      *
      * CONTENT-DERIVED, NEVER AN ORDINAL: the intent is "this photograph into
      * that album", so that is the key — and it ends in the asset id, which is
@@ -240,8 +286,7 @@ public object AlbumChoice {
         return assetIds.filter { it.isNotEmpty() }.distinct().map { assetId ->
             ScreenEffect.SubmitWrite(
                 command = ADD_COMMAND,
-                inputJson = "{\"album_id\":${jsonString(albumId)}," +
-                    "\"asset_id\":${jsonString(assetId)}}",
+                inputJson = PhotoWrites.membership(albumId, assetId),
                 invokeKey = "$ADD_COMMAND:$albumId:$assetId",
             )
         }
@@ -263,8 +308,8 @@ public object AlbumChoice {
         return listOf(
             ScreenEffect.SubmitWrite(
                 command = CREATE_COMMAND,
-                inputJson = "{\"title\":${jsonString(name)}}",
-                invokeKey = "$CREATE_COMMAND:$name",
+                inputJson = PhotoWrites.createAlbum(name),
+                invokeKey = "$CREATE_KEY:$name",
             ),
         )
     }
@@ -279,13 +324,24 @@ public object AlbumChoice {
         val albums = core.photosPage(albumsQuery(), limit = ALBUM_LIMIT) as? PhotosPage.Rows
             ?: return null
         val entries = core.photosPage(entriesQuery(), limit = ENTRY_LIMIT) as? PhotosPage.Rows
-        val coverIds = albums.rows.map { it.text(ALBUM_COVER) }
-        val covers = coversQuery(coverIds)?.let { query ->
-            core.photosPage(query, limit = coverIds.size) as? PhotosPage.Rows
+        val containers = coversOfQuery(albums.rows.map { it.text(ALBUM_ID) })?.let { query ->
+            core.photosPage(query, limit = ALBUM_LIMIT) as? PhotosPage.Rows
+        }
+        val coverBlob = containers?.rows.orEmpty()
+            .filter { it.text(CONTAINER_COVER).isNotEmpty() }
+            .associate { it.text(CONTAINER_ID) to it.text(CONTAINER_COVER) }
+        val first = firstMembers(entries?.rows.orEmpty())
+        val chosen = albums.rows.map { it.text(ALBUM_ID) }
+        val covers = coversQuery(
+            coverBlobs = coverBlob.values.toList(),
+            firstMembers = chosen.filter { it !in coverBlob }.mapNotNull { first[it] },
+        )?.let { query ->
+            core.photosPage(query, limit = ENTRY_LIMIT) as? PhotosPage.Rows
         }
         return entries(
             rows(
                 albumRows = albums.rows,
+                coverBlob = coverBlob,
                 entryRows = entries?.rows.orEmpty(),
                 coverRows = covers?.rows.orEmpty(),
                 entriesCapped = entries == null || entries.nextCursor != null,
@@ -320,11 +376,14 @@ public object AlbumChoice {
     }
 
     private const val ALBUM_ID: Int = 0
-    private const val ALBUM_NAME: Int = 1
-    private const val ALBUM_COVER: Int = 2
-    private const val ENTRY_COLLECTION: Int = 1
+    private const val ALBUM_TITLE: Int = 1
+    private const val CONTAINER_ID: Int = 0
+    private const val CONTAINER_COVER: Int = 1
+    private const val ENTRY_ALBUM: Int = 0
+    private const val ENTRY_PHOTO: Int = 1
+    private const val ENTRY_POSITION: Int = 2
     private const val COVER_ASSET: Int = 0
-    private const val COVER_CONTENT: Int = 1
+    private const val COVER_BLOB: Int = 1
 
     /** The door APPENDS `thumbnail_path` after the two named columns. */
     private const val COVER_THUMBNAIL: Int = 2

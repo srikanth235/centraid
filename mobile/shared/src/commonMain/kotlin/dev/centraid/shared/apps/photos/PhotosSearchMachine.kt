@@ -173,10 +173,10 @@ public object PhotosSearchMachine : ScreenMachine<PhotosSearchState, PhotosSearc
         //   screen stay until the new ones land, because a resting page that
         //   blinked empty on every commit would read as "you have nobody".
         // * A query re-reads its hits only when the change can be its own. The
-        //   keys are asset ids for `media_asset` and are checked against the
+        //   keys are photograph ids for `photo` and are checked against the
         //   cells on screen, EXCEPT when there are none: an empty list means
         //   "this table moved and nobody can say which rows" (every local
-        //   commit, and every table that is not `media_asset`), so it is a
+        //   commit, and every table that is not `photo`), so it is a
         //   re-read and not a shrug.
         event.rows_changed != null -> {
             val ids = event.rows_changed.asset_ids
@@ -274,7 +274,7 @@ public object PhotosSearchMachine : ScreenMachine<PhotosSearchState, PhotosSearc
     /**
      * EVERY TABLE A SEARCH READS, because every one can change an answer.
      *
-     * `media_asset` carries its keys, which are this screen's own cell ids and
+     * `photo` carries its keys, which are this screen's own cell ids and
      * are filtered by the reducer. The others — a place renamed, an album filled, a label put on — carry none: their keys are not
      * asset ids, and a filter over them would always say "not mine".
      */
@@ -285,15 +285,14 @@ public object PhotosSearchMachine : ScreenMachine<PhotosSearchState, PhotosSearc
         else -> null
     }
 
-    internal const val TABLE: String = "media_asset"
+    internal const val TABLE: String = "photo"
 
-    private val VOCABULARY_TABLES: Set<String> = setOf(
-        "core_place",
-        "core_collection",
-        "core_collection_entry",
-        "core_tag",
-        "core_concept",
-    )
+    /**
+     * What names a place, an album or a label, and what files a photograph under
+     * one: the `entity` (a title, the trash), the `place` row, the `container` and
+     * the `edge`s (`contains`, `tagged`).
+     */
+    private val VOCABULARY_TABLES: Set<String> = setOf("entity", "place", "container", "edge")
 
     /** Where this screen keeps the shared field. */
     private object Search : SearchLens<PhotosSearchState> {

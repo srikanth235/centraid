@@ -166,14 +166,22 @@ public class PhotosSearchBridge {
             }
         }
         if (page is PhotosPage.Refused) return host.send(PhotosSearchReads.refused(page.failure))
+        val rows = (page as PhotosPage.Rows?)?.rows.orEmpty()
+        // THE CAPTIONS OF THE PAGE, for "why this matched": the entity's titles, and a read
+        // that does not answer costs the reasons and not the photographs.
+        val titles = PhotosSearchReads.titlesQuery(rows.map { it.values.firstOrNull()?.text.orEmpty() })
+            ?.let { (core.photosPage(it, rows.size) as? PhotosPage.Rows)?.rows }
+            .orEmpty()
+            .associate { it.values.getOrNull(0)?.text.orEmpty() to it.values.getOrNull(1)?.text.orEmpty() }
         host.send(
             PhotosSearchReads.hitsArrived(
                 query = query,
-                rows = (page as PhotosPage.Rows?)?.rows.orEmpty(),
+                rows = rows,
                 nextCursor = (page as PhotosPage.Rows?)?.nextCursor,
                 topHits = kept.topHits,
                 labels = kept.labels,
                 corrected = corrected,
+                titles = titles,
             ),
         )
     }
@@ -214,10 +222,14 @@ public class PhotosSearchBridge {
 
         val placeRows = handle.photosPage(PhotosSearchReads.placesQuery(), PhotosSearchReads.PLACE_LIMIT)
         if (placeRows is PhotosPage.Refused) return Legs.Refused(placeRows.failure)
+        // THE GAZETTEER'S NAMES are the `place` rows', beside the entities' titles. A leg
+        // that does not answer costs the gazetteer's words and nothing else.
+        val geoRows = (handle.photosPage(PhotosSearchReads.placeGeoQuery(), PhotosSearchReads.PLACE_LIMIT) as? PhotosPage.Rows)
+            ?.rows.orEmpty()
         val labelRows = handle.photosPage(PhotosSearchReads.labelsQuery(words), limit)
         if (labelRows is PhotosPage.Refused) return Legs.Refused(labelRows.failure)
 
-        val places = PhotosSearchReads.matchPlaces((placeRows as PhotosPage.Rows).rows, term)
+        val places = PhotosSearchReads.matchPlaces((placeRows as PhotosPage.Rows).rows, geoRows, term)
             .let { it.copy(places = it.places.take(PhotosSearchReads.PER_KIND_CAP)) }
         val labels = PhotosSearchReads.labels((labelRows as PhotosPage.Rows).rows)
 
@@ -236,7 +248,7 @@ public class PhotosSearchBridge {
             1,
             0,
         )
-        val albumCounts = count(handle, PhotosSearchReads.albumCountsQuery(albums.map { it.id }), 1, 0)
+        val albumCounts = count(handle, PhotosSearchReads.albumCountsQuery(albums.map { it.id }), 0, 1)
         val topHits = PhotosSearchReads.topHits(
             places = places,
             placeCounts = placeCounts,

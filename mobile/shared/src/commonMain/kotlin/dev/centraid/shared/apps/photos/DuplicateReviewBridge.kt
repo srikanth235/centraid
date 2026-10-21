@@ -49,6 +49,7 @@ public class DuplicateReviewBridge {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var onState: ((ByteArray) -> Unit)? = null
+    private var session: HomeSession? = null
 
     /**
      * Put this screen on the session's core, and start publishing.
@@ -58,6 +59,7 @@ public class DuplicateReviewBridge {
      * would be refused by `SingleHandleGuard`.
      */
     public fun attach(session: HomeSession) {
+        this.session = session
         // THE MEMBERS AND THE WRITE, AND THE ONE THING THAT ROUTES SYNC.
         session.attachScreen(host, DuplicateReviewReads, DuplicateReviewReads)
         // THE PLACEMENT LEG, THROUGH `attachReads` AND NOT A SECOND
@@ -83,6 +85,11 @@ public class DuplicateReviewBridge {
      */
     public fun opened(clusterId: String) {
         scope.launch {
+            // THE CLUSTER'S MEMBERS ARE THE CORE'S, asked once as the screen opens: the
+            // grouping is `photos.duplicates`' and no page read can say it. A cluster the
+            // core no longer answers (every copy resolved, a hash changed) is remembered
+            // as nothing, and the read says so rather than offering the whole library.
+            DuplicateClusterMembers.ask(session?.shelf?.core(), clusterId)
             host.send(
                 DuplicateReviewEvent(
                     opened = DuplicateReviewEvent.Opened(cluster_id = clusterId),

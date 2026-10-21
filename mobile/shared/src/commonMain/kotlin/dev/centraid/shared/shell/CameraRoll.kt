@@ -387,7 +387,11 @@ public class CameraRoll(
             } else {
                 null
             }
-            val committed = commit(handle, inputFor(asset, ok.contentHash, kind, source), ok.contentHash)
+            val committed = commit(
+                handle,
+                inputFor(asset, ok.contentHash, ok.byteSize, opened.mediaType, kind, source),
+                ok.contentHash,
+            )
             committed.refusal?.let { return it }
             if (camera) {
                 cameraAsset = committed.assetId.ifEmpty { null }
@@ -428,10 +432,10 @@ public class CameraRoll(
         return Prior(found.asset_id, found.content_hash.hex())
     }
 
-    /** What one `media.add_asset` came to: a refusal, or the asset it made or adopted. */
+    /** What one `photo.add` came to: a refusal, or the photograph it made or adopted. */
     private class Committed(val refusal: Offered.Refused?, val assetId: String = "")
 
-    /** `media.add_asset` for one staged resource. */
+    /** `photo.add` for one staged resource. */
     private suspend fun commit(handle: CentraidCore, input: String, hash: String): Committed {
         val answer = handle.call(
             Envelope(
@@ -443,8 +447,8 @@ public class CameraRoll(
                         // photograph re-offered is the same key. The key does
                         // not make the re-walk that follows a reinstall commit
                         // once, because the core remembers no key;
-                        // `media.add_asset` does, by adopting the asset that
-                        // already wraps the same bytes.
+                        // `photo.add` does, by adopting the photograph that
+                        // already holds the same bytes.
                         invoke_key = "$ACTION:$hash",
                         input = input.encodeUtf8(),
                     ),
@@ -455,7 +459,7 @@ public class CameraRoll(
             is CoreOutcome.Failed -> Committed(
                 Offered.Refused(answer.failure.sentence.ifEmpty { "Couldn't add that photo." }),
             )
-            // `{"asset_id": …}` — the ADOPTED id on a dedupe too. Empty when the
+            // `{"id": …}` — the ADOPTED id on a dedupe too. Empty when the
             // command said nothing, and an edit then comes in without lineage.
             is CoreOutcome.Answered -> Committed(
                 refusal = null,
@@ -490,11 +494,11 @@ public class CameraRoll(
     }
 
     /**
-     * `media.add_asset`'s input, hand-spelled.
+     * `photo.add`'s input, hand-spelled.
      *
-     * **`source_asset_id` IS NOT THE PHONE'S LOCAL IDENTIFIER** and the local
+     * **`edited_from` IS NOT THE PHONE'S LOCAL IDENTIFIER** and the local
      * identifier is deliberately not sent at all. The column is an FK to
-     * `media_asset(asset_id)` and it means EDIT LINEAGE (#711) — "this asset was
+     * `photo(id)` and it means EDIT LINEAGE (#711) — "this photograph was
      * cropped out of that one" — so a `PHAsset` identifier there would be a
      * dangling foreign key wearing a field's name. The library's own reference
      * travels on the stage door as `os_ref`, where the core keeps it beside
@@ -504,6 +508,10 @@ public class CameraRoll(
      * computing one would be decoding every original to produce a second
      * opinion about a value that never merges anything.
      *
+     * **`size` IS THE BYTES THE CORE COUNTED**: the stage door only stores and
+     * hashes, and a command claims the bytes it names at the size it was told, so
+     * bytes staged and never named leave no row to collect (R-1135-5-9).
+     *
      * Hand-spelled rather than serialised: the input is the HASH PREIMAGE, so it
      * has to be the exact bytes the core rehashes, and a JSON library's key
      * order is not something this layer may leave to a dependency.
@@ -511,28 +519,32 @@ public class CameraRoll(
     internal fun inputFor(
         asset: MediaLibrary.Asset,
         hash: String,
+        size: Long,
+        mediaType: String,
         kind: MediaLibrary.Kind = asset.kind,
-        sourceAssetId: String? = null,
+        editedFrom: String? = null,
     ): String =
         buildString {
-            append("{\"staged_sha\":\"").append(hash).append('"')
-            append(",\"kind\":\"").append(kind.wire).append('"')
+            append("{\"blob\":\"").append(hash).append('"')
+            append(",\"size\":").append(size)
+            append(",\"media_type\":\"").append(mediaType).append('"')
+            append(",\"form\":\"").append(kind.wire).append('"')
             // AN EDIT SAYS NOTHING OF WHEN IT WAS TAKEN: the core fills the
             // date, the zone, the caption and the place in from the original it
             // names, so a date the member corrected there is kept (A20).
-            if (sourceAssetId == null) {
+            if (editedFrom == null) {
                 if (asset.capturedAtIso.isNotEmpty()) {
-                    append(",\"captured_at\":\"").append(asset.capturedAtIso).append('"')
+                    append(",\"taken_at\":\"").append(asset.capturedAtIso).append('"')
                 }
-                append(",\"tz_offset_min\":").append(asset.capturedUtcOffsetMinutes)
+                append(",\"offset_min\":").append(asset.capturedUtcOffsetMinutes)
             }
             asset.captureGroupId?.let {
-                append(",\"capture_group_id\":\"").append(it).append('"')
+                append(",\"burst\":\"").append(it).append('"')
             }
             // EDIT LINEAGE (#711), named by the core's own id and only ever by
             // one: see above.
-            sourceAssetId?.let {
-                append(",\"source_asset_id\":\"").append(it).append('"')
+            editedFrom?.let {
+                append(",\"edited_from\":\"").append(it).append('"')
             }
             append('}')
         }
@@ -585,9 +597,9 @@ public class CameraRoll(
 
     public companion object {
         internal const val APP: String = "media"
-        internal const val ACTION: String = "media.add_asset"
+        internal const val ACTION: String = "photo.add"
 
-        private val ASSET_ID = Regex("\"asset_id\"\\s*:\\s*\"([^\"]+)\"")
+        private val ASSET_ID = Regex("\"id\"\\s*:\\s*\"([^\"]+)\"")
 
         /** `crates/media/src/renditions.rs`' `DERIVATIVE_MEDIA_TYPE`. */
         internal const val DERIVATIVE_MEDIA_TYPE: String = "image/jpeg"

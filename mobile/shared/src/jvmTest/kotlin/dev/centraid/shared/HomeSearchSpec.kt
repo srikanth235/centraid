@@ -90,7 +90,7 @@ class HomeSearchSpec : StringSpec({
                 hit("notes", "note", "n1", "Cabin packing"),
                 hit("agenda", "event", "e1", "Cabin weekend"),
                 hit("notes", "note", "n2", "Cabin key"),
-                hit("photos", "core.content_item", "c1", "Cabin at dusk", openId = "a1"),
+                hit("photos", "photo", "a1", "Cabin at dusk"),
                 hit("tasks", "task", "t1", "Book the cabin"),
             ),
         )
@@ -205,8 +205,8 @@ class HomeSearchSpec : StringSpec({
                 hit("people", "person", "p1", "Kate Bell"),
                 hit("agenda", "event", "e1", "Cabin weekend"),
                 hit("tasks", "task", "t1", "Book the cabin"),
-                hit("docs", "core.document", "d1", "Cabin lease"),
-                hit("photos", "core.content_item", "c1", "Cabin at dusk", openId = "a1"),
+                hit("docs", "document", "d1", "Cabin lease"),
+                hit("photos", "photo", "a1", "Cabin at dusk"),
             ),
         )
         // A task hit sits in Agenda's group and still opens in its own app's router (R-CHROME-6).
