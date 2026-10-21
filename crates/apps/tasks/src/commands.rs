@@ -1,15 +1,15 @@
-//! THE TWELVE ACTIONS, as command invocations.
+//! THE FIFTEEN ACTIONS, as command invocations.
 //!
 //! Every Tasks action is a thin invocation of ONE typed vault command: the
 //! projection lives in the command, not the app. So this module is a table, not
 //! logic.
 //!
-//! **SEVEN OF THE ELEVEN ARE `schedule.*`** — this lane's whole schema — and
-//! four are `core.*`: the tag pair (the Docs lane's) and the attachment pair
-//! (the Notes lane's). All four are registered, so [`PENDING_COMMANDS`] is
-//! **empty** and [`tests::every_command_this_app_names_is_registered`] checks
-//! it against the vault's own catalogue. A button that reported success and
-//! wrote nothing is what that test exists to prevent.
+//! **SIX OF THE FIFTEEN ARE `task.*`**, the task's own verbs; the rest are the
+//! shared verbs every app uses (`entity.*`, `container.create`, `edge.*`,
+//! `tag.*`). An action's input is its command's input, verbatim, and
+//! [`tests::every_command_this_app_names_is_registered`] checks the table
+//! against the vault's own catalogue. A button that reported success and wrote
+//! nothing is what that test exists to prevent.
 //!
 //! **`invoke_key` is mandatory** (D-1020-D3-5).
 //!
@@ -118,31 +118,34 @@ const fn act(action: &'static str, command: &'static str) -> ActionRow {
 
 /// The thirteen, in the manifest's own order.
 pub const ACTIONS: &[ActionRow] = &[
-    act("add", "schedule.add_task"),
-    act("set-status", "schedule.set_task_status"),
-    act("delete", "schedule.delete_task"),
+    act("add", "task.add"),
+    act("edit", "task.edit"),
+    // AN ACTION SAYS THE STATE IT WANTS (R-1135-3-10): the v0 `set-status` took a
+    // status word the caller had not read, and `in-process` is no state of the
+    // model. Completing is the one operation Tasks, People and automations share
+    // (a repeating task gets its next occurrence); cancelling ends the
+    // occurrence with no successor; reopening makes a closed one open.
+    act("complete", "task.complete"),
+    act("reopen", "task.reopen"),
+    act("cancel", "task.cancel"),
+    act("organize-task", "task.organize"),
+    act("delete", "entity.trash"),
     // EMPTYING THE TRASH (#1015 D1), behind the manifest's confirmation.
     ActionRow {
         confirm: Confirm::Required,
-        ..act("purge", "schedule.purge_task")
+        ..act("purge", "entity.purge")
     },
     // RESTORE UNDOES THE DELETE GESTURE (the trash's one verb every app has).
-    act("restore", "schedule.restore_task"),
-    act("edit", "schedule.edit_task"),
-    act("save-project", "schedule.save_project"),
-    act("save-section", "schedule.save_section"),
-    act("organize-task", "schedule.organize_task"),
-    act("attach", "core.attach"),
-    act("detach", "core.detach"),
-    act("add-tag", "core.tag_item"),
-    act("remove-tag", "core.untag_item"),
+    act("restore", "entity.restore"),
+    // A project, an area and a section are containers: the shared verb.
+    act("create-project", "container.create"),
+    act("create-section", "container.create"),
+    // An attachment is an `attached` edge, a tag a `tagged` one: the shared verbs.
+    act("attach", "edge.add"),
+    act("detach", "edge.remove"),
+    act("add-tag", "tag.add"),
+    act("remove-tag", "tag.remove"),
 ];
-
-/// The commands this app names that the vault does not register yet.
-///
-/// **EMPTY.** It held the attachment pair — the Notes lane's half of `core.*`
-/// — and they came off when that lane registered them.
-pub const PENDING_COMMANDS: [&str; 0] = [];
 
 /// The row for an action, by name.
 #[must_use]
@@ -150,26 +153,21 @@ pub fn action_row(action: &str) -> Option<&'static ActionRow> {
     ACTIONS.iter().find(|row| row.action == action)
 }
 
-/// The `act` scope tables the manifest declares, sorted.
+/// The `act` scopes Tasks declares, derived from the action table: one per
+/// distinct command, as `(schema, name)`.
 #[must_use]
-pub fn act_scope_tables() -> Vec<&'static str> {
-    let mut tables: Vec<&'static str> = vec![
-        "add_task",
-        "set_task_status",
-        "edit_task",
-        "save_project",
-        "save_section",
-        "organize_task",
-        "delete_task",
-        "purge_task",
-        "restore_task",
-        "attach",
-        "detach",
-        "tag_item",
-        "untag_item",
-    ];
-    tables.sort_unstable();
-    tables
+pub fn act_scope_tables() -> Vec<(&'static str, &'static str)> {
+    let mut scopes: Vec<(&'static str, &'static str)> = ACTIONS
+        .iter()
+        .map(|row| {
+            row.command
+                .split_once('.')
+                .map_or((row.command, row.command), |(schema, name)| (schema, name))
+        })
+        .collect();
+    scopes.sort_unstable();
+    scopes.dedup();
+    scopes
 }
 
 #[cfg(test)]
@@ -177,71 +175,59 @@ mod tests {
     use super::*;
 
     #[test]
-    fn every_action_names_one_command_and_no_two_name_the_same() {
-        let mut commands: Vec<&str> = ACTIONS.iter().map(|row| row.command).collect();
-        commands.sort_unstable();
-        let unique = {
-            let mut copy = commands.clone();
-            copy.dedup();
-            copy
-        };
-        assert_eq!(commands, unique, "one command per action");
-        assert_eq!(ACTIONS.len(), 13);
+    fn every_action_names_one_command_and_the_task_verbs_are_the_tasks_own() {
+        assert_eq!(ACTIONS.len(), 15);
+        let own: Vec<&str> = ACTIONS
+            .iter()
+            .map(|row| row.command)
+            .filter(|command| command.starts_with("task."))
+            .collect();
+        assert_eq!(
+            own,
+            [
+                "task.add",
+                "task.edit",
+                "task.complete",
+                "task.reopen",
+                "task.cancel",
+                "task.organize"
+            ]
+        );
+        // The shared verbs serve two actions without a wrapper: a project and a
+        // section are one `container.create`.
+        let creates: Vec<&str> = ACTIONS
+            .iter()
+            .filter(|row| row.command == "container.create")
+            .map(|row| row.action)
+            .collect();
+        assert_eq!(creates, ["create-project", "create-section"]);
+        assert_eq!(act_scope_tables().len(), 14);
     }
 
-    #[test]
-    fn nine_of_the_thirteen_are_the_schedule_schema() {
-        assert_eq!(
-            ACTIONS
-                .iter()
-                .filter(|row| row.command.starts_with("schedule."))
-                .count(),
-            9
-        );
-        assert_eq!(
-            ACTIONS
-                .iter()
-                .filter(|row| row.command.starts_with("core."))
-                .count(),
-            4
-        );
-    }
-
-    /// EVERY command this app names is either in the vault's own catalogue or
-    /// on [`PENDING_COMMANDS`]. The tag pair landed with Docs, the attachment
-    /// pair with Notes, and `schedule.*` is this lane's own.
+    /// EVERY command this app names is in the vault's own catalogue. A button
+    /// that reported success and wrote nothing is what this exists to prevent.
     #[test]
     fn every_command_this_app_names_is_registered() {
         let registry = centraid_vault::commands::Registry::with_system_commands()
             .expect("the vault's own registry");
         for row in ACTIONS {
-            let known = registry.get(row.command).is_some();
-            let pending = PENDING_COMMANDS.contains(&row.command);
             assert!(
-                known != pending,
-                "`{}` is {}registered and {}on the pending list",
-                row.command,
-                if known { "" } else { "not " },
-                if pending { "" } else { "not " }
+                registry.get(row.command).is_some(),
+                "`{}` is not registered",
+                row.command
             );
         }
-        assert!(PENDING_COMMANDS.is_empty(), "nothing is owed to this app");
     }
 
     /// EVERY INPUT KEY AN ACTION DECLARES IS ONE ITS COMMAND ACCEPTS. The
-    /// `schedule.*` commands are `additionalProperties: false`, so a key the
-    /// manifest names and the vault does not is a write that is refused
-    /// outright: `organize-task` declared `recurrence_tz` while the vault takes
-    /// `tz`, and an anchor or zone change from the detail screen silently did
-    /// nothing (#1046's audit).
+    /// commands are `additionalProperties: false`, so a key the manifest names
+    /// and the vault does not is a write that is refused outright
+    /// (#1046's audit).
     #[test]
     fn every_declared_input_key_is_one_the_command_accepts() {
         let registry = centraid_vault::commands::Registry::with_system_commands()
             .expect("the vault's own registry");
-        for row in ACTIONS
-            .iter()
-            .filter(|row| row.command.starts_with("schedule."))
-        {
+        for row in ACTIONS {
             let declared = crate::manifest::manifest()
                 .action(row.action)
                 .expect("the manifest declares it");
@@ -269,17 +255,13 @@ mod tests {
         }
     }
 
-    /// THE OTHER DIRECTION, FOR `edit`: every key `schedule.edit_task` takes
-    /// is one the app can send. `clear_effort` was a vault key the detail
-    /// screen could not reach, so an estimate could be set and never unset.
+    /// THE OTHER DIRECTION, FOR `edit`: every key `task.edit` takes is one the
+    /// app can send, so an estimate that can be set can be unset.
     #[test]
-    fn edit_declares_every_key_edit_task_accepts() {
+    fn edit_declares_every_key_task_edit_accepts() {
         let registry = centraid_vault::commands::Registry::with_system_commands()
             .expect("the vault's own registry");
-        let accepted = registry
-            .get("schedule.edit_task")
-            .expect("registered")
-            .schema();
+        let accepted = registry.get("task.edit").expect("registered").schema();
         let declared = &crate::manifest::manifest()
             .action("edit")
             .expect("declared")

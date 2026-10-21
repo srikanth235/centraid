@@ -108,13 +108,13 @@ message TasksTask {
   optional string parent_task_id = 2;
   optional string project_id = 3;
   optional string section_id = 4;
-  // `needs-action`, `in-process`, `completed` or `cancelled`.
+  // `open`, `done` or `cancelled`.
   string status = 5;
   string title = 6;
   optional string description = 7;
   // Todoist's scale: 0 is unset, 1..9 with HIGHER MORE URGENT — not RFC
   // 5545's 1-is-highest. Ruled by D-1020-S5 (`docs/decisions.md`: the board
-  // sorts "priority desc"); `schedule.add_task`/`edit_task` store it as sent.
+  // sorts "priority desc"); `task.add` and `task.edit` store it as sent.
   int64 priority = 8;
   // As stored: a civil date or an instant.
   optional string due_at = 9;
@@ -178,7 +178,7 @@ message TasksTask {
   optional string snippet = 37;
   // The stored RFC 5545 rule, verbatim; absent on a one-off. For the editor's
   // repeat picker ONLY — to pre-select a preset and send the rule back
-  // through `schedule.edit_task`. A shell never expands, summarises or dates
+  // through `task.edit`. A shell never expands, summarises or dates
   // from it: `recurrence_summary`, `next_due` and `missed` are those answers
   // (#834's rule, which this field does not relax).
   optional string rrule = 38;
@@ -188,17 +188,21 @@ message TasksTask {
 }
 
 message TasksTag {
-  string tag_id = 1;
+  // `tag_id`: a tag is a `tagged` edge to a concept and has no id beside it.
+  reserved 1;
+  reserved "tag_id";
   string concept_id = 2;
   // The concept's label, or `?` when the concept row is gone.
   string label = 3;
 }
 
 message TasksAttachment {
+  // `role` and `is_primary`: an attachment is an `attached` edge and keeps
+  // neither. `attachment_id` is the attached document's or photo's id.
+  reserved 3, 4;
+  reserved "role", "is_primary";
   string attachment_id = 1;
   string content_id = 2;
-  optional string role = 3;
-  bool is_primary = 4;
   string media_type = 5;
   string content_uri = 6;
   int64 byte_size = 7;
@@ -207,7 +211,9 @@ message TasksAttachment {
 // An `@`-mention, resolved through a live link and its anchor. The entity
 // card is not resolved here; a shell draws the target by type and id.
 message TasksReference {
-  string link_id = 1;
+  // `link_id`: a reference is an `about` edge and has no id of its own.
+  reserved 1;
+  reserved "link_id";
   string to_type = 2;
   string to_id = 3;
 }

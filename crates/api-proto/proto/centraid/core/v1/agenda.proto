@@ -29,7 +29,7 @@
 //
 // THE ZONE RULE, for every request that carries `tz`: an IANA name (the
 // device's own, e.g. `America/New_York`). EMPTY is the vault's zone —
-// `core_vault.settings_json`'s `timeZone` — and a vault that names none either
+// the vault's `zone` — and a vault that names none either
 // is REFUSED, `ERROR_CODE_INVALID_REQUEST`, as is a name the bundled database
 // does not know. Never UTC by default: 00:00Z is somebody else's midnight.
 
@@ -111,8 +111,11 @@ message AgendaEventRequest {
 // its own `dtstart` and `instance_key`. `event_id` is always the SERIES' id, so
 // reschedule, cancel, RSVP and attach all still target the series.
 message AgendaEvent {
+  // `ical_uid`, `organizer_party_id` and `sequence`: the model keeps none of them
+  // (an event has no iCalendar identity, organizer or revision count).
+  reserved 2, 14, 15;
+  reserved "ical_uid", "organizer_party_id", "sequence";
   string event_id = 1;
-  optional string ical_uid = 2;
   optional string summary = 3;
   optional string description = 4;
   // This occurrence's start: the series' anchor moved to the occurrence.
@@ -136,8 +139,6 @@ message AgendaEvent {
   // cancelled event; `search` drops one after the hit.
   optional string status = 12;
   optional string location_place_id = 13;
-  optional string organizer_party_id = 14;
-  optional int64 sequence = 15;
   optional string created_at = 16;
   optional string updated_at = 17;
   // The calendar edge: which calendar, the joining link, the reminders.
@@ -193,7 +194,7 @@ message AgendaEvent {
   // `recurrence_semantics` is `all-day`: a day and not a time, so a surface
   // draws no clock time for it. The one test a view makes, answered here.
   bool all_day = 32;
-  // `core_place.name` of `location_place_id`, so a detail can say where.
+  // The `place` entity's name of `location_place_id`, so a detail can say where.
   // Absent when the event names no place, or the place is gone.
   optional string location_name = 33;
 
@@ -220,10 +221,12 @@ message AgendaReminder {
 
 // One attachment on an event, joined to its bytes.
 message AgendaAttachment {
+  // `role` and `is_primary`: an attachment is an `attached` edge and keeps
+  // neither. `attachment_id` is the attached document's or photo's id.
+  reserved 3, 4;
+  reserved "role", "is_primary";
   string attachment_id = 1;
   string content_id = 2;
-  optional string role = 3;
-  optional int64 is_primary = 4;
   // The ATTACHMENT's own reading of the bytes (#996 R20(b)); bytes carry no
   // media type of their own.
   string media_type = 5;
@@ -235,28 +238,29 @@ message AgendaAttachment {
 
 // One guest, and their reply.
 message AgendaAttendee {
-  // Absent on `search`'s projection, and on a guest an occurrence override
-  // introduced.
-  optional string attendee_id = 1;
+  // `attendee_id` and `role`: a guest is an `attendee` edge to a person, which
+  // has neither.
+  reserved 1, 5;
+  reserved "attendee_id", "role";
   string party_id = 2;
   // `Guest` when the party has no display name.
   string name = 3;
   // `needs-action`, `accepted`, `declined` or `tentative`.
   string partstat = 4;
-  optional string role = 5;
-  // This guest IS the vault's owner — `core_vault.self_party_id`, never a
+  // This guest IS the vault's owner — the vault's `self_id`, never a
   // guess — so the RSVP controls are theirs.
   bool is_you = 6;
 }
 
 // A calendar, as the picker draws it.
 message AgendaCalendar {
+  // `owner_party_id`, `default_tz` and `visibility`: a calendar is a container
+  // with a name and a color.
+  reserved 2, 5, 6;
+  reserved "owner_party_id", "default_tz", "visibility";
   string calendar_id = 1;
-  optional string owner_party_id = 2;
   optional string name = 3;
   optional string color = 4;
-  optional string default_tz = 5;
-  optional string visibility = 6;
 }
 
 // One birthday inside the range.

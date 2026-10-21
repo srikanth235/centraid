@@ -59,7 +59,7 @@ pub use local::{Placement, place};
 pub use manifest::{APP_ID, manifest};
 pub use queries::{
     DayContextData, EVENT_WINDOW_CAP, MAX_RANGE_DAYS, PARTY_CAP, PartiesData, RECURRING_ANCHOR_CAP,
-    SEARCH_LIMIT, SearchData, TAG_CAP, UpcomingData, load_day_context, load_parties, load_search,
+    SEARCH_LIMIT, SearchData, UpcomingData, load_day_context, load_parties, load_search,
     load_search_term, load_upcoming,
 };
 pub use window::{Occurrence, occurrences};

@@ -1,6 +1,6 @@
 //! A TRASHED EVENT IS NOT ON THE AGENDA ([#1046](https://github.com/srikanth235/centraid/issues/1046)).
 //!
-//! `schedule.delete_event` moves an event to the trash: `deleted_at` and
+//! `entity.trash` moves an event to the trash: `deleted_at` and
 //! `purge_at` are set and the row stays for its restore window. The question
 //! this file answers is whether `upcoming` shows it anyway, and it answers it
 //! against a REAL vault — founded, written through the registered commands, and
@@ -25,7 +25,7 @@ const FROM: &str = "2099-06-01T00:00:00.000Z";
 const TO: &str = "2099-06-22T00:00:00.000Z";
 const NOW: &str = "2099-06-01T09:00:00.000Z";
 
-/// The events here are floating (no `start_tz`), so the zone only reads the
+/// The events here are floating (no `zone`), so the zone only reads the
 /// lower bound; UTC keeps `FROM` and the wall clocks on one axis.
 fn utc() -> FireZone {
     FireZone::named("Etc/UTC").expect("UTC is in the bundled database")
@@ -100,32 +100,17 @@ impl Scratch {
             .expect("the read runs")
     }
 
-    fn calendar_id(&self) -> String {
-        self.vault
-            .read(|connection| {
-                let door = TestDoor::new(connection);
-                let (data, _) = load_upcoming(&door, Some(FROM), Some(TO), NOW, &utc())
-                    .expect("upcoming reads");
-                Ok(data
-                    .calendars
-                    .first()
-                    .map(|calendar| calendar.calendar_id.clone())
-                    .expect("founding makes a calendar"))
-            })
-            .expect("the read runs")
-    }
-
     fn propose(&self, summary: &str, dtstart: &str, dtend: &str, rrule: Option<&str>) -> String {
         let mut input = json!({
-            "summary": summary,
-            "dtstart": dtstart,
-            "dtend": dtend,
-            "calendar_id": self.calendar_id(),
+            "title": summary,
+            "starts": dtstart.trim_end_matches('Z'),
+            "ends": dtend.trim_end_matches('Z'),
+            "timing": "floating",
         });
         if let Some(rule) = rrule {
-            input["rrule"] = json!(rule);
+            input["rule"] = json!(rule);
         }
-        self.run("schedule.propose_event", input)["event_id"]
+        self.run("event.propose", input)["id"]
             .as_str()
             .expect("an event id")
             .to_owned()
@@ -158,7 +143,7 @@ fn a_one_off_moved_to_the_trash_leaves_the_agenda() {
     assert_ne!(kept, trashed);
     assert_eq!(scratch.upcoming(), vec!["Dentist", "Book the cabin"]);
 
-    scratch.run("schedule.delete_event", json!({ "event_id": trashed }));
+    scratch.run("entity.trash", json!({ "id": trashed }));
     assert_eq!(
         scratch.upcoming(),
         vec!["Dentist"],
@@ -166,7 +151,7 @@ fn a_one_off_moved_to_the_trash_leaves_the_agenda() {
     );
 
     // AND A RESTORE BRINGS IT BACK: the clause is the trash, not a tombstone.
-    scratch.run("schedule.restore_event", json!({ "event_id": trashed }));
+    scratch.run("entity.restore", json!({ "id": trashed }));
     assert_eq!(scratch.upcoming(), vec!["Dentist", "Book the cabin"]);
 }
 
@@ -193,7 +178,7 @@ fn a_series_moved_to_the_trash_leaves_every_occurrence() {
         "three weeks, three occurrences: {before:?}"
     );
 
-    scratch.run("schedule.delete_event", json!({ "event_id": series }));
+    scratch.run("entity.trash", json!({ "id": series }));
     assert!(
         scratch.upcoming().is_empty(),
         "no occurrence of a trashed series is on the agenda"
@@ -216,13 +201,18 @@ fn search_answers_the_live_event_with_its_snippet_and_not_the_trashed_one() {
         "2099-06-07T16:00:00.000Z",
         None,
     );
+    // The title alone is a hit without an excerpt; the words about it are the snippet.
+    scratch.run(
+        "event.edit",
+        json!({ "id": live, "description": "the cabin sleeps six" }),
+    );
     let trashed = scratch.propose(
         "Book the cabin",
         "2099-06-04T09:00:00.000Z",
         "2099-06-04T10:00:00.000Z",
         None,
     );
-    scratch.run("schedule.delete_event", json!({ "event_id": trashed }));
+    scratch.run("entity.trash", json!({ "id": trashed }));
 
     let (data, denial) = scratch
         .vault

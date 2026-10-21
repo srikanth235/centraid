@@ -95,11 +95,10 @@ pub const MAX_CONTENT_URLS: usize = 100;
 /// |---|---|
 /// | The vault roster | `core_vault` |
 /// | People (Home's tile counts the circle; its trash shelf pages the trashed) | `entity`, `person`, `vault` |
-/// | Home's tiles | `media_asset`, `core_document`, `schedule_task`, `entity`, `person`, `vault`, `locker_item` |
-/// | Trash (Docs, Tasks, People, Locker) | `core_document`, `schedule_task`, `entity`, `locker_item` |
+/// | Home's tiles | `media_asset`, `core_document`, `entity`, `person`, `vault`, `locker_item` |
+/// | Trash (Docs, Tasks, People, Locker) | `core_document`, `entity`, `locker_item` |
 /// | Photos (grid, shelves, lightbox, collections, search, picker, places, memories, duplicates, album choice, editor) | `media_asset`, `media_asset_phash`, `media_memory`, `media_memory_member`, `core_collection`, `core_collection_entry`, `core_concept`, `core_concept_scheme`, `core_tag`, `core_place`, `core_content_item` |
-/// | Calendar import | `schedule_calendar` |
-/// | Phone sync (Agenda and Docs follow the phone, #1127; whether a source was imported is its `origin`; People follows through `follow.contacts` and reads nothing else back) | `origin`, `phone_link`, `phone_origin`, `core_event`, `schedule_recurrence_exception` (a followed series' skipped and moved occurrences) |
+/// | Phone sync (Docs follows the phone, #1127; whether a source was imported is its `origin`; People and Agenda follow through `follow.contacts` and `follow.calendar` and read nothing else back) | `origin`, `phone_link`, `phone_origin` |
 /// | `with_minor_units` | `core_account` |
 ///
 /// `core_account` has no shell caller: it is the one table whose `currency`
@@ -118,11 +117,11 @@ pub const MAX_CONTENT_URLS: usize = 100;
 ///
 /// The `where` is held to the same list: it is predicate text and could name
 /// a subquery on any table, so the vault prepares it under an authorizer that
-/// refuses a read outside these twenty-five
+/// refuses a read outside these twenty-one
 /// ([`Vault::keyset_page_reading_only`]). The vault's test
 /// `a_predicate_that_reads_a_table_outside_the_list_is_refused` is where that
 /// is read: the predicates it tries are SQL, which lives in that crate.
-pub const PAGE_TABLES: [&str; 25] = [
+pub const PAGE_TABLES: [&str; 21] = [
     "core_account",
     "core_collection",
     "core_collection_entry",
@@ -130,24 +129,20 @@ pub const PAGE_TABLES: [&str; 25] = [
     "core_concept_scheme",
     "core_content_item",
     "core_document",
-    "core_event",
-    "entity",
-    "person",
     "core_place",
     "core_tag",
     "core_vault",
-    "vault",
+    "entity",
     "locker_item",
     "media_asset",
     "media_asset_phash",
     "media_memory",
     "media_memory_member",
     "origin",
+    "person",
     "phone_link",
     "phone_origin",
-    "schedule_calendar",
-    "schedule_recurrence_exception",
-    "schedule_task",
+    "vault",
 ];
 
 /// One page of rows, as the wire spells it.
@@ -802,7 +797,7 @@ mod tests {
     /// Every table a screen pages, with a column that can key its cursor. Spelled
     /// here, not derived from the allowlist, so the allowlist cannot grow without
     /// this list (and the paragraph above it) being read.
-    const PAGED_BY_A_SCREEN: [(&str, &str); 25] = [
+    const PAGED_BY_A_SCREEN: [(&str, &str); 21] = [
         ("core_account", "account_id"),
         ("core_collection", "collection_id"),
         ("core_collection_entry", "entry_id"),
@@ -810,24 +805,20 @@ mod tests {
         ("core_concept_scheme", "scheme_id"),
         ("core_content_item", "content_id"),
         ("core_document", "document_id"),
-        ("core_event", "event_id"),
-        ("entity", "id"),
-        ("person", "id"),
         ("core_place", "place_id"),
         ("core_tag", "tag_id"),
         ("core_vault", "vault_id"),
-        ("vault", "self_id"),
+        ("entity", "id"),
         ("locker_item", "item_id"),
         ("media_asset", "asset_id"),
         ("media_asset_phash", "asset_id"),
         ("media_memory", "memory_id"),
         ("media_memory_member", "memory_id"),
         ("origin", "id"),
+        ("person", "id"),
         ("phone_link", "link_id"),
         ("phone_origin", "origin_id"),
-        ("schedule_calendar", "calendar_id"),
-        ("schedule_recurrence_exception", "exception_id"),
-        ("schedule_task", "task_id"),
+        ("vault", "self_id"),
     ];
 
     #[test]
@@ -886,112 +877,6 @@ mod tests {
                 panic!("`{table}` is paged by a screen and was refused: {error}")
             });
         }
-        let _ = std::fs::remove_dir_all(&scratch);
-    }
-
-    /// THE READ A FOLLOWED SERIES ADDS (#1127, lane C): a series' occurrence exceptions page through
-    /// the door with the exact predicate the store writes, including the event-scoped bind.
-    #[test]
-    fn a_followed_exception_pages_through_the_door() {
-        let scratch = centraid_ontology::scratch::scratch_dir();
-        std::fs::create_dir_all(&scratch).expect("made");
-        let vault = Vault::create(scratch.join("v.db")).expect("a vault");
-        vault.found("T", "O").expect("founded");
-        let registry = Registry::with_system_commands().expect("the registry");
-        let owner = centraid_vault::Principal::owner("test-device");
-        let run = |name: &str, input: serde_json::Value| {
-            let outcome = vault
-                .execute(&registry, &owner, &Command::new(name, input))
-                .expect("the command answers");
-            assert_eq!(
-                outcome.status,
-                CommandStatus::Executed,
-                "{name}: {:?}",
-                outcome.reason
-            );
-            outcome.output
-        };
-        let text = |value: &str| wire::Value {
-            kind: Some(wire::value::Kind::Text(value.to_owned())),
-        };
-        let cell = |value: &wire::Value| match &value.kind {
-            Some(wire::value::Kind::Text(text)) => text.clone(),
-            other => panic!("a text cell, got {other:?}"),
-        };
-
-        // A SERIES' EXCEPTION, scoped to the event.
-        let mut calendars = query(&["calendar_id"], "calendar_id", "calendar_id");
-        calendars.from = "schedule_calendar".to_owned();
-        let calendar = cell(
-            &page(
-                &vault,
-                &wire::PageRequest {
-                    query: Some(calendars),
-                    limit: 1,
-                    after: None,
-                },
-            )
-            .expect("the calendars page")
-            .rows[0]
-                .values[0],
-        );
-        let event = run(
-            "schedule.propose_event",
-            serde_json::json!({
-                "summary": "Standup", "calendar_id": calendar, "tz": "UTC",
-                "dtstart": "2026-10-05T09:00:00", "dtend": "2026-10-05T09:30:00",
-                "rrule": "FREQ=WEEKLY;BYDAY=MO",
-            }),
-        )["event_id"]
-            .as_str()
-            .expect("an event id")
-            .to_owned();
-        run(
-            "schedule.edit_event_occurrence",
-            serde_json::json!({
-                "event_id": event, "original_start_local": "2026-10-19T09:00:00",
-                "scope": "occurrence", "action": "skip",
-            }),
-        );
-        let mut exceptions = query(
-            &[
-                "exception_id",
-                "target_id",
-                "original_start_local",
-                "scope",
-                "action",
-                "override_json",
-            ],
-            "exception_id",
-            "exception_id",
-        );
-        exceptions.from = "schedule_recurrence_exception".to_owned();
-        exceptions.r#where = Some("target_type = 'core.event' AND target_id = ?".to_owned());
-        exceptions.bind = vec![text(&event)];
-        let held = page(
-            &vault,
-            &wire::PageRequest {
-                query: Some(exceptions.clone()),
-                limit: 10,
-                after: None,
-            },
-        )
-        .expect("the exceptions page");
-        assert_eq!(held.rows.len(), 1);
-        assert_eq!(cell(&held.rows[0].values[2]), "2026-10-19T09:00:00");
-        assert_eq!(cell(&held.rows[0].values[4]), "skip");
-        // Another event's exceptions are not in it.
-        exceptions.bind = vec![text("another-event")];
-        let none = page(
-            &vault,
-            &wire::PageRequest {
-                query: Some(exceptions),
-                limit: 10,
-                after: None,
-            },
-        )
-        .expect("an event with none pages empty");
-        assert!(none.rows.is_empty());
         let _ = std::fs::remove_dir_all(&scratch);
     }
 

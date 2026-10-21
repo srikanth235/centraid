@@ -40,7 +40,7 @@ mod tests {
         let manifest = manifest();
         assert_eq!(manifest.id, APP_ID);
         assert_eq!(manifest.manifest_version, 1);
-        assert_eq!(manifest.version, "0.5.1");
+        assert_eq!(manifest.version, "0.6.0");
     }
 
     #[test]
@@ -79,7 +79,7 @@ mod tests {
     /// Notes confirms.
     ///
     /// **This is not the command's `confirm`** — two different gates. The
-    /// `schedule.*` commands behind `cancel-event`, `edit-event` and
+    /// `event.*` commands behind `cancel-event`, `edit-event` and
     /// `edit-occurrence` DO carry the command-level gate, which parks a
     /// NON-OWNER invocation regardless of risk; what is absent here is the
     /// owner-facing prompt on the member's own gesture.
@@ -95,38 +95,47 @@ mod tests {
         }
     }
 
-    /// FOURTEEN SCOPES, and `read+act` over the whole `schedule` schema is the
-    /// **widest form in the tree** — only agenda and people use it (census
-    /// §A0). Ported faithfully, and re-judged in the receipt rather than
-    /// silently narrowed: narrowing it here would make the port's grant
-    /// disagree with the one a member already accepted.
+    /// SEVENTEEN SCOPES: ten reads of the vault's own tables and one `act` per
+    /// command the actions invoke. The `act` half is compared against the action
+    /// table rather than transcribed: an action with no scope is an action the
+    /// grant does not cover, and a scope with no action is reach nothing uses.
     #[test]
-    fn it_declares_fourteen_scopes_including_the_widest_form() {
+    fn it_declares_ten_reads_and_one_act_scope_per_command() {
         let manifest = manifest();
         let vault = manifest.vault.as_ref().expect("Agenda declares its reach");
-        // The fourteenth is `core.place`: an event's location name (#1029).
-        assert_eq!(vault.scopes.len(), 14);
-        let mut schemas: Vec<&str> = vault
+        assert_eq!(vault.scopes.len(), 17);
+        let mut declared: Vec<(&str, &str)> = vault
             .scopes
             .iter()
-            .map(|scope| scope.schema.as_str())
+            .filter(|scope| scope.verbs == ScopeVerbs::Act)
+            .map(|scope| {
+                (
+                    scope.schema.as_str(),
+                    scope
+                        .table
+                        .as_deref()
+                        .expect("an act scope names a command"),
+                )
+            })
             .collect();
-        schemas.sort_unstable();
-        schemas.dedup();
-        assert_eq!(schemas, ["core", "schedule"]);
-        let wide: Vec<&str> = vault
+        declared.sort_unstable();
+        assert_eq!(declared, crate::commands::act_scope_tables());
+        let reads: Vec<&str> = vault
             .scopes
             .iter()
-            .filter(|scope| scope.verbs == ScopeVerbs::ReadAct)
-            .map(|scope| scope.schema.as_str())
+            .filter(|scope| scope.verbs == ScopeVerbs::Read)
+            .map(|scope| {
+                assert_eq!(scope.schema, "vault");
+                scope.table.as_deref().expect("a read names a table")
+            })
             .collect();
-        assert_eq!(wide, ["schedule"]);
+        assert_eq!(reads.len(), 10);
         assert!(
             vault
                 .scopes
                 .iter()
-                .all(|scope| scope.verbs != ScopeVerbs::Reveal),
-            "`reveal` is Locker's alone"
+                .all(|scope| matches!(scope.verbs, ScopeVerbs::Read | ScopeVerbs::Act)),
+            "nothing wider and nothing revealed: `reveal` is Locker's alone"
         );
         assert!(
             manifest.ext_tables.is_empty(),

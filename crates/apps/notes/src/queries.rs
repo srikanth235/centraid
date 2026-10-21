@@ -80,18 +80,7 @@ pub fn window_of(limit: Option<i64>) -> usize {
 // The shapes
 // ---------------------------------------------------------------------------
 
-/// One attachment: a document or a photo attached to a note.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Attachment {
-    /// The attached document's or photo's id: an attachment is an edge, and the
-    /// thing it joins is its identity.
-    pub attachment_id: String,
-    /// The bytes' hash.
-    pub content_id: String,
-    pub media_type: String,
-    pub content_uri: String,
-    pub byte_size: i64,
-}
+pub use centraid_apps_kit::attached::Attachment;
 
 /// One tag on a note.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -535,91 +524,6 @@ fn tags_of(door: &dyn PageDoor, ids: &[String]) -> KitResult<BTreeMap<String, Ve
     Ok(by_note)
 }
 
-/// What is attached to a set of notes: documents and photos, primary first as
-/// they were attached.
-fn attachments_of(
-    door: &dyn PageDoor,
-    ids: &[String],
-) -> KitResult<BTreeMap<String, Vec<Attachment>>> {
-    let edges = Read {
-        name: "notes.library.attachments",
-        table: "edge",
-        select: "from_id, to_id",
-        order: ("from_id", "to_id"),
-        column: "from_id",
-    }
-    .of(
-        door,
-        ids,
-        Some(("rel = ?", vec![PageBindValue::Text("attached".to_owned())])),
-    )?;
-    let targets = texts(&edges, "to_id");
-    let live: BTreeSet<String> = Read {
-        name: "notes.library.attached",
-        table: "entity",
-        select: "id",
-        order: ("id", "id"),
-        column: "id",
-    }
-    .of(door, &targets, Some(("deleted_at IS NULL", Vec::new())))?
-    .iter()
-    .filter_map(|row| text_of(row, "id"))
-    .collect();
-    let mut held: BTreeMap<String, (String, String)> = BTreeMap::new();
-    // A document and a photo are both a blob with a media type.
-    for (name, table) in [
-        ("notes.library.document", "document"),
-        ("notes.library.photo", "photo"),
-    ] {
-        let rows = Read {
-            name,
-            table,
-            select: "id, blob, media_type",
-            order: ("id", "id"),
-            column: "id",
-        }
-        .of(door, &targets, None)?;
-        for row in rows {
-            if let (Some(id), Some(blob)) = (text_of(&row, "id"), text_of(&row, "blob")) {
-                held.insert(id, (blob, text_of(&row, "media_type").unwrap_or_default()));
-            }
-        }
-    }
-    let hashes: Vec<String> = held.values().map(|(blob, _)| blob.clone()).collect();
-    let sizes: BTreeMap<String, i64> = Read {
-        name: "notes.library.blobs",
-        table: "blob",
-        select: "hash, size",
-        order: ("hash", "hash"),
-        column: "hash",
-    }
-    .of(door, &hashes, None)?
-    .iter()
-    .filter_map(|row| Some((text_of(row, "hash")?, integer_or_zero(row, "size"))))
-    .collect();
-    let mut by_note: BTreeMap<String, Vec<Attachment>> = BTreeMap::new();
-    for edge in &edges {
-        let (Some(note), Some(target)) = (text_of(edge, "from_id"), text_of(edge, "to_id")) else {
-            continue;
-        };
-        let Some((blob, media_type)) = held.get(&target).filter(|_| live.contains(&target)) else {
-            continue;
-        };
-        by_note.entry(note).or_default().push(Attachment {
-            attachment_id: target,
-            content_id: blob.clone(),
-            media_type: if media_type.is_empty() {
-                "application/octet-stream".to_owned()
-            } else {
-                media_type.clone()
-            },
-            content_uri: format!("/centraid/_vault/blobs/{blob}"),
-            byte_size: sizes.get(blob).copied().unwrap_or_default(),
-        });
-    }
-    Ok(by_note)
-}
-
 /// The references out of a set of notes and the references into them, each with
 /// the card of the other end.
 #[expect(
@@ -774,7 +678,7 @@ fn library_body(door: &dyn PageDoor, window: usize) -> KitResult<LibraryData> {
 
     let notes = note_rows(door, &ids)?;
     let mut tags = tags_of(door, &ids)?;
-    let mut attachments = attachments_of(door, &ids)?;
+    let mut attachments = centraid_apps_kit::attached::of(door, &ids)?;
     let (mut references, mut backlinks) = links_of(door, &ids)?;
 
     let mut facets: BTreeMap<String, String> = BTreeMap::new();
@@ -930,7 +834,7 @@ fn search_body(
     let notes = note_rows(door, &hit_ids)?;
     let pinned = pinned_ids(door)?;
     let books = notebooks(door)?;
-    let mut attachments = attachments_of(door, &hit_ids)?;
+    let mut attachments = centraid_apps_kit::attached::of(door, &hit_ids)?;
     Ok(SearchData {
         notes: ranked
             .into_iter()

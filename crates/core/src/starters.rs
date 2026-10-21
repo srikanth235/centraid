@@ -51,7 +51,7 @@ pub const NOTES: &[(&str, &str)] = &[
 ];
 
 /// The starter tasks, in the order they are written, each an undated
-/// `schedule.add_task`: an Inbox task.
+/// `task.add`: an Inbox task.
 pub const TASKS: &[&str] = &[
     "Tap the circle to finish me",
     "Open me to add a date, a tag or a subtask",
@@ -75,7 +75,7 @@ pub fn write(vault: &Vault, registry: &Registry, principal: &Principal) -> Repor
         );
     }
     for title in TASKS {
-        seeder.run("schedule.add_task", json!({ "title": title }));
+        seeder.run("task.add", json!({ "title": title }));
     }
     seeder.report
 }

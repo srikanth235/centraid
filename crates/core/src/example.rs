@@ -32,7 +32,6 @@
 
 use std::collections::BTreeSet;
 
-use centraid_api_proto::core_v1 as wire;
 use centraid_vault::commands::{Command, CommandStatus, Registry};
 use centraid_vault::{Principal, Vault};
 use serde_json::{Value, json};
@@ -115,51 +114,12 @@ pub fn seed(
         seed_tasks(&mut seeder, now_ms);
     }
     if wanted("agenda") {
-        // THE CALENDAR IS DISCOVERED, never hard-coded: `Vault::found` mints a
-        // private "Personal" one, and a vault with none cannot hold an event.
-        match first_calendar(vault) {
-            Some(calendar_id) => seed_agenda(&mut seeder, now_ms, &calendar_id),
-            None => seeder
-                .report
-                .refused
-                .push("agenda: this vault has no calendar".to_owned()),
-        }
+        seed_agenda(&mut seeder, now_ms);
     }
     if wanted("money") {
         seed_money(&mut seeder, now_ms);
     }
     Ok(seeder.report)
-}
-
-/// The first calendar's id, read through the page door a shell reads through.
-fn first_calendar(vault: &Vault) -> Option<String> {
-    let request = wire::PageRequest {
-        query: Some(wire::PageQuery {
-            name: "example.calendar".to_owned(),
-            select: vec!["calendar_id".to_owned()],
-            from: "schedule_calendar".to_owned(),
-            r#where: None,
-            bind: Vec::new(),
-            order: Some(wire::PageOrder {
-                sort_column: "calendar_id".to_owned(),
-                pk_column: "calendar_id".to_owned(),
-                descending: false,
-            }),
-            with_held_thumbnail: false,
-            with_document_size: false,
-            with_minor_units: false,
-            local_day_columns: Vec::new(),
-            tz: String::new(),
-        }),
-        limit: 1,
-        after: None,
-    };
-    let page = crate::api::page(vault, &request).ok()?;
-    let value = page.rows.first()?.values.first()?;
-    match value.kind.as_ref()? {
-        wire::value::Kind::Text(text) => Some(text.clone()),
-        _ => None,
-    }
 }
 
 const DAY_MS: i64 = 86_400_000;
@@ -1220,23 +1180,23 @@ fn seed_album(seeder: &mut Seeder, asset_by_file: &std::collections::BTreeMap<&s
 // Tasks.
 //
 // "A believable week on the board — overdue errands, a project with subtasks,
-// done items, a someday idea." The project is a real `schedule_project` with a
+// done items, a someday idea." The project is a real container with a
 // section, so the project place is reachable (#1047).
 // ---------------------------------------------------------------------------
 
 fn seed_tasks(seeder: &mut Seeder, now: i64) {
     let add = |seeder: &mut Seeder, input: Value| -> Option<String> {
-        let output = seeder.run("schedule.add_task", input);
-        Seeder::id(output.as_ref(), "task_id")
+        let output = seeder.run("task.add", input);
+        Seeder::id(output.as_ref(), "id")
     };
 
     for input in [
-        json!({ "title": "Rotate the tires before the drive", "due_at": at(now, -2, 9, 0), "priority": 8 }),
-        json!({ "title": "Book dentist appointment", "due_at": at(now, 1, 9, 0), "priority": 5, "effort_min": 15 }),
+        json!({ "title": "Rotate the tires before the drive", "due": at(now, -2, 9, 0), "priority": 8 }),
+        json!({ "title": "Book dentist appointment", "due": at(now, 1, 9, 0), "priority": 5, "effort_min": 15 }),
         json!({
             "title": "Pick up the dry cleaning",
             "description": "Ticket is on the fridge.",
-            "due_at": at(now, 0, 9, 0),
+            "due": at(now, 0, 9, 0),
             "priority": 3,
         }),
     ] {
@@ -1248,7 +1208,7 @@ fn seed_tasks(seeder: &mut Seeder, now: i64) {
         json!({
             "title": "Plan the Tahoe trip",
             "description": "Long weekend at the lake with Maya, Jake and Chris.",
-            "due_at": at(now, 7, 9, 0),
+            "due": at(now, 7, 9, 0),
             "priority": 6,
         }),
     );
@@ -1257,64 +1217,57 @@ fn seed_tasks(seeder: &mut Seeder, now: i64) {
     let project = Seeder::id(
         seeder
             .run(
-                "schedule.save_project",
-                json!({ "name": "Tahoe trip", "color": "steelblue", "sort_order": 1 }),
+                "container.create",
+                json!({ "kind": "project", "title": "Tahoe trip", "color": "steelblue", "position": 1 }),
             )
             .as_ref(),
-        "project_id",
+        "id",
     );
     if let Some(project) = project.as_ref() {
         let section = Seeder::id(
             seeder
                 .run(
-                    "schedule.save_section",
-                    json!({ "project_id": project, "name": "Booking", "sort_order": 1 }),
+                    "container.create",
+                    json!({ "kind": "section", "title": "Booking", "parent": project, "position": 1 }),
                 )
                 .as_ref(),
-            "section_id",
+            "id",
         );
         let lift = add(
             seeder,
-            json!({ "title": "Buy lift tickets online", "due_at": at(now, 5, 9, 0), "priority": 4 }),
+            json!({ "title": "Buy lift tickets online", "due": at(now, 5, 9, 0), "priority": 4 }),
         );
-        for (task, sort_order) in [(trip.as_ref(), 1), (lift.as_ref(), 2)] {
+        for (task, position) in [(trip.as_ref(), 1), (lift.as_ref(), 2)] {
             let Some(task) = task else { continue };
-            let mut input =
-                json!({ "task_id": task, "project_id": project, "sort_order": sort_order });
+            let mut input = json!({ "id": task, "project_id": project, "position": position });
             if let Some(section) = section.as_ref() {
                 input["section_id"] = json!(section);
             }
-            seeder.run("schedule.organize_task", input);
+            seeder.run("task.organize", input);
         }
     }
     if let Some(trip) = trip.as_ref() {
         for input in [
-            json!({ "title": "Compare cabins — South Lake vs Truckee", "parent_task_id": trip, "effort_min": 45 }),
-            json!({ "title": "Book the Tahoe cabin", "parent_task_id": trip, "due_at": at(now, 3, 9, 0) }),
+            json!({ "title": "Compare cabins — South Lake vs Truckee", "parent_id": trip, "effort_min": 45 }),
+            json!({ "title": "Book the Tahoe cabin", "parent_id": trip, "due": at(now, 3, 9, 0) }),
         ] {
             add(seeder, input);
         }
         let packed = add(
             seeder,
-            json!({ "title": "Draft packing list", "parent_task_id": trip }),
+            json!({ "title": "Draft packing list", "parent_id": trip }),
         );
         if let Some(packed) = packed {
-            seeder.run(
-                "schedule.set_task_status",
-                json!({ "task_id": packed, "status": "completed" }),
-            );
+            seeder.run("task.complete", json!({ "id": packed }));
         }
     }
 
     let groceries = add(
         seeder,
-        json!({ "title": "Weekly grocery run", "due_at": at(now, -1, 9, 0), "priority": 4 }),
+        json!({ "title": "Weekly grocery run", "due": at(now, -1, 9, 0), "priority": 4 }),
     );
     if let Some(groceries) = groceries {
-        seeder.run(
-            "schedule.set_task_status",
-            json!({ "task_id": groceries, "status": "completed" }),
-        );
+        seeder.run("task.complete", json!({ "id": groceries }));
     }
     add(
         seeder,
@@ -1327,7 +1280,7 @@ fn seed_tasks(seeder: &mut Seeder, now: i64) {
 //
 // "One lived-in week on the calendar — something small today so the brief is
 // never blank, dinner with a friend, a deadline, a weekly recurring run with a
-// reminder, and next week's dentist." Every slot is DISJOINT: `propose_event`
+// reminder, and next week's dentist." Every slot is DISJOINT: `event.propose`
 // refuses any busy overlap, vault-wide.
 //
 // No attendees, which is v0's own note: resolving "Maya" to a party here would
@@ -1335,7 +1288,7 @@ fn seed_tasks(seeder: &mut Seeder, now: i64) {
 // names her in the summary instead.
 // ---------------------------------------------------------------------------
 
-fn seed_agenda(seeder: &mut Seeder, now: i64, calendar_id: &str) {
+fn seed_agenda(seeder: &mut Seeder, now: i64) {
     let slot = |days: i64, hour: i64, minute: i64, minutes: i64| {
         let start = at(now, days, hour, minute);
         let end = at(now, days, hour, minute + minutes);
@@ -1372,17 +1325,17 @@ fn seed_agenda(seeder: &mut Seeder, now: i64, calendar_id: &str) {
     ];
     for (summary, description, (dtstart, dtend), rrule) in events {
         let mut input = json!({
-            "calendar_id": calendar_id,
-            "summary": summary,
-            "dtstart": dtstart,
-            "dtend": dtend,
+            "title": summary,
+            "starts": dtstart,
+            "ends": dtend,
+            "zone": "Etc/UTC",
         });
         if let Some(description) = description {
             input["description"] = json!(description);
         }
         if let Some(rrule) = rrule {
-            input["rrule"] = json!(rrule);
+            input["rule"] = json!(rrule);
         }
-        seeder.run("schedule.propose_event", input);
+        seeder.run("event.propose", input);
     }
 }

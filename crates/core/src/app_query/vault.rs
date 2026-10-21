@@ -294,10 +294,7 @@ mod tests {
             .as_str()
             .expect("a note id")
             .to_owned();
-        let task = scratch.run(
-            "schedule.add_task",
-            serde_json::json!({ "title": "Book the cabin" }),
-        )["task_id"]
+        let task = scratch.run("task.add", serde_json::json!({ "title": "Book the cabin" }))["id"]
             .as_str()
             .expect("a task id")
             .to_owned();
@@ -308,10 +305,7 @@ mod tests {
             .map(|hit| (hit.app_id.as_str(), hit.entity.as_str(), hit.id.as_str()))
             .collect();
         assert!(hits.contains(&("notes", "note", note.as_str())), "{hits:?}");
-        assert!(
-            hits.contains(&("tasks", "schedule.task", task.as_str())),
-            "{hits:?}"
-        );
+        assert!(hits.contains(&("tasks", "task", task.as_str())), "{hits:?}");
         assert!(
             found.hits.iter().all(|hit| hit.app_id != "locker"),
             "Locker is never searched: {hits:?}"
@@ -336,10 +330,7 @@ mod tests {
             "note.create",
             serde_json::json!({ "title": "Cabin packing", "body": "bring the lantern" }),
         );
-        scratch.run(
-            "schedule.add_task",
-            serde_json::json!({ "title": "Book the cabin" }),
-        );
+        scratch.run("task.add", serde_json::json!({ "title": "Book the cabin" }));
         let slipped = scratch.search("cabni");
         let apps: Vec<&str> = slipped.hits.iter().map(|hit| hit.app_id.as_str()).collect();
         assert!(
@@ -513,10 +504,10 @@ mod tests {
         );
         let project = id(
             scratch.run(
-                "schedule.save_project",
-                serde_json::json!({ "name": "Heron hide" }),
+                "container.create",
+                serde_json::json!({ "kind": "project", "title": "Heron hide" }),
             ),
-            "project_id",
+            "id",
         );
         let folder = id(
             scratch.run(
@@ -539,7 +530,7 @@ mod tests {
         assert_eq!(hits.len(), 4, "{hits:?}");
         assert_eq!(hits[&("notes", "notebook")], (notebook.as_str(), ""));
         assert_eq!(hits[&("photos", "core.collection")], (album.as_str(), ""));
-        assert_eq!(hits[&("tasks", "schedule.project")], (project.as_str(), ""));
+        assert_eq!(hits[&("tasks", "project")], (project.as_str(), ""));
         assert_eq!(hits[&("docs", "core.concept")], (folder.as_str(), ""));
         // Titles are the names; a container's subtitle is its app.
         let titled: BTreeSet<&str> = found.hits.iter().map(|hit| hit.title.as_str()).collect();

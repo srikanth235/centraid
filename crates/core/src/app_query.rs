@@ -343,7 +343,7 @@ fn search_events(
         let limit = usize::try_from(limit).unwrap_or(usize::MAX);
         Ok(Ok(corrected_search(
             &search,
-            &[agenda::EVENT_TARGET_TYPE],
+            &[agenda::EVENT_KIND],
             term,
             |data: &agenda::SearchData| data.events.is_empty(),
             |term| {
@@ -617,9 +617,14 @@ fn event_to_wire(event: agenda::EventRow, zone: &FireZone) -> wire::AgendaEvent 
         local_end: placed.local_end,
         local_days: placed.local_days,
         all_day,
-        reminders: reminders_of(event.reminders_json.as_deref()),
+        reminders: event
+            .reminders
+            .iter()
+            .map(|minutes_before| wire::AgendaReminder {
+                minutes_before: *minutes_before,
+            })
+            .collect(),
         event_id: event.event_id,
-        ical_uid: event.ical_uid,
         summary: event.summary,
         description: event.description,
         dtstart: event.dtstart,
@@ -632,8 +637,6 @@ fn event_to_wire(event: agenda::EventRow, zone: &FireZone) -> wire::AgendaEvent 
         status: event.status,
         location_place_id: event.location_place_id,
         location_name: event.location_name,
-        organizer_party_id: event.organizer_party_id,
-        sequence: event.sequence,
         created_at: event.created_at,
         updated_at: event.updated_at,
         calendar_id: event.calendar_id,
@@ -644,8 +647,6 @@ fn event_to_wire(event: agenda::EventRow, zone: &FireZone) -> wire::AgendaEvent 
             .map(|attachment| wire::AgendaAttachment {
                 attachment_id: attachment.attachment_id,
                 content_id: attachment.content_id,
-                role: attachment.role,
-                is_primary: attachment.is_primary,
                 media_type: attachment.media_type,
                 content_uri: attachment.content_uri,
                 byte_size: attachment.byte_size,
@@ -655,11 +656,9 @@ fn event_to_wire(event: agenda::EventRow, zone: &FireZone) -> wire::AgendaEvent 
             .attendees
             .into_iter()
             .map(|attendee| wire::AgendaAttendee {
-                attendee_id: attendee.attendee_id,
                 party_id: attendee.party_id,
                 name: attendee.name,
                 partstat: attendee.partstat,
-                role: attendee.role,
                 is_you: attendee.is_you,
             })
             .collect(),
@@ -676,37 +675,11 @@ fn event_to_wire(event: agenda::EventRow, zone: &FireZone) -> wire::AgendaEvent 
     }
 }
 
-/// `schedule_event_ext.reminders_json`, decoded ONCE, here.
-///
-/// The one writer is the command plane, whose input schema admits exactly
-/// `[{ "minutes_before": <integer ≥ 0> }]` (`schedule.propose_event`,
-/// `edit_event`, `edit_event_occurrence`). An entry of any other shape is
-/// skipped rather than guessed at, and a column that will not parse at all is
-/// no reminders: a reminder list is a decoration of an event a member can
-/// still see, and failing the whole agenda over one row's decoration would take
-/// the calendar away to report it.
-fn reminders_of(json: Option<&str>) -> Vec<wire::AgendaReminder> {
-    let Some(entries) = json.and_then(|text| serde_json::from_str::<serde_json::Value>(text).ok())
-    else {
-        return Vec::new();
-    };
-    entries
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter_map(|entry| entry.get("minutes_before")?.as_i64())
-        .map(|minutes_before| wire::AgendaReminder { minutes_before })
-        .collect()
-}
-
 fn calendar_to_wire(calendar: agenda::CalendarRow) -> wire::AgendaCalendar {
     wire::AgendaCalendar {
         calendar_id: calendar.calendar_id,
-        owner_party_id: calendar.owner_party_id,
         name: calendar.name,
         color: calendar.color,
-        default_tz: calendar.default_tz,
-        visibility: calendar.visibility,
     }
 }
 
@@ -855,33 +828,23 @@ mod tests {
             serde_json::from_slice(&outcome.output).expect("the output is JSON")
         }
 
-        fn calendar_id(&self) -> String {
-            self.upcoming(FROM, TO)
-                .expect("upcoming answers")
-                .calendars
-                .first()
-                .map(|calendar| calendar.calendar_id.clone())
-                .expect("founding makes a calendar")
-        }
-
         fn propose(&self, summary: &str, start: &str, end: &str, rrule: Option<&str>) -> String {
             let mut input = serde_json::json!({
-                "summary": summary,
-                "dtstart": start,
-                "dtend": end,
-                "calendar_id": self.calendar_id(),
-                "reminders": [{ "minutes_before": 10 }],
+                "title": summary,
+                "starts": start,
+                "ends": end,
+                "zone": "Etc/UTC",
+                "reminders": [10],
             });
             if let Some(rule) = rrule {
-                input["rrule"] = serde_json::json!(rule);
+                input["rule"] = serde_json::json!(rule);
             }
             self.propose_with(input)
         }
 
-        /// A proposal with every field the caller's, the calendar added.
-        fn propose_with(&self, mut input: serde_json::Value) -> String {
-            input["calendar_id"] = serde_json::json!(self.calendar_id());
-            self.run("schedule.propose_event", input)["event_id"]
+        /// A proposal with every field the caller's.
+        fn propose_with(&self, input: serde_json::Value) -> String {
+            self.run("event.propose", input)["id"]
                 .as_str()
                 .expect("an event id")
                 .to_owned()
@@ -919,10 +882,7 @@ mod tests {
             "2099-06-04T10:00:00.000Z",
             None,
         );
-        scratch.run(
-            "schedule.delete_event",
-            serde_json::json!({ "event_id": trashed }),
-        );
+        scratch.run("entity.trash", serde_json::json!({ "id": trashed }));
 
         let upcoming = scratch.upcoming(FROM, TO).expect("upcoming answers");
         assert_eq!(upcoming.calendars.len(), 1, "the calendar founding made");
@@ -972,16 +932,16 @@ mod tests {
     fn upcoming_answers_each_occurrence_in_the_request_zone() {
         let scratch = Scratch::founded();
         let late = scratch.propose_with(serde_json::json!({
-            "summary": "Late call",
-            "dtstart": "2099-06-04T03:30:00.000Z",
-            "dtend": "2099-06-04T05:00:00.000Z",
-            "start_tz": "Europe/London",
+            "title": "Late call",
+            "starts": "2099-06-04T03:30:00.000Z",
+            "ends": "2099-06-04T05:00:00.000Z",
+            "zone": "Europe/London",
         }));
         let away = scratch.propose_with(serde_json::json!({
-            "summary": "Away",
-            "dtstart": "2099-06-10",
-            "dtend": "2099-06-12",
-            "recurrence_semantics": "all-day",
+            "title": "Away",
+            "starts": "2099-06-10",
+            "ends": "2099-06-12",
+            "timing": "all-day",
         }));
         // A weekly series anchored a year back: its reach-back month is not
         // answered.
@@ -1129,12 +1089,12 @@ mod tests {
     #[test]
     fn search_answers_in_rank_order_with_a_snippet() {
         let scratch = Scratch::founded();
-        let cabin = scratch.propose(
-            "Cabin weekend",
-            "2099-06-05T16:00:00.000Z",
-            "2099-06-05T18:00:00.000Z",
-            None,
-        );
+        // The title alone is a hit without an excerpt; the words about it are the snippet.
+        let cabin = scratch.propose_with(serde_json::json!({
+            "title": "Cabin weekend", "starts": "2099-06-05T16:00:00.000Z",
+            "ends": "2099-06-05T18:00:00.000Z", "zone": "Etc/UTC",
+            "description": "the cabin sleeps six",
+        }));
         scratch.propose(
             "Dentist",
             "2099-06-03T09:00:00.000Z",
@@ -1380,11 +1340,11 @@ mod tests {
         let scratch = Scratch::founded();
         // A wall clock in the device's zone, as the phone writes it.
         let series = scratch.propose_with(serde_json::json!({
-            "summary": "Morning run",
-            "dtstart": "2099-05-04T07:00:00",
-            "dtend": "2099-05-04T08:00:00",
-            "tz": TZ,
-            "rrule": "FREQ=WEEKLY",
+            "title": "Morning run",
+            "starts": "2099-05-04T07:00:00",
+            "ends": "2099-05-04T08:00:00",
+            "zone": TZ,
+            "rule": "FREQ=WEEKLY",
         }));
         let ask = |event_id: &str, instance_key: &str| match scratch
             .ask(wire::app_query_request::Query::AgendaEvent(

@@ -294,7 +294,7 @@ pub fn groups(
         View::Logbook => {
             let mut done: Vec<Placed> = logbook
                 .iter()
-                .filter(|t| t.task.status == "completed")
+                .filter(|t| t.task.status == "done")
                 .cloned()
                 .collect();
             let mut released: Vec<Placed> = logbook
@@ -474,7 +474,7 @@ mod tests {
         TaskRow {
             task_id: id.to_owned(),
             title: id.to_owned(),
-            status: "needs-action".to_owned(),
+            status: "open".to_owned(),
             due_at: due.map(str::to_owned),
             project_id: project.map(str::to_owned),
             created_at: Some("2099-05-30T12:00:00.000Z".to_owned()),
@@ -611,8 +611,8 @@ mod tests {
             ..task(id, None, None)
         };
         let logbook = placed(&[
-            closed("old", "completed", Some("2099-05-01T10:00:00.000Z")),
-            closed("new", "completed", Some("2099-06-01T10:00:00.000Z")),
+            closed("old", "done", Some("2099-05-01T10:00:00.000Z")),
+            closed("new", "done", Some("2099-06-01T10:00:00.000Z")),
             closed("released", "cancelled", None),
         ]);
         assert_eq!(logbook[1].completed_day, "2099-06-01");

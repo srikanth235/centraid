@@ -1,66 +1,59 @@
-//! THE FOUR QUERIES: `upcoming`, `search`, `day-context` and `parties`.
+//! THE FOUR QUERIES: `upcoming`, `search`, `day-context` and `parties`, read one
+//! table at a time over the model's own tables (#1135).
 //!
-//! `queries/upcoming.ts` is the one to read first (629 lines). Its doctrine, in
-//! its own words: *"`{from, to}` optional (default: today forward); events
-//! fetched from BEFORE `from` so multi-day spans arrive — the filter below
-//! re-applies the true lower bound."*
+//! An event is an `entity` of kind `event` with an `event` row; what a screen
+//! shows about it is another table joined by a column or an edge. The paged
+//! door's one shape is a keyset page of one table, so a read here is a window of
+//! `event` rows and then, per table, the rows that window's ids name,
+//! `IN`-bounded by the window and never a whole-table pull.
 //!
-//! ## The reads that DISCOVER rows, and the ones that decorate them
-//!
-//! | Read | What it is |
+//! | A screen's word | Read from |
 //! |---|---|
-//! | `agenda.upcoming.window` | **the visible range, as a page**: `status <> 'cancelled'`, not in the trash, and `dtstart` inside `[from - 31 days, to)`, capped at [`EVENT_WINDOW_CAP`] |
-//! | `agenda.upcoming.recurringAnchors` | **the second window**: a series anchors years in the past, so the range predicate would drop it. `rrule IS NOT NULL` and not in the trash, newest first, capped at [`RECURRING_ANCHOR_CAP`] (D-1020-S4) |
-//! | `ctx.vault.search` | `search`'s own FTS read, which is `crates/search`'s and not a [`PageQuery`] — the hits arrive here in RANK ORDER and the fold keeps that order |
-//! | `agenda.dayContext.birthdays` | the grid's one decoration, its own stated window; the grid reads no task (R-1128-F1, #1128) |
-//! | `agenda.parties.people` | the invite directory: owner-curated, walked with a stated ceiling |
-//!
-//! Everything else — the calendar edges, the guests, the attachments, the
-//! bytes, the parties and the exceptions — is `IN`-bounded by ids one of those
-//! already returned.
-//!
-//! ## A trashed event is not on the agenda
-//!
-//! `schedule.delete_event` moves an event to the trash — `deleted_at` and
-//! `purge_at` set, the row kept for its restore window — and both discovering
-//! reads say `deleted_at IS NULL` ([#1046](https://github.com/srikanth235/centraid/issues/1046)).
-//! v0's statements named only `status`, so a deleted event stayed on the
-//! agenda until its purge: `contracts/apps/agenda/queries.json` carries the
-//! trashed "Book the Tahoe cabin" in three `upcoming` answers, and
-//! `tests/parity.rs` names it as the one row the port refuses to reproduce.
-//! `search` needs no clause of its own — the FTS door drops a trashed row
-//! before a hit reaches the fold (`crates/search`'s `deleted_column`).
+//! | the event, its times, its rule | `event` (the window, ordered by `starts`) |
+//! | its title, when it was made | `entity` (live ones only: a trashed event is not on the agenda) |
+//! | its guests and their answers | `attendee` edges to people, the answer in `state` |
+//! | what is attached | `attached` edges to documents and photos ([`centraid_apps_kit::attached`]) |
+//! | where | the `place` entity's title |
+//! | the calendar and its colour | the `calendar` entity and its `container` row |
+//! | a skipped or moved day | `occurrence` rows, keyed by the series-local wall clock |
+//! | a birthday | the person's own column |
 //!
 //! ## Two windows, then the TRUE lower bound
 //!
-//! The two windows are merged by `event_id` (the recurring read wins, because
-//! it carries the anchor row), expanded, and then filtered: **every** row — an
-//! ordinary event and an expanded occurrence alike — is kept only if it is
-//! still running at `from` or starts at or after it ([`still_running_at`]).
-//! The expansion runs from the `SPAN_BUFFER_MS` reach-back, which is what
-//! finds a multi-day occurrence that began before the range; without the
-//! filter every series leaked a month of PAST occurrences into the answer,
-//! which v0 did and its goldens carry (`tests/parity.rs`, `ENDED_BEFORE_FROM`,
-//! [#1046](https://github.com/srikanth235/centraid/issues/1046)).
+//! `upcoming` reads the events whose `starts` fall inside `[from - 31 days, to)`
+//! and, separately, every series (`rule IS NOT NULL`), because a series anchors
+//! years in the past and the range predicate would drop it. The two are merged
+//! by id, expanded, and then filtered: **every** row, an ordinary event and an
+//! expanded occurrence alike, is kept only if it is still running at `from` or
+//! starts at or after it ([`still_running_at`]). The expansion runs from the
+//! reach-back, which is what finds a multi-day occurrence that began before the
+//! range; without the filter every series leaked a month of PAST occurrences
+//! into the answer (#1046).
+//!
+//! ## A trashed event is not on the agenda
+//!
+//! The window is read from `event`, which has no trash; the trash is `entity`'s,
+//! so the entity rows of the window are read live-only and an event with none is
+//! dropped. `search` needs no clause of its own: the index drops a trashed row.
 //!
 //! ## The zone a range is read in
 //!
-//! `upcoming` and `day-context` take the REQUEST's zone — the device's, stated
-//! by the shell ([`crate::local`]). An empty `from` is the first instant of
-//! today THERE, not 00:00Z; a floating wall clock and an all-day date are read
-//! there when the lower bound asks whether they have ended.
+//! `upcoming` and `day-context` take the REQUEST's zone, the device's, stated by
+//! the shell ([`crate::local`]). An empty `from` is the first instant of today
+//! THERE, not 00:00Z; a floating wall clock and an all-day date are read there
+//! when the lower bound asks whether they have ended.
 
 use std::collections::{BTreeMap, BTreeSet};
 
 use centraid_apps_kit::error::{KitError, KitResult};
-use centraid_apps_kit::reads::{FanOutBound, PageDoor, in_list, read_pages, read_window};
-use centraid_apps_kit::representations::{RepresentationIndex, read_representations};
-use centraid_apps_kit::row::{Row, text_of};
+use centraid_apps_kit::reads::{FanOutBound, PageDoor, Read, read_pages, read_window};
+use centraid_apps_kit::row::{Cell, Row, text_of};
 use centraid_apps_kit::statement::{PageBindValue, PageOrder, PageQuery};
-use centraid_vault::time::occurrence::StoredExceptionRow;
+use centraid_vault::time::occurrence::{SeriesType, StoredExceptionRow};
 use centraid_vault::time::recurrence::{Semantics, parse_instant_ms};
-
 use centraid_vault::time::zone::FireZone;
+
+pub use centraid_apps_kit::attached::Attachment;
 
 use crate::expansion::{
     DEFAULT_EXPAND_MS, SPAN_BUFFER_MS, expand_recurring_events, recurrence_summary,
@@ -68,68 +61,46 @@ use crate::expansion::{
 use crate::{Denial, denial_of};
 
 // ---------------------------------------------------------------------------
-// The declared bounds (`day-context.ts:83`-`:89`, `upcoming.ts:180`-`:185`).
+// The declared bounds.
 // ---------------------------------------------------------------------------
 
 /// One visible range must not make first paint read an unbounded table.
 pub const EVENT_WINDOW_CAP: usize = 2_000;
-/// Series anchors live in the past; cap rows instead of walking unbounded.
+/// The second window: every series, newest anchor first.
 pub const RECURRING_ANCHOR_CAP: usize = 1_000;
-/// The widest range the grid will answer for, in days.
+/// The longest range `day-context` answers.
 pub const MAX_RANGE_DAYS: i64 = 400;
-/// The default range when the caller states none.
+/// `day-context`'s default range.
 pub const DEFAULT_RANGE_DAYS: i64 = 45;
-/// A vault has no upper bound; reads are row-capped.
+/// The people the invite directory and the birthday grid walk.
 pub const PARTY_CAP: usize = 2_000;
-pub const TAG_CAP: usize = 5_000;
-/// FTS answers at most this many matches (`search.ts:38`).
+/// How many ranked hits `search` folds.
 pub const SEARCH_LIMIT: usize = 100;
-
-/// A join per windowed event: the kit's default, 500 × 8 = 4,000 rows.
+/// The fan-out of a join over a bounded set.
 pub const EVENT_JOIN_BOUND: FanOutBound = FanOutBound::new(500, 8);
 
-/// The blob route a `blob:` content URI becomes (`upcoming.ts:106`).
-pub const BLOB_ROUTE: &str = "/centraid/_vault/blobs";
+const STARRED: &str = "flag:starred";
+const EVENT_COLUMNS: &str = "id, starts, ends, timing, zone, rule, rule_supported, status, \
+     calendar_id, place_id, url, reminders, description";
+const ENTITY_COLUMNS: &str = "id, title, created_at, updated_at";
 
-/// The flags scheme, and the notation a starred party carries.
-pub const FLAGS_SCHEME_URI: &str = "https://centraid.dev/schemes/flags";
-pub const STARRED_NOTATION: &str = "starred";
-
-/// One `core.event` row, as both of `upcoming`'s windows project it
-/// (`upcoming.ts:11`-`:15`).
-pub const EVENT_COLUMNS: &str = "event_id, ical_uid, summary, description, dtstart, dtend, \
-     start_tz, end_tz, recurrence_semantics, rrule, rrule_support, status, location_place_id, \
-     organizer_party_id, sequence, created_at, updated_at";
+fn text(word: &str) -> PageBindValue {
+    PageBindValue::Text(word.to_owned())
+}
 
 // ---------------------------------------------------------------------------
 // The rows, as the payload carries them.
 // ---------------------------------------------------------------------------
 
-/// One attachment on an event, joined to its bytes.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct Attachment {
-    pub attachment_id: String,
-    pub content_id: String,
-    pub role: Option<String>,
-    pub is_primary: Option<i64>,
-    /// **The ATTACHMENT's own reading of the bytes** (#996 R20(b)); bytes carry
-    /// neither a media type nor a title of their own.
-    pub media_type: String,
-    pub content_uri: String,
-    pub byte_size: i64,
-}
-
 /// One guest.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Attendee {
-    /// Absent on `search`'s projection, and on a guest an override introduced.
-    pub attendee_id: Option<String>,
     pub party_id: String,
     pub name: String,
+    /// `needs-action`, `accepted`, `declined` or `tentative`.
     pub partstat: String,
-    pub role: Option<String>,
-    /// **"You" sorts FIRST so RSVP controls lead** (#337); this is the vault's
-    /// own `self_party_id`, never a guess.
+    /// **"You" sorts FIRST so RSVP controls lead** (#337): the vault's own
+    /// `self_id`, never a guess.
     pub is_you: bool,
 }
 
@@ -137,40 +108,39 @@ pub struct Attendee {
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct CalendarRow {
     pub calendar_id: String,
-    pub owner_party_id: Option<String>,
     pub name: Option<String>,
     pub color: Option<String>,
-    pub default_tz: Option<String>,
-    pub visibility: Option<String>,
 }
 
-/// One event row — or one OCCURRENCE of one, which is the same row with a
-/// different `dtstart` and an `instance_key`.
+/// One event row, or one OCCURRENCE of one, which is the same row with a
+/// different `dtstart` and an `instance_key`. The wire's words are kept
+/// (`dtstart`, `rrule`, `summary`): `starts`, `rule` and the title are the
+/// model's.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct EventRow {
     pub event_id: String,
-    pub ical_uid: Option<String>,
     pub summary: Option<String>,
     pub description: Option<String>,
     pub dtstart: String,
     pub dtend: Option<String>,
+    /// The zone of a zoned event; both ends are in it.
     pub start_tz: Option<String>,
     pub end_tz: Option<String>,
     pub recurrence_semantics: Option<String>,
     pub rrule: Option<String>,
+    /// `supported` or `unsupported`.
     pub rrule_support: Option<String>,
     pub status: Option<String>,
     pub location_place_id: Option<String>,
-    /// `core_place.name` of `location_place_id`, so a detail can say where
-    /// without a second read. Absent when there is no place or it is gone.
+    /// The place's name, so a detail can say where without a second read.
     pub location_name: Option<String>,
-    pub organizer_party_id: Option<String>,
-    pub sequence: Option<i64>,
     pub created_at: Option<String>,
     pub updated_at: Option<String>,
     pub calendar_id: Option<String>,
+    /// The joining link.
     pub conferencing_uri: Option<String>,
-    pub reminders_json: Option<String>,
+    /// Minutes before it starts, in the order they were set.
+    pub reminders: Vec<i64>,
     pub attachments: Vec<Attachment>,
     pub attendees: Vec<Attendee>,
     /// The ONE member-facing recurrence sentence; **never the rule** (#834).
@@ -215,23 +185,20 @@ pub struct BirthdayFact {
     pub name: String,
     pub month: i64,
     pub day: i64,
-    /// `inner` means STARRED. **No `relationship_tier` column exists**
-    /// (`day-context.ts:79`), so the tier is derived and the derivation is
-    /// named here rather than implied.
+    /// `inner` means STARRED; the tier is derived and the derivation is named
+    /// here rather than implied.
     pub tier: &'static str,
 }
 
 /// What `day-context` answers.
 ///
-/// **NO DUE WORK.** v0 answered a per-day list of open tasks due; the shelf
-/// that drew it retired with R-1128-2, a dated task is a row in its day read
-/// from `tasks.board`, and the read went with it (R-1128-F1, #1128).
+/// **NO DUE WORK**: a dated task is a row in its day, read from `tasks.board`
+/// (R-1128-F1, #1128).
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct DayContextData {
     pub birthdays: Vec<BirthdayFact>,
-    /// **No holiday source exists in the vault**; the field holds the shape
-    /// open (`day-context.ts:263`) and is empty by construction, not by
-    /// accident.
+    /// **No holiday source exists in the vault**; the field holds the shape open
+    /// and is empty by construction.
     pub holidays: Vec<String>,
 }
 
@@ -251,391 +218,176 @@ pub struct PartiesData {
 }
 
 // ---------------------------------------------------------------------------
-// Statements.
+// The reads.
 // ---------------------------------------------------------------------------
 
-/// `agenda.upcoming.window` — the visible range, as a page.
-///
-/// `dtstart` is `NOT NULL` on `core_event`, so the page is continuable.
-/// **`deleted_at IS NULL` is the trash** (see the module header): a cancelled
-/// event and a deleted one are two different facts, and the agenda shows
-/// neither.
+/// `agenda.upcoming.window`: the events whose `starts` fall in the range.
 #[must_use]
 pub fn event_window_statement(from_lower: &str, to: Option<&str>) -> PageQuery {
-    let mut bind = vec![
-        PageBindValue::Text("cancelled".to_owned()),
-        PageBindValue::Text(from_lower.to_owned()),
-    ];
+    let mut bind = vec![text("cancelled"), text(from_lower)];
     let predicate = match to {
         Some(upper) => {
-            bind.push(PageBindValue::Text(upper.to_owned()));
-            "status <> ? AND deleted_at IS NULL AND dtstart >= ? AND dtstart < ?"
+            bind.push(text(upper));
+            "status <> ? AND starts >= ? AND starts < ?"
         }
-        None => "status <> ? AND deleted_at IS NULL AND dtstart >= ?",
+        None => "status <> ? AND starts >= ?",
     };
     PageQuery::new(
         "agenda.upcoming.window",
         EVENT_COLUMNS,
-        "core_event",
-        PageOrder::asc("dtstart", "event_id"),
+        "event",
+        PageOrder::asc("starts", "id"),
     )
     .filter(predicate, bind)
 }
 
-/// `agenda.upcoming.recurringAnchors` — THE SECOND WINDOW.
-///
-/// A recurring series anchors years in the past, so the range predicate would
-/// drop it; the anchors are fetched separately and merged before the range
-/// check (`upcoming.ts:352`-`:354`). A trashed series is left out here as well
-/// as in the window: the anchor read is the one that would otherwise bring a
-/// deleted series back, one occurrence a week, for as long as it recurs.
+/// `agenda.upcoming.recurringAnchors`: THE SECOND WINDOW, every series, which
+/// anchors years in the past and so escapes the range predicate.
 #[must_use]
 pub fn recurring_anchors_statement() -> PageQuery {
     PageQuery::new(
         "agenda.upcoming.recurringAnchors",
         EVENT_COLUMNS,
-        "core_event",
-        PageOrder::desc("dtstart", "event_id"),
+        "event",
+        PageOrder::desc("starts", "id"),
     )
-    .filter(
-        "status <> ? AND deleted_at IS NULL AND rrule IS NOT NULL",
-        vec![PageBindValue::Text("cancelled".to_owned())],
-    )
+    .filter("status <> ? AND rule IS NOT NULL", vec![text("cancelled")])
 }
 
-/// `agenda.upcoming.calendars` — the member's own calendars: owner-curated and
-/// small.
-#[must_use]
-pub fn calendars_statement() -> PageQuery {
-    PageQuery::new(
-        "agenda.upcoming.calendars",
-        "calendar_id, owner_party_id, name, color, default_tz, visibility",
-        "schedule_calendar",
-        PageOrder::asc("calendar_id", "calendar_id"),
-    )
-}
-
-fn by_event(
+/// The id-keyed read of one table: `column IN (the ids)`.
+fn by_ids(
     name: &'static str,
+    table: &'static str,
     select: &'static str,
-    from: &'static str,
-    pk: &'static str,
-    event_ids: &[String],
-) -> KitResult<PageQuery> {
-    let fragment = in_list("event_id", event_ids)?;
-    Ok(PageQuery::new(name, select, from, PageOrder::asc(pk, pk))
-        .filter(&fragment.sql, fragment.bind))
-}
-
-fn by_target(
-    name: &'static str,
-    select: &'static str,
-    from: &'static str,
-    pk: &'static str,
-    target_type: &str,
-    event_ids: &[String],
-) -> KitResult<PageQuery> {
-    let fragment = in_list("target_id", event_ids)?;
-    let mut bind = vec![PageBindValue::Text(target_type.to_owned())];
-    bind.extend(fragment.bind);
-    Ok(PageQuery::new(name, select, from, PageOrder::asc(pk, pk))
-        .filter(&format!("target_type = ? AND {}", fragment.sql), bind))
-}
-
-/// `agenda.<query>.eventExt` — the calendar edge.
-pub fn event_ext_statement(name: &'static str, event_ids: &[String]) -> KitResult<PageQuery> {
-    by_event(
+    column: &'static str,
+) -> Read {
+    Read {
         name,
-        "event_ext_id, event_id, calendar_id, busy, conferencing_uri, reminders_json, \
-         travel_buffer_min",
-        "schedule_event_ext",
-        "event_ext_id",
-        event_ids,
-    )
-}
-
-/// `agenda.<query>.attendees` — the guests.
-pub fn attendees_statement(name: &'static str, event_ids: &[String]) -> KitResult<PageQuery> {
-    by_event(
-        name,
-        "attendee_id, event_id, party_id, partstat, role",
-        "schedule_attendee",
-        "attendee_id",
-        event_ids,
-    )
-}
-
-/// `agenda.<query>.attachments` — the attachment edges.
-pub fn attachments_statement(name: &'static str, event_ids: &[String]) -> KitResult<PageQuery> {
-    by_target(
-        name,
-        "attachment_id, target_type, target_id, content_id, role, is_primary",
-        "core_attachment",
-        "attachment_id",
-        "core.event",
-        event_ids,
-    )
-}
-
-/// `agenda.upcoming.exceptions` — the stored occurrence exceptions.
-///
-/// **The projection names `original_start_local` through
-/// [`centraid_vault::time::occurrence::OCCURRENCE_LOCAL_START_COLUMN`]**, which
-/// is the one place the spelling appears (#996 R21, ONT-25).
-pub fn exceptions_statement(event_ids: &[String]) -> KitResult<PageQuery> {
-    let column = centraid_vault::time::occurrence::OCCURRENCE_LOCAL_START_COLUMN;
-    let fragment = in_list("target_id", event_ids)?;
-    let mut bind = vec![PageBindValue::Text("core.event".to_owned())];
-    bind.extend(fragment.bind);
-    Ok(PageQuery::new(
-        "agenda.upcoming.exceptions",
-        &format!(
-            "exception_id, target_type, target_id, {column}, recurrence_semantics, scope, \
-             action, override_json"
-        ),
-        "schedule_recurrence_exception",
-        PageOrder::asc("exception_id", "exception_id"),
-    )
-    .filter(&format!("target_type = ? AND {}", fragment.sql), bind))
-}
-
-/// `agenda.<query>.vault` — the owner's own party, so a guest that IS you gets
-/// RSVP controls (#337).
-#[must_use]
-pub fn vault_statement(name: &'static str) -> PageQuery {
-    PageQuery::new(
-        name,
-        "vault_id, self_party_id",
-        "core_vault",
-        PageOrder::asc("vault_id", "vault_id"),
-    )
-}
-
-/// `agenda.<query>.parties` — the names the guests carry.
-pub fn parties_statement(name: &'static str, party_ids: &[String]) -> KitResult<PageQuery> {
-    let fragment = in_list("party_id", party_ids)?;
-    Ok(PageQuery::new(
-        name,
-        "party_id, display_name",
-        "core_party",
-        PageOrder::asc("party_id", "party_id"),
-    )
-    .filter(&fragment.sql, fragment.bind))
-}
-
-/// `agenda.<query>.places` — the names the events' places carry.
-pub fn places_statement(name: &'static str, place_ids: &[String]) -> KitResult<PageQuery> {
-    let fragment = in_list("place_id", place_ids)?;
-    Ok(PageQuery::new(
-        name,
-        "place_id, name",
-        "core_place",
-        PageOrder::asc("place_id", "place_id"),
-    )
-    .filter(&fragment.sql, fragment.bind))
-}
-
-/// `agenda.<query>.contents` — the bytes an attachment points at.
-pub fn contents_statement(name: &'static str, content_ids: &[String]) -> KitResult<PageQuery> {
-    let fragment = in_list("content_id", content_ids)?;
-    Ok(PageQuery::new(
-        name,
-        "content_id, content_uri, byte_size",
-        "core_content_item",
-        PageOrder::asc("content_id", "content_id"),
-    )
-    .filter(&fragment.sql, fragment.bind))
-}
-
-/// `agenda.dayContext.birthdays` — every person with a birth date.
-#[must_use]
-pub fn birthdays_statement() -> PageQuery {
-    PageQuery::new(
-        "agenda.dayContext.birthdays",
-        "party_id, display_name, kind, birth_date",
-        "core_party",
-        PageOrder::asc("party_id", "party_id"),
-    )
-    .filter(
-        "kind = ? AND birth_date IS NOT NULL",
-        vec![PageBindValue::Text("person".to_owned())],
-    )
-}
-
-/// `agenda.dayContext.flagsScheme` — the flags scheme, if this vault has one.
-#[must_use]
-pub fn flags_scheme_statement() -> PageQuery {
-    PageQuery::new(
-        "agenda.dayContext.flagsScheme",
-        "scheme_id, uri",
-        "core_concept_scheme",
-        PageOrder::asc("scheme_id", "scheme_id"),
-    )
-    .filter(
-        "uri = ?",
-        vec![PageBindValue::Text(FLAGS_SCHEME_URI.to_owned())],
-    )
-}
-
-/// `agenda.dayContext.flagConcepts` — its concepts.
-#[must_use]
-pub fn flag_concepts_statement(scheme_id: &str) -> PageQuery {
-    PageQuery::new(
-        "agenda.dayContext.flagConcepts",
-        "concept_id, scheme_id, notation",
-        "core_concept",
-        PageOrder::asc("concept_id", "concept_id"),
-    )
-    .filter(
-        "scheme_id = ?",
-        vec![PageBindValue::Text(scheme_id.to_owned())],
-    )
-}
-
-/// `agenda.dayContext.starTags` — who is starred.
-#[must_use]
-pub fn star_tags_statement(concept_id: &str) -> PageQuery {
-    PageQuery::new(
-        "agenda.dayContext.starTags",
-        "tag_id, target_type, target_id, concept_id",
-        "core_tag",
-        PageOrder::asc("tag_id", "tag_id"),
-    )
-    .filter(
-        "target_type = ? AND concept_id = ?",
-        vec![
-            PageBindValue::Text("core.party".to_owned()),
-            PageBindValue::Text(concept_id.to_owned()),
-        ],
-    )
-}
-
-/// `agenda.parties.people` — the invite directory.
-///
-/// **Agents, orgs and groups are left out**: an invitation is a commitment
-/// asked of a person (`parties.ts:1`-`:9`).
-#[must_use]
-pub fn people_statement() -> PageQuery {
-    PageQuery::new(
-        "agenda.parties.people",
-        "party_id, display_name, kind",
-        "core_party",
-        PageOrder::asc("party_id", "party_id"),
-    )
-    .filter("kind = ?", vec![PageBindValue::Text("person".to_owned())])
-}
-
-// ---------------------------------------------------------------------------
-// The folds.
-// ---------------------------------------------------------------------------
-
-pub(crate) fn cell_text(row: &Row, column: &str) -> Option<String> {
-    text_of(row, column)
-}
-
-fn cell_int(row: &Row, column: &str) -> Option<i64> {
-    row.get(column)
-        .and_then(centraid_apps_kit::row::Cell::integer)
-}
-
-/// Blob-backed bytes serve as same-origin URLs (#296).
-fn source_of(content_uri: Option<&str>, content_id: &str) -> String {
-    match content_uri {
-        Some(uri) if uri.starts_with("blob:") => format!("{BLOB_ROUTE}/{content_id}"),
-        Some(uri) => uri.to_owned(),
-        None => String::new(),
+        table,
+        select,
+        order: (column, column),
+        column,
     }
 }
 
-/// The shared attachment projection. `is_primary` first, then the order the
-/// read returned — a STABLE sort, as v0's is.
-fn attachments_by_subject(
-    attachment_rows: &[Row],
-    content_rows: &[Row],
-    representations: &RepresentationIndex,
-) -> BTreeMap<String, Vec<Attachment>> {
-    let contents: BTreeMap<String, &Row> = content_rows
+fn ids_of(rows: &[Row], column: &str) -> Vec<String> {
+    rows.iter()
+        .filter_map(|row| text_of(row, column))
+        .collect::<BTreeSet<String>>()
+        .into_iter()
+        .collect()
+}
+
+/// The `event` rows' events: the entity's words joined on, in the rows' order,
+/// a trashed or purged event left out.
+fn live_events(door: &dyn PageDoor, rows: &[Row]) -> KitResult<Vec<EventRow>> {
+    let ids = ids_of(rows, "id");
+    if ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    let entities: BTreeMap<String, Row> =
+        by_ids("agenda.events.entity", "entity", ENTITY_COLUMNS, "id")
+            .among(
+                EVENT_JOIN_BOUND,
+                door,
+                &ids,
+                Some(("kind = ? AND deleted_at IS NULL", vec![text("event")])),
+            )?
+            .into_iter()
+            .filter_map(|row| text_of(&row, "id").map(|id| (id, row)))
+            .collect();
+    let mut seen = BTreeSet::new();
+    Ok(rows
         .iter()
-        .filter_map(|row| cell_text(row, "content_id").map(|id| (id, row)))
-        .collect();
-    let mut by_subject: BTreeMap<String, Vec<Attachment>> = BTreeMap::new();
-    for row in attachment_rows {
-        let Some(attachment_id) = cell_text(row, "attachment_id") else {
-            continue;
-        };
-        let Some(target_id) = cell_text(row, "target_id") else {
-            continue;
-        };
-        let content_id = cell_text(row, "content_id").unwrap_or_default();
-        let content = contents.get(&content_id);
-        by_subject.entry(target_id).or_default().push(Attachment {
-            media_type: representations
-                .owner("core.attachment", &attachment_id)
-                .or_else(|| representations.content(&content_id))
-                .unwrap_or("application/octet-stream")
-                .to_owned(),
-            content_uri: source_of(
-                content
-                    .and_then(|row| cell_text(row, "content_uri"))
-                    .as_deref(),
-                &content_id,
-            ),
-            byte_size: content
-                .and_then(|row| cell_int(row, "byte_size"))
-                .unwrap_or(0),
-            attachment_id,
-            content_id,
-            role: cell_text(row, "role"),
-            is_primary: cell_int(row, "is_primary"),
-        });
-    }
-    for list in by_subject.values_mut() {
-        list.sort_by(|left, right| {
-            right
-                .is_primary
-                .unwrap_or(0)
-                .cmp(&left.is_primary.unwrap_or(0))
-        });
-    }
-    by_subject
+        .filter_map(|row| {
+            let id = text_of(row, "id")?;
+            let entity = entities.get(&id)?;
+            seen.insert(id.clone()).then(|| event_of(row, entity))
+        })
+        .collect())
 }
 
-/// The shared guest projection. **"You" sorts FIRST so RSVP controls lead**
-/// (#337), then by name.
-///
-/// v0 orders the name half with `localeCompare`; this is code-point order. For
-/// the ASCII display names a vault holds the two agree, and the divergence is
-/// stated rather than reconciled — a `localeCompare` port would put ICU in the
-/// app plane for a tie-break (the same call `crates/apps/kit::money` records).
-fn attendees_by_event(
-    attendee_rows: &[Row],
-    names: &BTreeMap<String, String>,
-    me: Option<&str>,
-    carry_attendee_id: bool,
-) -> BTreeMap<String, Vec<Attendee>> {
-    let mut by_event: BTreeMap<String, Vec<Attendee>> = BTreeMap::new();
-    for row in attendee_rows {
-        let Some(event_id) = cell_text(row, "event_id") else {
+fn event_of(row: &Row, entity: &Row) -> EventRow {
+    let reminders = text_of(row, "reminders")
+        .and_then(|json| serde_json::from_str::<Vec<i64>>(&json).ok())
+        .unwrap_or_default();
+    let zone = text_of(row, "zone");
+    EventRow {
+        event_id: text_of(row, "id").unwrap_or_default(),
+        summary: text_of(entity, "title"),
+        description: text_of(row, "description"),
+        dtstart: text_of(row, "starts").unwrap_or_default(),
+        dtend: text_of(row, "ends"),
+        start_tz: zone.clone(),
+        end_tz: zone,
+        recurrence_semantics: text_of(row, "timing"),
+        rrule: text_of(row, "rule"),
+        rrule_support: Some(
+            if row.get("rule_supported").and_then(Cell::integer) == Some(0) {
+                "unsupported"
+            } else {
+                "supported"
+            }
+            .to_owned(),
+        ),
+        status: text_of(row, "status"),
+        location_place_id: text_of(row, "place_id"),
+        created_at: text_of(entity, "created_at"),
+        updated_at: text_of(entity, "updated_at"),
+        calendar_id: text_of(row, "calendar_id"),
+        conferencing_uri: text_of(row, "url"),
+        reminders,
+        ..EventRow::default()
+    }
+}
+
+/// The vault's owner.
+fn me(door: &dyn PageDoor) -> KitResult<Option<String>> {
+    let page = door.page(
+        &PageQuery::new(
+            "agenda.vault",
+            "self_id",
+            "vault",
+            PageOrder::asc("self_id", "self_id"),
+        ),
+        &centraid_apps_kit::page::PageRequest::first(1),
+    )?;
+    Ok(page.rows.first().and_then(|row| text_of(row, "self_id")))
+}
+
+/// What a window of events carries beside its own row: the guests, the
+/// attachments and the place's name.
+pub(crate) fn decorate(door: &dyn PageDoor, events: &mut [EventRow]) -> KitResult<()> {
+    let ids: Vec<String> = events.iter().map(|event| event.event_id.clone()).collect();
+    if ids.is_empty() {
+        return Ok(());
+    }
+    let owner = me(door)?;
+    let invited = by_ids(
+        "agenda.events.guests",
+        "edge",
+        "from_id, to_id, state",
+        "from_id",
+    )
+    .of(door, &ids, Some(("rel = ?", vec![text("attendee")])))?;
+    let people = ids_of(&invited, "to_id");
+    let names = names_of(door, &people)?;
+    let mut guests: BTreeMap<String, Vec<Attendee>> = BTreeMap::new();
+    for edge in &invited {
+        let (Some(event), Some(person)) = (text_of(edge, "from_id"), text_of(edge, "to_id")) else {
             continue;
         };
-        let party_id = cell_text(row, "party_id").unwrap_or_default();
-        by_event.entry(event_id).or_default().push(Attendee {
-            attendee_id: if carry_attendee_id {
-                cell_text(row, "attendee_id")
-            } else {
-                None
-            },
+        guests.entry(event).or_default().push(Attendee {
             name: names
-                .get(&party_id)
+                .get(&person)
                 .cloned()
                 .unwrap_or_else(|| "Guest".to_owned()),
-            is_you: me.is_some_and(|me| me == party_id),
-            party_id,
-            partstat: cell_text(row, "partstat").unwrap_or_default(),
-            role: cell_text(row, "role"),
+            partstat: text_of(edge, "state").unwrap_or_else(|| "needs-action".to_owned()),
+            is_you: owner.as_deref() == Some(person.as_str()),
+            party_id: person,
         });
     }
-    for list in by_event.values_mut() {
+    for list in guests.values_mut() {
         list.sort_by(|left, right| {
             right
                 .is_you
@@ -643,220 +395,152 @@ fn attendees_by_event(
                 .then_with(|| left.name.cmp(&right.name))
         });
     }
-    by_event
-}
-
-/// One `core_event` row, read off the page.
-pub(crate) fn event_of(row: &Row) -> Option<EventRow> {
-    Some(EventRow {
-        event_id: cell_text(row, "event_id")?,
-        ical_uid: cell_text(row, "ical_uid"),
-        summary: cell_text(row, "summary"),
-        description: cell_text(row, "description"),
-        dtstart: cell_text(row, "dtstart").unwrap_or_default(),
-        dtend: cell_text(row, "dtend"),
-        start_tz: cell_text(row, "start_tz"),
-        end_tz: cell_text(row, "end_tz"),
-        recurrence_semantics: cell_text(row, "recurrence_semantics"),
-        rrule: cell_text(row, "rrule"),
-        rrule_support: cell_text(row, "rrule_support"),
-        status: cell_text(row, "status"),
-        location_place_id: cell_text(row, "location_place_id"),
-        organizer_party_id: cell_text(row, "organizer_party_id"),
-        sequence: cell_int(row, "sequence"),
-        created_at: cell_text(row, "created_at"),
-        updated_at: cell_text(row, "updated_at"),
-        ..EventRow::default()
-    })
-}
-
-pub(crate) fn calendar_of(row: &Row) -> Option<CalendarRow> {
-    Some(CalendarRow {
-        calendar_id: cell_text(row, "calendar_id")?,
-        owner_party_id: cell_text(row, "owner_party_id"),
-        name: cell_text(row, "name"),
-        color: cell_text(row, "color"),
-        default_tz: cell_text(row, "default_tz"),
-        visibility: cell_text(row, "visibility"),
-    })
-}
-
-pub(crate) fn exception_of(row: &Row) -> StoredExceptionRow {
-    StoredExceptionRow {
-        target_type: cell_text(row, "target_type"),
-        target_id: cell_text(row, "target_id"),
-        original_start_local: cell_text(
-            row,
-            centraid_vault::time::occurrence::OCCURRENCE_LOCAL_START_COLUMN,
-        ),
-        recurrence_semantics: cell_text(row, "recurrence_semantics"),
-        scope: cell_text(row, "scope"),
-        action: cell_text(row, "action"),
-        override_json: cell_text(row, "override_json"),
-    }
-}
-
-/// The owner's own party, from `core_vault`.
-fn me_of(rows: &[Row]) -> Option<String> {
-    rows.first().and_then(|row| cell_text(row, "self_party_id"))
-}
-
-/// Every decoration the event queries share, read over one windowed set.
-pub(crate) struct Decorations {
-    ext: BTreeMap<String, Row>,
-    attachments: BTreeMap<String, Vec<Attachment>>,
-    attendees: BTreeMap<String, Vec<Attendee>>,
-    /// `place_id` → `name`.
-    places: BTreeMap<String, String>,
-}
-
-/// The distinct places a set of event rows names, for [`read_decorations`].
-pub(crate) fn place_ids_of<'a>(rows: impl Iterator<Item = &'a Row>) -> Vec<String> {
-    rows.filter_map(|row| cell_text(row, "location_place_id"))
-        .filter(|id| !id.is_empty())
-        .collect::<BTreeSet<String>>()
-        .into_iter()
-        .collect()
-}
-
-pub(crate) fn read_decorations(
-    door: &dyn PageDoor,
-    prefix: &'static str,
-    event_ids: &[String],
-    place_ids: &[String],
-    carry_attendee_id: bool,
-) -> KitResult<Decorations> {
-    let ext_rows = read_pages(
+    let places = names_of(
         door,
-        &event_ext_statement(name_of(prefix, "eventExt"), event_ids)?,
-        EVENT_JOIN_BOUND,
-    )?;
-    let attachment_rows = read_pages(
-        door,
-        &attachments_statement(name_of(prefix, "attachments"), event_ids)?,
-        EVENT_JOIN_BOUND,
-    )?;
-    let attendee_rows = read_pages(
-        door,
-        &attendees_statement(name_of(prefix, "attendees"), event_ids)?,
-        EVENT_JOIN_BOUND,
-    )?;
-    let vault_rows = read_pages(
-        door,
-        &vault_statement(name_of(prefix, "vault")),
-        EVENT_JOIN_BOUND,
-    )?;
-    let me = me_of(&vault_rows);
-    let party_ids: Vec<String> = attendee_rows
-        .iter()
-        .filter_map(|row| cell_text(row, "party_id"))
-        .filter(|id| !id.is_empty())
-        .collect::<BTreeSet<String>>()
-        .into_iter()
-        .collect();
-    let party_rows = if party_ids.is_empty() {
-        Vec::new()
-    } else {
-        read_pages(
-            door,
-            &parties_statement(name_of(prefix, "parties"), &party_ids)?,
-            EVENT_JOIN_BOUND,
-        )?
-    };
-    let names: BTreeMap<String, String> = party_rows
-        .iter()
-        .filter_map(|row| Some((cell_text(row, "party_id")?, cell_text(row, "display_name")?)))
-        .collect();
-    let content_ids: Vec<String> = attachment_rows
-        .iter()
-        .filter_map(|row| cell_text(row, "content_id"))
-        .filter(|id| !id.is_empty())
-        .collect::<BTreeSet<String>>()
-        .into_iter()
-        .collect();
-    let content_rows = if content_ids.is_empty() {
-        Vec::new()
-    } else {
-        read_pages(
-            door,
-            &contents_statement(name_of(prefix, "contents"), &content_ids)?,
-            EVENT_JOIN_BOUND,
-        )?
-    };
-    let representations = read_representations(door, &content_ids, EVENT_JOIN_BOUND)?;
-    let places = if place_ids.is_empty() {
-        BTreeMap::new()
-    } else {
-        read_pages(
-            door,
-            &places_statement(name_of(prefix, "places"), place_ids)?,
-            EVENT_JOIN_BOUND,
-        )?
-        .iter()
-        .filter_map(|row| Some((cell_text(row, "place_id")?, cell_text(row, "name")?)))
-        .collect()
-    };
-    Ok(Decorations {
-        places,
-        ext: ext_rows
+        &events
+            .iter()
+            .filter_map(|event| event.location_place_id.clone())
+            .collect::<BTreeSet<_>>()
             .into_iter()
-            .filter_map(|row| cell_text(&row, "event_id").map(|id| (id, row)))
-            .collect(),
-        attachments: attachments_by_subject(&attachment_rows, &content_rows, &representations),
-        attendees: attendees_by_event(&attendee_rows, &names, me.as_deref(), carry_attendee_id),
-    })
+            .collect::<Vec<_>>(),
+    )?;
+    let mut attached = centraid_apps_kit::attached::of(door, &ids)?;
+    for event in events {
+        event.attendees = guests.remove(&event.event_id).unwrap_or_default();
+        event.attachments = attached.remove(&event.event_id).unwrap_or_default();
+        event.location_name = event
+            .location_place_id
+            .as_ref()
+            .and_then(|place| places.get(place).cloned());
+        // THE ONE SUMMARISER, RESOLVED HERE (#834): the row carries the sentence
+        // and never the raw rule.
+        event.recurrence_summary = recurrence_summary(event.rrule.as_deref());
+    }
+    Ok(())
 }
 
-/// The statement names are v0's, and the prefix says which query asked.
-fn name_of(prefix: &'static str, leaf: &'static str) -> &'static str {
-    match (prefix, leaf) {
-        ("upcoming", "eventExt") => "agenda.upcoming.eventExt",
-        ("upcoming", "attachments") => "agenda.upcoming.attachments",
-        ("upcoming", "attendees") => "agenda.upcoming.attendees",
-        ("upcoming", "vault") => "agenda.upcoming.vault",
-        ("upcoming", "parties") => "agenda.upcoming.parties",
-        ("upcoming", "contents") => "agenda.upcoming.contents",
-        ("upcoming", "places") => "agenda.upcoming.places",
-        ("search", "eventExt") => "agenda.search.eventExt",
-        ("search", "attachments") => "agenda.search.attachments",
-        ("search", "attendees") => "agenda.search.attendees",
-        ("search", "vault") => "agenda.search.vault",
-        ("search", "parties") => "agenda.search.parties",
-        ("search", "contents") => "agenda.search.contents",
-        ("search", "places") => "agenda.search.places",
-        ("event", "eventExt") => "agenda.event.eventExt",
-        ("event", "attachments") => "agenda.event.attachments",
-        ("event", "attendees") => "agenda.event.attendees",
-        ("event", "vault") => "agenda.event.vault",
-        ("event", "parties") => "agenda.event.parties",
-        ("event", "contents") => "agenda.event.contents",
-        ("event", "places") => "agenda.event.places",
-        _ => "agenda.unknown",
+/// The titles of the entities among `ids` (a person's name, a place's name).
+fn names_of(door: &dyn PageDoor, ids: &[String]) -> KitResult<BTreeMap<String, String>> {
+    if ids.is_empty() {
+        return Ok(BTreeMap::new());
+    }
+    Ok(by_ids("agenda.names", "entity", "id, title", "id")
+        .among(EVENT_JOIN_BOUND, door, ids, None)?
+        .iter()
+        .filter_map(|row| Some((text_of(row, "id")?, text_of(row, "title")?)))
+        .collect())
+}
+
+/// The days of these series that were skipped or moved, as the recurrence
+/// engine reads them. The `occurrence` row is the model's; the engine's stored
+/// row is its own, kept, so one adapter turns the one into the other.
+pub(crate) fn read_exceptions(
+    door: &dyn PageDoor,
+    events: &[EventRow],
+) -> KitResult<Vec<StoredExceptionRow>> {
+    let ids: Vec<String> = events
+        .iter()
+        .filter(|event| event.rrule.is_some())
+        .map(|event| event.event_id.clone())
+        .collect();
+    if ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    let timing: BTreeMap<&str, &str> = events
+        .iter()
+        .map(|event| {
+            (
+                event.event_id.as_str(),
+                event.recurrence_semantics.as_deref().unwrap_or("zoned"),
+            )
+        })
+        .collect();
+    Ok(by_ids(
+        "agenda.events.occurrences",
+        "occurrence",
+        "series_id, original_start, scope, cancelled, starts, ends, title, description",
+        "series_id",
+    )
+    .of(door, &ids, None)?
+    .iter()
+    .map(|row| exception_of(row, &timing))
+    .collect())
+}
+
+pub(crate) fn exception_of(row: &Row, timing: &BTreeMap<&str, &str>) -> StoredExceptionRow {
+    let series = text_of(row, "series_id").unwrap_or_default();
+    let cancelled = row.get("cancelled").and_then(Cell::integer) == Some(1);
+    let said: serde_json::Map<String, serde_json::Value> = [
+        ("start", "starts"),
+        ("end", "ends"),
+        ("summary", "title"),
+        ("description", "description"),
+    ]
+    .into_iter()
+    .filter_map(|(key, column)| Some((key.to_owned(), text_of(row, column)?.into())))
+    .collect();
+    StoredExceptionRow {
+        target_type: Some(SeriesType::Event.as_str().to_owned()),
+        recurrence_semantics: timing.get(series.as_str()).map(|word| (*word).to_owned()),
+        target_id: Some(series),
+        original_start_local: text_of(row, "original_start"),
+        scope: text_of(row, "scope"),
+        action: Some(if cancelled { "skip" } else { "override" }.to_owned()),
+        override_json: (!cancelled).then(|| serde_json::Value::Object(said).to_string()),
     }
 }
 
-pub(crate) fn decorate(event: &mut EventRow, decorations: &Decorations) {
-    let ext = decorations.ext.get(&event.event_id);
-    event.location_name = event
-        .location_place_id
-        .as_ref()
-        .and_then(|place_id| decorations.places.get(place_id).cloned());
-    event.calendar_id = ext.and_then(|row| cell_text(row, "calendar_id"));
-    event.conferencing_uri = ext.and_then(|row| cell_text(row, "conferencing_uri"));
-    event.reminders_json = ext.and_then(|row| cell_text(row, "reminders_json"));
-    event.attachments = decorations
-        .attachments
-        .get(&event.event_id)
-        .cloned()
-        .unwrap_or_default();
-    event.attendees = decorations
-        .attendees
-        .get(&event.event_id)
-        .cloned()
-        .unwrap_or_default();
-    // THE ONE SUMMARISER, RESOLVED HERE (#834): the row carries the sentence
-    // and never the raw rule.
-    event.recurrence_summary = recurrence_summary(event.rrule.as_deref());
+/// The member's calendars: owner-curated and small, by their order.
+pub(crate) fn read_calendars(door: &dyn PageDoor) -> KitResult<Vec<CalendarRow>> {
+    let named = read_pages(
+        door,
+        &PageQuery::new(
+            "agenda.upcoming.calendars",
+            "id, title",
+            "entity",
+            PageOrder::asc("title", "id"),
+        )
+        .filter("kind = ?", vec![text("calendar")]),
+        EVENT_JOIN_BOUND,
+    )?;
+    let ids = ids_of(&named, "id");
+    let painted: BTreeMap<String, (Option<String>, f64)> = by_ids(
+        "agenda.upcoming.colors",
+        "container",
+        "id, color, position",
+        "id",
+    )
+    .of(door, &ids, None)?
+    .iter()
+    .filter_map(|row| {
+        Some((
+            text_of(row, "id")?,
+            (
+                text_of(row, "color"),
+                match row.get("position") {
+                    Some(Cell::Real(at)) => *at,
+                    _ => 0.0,
+                },
+            ),
+        ))
+    })
+    .collect();
+    let mut calendars: Vec<CalendarRow> = named
+        .iter()
+        .filter_map(|row| {
+            let id = text_of(row, "id")?;
+            Some(CalendarRow {
+                color: painted.get(&id).and_then(|(color, _)| color.clone()),
+                name: text_of(row, "title"),
+                calendar_id: id,
+            })
+        })
+        .collect();
+    calendars.sort_by(|left, right| {
+        let place = |row: &CalendarRow| painted.get(&row.calendar_id).map_or(0.0, |(_, at)| *at);
+        place(left).total_cmp(&place(right))
+    });
+    Ok(calendars)
 }
 
 fn iso_of(millis: i64) -> String {
@@ -864,27 +548,26 @@ fn iso_of(millis: i64) -> String {
 }
 
 /// THE TRUE LOWER BOUND, for every row: an occurrence is in the range if it is
-/// still running at `from` — it ends AFTER `from` — or starts at or after it.
-/// So a run that ended exactly at `from` is out, and a zero-length event AT
-/// `from` is in. A row whose start does not parse is kept, as v0 keeps it:
-/// dropping it would hide a row, and the placement already draws it nowhere.
+/// still running at `from` (it ends AFTER `from`) or starts at or after it. A
+/// run that ended exactly at `from` is out, and a zero-length event AT `from` is
+/// in. A row whose start does not parse is kept: dropping it would hide a row.
 #[must_use]
 pub fn still_running_at(event: &EventRow, from_ms: i64, zone: &FireZone) -> bool {
     crate::local::interval_ms(event, zone)
         .is_none_or(|(start, end)| end > from_ms || start >= from_ms)
 }
 
-/// `upcoming` — TWO WINDOWS, the expansion, and the true lower bound.
+/// `upcoming`: two windows, the expansion, and the true lower bound.
 ///
-/// `zone` is the request's: an empty `from` is the first instant of today in
-/// it, and the lower bound reads floating and all-day rows in it.
+/// `zone` is the request's: an empty `from` is the first instant of today in it,
+/// and the lower bound reads floating and all-day rows in it.
 ///
 /// # Errors
 ///
-/// A door refusal becomes the payload's denial; a bound that is reached — the
-/// join fan-out, or [`crate::expansion::MAX_TOTAL_INSTANCES`] — is an `Err`
-/// naming the size it reached, because a short agenda that reads as a whole one
-/// is the truncation flag again (D-1020-D3-12).
+/// A door refusal becomes the payload's denial; a bound that is reached, the
+/// join fan-out or [`crate::expansion::MAX_TOTAL_INSTANCES`], is an `Err` naming
+/// the size it reached, because a short agenda that reads as a whole one is the
+/// truncation flag again (D-1020-D3-12).
 pub fn load_upcoming(
     door: &dyn PageDoor,
     from: Option<&str>,
@@ -917,55 +600,38 @@ pub fn load_upcoming(
         Err(other) => return Err(other),
     };
     let anchors = read_window(door, &recurring_anchors_statement(), RECURRING_ANCHOR_CAP)?;
-    let calendars: Vec<CalendarRow> = read_pages(door, &calendars_statement(), EVENT_JOIN_BOUND)?
-        .iter()
-        .filter_map(calendar_of)
-        .collect();
-
+    let calendars = read_calendars(door)?;
     // THE TWO WINDOWS ARE MERGED BY ID, the anchor read last so its row wins.
-    let mut merged: BTreeMap<String, EventRow> = BTreeMap::new();
-    let mut order: Vec<String> = Vec::new();
-    for row in window.rows.iter().chain(anchors.rows.iter()) {
-        let Some(event) = event_of(row) else { continue };
-        if !merged.contains_key(&event.event_id) {
-            order.push(event.event_id.clone());
+    let mut rows: Vec<Row> = Vec::new();
+    let mut at: BTreeMap<String, usize> = BTreeMap::new();
+    for row in window.rows.into_iter().chain(anchors.rows) {
+        let Some(id) = text_of(&row, "id") else {
+            continue;
+        };
+        match at.get(&id) {
+            Some(index) => rows[*index] = row,
+            None => {
+                at.insert(id, rows.len());
+                rows.push(row);
+            }
         }
-        merged.insert(event.event_id.clone(), event);
     }
-    if merged.is_empty() {
-        return Ok((
-            UpcomingData {
-                events: Vec::new(),
-                calendars,
-            },
-            None,
-        ));
+    let mut events = live_events(door, &rows)?;
+    if events.is_empty() {
+        return Ok((UpcomingData { events, calendars }, None));
     }
-    let event_ids: Vec<String> = order.clone();
-    let place_ids = place_ids_of(window.rows.iter().chain(anchors.rows.iter()));
-    let decorations = read_decorations(door, "upcoming", &event_ids, &place_ids, true)?;
-    let exception_rows: Vec<StoredExceptionRow> =
-        read_pages(door, &exceptions_statement(&event_ids)?, EVENT_JOIN_BOUND)?
-            .iter()
-            .map(exception_of)
-            .collect();
-    let mut enriched: Vec<EventRow> = order
-        .iter()
-        .filter_map(|id| merged.get(id).cloned())
-        .collect();
-    for event in &mut enriched {
-        decorate(event, &decorations);
-    }
+    decorate(door, &mut events)?;
+    let exceptions = read_exceptions(door, &events)?;
     // Open-ended "upcoming" still needs a ceiling to expand against, or a
     // doorbell re-expands a year of a DAILY series (#404).
     let expand_to = match to.filter(|value| !value.is_empty()) {
         Some(upper) => upper.to_owned(),
         None => from_ms.map_or_else(|| from.clone(), |millis| iso_of(millis + DEFAULT_EXPAND_MS)),
     };
-    let expanded = expand_recurring_events(enriched, &from_lower, &expand_to, &exception_rows)?;
-    // THE TRUE LOWER BOUND, on EVERY row: the expansion ran from the
-    // reach-back, so an occurrence of a series is no more in range by
-    // construction than a one-off is.
+    let expanded = expand_recurring_events(events, &from_lower, &expand_to, &exceptions)?;
+    // THE TRUE LOWER BOUND, on EVERY row: the expansion ran from the reach-back,
+    // so an occurrence of a series is no more in range by construction than a
+    // one-off is.
     let mut events: Vec<EventRow> = expanded
         .into_iter()
         .filter(|event| from_ms.is_none_or(|from| still_running_at(event, from, zone)))
@@ -974,99 +640,60 @@ pub fn load_upcoming(
     Ok((UpcomingData { events, calendars }, None))
 }
 
-/// `search` — the same rows, in the order the index ranked them.
-///
-/// The FTS read is `ctx.vault.search`, which is not a [`PageQuery`] and belongs
-/// to `crates/search`; the hits arrive here as the rows the index answered, in
-/// RANK ORDER, and the fold keeps that order.
-///
-/// **A cancelled event drops AFTER the hit**, never before: the index knows
-/// text, not status (`search.ts:4`).
+/// One event by id, live, decorated: what `event` and `search` fold.
+pub(crate) fn events_among(door: &dyn PageDoor, ids: &[String]) -> KitResult<Vec<EventRow>> {
+    let rows = by_ids("agenda.events.rows", "event", EVENT_COLUMNS, "id").of(door, ids, None)?;
+    let mut events = live_events(door, &rows)?;
+    decorate(door, &mut events)?;
+    Ok(events)
+}
+
+/// `search`: the same rows, in the order the index ranked them. **A cancelled
+/// event drops AFTER the hit**, never before: the index knows text, not status.
 ///
 /// # Errors
 ///
 /// A door refusal becomes the payload's denial; a reached bound is an `Err`.
-pub fn load_search(door: &dyn PageDoor, hits: &[Row]) -> KitResult<(SearchData, Option<Denial>)> {
-    let live: Vec<&Row> = hits
-        .iter()
-        .filter(|row| cell_text(row, "status").as_deref() != Some("cancelled"))
-        .collect();
-    if live.is_empty() {
+pub fn load_search(
+    door: &dyn PageDoor,
+    hits: &[(String, String)],
+) -> KitResult<(SearchData, Option<Denial>)> {
+    let ids: Vec<String> = hits.iter().map(|(id, _)| id.clone()).collect();
+    if ids.is_empty() {
         return Ok((SearchData::default(), None));
     }
-    let event_ids: Vec<String> = live
-        .iter()
-        .filter_map(|row| cell_text(row, "event_id"))
-        .collect();
-    if event_ids.is_empty() {
-        return Ok((SearchData::default(), None));
-    }
-    let place_ids = place_ids_of(live.iter().copied());
-    let decorations = match read_decorations(door, "search", &event_ids, &place_ids, false) {
-        Ok(decorations) => decorations,
+    let mut found: BTreeMap<String, EventRow> = match events_among(door, &ids) {
+        Ok(events) => events
+            .into_iter()
+            .map(|event| (event.event_id.clone(), event))
+            .collect(),
         Err(KitError::Door(message)) => {
             return Ok((SearchData::default(), Some(denial_of(message))));
         }
         Err(other) => return Err(other),
     };
-    let events = live
-        .into_iter()
-        .filter_map(|row| {
-            let mut event = event_of(row)?;
-            decorate(&mut event, &decorations);
-            // v0 spreads only the CALENDAR id onto a search hit, not the rest
-            // of the ext row: `calByEvent` maps `event_id -> calendar_id`
-            // (`search.ts:279`-`:281`).
-            event.conferencing_uri = None;
-            event.reminders_json = None;
-            event.instance_key = event.event_id.clone();
-            event.snippet = Some(cell_text(row, "_snippet").unwrap_or_default());
-            Some(event)
+    let events = hits
+        .iter()
+        .filter_map(|(id, snippet)| {
+            let mut event = found.remove(id)?;
+            (event.status.as_deref() != Some("cancelled")).then(|| {
+                event.instance_key = event.event_id.clone();
+                event.snippet = Some(snippet.clone());
+                event
+            })
         })
         .collect();
     Ok((SearchData { events }, None))
 }
 
-/// The FTS domain an event is indexed under (`crates/search`'s `DOMAINS`).
-pub const EVENT_TARGET_TYPE: &str = "core.event";
+/// The index's kind for an event.
+pub const EVENT_KIND: &str = "event";
 
-/// `agenda.search.events` — the rows the index ranked, by id.
-///
-/// The index answers a [`centraid_search::Target`] — five strings — and the
-/// fold needs the event row, so the hits are read back through the page door
-/// the same way Notes reads its own. **`deleted_at IS NULL` is stated even
-/// though the index already dropped the trash**: the index is kept in step by a
-/// trigger, and this read is the one a member's screen is drawn from.
-pub fn search_events_statement(event_ids: &[String]) -> KitResult<PageQuery> {
-    let fragment = in_list("event_id", event_ids)?;
-    Ok(PageQuery::new(
-        "agenda.search.events",
-        EVENT_COLUMNS,
-        "core_event",
-        PageOrder::asc("event_id", "event_id"),
-    )
-    .filter(
-        &format!("{} AND deleted_at IS NULL", fragment.sql),
-        fragment.bind,
-    ))
-}
-
-/// `search` from a TERM: the FTS door's ranked hits, read back as event rows
-/// and folded by [`load_search`].
-///
-/// v0's `ctx.vault.search` answered whole rows with an `_snippet` beside them;
-/// `crates/search` answers secret-free targets, so this is the step between —
-/// the ids in RANK ORDER, the rows they name, and the index's own snippet laid
-/// back on each. `limit` is the caller's and is clamped to [`SEARCH_LIMIT`];
-/// a zero is the caller's refusal to state one and is answered as nothing,
-/// never as a default.
-///
-/// **A term with no searchable word answers the empty shape and no denial**,
-/// which is v0's short-circuit reached one step earlier: a member who typed
-/// `---` was not refused anything. A door that answers [`Answer::Denied`] is
-/// the payload's denial.
-///
-/// [`Answer::Denied`]: centraid_search::Answer::Denied
+/// `search` from a TERM: the index's ranked hits, read back as event rows and
+/// folded by [`load_search`]. `limit` is the caller's and is clamped to
+/// [`SEARCH_LIMIT`]; a zero is the caller's refusal to state one and is answered
+/// as nothing. **A term with no searchable word answers the empty shape and no
+/// denial.**
 ///
 /// # Errors
 ///
@@ -1083,8 +710,7 @@ pub fn load_search_term(
     if term.is_empty() || limit == 0 {
         return Ok((SearchData::default(), None));
     }
-    let request =
-        centraid_search::SearchRequest::new(EVENT_TARGET_TYPE, term, limit.min(SEARCH_LIMIT));
+    let request = centraid_search::SearchRequest::new(EVENT_KIND, term, limit.min(SEARCH_LIMIT));
     let page = match search.query(principal, &request) {
         Ok(centraid_search::Answer::Data { page, .. }) => page,
         Ok(centraid_search::Answer::Denied(denial)) => {
@@ -1102,34 +728,11 @@ pub fn load_search_term(
         }
         Err(other) => return Ok((SearchData::default(), Some(denial_of(other.to_string())))),
     };
-    if page.rows.is_empty() {
-        return Ok((SearchData::default(), None));
-    }
-    // VAULT ORDER IS RANK ORDER, best match first. The rows come back in id
-    // order and are laid back onto this one.
-    let ids: Vec<String> = page.rows.iter().map(|target| target.id.clone()).collect();
-    let mut rows: BTreeMap<String, Row> =
-        match read_pages(door, &search_events_statement(&ids)?, EVENT_JOIN_BOUND) {
-            Ok(rows) => rows
-                .into_iter()
-                .filter_map(|row| cell_text(&row, "event_id").map(|id| (id, row)))
-                .collect(),
-            Err(KitError::Door(message)) => {
-                return Ok((SearchData::default(), Some(denial_of(message))));
-            }
-            Err(other) => return Err(other),
-        };
-    let hits: Vec<Row> = page
+    // VAULT ORDER IS RANK ORDER, best match first.
+    let hits: Vec<(String, String)> = page
         .rows
         .iter()
-        .filter_map(|target| {
-            let mut row = rows.remove(&target.id)?;
-            row.insert(
-                "_snippet".to_owned(),
-                centraid_apps_kit::row::Cell::Text(target.snippet.clone()),
-            );
-            Some(row)
-        })
+        .map(|target| (target.id.clone(), target.snippet.clone()))
         .collect();
     load_search(door, &hits)
 }
@@ -1225,10 +828,10 @@ fn recurs_in_range(month: i64, day: i64, from: &str, to: &str) -> bool {
     false
 }
 
-/// `day-context` — birthdays for the calendar grid.
+/// `day-context`: birthdays for the calendar grid.
 ///
-/// `zone` is the request's, and it decides only which day an empty `from` is:
-/// a birthday is a civil day already.
+/// `zone` is the request's, and it decides only which day an empty `from` is: a
+/// birthday is a civil day already.
 ///
 /// # Errors
 ///
@@ -1241,70 +844,86 @@ pub fn load_day_context(
     zone: &FireZone,
 ) -> KitResult<(DayContextData, Option<Denial>)> {
     let (from, to) = range_of(from, to, now, zone);
-    let parties = match read_window(door, &birthdays_statement(), PARTY_CAP) {
+    let born = match read_window(
+        door,
+        &PageQuery::new(
+            "agenda.dayContext.birthdays",
+            "id, birthday",
+            "person",
+            PageOrder::asc("id", "id"),
+        )
+        .filter("birthday IS NOT NULL", Vec::new()),
+        PARTY_CAP,
+    ) {
         Ok(window) => window.rows,
         Err(KitError::Door(message)) => {
             return Ok((DayContextData::default(), Some(denial_of(message))));
         }
         Err(other) => return Err(other),
     };
-    let schemes = read_pages(door, &flags_scheme_statement(), EVENT_JOIN_BOUND)?;
-    // NO MARKER MEANS NOBODY IS STARRED: an honest `outer`, never a refusal.
-    let starred_concept = match schemes.first().and_then(|row| cell_text(row, "scheme_id")) {
-        None => None,
-        Some(scheme_id) => {
-            let concepts =
-                read_pages(door, &flag_concepts_statement(&scheme_id), EVENT_JOIN_BOUND)?;
-            concepts
-                .iter()
-                .find(|row| cell_text(row, "notation").as_deref() == Some(STARRED_NOTATION))
-                .and_then(|row| cell_text(row, "concept_id"))
-        }
-    };
-    let starred: BTreeSet<String> = match starred_concept {
-        None => BTreeSet::new(),
-        Some(concept_id) => read_window(door, &star_tags_statement(&concept_id), TAG_CAP)?
-            .rows
-            .iter()
-            .filter(|row| cell_text(row, "concept_id").as_deref() == Some(concept_id.as_str()))
-            .filter_map(|row| cell_text(row, "target_id"))
-            .collect(),
-    };
-
-    let mut birthdays: Vec<BirthdayFact> = Vec::new();
-    for row in &parties {
-        let kind = cell_text(row, "kind");
-        if kind.as_deref().is_some_and(|kind| kind != "person") {
-            continue;
-        }
-        let Some((month, day)) = month_day_of(cell_text(row, "birth_date").as_deref()) else {
-            continue;
-        };
-        if !recurs_in_range(month, day, &from, &to) {
-            continue;
-        }
-        let Some(party_id) = cell_text(row, "party_id") else {
-            continue;
-        };
-        birthdays.push(BirthdayFact {
-            party_id: party_id.clone(),
-            name: cell_text(row, "display_name").unwrap_or_default(),
-            month,
-            day,
-            tier: if starred.contains(&party_id) {
-                "inner"
-            } else {
-                "outer"
-            },
-        });
+    let due: Vec<&Row> = born
+        .iter()
+        .filter(|row| {
+            month_day_of(text_of(row, "birthday").as_deref())
+                .is_some_and(|(month, day)| recurs_in_range(month, day, &from, &to))
+        })
+        .collect();
+    let ids: Vec<String> = due.iter().filter_map(|row| text_of(row, "id")).collect();
+    if ids.is_empty() {
+        return Ok((DayContextData::default(), None));
     }
+    // A trashed person has no birthday on the grid.
+    let names: BTreeMap<String, String> =
+        by_ids("agenda.dayContext.names", "entity", "id, title", "id")
+            .among(
+                EVENT_JOIN_BOUND,
+                door,
+                &ids,
+                Some(("deleted_at IS NULL", Vec::new())),
+            )?
+            .iter()
+            .filter_map(|row| Some((text_of(row, "id")?, text_of(row, "title")?)))
+            .collect();
+    // NO STAR MEANS NOBODY IS STARRED: an honest `outer`, never a refusal.
+    let starred: BTreeSet<String> = by_ids(
+        "agenda.dayContext.starred",
+        "edge",
+        "from_id, to_id",
+        "from_id",
+    )
+    .among(
+        EVENT_JOIN_BOUND,
+        door,
+        &ids,
+        Some(("rel = ? AND to_id = ?", vec![text("tagged"), text(STARRED)])),
+    )?
+    .iter()
+    .filter_map(|row| text_of(row, "from_id"))
+    .collect();
+    let mut birthdays: Vec<BirthdayFact> = due
+        .iter()
+        .filter_map(|row| {
+            let party_id = text_of(row, "id")?;
+            let (month, day) = month_day_of(text_of(row, "birthday").as_deref())?;
+            Some(BirthdayFact {
+                name: names.get(&party_id)?.clone(),
+                tier: if starred.contains(&party_id) {
+                    "inner"
+                } else {
+                    "outer"
+                },
+                party_id,
+                month,
+                day,
+            })
+        })
+        .collect();
     birthdays.sort_by(|left, right| {
         left.month
             .cmp(&right.month)
             .then_with(|| left.day.cmp(&right.day))
             .then_with(|| left.name.cmp(&right.name))
     });
-
     Ok((
         DayContextData {
             birthdays,
@@ -1314,32 +933,50 @@ pub fn load_day_context(
     ))
 }
 
-/// `parties` — the invite directory.
+/// `parties`: the invite directory, the people of the vault (not an
+/// organisation, a group or a pet), the owner first.
 ///
 /// # Errors
 ///
 /// A door refusal becomes the payload's denial; a reached bound is an `Err`.
 pub fn load_parties(door: &dyn PageDoor) -> KitResult<(PartiesData, Option<Denial>)> {
-    let vault_rows = match read_pages(
-        door,
-        &vault_statement("agenda.parties.vault"),
-        EVENT_JOIN_BOUND,
-    ) {
-        Ok(rows) => rows,
+    let owner = match me(door) {
+        Ok(owner) => owner,
         Err(KitError::Door(message)) => {
             return Ok((PartiesData::default(), Some(denial_of(message))));
         }
         Err(other) => return Err(other),
     };
-    let me = me_of(&vault_rows);
-    let people = read_pages(door, &people_statement(), EVENT_JOIN_BOUND)?;
-    let mut parties: Vec<PartyEntry> = people
+    let named = read_window(
+        door,
+        &PageQuery::new(
+            "agenda.parties.people",
+            "id, title",
+            "entity",
+            PageOrder::asc("title", "id"),
+        )
+        .filter("kind = ? AND deleted_at IS NULL", vec![text("person")]),
+        PARTY_CAP,
+    )?;
+    let ids = ids_of(&named.rows, "id");
+    let people: BTreeSet<String> = by_ids("agenda.parties.forms", "person", "id, form", "id")
+        .among(
+            EVENT_JOIN_BOUND,
+            door,
+            &ids,
+            Some(("form = ?", vec![text("person")])),
+        )?
+        .iter()
+        .filter_map(|row| text_of(row, "id"))
+        .collect();
+    let mut parties: Vec<PartyEntry> = named
+        .rows
         .iter()
         .filter_map(|row| {
-            let party_id = cell_text(row, "party_id")?;
+            let party_id = text_of(row, "id").filter(|id| people.contains(id))?;
             Some(PartyEntry {
-                is_you: me.as_deref() == Some(party_id.as_str()),
-                name: cell_text(row, "display_name").unwrap_or_else(|| "Guest".to_owned()),
+                is_you: owner.as_deref() == Some(party_id.as_str()),
+                name: text_of(row, "title").unwrap_or_else(|| "Guest".to_owned()),
                 party_id,
             })
         })
@@ -1351,5 +988,5 @@ pub fn load_parties(door: &dyn PageDoor) -> KitResult<(PartiesData, Option<Denia
             .cmp(&left.is_you)
             .then_with(|| left.name.cmp(&right.name))
     });
-    Ok((PartiesData { parties, me }, None))
+    Ok((PartiesData { parties, me: owner }, None))
 }
