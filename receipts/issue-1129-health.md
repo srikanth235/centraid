@@ -239,16 +239,16 @@ The owner asked for every open point to be worked on this branch. The root ran t
 
 | Open point | What landed | Commits |
 | --- | --- | --- |
-| RUSTSEC-2026-0382 | `rustls-webpki` 0.103.15 → 0.103.16; `Cargo.lock` only | d8ee957be |
+| RUSTSEC-2026-0382 | `rustls-webpki` 0.103.15 → 0.103.16, in `Cargo.lock` only. The resolver also moved `tempfile`'s `getrandom` from 0.4.3 to 0.3.4, and `cargo deny` is clean over the result | d8ee957be |
 | F-A-2: `android-core.sh` ignored `CARGO_TARGET_DIR` | It copies from `${CARGO_TARGET_DIR:-$root/target}`, a relative one read from the workspace root | 82edbb5af |
-| RP-K-2 and RP-K-6: the strictness of R-1129-12 | **R-1129-16.** All six Health requests carry `tz`, under Agenda's zone rule. The core answers several things the shell used to work out: today, today's bounds, each workout's `local_start`, `local_end` and `length_sec`, the follower's window (`window_from`, moved from Kotlin into `crates/apps/health`), and the differences (`change`/`change_pct`, `versus_typical`/`versus_typical_pct`). `kit/time/LocalDays.kt` and `DeviceClock.offsetMinutesAt` are deleted, and the three platform clocks are back to their base. A workouts read takes its zone as a decoration (`zone_if_any`), so the follower's store reads work without one. The six arms joined the shell's zone pre-check (`AppQueryRequest.zone()`). | 04acff0ab, 6237f9a09 |
+| RP-K-2 and RP-K-6: the strictness of R-1129-12 | **R-1129-16.** All six Health requests carry `tz`, under Agenda's zone rule. The core answers several things the shell used to work out: today, today's bounds, each workout's `local_start`, `local_end` and `length_sec`, the follower's window (`window_from`, moved from Kotlin into `crates/apps/health`), and the differences (`change`/`change_pct`, `versus_typical`/`versus_typical_pct`). `kit/time/LocalDays.kt` and `DeviceClock.offsetMinutesAt` are deleted, and the three platform clocks are back to their base. A workouts read takes its zone as a decoration (`zone_if_any`), so the follower's store reads work without one. The six arms joined the shell's zone pre-check (`AppQueryRequest.zone()`). That last fix was missed in 04acff0ab, which ran only the Health specs, so `ScreenQueryRuntimeSpec`'s zone pre-check case was red from 04acff0ab until lane P found it. It landed inside merge 6237f9a09 together with R-1129-19's text, and the merge's message names neither. | 04acff0ab, 6237f9a09 |
 | F-R-1: `chat_message` had no `row_version` | **R-1129-17.** Rung four, `contracts/migrations/004_chat_message_version.sql`, rebuilds the message and its two children, keeping every row. The chat commands stamp `updated_at`. The `row_version` commitment now reads every registered table the corpus lacks at the ladder head. | 5704181cd, a1a8bc98c |
 | RP-I-2: the first-launch picture | **R-1129-18.** Shared `FirstLaunch.APPS` is Home's `SPRINGBOARD_ORDER`. iOS draws it five to a row, and Android now draws the marks too. `FirstLaunchRosterSpec` holds both to the roster. | d28d19145, a3dfa9119 |
 | F-A-1: `lint-native-controls` red at the base | #1127's three system alerts and Android's raw `AlertDialog` (in `kit/`, unseen by the lint) became the kit's `ConfirmSheet` and a new `NoticeSheet`. Keep is still the default. | 5ba3d303c |
 | F-K-1: a new phone with a restored vault | **R-1129-19.** A `local:` link names its device (`phone_link.device_id`; an origin's `device_id` is the device that last read it), in rung two, amended in place. The device id is minted once per install into `SecureStore`, never in the vault. Another device's link is re-found one to one by the match key its fingerprint remembers (fingerprint v3), and is moved with the new command `phone.relink`. If nothing matches, the link is forgotten and its row kept; it is never trashed or counted by the vanish guard. A shared key pairs nothing. | 0472f2e64, 5a462e4bb, 6237f9a09 |
 | The gateway's bonjour flake | A just-written executable's first run on macOS is checked first (about 0.5 s alone, 7.7 s for sixteen at once), and the fake `dns-sd` overran its fixed 3 s and 5 s windows. `start_after` now returns when the tool exits, a fake's first run gets a 60 s ceiling, and the notes are read only once a line is complete. New trap: `docs/traps/fresh-executable-first-exec.md`. Before: 3 of 30 lib runs failed, and 197 of 200 contended runs. After: 0 of 30 and 0 of 200. | 3d2be39f1 |
 | #1127's receipt had no `## Audit` | An independent, read-only audit: PASS, with caveats, written into that receipt. `PhoneModel.kt`'s stale `file:` comment is fixed. `receipt-per-issue` is green. | ebb33e441 |
-| The mobile-jvm gate's 420 s budget | Not raised. On an idle machine (load 2): **235.7 s cold, 34.3 s warm**. The earlier 441 s and 518.9 s came from load. | — |
+| The mobile-jvm gate's 420 s budget | Not raised. On an idle machine (load 2): **235.7 s cold, 34.3 s warm**. Under load it ran over: 441 s and 518.9 s in the first wave, then 453.2 s cold in lane M2 and 568 s cold in lane P, while several heavy builds ran. | — |
 
 **Verification at the new tip**, every heavy run through `heavy.sh`, one at a time:
 
@@ -282,7 +282,7 @@ maestro test first-launch.yaml onboarding.yaml health-connect.yaml
 
 All three PASS on a fresh install of the new build, over the simulator's seeded Health. Today read "Wed 21 October", the core's day in the phone's zone. Workouts drew the core's wall clocks (00:24 today, then weekdays, then months). The screenshots are in the notes folder's `screens/close/`.
 
-Lane checks:
+Lane checks, as each lane reported them (lane R2 kept no notes file, so its figures rest on its report and on 3d2be39f1's commit message):
 - `cargo nextest -p centraid-ontology -p centraid-vault`: 676 of 676 pass (R2).
 - `cargo test -p centraid-vault -p centraid-core`: green, with the ladder DDL check (P).
 - `NewPhoneSpec`: 15 cases. `FilesFollowSpec` gains 3 and `HealthFollowSpec` 4 restored-phone cases (P).
@@ -293,7 +293,7 @@ Lane checks:
 
 - **Android has not run.** It is compiled and linted only, and no device or emulator has run it. The new sheets and first-launch marks have not been looked at on Android.
 - **Health's `connected` on a restored phone.** It reads any `health` origin, so a restored phone shows Health connected until the old phone's origin retires (R-1129-19's cost).
-- **ONT-42's third machinery departure.** The link band now records which phone wrote a link.
+- **ONT-42's fifth departure.** The link band now records which phone wrote a link.
 - **F-K-1's tests were written beside the fix**, not run red first.
 - **Deferred, unchanged:** splits, "Write a note about it", background delivery, HRV, mindful minutes and cycle tracking, a glyph per workout kind, and the published page's §03.
 
