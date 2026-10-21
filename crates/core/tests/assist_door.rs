@@ -28,7 +28,7 @@ impl Drop for Pair {
 }
 
 fn pair() -> Pair {
-    let dir = centraid_ontology::golden::scratch_dir();
+    let dir = centraid_ontology::scratch::scratch_dir();
     std::fs::create_dir_all(&dir).expect("a directory");
     let path = dir.join("vault.db");
     let copy = dir.join("harness.db");

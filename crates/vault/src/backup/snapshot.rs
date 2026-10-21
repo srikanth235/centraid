@@ -375,7 +375,9 @@ pub(crate) fn census_of(connection: &Connection) -> Result<BTreeMap<String, i64>
         .collect::<rusqlite::Result<Vec<_>>>()?
         .into_iter()
         .filter(|(table, sql)| {
-            crate::log::guard::is_reportable(table) && !sql.contains("CREATE VIRTUAL TABLE")
+            !table.starts_with("sqlite_")
+                && !crate::log::guard::is_index(table)
+                && !sql.contains("CREATE VIRTUAL TABLE")
         })
         .map(|(table, _)| table)
         .collect();
@@ -740,10 +742,12 @@ mod tests {
         vault
             .commit(|tx| {
                 tx.connection().execute(
-                    "INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at)
+                    "INSERT INTO entity (id, kind, title, created_at, updated_at)
                      VALUES (?1, 'person', ?2, ?3, ?3)",
                     rusqlite::params![id, label, now],
                 )?;
+                tx.connection()
+                    .execute("INSERT INTO person (id) VALUES (?1)", [&id])?;
                 Ok(())
             })
             .expect("commits");
@@ -751,7 +755,7 @@ mod tests {
 
     fn parties(path: &Path) -> i64 {
         read_copy(path, |connection| {
-            Ok(connection.query_row("SELECT count(*) FROM core_party", [], |row| row.get(0))?)
+            Ok(connection.query_row("SELECT count(*) FROM person", [], |row| row.get(0))?)
         })
         .expect("counts")
     }
@@ -770,10 +774,12 @@ mod tests {
         let now = vault.clock().now_text();
         let outcome = vault.commit(|tx| {
             tx.connection().execute(
-                "INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at)
+                "INSERT INTO entity (id, kind, title, created_at, updated_at)
                  VALUES (?1, 'person', 'Nobody', ?2, ?2)",
                 rusqlite::params![id, now],
             )?;
+            tx.connection()
+                .execute("INSERT INTO person (id) VALUES (?1)", [&id])?;
             assert!(
                 matches!(
                     copy(&vault, &dir.path().join("scratch")),
@@ -816,7 +822,7 @@ mod tests {
             assert_eq!(range.h, PlaintextHash::of(&bytes[start..end]));
             assert_eq!(range.name, name(&keys, &range.h, 0));
         }
-        assert_eq!(snapshot.manifest.census.get("core_party"), Some(&1));
+        assert_eq!(snapshot.manifest.census.get("person"), Some(&1));
         assert!(
             !snapshot
                 .manifest

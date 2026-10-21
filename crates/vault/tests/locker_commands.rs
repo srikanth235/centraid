@@ -61,9 +61,6 @@ impl World {
     fn new(seed: &str, key_id: &str) -> Self {
         let scratch = common::Scratch::founded(seed).expect("a vault is founded");
         let registry = registry();
-        registry
-            .install(&scratch.vault)
-            .expect("the record installs");
         if !key_id.is_empty() {
             scratch
                 .vault
@@ -588,7 +585,7 @@ fn an_edit_rewrites_the_types_fields_rather_than_patching_them() {
     // name them, and an empty list is how a caller clears them.
     let tags = |world: &World| {
         world.one::<i64>(
-            "SELECT COUNT(*) FROM core_tag WHERE target_id = ?1",
+            "SELECT COUNT(*) FROM locker_tag WHERE item_id = ?1",
             &["item-1"],
         )
     };
@@ -887,73 +884,77 @@ fn a_purge_deletes_every_sidecar_in_the_same_transaction() {
     }
     assert_eq!(
         world.one::<i64>(
-            "SELECT COUNT(*) FROM core_tag WHERE target_id = ?1",
+            "SELECT COUNT(*) FROM locker_tag WHERE item_id = ?1",
             &["item-1"]
         ),
         0,
-        "core_tag is polymorphic and no CASCADE reaches it"
+        "a purged item's tags went with it"
     );
+}
+
+/// A STAR IS A COLUMN OF LOCKER'S OWN ROW AND A LABEL IS A ROW OF ITS OWN TABLE
+/// (#1135): a Locker item is not an entity, so nothing outside Locker can tag,
+/// star, flag or search it, and no label reaches another app's rail.
+#[test]
+fn a_star_is_a_column_and_a_label_is_a_locker_tag() {
+    let world = World::new("locker-tags", "key-1");
+    world.login("item-1", "key-1");
     assert_eq!(
         world.one::<i64>(
-            "SELECT COUNT(*) FROM knowledge_annotation WHERE target_id = ?1",
+            "SELECT starred FROM locker_item WHERE item_id = ?1",
             &["item-1"]
         ),
         0
     );
-}
-
-/// A STAR IS A TAG AND A LOCKER TAG IS LOCKER'S OWN (#274, #310).
-#[test]
-fn a_star_is_a_flags_tag_and_a_label_is_a_locker_tag() {
-    let world = World::new("locker-tags", "key-1");
-    world.login("item-1", "key-1");
     world.ok(
         "locker.star_item",
         serde_json::json!({ "item_id": "item-1" }),
     );
-
-    let flags: i64 = world.one(
-        "SELECT COUNT(*) FROM core_tag t
-           JOIN core_concept c ON c.concept_id = t.concept_id
-           JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
-          WHERE t.target_id = ?1 AND s.uri = 'https://centraid.dev/schemes/flags'",
-        &["item-1"],
-    );
-    assert_eq!(flags, 1);
-    // Locker's own scheme, not the shared `centraid:tags:v1` one: labels are
-    // as private as the item, and they never appear in another app's rail.
-    let locker: i64 = world.one(
-        "SELECT COUNT(*) FROM core_tag t
-           JOIN core_concept c ON c.concept_id = t.concept_id
-           JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
-          WHERE t.target_id = ?1 AND s.uri = 'https://centraid.dev/schemes/locker-tags'",
-        &["item-1"],
-    );
-    // "money" twice and a blank one: deduplicated and trimmed away.
-    assert_eq!(locker, 1);
     assert_eq!(
         world.one::<i64>(
-            "SELECT COUNT(*) FROM core_concept_scheme WHERE uri = 'centraid:tags:v1'",
-            &[]
+            "SELECT starred FROM locker_item WHERE item_id = ?1",
+            &["item-1"]
         ),
+        1
+    );
+    // "money" twice and a blank one: deduplicated and trimmed away.
+    assert_eq!(
+        world.one::<i64>(
+            "SELECT COUNT(*) FROM locker_tag WHERE item_id = ?1",
+            &["item-1"]
+        ),
+        1
+    );
+    // Nothing of Locker's is in the vault's own tables.
+    assert_eq!(
+        world.one::<i64>("SELECT COUNT(*) FROM entity WHERE kind = 'tag'", &[]),
         0,
-        "a Locker tag reached the shared tags scheme"
+        "a Locker tag reached the vault's tags"
+    );
+    assert_eq!(
+        world.one::<i64>("SELECT COUNT(*) FROM edge", &[]),
+        0,
+        "a Locker item was joined to something"
     );
 
-    // Unstarring removes the flag and leaves the label.
+    // Unstarring clears the column and leaves the label.
     world.ok(
         "locker.unstar_item",
         serde_json::json!({ "item_id": "item-1" }),
     );
     assert_eq!(
         world.one::<i64>(
-            "SELECT COUNT(*) FROM core_tag t
-               JOIN core_concept c ON c.concept_id = t.concept_id
-               JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
-              WHERE t.target_id = ?1 AND s.uri = 'https://centraid.dev/schemes/flags'",
+            "SELECT starred FROM locker_item WHERE item_id = ?1",
             &["item-1"]
         ),
         0
+    );
+    assert_eq!(
+        world.one::<i64>(
+            "SELECT COUNT(*) FROM locker_tag WHERE item_id = ?1",
+            &["item-1"]
+        ),
+        1
     );
 }
 
@@ -1053,10 +1054,7 @@ fn a_duplicate_takes_the_re_sealed_cells_and_leaves_the_alias_behind() {
     // Nor the star.
     assert_eq!(
         world.one::<i64>(
-            "SELECT COUNT(*) FROM core_tag t
-               JOIN core_concept c ON c.concept_id = t.concept_id
-               JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
-              WHERE t.target_id = ?1 AND s.uri = 'https://centraid.dev/schemes/flags'",
+            "SELECT starred FROM locker_item WHERE item_id = ?1",
             &["item-copy"]
         ),
         0
@@ -1071,7 +1069,7 @@ fn a_duplicate_takes_the_re_sealed_cells_and_leaves_the_alias_behind() {
     );
     assert_eq!(
         world.one::<i64>(
-            "SELECT COUNT(*) FROM core_tag WHERE target_id = ?1",
+            "SELECT COUNT(*) FROM locker_tag WHERE item_id = ?1",
             &["item-copy"]
         ),
         1
@@ -1189,23 +1187,25 @@ fn a_reveal_receipt_names_a_sealed_column_and_lands_where_the_history_reads() {
             "kind": "reveal"
         }),
     );
-    let (object_type, object_id, kind): (String, String, String) = world
+    let (item, act, journal): (String, String, String) = world
         .scratch
         .vault
         .read(|connection| {
             Ok(connection.query_row(
-                "SELECT object_type, object_id,
-                        json_extract(detail_json, '$.context.kind')
-                   FROM access_receipt WHERE action = 'reveal locker.item'
-                  ORDER BY seq DESC LIMIT 1",
+                "SELECT r.item_id, r.act, j.command
+                   FROM receipt r JOIN journal j ON j.seq = r.journal_seq
+                  ORDER BY r.seq DESC LIMIT 1",
                 [],
                 |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
             )?)
         })
         .expect("the receipt is there");
-    assert_eq!(object_type, "locker.item");
-    assert_eq!(object_id, "item-1");
-    assert_eq!(kind, "reveal");
+    assert_eq!(item, "item-1");
+    assert_eq!(act, "reveal password", "the verb, then the cells it opened");
+    assert_eq!(
+        journal, "locker.reveal_receipt",
+        "the receipt names the journal row that explains it"
+    );
 
     // A RECEIPT THAT NAMES A PLAIN COLUMN IS A LIE about what was revealed.
     let reason = world.refused(
@@ -1252,8 +1252,7 @@ fn a_reveal_receipt_names_a_sealed_column_and_lands_where_the_history_reads() {
     );
     assert_eq!(
         world.one::<i64>(
-            "SELECT COUNT(*) FROM access_receipt
-              WHERE object_type = 'locker.auth' AND object_id IS NULL",
+            "SELECT COUNT(*) FROM receipt WHERE act = 'unlock' AND item_id IS NULL",
             &[]
         ),
         1
@@ -1327,12 +1326,11 @@ fn an_export_is_confirmed_receipted_and_carries_no_plaintext() {
     assert!(output.get("unseals_on").is_none());
 
     // And the one receipt a mass reveal owes.
-    let columns: String = world.one(
-        "SELECT json_extract(detail_json, '$.context.derivation') FROM access_receipt
-          WHERE action = 'reveal locker.export' ORDER BY seq DESC LIMIT 1",
+    let act: String = world.one(
+        "SELECT act FROM receipt WHERE item_id IS NULL ORDER BY seq DESC LIMIT 1",
         &[],
     );
-    assert_eq!(columns, "export");
+    assert_eq!(act, "export");
 }
 
 /// THE TOTP DOOR IS A RECEIPT DOOR NOW, and its precondition is a PRESENCE
@@ -1384,22 +1382,11 @@ fn a_field_reveal_receipt_names_the_field_and_what_the_value_was_for() {
             "kind": "reveal"
         }),
     );
-    let (field, used): (String, String) = world
-        .scratch
-        .vault
-        .read(|connection| {
-            Ok(connection.query_row(
-                "SELECT json_extract(detail_json, '$.field_id'),
-                        json_extract(detail_json, '$.context.use')
-                   FROM access_receipt WHERE action = 'reveal locker.item'
-                  ORDER BY seq DESC LIMIT 1",
-                [],
-                |row| Ok((row.get(0)?, row.get(1)?)),
-            )?)
-        })
-        .expect("the receipt is there");
-    assert_eq!(field, "field-1");
-    assert_eq!(used, "copy");
+    let act: String = world.one("SELECT act FROM receipt ORDER BY seq DESC LIMIT 1", &[]);
+    assert_eq!(
+        act, "copy value_sealed field-1",
+        "a copy, of the field's one sealed cell"
+    );
 
     // A FIELD RECEIPT THAT NAMES AN ITEM CELL is a lie about what opened.
     let reason = world.refused(
@@ -1437,12 +1424,8 @@ fn a_field_reveal_receipt_names_the_field_and_what_the_value_was_for() {
         "locker.totp_code",
         serde_json::json!({ "item_id": "item-1", "use": "copy" }),
     );
-    let used: String = world.one(
-        "SELECT json_extract(detail_json, '$.context.use') FROM access_receipt
-          WHERE action = 'reveal locker.totp_code' ORDER BY seq DESC LIMIT 1",
-        &[],
-    );
-    assert_eq!(used, "copy");
+    let act: String = world.one("SELECT act FROM receipt ORDER BY seq DESC LIMIT 1", &[]);
+    assert_eq!(act, "code_copy otp_seed");
 }
 
 /// THE SEALED-FIELD DOOR (#1047 T2): a live item's sealed field, with the

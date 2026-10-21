@@ -149,7 +149,7 @@ impl Opened {
     }
 
     fn over_a_fresh_file(with_seed: bool) -> Self {
-        let dir = centraid_ontology::golden::scratch_dir();
+        let dir = centraid_ontology::scratch::scratch_dir();
         std::fs::create_dir_all(&dir).expect("the directory is made");
         let vault = if with_seed {
             format!(
@@ -525,7 +525,7 @@ fn a_timeout_allocates_nothing() {
 /// CLAUSE 7.
 #[test]
 fn close_unblocks_next_event_with_a_terminal_answer() {
-    let dir = centraid_ontology::golden::scratch_dir();
+    let dir = centraid_ontology::scratch::scratch_dir();
     std::fs::create_dir_all(&dir).expect("made");
     let config = format!(
         r#"{{"path":{:?},"role":"gateway","create":true}}"#,
@@ -797,7 +797,7 @@ fn a_panic_in_open_hands_back_no_handle() {
 /// the ABI: a negative code, no handle written, and a line that names the reason.
 #[test]
 fn a_refusal_at_open_is_a_negative_code_no_handle_and_a_line_that_says_why() {
-    let dir = centraid_ontology::golden::scratch_dir();
+    let dir = centraid_ontology::scratch::scratch_dir();
     std::fs::create_dir_all(&dir).expect("the directory is made");
     let path = dir.join("from-the-future.db");
 
@@ -879,7 +879,7 @@ fn a_refusal_at_open_is_a_negative_code_no_handle_and_a_line_that_says_why() {
 /// comment names in those words. See `code_for_open`.
 #[test]
 fn an_open_that_refuses_an_ordinary_file_never_answers_ok() {
-    let dir = centraid_ontology::golden::scratch_dir();
+    let dir = centraid_ontology::scratch::scratch_dir();
     std::fs::create_dir_all(&dir).expect("the directory is made");
     let path = dir.join("not-a-vault.db");
     // A REAL SQLITE FILE AND NOT RANDOM BYTES: `application_id 0` is what a
@@ -1331,7 +1331,7 @@ fn the_pair_and_restore_answers_carry_a_safety_number_a_member_can_read_aloud() 
 /// with an `ERROR_CODE_INVALID_REQUEST` body that quotes no word.
 #[test]
 fn the_words_are_minted_judged_and_seeded_over_a_core_with_no_vault() {
-    let dir = centraid_ontology::golden::scratch_dir();
+    let dir = centraid_ontology::scratch::scratch_dir();
     std::fs::create_dir_all(&dir).expect("the directory is made");
     let config = format!(
         r#"{{"path":{:?},"create":false}}"#,

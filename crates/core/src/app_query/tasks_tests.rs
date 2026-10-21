@@ -34,7 +34,7 @@ impl Scratch {
     /// Founded with the vault clock stopped at `now` — the way to stand inside
     /// the hours a run happened to miss (#1090).
     fn founded_at(now: &str) -> Self {
-        let dir = centraid_ontology::golden::scratch_dir();
+        let dir = centraid_ontology::scratch::scratch_dir();
         std::fs::create_dir_all(&dir).expect("the directory is made");
         let now = centraid_vault::time::recurrence::parse_instant_ms(now).expect("an instant");
         let clock = std::sync::Arc::new(centraid_vault::clock::FixedClock::at(now));

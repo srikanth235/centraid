@@ -181,7 +181,7 @@ mod tests {
     use super::*;
 
     fn scratch() -> (PathBuf, Vault) {
-        let dir = centraid_ontology::golden::scratch_dir();
+        let dir = centraid_ontology::scratch::scratch_dir();
         std::fs::create_dir_all(&dir).expect("the directory is made");
         let file = dir.join("vault.sqlite3");
         let vault = Vault::create(&file).expect("a vault");

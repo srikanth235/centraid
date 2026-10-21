@@ -101,9 +101,6 @@ impl Sealed {
         let scratch =
             common::Scratch::founded("locker-plaintext-gate").expect("a vault is founded");
         let registry = Registry::with_system_commands().expect("the registry builds");
-        registry
-            .install(&scratch.vault)
-            .expect("the record installs");
         let key = locker_key();
         scratch
             .vault
@@ -233,7 +230,6 @@ fn nothing_the_vault_serves_or_backs_up_carries_locker_plaintext() {
                 limit: 100,
                 after: None,
                 held_thumbnail: false,
-                note_body: false,
                 document_size: false,
             })
             .expect("the door answers");

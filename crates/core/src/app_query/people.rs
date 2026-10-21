@@ -551,7 +551,7 @@ mod tests {
 
     impl Scratch {
         fn founded() -> Self {
-            let dir = centraid_ontology::golden::scratch_dir();
+            let dir = centraid_ontology::scratch::scratch_dir();
             std::fs::create_dir_all(&dir).expect("the directory is made");
             let handle = open_at(&dir.join("vault.db"), ADDED);
             handle

@@ -52,7 +52,7 @@ struct Drive {
 
 impl Drive {
     fn founded(seed: &str) -> Self {
-        let dir = centraid_ontology::golden::scratch_dir();
+        let dir = centraid_ontology::scratch::scratch_dir();
         std::fs::create_dir_all(&dir).expect("a scratch directory");
         let clock = Arc::new(FixedClock::at(
             centraid_vault::clock::parse_iso_ms(EPOCH).expect("the epoch parses"),

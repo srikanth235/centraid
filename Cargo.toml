@@ -50,6 +50,7 @@ image = { version = "0.25.10", default-features = false, features = [
   "webp",
 ] }
 blake3 = "1.8"
+unicode-normalization = "0.1"
 jsonschema = "0.30"
 proptest = "1"
 # `session` is the log plane's capture mechanism and it requires `bundled`

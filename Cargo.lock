@@ -769,11 +769,7 @@ dependencies = [
 name = "centraid-ontology"
 version = "1.0.0-alpha.0"
 dependencies = [
- "blake3",
- "flate2",
- "hex",
  "rusqlite",
- "serde",
  "serde_json",
  "thiserror",
 ]
@@ -797,6 +793,7 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
+ "tempfile",
  "thiserror",
 ]
 
@@ -823,6 +820,7 @@ dependencies = [
  "tempfile",
  "thiserror",
  "tracing",
+ "unicode-normalization",
 ]
 
 [[package]]

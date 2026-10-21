@@ -1,77 +1,42 @@
 #![forbid(unsafe_code)]
-//! # The FTS door — text search as the vault's own question (#1020, D-1020-N1)
+//! # The FTS door: text search as the vault's own question
 //!
-//! Matching happens **inside SQLite**. The alternative is what every app in v0
-//! stopped doing: pull a table and grep it, over data that has no upper
-//! bound. The FTS5 shadow tables are the vault's — one per text-bearing
-//! entity, kept in step by triggers the
-//! baseline installs — and **this crate owns every `MATCH` statement in the
-//! workspace**. The app kit's grammar has no `MATCH` production at all
-//! ([`centraid_apps_kit::grammar`]), which is what makes "an app cannot search
-//! by hand" a fact rather than a convention.
+//! Matching happens **inside SQLite**. The vault keeps ONE index, `search`, a
+//! contentless FTS5 table whose rowid is `entity.n`, written at commit by
+//! `crates/vault`'s gate for every entity a command touched
+//! ([#1135](https://github.com/srikanth235/centraid/issues/1135)). This crate
+//! owns every `MATCH` statement in the workspace; the app kit's grammar has no
+//! `MATCH` production at all ([`centraid_apps_kit::grammar`]), which is what
+//! makes "an app cannot search by hand" a fact rather than a convention.
 //!
-//! ## What this crate promises, and what enforces each promise
+//! A read joins `entity` on `n` for the kind and the trash filter, so a result
+//! is an entity's id, kind and title and nothing else: **a result can carry no
+//! secret** because the index holds none. Locker is not an entity and is not in
+//! the index, so asking for it is a typed [`SearchError::NotSearchable`], never
+//! an empty page (an empty page reads as "no matches", which is a different
+//! claim about the vault).
 //!
 //! | Promise | What enforces it |
 //! |---|---|
-//! | SQL lives here, not in an app | `cargo xtask rules`' `sql-confinement` allows `crates/{ontology,vault,seat,search}` and `crates/apps/kit`, and nothing else |
+//! | SQL lives here, not in an app | `cargo xtask rules`' `sql-confinement` |
 //! | Every read is a window | [`Search::query`] takes a [`centraid_apps_kit::page::PageRequest`], whose `limit` is required and has no default |
 //! | A window continues by keyset | [`Page::next`] is the last row's `(rank, id)`; there is no offset to reconstruct |
-//! | A denial is a VALUE | [`Answer`] is `Denied` or `Data`, never an `Err` (census §A seam 6) |
-//! | A bound reports the size it reaches | [`SearchRequest::limit`] is clamped by [`MAX_MATCH_ROWS`] and [`Answer::window`] says what it actually was (D-1020-D3-12) |
-//! | **A result can carry no secret** | [`Target`], and [`domains::assert_no_sealed_column`] — see below |
-//! | A correction is a bounded lookup (#1097) | [`Search::correct`] replaces a word by a whole term the named domains' and named kinds' vocabularies hold, reads at most [`MAX_VOCAB_SCAN`] rows per word per index, and refuses an entity that is neither exactly as `query` does |
-//!
-//! ## Secret-free BY CONSTRUCTION, not by filtering
-//!
-//! A search result is a [`Target`]: five strings, every one of them read from a
-//! column named in [`domains::DOMAINS`]. Three separate things have to be true
-//! before a sealed value could reach a caller through this door, and each is
-//! closed by a mechanism rather than by review:
-//!
-//! 1. **No sealed column is projected.** Every column any domain reads is
-//!    checked against [`centraid_ontology::registries::sealed_physical_columns`]
-//!    at door construction ([`domains::assert_no_sealed_column`]), so a domain
-//!    that grew a sealed projection fails to open rather than answering.
-//! 2. **No sealed column is INDEXED.** v0 throws at DDL-build time for an FTS
-//!    spec naming a sealed column (issue #293) — FTS exclusion is one of the
-//!    six sealed-column enforcement points (census §D2). [`SqliteDoor::open`]
-//!    re-checks the live index columns
-//!    against the same registry, so the DDL and this door cannot disagree. A
-//!    column folded in from another table ([`domains::FOLDED`], #1097) is held
-//!    to it through its listed sources, and an index column nobody listed does
-//!    not open.
-//! 3. **`locker.item` is not a domain, and not named.** The absence is
-//!    structural: the powerbox reaches six domains, the named kinds (the
-//!    containers a member files things in, and the chat history) are a second
-//!    list ([`named::NAMED`], held to the same two checks above) and
-//!    Locker is in neither, so a secret cannot become a link target or a result
-//!    by *adding a probe*. Asking for it is a typed [`SearchError::NotADomain`].
-//!
-//! `crates/search/tests/door.rs` plants a secret in every sealed column the
-//! registry names — **sealed by `crates/vault::custody` itself**, as the member
-//! key's `lk1:` cell — and asserts the door answers nothing carrying either the
-//! plaintext or the ciphertext. A hand-typed prefix would prove something about
-//! a string; this proves something about the vault.
+//! | A denial is a VALUE | [`Answer`] is `Denied` or `Data`, never an `Err` |
+//! | A bound reports the size it reaches | [`SearchRequest::page`] is clamped by [`MAX_MATCH_ROWS`] and [`Answer::window`] says what it actually was |
+//! | A correction is a bounded lookup | [`Search::correct`] replaces a word by a whole term of the one vocabulary, reading at most [`MAX_VOCAB_SCAN`] rows per word |
 //!
 //! ## What this crate is NOT
 //!
-//! It is not the consent pipeline. v0's `searchEntity` evaluates access, folds
-//! in the consent of every entity whose canonical text the index carries, fails
-//! closed on a field mask that hides an indexed column, and receipts the
-//! decision (`search.ts:43`-`:130`). Those are `crates/vault`'s gateway, whose
-//! Rust home is the paged door; this crate takes the [`Principal`] it is given
-//! and states, in [`SqliteDoor`]'s own words, which of those walls it does and
-//! does not stand behind yet.
+//! It is not the consent pipeline: it takes the [`Principal`] it is given and
+//! answers the OWNER's view. Wiring a consented search is `crates/vault`'s
+//! paged-door work, written down here rather than stubbed, because a stub that
+//! *looks* like a consent check is worse than an absence that is written down.
 
-pub mod domains;
 pub mod matching;
-pub mod named;
+pub mod snippet;
 pub mod sqlite;
 
-pub use domains::{DOMAINS, Domain, domain_of};
 pub use matching::{MAX_MATCH_TOKENS, match_expression};
-pub use named::{NAMED, Named, named_of};
 pub use sqlite::{MAX_VOCAB_SCAN, SqliteDoor};
 
 use centraid_apps_kit::page::{Page, PageRequest};
@@ -109,47 +74,44 @@ impl Principal {
     }
 }
 
-/// One search: which domain, what words, how many rows, and where to continue.
+/// One search: which kinds, what words, how many rows, and where to continue.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SearchRequest {
-    /// A logical entity from [`DOMAINS`], e.g. `knowledge.note`, or from
-    /// [`NAMED`], e.g. `core.collection` or `chat.thread`.
-    pub entity: String,
+    /// The kinds to look in (`note`, `person`, `event`, ...), by the words
+    /// `entity.kind` spells. Empty answers every searchable kind.
+    pub kinds: Vec<String>,
     /// Owner-typed words. Compiled by [`match_expression`]; FTS5 operators in
     /// it stay literals.
     pub query: String,
     /// The window, and where it continues from. Required, with no default.
     pub page: PageRequest,
-    /// Ids of this domain the caller wants left out — Notes passes its journal
-    /// set, because the Journal place is those entries' one home (#834
-    /// R-journal). Applied **in the door**, over the ranked hits, so an
-    /// all-journal search answers an empty list rather than a filtered one.
+    /// Ids the caller wants left out: Notes passes its journal set, because the
+    /// Journal place is those entries' one home (#834 R-journal). Applied **in
+    /// the door**, over the ranked hits, so an all-journal search answers an
+    /// empty list rather than a filtered one.
     pub excluded_ids: Vec<String>,
-    /// Only the rows that open in this app, when set. A container index that
-    /// serves two apps (`core.collection`: notebooks open in Notes, albums in
-    /// Photos) answers one app's rows; an entity that opens in another app answers
-    /// none. `None` answers every row.
-    pub app: Option<String>,
 }
 
 impl SearchRequest {
-    /// A first window over one domain.
+    /// A first window over one kind.
     #[must_use]
-    pub fn new(entity: impl Into<String>, query: impl Into<String>, limit: usize) -> Self {
+    pub fn new(kind: impl Into<String>, query: impl Into<String>, limit: usize) -> Self {
+        Self::across([kind.into()], query, limit)
+    }
+
+    /// A first window over several kinds at once; none means every searchable one.
+    #[must_use]
+    pub fn across(
+        kinds: impl IntoIterator<Item = String>,
+        query: impl Into<String>,
+        limit: usize,
+    ) -> Self {
         Self {
-            entity: entity.into(),
+            kinds: kinds.into_iter().collect(),
             query: query.into(),
             page: PageRequest::first(limit),
             excluded_ids: Vec::new(),
-            app: None,
         }
-    }
-
-    /// The same request narrowed to the rows that open in `app`.
-    #[must_use]
-    pub fn in_app(mut self, app: impl Into<String>) -> Self {
-        self.app = Some(app.into());
-        self
     }
 
     /// The same request with ids the caller wants excluded.
@@ -211,36 +173,26 @@ impl Answer {
     }
 }
 
-/// ONE SEARCH RESULT, AND IT CANNOT CARRY A SECRET.
+/// One hit. Strings and nothing else: there is no `Value`, no map, no byte field,
+/// so there is no shape a sealed cell could arrive in even if the index held one,
+/// and it holds none (Locker is not indexed).
 ///
-/// Five strings and nothing else. There is no `Value`, no map, no
-/// `extra: serde_json::Value`, no byte field — so there is no shape a sealed
-/// cell could arrive in even if a domain grew one, and
-/// [`domains::assert_no_sealed_column`] is what stops a domain growing one at
-/// all. This is v0's `LinkTarget`, which the powerbox already treats as its
-/// whole vocabulary.
-///
-/// `snippet` is the index's own highlight (`snippet(fts, -1, '⟦', '⟧', '…',
-/// 12)`), and it is a projection of the SAME indexed columns — a sealed column
-/// is not indexed, so it cannot appear in a snippet either.
+/// `snippet` is the matching words in their text, marked `⟦…⟧` ([`snippet`]),
+/// read from the same text the index was written from.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Target {
-    /// The logical entity, e.g. `knowledge.note`.
+    /// The entity's kind (`note`, `person`, ...).
     #[serde(rename = "type")]
     pub entity: String,
-    /// The row's own primary key.
+    /// The entity's id.
     pub id: String,
-    /// The first non-empty label column. A row with none **is not a target** —
-    /// an unlabelled link is a link a member cannot recognise.
+    /// The entity's title. An entity with none **is not a target**: an
+    /// unlabelled link is a link a member cannot recognise.
     pub title: String,
-    /// The first non-empty subtitle column, or the app's name when there is
-    /// none. Never empty, so a surface has nothing to guess.
+    /// What the hit is, in words (`note`, `person`, ...), so a surface never
+    /// has to guess; never empty.
     pub subtitle: String,
-    /// The app a member would open this in, by ID. The product catalogue owns
-    /// the NAME (#883, ruling O-label), so this crate carries the id and
-    /// `crates/design` lowers it.
-    pub app_id: String,
-    /// The index's highlight of the match, or empty when it had none.
+    /// The highlight of the match, or empty when it had none.
     pub snippet: String,
 }
 
@@ -266,9 +218,9 @@ pub trait Search {
     /// [`centraid_apps_kit::spelling`]'s, which the assistant's name resolver
     /// reads too.
     ///
-    /// `entities` are the domains and named kinds the caller is about to search
+    /// `entities` are the kinds the caller is about to search
     /// again, and the same refusal applies as in `query`: an entity that is
-    /// neither is [`SearchError::NotADomain`], so Locker has no vocabulary to ask.
+    /// neither is [`SearchError::NotSearchable`], so Locker has no vocabulary to ask.
     ///
     /// The default is `None`, so a door with no vocabulary (a test double, a
     /// recorder around another door) is a door that corrects nothing and not one
@@ -293,44 +245,20 @@ pub trait Search {
 /// empty page.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum SearchError {
-    /// The entity is not one of the seven domains or the named kinds. **`locker.item`
-    /// lands here on purpose**: the absence is the security property, so asking has
-    /// to fail loudly rather than answer nothing and look like "no matches".
-    /// `count` is the number of domains.
     #[error(
-        "`{entity}` is not a search domain or a named kind — the powerbox reaches {count} domains and a secret cannot become one by adding a probe (#1020, D-1020-N1)"
+        "`{kind}` is not a kind the vault searches: its index holds {count} kinds, and a secret cannot become one (#1135)"
     )]
-    NotADomain { entity: String, count: usize },
+    NotSearchable { kind: String, count: usize },
 
-    /// Every word was punctuation. v0 throws `contract` here for the same
-    /// reason: an empty quoted phrase is an FTS5 syntax error, so there is no
-    /// statement to run (`search.ts:66`-`:69`).
     #[error("\"{query}\" has no searchable words")]
     NoSearchableWords { query: String },
 
-    /// The index is not in this file, or does not carry the column the domain
-    /// projects. A door that answered anyway would be answering over a
-    /// different model than the one it was written against.
-    #[error("the index for `{entity}` is not usable: {detail}")]
-    IndexUnusable { entity: String, detail: String },
+    #[error("the search index is not usable: {detail}")]
+    IndexUnusable { detail: String },
 
-    /// A SEALED COLUMN IS REACHABLE FROM THIS DOOR. Refusing to open is the
-    /// only safe answer: the alternative is a door that filters, and a filter
-    /// is a thing someone edits.
-    #[error(
-        "`{entity}`.`{column}` is a sealed column and `{table}` feeds the search index — sealed columns are never indexed (#293; #1020, D-1020-N1)"
-    )]
-    SealedColumnReachable {
-        entity: String,
-        table: String,
-        column: String,
-    },
-
-    /// The window itself was refused by the kit.
     #[error("{0}")]
     Window(#[from] centraid_apps_kit::error::KitError),
 
-    /// SQLite said no. A broken fixture or a file from a newer rung.
     #[error("search: {0}")]
     Sqlite(String),
 }

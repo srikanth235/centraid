@@ -38,7 +38,7 @@ impl Drop for Scratch {
 
 impl Scratch {
     fn founded() -> Self {
-        let dir = centraid_ontology::golden::scratch_dir();
+        let dir = centraid_ontology::scratch::scratch_dir();
         std::fs::create_dir_all(&dir).expect("the directory is made");
         let now = centraid_vault::time::recurrence::parse_instant_ms(NOW).expect("an instant");
         let config = CoreConfig::new(dir.join("vault.db")).with_clock(

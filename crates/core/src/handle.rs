@@ -1456,7 +1456,7 @@ mod tests {
 
     impl Scratch {
         fn founded() -> Self {
-            let dir = centraid_ontology::golden::scratch_dir();
+            let dir = centraid_ontology::scratch::scratch_dir();
             std::fs::create_dir_all(&dir).expect("the directory is made");
             let handle = Core::open(CoreConfig::new(dir.join("vault.db"))).expect("it opens");
             handle
@@ -1626,7 +1626,7 @@ mod tests {
     /// the found that follows it — which is a state nothing could leave over
     /// this ABI until #1029 W5 added the door.
     fn unfounded() -> Scratch {
-        let dir = centraid_ontology::golden::scratch_dir();
+        let dir = centraid_ontology::scratch::scratch_dir();
         std::fs::create_dir_all(&dir).expect("the directory is made");
         let handle = Core::open(CoreConfig::new(dir.join("vault.db"))).expect("it opens");
         Scratch { dir, handle }
@@ -1752,7 +1752,7 @@ mod tests {
     /// released case, which is the one that matters in production.
     #[test]
     fn an_expected_digest_is_carried_into_open_and_a_mismatch_is_typed() {
-        let dir = centraid_ontology::golden::scratch_dir();
+        let dir = centraid_ontology::scratch::scratch_dir();
         std::fs::create_dir_all(&dir).expect("the directory is made");
         let handle =
             Core::open(CoreConfig::new(dir.join("vault.db")).expecting_digest("aaaa1111bbbb2222"))
@@ -1898,7 +1898,7 @@ mod tests {
 
     /// A founded core holding the vault's keys, its content store open.
     fn unlocked() -> Scratch {
-        let dir = centraid_ontology::golden::scratch_dir();
+        let dir = centraid_ontology::scratch::scratch_dir();
         std::fs::create_dir_all(&dir).expect("the directory is made");
         let words = "abandon abandon abandon abandon abandon abandon abandon abandon \
                      abandon abandon abandon abandon abandon abandon abandon abandon \

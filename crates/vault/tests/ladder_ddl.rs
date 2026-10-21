@@ -16,7 +16,7 @@
 //! vault in a scratch directory and re-renders the fixture in memory from its
 //! live schema, exactly as `bin/export-ladder-ddl` does, and diffs.
 
-use centraid_ontology::golden::repo_root;
+use centraid_ontology::scratch::repo_root;
 use centraid_vault::migrations::render_ladder_ddl;
 
 /// The first differing line of two texts, as a message a reviewer can act on.
@@ -71,46 +71,41 @@ fn the_ddl_fixture_is_not_vacuous() {
         .expect("the DDL fixture is committed");
     let statements = fixture.matches("\nCREATE ").count();
     assert!(
-        statements > 500,
+        statements > 80,
         "only {statements} statements in the fixture"
     );
-    assert!(fixture.contains("CREATE TABLE core_party"));
-    assert!(fixture.contains("CREATE VIRTUAL TABLE fts_knowledge_note"));
+    for object in [
+        "CREATE TABLE entity ",
+        "CREATE TABLE edge ",
+        "CREATE VIRTUAL TABLE search ",
+        "entity_kind_is_fixed",
+        "edge_has_a_shape",
+        "journal_is_evidence",
+        "locker_key_one_generation",
+    ] {
+        assert!(fixture.contains(object), "`{object}` is not in the fixture");
+    }
 }
 
 #[test]
-fn the_fixture_is_the_ladder_head_and_not_the_corpuss_description() {
-    // THE POINT OF THE SPLIT. The two files are different fixtures answering
-    // different questions, and this is what stops one being silently repointed
-    // at the other: the ladder head carries v1's objects, and the corpus, a v0
-    // file, carries none of them — and what v1 dropped is in neither.
+fn nothing_the_model_deleted_is_founded() {
     let fixture = std::fs::read_to_string(repo_root().join("contracts/schema/vault-ddl.sql"))
-        .expect("the ladder-head fixture is committed");
-    let corpus =
-        std::fs::read_to_string(repo_root().join("contracts/golden/issue-1020/vault-ddl.sql"))
-            .expect("the corpus's description is committed");
-    // The old backup plane's tables were once two more names here; they were
-    // dropped before the first release (#1080), so the head carries the
-    // collection kind's and the Locker's guards instead.
-    for object in [
-        "core_entity_revision_no_self_parent",
-        "core_link_no_revises_edge",
-        "core_collection_kind_is_immutable",
-        "locker_key_one_generation",
+        .expect("the DDL fixture is committed");
+    for gone in [
+        "core_entity",
+        "core_party",
+        "core_tag",
+        "core_link",
+        "command_definition",
+        "access_receipt",
+        "phone_link",
+        "social_thread",
+        "fts_core_party",
+        "blob_staging",
     ] {
         assert!(
-            fixture.contains(object),
-            "`{object}` is v1's object and is not in the ladder-head fixture"
-        );
-        assert!(
-            !corpus.contains(object),
-            "`{object}` is in the corpus's description, which is a v0 file"
-        );
-    }
-    for dropped in ["backup_base_range", "backup_blob_custody"] {
-        assert!(
-            !fixture.contains(&format!("CREATE TABLE {dropped}")),
-            "`{dropped}` is the old backup plane's, which a new vault no longer founds"
+            !fixture.contains(gone),
+            "`{gone}` belongs to the model #1135 replaced and a new vault no longer founds it"
         );
     }
 }

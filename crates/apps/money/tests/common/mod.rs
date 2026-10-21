@@ -26,7 +26,7 @@ pub struct Scratch {
 
 impl Scratch {
     pub fn founded(seed: &str) -> Self {
-        let dir = centraid_ontology::golden::scratch_dir();
+        let dir = centraid_ontology::scratch::scratch_dir();
         std::fs::create_dir_all(&dir).expect("a scratch directory");
         let vault = Vault::create_with(
             dir.join("vault.db"),
@@ -131,7 +131,6 @@ impl PageDoor for KeysetDoor<'_> {
                     .as_ref()
                     .map(|c| (c.sort_key.clone(), c.pk.clone())),
                 held_thumbnail: false,
-                note_body: false,
                 document_size: false,
             })
             .map_err(|e| KitError::Door(e.to_string()))?;

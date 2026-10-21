@@ -365,7 +365,6 @@ fn count_rows(
                     limit: 500,
                     after,
                     held_thumbnail: false,
-                    note_body: false,
                     document_size: false,
                 })?;
                 rows += answer.rows.len();

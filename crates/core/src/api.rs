@@ -614,7 +614,7 @@ mod tests {
     /// vault that names none.
     #[test]
     fn a_local_day_column_is_each_instants_day_in_the_stated_zone() {
-        let scratch = centraid_ontology::golden::scratch_dir();
+        let scratch = centraid_ontology::scratch::scratch_dir();
         std::fs::create_dir_all(&scratch).expect("made");
         let vault = Vault::create(scratch.join("v.db")).expect("a vault");
         vault.found("T", "O").expect("founded");
@@ -690,7 +690,7 @@ mod tests {
     /// than as an internal error the shell would restart the core over.
     #[test]
     fn a_zero_limit_and_a_missing_order_column_reach_the_shell_as_invalid_request() {
-        let scratch = centraid_ontology::golden::scratch_dir();
+        let scratch = centraid_ontology::scratch::scratch_dir();
         std::fs::create_dir_all(&scratch).expect("the directory is made");
         let vault = Vault::create(scratch.join("v.db")).expect("a vault");
         vault.found("T", "O").expect("founded");
@@ -725,7 +725,7 @@ mod tests {
     /// `currency` to state it of is refused rather than answered with 2s.
     #[test]
     fn the_minor_units_column_is_the_kits_exponent_of_each_rows_currency() {
-        let scratch = centraid_ontology::golden::scratch_dir();
+        let scratch = centraid_ontology::scratch::scratch_dir();
         std::fs::create_dir_all(&scratch).expect("made");
         let vault = Vault::create(scratch.join("v.db")).expect("a vault");
         vault.found("T", "O").expect("founded");
@@ -840,7 +840,7 @@ mod tests {
 
     #[test]
     fn a_table_no_screen_pages_is_refused_and_one_a_screen_pages_still_answers() {
-        let scratch = centraid_ontology::golden::scratch_dir();
+        let scratch = centraid_ontology::scratch::scratch_dir();
         std::fs::create_dir_all(&scratch).expect("made");
         let vault = Vault::create(scratch.join("v.db")).expect("a vault");
         vault.found("T", "O").expect("founded");
@@ -902,7 +902,7 @@ mod tests {
     /// (`source = ?`) reads only `phone_link`.
     #[test]
     fn the_phone_link_pages_by_source_through_the_door() {
-        let scratch = centraid_ontology::golden::scratch_dir();
+        let scratch = centraid_ontology::scratch::scratch_dir();
         std::fs::create_dir_all(&scratch).expect("made");
         let vault = Vault::create(scratch.join("v.db")).expect("a vault");
         vault.found("T", "O").expect("founded");
@@ -1016,7 +1016,7 @@ mod tests {
     /// predicates the stores write, including the `lower(...) LIKE` and the event-scoped bind.
     #[test]
     fn a_followed_birthday_and_a_followed_exception_page_through_the_door() {
-        let scratch = centraid_ontology::golden::scratch_dir();
+        let scratch = centraid_ontology::scratch::scratch_dir();
         std::fs::create_dir_all(&scratch).expect("made");
         let vault = Vault::create(scratch.join("v.db")).expect("a vault");
         vault.found("T", "O").expect("founded");
@@ -1158,7 +1158,7 @@ mod tests {
     /// `crates/vault/src/page.rs` (`a_followed_folders_head_hash_subquery_answers`).
     #[test]
     fn a_followed_folder_reads_its_documents_and_a_change_is_a_revision() {
-        let scratch = centraid_ontology::golden::scratch_dir();
+        let scratch = centraid_ontology::scratch::scratch_dir();
         std::fs::create_dir_all(&scratch).expect("made");
         let vault = Vault::create(scratch.join("v.db")).expect("a vault");
         vault.found("T", "O").expect("founded");
@@ -1260,7 +1260,7 @@ mod tests {
 
     #[test]
     fn a_query_with_no_order_is_refused() {
-        let scratch = centraid_ontology::golden::scratch_dir();
+        let scratch = centraid_ontology::scratch::scratch_dir();
         std::fs::create_dir_all(&scratch).expect("made");
         let vault = Vault::create(scratch.join("v.db")).expect("a vault");
         vault.found("T", "O").expect("founded");
@@ -1290,7 +1290,7 @@ mod tests {
     /// one statement `VaultRoster.identify` uses.
     #[test]
     fn founding_turns_a_created_file_into_a_vault_that_can_name_itself() {
-        let scratch = centraid_ontology::golden::scratch_dir();
+        let scratch = centraid_ontology::scratch::scratch_dir();
         std::fs::create_dir_all(&scratch).expect("the directory is made");
         let vault = Vault::create(scratch.join("v.db")).expect("a vault file");
 
@@ -1329,7 +1329,7 @@ mod tests {
     /// a vault whose identity depends on a random draw.
     #[test]
     fn a_second_found_is_refused_and_the_vault_already_here_is_untouched() {
-        let scratch = centraid_ontology::golden::scratch_dir();
+        let scratch = centraid_ontology::scratch::scratch_dir();
         std::fs::create_dir_all(&scratch).expect("the directory is made");
         let vault = Vault::create(scratch.join("v.db")).expect("a vault file");
         let first = found_here(
@@ -1367,7 +1367,7 @@ mod tests {
     /// "No vault yet" over it and the member renames the vault from inside it.
     #[test]
     fn an_empty_display_name_founds_a_vault_that_is_simply_unnamed() {
-        let scratch = centraid_ontology::golden::scratch_dir();
+        let scratch = centraid_ontology::scratch::scratch_dir();
         std::fs::create_dir_all(&scratch).expect("the directory is made");
         let vault = Vault::create(scratch.join("v.db")).expect("a vault file");
         let answer = found_here(&vault, &wire::FoundRequest::default()).expect("founded");

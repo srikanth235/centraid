@@ -1,4 +1,4 @@
-//! THE TEST DOOR over the REPLICATED tables — questions a test asks about a
+//! THE TEST DOOR over a vault's own tables — questions a test asks about a
 //! copy of a vault, in the crate that owns the schema (#1025 S5).
 //!
 //! ## Why it exists
@@ -7,14 +7,14 @@
 //! `crates/{ontology,vault,seat,search}` and `crates/apps/kit`, and the refusal
 //! is the point: a query written somewhere else is a crate reaching past its
 //! layer, and a test is not an exemption — a test that hand-writes
-//! `SELECT … FROM core_party` is a second, unversioned opinion about a schema
+//! `SELECT … FROM entity` is a second, unversioned opinion about a schema
 //! this crate owns, and it goes stale the first time a column moves.
 //!
 //! S1–S4 built the seat's end-to-end tests with the statements inline and the
 //! rule went red. These are those questions, moved here and **named for the
 //! question rather than for the SQL**, so the call site reads as the assertion
 //! it is: `assert_eq!(vault_rows(connection), 1)` says what
-//! `query_row("SELECT COUNT(*) FROM core_vault", …)` only implied.
+//! `query_row("SELECT COUNT(*) FROM vault", …)` only implied.
 //!
 //! ## Why a plain `pub mod` and not a cargo feature
 //!
@@ -37,11 +37,7 @@
 
 use rusqlite::Connection;
 
-/// How many `core_vault` rows a file holds.
-///
-/// The question behind it is "did the founding commit really land here" — a
-/// replica that reported applying rows into a schema it had never laid down
-/// passes every count a caller takes of its own report.
+/// How many `vault` rows a file holds: one once it is founded.
 ///
 /// A file with no such table answers **0** rather than failing: "this is not a
 /// vault" and "this vault is not founded" are the same answer to this question,
@@ -49,191 +45,114 @@ use rusqlite::Connection;
 #[must_use]
 pub fn vault_rows(connection: &Connection) -> i64 {
     connection
-        .query_row("SELECT COUNT(*) FROM core_vault", [], |row| row.get(0))
+        .query_row("SELECT COUNT(*) FROM vault", [], |row| row.get(0))
         .unwrap_or(0)
 }
 
-/// Every party in the file, `(party_id, display_name)`, ordered by id.
-///
-/// ORDERED so that two copies of one vault are comparable row for row, which is
-/// the assertion a bootstrap test wants: counting them would pass on a replica
-/// holding the right number of the wrong rows.
+/// Every person, as `(id, name)`, in name order.
 #[must_use]
-pub fn parties(connection: &Connection) -> Vec<(String, String)> {
-    let Ok(mut statement) =
-        connection.prepare("SELECT party_id, display_name FROM core_party ORDER BY party_id")
-    else {
-        return Vec::new();
-    };
-    statement
-        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
-        .and_then(std::iter::Iterator::collect)
-        .unwrap_or_default()
+pub fn people(connection: &Connection) -> Vec<(String, String)> {
+    pairs(
+        connection,
+        "SELECT id, title FROM entity WHERE kind = 'person' ORDER BY title, id",
+    )
 }
 
-/// How many parties carry this display name.
-///
-/// A NAME AND NOT AN ID, because the test that asks is about a write the
-/// MEMBER made — a `core.add_party` whose id the vault minted and the caller
-/// never saw. Counting by name is how it checks the row arrived exactly once,
-/// which a command that ran twice would break.
+/// How many people carry this name.
 #[must_use]
-pub fn parties_named(connection: &Connection, display_name: &str) -> i64 {
+pub fn people_named(connection: &Connection, name: &str) -> i64 {
     connection
         .query_row(
-            "SELECT COUNT(*) FROM core_party WHERE display_name = ?1",
-            [display_name],
+            "SELECT COUNT(*) FROM entity WHERE kind = 'person' AND title = ?1",
+            [name],
             |row| row.get(0),
         )
         .unwrap_or(0)
 }
 
-/// Every note's title, ordered by note id.
-///
-/// ORDERED for the same reason [`parties`] is: the comparison a seat test makes
-/// is row for row, and two copies holding the right NUMBER of the wrong rows is
-/// exactly the failure it exists to catch.
+/// Every note's title, in title order.
 #[must_use]
 pub fn note_titles(connection: &Connection) -> Vec<String> {
-    let Ok(mut statement) = connection.prepare("SELECT title FROM knowledge_note ORDER BY note_id")
-    else {
-        return Vec::new();
-    };
-    statement
-        .query_map([], |row| row.get::<_, String>(0))
-        .and_then(std::iter::Iterator::collect)
-        .unwrap_or_default()
+    pairs(
+        connection,
+        "SELECT title, id FROM entity WHERE kind = 'note' ORDER BY title, id",
+    )
+    .into_iter()
+    .map(|(title, _)| title)
+    .collect()
 }
 
-/// The calendar founding seeds and the party that owns it:
-/// `(calendar_id, owner_party_id)`.
-///
-/// A record test writing an event needs a calendar to put it on, and founding
-/// makes exactly one; `None` when there is none, which a fixture should not
-/// survive.
+/// The calendar a founded vault starts with, as `(id, name)`.
 #[must_use]
 pub fn the_founded_calendar(connection: &Connection) -> Option<(String, String)> {
-    connection
-        .query_row(
-            "SELECT calendar_id, owner_party_id FROM schedule_calendar
-              ORDER BY created_at, calendar_id LIMIT 1",
-            [],
-            |row| Ok((row.get(0)?, row.get(1)?)),
-        )
-        .ok()
+    pairs(
+        connection,
+        "SELECT id, title FROM entity WHERE kind = 'calendar' ORDER BY n LIMIT 1",
+    )
+    .into_iter()
+    .next()
 }
 
-/// The one content item in a file, with the asset that names it:
-/// `(content_id, content_uri, asset_id)`.
-///
-/// `None` when there is none, or more than the query's first — a fixture that
-/// seeded two photographs and asserted on "the" one would be asserting on
-/// whichever SQLite happened to return.
-#[must_use]
-pub fn the_one_photograph(connection: &Connection) -> Option<(String, String, String)> {
-    connection
-        .query_row(
-            "SELECT c.content_id, c.content_uri, a.asset_id
-               FROM core_content_item c JOIN media_asset a USING (content_id)",
-            [],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
-        )
-        .ok()
-}
-
-/// Which derivative tiers a content item has, ordered — `["preview", "thumb"]`
-/// for an image the gateway has derived (#1025 S7, the verifier's finding on
-/// the backfill sweep).
-///
-/// Named for the question because that is what the assertion is: "did the
-/// sweep put the tiers back" reads off this, and a `COUNT(*)` would pass on a
-/// vault holding two rows of the wrong variant.
+/// The variant of every derivative a file holds, in variant order.
 #[must_use]
 pub fn derivative_variants(connection: &Connection) -> Vec<String> {
-    let Ok(mut statement) = connection
-        .prepare("SELECT variant FROM core_content_derivative ORDER BY variant, derivative_id")
-    else {
-        return Vec::new();
-    };
-    statement
-        .query_map([], |row| row.get::<_, String>(0))
-        .map(|rows| rows.filter_map(std::result::Result::ok).collect())
-        .unwrap_or_default()
+    pairs(
+        connection,
+        "SELECT variant, blob FROM derivative ORDER BY variant, blob",
+    )
+    .into_iter()
+    .map(|(variant, _)| variant)
+    .collect()
 }
 
-/// FORGET EVERY DERIVATIVE, which is what a vault founded before the gateway
-/// made tiers looks like (#1025 S7).
-///
-/// The one way to build that state in a test: the tiers are written inside the
-/// mint's own transaction, so there is no door that creates an original
-/// WITHOUT them. A test therefore makes one the ordinary way and then takes the
-/// tiers away — which is also, exactly, the vault the backfill sweep exists for.
-///
-/// Returns how many rows went.
+/// Forget every derivative a file holds, so a sweep has something to do.
+/// Returns how many it forgot.
+#[must_use]
 pub fn forget_derivatives(connection: &Connection) -> usize {
     connection
-        .execute("DELETE FROM core_content_derivative", [])
+        .execute("DELETE FROM derivative", [])
         .unwrap_or(0)
 }
 
-/// DROP THE GATEWAY'S PRIVATE STAGING BAND, which is what makes a file look
-/// like a replica for the one question `media.add_asset` asks (#1025 S7).
-///
-/// `blob_staging` is a declared private table (`contracts/schema/
-/// v0-registries.json`): the gateway's record of an upload door it ran, and by
-/// design absent from every copy. A test that wants a SEAT's schema without
-/// standing up a gateway, a pairing and a bootstrap takes the band away from a
-/// founded file — and the difference that remains is exactly the one under
-/// test.
-///
-/// Returns whether there was a band to drop, so a fixture cannot silently
-/// assert against a file that never had one.
-pub fn drop_the_private_staging_band(connection: &Connection) -> bool {
-    connection.execute("DROP TABLE blob_staging", []).is_ok()
+fn pairs(connection: &Connection, sql: &str) -> Vec<(String, String)> {
+    let Ok(mut statement) = connection.prepare(sql) else {
+        return Vec::new();
+    };
+    statement
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+        .map(|rows| rows.filter_map(std::result::Result::ok).collect())
+        .unwrap_or_default()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// A FILE THAT IS NOT A VAULT ANSWERS ZERO rather than panicking. The
-    /// counts are used inside assertions, and a door that failed on an
-    /// unfounded file would turn "the row is not there" into a panic with a
-    /// SQLite message in it.
-    #[test]
-    fn an_unfounded_file_answers_zero_and_empty() {
-        let connection = Connection::open_in_memory().expect("opens");
-        assert_eq!(vault_rows(&connection), 0);
-        assert_eq!(parties_named(&connection, "Anyone"), 0);
-        assert!(parties(&connection).is_empty());
-        assert_eq!(the_one_photograph(&connection), None);
-        assert!(note_titles(&connection).is_empty());
-    }
+    use crate::Vault;
 
     #[test]
-    fn a_founded_vault_has_one_vault_row_and_its_owner_party() {
-        let dir = crate::testdoor::tests::scratch("founded");
-        let path = dir.join("vault.db");
-        let vault = crate::Vault::create(&path).expect("created");
-        let founded = vault.found("Test", "Owner").expect("founded");
-        let (rows, parties_held) = vault
-            .read(|connection| Ok((vault_rows(connection), parties(connection))))
-            .expect("reads");
-        vault.close().expect("closes");
-        assert_eq!(rows, 1);
-        assert!(
-            parties_held
-                .iter()
-                .any(|(id, _)| *id == founded.owner_party_id),
-            "the founding owner is not among the parties"
+    fn a_founded_vault_answers_the_questions_a_test_asks() {
+        let dir = tempfile::tempdir().expect("a directory");
+        let vault = Vault::create(dir.path().join("vault.db")).expect("a vault");
+        assert_eq!(
+            vault
+                .read(|connection| Ok(vault_rows(connection)))
+                .expect("reads"),
+            0
         );
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-
-    pub(super) fn scratch(name: &str) -> std::path::PathBuf {
-        let dir = std::env::temp_dir().join(format!("centraid-vault-testdoor-{name}"));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).expect("a scratch dir");
-        dir
+        vault.found("Household", "Ada").expect("founds");
+        vault
+            .read(|connection| {
+                assert_eq!(vault_rows(connection), 1);
+                assert_eq!(people(connection).len(), 1);
+                assert_eq!(people_named(connection, "Ada"), 1);
+                assert_eq!(
+                    the_founded_calendar(connection).map(|(_, name)| name),
+                    Some("Calendar".to_owned())
+                );
+                assert!(note_titles(connection).is_empty());
+                assert!(derivative_variants(connection).is_empty());
+                Ok(())
+            })
+            .expect("reads");
     }
 }

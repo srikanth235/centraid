@@ -22,7 +22,7 @@
 //! `tests/log_plane.rs` asserts both halves, and the receipt carries the grep
 //! that shows no other public function returns a `Connection`.
 
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::path::{Path, PathBuf};
 
 use rusqlite::Connection;
@@ -63,6 +63,7 @@ pub struct Vault {
     /// Commit-guard depth. A nested `commit` is a deliberate no-op: the inner
     /// body runs inside the outer pair, and one pair is one transaction.
     pub(crate) depth: Cell<u32>,
+    pub(crate) pending: RefCell<crate::log::guard::Pending>,
     /// Read depth, so a nested read does not clear `query_only` early.
     read_depth: Cell<u32>,
     /// A fault to inject, for the snapshot builder's interrupted-build test.
@@ -124,19 +125,12 @@ impl Vault {
         connection.pragma_update(None, "auto_vacuum", "NONE")?;
         Self::apply_pragmas(&connection)?;
         connection.pragma_update(None, "application_id", APPLICATION_ID)?;
-        // OFF for the ladder: the baseline creates a hundred tables whose
-        // foreign keys point at each other, and SQLite resolves an FK's target
-        // lazily, so leaving enforcement on during creation would only make the
-        // order matter for no benefit. It also seeds rows (the money
-        // categories and their `core_entity` rows) that point at the registry
-        // `seed_entity_kinds` derives only afterwards.
+        // OFF for the ladder: the baseline's tables point at each other (the
+        // vault row at its owner, a kind row at its entity), SQLite resolves a
+        // foreign key's target lazily, and the seeds are written in the order
+        // that reads best rather than the order that satisfies a check.
         connection.pragma_update(None, "foreign_keys", "OFF")?;
         crate::migrations::run_from(&connection, 0)?;
-        // The registry the schema's own foreign keys point into, derived from
-        // the DDL that was just run (D-1020-D1-15). Before `foreign_keys = ON`,
-        // because `core_entity_kind` is what makes the first entity insert
-        // legal and seeding it is not itself an entity write.
-        crate::migrations::seed_entity_kinds(&connection)?;
         connection.pragma_update(None, "foreign_keys", "ON")?;
 
         Self::wrap(connection, path, head_version(), clock, ids)
@@ -277,6 +271,7 @@ impl Vault {
             clock,
             ids,
             depth: Cell::new(0),
+            pending: RefCell::default(),
             read_depth: Cell::new(0),
             fault: Cell::new(None),
             blobs: None,
@@ -439,7 +434,7 @@ mod tests {
     use crate::clock::{FixedClock, SeededIds};
 
     fn scratch() -> PathBuf {
-        centraid_ontology::golden::scratch_dir()
+        centraid_ontology::scratch::scratch_dir()
     }
 
     #[test]
@@ -574,8 +569,7 @@ mod tests {
         let reopened = Vault::open(copy.join("vault.db")).expect("the copy opens");
         let name: String = reopened
             .read(|connection| {
-                Ok(connection
-                    .query_row("SELECT display_name FROM core_vault", [], |row| row.get(0))?)
+                Ok(connection.query_row("SELECT name FROM vault", [], |row| row.get(0))?)
             })
             .expect("the vault row reads");
         assert_eq!(name, "Durable", "the `.db` alone carries the founding");
@@ -610,7 +604,7 @@ mod tests {
         .expect("a vault is founded");
         let outcome = vault.read(|connection| {
             connection
-                .execute("UPDATE core_vault SET display_name = 'x'", [])
+                .execute("UPDATE vault SET name = 'x'", [])
                 .map_err(VaultError::Sqlite)
         });
         let error = outcome.expect_err("a write through a read connection must be refused");
@@ -704,15 +698,13 @@ mod tests {
         std::fs::create_dir_all(&dir).expect("the scratch dir is made");
         let path = dir.join("vault.db");
 
-        // Session one: found the vault (two minted ids — the vault row and its
-        // owner party) and close the file.
+        // Session one: found the vault (one minted id — the self person) and close the file.
         let vault = Vault::create(&path).expect("a founded vault");
         vault.found("Test", "Test Owner").expect("it founds");
         vault.close().expect("it closes");
 
-        // Session two: the same file, a fresh source of ids. Two writes,
-        // because `found` minted two: with a per-instance counter the first
-        // reopened id is the vault row's and the second is the owner party's.
+        // Session two: the same file, a fresh source of ids. A per-instance
+        // counter would hand out the id founding already used for the self person.
         let vault = Vault::open(&path).expect("it reopens");
         let now = vault.clock().now_text();
         for label in ["after-reopen-1", "after-reopen-2"] {
@@ -720,12 +712,9 @@ mod tests {
             vault
                 .commit(|tx| {
                     tx.set_producer("test.reopen");
-                    tx.connection().execute(
-                        "INSERT INTO core_party
-                           (party_id, kind, display_name, created_at, updated_at)
-                         VALUES (?1, 'person', ?2, ?3, ?3)",
-                        rusqlite::params![id, label, now],
-                    )?;
+                    tx.insert_entity(&id, crate::model::Kind::Person, label, &now)?;
+                    tx.connection()
+                        .execute("INSERT INTO person (id) VALUES (?1)", [&id])?;
                     Ok(())
                 })
                 .unwrap_or_else(|error| {
@@ -734,13 +723,11 @@ mod tests {
         }
 
         // And the ids really are fresh rather than merely accepted.
-        let parties: i64 =
-            vault
-                .read(|connection| {
-                    Ok(connection
-                        .query_row("SELECT count(*) FROM core_party", [], |row| row.get(0))?)
-                })
-                .expect("the count reads");
+        let parties: i64 = vault
+            .read(|connection| {
+                Ok(connection.query_row("SELECT count(*) FROM person", [], |row| row.get(0))?)
+            })
+            .expect("the count reads");
         assert_eq!(
             parties, 3,
             "the owner plus the two written after the reopen"

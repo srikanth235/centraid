@@ -69,7 +69,7 @@ pub fn decline(reason: &str) -> [String; 2] {
 /// A founded vault seeded with the scenario, with its byte store, and no
 /// model loaded.
 pub fn sample() -> Sample {
-    let dir = centraid_ontology::golden::scratch_dir();
+    let dir = centraid_ontology::scratch::scratch_dir();
     std::fs::create_dir_all(&dir).expect("the directory is made");
     let path = dir.join("vault.db");
     let handle = Core::open(CoreConfig::new(&path)).expect("a core opens with create");

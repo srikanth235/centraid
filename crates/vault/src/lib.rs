@@ -1,62 +1,43 @@
-//! The authority's file: the v1 vault, its commit log, its doors, its commands.
+//! The authority's file: the vault, its gate, its doors and its backup plane.
 //!
-//! This is the umbrella's centre ([#1020](https://github.com/srikanth235/centraid/issues/1020)
-//! wave 2, lane D1). Everything durable a Centraid gateway knows is in one
-//! SQLite file, and everything that writes to that file goes through
-//! [`Vault::commit`].
+//! Everything durable a Centraid phone knows is in one SQLite file, and
+//! everything that writes to that file goes through [`Vault::commit`]
+//! ([#1020](https://github.com/srikanth235/centraid/issues/1020)). The model it
+//! holds is the one of [#1135](https://github.com/srikanth235/centraid/issues/1135):
+//! an `entity` for everything with a title and a trash, a `kind` row for what it
+//! is, typed `edge`s for how things are joined, `blob`s and `derivative`s for
+//! bytes, an `origin` and a `source` for what is followed. `docs/vault-ontology.md`
+//! says what each table means; this crate is the writer.
 //!
-//! ## What is v0-faithful and what is v1-only
-//!
-//! **Faithful** — reproduced because a fixture, a seat or a file format depends
-//! on the exact behaviour, with the v0 path named in each module's docs: the
-//! `replica_meta` / `replica_log` DDL and its constants; session capture, one
-//! session per table; the changeset decode including `absent` ≠ NULL and the
-//! positional DELETE image; the delta prior; the row-image JSON spelling
-//! (`{i}`, `{b64}`, JavaScript's numbers); the log door's paging rules and
-//! epoch gate; retention's commit edge and live-cursor hold; the epoch bump's
-//! floor derivation; the snapshot pipeline's seven steps and their order; the
-//! command gate order and the audit band; the canonical payload hash.
-//!
-//! **v1-only** — decided here, each with its reason in the module:
-//! `PRAGMA application_id = CEN1` and a `user_version` counting v1's OWN
-//! migrations (D-1020-D1-2); the commit pair as the only writable connection,
-//! with reads held under `query_only` (D-1020-D1-5); the doors as functions
-//! rather than routes (D-1020-D1-6); one content-addressed snapshot for backup,
-//! bootstrap and pre-migration safety (D-1020-D1-7); `VaultError::DiskFull` as
-//! a typed answer (D-1020-D1-8); the baseline migration and its `contracts/`
-//! fixture being ONE file (D-1020-D1-13).
-//!
-//! ## The interface D2, D3 and R consume
+//! ## The interface its consumers use
 //!
 //! | Consumer | What it uses |
 //! |---|---|
-//! | `crates/seat` (D2) | [`log::apply_log_page`], [`log::LogRow`], [`log::Cursor`], [`log::read_log_page`] |
-//! | `crates/apps/kit` (D3) | [`Vault::page_raw`], [`page::and_row_filters`], [`page::apply_field_mask`], [`commands::Registry`] |
-//! | recovery (R) | [`snapshot::build_snapshot`], [`snapshot::SnapshotHead`], [`Vault::found`], [`Vault::enrol_device`] |
+//! | `crates/apps/kit` | [`Vault::page_raw`], [`page::and_row_filters`], [`page::apply_field_mask`], [`commands::Registry`] |
+//! | `crates/search` | the `search` index [`index`] keeps, read through [`Vault::read`] |
+//! | `crates/core` | [`Vault`], its commands and doors, [`backup`], [`blob`] |
 //!
-//! `crates/api-proto` is deliberately **not** a dependency: lane C defines the
-//! proto messages concurrently, so everything here is plain Rust and D2 wires
-//! the conversion at the edge.
+//! `crates/api-proto` is deliberately **not** a dependency: everything here is
+//! plain Rust and the conversion to wire messages happens at the edge.
 
 #![forbid(unsafe_code)]
 
 pub mod access;
-pub mod audit;
 pub mod backup;
+pub mod blob;
 pub mod bootstrap;
 pub mod bytes;
 pub mod canonical;
-pub mod chat;
 pub mod clock;
 pub mod commands;
-pub mod content;
 pub mod custody;
 pub mod error;
 pub mod file;
+pub mod index;
+pub mod journal;
 pub mod log;
 pub mod migrations;
-pub mod operations;
-pub mod originals;
+pub mod model;
 pub mod page;
 pub mod snapshot;
 pub mod testdoor;

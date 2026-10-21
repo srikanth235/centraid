@@ -105,7 +105,7 @@ fn the_c_harness_crosses_the_abi_ten_thousand_times() {
         return;
     }
 
-    let scratch = centraid_ontology::golden::scratch_dir();
+    let scratch = centraid_ontology::scratch::scratch_dir();
     std::fs::create_dir_all(&scratch).expect("the directory is made");
 
     // The request bytes are written HERE and read by the harness, so the C
@@ -245,7 +245,7 @@ fn the_c_harness_crosses_the_abi_ten_thousand_times() {
 fn the_event_path_drains_through_the_abi() {
     use centraid_core_ffi::{CENTRAID_OK, centraid_free, centraid_next_event, centraid_open};
 
-    let scratch = centraid_ontology::golden::scratch_dir();
+    let scratch = centraid_ontology::scratch::scratch_dir();
     std::fs::create_dir_all(&scratch).expect("the directory is made");
     let config = format!(
         r#"{{"path":{:?},"role":"gateway","create":true}}"#,

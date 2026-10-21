@@ -94,7 +94,7 @@ pub trait BlobStore {
 }
 
 /// The byte door over one directory, one file per blob named by its BLAKE3
-/// ([`crate::content::content_digest`]).
+/// ([`crate::blob::content_digest`]).
 ///
 /// **A put is atomic or it did not happen**: the bytes go to a temp file in the
 /// same directory, are fsynced, renamed into place, and the directory is
@@ -200,7 +200,7 @@ impl FsBlobStore {
 
 impl BlobStore for FsBlobStore {
     fn put(&self, bytes: &[u8]) -> Result<String> {
-        let id = crate::content::content_digest(bytes);
+        let id = crate::blob::content_digest(bytes);
         let target = self.file_of(&id)?;
         if target.exists() {
             return Ok(id);
@@ -218,7 +218,7 @@ impl BlobStore for FsBlobStore {
             }
             Err(error) => return Err(io_at(&path)(error)),
         };
-        let actual = crate::content::content_digest(&bytes);
+        let actual = crate::blob::content_digest(&bytes);
         if actual != id {
             return Err(BlobError::Corrupt {
                 id: id.to_owned(),
@@ -271,7 +271,7 @@ impl BlobStore for FsBlobStore {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::content::content_digest;
+    use crate::blob::content_digest;
 
     #[test]
     fn a_blob_is_named_by_its_bytes_and_a_second_put_is_one_blob() {

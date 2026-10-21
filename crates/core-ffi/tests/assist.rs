@@ -40,7 +40,7 @@ impl Opened {
     }
 
     fn open(private_slot: bool) -> Self {
-        let dir = centraid_ontology::golden::scratch_dir();
+        let dir = centraid_ontology::scratch::scratch_dir();
         std::fs::create_dir_all(&dir).expect("the directory is made");
         let config = format!(
             r#"{{"path":{:?},"create":true}}"#,

@@ -92,7 +92,7 @@ fn percentile(sorted: &[Duration], fraction: f64) -> Duration {
 
 #[test]
 fn the_p95_of_a_bounded_read_is_inside_the_budget() {
-    let dir = centraid_ontology::golden::scratch_dir();
+    let dir = centraid_ontology::scratch::scratch_dir();
     std::fs::create_dir_all(&dir).expect("the directory is made");
     let _scratch = Scratch { dir: dir.clone() };
 
@@ -179,7 +179,7 @@ fn the_p95_of_a_bounded_read_is_inside_the_budget() {
 /// is what measures. They have to agree, so the test asserts it.
 #[test]
 fn the_ledger_and_this_test_state_the_same_ceiling() {
-    let path = centraid_ontology::golden::repo_root().join("contracts/ledgers/call-budget.json");
+    let path = centraid_ontology::scratch::repo_root().join("contracts/ledgers/call-budget.json");
     let text = std::fs::read_to_string(&path)
         .unwrap_or_else(|error| panic!("{} is committed: {error}", path.display()));
     let ledger: serde_json::Value = serde_json::from_str(&text).expect("the ledger is valid JSON");

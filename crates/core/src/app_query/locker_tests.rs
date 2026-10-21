@@ -55,7 +55,7 @@ impl Scratch {
     }
 
     fn founded_with(seed: Option<centraid_identity::Seed>) -> Self {
-        let dir = centraid_ontology::golden::scratch_dir();
+        let dir = centraid_ontology::scratch::scratch_dir();
         std::fs::create_dir_all(&dir).expect("the directory is made");
         let handle = open_at(dir.join("vault.db"), seed);
         handle
@@ -72,7 +72,7 @@ impl Scratch {
     /// a directory of its own, opened by a core holding `words`' seed. No key
     /// directory travels, because there is none.
     fn restored(&self, words: &str) -> Self {
-        let dir = centraid_ontology::golden::scratch_dir();
+        let dir = centraid_ontology::scratch::scratch_dir();
         std::fs::create_dir_all(&dir).expect("the directory is made");
         // The file and its write-ahead log, which SQLite folds in on open;
         // nothing writes while the copy is taken.

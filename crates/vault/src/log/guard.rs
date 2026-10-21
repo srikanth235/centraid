@@ -45,6 +45,7 @@ use rusqlite::hooks::Action;
 
 use crate::error::{Result, VaultError};
 use crate::file::Vault;
+use crate::model::Kind;
 
 /// The writable connection a commit body is handed.
 ///
@@ -54,6 +55,20 @@ use crate::file::Vault;
 pub struct CommitTx<'conn> {
     connection: &'conn Connection,
     producer: RefCell<String>,
+    pending: &'conn RefCell<Pending>,
+}
+
+/// What a commit owes the search index: the entities it changed.
+///
+/// Held by the [`Vault`] rather than by one [`CommitTx`], so a commit nested
+/// inside another still lands its ids on the outermost one's list.
+#[derive(Debug, Default)]
+pub struct Pending {
+    /// Every id to re-index at commit.
+    reindex: BTreeSet<String>,
+    /// The ids already stamped in this commit, so a second touch does not bump
+    /// `version` a second time: a commit is one change.
+    stamped: BTreeSet<String>,
 }
 
 impl<'conn> CommitTx<'conn> {
@@ -68,6 +83,58 @@ impl<'conn> CommitTx<'conn> {
     /// persists it since the log rows went.
     pub fn set_producer(&self, producer: impl Into<String>) {
         *self.producer.borrow_mut() = producer.into();
+    }
+
+    /// Stamp an entity as changed: `updated_at`, `version`, and a place on the
+    /// list the search index is rebuilt from at commit. Once per commit per
+    /// entity; a second call only keeps it on the list.
+    ///
+    /// # Errors
+    /// [`VaultError::Invariant`] when there is no such entity.
+    pub fn touch(&self, id: &str, now: &str) -> Result<()> {
+        let first = self.pending.borrow_mut().stamped.insert(id.to_owned());
+        if first {
+            let changed = self.connection.execute(
+                "UPDATE entity SET updated_at = ?2, version = version + 1 WHERE id = ?1",
+                rusqlite::params![id, now],
+            )?;
+            if changed != 1 {
+                self.pending.borrow_mut().stamped.remove(id);
+                return Err(VaultError::Invariant {
+                    context: format!("`{id}` is not an entity; there is nothing to touch"),
+                });
+            }
+        }
+        self.mark_for_index(id);
+        Ok(())
+    }
+
+    /// An entity this commit inserted: it is already at its first version, so
+    /// it is only owed an index row.
+    pub fn born(&self, id: &str) {
+        self.pending.borrow_mut().stamped.insert(id.to_owned());
+        self.mark_for_index(id);
+    }
+
+    /// Insert an entity row: the first half of every kind's create, the half
+    /// that is the same for all of them. The caller inserts the kind row next.
+    ///
+    /// # Errors
+    /// Whatever SQLite refused: a duplicate id, a kind the CHECK does not know.
+    pub fn insert_entity(&self, id: &str, kind: Kind, title: &str, now: &str) -> Result<()> {
+        self.connection.execute(
+            "INSERT INTO entity (id, kind, title, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?4)",
+            rusqlite::params![id, kind.as_str(), title, now],
+        )?;
+        self.born(id);
+        Ok(())
+    }
+
+    /// Re-index an entity whose own row did not change but whose search text
+    /// did (the person a note stopped being `about`).
+    pub fn mark_for_index(&self, id: &str) {
+        self.pending.borrow_mut().reindex.insert(id.to_owned());
     }
 }
 
@@ -134,6 +201,7 @@ impl Vault {
             let tx = CommitTx {
                 connection,
                 producer: RefCell::new(String::new()),
+                pending: &self.pending,
             };
             let value = body(&tx)?;
             return Ok(CommitResult {
@@ -158,16 +226,23 @@ impl Vault {
             return Err(error);
         }
 
+        *self.pending.borrow_mut() = Pending::default();
         let outcome = (|| -> Result<T> {
             let tx = CommitTx {
                 connection,
                 producer: RefCell::new("unnamed".to_owned()),
+                pending: &self.pending,
             };
             let value = body(&tx)?;
+            // The index is part of the commit: a change and its search rows
+            // land together or not at all.
+            let owed = std::mem::take(&mut self.pending.borrow_mut().reindex);
+            crate::index::reindex(connection, &owed)?;
             Ok(value)
         })();
 
         self.depth.set(0);
+        *self.pending.borrow_mut() = Pending::default();
 
         match outcome {
             Ok(value) => {
@@ -207,23 +282,27 @@ impl Vault {
 
 /// FTS5's own shadow tables, by suffix.
 ///
-/// An FTS5 virtual table is backed by `<name>_content`, `_data`, `_docsize`,
-/// `_idx` and `_config`, and every insert into an indexed table writes them
-/// through a trigger. They are SQLite's bookkeeping for the index, not rows a
-/// screen reads — and the base table's own entry in the census already says
-/// that its rows moved. Reporting them would make every write to an indexed
-/// table name four extra "tables" no shell has ever heard of.
+/// `search` is backed by `search_content`, `_data`, `_docsize`, `_idx` and
+/// `_config`. They are SQLite's bookkeeping for the index, and the index itself
+/// is not rows a screen reads: it follows the entities the census already names.
 const FTS_SHADOW_SUFFIXES: [&str; 5] = ["_content", "_data", "_docsize", "_idx", "_config"];
 
+/// Whether a table is the search index or one of FTS5's shadows of it: rows a
+/// restore rebuilds rather than counts.
+pub(crate) fn is_index(table: &str) -> bool {
+    table == "search"
+        || (table.starts_with("search_")
+            && FTS_SHADOW_SUFFIXES
+                .iter()
+                .any(|suffix| table.ends_with(suffix)))
+}
+
 /// Whether a table name is a change a screen could care about.
+///
+/// Not SQLite's own, not the search index, and not the journal, which every
+/// command writes and no screen reads.
 pub(crate) fn is_reportable(table: &str) -> bool {
-    if table.starts_with("sqlite_") {
-        return false;
-    }
-    !(table.starts_with("fts_")
-        && FTS_SHADOW_SUFFIXES
-            .iter()
-            .any(|suffix| table.ends_with(suffix)))
+    !table.starts_with("sqlite_") && table != "journal" && !is_index(table)
 }
 
 /// Point the connection's `update_hook` at `census` for the length of a commit.
@@ -265,21 +344,23 @@ mod tests {
     /// A shadow table is the index, not the rows. The base table's own entry
     /// is what a screen reads, and it is already in the census.
     #[test]
-    fn ftss_shadow_tables_and_sqlites_own_are_not_reported() {
-        assert!(is_reportable("core_party"));
-        assert!(is_reportable("fts_core_party"), "the virtual table itself");
-        for shadow in [
-            "fts_core_party_content",
-            "fts_core_party_data",
-            "fts_core_party_docsize",
-            "fts_core_party_idx",
-            "fts_core_party_config",
+    fn the_index_the_journal_and_sqlites_own_are_not_reported() {
+        assert!(is_reportable("note"));
+        assert!(is_reportable("locker_item"));
+        for hidden in [
+            "search",
+            "search_content",
+            "search_data",
+            "search_docsize",
+            "search_idx",
+            "search_config",
+            "journal",
+            "sqlite_sequence",
         ] {
-            assert!(!is_reportable(shadow), "{shadow}");
+            assert!(!is_reportable(hidden), "{hidden}");
         }
-        assert!(!is_reportable("sqlite_sequence"));
-        // A table that merely ENDS in a shadow suffix without the `fts_`
+        // A table that merely ENDS in a shadow suffix without the `search_`
         // prefix is an ordinary table and is reported.
-        assert!(is_reportable("media_asset_data"));
+        assert!(is_reportable("photo_data"));
     }
 }

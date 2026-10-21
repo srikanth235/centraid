@@ -32,7 +32,7 @@ fn open(config: &str) -> *mut centraid_core::Handle {
 
 #[test]
 fn a_vault_closed_over_the_abi_opens_again_in_the_same_process() {
-    let dir = centraid_ontology::golden::scratch_dir();
+    let dir = centraid_ontology::scratch::scratch_dir();
     std::fs::create_dir_all(&dir).expect("the directory is made");
     let path = dir.join("vault.db");
 

@@ -1,35 +1,23 @@
-//! Export the golden corpus's `sqlite_master` DDL as the fixture beside it.
-//!
-//! The fixture is a REGENERATED file, never a hand-edited one:
+//! Print a vault file's schema in the DDL fixture's format.
 //!
 //! ```sh
-//! cargo run -p centraid-ontology --bin export-ddl -- \
-//!   contracts/golden/issue-1020/vault.db.gz \
-//!     > contracts/golden/issue-1020/vault-ddl.sql
+//! cargo run -p centraid-ontology --bin export-ddl -- <vault.db>
 //! ```
 //!
-//! The argument may be a `.gz` (inflated into a scratch directory first, never
-//! opened in place — see `docs/traps/wal-checkpoint.md`) or a plain `vault.db`.
-//! `tests/fixtures.rs` regenerates the same text in memory and diffs it, so a
-//! stale fixture is red rather than decorative.
+//! The file is opened as it is, so point it at a COPY: opening a vault writes a
+//! `-wal` sidecar and a checkpoint folds that back into the file
+//! ([`docs/traps/wal-checkpoint.md`](../../../../docs/traps/wal-checkpoint.md)).
 
-use std::path::PathBuf;
 use std::process::ExitCode;
 
-use centraid_ontology::golden::{inflate, scratch_dir};
 use centraid_ontology::vault::Vault;
 
 fn main() -> ExitCode {
-    let mut args = std::env::args_os().skip(1);
-    let Some(target) = args.next() else {
-        eprintln!(
-            "usage: export-ddl <path to vault.db or vault.db.gz>\n\
-             writes the file's sqlite_master DDL to stdout"
-        );
+    let Some(target) = std::env::args_os().nth(1) else {
+        eprintln!("usage: export-ddl <path to a copy of vault.db>");
         return ExitCode::FAILURE;
     };
-    let path = PathBuf::from(target);
-    match render(&path) {
+    match Vault::open(&target).and_then(|vault| centraid_ontology::ddl_fixture(&vault)) {
         Ok(text) => {
             print!("{text}");
             ExitCode::SUCCESS
@@ -39,17 +27,4 @@ fn main() -> ExitCode {
             ExitCode::FAILURE
         }
     }
-}
-
-fn render(path: &std::path::Path) -> centraid_ontology::Result<String> {
-    if path.extension().is_none_or(|ext| ext != "gz") {
-        return centraid_ontology::ddl_fixture(&Vault::open(path)?);
-    }
-    // Never open the committed file in place: opening a vault writes a `-wal`
-    // sidecar beside it and a checkpoint folds that back into the file itself.
-    let dir = scratch_dir();
-    let db = inflate(path, &dir)?;
-    let rendered = centraid_ontology::ddl_fixture(&Vault::open(&db)?);
-    let _ = std::fs::remove_dir_all(&dir);
-    rendered
 }
