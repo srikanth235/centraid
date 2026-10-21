@@ -25,6 +25,7 @@ export const APP_HUES = {
   forest: 150,
   indigo: 290,
   ochre: 70,
+  olive: 110,
   rose: 0,
   slate: 255,
   teal: 210,

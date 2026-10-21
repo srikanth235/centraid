@@ -4,8 +4,6 @@ import centraid.core.v1.AgendaAttendee
 import centraid.core.v1.AgendaBirthday
 import centraid.core.v1.AgendaCalendar
 import centraid.core.v1.AgendaDayContext
-import centraid.core.v1.AgendaDueDay
-import centraid.core.v1.AgendaDueTask
 import centraid.core.v1.AgendaEvent
 import centraid.core.v1.AgendaSearch
 import centraid.core.v1.AgendaUpcoming
@@ -14,6 +12,9 @@ import centraid.core.v1.AppQueryRequest
 import centraid.core.v1.AppQueryResponse
 import centraid.core.v1.Envelope
 import centraid.core.v1.Response
+import centraid.core.v1.TasksCatchUp
+import centraid.core.v1.TasksGroup
+import centraid.core.v1.TasksView
 import centraid.screen.v1.AgendaEmpty
 import centraid.screen.v1.AgendaEventRow
 import centraid.screen.v1.AgendaHomeEvent
@@ -26,6 +27,7 @@ import dev.centraid.shared.apps.agenda.AgendaHome
 import dev.centraid.shared.apps.agenda.AgendaHomeMachine
 import dev.centraid.shared.apps.agenda.AgendaInput
 import dev.centraid.shared.apps.agenda.AgendaReads
+import dev.centraid.shared.apps.agenda.TasksAnswers
 import dev.centraid.shared.design.PartyHueWheel
 import dev.centraid.shared.nav.Destination
 import dev.centraid.shared.nav.NavStack
@@ -81,10 +83,14 @@ class AgendaHomeSpec : StringSpec({
         toolbar.at_today shouldBe true
         // THE BAND, computed: places only, then More (R-CHROME-5) — no Search
         // tab, because search is the bar under the title.
-        landed.screen.band.map { it.key } shouldBe listOf("day", "schedule", "waiting", "more")
-        landed.screen.band.map { it.icon_key } shouldBe listOf("Clock", "List", "Inbox", "MoreHoriz")
+        landed.screen.band.map { it.key } shouldBe listOf("day", "schedule", "waiting", "todo", "more")
+        landed.screen.band.map { it.icon_key } shouldBe listOf("Clock", "List", "Inbox", "Todo", "MoreHoriz")
         landed.screen.band.filter { it.current }.map { it.key } shouldBe listOf("day")
         landed.screen.chrome.shouldNotBeNull().new_event shouldBe "New event"
+        // THE HEADER PLUS says Add: its sheet adds an event or a task (R-1128-Z1), and Day's
+        // Plus opens that sheet, not the quick-add bar.
+        landed.screen.add_label shouldBe "Add"
+        landed.screen.add_opens_quick_add shouldBe false
     }
 
     "a destination opened from the shell lands there" {
@@ -96,7 +102,14 @@ class AgendaHomeSpec : StringSpec({
 
     "before the first answer the core names today; after it, the window is padded UTC midnights" {
         val first = AgendaReads.requests(AgendaHomeMachine.initial(), clock).shouldNotBeNull()
-        first.size shouldBe 2
+        // DAY ASKS ITS TASKS TOO (R-1128-4): both dated boards, and the absence notice's catch-up
+        // while the window holds today — and before the first answer the anchor IS today.
+        first.map { it.kind() } shouldBe listOf("upcoming", "context", "tasks-today", "tasks-upcoming", "tasks-catch-up")
+        first[2].tasks_board.shouldNotBeNull().let {
+            it.tz shouldBe "Europe/London"
+            it.limit shouldBe 500
+        }
+        first[4].tasks_catch_up.shouldNotBeNull().tz shouldBe "Europe/London"
         val firstUpcoming = first[0].agenda_upcoming.shouldNotBeNull()
         firstUpcoming.from shouldBe ""
         firstUpcoming.to shouldBe "2026-06-17T09:42:00Z"
@@ -109,6 +122,7 @@ class AgendaHomeSpec : StringSpec({
 
         val onDay = landed(day)
         val dayReads = AgendaReads.requests(onDay, clock).shouldNotBeNull()
+        dayReads.map { it.kind() } shouldBe listOf("upcoming", "context", "tasks-today", "tasks-upcoming", "tasks-catch-up")
         dayReads[0].agenda_upcoming.shouldNotBeNull().let {
             it.from shouldBe "2026-06-14T00:00:00Z"
             it.to shouldBe "2026-06-17T00:00:00Z"
@@ -122,18 +136,21 @@ class AgendaHomeSpec : StringSpec({
         val listReads = AgendaReads.requests(onSchedule, clock).shouldNotBeNull()
         listReads[0].agenda_upcoming.shouldNotBeNull().to shouldBe "2026-10-14T00:00:00Z"
         listReads[1].agenda_day_context.shouldNotBeNull().to shouldBe "2026-10-12"
-        // WAITING IS SCHEDULE'S WINDOW: the same two queries.
+        // SCHEDULE DRAWS TASKS BUT NO ABSENCE NOTICE: that is Day's, on today.
+        listReads.map { it.kind() } shouldBe listOf("upcoming", "context", "tasks-today", "tasks-upcoming")
+        // WAITING IS SCHEDULE'S WINDOW: the same two event queries, and no task query.
         AgendaReads.requests(
             onSchedule.copy(screen = onSchedule.screen.copy(destination = waiting)),
             clock,
-        ) shouldBe listReads
+        ) shouldBe listReads.take(2)
     }
 
     "a search term replaces the upcoming list, and asks for it again only when it is not held" {
         val typed = drive(landed(schedule), searchOpened(), term("dentist"))
         val reads = AgendaReads.requests(typed.state, clock).shouldNotBeNull()
-        reads.map { it.kind() } shouldBe listOf("context", "search")
-        reads[1].agenda_search.shouldNotBeNull().let {
+        // THE HELD LIST AND BOARDS ARE NOT ASKED AGAIN: a keystroke is the context and the hits.
+        reads.map { it.kind() } shouldBe listOf("context", "tasks-search", "search")
+        reads[2].agenda_search.shouldNotBeNull().let {
             it.term shouldBe "dentist"
             it.limit shouldBe 100
             it.tz shouldBe "Europe/London"
@@ -141,7 +158,11 @@ class AgendaHomeSpec : StringSpec({
         // A ROW MOVED: the held list is stale, so it is read again too.
         val stale = drive(typed.state, AgendaHomeMachine.rowsChanged("core_event", emptyList())!!)
         AgendaReads.requests(stale.state, clock).shouldNotBeNull().map { it.kind() } shouldBe
-            listOf("upcoming", "context", "search")
+            listOf("upcoming", "context", "tasks-today", "tasks-upcoming", "tasks-search", "search")
+        reads[1].tasks_search.shouldNotBeNull().let {
+            it.term shouldBe "dentist"
+            it.tz shouldBe "Europe/London"
+        }
     }
 
     "the sections, in day order, with the month named where the list reaches a new one" {
@@ -312,33 +333,6 @@ class AgendaHomeSpec : StringSpec({
         days.getValue("2026-06-15").ribbon.shouldBeNull()
     }
 
-    "the due shelf counts, and opening it re-folds without a read" {
-        val home = landed(
-            schedule,
-            upcoming(),
-            context(
-                due = listOf(
-                    AgendaDueDay(
-                        day = "2026-06-17",
-                        count = 9,
-                        tasks = listOf(AgendaDueTask(task_id = "t1", title = "File taxes")),
-                    ),
-                ),
-            ),
-        )
-        val shelf = home.screen.data_.shouldNotBeNull().days.single()
-        shelf.due_count shouldBe 9
-        shelf.due_label shouldBe "9 due"
-        shelf.due.map { it.title } shouldBe listOf("File taxes")
-        val opened = drive(home, view(AgendaHomeEvent(due_toggled = AgendaHomeEvent.DueShelfToggled(day = "2026-06-17"))))
-        opened.effects.shouldBeEmpty()
-        opened.state.screen.data_.shouldNotBeNull().days.single().let {
-            it.due_open shouldBe true
-            it.due_label shouldBe "Hide"
-        }
-        home.screen.chrome.shouldNotBeNull().shelf_label shouldBe "Tasks due on this day"
-    }
-
     "Waiting is Schedule's window filtered to your unanswered invitations — and moving re-reads nothing" {
         val home = landed(
             schedule,
@@ -388,7 +382,7 @@ class AgendaHomeSpec : StringSpec({
         drive(hidden.state, view(opened())).state.screen.hidden_calendar_ids shouldBe listOf("cal-2")
     }
 
-    "More is rows on the state — Calendars and What Agenda may read, never Search — and a row's key does the rest" {
+    "More is rows on the state — Calendars, the Tasks places, What Agenda may read, never Search — and a row's key does the rest" {
         val home = landed(
             schedule,
             upcoming(
@@ -399,11 +393,13 @@ class AgendaHomeSpec : StringSpec({
         val more = drive(home, band("more")).state
         more.screen.sheet shouldBe AgendaHomeState.Sheet.SHEET_MORE
         more.screen.band.single { it.key == "more" }.current shouldBe true
-        more.screen.more_rows.map { it.key } shouldBe listOf("calendar-cal-1", "calendar-cal-2", "reads")
-        more.screen.more_rows.map { it.label } shouldBe listOf("Personal", "Work", "What Agenda may read")
-        // THE HEADING RIDES ON THE FIRST CALENDAR ROW, and only there.
-        more.screen.more_rows.map { it.section } shouldBe listOf("Calendars", "", "")
-        more.screen.more_rows.map { it.toggle } shouldBe listOf(true, true, false)
+        more.screen.more_rows.map { it.key } shouldBe
+            listOf("calendar-cal-1", "calendar-cal-2", "anytime", "logbook", "reminders", "trash", "reads")
+        more.screen.more_rows.map { it.label } shouldBe
+            listOf("Personal", "Work", "Anytime", "Logbook", "Reminders", "Trash", "What Agenda may read")
+        // THE HEADINGS RIDE ON THE FIRST ROW OF EACH GROUP, and only there (R-1128-6).
+        more.screen.more_rows.map { it.section } shouldBe listOf("Calendars", "", "Tasks", "", "", "", "")
+        more.screen.more_rows.map { it.toggle } shouldBe listOf(true, true, false, false, false, false, false)
         more.screen.more_rows.first().let {
             it.on shouldBe true
             it.meta shouldBe "Shown"
@@ -427,10 +423,15 @@ class AgendaHomeSpec : StringSpec({
         // THE READS ROW opens the facts sheet; a key the sheet does not hold does nothing.
         drive(more, moreRow("reads")).state.screen.sheet shouldBe AgendaHomeState.Sheet.SHEET_READS
         drive(more, moreRow("calendar-gone")).state shouldBe more
+        // A TASKS PLACE is an intent: the sheet closes and nothing is read or written here.
+        drive(more, moreRow("logbook")).let {
+            it.effects.shouldBeEmpty()
+            it.state.screen.sheet shouldBe AgendaHomeState.Sheet.SHEET_NONE
+        }
 
-        // BEFORE AN ANSWER NAMES A CALENDAR, the sheet is the reads row alone.
+        // BEFORE AN ANSWER NAMES A CALENDAR, the sheet is the Tasks places and the reads row.
         AgendaHomeMachine.reduce(AgendaHomeMachine.initial(), view(opened())).state.screen.more_rows
-            .map { it.key } shouldBe listOf("reads")
+            .map { it.key } shouldBe listOf("anytime", "logbook", "reminders", "trash", "reads")
     }
 
     "search: opening reads nothing, a term reads over the rows, closing CLEARS it and re-reads nothing" {
@@ -577,7 +578,7 @@ class AgendaHomeSpec : StringSpec({
             AgendaInput.Denied(AppQueryDenial(code = "revoked")),
         ).state
         denied.screen.denied.shouldNotBeNull().let {
-            it.title shouldBe "Agenda cannot read your calendar"
+            it.title shouldBe "Agenda cannot read this vault"
             it.body shouldBe "Ask the owner of this vault for access."
             // The kit's gate: the refusal's code is the receipt.
             it.receipt shouldBe "revoked"
@@ -664,6 +665,8 @@ class AgendaHomeSpec : StringSpec({
                         query.agenda_upcoming != null -> AppQueryResponse(
                             agenda_upcoming = upcoming(timed("a", "Stand-up", "2026-06-15T10:00")),
                         )
+                        query.tasks_board != null -> AppQueryResponse(tasks_board = TasksSpec.board(query.tasks_board!!.view))
+                        query.tasks_catch_up != null -> AppQueryResponse(tasks_catch_up = TasksCatchUp(today = TODAY))
                         else -> AppQueryResponse(agenda_day_context = context())
                     },
                 ),
@@ -683,7 +686,7 @@ class AgendaHomeSpec : StringSpec({
             val landed = withTimeout(5_000) { host.state.first { it.screen.data_ != null } }
             landed.screen.anchor_day shouldBe TODAY
             rows(landed.screen.data_.shouldNotBeNull().days.single()).single().title shouldBe "Stand-up"
-            asked.map { it.kind() } shouldBe listOf("upcoming", "context")
+            asked.map { it.kind() } shouldBe listOf("upcoming", "context", "tasks-today", "tasks-upcoming", "tasks-catch-up")
             asked.first().agenda_upcoming.shouldNotBeNull().tz shouldBe "America/New_York"
         } finally {
             scope.cancel()
@@ -728,18 +731,35 @@ class AgendaHomeSpec : StringSpec({
             return Driven(current, effects)
         }
 
-        fun answer(state: AgendaHome, upcoming: AgendaUpcoming, context: AgendaDayContext): AgendaHome =
-            drive(state, AgendaInput.Answered(upcoming, context, null)).state
+        fun answer(
+            state: AgendaHome,
+            upcoming: AgendaUpcoming,
+            context: AgendaDayContext,
+            tasks: TasksAnswers = quietTasks(),
+        ): AgendaHome = drive(state, AgendaInput.Answered(upcoming, context, null, tasks)).state
 
-        /** Opened on [destination] and answered with [upcoming] and [context]. */
+        /** The `tasks.*` arms of a Day or Schedule read with nothing due: the two dated boards, whole. */
+        fun quietTasks(
+            today: List<TasksGroup> = emptyList(),
+            later: List<TasksGroup> = emptyList(),
+            catchUp: TasksCatchUp? = null,
+        ): TasksAnswers = TasksAnswers(
+            today = TasksSpec.board(TasksView.TASKS_VIEW_TODAY, *today.toTypedArray()),
+            upcoming = TasksSpec.board(TasksView.TASKS_VIEW_UPCOMING, *later.toTypedArray()),
+            catchUp = catchUp,
+        )
+
+        /** Opened on [destination] and answered with [upcoming], [context] and [tasks]. */
         fun landed(
             destination: AgendaHomeState.Destination,
             upcoming: AgendaUpcoming = upcoming(),
             context: AgendaDayContext = context(),
+            tasks: TasksAnswers = quietTasks(),
         ): AgendaHome = answer(
             drive(AgendaHomeMachine.initial(), view(opened(destination))).state,
             upcoming,
             context,
+            tasks,
         )
 
         fun upcoming(vararg events: AgendaEvent): AgendaUpcoming = AgendaUpcoming(
@@ -754,9 +774,8 @@ class AgendaHomeSpec : StringSpec({
 
         fun context(
             birthdays: List<AgendaBirthday> = emptyList(),
-            due: List<AgendaDueDay> = emptyList(),
             today: String = TODAY,
-        ): AgendaDayContext = AgendaDayContext(birthdays = birthdays, due = due, today = today, now_local = NOW)
+        ): AgendaDayContext = AgendaDayContext(birthdays = birthdays, today = today, now_local = NOW)
 
         /** A timed occurrence as the core places it: its local days, end exclusive. */
         fun timed(
@@ -805,6 +824,9 @@ class AgendaHomeSpec : StringSpec({
             agenda_upcoming != null -> "upcoming"
             agenda_day_context != null -> "context"
             agenda_search != null -> "search"
+            tasks_board != null -> if (tasks_board!!.view == TasksView.TASKS_VIEW_TODAY) "tasks-today" else "tasks-upcoming"
+            tasks_catch_up != null -> "tasks-catch-up"
+            tasks_search != null -> "tasks-search"
             else -> "other"
         }
     }

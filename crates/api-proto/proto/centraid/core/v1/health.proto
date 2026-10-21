@@ -1,0 +1,330 @@
+// HEALTH'S PHONE QUERIES, AS THE CORE ANSWERS THEM (#1129).
+//
+// `crates/apps/health` reads the vault's daily totals (`health_daily`) and
+// workouts (`health_workout` over `core_activity`) through the page door and
+// folds them: today against the member's own 30-day typical, a metric's week,
+// month or year, the trends, the workouts. These are its answers, typed. A
+// shell reaches them through `app_query.proto`'s `AppQueryRequest` (arms
+// 120-125) and draws them; it computes no typical, average, percentile or
+// bucket, because the figures are Rust's (R-1129-12) and a second engine in
+// Kotlin or Swift is the drift that rule exists to prevent. The shell FORMATS:
+// units follow the phone's locale (km or mi, kg or lb), storage never does.
+//
+// Every message mirrors a Rust struct in `crates/apps/health/src/queries.rs`;
+// `crates/core`'s `app_query/health.rs` is the one conversion.
+//
+// FIGURES ARE IN THE METRIC'S OWN UNIT, which its name states (`weight_kg`,
+// `sleep_min`, `distance_m`): SI or the store's own count, never converted.
+//
+// DAYS ARE THE PHONE'S. A day is `YYYY-MM-DD` as the health store reckoned it
+// in the device's zone when it was read. Every request states `tz`, the
+// device's zone, and the core places everything civil in it: `today` (the
+// vault clock's day there), the instants today begins and ends, a workout's
+// wall clock, and the follower's read window. A shell does no zone arithmetic
+// (agenda.proto's rule, #1046).
+//
+// THE ZONE RULE is agenda.proto's: an IANA name; EMPTY is the vault's zone
+// (`core_vault.settings_json`'s `timeZone`), and a vault that names none either
+// is `ERROR_CODE_INVALID_REQUEST`, as is a name the bundled database does not
+// know. Never UTC by default.
+//
+// DIFFERENCES ARE THE CORE'S TOO (R-1129-12): a trend's change on the period
+// before and a series' distance from the typical come as numbers, signed, in the
+// metric's unit and as a percentage. The shell picks which one a metric says
+// and rounds it for words; it subtracts nothing.
+//
+// A FIGURE NOTHING FEEDS IS ABSENT, never zero: a day with no row is not a
+// day of zero steps, and an average of no days is not an average.
+
+syntax = "proto3";
+
+package centraid.core.v1;
+
+// ---------------------------------------------------------------------------
+// Shared shapes.
+// ---------------------------------------------------------------------------
+
+// The six daily metrics, in the order Today lists them. Each folds one way:
+// steps, active energy and exercise are SUMS of a day (a period's total is
+// their sum); sleep is a NIGHT's total keyed to the day the member woke (never
+// added across nights); resting heart rate is the store's daily AVERAGE; weight
+// is the day's LAST sample (a period's figure is its newest).
+enum HealthMetric {
+  HEALTH_METRIC_UNSPECIFIED = 0;
+  HEALTH_METRIC_STEPS = 1;
+  HEALTH_METRIC_SLEEP_MIN = 2;
+  HEALTH_METRIC_ACTIVE_ENERGY_KCAL = 3;
+  HEALTH_METRIC_EXERCISE_MIN = 4;
+  HEALTH_METRIC_RESTING_HR_BPM = 5;
+  HEALTH_METRIC_WEIGHT_KG = 6;
+}
+
+// A metric's series: the last 7 days, the last 30 days, or the last 12
+// calendar months (the current month to today).
+enum HealthRange {
+  HEALTH_RANGE_UNSPECIFIED = 0;
+  HEALTH_RANGE_WEEK = 1;
+  HEALTH_RANGE_MONTH = 2;
+  HEALTH_RANGE_YEAR = 3;
+}
+
+// The trends: the last 30 days, the last 90 days, or the last 12 calendar
+// months.
+enum HealthTrendRange {
+  HEALTH_TREND_RANGE_UNSPECIFIED = 0;
+  HEALTH_TREND_RANGE_DAYS_30 = 1;
+  HEALTH_TREND_RANGE_DAYS_90 = 2;
+  HEALTH_TREND_RANGE_YEAR = 3;
+}
+
+// One bucket of a series: a day, a run of days, or a calendar month, and the
+// per-day average of the days in it that have a row.
+message HealthBucket {
+  // The first day, `YYYY-MM-DD`.
+  string start = 1;
+  // The last day, inclusive. A day bucket's `start`; a month's last day, or
+  // `today` for the current month.
+  string end = 2;
+  // The per-day average over the days that have a row (weight: the newest
+  // value in the bucket). Absent when no day in it has a row.
+  optional double value = 3;
+  // How many days in it have a row.
+  uint32 days = 4;
+}
+
+// One workout, as the vault holds it.
+message HealthWorkoutRow {
+  string activity_id = 1;
+  // The workout-kinds concept, its key (`run`, or the store's word for a
+  // kind the seed does not name) and its label.
+  string kind_concept_id = 2;
+  string kind_key = 3;
+  string kind_label = 4;
+  // The store's own word for the kind, kept whole.
+  string phone_kind = 5;
+  // Instants, `YYYY-MM-DDTHH:MM:SS.sssZ`.
+  string started_at = 6;
+  string ended_at = 7;
+  // What the store measured; absent when it did not.
+  optional int64 moving_sec = 8;
+  optional double distance_m = 9;
+  optional double energy_kcal = 10;
+  optional int64 avg_hr_bpm = 11;
+  optional double elevation_gain_m = 12;
+  // The app or device that recorded it ("Apple Watch").
+  optional string recorded_by = 13;
+  // The start and end on the request zone's wall clock, `YYYY-MM-DDTHH:MM`:
+  // what a list groups by and prints.
+  string local_start = 14;
+  string local_end = 15;
+  // Its length in seconds: `moving_sec` when the store measured it, else the
+  // span from start to end.
+  int64 length_sec = 16;
+}
+
+// The keyset position of the next page of workouts: the start and the id of
+// the last row served. Opaque to a shell; sent back as is.
+message HealthWorkoutsCursor {
+  string started_at = 1;
+  string activity_id = 2;
+}
+
+// ---------------------------------------------------------------------------
+// The six queries (AppQueryRequest 120-125).
+// ---------------------------------------------------------------------------
+
+// `health.today`: today's numbers against the member's own typical (R-1129-8).
+message HealthTodayRequest {
+  reserved 1, 2, 3;
+  reserved "today", "day_start", "day_end";
+  // The zone (the file header's rule). Today is the vault clock's day in it,
+  // and a workout that started between that day's first instant and the
+  // next day's is today's.
+  string tz = 4;
+}
+
+message HealthTodayMetric {
+  HealthMetric metric = 1;
+  // Today's figure: today's row for a sum, last night's for sleep (the row
+  // keyed today), today's for resting heart rate, and for weight the newest
+  // row in the 30 days to today. Absent when there is none.
+  optional double value = 2;
+  // The day `value` is for.
+  optional string day = 3;
+  // The median of the 30 whole days before today that have a row, and the
+  // 25th and 75th percentiles of the same days (linear between ranks). Absent
+  // when no such day has a row.
+  optional double typical = 4;
+  optional double low = 5;
+  optional double high = 6;
+  // How many days fed `typical`.
+  uint32 typical_days = 7;
+}
+
+message HealthToday {
+  string today = 1;
+  // All six, in `HealthMetric` order.
+  repeated HealthTodayMetric metrics = 2;
+  // The workouts that started today, newest first.
+  repeated HealthWorkoutRow workouts = 3;
+  // A health store has been connected: a `phone_origin` of source `health`
+  // exists.
+  bool connected = 4;
+  // The metrics with any row in the 365 days to today (R-1129-6: a chosen
+  // type that read nothing is named by the shell from this).
+  repeated HealthMetric metrics_with_data = 5;
+}
+
+// `health.series`: one metric over a week, a month or a year.
+message HealthSeriesRequest {
+  reserved 3;
+  reserved "today";
+  HealthMetric metric = 1;
+  HealthRange range = 2;
+  // The zone (the file header's rule); the period ends on today in it.
+  string tz = 4;
+}
+
+message HealthSeries {
+  HealthMetric metric = 1;
+  HealthRange range = 2;
+  string today = 3;
+  // WEEK: 7 days to today; MONTH: 30 days to today; YEAR: 12 months to
+  // today's, each the per-day average of its days that have a row. Oldest
+  // first.
+  repeated HealthBucket buckets = 4;
+  // The period's per-day average over its days that have a row (weight: the
+  // newest value in it), and the equal period before it.
+  optional double average = 5;
+  optional double previous_average = 6;
+  // WEEK and MONTH: the 30-day typical (`HealthTodayMetric.typical`). YEAR:
+  // the previous year's per-day average.
+  optional double typical = 7;
+  // The best bucket: the highest, but the lowest for resting heart rate;
+  // absent for weight, where no direction is better.
+  optional HealthBucket best = 8;
+  // The period's total, for a sum metric only.
+  optional double total = 9;
+  // How many buckets with a value are above `typical`, out of how many have a
+  // value.
+  uint32 above_typical = 10;
+  uint32 counted = 11;
+  // `average` less `typical`, in the metric's unit, and as a percentage of
+  // `typical` (absent when `typical` is 0). Absent when either is.
+  optional double versus_typical = 12;
+  optional double versus_typical_pct = 13;
+}
+
+// `health.trends`: every metric over a range, with a sparkline.
+message HealthTrendsRequest {
+  reserved 2;
+  reserved "today";
+  HealthTrendRange range = 1;
+  // The zone (the file header's rule); the period ends on today in it.
+  string tz = 3;
+}
+
+message HealthTrend {
+  HealthMetric metric = 1;
+  // The period's per-day average (weight: the newest value in it), and the
+  // equal period before it's.
+  optional double average = 2;
+  optional double previous = 3;
+  // 9 buckets for 30 and 90 days (the days split as evenly as they go, the
+  // later buckets taking the extra day), 12 months for a year. Oldest first.
+  repeated HealthBucket buckets = 4;
+  // `average` less `previous`, in the metric's unit, and as a percentage of
+  // `previous` (absent when `previous` is 0). Absent when either is.
+  optional double change = 5;
+  optional double change_pct = 6;
+}
+
+message HealthTrends {
+  HealthTrendRange range = 1;
+  string today = 2;
+  // In `HealthMetric` order; a metric with no row in either period is absent.
+  repeated HealthTrend trends = 3;
+}
+
+// `health.workouts`: every workout, newest first, a page at a time.
+message HealthWorkoutsRequest {
+  // Only this kind's workouts; absent is every workout.
+  optional string kind_concept_id = 1;
+  // REQUIRED: 0 is `ERROR_CODE_INVALID_REQUEST`, never a default. At most 200.
+  uint32 limit = 2;
+  // The previous page's `next`; absent is the first page.
+  optional HealthWorkoutsCursor after = 3;
+  // The zone each row's wall clock is read in. The file header's rule, except
+  // that EMPTY on a vault that names no zone is not refused: the rows come
+  // with empty wall clocks (the follower diffs instants and reads none).
+  string tz = 4;
+}
+
+message HealthKindCount {
+  string kind_concept_id = 1;
+  string kind_key = 2;
+  string kind_label = 3;
+  uint32 count = 4;
+}
+
+message HealthWorkouts {
+  repeated HealthWorkoutRow workouts = 1;
+  // Every kind with a workout, and how many, whatever the filter: the chips.
+  // Most first, then by label.
+  repeated HealthKindCount kinds = 2;
+  // The next page; absent when this page is the last.
+  optional HealthWorkoutsCursor next = 3;
+}
+
+// `health.workout`: one workout.
+message HealthWorkoutRequest {
+  string activity_id = 1;
+  // The zone its wall clock is read in, as `HealthWorkoutsRequest.tz`.
+  string tz = 2;
+}
+
+message HealthWorkout {
+  // Absent when no such workout is in the vault.
+  optional HealthWorkoutRow workout = 1;
+}
+
+// `health.follow_view`: what the follower engine reads before a pass
+// (R-1129-3, R-1129-4): the window to read, placed by the core out of the two
+// latests, and what the vault holds in it, so the engine diffs the store's
+// totals against `days` and sends only what moved.
+message HealthFollowViewRequest {
+  reserved 1;
+  reserved "since";
+  // The zone (the file header's rule): today, and the day the newest
+  // workout started on, are read in it.
+  string tz = 2;
+}
+
+message HealthDayValue {
+  string day = 1;
+  HealthMetric metric = 2;
+  double value = 3;
+}
+
+message HealthFollowView {
+  // The newest day with any row; absent when there is none.
+  optional string latest_day = 1;
+  // The newest followed workout's start; absent when there is none.
+  optional string latest_workout_started_at = 2;
+  // Every (day, metric, value) the vault holds from `totals_from` on, oldest
+  // first. More than 2,400 rows (400 days of the six metrics) is
+  // `ERROR_CODE_READ_BOUND_REACHED`, never a short answer.
+  repeated HealthDayValue days = 3;
+  // The vault clock's day in the zone.
+  string today = 4;
+  // THE WINDOW (R-1129-4), each `YYYY-MM-DD`: with nothing held, 365 days
+  // before today for the totals and 90 for the workouts; otherwise 7 days
+  // before the latest held (the totals' latest day, the newest workout's day
+  // in the zone) or before today when that is earlier, never further back
+  // than the first read's.
+  string totals_from = 5;
+  string workouts_from = 6;
+  // The instant `workouts_from` begins in the zone, `YYYY-MM-DDTHH:MM:SS.sssZ`:
+  // a workout that started at or after it is in the window.
+  string workouts_since = 7;
+}

@@ -11,6 +11,7 @@ import dev.centraid.design.copy.AgendaCopy
 import dev.centraid.design.copy.PeopleCopy
 import dev.centraid.design.copy.SharedCopy
 import dev.centraid.design.copy.TasksCopy
+import dev.centraid.shared.nav.AppHomes
 import okio.ByteString.Companion.encodeUtf8
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
@@ -91,9 +92,13 @@ public object PhoneImport {
     public fun madeOpens(apps: List<String>, outcomes: List<String>): String =
         apps.zip(outcomes).firstOrNull { (_, said) -> said.isNotBlank() && said !in quiet }?.first.orEmpty()
 
-    /** "Open People": the line's one action, for the app [madeOpens] named. */
+    /**
+     * "Open People": the line's one action, for the app [madeOpens] named. A
+     * domain names the app it opens in (#1128, R-1128-7): reminders, written to
+     * `tasks`, read "Open Agenda".
+     */
     public fun openLabel(app: String): String =
-        CentraidCatalog.apps.firstOrNull { it.id == app }?.name?.let { SharedCopy.OPEN_APP.replace("{name}", it) }.orEmpty()
+        CentraidCatalog.byId[AppHomes.appOf(app)]?.name?.let { SharedCopy.OPEN_APP.replace("{name}", it) }.orEmpty()
 
     private val quiet: Set<String> = setOf(
         PeopleCopy.IMPORT_CONTACTS_NONE,

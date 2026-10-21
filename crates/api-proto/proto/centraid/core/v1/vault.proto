@@ -52,10 +52,10 @@ message FoundRequest {
   // WHAT THE NEW VAULT HOLDS WHEN THE FOUND ANSWERS. Rows are written through
   // the command plane after the found's own commit, never by the found itself.
   FoundContent content = 3;
-  // THE DEVICE'S IANA ZONE, read off the platform at the found. Used only by
-  // `FOUND_CONTENT_STARTERS`, so the starter tasks are due on the member's own
-  // today and Tasks — which opens on Today — shows them. Empty is UTC.
-  string tz = 4;
+  // The device's zone once dated the starter tasks; they are undated now
+  // (R-ONBOARD-5), so nothing reads it.
+  reserved 4;
+  reserved "tz";
 }
 
 // WHAT A FOUND FILLS THE NEW VAULT WITH.

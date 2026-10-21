@@ -1443,6 +1443,73 @@ mod keyset_tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// THE HEAD-HASH PREDICATE A FOLLOWED FOLDER SENDS (#1127, lane F): Docs' `FilesStore`
+    /// pages `core_content_item` with a subquery on `core_document` — one document's head, and
+    /// every document's — and both tables are on the core's list, so the predicate answers and
+    /// names exactly the heads.
+    #[test]
+    fn a_followed_folders_head_hash_subquery_answers() {
+        let dir = centraid_ontology::golden::scratch_dir();
+        std::fs::create_dir_all(&dir).expect("made");
+        let vault = Vault::create(dir.join("v.db")).expect("a vault");
+        vault.found("T", "O").expect("founded");
+        let registry = crate::commands::Registry::with_system_commands().expect("registry");
+        let principal = crate::access::Principal::owner("d1");
+        let add = |title: &str, uri: &str| {
+            let outcome = vault
+                .execute(
+                    &registry,
+                    &principal,
+                    &crate::commands::Command::new(
+                        "core.add_document",
+                        serde_json::json!({ "title": title, "data_uri": uri }),
+                    ),
+                )
+                .expect("the command executes");
+            outcome.output["document_id"]
+                .as_str()
+                .expect("a document id")
+                .to_owned()
+        };
+        let notes = add("notes.txt", "data:text/plain,one");
+        add("other.txt", "data:text/plain,elsewhere");
+        let readable = ["core_document", "core_content_item"];
+        let heads = |predicate: &str, binds: Vec<Value>| {
+            vault
+                .keyset_page_reading_only(
+                    &KeysetPage {
+                        name: "phone.files.hashes".to_owned(),
+                        select: vec!["content_id".to_owned(), "content_hash".to_owned()],
+                        from: "core_content_item".to_owned(),
+                        predicate: Some(predicate.to_owned()),
+                        binds,
+                        sort_column: "content_id".to_owned(),
+                        pk_column: "content_id".to_owned(),
+                        descending: false,
+                        limit: 10,
+                        after: None,
+                        held_thumbnail: false,
+                        note_body: false,
+                        document_size: false,
+                    },
+                    &readable,
+                )
+                .expect("the predicate answers")
+        };
+        let one = heads(
+            "content_id IN (SELECT current_content_id FROM core_document WHERE document_id = ?)",
+            vec![Value::Text(notes)],
+        );
+        assert_eq!(one.rows.len(), 1, "one document, one head");
+        assert_eq!(cursor_text(&one.rows[0], "content_hash").len(), 64);
+        let all = heads(
+            "content_id IN (SELECT current_content_id FROM core_document)",
+            Vec::new(),
+        );
+        assert_eq!(all.rows.len(), 2, "every document's head, and nothing else");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn the_cursor_is_absent_when_the_rows_end_and_present_when_they_do_not() {
         let dir = centraid_ontology::golden::scratch_dir();

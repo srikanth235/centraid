@@ -78,6 +78,8 @@ dependencies {
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.view)
     implementation(libs.zxing.core)
+    // Health (#1129): Health Connect's client, read only (R-1129-7).
+    implementation(libs.androidx.health.connect)
     implementation(libs.androidx.media3.exoplayer)
     implementation(libs.androidx.media3.ui)
     // `debugImplementation`, NOT `androidRuntimeClasspath` (#1020, wave A).

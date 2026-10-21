@@ -6,7 +6,7 @@ import centraid.screen.v1.NotesEditorState
 import centraid.screen.v1.NotesJournalEvent
 import centraid.screen.v1.NotesLibraryEvent
 import centraid.screen.v1.NotesNotebooksEvent
-import centraid.screen.v1.TasksHomeState
+import centraid.screen.v1.AgendaHomeState
 import centraid.screen.v1.TileStatus
 import dev.centraid.shared.nav.AppIds
 import dev.centraid.shared.nav.Destination
@@ -18,28 +18,20 @@ import dev.centraid.shared.nav.ScreenOpenings
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 
-/** Where a Notes entry point lands. */
-public sealed interface NotesTarget {
-    /** An existing note, by id; the title rides along for the app bar. */
-    public data class Existing(val noteId: String, val title: String) : NotesTarget
-
-    /** A new note under an id minted on this phone, created on its first save. */
-    public data class New(val noteId: String) : NotesTarget
-}
-
 /**
  * WHERE NOTES' ENTRY POINTS AND INTENTS GO, ONCE (#1029 port).
  *
  * **The tile.** Where the Notes tile, the all-apps row and the first move land
  * — one decision for both shells, not three (the Android demo-id defect):
- * - The tile shows a note: that note.
+ * - The tile drew its shelf (`CONTENT`): the Notes place, since the tile
+ *   showed notebooks and notes rather than one note.
  * - The tile's read landed with nothing (`EMPTY`), or there is no tile at all
  *   (the first move on a new vault): a NEW note.
  * - The read is in flight (`LOADING`) or did not land (`UNKNOWN`): NOTHING.
  *   A blank editor opened over a vault that does have notes would be a guess.
  *
  * **The intents.** A Notes machine that emits a band tap, a note, a notebook,
- * More's Trash, History or Send to Tasks changes nothing, or only closes its
+ * More's Trash, History or Send to Agenda changes nothing, or only closes its
  * sheet; the shell moves. WHICH move lives here: Android applies the
  * [NavMove] to its stack, and iOS asks [route] for the same move spelled.
  * Notes · Notebooks · Journal are three screens under one band, so a tap on
@@ -47,23 +39,15 @@ public sealed interface NotesTarget {
  * SWAPS the top entry: back never walks through the places a member tapped.
  */
 public object NotesRouting {
-    /** [target] with a phone-minted id — the call Swift can make (default arguments do not cross). */
-    public fun target(tile: HomeTile?): NotesTarget? = target(tile, ::mintNoteId)
-
-    public fun target(tile: HomeTile?, mint: () -> String = ::mintNoteId): NotesTarget? {
-        val note = tile?.body?.notes
-        if (note != null && note.note_id.isNotEmpty()) return NotesTarget.Existing(note.note_id, note.title)
-        return when (tile?.status) {
-            null, TileStatus.TILE_STATUS_EMPTY, TileStatus.TILE_STATUS_CONTENT -> NotesTarget.New(mint())
-            else -> null
-        }
-    }
-
-    /** The tile's [target], as the page it opens. */
-    public fun tile(tile: HomeTile?): Destination? = when (val target = target(tile)) {
-        is NotesTarget.Existing -> Destination.NotesEditor(target.noteId, target.title)
-        is NotesTarget.New -> Destination.NotesEditor(target.noteId, isNew = true)
-        null -> null
+    /**
+     * The page the tile opens. A tile drawing its shelf opens THE NOTES PLACE:
+     * it showed notebooks and notes, so a tap that landed in one note would go
+     * somewhere the tile never named. [mint] names a new note's id.
+     */
+    public fun tile(tile: HomeTile?, mint: () -> String = ::mintNoteId): Destination? = when (tile?.status) {
+        TileStatus.TILE_STATUS_CONTENT -> Destination.NotesLibrary()
+        null, TileStatus.TILE_STATUS_EMPTY -> Destination.NotesEditor(mint(), isNew = true)
+        else -> null
     }
 
     /** [tile] for a shell that sends bytes: [tile] is the encoded `HomeTile`, empty for none. */
@@ -137,10 +121,10 @@ public object NotesRouting {
                     ),
                 )
             }
-            // SEND TO TASKS: Tasks' Inbox, the words waiting in a focused quick
-            // add. Nothing is written until the member adds them.
+            // SEND TO AGENDA: To-do, the words waiting in a focused quick add
+            // (the Inbox is where it lands). Nothing is written until the member adds them.
             sent != null && sent.text.isNotBlank() -> NavMove.push(
-                Destination.TasksHome(TasksHomeState.Destination.DESTINATION_INBOX, quickAdd = sent.text),
+                Destination.AgendaHome(AgendaHomeState.Destination.DESTINATION_TODO, quickAdd = sent.text),
             )
             else -> null
         }

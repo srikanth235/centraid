@@ -1,4 +1,4 @@
-//! The forward-only ladder, and the one rung it holds.
+//! The forward-only ladder, and the five rungs it holds.
 //!
 //! ## Two axes, and v0's is not one of them (D-1020-D1-2)
 //!
@@ -17,9 +17,9 @@
 //! - A file ABOVE the binary is `DowngradeRefused`. Never guessed down: a
 //!   newer rung may have moved data this binary does not know the shape of.
 //!
-//! ## One rung, squashed on 2026-10-15
+//! ## One rung squashed on 2026-10-15, and rung two above it
 //!
-//! The ladder is ONE rung. `001_baseline.sql` is the whole schema a new vault
+//! The ladder began as ONE rung. `001_baseline.sql` is the whole schema a new vault
 //! is founded with and the rows that founding seeds, squashed from the fifteen
 //! rungs that preceded it (Q-1029-1): nothing had shipped, so no vault needed
 //! the climb, and a new vault had been founding the planes #1029 struck only to
@@ -30,6 +30,24 @@
 //! climb is: found a vault, wind its file back to `user_version = 1` by undoing
 //! the rung's own statements, write the rows the old shape let through, and
 //! open it.
+//!
+//! Rung two, `002_phone_link.sql`, is that appended rung (#1127): the table that records which
+//! phone record each followed person, event, document or workout came from. It was amended in
+//! place to admit the `health` source before any release (#1129, R-1129-1).
+//!
+//! Rung three, `003_health.sql`, holds the health pack (#1129): `health_daily` and
+//! `health_workout`, the workout-kinds scheme seeded under fixed ids, and `core_activity` rebuilt
+//! as mutable (`updated_at`, `row_version`, the touch trigger), every row kept.
+//!
+//! Rung four, `004_chat_message_version.sql`, gives `chat_message` the `updated_at`,
+//! `row_version` and touch trigger its registered `mutable` life promised (#1129, F-R-1): a
+//! proposal settles in place. It is a rung of its own rather than an edit to rung three because
+//! the phones #1129 ran had already climbed rung three.
+//!
+//! Rung five, `005_chat_scope_agenda.sql`, folds the chat scope that named the task domain into
+//! Agenda's, and a thread saved under it is scoped to Agenda (#1128, R-1128-F3). It rebuilds the
+//! four chat tables because a CHECK cannot be altered, from rung four's `chat_message`, and its
+//! header says why all four.
 //!
 //! The file is cut by `bin/export-baseline` ([`render_baseline`]), which founds
 //! a vault from whatever ladder the build embeds and renders what it holds. With
@@ -66,19 +84,57 @@ pub struct Migration {
 }
 
 /// The baseline: the vault's schema as one statement per block, in dependency
-/// order, and the rows founding seeds. Rung one, and today the whole ladder.
+/// order, and the rows founding seeds. Rung one.
 pub const BASELINE_SQL: &str = include_str!("../../../contracts/migrations/001_baseline.sql");
+
+/// Rung two: the phone link, which records which phone record each synced person, event or
+/// document came from (#1127).
+pub const PHONE_LINK_SQL: &str = include_str!("../../../contracts/migrations/002_phone_link.sql");
+
+/// Rung three: the health pack, and `core_activity` made mutable (#1129).
+pub const HEALTH_SQL: &str = include_str!("../../../contracts/migrations/003_health.sql");
+
+/// Rung four: `chat_message` carries `updated_at`, `row_version` and the touch trigger (#1129).
+pub const CHAT_MESSAGE_VERSION_SQL: &str =
+    include_str!("../../../contracts/migrations/004_chat_message_version.sql");
+
+/// Rung five: the chat scope that named the task domain folds into Agenda's, and the threads
+/// saved under it move with it (#1128, R-1128-F3).
+pub const CHAT_SCOPE_AGENDA_SQL: &str =
+    include_str!("../../../contracts/migrations/005_chat_scope_agenda.sql");
 
 /// The ladder, in order. Rung one is the baseline.
 ///
 /// A NEW RUNG IS APPENDED, NEVER INSERTED, and never edited once released: a
 /// file in the field has already run the old text, so an edit changes what a
 /// fresh file gets and nothing else, which is two schemas with one number.
-pub const LADDER: &[Migration] = &[Migration {
-    version: 1,
-    name: "baseline",
-    sql: BASELINE_SQL,
-}];
+pub const LADDER: &[Migration] = &[
+    Migration {
+        version: 1,
+        name: "baseline",
+        sql: BASELINE_SQL,
+    },
+    Migration {
+        version: 2,
+        name: "phone_link",
+        sql: PHONE_LINK_SQL,
+    },
+    Migration {
+        version: 3,
+        name: "health",
+        sql: HEALTH_SQL,
+    },
+    Migration {
+        version: 4,
+        name: "chat_message_version",
+        sql: CHAT_MESSAGE_VERSION_SQL,
+    },
+    Migration {
+        version: 5,
+        name: "chat_scope_agenda",
+        sql: CHAT_SCOPE_AGENDA_SQL,
+    },
+];
 
 /// The `user_version` a file this build wrote carries.
 #[must_use]
@@ -98,7 +154,7 @@ pub fn run_from(connection: &Connection, from: i64) -> Result<i64> {
 
 /// [`run_from`] over any ladder, so the climb itself — its order, its
 /// contiguity guard and its per-rung transaction — stays under test while the
-/// real ladder holds one rung.
+/// real ladder holds only the rungs it has.
 fn run_rungs(connection: &Connection, ladder: &[Migration], from: i64) -> Result<i64> {
     let mut at = from;
     for rung in ladder.iter().filter(|rung| rung.version > from) {
@@ -553,6 +609,20 @@ mod tests {
         connection
     }
 
+    /// [`founded`], stopped at rung one: the synthetic ladders below append their own rung two,
+    /// and the real one's would be run first and move the version past it.
+    fn founded_at_baseline() -> Connection {
+        let connection = Connection::open_in_memory().expect("a connection opens");
+        connection
+            .pragma_update(None, "foreign_keys", "OFF")
+            .expect("foreign keys go off");
+        assert_eq!(
+            run_rungs(&connection, &LADDER[..1], 0).expect("rung one runs"),
+            1
+        );
+        connection
+    }
+
     fn user_version(connection: &Connection) -> i64 {
         connection
             .query_row("PRAGMA user_version", [], |row| row.get(0))
@@ -669,7 +739,7 @@ mod tests {
 
     #[test]
     fn a_rung_appended_above_the_baseline_climbs_once_and_in_order() {
-        let connection = founded();
+        let connection = founded_at_baseline();
         let ladder = [
             Migration {
                 version: 1,
@@ -736,7 +806,7 @@ mod tests {
         // `999_fails.sql` creates a table, writes a row, then fails: the file it would leave is
         // CHANGED, which is the case the pre-migration snapshot exists for. The rung's own
         // transaction is what undoes it here.
-        let connection = founded();
+        let connection = founded_at_baseline();
         let ladder = [
             Migration {
                 version: 1,

@@ -2,8 +2,11 @@
 # an event awaiting the member's reply, and one whose write this device still
 # holds — a row status from `pending_event_ids`, never a separate list. The
 # landing is today's section, at its now line.
+# A task due today is a row on the day (R-1128-2), untimed, ahead of the timed
+# rows; its box checks it off in place.
 # The More sheet's rows ride on the state, so both platforms draw one list:
-# each calendar a toggle under the Calendars heading, then the reads row.
+# each calendar a toggle under the Calendars heading, the Tasks places under
+# theirs, then the reads row.
 seat {
   availability: AVAILABILITY_READY
   durability: DURABILITY_AUTHORITATIVE
@@ -21,10 +24,17 @@ data {
     heading: "Today"
     is_today: true
     is_past: false
-    due_count: 1
-    due { task_id: "task-0001" title: "Send the survey notes" }
-    due_label: "1 due"
-    due_open: false
+    items {
+      task {
+        task_id: "task-0001"
+        title: "Send the survey notes"
+        check: TASKS_CHECK_OPEN
+        check_label: "Mark Send the survey notes done"
+        accessibility_label: "Send the survey notes"
+        can_file: true
+        can_check: true
+      }
+    }
     items {
       event {
         event_id: "event-0001"
@@ -84,6 +94,7 @@ sheet: SHEET_NONE
 band { key: "day" label: "Day" icon_key: "Clock" current: true }
 band { key: "schedule" label: "Schedule" icon_key: "List" current: false }
 band { key: "waiting" label: "Waiting" icon_key: "Inbox" current: false }
+band { key: "todo" label: "To-do" icon_key: "Todo" current: false }
 band { key: "more" label: "More" icon_key: "MoreHoriz" current: false }
 toolbar {
   shown: true
@@ -91,7 +102,14 @@ toolbar {
   month_label: "March 2026"
   at_today: true
 }
-chrome { title: "Agenda" new_event: "New event" today: "Today" }
+chrome {
+  title: "Agenda"
+  new_event: "New event"
+  today: "Today"
+  tasks { quick_add_placeholder: "Task name" quick_add_verb: "Add" file_verb: "Move to project" }
+}
+add_label: "New event"
+add_opens_quick_add: false
 pending_event_ids: "event-0002"
 more_rows {
   key: "calendar-calendar-home"
@@ -112,4 +130,27 @@ more_rows {
   on: true
   spoken: "Health, Shown"
 }
+more_rows {
+  key: "anytime"
+  label: "Anytime"
+  meta: "no date, still yours"
+  section: "Tasks"
+  spoken: "Anytime, no date, still yours"
+  icon_key: "Layers"
+}
+more_rows {
+  key: "logbook"
+  label: "Logbook"
+  meta: "done and won't do"
+  spoken: "Logbook, done and won't do"
+  icon_key: "Book"
+}
+more_rows {
+  key: "reminders"
+  label: "Reminders"
+  meta: "open work with a reminder"
+  spoken: "Reminders, open work with a reminder"
+  icon_key: "Bell"
+}
+more_rows { key: "trash" label: "Trash" meta: "deleted tasks" spoken: "Trash, deleted tasks" icon_key: "Trash" }
 more_rows { key: "reads" label: "What Agenda may read" spoken: "What Agenda may read" }

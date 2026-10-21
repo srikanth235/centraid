@@ -36,8 +36,8 @@ enum ChatRouting {
         RowRoutes.shared.isThread(row: card.row)
     }
 
-    /// The app an opened route belongs to (`tasks.home` is Tasks), or nil. The
-    /// Chat tab scopes itself to the app the member last had open.
+    /// The app id an opened route names (`tasks.detail` names the `tasks` domain), or nil. The
+    /// Chat tab scopes itself to the app the member last had open ([scope(of:)]).
     static func app(of route: ShellModel.Route) -> String? {
         switch route {
         case let .screen(identifier, _):
@@ -49,16 +49,16 @@ enum ChatRouting {
         }
     }
 
-    /// Locker is not something the assistant can read (it has no scope), so a
-    /// visit to it never scopes the chat.
-    static func scopes(_ app: String) -> Bool {
-        scopable.contains(app)
+    /// The scope a visit to `app` gives the chat, or "" for none: the machine's
+    /// `scopeOf` — a task page scopes to Agenda (R-1128-F2), and Locker, which the
+    /// assistant cannot read, scopes nothing.
+    static func scope(of app: String) -> String {
+        ChatMachine.shared.scopeOf(appId: app)
     }
 
-    /// The apps a chat can be scoped to, in the order the composer's menu lists
-    /// them: the machine's list (`ChatMachine.SCOPABLE_APPS`), which a spec ties
-    /// to the core's.
-    static var scopable: [String] { ChatMachine.shared.SCOPABLE_APPS }
+    /// The scopes the composer's menu offers, in its order: the machine's list
+    /// (`ChatMachine.SCOPABLE_APPS`), which a spec ties to the core's.
+    static var scopeMenu: [String] { ChatMachine.shared.SCOPABLE_APPS }
 
     private static var chatTitle: String { ChatCopy.shared.TITLE }
 }

@@ -26,16 +26,32 @@ import dev.centraid.shared.shell.HomeSession
 import kotlinx.coroutines.CoroutineScope
 
 /**
- * AGENDA'S ROUTES (#1046). The shell builds the bridges — `shell/` may not
- * import `apps` — and attaches them once, with the other screens. ONE
+ * AGENDA'S ROUTES (#1046, #1128). The shell builds the bridges — `shell/` may
+ * not import `apps` — and attaches them once, with the other screens. ONE
  * [AgendaMarks] is handed to all three, so a write held by the detail or the
  * editor outlives its screen and the list draws its pending chip.
+ *
+ * The home is Day · Schedule · Waiting · To-do (#1128): every way into Agenda —
+ * Home's tile, a chat card or search row, the reminders import's "Open Agenda",
+ * Notes' "Send to Agenda" — is a push of [Destination.AgendaHome], and a task
+ * or project picked on it is a push `AgendaRouting` chooses, drawn by
+ * `TasksRoutes`.
  */
 public class AgendaRoutes : AppRoutes {
     private val marks = AgendaMarks()
     private val agenda = AgendaBridge(marks)
     private val event = AgendaEventBridge(marks)
     private val editor = AgendaEditorBridge(marks)
+
+    /**
+     * THE BAND SWAP THE ROUTE JUST WROTE (or the open it just asked for), so the
+     * entry it produces is not mistaken for a push from elsewhere. One shot: the
+     * next arrival consumes it.
+     */
+    private var written: AgendaHomeState.Destination? = null
+
+    /** A place the route asked the machine to open and has not yet seen land. */
+    private var opening: AgendaHomeState.Destination? = null
 
     override fun handles(destination: Destination): Boolean =
         destination is Destination.AgendaHome || destination is Destination.AgendaEvent || destination is Destination.AgendaEditor
@@ -44,6 +60,8 @@ public class AgendaRoutes : AppRoutes {
     // top entry and must not land on today.
     override fun opens(moveId: String): Destination? = if (moveId == AppIds.AGENDA) {
         agenda.open()
+        written = AgendaHomeState.Destination.DESTINATION_DAY
+        opening = AgendaHomeState.Destination.DESTINATION_DAY
         Destination.AgendaHome()
     } else {
         null
@@ -86,13 +104,39 @@ public class AgendaRoutes : AppRoutes {
         var stack by nav
         val state by agenda.host.state.collectAsStateWithLifecycle()
         val screen = state.screen
+        // A PUSH FROM ELSEWHERE OPENS THE MACHINE ON IT, ONCE: the destination it
+        // names (To-do, from a chat card or the reminders import) and the words
+        // Notes' "Send to Agenda" carries, which wait in the focused quick add.
+        // The words then leave the entry, so a pop back onto this home never seeds
+        // the bar a second time. A band swap the route itself wrote is not an
+        // arrival (`written`), and neither is the machine already being there.
+        LaunchedEffect(destination) {
+            val echo = written
+            written = null
+            val wanted = destination.destination
+            val here = agenda.screen.destination
+            val elsewhere = wanted != AgendaHomeState.Destination.DESTINATION_UNSPECIFIED && wanted != here && wanted != echo
+            val words = destination.quickAdd
+            if (elsewhere || words.isNotEmpty()) {
+                if (wanted != here) opening = wanted
+                agenda.open(wanted, words)
+                if (words.isNotEmpty() && stack.current == destination) {
+                    written = wanted
+                    stack = NavStack(stack.entries.dropLast(1) + destination.copy(quickAdd = ""))
+                }
+            }
+        }
         // THE ROUTE FOLLOWS THE MACHINE: a band tab is a parameter swap on the
-        // top entry, never a push.
+        // top entry, never a push — except while an arrival's open has not landed,
+        // when the machine is still where it was.
         LaunchedEffect(screen.destination) {
             val band = screen.destination
-            if (band != AgendaHomeState.Destination.DESTINATION_UNSPECIFIED &&
-                band != destination.destination
-            ) {
+            if (band == AgendaHomeState.Destination.DESTINATION_UNSPECIFIED) return@LaunchedEffect
+            val pending = opening
+            if (pending != null && band != pending) return@LaunchedEffect
+            opening = null
+            if (band != destination.destination) {
+                written = band
                 stack = stack.withAgendaDestination(band)
             }
         }

@@ -87,9 +87,15 @@ class AssistRoundTripSpec : StringSpec({
 
             // --- a session, scoped to an app the assistant reads --------------
             val started = core.assist(
-                AssistRequest(start = AssistStartRequest(app = "tasks")),
+                AssistRequest(start = AssistStartRequest(app = "agenda")),
             ).answer().started!!
             (started.session_id > 0L) shouldBe true
+
+            // `tasks` is a domain a card names, not a scope: Agenda's scope covers it (R-1128-F2).
+            val tasks = core.assist(AssistRequest(start = AssistStartRequest(app = "tasks")))
+            tasks.shouldBeInstanceOf<CoreOutcome.Failed>()
+            tasks.failure.shouldBeInstanceOf<CoreFailure.Refused>().code shouldBe
+                ErrorCode.ERROR_CODE_INVALID_REQUEST.value
 
             // Locker is not an app a chat can be scoped to: the request's fault.
             val locker = core.assist(AssistRequest(start = AssistStartRequest(app = "locker")))

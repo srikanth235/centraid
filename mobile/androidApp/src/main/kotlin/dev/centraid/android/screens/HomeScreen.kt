@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
@@ -805,6 +806,61 @@ private fun ColumnScope.TileBodyView(tile: HomeTile) {
     }
 }
 
+/**
+ * NOTES' SHELF (`HomeNotesTile`): the notebooks holding notes in soft ink, each
+ * with its count, and the newest note's title alone at the foot. A vault with
+ * nothing filed draws its newest notes instead, and no foot — the first of them
+ * IS the newest. Quiet on purpose: two inks and air, every line one line.
+ * Matches SwiftUI's `NotesShelf`, which says why.
+ */
+@Composable
+private fun NotesShelf(notes: TileBody.Notes, modifier: Modifier) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (notes.notebooks.isEmpty()) {
+            notes.recent.forEach { note ->
+                Text(
+                    note.title,
+                    style = centraidType("small"),
+                    color = centraidColor("text"),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            return@Column
+        }
+        notes.notebooks.forEach { notebook ->
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    notebook.name,
+                    style = centraidType("small"),
+                    color = centraidColor("textSoft"),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    notebook.note_count.toString(),
+                    style = centraidType("mono"),
+                    color = centraidColor("textFaint"),
+                )
+            }
+        }
+        // Pinned to the foot: the shelf leaves its slack above.
+        Spacer(Modifier.weight(1f))
+        Text(
+            notes.title,
+            style = centraidType("smallStrong"),
+            color = centraidColor("text"),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
 @Composable
 private fun ColumnScope.FilledBody(body: TileBody) {
     val column = Modifier.weight(1f, fill = true).fillMaxWidth()
@@ -813,9 +869,9 @@ private fun ColumnScope.FilledBody(body: TileBody) {
     val notes = body.notes
     val agenda = body.agenda
     val people = body.people
-    val tasks = body.tasks
     val locker = body.locker
     val spent = body.money
+    val health = body.health
     when {
         photos != null -> {
             val cells = photos.cells
@@ -928,33 +984,12 @@ private fun ColumnScope.FilledBody(body: TileBody) {
             }
         }
 
-        notes != null -> Column(column, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            // PROSE — a title over an opening line. Notes and Docs shared one
-            // body shape in an early draft and the two were indistinguishable.
-            Text(
-                notes.title,
-                style = centraidType("smallStrong"),
-                color = centraidColor("text"),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            if (notes.excerpt.isNotEmpty()) {
-                // SOFT INK, NOT FULL: `readBodyCss` is `color: t.ink2`, which
-                // the handoff's role map spells `--text-soft`. At full `text`
-                // the excerpt weighed the same as its title and the tile read
-                // as two headings.
-                Text(
-                    notes.excerpt,
-                    style = centraidType("small"),
-                    color = centraidColor("textSoft"),
-                    maxLines = 3,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-        }
+        notes != null -> NotesShelf(notes, column)
 
         agenda != null -> Column(column, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(agenda.at, style = centraidType("mono"), color = centraidColor("textSoft"))
+            if (agenda.at.isNotEmpty()) {
+                Text(agenda.at, style = centraidType("mono"), color = centraidColor("textSoft"))
+            }
             Text(
                 agenda.title,
                 style = centraidType("smallStrong"),
@@ -964,13 +999,44 @@ private fun ColumnScope.FilledBody(body: TileBody) {
             )
             // Pinned to the foot: the sparse tiles leave their slack above.
             Spacer(Modifier.weight(1f))
-            Text(
-                agenda.after,
-                style = centraidType("small"),
-                color = centraidColor("textFaint"),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            // TODAY'S DUE TASKS (#1128): the machine's words, drawn after a round
+            // mark. INK, never the app's hue — a hue-filled circle is a second identity.
+            if (agenda.due_count > 0) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Box(
+                        Modifier
+                            .size(13.dp)
+                            .clip(CircleShape)
+                            .border(HAIRLINE, centraidColor("lineStrong"), CircleShape),
+                    )
+                    Text(
+                        agenda.due_label,
+                        style = centraidType("small"),
+                        color = centraidColor("text"),
+                        maxLines = 1,
+                    )
+                    Text(
+                        agenda.due_title,
+                        style = centraidType("small"),
+                        color = centraidColor("textFaint"),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+            if (agenda.after.isNotEmpty()) {
+                Text(
+                    agenda.after,
+                    style = centraidType("small"),
+                    color = centraidColor("textFaint"),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
 
         people != null -> Column(column, verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -1034,42 +1100,6 @@ private fun ColumnScope.FilledBody(body: TileBody) {
             )
         }
 
-        tasks != null -> Column(column, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            tasks.rows.forEach { row ->
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    // INK, never the app's hue — a hue-filled box is a second
-                    // identity. Done is a filled box with NO glyph.
-                    Box(
-                        Modifier
-                            .size(13.dp)
-                            .clip(RoundedCornerShape(SUB_RADIUS))
-                            .background(if (row.done) centraidColor("accent") else Color.Transparent)
-                            .border(
-                                HAIRLINE,
-                                if (row.done) {
-                                    centraidColor("accent")
-                                } else {
-                                    centraidColor("lineStrong")
-                                },
-                                RoundedCornerShape(SUB_RADIUS),
-                            ),
-                    )
-                    Text(
-                        row.title,
-                        style = centraidType("small"),
-                        color = if (row.done) centraidColor("textFaint") else centraidColor("text"),
-                        textDecoration = if (row.done) TextDecoration.LineThrough else null,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-            }
-        }
-
         // THIS MONTH'S SPENDING, one figure per currency and never a sum across them.
         // The amounts are the core's and the caption is the machine's.
         spent != null -> Column(column, verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -1090,6 +1120,31 @@ private fun ColumnScope.FilledBody(body: TileBody) {
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
+        }
+
+        // TODAY'S STEPS AND LAST NIGHT'S SLEEP (#1129). The figure is the machine's, in text ink:
+        // Health's hue stays on its mark (R-1129-10). No figure is an empty string, never a 0.
+        health != null -> Column(column, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            if (health.figure.isNotEmpty()) {
+                Text(health.figure, style = centraidType("title"), color = centraidColor("text"), maxLines = 1)
+            }
+            Text(
+                health.caption,
+                style = centraidType("small"),
+                color = centraidColor("textSoft"),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.weight(1f))
+            if (health.line.isNotEmpty()) {
+                Text(
+                    health.line,
+                    style = centraidType("small"),
+                    color = centraidColor("textSoft"),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
 
         locker != null -> Column(column, verticalArrangement = Arrangement.spacedBy(4.dp)) {

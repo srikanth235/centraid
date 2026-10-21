@@ -47,6 +47,7 @@ colors:
   c-forest: "#397247"
   c-indigo: "#635a93"
   c-ochre: "#845922"
+  c-olive: "#666723"
   c-rose: "#8c4c61"
   c-slate: "#3e6596"
   c-teal: "#00707e"
@@ -55,6 +56,7 @@ colors:
   c-forest-dark: "#7bb587"
   c-indigo-dark: "#a39bda"
   c-ochre-dark: "#c99b65"
+  c-olive-dark: "#a8aa66"
   c-rose-dark: "#d48da2"
   c-slate-dark: "#7ea7dc"
   c-teal-dark: "#58b4c4"
@@ -63,6 +65,7 @@ colors:
   c-forest-text: "#346841"
   c-indigo-text: "#5f568d"
   c-ochre-text: "#7c5420"
+  c-olive-text: "#5e5f20"
   c-rose-text: "#894a5f"
   c-slate-text: "#3a5e8b"
   c-teal-text: "#006774"
@@ -71,6 +74,7 @@ colors:
   c-forest-text-dark: "#7bb587"
   c-indigo-text-dark: "#a39bda"
   c-ochre-text-dark: "#c99b65"
+  c-olive-text-dark: "#a8aa66"
   c-rose-text-dark: "#d48da2"
   c-slate-text-dark: "#7ea7dc"
   c-teal-text-dark: "#58b4c4"
@@ -398,6 +402,7 @@ Retired with the flip: the teal brand hue, the five-accent `ACCENT_PALETTE` and 
 | photos | 28  | `amber`  | notes  | 255 | `slate`  |
 | tasks  | 70  | `ochre`  | money  | 290 | `indigo` |
 | agenda | 150 | `forest` | people | 320 | `violet` |
+| health | 110 | `olive`  |        |     |          |
 
 Home takes no hue: it renders in `--text-soft`. Colour is never the only channel — every app mark is distinguishable by silhouette alone at 14px, which is what makes the hue system safe for colour-blind readers.
 
@@ -534,8 +539,8 @@ The room owns the header, the back control, search, the empty/loading/error stat
 | --- | --- | --- |
 | The core corrected a typo (the exact answer was empty and a vocabulary word one slip away found rows) | one line directly under the open field, in the secondary text style — "Showing results for “sunscreen”" (`SEARCH_CORRECTED`, id `search-corrected`). It lives in the field component every search slot and Home's search page share, so it is drawn once per platform; the machine puts `SearchField.corrected` in state and the view draws it | a banner, a toast, a second row of results, the line over an exact answer, the line over rows for a term since changed |
 | Home's search found nothing | the no-match sentence and its one action, "Ask about “zzqx”" (`SEARCH_ASK_ABOUT`, id `search-ask-about`): the shell's router switches to the Chat tab and sends "Find zzqx" (`SEARCH_ASK_QUESTION`, finished by the machine in `HomeSearchData.ask_question`). The action is drawn only where the shell has a Chat tab — iOS today | a second sentence, a button inside a row |
-| An app's own search found nothing (Notes, People, Tasks, Docs, Agenda, Photos) | the same kit empty state with the same one action, id `search-ask-about`, whenever the machine put a question in `SearchField.ask` (`AgendaHomeState.search_ask`; Photos' no-match state is `SearchHits.empty`): the answer is current, not denied, and wholly empty (rows and containers). One `SearchEmptyView` per shell draws it, the tap goes to the shell's `askChat`, and Android, with no Chat tab, draws the sentence without it. **Locker's search never offers it** — its term can itself be a secret — | a second presentation, a hand-drawn empty column, an action the view decides to add, Ask in Locker, the action over rows or over a term since changed |
-| A search matched the NAME of a notebook, album, project or Docs folder | one container row per match, above that app's result rows — its kit glyph (`Book`, `Image`, `List`, `Folder`), the title on one line and the kind in a soft word ("Notebook", "Album", "Project", "Folder"; `SEARCH_KIND_*`), id `search-container-<entity>-<id>`. It is ONE component per platform (`SearchContainerRow`) drawn by Home's search page (inside the app's group, before its rows, counted with them) and by Notes', Tasks' and Docs' own search results; the machine finished the words, the glyph and the reference (`SearchContainer`, in `SearchField.containers` for an app and `HomeSearchGroup.containers` on Home) and a tap opens the reference through the shell's one row router, so a chat card for a notebook opens too. A container that matched is an answer: the no-match sentence is not drawn over it. A new term, a close and a stale answer clear or never set it, as for `corrected` | a second router, a row of the view's own, the container among the rows, a count that leaves it out, "nothing found" over a notebook that was found |
+| An app's own search found nothing (Notes, People, Docs, Agenda — tasks included —, Photos) | the same kit empty state with the same one action, id `search-ask-about`, whenever the machine put a question in `SearchField.ask` (`AgendaHomeState.search_ask`; Photos' no-match state is `SearchHits.empty`): the answer is current, not denied, and wholly empty (rows and containers). One `SearchEmptyView` per shell draws it, the tap goes to the shell's `askChat`, and Android, with no Chat tab, draws the sentence without it. **Locker's search never offers it** — its term can itself be a secret — | a second presentation, a hand-drawn empty column, an action the view decides to add, Ask in Locker, the action over rows or over a term since changed |
+| A search matched the NAME of a notebook, album, project or Docs folder | one container row per match, above that app's result rows — its kit glyph (`Book`, `Image`, `List`, `Folder`), the title on one line and the kind in a soft word ("Notebook", "Album", "Project", "Folder"; `SEARCH_KIND_*`), id `search-container-<entity>-<id>`. It is ONE component per platform (`SearchContainerRow`) drawn by Home's search page (inside the app's group, before its rows, counted with them) and by Notes' and Docs' own search results (Agenda's own search carries none: [Q-1128-1](docs/decisions.md#tasks-folds-into-agenda-1128)); the machine finished the words, the glyph and the reference (`SearchContainer`, in `SearchField.containers` for an app and `HomeSearchGroup.containers` on Home) and a tap opens the reference through the shell's one row router, so a chat card for a notebook opens too. A container that matched is an answer: the no-match sentence is not drawn over it. A new term, a close and a stale answer clear or never set it, as for `corrected` | a second router, a row of the view's own, the container among the rows, a count that leaves it out, "nothing found" over a notebook that was found |
 
 `StageRoom` is the one room that takes none of those, and that is the point rather than an omission: one piece of media edge to edge has nothing to be empty of, nothing to search, and no list to select from, and a strip across the top of a photograph is a second ground. What it owes a member instead is a way out, so the room owns the swipe-down dismiss and hands the caller's chrome the same close act — a stage that brings no chrome gets the room's own close key, because a stage with no visible way out is a black screen.
 

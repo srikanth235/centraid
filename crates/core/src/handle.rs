@@ -1060,6 +1060,9 @@ impl Handle {
                     })?,
                 )))
             }
+            K::LibraryAssets(request) => Ok(response(wire::response::Kind::LibraryAssets(
+                self.with_vault(|vault| crate::phone::library_assets(&self.plane, vault, request))?,
+            ))),
             K::Released(request) => {
                 let (answer, assets) =
                     self.with_vault(|vault| crate::phone::released(&self.plane, vault, request))?;
@@ -1419,6 +1422,9 @@ fn request_kind(request: &wire::Request) -> RequestKind {
             | K::RefreshDestination(_)
             | K::Releasable(_)
             | K::Released(_)
+            // `library_assets` IS ONE READ OF THE LEDGER and one of the vault,
+            // for at most a hundred refs (#1127).
+            | K::LibraryAssets(_)
             // A CHAT TURN IS BOUNDED BY ITS CEILINGS: `STEP_CAP` (6) steps of at most
             // 512 tokens, each read from memory, and a free reply of at most 256.
             // It stops through `AssistCancel`, not through this registry, so it

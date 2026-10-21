@@ -17,10 +17,11 @@
 //! People, Agenda and
 //! Docs get none because their day one offers an import.
 //!
-//! **THE TASKS ARE DUE TODAY, the member's today**: Tasks opens on Today, and a
-//! starter that sat in the Inbox would leave Today saying there is nothing to
-//! do. The day is read in the zone the found carried (`FoundRequest.tz`), UTC
-//! when it carried none.
+//! **THE TASKS ARE UNDATED, so they wait in the Inbox**: a starter due on the
+//! day the vault was made read as overdue from the next morning on, "Overdue 2"
+//! and a Reschedule prompt over work the member never chose. Today, empty,
+//! offers "Open Inbox" while undated work waits there, and Home's tile lists
+//! open work whatever its date.
 //!
 //! **THE ROWS ARE DATA**, declared once in [`NOTES`] and [`TASKS`], so a test
 //! reads the same consts [`write`] writes and changing the content never has to
@@ -49,33 +50,18 @@ pub const NOTES: &[(&str, &str)] = &[
     ),
 ];
 
-/// The starter tasks, in the order they are written, each a `schedule.add_task`
-/// due on the member's today.
+/// The starter tasks, in the order they are written, each an undated
+/// `schedule.add_task`: an Inbox task.
 pub const TASKS: &[&str] = &[
     "Tap the circle to finish me",
     "Open me to add a date, a tag or a subtask",
 ];
 
-/// THE MEMBER'S TODAY, `YYYY-MM-DD`, in the IANA zone `tz` at `now_ms`: UTC's
-/// when `tz` is empty or not one the bundled database knows.
-#[must_use]
-pub fn local_today(tz: &str, now_ms: i64) -> String {
-    let zone = centraid_vault::time::zone::FireZone::named(tz)
-        .or_else(|_| centraid_vault::time::zone::FireZone::named("UTC"));
-    match zone {
-        Ok(zone) => {
-            let wall = zone.zoned_parts(now_ms);
-            format!("{:04}-{:02}-{:02}", wall.year, wall.month, wall.day)
-        }
-        Err(_) => crate::example::utc_day(now_ms),
-    }
-}
-
 /// WRITE EVERY STARTER ROW into a founded vault through the command plane, and
 /// report what was refused. The caller warns on a refusal and carries on; see
 /// the module header.
 #[must_use]
-pub fn write(vault: &Vault, registry: &Registry, principal: &Principal, today: &str) -> Report {
+pub fn write(vault: &Vault, registry: &Registry, principal: &Principal) -> Report {
     let mut seeder = Seeder {
         vault,
         registry,
@@ -89,10 +75,7 @@ pub fn write(vault: &Vault, registry: &Registry, principal: &Principal, today: &
         );
     }
     for title in TASKS {
-        seeder.run(
-            "schedule.add_task",
-            json!({ "title": title, "due_at": today }),
-        );
+        seeder.run("schedule.add_task", json!({ "title": title }));
     }
     seeder.report
 }

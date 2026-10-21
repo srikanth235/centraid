@@ -126,7 +126,10 @@ struct DocsDriveView: View {
         .sheet(isPresented: sheetBinding(state)) {
             DocsSheetView(sheet: state.sheet, actions: sheetActions(state))
         }
-        .onAppear(perform: reportPermissions)
+        .onAppear {
+            reportPermissions()
+            ingest.reportFollowed()
+        }
     }
 
     /// THE ONE TRAILING ACTION (R-CHROME-1): the Plus, said as the state's
@@ -400,8 +403,19 @@ struct DocsDriveView: View {
                 case (.add, DocsWrites.shared.KEY_UPLOAD): addRequested(action.key, .upload, state)
                 case (.add, DocsWrites.shared.KEY_SCAN): addRequested(action.key, .scan, state)
                 case (.add, DocsWrites.shared.KEY_TEXT): addRequested(action.key, .text, state)
+                case (.add, DocsWrites.shared.KEY_FOLLOW_FOLDER):
+                    send(Self.event { $0.followFolderRequested = .init() })
+                    ingest.followFolder()
                 case (.more, DocsWrites.shared.KEY_TRASH_SHELF):
                     send(Self.event { $0.trashOpened = .init() })
+                case (.followed, _):
+                    // The row's key names the folder; the shell tells the vault and drops its access.
+                    if let origin = DocsScreens.followBridge.stopTarget(actionKey: action.key) {
+                        send(Self.event { $0.stopFollowingRequested = .with { $0.originID = origin } })
+                        ingest.stopFollowing(origin)
+                    } else {
+                        send(Self.event { $0.action = .with { $0.key = action.key } })
+                    }
                 default:
                     send(Self.event { $0.action = .with { $0.key = action.key } })
                 }
@@ -497,4 +511,10 @@ struct DocsIngestHooks {
     let request: (String, String, String) -> Void
     let retry: () -> Void
     let dismiss: () -> Void
+    /// "Follow a folder" (#1127): raise the folder picker.
+    let followFolder: () -> Void
+    /// A followed folder's "Stop following", by its origin.
+    let stopFollowing: (String) -> Void
+    /// Tell the machine which folders are followed now.
+    let reportFollowed: () -> Void
 }

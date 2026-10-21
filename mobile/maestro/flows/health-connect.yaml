@@ -1,0 +1,84 @@
+# Health: Home → Health → Connect → Apple Health's sheet → Today (#1129).
+#
+# THE POINT OF THIS FLOW is the one thing a unit test cannot see: the OS is asked
+# for access at the member's tap on Connect and nowhere else, and what it read
+# lands on Today. iOS only — Apple Health's sheet is the subject; the Android
+# twin (Health Connect's permission screen) has no flow yet.
+#
+# BEFORE IT RUNS: a vault on the simulator (`mobile/scripts/demo-vault.sh`, or
+# `onboarding.yaml`), and the simulator's Health seeded by the separate
+# HealthSeeder app (`mobile/README.md`, "Seeding the simulator's Health") —
+# without it Today reads nothing and its steps line stays empty. Health must not
+# be connected yet: Connect is reached from the empty state's one action.
+appId: dev.centraid.Centraid
+name: health-connect
+---
+- launchApp
+- assertVisible:
+    id: "home-grid"
+# Health's tile is on Home from day one, drawing what to do while nothing is read.
+# It sits after Money, below the fold on a vault with content.
+- scrollUntilVisible:
+    element:
+      id: "home-tile-health"
+    direction: DOWN
+- tapOn:
+    id: "home-tile-health"
+# NOT CONNECTED: one sentence and Connect, on every tab.
+- assertVisible:
+    id: "health-band"
+- tapOn:
+    id: "health-connect-open"
+# Connect: a switch a type, every one on the first time, and the one Ink button.
+- assertVisible:
+    id: "health-connect-page"
+- assertVisible:
+    id: "health-choice-steps"
+- assertVisible:
+    id: "health-choice-workouts"
+- tapOn:
+    id: "health-connect"
+# APPLE HEALTH'S OWN SHEET, read types only: there is no "write" section in it,
+# because Centraid asks to share nothing (R-1129-7).
+- waitForAnimationToEnd:
+    timeout: 5000
+# HealthKit asks once per install: a phone that already answered (Health was
+# connected, then stopped) gets no sheet, and Connect goes straight through.
+- runFlow:
+    when:
+      visible: "Turn On All"
+    commands:
+      - waitForAnimationToEnd
+      # The sheet is another process's view: a tap by text lands on nothing, so
+      # Turn On All and Allow are tapped where they are drawn (iPhone 17 Pro,
+      # iOS 26.5).
+      - tapOn:
+          point: "30%,54%"
+      - tapOn:
+          point: "50%,85%"
+# CONNECTED POPS BACK to Health, which now reads: Today's hero is steps.
+- extendedWaitUntil:
+    visible:
+      id: "health-hero"
+    timeout: 60000
+- assertNotVisible:
+    id: "health-connect-open"
+# Where the numbers come from, at the page's foot.
+- scrollUntilVisible:
+    element:
+      id: "health-today-foot"
+    direction: DOWN
+# A metric opens on its own page.
+- tapOn:
+    id: "health-metric-active_energy_kcal"
+- assertVisible:
+    id: "health-metric-page"
+- tapOn:
+    id: "kit-pushed-back"
+# The other two tabs read. A band tab is tapped by its words: the plate's own id
+# reaches its buttons on iOS (`selectors.md`, a container's id leaks).
+- tapOn: "Trends"
+- assertVisible:
+    id: "health-trend-steps"
+- tapOn: "Workouts"
+- assertVisible: "All"

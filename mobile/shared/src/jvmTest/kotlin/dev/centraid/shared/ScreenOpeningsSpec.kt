@@ -7,13 +7,14 @@ import centraid.screen.v1.PhotoShelf
 import centraid.screen.v1.TasksCatchUpEvent
 import centraid.screen.v1.TasksDetailEvent
 import centraid.screen.v1.TasksDetailState
-import centraid.screen.v1.TasksHomeEvent
-import centraid.screen.v1.TasksHomeState
+import centraid.screen.v1.AgendaHomeEvent
+import centraid.screen.v1.AgendaHomeState
 import centraid.screen.v1.TasksListEvent
 import centraid.screen.v1.TasksListState
 import dev.centraid.shared.apps.agenda.AgendaEventMachine
 import dev.centraid.shared.apps.docs.DocsDocumentMachine
 import dev.centraid.shared.apps.docs.DocsDriveMachine
+import dev.centraid.shared.apps.health.HealthHomeMachine
 import dev.centraid.shared.apps.money.MoneyHomeMachine
 import dev.centraid.shared.apps.money.MoneyTransactionMachine
 import dev.centraid.shared.apps.notes.NotesEditorMachine
@@ -25,10 +26,10 @@ import dev.centraid.shared.apps.photos.PhotoShelfMachine
 import dev.centraid.shared.apps.photos.PhotosGridMachine
 import dev.centraid.shared.apps.tasks.TasksCatchUpMachine
 import dev.centraid.shared.apps.tasks.TasksDetailMachine
-import dev.centraid.shared.apps.tasks.TasksHomeMachine
+import dev.centraid.shared.apps.agenda.AgendaHomeMachine
 import dev.centraid.shared.apps.tasks.TasksListMachine
 import dev.centraid.shared.apps.tasks.TasksProjectMachine
-import dev.centraid.shared.apps.tasks.TasksRouting
+import dev.centraid.shared.apps.agenda.AgendaRouting
 import dev.centraid.shared.apps.tasks.TasksTrashMachine
 import dev.centraid.shared.nav.AppIds
 import dev.centraid.shared.nav.Destination
@@ -104,12 +105,17 @@ class ScreenOpeningsSpec : StringSpec({
     }
 
     "a noun the table has no row for opens the app's home, an unknown app opens nothing" {
-        RowRoutes.route(row("tasks", "tag", "x"))!!.screenId shouldBe TasksHomeMachine.SCREEN_ID
+        RowRoutes.route(row("tasks", "tag", "x"))!!.screenId shouldBe AgendaHomeMachine.SCREEN_ID
         RowRoutes.route(row("people", "tag", "x"))!!.screenId shouldBe PeopleHomeMachine.SCREEN_ID
         RowRoutes.route(row("money", "tag", "x"))!!.screenId shouldBe MoneyHomeMachine.SCREEN_ID
+        RowRoutes.route(row("health", "activity", "x"))!!.screenId shouldBe HealthHomeMachine.SCREEN_ID
         RowRoutes.route(row("photos", "tag", "x"))!!.screenId shouldBe PhotosGridMachine.SCREEN_ID
         RowRoutes.route(row("weather", "forecast", "x")).shouldBeNull()
-        RowRoutes.appHomeRoute(AppIds.TASKS)!!.screenId shouldBe TasksHomeMachine.SCREEN_ID
+        // TASKS IS A DOMAIN, NOT AN APP (R-1128-7): its front door is Agenda's To-do.
+        RowRoutes.appHomeRoute(AppIds.TASKS)!!.run {
+            screenId shouldBe AgendaHomeMachine.SCREEN_ID
+            AgendaHomeEvent.ADAPTER.decode(event).opened!!.destination shouldBe AgendaHomeState.Destination.DESTINATION_TODO
+        }
         RowRoutes.appHomeRoute("locker").shouldBeNull()
     }
 
@@ -119,9 +125,12 @@ class ScreenOpeningsSpec : StringSpec({
     }
 
     "a route is its destination, spelled: the same screen id the shell registers and the event it opens by" {
-        ScreenOpenings.of(Destination.TasksHome())!!.run {
-            screenId shouldBe TasksHomeMachine.SCREEN_ID
-            TasksHomeEvent.ADAPTER.decode(event).opened!!.destination shouldBe TasksHomeState.Destination.DESTINATION_TODAY
+        ScreenOpenings.of(Destination.AgendaHome(AgendaHomeState.Destination.DESTINATION_TODO, quickAdd = "Buy milk"))!!.run {
+            screenId shouldBe AgendaHomeMachine.SCREEN_ID
+            AgendaHomeEvent.ADAPTER.decode(event).opened!!.let {
+                it.destination shouldBe AgendaHomeState.Destination.DESTINATION_TODO
+                it.quick_add_title shouldBe "Buy milk"
+            }
         }
         ScreenOpenings.of(Destination.TasksList(TasksListState.View.VIEW_LOGBOOK))!!.run {
             screenId shouldBe TasksListMachine.SCREEN_ID
@@ -133,43 +142,68 @@ class ScreenOpeningsSpec : StringSpec({
         ScreenOpenings.of(Destination.Settings).shouldBeNull()
     }
 
-    "every More row of Tasks' home is a page the shell pushes, or the machine's own" {
-        val rows = TasksHomeMachine.initial().screen.more_rows.map { it.key }
-        val state = TasksHomeState()
+    "every Tasks place in Agenda's More is a page the shell pushes, or the machine's own" {
+        val rows = AgendaHomeMachine.initial().screen.more_rows.map { it.key }
+        val state = AgendaHomeState()
         val routed = rows.filter { key ->
-            TasksRouting.home(TasksHomeEvent(more_row = TasksHomeEvent.MoreRowPicked(key = key)), state) != null
+            AgendaRouting.home(AgendaHomeEvent(more_row = AgendaHomeEvent.MoreRowPicked(key = key)), state) != null
         }
-        // `reads` is a sheet over the home; every other row is a destination.
-        rows.filterNot { it in routed } shouldContainExactly listOf(TasksHomeMachine.MORE_READS)
-        TasksRouting.home(TasksHomeEvent(more_row = TasksHomeEvent.MoreRowPicked(key = TasksHomeMachine.MORE_TRASH)), state) shouldBe
-            Destination.TasksTrash
-        TasksRouting.home(TasksHomeEvent(more_row = TasksHomeEvent.MoreRowPicked(key = TasksHomeMachine.MORE_CATCH_UP)), state) shouldBe
-            Destination.TasksCatchUp
-        TasksRouting.home(TasksHomeEvent(more_row = TasksHomeEvent.MoreRowPicked(key = TasksHomeMachine.MORE_ALL)), state) shouldBe
-            Destination.TasksList(TasksListState.View.VIEW_ALL)
+        // `reads` is a sheet over the home; every Tasks place is a destination.
+        rows.filterNot { it in routed } shouldContainExactly listOf(AgendaHomeMachine.MORE_READS)
+        fun more(key: String) = AgendaRouting.home(AgendaHomeEvent(more_row = AgendaHomeEvent.MoreRowPicked(key = key)), state)
+        more(AgendaHomeMachine.MORE_TRASH) shouldBe Destination.TasksTrash
+        more(AgendaHomeMachine.MORE_ANYTIME) shouldBe Destination.TasksList(TasksListState.View.VIEW_ANYTIME)
+        more(AgendaHomeMachine.MORE_LOGBOOK) shouldBe Destination.TasksList(TasksListState.View.VIEW_LOGBOOK)
+        more(AgendaHomeMachine.MORE_REMINDERS) shouldBe Destination.TasksList(TasksListState.View.VIEW_REMINDERS)
+        // All and Catch up are retired rows (R-1128-6): their old keys route nowhere.
+        more("all").shouldBeNull()
+        more("catch_up").shouldBeNull()
     }
 
-    "Tasks' intents, asked as bytes, answer the destination Android would push" {
-        val picked = TasksHomeEvent(row_picked = TasksHomeEvent.RowPicked(task_id = "t9"))
-        val route = TasksRouting.route(TasksHomeMachine.SCREEN_ID, picked.encode(), TasksHomeState().encode())
+    "Agenda's task intents, asked as bytes, answer the destination Android would push" {
+        val picked = AgendaHomeEvent(task_picked = AgendaHomeEvent.TaskPicked(task_id = "t9"))
+        val route = AgendaRouting.route(AgendaHomeMachine.SCREEN_ID, picked.encode(), AgendaHomeState().encode())
         route.shouldNotBeNull()
-        route.screenId shouldBe TasksDetailMachine.SCREEN_ID
-        TasksDetailEvent.ADAPTER.decode(route.event).opened!!.task_id shouldBe "t9"
+        route.dropsTop shouldBe false
+        route.openings.single().screenId shouldBe TasksDetailMachine.SCREEN_ID
+        TasksDetailEvent.ADAPTER.decode(route.openings.single().event).opened!!.task_id shouldBe "t9"
 
         // A task with no id, an event that routes nowhere and bytes that are not an event open nothing.
-        TasksRouting.route(TasksHomeMachine.SCREEN_ID, TasksHomeEvent(row_picked = TasksHomeEvent.RowPicked()).encode(), ByteArray(0)).shouldBeNull()
-        TasksRouting.route(TasksHomeMachine.SCREEN_ID, TasksHomeEvent().encode(), ByteArray(0)).shouldBeNull()
-        TasksRouting.route(TasksHomeMachine.SCREEN_ID, byteArrayOf(-1, -1, -1), ByteArray(0)).shouldBeNull()
-        TasksRouting.route("notes.library", picked.encode(), ByteArray(0)).shouldBeNull()
+        AgendaRouting.route(AgendaHomeMachine.SCREEN_ID, AgendaHomeEvent(task_picked = AgendaHomeEvent.TaskPicked()).encode(), ByteArray(0)).shouldBeNull()
+        AgendaRouting.route(AgendaHomeMachine.SCREEN_ID, AgendaHomeEvent().encode(), ByteArray(0)).shouldBeNull()
+        AgendaRouting.route(AgendaHomeMachine.SCREEN_ID, byteArrayOf(-1, -1, -1), ByteArray(0)).shouldBeNull()
+        AgendaRouting.route("notes.library", picked.encode(), ByteArray(0)).shouldBeNull()
 
         val catchUp = TasksCatchUpEvent(row_picked = TasksCatchUpEvent.RowPicked(task_id = "t2"))
-        TasksRouting.route(TasksCatchUpMachine.SCREEN_ID, catchUp.encode(), ByteArray(0))!!.screenId shouldBe TasksDetailMachine.SCREEN_ID
+        AgendaRouting.route(TasksCatchUpMachine.SCREEN_ID, catchUp.encode(), ByteArray(0))!!.openings.single().screenId shouldBe
+            TasksDetailMachine.SCREEN_ID
+    }
+
+    "a project picked on To-do opens that project under the name the state draws; Reschedule opens Catch up" {
+        val state = AgendaHomeState(
+            data_ = centraid.screen.v1.AgendaHomeData(
+                todo = centraid.screen.v1.AgendaTodo(
+                    projects = listOf(
+                        centraid.screen.v1.TasksProjectGroup(
+                            rows = listOf(centraid.screen.v1.ListRow(id = "p1", title = "Garden")),
+                        ),
+                    ),
+                ),
+                notice = centraid.screen.v1.TasksNotice(verb_key = "catch_up"),
+            ),
+        )
+        AgendaRouting.home(AgendaHomeEvent(project_picked = AgendaHomeEvent.ProjectPicked(project_id = "p1")), state) shouldBe
+            Destination.TasksProject("p1", "Garden")
+        AgendaRouting.home(AgendaHomeEvent(group_verb = AgendaHomeEvent.GroupVerb(key = "catch_up")), state) shouldBe Destination.TasksCatchUp
+        AgendaRouting.home(AgendaHomeEvent(notice_acted = AgendaHomeEvent.NoticeActed()), state) shouldBe Destination.TasksCatchUp
+        AgendaRouting.home(AgendaHomeEvent(notice_acted = AgendaHomeEvent.NoticeActed()), AgendaHomeState()).shouldBeNull()
+        AgendaRouting.home(AgendaHomeEvent(group_verb = AgendaHomeEvent.GroupVerb(key = "add:")), state).shouldBeNull()
     }
 
     "a detail's parent opens the task it hangs from, once the state names it" {
         val parent = TasksDetailEvent(parent_picked = TasksDetailEvent.ParentPicked())
-        TasksRouting.detail(parent, TasksDetailState()).shouldBeNull()
+        AgendaRouting.detail(parent, TasksDetailState()).shouldBeNull()
         val state = TasksDetailState(data_ = centraid.screen.v1.TasksDetailData(parent_task_id = "up"))
-        TasksRouting.detail(parent, state) shouldBe Destination.TasksDetail("up")
+        AgendaRouting.detail(parent, state) shouldBe Destination.TasksDetail("up")
     }
 })

@@ -61,8 +61,9 @@ public class NotesRoutes : AppRoutes {
             destination == Destination.NotesTrash
 
     /**
-     * THE TILE DECIDES, ONE RULE FOR BOTH SHELLS (`NotesRouting.target`): the
-     * note it shows, a new note when there is none, nowhere while it reads.
+     * THE TILE DECIDES, ONE RULE FOR BOTH SHELLS (`NotesRouting.tile`): the
+     * Notes place over its shelf, a new note when there is none, nowhere
+     * while it reads.
      */
     override fun opens(moveId: String): Destination? {
         if (moveId != AppIds.NOTES) return null

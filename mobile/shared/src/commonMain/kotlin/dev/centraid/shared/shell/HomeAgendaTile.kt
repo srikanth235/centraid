@@ -4,6 +4,10 @@ import centraid.core.v1.AgendaEvent
 import centraid.core.v1.AgendaUpcoming
 import centraid.core.v1.AgendaUpcomingRequest
 import centraid.core.v1.AppQueryRequest
+import centraid.core.v1.TasksBoard
+import centraid.core.v1.TasksBoardRequest
+import centraid.core.v1.TasksGroupKind
+import centraid.core.v1.TasksView
 import centraid.screen.v1.HomeEvent
 import centraid.screen.v1.TileBody
 import centraid.screen.v1.TileCount
@@ -33,6 +37,16 @@ import dev.centraid.shared.sync.rfc3339FromEpochMillis
  * name, and the only arithmetic is civil — which weekday a `YYYY-MM-DD` is,
  * which day is seven after it (`sync/CivilDays.kt`).
  *
+ * ## Today's due tasks ride the same tile (#1128, R-1128-8)
+ *
+ * Tasks folded into Agenda, so the tile that names the next event also says how
+ * much is due: one more app query, `tasks.board` over TODAY, answers the open
+ * tasks overdue or due today, and [arrived] puts their count and the first
+ * title on the body. The two reads are SEPARATE calls: a tasks read that is
+ * denied or fails leaves the tile as it was (no due line), never a refused
+ * Agenda. OVERDUE COUNTS AS DUE: a tile that said "0 due" over two tasks a week
+ * late would lie by omission, and the Overdue group is Today's first.
+ *
  * ## The window is fourteen days
  *
  * `from` is empty, which the core reads as the first instant of TODAY in the
@@ -52,6 +66,12 @@ public object HomeAgendaTile {
     /** The count's reach: occurrences on today and the six days after it. */
     public const val COUNT_DAYS: Int = 7
 
+    /**
+     * The board window the due read asks for: the page Today itself reads, so
+     * the tile and Today agree (the manifest clamps it to 20..500).
+     */
+    public const val DUE_WINDOW: Int = 100
+
     private const val MILLIS_PER_DAY: Long = 86_400_000
 
     /**
@@ -62,10 +82,11 @@ public object HomeAgendaTile {
      * occurrences — each changes which occurrence is next or what it is
      * called. Attendees, attachments and parties decorate a row the tile does
      * not draw, and a re-read of Home on every RSVP would be read load for a
-     * launcher that looks the same afterwards.
+     * launcher that looks the same afterwards. `schedule_task` moves the due
+     * line (#1128).
      */
     public val TABLES: Set<String> =
-        setOf("core_event", "schedule_event_ext", "schedule_recurrence_exception")
+        setOf("core_event", "schedule_event_ext", "schedule_recurrence_exception", "schedule_task")
 
     /** The one query, in the device's zone, over the next [WINDOW_DAYS]. */
     public fun request(now: DeviceClock.Reading): AppQueryRequest = AppQueryRequest(
@@ -76,28 +97,41 @@ public object HomeAgendaTile {
         ),
     )
 
+    /** The due read: the open tasks overdue or due today, in the device's zone (#1128). */
+    public fun dueRequest(now: DeviceClock.Reading): AppQueryRequest = AppQueryRequest(
+        tasks_board = TasksBoardRequest(tz = now.zone, limit = DUE_WINDOW, view = TasksView.TASKS_VIEW_TODAY),
+    )
+
     /**
-     * The tile, out of one answer.
+     * The tile, out of one answer and, when that read landed, the due board.
      *
-     * **NOTHING UPCOMING IS `EMPTY`, not `UNKNOWN`.** The read landed and the
-     * next fortnight holds nothing, which is a true answer — the tile falls to
-     * first moves with its empty copy, as v0's did. A read that did not land
-     * never reaches here; it is `TileRefused`.
+     * **NOTHING UPCOMING AND NOTHING DUE IS `EMPTY`, not `UNKNOWN`.** The read
+     * landed and the next fortnight holds nothing, which is a true answer — the
+     * tile falls to first moves with its empty copy, as v0's did. A read that
+     * did not land never reaches here; it is `TileRefused`. A [due] that did
+     * not land is null and adds nothing: the tile never claims a count it did
+     * not read.
      */
-    public fun arrived(answer: AgendaUpcoming): HomeEvent {
+    public fun arrived(answer: AgendaUpcoming, due: TasksBoard? = null): HomeEvent {
         val today = answer.today
         val now = answer.now_local
         // IN START ORDER, as the core answers them: the first that has not
         // ended is next, whether it is later today or already under way.
         val live = answer.events.filter { it.local_start.isNotEmpty() && !it.endedBy(today, now) }
         val horizon = plusDays(today, COUNT_DAYS)
-        val count = live.count { horizon == null || it.firstDay() < horizon }
+        val owed = Due.of(due)
+        // THE COUNT IS WHAT THE TILE DRAWS (#1128): events in the next
+        // COUNT_DAYS plus the tasks due, because "0" over a "1 due" line
+        // contradicted itself. Its noun is "on your plate", which holds both.
+        val count = live.count { horizon == null || it.firstDay() < horizon } + owed.count
         val next = live.firstOrNull() ?: return HomeEvent(
             tile = HomeEvent.TileArrived(
                 app_id = APP_ID,
-                status = TileStatus.TILE_STATUS_EMPTY,
-                count = TileCount(value_ = 0),
-                count_label = HomeReads.countNoun(0, false, AgendaCopy.TILE_COUNT_ONE, AgendaCopy.TILE_COUNT_MANY),
+                status = if (owed.count == 0) TileStatus.TILE_STATUS_EMPTY else TileStatus.TILE_STATUS_CONTENT,
+                count = TileCount(value_ = owed.count),
+                count_label = HomeReads.countNoun(owed.count, false, AgendaCopy.TILE_COUNT_ONE, AgendaCopy.TILE_COUNT_MANY),
+                // Tasks alone: the headline says there is no event, and the due line is the tile.
+                body = if (owed.count == 0) null else TileBody(agenda = owed.on(TileBody.Agenda(title = AgendaCopy.TILE_NO_EVENTS))),
             ),
         )
         // A SERIES IS ONE THING ON A LAUNCHER. Its next occurrence is the
@@ -114,14 +148,41 @@ public object HomeAgendaTile {
                 count = TileCount(value_ = count),
                 count_label = HomeReads.countNoun(count, false, AgendaCopy.TILE_COUNT_ONE, AgendaCopy.TILE_COUNT_MANY),
                 body = TileBody(
-                    agenda = TileBody.Agenda(
-                        title = next.title(),
-                        at = next.whenLine(today),
-                        after = afterLine(next, after, today),
+                    agenda = owed.on(
+                        TileBody.Agenda(
+                            title = next.title(),
+                            at = next.whenLine(today),
+                            after = afterLine(next, after, today),
+                        ),
                     ),
                 ),
             ),
         )
+    }
+
+    /**
+     * WHAT IS DUE (#1128): overdue and due-today open tasks, counted off the
+     * board's own counts (roots only, as Today counts them), headed by the first
+     * title of the first group that holds one — Overdue before Today.
+     */
+    private class Due(val count: Int, val title: String) {
+        fun on(body: TileBody.Agenda): TileBody.Agenda = if (count == 0) {
+            body
+        } else {
+            body.copy(due_count = count, due_label = AgendaCopy.TILE_DUE.replace("{n}", count.toString()), due_title = title)
+        }
+
+        companion object {
+            fun of(board: TasksBoard?): Due {
+                val counts = board?.counts ?: return Due(0, "")
+                val count = counts.overdue + counts.today
+                val first = board.groups
+                    .filter { it.kind == TasksGroupKind.TASKS_GROUP_KIND_OVERDUE || it.kind == TasksGroupKind.TASKS_GROUP_KIND_TODAY }
+                    .sortedBy { if (it.kind == TasksGroupKind.TASKS_GROUP_KIND_OVERDUE) 0 else 1 }
+                    .firstNotNullOfOrNull { group -> group.tasks.firstOrNull() }
+                return Due(count, first?.title.orEmpty())
+            }
+        }
     }
 
     /**

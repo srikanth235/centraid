@@ -132,10 +132,10 @@ class HomeMachineSpec : StringSpec({
         val tiles = opened().data_!!.tiles.associateBy { it.app_id }
         // The mosaic takes the corner because it is the one body that needs area.
         tiles.getValue("photos").size shouldBe TileSize.TILE_SIZE_LARGE
-        // Prose needs measure.
+        // A file list's names and sizes need measure.
         tiles.getValue("docs").size shouldBe TileSize.TILE_SIZE_MEDIUM
-        tiles.getValue("notes").size shouldBe TileSize.TILE_SIZE_MEDIUM
-        // A figure or a chip needs neither.
+        // A figure, a chip or a shelf of one-line names needs neither.
+        tiles.getValue("notes").size shouldBe TileSize.TILE_SIZE_SMALL
         tiles.getValue("locker").size shouldBe TileSize.TILE_SIZE_SMALL
         // `LARGE` flattens to full width on the two-column phone grid.
         tiles.getValue("photos").wide.shouldBeTrue()
@@ -323,12 +323,12 @@ class HomeMachineSpec : StringSpec({
             // A wide tile takes a whole line.
             listOf("photos"),
             listOf("docs"),
-            listOf("notes"),
+            listOf("agenda"),
             // Smalls pair.
-            listOf("agenda", "tasks"),
-            listOf("money", "people"),
-            // A lone small at the end is not a hole.
+            listOf("notes", "money"),
+            listOf("health", "people"),
             listOf("locker"),
+            listOf("people", "locker"),
         )
     }
 
@@ -354,7 +354,7 @@ class HomeMachineSpec : StringSpec({
     }
 
     "a small before a wide is PULLED FORWARD, so no row ends half empty" {
-        // Today's roster never reaches this: `SPRINGBOARD_ORDER` puts all three
+        // Today's roster never reaches this: `SPRINGBOARD_ORDER` puts both
         // wide tiles first, so a small never precedes one. Pins are what
         // reorder the grid (v0 `home-pins.ts`, not yet ported), and the moment
         // they do, a pinned small ahead of Photos would otherwise leave a
@@ -688,7 +688,7 @@ class HomeMachineSpec : StringSpec({
         quiet.action shouldBe ""
         quiet.destination shouldBe HomeStatus.Destination.DESTINATION_NONE
         strandedStatus(StrandedWrite("tasks", "schedule.edit_task", "That task is gone.")).copy shouldBe
-            "Tasks: That task is gone."
+            "Agenda: That task is gone."
         val told = HomeMachine.reduce(named("v1", "Demo vault"), HomeEvent(status = HomeEvent.StatusChanged(status = quiet))).state
         told.data_.shouldNotBeNull().status shouldBe quiet
     }

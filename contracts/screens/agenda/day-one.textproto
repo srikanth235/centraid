@@ -30,6 +30,7 @@ sheet: SHEET_NONE
 band { key: "day" label: "Day" icon_key: "Clock" current: false }
 band { key: "schedule" label: "Schedule" icon_key: "List" current: true }
 band { key: "waiting" label: "Waiting" icon_key: "Inbox" current: false }
+band { key: "todo" label: "To-do" icon_key: "Todo" current: false }
 band { key: "more" label: "More" icon_key: "MoreHoriz" current: false }
 toolbar {
   shown: true

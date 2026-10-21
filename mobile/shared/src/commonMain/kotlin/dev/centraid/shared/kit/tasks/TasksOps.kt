@@ -1,4 +1,4 @@
-package dev.centraid.shared.apps.tasks
+package dev.centraid.shared.kit.tasks
 
 import centraid.core.v1.TasksTask
 import centraid.screen.v1.StatusLine
@@ -8,6 +8,8 @@ import dev.centraid.shared.kit.InvokeKeys
 import dev.centraid.shared.kit.jsonString
 import dev.centraid.shared.kit.time.CivilWords
 import dev.centraid.shared.screen.ScreenEffect
+import kotlin.uuid.ExperimentalUuidApi
+import kotlin.uuid.Uuid
 
 /** One write a Tasks list holds, by the key it was submitted under. */
 public data class TaskOp(
@@ -87,6 +89,10 @@ public object TaskOpsLaw {
     public const val SAVE_SECTION: String = "schedule.save_section"
 
     public data class Out(val ops: TaskOps, val effects: List<ScreenEffect> = emptyList())
+
+    /** A fresh task id: a v4 UUID, the shape `add_task` honours. A reducer is pure, so a bridge mints it. */
+    @OptIn(ExperimentalUuidApi::class)
+    public fun mintId(): String = Uuid.random().toString()
 
     /** The box. Open work completes; closed work (the Logbook) reopens. */
     public fun checked(ops: TaskOps, task: TasksTask): Out {

@@ -508,9 +508,8 @@ private struct TileCard: View {
     /// no destination yet, and `nil` is the honest answer for them — pushing a
     /// blank cover would be worse than a tap that stays put.
     ///
-    /// Notes leads to ITS OWN NOTE, because the tile body names one
-    /// (`TileBody.Notes.note_id`) and the editor's read is parameterised by a
-    /// note id: a cover opened without one reads nothing.
+    /// Notes leads to the Notes place once its shelf is drawn, and to a new
+    /// note on an empty vault (`NotesRouting.tile`).
     static func route(for tile: Centraid_Screen_V1_HomeTile) -> ShellModel.Route? {
         // Photos is the one app still routed by its own case; every other
         // app's tile route is its `AppScreens.tileRoute` (K5).
@@ -589,68 +588,47 @@ private struct ContentBody: View {
             }
             .frame(maxWidth: .infinity, alignment: .topLeading)
 
-        case let .notes(note):
-            // PROSE — a title over an opening line. Notes and Docs shared one
-            // body shape in an early draft and the two were indistinguishable.
-            VStack(alignment: .leading, spacing: 4) {
-                Text(note.title)
-                    .centraidType("smallStrong")
-                    .foregroundStyle(Theme.color("text", scheme))
-                    .lineLimit(1)
-                if !note.excerpt.isEmpty {
-                    // SOFT INK, NOT FULL: `readBodyCss` is `color: t.ink2`,
-                    // which the handoff's own role map spells `--text-soft`.
-                    // Drawn at full `text` the excerpt weighed the same as the
-                    // title above it and the tile read as two headings.
-                    Text(note.excerpt)
-                        .centraidType("small")
-                        .foregroundStyle(Theme.color("textSoft", scheme))
-                        .lineLimit(3)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .topLeading)
+        case let .notes(notes):
+            NotesShelf(notes: notes)
 
         case let .agenda(agenda):
             VStack(alignment: .leading, spacing: 4) {
-                Text(agenda.at)
-                    .centraidType("mono")
-                    .foregroundStyle(Theme.color("textSoft", scheme))
+                if !agenda.at.isEmpty {
+                    Text(agenda.at)
+                        .centraidType("mono")
+                        .foregroundStyle(Theme.color("textSoft", scheme))
+                }
                 Text(agenda.title)
                     .centraidType("smallStrong")
                     .foregroundStyle(Theme.color("text", scheme))
                     .lineLimit(2)
                 // Pinned to the foot: the sparse tiles leave their slack above.
                 Spacer(minLength: 0)
-                Text(agenda.after)
-                    .centraidType("small")
-                    .foregroundStyle(Theme.color("textFaint", scheme))
-                    .lineLimit(1)
-            }
-            .frame(maxWidth: .infinity, alignment: .topLeading)
-
-        case let .tasks(tasks):
-            VStack(alignment: .leading, spacing: 4) {
-                ForEach(tasks.rows, id: \.taskID) { row in
-                    HStack(spacing: 8) {
-                        // INK, never the app's hue — a hue-filled box is a
-                        // second identity. Done is a filled box with NO glyph.
-                        RoundedRectangle(cornerRadius: subRadius)
-                            .fill(row.done ? Theme.color("accent", scheme) : Color.clear)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: subRadius)
-                                    .strokeBorder(
-                                        Theme.color(row.done ? "accent" : "lineStrong", scheme),
-                                        lineWidth: hairline
-                                    )
-                            )
+                // TODAY'S DUE TASKS (#1128): the machine's words, drawn after a
+                // round mark. INK, never the app's hue — a hue-filled circle is a
+                // second identity.
+                if agenda.dueCount > 0 {
+                    HStack(spacing: 6) {
+                        Circle()
+                            .strokeBorder(Theme.color("lineStrong", scheme), lineWidth: hairline)
                             .frame(width: 13, height: 13)
-                        Text(row.title)
+                        Text(agenda.dueLabel)
                             .centraidType("small")
-                            .foregroundStyle(Theme.color(row.done ? "textFaint" : "text", scheme))
-                            .strikethrough(row.done)
+                            .foregroundStyle(Theme.color("text", scheme))
+                            .lineLimit(1)
+                            .layoutPriority(1)
+                        Text(agenda.dueTitle)
+                            .centraidType("small")
+                            .foregroundStyle(Theme.color("textFaint", scheme))
                             .lineLimit(1)
                         Spacer(minLength: 0)
                     }
+                }
+                if !agenda.after.isEmpty {
+                    Text(agenda.after)
+                        .centraidType("small")
+                        .foregroundStyle(Theme.color("textFaint", scheme))
+                        .lineLimit(1)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .topLeading)
@@ -755,9 +733,82 @@ private struct ContentBody: View {
             }
             .frame(maxWidth: .infinity, alignment: .topLeading)
 
+        case let .health(health):
+            // TODAY'S STEPS AND LAST NIGHT'S SLEEP (#1129), every word the
+            // machine's: an empty figure is a day with no steps yet, drawn as
+            // the caption alone and never as a 0, and an empty line is no sleep.
+            VStack(alignment: .leading, spacing: 2) {
+                if !health.figure.isEmpty {
+                    Text(health.figure)
+                        .centraidType("mono")
+                        .monospacedDigit()
+                        .foregroundStyle(Theme.color("text", scheme))
+                        .lineLimit(1)
+                }
+                Text(health.caption)
+                    .centraidType("small")
+                    .foregroundStyle(Theme.color("textSoft", scheme))
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+                if !health.line.isEmpty {
+                    Text(health.line)
+                        .centraidType("small")
+                        .foregroundStyle(Theme.color("text", scheme))
+                        .lineLimit(1)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+
         case .none:
             EmptyView()
         }
+    }
+}
+
+/// NOTES' SHELF (`HomeNotesTile`): the notebooks holding notes in soft ink,
+/// each with its count, and the newest note's title alone at the foot. A vault
+/// with nothing filed draws its newest notes instead, and no foot — the first
+/// of them IS the newest.
+///
+/// QUIET ON PURPOSE. A first build drew a spine per notebook, a rule over the
+/// foot and an edited line under it: five marks in a half-width body, and it
+/// read as congested. What is left is two inks and air — the shelf soft, the
+/// note full — and every line is one line, truncated rather than wrapped.
+private struct NotesShelf: View {
+    let notes: Centraid_Screen_V1_TileBody.Notes
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if notes.notebooks.isEmpty {
+                ForEach(notes.recent, id: \.noteID) { note in
+                    Text(note.title)
+                        .centraidType("small")
+                        .foregroundStyle(Theme.color("text", scheme))
+                        .lineLimit(1)
+                }
+            } else {
+                ForEach(notes.notebooks, id: \.notebookID) { notebook in
+                    HStack(spacing: 8) {
+                        Text(notebook.name)
+                            .centraidType("small")
+                            .foregroundStyle(Theme.color("textSoft", scheme))
+                            .lineLimit(1)
+                        Spacer(minLength: 0)
+                        Text("\(notebook.noteCount)")
+                            .centraidType("mono")
+                            .foregroundStyle(Theme.color("textFaint", scheme))
+                    }
+                }
+                // Pinned to the foot: the shelf leaves its slack above.
+                Spacer(minLength: 0)
+                Text(notes.title)
+                    .centraidType("smallStrong")
+                    .foregroundStyle(Theme.color("text", scheme))
+                    .lineLimit(1)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
     }
 }
 

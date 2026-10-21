@@ -114,16 +114,11 @@ public object VaultRoster {
          * a member's first vault.
          */
         content: FoundContent = FoundContent.FOUND_CONTENT_UNSPECIFIED,
-        /**
-         * The device's IANA zone, so the starter tasks are due on the member's
-         * own today (`FoundRequest.tz`). Empty is UTC.
-         */
-        tz: String = "",
     ): Boolean {
         val envelope = Envelope(
             request_id = 0,
             request = Request(
-                found = FoundRequest(display_name = displayName, owner_name = ownerName, content = content, tz = tz),
+                found = FoundRequest(display_name = displayName, owner_name = ownerName, content = content),
             ),
         )
         return when (val outcome = core.call(envelope)) {

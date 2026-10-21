@@ -8,6 +8,10 @@ import centraid.screen.v1.DocsDocumentEvent
 import centraid.screen.v1.DocsDriveEvent
 import centraid.screen.v1.DocsDriveState
 import centraid.screen.v1.DocsEditorEvent
+import centraid.screen.v1.HealthConnectEvent
+import centraid.screen.v1.HealthHomeEvent
+import centraid.screen.v1.HealthMetricEvent
+import centraid.screen.v1.HealthWorkoutEvent
 import centraid.screen.v1.LockerAccessEvent
 import centraid.screen.v1.LockerEditorEvent
 import centraid.screen.v1.LockerEditorState
@@ -34,7 +38,6 @@ import centraid.screen.v1.PeopleHomeEvent
 import centraid.screen.v1.PeoplePersonEvent
 import centraid.screen.v1.TasksCatchUpEvent
 import centraid.screen.v1.TasksDetailEvent
-import centraid.screen.v1.TasksHomeEvent
 import centraid.screen.v1.TasksListEvent
 import centraid.screen.v1.TasksProjectEvent
 import centraid.screen.v1.TrashListEvent
@@ -68,15 +71,6 @@ public object ScreenOpenings {
      * spells (a shell-owned page, or one the callers have not needed yet).
      */
     public fun of(destination: Destination): ScreenOpening? = when (destination) {
-        is Destination.TasksHome -> screen(
-            ScreenIds.TASKS_HOME,
-            TasksHomeEvent(
-                opened = TasksHomeEvent.Opened(
-                    destination = destination.destination,
-                    quick_add_title = destination.quickAdd,
-                ),
-            ).encode(),
-        )
         is Destination.TasksList -> screen(
             ScreenIds.TASKS_LIST,
             TasksListEvent(opened = TasksListEvent.Opened(view = destination.view)).encode(),
@@ -154,7 +148,12 @@ public object ScreenOpenings {
         )
         is Destination.AgendaHome -> screen(
             ScreenIds.AGENDA_HOME,
-            AgendaHomeEvent(opened = AgendaHomeEvent.Opened(destination = destination.destination)).encode(),
+            AgendaHomeEvent(
+                opened = AgendaHomeEvent.Opened(
+                    destination = destination.destination,
+                    quick_add_title = destination.quickAdd,
+                ),
+            ).encode(),
         )
         is Destination.AgendaEvent -> screen(
             ScreenIds.AGENDA_EVENT,
@@ -208,6 +207,23 @@ public object ScreenOpenings {
             MoneyCategoriesEvent(opened = MoneyCategoriesEvent.Opened(parent = destination.parent)).encode(),
         )
         Destination.MoneySearch -> screen(ScreenIds.MONEY_SEARCH, MoneySearchEvent(opened = MoneySearchEvent.Opened()).encode())
+        // HEALTH: the phone's facts are stamped on arrival (`HealthRouting.opened`), never spelled here.
+        is Destination.HealthHome -> screen(
+            ScreenIds.HEALTH_HOME,
+            HealthHomeEvent(opened = HealthHomeEvent.Opened(destination = destination.destination)).encode(),
+        )
+        is Destination.HealthMetric -> screen(
+            ScreenIds.HEALTH_METRIC,
+            HealthMetricEvent(opened = HealthMetricEvent.Opened(metric = destination.metric, parent = destination.parent)).encode(),
+        )
+        is Destination.HealthWorkout -> screen(
+            ScreenIds.HEALTH_WORKOUT,
+            HealthWorkoutEvent(opened = HealthWorkoutEvent.Opened(activity_id = destination.activityId, parent = destination.parent)).encode(),
+        )
+        is Destination.HealthConnect -> screen(
+            ScreenIds.HEALTH_CONNECT,
+            HealthConnectEvent(opened = HealthConnectEvent.Opened(parent = destination.parent)).encode(),
+        )
         Destination.NotesNotebooks -> screen(
             ScreenIds.NOTES_NOTEBOOKS,
             NotesNotebooksEvent(opened = NotesNotebooksEvent.Opened()).encode(),

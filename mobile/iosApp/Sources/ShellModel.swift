@@ -1,4 +1,6 @@
 import Combine
+import Contacts
+import EventKit
 import Foundation
 import SwiftUI
 import UIKit
@@ -132,6 +134,55 @@ final class ShellModel: ObservableObject {
     func becameActive() {
         let grace = ForegroundGrace(name: "dev.centraid.pass.active")
         home.becameActive(onDone: { _ in grace.end() })
+        followPhone()
+    }
+
+    /// THE APP CAME FORWARD, or the OS announced a change: People, Agenda, Docs
+    /// and Health follow the phone (#1127, #1129). Cheap; the shared gate decides
+    /// whether a pass runs. Health is read on coming forward only — background
+    /// delivery is a later wave — and a pass never asks HealthKit for access.
+    func followPhone() {
+        follow.requested(source: .contacts)
+        follow.requested(source: .calendar)
+        follow.requested(source: .files)
+        follow.requested(source: .health)
+    }
+
+    /// A folder was just followed, or picked again: read it now (#1127).
+    func followFolders() {
+        follow.requested(source: .files)
+    }
+
+    /// CONNECT HEALTH (#1129): the member tapped Connect with [chosen]. The OS
+    /// is asked for exactly those types, read only; then the vault is told, and
+    /// the first pass runs. [done] hears whether both answered.
+    func connectHealth(_ chosen: [String], done: @escaping (Bool) -> Void) {
+        Task { @MainActor in
+            guard await HealthAccess.request(chosen) else {
+                done(false)
+                return
+            }
+            healthConnect.connect(store: HealthDevices.shared.APPLE_HEALTH, chosen: chosen) { ok in
+                done(ok.boolValue)
+            }
+        }
+    }
+
+    /// STOP (#1129): Health stops reading the store; every day and workout stays.
+    func stopHealth() {
+        HealthAccess.stopped()
+        healthConnect.stop { _ in }
+    }
+
+    /// The question a held account or calendar leaves (R-1127-9), or nil. The
+    /// words are the shared bridge's; this shell draws them.
+    @Published var followQuestion: PhoneFollowQuestion?
+
+    /// The member's answer to [followQuestion]; Keep is the default.
+    func answerFollowQuestion(keep: Bool) {
+        guard let question = followQuestion else { return }
+        followQuestion = nil
+        follow.answer(question: question, keep: keep)
     }
 
     /// THE APP WENT TO THE BACKGROUND (#1080, the shells).
@@ -270,6 +321,19 @@ final class ShellModel: ObservableObject {
     private let home = HomeBridge()
     private let contacts = ContactsImportBridge()
     private let calendar = CalendarImportBridge()
+    /// THE PHONE FOLLOWED (#1127): People, Agenda and Docs keep following what the
+    /// phone holds after the member imported it. One bridge for both; the gate,
+    /// the passes and the question are in `CentraidShared`.
+    private let follow = PhoneFollowBridge()
+    /// HEALTHKIT, READ ONLY (#1129): the follower's reader and Connect's.
+    private let healthReader = HealthKitReader()
+    /// CONNECT AND STOP (#1129): what the vault is told after the member's
+    /// Connect tap and the OS's answer, and when they stop. Health's screens
+    /// reach it through `connectHealth` and `stopHealth`.
+    private lazy var healthConnect = HealthConnectBridge(
+        reader: healthReader,
+        clock: PlatformServices_iosKt.platformServices().clock
+    )
     private let reminders = RemindersImportBridge()
 
     /// The three app screens' bridges (#1025 S5, lane L5).
@@ -326,6 +390,24 @@ final class ShellModel: ObservableObject {
     init() {
         home.observe { [weak self] bytes in
             self?.homeState = bytes.data
+        }
+        // THE OS SAYS THE ADDRESS BOOK OR A CALENDAR CHANGED: follow it (#1127).
+        // The shared gate folds a burst of these into one pass, and a pass does
+        // nothing unless the member imported the source and access is already given.
+        NotificationCenter.default.addObserver(forName: .CNContactStoreDidChange, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.follow.requested(source: .contacts) }
+        }
+        NotificationCenter.default.addObserver(forName: .EKEventStoreChanged, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.follow.requested(source: .calendar) }
+        }
+        // EventKit posts only for a store that is alive.
+        _ = PhoneCalendar.watcher
+        // THE PHONE'S HEALTH FACTS (#1129): the store, the units and the chosen
+        // set, stated before any Health screen opens and again whenever the
+        // member changes the region's measurement system.
+        HealthAccess.state()
+        NotificationCenter.default.addObserver(forName: NSLocale.currentLocaleDidChangeNotification, object: nil, queue: .main) { _ in
+            HealthAccess.state()
         }
         photos.observe { [weak self] bytes in self?.photosState = bytes.data }
         home.observeHoldsNoVault { [weak self] none in self?.holdsNoVaultChanged(none.boolValue) }
@@ -397,7 +479,18 @@ final class ShellModel: ObservableObject {
             self.pairLaptop.attach(session: session)
             self.contacts.attach(session: session)
             self.calendar.attach(session: session)
+            self.follow.attach(
+                session: session,
+                sources: [
+                    ContactsFollow(reader: ContactsFollowReader()),
+                    CalendarFollow(reader: CalendarFollowReader()),
+                    FilesFollow(reader: FolderFollowReader()),
+                    HealthFollow(reader: self.healthReader, clock: PlatformServices_iosKt.platformServices().clock),
+                ],
+                ask: { [weak self] question in DispatchQueue.main.async { self?.followQuestion = question } }
+            )
             self.reminders.attach(session: session)
+            self.healthConnect.attach(session: session)
             self.backup.attach(session: session)
             self.photoShelf.attach(session: session)
             self.photoLightbox.attach(session: session)
@@ -679,10 +772,12 @@ final class ShellModel: ObservableObject {
         path.append(route)
     }
 
-    /// Remember the app a route belongs to, for the Chat tab's scope.
+    /// Remember the scope a route gives the Chat tab.
     private func noteVisit(_ route: Route) {
-        guard let app = ChatRouting.app(of: route), ChatRouting.scopes(app) else { return }
-        lastVisitedApp = app
+        guard let app = ChatRouting.app(of: route) else { return }
+        let scope = ChatRouting.scope(of: app)
+        guard !scope.isEmpty else { return }
+        lastVisitedApp = scope
     }
 
     // MARK: The 24 words (#1047 E2)
@@ -1073,6 +1168,8 @@ final class ShellModel: ObservableObject {
     }
 
     /// The app an import writes to: Contacts → People, Calendar → Agenda, Reminders → Tasks.
+    /// Reminders land in the tasks domain, which opens in Agenda's To-do (#1128, R-1128-7):
+    /// the id stays the write app's, and `openImported` routes it through `appHomeRoute`.
     private static func importApp(_ source: Centraid_Screen_V1_ImportSource) -> String {
         switch source {
         case .contacts: return "people"
@@ -1098,20 +1195,33 @@ final class ShellModel: ObservableObject {
         case .contacts:
             switch await PhoneContacts.read() {
             case .denied: return nil
-            case let .read(found):
-                return await withCheckedContinuation { done in
-                    contacts.run(contacts: found) { done.resume(returning: $0) }
+            case let .read(read):
+                let sentence: String = await withCheckedContinuation { done in
+                    contacts.sync(contacts: read.contacts, origins: read.origins, complete: read.complete) { outcome in
+                        done.resume(returning: ContactsImport.shared.sentence(outcome: outcome))
+                    }
                 }
+                // What an import leaves held (an account that left the phone) is asked by the follower.
+                follow.requested(source: .contacts)
+                return sentence
             }
         case .calendar:
             switch await PhoneCalendar.read() {
             case .denied: return nil
-            case let .read(found, now):
-                return await withCheckedContinuation { done in
-                    calendar.run(events: found, deviceTz: TimeZone.current.identifier, now: now) {
-                        done.resume(returning: $0)
+            case let .read(read):
+                let sentence: String = await withCheckedContinuation { done in
+                    calendar.sync(
+                        events: read.events,
+                        origins: read.origins,
+                        complete: read.complete,
+                        deviceTz: read.deviceTz,
+                        now: read.now
+                    ) { outcome in
+                        done.resume(returning: CalendarImport.shared.sentence(outcome: outcome))
                     }
                 }
+                follow.requested(source: .calendar)
+                return sentence
             }
         case .reminders:
             switch await PhoneReminders.read() {
@@ -1128,20 +1238,28 @@ final class ShellModel: ObservableObject {
     /// iOS's contact picker is up (limited access, iOS 18).
     @Published var contactAccessPickerShown = false
 
-    /// THE PICKER CLOSED: import the contacts it newly shared. Nothing shared
-    /// is nothing to say.
+    /// THE PICKER CLOSED: read again, now over what it shared, and bring in what
+    /// is new. Over limited access the read is incomplete, so nothing is trashed.
+    /// Nothing shared is nothing to say.
     func contactsShared(_ identifiers: [String]) {
         guard !importing, !identifiers.isEmpty else { return }
         importing = true
         importNotice = PeopleCopy.shared.IMPORT_CONTACTS_RUNNING
         importOpens = ""
         Task { @MainActor in
-            let found = await PhoneContacts.read(identifiers: identifiers)
+            guard let read = await PhoneContacts.readIfGranted() else {
+                self.importing = false
+                self.importNotice = PeopleCopy.shared.IMPORT_CONTACTS_DENIED
+                return
+            }
             let sentence: String = await withCheckedContinuation { done in
-                contacts.run(contacts: found) { done.resume(returning: $0) }
+                contacts.sync(contacts: read.contacts, origins: read.origins, complete: read.complete) { outcome in
+                    done.resume(returning: ContactsImport.shared.sentence(outcome: outcome))
+                }
             }
             self.importing = false
             self.importNotice = sentence
+            self.follow.requested(source: .contacts)
         }
     }
 

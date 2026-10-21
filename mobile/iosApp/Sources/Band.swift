@@ -216,7 +216,7 @@ struct AppBand: View {
                         label: tab.label,
                         selected: tab.selected,
                         rule: rule,
-                        identifier: "\(app)-band-\(tab.label.lowercased())",
+                        identifier: "\(app)-band-\(tab.key.isEmpty ? tab.label.lowercased() : tab.key)",
                         onPress: { onSelect(tab.event) }
                     )
                 }
@@ -255,6 +255,10 @@ struct AppBand: View {
         .padding(.top, BandMetrics.topGap)
         .padding(.bottom, BandMetrics.floorPadding)
         .sensoryFeedback(.selection, trigger: lit)
+        // `.contain`, as on Home's band: without it the container's identifier
+        // REPLACES each tab's own, and every tab reads `<app>-band` (#1128's
+        // flows found it).
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("\(app)-band")
     }
 }

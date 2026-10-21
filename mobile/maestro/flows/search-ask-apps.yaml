@@ -1,5 +1,5 @@
 # An app's own search that finds nothing offers the assistant (#1097,
-# R-1097-28 to 30): Tasks, Notes and Photos draw the kit's one no-match state with
+# R-1097-28 to 30): Agenda (its tasks included, #1128), Notes and Photos draw the kit's one no-match state with
 # "Ask about “…”" (`search-ask-about`), the tap opens the Chat tab, and
 # Locker's search never draws it, because a term there can itself be a secret.
 #
@@ -18,12 +18,12 @@
 appId: dev.centraid.Centraid
 name: search-ask-apps
 ---
-# --- Tasks ----------------------------------------------------------------
+# --- Agenda ---------------------------------------------------------------
 - launchApp
 - tapOn:
-    id: "home-tile-tasks"
+    id: "home-tile-agenda"
 - tapOn:
-    id: "tasks-search-open"
+    id: "agenda-search-open"
 - inputText: "zzqxv"
 - extendedWaitUntil:
     visible:
@@ -37,7 +37,7 @@ name: search-ask-apps
       id: "chat"
     timeout: 5000
 - assertNotVisible:
-    id: "tasks-search"
+    id: "agenda-search"
 - runFlow:
     when:
       notVisible:

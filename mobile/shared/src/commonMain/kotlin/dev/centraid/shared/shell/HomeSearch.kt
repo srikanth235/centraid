@@ -18,12 +18,12 @@ import centraid.screen.v1.Loading
 import centraid.screen.v1.ReadFailure
 import centraid.screen.v1.SearchField
 import centraid.screen.v1.SeatState
-import dev.centraid.design.CentraidCatalog
 import dev.centraid.design.copy.SharedCopy
 import dev.centraid.shared.kit.ScreenBridge
 import dev.centraid.shared.kit.SearchContainers
 import dev.centraid.shared.kit.SearchLaw
 import dev.centraid.shared.kit.SearchLens
+import dev.centraid.shared.nav.AppHomes
 import dev.centraid.shared.platform.DeviceClock
 import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.screen.ScreenEffect
@@ -205,19 +205,25 @@ public object HomeSearchMachine : ScreenMachine<HomeSearchState, HomeSearchEvent
      * THE CORE'S HITS, GROUPED BY APP IN HOME'S TILE ORDER. A Locker hit
      * cannot exist (Locker is not a search domain); one is dropped here all
      * the same, so a domain added by mistake still never draws a secret's row.
+     *
+     * A HIT IS GROUPED UNDER THE APP A MEMBER OPENS IT IN (#1128, R-1128-7): a
+     * task hit sits in Agenda's group, among its events, and the group's header,
+     * mark and test id are Agenda's. The row keeps its own `app_id`, so it still
+     * opens `TasksDetail` through `RowRoutes` (R-CHROME-6: a row opens in its own
+     * app's router).
      */
     public fun fold(hits: List<VaultSearchHit>): HomeSearchData {
         val order = SpringboardPolicy.SPRINGBOARD_ORDER
         val groups = hits
             .filter { it.app_id != LOCKER && it.app_id.isNotBlank() }
-            .groupBy { it.app_id }
+            .groupBy { AppHomes.appOf(it.app_id) }
             .entries
             .sortedBy { (app, _) -> order.indexOf(app).let { if (it < 0) order.size else it } }
             .map { (app, hits) ->
                 val label = if (app == CHAT) {
                     SharedCopy.HOME_SEARCH_CHAT_GROUP
                 } else {
-                    CentraidCatalog.byId[app]?.name ?: app.replaceFirstChar { it.uppercase() }
+                    AppHomes.nameOf(app)
                 }
                 // A CONTAINER (#1097) IS A HIT OF ITS APP'S GROUP, drawn before that app's rows;
                 // `SearchContainers` says which hits are one and how each opens.

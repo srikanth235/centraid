@@ -3,9 +3,11 @@
 //
 // `colorKey` names the app's slot on the identity hue wheel (`APP_HUES` in
 // palette.ts). The Binding Layer assigns them by content character, not by
-// taste: locker 0 (rose), photos 28 (amber), tasks 70 (ochre), agenda 150
-// (forest), docs 210 (teal), notes 255 (slate), people 320 (violet), money 290
-// (indigo, taken from the freed Tally slot, #1099). Home takes no hue at all — it renders in `--text-soft`.
+// taste: locker 0 (rose), photos 28 (amber), health 110 (olive, #1129,
+// R-1129-10), agenda 150 (forest), docs 210 (teal), notes 255 (slate), people
+// 320 (violet), money 290 (indigo, taken from the freed Tally slot, #1099). The
+// ochre slot (70) is free since Tasks folded into Agenda (#1128). Home takes no
+// hue at all — it renders in `--text-soft`.
 
 import type { IconName } from "./icons";
 import { palette } from "./palette";
@@ -53,13 +55,6 @@ const BUILTIN_APPS: readonly AppMeta[] = [
     name: "Locker",
   },
   {
-    colorKey: "ochre",
-    desc: "Capture the next thing to do.",
-    iconKey: "Check",
-    id: "tasks",
-    name: "Tasks",
-  },
-  {
     colorKey: "teal",
     desc: "Read and organize your documents.",
     iconKey: "Folder",
@@ -79,6 +74,13 @@ const BUILTIN_APPS: readonly AppMeta[] = [
     iconKey: "Coin",
     id: "money",
     name: "Money",
+  },
+  {
+    colorKey: "olive",
+    desc: "Daily totals and workouts from your phone.",
+    iconKey: "Activity",
+    id: "health",
+    name: "Health",
   },
 ];
 

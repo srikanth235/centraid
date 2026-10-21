@@ -29,6 +29,9 @@ import dev.centraid.shared.screen.ScreenMachine
 import dev.centraid.shared.screen.Step
 import dev.centraid.shared.sync.ScreenQueries
 import dev.centraid.shared.sync.ScreenWrites
+import dev.centraid.shared.kit.tasks.TaskOps
+import dev.centraid.shared.kit.tasks.TaskOpsLaw
+import dev.centraid.shared.kit.tasks.TasksRows
 
 /** What `tasks.project` holds. */
 public data class TasksProjectPage(
@@ -60,7 +63,7 @@ public sealed interface TasksProjectInput {
 public object TasksProjectMachine : ScreenMachine<TasksProjectPage, TasksProjectInput> {
     public const val SCREEN_ID: String = ScreenIds.TASKS_PROJECT
 
-    public val TABLES: Set<String> = TasksHomeMachine.TABLES
+    public val TABLES: Set<String> = TasksRows.TABLES
 
     private val NONE = TasksProjectState.Sheet.SHEET_NONE
 
@@ -79,7 +82,7 @@ public object TasksProjectMachine : ScreenMachine<TasksProjectPage, TasksProject
                 Step(
                     state.copy(
                         reading = false,
-                        screen = state.screen.copy(loading = null, failure = null, data_ = null, denied = TasksHomeMachine.deniedOf(event.denial)),
+                        screen = state.screen.copy(loading = null, failure = null, data_ = null, denied = TasksRows.deniedOf(event.denial)),
                     ),
                 )
             }
@@ -202,7 +205,7 @@ public object TasksProjectMachine : ScreenMachine<TasksProjectPage, TasksProject
                 ),
             )
         }
-        val open = board.groups.flatMap(TasksHomeMachine::flatten).filter(TasksRows::isOpen)
+        val open = board.groups.flatMap(TasksRows::flatten).filter(TasksRows::isOpen)
         return Step(refold(state.copy(reading = false, board = board, ops = TaskOpsLaw.answered(state.ops, open, board.today)), force = true))
     }
 
@@ -294,6 +297,8 @@ public object TasksProjectMachine : ScreenMachine<TasksProjectPage, TasksProject
                     can_submit = title.isNotBlank(),
                     lands_label = "${TasksCopy.LANDS_IN} ${landsIn(state)}",
                     shown = screen.data_?.found == true,
+                    // A PUSHED PAGE HAS NO PLUS, so its bar stays drawn.
+                    drawn = screen.data_?.found == true,
                 ),
                 new_section_can_submit = screen.new_section_name.isNotBlank(),
             ),
@@ -301,7 +306,7 @@ public object TasksProjectMachine : ScreenMachine<TasksProjectPage, TasksProject
     }
 
     public fun find(state: TasksProjectPage, id: String): TasksTask? =
-        state.board?.groups?.flatMap(TasksHomeMachine::flatten)?.firstOrNull { it.task_id == id }
+        state.board?.groups?.flatMap(TasksRows::flatten)?.firstOrNull { it.task_id == id }
 
     private fun overRows(screen: TasksProjectState): TasksProjectState =
         if (screen.data_ != null) screen else screen.copy(loading = Loading(first_load = true), failure = null, denied = null)
@@ -319,7 +324,7 @@ public object TasksProjectReads : ScreenQueries<TasksProjectPage, TasksProjectIn
             AppQueryRequest(
                 tasks_board = TasksBoardRequest(
                     tz = now.zone,
-                    limit = TasksHomeMachine.MAX_WINDOW,
+                    limit = TasksRows.MAX_WINDOW,
                     view = TasksView.TASKS_VIEW_PROJECT,
                     project_id = project,
                 ),

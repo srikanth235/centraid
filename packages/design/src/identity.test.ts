@@ -22,10 +22,28 @@ const AA = 4.5;
 describe(identityHueKey, () => {
   test("every key is a real point on the shipped hue wheel", () => {
     for (const key of IDENTITY_HUE_KEYS) expect(APP_HUES).toHaveProperty(key);
-    // The BRAND ink default is deliberately absent.
-    expect([...IDENTITY_HUE_KEYS].sort()).toStrictEqual(
-      Object.keys(APP_HUES).sort()
-    );
+    // The BRAND ink default is deliberately absent. The person wheel is the
+    // EIGHT hues it shipped with, named: a person's hue is the id's hash modulo
+    // the wheel's length, so a ninth app hue (`olive`, Health, #1129) joining
+    // the wheel would repaint every face a member already knows.
+    expect([...IDENTITY_HUE_KEYS].sort()).toStrictEqual([
+      "amber",
+      "forest",
+      "indigo",
+      "ochre",
+      "rose",
+      "slate",
+      "teal",
+      "violet",
+    ]);
+    // Every app hue is on the wheel but the ones added after it froze.
+    expect(
+      Object.keys(APP_HUES)
+        .filter(
+          (key) => !(IDENTITY_HUE_KEYS as readonly string[]).includes(key)
+        )
+        .sort()
+    ).toStrictEqual(["olive"]);
   });
 
   test("the same id derives the same hue on every call", () => {

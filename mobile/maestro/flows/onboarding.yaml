@@ -3,7 +3,7 @@
 # starter rows — and every empty app is a tile that opens on its own day one.
 #
 # THE POINT OF THIS FLOW is what the shared specs cannot see: that Get started
-# lands on Home with one vault, that Notes and Tasks open on the starter rows,
+# lands on Home with one vault, that Notes opens on its starter rows and Agenda's To-do holds the Tasks starters,
 # that an empty app opens on its own empty state with nothing borrowed, and
 # that People offers the phone's contacts at the point of use (the OS prompt
 # itself is not tapped here).
@@ -59,10 +59,10 @@ name: onboarding
 - assertVisible:
     id: "home-backup-status"
 
-# THE TEACHING STARTERS are the member's own notes and tasks, on Home
-# (`crates/core/src/starters.rs`).
+# THE TEACHING STARTERS are the member's own notes, on Home
+# (`crates/core/src/starters.rs`). The starter tasks are undated, so they wait in
+# Agenda's To-do Inbox and not on Agenda's tile, which shows what is due (#1128).
 - assertVisible: "Link with \\[\\[.*"
-- assertVisible: "Tap the circle to.*"
 
 # AN EMPTY APP IS STILL A TILE, one tap from Home, and opens on its own day
 # one: its add, and no example (R-ONBOARD-12).

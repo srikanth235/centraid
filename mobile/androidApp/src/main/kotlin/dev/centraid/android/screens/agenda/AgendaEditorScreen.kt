@@ -24,6 +24,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import centraid.screen.v1.AgendaChoice
 import centraid.screen.v1.AgendaDraft
@@ -36,6 +37,7 @@ import dev.centraid.android.kit.EditableFieldRow
 import dev.centraid.android.kit.EditorRoom
 import dev.centraid.android.kit.FieldRow
 import dev.centraid.android.kit.KitGeometry
+import dev.centraid.android.kit.KitSegmented
 import dev.centraid.android.kit.KitWords
 import dev.centraid.android.kit.OptionSheet
 import dev.centraid.android.kit.OutlineButton
@@ -115,6 +117,23 @@ private fun EditorBody(state: AgendaEditorState, data: AgendaEditorData, onEvent
     val clean = !data.dirty
     var picking by remember { mutableStateOf("") }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).testTag("agenda-editor")) {
+        // THE ADD SHEET'S SWITCH (#1128): only a create has one, and the
+        // machine says which side is lit and what each is called.
+        if (data.kinds.isNotEmpty()) {
+            KitSegmented(
+                options = data.kinds.map { it.kind.value.toString() to it.label },
+                selected = data.kinds.firstOrNull { it.selected }?.kind?.value?.toString().orEmpty(),
+                onSelect = { key ->
+                    data.kinds.firstOrNull { it.kind.value.toString() == key }?.let {
+                        onEvent(AgendaEditorEvent(kind_picked = AgendaEditorEvent.KindPicked(kind = it.kind)))
+                    }
+                },
+                modifier = Modifier
+                    .padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp)
+                    .semantics { contentDescription = chrome.kind_label }
+                    .testTag("agenda-editor-kind"),
+            )
+        }
         EditableFieldRow(
             key = chrome.field_title,
             value = draft.title,
@@ -128,7 +147,7 @@ private fun EditorBody(state: AgendaEditorState, data: AgendaEditorData, onEvent
             onEvent(AgendaEditorEvent(all_day = AgendaEditorEvent.AllDayToggled(on = it)))
         }
         WhenRow(
-            key = chrome.field_starts,
+            key = data.start_field_label,
             day = data.start_day_label.ifEmpty { data.start_label },
             time = data.start_time_label,
             pickDate = chrome.pick_date,
@@ -137,50 +156,53 @@ private fun EditorBody(state: AgendaEditorState, data: AgendaEditorData, onEvent
             onDay = { picking = "start-day" },
             onTime = { picking = "start-time" },
         )
-        WhenRow(
-            key = chrome.field_ends,
-            day = data.end_day_label.ifEmpty { data.end_label },
-            time = data.end_time_label,
-            pickDate = chrome.pick_date,
-            pickTime = chrome.pick_time,
-            testTag = "agenda-editor-end",
-            onDay = { picking = "end-day" },
-            onTime = { picking = "end-time" },
-        )
-        ChoiceFieldRow(chrome.field_calendar, data.calendar_label, testTag = "agenda-editor-calendar", onTap = {
-            onEvent(AgendaEditorEvent(sheet_opened = AgendaEditorEvent.SheetOpened(sheet = AgendaEditorState.Sheet.SHEET_CALENDAR)))
-        })
-        ChoiceFieldRow(chrome.field_guests, data.guests_label, testTag = "agenda-editor-guests", onTap = {
-            onEvent(AgendaEditorEvent(sheet_opened = AgendaEditorEvent.SheetOpened(sheet = AgendaEditorState.Sheet.SHEET_GUESTS)))
-        })
-        if (data.repeat_enabled) {
-            ChoiceFieldRow(chrome.field_repeat, data.repeat_label, testTag = "agenda-editor-repeat", onTap = {
-                onEvent(AgendaEditorEvent(sheet_opened = AgendaEditorEvent.SheetOpened(sheet = AgendaEditorState.Sheet.SHEET_REPEAT)))
+        // A TASK IS A TITLE AND A DUE DAY: the event's fields are not drawn.
+        if (data.show_event_fields) {
+            WhenRow(
+                key = chrome.field_ends,
+                day = data.end_day_label.ifEmpty { data.end_label },
+                time = data.end_time_label,
+                pickDate = chrome.pick_date,
+                pickTime = chrome.pick_time,
+                testTag = "agenda-editor-end",
+                onDay = { picking = "end-day" },
+                onTime = { picking = "end-time" },
+            )
+            ChoiceFieldRow(chrome.field_calendar, data.calendar_label, testTag = "agenda-editor-calendar", onTap = {
+                onEvent(AgendaEditorEvent(sheet_opened = AgendaEditorEvent.SheetOpened(sheet = AgendaEditorState.Sheet.SHEET_CALENDAR)))
             })
-            if (data.repeat_note.isNotEmpty()) Note(data.repeat_note)
-        } else {
-            FieldRow(key = chrome.field_repeat, value = data.repeat_label, note = data.repeat_note)
+            ChoiceFieldRow(chrome.field_guests, data.guests_label, testTag = "agenda-editor-guests", onTap = {
+                onEvent(AgendaEditorEvent(sheet_opened = AgendaEditorEvent.SheetOpened(sheet = AgendaEditorState.Sheet.SHEET_GUESTS)))
+            })
+            if (data.repeat_enabled) {
+                ChoiceFieldRow(chrome.field_repeat, data.repeat_label, testTag = "agenda-editor-repeat", onTap = {
+                    onEvent(AgendaEditorEvent(sheet_opened = AgendaEditorEvent.SheetOpened(sheet = AgendaEditorState.Sheet.SHEET_REPEAT)))
+                })
+                if (data.repeat_note.isNotEmpty()) Note(data.repeat_note)
+            } else {
+                FieldRow(key = chrome.field_repeat, value = data.repeat_label, note = data.repeat_note)
+            }
+            ChoiceFieldRow(chrome.field_reminder, data.reminder_label, testTag = "agenda-editor-reminder", onTap = {
+                onEvent(AgendaEditorEvent(sheet_opened = AgendaEditorEvent.SheetOpened(sheet = AgendaEditorState.Sheet.SHEET_REMINDER)))
+            })
+            EditableFieldRow(
+                key = chrome.field_link,
+                value = draft.link,
+                reload = if (clean) draft.link else null,
+                placeholder = chrome.link_placeholder,
+                onEdit = { onEvent(AgendaEditorEvent(link = AgendaEditorEvent.LinkChanged(text = it))) },
+                testTag = "agenda-editor-link",
+            )
+            EditableFieldRow(
+                key = chrome.field_notes,
+                value = draft.notes,
+                reload = if (clean) draft.notes else null,
+                placeholder = chrome.notes_placeholder,
+                singleLine = false,
+                onEdit = { onEvent(AgendaEditorEvent(notes = AgendaEditorEvent.NotesChanged(text = it))) },
+                testTag = "agenda-editor-notes",
+            )
         }
-        ChoiceFieldRow(chrome.field_reminder, data.reminder_label, testTag = "agenda-editor-reminder", onTap = {
-            onEvent(AgendaEditorEvent(sheet_opened = AgendaEditorEvent.SheetOpened(sheet = AgendaEditorState.Sheet.SHEET_REMINDER)))
-        })
-        EditableFieldRow(
-            key = chrome.field_link,
-            value = draft.link,
-            reload = if (clean) draft.link else null,
-            placeholder = chrome.link_placeholder,
-            onEdit = { onEvent(AgendaEditorEvent(link = AgendaEditorEvent.LinkChanged(text = it))) },
-            testTag = "agenda-editor-link",
-        )
-        EditableFieldRow(
-            key = chrome.field_notes,
-            value = draft.notes,
-            reload = if (clean) draft.notes else null,
-            placeholder = chrome.notes_placeholder,
-            singleLine = false,
-            onEdit = { onEvent(AgendaEditorEvent(notes = AgendaEditorEvent.NotesChanged(text = it))) },
-            testTag = "agenda-editor-notes",
-        )
         if (data.blocked_reason.isNotEmpty()) Note(data.blocked_reason)
         if (data.show_skip && data.skip_label.isNotEmpty()) {
             OutlineButton(data.skip_label, testTag = "agenda-editor-skip", ink = "net", modifier = Modifier.padding(KitGeometry.GUTTER)) {

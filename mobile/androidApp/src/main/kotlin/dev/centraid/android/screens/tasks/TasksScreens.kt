@@ -2,45 +2,26 @@ package dev.centraid.android.screens.tasks
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.unit.dp
-import centraid.screen.v1.ChatCard
-import centraid.screen.v1.SearchField
+import androidx.compose.ui.platform.testTag
 import centraid.screen.v1.SectionHead
 import centraid.screen.v1.TasksCatchUpEvent
 import centraid.screen.v1.TasksCatchUpState
-import centraid.screen.v1.TasksHomeEvent
-import centraid.screen.v1.TasksHomeState
 import centraid.screen.v1.TasksListEvent
 import centraid.screen.v1.TasksListState
-import centraid.screen.v1.TasksNotice
 import centraid.screen.v1.TasksProjectEvent
 import centraid.screen.v1.TasksProjectState
-import dev.centraid.android.kit.AppBand
-import dev.centraid.android.kit.AppBandTab
-import dev.centraid.android.kit.AppPlace
-import dev.centraid.android.kit.CentraidRow
 import dev.centraid.android.kit.ConfirmSheet
 import dev.centraid.android.kit.EditableFieldRow
 import dev.centraid.android.kit.EmptyStateView
-import dev.centraid.android.kit.FieldRow
 import dev.centraid.android.kit.KitGeometry
-import dev.centraid.android.kit.OptionSheet
-import dev.centraid.android.kit.OutlineButton
 import dev.centraid.android.kit.PushedPage
 import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.RoomAction
-import dev.centraid.android.kit.RoomSearch
-import dev.centraid.android.kit.RowSkeleton
-import dev.centraid.android.kit.SearchContainerRow
 import dev.centraid.android.kit.SectionHeader
 import dev.centraid.android.kit.SheetPrimary
 import dev.centraid.android.kit.SheetRoom
@@ -50,186 +31,6 @@ import dev.centraid.android.kit.screenContentOf
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 import dev.centraid.design.copy.TasksCopy
-
-/** `tasks.home`: Today · Upcoming · Inbox · Projects in an `AppPlace`; More a sheet. */
-@Composable
-internal fun TasksHomeScreen(
-    state: TasksHomeState,
-    onEvent: (TasksHomeEvent) -> Unit,
-    onHome: () -> Unit,
-    onOpenContainer: (ChatCard) -> Unit = {},
-) {
-    val chrome = state.chrome
-    val data = state.data_
-    val tabs = state.band
-    // THE PLUS PUTS THE KEYBOARD IN THE QUICK ADD (R-CHROME-1): the bar at the
-    // foot stays the one place a task is typed; the header's Plus is its door.
-    val quickAddFocus = remember { FocusRequester() }
-    val quickAdd = state.quick_add
-    AppPlace(
-        app = "tasks",
-        title = chrome?.title.orEmpty(),
-        meta = data?.count_label.orEmpty(),
-        trailing = if (quickAdd != null && quickAdd.shown && quickAdd.add_label.isNotEmpty()) {
-            RoomAction("Plus", quickAdd.add_label, "tasks-add") { runCatching { quickAddFocus.requestFocus() } }
-        } else {
-            null
-        },
-        search = if (state.denied == null && chrome != null) {
-            RoomSearch(
-                field = state.search ?: SearchField(),
-                placeholder = chrome.search_placeholder,
-                onTerm = { onEvent(TasksHomeEvent(search_term = TasksHomeEvent.SearchTermChanged(term = it))) },
-                onClose = { onEvent(TasksHomeEvent(search_closed = TasksHomeEvent.SearchClosed())) },
-                label = chrome.search_label,
-                closeLabel = chrome.search_close,
-                onOpen = { onEvent(TasksHomeEvent(search_opened = TasksHomeEvent.SearchOpened())) },
-            )
-        } else {
-            null
-        },
-        band = if (tabs.isEmpty()) {
-            null
-        } else {
-            {
-                AppBand(
-                    app = "tasks",
-                    tabs = tabs.map { AppBandTab(key = it.key, label = it.label, iconKey = it.icon_key, selected = it.current) },
-                    onSelect = { key -> onEvent(TasksHomeEvent(band = TasksHomeEvent.BandPicked(key = key))) },
-                    onHome = onHome,
-                )
-            }
-        },
-    ) {
-        Column(Modifier.fillMaxSize()) {
-            ReadStateView(
-                content = screenContentOf(state.loading, state.failure, data, state.denied),
-                onRetry = { onEvent(TasksHomeEvent(refreshed = TasksHomeEvent.Refreshed())) },
-                retryLabel = chrome?.retry?.ifEmpty { null } ?: dev.centraid.android.kit.KitWords.RETRY,
-                skeleton = { RowSkeleton(label = chrome?.loading?.ifEmpty { null } ?: dev.centraid.android.kit.KitWords.OPENING) },
-                modifier = Modifier.weight(1f),
-            ) { home ->
-                // THE PROJECTS WHOSE NAME MATCHED (#1097) are an answer: they come first, through the router.
-                val containers = state.search?.containers.orEmpty()
-                val nothing = home.groups.isEmpty() && home.projects.isEmpty() && containers.isEmpty()
-                val empty = home.empty
-                if (nothing && empty != null) {
-                    // A SEARCH THAT FOUND NOTHING carries Ask as its action (#1097, R-1097-30); Android has no Chat
-                    // tab, so it draws the sentence alone, as Home does.
-                    EmptyStateView(
-                        empty,
-                        onAction = if (home.searching) null else {
-                            { onEvent(TasksHomeEvent(empty_acted = TasksHomeEvent.EmptyActed())) }
-                        },
-                    )
-                } else {
-                    LazyColumn(Modifier.fillMaxSize()) {
-                        val notice = home.notice
-                        if (notice != null) {
-                            item(key = "notice") {
-                                TasksNoticeView(notice) { onEvent(TasksHomeEvent(notice_acted = TasksHomeEvent.NoticeActed())) }
-                            }
-                        }
-                        items(containers, key = { "c-${it.entity}-${it.id}" }) { container ->
-                            SearchContainerRow(container, onOpen = onOpenContainer)
-                        }
-                        home.projects.forEach { group ->
-                            item(key = "projects-${group.key}") { SectionHeader(SectionHead(title = group.title)) }
-                            items(group.rows, key = { "project-${it.id}" }) { row ->
-                                CentraidRow(row) { onEvent(TasksHomeEvent(project_picked = TasksHomeEvent.ProjectPicked(project_id = row.id))) }
-                            }
-                        }
-                        taskGroups(
-                            home.groups,
-                            onCheck = { onEvent(TasksHomeEvent(row_checked = TasksHomeEvent.RowChecked(task_id = it))) },
-                            onPick = { onEvent(TasksHomeEvent(row_picked = TasksHomeEvent.RowPicked(task_id = it))) },
-                            onVerb = { onEvent(TasksHomeEvent(group_verb = TasksHomeEvent.GroupVerb(key = it))) },
-                            onFile = { onEvent(TasksHomeEvent(file_requested = TasksHomeEvent.FileRequested(task_id = it))) },
-                            fileVerb = state.chrome?.file_verb.orEmpty(),
-                        )
-                        item(key = "foot") {
-                            Column {
-                                if (home.window_label.isNotEmpty()) {
-                                    Text(
-                                        home.window_label,
-                                        style = centraidType("annotLabel"),
-                                        color = centraidColor("textFaint"),
-                                        modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp),
-                                    )
-                                }
-                                ShowMoreFooter(
-                                    visible = home.can_show_more,
-                                    loading = false,
-                                    label = chrome?.show_more?.ifEmpty { null } ?: dev.centraid.android.kit.KitWords.SHOW_MORE,
-                                    onMore = { onEvent(TasksHomeEvent(next_page = TasksHomeEvent.NextPageRequested())) },
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-            StatusLine(state.status) { onEvent(TasksHomeEvent(status_acted = TasksHomeEvent.StatusActed())) }
-            TasksQuickAddBar(
-                quickAdd = state.quick_add,
-                placeholder = chrome?.quick_add_placeholder.orEmpty(),
-                verb = chrome?.quick_add_verb.orEmpty(),
-                onChange = { onEvent(TasksHomeEvent(quick_add_changed = TasksHomeEvent.QuickAddChanged(title = it))) },
-                onSubmit = { onEvent(TasksHomeEvent(quick_add_submitted = TasksHomeEvent.QuickAddSubmitted())) },
-                focus = quickAddFocus,
-            )
-        }
-    }
-    TasksHomeSheets(state, onEvent)
-}
-
-@Composable
-private fun TasksHomeSheets(state: TasksHomeState, onEvent: (TasksHomeEvent) -> Unit) {
-    val chrome = state.chrome ?: return
-    val close = { onEvent(TasksHomeEvent(sheet_closed = TasksHomeEvent.SheetClosed())) }
-    when (state.sheet) {
-        TasksHomeState.Sheet.SHEET_MORE -> OptionSheet(
-            title = chrome.more_title,
-            options = state.more_rows.map { it.option() },
-            onPick = { onEvent(TasksHomeEvent(more_row = TasksHomeEvent.MoreRowPicked(key = it))) },
-            onDismiss = close,
-        )
-        TasksHomeState.Sheet.SHEET_READS -> SheetRoom(title = chrome.reads_title, onDismiss = close) {
-            chrome.reads_facts.forEach { FieldRow(key = it.label, value = it.detail) }
-        }
-        TasksHomeState.Sheet.SHEET_FILE -> SheetRoom(title = chrome.file_title, onDismiss = close) {
-            state.file_choices.forEach { choice ->
-                TasksChoiceRow(choice) { onEvent(TasksHomeEvent(file_chosen = TasksHomeEvent.FileChosen(key = it))) }
-            }
-        }
-        TasksHomeState.Sheet.SHEET_NEW_PROJECT -> SheetRoom(
-            title = chrome.new_project_title,
-            onDismiss = close,
-            primary = SheetPrimary(chrome.new_project_verb, enabled = state.new_project_can_submit) {
-                onEvent(TasksHomeEvent(new_project_submitted = TasksHomeEvent.NewProjectSubmitted()))
-            },
-        ) {
-            EditableFieldRow(
-                key = "",
-                value = state.new_project_name,
-                reload = state.new_project_name.takeIf { it.isEmpty() },
-                placeholder = chrome.new_project_placeholder,
-                onEdit = { onEvent(TasksHomeEvent(new_project_name = TasksHomeEvent.NewProjectNameChanged(name = it))) },
-                testTag = "tasks-new-project",
-            )
-        }
-        else -> Unit
-    }
-}
-
-@Composable
-internal fun TasksNoticeView(notice: TasksNotice, onAct: () -> Unit) {
-    Column(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 10.dp)) {
-        Text(notice.sentence, style = centraidType("body"), color = centraidColor("text"))
-        if (notice.verb_label.isNotEmpty()) {
-            OutlineButton(notice.verb_label, testTag = "tasks-notice-act", modifier = Modifier.padding(top = 8.dp), onPress = onAct)
-        }
-    }
-}
 
 /** `tasks.list`: one view (Anytime, All, Logbook, Reminders), pushed. */
 @Composable
@@ -246,7 +47,7 @@ internal fun TasksListScreen(state: TasksListState, onEvent: (TasksListEvent) ->
                 if (list.groups.isEmpty() && empty != null) {
                     EmptyStateView(empty, onAction = null)
                 } else {
-                    LazyColumn(Modifier.fillMaxSize()) {
+                    LazyColumn(Modifier.fillMaxSize().testTag("tasks-list")) {
                         taskGroups(
                             list.groups,
                             onCheck = { onEvent(TasksListEvent(row_checked = TasksListEvent.RowChecked(task_id = it))) },
@@ -298,7 +99,7 @@ internal fun TasksProjectScreen(state: TasksProjectState, onEvent: (TasksProject
                 if (project.groups.isEmpty() && empty != null) {
                     EmptyStateView(empty, onAction = null)
                 } else {
-                    LazyColumn(Modifier.fillMaxSize()) {
+                    LazyColumn(Modifier.fillMaxSize().testTag("tasks-project")) {
                         if (project.count_label.isNotEmpty()) {
                             item(key = "count") {
                                 Text(project.count_label, style = centraidType("annotLabel"), color = centraidColor("textSoft"), modifier = Modifier.padding(horizontal = KitGeometry.GUTTER))
@@ -337,7 +138,7 @@ internal fun TasksProjectScreen(state: TasksProjectState, onEvent: (TasksProject
                 reload = state.new_section_name.takeIf { it.isEmpty() },
                 placeholder = chrome.add_section_placeholder,
                 onEdit = { onEvent(TasksProjectEvent(section_name = TasksProjectEvent.SectionNameChanged(name = it))) },
-                testTag = "tasks-new-section",
+                testTag = "tasks-new-section-field",
             )
         }
     }
@@ -357,7 +158,7 @@ internal fun TasksCatchUpScreen(state: TasksCatchUpState, onEvent: (TasksCatchUp
                 if (catchUp.piles.isEmpty() && empty != null) {
                     EmptyStateView(empty, onAction = null)
                 } else {
-                    LazyColumn(Modifier.fillMaxSize()) {
+                    LazyColumn(Modifier.fillMaxSize().testTag("tasks-catch-up")) {
                         if (catchUp.head.isNotEmpty()) {
                             item(key = "head") {
                                 Text(catchUp.head, style = centraidType("body"), color = centraidColor("textSoft"), modifier = Modifier.padding(horizontal = KitGeometry.GUTTER))

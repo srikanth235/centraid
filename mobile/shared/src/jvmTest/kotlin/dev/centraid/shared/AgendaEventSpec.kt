@@ -263,7 +263,7 @@ class AgendaEventSpec : StringSpec({
     "denied is the gate; a first read refused is a failure; a re-read refused keeps the event" {
         val opened = drive(AgendaEventMachine.initial(), open("e1")).state
         drive(opened, AgendaEventInput.Denied(AppQueryDenial())).state.screen.denied.shouldNotBeNull().title shouldBe
-            "Agenda cannot read your calendar"
+            "Agenda cannot read this vault"
         val failure = ReadFailure(kind = ReadFailureKind.READ_FAILURE_KIND_REFUSED, sentence = "No.")
         drive(opened, refused(failure)).state.screen.failure shouldBe failure
 
@@ -318,6 +318,7 @@ class AgendaEventSpec : StringSpec({
                 upcoming(timed("e2", "Review", "2026-06-15T14:00"), series("s1", "Stand-up", "2026-06-15T10:00", "2026-06-15T10:15")),
                 centraid.core.v1.AgendaDayContext(today = TODAY, now_local = NOW),
                 null,
+                AgendaHomeSpec.quietTasks(),
             ),
         ).state
         val marked = AgendaHomeMachine.reduce(home, AgendaInput.Marks(AgendaMarks.pendingIds(marks.held.value), AgendaMarks.cancelIds(marks.held.value)))

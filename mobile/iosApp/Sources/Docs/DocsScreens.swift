@@ -33,6 +33,10 @@ enum DocsScreens: AppScreens {
     /// the root answers its picker and pushes what it files (`DocsIngestRoot`).
     static let ingestBridge = DocsIngestBridge()
 
+    /// FOLLOWING A FOLDER (#1127): what the vault is told when the member follows or stops one.
+    /// Attached with the ingest, to the same session; the picker and the access are `DocsFollow`'s.
+    static let followBridge = DocsFollowBridge()
+
     @MainActor
     static func register(into shell: ShellModel) {
         shell.register(.of(drive, DocsDriveBridge()))
@@ -43,12 +47,16 @@ enum DocsScreens: AppScreens {
         shell.register(ScreenPort(
             id: ingest,
             send: { ingestBridge.send(event: $0.kotlin) },
-            attach: { ingestBridge.attach(session: $0) },
+            attach: {
+                ingestBridge.attach(session: $0)
+                followBridge.attach(session: $0)
+            },
             observe: { onState in ingestBridge.observe { onState($0.data) } }
         ))
         /// The drive's capture rows start an ingest; its status line puts it away.
         func ingestPort(_ shell: ShellModel?) -> DocsIngestHooks {
-            DocsIngestHooks(
+            DocsFollow.shared.shell = shell
+            return DocsIngestHooks(
                 state: { [weak shell] in shell?.state(ingest) ?? Data() },
                 request: { key, folderID, parent in
                     ingestBridge.requestFor(actionKey: key, folderId: folderID, parent: parent)
@@ -58,7 +66,10 @@ enum DocsScreens: AppScreens {
                 },
                 dismiss: {
                     ingestBridge.dismiss()
-                }
+                },
+                followFolder: { DocsFollow.shared.request() },
+                stopFollowing: { DocsFollow.shared.stop($0) },
+                reportFollowed: { DocsFollow.shared.report() }
             )
         }
 
@@ -171,5 +182,10 @@ enum DocsScreens: AppScreens {
 
     /// THE FILED PUSH AND THE PICKER, at the root (`DocsIngestRoot`).
     @MainActor
-    static func global(_ shell: ShellModel) -> AnyView? { AnyView(DocsIngestRoot(shell: shell)) }
+    static func global(_ shell: ShellModel) -> AnyView? {
+        AnyView(ZStack {
+            DocsIngestRoot(shell: shell)
+            DocsFollowRoot()
+        })
+    }
 }

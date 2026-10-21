@@ -1,0 +1,45 @@
+# THE SIMULATOR'S HEALTH, SEEDED (#1129) — a debug tool, never part of Centraid.
+#
+# Centraid reads Apple Health and never writes it (R-1129-7): its bundle has no
+# share type, no `NSHealthUpdateUsageDescription`, and `HealthKitReadOnlySpec`
+# fails the build of the Kotlin suite if one appears. A simulator's Health is
+# empty, so something must write a year of days into it before Health has
+# anything to read — and that something is THIS separate app: its own XcodeGen
+# project, its own bundle id, its own entitlement with share types. Centraid's
+# `project.yml` does not name it, and nothing here links or embeds Centraid.
+#
+#   cd mobile/iosApp && export CENTRAID_IOS_DEPLOYMENT_TARGET=$(cat ../ios-deployment-target)
+#   xcodegen generate --spec HealthSeeder/project.yml
+#
+# writes `mobile/iosApp/HealthSeeder/HealthSeeder.xcodeproj` (gitignored, like Centraid's).
+# `mobile/README.md` ("Seeding the simulator's Health") carries the run.
+
+name: HealthSeeder
+options:
+  bundleIdPrefix: dev.centraid
+  deploymentTarget:
+    iOS: ${CENTRAID_IOS_DEPLOYMENT_TARGET}
+
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+
+targets:
+  HealthSeeder:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources
+    entitlements:
+      path: HealthSeeder.entitlements
+      properties:
+        com.apple.developer.healthkit: true
+        com.apple.developer.healthkit.access: []
+    info:
+      path: Info.plist
+      properties:
+        CFBundleDisplayName: Health Seeder
+        UILaunchScreen: {}
+        NSHealthShareUsageDescription: The seeder reads back what it wrote, to say how much is there.
+        NSHealthUpdateUsageDescription: The seeder writes a year of test days, nights and workouts into this simulator's Health.

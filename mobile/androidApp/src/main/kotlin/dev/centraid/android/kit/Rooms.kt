@@ -42,6 +42,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.SecureFlagPolicy
@@ -403,7 +404,13 @@ public fun SheetRoom(
             shouldDismissOnClickOutside = swipeable,
         ),
     ) {
-        Column(modifier.fillMaxWidth().navigationBarsPadding().padding(bottom = 16.dp).testTag("sheet-room")) {
+        // A SHEET IS ITS OWN WINDOW, so the root's `testTagsAsResourceId` (MainActivity,
+        // Q-1128-2) does not reach it: the sheet sets it again for Maestro's `id:` selectors.
+        Column(
+            modifier.fillMaxWidth().navigationBarsPadding().padding(bottom = 16.dp)
+                .semantics { testTagsAsResourceId = true }
+                .testTag("sheet-room"),
+        ) {
             if (title.isNotEmpty()) RoomTitle(title, Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp))
             content()
             StatusLine(status)
@@ -511,10 +518,17 @@ public fun StatusLine(status: String, modifier: Modifier = Modifier) {
 /**
  * THE KIT `StatusLine` MESSAGE: one clause and at most one verb ("Undo"). A
  * refusal is `net` ink and the core's sentence; [onAct] is the screen's own
- * `StatusActed` event. Drawn only when there is a sentence.
+ * `StatusActed` event, and [actTag] the id its verb carries (Agenda's is
+ * `agenda-status-action`, the string iOS sets). Drawn only when there is a
+ * sentence.
  */
 @Composable
-public fun StatusLine(line: StatusLineMessage?, modifier: Modifier = Modifier, onAct: () -> Unit) {
+public fun StatusLine(
+    line: StatusLineMessage?,
+    modifier: Modifier = Modifier,
+    actTag: String = "room-status-act",
+    onAct: () -> Unit,
+) {
     if (line == null || line.sentence.isEmpty()) return
     Row(
         modifier
@@ -530,7 +544,7 @@ public fun StatusLine(line: StatusLineMessage?, modifier: Modifier = Modifier, o
             modifier = Modifier.weight(1f),
         )
         if (line.action_label.isNotEmpty()) {
-            OutlineButton(line.action_label, testTag = "room-status-act", onPress = onAct)
+            OutlineButton(line.action_label, testTag = actTag, onPress = onAct)
         }
     }
 }

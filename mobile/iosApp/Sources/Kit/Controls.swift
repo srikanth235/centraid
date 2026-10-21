@@ -247,20 +247,23 @@ enum KitCheckState {
 /// 1.5 outline when off, `accent` fill with a `onAccent` check when on —
 /// inside a 44 target. The label is spoken only; the row beside it says the
 /// words. `state` adds the two in-between faces (`mixed`, `partial`).
-/// Disabled is `textDisabled` on the outline and the mark.
+/// `round` draws a circle instead: a task's mark, where the box is a choice's
+/// or a subtask's. Disabled is `textDisabled` on the outline and the mark.
 struct KitCheckBox: View {
     let state: KitCheckState
     let label: String
     var identifier: String = ""
+    var round: Bool = false
     let action: () -> Void
 
     @Environment(\.colorScheme) private var scheme
     @Environment(\.isEnabled) private var enabled
 
-    init(state: KitCheckState, label: String, identifier: String = "", action: @escaping () -> Void) {
+    init(state: KitCheckState, label: String, identifier: String = "", round: Bool = false, action: @escaping () -> Void) {
         self.state = state
         self.label = label
         self.identifier = identifier
+        self.round = round
         self.action = action
     }
 
@@ -269,7 +272,7 @@ struct KitCheckBox: View {
     }
 
     var body: some View {
-        let radius = Theme.radius("sm", scheme)
+        let radius: CGFloat = round ? 10 : Theme.radius("sm", scheme)
         let fill = Theme.color(enabled ? "accent" : "textDisabled", scheme)
         let outline = Theme.color(enabled ? "lineStrong" : "textDisabled", scheme)
         let mark = Theme.color(enabled ? "onAccent" : "bg", scheme)

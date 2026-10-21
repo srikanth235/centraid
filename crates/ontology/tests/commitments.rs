@@ -51,6 +51,14 @@ const RETIRED_IN_CORPUS: &[&str] = &[
 /// `crates/vault/tests/money_schema.rs`, rung fourteen's `money_rule`).
 const ADDED_AFTER_THE_CORPUS: &[&str] = &["chat_thread", "money_rule"];
 
+/// Entity tables the corpus holds and a rung ABOVE it RESHAPED, so a commitment about their shape
+/// is held against the ladder head and not the corpus. `core_activity` became mutable in rung
+/// three (#1129, R-1129-1: `updated_at`, `row_version`, the touch trigger), and the corpus's
+/// v0 copy has neither column. The head is `contracts/schema/vault-ddl.sql`, which
+/// `crates/vault/tests/ladder_ddl.rs` holds equal to a vault founded by the ladder on every run;
+/// this crate cannot found one itself (`crates/vault` depends on it).
+const CHANGED_AFTER_THE_CORPUS: &[&str] = &["core_activity"];
+
 fn golden_vault() -> (centraid_ontology::golden::InflatedGolden, Vault) {
     let golden = open_golden().expect("the corpus inflates");
     let vault = Vault::open(golden.db_path()).expect("the corpus opens");
@@ -99,6 +107,39 @@ fn column_names(vault: &Vault, table: &str) -> Vec<String> {
         .into_iter()
         .map(|(name, _)| name)
         .collect()
+}
+
+/// The columns of a table AT THE LADDER HEAD: its `CREATE TABLE` block cut from the committed
+/// head fixture and run on an empty in-memory database, so the engine names the columns and no
+/// test parses DDL text.
+fn ladder_head_column_names(table: &str) -> Vec<String> {
+    let block = ladder_head_table(table)
+        .unwrap_or_else(|| panic!("`{table}` is not in the ladder-head fixture"));
+    let connection = rusqlite::Connection::open_in_memory().expect("a database opens");
+    connection
+        .execute_batch(&block)
+        .unwrap_or_else(|error| panic!("`{table}`'s head DDL runs: {error}"));
+    let mut statement = connection
+        .prepare(&format!("PRAGMA table_info(\"{table}\")"))
+        .expect("table_info prepares");
+    statement
+        .query_map([], |row| row.get::<_, String>("name"))
+        .expect("table_info runs")
+        .collect::<rusqlite::Result<Vec<_>>>()
+        .expect("table_info rows")
+}
+
+/// A table's `CREATE TABLE` block in the committed ladder-head fixture, or `None` when a new vault
+/// does not found it (a v0 table v1 struck).
+fn ladder_head_table(table: &str) -> Option<String> {
+    let path = centraid_ontology::golden::repo_root().join("contracts/schema/vault-ddl.sql");
+    let fixture = std::fs::read_to_string(&path).expect("the ladder-head fixture reads");
+    let header = format!("-- table {table} on {table}\n");
+    let at = fixture.find(&header)?;
+    // The block runs to the next column-0 comment, which is the next object's header.
+    let body = &fixture[at + header.len()..];
+    let end = body.find("\n-- ").unwrap_or(body.len());
+    Some(body[..end].to_owned())
 }
 
 fn table_sql(vault: &Vault, table: &str) -> Option<String> {
@@ -316,7 +357,12 @@ fn no_sealed_column_appears_in_any_fts_ddl() {
 fn every_replicated_mutable_entity_table_carries_row_version() {
     // "A member's edit is refused when the row moved under it": `row_version`
     // on the row, bumped in the same trigger as `updated_at`. Private tables
-    // are excluded — a gateway-only row has no seat to disagree with.
+    // are excluded — a gateway-only row has no seat to disagree with. A table
+    // a later rung reshaped is held at the ladder head instead of the corpus
+    // (`CHANGED_AFTER_THE_CORPUS`), and every one of them is checked. So is a
+    // table the corpus never held and the head founds: skipping it is how
+    // `chat_message` stayed registered mutable with no `row_version` until rung
+    // four (#1129, F-R-1). Only a registered table no new vault founds is passed.
     let (_golden, vault) = golden_vault();
     let registries = v0_registries();
     let private: BTreeSet<&str> = registries
@@ -331,14 +377,27 @@ fn every_replicated_mutable_entity_table_carries_row_version() {
         .collect();
 
     let mut checked = 0usize;
+    let mut checked_at_head: Vec<&str> = Vec::new();
+    let mut born_at_head: Vec<&str> = Vec::new();
     let findings: Vec<String> = registries
         .entities
         .iter()
         .filter(|entity| matches!(entity.lifecycle.as_str(), "mutable" | "trash"))
-        .filter(|entity| !private.contains(entity.table.as_str()) && tables.contains(&entity.table))
+        .filter(|entity| !private.contains(entity.table.as_str()))
         .filter_map(|entity| {
+            let columns = if CHANGED_AFTER_THE_CORPUS.contains(&entity.table.as_str()) {
+                checked_at_head.push(entity.table.as_str());
+                ladder_head_column_names(&entity.table)
+            } else if tables.contains(&entity.table) {
+                column_names(&vault, &entity.table)
+            } else if ladder_head_table(&entity.table).is_some() {
+                born_at_head.push(entity.table.as_str());
+                ladder_head_column_names(&entity.table)
+            } else {
+                return None;
+            };
             checked += 1;
-            (!column_names(&vault, &entity.table).contains(&"row_version".to_owned())).then(|| {
+            (!columns.contains(&"row_version".to_owned())).then(|| {
                 format!(
                     "`{}` is replicated and {} and has no row_version",
                     entity.table, entity.lifecycle
@@ -348,6 +407,15 @@ fn every_replicated_mutable_entity_table_carries_row_version() {
         .collect();
     assert_eq!(findings.join("\n"), "");
     assert!(checked > 40, "only {checked} tables were checked");
+    // NOT VACUOUS FOR THE RESHAPED: each is registered mutable and was read at the head.
+    assert_eq!(checked_at_head, CHANGED_AFTER_THE_CORPUS);
+    // NOR FOR THE BORN-LATER: the chat's two mutable tables are read at the head.
+    for table in ["chat_message", "chat_thread"] {
+        assert!(
+            born_at_head.contains(&table),
+            "`{table}` was not read at the head: {born_at_head:?}"
+        );
+    }
 }
 
 #[test]
