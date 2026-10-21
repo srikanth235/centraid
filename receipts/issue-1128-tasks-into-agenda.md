@@ -257,10 +257,108 @@ The rulings are in [`docs/decisions.md#tasks-folds-into-agenda-1128`](../docs/de
 
 1. **Run the flows on Android and on a device.** The three Agenda flows and `onboarding.yaml` passed on the iOS simulator (root); the other edited Home and search flows (`home-search`, `search-ask-apps`, `search-containers`, `search-correction`) were syntax-checked, not run.
 2. **Compile Android.** `androidApp` is not built by the project's gate (no SDK on these machines). Lane C's evidence is a throwaway typecheck against the Compose classes, with zero errors in the touched files. A device walk of the arrival logic in `AgendaRoutes` (R-1128-C1) is owed.
-3. **Q-1128-2**, Android `testTagsAsResourceId`: until it is set, Maestro `id:` selectors cannot see Compose tags on Android.
-4. **Q-1128-1 to Q-1128-6** in `docs/decisions.md#tasks-folds-into-agenda-1128`.
-5. **The combined PR.** This branch is one of four lines that land together (with #1127, #1129 and #1130) and a Notes Home tile change; the parent resolves the conflicts in `docs/decisions.md`, `CHANGELOG.md`, `HomeView.swift`, `HomeScreen.kt`, `SpringboardPolicy.kt` and `screen.proto`. The pre-existing `receipts/issue-1130-tasks-today.md` lacks the `## Audit` section the law asks of a receipt that a range adds (see Inherited red).
+3. **Q-1128-2**, Android `testTagsAsResourceId`: set in wave 2 (R-1128-G5), on the root content and in `SheetRoom`; uncompiled, and no Maestro run on Android yet (hand-off 1).
+4. **Q-1128-1 to Q-1128-6**: ruled by the owner on 2026-10-21 and built in wave 2 (below). Nothing left open.
+5. **The combined PR.** This branch is one of four lines that land together (with #1127, #1129 and #1130) and a Notes Home tile change; the parent resolves the conflicts in `docs/decisions.md`, `CHANGELOG.md`, `HomeView.swift`, `HomeScreen.kt`, `SpringboardPolicy.kt` and `screen.proto`. The pre-existing `receipts/issue-1130-tasks-today.md` lacks the `## Audit` section the law asks of a receipt that a range adds (see Inherited red). **Rung renumber:** this branch's `contracts/migrations/002_chat_scope_agenda.sql` becomes `004_chat_scope_agenda.sql` after #1127's `002_phone_link.sql` and #1129's `003_health.sql`: rename the file; in `crates/vault/src/migrations.rs` point `CHAT_SCOPE_AGENDA_SQL` at `004_…` and make its `Migration` `version: 4`, after rungs two and three; in `crates/vault/tests/chat_scope_agenda.rs` the head and both `user_version` checks become 4 and the wind-back sets `user_version = 3`; `crates/vault/tests/baseline.rs` expects 4; `crates/assist/src/app.rs`'s `SCOPES` comment names `004_*`; regenerate `contracts/schema/vault-ddl.sql` with `export-ladder-ddl` on the combined tree, then `cargo test -p centraid-vault`.
 6. **An independent audit verdict.** The `## Audit` below is the close worker's re-check; the law asks for a reviewer who did not write the change.
+
+## Wave 2: the owner rules the open questions (2026-10-21)
+
+The owner told the root, in this session's chat on 2026-10-21, to apply every recommendation in the owner-questions table on this branch. The rulings are in [`docs/decisions.md#the-owner-rules-the-open-questions-1128`](../docs/decisions.md#the-owner-rules-the-open-questions-1128) (R-1128-F1 to F3, G1 to G3, G5); Q-1128-4 and Q-1128-5 kept what was built. The wave-1 fence (no vault, core query or core proto change) was lifted for exactly Q-1128-3 and Q-1128-6.
+
+### Lanes and commits
+
+| Lane | Slice | Commits |
+| --- | --- | --- |
+| F (core) | Q-1128-6: `agenda.day_context` stops answering the due list | `602a56e73` |
+| F | Q-1128-3: the assistant scopes Agenda over events and tasks and refuses `tasks` | `de8ee2695` |
+| F | Q-1128-3: vault rung two moves `tasks`-scoped threads to `agenda` | `5f9de9511` |
+| F | Q-1128-3: the shell's scope list and a task page's chat scope | `06f637140` |
+| G (shell) | Q-1128-1: Agenda's search folds and routes project containers | `b896e9e7c` |
+| G | Q-1128-1: iOS and Android draw them; `search-containers.yaml` gains an Agenda leg | `dfb220703` |
+| G | Q-1128-2: Android's root sets `testTagsAsResourceId` | `8f0ff88c9` |
+| root | merges `76958a77f` (F), `e9fc99827` (G); `SheetRoom` sets the flag too (a sheet is its own window, lane G's finding) `7ae2fe5f4`; vault docs `3cce28af2`; decisions `82539755e`; changelog `d0a483228`; the core round trip lane F missed `d44a0e1a4`; `agenda-day.yaml` on an empty day `9cce905cf` |
+
+### Files changed (`git diff --name-status d5bb9fe9e..HEAD`, at the commit before this section)
+
+```text
+M	CHANGELOG.md
+A	contracts/migrations/002_chat_scope_agenda.sql
+M	contracts/schema/vault-ddl.sql
+M	crates/api-proto/proto/centraid/core/v1/agenda.proto
+M	crates/api-proto/proto/centraid/screen/v1/screen.proto
+M	crates/apps/agenda/README.md
+M	crates/apps/agenda/manifest.json
+M	crates/apps/agenda/src/lib.rs
+M	crates/apps/agenda/src/queries.rs
+M	crates/apps/agenda/tests/parity.rs
+M	crates/apps/agenda/tests/year3.rs
+M	crates/apps/kit/src/fixtures.rs
+M	crates/assist/README.md
+M	crates/assist/src/app.rs
+M	crates/assist/src/lib.rs
+M	crates/assist/src/suggest.rs
+M	crates/assist/src/turn.rs
+M	crates/core-ffi/tests/assist.rs
+M	crates/core/src/app_query.rs
+M	crates/core/src/assist/mod.rs
+M	crates/core/src/assist/store.rs
+M	crates/core/tests/assist_history.rs
+M	crates/core/tests/assist_plane.rs
+M	crates/vault/README.md
+M	crates/vault/src/commands/chat.rs
+M	crates/vault/src/migrations.rs
+M	crates/vault/tests/baseline.rs
+A	crates/vault/tests/chat_scope_agenda.rs
+M	docs/decisions.md
+M	docs/recovery/backup-restore.md
+M	docs/vault-ontology.md
+M	mobile/androidApp/src/main/kotlin/dev/centraid/android/MainActivity.kt
+M	mobile/androidApp/src/main/kotlin/dev/centraid/android/kit/Rooms.kt
+M	mobile/androidApp/src/main/kotlin/dev/centraid/android/screens/AgendaHomeScreen.kt
+M	mobile/core/src/jvmTest/kotlin/dev/centraid/core/AgendaQueryRoundTripSpec.kt
+M	mobile/core/src/jvmTest/kotlin/dev/centraid/core/AssistRoundTripSpec.kt
+M	mobile/iosApp/Sources/AgendaHomeView.swift
+M	mobile/iosApp/Sources/Chat/ChatPreview.swift
+M	mobile/iosApp/Sources/Chat/ChatRouting.swift
+M	mobile/iosApp/Sources/ShellModel.swift
+M	mobile/maestro/flows/agenda-day.yaml
+M	mobile/maestro/flows/search-containers.yaml
+M	mobile/maestro/flows/selectors.md
+M	mobile/shared/src/commonMain/kotlin/dev/centraid/shared/apps/agenda/AgendaFold.kt
+M	mobile/shared/src/commonMain/kotlin/dev/centraid/shared/apps/agenda/AgendaHomeMachine.kt
+M	mobile/shared/src/commonMain/kotlin/dev/centraid/shared/apps/agenda/AgendaReads.kt
+M	mobile/shared/src/commonMain/kotlin/dev/centraid/shared/apps/agenda/AgendaRouting.kt
+M	mobile/shared/src/commonMain/kotlin/dev/centraid/shared/chat/ChatMachine.kt
+M	mobile/shared/src/commonMain/kotlin/dev/centraid/shared/nav/AppHomes.kt
+M	mobile/shared/src/jvmTest/kotlin/dev/centraid/shared/AgendaHomeSpec.kt
+A	mobile/shared/src/jvmTest/kotlin/dev/centraid/shared/AgendaSearchProjectsSpec.kt
+M	mobile/shared/src/jvmTest/kotlin/dev/centraid/shared/ChatFlowSpec.kt
+M	mobile/shared/src/jvmTest/kotlin/dev/centraid/shared/ChatHistorySpec.kt
+M	mobile/shared/src/jvmTest/kotlin/dev/centraid/shared/ChatMachineSpec.kt
+M	mobile/shared/src/jvmTest/kotlin/dev/centraid/shared/ChatScopeSpec.kt
+```
+
+### Verification
+
+| Check | Result |
+| --- | --- |
+| `cargo xtask gate --profile mobile-jvm` at `9cce905cf` | **Every step green; budget-only FAIL**: 1129.7 s against 420 s, cold `CARGO_TARGET_DIR` (`1128-lane-z`), load average 18 to 135 from other sessions. The clean-tree check passed. The first run, at `d0a483228`, failed `:core:jvmTest` `AssistRoundTripSpec`, which still scoped a chat to `tasks`; fixed in `d44a0e1a4` (`:core:jvmTest` then green on its own). |
+| Rust, lane F on its branch | vault (35 binaries, `chat_scope_agenda` 2/2), assist 184 + 3, core `--lib assist` 20, core `--test assist_*` 78, core-ffi `--test assist` 11, core `app_query` 117, api-proto, apps-agenda, apps-kit: pass; clippy `-D warnings` on the seven touched crates: clean. |
+| Rust, root on the merged tree | `cargo test -p centraid-api-proto -p centraid-assist`: pass (assist 184 + 3); `cargo test -p centraid-vault --test chat_scope_agenda --test baseline`: 2 and 8 pass. |
+| The rung under foreign keys | Lane F's throwaway: the rung inside `BEGIN IMMEDIATE` with `foreign_keys = ON` on a rung-one file keeps every chat row, rowid and FTS match, keeps `updated_at` and `row_version`, and the schema differs from rung one by the one CHECK line; a one-table rebuild under the same conditions leaves 0 messages and 0 cards. |
+| Lane G's spec, mutated | Reverting the empty rule and the routing's container-name lookup failed `AgendaSearchProjectsSpec` 3 of 5; restored. Full `:shared:jvmTest`: 1419 tests, 0 failures. |
+| iOS build of `7ae2fe5f4` | `xcodebuild -sdk iphonesimulator` (arm64, debug core-ffi): `BUILD SUCCEEDED`. The later commits change one SwiftUI preview string, docs, tests and a flow. |
+| iOS simulator, Maestro, on "1128 Agenda" (iPhone 17 Pro, iOS 26.5) | `onboarding` PASS, `agenda-todo` PASS, `agenda-task-from-search` PASS, `search-containers` PASS (Home's leg and Agenda's new leg both open the "Orchard" project page), `chat` PASS. `agenda-day` FAILED on a fresh vault's empty day (the flow asserted `agenda-list`, which an empty day does not draw), fixed in `9cce905cf`, then PASS. On that fresh vault no task is due today, so the flow's check-off branch did not run; wave 1 ran it. |
+| Not checked | A chat opened from a task page reading "Agenda" as its scope is held by `ChatScopeSpec` and lane F's specs, not seen on the simulator. Android is uncompiled: the two `testTagsAsResourceId` lines and the container rows are checked by reading against the APIs the app already uses (lane G's javap check: no experimental marker in Compose UI 1.9.4). |
+
+### Audit (wave 2, root's re-check, not independent)
+
+1. **The deleted read is gone.** `rg -n "AgendaDue|due_tasks_statement" -g '!target'` leaves only decisions and receipt text. **PASS.**
+2. **`tasks` is no scope anywhere a scope is set.** `rg -n 'app = "tasks"|scopeApp = "tasks"' mobile` leaves card and activity fixtures only, after the two the gate and a read found (`AssistRoundTripSpec`, `ChatPreview.swift`). **PASS.**
+3. **The rung keeps the card domain.** `chat_scope_agenda.rs` asserts a card under a moved thread still says `tasks` and a new `tasks` scope is refused. **PASS.**
+4. **Nothing renumbered.** `AgendaDayContext` reserves `2` and `"due"`; `AgendaHomeData.containers` is the new field 18. **PASS on reading.**
+5. **Q-1128-5's caveat stands.** The tile's first title comes from Today's first 100-row page while its count is exact; kept as built by the owner.
 
 ## Audit
 
