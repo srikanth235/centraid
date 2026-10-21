@@ -46,7 +46,7 @@
 //!
 //! A session is a `Mutex<Session>` in a map, beside the native session: what an attachment
 //! turn reads, the last two turns. Dropping the handle drops every session. What the member said
-//! and was told is saved at the end of each turn through the `chat.save_turn`
+//! and was told is saved at the end of each turn through the `thread.save_turn`
 //! command ([`store`]) and read back by the `chat.*` app queries, so a chat is
 //! backed up with the vault, deletable, and per vault — and a stored thread
 //! reopens into a fresh session, whose first question starts the native one afresh.
@@ -539,12 +539,19 @@ pub fn answer(handle: &Handle, request: &wire::AssistRequest) -> Result<wire::As
             } else {
                 asked.limit.min(200)
             };
-            // The documents a chat may attach are the chat lane's to list over
-            // the new model (#1135, lane 7); until then there are none.
-            let _ = (handle, limit);
+            let listed =
+                handle.with_vault(|vault| Ok(vault.attachable_documents(limit as usize)?))?;
             Ok(response(wire::assist_response::Kind::Documents(
                 wire::AssistDocuments {
-                    documents: Vec::new(),
+                    documents: listed
+                        .into_iter()
+                        .map(|document| wire::AssistDocument {
+                            doc_id: document.document_id,
+                            title: document.title,
+                            media_type: document.media_type,
+                            updated_at: document.updated_at,
+                        })
+                        .collect(),
                 },
             )))
         }
@@ -683,7 +690,7 @@ fn send(handle: &Handle, asked: &wire::AssistSendRequest) -> Result<wire::Assist
 
     // SAVING THE TURN (R-CHAT-1). Every way a turn ends — an answer, a stop,
     // any refusal but "busy" — is saved as what the member was shown, in one
-    // commit, through `chat.save_turn`. A save that fails loses the history of
+    // commit, through `thread.save_turn`. A save that fails loses the history of
     // this turn and nothing else: the answer is still on screen.
     let persist = |said: &store::Said,
                    record: Option<&centraid_assist::prompt::Turn>,
@@ -697,7 +704,7 @@ fn send(handle: &Handle, asked: &wire::AssistSendRequest) -> Result<wire::Assist
         let thread = locked(&slot.thread).clone();
         let replace =
             asked.regenerate && thread.is_some() && slot.last_saved.load(Ordering::SeqCst);
-        let key = format!("chat.save_turn:{session_id}:{turn_id}");
+        let key = format!("thread.save_turn:{session_id}:{turn_id}");
         let saved = store::save(
             handle,
             &store::Turned {

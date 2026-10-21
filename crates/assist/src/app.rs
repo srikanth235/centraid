@@ -1,6 +1,11 @@
 //! THE APPS THE ASSISTANT READS: seven, and Locker is not one of them. (Tally left with
 //! the app and Money joined, #1099.)
 //!
+//! The roster is the vault's one constant (`centraid_vault::roster::APPS`, R-1135-7-1): [`App`]
+//! is its typed face, and its id and its `opens_in` are *indexed out of that constant* by the
+//! variant's position, so a word is never spelled twice. A test holds the variants and the
+//! roster to the same order and the same names.
+//!
 //! [`App`] has no `Locker` variant, so no card can name it and no chat can be scoped to it. A
 //! secret that was never in a prompt cannot be in an answer (R-1088-3).
 //!
@@ -9,7 +14,10 @@
 //! [`App::SCOPES`] leaves it out, [`App::scope_from_id`] refuses `tasks`, and a chat scoped to
 //! Agenda covers task rows as well as events ([`App::covers`]).
 
-/// An app the assistant can read. Locker is deliberately absent.
+use centraid_vault::roster;
+
+/// An app the assistant can read. Locker is deliberately absent. The variants are in the order of
+/// `roster::APPS`, which `id` and `opens_in` index.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum App {
     Agenda,
@@ -36,15 +44,7 @@ impl App {
     /// The id a shell routes by — the same word `AppRegistry` uses.
     #[must_use]
     pub const fn id(self) -> &'static str {
-        match self {
-            Self::Agenda => "agenda",
-            Self::Docs => "docs",
-            Self::Money => "money",
-            Self::Notes => "notes",
-            Self::People => "people",
-            Self::Photos => "photos",
-            Self::Tasks => "tasks",
-        }
+        roster::APPS[self as usize].id
     }
 
     /// THE APP A MEMBER OPENS THIS DOMAIN IN (R-1128-D1). `id` is the domain a card, a chat scope
@@ -53,16 +53,14 @@ impl App {
     /// assistant NAMES an app to the member (the activity line "Looking in Agenda", a name on a
     /// screen) goes through here; every place it STORES or ROUTES an id keeps `id()`.
     #[must_use]
-    pub const fn opens_in(self) -> Self {
-        match self {
-            Self::Tasks => Self::Agenda,
-            other => other,
-        }
+    pub fn opens_in(self) -> Self {
+        let opens_in = roster::APPS[self as usize].opens_in;
+        Self::from_id(opens_in).unwrap_or(self)
     }
 
     /// THE APPS A CHAT CAN BE SCOPED TO (R-1128-F2): every app a member opens, which is every
     /// domain that opens in itself. `Tasks` opens in Agenda, so it is not one; the vault's
-    /// `chat_thread.scope_app` CHECK holds the same six (`contracts/migrations/002_*`).
+    /// `thread.save_turn` schema holds the same six (`roster::scopes`).
     pub const SCOPES: [Self; 6] = [
         Self::Agenda,
         Self::Docs,
@@ -121,6 +119,23 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_variants_are_the_vaults_roster_in_its_order() {
+        assert_eq!(
+            App::ALL.map(App::id),
+            roster::APPS.map(|app| app.id),
+            "App::ALL and roster::APPS list the same apps in the same order"
+        );
+        assert_eq!(
+            App::SCOPES.map(App::id).to_vec(),
+            roster::scopes().collect::<Vec<_>>()
+        );
+        for (position, app) in App::ALL.into_iter().enumerate() {
+            assert_eq!(app as usize, position, "{app:?} is indexed by its position");
+            assert_eq!(app.opens_in().id(), roster::APPS[position].opens_in);
+        }
+    }
 
     #[test]
     fn locker_is_in_no_scope() {

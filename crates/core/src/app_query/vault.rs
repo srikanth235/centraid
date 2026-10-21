@@ -12,7 +12,7 @@
 //!
 //! **THE NAMED ARE HITS TOO** (#1097, R-1097-19..24): one more probe per named
 //! index ([`centraid_search::NAMED`]) — a notebook or an album, a project, a
-//! Docs folder, and a chat thread (entity `chat.thread`, app
+//! Docs folder, and a chat thread (entity `thread`, app
 //! `chat`, found by its title and by what the member said) — appended after the
 //! domains' rows, each with the app it opens in; every one opens by its `id`. They are not domains: the Notes powerbox above
 //! does not see them. A shell with no Chat tab draws no `chat` row.

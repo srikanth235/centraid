@@ -2,7 +2,7 @@
 //!
 //! The plane (`crates/assist`) holds no vault and the session is memory: what
 //! the member said and was told is the vault's. This module is the join. At the
-//! end of every turn [`save`] writes it through the `chat.save_turn` command —
+//! end of every turn [`save`] writes it through the `thread.save_turn` command —
 //! the one writer, so a conversation is receipted, captured and backed up like
 //! any other row — and [`reopen`] reads a stored thread back into a
 //! [`Session`]. The records a thread may hold from before the native plane (`tool`, `no_tool`)
@@ -25,10 +25,10 @@
 //! A native turn that ends in a write parked behind a confirm card is saved with the outcome
 //! `proposed` ([`answered_word`]) and the proposal's own words. The pending write is memory
 //! (R-1088-10); the vault keeps only how the card ended. [`settle`] records it through
-//! `chat.settle_proposal` when the member taps (`applied`, `stale` or `failed`, with the line they
+//! `thread.settle_proposal` when the member taps (`applied`, `stale` or `failed`, with the line they
 //! were told) or dismisses (`dismissed`), so a thread reopened later reads the settled line and
 //! not a question the member had already answered. A card nobody answered is dismissed by the next
-//! turn saved into its thread, inside `chat.save_turn` itself.
+//! turn saved into its thread, inside `thread.save_turn` itself.
 //!
 //! # NOTHING HERE LETS A PICTURE INTO THE VAULT
 //!
@@ -53,20 +53,16 @@ pub const THUMBNAIL_EDGE: u32 = 256;
 /// How many stored turns a reopened session is rebuilt from. The prompt shows
 /// only its last two, so more is for the Retry that drops one and the router
 /// that skips a refusal.
-#[expect(
-    dead_code,
-    reason = "the chat lane rebuilds a session from its stored turns (#1135, lane 7)"
-)]
 const REHYDRATE_TURNS: usize = 8;
 
 /// What a saved attachment names.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AttachmentRef {
     /// `photo`, `document` or `image`.
-    pub kind: &'static str,
+    pub form: &'static str,
     pub label: String,
-    pub asset_id: Option<String>,
-    pub document_id: Option<String>,
+    /// The vault photograph or document a `photo` or `document` names.
+    pub entity_id: Option<String>,
     /// A `data:` URI of the stored thumbnail, for an `image`.
     pub thumbnail: Option<String>,
 }
@@ -176,24 +172,21 @@ pub fn refs_of(
             let label = attachment.label.clone();
             match attachment.kind.as_ref()? {
                 wire::assist_attachment::Kind::VaultPhoto(photo) => Some(AttachmentRef {
-                    kind: "photo",
+                    form: "photo",
                     label,
-                    asset_id: Some(photo.asset_id.clone()),
-                    document_id: None,
+                    entity_id: Some(photo.asset_id.clone()),
                     thumbnail: None,
                 }),
                 wire::assist_attachment::Kind::VaultDoc(doc) => Some(AttachmentRef {
-                    kind: "document",
+                    form: "document",
                     label,
-                    asset_id: None,
-                    document_id: Some(doc.doc_id.clone()),
+                    entity_id: Some(doc.doc_id.clone()),
                     thumbnail: None,
                 }),
                 wire::assist_attachment::Kind::ImageBytes(_) => Some(AttachmentRef {
-                    kind: "image",
+                    form: "image",
                     label,
-                    asset_id: None,
-                    document_id: None,
+                    entity_id: None,
                     thumbnail: resolved
                         .and_then(|held| held.image.as_ref())
                         .and_then(thumbnail_uri),
@@ -204,12 +197,9 @@ pub fn refs_of(
 }
 
 fn attachment_json(attachment: &AttachmentRef) -> serde_json::Value {
-    let mut out = serde_json::json!({ "kind": attachment.kind, "label": attachment.label });
-    if let Some(id) = &attachment.asset_id {
-        out["asset_id"] = serde_json::json!(id);
-    }
-    if let Some(id) = &attachment.document_id {
-        out["document_id"] = serde_json::json!(id);
+    let mut out = serde_json::json!({ "form": attachment.form, "label": attachment.label });
+    if let Some(id) = &attachment.entity_id {
+        out["entity_id"] = serde_json::json!(id);
     }
     if let Some(uri) = &attachment.thumbnail {
         out["thumbnail_data_uri"] = serde_json::json!(uri);
@@ -286,7 +276,7 @@ fn run(
 ) -> Option<Saved> {
     let input = serde_json::to_vec(&command_input(turned, thread, replace)).ok()?;
     let command = wire::Command {
-        name: "chat.save_turn".to_owned(),
+        name: "thread.save_turn".to_owned(),
         input,
         invoke_key: key.to_owned(),
         ..wire::Command::default()
@@ -354,10 +344,10 @@ pub fn save(handle: &Handle, turned: &Turned<'_>) -> Option<Saved> {
 fn settle(handle: &Handle, thread: &str, key: &str, outcome: &str, text: &str) -> bool {
     // A CARD TAPPED TWICE SETTLES ONCE, and the second tap writes nothing and tells no screen
     // anything: only a thread whose last answer is a proposal nobody has settled is written to.
-    // Nothing records a settled proposal until the chat lane writes `thread.*`
-    // (#1135, lane 7): there is no history to settle in.
-    if true {
-        let _ = (handle, thread);
+    if !handle
+        .with_vault(|vault| Ok(vault.chat_proposal_waiting(thread)?))
+        .unwrap_or(false)
+    {
         return false;
     }
     let input = serde_json::json!({ "thread_id": thread, "outcome": outcome, "text": text });
@@ -365,7 +355,7 @@ fn settle(handle: &Handle, thread: &str, key: &str, outcome: &str, text: &str) -
         return false;
     };
     let command = wire::Command {
-        name: "chat.settle_proposal".to_owned(),
+        name: "thread.settle_proposal".to_owned(),
         input,
         invoke_key: key.to_owned(),
         ..wire::Command::default()
@@ -411,7 +401,7 @@ pub(super) fn settle_slot(
     settle(
         handle,
         &thread,
-        &format!("chat.settle_proposal:{pending_id}:{outcome}"),
+        &format!("thread.settle_proposal:{pending_id}:{outcome}"),
         outcome,
         text,
     )
@@ -428,10 +418,30 @@ pub struct Reopened {
 ///
 /// # Errors
 /// [`crate::error::CoreError`] when the vault will not read.
-pub fn reopen(_handle: &Handle, _thread_id: &str) -> crate::error::Result<Option<Reopened>> {
-    // A thread is an entity with messages now, and the readers over them are the
-    // chat lane's (#1135, lane 7): until then nothing is stored to reopen.
-    Ok(None)
+pub fn reopen(handle: &Handle, thread_id: &str) -> crate::error::Result<Option<Reopened>> {
+    handle.with_vault(|vault| {
+        let Some(stored) = vault.chat_thread(thread_id)? else {
+            return Ok(None);
+        };
+        // The roster holds a stored scope to the six apps (R-1128-F2); a word this build does not
+        // know reads as every app rather than a thread that will not open.
+        let scope = stored
+            .thread
+            .scope_app
+            .as_deref()
+            .and_then(App::scope_from_id);
+        let history: Vec<Turn> = vault
+            .chat_history(thread_id, REHYDRATE_TURNS)?
+            .iter()
+            .filter_map(|turn| Turn::from_json(turn.record_json.as_deref()?))
+            .collect();
+        let last_question = vault.chat_last_question(thread_id)?;
+        Ok(Some(Reopened {
+            session: Session::restore(scope, history, last_question),
+            scope,
+            title: stored.thread.title,
+        }))
+    })
 }
 
 #[cfg(test)]

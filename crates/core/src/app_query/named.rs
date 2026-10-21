@@ -26,9 +26,14 @@ pub(super) const CONTAINER_ROWS: usize = 8;
 /// containers and the chat threads.
 const NAMED: &[&str] = &["notebook", "album", "project", "folder", "thread"];
 
-/// The app a kind opens in, by id; empty for a kind that opens in none (a
-/// thread: Home draws it if the shell has a Chat tab, R-1097-24). The one place
-/// the app roster meets the model.
+/// The app id a Home hit for a thread is answered under: the Chat tab is no app (it is not on
+/// `centraid_vault::roster`), but a conversation is a hit like the rest, and the shell draws it
+/// only if it has a Chat tab (R-1097-24).
+pub(super) const CHAT: &str = "chat";
+
+/// The app a kind opens in, by id; `chat` for a thread, empty for a kind that opens in none. The
+/// one place the app roster meets the model: every id it answers but `chat` is a
+/// `centraid_vault::roster` id (the test below holds it).
 pub(super) fn app_of(kind: &str) -> &'static str {
     match kind {
         "person" => "people",
@@ -37,6 +42,7 @@ pub(super) fn app_of(kind: &str) -> &'static str {
         "task" | "project" | "section" | "area" => "tasks",
         "photo" | "album" => "photos",
         "document" | "folder" => "docs",
+        "thread" => CHAT,
         _ => "",
     }
 }
@@ -103,5 +109,25 @@ pub(super) fn to_wire(target: Target) -> wire::ContainerHit {
         id: target.id,
         title: target.title,
         snippet: target.snippet,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_app_a_kind_opens_in_is_on_the_roster_but_the_chat_tab() {
+        for kind in centraid_vault::model::Kind::ALL {
+            let app = app_of(kind.as_str());
+            assert!(
+                app.is_empty() || app == CHAT || centraid_vault::roster::is_card_app(app),
+                "{kind:?} opens in `{app}`, which the roster does not know"
+            );
+        }
+        assert!(
+            !centraid_vault::roster::is_card_app(CHAT),
+            "the Chat tab is no app a card names"
+        );
     }
 }
