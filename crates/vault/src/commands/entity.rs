@@ -120,8 +120,14 @@ fn ids(connection: &Connection, sql: &str, id: &str) -> Result<Vec<String>> {
 /// with it and comes back with it.
 fn members(connection: &Connection, holder: &Found) -> Result<Vec<String>> {
     let sql = match holder.kind {
-        Kind::Notebook => "SELECT id FROM note WHERE notebook_id = ?1",
-        Kind::Folder => "SELECT id FROM document WHERE folder_id = ?1",
+        Kind::Notebook => {
+            "SELECT id FROM note WHERE notebook_id = ?1
+             UNION ALL SELECT id FROM container WHERE parent_id = ?1"
+        }
+        Kind::Folder => {
+            "SELECT id FROM document WHERE folder_id = ?1
+             UNION ALL SELECT id FROM container WHERE parent_id = ?1"
+        }
         Kind::Project => {
             "SELECT id FROM container WHERE parent_id = ?1 AND kind = 'section'
              UNION ALL SELECT id FROM task WHERE project_id = ?1"
@@ -293,6 +299,23 @@ pub(crate) fn purge_one(
             ctx.touch(&referrer)?;
         }
     }
+    // An album's cover is a photograph's bytes: once those are purged the cover
+    // goes, so the bytes are not held by a picture of something that is gone.
+    if found.kind == Kind::Photo {
+        let albums = ids(
+            connection,
+            "SELECT c.id FROM container c JOIN photo p ON p.blob = c.cover WHERE p.id = ?1",
+            id,
+        )?;
+        connection.execute(
+            "UPDATE container SET cover = NULL
+              WHERE cover = (SELECT blob FROM photo WHERE id = ?1)",
+            [id],
+        )?;
+        for album in albums {
+            ctx.touch(&album)?;
+        }
+    }
     // The people and things a note was about lose its words from their search
     // text; they are not touched, only re-indexed.
     for target in ids(
@@ -372,21 +395,28 @@ fn pre_restore(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     })
 }
 
+/// Everything that went to the trash together with `holder`, however deep.
+fn went_with(connection: &Connection, holder: &Found) -> Result<Vec<String>> {
+    let mut found = Vec::new();
+    for member in members(connection, holder)? {
+        let Some(m) = find(connection, &member)? else {
+            continue;
+        };
+        if m.deleted_at == holder.deleted_at {
+            found.extend(went_with(connection, &m)?);
+            found.push(member);
+        }
+    }
+    Ok(found)
+}
+
 fn restore(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     let id = ctx.required_str("id")?;
     let holder = require(ctx.connection(), id)?;
     let mut restored = Vec::new();
-    // The holder's members that went to the trash WITH it come back with it;
-    // the ones that were already there stay where they were.
-    let with_it: Vec<String> = members(ctx.connection(), &holder)?
-        .into_iter()
-        .filter(|member| {
-            find(ctx.connection(), member)
-                .ok()
-                .flatten()
-                .is_some_and(|m| m.deleted_at == holder.deleted_at)
-        })
-        .collect();
+    // What went to the trash WITH the holder (its members, and theirs in turn)
+    // comes back with it; what was already there stays where it was.
+    let with_it = went_with(ctx.connection(), &holder)?;
     for target in std::iter::once(id.to_owned()).chain(with_it) {
         ctx.connection().execute(
             "UPDATE entity SET deleted_at = NULL, purge_at = NULL WHERE id = ?1",

@@ -36,11 +36,12 @@ pub fn reindex(connection: &Connection, touched: &BTreeSet<String>) -> Result<()
     )?;
     let mut with = connection
         .prepare_cached("SELECT w.to_id FROM edge w WHERE w.from_id = ?1 AND w.rel = 'with'")?;
-    // The words of a task's project and an event's place are part of its own
-    // text: renaming either brings what is filed under it.
+    // The words of a task's project and of an event's or a photograph's place
+    // are part of its own text: renaming either brings what is filed under it.
     let mut dependents = connection.prepare_cached(
         "SELECT id FROM task WHERE project_id = ?1
-         UNION ALL SELECT id FROM event WHERE place_id = ?1",
+         UNION ALL SELECT id FROM event WHERE place_id = ?1
+         UNION ALL SELECT id FROM photo WHERE place_id = ?1",
     )?;
     for id in touched {
         work.extend(
@@ -185,7 +186,10 @@ pub fn text_of(connection: &Connection, id: &str, kind: Kind) -> Result<Option<S
         Kind::Photo => joined(
             connection,
             "SELECT d.text FROM photo c JOIN derivative d ON d.blob = c.blob
-              WHERE c.id = ?1 AND d.variant = 'caption'",
+              WHERE c.id = ?1 AND d.variant = 'caption'
+             UNION ALL SELECT p.title FROM photo v JOIN entity p ON p.id = v.place_id WHERE v.id = ?1
+             UNION ALL SELECT pl.address FROM photo v JOIN place pl ON pl.id = v.place_id WHERE v.id = ?1
+             UNION ALL SELECT pl.locality FROM photo v JOIN place pl ON pl.id = v.place_id WHERE v.id = ?1",
             id,
         )?,
         Kind::Thread => joined(

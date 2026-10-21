@@ -32,7 +32,7 @@ use serde_json::{Map, Value as Json};
 
 use crate::commands::entity::{self, trash_stamp};
 use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency};
-use crate::commands::{contact_point, event};
+use crate::commands::{contact_point, document, event};
 use crate::error::{Result, VaultError};
 use crate::model::{DEFAULT_CALENDAR_ID, Kind};
 
@@ -92,6 +92,10 @@ pub struct SystemMap {
     /// What a row derives from what the source stated (a rule's support), run
     /// after the fields are written.
     pub settle: Settle,
+    /// What a row keeps of what the source is about to replace (a file's old
+    /// bytes, as a revision), run on a row that exists before its fields are
+    /// written.
+    pub replaced: Replaced,
 }
 
 /// See [`SystemMap::shape`].
@@ -100,11 +104,18 @@ pub type Shape = fn(&mut Map<String, Json>) -> std::result::Result<(), String>;
 /// See [`SystemMap::settle`].
 pub type Settle = fn(&CommandCtx<'_, '_>, &str) -> Result<()>;
 
+/// See [`SystemMap::replaced`].
+pub type Replaced = fn(&CommandCtx<'_, '_>, &str, &[(&str, &Json)]) -> Result<()>;
+
 fn as_stated(_: &mut Map<String, Json>) -> std::result::Result<(), String> {
     Ok(())
 }
 
 fn nothing_to_settle(_: &CommandCtx<'_, '_>, _: &str) -> Result<()> {
+    Ok(())
+}
+
+fn nothing_replaced(_: &CommandCtx<'_, '_>, _: &str, _: &[(&str, &Json)]) -> Result<()> {
     Ok(())
 }
 
@@ -204,6 +215,7 @@ pub const SYSTEMS: &[SystemMap] = &[
         defaults: no_defaults,
         shape: as_stated,
         settle: nothing_to_settle,
+        replaced: nothing_replaced,
     },
     SystemMap {
         system: "calendar",
@@ -230,6 +242,7 @@ pub const SYSTEMS: &[SystemMap] = &[
         defaults: calendar_defaults,
         shape: event::shape,
         settle: event::settle,
+        replaced: nothing_replaced,
     },
     SystemMap {
         system: "files",
@@ -243,6 +256,7 @@ pub const SYSTEMS: &[SystemMap] = &[
         defaults: folder_defaults,
         shape: as_stated,
         settle: nothing_to_settle,
+        replaced: document::keep_replaced_by_write,
     },
     SystemMap {
         system: "health",
@@ -256,6 +270,7 @@ pub const SYSTEMS: &[SystemMap] = &[
         defaults: no_defaults,
         shape: as_stated,
         settle: nothing_to_settle,
+        replaced: nothing_replaced,
     },
     SystemMap {
         system: "statement",
@@ -271,6 +286,7 @@ pub const SYSTEMS: &[SystemMap] = &[
         defaults: statement_defaults,
         shape: as_stated,
         settle: nothing_to_settle,
+        replaced: nothing_replaced,
     },
 ];
 
@@ -529,6 +545,7 @@ fn write_fields(
     if fields.is_empty() {
         return Ok(());
     }
+    (map.replaced)(ctx, id, fields)?;
     let connection = ctx.connection();
     for (name, value) in fields {
         if *name == "title" {
