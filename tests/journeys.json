@@ -40,7 +40,9 @@
     "year3-notes": "The notebook at year three: 10,000 notes — 400 trashed, 200 pinned, 1,200 memos (notes about a person, the Journal's entries) — with a 48 KiB body on 600 of them, the largest body the product holds. `crates/apps/kit::fixtures::year3_notes`.",
     "year3-people": "The roster at year three: 5,000 people, 12,000 important dates, 20,000 interactions. `crates/apps/kit::fixtures::year3_people`. v0's own year-3 generator writes 5,000 `core_party` rows and no `people_profile` at all, so these reads had no artifact behind them before [#1020](https://github.com/srikanth235/centraid/issues/1020).",
     "year3-agenda": "The calendar at year three: 12,000 events, 800 recurring series, 1,200 exceptions. `crates/apps/kit::fixtures::year3_agenda`. It is the volume at which a six-month `upcoming` window genuinely reaches the 1,500-instance expansion cap, which is what makes the cap's error a real answer rather than a synthetic one.",
-    "year3-tasks": "The board at year three: 12,000 tasks — 8,250 open, 3,750 closed, 800 cancelled. `crates/apps/kit::fixtures::year3_tasks`."
+    "year3-tasks": "The board at year three: 12,000 tasks — 8,250 open, 3,750 closed, 800 cancelled. `crates/apps/kit::fixtures::year3_tasks`.",
+    "year3-money": "The ledger at year three: 4 accounts, 18,000 statement lines over three years, each account's statement followed through `follow.statement`. `crates/apps/money/src/year3.rs` writes the CSV text; the vault is filled by the real command path.",
+    "year3-health": "The health store at year three: 1,095 days of the six daily totals (6,570 values) and 1,200 workouts, written through `measurement.record` and `follow.health`. `crates/apps/health/tests/year3.rs`."
   },
   "journeys": {
     "cold-open": "Process start to the first screen the owner can act on.",
@@ -1694,6 +1696,50 @@
             "at": "2026-10-21",
             "host": "ci-linux-x64-4c, 4 vCPU / 15 GB, shared with concurrent lanes",
             "note": "The board's 500-row window over 3,000 open and 12,000 closed tasks walks the newest 500 entities, folds subtasks under their parents (475 roots) and reads 50 logbook rows, `truncated` true from the walk's own cursor, not a count comparison."
+          }
+        }
+      }
+    },
+    "gateway/app-read/year3-money/ci-linux-x64-4c": {
+      "surface": "gateway",
+      "journey": "app-read",
+      "volume": "year3-money",
+      "hardware": "ci-linux-x64-4c",
+      "spans": [],
+      "consumers": ["crates/apps/money/tests/year3.rs"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "sixScreens": {
+          "status": "projected",
+          "probe": "cargo test -p centraid-apps-money --test year3 -- --ignored --nocapture",
+          "_observedMs": 19796,
+          "_basis": "One DEBUG-build run on ci-linux-x64-4c under concurrent lanes, through the app crate's real query path over a vault filled by the commands the phone uses. PROJECTED in this ledger's sense and in D-1020-D3-7's: the number is observed, but one run on one contended container is not a distribution, and the target this journey exists to protect is stated on a reference DEVICE, which this host is not. Every number here is parked under a leading underscore so the ratchet cannot read it as a ceiling; the device lane of R-1020-20 is what promotes one.",
+          "_provenance": {
+            "at": "2026-10-21",
+            "host": "ci-linux-x64-4c, 4 vCPU / 15 GB, shared with concurrent lanes",
+            "note": "Spending, cash flow, accounts, recurring, activity and search over 18,000 lines on four accounts; the 18,000 lines follow in 4.4 s and a re-follow writes nothing. Reconciled to the cent against the parsed rows."
+          }
+        }
+      }
+    },
+    "gateway/app-read/year3-health/ci-linux-x64-4c": {
+      "surface": "gateway",
+      "journey": "app-read",
+      "volume": "year3-health",
+      "hardware": "ci-linux-x64-4c",
+      "spans": [],
+      "consumers": ["crates/apps/health/tests/year3.rs"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "threeYearScreens": {
+          "status": "projected",
+          "probe": "cargo test -p centraid-apps-health --test year3 -- --ignored --nocapture",
+          "_observedMs": 92,
+          "_basis": "One DEBUG-build run on ci-linux-x64-4c under concurrent lanes, through the app crate's real query path over a vault filled by the commands the phone uses. PROJECTED in this ledger's sense and in D-1020-D3-7's: the number is observed, but one run on one contended container is not a distribution, and the target this journey exists to protect is stated on a reference DEVICE, which this host is not. Every number here is parked under a leading underscore so the ratchet cannot read it as a ceiling; the device lane of R-1020-20 is what promotes one.",
+          "_provenance": {
+            "at": "2026-10-21",
+            "host": "ci-linux-x64-4c, 4 vCPU / 15 GB, shared with concurrent lanes",
+            "note": "Series, trends, today, the follow view and a walk of all 1,200 workouts over 6,570 daily values; the writes take 0.8 s and a re-read writes nothing."
           }
         }
       }
