@@ -44,7 +44,7 @@ Photos' north star is **iOS Photos** ([blueprint seats](../blueprint-seats.md)):
     - **Status: PARTIAL** — Videos ship. **Screenshots, Panoramas and Selfies are deferred**: `media_asset.kind` is `photo | video | audio | scan` and no column carries a media subtype, so there is no honest signal to shelve on.
 
 11. **Review faces, name people.**
-    - **Status: REMOVED** — Photos has no face surface. People, face review, a person's shelf, "who is in it" in the viewer and search by person read `media_face_region`, which nothing has written since `upsert_faces` went with the enrichment worker in [#1029](https://github.com/srikanth235/centraid/issues/1029); the owner ruled them out on 2026-10-15 ([Q-1047-2](../decisions.md#open-questions-for-the-owner-1046-1047)), and on-device detection is proposed separately. The face rows and `media.forget_person` stay in the vault.
+    - **Status: REMOVED** — Photos has no face surface. People, face review, a person's shelf, "who is in it" in the viewer and search by person read a face table that nothing has written since `upsert_faces` went with the enrichment worker in [#1029](https://github.com/srikanth235/centraid/issues/1029); the owner ruled them out on 2026-10-15 ([Q-1047-2](../decisions.md#open-questions-for-the-owner-1046-1047)), and on-device detection is proposed separately. The model holds no face table ([R-1135-5-18](../decisions.md#lane-5--docs-and-photos-1135)).
 
 12. **Edit a photograph.**
     - Crop, rotate, straighten, flip and fixed ratios. The original is never touched: a save is a new photograph that keeps the original's date, place and caption and names it as its source ([R-1029-PH-5](../decisions.md#photos-what-the-port-builds-and-what-it-does-not-1029)).

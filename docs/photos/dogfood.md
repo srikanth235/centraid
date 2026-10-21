@@ -46,12 +46,9 @@ Run this motion:
 
 8. **Set an album's key photo.** Verify:
    - [ ] In an album, selecting one photograph offers Make key photo; the viewer's `···` offers it only when the photograph was opened from an album.
-   - [ ] The chosen cover appears on the album in the Add to album sheet. Collections' album tiles draw no cover, which is expected ([switcher walkthrough](switcher-walkthrough.md), step 9).
+   - [ ] The chosen cover appears on the album in the Add to album sheet. Collections' album tiles draw it too: the chosen photograph, else the album's first ([R-1135-5-2](../decisions.md#lane-5--docs-and-photos-1135)).
 
-9. **Memories.** Nothing in this tree runs OCR or computes memories ([switcher walkthrough](switcher-walkthrough.md), step 6). Verify:
-   - [ ] An empty Memories shelf reads that Centraid has not looked yet, never that there are none; a trip memory draws its route from the member's own coordinates.
-
-10. **Check four known stuck-state classes**:
+9. **Check four known stuck-state classes**:
 
 - [ ] **Stuck backup indicator:** a backup-in-progress line that never clears. A hung camera-roll pass or an unreachable laptop makes this visible; `docs/logs.md` → the mobile logs should show steady progress or a clear offline sentence, never a silent hang.
 - [ ] **Quadruple offline announcements:** the offline line appeared four times in one session. If it repeats, the banner logic has drifted.

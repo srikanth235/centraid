@@ -175,7 +175,7 @@ public object PhotosSearchReads {
 
     /**
      * `photos.search.placeGeo` — each place's gazetteer name (`locality`, written by
-     * `place.locate`) beside the name. The model keeps no home place (R-1135-5-15),
+     * `place.locate`) beside the name. The model keeps no home place (R-1135-5-3),
      * so no home words are vocabulary.
      */
     public fun placeGeoQuery(): PageQuery = PageQuery(
@@ -384,7 +384,7 @@ public object PhotosSearchReads {
     /**
      * WHAT A PLACE ANSWERS TO (v0's `search-place-vocabulary.ts`): the member's
      * own name for it and the gazetteer's settlement. **Never a coordinate.** The
-     * model keeps no home place (R-1135-5-15), so "home", "at home" and "near home"
+     * model keeps no home place (R-1135-5-3), so "home", "at home" and "near home"
      * are no words: a guess at where the member lives is not vocabulary.
      *
      * The printed label is the member's name, else the gazetteer's; a place

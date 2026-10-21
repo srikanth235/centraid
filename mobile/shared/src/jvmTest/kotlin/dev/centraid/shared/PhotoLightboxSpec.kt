@@ -424,7 +424,7 @@ class PhotoLightboxSpec : StringSpec({
 
     "every tag is the member's: the model has no proposal to confirm" {
         // An edge carries no tagger and no derivation, so a label on this screen
-        // is one a member put there (R-1135-5-16 reserves the wire field for the
+        // is one a member put there (the wire field stays for the
         // day a proposal exists). The concept id and the tag id are the one id.
         val tags = PhotoLightboxLeg(PhotoLightboxMachine.Leg.TAGS).arrived(
             listOf(tagRow("concept-1"), tagRow("concept-2")),
