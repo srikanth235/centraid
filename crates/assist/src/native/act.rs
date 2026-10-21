@@ -86,22 +86,13 @@ pub(crate) fn create_arg_alias(kind: Kind, key: &str) -> Option<&'static str> {
         .map(|_| "date")
 }
 
-/// The input key that names a row of each kind in its commands.
+/// The input key that names a row of each kind in its commands: `id` for every entity of the
+/// vault, and a Locker item's own `item_id`.
 #[must_use]
 pub fn id_param(kind: Kind) -> &'static str {
     match kind {
-        Kind::Person => "party_id",
-        Kind::Event => "event_id",
-        Kind::Task => "task_id",
-        Kind::Note => "note_id",
-        Kind::Document => "document_id",
-        Kind::Photo => "asset_id",
-        Kind::Album => "album_id",
         Kind::LockerItem => "item_id",
-        Kind::Notebook => "notebook_id",
-        Kind::Folder => "folder_id",
-        Kind::List => "project_id",
-        Kind::Transaction => "txn_id",
+        _ => "id",
     }
 }
 
@@ -232,6 +223,15 @@ enum Plan {
         inverse: Vec<Step>,
         not_undoable: Option<String>,
         note: Option<String>,
+    },
+    /// A write the runtime itself will not make, with the id and the sentence of the check that
+    /// says so, exactly as a refusal of the vault is read (`Session::refusal`): the rule is the
+    /// assistant's, the product is the same (a cancelled event is not moved: plan a new one).
+    Refused {
+        command: &'static str,
+        input: Value,
+        predicate: &'static str,
+        reason: &'static str,
     },
 }
 
@@ -1369,7 +1369,7 @@ impl Session {
                     let planned = self.plan(verb, &row, extra);
                     self.acted = acted;
                     match planned {
-                        Ok(Plan::Run { .. }) => Fit::Yes,
+                        Ok(Plan::Run { .. } | Plan::Refused { .. }) => Fit::Yes,
                         // A reschedule to where the row already is stays a
                         // candidate: the person may be re-confirming it.
                         Ok(Plan::Already(_)) if verb == Verb::Reschedule => Fit::Yes,
@@ -1577,6 +1577,31 @@ impl Session {
         let mut set_aside: Vec<(Key, &'static str, Value, Ran, String)> = Vec::new();
         for (key, plan) in plans {
             match plan {
+                Plan::Refused {
+                    command,
+                    input,
+                    predicate,
+                    reason,
+                } => {
+                    let ran = Ran {
+                        ok: false,
+                        output: Value::Null,
+                        reason: Some(reason.to_owned()),
+                        predicate: Some(predicate.to_owned()),
+                    };
+                    if touched.is_empty()
+                        && let Some(ended) =
+                            self.refusal(verb, &key, (command, &input), &ran, &before)
+                    {
+                        return Ok(ended);
+                    }
+                    let name = self.named(&key);
+                    failure = Some(format!(
+                        "error: {} {name} was refused: {reason}",
+                        verb.spec().name
+                    ));
+                    break;
+                }
                 Plan::Already(state) => {
                     let name = self.named(&key);
                     already_lines.push(format!("already: {name} {state}"));
@@ -1657,19 +1682,6 @@ impl Session {
                         break;
                     }
                     touched.push(key.clone());
-                    if verb == Verb::Delete
-                        && key.0 == Kind::Album
-                        && let Some(revision) = outputs
-                            .first()
-                            .and_then(|output| output.get("revision_id"))
-                            .and_then(Value::as_str)
-                    {
-                        inverses.push(Inverse {
-                            command: "media.restore_album".to_owned(),
-                            input: json!({"album_id": key.1, "revision_id": revision}),
-                            key: key.clone(),
-                        });
-                    }
                     for step in inverse {
                         inverses.push(Inverse {
                             command: step.command.to_owned(),
@@ -1966,10 +1978,10 @@ impl Session {
             Verb::Complete | Verb::Reopen => {
                 check_args(&[])?;
                 let old = status_of(row.field("status"));
-                let (want, vault) = if verb == Verb::Complete {
-                    ("completed", "completed")
+                let want = if verb == Verb::Complete {
+                    "completed"
                 } else {
-                    ("open", "needs-action")
+                    "open"
                 };
                 if task_stand(verb, old) == Stand::Already {
                     let when = row
@@ -1978,19 +1990,22 @@ impl Session {
                         .unwrap_or_default();
                     return Ok(Plan::Already(format!("is {want}{when}")));
                 }
-                let old_vault = Kind::Task
+                // closing, reopening and cancelling are three commands of the vault; the undo is
+                // the command of the status the row had
+                let back = Kind::Task
                     .spec()
                     .field("status")
                     .and_then(|field| field.vault_value(old))
-                    .unwrap_or("needs-action");
+                    .and_then(meta::task_status_command)
+                    .unwrap_or("task.reopen");
                 run(
                     vec![Step {
                         command,
-                        input: json!({"task_id": id, "status": vault}),
+                        input: target(),
                     }],
                     vec![Step {
-                        command,
-                        input: json!({"task_id": id, "status": old_vault}),
+                        command: back,
+                        input: target(),
                     }],
                 )
             }
@@ -1999,72 +2014,47 @@ impl Session {
                 if row.field("status") == Some(&Val::Enum("cancelled")) {
                     return Ok(Plan::Already("is cancelled".to_owned()));
                 }
-                Plan::Run {
-                    steps: vec![Step {
+                // an edit of the status puts the event back as it was
+                let old = Kind::Event
+                    .spec()
+                    .field("status")
+                    .and_then(|field| {
+                        row.field("status").and_then(|value| match value {
+                            Val::Enum(model) => field.vault_value(model),
+                            _ => None,
+                        })
+                    })
+                    .unwrap_or("confirmed");
+                run(
+                    vec![Step {
                         command,
                         input: target(),
                     }],
-                    inverse: Vec::new(),
-                    not_undoable: Some(
-                        "the vault has no command that un-cancels an event".to_owned(),
-                    ),
-                    note: None,
-                }
+                    vec![Step {
+                        command: "event.edit",
+                        input: json!({"id": id, "status": old}),
+                    }],
+                )
             }
             Verb::Delete => {
                 check_args(&[])?;
                 if row.trashed {
                     return Ok(Plan::Already("is in the trash".to_owned()));
                 }
-                let restore = Verb::Restore.command(kind);
-                match (restore, kind) {
-                    (Some(restore), _) => {
-                        // THE VAULT TAKES A TRASHED PHOTO OUT OF ITS ALBUMS, and
-                        // its restore does not put it back, so the undo re-adds
-                        // each album after the restore (inverses run last first).
-                        let mut inverse: Vec<Step> = if kind == Kind::Photo {
-                            self.world
-                                .neighbours(&row.key())
-                                .remove(&Kind::Album)
-                                .unwrap_or_default()
-                                .into_iter()
-                                .map(|album| Step {
-                                    command: "media.add_to_album",
-                                    input: json!({"album_id": album.1, "asset_id": id}),
-                                })
-                                .collect()
-                        } else {
-                            Vec::new()
-                        };
-                        inverse.push(Step {
-                            command: restore,
-                            input: target(),
-                        });
-                        run(
-                            vec![Step {
-                                command,
-                                input: target(),
-                            }],
-                            inverse,
-                        )
-                    }
-                    (None, Kind::Album) => run(
-                        vec![Step {
-                            command,
-                            input: target(),
-                        }],
-                        Vec::new(),
-                    ),
-                    (None, _) => Plan::Run {
-                        steps: vec![Step {
-                            command,
-                            input: target(),
-                        }],
-                        inverse: Vec::new(),
-                        not_undoable: Some(format!("a deleted {} is gone for good", kind.name())),
-                        note: None,
-                    },
-                }
+                // EVERY KIND COMES BACK THE SAME WAY: a trashed row, and what went to the trash
+                // with it, is restored by the vault's own `entity.restore` (a Locker item by its
+                // own); the album, notebook or folder a delete takes out of the model included.
+                let restore = Verb::Restore.command(kind).unwrap_or("entity.restore");
+                run(
+                    vec![Step {
+                        command,
+                        input: target(),
+                    }],
+                    vec![Step {
+                        command: restore,
+                        input: target(),
+                    }],
+                )
             }
             Verb::Restore => {
                 check_args(&[])?;
@@ -2092,11 +2082,12 @@ impl Session {
                     ));
                 }
                 let other = if want { Verb::Unstar } else { Verb::Star };
-                let input = |on: bool| {
-                    if kind == Kind::Photo {
-                        json!({"asset_id": id, "favorite": i64::from(on)})
-                    } else {
+                // a flag is named by the verb; a Locker item has its own star
+                let input = |_: bool| {
+                    if kind == Kind::LockerItem {
                         target()
+                    } else {
+                        json!({"id": id, "flag": "starred"})
                     }
                 };
                 run(
@@ -2127,7 +2118,7 @@ impl Session {
                 Plan::Run {
                     steps: vec![Step {
                         command,
-                        input: json!({"party_id": id, "kind": log}),
+                        input: json!({"id": id, "kind": log}),
                     }],
                     inverse: Vec::new(),
                     not_undoable: Some("a logged interaction stays in the journal".to_owned()),
@@ -2234,37 +2225,30 @@ impl Session {
         let place = |at: Option<&Key>| -> Step {
             match row.kind {
                 Kind::Note => Step {
-                    command: "knowledge.move_note",
-                    input: match at {
-                        Some(at) => json!({"note_id": id, "notebook_id": at.1}),
-                        None => json!({"note_id": id}),
-                    },
+                    command: "note.move",
+                    input: json!({"id": id, "notebook_id": at.map(|at| at.1.clone())}),
                 },
                 Kind::Document => Step {
-                    command: "core.move_document",
-                    input: match at {
-                        Some(at) => json!({"document_id": id, "folder_id": at.1}),
-                        None => json!({"document_id": id}),
-                    },
+                    command: "document.move",
+                    input: json!({"id": id, "folder_id": at.map(|at| at.1.clone())}),
                 },
                 _ => Step {
-                    command: "schedule.organize_task",
-                    input: match at {
-                        Some(at) => json!({"task_id": id, "project_id": at.1, "sort_order": 0}),
-                        None => json!({"task_id": id, "clear_project": true, "sort_order": 0}),
-                    },
+                    command: "task.organize",
+                    input: json!({"id": id, "project_id": at.map(|at| at.1.clone())}),
                 },
             }
         };
+        // a photograph is in an album by an ordered `contains` edge, and there are as many as it
+        // is in albums
         let pair = |command: &'static str| -> Step {
             Step {
                 command,
-                input: json!({"album_id": cid, "asset_id": id}),
+                input: json!({"from": cid, "rel": "contains", "to": id}),
             }
         };
         let mut planned = match row.kind {
             Kind::Photo => {
-                let (add, remove) = ("media.add_to_album", "media.remove_from_album");
+                let (add, remove) = ("edge.add", "edge.remove");
                 if verb == Verb::AddTo {
                     Plan::Run {
                         steps: vec![pair(add)],
@@ -2596,17 +2580,15 @@ impl Session {
                 if row.date == Some(point) {
                     return Ok(Plan::Already(format!("is already due {}", point.show())));
                 }
-                let inverse = match row.date {
-                    Some(old) => json!({"task_id": row.id, "due_at": old.vault()}),
-                    None => json!({"task_id": row.id, "clear_due": true}),
-                };
+                // `due: null` clears a due date, so the undo of a first date is the same command
+                let inverse = json!({"id": row.id, "due": row.date.map(Stamp::vault)});
                 Ok(Plan::Run {
                     steps: vec![Step {
-                        command: "schedule.edit_task",
-                        input: json!({"task_id": row.id, "due_at": point.vault()}),
+                        command: "task.edit",
+                        input: json!({"id": row.id, "due": point.vault()}),
                     }],
                     inverse: vec![Step {
-                        command: "schedule.edit_task",
+                        command: "task.edit",
                         input: inverse,
                     }],
                     not_undoable: None,
@@ -2614,6 +2596,15 @@ impl Session {
                 })
             }
             Kind::Event => {
+                // A CANCELLED EVENT IS NOT MOVED: the person is asked whether to plan a new one
+                if row.field("status") == Some(&Val::Enum("cancelled")) {
+                    return Ok(Plan::Refused {
+                        command: "event.edit",
+                        input: json!({"id": row.id}),
+                        predicate: "event_exists_not_cancelled",
+                        reason: "That event is not here to change.",
+                    });
+                }
                 let (old_start, old_end) = event_span(row);
                 let (start, end) = match resolved {
                     dates::Resolved::Between { from, to } => (from, to),
@@ -2636,17 +2627,19 @@ impl Session {
                         row.date.map(Stamp::show).unwrap_or_default()
                     )));
                 }
-                let spell = |at: jiff::civil::DateTime| {
-                    format!("{}T{}:00", at.date(), dates::clock(at.time()))
+                let times = |start, end| {
+                    let mut input = event_times(row, start, end);
+                    input["id"] = json!(row.id);
+                    input
                 };
                 Ok(Plan::Run {
                     steps: vec![Step {
-                        command: "schedule.reschedule_event",
-                        input: json!({"event_id": row.id, "dtstart": spell(start), "dtend": spell(end)}),
+                        command: "event.edit",
+                        input: times(start, end),
                     }],
                     inverse: vec![Step {
-                        command: "schedule.reschedule_event",
-                        input: json!({"event_id": row.id, "dtstart": spell(old_start), "dtend": spell(old_end)}),
+                        command: "event.edit",
+                        input: times(old_start, old_end),
                     }],
                     not_undoable: None,
                     note: said,
@@ -2797,8 +2790,12 @@ impl Session {
         // command → (input, inverse input)
         let mut forward: BTreeMap<&'static str, Map<String, Value>> = BTreeMap::new();
         let mut backward: BTreeMap<&'static str, Map<String, Value>> = BTreeMap::new();
+        // the edits that are a command of their own, not a field of one: a task's status, a
+        // note's pin, a list's area (steps, in order, and the steps that put each back)
+        let mut apart: Vec<Step> = Vec::new();
+        let mut apart_back: Vec<Step> = Vec::new();
         let mut changed = false;
-        let mut not_undoable = None;
+        let not_undoable = None;
         for (field, value) in args {
             let field = field.as_str();
             if field == "name" {
@@ -2859,7 +2856,7 @@ impl Session {
                     let given = text_of(value);
                     let on =
                         whr::parse_bool(&given).ok_or_else(|| whr::bool_error(field, &given))?;
-                    (json!(i64::from(on)), Some(Val::Bool(on)))
+                    (json!(on), Some(Val::Bool(on)))
                 }
                 FieldType::Enum => {
                     let model = whr::enum_value(kind, field, &text_of(value))?;
@@ -2879,30 +2876,41 @@ impl Session {
             if new_val != normalised_old {
                 changed = true;
             }
-            let (param, old_json) = match (kind, field) {
-                (Kind::Person, "cadence") => (
-                    "cadence_days",
-                    old.as_ref().map(Val::json).unwrap_or(json!(0)),
-                ),
-                (Kind::Task, "status") => (
-                    "status",
-                    json!(match &old {
-                        Some(Val::Enum(model)) =>
-                            spec_field.vault_value(model).unwrap_or("needs-action"),
-                        _ => "needs-action",
-                    }),
-                ),
-                (Kind::Task, "effort") => {
-                    ("effort_min", old.as_ref().map_or(Value::Null, Val::json))
-                }
-                (Kind::Task, "priority") => ("priority", old.as_ref().map_or(json!(0), Val::json)),
-                (Kind::Note, "body") => ("body_text", old.as_ref().map_or(Value::Null, Val::json)),
-                (Kind::Note, "pinned") => {
-                    ("pinned", json!(i64::from(old == Some(Val::Bool(true)))))
-                }
-                (Kind::Event, "duration") => ("dtend", Value::Null),
-                (_, name) => (name, old.as_ref().map_or(json!(""), Val::json)),
-            };
+            // a task's status is three commands, one for each word it can be put in
+            if (kind, field) == (Kind::Task, "status") {
+                let old_vault = match &old {
+                    Some(Val::Enum(model)) => spec_field.vault_value(model).unwrap_or("open"),
+                    _ => "open",
+                };
+                let new_vault = new_json.as_str().unwrap_or("open");
+                apart.push(Step {
+                    command: meta::task_status_command(new_vault).unwrap_or("task.reopen"),
+                    input: json!({ id_key: row.id }),
+                });
+                apart_back.push(Step {
+                    command: meta::task_status_command(old_vault).unwrap_or("task.reopen"),
+                    input: json!({ id_key: row.id }),
+                });
+                continue;
+            }
+            // a note is pinned by a flag, which is set and cleared by two commands
+            if (kind, field) == (Kind::Note, "pinned") {
+                let flag = |on: bool| Step {
+                    command: if on { "flag.set" } else { "flag.clear" },
+                    input: json!({ id_key: row.id, "flag": "pinned" }),
+                };
+                apart.push(flag(new_val == Some(Val::Bool(true))));
+                apart_back.push(flag(old == Some(Val::Bool(true))));
+                continue;
+            }
+            // a list sits in an area, which is a container of its own: found by its title, or made
+            if (kind, field) == (Kind::List, "area") {
+                let area = text_of(value);
+                let (steps, back) = self.plan_area(row, area.trim());
+                apart.extend(steps);
+                apart_back.extend(back);
+                continue;
+            }
             if kind == Kind::Event && field == "duration" {
                 let (start, end) = event_span(row);
                 let minutes = new_json.as_i64().unwrap_or(60).max(1);
@@ -2910,48 +2918,63 @@ impl Session {
                     .try_minutes(minutes)
                     .and_then(|span| start.checked_add(span))
                     .map_err(|_| "error: that duration is out of range.".to_owned())?;
-                let spell = |at: jiff::civil::DateTime| {
-                    format!("{}T{}:00", at.date(), dates::clock(at.time()))
-                };
-                forward
-                    .entry(command)
-                    .or_default()
-                    .insert("dtend".to_owned(), json!(spell(new_end)));
-                backward
-                    .entry(command)
-                    .or_default()
-                    .insert("dtend".to_owned(), json!(spell(end)));
+                let times = event_times(row, start, new_end);
+                let back = event_times(row, start, end);
+                for (map, times) in [(&mut forward, times), (&mut backward, back)] {
+                    if let Some(ends) = times.get("ends") {
+                        map.entry(command)
+                            .or_default()
+                            .insert("ends".to_owned(), ends.clone());
+                    }
+                }
                 continue;
             }
+            // the column each model field is edited under; `null` clears a column that can be
+            let (param, new_json, old_json) = match (kind, field) {
+                (Kind::Person, "cadence") => (
+                    "cadence_days",
+                    // a cadence of none is no column value
+                    if new_json == json!(0) {
+                        Value::Null
+                    } else {
+                        new_json
+                    },
+                    old.as_ref().map_or(Value::Null, Val::json),
+                ),
+                (Kind::Task, "effort") => (
+                    "effort_min",
+                    new_json,
+                    old.as_ref().map_or(Value::Null, Val::json),
+                ),
+                (Kind::Task, "priority") => (
+                    "priority",
+                    new_json,
+                    old.as_ref().map_or(json!(0), Val::json),
+                ),
+                // a body is never null: no words is an empty body
+                (Kind::Note, "body") => {
+                    ("body", new_json, old.as_ref().map_or(json!(""), Val::json))
+                }
+                (Kind::Person, "role" | "nickname" | "met")
+                | (Kind::Task | Kind::Event, "description") => (
+                    field,
+                    if new_json == json!("") {
+                        Value::Null
+                    } else {
+                        new_json
+                    },
+                    old.as_ref().map_or(Value::Null, Val::json),
+                ),
+                (_, name) => (name, new_json, old.as_ref().map_or(json!(""), Val::json)),
+            };
             forward
                 .entry(command)
                 .or_default()
                 .insert(param.to_owned(), new_json);
-            let clear = match (kind, field) {
-                (Kind::Task | Kind::Event, "description") if old.is_none() => {
-                    Some("clear_description")
-                }
-                _ => None,
-            };
-            match (clear, old_json) {
-                (Some(flag), _) => {
-                    backward
-                        .entry(command)
-                        .or_default()
-                        .insert(flag.to_owned(), json!(true));
-                }
-                (None, Value::Null) => {
-                    not_undoable = Some(format!(
-                        "{field} had no value before, and the vault cannot clear it"
-                    ));
-                }
-                (None, old_json) => {
-                    backward
-                        .entry(command)
-                        .or_default()
-                        .insert(param.to_owned(), old_json);
-                }
-            }
+            backward
+                .entry(command)
+                .or_default()
+                .insert(param.to_owned(), old_json);
         }
         if kind == Kind::LockerItem {
             self.locker_draft(row, &mut forward, &mut backward)?;
@@ -2964,19 +2987,6 @@ impl Session {
                 .filter(|(_, input)| !input.is_empty())
                 .map(|(command, mut input)| {
                     input.insert(id_key.to_owned(), json!(row.id));
-                    // `save_project` is an upsert that writes every column it
-                    // is given and nulls the rest, so a rename carries the
-                    // current area along and an area edit the current name.
-                    if command == "schedule.save_project" {
-                        if !input.contains_key("name") {
-                            input.insert("name".to_owned(), json!(row.name));
-                        }
-                        if !input.contains_key("area")
-                            && let Some(area) = row.field("area")
-                        {
-                            input.insert("area".to_owned(), area.json());
-                        }
-                    }
                     Step {
                         command,
                         input: Value::Object(input),
@@ -2984,12 +2994,65 @@ impl Session {
                 })
                 .collect()
         };
+        let (mut steps, mut inverse) = (finish(forward), finish(backward));
+        steps.extend(apart);
+        // the undo runs the last step first, so the pieces that came last go back first
+        inverse.extend(apart_back);
         Ok(Plan::Run {
-            steps: finish(forward),
-            inverse: finish(backward),
+            steps,
+            inverse,
             not_undoable,
             note: None,
         })
+    }
+
+    /// A list's area, as steps: the list moves into the area of that name (found by its title,
+    /// without regard to case), or into one made for it; an empty name takes it out of its area.
+    /// The second list is the undo, in the order the steps were made.
+    fn plan_area(&self, row: &Row, area: &str) -> (Vec<Step>, Vec<Step>) {
+        self.plan_area_for(&row.id, row.extra.get("area_id").cloned(), area)
+    }
+
+    fn plan_area_for(
+        &self,
+        project: &str,
+        old: Option<String>,
+        area: &str,
+    ) -> (Vec<Step>, Vec<Step>) {
+        let put = |parent: Option<String>| Step {
+            command: "container.move",
+            input: json!({"id": project, "parent": parent}),
+        };
+        let back = put(old);
+        if area.is_empty() {
+            return (vec![put(None)], vec![back]);
+        }
+        if let Some((id, _)) = self
+            .world
+            .areas
+            .iter()
+            .find(|(_, title)| title.eq_ignore_ascii_case(area))
+        {
+            return (vec![put(Some(id.clone()))], vec![back]);
+        }
+        let id = self.door.mint_id();
+        (
+            vec![
+                Step {
+                    command: "container.create",
+                    input: json!({"id": id, "kind": "area", "title": area}),
+                },
+                put(Some(id.clone())),
+            ],
+            // the undo puts the list back, then lets the area made for it go
+            vec![
+                Step {
+                    command: "entity.purge",
+                    input: json!({"id": id}),
+                },
+                back,
+            ],
+        )
     }
 
     /// A LOCKER EDIT SENDS THE WHOLE DRAFT. `locker.edit_item` rewrites every
@@ -3180,62 +3243,62 @@ impl Session {
             None
         };
         let mint = || self.door.mint_id();
+        // EVERY CREATE NAMES THE ID IT WILL HAVE: a parked card shows it, and the confirm writes
+        // the row the card named (the vault honours an id the caller minted).
+        // a list's area: a container found by its title, or one made after the list
+        let mut area_follow: Vec<(&'static str, Value)> = Vec::new();
         let (command, input, id_out): (&'static str, Value, &'static str) = match kind {
             Kind::Person => {
-                let mut input =
-                    json!({"display_name": name, "cadence_days": number("cadence")?.unwrap_or(0)});
+                let mut input = json!({"id": mint(), "title": name});
+                if let Some(cadence) = number("cadence")?.filter(|days| *days > 0) {
+                    input["cadence_days"] = json!(cadence);
+                }
                 for field in ["role", "nickname"] {
                     if let Some(value) = text(field) {
                         input[field] = json!(value);
                     }
                 }
-                // A PARKED PERSON KEEPS THE ID IT WAS SHOWN WITH: the vault honours a seat-minted
-                // party id (#922 G2), so the confirm writes the row the card named. A run lets the
-                // vault mint it, as every harness run always has.
-                if self.flags.writes != crate::native::park::Writes::Run {
-                    input["party_id"] = json!(mint());
-                }
-                ("people.add_person", input, "party_id")
+                ("person.add", input, "id")
             }
             Kind::Event => {
                 let resolved = date.ok_or("error: create event needs date: <date expression>.")?;
                 let spell = |at: jiff::civil::DateTime| {
                     format!("{}T{}:00", at.date(), dates::clock(at.time()))
                 };
-                let (start, end) = match resolved {
-                    dates::Resolved::Between { from, to } => (from, to),
+                let (starts, ends, timing) = match resolved {
+                    dates::Resolved::Between { from, to } => (spell(from), spell(to), "floating"),
                     dates::Resolved::At(at) => {
                         let minutes = number("duration")?.unwrap_or(60).max(1);
                         let end = jiff::Span::new()
                             .try_minutes(minutes)
                             .and_then(|span| at.checked_add(span))
                             .map_err(|_| "error: that duration is out of range.".to_owned())?;
-                        (at, end)
+                        (spell(at), spell(end), "floating")
                     }
-                    dates::Resolved::Days { from, to } => (
-                        from.to_datetime(jiff::civil::Time::midnight()),
-                        to.tomorrow()
-                            .unwrap_or(to)
-                            .to_datetime(jiff::civil::Time::midnight()),
-                    ),
+                    // a day is a day: an all-day event, whose end is its LAST day
+                    dates::Resolved::Days { from, to } => {
+                        (from.to_string(), to.to_string(), "all-day")
+                    }
                 };
+                // a PROPOSED event is tentative until the member says otherwise
                 let mut input = json!({
-                    "event_id": mint(),
-                    "summary": name,
-                    "dtstart": spell(start),
-                    "dtend": spell(end),
-                    "calendar_id": self.world.calendar,
+                    "id": mint(),
+                    "title": name,
+                    "starts": starts,
+                    "ends": ends,
+                    "timing": timing,
+                    "status": "tentative",
                 });
                 if let Some(description) = text("description") {
                     input["description"] = json!(description);
                 }
                 if !attendees.is_empty() {
-                    input["attendee_party_ids"] = json!(attendees);
+                    input["attendees"] = json!(attendees);
                 }
-                ("schedule.propose_event", input, "event_id")
+                ("event.propose", input, "id")
             }
             Kind::Task => {
-                let mut input = json!({"task_id": mint(), "title": name});
+                let mut input = json!({"id": mint(), "title": name});
                 if let Some(resolved) = date {
                     let point = match resolved.point() {
                         Some(point) => point,
@@ -3250,7 +3313,7 @@ impl Session {
                             point
                         }
                     };
-                    input["due_at"] = json!(point.vault());
+                    input["due"] = json!(point.vault());
                 }
                 if let Some(effort) = number("effort")? {
                     input["effort_min"] = json!(effort.max(1));
@@ -3262,51 +3325,64 @@ impl Session {
                     input["description"] = json!(description);
                 }
                 if let Some(parent) = one_row(self, "parent", Kind::Task)? {
-                    input["parent_task_id"] = json!(parent.1);
+                    input["parent_id"] = json!(parent.1);
                 }
-                ("schedule.add_task", input, "task_id")
+                // the list is a column of the task: no second command to file it
+                if let Some(list) = &list {
+                    input["project_id"] = json!(list.1);
+                }
+                ("task.add", input, "id")
             }
             Kind::Note => {
                 let body = text("body").unwrap_or_else(|| name.clone());
-                let mut input = json!({"note_id": mint(), "title": name, "body_text": body});
+                let mut input = json!({"id": mint(), "title": name, "body": body});
                 if let Some(notebook) = one_row(self, "notebook", Kind::Notebook)? {
                     input["notebook_id"] = json!(notebook.1);
                 }
-                ("knowledge.create_note", input, "note_id")
+                ("note.create", input, "id")
             }
             Kind::Document => {
                 let body = text("text").unwrap_or_else(|| name.clone());
                 let mut input = json!({
-                    "document_id": mint(),
+                    "id": mint(),
                     "title": name,
-                    "data_uri": format!("data:text/plain,{}", percent(&body)),
+                    "body_text": body,
+                    "media_type": "text/plain",
                 });
                 if let Some(folder) = one_row(self, "folder", Kind::Folder)? {
                     input["folder_id"] = json!(folder.1);
                 }
-                ("core.add_document", input, "document_id")
+                ("document.create_text", input, "id")
             }
             Kind::Album => (
-                "media.create_album",
-                json!({"album_id": mint(), "title": name}),
-                "album_id",
+                "container.create",
+                json!({"id": mint(), "kind": "album", "title": name}),
+                "id",
             ),
             Kind::Notebook => (
-                "knowledge.create_notebook",
-                json!({"notebook_id": mint(), "name": name}),
-                "notebook_id",
+                "container.create",
+                json!({"id": mint(), "kind": "notebook", "title": name}),
+                "id",
             ),
             Kind::Folder => (
-                "core.create_folder",
-                json!({"folder_id": mint(), "name": name}),
-                "folder_id",
+                "container.create",
+                json!({"id": mint(), "kind": "folder", "title": name}),
+                "id",
             ),
             Kind::List => {
-                let mut input = json!({"project_id": mint(), "name": name});
+                let id = mint();
                 if let Some(area) = text("area") {
-                    input["area"] = json!(area);
+                    let (steps, _) = self.plan_area_for(&id, None, area.trim());
+                    area_follow = steps
+                        .into_iter()
+                        .map(|step| (step.command, step.input))
+                        .collect();
                 }
-                ("schedule.save_project", input, "project_id")
+                (
+                    "container.create",
+                    json!({"id": id, "kind": "project", "title": name}),
+                    "id",
+                )
             }
             Kind::LockerItem => {
                 let kind_value = match text("type") {
@@ -3381,13 +3457,7 @@ impl Session {
             .to_owned();
         let key = (kind, id.clone());
         // Follow-ups that the create command itself does not take.
-        let mut follow = Vec::new();
-        if let Some(list) = list {
-            follow.push((
-                "schedule.organize_task",
-                json!({"task_id": id, "project_id": list.1, "sort_order": 0}),
-            ));
-        }
+        let follow = area_follow;
         for (command, input) in follow {
             if let Err(error) = self.write_must(command, input) {
                 // Take the half-made row back out, so no later diff finds it.
@@ -3812,47 +3882,7 @@ impl Session {
             .map(|row| row.name.clone())
             .unwrap_or_default();
         Some(match (command, predicate) {
-            ("core.delete_folder", "folder_is_empty") => {
-                let held = self
-                    .world
-                    .neighbours(key)
-                    .remove(&Kind::Document)
-                    .unwrap_or_default();
-                let in_trash = |held: &Key| self.world.row(held).is_some_and(|row| row.trashed);
-                let mut live: Vec<Key> = held
-                    .iter()
-                    .filter(|held| !in_trash(held))
-                    .cloned()
-                    .collect();
-                let trashed: Vec<Key> =
-                    held.iter().filter(|held| in_trash(held)).cloned().collect();
-                let holds = match (live.len(), trashed.len()) {
-                    (0, 0) => "other folders".to_owned(),
-                    (live, 0) => Kind::Document.count(live),
-                    (0, trashed) => format!("{} in the trash", Kind::Document.count(trashed)),
-                    (live, trashed) => format!(
-                        "{} and {} in the trash",
-                        Kind::Document.count(live),
-                        Kind::Document.count(trashed)
-                    ),
-                };
-                let them = if held.len() == 1 { "it" } else { "them" };
-                live.extend(trashed);
-                live.truncate(ROW_CAP);
-                (
-                    format!(
-                        "the {row_name} folder still holds {holds}; take {them} out first, then delete the folder?"
-                    ),
-                    live,
-                )
-            }
-            ("knowledge.delete_notebook", "notebook_has_no_children") => (
-                format!(
-                    "the {row_name} notebook still holds other notebooks, so it cannot be deleted; keep it?"
-                ),
-                Vec::new(),
-            ),
-            ("schedule.reschedule_event", "event_exists_not_cancelled") => (
+            ("event.edit", "event_exists_not_cancelled") => (
                 format!(
                     "the {row_name} event was cancelled, so it cannot be moved; plan a new one instead?"
                 ),
@@ -3902,19 +3932,45 @@ pub(crate) fn event_span(row: &Row) -> (jiff::civil::DateTime, jiff::civil::Date
     (start, end)
 }
 
+/// A span as `event.edit` and `event.propose` take it, under the row's own timing: a wall clock
+/// (and the row's zone, when it is zoned) for a timed event, and for an all-day one the first day
+/// and the LAST day, inclusive. The model's span ends where the next one could begin, so an
+/// all-day end is the day before it.
+pub(crate) fn event_times(
+    row: &Row,
+    start: jiff::civil::DateTime,
+    end: jiff::civil::DateTime,
+) -> Value {
+    let wall = |at: jiff::civil::DateTime| format!("{}T{}:00", at.date(), dates::clock(at.time()));
+    match row.extra.get("timing").map(String::as_str) {
+        Some("all-day") => {
+            let last = end
+                .date()
+                .yesterday()
+                .ok()
+                .filter(|day| *day >= start.date());
+            json!({"starts": start.date().to_string(), "ends": last.unwrap_or(start.date()).to_string()})
+        }
+        Some("zoned") => {
+            json!({"starts": wall(start), "ends": wall(end), "zone": row.extra.get("zone")})
+        }
+        _ => json!({"starts": wall(start), "ends": wall(end)}),
+    }
+}
+
+/// The command that renames a row of each kind, and the input key it takes the name under: a
+/// kind with a row of its own has an edit that carries the title, and every other entity is
+/// renamed by the shared `entity.retitle`.
 fn rename(kind: Kind) -> (&'static str, &'static str) {
     match kind {
-        Kind::Person => ("people.edit_person", "display_name"),
-        Kind::Event => ("schedule.edit_event", "summary"),
-        Kind::Task => ("schedule.edit_task", "title"),
-        Kind::Note => ("knowledge.edit_note", "title"),
-        Kind::Document => ("core.rename_document", "title"),
-        Kind::Photo => ("media.update_asset", "title"),
-        Kind::Album => ("media.rename_album", "title"),
+        Kind::Person => ("person.edit", "title"),
+        Kind::Event => ("event.edit", "title"),
+        Kind::Task => ("task.edit", "title"),
+        Kind::Note => ("note.edit", "title"),
         Kind::LockerItem => ("locker.edit_item", "title"),
-        Kind::Notebook => ("knowledge.rename_notebook", "name"),
-        Kind::Folder => ("core.rename_folder", "name"),
-        Kind::List => ("schedule.save_project", "name"),
+        Kind::Document | Kind::Photo | Kind::Album | Kind::Notebook | Kind::Folder | Kind::List => {
+            ("entity.retitle", "title")
+        }
         Kind::Transaction => unreachable!("transactions are read-only (#1099, R-1099-8)"),
     }
 }
@@ -3965,18 +4021,6 @@ fn editable(kind: Kind) -> String {
             .map(|field| field.name),
     );
     names.join(", ")
-}
-
-fn percent(text: &str) -> String {
-    let mut out = String::new();
-    for byte in text.bytes() {
-        if byte.is_ascii_alphanumeric() || b"-_.~".contains(&byte) {
-            out.push(char::from(byte));
-        } else {
-            out.push_str(&format!("%{byte:02X}"));
-        }
-    }
-    out
 }
 
 /// What changed between two reads of the world.

@@ -70,10 +70,7 @@ fn a_turn_that_writes_ends_in_one_pending_write() {
     let pending = &response["effect"]["pending"];
     assert_eq!(pending["verbs"], json!(["complete"]));
     assert_eq!(pending["preview"], json!([shown]));
-    assert_eq!(
-        pending["steps"][0]["command"],
-        json!("schedule.set_task_status")
-    );
+    assert_eq!(pending["steps"][0]["command"], json!("task.complete"));
     assert_eq!(pending["destructive"], json!(false));
     assert_eq!(
         session.pending().map(|p| p.id.clone()),
@@ -165,8 +162,8 @@ fn confirm_runs_the_steps_and_shows_what_the_vault_did() {
 fn a_chain_confirms_call_by_call_to_the_text_each_call_showed() {
     let world = seeded();
     let (added, ticked) = (
-        executed(&world, "schedule.add_task"),
-        executed(&world, "schedule.set_task_status"),
+        executed(&world, "task.add"),
+        executed(&world, "task.complete"),
     );
     let mut session = park(&world);
     session.user("add a task to renew the passport and tick it off");
@@ -180,7 +177,7 @@ fn a_chain_confirms_call_by_call_to_the_text_each_call_showed() {
     let id = pending_id(&done);
     let parked = format!("{}\n{}", text(&made), text(&done));
     assert_eq!(
-        executed(&world, "schedule.add_task"),
+        executed(&world, "task.add"),
         added,
         "nothing ran while parked"
     );
@@ -195,8 +192,8 @@ fn a_chain_confirms_call_by_call_to_the_text_each_call_showed() {
         real, parked,
         "the vault's after-write texts are the parked ones"
     );
-    assert_eq!(executed(&world, "schedule.add_task"), added + 1);
-    assert_eq!(executed(&world, "schedule.set_task_status"), ticked + 1);
+    assert_eq!(executed(&world, "task.add"), added + 1);
+    assert_eq!(executed(&world, "task.complete"), ticked + 1);
 }
 
 #[test]
@@ -235,14 +232,14 @@ fn dismiss_leaves_the_vault_and_the_session_as_they_were() {
 #[test]
 fn a_row_changed_since_planning_makes_the_confirm_stale() {
     let world = seeded();
-    let ticked = executed(&world, "schedule.set_task_status");
+    let ticked = executed(&world, "task.complete");
     let mut session = park(&world);
     let (response, _) = complete_cabin(&mut session);
     let id = pending_id(&response);
     elsewhere(
         &world,
-        "schedule.edit_task",
-        json!({"task_id": world.id("cabin"), "title": "cabin, rebooked"}),
+        "task.edit",
+        json!({"id": world.id("cabin"), "title": "cabin, rebooked"}),
     );
     let Confirmed::Stale { rows } = session.confirm(&id) else {
         panic!("a changed row must make the card stale");
@@ -250,7 +247,7 @@ fn a_row_changed_since_planning_makes_the_confirm_stale() {
     assert_eq!(rows.len(), 1, "{rows:?}");
     assert!(rows[0].starts_with("task "), "{rows:?}");
     assert_eq!(
-        executed(&world, "schedule.set_task_status"),
+        executed(&world, "task.complete"),
         ticked,
         "a stale card writes nothing"
     );
@@ -261,7 +258,7 @@ fn a_row_changed_since_planning_makes_the_confirm_stale() {
 fn a_new_message_dismisses_the_pending_write() {
     let world = seeded();
     let before = journal(&world);
-    let ticked = executed(&world, "schedule.set_task_status");
+    let ticked = executed(&world, "task.complete");
     let mut session = park(&world);
     let (first, _) = complete_cabin(&mut session);
     let id = pending_id(&first);
@@ -277,7 +274,7 @@ fn a_new_message_dismisses_the_pending_write() {
         session.confirm(&second_id),
         Confirmed::Done { .. }
     ));
-    assert_eq!(executed(&world, "schedule.set_task_status"), ticked + 1);
+    assert_eq!(executed(&world, "task.complete"), ticked + 1);
 }
 
 #[test]
@@ -308,10 +305,10 @@ fn a_step_the_vault_refuses_is_typed_and_names_what_landed() {
     // someone else takes the hour while the card waits: no row it addresses has changed
     elsewhere(
         &world,
-        "schedule.propose_event",
+        "event.propose",
         json!({
-            "summary": "Meeting", "dtstart": step.input["dtstart"], "dtend": step.input["dtend"],
-            "calendar_id": step.input["calendar_id"],
+            "title": "Meeting", "starts": step.input["starts"], "ends": step.input["ends"],
+            "timing": step.input["timing"],
         }),
     );
     match session.confirm(&id) {
@@ -333,8 +330,8 @@ fn a_step_the_vault_refuses_is_typed_and_names_what_landed() {
 fn undo_parks_too_and_takes_back_a_confirmed_batch() {
     let world = seeded();
     let (deletes, restores) = (
-        executed(&world, "schedule.delete_task"),
-        executed(&world, "schedule.restore_task"),
+        executed(&world, "entity.trash"),
+        executed(&world, "entity.restore"),
     );
     let mut session = park(&world);
     let row = number(&mut session, "task", "cabin");
@@ -342,25 +339,25 @@ fn undo_parks_too_and_takes_back_a_confirmed_batch() {
     let id = pending_id(&deleted);
     assert_eq!(deleted["effect"]["pending"]["destructive"], json!(true));
     assert!(matches!(session.confirm(&id), Confirmed::Done { .. }));
-    assert_eq!(executed(&world, "schedule.delete_task"), deletes + 1);
+    assert_eq!(executed(&world, "entity.trash"), deletes + 1);
     // the next message takes it back: the undo is a card of its own
     session.user("undo that");
     let undone = call(&mut session, "act", json!({"verb": "undo"}));
     assert!(text(&undone).starts_with("undone:"), "{}", text(&undone));
     assert_eq!(undone["effect"]["pending"]["verbs"], json!(["undo"]));
     assert_eq!(
-        executed(&world, "schedule.restore_task"),
+        executed(&world, "entity.restore"),
         restores,
         "the undo waits for its tap"
     );
     let id = pending_id(&undone);
     assert!(matches!(session.confirm(&id), Confirmed::Done { .. }));
-    assert_eq!(executed(&world, "schedule.restore_task"), restores + 1);
+    assert_eq!(executed(&world, "entity.restore"), restores + 1);
 }
 
 #[test]
 fn a_parked_person_keeps_the_id_the_card_showed_and_a_later_step_names_it() {
-    // `people.add_person` honours a caller-minted `party_id`, and a parked create pre-mints it
+    // `person.add` honours a caller-minted `id`, and a parked create pre-mints it
     // (#1088), so the id on the card is the id the vault writes and a later step of the same turn
     // names the row the member will have. Before the vault took an id, the patch made one up and
     // the confirm replaced it in the later steps; that replacement is still the safety net for an
@@ -380,14 +377,14 @@ fn a_parked_person_keeps_the_id_the_card_showed_and_a_later_step_names_it() {
     let starred = call(&mut session, "act", json!({"verb": "star", "rows": person}));
     let id = pending_id(&starred);
     let steps = &starred["effect"]["pending"]["steps"];
-    assert_eq!(steps[0]["command"], json!("people.add_person"));
+    assert_eq!(steps[0]["command"], json!("person.add"));
     assert_eq!(
-        steps[0]["input"]["party_id"],
+        steps[0]["input"]["id"],
         json!(parked_id),
         "the create step carries the id the card showed"
     );
     assert_eq!(
-        steps[1]["input"]["party_id"],
+        steps[1]["input"]["id"],
         json!(parked_id),
         "and the star step names the same one"
     );

@@ -66,7 +66,7 @@ fn live(world: &World, kind: Kind) -> impl Iterator<Item = &Row> {
 
 /// A task that still has work in it.
 fn unfinished(row: &Row) -> bool {
-    is(row, "status", "open") || is(row, "status", "in_progress")
+    is(row, "status", "open")
 }
 
 /// The row that sorts first by `key`, ties broken by id.

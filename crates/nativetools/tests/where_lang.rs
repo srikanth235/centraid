@@ -86,7 +86,7 @@ fn errors_name_every_valid_option() {
         (
             "task",
             "status = done",
-            "error: status has no value \"done\". task status values: open, in_progress, completed, cancelled.",
+            "error: status has no value \"done\". task status values: open, completed, cancelled.",
         ),
         (
             "task",
@@ -167,7 +167,7 @@ fn a_where_on_name_is_refused_by_the_parser_and_repaired_by_the_call() {
 proptest! {
     /// `in (a, b)` is exactly `= a` or `= b` — the only `or` the language has.
     #[test]
-    fn in_is_the_union_of_equalities(pick in proptest::sample::subsequence(vec!["open", "in_progress", "completed", "cancelled"], 1..4)) {
+    fn in_is_the_union_of_equalities(pick in proptest::sample::subsequence(vec!["open", "completed", "cancelled"], 1..3)) {
         let clause = format!("status in ({})", pick.iter().map(|value| format!("\"{value}\"")).collect::<Vec<_>>().join(", "));
         let parsed = whr::parse(Kind::Task, &clause).unwrap();
         prop_assert_eq!(parsed.len(), 1);

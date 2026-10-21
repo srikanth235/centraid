@@ -22,11 +22,11 @@ use crate::native::world::{Key, Row, Val};
 
 /// The FTS domains and the model kind each answers for.
 const FTS: &[(&str, Kind)] = &[
-    ("core.party", Kind::Person),
-    ("knowledge.note", Kind::Note),
-    ("core.event", Kind::Event),
-    ("schedule.task", Kind::Task),
-    ("core.document", Kind::Document),
+    ("person", Kind::Person),
+    ("note", Kind::Note),
+    ("event", Kind::Event),
+    ("task", Kind::Task),
+    ("document", Kind::Document),
 ];
 
 /// Words a message token must not be matched on.

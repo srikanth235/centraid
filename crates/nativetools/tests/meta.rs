@@ -116,25 +116,23 @@ fn every_enum_is_exactly_what_the_table_states() {
     );
 }
 
-/// A command's own input schema is a second statement of the same list: the
-/// task status `edit` runs `schedule.set_task_status`, whose schema enumerates
-/// the statuses it accepts.
+/// A task's status is not one command with an argument: each word the model can put a task in is
+/// a command of the vault's own (`task.complete`, `task.reopen`, `task.cancel`), and the words are
+/// exactly the `task.status` CHECK (`every_enum_is_exactly_what_the_table_states`).
 #[test]
-fn the_task_status_enum_is_the_edit_commands_schema_enum() {
+fn every_task_status_is_a_registered_command() {
     let status = Kind::Task.spec().field("status").unwrap();
-    let command = status.edit.expect("task status is editable");
     let registry = centraid_vault::Registry::with_system_commands().unwrap();
-    let schema = registry.get(command).unwrap().schema();
-    let mut accepted: Vec<&str> = schema["properties"]["status"]["enum"]
-        .as_array()
-        .unwrap_or_else(|| panic!("{command} has no status enum"))
-        .iter()
-        .map(|value| value.as_str().unwrap())
-        .collect();
-    let mut spoken: Vec<&str> = status.values.iter().map(|(_, vault)| *vault).collect();
-    accepted.sort_unstable();
-    spoken.sort_unstable();
-    assert_eq!(spoken, accepted, "{command}: the model's task statuses");
+    for (model, vault) in status.values {
+        let command = meta::task_status_command(vault)
+            .unwrap_or_else(|| panic!("no command puts a task in {model}"));
+        assert!(registry.get(command).is_some(), "{command}");
+    }
+    assert_eq!(
+        meta::task_status_command("in-process"),
+        None,
+        "a task has no in-progress status"
+    );
 }
 
 #[test]
@@ -182,7 +180,7 @@ fn the_constants_and_the_card_come_from_the_table() {
     let card = prompt::kind_card("USD");
     assert_eq!(card.len(), Kind::ALL.len());
     assert!(card.iter().any(|line| line.starts_with(
-        "task: name, date (due), status (open|in_progress|completed|cancelled), effort (min), priority (9 highest..1 lowest, 0 none)"
+        "task: name, date (due), status (open|completed|cancelled), effort (min), priority (9 highest..1 lowest, 0 none)"
     )));
     // §14: member is folded into person; the model-facing names are these.
     let names: Vec<&str> = Kind::ALL.iter().map(|kind| kind.name()).collect();

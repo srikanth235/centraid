@@ -747,16 +747,7 @@
   "act.x_name_said": {
     "tool": "act",
     "argument": "verb",
-    "calls": [
-      {
-        "tool": "act",
-        "args": {
-          "verb": "delete",
-          "kind": "folder",
-          "name": "Taxes"
-        }
-      }
-    ]
+    "why_none": "composed only: the vault refuses a delete no more (a container's members go to the trash with it, #1135), so the ask this line leads is the one a cancelled event's reschedule ends in, and the asks the runtime composes are not said to the model uncomposed"
   },
   "act.restore_name_it_is_in_the": {
     "tool": "act",

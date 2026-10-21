@@ -1,7 +1,9 @@
 //! THE METADATA TABLE — the one source of truth (SPEC §1.7).
 //!
 //! Model-facing kinds, fields, enums, units, links and verbs, each mapped to
-//! the vault table, column and typed command it stands for. The tool schemas,
+//! the vault table, column and typed command it stands for (the kind tables of
+//! [#1135](https://github.com/srikanth235/centraid/issues/1135): an entity row
+//! and its kind row, a flag or a container as the edge or the column that holds it). The tool schemas,
 //! the kind card, the `where` parser's fields, the runtime's reads and writes
 //! and the generator's vocabulary (through `nativetools export`) are all
 //! generated from these rows. `tests/meta.rs` proves every mapped column exists in a
@@ -255,18 +257,18 @@ pub struct Link {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Via {
-    /// `schedule_attendee`.
+    /// An `attendee` edge, event to person.
     Attendee,
-    /// `core_link` with the `about` relation (`core.link_entities`).
+    /// An `about` edge: a note, a task or an event about what it names.
     About,
-    /// `schedule_task.parent_task_id` — parent to subtask.
+    /// `task.parent_id` — parent to subtask.
     Subtask,
-    /// `schedule_task.project_id`.
+    /// `task.project_id`.
     ListColumn,
-    /// `core_collection_entry` (photo in album, note in notebook).
+    /// A `contains` edge (photo in album) or `note.notebook_id` (note in notebook).
     Entry,
-    /// A folder concept tag on a document (`core.move_document`).
-    FolderTag,
+    /// `document.folder_id`.
+    FolderColumn,
 }
 
 /// What an `act` can do.
@@ -309,8 +311,10 @@ pub struct KindSpec {
     pub kind: Kind,
     pub name: &'static str,
     pub plural: &'static str,
-    /// The vault's logical entity name (`core.party`).
+    /// The vault kind the row is an entity of (`person`, `txn`, `project`), the word search and a
+    /// card name it by.
     pub entity: &'static str,
+    /// The table of the kind's own row; its key is `pk`, and its `entity` row carries the name.
     pub table: &'static str,
     pub pk: &'static str,
     /// Where the row's name lives.
@@ -352,9 +356,8 @@ impl KindSpec {
 }
 
 const TASK_STATUS: &[(&str, &str)] = &[
-    ("open", "needs-action"),
-    ("in_progress", "in-process"),
-    ("completed", "completed"),
+    ("open", "open"),
+    ("completed", "done"),
     ("cancelled", "cancelled"),
 ];
 const EVENT_STATUS: &[(&str, &str)] = &[
@@ -390,7 +393,7 @@ pub struct Unexposed {
 
 /// The CHECK values the model's enums leave out: only a transaction's `pending`.
 pub const UNEXPOSED: &[Unexposed] = &[Unexposed {
-    table: "core_transaction",
+    table: "txn",
     column: "status",
     value: "pending",
     reason: "Money's import writes only posted rows and the member voids one; a pending row is a provider state no member action makes",
@@ -399,8 +402,8 @@ pub const UNEXPOSED: &[Unexposed] = &[Unexposed {
 /// `log kind:` values, stored as the activity kind notation.
 pub const LOG_KINDS: &[&str] = &["call", "message", "visit", "coffee"];
 
-/// The starred flag lives in `core_tag` under the flags scheme for every kind.
-const STAR: Source = at("core_tag", "concept_id");
+/// A flag (starred, pinned) is a `tagged` edge to a `flag` entity, for every kind that takes one.
+const STAR: Source = at("edge", "to_id");
 
 use FieldType::{Bool, Date, Enum, Money, Number, Text};
 
@@ -409,25 +412,26 @@ pub static KINDS: &[KindSpec] = &[
         kind: Kind::Person,
         name: "person",
         plural: "people",
-        entity: "core.party",
-        table: "core_party",
-        pk: "party_id",
-        name_source: at("core_party", "display_name"),
+        entity: "person",
+        table: "person",
+        pk: "id",
+        name_source: at("entity", "title"),
+        // Computed at read: the latest touch (`activity` of an activity kind, `with` the person).
         date: Some(DateSpec {
             label: "last contacted",
-            source: at("people_profile", "last_contacted_at"),
+            source: at("activity", "starts"),
         }),
         fields: &[
-            field("role", Text, at("people_profile", "role"))
-                .edit("people.edit_person")
+            field("role", Text, at("person", "role"))
+                .edit("person.edit")
                 .create(),
-            field("nickname", Text, at("people_profile", "nickname"))
-                .edit("people.edit_person")
+            field("nickname", Text, at("person", "nickname"))
+                .edit("person.edit")
                 .create(),
-            field("met", Text, at("people_profile", "met")).edit("people.edit_person"),
-            field("cadence", Number, at("people_profile", "cadence_days"))
+            field("met", Text, at("person", "met")).edit("person.edit"),
+            field("cadence", Number, at("person", "cadence_days"))
                 .unit("days")
-                .edit("people.set_cadence")
+                .edit("person.edit")
                 .create(),
             field("starred", Bool, STAR),
         ],
@@ -447,11 +451,6 @@ pub static KINDS: &[KindSpec] = &[
                 label: "notes",
                 via: Via::About,
             },
-            Link {
-                kind: Kind::Photo,
-                label: "photos",
-                via: Via::About,
-            },
         ],
         trash: true,
         container: false,
@@ -460,22 +459,22 @@ pub static KINDS: &[KindSpec] = &[
         kind: Kind::Event,
         name: "event",
         plural: "events",
-        entity: "core.event",
-        table: "core_event",
-        pk: "event_id",
-        name_source: at("core_event", "summary"),
+        entity: "event",
+        table: "event",
+        pk: "id",
+        name_source: at("entity", "title"),
         date: Some(DateSpec {
             label: "start",
-            source: at("core_event", "dtstart"),
+            source: at("event", "starts"),
         }),
         fields: &[
-            field("status", Enum, at("core_event", "status")).values(EVENT_STATUS),
-            field("duration", Number, at("core_event", "dtend"))
+            field("status", Enum, at("event", "status")).values(EVENT_STATUS),
+            field("duration", Number, at("event", "ends"))
                 .unit("min")
-                .edit("schedule.edit_event")
+                .edit("event.edit")
                 .create(),
-            field("description", Text, at("core_event", "description"))
-                .edit("schedule.edit_event")
+            field("description", Text, at("event", "description"))
+                .edit("event.edit")
                 .create(),
         ],
         links: &[Link {
@@ -490,29 +489,30 @@ pub static KINDS: &[KindSpec] = &[
         kind: Kind::Task,
         name: "task",
         plural: "tasks",
-        entity: "schedule.task",
-        table: "schedule_task",
-        pk: "task_id",
-        name_source: at("schedule_task", "title"),
+        entity: "task",
+        table: "task",
+        pk: "id",
+        name_source: at("entity", "title"),
         date: Some(DateSpec {
             label: "due",
-            source: at("schedule_task", "due_at"),
+            source: at("task", "due"),
         }),
         fields: &[
-            field("status", Enum, at("schedule_task", "status"))
+            // A status is three commands, one per word (`task_status_command`).
+            field("status", Enum, at("task", "status"))
                 .values(TASK_STATUS)
-                .edit("schedule.set_task_status"),
-            field("effort", Number, at("schedule_task", "effort_min"))
+                .edit("task.complete"),
+            field("effort", Number, at("task", "effort_min"))
                 .unit("min")
-                .edit("schedule.edit_task")
+                .edit("task.edit")
                 .create(),
-            field("priority", Number, at("schedule_task", "priority"))
+            field("priority", Number, at("task", "priority"))
                 .unit(PRIORITY_SCALE)
-                .edit("schedule.edit_task")
+                .edit("task.edit")
                 .create(),
-            field("completed", Date, at("schedule_task", "completed_at")),
-            field("description", Text, at("schedule_task", "description"))
-                .edit("schedule.edit_task")
+            field("completed", Date, at("task", "done_at")),
+            field("description", Text, at("task", "description"))
+                .edit("task.edit")
                 .create(),
         ],
         links: &[
@@ -539,19 +539,20 @@ pub static KINDS: &[KindSpec] = &[
         kind: Kind::Note,
         name: "note",
         plural: "notes",
-        entity: "knowledge.note",
-        table: "knowledge_note",
-        pk: "note_id",
-        name_source: at("knowledge_note", "title"),
+        entity: "note",
+        table: "note",
+        pk: "id",
+        name_source: at("entity", "title"),
         date: Some(DateSpec {
             label: "created",
-            source: at("knowledge_note", "created_at"),
+            source: at("entity", "created_at"),
         }),
         fields: &[
-            field("body", Text, at("core_content_text", "body_text"))
-                .edit("knowledge.edit_note")
+            field("body", Text, at("note", "body"))
+                .edit("note.edit")
                 .create(),
-            field("pinned", Bool, at("knowledge_note", "pinned")).edit("knowledge.edit_note"),
+            // Pinned is a flag: `flag.set` / `flag.clear` by value.
+            field("pinned", Bool, STAR).edit("flag.set"),
         ],
         links: &[
             Link {
@@ -572,19 +573,19 @@ pub static KINDS: &[KindSpec] = &[
         kind: Kind::Document,
         name: "document",
         plural: "documents",
-        entity: "core.document",
-        table: "core_document",
-        pk: "document_id",
-        name_source: at("core_document", "title"),
+        entity: "document",
+        table: "document",
+        pk: "id",
+        name_source: at("entity", "title"),
         date: Some(DateSpec {
             label: "created",
-            source: at("core_document", "created_at"),
+            source: at("entity", "created_at"),
         }),
         fields: &[field("starred", Bool, STAR)],
         links: &[Link {
             kind: Kind::Folder,
             label: "folder",
-            via: Via::FolderTag,
+            via: Via::FolderColumn,
         }],
         trash: true,
         container: false,
@@ -593,27 +594,20 @@ pub static KINDS: &[KindSpec] = &[
         kind: Kind::Photo,
         name: "photo",
         plural: "photos",
-        entity: "media.asset",
-        table: "media_asset",
-        pk: "asset_id",
-        name_source: at("media_asset", "title"),
+        entity: "photo",
+        table: "photo",
+        pk: "id",
+        name_source: at("entity", "title"),
         date: Some(DateSpec {
             label: "taken",
-            source: at("media_asset", "captured_at"),
+            source: at("photo", "taken_at"),
         }),
         fields: &[field("starred", Bool, STAR)],
-        links: &[
-            Link {
-                kind: Kind::Album,
-                label: "albums",
-                via: Via::Entry,
-            },
-            Link {
-                kind: Kind::Person,
-                label: "people",
-                via: Via::About,
-            },
-        ],
+        links: &[Link {
+            kind: Kind::Album,
+            label: "albums",
+            via: Via::Entry,
+        }],
         trash: true,
         container: false,
     },
@@ -621,10 +615,10 @@ pub static KINDS: &[KindSpec] = &[
         kind: Kind::Album,
         name: "album",
         plural: "albums",
-        entity: "core.collection",
-        table: "core_collection",
-        pk: "collection_id",
-        name_source: at("core_collection", "name"),
+        entity: "album",
+        table: "container",
+        pk: "id",
+        name_source: at("entity", "title"),
         date: None,
         fields: &[],
         links: &[Link {
@@ -639,7 +633,7 @@ pub static KINDS: &[KindSpec] = &[
         kind: Kind::LockerItem,
         name: "locker item",
         plural: "locker items",
-        entity: "locker.item",
+        entity: "locker_item",
         table: "locker_item",
         pk: "item_id",
         name_source: at("locker_item", "title"),
@@ -657,7 +651,7 @@ pub static KINDS: &[KindSpec] = &[
             field("notes", Text, at("locker_item", "notes"))
                 .edit("locker.edit_item")
                 .create(),
-            field("starred", Bool, STAR),
+            field("starred", Bool, at("locker_item", "starred")),
         ],
         links: &[],
         trash: true,
@@ -667,10 +661,10 @@ pub static KINDS: &[KindSpec] = &[
         kind: Kind::Notebook,
         name: "notebook",
         plural: "notebooks",
-        entity: "core.collection",
-        table: "core_collection",
-        pk: "collection_id",
-        name_source: at("core_collection", "name"),
+        entity: "notebook",
+        table: "container",
+        pk: "id",
+        name_source: at("entity", "title"),
         date: None,
         fields: &[],
         links: &[Link {
@@ -685,16 +679,16 @@ pub static KINDS: &[KindSpec] = &[
         kind: Kind::Folder,
         name: "folder",
         plural: "folders",
-        entity: "core.concept",
-        table: "core_concept",
-        pk: "concept_id",
-        name_source: at("core_concept", "pref_label"),
+        entity: "folder",
+        table: "container",
+        pk: "id",
+        name_source: at("entity", "title"),
         date: None,
         fields: &[],
         links: &[Link {
             kind: Kind::Document,
             label: "documents",
-            via: Via::FolderTag,
+            via: Via::FolderColumn,
         }],
         trash: false,
         container: true,
@@ -703,13 +697,16 @@ pub static KINDS: &[KindSpec] = &[
         kind: Kind::List,
         name: "list",
         plural: "lists",
-        entity: "schedule.project",
-        table: "schedule_project",
-        pk: "project_id",
-        name_source: at("schedule_project", "name"),
+        // Agenda's project; the vault's own `list` kind is a People list, which the model has no
+        // word for.
+        entity: "project",
+        table: "container",
+        pk: "id",
+        name_source: at("entity", "title"),
         date: None,
-        fields: &[field("area", Text, at("schedule_project", "area"))
-            .edit("schedule.save_project")
+        // The area is the title of the `area` container the project sits in.
+        fields: &[field("area", Text, at("container", "parent_id"))
+            .edit("container.move")
             .create()],
         links: &[Link {
             kind: Kind::Task,
@@ -723,24 +720,24 @@ pub static KINDS: &[KindSpec] = &[
         kind: Kind::Transaction,
         name: "transaction",
         plural: "transactions",
-        entity: "core.transaction",
-        table: "core_transaction",
-        pk: "txn_id",
-        // The name the member sees: Money's display name, else the bank's own description.
-        name_source: at("money_transaction", "display_name"),
+        entity: "txn",
+        table: "txn",
+        pk: "id",
+        // The name the member sees: Money's display name, which is the transaction's own title.
+        name_source: at("entity", "title"),
         date: Some(DateSpec {
             label: "posted",
-            source: at("core_transaction", "posted_at"),
+            source: at("txn", "posted_on"),
         }),
         // READS ONLY (#1099, R-1099-8): `amount` is signed (money out is negative) in the
-        // account's currency; `account` and `category` are the names of the rows the
-        // transaction points at. `money.categorize` takes a concept id in an array, which
-        // the one-scalar-per-field `edit` path cannot carry, so no field is editable.
+        // account's currency; `account` and `category` are the titles of the entities the
+        // transaction points at. `txn.categorize` takes an id in an array, which the
+        // one-scalar-per-field `edit` path cannot carry, so no field is editable.
         fields: &[
-            field("amount", Money, at("core_transaction", "amount_minor")),
-            field("account", Text, at("core_account", "name")),
-            field("category", Text, at("core_concept", "pref_label")),
-            field("status", Enum, at("core_transaction", "status")).values(TXN_STATUS),
+            field("amount", Money, at("txn", "amount_minor")),
+            field("account", Text, at("txn", "account_id")),
+            field("category", Text, at("txn", "category_id")),
+            field("status", Enum, at("txn", "status")).values(TXN_STATUS),
         ],
         links: &[],
         trash: false,
@@ -756,16 +753,16 @@ pub static VERBS: &[VerbSpec] = &[
         args: "kind: <kind>, name: <text>, then that kind's fields (dates as date expressions)",
         done: "created",
         commands: &[
-            (Kind::Person, "people.add_person"),
-            (Kind::Event, "schedule.propose_event"),
-            (Kind::Task, "schedule.add_task"),
-            (Kind::Note, "knowledge.create_note"),
-            (Kind::Document, "core.add_document"),
-            (Kind::Album, "media.create_album"),
+            (Kind::Person, "person.add"),
+            (Kind::Event, "event.propose"),
+            (Kind::Task, "task.add"),
+            (Kind::Note, "note.create"),
+            (Kind::Document, "document.create_text"),
+            (Kind::Album, "container.create"),
             (Kind::LockerItem, "locker.add_item"),
-            (Kind::Notebook, "knowledge.create_notebook"),
-            (Kind::Folder, "core.create_folder"),
-            (Kind::List, "schedule.save_project"),
+            (Kind::Notebook, "container.create"),
+            (Kind::Folder, "container.create"),
+            (Kind::List, "container.create"),
         ],
     },
     VerbSpec {
@@ -774,17 +771,17 @@ pub static VERBS: &[VerbSpec] = &[
         args: "field: value lines (name, or any editable field; body+: or description+: adds text)",
         done: "edited",
         commands: &[
-            (Kind::Person, "people.edit_person"),
-            (Kind::Event, "schedule.edit_event"),
-            (Kind::Task, "schedule.edit_task"),
-            (Kind::Note, "knowledge.edit_note"),
-            (Kind::Document, "core.rename_document"),
-            (Kind::Photo, "media.update_asset"),
-            (Kind::Album, "media.rename_album"),
+            (Kind::Person, "person.edit"),
+            (Kind::Event, "event.edit"),
+            (Kind::Task, "task.edit"),
+            (Kind::Note, "note.edit"),
+            (Kind::Document, "entity.retitle"),
+            (Kind::Photo, "entity.retitle"),
+            (Kind::Album, "entity.retitle"),
             (Kind::LockerItem, "locker.edit_item"),
-            (Kind::Notebook, "knowledge.rename_notebook"),
-            (Kind::Folder, "core.rename_folder"),
-            (Kind::List, "schedule.save_project"),
+            (Kind::Notebook, "entity.retitle"),
+            (Kind::Folder, "entity.retitle"),
+            (Kind::List, "entity.retitle"),
         ],
     },
     VerbSpec {
@@ -792,31 +789,28 @@ pub static VERBS: &[VerbSpec] = &[
         name: "reschedule",
         args: "to: <date expression>",
         done: "rescheduled",
-        commands: &[
-            (Kind::Task, "schedule.edit_task"),
-            (Kind::Event, "schedule.reschedule_event"),
-        ],
+        commands: &[(Kind::Task, "task.edit"), (Kind::Event, "event.edit")],
     },
     VerbSpec {
         verb: Verb::Complete,
         name: "complete",
         args: "",
         done: "completed",
-        commands: &[(Kind::Task, "schedule.set_task_status")],
+        commands: &[(Kind::Task, "task.complete")],
     },
     VerbSpec {
         verb: Verb::Reopen,
         name: "reopen",
         args: "",
         done: "reopened",
-        commands: &[(Kind::Task, "schedule.set_task_status")],
+        commands: &[(Kind::Task, "task.reopen")],
     },
     VerbSpec {
         verb: Verb::Cancel,
         name: "cancel",
         args: "",
         done: "cancelled",
-        commands: &[(Kind::Event, "schedule.cancel_event")],
+        commands: &[(Kind::Event, "event.cancel")],
     },
     VerbSpec {
         verb: Verb::Delete,
@@ -824,16 +818,16 @@ pub static VERBS: &[VerbSpec] = &[
         args: "",
         done: "deleted",
         commands: &[
-            (Kind::Person, "people.trash_person"),
-            (Kind::Event, "schedule.delete_event"),
-            (Kind::Task, "schedule.delete_task"),
-            (Kind::Note, "knowledge.delete_note"),
-            (Kind::Document, "core.trash_document"),
-            (Kind::Photo, "media.delete_asset"),
-            (Kind::Album, "media.delete_album"),
+            (Kind::Person, "entity.trash"),
+            (Kind::Event, "entity.trash"),
+            (Kind::Task, "entity.trash"),
+            (Kind::Note, "entity.trash"),
+            (Kind::Document, "entity.trash"),
+            (Kind::Photo, "entity.trash"),
+            (Kind::Album, "entity.trash"),
             (Kind::LockerItem, "locker.trash_item"),
-            (Kind::Notebook, "knowledge.delete_notebook"),
-            (Kind::Folder, "core.delete_folder"),
+            (Kind::Notebook, "entity.trash"),
+            (Kind::Folder, "entity.trash"),
         ],
     },
     VerbSpec {
@@ -842,12 +836,12 @@ pub static VERBS: &[VerbSpec] = &[
         args: "",
         done: "restored",
         commands: &[
-            (Kind::Person, "people.restore_person"),
-            (Kind::Event, "schedule.restore_event"),
-            (Kind::Task, "schedule.restore_task"),
-            (Kind::Note, "knowledge.restore_note"),
-            (Kind::Document, "core.restore_document"),
-            (Kind::Photo, "media.restore_asset"),
+            (Kind::Person, "entity.restore"),
+            (Kind::Event, "entity.restore"),
+            (Kind::Task, "entity.restore"),
+            (Kind::Note, "entity.restore"),
+            (Kind::Document, "entity.restore"),
+            (Kind::Photo, "entity.restore"),
             (Kind::LockerItem, "locker.restore_item"),
         ],
     },
@@ -857,9 +851,9 @@ pub static VERBS: &[VerbSpec] = &[
         args: "",
         done: "starred",
         commands: &[
-            (Kind::Person, "people.star_person"),
-            (Kind::Document, "core.star_document"),
-            (Kind::Photo, "media.set_favorite"),
+            (Kind::Person, "flag.set"),
+            (Kind::Document, "flag.set"),
+            (Kind::Photo, "flag.set"),
             (Kind::LockerItem, "locker.star_item"),
         ],
     },
@@ -869,9 +863,9 @@ pub static VERBS: &[VerbSpec] = &[
         args: "",
         done: "unstarred",
         commands: &[
-            (Kind::Person, "people.unstar_person"),
-            (Kind::Document, "core.unstar_document"),
-            (Kind::Photo, "media.set_favorite"),
+            (Kind::Person, "flag.clear"),
+            (Kind::Document, "flag.clear"),
+            (Kind::Photo, "flag.clear"),
             (Kind::LockerItem, "locker.unstar_item"),
         ],
     },
@@ -881,10 +875,10 @@ pub static VERBS: &[VerbSpec] = &[
         args: "to: #n (the album, notebook, folder or list)",
         done: "added",
         commands: &[
-            (Kind::Photo, "media.add_to_album"),
-            (Kind::Note, "knowledge.move_note"),
-            (Kind::Document, "core.move_document"),
-            (Kind::Task, "schedule.organize_task"),
+            (Kind::Photo, "edge.add"),
+            (Kind::Note, "note.move"),
+            (Kind::Document, "document.move"),
+            (Kind::Task, "task.organize"),
         ],
     },
     VerbSpec {
@@ -893,10 +887,10 @@ pub static VERBS: &[VerbSpec] = &[
         args: "from: #n",
         done: "removed",
         commands: &[
-            (Kind::Photo, "media.remove_from_album"),
-            (Kind::Note, "knowledge.move_note"),
-            (Kind::Document, "core.move_document"),
-            (Kind::Task, "schedule.organize_task"),
+            (Kind::Photo, "edge.remove"),
+            (Kind::Note, "note.move"),
+            (Kind::Document, "document.move"),
+            (Kind::Task, "task.organize"),
         ],
     },
     VerbSpec {
@@ -904,7 +898,7 @@ pub static VERBS: &[VerbSpec] = &[
         name: "log",
         args: "kind: call|message|visit|coffee",
         done: "logged",
-        commands: &[(Kind::Person, "people.log_interaction")],
+        commands: &[(Kind::Person, "person.log_interaction")],
     },
     VerbSpec {
         verb: Verb::Reveal,
@@ -953,6 +947,18 @@ impl Verb {
     #[must_use]
     pub fn kinds(self) -> Vec<Kind> {
         self.spec().commands.iter().map(|(kind, _)| *kind).collect()
+    }
+}
+
+/// The command that puts a task in a status, by the VAULT's word for it: closing, reopening and
+/// cancelling are three commands, not one command with a status argument.
+#[must_use]
+pub fn task_status_command(vault_status: &str) -> Option<&'static str> {
+    match vault_status {
+        "done" => Some("task.complete"),
+        "open" => Some("task.reopen"),
+        "cancelled" => Some("task.cancel"),
+        _ => None,
     }
 }
 
@@ -1190,10 +1196,12 @@ pub fn mapped_commands() -> Vec<&'static str> {
         }
     }
     out.extend([
-        "core.link_entities",
-        "core.unlink_entities",
-        "media.add_asset",
-        "schedule.edit_event",
+        "edge.add",
+        "edge.remove",
+        "flag.set",
+        "flag.clear",
+        "task.cancel",
+        "task.reopen",
     ]);
     out.sort_unstable();
     out.dedup();

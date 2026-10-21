@@ -292,13 +292,11 @@ fn money_off_reads_no_money_table_and_money_on_reads_only_the_window() {
     let world = seeded_with(&world_json());
     let off = tables_read(&world, money_off());
     assert!(
-        off.iter().all(|table| !table.starts_with("money_")
-            && table != "core_transaction"
-            && table != "core_account"),
+        off.iter().all(|table| table != "txn" && table != "account"),
         "{off:?}"
     );
     let on = tables_read(&world, Flags::default());
-    for table in ["core_transaction", "money_transaction", "core_account"] {
+    for table in ["txn", "entity"] {
         assert!(on.iter().any(|read| read == table), "{table} in {on:?}");
     }
 }

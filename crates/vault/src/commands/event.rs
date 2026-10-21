@@ -484,8 +484,16 @@ fn pre_propose(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     if let Some(sentence) = references_refusal(ctx)? {
         return Ok(Some(sentence));
     }
+    Ok(times(ctx, None).err())
+}
+
+/// A busy event does not land on another busy one: its own condition, so a caller that can lift
+/// the refusal by choosing another time (the on-device assistant asks) tells it from every other
+/// by the id and not by the sentence.
+fn pre_free_slot(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     match times(ctx, None) {
-        Err(sentence) => Ok(Some(sentence)),
+        // the title-and-time condition has already said so
+        Err(_) => Ok(None),
         Ok(times) => conflict_refusal(ctx, &times),
     }
 }
@@ -1134,10 +1142,16 @@ const OCCURRENCE_SCHEMA: &str = r#"{
 
 #[must_use]
 pub fn definitions() -> Vec<CommandDefinition> {
-    const PROPOSE: &[CommandCondition] = &[CommandCondition {
-        predicate: "event_has_a_title_a_time_and_a_free_slot",
-        check: pre_propose,
-    }];
+    const PROPOSE: &[CommandCondition] = &[
+        CommandCondition {
+            predicate: "event_has_a_title_and_a_time",
+            check: pre_propose,
+        },
+        CommandCondition {
+            predicate: "no_busy_conflict",
+            check: pre_free_slot,
+        },
+    ];
     const EDIT: &[CommandCondition] = &[CommandCondition {
         predicate: "event_is_live_and_its_change_resolves",
         check: pre_edit,

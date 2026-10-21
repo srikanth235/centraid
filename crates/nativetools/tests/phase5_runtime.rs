@@ -20,12 +20,12 @@ use serde_json::{Value, json};
 const BIN: &str = env!("CARGO_BIN_EXE_nativetools");
 
 /// The fixture plus a Home list with every status, and a parent task with every status below it.
-/// Home: `cabin` (open), `sink` (in progress), `plants` (open), `chore_done` (completed), `idea`
+/// Home: `cabin` (open), `sink` (open), `plants` (open), `chore_done` (completed), `idea`
 /// (cancelled). Report: `outline` (open), `part_done` (completed), `part_off` (cancelled).
 fn home_world() -> World {
     let mut world: Value = serde_json::from_str(common::FIXTURE).unwrap();
     let tasks = world["tasks"].as_array_mut().unwrap();
-    tasks.push(json!({"key": "sink", "name": "Wipe the sink", "status": "in_progress", "list": "home", "effort": 15}));
+    tasks.push(json!({"key": "sink", "name": "Wipe the sink", "list": "home", "effort": 15}));
     tasks.push(json!({"key": "plants", "name": "Water the plants", "list": "home", "effort": 10}));
     tasks.push(
         json!({"key": "chore_done", "name": "Done chore", "status": "completed", "list": "home"}),
@@ -470,7 +470,7 @@ fn every_error_family_has_an_example_that_produces_it_or_says_why_not() {
             ),
         }
     }
-    assert!(with_example >= 116, "{with_example} examples");
+    assert!(with_example >= 115, "{with_example} examples");
 }
 
 #[test]

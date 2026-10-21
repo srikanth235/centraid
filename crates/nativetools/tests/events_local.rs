@@ -16,14 +16,13 @@ const TODAY: &str = "2026-09-27";
 /// An event stored as an instant in UTC.
 fn night_call(world: &World) {
     world.elsewhere(
-        "schedule.propose_event",
+        "event.propose",
         json!({
-            "summary": "Night call",
-            "dtstart": "2026-09-27T22:30:00.000Z",
-            "dtend": "2026-09-27T23:30:00.000Z",
-            "start_tz": "Etc/UTC",
-            "recurrence_semantics": "zoned",
-            "calendar_id": world.calendar(),
+            "title": "Night call",
+            "starts": "2026-09-27T22:30:00.000Z",
+            "ends": "2026-09-27T23:30:00.000Z",
+            "zone": "Etc/UTC",
+            "timing": "zoned",
         }),
     );
 }
@@ -117,13 +116,13 @@ fn the_session_clock_follows_the_request() {
 fn a_weekly_event_is_read_as_its_occurrences_in_a_two_week_window() {
     let world = seeded();
     world.elsewhere(
-        "schedule.propose_event",
+        "event.propose",
         json!({
-            "summary": "Book club",
-            "dtstart": "2026-09-01T19:00:00",
-            "dtend": "2026-09-01T20:00:00",
-            "rrule": "FREQ=WEEKLY;BYDAY=TU",
-            "calendar_id": world.calendar(),
+            "title": "Book club",
+            "starts": "2026-09-01T19:00:00",
+            "ends": "2026-09-01T20:00:00",
+            "timing": "floating",
+            "rule": "FREQ=WEEKLY;BYDAY=TU",
         }),
     );
     let mut session = world.session_in(TODAY, "Etc/UTC");

@@ -8,7 +8,7 @@ mod common;
 use centraid_nativetools::meta::ROW_CAP;
 use centraid_nativetools::vaultio::{Handle, SetClock};
 use centraid_nativetools::{Flags, Session};
-use common::{call, diff_rows, seeded_with, text};
+use common::{call, diff_rows, ids, seeded_with, text};
 use serde_json::{Value, json};
 
 fn fixture() -> Value {
@@ -59,15 +59,6 @@ fn tool_of(response: &Value) -> &str {
 
 fn reply(response: &Value) -> &str {
     response["text"].as_str().expect("a text")
-}
-
-fn options_of(response: &Value) -> Vec<String> {
-    response["effect"]["ask"]["options"]
-        .as_array()
-        .expect("options")
-        .iter()
-        .map(|row| row["id"].as_str().expect("an id").to_owned())
-        .collect()
 }
 
 /// The vault write `act` over one row picked by number.
@@ -681,54 +672,54 @@ fn a_restore_that_lands_in_part_stays_an_error_with_its_diff() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn a_folder_that_holds_documents_ends_in_an_ask_that_names_them() {
+fn a_folder_that_holds_documents_takes_them_to_the_trash_with_it_and_undo_brings_them_back() {
+    // #1135: the vault refuses no delete of a holder; what a folder holds goes to the trash with
+    // it and comes back with it, so the card shows the documents and no question is asked
     let world = seeded_with(&fixture());
     let mut session = world.session();
     session.user("get rid of the taxes folder");
-    let asked = call(
+    let done = call(
         &mut session,
         "act",
         json!({"verb": "delete", "kind": "folder", "name": "Taxes"}),
     );
-    assert_eq!(asked["ends_turn"], true, "{asked}");
-    assert_eq!(tool_of(&asked), "ask", "{asked}");
-    assert!(diff_rows(&asked).is_empty(), "{asked}");
-    assert_eq!(
-        asked["effect"]["ask"]["question"],
-        "the Taxes folder still holds 1 document; take it out first, then delete the folder?"
-    );
-    assert_eq!(options_of(&asked), vec![world.id("w2")]);
-    assert_eq!(asked["effect"]["refusal"]["predicate"], "folder_is_empty");
-    assert_eq!(asked["effect"]["refusal"]["outcome"], "ask");
-    let lines: Vec<&str> = reply(&asked).lines().collect();
+    assert_eq!(tool_of(&done), "act", "{done}");
+    assert_eq!(done["ends_turn"], true, "{done}");
+    let rows = diff_rows(&done);
     assert!(
-        lines[0].starts_with("refused: delete #")
-            && lines[0].contains("folder \"Taxes\": that folder still holds documents"),
-        "{}",
-        lines[0]
+        rows.iter()
+            .any(|row| row["kind"] == "folder" && row["change"] == "removed"),
+        "{done}"
     );
     assert!(
-        lines[1].starts_with("asked: \"the Taxes folder still holds 1 document;")
-            && lines[1].contains(" · options: #")
-            && lines[1].ends_with(" · the runtime ended the turn and nothing was done"),
-        "{}",
-        lines[1]
+        rows.iter().any(|row| row["kind"] == "document"
+            && row["change"] == "trashed"
+            && row["id"] == world.id("w2")),
+        "{done}"
     );
-    // the folder is still there, and the options are in focus for the answer
-    let focus = session.user("yes, move it to the lease folder")["focus"]
-        .as_str()
-        .map(str::to_owned)
-        .expect("a focus line");
+    session.user("undo that");
+    let undone = call(&mut session, "act", json!({"verb": "undo"}));
+    // the folder comes back as a row that was not there, with the document it held
     assert!(
-        focus.contains("asked: #") && focus.contains("document \"W2 2025\""),
-        "{focus}"
+        reply(&undone).starts_with("created: #") && reply(&undone).contains("folder \"Taxes\""),
+        "{undone}"
     );
+    session.user("");
     let folders = call(&mut session, "find", json!({"kind": "folder"}));
     assert_eq!(folders["effect"]["rows"].as_array().unwrap().len(), 1);
+    let trashed = call(
+        &mut session,
+        "find",
+        json!({"kind": "document", "name": "W2", "trashed": true}),
+    );
+    assert!(
+        trashed["effect"]["rows"].as_array().unwrap().is_empty(),
+        "the document came back with its folder: {trashed}"
+    );
 }
 
 #[test]
-fn a_trashed_document_counts_toward_what_a_folder_holds() {
+fn a_document_already_in_the_trash_stays_there_when_its_folder_comes_back() {
     let mut world = fixture();
     world["documents"].as_array_mut().unwrap().push(
         json!({"key": "w9", "name": "W9 2025", "text": "x", "folder": "taxes", "trashed": "2026-09-20T09:00"}),
@@ -736,20 +727,34 @@ fn a_trashed_document_counts_toward_what_a_folder_holds() {
     let seeded = seeded_with(&world);
     let mut session = seeded.session();
     session.user("delete the taxes folder");
-    let asked = call(
+    let done = call(
         &mut session,
         "act",
         json!({"verb": "delete", "kind": "folder", "name": "Taxes"}),
     );
-    assert_eq!(tool_of(&asked), "ask", "{asked}");
+    assert_eq!(tool_of(&done), "act", "{done}");
+    let moved: Vec<String> = diff_rows(&done)
+        .iter()
+        .filter(|row| row["kind"] == "document")
+        .map(|row| row["id"].as_str().unwrap_or_default().to_owned())
+        .collect();
     assert_eq!(
-        asked["effect"]["ask"]["question"],
-        "the Taxes folder still holds 1 document and 1 document in the trash; take them out first, then delete the folder?"
+        moved,
+        vec![seeded.id("w2")],
+        "only the live document goes with the folder: {done}"
+    );
+    session.user("undo that");
+    call(&mut session, "act", json!({"verb": "undo"}));
+    session.user("");
+    let trashed = call(
+        &mut session,
+        "find",
+        json!({"kind": "document", "trashed": true}),
     );
     assert_eq!(
-        options_of(&asked),
-        vec![seeded.id("w2"), seeded.id("w9")],
-        "live documents first"
+        ids(&trashed["effect"]["rows"]),
+        vec![seeded.id("w9")],
+        "what was in the trash before stays there: {trashed}"
     );
 }
 
@@ -775,7 +780,8 @@ fn an_empty_folder_deletes_as_before() {
 #[test]
 fn the_refusals_of_other_verbs_stay_errors_for_the_model() {
     // D-1044-10 reads the refusals of `restore` and `delete`; the others (an event that
-    // clashes, a cancelled event, a name in use) are the model's
+    // clashes, a cancelled event) are the model's. A name in use is no refusal since #1135: a
+    // notebook, a folder and the rest of the containers may share a title, as two people may.
     let world = seeded_with(&fixture());
     let mut session = world.session_uncomposed();
     session.user("do these");
@@ -787,14 +793,6 @@ fn the_refusals_of_other_verbs_stay_errors_for_the_model() {
         (
             "reschedule",
             json!({"verb": "reschedule", "kind": "event", "name": "Launch party", "args": "to: {\"unit\":\"week\",\"rel\":1,\"weekday\":5}"}),
-        ),
-        (
-            "rename",
-            json!({"verb": "edit", "kind": "notebook", "name": "Ideas", "args": "name: Recipes"}),
-        ),
-        (
-            "create folder",
-            json!({"verb": "create", "kind": "folder", "args": "name: Taxes"}),
         ),
     ];
     for (what, args) in refused {
@@ -823,7 +821,7 @@ fn the_refusals_of_other_verbs_stay_errors_for_the_model() {
 }
 
 #[test]
-fn a_notebook_that_holds_notebooks_ends_in_an_ask() {
+fn a_notebook_that_holds_notebooks_takes_them_with_it() {
     let world = seeded_with(&fixture());
     // a child notebook, made through the vault: `act` does not nest notebooks
     let handle = Handle::open(
@@ -834,26 +832,30 @@ fn a_notebook_that_holds_notebooks_ends_in_an_ask() {
     .expect("the vault opens");
     handle
         .must(
-            "knowledge.create_notebook",
-            json!({"name": "Soups", "parent_notebook_id": world.id("recipes")}),
+            "container.create",
+            json!({"kind": "notebook", "title": "Soups", "parent": world.id("recipes")}),
         )
         .expect("the child is made");
     drop(handle);
     let mut session = world.session();
     session.user("delete the recipes notebook");
-    let asked = call(
+    let done = call(
         &mut session,
         "act",
         json!({"verb": "delete", "kind": "notebook", "name": "Recipes"}),
     );
-    assert_eq!(tool_of(&asked), "ask", "{asked}");
-    assert_eq!(
-        asked["effect"]["ask"]["question"],
-        "the Recipes notebook still holds other notebooks, so it cannot be deleted; keep it?"
-    );
-    assert_eq!(
-        asked["effect"]["refusal"]["predicate"],
-        "notebook_has_no_children"
+    assert_eq!(tool_of(&done), "act", "{done}");
+    session.user("");
+    let left = call(&mut session, "find", json!({"kind": "notebook"}));
+    let names: Vec<&str> = left["effect"]["rows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|row| row["name"].as_str().unwrap_or_default())
+        .collect();
+    assert!(
+        !names.contains(&"Recipes") && !names.contains(&"Soups"),
+        "the notebook and the one inside it are gone together: {left}"
     );
 }
 
@@ -882,10 +884,12 @@ fn a_refusal_of_the_call_itself_stays_an_error() {
 fn a_composed_ask_is_not_an_error_the_model_can_repeat() {
     let world = seeded_with(&fixture());
     let mut session = world.session();
-    session.user("get rid of the taxes folder");
-    let write = json!({"verb": "delete", "kind": "folder", "name": "Taxes"});
+    session.user("move the launch party to friday");
+    let write = json!({"verb": "reschedule", "kind": "event", "name": "Launch party",
+                       "args": "to: {\"unit\":\"week\",\"rel\":1,\"weekday\":5}"});
     let asked = call(&mut session, "act", write.clone());
-    assert_eq!(asked["ends_turn"], true);
+    assert_eq!(asked["ends_turn"], true, "{asked}");
+    assert_eq!(tool_of(&asked), "ask", "{asked}");
     // the same call again in the same turn is answered as a call after the end
     let again = call(&mut session, "act", write);
     assert!(
