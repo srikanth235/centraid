@@ -1620,6 +1620,39 @@
           }
         }
       }
+    },
+    "gateway/app-read/year3-people/ci-linux-x64-4c": {
+      "surface": "gateway",
+      "journey": "app-read",
+      "volume": "year3-people",
+      "hardware": "ci-linux-x64-4c",
+      "spans": [],
+      "consumers": ["crates/apps/people/tests/year3.rs"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "rosterWalk": {
+          "status": "projected",
+          "probe": "cargo test -p centraid-apps-people --test year3 -- --ignored --nocapture",
+          "_observedMs": 557,
+          "_basis": "One run on ci-linux-x64-4c under concurrent lanes, through the app crate's real query path over a vault seeded by `crates/apps/kit::fixtures::year3_people`. PROJECTED in this ledger's sense and in D-1020-D3-7's: the number is observed, but one run on one contended container is not a distribution, and the target this journey exists to protect is stated on a reference DEVICE, which this host is not. Every number here is parked under a leading underscore so the ratchet cannot read it as a ceiling; the device lane of R-1020-20 is what promotes one.",
+          "_provenance": {
+            "at": "2026-10-21",
+            "host": "ci-linux-x64-4c, 4 vCPU / 15 GB, shared with concurrent lanes",
+            "note": "4,750 live people walked in one window (ten pages of 500; the door clamps a page, so the walk is the window), each with its star, list, reminders and last-contacted computed from 20,000 touches. Rebuilt on the new model (#1135): one table at a time, and a set past 64 ids is not named in an IN list (a keyset page re-binds the list on every page); the first cut named it and took 19 s."
+          }
+        },
+        "dashboardFold": {
+          "status": "projected",
+          "probe": "cargo test -p centraid-apps-people --test year3 -- --ignored --nocapture",
+          "_observedMs": 489,
+          "_basis": "One run on ci-linux-x64-4c under concurrent lanes, through the app crate's real query path over a vault seeded by `crates/apps/kit::fixtures::year3_people`. PROJECTED in this ledger's sense and in D-1020-D3-7's: the number is observed, but one run on one contended container is not a distribution, and the target this journey exists to protect is stated on a reference DEVICE, which this host is not. Every number here is parked under a leading underscore so the ratchet cannot read it as a ceiling; the device lane of R-1020-20 is what promotes one.",
+          "_provenance": {
+            "at": "2026-10-21",
+            "host": "ci-linux-x64-4c, 4 vCPU / 15 GB, shared with concurrent lanes",
+            "note": "The dashboard folds the same 4,750, 12,000 dates and the newest 30 touches. The largest numbers in this entry want a device figure beside them."
+          }
+        }
+      }
     }
   },
   "rigs": {
