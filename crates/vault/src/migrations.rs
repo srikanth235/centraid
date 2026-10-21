@@ -71,7 +71,7 @@ pub struct Migration {
 }
 
 /// The baseline: the vault's schema as one statement per block, in dependency
-/// order, and the rows founding seeds. Rung one, and today the whole ladder.
+/// order, and the rows founding seeds. Rung one.
 pub const BASELINE_SQL: &str = include_str!("../../../contracts/migrations/001_baseline.sql");
 
 /// Rung two: the chat scope that named the task domain folds into Agenda's, and the threads
