@@ -40,26 +40,27 @@ mod tests {
         let manifest = manifest();
         assert_eq!(manifest.id, APP_ID);
         assert_eq!(manifest.manifest_version, 1);
-        assert_eq!(manifest.version, "0.4.1");
+        assert_eq!(manifest.version, "0.5.0");
     }
 
     #[test]
-    fn it_declares_five_queries_and_eighteen_actions() {
+    fn it_declares_three_queries_and_nineteen_actions() {
         let manifest = manifest();
-        // v0's eight less `faces`, `face-queue` and `people`, which no surface called once the
-        // face screens went (Q-1047-2) and the app retired (2026-10-16).
-        assert_eq!(manifest.queries.len(), 5);
-        assert_eq!(manifest.actions.len(), 18);
-        for name in [
-            "storage",
-            "library",
-            "search",
-            "duplicates",
-            "enrichment-status",
-        ] {
+        // v0's eight less `faces`, `face-queue` and `people` (Q-1047-2), and less
+        // `storage` and `enrichment-status`, whose producers left with the custody
+        // sweep and the enricher (R-1135-5).
+        assert_eq!(manifest.queries.len(), 3);
+        assert_eq!(manifest.actions.len(), 19);
+        for name in ["library", "search", "duplicates"] {
             assert!(manifest.query(name).is_some(), "no query {name}");
         }
-        for name in ["faces", "face-queue", "people"] {
+        for name in [
+            "faces",
+            "face-queue",
+            "people",
+            "storage",
+            "enrichment-status",
+        ] {
             assert!(
                 manifest.query(name).is_none(),
                 "the retired query {name} is back"
@@ -93,9 +94,8 @@ mod tests {
     /// manifest field the dispatching surface reads, and `confirm` on a
     /// [`crate::commands`] target's definition parks a NON-OWNER invocation
     /// regardless of risk. Photos' two manifest-confirmed actions are
-    /// `purge-asset` and `delete-album`; the only `media.*` command carrying
-    /// the command-level gate is `media.forget_person`, which no Photos action
-    /// invokes at all. Collapsing the two loses the non-owner park.
+    /// `purge-photo` and `delete-album`; no command this build carries sets the
+    /// command-level gate.
     #[test]
     fn the_confirmation_of_every_action_agrees_with_the_manifest() {
         use centraid_apps_kit::manifest::Confirmation;
@@ -122,19 +122,27 @@ mod tests {
             .filter(|row| row.confirm == Confirm::Required)
             .map(|row| row.action)
             .collect();
-        assert_eq!(required, ["purge-asset", "delete-album"]);
+        assert_eq!(required, ["purge-photo", "delete-album"]);
     }
 
-    /// PHOTOS' ACTIONS INVOKE THE COMMANDS OF `media`, `core` AND `enrich`, and
-    /// the table says so. What each command wrote is the commit's own census,
-    /// not a list a manifest carries (V3) — which is how a declared `share`
-    /// table outlived the sharing plane it named.
+    /// PHOTOS' ACTIONS INVOKE ITS OWN VERBS AND THE SHARED ONES, and the table says
+    /// so. What each command wrote is the commit's own census, not a list a
+    /// manifest carries (V3).
     #[test]
-    fn every_action_invokes_a_media_core_or_enrich_command() {
+    fn every_action_invokes_a_photo_verb_or_a_shared_one() {
         for row in ACTIONS {
             let schema = row.command.split('.').next().unwrap_or_default();
             assert!(
-                ["media", "core", "enrich"].contains(&schema),
+                [
+                    "photo",
+                    "album",
+                    "entity",
+                    "flag",
+                    "tag",
+                    "edge",
+                    "container"
+                ]
+                .contains(&schema),
                 "{} invokes {}, which is outside Photos' reach",
                 row.action,
                 row.command
@@ -156,21 +164,54 @@ mod tests {
     }
 
     #[test]
-    fn it_declares_thirty_eight_scopes_over_five_schemas_and_no_tables_of_its_own() {
+    fn it_declares_twenty_two_scopes_seven_reads_and_one_act_per_command() {
+        use centraid_apps_kit::manifest::ScopeVerbs;
+
         let manifest = manifest();
         let vault = manifest
             .vault
             .as_ref()
             .expect("Photos declares its vault reach");
-        assert_eq!(vault.scopes.len(), 38);
-        let mut schemas: Vec<&str> = vault
+        assert_eq!(vault.scopes.len(), 22);
+        let mut reads: Vec<&str> = vault
             .scopes
             .iter()
-            .map(|scope| scope.schema.as_str())
+            .filter(|scope| scope.verbs == ScopeVerbs::Read)
+            .map(|scope| {
+                assert_eq!(scope.schema, "vault");
+                scope.table.as_deref().expect("a read names its table")
+            })
             .collect();
-        schemas.sort_unstable();
-        schemas.dedup();
-        assert_eq!(schemas, ["blob", "core", "enrich", "media", "social"]);
+        reads.sort_unstable();
+        assert_eq!(
+            reads,
+            [
+                "blob",
+                "container",
+                "derivative",
+                "edge",
+                "entity",
+                "photo",
+                "place"
+            ]
+        );
+        let mut declared: Vec<(&str, &str)> = vault
+            .scopes
+            .iter()
+            .filter(|scope| scope.verbs == ScopeVerbs::Act)
+            .map(|scope| {
+                (
+                    scope.schema.as_str(),
+                    scope
+                        .table
+                        .as_deref()
+                        .expect("an act scope over a whole schema would be the widest form"),
+                )
+            })
+            .collect();
+        declared.sort_unstable();
+        assert_eq!(declared, crate::commands::act_scope_tables());
+        assert_eq!(declared.len(), 15);
         assert!(
             manifest.ext_tables.is_empty(),
             "Photos is a projection over the vault's own tables"

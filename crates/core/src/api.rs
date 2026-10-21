@@ -85,7 +85,7 @@ pub const MAX_CONTENT_URLS: usize = 100;
 /// a table in `from`, and a door that reads any table by name is wider than any
 /// screen needs: it would page the receipts, the provenance log, the Locker's
 /// fields and passkeys, the money ledger and every revision snapshot for a
-/// shell that asked. So it reads these twenty-five and refuses the rest as an
+/// shell that asked. So it reads these fifteen and refuses the rest as an
 /// invalid request, before the vault is asked.
 ///
 /// The set is every `from` a shell sends today, read off `mobile/shared`'s
@@ -95,10 +95,10 @@ pub const MAX_CONTENT_URLS: usize = 100;
 /// |---|---|
 /// | The vault roster | `core_vault` |
 /// | People (Home's tile counts the circle; its trash shelf pages the trashed) | `entity`, `person`, `vault` |
-/// | Home's tiles | `media_asset`, `core_document`, `entity`, `person`, `vault`, `locker_item` |
-/// | Trash (Docs, Tasks, People, Locker) | `core_document`, `entity`, `locker_item` |
-/// | Photos (grid, shelves, lightbox, collections, search, picker, places, memories, duplicates, album choice, editor) | `media_asset`, `media_asset_phash`, `media_memory`, `media_memory_member`, `core_collection`, `core_collection_entry`, `core_concept`, `core_concept_scheme`, `core_tag`, `core_place`, `core_content_item` |
-/// | Phone sync (Docs follows the phone, #1127; whether a source was imported is its `origin`; People and Agenda follow through `follow.contacts` and `follow.calendar` and read nothing else back) | `origin`, `phone_link`, `phone_origin` |
+/// | Home's tiles | `entity`, `document`, `person`, `vault`, `locker_item` |
+/// | Trash (Docs, Photos, Tasks, People, Locker) | `entity`, `locker_item` |
+/// | Photos (grid, shelves, lightbox, collections, search, picker, places, album choice, editor) | `photo`, `entity`, `edge`, `container`, `place`, `derivative`, `blob` |
+/// | Phone sync (Docs follows the phone through `follow.files`, #1127; whether a source was imported is its `origin`, and what a followed file last stated is its `source`) | `origin`, `source` |
 /// | `with_minor_units` | `core_account` |
 ///
 /// `core_account` has no shell caller: it is the one table whose `currency`
@@ -107,8 +107,8 @@ pub const MAX_CONTENT_URLS: usize = 100;
 ///
 /// NOT HERE, ON PURPOSE: every other Locker table (`locker_item_field`,
 /// `locker_item_passkey`, `locker_item_address`, `locker_item_alias`), the
-/// audit band (`access_receipt`, `access_provenance`), `core_entity_revision`,
-/// `core_link`, the money tables and `core_transaction`. The apps that read
+/// the journal and Locker's receipts, the `revision` snapshots, the money
+/// tables and `core_transaction`. The apps that read
 /// those do it in the core (`Request.app_query`, `Request.money`), through
 /// [`crate::app_query::VaultDoor`], which this list does not govern. A screen
 /// that starts paging a new table adds it here, in the same change, and the
@@ -117,31 +117,25 @@ pub const MAX_CONTENT_URLS: usize = 100;
 ///
 /// The `where` is held to the same list: it is predicate text and could name
 /// a subquery on any table, so the vault prepares it under an authorizer that
-/// refuses a read outside these twenty-one
+/// refuses a read outside these fifteen
 /// ([`Vault::keyset_page_reading_only`]). The vault's test
 /// `a_predicate_that_reads_a_table_outside_the_list_is_refused` is where that
 /// is read: the predicates it tries are SQL, which lives in that crate.
-pub const PAGE_TABLES: [&str; 21] = [
+pub const PAGE_TABLES: [&str; 15] = [
+    "blob",
+    "container",
     "core_account",
-    "core_collection",
-    "core_collection_entry",
-    "core_concept",
-    "core_concept_scheme",
-    "core_content_item",
-    "core_document",
-    "core_place",
-    "core_tag",
     "core_vault",
+    "derivative",
+    "document",
+    "edge",
     "entity",
     "locker_item",
-    "media_asset",
-    "media_asset_phash",
-    "media_memory",
-    "media_memory_member",
     "origin",
     "person",
-    "phone_link",
-    "phone_origin",
+    "photo",
+    "place",
+    "source",
     "vault",
 ];
 
@@ -797,27 +791,21 @@ mod tests {
     /// Every table a screen pages, with a column that can key its cursor. Spelled
     /// here, not derived from the allowlist, so the allowlist cannot grow without
     /// this list (and the paragraph above it) being read.
-    const PAGED_BY_A_SCREEN: [(&str, &str); 21] = [
+    const PAGED_BY_A_SCREEN: [(&str, &str); 15] = [
+        ("blob", "hash"),
+        ("container", "id"),
         ("core_account", "account_id"),
-        ("core_collection", "collection_id"),
-        ("core_collection_entry", "entry_id"),
-        ("core_concept", "concept_id"),
-        ("core_concept_scheme", "scheme_id"),
-        ("core_content_item", "content_id"),
-        ("core_document", "document_id"),
-        ("core_place", "place_id"),
-        ("core_tag", "tag_id"),
         ("core_vault", "vault_id"),
+        ("derivative", "blob"),
+        ("document", "id"),
+        ("edge", "from_id"),
         ("entity", "id"),
         ("locker_item", "item_id"),
-        ("media_asset", "asset_id"),
-        ("media_asset_phash", "asset_id"),
-        ("media_memory", "memory_id"),
-        ("media_memory_member", "memory_id"),
         ("origin", "id"),
         ("person", "id"),
-        ("phone_link", "link_id"),
-        ("phone_origin", "origin_id"),
+        ("photo", "id"),
+        ("place", "id"),
+        ("source", "id"),
         ("vault", "self_id"),
     ];
 
@@ -828,14 +816,14 @@ mod tests {
         let vault = Vault::create(scratch.join("v.db")).expect("a vault");
         vault.found("T", "O").expect("founded");
         for (table, pk) in [
-            ("access_receipt", "receipt_id"),
-            ("access_provenance", "prov_id"),
+            ("journal", "seq"),
+            ("receipt", "seq"),
             ("locker_item_field", "field_id"),
             ("locker_item_passkey", "item_id"),
             ("locker_item_address", "address_id"),
             ("core_transaction", "txn_id"),
             ("money_transaction", "txn_id"),
-            ("core_entity_revision", "revision_id"),
+            ("revision", "entity_id"),
             ("sqlite_master", "name"),
         ] {
             let mut asked = query(&[pk], pk, pk);
@@ -877,112 +865,6 @@ mod tests {
                 panic!("`{table}` is paged by a screen and was refused: {error}")
             });
         }
-        let _ = std::fs::remove_dir_all(&scratch);
-    }
-
-    /// THE DOCUMENT READ AND THE ONE REVISION A FOLLOWED FOLDER MAKES (#1127, lane F): `FilesStore`
-    /// pages documents through the door, and a changed file is `core.replace_document_content`:
-    /// the same document, a new head, a new revision. Its head-hash subquery is held in
-    /// `crates/vault/src/page.rs` (`a_followed_folders_head_hash_subquery_answers`).
-    #[test]
-    fn a_followed_folder_reads_its_documents_and_a_change_is_a_revision() {
-        let scratch = centraid_ontology::scratch::scratch_dir();
-        std::fs::create_dir_all(&scratch).expect("made");
-        let vault = Vault::create(scratch.join("v.db")).expect("a vault");
-        vault.found("T", "O").expect("founded");
-        let registry = Registry::with_system_commands().expect("the registry");
-        let owner = centraid_vault::Principal::owner("test-device");
-        let run = |name: &str, input: serde_json::Value| {
-            let outcome = vault
-                .execute(&registry, &owner, &Command::new(name, input))
-                .expect("the command answers");
-            assert_eq!(
-                outcome.status,
-                CommandStatus::Executed,
-                "{name}: {:?}",
-                outcome.reason
-            );
-            outcome.output
-        };
-        let text = |value: &str| wire::Value {
-            kind: Some(wire::value::Kind::Text(value.to_owned())),
-        };
-        let cell = |value: &wire::Value| match &value.kind {
-            Some(wire::value::Kind::Text(text)) => text.clone(),
-            None | Some(wire::value::Kind::Null(_)) => String::new(),
-            other => panic!("a text cell, got {other:?}"),
-        };
-        let add = |title: &str, uri: &str| {
-            run(
-                "core.add_document",
-                serde_json::json!({ "title": title, "data_uri": uri }),
-            )["document_id"]
-                .as_str()
-                .expect("a document id")
-                .to_owned()
-        };
-        let notes = add("notes.txt", "data:text/plain,one");
-        let other = add("other.txt", "data:text/plain,elsewhere");
-
-        // THE STORE'S DOCUMENT READ, as `FilesStore.read` writes it, for one document. Its
-        // head-hash subquery is held in `crates/vault/src/page.rs`, where SQL may be written.
-        let documents_of = |only: &str| {
-            let mut documents = query(
-                &[
-                    "document_id",
-                    "title",
-                    "current_content_id",
-                    "deleted_at",
-                    "current_revision_id",
-                ],
-                "document_id",
-                "document_id",
-            );
-            documents.from = "core_document".to_owned();
-            documents.r#where = Some("document_id = ?".to_owned());
-            documents.bind = vec![text(only)];
-            page(
-                &vault,
-                &wire::PageRequest {
-                    query: Some(documents),
-                    limit: 10,
-                    after: None,
-                },
-            )
-            .expect("the documents page")
-        };
-        let before = documents_of(&notes);
-        assert_eq!(before.rows.len(), 1);
-        assert_eq!(cell(&before.rows[0].values[1]), "notes.txt");
-        assert_eq!(cell(&before.rows[0].values[3]), "", "live");
-        let (head, revision) = (
-            cell(&before.rows[0].values[2]),
-            cell(&before.rows[0].values[4]),
-        );
-        assert!(!head.is_empty() && !revision.is_empty());
-        assert_ne!(
-            cell(&documents_of(&other).rows[0].values[2]),
-            head,
-            "another document's head is not this one's"
-        );
-
-        // A CHANGED FILE: the same document, a new head, a new revision of it.
-        run(
-            "core.replace_document_content",
-            serde_json::json!({ "document_id": notes, "data_uri": "data:text/plain,two" }),
-        );
-        let after = documents_of(&notes);
-        assert_eq!(after.rows.len(), 1, "still one document");
-        assert_ne!(
-            cell(&after.rows[0].values[2]),
-            head,
-            "the head moved to the new bytes"
-        );
-        assert_ne!(
-            cell(&after.rows[0].values[4]),
-            revision,
-            "the change is a new revision of the same document"
-        );
         let _ = std::fs::remove_dir_all(&scratch);
     }
 

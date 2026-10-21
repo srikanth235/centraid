@@ -396,8 +396,8 @@ const DAY_MS: i64 = 86_400_000;
 /// `ceil((purge_at - now) / 24 h)`. `None` when `purge_at` does not parse.
 ///
 /// **Elapsed time, not calendar days** (#1090). The window is an instant —
-/// `core.trash_document` stamps `purge_at` thirty 24-hour days out and
-/// `core.restore_document` refuses once `purge_at <= now` — so the count is
+/// `entity.trash` stamps `purge_at` thirty 24-hour days out and
+/// `entity.restore` refuses once `purge_at <= now` — so the count is
 /// the same arithmetic: 30 for the first 24 hours after trashing, 29 for the
 /// next, and so on, whatever the wall calendar did in between. Counting the
 /// civil days between two local dates made a document trashed in the hour

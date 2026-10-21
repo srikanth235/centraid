@@ -235,8 +235,7 @@ pub(super) fn search(
         let limit = usize::try_from(asked.limit).unwrap_or(usize::MAX);
         // THE FOLDERS THE TERM NAMES RIDE BESIDE THE DOCUMENTS (#1097,
         // R-1097-19..21), and the correction treats the two as one answer.
-        let entities =
-            named::entities_of(centraid_apps_docs::queries::DOCUMENT_TARGET_TYPE, "docs");
+        let entities = named::entities_of(centraid_apps_docs::queries::DOCUMENT_KIND, "docs");
         Ok(Ok(corrected_search(
             &search,
             &entities,
@@ -305,7 +304,6 @@ pub(super) fn document(
         _ => None,
     };
     settle(door, loaded, |(data, history)| {
-        let count = history.versions.len();
         Answer::DocsDocument(wire::DocsDocument {
             document: data.row.map(|row| row_to_wire(row, &zone, clock.now_ms)),
             path: data
@@ -316,8 +314,7 @@ pub(super) fn document(
             versions: history
                 .versions
                 .into_iter()
-                .enumerate()
-                .map(|(index, version)| version_to_wire(version, count - index, &zone))
+                .map(|version| version_to_wire(version, &zone))
                 .collect(),
             body: data.body,
             bytes_held: held
@@ -359,7 +356,6 @@ pub(super) fn activity(
                         let occurred_at = event.occurred_at.unwrap_or_default();
                         wire::DocsActivityEvent {
                             activity: event.activity.unwrap_or_default(),
-                            agent_kind: event.agent_kind.unwrap_or_default(),
                             occurred_local: phone::local_minute(&zone, &occurred_at),
                             occurred_at,
                         }
@@ -465,11 +461,11 @@ fn row_to_wire(row: DocumentRow, zone: &FireZone, now_ms: i64) -> wire::DocsDocu
     }
 }
 
-fn version_to_wire(version: VersionRow, number: usize, zone: &FireZone) -> wire::DocsVersion {
+fn version_to_wire(version: VersionRow, zone: &FireZone) -> wire::DocsVersion {
     let asserted_at = version.asserted_at.unwrap_or_default();
     wire::DocsVersion {
         size: size_of(version.byte_size),
-        number: count_of(number),
+        number: count_of(version.number),
         asserted_local: phone::local_minute(zone, &asserted_at),
         asserted_at,
         content_id: version.content_id,

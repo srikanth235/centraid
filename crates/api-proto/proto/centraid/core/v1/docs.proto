@@ -32,11 +32,11 @@
 // EMPTY when the document's bytes have no row, never "0 bytes".
 //
 // WHAT "TRASH" MEANS ON THIS PHONE. Trashing stamps `purge_at` thirty days out
-// and `core.restore_document` brings a document back until then.
-// `core.purge_document` destroys one trashed document at once — the path
-// Photos' `media.purge_asset` takes: the row, its folder tag, star, labels and
-// version occurrences go, and its bytes are released when nothing else rents
-// them — and `core.empty_document_trash` does that to every trashed document
+// and `entity.restore` brings a document back until then.
+// `entity.purge` destroys one trashed document at once — the path Photos'
+// purge takes: the row, its star, labels and versions go, and its bytes are
+// released when nothing else holds them — and `entity.empty_trash` does that to
+// every trashed document
 // (the 2026-09-25 ruling D-1 in `docs/decisions.md`). No sweep runs on the
 // phone, so a document whose window ran out and that nobody purged stays in
 // Trash, unrestorable, until "Delete forever" or "Empty trash";
@@ -104,7 +104,7 @@ message DocsDocumentRequest {
   string tz = 2;
 }
 
-// `docs.activity`: one document's audit trail, newest first.
+// `docs.activity`: what the journal says was done to one document, newest first.
 message DocsActivityRequest {
   string document_id = 1;
   string tz = 2;
@@ -277,11 +277,12 @@ message DocsVersion {
 
 // One event on the activity rail.
 message DocsActivityEvent {
-  // The vault's activity name (`core.edit_document`, …), for a view's label
-  // table. EMPTY on a row that recorded none.
+  // The command's name (`document.replace`, `entity.trash`, …) as the journal
+  // recorded it, for a view's label table. EMPTY on a row that recorded none.
   string activity = 1;
-  // `owner`, `agent`, … — who acted.
-  string agent_kind = 2;
+  // The journal does not record who acted (#1135).
+  reserved 2;
+  reserved "agent_kind";
   string occurred_at = 3;
   string occurred_local = 4;
 }

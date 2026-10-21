@@ -552,7 +552,9 @@ version = "1.0.0-alpha.0"
 dependencies = [
  "centraid-apps-kit",
  "centraid-media",
+ "centraid-ontology",
  "centraid-search",
+ "centraid-vault",
  "rusqlite",
  "serde_json",
  "thiserror",

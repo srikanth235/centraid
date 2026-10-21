@@ -1,34 +1,28 @@
-//! # Docs — a manifest, five queries, the phone's shelves, eighteen actions
+//! # Docs — a manifest, four queries, the phone's shelves, eighteen actions
 //!
-//! 13,183 lines of v0 TypeScript, 4 queries, 16 actions, 34 scopes over five
-//! schemas (#1020, wave 4 census §A3). Its doctrine, from the manifest's own
-//! description (`manifest.json`, copied verbatim from v0's `app.json`):
+//! Its doctrine, from the manifest's own description (`manifest.json`):
 //!
-//! - **IDENTITY IS THE WRAPPER, NOT THE BYTES.** A document is a
-//!   `core.document` wrapper around a hash-deduped canonical content item
-//!   (#352): identity is separate from bytes, so two documents may legitimately
-//!   share identical bytes. Dedup is on the bytes, never on document identity —
-//!   **a port that keys a drive row by content id merges two members' unrelated
-//!   files** (D-1020-DC1).
-//! - **FOLDERS ARE SKOS CONCEPTS** in the owner's folders scheme, and filing is
-//!   a single tag per document. Documents arrive newest-filed-first *via their
-//!   folders-scheme tags*, and every decoration is `IN`-bounded by the same
-//!   window.
-//! - **STARRING IS A FLAGS-SCHEME TAG ON THE WRAPPER ITSELF**, so Starred here
-//!   is the set of starred DOCUMENTS and nothing else — a photo starred in
-//!   Photos carries its tag on the `media.asset` and never appears in this list.
-//! - **TRASH KEEPS THE FOLDER TAG AND THE STAR**, so a restored document lands
-//!   right back where it was.
-//! - **NOTHING IS SHARED AND NOTHING ARRIVES.** The share fold and the origin
-//!   plane left with the sharing plane (#1029's scope amendment): no row
-//!   carries `shared_with` or `shared_from`, and there is no Shared shelf.
-//! - **"DELETE FOREVER" IS PHOTOS' PATH.** `purge` and `empty-trash` destroy
-//!   through `core.purge_document`'s internals, the way `media.purge_asset`
-//!   destroys a photograph (ruling D-1 of 2026-09-25) — see the README's
-//!   "Trash".
+//! - **IDENTITY IS THE WRAPPER, NOT THE BYTES.** A document is an `entity` of
+//!   kind `document` over one blob: two documents may legitimately share
+//!   identical bytes, and **a port that keys a drive row by the blob's hash
+//!   merges two members' unrelated files** (D-1020-DC1). The blob plane stores
+//!   the bytes once.
+//! - **FOLDERS ARE CONTAINERS**, and filing is one column of the document
+//!   (`folder_id`). A document attached to something and filed nowhere shows
+//!   only where it is attached ([`queries`]).
+//! - **STARRING IS A `tagged` EDGE TO `flag:starred`** on the document itself,
+//!   so Starred here is the set of starred DOCUMENTS and nothing else — a photo
+//!   starred in Photos carries its edge on the `photo` and never appears here.
+//! - **TRASH KEEPS THE FOLDER AND THE STAR**, so a restored document lands right
+//!   back where it was; a folder takes what is filed in it to the trash with it.
+//! - **A VERSION IS THE BYTES A REPLACE PUT DOWN** (`revision`), numbered by its
+//!   `seq`; restoring one keeps what it replaced.
+//! - **"DELETE FOREVER" IS PHOTOS' PATH.** `purge` and `empty-trash` are
+//!   `entity.purge` and `entity.empty_trash`, the way a photograph is destroyed
+//!   (ruling D-1 of 2026-09-25).
 //! - **THE PHONE ASKS FOR A SHELF, NOT A WINDOW** ([`phone`], [`kind`], #1046):
-//!   the core cuts the shelf, applies the filters and the order, classifies
-//!   each row and reads its dates in the device's zone.
+//!   the core cuts the shelf, applies the filters and the order, classifies each
+//!   row and reads its dates in the device's zone.
 //! - **BYTES RIDE THE DOOR, NEVER THE PAYLOAD** ([`bytes`], D-1020-DC4).
 //! - **NO DATA OF ITS OWN** — revoke the grant and the app goes dark.
 //!
@@ -36,7 +30,7 @@
 //!
 //! | Not allowed | What stops it |
 //! |---|---|
-//! | SQL, in any form | `cargo xtask rules`' `sql-confinement` scans this crate; SQL lives only under `crates/{ontology,vault,seat,search}` and `crates/apps/kit`. A statement here is a [`centraid_apps_kit::PageQuery`] — a projection, a `from`, a predicate and an order, as data |
+//! | SQL, in any form | `cargo xtask rules`' `sql-confinement` scans this crate; SQL lives only under `crates/{ontology,vault,search}` and `crates/apps/kit`. A statement here is a [`centraid_apps_kit::PageQuery`] — a projection, a `from`, a predicate and an order, as data |
 //! | The bytes themselves | the byte plane is `crates/media`'s and the door is the seat's; [`bytes`] holds the REQUEST shapes and the never-inline rule, and no buffer |
 //! | A write from a query | [`queries`] holds statements and a [`centraid_apps_kit::PageDoor`], whose one method reads |
 //! | An invocation with no `invoke_key` | the field is required on [`commands::Invocation`] (D-1020-D3-5) |
@@ -45,9 +39,10 @@
 //!
 //! ## The manifest
 //!
-//! `manifest.json` is v0's `app.json`, byte for byte, and [`manifest`] parses
-//! it with the kit's parser at load time rather than restating it in Rust. Two
-//! copies of "which tables does Docs write" is how the two answers drift.
+//! `manifest.json` is the contract; [`manifest`] parses it with the kit's parser
+//! at load time rather than restating it in Rust. Two copies of "which commands
+//! does Docs send" is how the two answers drift, so the action table
+//! ([`commands::ACTIONS`]) is compared with it by a test.
 
 pub mod bytes;
 pub mod commands;
@@ -60,8 +55,8 @@ pub use bytes::{ByteDoor, ByteRequest, NEVER_INLINE, StagedBlob, may_serve_inlin
 pub use commands::{ACTIONS, Commands, Invocation, Outcome};
 pub use manifest::{APP_ID, manifest};
 pub use queries::{
-    ActivityData, DocumentData, DriveData, DriveInput, HistoryData, MAX_CHAIN_STEPS, SearchData,
-    load_activity, load_document, load_drive, load_history, load_search, load_search_term,
+    ActivityData, DocumentData, DriveData, DriveInput, HistoryData, MAX_VERSIONS, SearchData,
+    load_activity, load_document, load_drive, load_history, load_search_term,
 };
 
 /// A CONSENT DENIAL, as the payload carries it: the kit's one type, shared by

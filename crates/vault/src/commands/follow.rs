@@ -196,6 +196,33 @@ fn statement_defaults(
     ])
 }
 
+/// A file's size and modification time as the phone last stated them.
+///
+/// The phone's cheap pre-check rides in the statement: a rescan of an unchanged
+/// folder reads no bytes, because the phone asks the vault what each file last
+/// stated (`source.stated`) and stages a file only when its size or time moved.
+/// It is not a column of the document and the member cannot edit it, so the row
+/// always agrees with what was stated.
+fn stat_read(connection: &Connection, id: &str) -> Result<Json> {
+    let stated: Option<String> = connection
+        .query_row(
+            "SELECT json_extract(stated, '$.stat') FROM source WHERE entity_id = ?1",
+            [id],
+            |row| row.get(0),
+        )
+        .optional()?
+        .flatten();
+    Ok(stated.map_or(Json::Null, Json::String))
+}
+
+fn stat_canon(value: &Json) -> Json {
+    value.clone()
+}
+
+fn stat_merge(_: &CommandCtx<'_, '_>, _: &str, _: Option<&Json>, _: &Json) -> Result<bool> {
+    Ok(false)
+}
+
 /// The five systems the vault follows.
 pub const SYSTEMS: &[SystemMap] = &[
     SystemMap {
@@ -250,7 +277,12 @@ pub const SYSTEMS: &[SystemMap] = &[
         kind: Kind::Document,
         fills: Some(Kind::Folder),
         fields: &["blob", "media_type"],
-        children: &[],
+        children: &[Child {
+            name: "stat",
+            read: stat_read,
+            canon: stat_canon,
+            merge: stat_merge,
+        }],
         match_on: &["title"],
         removes: true,
         defaults: folder_defaults,

@@ -202,6 +202,24 @@ impl Seeder<'_> {
         }
     }
 
+    /// Put bytes in the content store the scenario's vault holds and answer their
+    /// hash, or report that it holds none (the commands that name bytes claim
+    /// them by hash and size).
+    fn spill(&mut self, bytes: &[u8]) -> Option<String> {
+        let stored = self.vault.blobs().map(|store| store.put(bytes));
+        match stored {
+            Some(Ok(hash)) => Some(hash),
+            other => {
+                let why = match other {
+                    Some(Err(error)) => error.to_string(),
+                    _ => "the vault has no content store".to_owned(),
+                };
+                self.report.refused.push(format!("content store: {why}"));
+                None
+            }
+        }
+    }
+
     /// A minted id out of a command's output, or nothing.
     fn id(output: Option<&Value>, field: &str) -> Option<String> {
         output?
@@ -583,38 +601,29 @@ fn seed_notes(seeder: &mut Seeder) {
 // Docs.
 //
 // "Two folders, three filed documents, a star, a tag, and one document with a
-// SECOND version so the history walk has something to walk." The bytes ride the
-// inline `data:` door as text/markdown, which is v0's choice and the reason the
-// FTS triggers index them.
+// SECOND version so the history walk has something to walk." Each is written as
+// text/markdown through `document.create_text`, so its words are what the index
+// finds it by.
 // ---------------------------------------------------------------------------
-
-fn markdown(text: &str) -> String {
-    // Percent-encoding by hand: the alternative is a URL crate in a fixture,
-    // and the set of characters these documents use is small and known.
-    let mut encoded = String::with_capacity(text.len() * 3);
-    for byte in text.bytes() {
-        match byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
-                encoded.push(byte as char);
-            }
-            _ => encoded.push_str(&format!("%{byte:02X}")),
-        }
-    }
-    format!("data:text/markdown;charset=utf-8,{encoded}")
-}
 
 fn seed_docs(seeder: &mut Seeder, now: i64) {
     let travel = Seeder::id(
         seeder
-            .run("core.create_folder", json!({ "name": "Travel" }))
+            .run(
+                "container.create",
+                json!({ "kind": "folder", "title": "Travel" }),
+            )
             .as_ref(),
-        "folder_id",
+        "id",
     );
     let home = Seeder::id(
         seeder
-            .run("core.create_folder", json!({ "name": "Home" }))
+            .run(
+                "container.create",
+                json!({ "kind": "folder", "title": "Home" }),
+            )
             .as_ref(),
-        "folder_id",
+        "id",
     );
 
     let leaving = day(now, 3);
@@ -625,34 +634,28 @@ fn seed_docs(seeder: &mut Seeder, now: i64) {
     );
     let mut packing_input = json!({
         "title": "Tahoe packing list",
-        "data_uri": markdown(&packing_body),
+        "body_text": packing_body,
+        "media_type": "text/markdown",
     });
     if let Some(travel) = travel.as_ref() {
         packing_input["folder_id"] = json!(travel);
     }
     let packing = Seeder::id(
-        seeder.run("core.add_document", packing_input).as_ref(),
-        "document_id",
+        seeder.run("document.create_text", packing_input).as_ref(),
+        "id",
     );
     if let Some(packing) = packing.as_ref() {
-        // ONE EDIT, so version history has two versions to show: the walk is
-        // `revises` links between CONTENT items, minted by this call.
+        // ONE EDIT, so version history has two versions to show: the words it
+        // replaced are version one.
         let revised = format!(
             "{packing_body}- Tire chains (I-80 requires them after a storm)\n- Cooler for the drive\n"
         );
         seeder.run(
-            "core.edit_document",
-            json!({ "document_id": packing, "body_text": revised }),
+            "document.edit",
+            json!({ "id": packing, "body_text": revised }),
         );
-        seeder.run("core.star_document", json!({ "document_id": packing }));
-        seeder.run(
-            "core.tag_item",
-            json!({
-                "subject_type": "core.document",
-                "subject_id": packing,
-                "label": "tahoe",
-            }),
-        );
+        seeder.run("flag.set", json!({ "id": packing, "flag": "starred" }));
+        seeder.run("tag.add", json!({ "id": packing, "label": "tahoe" }));
     }
 
     // "(sample)" IN THE TITLE, which is v0's own rule: a rental agreement and an
@@ -666,24 +669,26 @@ fn seed_docs(seeder: &mut Seeder, now: i64) {
     );
     let mut cabin_input = json!({
         "title": "Cabin rental agreement (sample)",
-        "data_uri": markdown(&cabin),
+        "body_text": cabin,
+        "media_type": "text/markdown",
     });
     if let Some(travel) = travel.as_ref() {
         cabin_input["folder_id"] = json!(travel);
     }
-    seeder.run("core.add_document", cabin_input);
+    seeder.run("document.create_text", cabin_input);
 
     let insurance = "# Renters insurance policy (sample)\n\nThis is sample demo data, not a real policy.\n\n\
          - Policy number: SAMPLE-0000-0000\n- Personal property: $30,000\n- Liability: $100,000\n\
          - Deductible: $500\n- Renews annually\n";
     let mut insurance_input = json!({
         "title": "Renters insurance policy (sample)",
-        "data_uri": markdown(insurance),
+        "body_text": insurance,
+        "media_type": "text/markdown",
     });
     if let Some(home) = home.as_ref() {
         insurance_input["folder_id"] = json!(home);
     }
-    seeder.run("core.add_document", insurance_input);
+    seeder.run("document.create_text", insurance_input);
 }
 
 // ---------------------------------------------------------------------------
@@ -899,14 +904,8 @@ fn roll() -> Vec<Frame> {
 ///
 /// These are ORIGINAL procedurally drawn frames, not photographs of anyone and
 /// not any third party's character art: every byte here has to be ours to
-/// distribute. v0's note says they are drawn with human face geometry rather
-/// than a stylised one, because a detector trained on human faces is what would
-/// eventually run over them.
-///
-/// **The face BOXES are not ported.** v0 stages them as `media.face_region`
-/// proposals; that is the recognition plane, and seeding boxes for a plane this
-/// build does not run would be rows nothing reads. The frames themselves carry
-/// the faces, so the boxes are one detection pass away whenever that lands.
+/// distribute. They are ordinary photographs of the roll: nothing recognises the
+/// faces in them, and no surface draws a face (R-FP-10, Q-1047-2).
 fn portraits() -> Vec<Frame> {
     vec![
         frame(
@@ -1031,96 +1030,70 @@ roll!(
 /// DIVERSITY, not playback fidelity. The viewer's capability rows and the
 /// video badge read the vault's honest kind and duration; the bytes only have
 /// to be real enough to have a sha and a media type.
-const VIDEO_BASE64: &str = "AAAAHGZ0eXBtcDQyAAAAAG1wNDJpc29t";
+const VIDEO_BYTES: [u8; 24] = *b"\0\0\0\x1cftypmp42\0\0\0\0mp42isom";
 
-/// ONE FRAME'S CALL, with its bytes.
+fn video_bytes() -> Vec<u8> {
+    VIDEO_BYTES.to_vec()
+}
+
+/// ONE FRAME'S CALL, over bytes the seeder has put in the store.
 ///
-/// The coordinate pair is spread in only when the frame has one: a
-/// place-less frame must send NEITHER, because `media.add_asset` refuses half
-/// a coordinate — half of one is no location at all, and accepting it would
-/// let this seeder believe it had placed a photograph it had not.
-fn frame_input(frame: &Frame, now: i64) -> Option<Value> {
-    let bytes = roll_bytes(frame.file)?;
+/// The coordinate pair is spread in only when the frame has one: a place-less
+/// frame must send NEITHER, because `photo.add` refuses half a coordinate — half
+/// of one is no location at all, and accepting it would let this seeder believe
+/// it had placed a photograph it had not.
+fn frame_input(frame: &Frame, now: i64, blob: &str, size: usize) -> Value {
     let mut input = json!({
-        "data_uri": format!(
-            "data:image/png;base64,{}",
-            base64_of(bytes),
-        ),
-        "kind": "photo",
+        "blob": blob,
+        "size": size,
+        "media_type": "image/png",
         "title": frame.title,
-        "captured_at": at(now, frame.day, frame.hour, frame.month_offset),
-        "tz_offset_min": TZ_OFFSET_MIN,
+        "taken_at": at(now, frame.day, frame.hour, frame.month_offset),
+        "offset_min": TZ_OFFSET_MIN,
         "width": frame.width,
         "height": frame.height,
         "thumbhash": frame.thumbhash,
         "phash": frame.phash,
     });
-    if let Some((lat, lng)) = place_of(frame.file) {
+    if let Some((lat, lon)) = place_of(frame.file) {
         let object = input.as_object_mut().expect("the input is an object");
-        object.insert("latitude".to_owned(), json!(lat));
-        object.insert("longitude".to_owned(), json!(lng));
+        object.insert("lat".to_owned(), json!(lat));
+        object.insert("lon".to_owned(), json!(lon));
     }
-    Some(input)
-}
-
-/// Standard base64, no line breaks — what a `data:` URI carries.
-fn base64_of(bytes: &[u8]) -> String {
-    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
-    for chunk in bytes.chunks(3) {
-        let b = [
-            chunk[0],
-            *chunk.get(1).unwrap_or(&0),
-            *chunk.get(2).unwrap_or(&0),
-        ];
-        let packed = (u32::from(b[0]) << 16) | (u32::from(b[1]) << 8) | u32::from(b[2]);
-        for shift in [18, 12, 6, 0] {
-            out.push(char::from(ALPHABET[((packed >> shift) & 0x3F) as usize]));
-        }
-        // The pad says how many of the last four characters are real.
-        let padding = 3 - chunk.len();
-        out.truncate(out.len() - padding);
-        for _ in 0..padding {
-            out.push('=');
-        }
-    }
-    out
+    input
 }
 
 /// The camera roll: eighteen frames with REAL BYTES, one video, one album.
 ///
-/// **The bytes are the point.** The first port of this seed sent titles and
-/// capture times with no `data_uri` at all, because `media.add_asset` had no
-/// handler — the blob door was missing from `CommandCtx`, so a vault could
-/// hold a note and not a photograph, and Photos seeded zero on every run. The
-/// door exists now (`Vault::with_blobs`), so this is v0's scenario entire:
-/// the same frames, the same places, the same two favourites, the same
-/// shortlist album.
+/// **The bytes are the point.** A vault that holds a note and not a photograph
+/// seeds zero photographs on every run, so the frames are put in the content
+/// store (`Vault::with_blobs`) and filed by `photo.add`, which claims them by
+/// hash and size: v0's scenario entire — the same frames, the same places, the
+/// same two favourites, the same shortlist album.
 fn seed_photos(seeder: &mut Seeder, now: i64) {
-    let mut asset_by_file: std::collections::BTreeMap<&str, String> =
+    let mut photo_by_file: std::collections::BTreeMap<&str, String> =
         std::collections::BTreeMap::new();
     // STRICTLY IN ORDER, as v0 runs them: ids are minted per invocation, so a
     // shuffled roll shuffles the timeline's tie-breaks and the album's member
     // positions run to run — and reproducibility is what a scenario generator
     // is for.
     for frame in roll().into_iter().chain(portraits()) {
-        let Some(input) = frame_input(&frame, now) else {
+        let Some(bytes) = roll_bytes(frame.file) else {
             continue;
         };
-        let Some(output) = seeder.run("media.add_asset", input) else {
+        let Some(blob) = seeder.spill(bytes) else {
             continue;
         };
-        let Some(asset_id) = Seeder::id(Some(&output), "asset_id") else {
+        let input = frame_input(&frame, now, &blob, bytes.len());
+        let Some(output) = seeder.run("photo.add", input) else {
             continue;
         };
-        asset_by_file.insert(frame.file, asset_id.clone());
+        let Some(photo_id) = Seeder::id(Some(&output), "id") else {
+            continue;
+        };
+        photo_by_file.insert(frame.file, photo_id.clone());
         if frame.favorite {
-            // The general editor rather than `set_favorite`: one command, and
-            // it is the path the app's own detail pane takes.
-            seeder.run(
-                "media.update_asset",
-                json!({ "asset_id": asset_id, "favorite": 1 }),
-            );
+            seeder.run("flag.set", json!({ "id": photo_id, "flag": "starred" }));
         }
     }
 
@@ -1128,23 +1101,27 @@ fn seed_photos(seeder: &mut Seeder, now: i64) {
     // can show — and the one cell in the demo library that draws no image.
     // Nothing in this workspace writes a `poster` derivative, so the mosaic has
     // no still to fall back to and says so by drawing an empty cell.
-    seeder.run(
-        "media.add_asset",
-        json!({
-            "data_uri": format!("data:video/mp4;base64,{VIDEO_BASE64}"),
-            "kind": "video",
-            "title": "Tahoe shoreline pan",
-            "captured_at": at(now, -2, 17, 0),
-            "tz_offset_min": TZ_OFFSET_MIN,
-            "width": 360,
-            "height": 240,
-            "duration_s": 12,
-            "latitude": WEST_SHORE_RIDGE.0,
-            "longitude": WEST_SHORE_RIDGE.1,
-        }),
-    );
+    let film = video_bytes();
+    if let Some(blob) = seeder.spill(&film) {
+        seeder.run(
+            "photo.add",
+            json!({
+                "blob": blob,
+                "size": film.len(),
+                "media_type": "video/mp4",
+                "title": "Tahoe shoreline pan",
+                "taken_at": at(now, -2, 17, 0),
+                "offset_min": TZ_OFFSET_MIN,
+                "width": 360,
+                "height": 240,
+                "duration_s": 12,
+                "lat": WEST_SHORE_RIDGE.0,
+                "lon": WEST_SHORE_RIDGE.1,
+            }),
+        );
+    }
 
-    seed_album(seeder, &asset_by_file);
+    seed_album(seeder, &photo_by_file);
 }
 
 /// The shortlist, as an album with a cover.
@@ -1152,26 +1129,29 @@ fn seed_photos(seeder: &mut Seeder, now: i64) {
 /// Separate from the roll because it can only run AFTER it: an album of four
 /// frames needs those four frames to have ids, and a cover needs to be a member
 /// of the album it covers.
-fn seed_album(seeder: &mut Seeder, asset_by_file: &std::collections::BTreeMap<&str, String>) {
-    let Some(output) = seeder.run("media.create_album", json!({ "title": ALBUM_TITLE })) else {
+fn seed_album(seeder: &mut Seeder, photo_by_file: &std::collections::BTreeMap<&str, String>) {
+    let Some(output) = seeder.run(
+        "container.create",
+        json!({ "kind": "album", "title": ALBUM_TITLE }),
+    ) else {
         return;
     };
-    let Some(album_id) = Seeder::id(Some(&output), "album_id") else {
+    let Some(album_id) = Seeder::id(Some(&output), "id") else {
         return;
     };
     for file in ALBUM_FILES {
-        let Some(asset_id) = asset_by_file.get(file) else {
+        let Some(photo_id) = photo_by_file.get(file) else {
             continue;
         };
         seeder.run(
-            "media.add_to_album",
-            json!({ "album_id": album_id, "asset_id": asset_id }),
+            "edge.add",
+            json!({ "from": album_id, "rel": "contains", "to": photo_id }),
         );
     }
-    if let Some(cover) = asset_by_file.get(ALBUM_COVER) {
+    if let Some(cover) = photo_by_file.get(ALBUM_COVER) {
         seeder.run(
-            "media.set_album_cover",
-            json!({ "album_id": album_id, "asset_id": cover }),
+            "album.set_cover",
+            json!({ "id": album_id, "photo_id": cover }),
         );
     }
 }

@@ -147,6 +147,13 @@ impl BlobStore for ContentBytes {
             .ok_or_else(|| BlobError::NotFound { id: id.to_owned() })
     }
 
+    fn remove(&self, id: &str) -> Result<bool> {
+        let hash = Self::parse(id)?;
+        self.store
+            .remove(hash)
+            .map_err(|error| door_error(id, error))
+    }
+
     /// The store's own file, read in place. Nothing is exported to a second
     /// copy: a phone that exported every cell of a camera roll would hold the
     /// roll twice.

@@ -1,37 +1,39 @@
 //! THE PLACES FACET, and it stays inside Photos (D-1020-P5).
 //!
 //! There is no `crates/apps/places`. Places is not an app: it is a facet of the
-//! library — `core_place` joined into the library and search reads, a shelf
+//! library — a `place` entity joined into the library and search reads, a shelf
 //! that groups by it, and the phrase logic that keeps a location a **phrase**
-//! rather than a coordinate. The gazetteer's writer is the automations lane's
-//! `place-names` recipe through `media.set_place_gazetteer`, which carries **no
-//! media bytes at all** (`docs/recognition-automations.md:69`); the member's
-//! own name for a place is written by `media.name_place`, and a rename never
-//! touches the derived address.
+//! rather than a coordinate. A place's name is the entity's title, so
+//! `entity.retitle` names one; its `locality` is the offline gazetteer's nearest
+//! city, written by `place.locate` alone, so a rename never touches it (#1135).
 //!
 //! ## A location is a phrase before it is a pin
 //!
-//! `place-phrase.ts:1-3` states the rule and the reason: in `"shared"` context
-//! the relative rung is **skipped**, because "5.2 km NW of Home" hands a
-//! stranger a bearing to the member's house. The four rungs, in order:
+//! The three rungs, in order:
 //!
 //! 1. the member's own name for the place;
-//! 2. `near <gazetteer name>`;
-//! 3. a relative phrase against a named anchor — **private context only**;
+//! 2. `near <locality>`;
+//! 3. a phrase relative to the nearest named place (`4 km NW of The cabin`);
 //! 4. "A place with no name yet".
 //!
-//! **The text is never coordinate-shaped, for any input.** A name that reads
-//! as `"37.7955, -122.3937"` is refused at rung 1 by [`printable_name`], which
-//! is why a gazetteer that wrote digits into `name` cannot leak them through
-//! the phrase.
+//! A place has no kind (home, work, …): the model keeps what the code
+//! interprets and nothing code reads needs one, so the relative rung measures
+//! from the nearest named place and does not prefer a home (R-1135-5-3).
+//!
+//! **The text is never coordinate-shaped, for any input.** A name that reads as
+//! `"37.7955, -122.3937"` is refused at rung 1 by [`printable_name`], which is why
+//! a coordinate-labelled place (the title a photograph's coordinates found it
+//! under, before anyone named it) cannot leak its digits through the phrase.
 
+use centraid_apps_kit::error::KitResult;
+use centraid_apps_kit::reads::{FanOutBound, PageDoor, Read, read_pages};
 use centraid_apps_kit::row::{Cell, Row, text_of};
-use centraid_apps_kit::statement::{PageOrder, PageQuery};
+use centraid_apps_kit::statement::{PageBindValue, PageOrder, PageQuery};
 
 /// Must stay byte-identical to `shared-copy.ts`'s `PLACE_UNNAMED`.
 pub const PLACE_NO_NAME: &str = "A place with no name yet";
 
-/// One `core_place` row, as the shelf and the grid read it.
+/// One place, as the shelf and the grid read it: its entity and its row.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct PlaceRow {
     pub place_id: String,
@@ -39,19 +41,20 @@ pub struct PlaceRow {
     /// `None`, never 0°,0° — the Gulf of Guinea is not "no location".
     pub lat: Option<f64>,
     pub lng: Option<f64>,
-    pub kind: Option<String>,
-    /// The gazetteer's derived name, read out of `address_json`. `None` for a
-    /// malformed blob: one bad address must not take the whole shelf down.
+    /// The gazetteer's nearest city, or `None` when it has not looked or found
+    /// nothing.
     pub gazetteer: Option<String>,
+    pub time_zone: Option<String>,
 }
 
 impl Eq for PlaceRow {}
 
 impl PlaceRow {
+    /// A place's entity and its `place` row.
     #[must_use]
-    pub fn of(row: &Row) -> Option<Self> {
+    pub fn of(entity: &Row, place: &Row) -> Option<Self> {
         let real = |column: &str| -> Option<f64> {
-            match row.get(column) {
+            match place.get(column) {
                 Some(Cell::Real(value)) => Some(*value),
                 #[expect(
                     clippy::cast_precision_loss,
@@ -62,49 +65,57 @@ impl PlaceRow {
             }
         };
         Some(Self {
-            place_id: text_of(row, "place_id")?,
-            name: text_of(row, "name")?,
-            lat: real("geo_lat"),
-            lng: real("geo_lng"),
-            kind: text_of(row, "kind"),
-            gazetteer: gazetteer_name_from(text_of(row, "address_json").as_deref()),
+            place_id: text_of(entity, "id")?,
+            name: text_of(entity, "title")?,
+            lat: real("lat"),
+            lng: real("lon"),
+            gazetteer: text_of(place, "locality").filter(|text| !text.trim().is_empty()),
+            time_zone: text_of(place, "zone"),
         })
-    }
-
-    /// Whether this place is the member's home — the anchor a relative phrase
-    /// prefers inside a town's span.
-    #[must_use]
-    pub fn is_home(&self) -> bool {
-        self.kind.as_deref() == Some("home")
     }
 }
 
-/// `photos.shared.places` — the gazetteer is owner-shaped and small, so it is a
-/// walk with a stated ceiling rather than a window nobody chose.
+/// `photos.shared.places` — the places are owner-shaped and small, so a walk with
+/// a stated ceiling rather than a window nobody chose.
 #[must_use]
 pub fn places_statement() -> PageQuery {
     PageQuery::new(
         "photos.shared.places",
-        "place_id, name, geo_lat, geo_lng, kind, address_json",
-        "core_place",
-        PageOrder::asc("place_id", "place_id"),
+        "id, title",
+        "entity",
+        PageOrder::asc("id", "id"),
+    )
+    .filter(
+        "kind = ? AND deleted_at IS NULL",
+        vec![PageBindValue::Text("place".to_owned())],
     )
 }
 
-/// `core_place.address_json` → `{ gazetteer: { name } }`.
-///
-/// `{ none: true }` is a RESULT, not a name — the gazetteer looked and found
-/// nothing, which is different from never having looked. Malformed shapes fall
-/// through to `None` and never throw (`place-phrase.ts:196-216`).
-#[must_use]
-pub fn gazetteer_name_from(address_json: Option<&str>) -> Option<String> {
-    let text = address_json?;
-    if text.is_empty() {
-        return None;
+/// Every live place, with its row.
+pub fn read_places(door: &dyn PageDoor) -> KitResult<Vec<PlaceRow>> {
+    let entities = read_pages(door, &places_statement(), FanOutBound::new(500, 8))?;
+    let ids: Vec<String> = entities
+        .iter()
+        .filter_map(|row| text_of(row, "id"))
+        .collect();
+    let rows = Read {
+        name: "photos.shared.place_rows",
+        table: "place",
+        select: "id, lat, lon, locality, zone",
+        order: ("id", "id"),
+        column: "id",
     }
-    let parsed: serde_json::Value = serde_json::from_str(text).ok()?;
-    let name = parsed.get("gazetteer")?.get("name")?.as_str()?.trim();
-    (!name.is_empty()).then(|| name.to_owned())
+    .within(FanOutBound::new(500, 8), door, &ids, None)?;
+    Ok(entities
+        .iter()
+        .filter_map(|entity| {
+            let id = text_of(entity, "id")?;
+            let place = rows
+                .iter()
+                .find(|row| text_of(row, "id").as_deref() == Some(id.as_str()))?;
+            PlaceRow::of(entity, place)
+        })
+        .collect())
 }
 
 /// A name a phrase may print: non-empty, and **not coordinate-shaped**.
@@ -153,14 +164,6 @@ pub struct PlacePhrase {
     pub source: PlacePhraseSource,
 }
 
-/// Private or shared. **The distinction is load-bearing**: see the module note.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum PhraseContext {
-    #[default]
-    Private,
-    Shared,
-}
-
 /// A named anchor a relative phrase can be measured from.
 #[derive(Debug, Clone, PartialEq)]
 pub struct NamedPlace {
@@ -168,7 +171,6 @@ pub struct NamedPlace {
     pub name: String,
     pub lat: f64,
     pub lng: f64,
-    pub is_home: bool,
 }
 
 impl NamedPlace {
@@ -183,7 +185,6 @@ impl NamedPlace {
                     name: printable_name(Some(&place.name))?.to_owned(),
                     lat: place.lat?,
                     lng: place.lng?,
-                    is_home: place.is_home(),
                 })
             })
             .collect()
@@ -238,38 +239,6 @@ pub fn compass_point(bearing: f64) -> Option<&'static str> {
     Some(COMPASS[index])
 }
 
-/// How far from home a coordinate is, as a band.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum HomeBand {
-    AtHome,
-    AroundTown,
-    Away,
-}
-
-/// "At home", not "same place": deliberately looser than the vault's own
-/// place-identity radius (`place-phrase.ts:108`).
-pub const AT_HOME_KM: f64 = 0.5;
-pub const AROUND_TOWN_KM: f64 = 25.0;
-const AT_ANCHOR_KM: f64 = 0.1;
-/// Home outranks a nearer anchor inside a town's span; beyond it nearest wins.
-const HOME_ANCHOR_KM: f64 = 25.0;
-/// Past this a bearing is trivia, not a location.
-const RELATIVE_MAX_KM: f64 = 250.0;
-
-#[must_use]
-pub fn home_band(km: f64) -> Option<HomeBand> {
-    if !km.is_finite() {
-        return None;
-    }
-    Some(if km <= AT_HOME_KM {
-        HomeBand::AtHome
-    } else if km <= AROUND_TOWN_KM {
-        HomeBand::AroundTown
-    } else {
-        HomeBand::Away
-    })
-}
-
 /// A distance a person would say out loud. 990 m rounds to 1000, and nobody
 /// says that — so the metre rung stops below a kilometre.
 #[must_use]
@@ -293,34 +262,27 @@ pub fn format_distance(km: f64) -> Option<String> {
     Some(format!("{} km", km.round()))
 }
 
-/// The relative rung. The `"shared"` suppression lives in [`place_phrase`], not
-/// here, so there is exactly one place that decides it.
+const AT_ANCHOR_KM: f64 = 0.1;
+/// Past this a bearing is trivia, not a location.
+const RELATIVE_MAX_KM: f64 = 250.0;
+
+/// The relative rung: the nearest named place, its distance and its bearing.
 #[must_use]
 pub fn relative_phrase(lat: f64, lng: f64, anchors: &[NamedPlace]) -> Option<String> {
     if !(lat.is_finite() && lng.is_finite()) {
         return None;
     }
     let mut nearest: Option<(&NamedPlace, f64)> = None;
-    let mut home: Option<(&NamedPlace, f64)> = None;
     for place in anchors {
         if printable_name(Some(&place.name)).is_none() {
             continue;
         }
         let km = distance_km(lat, lng, place.lat, place.lng);
-        if !km.is_finite() {
-            continue;
-        }
-        if nearest.is_none_or(|(_, held)| km < held) {
+        if km.is_finite() && nearest.is_none_or(|(_, held)| km < held) {
             nearest = Some((place, km));
         }
-        if place.is_home && home.is_none_or(|(_, held)| km < held) {
-            home = Some((place, km));
-        }
     }
-    let (anchor, km) = match home {
-        Some((place, km)) if km <= HOME_ANCHOR_KM => (place, km),
-        _ => nearest?,
-    };
+    let (anchor, km) = nearest?;
     if km > RELATIVE_MAX_KM {
         return None;
     }
@@ -341,7 +303,6 @@ pub struct PhraseInput<'a> {
     pub lat: Option<f64>,
     pub lng: Option<f64>,
     pub anchors: &'a [NamedPlace],
-    pub context: PhraseContext,
 }
 
 /// `placePhrase`, ported (`place-phrase.ts:169-192`). Total: it always answers.
@@ -359,8 +320,7 @@ pub fn place_phrase(input: &PhraseInput<'_>) -> PlacePhrase {
             source: PlacePhraseSource::Gazetteer,
         };
     }
-    if input.context == PhraseContext::Private
-        && let (Some(lat), Some(lng)) = (input.lat, input.lng)
+    if let (Some(lat), Some(lng)) = (input.lat, input.lng)
         && let Some(relative) = relative_phrase(lat, lng, input.anchors)
     {
         return PlacePhrase {
@@ -381,98 +341,28 @@ pub fn exact_location(lat: Option<f64>, lng: Option<f64>) -> Option<String> {
     (lat.is_finite() && lng.is_finite()).then(|| format!("{lat:.5}, {lng:.5}"))
 }
 
-// ---------------------------------------------------------------------------
-// Sharing a place: `share-place.ts`.
-// ---------------------------------------------------------------------------
-
-/// How much of a place a copy carries. `None` is the default; silence reads as
-/// safety and this is what makes it explicit.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum SharePrecision {
-    #[default]
-    None,
-    Name,
-    Exact,
-}
-
-/// The one phrase allowed off-device: hard-wires the shared context.
-#[must_use]
-pub fn shared_place_phrase(input: &PhraseInput<'_>) -> PlacePhrase {
-    place_phrase(&PhraseInput {
-        context: PhraseContext::Shared,
-        ..input.clone()
-    })
-}
-
-/// The name a share may carry, or `None` when there is none to carry.
-#[must_use]
-pub fn share_place_name(input: &PhraseInput<'_>) -> Option<String> {
-    let phrase = shared_place_phrase(input);
-    (phrase.source != PlacePhraseSource::None).then_some(phrase.text)
-}
-
-/// **`name` strips too**: words are no licence for the fix underneath.
-#[must_use]
-pub const fn share_place_strips_location(precision: SharePrecision) -> bool {
-    !matches!(precision, SharePrecision::Exact)
-}
-
-/// Stated every time, `None` included.
-#[must_use]
-pub fn share_place_receipt(precision: SharePrecision, input: &PhraseInput<'_>) -> String {
-    match precision {
-        SharePrecision::Exact => "Sent with the exact location.".to_owned(),
-        SharePrecision::Name => match share_place_name(input) {
-            Some(name) => format!("Sent with the place name only — {name}."),
-            None => "Sent with no location.".to_owned(),
-        },
-        SharePrecision::None => "Sent with no location.".to_owned(),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    const HOME: f64 = 37.4419;
-    const HOME_LNG: f64 = -122.143;
+    const CABIN: f64 = 37.4419;
+    const CABIN_LNG: f64 = -122.143;
 
     fn anchors() -> Vec<NamedPlace> {
         vec![
             NamedPlace {
-                key: "p-home".to_owned(),
-                name: "Home".to_owned(),
-                lat: HOME,
-                lng: HOME_LNG,
-                is_home: true,
+                key: "p-cabin".to_owned(),
+                name: "The cabin".to_owned(),
+                lat: CABIN,
+                lng: CABIN_LNG,
             },
             NamedPlace {
                 key: "p-embarcadero".to_owned(),
                 name: "Embarcadero".to_owned(),
                 lat: 37.7955,
                 lng: -122.3937,
-                is_home: false,
             },
         ]
-    }
-
-    /// THE RULE THIS FACET EXISTS FOR. A shared phrase never carries a bearing
-    /// to the member's home.
-    #[test]
-    fn a_shared_phrase_skips_the_relative_rung() {
-        let anchors = anchors();
-        let input = PhraseInput {
-            lat: Some(38.9186),
-            lng: Some(-120.0836),
-            anchors: &anchors,
-            ..PhraseInput::default()
-        };
-        let private = place_phrase(&input);
-        assert_eq!(private.source, PlacePhraseSource::Relative);
-        let shared = shared_place_phrase(&input);
-        assert_eq!(shared.source, PlacePhraseSource::None);
-        assert_eq!(shared.text, PLACE_NO_NAME);
-        assert_eq!(share_place_name(&input), None);
     }
 
     #[test]
@@ -496,6 +386,11 @@ mod tests {
             }
         );
         assert_eq!(place_phrase(&base).text, "near South Lake Tahoe".to_owned());
+        let relative = place_phrase(&PhraseInput {
+            gazetteer_name: None,
+            ..base
+        });
+        assert_eq!(relative.source, PlacePhraseSource::Relative);
     }
 
     /// The text is never coordinate-shaped, for any input.
@@ -514,17 +409,12 @@ mod tests {
     }
 
     #[test]
-    fn home_outranks_a_nearer_anchor_inside_a_towns_span() {
+    fn the_nearest_named_place_is_the_anchor() {
         let anchors = anchors();
-        // A point nearer the Embarcadero than Home, but inside the 25 km span.
         let phrase = relative_phrase(37.60, -122.25, &anchors).expect("a phrase");
-        assert!(
-            phrase.ends_with("of Home"),
-            "home is the anchor inside a town: {phrase}"
-        );
-        // Tahoe is 200 km out: nearest wins and it is still under the cap.
-        let far = relative_phrase(38.9186, -120.0836, &anchors).expect("a phrase");
-        assert!(far.contains(" of "), "{far}");
+        assert!(phrase.ends_with("of The cabin"), "{phrase}");
+        let city = relative_phrase(37.80, -122.40, &anchors).expect("a phrase");
+        assert!(city.ends_with("of Embarcadero"), "{city}");
     }
 
     #[test]
@@ -537,8 +427,8 @@ mod tests {
     fn at_the_anchor_is_a_sentence_and_not_a_zero_distance() {
         let anchors = anchors();
         assert_eq!(
-            relative_phrase(HOME, HOME_LNG, &anchors).as_deref(),
-            Some("At Home")
+            relative_phrase(CABIN, CABIN_LNG, &anchors).as_deref(),
+            Some("At The cabin")
         );
     }
 
@@ -559,23 +449,7 @@ mod tests {
     #[test]
     fn a_non_finite_distance_is_not_a_zero() {
         assert!(distance_km(f64::NAN, 0.0, 0.0, 0.0).is_nan());
-        assert_eq!(home_band(f64::NAN), None);
         assert_eq!(compass_point(f64::NAN), None);
-    }
-
-    #[test]
-    fn the_gazetteer_reads_a_name_and_never_a_result() {
-        assert_eq!(
-            gazetteer_name_from(Some(r#"{"gazetteer":{"name":"Truckee"}}"#)).as_deref(),
-            Some("Truckee")
-        );
-        assert_eq!(
-            gazetteer_name_from(Some(r#"{"gazetteer":{"none":true}}"#)),
-            None
-        );
-        assert_eq!(gazetteer_name_from(Some("{not json")), None);
-        assert_eq!(gazetteer_name_from(Some("")), None);
-        assert_eq!(gazetteer_name_from(None), None);
     }
 
     #[test]
@@ -588,62 +462,41 @@ mod tests {
     }
 
     #[test]
-    fn a_name_only_share_still_strips_the_location_from_the_file() {
-        assert!(share_place_strips_location(SharePrecision::Name));
-        assert!(share_place_strips_location(SharePrecision::None));
-        assert!(!share_place_strips_location(SharePrecision::Exact));
-        let input = PhraseInput {
-            place_name: Some("Sand Harbor"),
-            ..PhraseInput::default()
-        };
-        assert_eq!(
-            share_place_receipt(SharePrecision::Name, &input),
-            "Sent with the place name only — Sand Harbor."
-        );
-        assert_eq!(
-            share_place_receipt(SharePrecision::None, &input),
-            "Sent with no location."
-        );
-    }
-
-    #[test]
     fn anchors_need_both_a_name_and_a_coordinate() {
         let places = vec![
             PlaceRow {
                 place_id: "p-1".to_owned(),
-                name: "Home".to_owned(),
-                lat: Some(HOME),
-                lng: Some(HOME_LNG),
-                kind: Some("home".to_owned()),
-                gazetteer: None,
+                name: "The cabin".to_owned(),
+                lat: Some(CABIN),
+                lng: Some(CABIN_LNG),
+                ..PlaceRow::default()
             },
             PlaceRow {
                 place_id: "p-2".to_owned(),
                 name: "Unlocated".to_owned(),
-                lat: None,
-                lng: None,
-                kind: None,
-                gazetteer: None,
+                ..PlaceRow::default()
+            },
+            PlaceRow {
+                place_id: "p-3".to_owned(),
+                name: "12.3400, 56.7800".to_owned(),
+                lat: Some(12.34),
+                lng: Some(56.78),
+                ..PlaceRow::default()
             },
         ];
         let anchors = NamedPlace::anchors(&places);
-        assert_eq!(anchors.len(), 1);
-        assert!(anchors[0].is_home);
+        assert_eq!(anchors.len(), 1, "a coordinate is no name");
     }
 
     #[test]
-    fn the_statement_selects_the_columns_the_row_reader_asks_for() {
+    fn the_statement_names_what_the_row_reader_asks_for() {
         let query = places_statement();
-        for column in [
-            "place_id",
-            "name",
-            "geo_lat",
-            "geo_lng",
-            "kind",
-            "address_json",
-        ] {
-            assert!(query.select.contains(column), "{column} is not selected");
-        }
-        assert_eq!(query.r#where, None);
+        assert!(query.select.contains("id") && query.select.contains("title"));
+        assert!(
+            query
+                .r#where
+                .as_deref()
+                .is_some_and(|text| text.contains("kind"))
+        );
     }
 }

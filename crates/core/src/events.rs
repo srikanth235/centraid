@@ -244,13 +244,13 @@ pub struct ChangeFeed {
 /// The table a grid re-reads when a photograph's bytes land (#1025,
 /// D-1025-S7-20).
 ///
-/// `media_asset` and not `core_content_item`, and that is the whole reason
-/// `BytesArrived` is gone: a grid is keyed by ASSET id, so an event carrying
+/// `photo` and not the blob, and that is the whole reason
+/// `BytesArrived` is gone: a grid is keyed by PHOTO id, so an event carrying
 /// content ids matched nothing it was showing and the shell had to answer it
 /// with "re-read everything" in an event kind of its own.
 /// The caller does the hash-to-asset join before it gets here, so what arrives
 /// are ids the screens already compare against.
-const ASSET_TABLE: &str = "media_asset";
+const ASSET_TABLE: &str = "photo";
 
 /// How long a stalled producer waits before offering the same page again.
 ///

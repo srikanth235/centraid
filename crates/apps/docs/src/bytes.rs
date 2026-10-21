@@ -20,7 +20,7 @@
 //! |---|---|---|
 //! | `blobText` | [`ByteRequest::ReadText`] | A quick-look of a text body. Bounded by [`MAX_QUICK_LOOK_BYTES`], because a quick-look is a GLANCE: a 60 MiB log file pasted into a popover is not a preview, and the inline text ceiling a command enforces is 64 KiB anyway |
 //! | `blobUrl` | [`ByteRequest::Url`] | A URL, never bytes. The door answers a `centraid://` URL the surface hands to an `<img>`, a `<video>` or a viewer, so range requests and caching are the platform's and this crate never buffers a document |
-//! | `stageBlob` | [`ByteRequest::Stage`] | An upload, answered with a [`StagedBlob`] — a sha and a size — which is what `core.add_document`'s `staged_sha` takes. The bytes go to `crates/media`'s store through the door; the command that claims them does pure row work |
+//! | `stageBlob` | [`ByteRequest::Stage`] | An upload, answered with a [`StagedBlob`] — a sha and a size — which is what `document.add`'s `blob` takes. The bytes go to `crates/media`'s store through the door; the command that claims them does pure row work |
 //!
 //! ## THE NEVER-INLINE RULE, and it is not this lane's to soften
 //!
@@ -48,7 +48,7 @@ pub const NEVER_INLINE: [&str; 3] = ["text/html", "application/xhtml+xml", "imag
 
 /// How much text a quick-look may pull through the door.
 ///
-/// 64 KiB, the same number `core.edit_document` enforces on an inline body,
+/// 64 KiB, the same number `document.edit` enforces on an inline body,
 /// so the popover can show the whole of anything the app itself could have
 /// written and says so rather than truncating silently.
 pub const MAX_QUICK_LOOK_BYTES: usize = 64 * 1024;
@@ -108,7 +108,7 @@ pub enum ByteRequest {
     /// `stageBlob` — bytes on their way in, answered with a sha to claim.
     Stage {
         /// The declared type. The staging band sniffs the bytes itself; this is
-        /// what the upload SAID, which is what `core.add_document` then puts on
+        /// what the upload SAID, which is what `document.add` then puts on
         /// the document's own representation (#996 R20(b)).
         media_type: String,
         byte_size: usize,
@@ -184,7 +184,7 @@ impl ServedUrl {
     }
 }
 
-/// Bytes that landed, as `core.add_document`'s `staged_sha` takes them.
+/// Bytes that landed, as `document.add`'s `blob` takes them.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StagedBlob {
     /// 64 lowercase hex characters. The sha of the RAW DECODED bytes — never of
@@ -198,8 +198,8 @@ pub struct StagedBlob {
 impl StagedBlob {
     /// Whether this sha has the shape a claim will accept.
     ///
-    /// `core.add_document`'s input schema pins `minLength: 64, maxLength: 64`
-    /// and `core_content_item.content_hash`'s own CHECK pins the alphabet; a surface
+    /// `document.add`'s input schema pins `minLength: 64, maxLength: 64`
+    /// and `blob.hash`'s own CHECK pins the alphabet; a surface
     /// that hands the command a truncated sha gets a schema refusal, and this
     /// is how it can say so first.
     #[must_use]

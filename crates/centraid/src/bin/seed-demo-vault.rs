@@ -69,7 +69,7 @@
 //! guard and not against it: a dev binary that can silently destroy a gateway's
 //! vault is the one class worth guarding, and the cost is one read.
 //!
-//! **THE BYTES ARE REAL.** `media.add_asset` stages the library's compiled-in
+//! **THE BYTES ARE REAL.** `photo.add` claims the library's compiled-in
 //! frames through the content plane, and both shells draw the mosaic and the
 //! grid from the files this seed leaves in `<stem>.bytes`. The one video seeds
 //! its own bytes and no `poster` derivative — nothing in the workspace writes
@@ -319,8 +319,8 @@ fn main() {
 /// this seeder trashes none, so every profile is live. Locker counts live,
 /// unarchived items, as its tile does; the trashed demo item is not one.
 const SEEDED_TABLES: [(&str, &str, &str, Option<&str>); 8] = [
-    ("photos", "media_asset", "asset_id", None),
-    ("docs", "core_document", "document_id", None),
+    ("photos", "photo", "id", None),
+    ("docs", "document", "id", None),
     ("notes", "knowledge_note", "note_id", None),
     ("agenda", "core_event", "event_id", None),
     ("tasks", "schedule_task", "task_id", None),

@@ -12,6 +12,13 @@
 //! `edge.remove` of `contains`, ordered), a promoted caption
 //! (`entity.retitle`), a perceptual hash or a thumbnail (`derivative.write`).
 //!
+//! ## Thumbnails
+//!
+//! A photograph the Rust fallback can decode (JPEG, PNG) gets its `thumb` and
+//! `preview` derivatives from the command itself when the shell staged none; the
+//! platform renders what the fallback cannot (HEIC, a film's poster) and stages
+//! it through `derivative.write`.
+//!
 //! ## What an edit keeps
 //!
 //! A photograph made from another (a crop, a filter) names it in `edited_from`
@@ -34,6 +41,7 @@
 
 use rusqlite::OptionalExtension;
 
+use crate::commands::blob::{claim, pre_claimable};
 use crate::commands::entity::lookup_live;
 use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency, place};
 use crate::error::Result;
@@ -87,13 +95,8 @@ fn pre_add(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
             "sound is kept in Docs; Photos holds photographs, video and scans".to_owned(),
         ));
     }
-    let held: i64 = ctx.connection().query_row(
-        "SELECT COUNT(*) FROM blob WHERE hash = ?1",
-        [ctx.required_str("blob")?],
-        |row| row.get(0),
-    )?;
-    if held == 0 {
-        return Ok(Some("those bytes have not arrived yet".to_owned()));
+    if let Some(sentence) = pre_claimable(ctx, "blob")? {
+        return Ok(Some(sentence));
     }
     let given = |key: &str| ctx.input.get(key).is_some_and(|value| !value.is_null());
     if given("lat") != given("lon") {
@@ -164,6 +167,7 @@ fn adopt(ctx: &CommandCtx<'_, '_>, id: &str) -> Result<()> {
 fn add(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     let blob = ctx.required_str("blob")?;
     let media_type = ctx.required_str("media_type")?;
+    claim(ctx, "blob")?;
     let existing: Option<String> = ctx
         .connection()
         .query_row("SELECT id FROM photo WHERE blob = ?1", [blob], |row| {
@@ -237,7 +241,53 @@ fn add(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
             )?;
         }
     }
+    derive_image_tiers(ctx, blob, media_type)?;
     Ok(serde_json::json!({ "id": id, "deduped": false }))
+}
+
+/// Write the `thumb` and `preview` derivatives of an image the core can decode,
+/// when the shell staged none (#1025 S3, D-1025-S7-50).
+///
+/// **A failed thumbnail never costs the member the original.** Every branch that
+/// cannot produce one returns quietly: a type the Rust fallback cannot decode
+/// (HEIC, RAW, a film's poster — the platform renders those and stages them), a
+/// vault with no content store, bytes this device does not hold, a store that
+/// refuses a write. The page door's `held_thumbnail` falls back through `thumb`,
+/// `poster` and the original, so a missing derivative is a slower first paint and
+/// never a blank cell. It asks the index first, so a re-add decodes nothing.
+fn derive_image_tiers(ctx: &CommandCtx<'_, '_>, blob: &str, media_type: &str) -> Result<()> {
+    if !centraid_media::renditions::is_derivable(media_type) {
+        return Ok(());
+    }
+    let already: i64 = ctx.connection().query_row(
+        "SELECT COUNT(*) FROM derivative WHERE blob = ?1 AND variant IN ('thumb', 'preview')",
+        [blob],
+        |row| row.get(0),
+    )?;
+    let Some(store) = ctx.blobs().filter(|_| already == 0) else {
+        return Ok(());
+    };
+    let Ok(bytes) = store.get(blob) else {
+        return Ok(());
+    };
+    for rendition in centraid_media::renditions::renditions_of(&bytes, media_type) {
+        let Ok(out) = store.put(&rendition.bytes) else {
+            continue;
+        };
+        crate::blob::write_derivative(
+            ctx.connection(),
+            &ctx.now,
+            blob,
+            rendition.variant,
+            Some((
+                &out,
+                i64::try_from(rendition.bytes.len()).unwrap_or(i64::MAX),
+                centraid_media::renditions::DERIVATIVE_MEDIA_TYPE,
+            )),
+            None,
+        )?;
+    }
+    Ok(())
 }
 
 fn pre_edit(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
@@ -369,6 +419,7 @@ pub fn definitions() -> Vec<CommandDefinition> {
               "properties": {
                 "id": { "type": "string", "minLength": 1 },
                 "blob": { "type": "string", "minLength": 64, "maxLength": 64 },
+                "size": { "type": "integer", "minimum": 0 },
                 "media_type": { "type": "string", "minLength": 1 },
                 "form": { "type": "string", "enum": ["photo", "video", "scan"] },
                 "title": { "type": "string", "maxLength": 1000 },

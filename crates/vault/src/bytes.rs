@@ -76,6 +76,12 @@ pub trait BlobStore {
     fn ids(&self) -> Result<BTreeSet<String>>;
     /// The stored size, for sizing a restore before fetching it.
     fn size(&self, id: &str) -> Result<u64>;
+    /// Delete a blob's file. `false` when it was not here, which is not an error:
+    /// the caller wanted it gone and it is. The default knows no way to delete,
+    /// for a store whose bytes someone else owns.
+    fn remove(&self, _id: &str) -> Result<bool> {
+        Ok(false)
+    }
     /// The FILE these bytes are in, when this store holds them whole.
     ///
     /// THE ANSWER `Vault::content_location` GIVES A GRID (#1025 S3). Every cell
@@ -263,6 +269,15 @@ impl BlobStore for FsBlobStore {
             Err(error) if error.kind() == io::ErrorKind::NotFound => {
                 Err(BlobError::NotFound { id: id.to_owned() })
             }
+            Err(error) => Err(io_at(&path)(error)),
+        }
+    }
+
+    fn remove(&self, id: &str) -> Result<bool> {
+        let path = self.file_of(id)?;
+        match fs::remove_file(&path) {
+            Ok(()) => Ok(true),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(false),
             Err(error) => Err(io_at(&path)(error)),
         }
     }

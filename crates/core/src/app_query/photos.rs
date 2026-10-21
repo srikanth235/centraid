@@ -1,19 +1,22 @@
-//! PHOTOS' ARM OF THE APP QUERY (#1097, R-1097-25..27): `photos.search`, the
-//! text and album legs of Photos' own search, asked of the full-text door.
+//! PHOTOS' ARM OF THE APP QUERY (#1097, R-1097-25..27, #1135): `photos.search`,
+//! the text and album legs of Photos' own search asked of the full-text door, and
+//! `photos.duplicates`, the near-duplicate clusters.
 //!
-//! **WHAT MOVED HERE.** Photos' search was Kotlin `LIKE` over
-//! `media_asset.title`. Its text leg is now the photograph domain
-//! (`core.content_item`: the caption, the text recognised in the picture and the
-//! transcript of a video, in rank order) and its album leg is the album
-//! container (`core.collection`, narrowed to the rows that open in Photos). The
-//! shell keeps the STRUCTURED legs (the places, the labels) and folds them with
-//! this answer.
+//! **WHAT MOVED HERE.** Photos' search was Kotlin `LIKE` over the caption. Its text
+//! leg is now the photograph (`photo`: its caption, its place's name and
+//! locality, the text recognised in the picture, in rank order) and its album leg
+//! is the album container. The shell keeps the STRUCTURED legs (the places, the
+//! labels) and folds them with this answer.
 //!
-//! **THE PHOTOGRAPHS ARE LIVE ONES.** A hit is a content item; the app opens it
-//! as the media assets that hold it, and a trashed or archived asset is no hit
-//! (Photos' own shelf does not show one). Home's search keeps the archived ones
-//! because it opens a photograph and does not draw a grid; the difference is
-//! R-1097-25's and is held by `centraid_apps_photos::queries::load_search_term`.
+//! **THE PHOTOGRAPHS ARE LIVE ONES.** A hit is a live photograph, and an archived
+//! one is no hit (Photos' own shelf does not show one). Home's search keeps the
+//! archived ones because it opens a photograph and does not draw a grid; the
+//! difference is R-1097-25's and is held by
+//! `centraid_apps_photos::queries::load_search_term`.
+//!
+//! **DUPLICATES ARE CLUSTERED HERE, AT READ.** The app reads the perceptual
+//! hashes; the one clustering is `centraid_media::duplicates::cluster`, handed to
+//! it, so there is exactly one and nothing is stored.
 //!
 //! **THE CORRECTION IS THE SHELL'S TO ASK FOR.** The core cannot see the shell's
 //! structured legs, and a typo is corrected only when EVERY leg is empty. So the
@@ -32,7 +35,7 @@ use centraid_api_proto::core_v1 as wire;
 use centraid_apps_kit::Denial;
 use centraid_apps_kit::error::KitResult;
 use centraid_apps_photos as photos;
-use centraid_apps_photos::queries::PHOTO_TARGET_TYPE;
+use centraid_apps_photos::queries::PHOTO_KIND;
 use centraid_search::{Principal, Search};
 use centraid_vault::Vault;
 
@@ -78,7 +81,7 @@ pub(super) fn search(
     })??;
     settle(door, loaded, |((data, albums), corrected)| {
         Answer::PhotosSearch(wire::PhotosSearch {
-            asset_ids: data.asset_ids,
+            asset_ids: data.photo_ids,
             albums: albums.into_iter().map(named::to_wire).collect(),
             corrected,
         })
@@ -98,7 +101,7 @@ fn answer(
     if denial.is_some() || !may_correct || !is_empty(&exact) || term.trim().is_empty() {
         return Ok(((exact, String::new()), denial));
     }
-    let entities = [PHOTO_TARGET_TYPE, "core.collection"];
+    let entities = [PHOTO_KIND, "album"];
     // A failure of the door's `correct` is the recorder's to keep; here it only
     // means there is no correction.
     let Ok(Some(words)) = search.correct(&Principal::Owner, &entities, term) else {
@@ -112,7 +115,7 @@ fn answer(
 }
 
 fn is_empty((data, albums): &Found) -> bool {
-    data.asset_ids.is_empty() && albums.is_empty()
+    data.photo_ids.is_empty() && albums.is_empty()
 }
 
 /// Both legs at one term: the photographs, then the albums. A denial answers for
@@ -130,4 +133,41 @@ fn run(
     }
     let (albums, denial) = named::of_app(search, APP, term, limit.min(named::CONTAINER_ROWS));
     Ok(((data, albums), denial))
+}
+
+/// `photos.duplicates`: the live library's near-duplicate clusters.
+pub(super) fn duplicates(door: &VaultDoor<'_>) -> Result<Answer> {
+    use centraid_media::duplicates::{DUPLICATE_HAMMING_THRESHOLD, Fingerprint, cluster};
+
+    let loaded = photos::duplicate_clusters(door, |prints| {
+        let rows: Vec<Fingerprint> = prints
+            .iter()
+            .map(|print| Fingerprint {
+                asset_id: print.photo_id.clone(),
+                phash: print.phash.clone(),
+                cluster_id: None,
+            })
+            .collect();
+        cluster(&rows, DUPLICATE_HAMMING_THRESHOLD)
+    })
+    .map(|clusters| (clusters, None));
+    settle(door, loaded, |clusters| {
+        Answer::PhotosDuplicates(wire::PhotosDuplicates {
+            clusters: clusters
+                .into_iter()
+                .map(|cluster| wire::PhotosDuplicateCluster {
+                    key: cluster.key,
+                    photo_ids: {
+                        let mut ids: Vec<String> = cluster
+                            .photos
+                            .into_iter()
+                            .map(|photo| photo.photo_id)
+                            .collect();
+                        ids.sort_unstable();
+                        ids
+                    },
+                })
+                .collect(),
+        })
+    })
 }

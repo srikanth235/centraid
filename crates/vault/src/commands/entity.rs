@@ -386,13 +386,29 @@ fn trash(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
 }
 
 fn pre_restore(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
-    Ok(match lookup(ctx.connection(), ctx.required_str("id")?)? {
-        Err(sentence) => Some(sentence),
-        Ok(found) => found
-            .deleted_at
-            .is_none()
-            .then(|| format!("“{}” is not in the trash", found.title)),
-    })
+    let found = match lookup(ctx.connection(), ctx.required_str("id")?)? {
+        Ok(found) => found,
+        Err(sentence) => return Ok(Some(sentence)),
+    };
+    if found.deleted_at.is_none() {
+        return Ok(Some(format!("“{}” is not in the trash", found.title)));
+    }
+    // The grace window is an instant: once it has passed the vault will not bring
+    // the thing back, and the phone's countdown (`purge_in_days`) is positive
+    // exactly while it will. Nothing sweeps on the phone, so it waits in the
+    // trash for "Delete forever" or "Empty trash".
+    let lapsed: bool = ctx.connection().query_row(
+        "SELECT purge_at <= ?2 FROM entity WHERE id = ?1",
+        [ctx.required_str("id")?, ctx.now.as_str()],
+        |row| row.get(0),
+    )?;
+    Ok(lapsed.then(|| {
+        format!(
+            "“{}” has been in the trash past its grace window and can no longer be restored; \
+             delete it forever",
+            found.title
+        )
+    }))
 }
 
 /// Everything that went to the trash together with `holder`, however deep.
@@ -445,7 +461,10 @@ fn pre_purge(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
 fn purge(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     let mut purged = Vec::new();
     purge_one(ctx, ctx.required_str("id")?, &mut purged)?;
-    Ok(serde_json::json!({ "purged": purged }))
+    // What nothing names any more is released with it: its bytes, and a
+    // thumbnail only it had.
+    let released = crate::blob::collect(ctx.connection())?;
+    Ok(serde_json::json!({ "purged": purged, "released": released }))
 }
 
 fn pre_empty(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
@@ -491,7 +510,8 @@ fn empty_trash(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
         }
         purge_one(ctx, id, &mut purged)?;
     }
-    Ok(serde_json::json!({ "purged": purged.len() }))
+    let released = crate::blob::collect(ctx.connection())?;
+    Ok(serde_json::json!({ "purged": purged.len(), "released": released }))
 }
 
 #[must_use]

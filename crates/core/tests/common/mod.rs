@@ -371,18 +371,25 @@ pub fn command(
     }
 }
 
-/// `media.add_asset` over staged bytes; answers the asset id.
+/// `photo.add` over staged bytes; answers the photograph's id. `kind` is what
+/// the bytes are drawn as: a photograph or a video.
 pub fn add_asset(handle: &Handle, staged: &wire::StageHandle, kind: &str) -> String {
+    let media_type = if kind == "video" {
+        "video/mp4"
+    } else {
+        "image/jpeg"
+    };
     let output = command(
         handle,
-        "media.add_asset",
+        "photo.add",
         &serde_json::json!({
-            "staged_sha": staged.content_hash,
-            "kind": kind,
+            "blob": staged.content_hash,
+            "size": staged.byte_size,
+            "media_type": media_type,
         }),
-        &format!("media.add_asset:{}", staged.content_hash),
+        &format!("photo.add:{}", staged.content_hash),
     );
-    output["asset_id"].as_str().expect("an asset id").to_owned()
+    output["id"].as_str().expect("a photograph id").to_owned()
 }
 
 pub fn try_drain(

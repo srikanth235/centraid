@@ -594,6 +594,20 @@ impl Vault {
             Some((sentence, predicate)) => (CommandStatus::Failed, Some(sentence), Some(predicate)),
             None => (CommandStatus::Executed, None, None),
         };
+        // A purge collected the blobs nothing names any more, inside its own
+        // commit; with the commit made, their files go from this device's store.
+        // A file that will not delete is left for a later sweep: the rows are
+        // already gone, so nothing refers to it.
+        if status == CommandStatus::Executed
+            && let (Some(store), Some(released)) = (
+                self.blobs(),
+                output.get("released").and_then(serde_json::Value::as_array),
+            )
+        {
+            for hash in released.iter().filter_map(serde_json::Value::as_str) {
+                let _ = store.remove(hash);
+            }
+        }
         Ok(CommandOutcome {
             status,
             invocation_id: seq.to_string(),

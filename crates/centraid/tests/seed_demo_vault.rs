@@ -185,8 +185,8 @@ fn seed_only(dir: &std::path::Path, file: &str, only: &str) -> std::path::PathBu
 ///
 /// Home's Docs tile is a ruled row with a size in the `annot` role at its
 /// trailing edge, and on the simulator that column was blank on every row. The
-/// cause was not the seed — `core.add_document` has always written the
-/// `core_content_item.byte_size` the bytes actually are — but the DOOR: there
+/// cause was not the seed — `document.add` has always claimed the blob at the
+/// size the bytes actually are — but the DOOR: there
 /// was no way for a caller to ask for a size, so the one honest thing the shell
 /// could put in `TileBody.Docs.Row.size` was the empty string. Nothing failed.
 ///
@@ -219,18 +219,14 @@ fn every_seeded_document_carries_a_size_the_docs_tile_can_draw() {
         kind: Some(wire::request::Kind::Page(wire::PageRequest {
             query: Some(wire::PageQuery {
                 name: "home.docs".to_owned(),
-                select: vec![
-                    "document_id".to_owned(),
-                    "title".to_owned(),
-                    "updated_at".to_owned(),
-                ],
-                from: "core_document".to_owned(),
+                select: vec!["id".to_owned(), "media_type".to_owned()],
+                from: "document".to_owned(),
                 r#where: None,
                 bind: Vec::new(),
                 order: Some(wire::PageOrder {
-                    sort_column: "updated_at".to_owned(),
-                    pk_column: "document_id".to_owned(),
-                    descending: true,
+                    sort_column: "id".to_owned(),
+                    pk_column: "id".to_owned(),
+                    descending: false,
                 }),
                 with_held_thumbnail: false,
                 with_document_size: true,
@@ -251,15 +247,15 @@ fn every_seeded_document_carries_a_size_the_docs_tile_can_draw() {
         "the docs scenario seeded no documents at all"
     );
     for row in &page.rows {
-        // THE APPENDED COLUMN RIDES AFTER THE THREE THE READ NAMED, always in
+        // THE APPENDED COLUMN RIDES AFTER THE TWO THE READ NAMED, always in
         // the same place — the positional contract the shell counts past its
         // own `select` list to reach.
-        assert_eq!(row.values.len(), 4, "the size column did not ride along");
-        let title = match row.values[1].kind.as_ref() {
+        assert_eq!(row.values.len(), 3, "the size column did not ride along");
+        let title = match row.values[0].kind.as_ref() {
             Some(wire::value::Kind::Text(text)) => text.clone(),
-            other => panic!("a document's title is text, got {other:?}"),
+            other => panic!("a document's id is text, got {other:?}"),
         };
-        let said = match row.values[3].kind.as_ref() {
+        let said = match row.values[2].kind.as_ref() {
             Some(wire::value::Kind::Text(text)) => text.clone(),
             // THIS IS THE DEFECT, and it is what the assertion is for: a NULL
             // here is the blank column the tile drew, and it would reach the

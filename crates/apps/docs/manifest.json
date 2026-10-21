@@ -2,458 +2,842 @@
   "manifestVersion": 1,
   "id": "docs",
   "name": "Docs",
-  "description": "A drive for your important documents — leases, IDs, warranties, tax forms — as a projection of the vault. A document is a core.document wrapper around a sha256-deduped canonical content item (issue #352): identity is separate from bytes, so text documents edit in place and any document's content can be replaced, each change a walkable version in its history. Folders are SKOS concepts in the owner's folders scheme, and filing is a single tag per document. Starring is a flags-scheme tag on the document wrapper itself, so Starred here is the set of starred DOCUMENTS and nothing else — a photo starred in Photos carries its tag on the media.asset and never appears in this list. Trash sets a purge date about 30 days out and keeps the folder tag (and the star), so a restored document lands right back where it was. Uploading, renaming, moving, editing, replacing, restoring a version, starring, trashing and folder management all run through typed vault commands — consent-checked and receipted. No data of its own — revoke the grant and the app goes dark.",
-  "version": "0.4.0",
+  "description": "A drive for your important documents — leases, IDs, warranties, tax forms — as a projection of the vault. A document is an entity over one blob: its title is the entity's, what the bytes are and the folder it is filed in are columns of its row, and two documents may legitimately share identical bytes (the blob plane stores them once). Text documents edit in place and any document's bytes can be replaced, each change a walkable version in its history. Folders are containers, and filing is one column of the document. Starring is a `tagged` edge to the starred flag on the document itself, so Starred here is the set of starred DOCUMENTS and nothing else. A document attached to something (a receipt on a transaction, a file on an event) and filed in no folder shows only where it is attached. Trash sets a purge date about 30 days out and keeps the folder and the star, so a restored document lands right back where it was. Uploading, renaming, moving, editing, replacing, restoring a version, starring, trashing and folder management all run through typed vault commands — the document's own (document.*) and the shared ones every app uses — contract-checked and journalled, with act consent granted per command. No data of its own — revoke the grant and the app goes dark.",
+  "version": "0.5.0",
   "iconKey": "Folder",
   "colorKey": "teal",
   "vault": {
     "why": "Keeps your important documents filed, editable, downloadable and restorable — with a version history.",
     "scopes": [
-      { "schema": "core", "table": "document", "verbs": "read" },
-      { "schema": "core", "table": "content_item", "verbs": "read" },
-      { "schema": "core", "table": "content_representation", "verbs": "read" },
-      { "schema": "core", "table": "entity_revision", "verbs": "read" },
-      { "schema": "core", "table": "content_text", "verbs": "read" },
-      { "schema": "core", "table": "link", "verbs": "read" },
-      { "schema": "core", "table": "tag", "verbs": "read" },
-      { "schema": "core", "table": "concept", "verbs": "read" },
-      { "schema": "core", "table": "concept_scheme", "verbs": "read" },
-      { "schema": "core", "table": "add_document", "verbs": "act" },
-      { "schema": "core", "table": "create_text_document", "verbs": "act" },
-      { "schema": "core", "table": "rename_document", "verbs": "act" },
-      { "schema": "core", "table": "move_document", "verbs": "act" },
-      { "schema": "core", "table": "trash_document", "verbs": "act" },
-      { "schema": "core", "table": "restore_document", "verbs": "act" },
-      { "schema": "core", "table": "purge_document", "verbs": "act" },
       {
-        "schema": "core",
-        "table": "empty_document_trash",
+        "schema": "vault",
+        "table": "entity",
+        "verbs": "read"
+      },
+      {
+        "schema": "vault",
+        "table": "document",
+        "verbs": "read"
+      },
+      {
+        "schema": "vault",
+        "table": "container",
+        "verbs": "read"
+      },
+      {
+        "schema": "vault",
+        "table": "edge",
+        "verbs": "read"
+      },
+      {
+        "schema": "vault",
+        "table": "revision",
+        "verbs": "read"
+      },
+      {
+        "schema": "vault",
+        "table": "blob",
+        "verbs": "read"
+      },
+      {
+        "schema": "vault",
+        "table": "derivative",
+        "verbs": "read"
+      },
+      {
+        "schema": "vault",
+        "table": "journal",
+        "verbs": "read"
+      },
+      {
+        "schema": "document",
+        "table": "add",
         "verbs": "act"
       },
-      { "schema": "core", "table": "star_document", "verbs": "act" },
-      { "schema": "core", "table": "unstar_document", "verbs": "act" },
-      { "schema": "core", "table": "edit_document", "verbs": "act" },
-      { "schema": "core", "table": "replace_document_content", "verbs": "act" },
-      { "schema": "core", "table": "restore_document_version", "verbs": "act" },
-      { "schema": "core", "table": "create_folder", "verbs": "act" },
-      { "schema": "core", "table": "rename_folder", "verbs": "act" },
-      { "schema": "core", "table": "delete_folder", "verbs": "act" },
-      { "schema": "core", "table": "tag_item", "verbs": "act" },
-      { "schema": "core", "table": "untag_item", "verbs": "act" },
-      { "schema": "access", "table": "provenance", "verbs": "read" },
-      { "schema": "blob", "table": "custody_state", "verbs": "read" }
+      {
+        "schema": "document",
+        "table": "create_text",
+        "verbs": "act"
+      },
+      {
+        "schema": "entity",
+        "table": "retitle",
+        "verbs": "act"
+      },
+      {
+        "schema": "document",
+        "table": "move",
+        "verbs": "act"
+      },
+      {
+        "schema": "entity",
+        "table": "trash",
+        "verbs": "act"
+      },
+      {
+        "schema": "entity",
+        "table": "restore",
+        "verbs": "act"
+      },
+      {
+        "schema": "entity",
+        "table": "purge",
+        "verbs": "act"
+      },
+      {
+        "schema": "entity",
+        "table": "empty_trash",
+        "verbs": "act"
+      },
+      {
+        "schema": "flag",
+        "table": "set",
+        "verbs": "act"
+      },
+      {
+        "schema": "flag",
+        "table": "clear",
+        "verbs": "act"
+      },
+      {
+        "schema": "tag",
+        "table": "add",
+        "verbs": "act"
+      },
+      {
+        "schema": "tag",
+        "table": "remove",
+        "verbs": "act"
+      },
+      {
+        "schema": "document",
+        "table": "edit",
+        "verbs": "act"
+      },
+      {
+        "schema": "document",
+        "table": "replace",
+        "verbs": "act"
+      },
+      {
+        "schema": "document",
+        "table": "restore_version",
+        "verbs": "act"
+      },
+      {
+        "schema": "container",
+        "table": "create",
+        "verbs": "act"
+      }
     ]
   },
   "actionSideEffect": "vault-write",
   "actions": [
     {
       "name": "upload",
-      "description": "Add a document through core.add_document; the bytes become a deduped canonical content item wrapped in a fresh core.document, filed into a folder (or the drive's top level). Two documents may legitimately share identical bytes — dedup is on the bytes, never on document identity.",
+      "description": "Add a file through document.add: the bytes (already staged, so identical bytes are one blob) become a document, filed into a folder or left at the top level. The words the phone read out of them, when it sent them, are what search finds.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "document_id": {
+          "id": {
             "type": "string",
             "minLength": 1,
-            "description": "The row id the seat minted for this write (#922 G2); omitted, the vault mints one."
+            "description": "The id the shell minted for this write (#922 G2); omitted, the vault mints one."
           },
-          "data_uri": { "type": "string", "minLength": 6 },
-          "staged_sha": { "type": "string", "minLength": 64, "maxLength": 64 },
-          "title": { "type": "string", "minLength": 1 },
-          "folder_id": { "type": "string", "minLength": 1 },
-          "extracted_text": {
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "blob": {
+            "type": "string",
+            "minLength": 64,
+            "maxLength": 64
+          },
+          "media_type": {
+            "type": "string",
+            "minLength": 1
+          },
+          "folder_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "text": {
             "type": "string",
             "minLength": 1,
             "maxLength": 200000
           }
         },
-        "required": ["title"],
+        "required": [
+          "title",
+          "blob",
+          "media_type"
+        ],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
         }
       }
     },
     {
       "name": "create-text",
-      "description": "Write a new text document through core.create_text_document — the Add sheet's Text. The words become the bytes in the core, so no caller spells a data: URI; no body_text is an empty document the editor then fills. text/plain unless media_type says text/markdown. Filed into folder_id, or the drive's top level.",
+      "description": "Write a new text document through document.create_text — the Add sheet's Text. The words become the bytes, so no caller spells a data URI.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "document_id": { "type": "string", "minLength": 36, "maxLength": 36 },
-          "title": { "type": "string", "minLength": 1 },
-          "folder_id": { "type": "string", "minLength": 1 },
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The id the shell minted for this write (#922 G2); omitted, the vault mints one."
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "body_text": {
+            "type": "string"
+          },
           "media_type": {
             "type": "string",
-            "enum": ["text/plain", "text/markdown"]
+            "enum": [
+              "text/plain",
+              "text/markdown"
+            ]
           },
-          "body_text": { "type": "string" }
+          "folder_id": {
+            "type": "string",
+            "minLength": 1
+          }
         },
-        "required": ["title"],
+        "required": [
+          "title"
+        ],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
         }
       }
     },
     {
       "name": "rename",
-      "description": "Rename a document through core.rename_document (refuses trashed documents). Renames the wrapper's title only — bytes and version history are untouched.",
+      "description": "Rename a document through entity.retitle (refuses a trashed document). Renames the title only — bytes and version history are untouched.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "document_id": { "type": "string", "minLength": 1 },
-          "title": { "type": "string", "minLength": 1 }
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          }
         },
-        "required": ["document_id", "title"],
+        "required": [
+          "id",
+          "title"
+        ],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
         }
       }
     },
     {
       "name": "move",
-      "description": "Refile a document into a folder through core.move_document — omit folder_id to move it to the drive's top level.",
+      "description": "Refile a document into a folder through document.move — omit folder_id to move it to the drive's top level.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "document_id": { "type": "string", "minLength": 1 },
-          "folder_id": { "type": "string", "minLength": 1 }
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "folder_id": {
+            "type": "string",
+            "minLength": 1
+          }
         },
-        "required": ["document_id"],
+        "required": [
+          "id"
+        ],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
         }
       }
     },
     {
       "name": "trash",
-      "description": "Move a document to the trash through core.trash_document; it keeps its folder and auto-purges about 30 days later. Its current bytes AND every superseded version stay live until the document itself purges.",
+      "description": "Move a document to the trash through entity.trash; it keeps its folder, its star and every version, and is purged about 30 days later.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "document_id": { "type": "string", "minLength": 1 }
+          "id": {
+            "type": "string",
+            "minLength": 1
+          }
         },
-        "required": ["document_id"],
+        "required": [
+          "id"
+        ],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
         }
       }
     },
     {
       "name": "restore",
-      "description": "Bring a document back from the trash through core.restore_document; it returns to the folder it was filed in.",
+      "description": "Bring a document back from the trash through entity.restore; it returns to the folder it was filed in.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "document_id": { "type": "string", "minLength": 1 }
+          "id": {
+            "type": "string",
+            "minLength": 1
+          }
         },
-        "required": ["document_id"],
+        "required": [
+          "id"
+        ],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
         }
       }
     },
     {
       "name": "purge",
-      "description": "Delete one ALREADY-TRASHED document forever through core.purge_document — the path Photos' purge takes. Irreversible: the row, its folder tag, star, labels and versions go now, and its bytes are released when nothing else names them. A document that is not in the trash is refused.",
+      "description": "Delete one ALREADY-TRASHED document forever through entity.purge — the path Photos' purge takes. Irreversible: the document, its versions, its star and labels go now, and its bytes go once nothing else holds them.",
       "confirmation": "required",
       "input": {
         "type": "object",
         "properties": {
-          "document_id": { "type": "string", "minLength": 1 }
+          "id": {
+            "type": "string",
+            "minLength": 1
+          }
         },
-        "required": ["document_id"],
+        "required": [
+          "id"
+        ],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
         }
       }
     },
     {
       "name": "empty-trash",
-      "description": "Empty the document trash through core.empty_document_trash. Irreversible and takes no id: every document in the trash is destroyed now, as purge destroys one — the row, its folder tag, star, labels and versions go, and its bytes are released when nothing else names them. A document that was restored is no longer in the trash and is untouched. An empty trash is a no-op, not a refusal.",
+      "description": "Empty the document trash through entity.empty_trash with kind document. Irreversible and takes no id: every document in the trash is destroyed now, as purge destroys one.",
       "confirmation": "required",
       "input": {
         "type": "object",
-        "properties": {},
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "document"
+            ]
+          },
+          "due_only": {
+            "type": "boolean"
+          }
+        },
+        "required": [],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
         }
       }
     },
     {
       "name": "star",
-      "description": "Star a document through core.star_document — one flags-scheme tag on the document wrapper, the same star every other surface reads. Idempotent; refuses trashed documents.",
+      "description": "Star a document through flag.set — one `tagged` edge to the starred flag, the same star every other surface reads. Idempotent; refuses trashed documents.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "document_id": { "type": "string", "minLength": 1 }
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "flag": {
+            "type": "string",
+            "enum": [
+              "starred"
+            ]
+          }
         },
-        "required": ["document_id"],
+        "required": [
+          "id",
+          "flag"
+        ],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
         }
       }
     },
     {
       "name": "unstar",
-      "description": "Remove a document's star through core.unstar_document. Idempotent; refuses trashed documents (a trashed document keeps its star through restore).",
+      "description": "Remove a document's star through flag.clear. Idempotent; refuses trashed documents (a trashed document keeps its star through restore).",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "document_id": { "type": "string", "minLength": 1 }
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "flag": {
+            "type": "string",
+            "enum": [
+              "starred"
+            ]
+          }
         },
-        "required": ["document_id"],
+        "required": [
+          "id",
+          "flag"
+        ],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
         }
       }
     },
     {
       "name": "tag",
-      "description": "Add a free-form label to a document through core.tag_item (issue #352 phase 4) — additive and idempotent over the shared \"Tags\" concept scheme; tagging the same label twice just dedupes onto the one tag row.",
+      "description": "Add a free-form label to a document through tag.add — additive and idempotent; the label is minted once and shared by everything wearing it.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "document_id": { "type": "string", "minLength": 1 },
-          "label": { "type": "string", "minLength": 1 }
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1
+          }
         },
-        "required": ["document_id", "label"],
+        "required": [
+          "id",
+          "label"
+        ],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
         }
       }
     },
     {
       "name": "untag",
-      "description": "Remove one free-form label from a document through core.untag_item — the other half of tag's additive gesture. Removes by tag_id, the specific edge.",
+      "description": "Remove one free-form label from a document through tag.remove — the other half of tag's additive gesture. Removes by label, the one edge.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "tag_id": { "type": "string", "minLength": 1 }
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1
+          }
         },
-        "required": ["tag_id"],
+        "required": [
+          "id",
+          "label"
+        ],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
         }
       }
     },
     {
       "name": "edit",
-      "description": "Edit a text-editable document's body in place through core.edit_document (media_type text/* only — anything else refuses; use replace instead). Mints a new (or deduped) content item and records the revises link itself; title is an optional partial update.",
+      "description": "Edit a text document's body in place through document.edit (media_type text/* only — anything else refuses; use replace instead). The words it replaced become a version.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "document_id": { "type": "string", "minLength": 1 },
-          "body_text": { "type": "string" },
-          "title": { "type": "string", "minLength": 1 }
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "body_text": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          }
         },
-        "required": ["document_id", "body_text"],
+        "required": [
+          "id"
+        ],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
         }
       }
     },
     {
       "name": "replace",
-      "description": "Replace a document's bytes (any media type) through core.replace_document_content — the current door for scanned PDFs, images and anything else edit can't touch structurally. Mints a new content item, records the revises link, and repoints the wrapper's current version; title is an optional partial update. Refuses trashed documents.",
+      "description": "Replace a document's bytes (any media type) through document.replace — the door for scanned PDFs, images and anything else edit cannot touch. The bytes it replaced become a version.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "document_id": { "type": "string", "minLength": 1 },
-          "data_uri": { "type": "string", "minLength": 6 },
-          "staged_sha": { "type": "string", "minLength": 64, "maxLength": 64 },
-          "title": { "type": "string", "minLength": 1 }
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "blob": {
+            "type": "string",
+            "minLength": 64,
+            "maxLength": 64
+          },
+          "media_type": {
+            "type": "string",
+            "minLength": 1
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200000
+          }
         },
-        "required": ["document_id"],
+        "required": [
+          "id",
+          "blob"
+        ],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
         }
       }
     },
     {
       "name": "restore-version",
-      "description": "Restore an older version through core.restore_document_version — history never rewrites (rule R3): this asserts a NEW forward revises link and repoints current_content_id at the chosen past content item, so the old chain stays exactly as it was and a restore-of-a-restore never loops.",
+      "description": "Restore an older version through document.restore_version — history never rewrites: the bytes it replaces become a version of their own and the chosen version becomes current, so a restore can itself be undone.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "document_id": { "type": "string", "minLength": 1 },
-          "content_id": { "type": "string", "minLength": 1 }
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "seq": {
+            "type": "integer",
+            "minimum": 1
+          }
         },
-        "required": ["document_id", "content_id"],
+        "required": [
+          "id",
+          "seq"
+        ],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
         }
       }
     },
     {
       "name": "create-folder",
-      "description": "Create a folder (a SKOS concept in the folders scheme) through core.create_folder; refuses duplicate sibling names.",
+      "description": "Create a folder through container.create with kind folder, at the top level or inside another folder.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "folder_id": {
+          "id": {
             "type": "string",
             "minLength": 1,
-            "description": "The row id the seat minted for this write (#922 G2); omitted, the vault mints one."
+            "description": "The id the shell minted for this write (#922 G2); omitted, the vault mints one."
           },
-          "name": { "type": "string", "minLength": 1 },
-          "parent_folder_id": { "type": "string", "minLength": 1 }
+          "kind": {
+            "type": "string",
+            "enum": [
+              "folder"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "parent": {
+            "type": "string",
+            "minLength": 1
+          }
         },
-        "required": ["name"],
+        "required": [
+          "kind",
+          "title"
+        ],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
         }
       }
     },
     {
       "name": "rename-folder",
-      "description": "Rename a folder through core.rename_folder (the drive's top level refuses).",
+      "description": "Rename a folder through entity.retitle.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "folder_id": { "type": "string", "minLength": 1 },
-          "name": { "type": "string", "minLength": 1 }
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          }
         },
-        "required": ["folder_id", "name"],
+        "required": [
+          "id",
+          "title"
+        ],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
         }
       }
     },
     {
       "name": "delete-folder",
-      "description": "Delete an empty folder through core.delete_folder — refused while it still holds documents (including trashed ones) or subfolders.",
+      "description": "Move a folder to the trash through entity.trash — the documents and folders filed in it go with it and come back with it on restore.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "folder_id": { "type": "string", "minLength": 1 }
+          "id": {
+            "type": "string",
+            "minLength": 1
+          }
         },
-        "required": ["folder_id"],
+        "required": [
+          "id"
+        ],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
         }
       }
     }
@@ -461,80 +845,125 @@
   "queries": [
     {
       "name": "drive",
-      "description": "The drive as a bounded recent window: every folder in the owner's folders scheme, plus the most recently filed documents (core.document wrappers carrying a folders-scheme tag) newest first — caller-sized via limit, default 200 — trashed ones included with their purge dates, each row decorated with starred (a flags-scheme tag on the wrapper), its free-form labels, and the current content's media_type/byte_size joined by current_content_id. Nothing is shared and nothing arrives: the sharing plane left with #1029's scope amendment. truncated=true means older documents exist beyond the window; grow limit or use the search query to reach them. Version history is a separate read (the history query) — this projection only ever ships the current version.",
+      "description": "The drive as a bounded recent window: every folder, plus the most recently changed documents newest first — caller-sized via limit, default 200 — trashed ones included with their purge dates, each row decorated with starred, its free-form labels, and the current bytes' media_type and size. A document attached to something and filed in no folder is not listed. truncated=true means older documents exist beyond the window; the shelves Trash, Starred and Recent are read for themselves.",
       "input": {
         "type": "object",
         "properties": {
-          "limit": { "type": "integer", "minimum": 20, "maximum": 2000 }
+          "limit": {
+            "type": "integer",
+            "minimum": 20,
+            "maximum": 2000
+          }
         },
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "folders": { "type": "array" },
-          "documents": { "type": "array" },
-          "root_folder_id": { "type": ["string", "null"] },
-          "truncated": { "type": "boolean" },
-          "window": { "type": "integer" },
-          "vaultDenied": { "type": "object" }
+          "folders": {
+            "type": "array"
+          },
+          "documents": {
+            "type": "array"
+          },
+          "root_folder_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "window": {
+            "type": "integer"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
         }
       }
     },
     {
       "name": "search",
-      "description": "Full-text document search through the vault's FTS5 index (title + the current version's decoded text body) — returns only the ranked matches in the drive's document row shape — tags and custody_state decorate a match exactly as they decorate a browsed row — plus a hit snippet, never a whole-table pull. Only wrappers carrying a folders-scheme tag come back; trashed documents never match.",
+      "description": "Full-text document search through the vault's one search index (title + the words extracted from the current bytes) — returns only the ranked matches in the drive's document row shape plus a hit snippet, never a whole-table pull. Trashed documents never match.",
       "input": {
         "type": "object",
         "properties": {
-          "term": { "type": "string" }
+          "term": {
+            "type": "string"
+          }
         },
-        "required": ["term"],
+        "required": [
+          "term"
+        ],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "documents": { "type": "array" },
-          "vaultDenied": { "type": "object" }
+          "documents": {
+            "type": "array"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
         }
       }
     },
     {
       "name": "history",
-      "description": "A document's version chain, walked from its current content backward through live `revises` core.link edges — never a command, since core.link is already the durable history. Ordered newest-first by ASSERTION time (when a version stopped being current, or its own upload time for the oldest entry), not the content item's own created_at: restoring an old version reads as the newest entry even though its bytes are old.",
+      "description": "A document's versions, newest first: the current bytes, then each revision a replace put down. A version's instant is when it became current — when the one before it was replaced, or the document was made for the oldest — so restoring an old version reads as the newest entry even though its bytes are old. A revision's seq is the version's number.",
       "input": {
         "type": "object",
         "properties": {
-          "document_id": { "type": "string", "minLength": 1 }
+          "document_id": {
+            "type": "string",
+            "minLength": 1
+          }
         },
-        "required": ["document_id"],
+        "required": [
+          "document_id"
+        ],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "versions": { "type": "array" },
-          "vaultDenied": { "type": "object" }
+          "versions": {
+            "type": "array"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
         }
       }
     },
     {
       "name": "activity",
-      "description": "A document's real activity trail — the app-plane read over access.provenance (the vault's actual audit trail, one row per command write), scoped to exactly this document. Never a synthesized guess from created_at/updated_at. An empty list is honest: no activity has been recorded yet (e.g. a freshly recreated schema), not an error.",
+      "description": "What was done to a document: the journal's executed commands that name it, newest first (the journal is the vault's evidence of every command). An empty list is honest: nothing has been done to it yet.",
       "input": {
         "type": "object",
         "properties": {
-          "document_id": { "type": "string", "minLength": 1 }
+          "document_id": {
+            "type": "string",
+            "minLength": 1
+          }
         },
-        "required": ["document_id"],
+        "required": [
+          "document_id"
+        ],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "events": { "type": "array" },
-          "vaultDenied": { "type": "object" }
+          "events": {
+            "type": "array"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
         }
       }
     }
@@ -546,8 +975,14 @@
       "type": "segmented",
       "default": "wide",
       "options": [
-        { "value": "narrow", "label": "Narrow" },
-        { "value": "wide", "label": "Wide" }
+        {
+          "value": "narrow",
+          "label": "Narrow"
+        },
+        {
+          "value": "wide",
+          "label": "Wide"
+        }
       ]
     },
     {
@@ -556,12 +991,30 @@
       "type": "swatch",
       "default": "#5C677D",
       "options": [
-        { "value": "#5C677D", "label": "Slate" },
-        { "value": "#4E68DD", "label": "Indigo" },
-        { "value": "#2EA098", "label": "Teal" },
-        { "value": "#7C5BD9", "label": "Violet" },
-        { "value": "#E55772", "label": "Rose" },
-        { "value": "#B47B3F", "label": "Ochre" }
+        {
+          "value": "#5C677D",
+          "label": "Slate"
+        },
+        {
+          "value": "#4E68DD",
+          "label": "Indigo"
+        },
+        {
+          "value": "#2EA098",
+          "label": "Teal"
+        },
+        {
+          "value": "#7C5BD9",
+          "label": "Violet"
+        },
+        {
+          "value": "#E55772",
+          "label": "Rose"
+        },
+        {
+          "value": "#B47B3F",
+          "label": "Ochre"
+        }
       ]
     },
     {
@@ -570,14 +1023,22 @@
       "type": "segmented",
       "default": "grid",
       "options": [
-        { "value": "grid", "label": "Grid" },
-        { "value": "list", "label": "List" }
+        {
+          "value": "grid",
+          "label": "Grid"
+        },
+        {
+          "value": "list",
+          "label": "List"
+        }
       ]
     }
   ],
   "seats": {
     "byteBearing": true,
-    "originActs": ["scanner"],
+    "originActs": [
+      "scanner"
+    ],
     "disabledOn": [],
     "northStar": "google-drive"
   },

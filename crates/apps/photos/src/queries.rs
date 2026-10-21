@@ -1,89 +1,96 @@
-//! `library` and `search`, plus the bounded joins both fold.
+//! PHOTOS' READS, over the model's own tables, one table at a time (#1135).
 //!
-//! `queries/library.ts` is the library projection as bounded windows: the
-//! newest live assets by `captured_at` plus the newest 200 trashed, with every
-//! join `IN`-bounded by the same window — **never a whole-table pull**, because
-//! bytes ride inline as `data:` URIs and a table scan over
-//! `core_content_item` is the library in memory (#264).
+//! A photograph is an `entity` of kind `photo` (its title is the caption and may
+//! be empty) over a `photo` row (the blob, what it is, when and where it was
+//! taken); an album is a `container` joined to its photographs by ordered
+//! `contains` edges; a heart, the archive and a label are `tagged` edges; a place
+//! is a `place` entity; a thumbnail, a perceptual hash and a caption are the
+//! blob's `derivative`s. The paged door's one shape is a keyset page of one table,
+//! so the library is a window of `photo` rows and then, for the ids it returned,
+//! one bounded read of each table that decorates them.
 //!
-//! Four facts the port keeps verbatim:
+//! ## What the library shows
 //!
-//! 1. **`before` is a keyset cursor** (#599): only assets captured strictly
-//!    earlier, and a NULL `captured_at` fails that comparison — so undated
-//!    assets ride the first window only, and `tail` is the next `before`.
-//! 2. **Archived assets are in neither shelf** (#419). Archived and trashed are
-//!    different answers and the table's own CHECK refuses a row claiming both.
-//! 3. **A live asset whose BYTES are released is not library.** The join drops
-//!    an asset whose content item carries a `deleted_at`, because "live" means
-//!    the bytes are live too (`library.ts:258-260`).
-//! 4. **`truncated` is the page's own cursor**, not a row count — a count
-//!    cannot tell a window that filled exactly from one that ran out.
+//! The library is the newest `limit` photographs by capture time, **live and not
+//! archived, and not folded under an edit**. The trash and the archive are
+//! `entity` and `edge` facts, not columns of the `photo` row, so the window is
+//! read first and they are applied to it: `truncated` is the page's own cursor and
+//! `photos` may hold fewer rows than `window` while it is true.
 //!
-//! **The favourite is DERIVED, never a column** (#916, ONT-03): the star is the
-//! `starred` concept in the flags scheme, and `media_asset.favorite` does not
-//! exist. [`AssetJoins`] reads the windowed assets' tags once and splits them
-//! by scheme — the label rail and the star are two readings of the same rows.
+//! An edit folds the photograph it was made from: a phone's edited photo arrives
+//! as two photographs of one capture (the camera's bytes, and the edit's render
+//! with `edited_from` naming them and a shared `burst`), and the library draws only
+//! the newest live one of a burst, so the grid shows the edit, the original is
+//! still there, and trashing or archiving the edit brings the original back. A
+//! crop the member saved from Centraid's own editor carries no burst and folds
+//! nothing: it is a new photograph they chose to make.
+//!
+//! ## ONE PAGE, BECAUSE THE SORT COLUMN IS NULLABLE (D-1020-P11)
+//!
+//! `photo.taken_at` is nullable, and the kit's door refuses a CONTINUED page over a
+//! nullable sort key because SQLite's row-value comparison puts every NULL on one
+//! side of the keyset and the walk silently drops them. So the window is one page
+//! plus "there is more" (`truncated`), and an undated photograph rides the first
+//! window only.
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use centraid_apps_kit::Denial;
 use centraid_apps_kit::error::KitResult;
 use centraid_apps_kit::page::{MAX_PAGE_ROWS, PageRequest};
-use centraid_apps_kit::reads::{FanOutBound, PageDoor, Window, in_list, read_pages, read_window};
-use centraid_apps_kit::row::{Cell, Row, text_of};
+use centraid_apps_kit::reads::{FanOutBound, PageDoor, Read, read_pages};
+use centraid_apps_kit::reads::{JOIN_FAN_OUT, Window};
+use centraid_apps_kit::row::{Cell, Row, integer_or_zero, text_of};
 use centraid_apps_kit::statement::{PageBindValue, PageOrder, PageQuery};
 
-use crate::places::{PlaceRow, places_statement};
+use crate::Denial;
+use crate::places::PlaceRow;
 
-/// The trash and memory shelves are what the screen shows (`library.ts:26`).
+/// What the index and the door call a photograph.
+pub const PHOTO_KIND: &str = "photo";
+
+/// The flags a heart and the archive are: `tagged` edges to these concepts.
+pub const STARRED: &str = "flag:starred";
+pub const ARCHIVED: &str = "flag:archived";
+
+/// The trash shelf is what the screen shows, so that is the read.
 pub const SHELF_ROWS: usize = 200;
 
-/// The most photographs the door's text leg names for one search (#1097,
-/// R-1097-25): the best of them by rank. The window is the kit's own page, and
-/// a search that matches more is a question the member narrows with another
-/// word.
+/// How many ranked hits `search` folds.
 pub const SEARCH_ROWS: usize = MAX_PAGE_ROWS;
 
-/// The entity a photograph is in the full-text index (`centraid_search::DOMAINS`).
-pub const PHOTO_TARGET_TYPE: &str = "core.content_item";
-
-/// The assets a search can open: the best `SEARCH_ROWS` contents, each with a
-/// handful of assets at most (two assets can share a sha).
-const SEARCH_ASSET_BOUND: FanOutBound = FanOutBound::new(500, 8);
-
-/// The library window's own bounds, from the manifest's input schema:
-/// `limit` 20…2,000 with a default of 500 (`library.ts:63`).
+/// The library window, as the manifest declares it.
 pub const LIBRARY_MIN: usize = 20;
 pub const LIBRARY_MAX: usize = 2_000;
 pub const LIBRARY_DEFAULT: usize = 500;
 
-/// A join per windowed asset: 500 × 8 = 4,000 rows, the kit's `JOIN_FAN_OUT`.
-/// A window of 2,000 assets can carry more than one album entry each, so the
-/// tag and entry walks get the wider bound below and report it when reached.
-pub const ASSET_JOIN_BOUND: FanOutBound = FanOutBound::new(500, 8);
+/// Where the vault serves a blob's bytes, by hash.
+pub use centraid_apps_kit::attached::BLOB_ROUTE;
 
-/// Tags and album entries are `(asset, concept)` and `(asset, collection)`
-/// pairs over a 2,000-asset window: 500 × 32 = 16,000 rows, stated.
-pub const ASSET_PAIR_BOUND: FanOutBound = FanOutBound::new(500, 32);
+/// A join per windowed photograph: 500 x 8 = 4,000 rows, the kit's fan-out.
+pub const PHOTO_JOIN_BOUND: FanOutBound = JOIN_FAN_OUT;
 
-/// ONE PAGE, BECAUSE THE SORT COLUMN IS NULLABLE (D-1020-P11).
-///
-/// `media_asset.captured_at`, `media_asset.deleted_at` and
-/// `media_asset_phash.cluster_id` are all nullable, and the kit's door
-/// **refuses a CONTINUED page over a nullable sort key**
-/// (`KitError::NullableSortKey`) because SQLite's row-value comparison puts
-/// every NULL on one side of the keyset and the walk silently drops them.
-/// A declared window wider than [`MAX_PAGE_ROWS`] over such a column is
-/// therefore unreachable by a walk, and the honest answer is one page plus
-/// "there is more" — which is exactly what v0 does by accident (it asks for
-/// its 2,000-row window as one page and the clamp gives it 500) and what this
-/// does on purpose.
-///
-/// The difference from v0 is the REPORT: `filled` is the page's own cursor, so
-/// a surface can say the library is longer than what was read instead of
-/// implying it read all of it. The remedy for the ceiling itself is a typed
-/// cursor on the app's `before` input — a manifest input-schema change, and
-/// therefore the root's (recorded as a finding).
+/// Tags and album entries are pairs over a 2,000-photograph window: 500 x 32 =
+/// 16,000 rows, stated.
+pub const PHOTO_PAIR_BOUND: FanOutBound = FanOutBound::new(500, 32);
+
+/// The `photo` row's columns, and the entity's.
+const PHOTO_COLUMNS: &str = "id, blob, media_type, form, taken_at, offset_min, width, height, \
+                             duration_s, burst, edited_from, place_id";
+const ENTITY_COLUMNS: &str = "id, title, created_at, updated_at, deleted_at, purge_at";
+
+fn text(value: &str) -> Vec<PageBindValue> {
+    vec![PageBindValue::Text(value.to_owned())]
+}
+
+fn denial_of(message: String) -> Denial {
+    Denial {
+        code: None,
+        message: Some(message),
+        revoked_at: None,
+    }
+}
+
+/// ONE PAGE, and whether it was the last.
 fn read_one_page(door: &dyn PageDoor, query: &PageQuery, rows: usize) -> KitResult<Window> {
     let page = door.page(query, &PageRequest::first(rows.min(MAX_PAGE_ROWS)))?;
     Ok(Window {
@@ -92,136 +99,76 @@ fn read_one_page(door: &dyn PageDoor, query: &PageQuery, rows: usize) -> KitResu
     })
 }
 
-/// The blob route a `blob:` content URI becomes (`_shared.ts:73`).
-pub const BLOB_ROUTE: &str = "/centraid/_vault/blobs";
+// ---------------------------------------------------------------------------
+// Rows and payloads
+// ---------------------------------------------------------------------------
 
-/// The flags and tags scheme URIs, and the star's notation. Restated here
-/// because `_shared/concept-scheme-kit.ts` is an import-free leaf on the v0
-/// side too; the values are asserted against the fixture in the parity test.
-///
-/// **The two URIs are spelled differently and that is deliberate**, not drift
-/// to tidy: the flags scheme is an `https` URI because flag SQL fragments are
-/// interpolated into condition SQL, where a `urn:`-style `:flags` reads as a
-/// NAMED PARAMETER (#258, the colon-literal trap) and no parameter name can
-/// start with a slash. Unifying them would break every condition that
-/// mentions the scheme.
-pub const FLAGS_SCHEME_URI: &str = "https://centraid.dev/schemes/flags";
-pub const TAGS_SCHEME_URI: &str = "centraid:tags:v1";
-pub const STARRED_NOTATION: &str = "starred";
-
-/// Tags target the ASSET, never the content item.
-pub const TAG_TARGET_TYPE: &str = "media.asset";
-
-/// The four URIs a tile can paint from. `None` throughout when the content item
-/// carries no readable URI — a tile with no bytes is a state, not a blank src.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct SourceUris {
-    pub src: Option<String>,
-    pub thumb: Option<String>,
-    pub preview: Option<String>,
-    pub poster: Option<String>,
-}
-
-/// `srcOf`, ported (`_shared.ts:75-87`). A `blob:` URI becomes a same-origin
-/// serve URL with three variant queries beside it; a `data:` URI passes
-/// through and has no variants, because there is no derivative to ask for.
-#[must_use]
-pub fn src_of(content: Option<&ContentRow>) -> SourceUris {
-    let Some(content) = content else {
-        return SourceUris::default();
-    };
-    let Some(uri) = content.content_uri.as_deref() else {
-        return SourceUris::default();
-    };
-    if !uri.starts_with("blob:") {
-        return SourceUris {
-            src: Some(uri.to_owned()),
-            ..SourceUris::default()
-        };
-    }
-    let src = format!("{BLOB_ROUTE}/{}", content.content_id);
-    SourceUris {
-        thumb: Some(format!("{src}?variant=thumb")),
-        preview: Some(format!("{src}?variant=preview")),
-        poster: Some(format!("{src}?variant=poster")),
-        src: Some(src),
-    }
-}
-
-/// One `core_content_item` row, as the library reads it.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ContentRow {
+/// One photograph: its `photo` row and its entity.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PhotoRow {
+    pub photo_id: String,
+    /// The bytes' hash.
     pub content_id: String,
-    pub content_uri: Option<String>,
-    pub byte_size: Option<i64>,
-    pub created_at: Option<String>,
-    /// The bytes were released. A live asset over released bytes is NOT
-    /// library.
-    pub deleted_at: Option<String>,
-    pub purge_at: Option<String>,
-}
-
-impl ContentRow {
-    #[must_use]
-    pub fn of(row: &Row) -> Option<Self> {
-        Some(Self {
-            content_id: text_of(row, "content_id")?,
-            content_uri: text_of(row, "content_uri"),
-            byte_size: row.get("byte_size").and_then(Cell::integer),
-            created_at: text_of(row, "created_at"),
-            deleted_at: text_of(row, "deleted_at"),
-            purge_at: text_of(row, "purge_at"),
-        })
-    }
-}
-
-/// One `media_asset` row.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AssetRow {
-    pub asset_id: String,
-    pub content_id: String,
-    pub kind: Option<String>,
-    pub title: Option<String>,
-    pub captured_at: Option<String>,
-    pub tz_offset_min: Option<i64>,
-    pub capture_group_id: Option<String>,
+    pub media_type: Option<String>,
+    /// `photo`, `video` or `scan`.
+    pub form: Option<String>,
+    /// The caption; empty when there is none.
+    pub title: String,
+    pub taken_at: Option<String>,
+    pub offset_min: Option<i64>,
+    pub burst: Option<String>,
     pub place_id: Option<String>,
     pub width: Option<i64>,
     pub height: Option<i64>,
-    pub source_asset_id: Option<String>,
-    pub archived_at: Option<String>,
+    pub duration_s: Option<f64>,
+    pub edited_from: Option<String>,
+    pub created_at: Option<String>,
+    pub updated_at: Option<String>,
     pub deleted_at: Option<String>,
     pub purge_at: Option<String>,
-    pub created_at: Option<String>,
 }
 
-impl AssetRow {
+fn real_of(row: &Row, column: &str) -> Option<f64> {
+    match row.get(column) {
+        Some(Cell::Real(value)) => Some(*value),
+        #[expect(
+            clippy::cast_precision_loss,
+            reason = "a whole number of seconds is exact"
+        )]
+        Some(Cell::Integer(value)) => Some(*value as f64),
+        _ => None,
+    }
+}
+
+impl PhotoRow {
+    /// A `photo` row and its entity's, joined by the caller.
     #[must_use]
-    pub fn of(row: &Row) -> Option<Self> {
+    pub fn of(photo: &Row, entity: &Row) -> Option<Self> {
         Some(Self {
-            asset_id: text_of(row, "asset_id")?,
-            content_id: text_of(row, "content_id")?,
-            kind: text_of(row, "kind"),
-            title: text_of(row, "title"),
-            captured_at: text_of(row, "captured_at"),
-            tz_offset_min: row.get("tz_offset_min").and_then(Cell::integer),
-            capture_group_id: text_of(row, "capture_group_id"),
-            place_id: text_of(row, "place_id"),
-            width: row.get("width").and_then(Cell::integer),
-            height: row.get("height").and_then(Cell::integer),
-            source_asset_id: text_of(row, "source_asset_id"),
-            archived_at: text_of(row, "archived_at"),
-            deleted_at: text_of(row, "deleted_at"),
-            purge_at: text_of(row, "purge_at"),
-            created_at: text_of(row, "created_at"),
+            photo_id: text_of(photo, "id")?,
+            content_id: text_of(photo, "blob")?,
+            media_type: text_of(photo, "media_type"),
+            form: text_of(photo, "form"),
+            title: text_of(entity, "title").unwrap_or_default(),
+            taken_at: text_of(photo, "taken_at"),
+            offset_min: photo.get("offset_min").and_then(Cell::integer),
+            burst: text_of(photo, "burst"),
+            place_id: text_of(photo, "place_id"),
+            width: photo.get("width").and_then(Cell::integer),
+            height: photo.get("height").and_then(Cell::integer),
+            duration_s: real_of(photo, "duration_s"),
+            edited_from: text_of(photo, "edited_from"),
+            created_at: text_of(entity, "created_at"),
+            updated_at: text_of(entity, "updated_at"),
+            deleted_at: text_of(entity, "deleted_at"),
+            purge_at: text_of(entity, "purge_at"),
         })
     }
 }
 
-/// One label on one photograph. The pair, because **untag removes the edge by
-/// id, never by label**.
+/// One label on one photograph.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AssetTag {
+pub struct PhotoTag {
     pub tag_id: String,
     pub label: String,
 }
@@ -231,52 +178,45 @@ pub struct AssetTag {
 pub struct AlbumRow {
     pub album_id: String,
     pub title: Option<String>,
+    /// The chosen cover's bytes, when it is still a member and live; else the
+    /// album's first live photograph.
     pub cover_content_id: Option<String>,
+    /// Live photographs in it.
+    pub photo_count: usize,
 }
 
-/// One grid row: the asset, joined.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct GridAsset {
-    pub asset: AssetRow,
-    /// DERIVED from the flags-scheme tag. `1`/`0` in v0's payload; a bool here,
-    /// because there is no third value and a mirror column is what #916 removed.
+/// One grid row: the photograph, joined.
+#[derive(Debug, Clone, PartialEq)]
+pub struct GridPhoto {
+    pub photo: PhotoRow,
+    /// A heart is a `tagged` edge to the starred flag, not a column.
     pub favorite: bool,
-    pub uris: SourceUris,
     pub byte_size: Option<i64>,
-    pub media_type: Option<String>,
-    /// `captured_at`, else the content item's `created_at`. Derived, never
-    /// a duplicate column.
+    /// `taken_at`, else when the photograph was made. Derived, never a duplicate
+    /// column.
     pub taken_at: Option<String>,
     pub album_ids: Vec<String>,
     pub album_titles: Vec<String>,
     pub place: Option<PlaceRow>,
-    pub tags: Vec<AssetTag>,
-    pub custody_state: Option<String>,
+    pub tags: Vec<PhotoTag>,
     /// Trash only: days until the grace window closes. `None` when the row
     /// carries no `purge_at` — never `0`, which would read as "today".
     pub purge_in_days: Option<i64>,
-    /// Trash only: the asset owns the grace window (#274); the content item is
-    /// the fallback.
     pub purge_at: Option<String>,
 }
 
 /// What `library` answers.
-// No `Eq`: `memories` holds raw [`Row`]s, whose `Cell` can be a `Real`, and an
-// f64 has no total equality. A caller comparing two answers by value would be
-// comparing floats.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct LibraryData {
-    pub assets: Vec<GridAsset>,
+    pub photos: Vec<GridPhoto>,
     pub albums: Vec<AlbumRow>,
     pub places: Vec<PlaceRow>,
-    pub trash: Vec<GridAsset>,
-    pub memories: Vec<Row>,
-    pub memory_members: Vec<Row>,
-    /// Older photographs exist beyond the window. The page's own cursor.
+    pub trash: Vec<GridPhoto>,
+    /// Older photographs exist beyond the window: the page's own cursor.
     pub truncated: bool,
     /// The window that was actually asked for, after the clamp.
     pub window: usize,
-    /// The oldest `taken_at` this page reached — pass it back as `before`.
+    /// The oldest `taken_at` this page reached: pass it back as `before`.
     pub tail: Option<String>,
 }
 
@@ -284,13 +224,12 @@ pub struct LibraryData {
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct LibraryInput {
     pub limit: Option<usize>,
-    /// The keyset cursor: only assets captured strictly earlier.
+    /// The keyset cursor: only photographs taken strictly earlier.
     pub before: Option<String>,
 }
 
 impl LibraryInput {
-    /// The clamped window. `Math.min(Math.max(Number(limit) || 500, 20), 2000)`
-    /// (`library.ts:63`) — a zero or absent limit is the default, not zero rows.
+    /// The clamped window: a zero or absent limit is the default, not zero rows.
     #[must_use]
     pub fn window(&self) -> usize {
         self.limit
@@ -299,294 +238,257 @@ impl LibraryInput {
             .clamp(LIBRARY_MIN, LIBRARY_MAX)
     }
 
-    /// The cursor, with the empty string read as absent (`library.ts:65-68`).
+    /// The cursor, with the empty string read as absent.
     #[must_use]
     pub fn before(&self) -> Option<&str> {
         self.before.as_deref().filter(|text| !text.is_empty())
     }
 }
 
-/// Every column both shelves project (`library.ts:19-23`).
-pub const ASSET_COLUMNS: &str = "asset_id, content_id, kind, title, captured_at, tz_offset_min, \
-                                 capture_group_id, place_id, width, height, duration_s, \
-                                 source_asset_id, archived_at, deleted_at, purge_at, created_at, \
-                                 updated_at";
-
 // ---------------------------------------------------------------------------
-// The statements.
+// The statements
 // ---------------------------------------------------------------------------
 
-/// `photos.library.live` — the newest live, unarchived assets.
+/// `photos.library.window` — the newest photographs by capture time.
 ///
-/// The `before` predicate is `captured_at < ?`, and a NULL `captured_at` FAILS
-/// that comparison in SQL. That is not a bug to fix: an undated asset has no
-/// place in a timeline cursor, so it rides the first window and no other.
+/// The `before` predicate is `taken_at < ?`, and a NULL `taken_at` FAILS that
+/// comparison in SQL. That is not a bug to fix: an undated photograph has no place
+/// in a timeline cursor, so it rides the first window and no other.
 #[must_use]
-pub fn live_statement(before: Option<&str>) -> PageQuery {
+pub fn window_statement(before: Option<&str>) -> PageQuery {
     let query = PageQuery::new(
-        "photos.library.live",
-        ASSET_COLUMNS,
-        "media_asset",
-        PageOrder::desc("captured_at", "asset_id"),
+        "photos.library.window",
+        PHOTO_COLUMNS,
+        "photo",
+        PageOrder::desc("taken_at", "id"),
     );
     match before {
-        Some(before) => query.filter(
-            "deleted_at IS NULL AND archived_at IS NULL AND captured_at < ?",
-            vec![PageBindValue::Text(before.to_owned())],
-        ),
-        None => query.filter("deleted_at IS NULL AND archived_at IS NULL", Vec::new()),
+        Some(before) => query.filter("taken_at < ?", text(before)),
+        None => query,
     }
 }
 
-/// `photos.library.trash` — a ~30-day shelf the sweep keeps short.
+/// `photos.library.trash` — what is in the trash, newest first.
 #[must_use]
 pub fn trash_statement() -> PageQuery {
     PageQuery::new(
         "photos.library.trash",
-        ASSET_COLUMNS,
-        "media_asset",
-        PageOrder::desc("deleted_at", "asset_id"),
+        ENTITY_COLUMNS,
+        "entity",
+        PageOrder::desc("deleted_at", "id"),
     )
-    .filter("deleted_at IS NOT NULL", Vec::new())
+    .filter("kind = ? AND deleted_at IS NOT NULL", text(PHOTO_KIND))
 }
 
-/// `photos.library.albums` — albums are collections: owner-curated and small.
-///
-/// `kind = 'album'` (rung six): `core_collection` holds Notes' notebooks too,
-/// and one of those is never an album here.
+/// `photos.library.albums` — albums are containers: owner-curated and small.
 #[must_use]
-pub fn albums_statement(name: &str) -> PageQuery {
+pub fn albums_statement() -> PageQuery {
     PageQuery::new(
+        "photos.library.albums",
+        "id, title",
+        "entity",
+        PageOrder::asc("id", "id"),
+    )
+    .filter("kind = ? AND deleted_at IS NULL", text("album"))
+}
+
+/// `photos.shared.places` — the places are owner-shaped and small, so a walk with
+/// a stated ceiling rather than a window nobody chose.
+#[must_use]
+pub fn places_statement() -> PageQuery {
+    PageQuery::new(
+        "photos.shared.places",
+        "id, title",
+        "entity",
+        PageOrder::asc("id", "id"),
+    )
+    .filter("kind = ? AND deleted_at IS NULL", text("place"))
+}
+
+fn read_of(
+    door: &dyn PageDoor,
+    name: &'static str,
+    table: &'static str,
+    select: &'static str,
+    column: &'static str,
+    ids: &[String],
+    extra: Option<(&str, Vec<PageBindValue>)>,
+) -> KitResult<Vec<Row>> {
+    Read {
         name,
-        "collection_id, name, cover_content_id",
-        "core_collection",
-        PageOrder::asc("collection_id", "collection_id"),
-    )
-    .filter("kind = ?", vec![PageBindValue::Text(ALBUM_KIND.to_owned())])
+        table,
+        select,
+        order: (column, column),
+        column,
+    }
+    .within(PHOTO_PAIR_BOUND, door, ids, extra)
 }
 
-/// `core_collection.kind` for an album — the vault's own word (rung six).
-pub const ALBUM_KIND: &str = "album";
-
-/// `photos.library.memories`.
-#[must_use]
-pub fn memories_statement() -> PageQuery {
-    PageQuery::new(
-        "photos.library.memories",
-        "memory_id, kind, title_hint, day_key, place_id, started_at, ended_at, computed_at",
-        "media_memory",
-        PageOrder::desc("computed_at", "memory_id"),
-    )
-}
-
-/// `photos.library.memoryMembers`.
-///
-/// **The keyset is the table's own pair.** `media_memory_member` is keyed on
-/// `(memory_id, asset_id)` and `ordinal` deliberately TIES — two photographs
-/// taken in the same second share one — so a cursor on `ordinal` alone would
-/// stop at the tie and call the memory finished (`library.ts:178-181`).
-pub fn memory_members_statement(memory_ids: &[String]) -> KitResult<PageQuery> {
-    let fragment = in_list("memory_id", memory_ids)?;
-    Ok(PageQuery::new(
-        "photos.library.memoryMembers",
-        "memory_id, asset_id, ordinal",
-        "media_memory_member",
-        PageOrder::asc("memory_id", "asset_id"),
-    )
-    .filter(&fragment.sql, fragment.bind))
-}
-
-/// `photos.library.contents` / `photos.search.contents`.
-pub fn content_statement(name: &str, content_ids: &[String]) -> KitResult<PageQuery> {
-    let fragment = in_list("content_id", content_ids)?;
-    Ok(PageQuery::new(
-        name,
-        "content_id, content_uri, byte_size, created_at, deleted_at, purge_at",
-        "core_content_item",
-        PageOrder::asc("content_id", "content_id"),
-    )
-    .filter(&fragment.sql, fragment.bind))
-}
-
-/// `photos.library.albumEntries` / `photos.search.albumEntries`.
-pub fn album_entries_statement(name: &str, asset_ids: &[String]) -> KitResult<PageQuery> {
-    let fragment = in_list("target_id", asset_ids)?;
-    let mut bind = vec![PageBindValue::Text(TAG_TARGET_TYPE.to_owned())];
-    bind.extend(fragment.bind);
-    Ok(PageQuery::new(
-        name,
-        "entry_id, target_type, target_id, collection_id",
-        "core_collection_entry",
-        PageOrder::asc("entry_id", "entry_id"),
-    )
-    .filter(&format!("target_type = ? AND {}", fragment.sql), bind))
-}
-
-/// `photos.shared.schemes`.
-#[must_use]
-pub fn schemes_statement() -> PageQuery {
-    PageQuery::new(
-        "photos.shared.schemes",
-        "scheme_id, uri",
-        "core_concept_scheme",
-        PageOrder::asc("scheme_id", "scheme_id"),
-    )
-}
-
-/// `photos.shared.concepts`.
-#[must_use]
-pub fn concepts_statement() -> PageQuery {
-    PageQuery::new(
-        "photos.shared.concepts",
-        "concept_id, scheme_id, pref_label, notation",
-        "core_concept",
-        PageOrder::asc("concept_id", "concept_id"),
-    )
-}
-
-/// `photos.shared.custody`.
-pub fn custody_statement(content_ids: &[String]) -> KitResult<PageQuery> {
-    let fragment = in_list("content_id", content_ids)?;
-    Ok(PageQuery::new(
-        "photos.shared.custody",
-        "content_id, custody_state",
-        "blob_custody_state",
-        PageOrder::asc("content_id", "content_id"),
-    )
-    .filter(&fragment.sql, fragment.bind))
-}
-
-/// `photos.shared.assetTags` — ONE read over the windowed assets' tags, split
-/// by scheme afterwards.
-pub fn asset_tags_statement(asset_ids: &[String]) -> KitResult<PageQuery> {
-    let fragment = in_list("target_id", asset_ids)?;
-    let mut bind = vec![PageBindValue::Text(TAG_TARGET_TYPE.to_owned())];
-    bind.extend(fragment.bind);
-    Ok(PageQuery::new(
-        "photos.shared.assetTags",
-        "tag_id, target_type, target_id, concept_id",
-        "core_tag",
-        PageOrder::asc("tag_id", "tag_id"),
-    )
-    .filter(&format!("target_type = ? AND {}", fragment.sql), bind))
-}
-
-/// `photos.search.assets` — the matched content ids' LIVE assets: not trashed
-/// and not archived, the shelf the library and Photos' own search draw. Home
-/// keeps the archived ones (it opens a photo; this draws a grid) — see
-/// `R-1097-25`.
-pub fn search_assets_statement(content_ids: &[String]) -> KitResult<PageQuery> {
-    let fragment = in_list("content_id", content_ids)?;
-    Ok(PageQuery::new(
-        "photos.search.assets",
-        "asset_id, content_id",
-        "media_asset",
-        PageOrder::asc("asset_id", "asset_id"),
-    )
-    .filter(
-        &format!(
-            "{} AND deleted_at IS NULL AND archived_at IS NULL",
-            fragment.sql
-        ),
-        fragment.bind,
-    ))
+fn ids_of(rows: &[Row], column: &str) -> Vec<String> {
+    rows.iter().filter_map(|row| text_of(row, column)).collect()
 }
 
 // ---------------------------------------------------------------------------
-// The joins.
+// The joins
 // ---------------------------------------------------------------------------
 
-/// What one read over the windowed assets' tags splits into.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct AssetJoins {
-    pub tags_by_asset: BTreeMap<String, Vec<AssetTag>>,
-    /// THE STAR, derived. No flags scheme or no `starred` concept yet means
-    /// nothing is starred — an honest "none", never an error: a vault mints
-    /// both the first time something is starred.
-    pub favorite_assets: BTreeSet<String>,
-    pub custody_by_content: BTreeMap<String, String>,
+/// Everything the decorations of a set of photographs need, read.
+#[derive(Debug, Clone, Default)]
+struct Joins {
+    sizes: BTreeMap<String, i64>,
+    favorites: BTreeSet<String>,
+    archived: BTreeSet<String>,
+    tags: BTreeMap<String, Vec<PhotoTag>>,
+    /// Photograph id to the albums that hold it, in the album's own order.
+    albums: BTreeMap<String, Vec<String>>,
 }
 
-/// `readAssetJoins`, ported (`_shared.ts:118-215`).
-#[must_use]
-pub fn fold_asset_joins(
-    schemes: &[Row],
-    concepts: &[Row],
-    asset_tags: &[Row],
-    custody: &[Row],
-) -> AssetJoins {
-    let scheme_id_of = |uri: &str| -> Option<String> {
-        schemes
-            .iter()
-            .find(|row| text_of(row, "uri").as_deref() == Some(uri))
-            .and_then(|row| text_of(row, "scheme_id"))
-    };
-    let tags_scheme = scheme_id_of(TAGS_SCHEME_URI);
-    let flags_scheme = scheme_id_of(FLAGS_SCHEME_URI);
-
-    let label_of: BTreeMap<String, String> = concepts
+fn read_joins(door: &dyn PageDoor, photos: &[PhotoRow]) -> KitResult<Joins> {
+    let ids: Vec<String> = photos.iter().map(|photo| photo.photo_id.clone()).collect();
+    if ids.is_empty() {
+        return Ok(Joins::default());
+    }
+    let hashes: Vec<String> = photos
         .iter()
-        .filter(|row| tags_scheme.is_some() && text_of(row, "scheme_id") == tags_scheme)
-        .filter_map(|row| {
-            let concept_id = text_of(row, "concept_id")?;
-            let label = text_of(row, "pref_label").or_else(|| text_of(row, "notation"))?;
-            (!label.is_empty()).then_some((concept_id, label))
-        })
+        .map(|photo| photo.content_id.clone())
         .collect();
-    let starred_concept: Option<String> = flags_scheme.as_ref().and_then(|scheme| {
-        concepts
-            .iter()
-            .find(|row| {
-                text_of(row, "scheme_id").as_deref() == Some(scheme.as_str())
-                    && text_of(row, "notation").as_deref() == Some(STARRED_NOTATION)
-            })
-            .and_then(|row| text_of(row, "concept_id"))
-    });
-
-    let mut joins = AssetJoins::default();
-    for row in asset_tags {
-        let Some(target) = text_of(row, "target_id") else {
+    let sizes = read_of(
+        door,
+        "photos.joins.blobs",
+        "blob",
+        "hash, size",
+        "hash",
+        &hashes,
+        None,
+    )?
+    .iter()
+    .filter_map(|row| Some((text_of(row, "hash")?, integer_or_zero(row, "size"))))
+    .collect();
+    let tag_edges = read_of(
+        door,
+        "photos.joins.tagged",
+        "edge",
+        "from_id, to_id",
+        "from_id",
+        &ids,
+        Some(("rel = ?", text("tagged"))),
+    )?;
+    let mut concept_ids = ids_of(&tag_edges, "to_id");
+    concept_ids.sort_unstable();
+    concept_ids.dedup();
+    let labels: BTreeMap<String, String> = read_of(
+        door,
+        "photos.joins.concepts",
+        "entity",
+        "id, title",
+        "id",
+        &concept_ids,
+        Some(("kind = ?", text("tag"))),
+    )?
+    .iter()
+    .filter_map(|row| Some((text_of(row, "id")?, text_of(row, "title")?)))
+    .collect();
+    let mut joins = Joins {
+        sizes,
+        ..Joins::default()
+    };
+    for edge in &tag_edges {
+        let (Some(from), Some(to)) = (text_of(edge, "from_id"), text_of(edge, "to_id")) else {
             continue;
         };
-        let Some(concept_id) = text_of(row, "concept_id") else {
-            continue;
-        };
-        if starred_concept.as_deref() == Some(concept_id.as_str()) {
-            joins.favorite_assets.insert(target);
-            continue;
-        }
-        // From another scheme: not this app's label rail.
-        let Some(label) = label_of.get(&concept_id) else {
-            continue;
-        };
-        let Some(tag_id) = text_of(row, "tag_id") else {
-            continue;
-        };
-        joins
-            .tags_by_asset
-            .entry(target)
-            .or_default()
-            .push(AssetTag {
-                tag_id,
+        if to == STARRED {
+            joins.favorites.insert(from);
+        } else if to == ARCHIVED {
+            joins.archived.insert(from);
+        } else if let Some(label) = labels.get(&to) {
+            joins.tags.entry(from).or_default().push(PhotoTag {
+                tag_id: to,
                 label: label.clone(),
             });
-    }
-    for row in custody {
-        if let (Some(content), Some(state)) =
-            (text_of(row, "content_id"), text_of(row, "custody_state"))
-        {
-            joins.custody_by_content.insert(content, state);
         }
     }
-    joins
+    let held = read_of(
+        door,
+        "photos.joins.albums",
+        "edge",
+        "from_id, to_id, position",
+        "to_id",
+        &ids,
+        Some(("rel = ?", text("contains"))),
+    )?;
+    for edge in &held {
+        if let (Some(album), Some(photo)) = (text_of(edge, "from_id"), text_of(edge, "to_id")) {
+            joins.albums.entry(photo).or_default().push(album);
+        }
+    }
+    Ok(joins)
 }
 
-/// Milliseconds in a day (`_shared/format-kit.ts`'s `DAY_MS`).
+/// The entity rows of these photograph ids, by id.
+fn read_entities(door: &dyn PageDoor, ids: &[String]) -> KitResult<BTreeMap<String, Row>> {
+    Ok(read_of(
+        door,
+        "photos.rows.entity",
+        "entity",
+        ENTITY_COLUMNS,
+        "id",
+        ids,
+        Some(("kind = ?", text(PHOTO_KIND))),
+    )?
+    .into_iter()
+    .filter_map(|row| Some((text_of(&row, "id")?, row)))
+    .collect())
+}
+
+/// The photographs a window of `photo` rows names, joined with their entities
+/// and in the window's order.
+fn photos_of(door: &dyn PageDoor, photo_rows: &[Row]) -> KitResult<Vec<PhotoRow>> {
+    let entities = read_entities(door, &ids_of(photo_rows, "id"))?;
+    Ok(photo_rows
+        .iter()
+        .filter_map(|row| PhotoRow::of(row, entities.get(&text_of(row, "id")?)?))
+        .collect())
+}
+
+/// The ids an edit folds: a live photograph of a burst folds the photograph it was
+/// made from, and any older photograph of the same burst that it did not come from.
+///
+/// An ungrouped photograph (no burst) folds nothing, so a crop saved from the
+/// member's own editor stays drawn beside its original. A Live Photo's movie shares
+/// its still's burst and is a `video`, which this never touches.
+fn folded(live: &[&PhotoRow]) -> BTreeSet<String> {
+    let mut out = BTreeSet::new();
+    let stills: Vec<&&PhotoRow> = live
+        .iter()
+        .filter(|photo| photo.form.as_deref() == Some("photo"))
+        .collect();
+    for newer in stills.iter().filter(|photo| photo.burst.is_some()) {
+        for older in &stills {
+            if older.photo_id == newer.photo_id {
+                continue;
+            }
+            let made_from = newer.edited_from.as_deref() == Some(older.photo_id.as_str());
+            let same_burst = newer.burst == older.burst
+                && older.edited_from.as_deref() != Some(newer.photo_id.as_str())
+                && (&newer.created_at, &newer.photo_id) > (&older.created_at, &older.photo_id);
+            if made_from || same_burst {
+                out.insert(older.photo_id.clone());
+            }
+        }
+    }
+    out
+}
+
+// ---------------------------------------------------------------------------
+// `library`
+// ---------------------------------------------------------------------------
+
+/// Milliseconds in a day.
 pub const DAY_MS: i64 = 86_400_000;
 
-/// Whole days until `purge_at`, rounded UP and floored at zero
-/// (`library.ts:271-276`). `None` when there is no date to compare, and
-/// **`None` is not `0`**: "no grace window recorded" is not "purges today".
+/// Whole days until `purge_at`, rounded UP and floored at zero. `None` when there
+/// is no date to compare, and **`None` is not `0`**: "no grace window recorded" is
+/// not "purges today".
 #[must_use]
 pub fn purge_in_days(purge_at: Option<&str>, now_ms: i64) -> Option<i64> {
     let parsed = parse_instant_ms(purge_at?)?;
@@ -594,8 +496,6 @@ pub fn purge_in_days(purge_at: Option<&str>, now_ms: i64) -> Option<i64> {
     Some(if ms <= 0 {
         0
     } else {
-        // `div_ceil` for integers is unstable on this toolchain; the
-        // ceiling division is written out (#1020, toolchain 1.94.1).
         (ms + DAY_MS - 1) / DAY_MS
     })
 }
@@ -643,321 +543,177 @@ pub fn parse_instant_ms(text: &str) -> Option<i64> {
     Some(((days * 24 + hour) * 60 + minute) * 60_000 + second * 1_000 + millis)
 }
 
-// ---------------------------------------------------------------------------
-// The `library` fold.
-// ---------------------------------------------------------------------------
-
-/// Everything the library's statements returned, so the fold is pure.
-#[derive(Debug, Clone, Default)]
-pub struct LibraryReads {
-    pub live: Vec<AssetRow>,
-    /// The live window filled: older photographs exist.
-    pub live_filled: bool,
-    pub trash: Vec<AssetRow>,
-    pub albums: Vec<AlbumRow>,
-    pub places: Vec<PlaceRow>,
-    pub contents: BTreeMap<String, ContentRow>,
-    pub album_ids_by_asset: BTreeMap<String, Vec<String>>,
-    pub media_types: BTreeMap<String, String>,
-    pub joins: AssetJoins,
-    pub memories: Vec<Row>,
-    pub memory_members: Vec<Row>,
-}
-
-fn join_one(
-    asset: &AssetRow,
-    reads: &LibraryReads,
-    places: &BTreeMap<String, PlaceRow>,
-    now_ms: i64,
-    trash: bool,
-) -> GridAsset {
-    let content = reads.contents.get(&asset.content_id);
-    let album_ids = reads
-        .album_ids_by_asset
-        .get(&asset.asset_id)
-        .cloned()
-        .unwrap_or_default();
-    let album_titles = album_ids
-        .iter()
-        .filter_map(|id| {
-            reads
-                .albums
-                .iter()
-                .find(|album| album.album_id == *id)
-                .and_then(|album| album.title.clone())
-        })
-        .collect();
-    let purge_at = if trash {
-        asset
-            .purge_at
-            .clone()
-            .or_else(|| content.and_then(|content| content.purge_at.clone()))
-    } else {
-        None
-    };
-    GridAsset {
-        favorite: reads.joins.favorite_assets.contains(&asset.asset_id),
-        uris: src_of(content),
-        byte_size: content.and_then(|content| content.byte_size),
-        media_type: reads.media_types.get(&asset.asset_id).cloned(),
-        taken_at: asset
-            .captured_at
-            .clone()
-            .or_else(|| content.and_then(|content| content.created_at.clone())),
-        album_ids,
-        album_titles,
-        place: asset
-            .place_id
-            .as_deref()
-            .and_then(|id| places.get(id))
-            .cloned(),
-        tags: reads
-            .joins
-            .tags_by_asset
-            .get(&asset.asset_id)
-            .cloned()
-            .unwrap_or_default(),
-        custody_state: reads
-            .joins
-            .custody_by_content
-            .get(&asset.content_id)
-            .cloned(),
-        purge_in_days: purge_in_days(purge_at.as_deref(), now_ms),
-        purge_at,
-        asset: asset.clone(),
+fn album_rows(door: &dyn PageDoor, wanted: &BTreeMap<String, String>) -> KitResult<Vec<AlbumRow>> {
+    let ids: Vec<String> = wanted.keys().cloned().collect();
+    let containers: BTreeMap<String, Option<String>> = read_of(
+        door,
+        "photos.albums.containers",
+        "container",
+        "id, cover",
+        "id",
+        &ids,
+        None,
+    )?
+    .iter()
+    .filter_map(|row| Some((text_of(row, "id")?, text_of(row, "cover"))))
+    .collect();
+    let mut albums = Vec::new();
+    for (album_id, title) in wanted {
+        albums.push(AlbumRow {
+            album_id: album_id.clone(),
+            title: Some(title.clone()),
+            cover_content_id: containers.get(album_id).cloned().flatten(),
+            photo_count: 0,
+        });
     }
-}
-
-/// THE FOLD. Pure: everything it needs is in [`LibraryReads`].
-#[must_use]
-pub fn fold_library(reads: &LibraryReads, window: usize, now_ms: i64) -> LibraryData {
-    let places: BTreeMap<String, PlaceRow> = reads
-        .places
-        .iter()
-        .map(|place| (place.place_id.clone(), place.clone()))
-        .collect();
-
-    let mut assets: Vec<GridAsset> = reads
-        .live
-        .iter()
-        // LIVE MEANS THE BYTES ARE LIVE TOO.
-        .filter(|asset| {
-            reads
-                .contents
-                .get(&asset.content_id)
-                .is_none_or(|content| content.deleted_at.is_none())
-        })
-        .map(|asset| join_one(asset, reads, &places, now_ms, false))
-        .collect();
-    // Newest first by `taken_at`, with an absent one sorting last — the same
-    // `String(b.taken_at ?? "").localeCompare(...)` v0 does, which is byte
-    // order for the ISO instants this column holds.
-    assets.sort_by(|left, right| {
-        right
-            .taken_at
-            .as_deref()
-            .unwrap_or("")
-            .cmp(left.taken_at.as_deref().unwrap_or(""))
-    });
-
-    let mut trash: Vec<GridAsset> = reads
-        .trash
-        .iter()
-        .map(|asset| join_one(asset, reads, &places, now_ms, true))
-        .collect();
-    trash.sort_by(|left, right| {
-        right
-            .asset
-            .deleted_at
-            .as_deref()
-            .unwrap_or("")
-            .cmp(left.asset.deleted_at.as_deref().unwrap_or(""))
-    });
-
-    let tail = assets.last().and_then(|asset| asset.taken_at.clone());
-    LibraryData {
-        assets,
-        albums: reads.albums.clone(),
-        places: reads.places.clone(),
-        trash,
-        memories: reads.memories.clone(),
-        memory_members: reads.memory_members.clone(),
-        truncated: reads.live_filled,
-        window,
-        tail,
-    }
+    Ok(albums)
 }
 
 /// Read and fold `library`.
 ///
-/// `now_ms` is INJECTED. v0 calls `Date.now()` inside the handler
-/// (`library.ts:273`), which makes `purge_in_days` a function of the host's
-/// wall clock and a fixture of it unreproducible (#1020, clock and ids are
-/// injected).
+/// `now_ms` is INJECTED: a fixture of the host's wall clock is unreproducible.
 pub fn load_library(
     door: &dyn PageDoor,
     input: &LibraryInput,
     now_ms: i64,
 ) -> KitResult<LibraryData> {
     let window = input.window();
-    let before = input.before();
-
-    let live = read_one_page(door, &live_statement(before), window)?;
-    let trash = read_one_page(door, &trash_statement(), SHELF_ROWS)?;
-    let albums = read_pages(
+    let newest = read_one_page(door, &window_statement(input.before()), window)?;
+    let trashed = read_one_page(door, &trash_statement(), SHELF_ROWS)?;
+    let windowed = photos_of(door, &newest.rows)?;
+    let trash_ids = ids_of(&trashed.rows, "id");
+    let trash_photo_rows = read_of(
         door,
-        &albums_statement("photos.library.albums"),
-        ASSET_JOIN_BOUND,
+        "photos.trash.rows",
+        "photo",
+        PHOTO_COLUMNS,
+        "id",
+        &trash_ids,
+        None,
     )?;
-    let places = read_pages(door, &places_statement(), ASSET_JOIN_BOUND)?;
-    // A cursored page carries no memories: the shelf belongs to the first
-    // window (`library.ts:118-120`).
-    let memories = if before.is_some() {
-        Vec::new()
-    } else {
-        read_window(door, &memories_statement(), SHELF_ROWS)?.rows
-    };
-
-    let live_rows: Vec<AssetRow> = live.rows.iter().filter_map(AssetRow::of).collect();
-    let trash_rows: Vec<AssetRow> = trash.rows.iter().filter_map(AssetRow::of).collect();
-    let reads = assemble_joins(door, &live_rows, &trash_rows, &albums, &places, memories)?;
-    let mut reads = reads;
-    reads.live = live_rows;
-    reads.live_filled = live.filled;
-    reads.trash = trash_rows;
-    Ok(fold_library(&reads, window, now_ms))
-}
-
-/// The `IN`-bounded joins both `library` and `search` make.
-fn assemble_joins(
-    door: &dyn PageDoor,
-    live: &[AssetRow],
-    trash: &[AssetRow],
-    albums: &[Row],
-    places: &[Row],
-    memories: Vec<Row>,
-) -> KitResult<LibraryReads> {
-    let windowed: Vec<&AssetRow> = live.iter().chain(trash.iter()).collect();
-    let asset_ids: Vec<String> = windowed
+    let in_trash = photos_of(door, &trash_photo_rows)?;
+    let all: Vec<PhotoRow> = windowed.iter().chain(in_trash.iter()).cloned().collect();
+    let joins = read_joins(door, &all)?;
+    let places: Vec<PlaceRow> = crate::places::read_places(door)?;
+    let by_place: BTreeMap<&str, &PlaceRow> = places
         .iter()
-        .map(|asset| asset.asset_id.clone())
+        .map(|place| (place.place_id.as_str(), place))
         .collect();
-    let mut content_ids: Vec<String> = windowed
+    let album_entities = read_pages(door, &albums_statement(), PHOTO_JOIN_BOUND)?;
+    let wanted: BTreeMap<String, String> = album_entities
         .iter()
-        .map(|asset| asset.content_id.clone())
-        .filter(|id| !id.is_empty())
+        .filter_map(|row| Some((text_of(row, "id")?, text_of(row, "title")?)))
         .collect();
-    content_ids.sort();
-    content_ids.dedup();
-
-    let contents = if content_ids.is_empty() {
-        BTreeMap::new()
-    } else {
-        read_pages(
-            door,
-            &content_statement("photos.library.contents", &content_ids)?,
-            ASSET_JOIN_BOUND,
-        )?
+    let mut albums = album_rows(door, &wanted)?;
+    let titles: BTreeMap<&str, &str> = wanted
         .iter()
-        .filter_map(|row| Some((text_of(row, "content_id")?, ContentRow::of(row)?)))
-        .collect()
-    };
+        .map(|(id, title)| (id.as_str(), title.as_str()))
+        .collect();
 
-    let mut album_ids_by_asset: BTreeMap<String, Vec<String>> = BTreeMap::new();
-    if !asset_ids.is_empty() {
-        for row in read_pages(
-            door,
-            &album_entries_statement("photos.library.albumEntries", &asset_ids)?,
-            ASSET_PAIR_BOUND,
-        )? {
-            if let (Some(target), Some(collection)) =
-                (text_of(&row, "target_id"), text_of(&row, "collection_id"))
-            {
-                album_ids_by_asset
-                    .entry(target)
-                    .or_default()
-                    .push(collection);
-            }
+    let join_one = |photo: &PhotoRow, trash: bool| {
+        let album_ids: Vec<String> = joins
+            .albums
+            .get(&photo.photo_id)
+            .into_iter()
+            .flatten()
+            .filter(|id| titles.contains_key(id.as_str()))
+            .cloned()
+            .collect();
+        let album_titles = album_ids
+            .iter()
+            .filter_map(|id| titles.get(id.as_str()).map(|title| (*title).to_owned()))
+            .collect();
+        let purge_at = trash.then(|| photo.purge_at.clone()).flatten();
+        GridPhoto {
+            favorite: joins.favorites.contains(&photo.photo_id),
+            byte_size: joins.sizes.get(&photo.content_id).copied(),
+            taken_at: photo.taken_at.clone().or_else(|| photo.created_at.clone()),
+            album_ids,
+            album_titles,
+            place: photo
+                .place_id
+                .as_deref()
+                .and_then(|id| by_place.get(id))
+                .map(|place| (*place).clone()),
+            tags: joins.tags.get(&photo.photo_id).cloned().unwrap_or_default(),
+            purge_in_days: purge_in_days(purge_at.as_deref(), now_ms),
+            purge_at,
+            photo: photo.clone(),
+        }
+    };
+    let live: Vec<&PhotoRow> = windowed
+        .iter()
+        .filter(|photo| photo.deleted_at.is_none() && !joins.archived.contains(&photo.photo_id))
+        .collect();
+    let folds = folded(&live);
+    let mut photos: Vec<GridPhoto> = live
+        .iter()
+        .filter(|photo| !folds.contains(&photo.photo_id))
+        .map(|photo| join_one(photo, false))
+        .collect();
+    // Newest first by `taken_at`, an absent one last.
+    photos.sort_by(|left, right| {
+        right
+            .taken_at
+            .as_deref()
+            .unwrap_or("")
+            .cmp(left.taken_at.as_deref().unwrap_or(""))
+            .then_with(|| right.photo.photo_id.cmp(&left.photo.photo_id))
+    });
+    let mut trash: Vec<GridPhoto> = in_trash.iter().map(|photo| join_one(photo, true)).collect();
+    trash.sort_by(|left, right| {
+        right
+            .photo
+            .deleted_at
+            .as_deref()
+            .unwrap_or("")
+            .cmp(left.photo.deleted_at.as_deref().unwrap_or(""))
+    });
+    // An album counts its live photographs and draws a cover that is still one of
+    // them: the chosen cover, else the first it holds.
+    for album in &mut albums {
+        let held: Vec<&GridPhoto> = photos
+            .iter()
+            .filter(|grid| grid.album_ids.contains(&album.album_id))
+            .collect();
+        album.photo_count = held.len();
+        let chosen_is_there = album
+            .cover_content_id
+            .as_deref()
+            .is_some_and(|cover| held.iter().any(|grid| grid.photo.content_id == cover));
+        if !chosen_is_there {
+            album.cover_content_id = held.first().map(|grid| grid.photo.content_id.clone());
         }
     }
-
-    let schemes = read_pages(door, &schemes_statement(), ASSET_JOIN_BOUND)?;
-    let concepts = read_pages(door, &concepts_statement(), ASSET_PAIR_BOUND)?;
-    let asset_tags = if asset_ids.is_empty() {
-        Vec::new()
-    } else {
-        read_pages(door, &asset_tags_statement(&asset_ids)?, ASSET_PAIR_BOUND)?
-    };
-    let custody = if content_ids.is_empty() {
-        Vec::new()
-    } else {
-        read_pages(door, &custody_statement(&content_ids)?, ASSET_JOIN_BOUND)?
-    };
-
-    let memory_ids: Vec<String> = memories
-        .iter()
-        .filter_map(|row| text_of(row, "memory_id"))
-        .collect();
-    let memory_members = if memory_ids.is_empty() {
-        Vec::new()
-    } else {
-        read_pages(
-            door,
-            &memory_members_statement(&memory_ids)?,
-            ASSET_PAIR_BOUND,
-        )?
-    };
-
-    Ok(LibraryReads {
-        live: Vec::new(),
-        live_filled: false,
-        trash: Vec::new(),
-        albums: albums
-            .iter()
-            .filter_map(|row| {
-                Some(AlbumRow {
-                    album_id: text_of(row, "collection_id")?,
-                    title: text_of(row, "name"),
-                    cover_content_id: text_of(row, "cover_content_id"),
-                })
-            })
-            .collect(),
-        places: places.iter().filter_map(PlaceRow::of).collect(),
-        contents,
-        album_ids_by_asset,
-        // `core_content_representation` is the R20(b) media-type index, keyed
-        // on the OWNER — `media.asset` — never on the bytes, because two
-        // assets can share a sha and read it as two different things
-        // (`crate::representations`).
-        media_types: crate::representations::read_media_types(door, &content_ids)?,
-        joins: fold_asset_joins(&schemes, &concepts, &asset_tags, &custody),
-        memories,
-        memory_members,
+    let tail = photos.last().and_then(|grid| grid.taken_at.clone());
+    Ok(LibraryData {
+        photos,
+        albums,
+        places,
+        trash,
+        truncated: newest.filled,
+        window,
+        tail,
     })
 }
 
 // ---------------------------------------------------------------------------
-// `search`.
+// `search`
 // ---------------------------------------------------------------------------
 
-/// What `search` answers: the photographs whose caption, recognised text or
-/// transcript the term names, as ASSET ids, in the index's **rank order** (best
-/// match first). A grid reads the photographs themselves by these ids; the
-/// order it draws them in is its own (capture time, as every shelf).
+/// What `search` answers: the photographs whose caption, place or recognised text
+/// the term names, in the index's **rank order**. A grid reads the photographs
+/// themselves by these ids; the order it draws them in is its own.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct SearchData {
-    pub asset_ids: Vec<String>,
+    pub photo_ids: Vec<String>,
 }
 
-/// Ask the FTS door for `term` over the photograph domain (`core.content_item`:
-/// the caption, the recognised text and the transcript, #1097 R-1097-25) and
-/// open the hits that are LIVE photographs.
-///
-/// The door answers CONTENT ids in rank order; a photograph is a media asset,
-/// so each content id opens the live, unarchived assets that hold it, and a
-/// content item with none (trashed, archived, or no asset at all) is no hit.
-/// `limit` is clamped to [`SEARCH_ROWS`]. A blank term, a term with no
-/// searchable word and a zero `limit` answer the empty shape and no denial.
+/// Ask the index for `term` over photographs and keep the hits that are LIVE and
+/// not archived. The index holds live photographs only; the archive is an edge, so
+/// it is read for the ids that came back. `limit` is clamped to [`SEARCH_ROWS`]. A
+/// blank term, a term with no searchable word and a zero `limit` answer the empty
+/// shape and no denial.
 ///
 /// # Errors
 ///
@@ -973,8 +729,7 @@ pub fn load_search_term(
     if term.is_empty() || limit == 0 {
         return Ok((SearchData::default(), None));
     }
-    let request =
-        centraid_search::SearchRequest::new(PHOTO_TARGET_TYPE, term, limit.min(SEARCH_ROWS));
+    let request = centraid_search::SearchRequest::new(PHOTO_KIND, term, limit.min(SEARCH_ROWS));
     let page = match search.query(principal, &request) {
         Ok(centraid_search::Answer::Data { page, .. }) => page,
         Ok(centraid_search::Answer::Denied(denial)) => {
@@ -990,45 +745,39 @@ pub fn load_search_term(
         Err(centraid_search::SearchError::NoSearchableWords { .. }) => {
             return Ok((SearchData::default(), None));
         }
-        Err(other) => {
-            return Ok((
-                SearchData::default(),
-                Some(Denial {
-                    code: None,
-                    message: Some(other.to_string()),
-                    revoked_at: None,
-                }),
-            ));
-        }
+        Err(other) => return Ok((SearchData::default(), Some(denial_of(other.to_string())))),
     };
-    if page.rows.is_empty() {
+    let ids: Vec<String> = page.rows.iter().map(|target| target.id.clone()).collect();
+    if ids.is_empty() {
         return Ok((SearchData::default(), None));
     }
-    let content_ids: Vec<String> = page.rows.iter().map(|target| target.id.clone()).collect();
-    let assets = read_pages(
-        door,
-        &search_assets_statement(&content_ids)?,
-        SEARCH_ASSET_BOUND,
-    )?;
-    // The rows come back in id order; the hit list's order is the rank.
-    let mut by_content: BTreeMap<String, Vec<String>> = BTreeMap::new();
-    for row in &assets {
-        if let (Some(content_id), Some(asset_id)) =
-            (text_of(row, "content_id"), text_of(row, "asset_id"))
-        {
-            by_content.entry(content_id).or_default().push(asset_id);
-        }
-    }
-    let mut seen = BTreeSet::new();
-    let mut asset_ids = Vec::new();
-    for content_id in &content_ids {
-        for asset_id in by_content.remove(content_id).unwrap_or_default() {
-            if seen.insert(asset_id.clone()) {
-                asset_ids.push(asset_id);
-            }
-        }
-    }
-    Ok((SearchData { asset_ids }, None))
+    let archived: BTreeSet<String> = ids_of(
+        &read_of(
+            door,
+            "photos.search.archived",
+            "edge",
+            "from_id, to_id",
+            "from_id",
+            &ids,
+            Some(("rel = ? AND to_id = ?", {
+                let mut bind = text("tagged");
+                bind.extend(text(ARCHIVED));
+                bind
+            })),
+        )?,
+        "from_id",
+    )
+    .into_iter()
+    .collect();
+    Ok((
+        SearchData {
+            photo_ids: ids
+                .into_iter()
+                .filter(|id| !archived.contains(id))
+                .collect(),
+        },
+        None,
+    ))
 }
 
 #[cfg(test)]
@@ -1038,31 +787,17 @@ mod tests {
     #[test]
     fn the_window_clamps_to_the_manifests_own_bounds() {
         assert_eq!(LibraryInput::default().window(), 500);
+        let at = |limit| LibraryInput {
+            limit: Some(limit),
+            before: None,
+        };
         assert_eq!(
-            LibraryInput {
-                limit: Some(0),
-                before: None
-            }
-            .window(),
+            at(0).window(),
             500,
             "a zero limit is v0's `|| 500`, not zero rows"
         );
-        assert_eq!(
-            LibraryInput {
-                limit: Some(5),
-                before: None
-            }
-            .window(),
-            20
-        );
-        assert_eq!(
-            LibraryInput {
-                limit: Some(9_000),
-                before: None
-            }
-            .window(),
-            2_000
-        );
+        assert_eq!(at(5).window(), 20);
+        assert_eq!(at(9_000).window(), 2_000);
     }
 
     #[test]
@@ -1072,241 +807,77 @@ mod tests {
             before: Some(String::new()),
         };
         assert_eq!(input.before(), None);
-        assert_eq!(live_statement(input.before()).bind.len(), 0);
+        assert_eq!(window_statement(input.before()).bind.len(), 0);
     }
 
-    /// The keyset predicate is `captured_at < ?`, so a NULL capture time fails
-    /// it — which is why an undated asset rides the first window only.
+    /// The keyset predicate is `taken_at < ?`, so a NULL capture time fails it —
+    /// which is why an undated photograph rides the first window only.
     #[test]
     fn the_cursor_predicate_is_a_strict_comparison_that_null_fails() {
-        let query = live_statement(Some("2026-01-01T00:00:00.000Z"));
-        assert_eq!(
-            query.r#where.as_deref(),
-            Some("deleted_at IS NULL AND archived_at IS NULL AND captured_at < ?")
-        );
+        let query = window_statement(Some("2026-01-01T00:00:00.000Z"));
+        assert_eq!(query.r#where.as_deref(), Some("taken_at < ?"));
         assert_eq!(query.bind.len(), 1);
     }
 
     #[test]
-    fn archived_assets_are_in_neither_shelf() {
-        let live = live_statement(None);
-        assert!(
-            live.r#where
-                .as_deref()
-                .is_some_and(|clause| clause.contains("archived_at IS NULL"))
+    fn the_countdown_is_whole_days_rounded_up_and_never_zero_for_no_date() {
+        let now = parse_instant_ms("2026-06-01T00:00:00.000Z").expect("an instant");
+        assert_eq!(
+            purge_in_days(Some("2026-06-02T00:00:00.001Z"), now),
+            Some(2)
         );
         assert_eq!(
-            trash_statement().r#where.as_deref(),
-            Some("deleted_at IS NOT NULL")
+            purge_in_days(Some("2026-06-01T00:00:00.000Z"), now),
+            Some(0)
         );
-    }
-
-    #[test]
-    fn a_blob_uri_becomes_three_variants_and_a_data_uri_becomes_none() {
-        let blob = ContentRow {
-            content_id: "c-1".to_owned(),
-            content_uri: Some("blob:blake3-abc".to_owned()),
-            byte_size: Some(10),
-            created_at: None,
-            deleted_at: None,
-            purge_at: None,
-        };
-        let uris = src_of(Some(&blob));
-        assert_eq!(uris.src.as_deref(), Some("/centraid/_vault/blobs/c-1"));
-        assert_eq!(
-            uris.thumb.as_deref(),
-            Some("/centraid/_vault/blobs/c-1?variant=thumb")
-        );
-        let inline = ContentRow {
-            content_uri: Some("data:image/png;base64,AA".to_owned()),
-            ..blob
-        };
-        let uris = src_of(Some(&inline));
-        assert_eq!(uris.src.as_deref(), Some("data:image/png;base64,AA"));
-        assert_eq!(uris.thumb, None, "there is no derivative to ask for");
-        assert_eq!(src_of(None), SourceUris::default());
-    }
-
-    #[test]
-    fn a_purge_window_with_no_date_is_unknown_and_not_today() {
-        let now = parse_instant_ms("2026-03-01T00:00:00.000Z").expect("parses");
         assert_eq!(purge_in_days(None, now), None);
-        assert_eq!(purge_in_days(Some("not-a-date"), now), None);
-        assert_eq!(
-            purge_in_days(Some("2026-03-31T00:00:00.000Z"), now),
-            Some(30)
-        );
-        assert_eq!(
-            purge_in_days(Some("2026-02-01T00:00:00.000Z"), now),
-            Some(0),
-            "an expired window floors at zero rather than going negative"
-        );
     }
 
-    #[test]
-    fn the_instant_parser_agrees_with_the_epoch_on_known_dates() {
-        assert_eq!(parse_instant_ms("1970-01-01T00:00:00.000Z"), Some(0));
-        assert_eq!(
-            parse_instant_ms("2026-03-01T00:00:00.000Z"),
-            Some(1_772_323_200_000)
-        );
-        assert_eq!(
-            parse_instant_ms("2099-06-01T09:00:00.000Z"),
-            Some(4_083_987_600_000)
-        );
-        assert_eq!(parse_instant_ms("2026-03-01"), None);
-    }
-
-    #[test]
-    fn the_star_is_derived_from_the_flags_scheme_and_absence_is_none() {
-        use centraid_apps_kit::row::Cell;
-        let text = |pairs: &[(&str, &str)]| -> Row {
-            pairs
-                .iter()
-                .map(|(key, value)| ((*key).to_owned(), Cell::Text((*value).to_owned())))
-                .collect()
-        };
-        let schemes = vec![
-            text(&[("scheme_id", "s-flags"), ("uri", FLAGS_SCHEME_URI)]),
-            text(&[("scheme_id", "s-tags"), ("uri", TAGS_SCHEME_URI)]),
-        ];
-        let concepts = vec![
-            text(&[
-                ("concept_id", "c-star"),
-                ("scheme_id", "s-flags"),
-                ("notation", STARRED_NOTATION),
-                ("pref_label", "Starred"),
-            ]),
-            text(&[
-                ("concept_id", "c-sunset"),
-                ("scheme_id", "s-tags"),
-                ("notation", "sunset"),
-                ("pref_label", "sunset"),
-            ]),
-        ];
-        let tags = vec![
-            text(&[
-                ("tag_id", "t-1"),
-                ("target_type", TAG_TARGET_TYPE),
-                ("target_id", "a-1"),
-                ("concept_id", "c-star"),
-            ]),
-            text(&[
-                ("tag_id", "t-2"),
-                ("target_type", TAG_TARGET_TYPE),
-                ("target_id", "a-1"),
-                ("concept_id", "c-sunset"),
-            ]),
-        ];
-        let joins = fold_asset_joins(&schemes, &concepts, &tags, &[]);
-        assert!(joins.favorite_assets.contains("a-1"));
-        assert_eq!(
-            joins.tags_by_asset["a-1"].len(),
-            1,
-            "the star is not a label"
-        );
-        assert_eq!(joins.tags_by_asset["a-1"][0].tag_id, "t-2");
-
-        // NO flags scheme yet: nothing is starred, and it is not an error.
-        let none = fold_asset_joins(&schemes[1..], &concepts, &tags, &[]);
-        assert!(none.favorite_assets.is_empty());
-    }
-
-    #[test]
-    fn a_live_asset_over_released_bytes_is_not_library() {
-        let asset = AssetRow {
-            asset_id: "a-1".to_owned(),
-            content_id: "c-1".to_owned(),
-            kind: Some("photo".to_owned()),
-            title: None,
-            captured_at: Some("2026-01-01T00:00:00.000Z".to_owned()),
-            tz_offset_min: None,
-            capture_group_id: None,
+    fn photo(
+        id: &str,
+        form: &str,
+        burst: Option<&str>,
+        from: Option<&str>,
+        made: &str,
+    ) -> PhotoRow {
+        PhotoRow {
+            photo_id: id.to_owned(),
+            content_id: format!("h-{id}"),
+            media_type: None,
+            form: Some(form.to_owned()),
+            title: String::new(),
+            taken_at: None,
+            offset_min: None,
+            burst: burst.map(str::to_owned),
             place_id: None,
             width: None,
             height: None,
-            source_asset_id: None,
-            archived_at: None,
+            duration_s: None,
+            edited_from: from.map(str::to_owned),
+            created_at: Some(made.to_owned()),
+            updated_at: None,
             deleted_at: None,
             purge_at: None,
-            created_at: None,
-        };
-        let mut reads = LibraryReads {
-            live: vec![asset.clone()],
-            ..LibraryReads::default()
-        };
-        reads.contents.insert(
-            "c-1".to_owned(),
-            ContentRow {
-                content_id: "c-1".to_owned(),
-                content_uri: Some("blob:x".to_owned()),
-                byte_size: Some(1),
-                created_at: None,
-                deleted_at: Some("2026-02-01T00:00:00.000Z".to_owned()),
-                purge_at: None,
-            },
-        );
-        assert!(fold_library(&reads, 500, 0).assets.is_empty());
-    }
-
-    #[test]
-    fn the_tail_is_the_oldest_taken_at_the_page_reached() {
-        let make = |id: &str, at: &str| AssetRow {
-            asset_id: id.to_owned(),
-            content_id: format!("c-{id}"),
-            kind: None,
-            title: None,
-            captured_at: Some(at.to_owned()),
-            tz_offset_min: None,
-            capture_group_id: None,
-            place_id: None,
-            width: None,
-            height: None,
-            source_asset_id: None,
-            archived_at: None,
-            deleted_at: None,
-            purge_at: None,
-            created_at: None,
-        };
-        let reads = LibraryReads {
-            live: vec![
-                make("a-1", "2026-01-01T00:00:00.000Z"),
-                make("a-2", "2026-03-01T00:00:00.000Z"),
-            ],
-            live_filled: true,
-            ..LibraryReads::default()
-        };
-        let data = fold_library(&reads, 500, 0);
-        assert_eq!(
-            data.assets
-                .iter()
-                .map(|asset| asset.asset.asset_id.as_str())
-                .collect::<Vec<_>>(),
-            ["a-2", "a-1"],
-            "newest first"
-        );
-        assert_eq!(data.tail.as_deref(), Some("2026-01-01T00:00:00.000Z"));
-        assert!(data.truncated);
-    }
-
-    #[test]
-    fn every_statement_selects_the_two_columns_its_cursor_reads() {
-        let statements = vec![
-            live_statement(None),
-            trash_statement(),
-            albums_statement("photos.library.albums"),
-            memories_statement(),
-            schemes_statement(),
-            concepts_statement(),
-        ];
-        for query in statements {
-            for column in [&query.order.sort_column, &query.order.pk_column] {
-                assert!(
-                    query.select.contains(column.as_str()),
-                    "{} orders by {column} and does not select it",
-                    query.name
-                );
-            }
         }
+    }
+
+    /// AN EDIT DRAWS AND THE ORIGINAL STAYS UNDERNEATH: the render folds the camera's
+    /// bytes, a second edit folds the first, a crop with no burst folds nothing, and
+    /// a movie of a burst is never folded.
+    #[test]
+    fn an_edit_folds_what_it_was_made_from_and_a_crop_folds_nothing() {
+        let original = photo("o", "photo", Some("b"), None, "2026-01-01");
+        let edit = photo("e", "photo", Some("b"), Some("o"), "2026-01-02");
+        let second = photo("e2", "photo", Some("b"), Some("e"), "2026-01-03");
+        let movie = photo("m", "video", Some("b"), None, "2026-01-01");
+        let crop = photo("c", "photo", None, Some("o"), "2026-01-04");
+        let live = [&original, &edit, &second, &movie, &crop];
+        let folds = folded(&live);
+        assert_eq!(folds, ["e", "o"].map(str::to_owned).into_iter().collect());
+        let without_the_edits = [&original, &movie, &crop];
+        assert!(
+            folded(&without_the_edits).is_empty(),
+            "trashing the edit brings the original back"
+        );
     }
 }

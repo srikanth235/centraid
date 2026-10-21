@@ -2,520 +2,968 @@
   "manifestVersion": 1,
   "id": "photos",
   "name": "Photos",
-  "description": "Your photo library as a projection of the personal vault: the meaning — assets, albums, captions, capture times — is owned in the vault, while the bytes are rented behind each content item's content_uri. Uploading, captioning, deleting and organizing into albums all run through typed media commands — consent-checked, receipted, and deduped on identical bytes. No data of its own — revoke the grant and the app goes dark while the library stays the owner's.",
-  "version": "0.4.1",
+  "description": "Your photo library as a projection of the vault: a photograph is an entity over one blob — its title is the caption, its capture time, size and place are columns of its row — an album is a container with an ordered list of photographs, a heart or the archive is an edge to a flag, and a thumbnail, a caption or a perceptual hash is a derivative of the bytes. Uploading, captioning, deleting and organizing into albums all run through typed vault commands — the photograph's own (photo.*, album.set_cover) and the shared ones every app uses — contract-checked and journalled, and identical bytes are one photograph. No data of its own — revoke the grant and the app goes dark while the library stays the owner's.",
+  "version": "0.5.0",
   "iconKey": "Camera",
   "colorKey": "amber",
   "vault": {
     "why": "Shows your photo library and albums, and lets you upload, caption and organize.",
     "scopes": [
-      { "schema": "media", "verbs": "read" },
-      { "schema": "core", "table": "content_item", "verbs": "read" },
-      { "schema": "core", "table": "content_representation", "verbs": "read" },
-      { "schema": "core", "table": "content_derivative", "verbs": "read" },
-      { "schema": "core", "table": "tag", "verbs": "read" },
-      { "schema": "core", "table": "concept", "verbs": "read" },
-      { "schema": "core", "table": "concept_scheme", "verbs": "read" },
-      { "schema": "core", "table": "collection", "verbs": "read" },
-      { "schema": "core", "table": "collection_entry", "verbs": "read" },
-      { "schema": "social", "table": "circle", "verbs": "read" },
-      { "schema": "social", "table": "circle_member", "verbs": "read" },
-      { "schema": "media", "table": "add_asset", "verbs": "act" },
-      { "schema": "media", "table": "update_asset", "verbs": "act" },
-      { "schema": "media", "table": "delete_asset", "verbs": "act" },
-      { "schema": "media", "table": "restore_asset", "verbs": "act" },
-      { "schema": "media", "table": "purge_asset", "verbs": "act" },
-      { "schema": "media", "table": "create_album", "verbs": "act" },
-      { "schema": "media", "table": "rename_album", "verbs": "act" },
-      { "schema": "media", "table": "set_album_cover", "verbs": "act" },
-      { "schema": "media", "table": "delete_album", "verbs": "act" },
-      { "schema": "media", "table": "restore_album", "verbs": "act" },
-      { "schema": "media", "table": "add_to_album", "verbs": "act" },
-      { "schema": "media", "table": "remove_from_album", "verbs": "act" },
-      { "schema": "media", "table": "face_region", "verbs": "read" },
-      { "schema": "media", "table": "face_cluster", "verbs": "read" },
-      { "schema": "media", "table": "memory", "verbs": "read" },
-      { "schema": "media", "table": "memory_member", "verbs": "read" },
-      { "schema": "core", "table": "party", "verbs": "read" },
-      { "schema": "media", "table": "answer_face_proposal", "verbs": "act" },
-      { "schema": "core", "table": "place", "verbs": "read" },
-      { "schema": "media", "table": "set_asset_place", "verbs": "act" },
-      { "schema": "media", "table": "name_place", "verbs": "act" },
-      { "schema": "core", "table": "tag_item", "verbs": "act" },
-      { "schema": "core", "table": "untag_item", "verbs": "act" },
-      { "schema": "enrich", "table": "policy", "verbs": "read" },
-      { "schema": "enrich", "table": "request_enrichment", "verbs": "act" },
-      { "schema": "blob", "table": "custody_state", "verbs": "read" },
-      { "schema": "blob", "table": "custody_rollup", "verbs": "read" }
+      {
+        "schema": "vault",
+        "table": "entity",
+        "verbs": "read"
+      },
+      {
+        "schema": "vault",
+        "table": "photo",
+        "verbs": "read"
+      },
+      {
+        "schema": "vault",
+        "table": "place",
+        "verbs": "read"
+      },
+      {
+        "schema": "vault",
+        "table": "container",
+        "verbs": "read"
+      },
+      {
+        "schema": "vault",
+        "table": "edge",
+        "verbs": "read"
+      },
+      {
+        "schema": "vault",
+        "table": "blob",
+        "verbs": "read"
+      },
+      {
+        "schema": "vault",
+        "table": "derivative",
+        "verbs": "read"
+      },
+      {
+        "schema": "photo",
+        "table": "add",
+        "verbs": "act"
+      },
+      {
+        "schema": "photo",
+        "table": "edit",
+        "verbs": "act"
+      },
+      {
+        "schema": "entity",
+        "table": "retitle",
+        "verbs": "act"
+      },
+      {
+        "schema": "flag",
+        "table": "set",
+        "verbs": "act"
+      },
+      {
+        "schema": "flag",
+        "table": "clear",
+        "verbs": "act"
+      },
+      {
+        "schema": "entity",
+        "table": "trash",
+        "verbs": "act"
+      },
+      {
+        "schema": "entity",
+        "table": "restore",
+        "verbs": "act"
+      },
+      {
+        "schema": "entity",
+        "table": "purge",
+        "verbs": "act"
+      },
+      {
+        "schema": "container",
+        "table": "create",
+        "verbs": "act"
+      },
+      {
+        "schema": "album",
+        "table": "set_cover",
+        "verbs": "act"
+      },
+      {
+        "schema": "edge",
+        "table": "add",
+        "verbs": "act"
+      },
+      {
+        "schema": "edge",
+        "table": "remove",
+        "verbs": "act"
+      },
+      {
+        "schema": "photo",
+        "table": "set_place",
+        "verbs": "act"
+      },
+      {
+        "schema": "tag",
+        "table": "add",
+        "verbs": "act"
+      },
+      {
+        "schema": "tag",
+        "table": "remove",
+        "verbs": "act"
+      }
     ]
   },
   "actionSideEffect": "vault-write",
   "actions": [
     {
       "name": "upload",
-      "description": "Ingest one file into the library through media.add_asset; identical bytes dedupe onto one asset, and re-uploading a deleted photo restores it.",
+      "description": "Add one file to the library through photo.add; identical bytes are one photograph (the existing one is adopted), and re-uploading a deleted photograph brings it back. An edit names the photograph it was made from and keeps that one's date, place and caption.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "data_uri": { "type": "string", "minLength": 6 },
-          "staged_sha": { "type": "string", "minLength": 64, "maxLength": 64 },
-          "kind": {
+          "id": {
             "type": "string",
-            "enum": ["photo", "video", "audio", "scan"]
+            "minLength": 1,
+            "description": "The id the shell minted for this write (#922 G2); omitted, the vault mints one."
           },
-          "captured_at": { "type": "string" },
-          "tz_offset_min": {
-            "type": "integer",
+          "blob": {
+            "type": "string",
+            "minLength": 64,
+            "maxLength": 64
+          },
+          "media_type": {
+            "type": "string",
+            "minLength": 1
+          },
+          "form": {
+            "type": "string",
+            "enum": [
+              "photo",
+              "video",
+              "scan"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "taken_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "offset_min": {
+            "type": [
+              "integer",
+              "null"
+            ],
             "minimum": -1080,
             "maximum": 1080
           },
-          "capture_group_id": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 200
+          "width": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
           },
-          "source_asset_id": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 200,
-            "description": "The asset these bytes were derived from — what the editor stamps on the new photograph it saves beside the original (issue #711). Absent for anything that is not a derived copy."
+          "height": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
           },
-          "title": { "type": "string" },
-          "width": { "type": "integer", "minimum": 1 },
-          "height": { "type": "integer", "minimum": 1 },
-          "duration_s": { "type": "number", "minimum": 0 },
+          "duration_s": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "exif": {
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "burst": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "edited_from": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "lat": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": -90,
+            "maximum": 90
+          },
+          "lon": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": -180,
+            "maximum": 180
+          },
+          "place_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "phash": {
-            "type": "string",
-            "minLength": 4,
-            "maxLength": 64,
-            "pattern": "^[0-9a-f]+$",
-            "description": "Client-computed perceptual hash (issue #299 Tier 0)."
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 128
           },
           "thumbhash": {
-            "type": "string",
-            "minLength": 6,
-            "maxLength": 100,
-            "pattern": "^[A-Za-z0-9+/]+$",
-            "description": "Client-computed ThumbHash placeholder, unpadded base64 (issue #419)."
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 512
           }
         },
+        "required": [
+          "blob",
+          "media_type"
+        ],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
         }
       }
     },
     {
-      "name": "update-asset",
-      "description": "Recaption a photo, fix its capture time, or toggle its favorite heart or its archived flag through media.update_asset (the title lives on the content item, the star is a flags-scheme tag on the asset rather than a column of its own, and archived lives on the asset — archiving hides a photo from the timeline without trashing it).",
+      "name": "edit-photo",
+      "description": "Fix a photograph's capture time or offset, or what it was edited from, through photo.edit; a field given as null is cleared.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "asset_id": { "type": "string", "minLength": 1 },
-          "captured_at": { "type": "string" },
-          "title": { "type": "string" },
-          "favorite": { "type": "integer", "enum": [0, 1] },
-          "archived": { "type": "integer", "enum": [0, 1] }
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "taken_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "offset_min": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": -1080,
+            "maximum": 1080
+          },
+          "edited_from": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
         },
-        "required": ["asset_id"],
+        "required": [
+          "id"
+        ],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
         }
       }
     },
     {
-      "name": "delete-asset",
-      "description": "Move a photo to the trash through media.delete_asset; album entries drop, covers hand off, the bytes soft-delete only when nothing else references them, and the trash purges after about 30 days.",
+      "name": "retitle-photo",
+      "description": "Recaption a photograph through entity.retitle; a photograph's caption may be empty.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "asset_id": { "type": "string", "minLength": 1 }
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "title": {
+            "type": "string"
+          }
         },
-        "required": ["asset_id"],
+        "required": [
+          "id",
+          "title"
+        ],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
         }
       }
     },
     {
-      "name": "restore",
-      "description": "Bring a trashed photo (and its bytes) back through media.restore_asset; metadata survives intact, album membership does not. Restoring a live photo fails.",
+      "name": "flag-photo",
+      "description": "Heart a photograph (starred) or put it in the archive (archived) through flag.set — one `tagged` edge to the flag; an archived photograph is in neither the library nor the trash.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "asset_id": { "type": "string", "minLength": 1 }
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "flag": {
+            "type": "string",
+            "enum": [
+              "starred",
+              "archived"
+            ]
+          }
         },
-        "required": ["asset_id"],
+        "required": [
+          "id",
+          "flag"
+        ],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
         }
       }
     },
     {
-      "name": "purge-asset",
-      "description": "Delete one ALREADY-TRASHED photo forever through media.purge_asset. Irreversible: the asset row, its faces, tags, album membership and annotations go now, and the bytes are handed to the gateway's next storage sweep. A photo that is not in the trash is refused, as is one an edited copy still names as its source — purge the copy first.",
+      "name": "unflag-photo",
+      "description": "Take a photograph's heart or its archive flag away through flag.clear.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "flag": {
+            "type": "string",
+            "enum": [
+              "starred",
+              "archived"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "flag"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "delete-photo",
+      "description": "Move a photograph to the trash through entity.trash; it keeps its albums, its heart and its bytes until it is purged about 30 days later.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "restore-photo",
+      "description": "Bring a trashed photograph back through entity.restore; its albums and its heart come back with it. Restoring a live photograph fails with a sentence.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "purge-photo",
+      "description": "Delete one ALREADY-TRASHED photograph forever through entity.purge. Irreversible: the photograph, its albums' places for it, its heart and its labels go now, and its bytes go once nothing else holds them.",
       "confirmation": "required",
       "input": {
         "type": "object",
         "properties": {
-          "asset_id": { "type": "string", "minLength": 1 }
+          "id": {
+            "type": "string",
+            "minLength": 1
+          }
         },
-        "required": ["asset_id"],
+        "required": [
+          "id"
+        ],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
         }
       }
     },
     {
       "name": "create-album",
-      "description": "Start a new album through media.create_album.",
+      "description": "Start a new album through container.create with kind album.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "album_id": {
+          "id": {
             "type": "string",
             "minLength": 1,
-            "description": "The row id the seat minted for this write (#922 G2); omitted, the vault mints one."
+            "description": "The id the shell minted for this write (#922 G2); omitted, the vault mints one."
           },
-          "title": { "type": "string", "minLength": 1 }
+          "kind": {
+            "type": "string",
+            "enum": [
+              "album"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          }
         },
-        "required": ["title"],
+        "required": [
+          "kind",
+          "title"
+        ],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
         }
       }
     },
     {
       "name": "rename-album",
-      "description": "Retitle an album through media.rename_album.",
+      "description": "Retitle an album through entity.retitle.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "album_id": { "type": "string", "minLength": 1 },
-          "title": { "type": "string", "minLength": 1 }
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          }
         },
-        "required": ["album_id", "title"],
+        "required": [
+          "id",
+          "title"
+        ],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
         }
       }
     },
     {
       "name": "set-album-cover",
-      "description": "Choose an existing album member as the album cover through media.set_album_cover.",
+      "description": "Choose one of an album's photographs as its cover through album.set_cover; omit photo_id to let the album show its first.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "album_id": { "type": "string", "minLength": 1 },
-          "asset_id": { "type": "string", "minLength": 1 }
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "photo_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1
+          }
         },
-        "required": ["album_id", "asset_id"],
+        "required": [
+          "id"
+        ],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
         }
       }
     },
     {
       "name": "delete-album",
-      "description": "Delete an album through media.delete_album; its photos stay in the library.",
+      "description": "Delete an album through entity.trash; its photographs stay in the library, and the album comes back with its ordered photographs through restore-album.",
       "confirmation": "required",
       "input": {
         "type": "object",
         "properties": {
-          "album_id": { "type": "string", "minLength": 1 }
+          "id": {
+            "type": "string",
+            "minLength": 1
+          }
         },
-        "required": ["album_id"],
+        "required": [
+          "id"
+        ],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
         }
       }
     },
     {
       "name": "restore-album",
-      "description": "Restore a deleted album and its ordered membership from its durable P5 revision.",
+      "description": "Restore a deleted album, with its ordered photographs, through entity.restore.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "album_id": { "type": "string", "minLength": 1 },
-          "revision_id": { "type": "string", "minLength": 1 }
+          "id": {
+            "type": "string",
+            "minLength": 1
+          }
         },
-        "required": ["album_id", "revision_id"],
+        "required": [
+          "id"
+        ],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
         }
       }
     },
     {
       "name": "add-to-album",
-      "description": "Put a photo in an album through media.add_to_album; fails when it is already there.",
+      "description": "Put a photograph in an album through edge.add (rel contains): it goes after the photographs the album has, and adding it twice changes nothing.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "album_id": { "type": "string", "minLength": 1 },
-          "asset_id": { "type": "string", "minLength": 1 }
+          "from": {
+            "type": "string",
+            "minLength": 1
+          },
+          "rel": {
+            "type": "string",
+            "enum": [
+              "contains"
+            ]
+          },
+          "to": {
+            "type": "string",
+            "minLength": 1
+          },
+          "position": {
+            "type": [
+              "number",
+              "null"
+            ]
+          }
         },
-        "required": ["album_id", "asset_id"],
+        "required": [
+          "from",
+          "rel",
+          "to"
+        ],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
         }
       }
     },
     {
       "name": "remove-from-album",
-      "description": "Take a photo out of an album through media.remove_from_album; the photo stays in the library.",
+      "description": "Take a photograph out of an album through edge.remove; the photograph stays in the library.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "album_id": { "type": "string", "minLength": 1 },
-          "asset_id": { "type": "string", "minLength": 1 }
-        },
-        "required": ["album_id", "asset_id"],
-        "additionalProperties": false
-      },
-      "output": {
-        "type": "object",
-        "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
-        }
-      }
-    },
-    {
-      "name": "answer-face",
-      "description": "Answer one enricher face proposal through media.answer_face_proposal (issue #712) — one verb, three answers: confirm names the person, reject refuses it for good, dismiss keeps the face and deliberately leaves it unnamed. Replaces confirm-face/reject-face, which between them could not express an answer that finishes a review queue.",
-      "confirmation": "none",
-      "input": {
-        "type": "object",
-        "properties": {
-          "region_id": { "type": "string", "minLength": 1 },
-          "answer": {
+          "from": {
             "type": "string",
-            "enum": ["confirm", "reject", "dismiss"]
+            "minLength": 1
           },
-          "party_id": { "type": "string", "minLength": 1 }
+          "rel": {
+            "type": "string",
+            "enum": [
+              "contains"
+            ]
+          },
+          "to": {
+            "type": "string",
+            "minLength": 1
+          }
         },
-        "required": ["region_id", "answer"],
+        "required": [
+          "from",
+          "rel",
+          "to"
+        ],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
         }
       }
     },
     {
       "name": "set-place",
-      "description": "Correct or clear a photo's place through media.set_asset_place (issue #352) — points the asset at an existing core.place row, or clears it back to unknown when place_id is omitted. There is no app-plane command to mint a brand-new place.",
+      "description": "Correct or clear a photograph's place through photo.set_place — points it at an existing place, or clears it back to unknown.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "asset_id": { "type": "string", "minLength": 1 },
-          "place_id": { "type": "string", "minLength": 1 }
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "place_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1
+          }
         },
-        "required": ["asset_id"],
+        "required": [
+          "id"
+        ],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
         }
       }
     },
     {
       "name": "name-place",
-      "description": "Name a place through media.name_place (issue #816) — the member's own name for somewhere the vault knows only as a coordinate, plus an optional kind ('home' is what anchors a relative phrase elsewhere). Writes core.place.name only; the gazetteer's derived address survives a rename.",
+      "description": "Name a place through entity.retitle — the member's own name for somewhere the vault knows only as a coordinate. A rename never touches the gazetteer's locality.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "place_id": { "type": "string", "minLength": 1 },
-          "name": { "type": "string", "minLength": 1, "maxLength": 120 },
-          "kind": {
+          "id": {
             "type": "string",
-            "enum": ["home", "work", "venue", "city", "region", "other"]
+            "minLength": 1
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
           }
         },
-        "required": ["place_id", "name"],
+        "required": [
+          "id",
+          "title"
+        ],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
         }
       }
     },
     {
-      "name": "tag-asset",
-      "description": "Add a free-form label to a photo through core.tag_item (issue #352) — additive and idempotent over the shared \"Tags\" concept scheme.",
+      "name": "tag-photo",
+      "description": "Add a free-form label to a photograph through tag.add — additive and idempotent; the label is minted once and shared by everything wearing it.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "asset_id": { "type": "string", "minLength": 1 },
-          "label": { "type": "string", "minLength": 1 }
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1
+          }
         },
-        "required": ["asset_id", "label"],
+        "required": [
+          "id",
+          "label"
+        ],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
         }
       }
     },
     {
-      "name": "untag-asset",
-      "description": "Remove one free-form label from a photo through core.untag_item (issue #352) — removes by tag_id, the specific edge.",
+      "name": "untag-photo",
+      "description": "Remove one free-form label from a photograph through tag.remove — by label, the one edge.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "tag_id": { "type": "string", "minLength": 1 }
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1
+          }
         },
-        "required": ["tag_id"],
+        "required": [
+          "id",
+          "label"
+        ],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
-        }
-      }
-    },
-    {
-      "name": "request-enrichment",
-      "description": "Ask the enricher to run now through enrich.request_enrichment (issue #352) — the owner's \"Prioritize faces\" ask, reason 'manual'. Recognition is ambient (ruled 2026-09-09); this row only moves a library sooner in the queue. Only fires when enrichment-status says the photos domain isn't 'off'.",
-      "confirmation": "none",
-      "input": {
-        "type": "object",
-        "properties": {
-          "entity_type": { "type": "string" },
-          "entity_id": { "type": "string" }
-        },
-        "additionalProperties": false
-      },
-      "output": {
-        "type": "object",
-        "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
         }
       }
     }
   ],
   "queries": [
     {
-      "name": "storage",
-      "description": "The whole library's byte custody, as the gateway's standing blob sweep counted it (blob.custody_rollup): per-bucket counts and bytes for the five custody states, plus `freeable` (locally resident originals with a proved copy elsewhere) and `local-unproven` (locally resident originals with no such proof, which no surface may offer to release). Seven small rows — the aggregate the bounded library window cannot give, and which no app can compute for itself because local-CAS presence is a filesystem fact. `computedAt` is null until the sweep has run, and must be rendered as \u201cnot counted yet\u201d rather than as zeroes.",
-      "input": {
-        "type": "object",
-        "properties": {},
-        "additionalProperties": false
-      },
-      "output": {
-        "type": "object",
-        "properties": {
-          "rollup": { "type": "object" },
-          "vaultDenied": { "type": "object" },
-          "error": { "type": "string" }
-        }
-      }
-    },
-    {
       "name": "library",
-      "description": "A bounded recent window of live media assets (newest by captured_at) with their content items' content_uri and media_type plus the albums they belong to — never a whole-table pull; trashed assets ride separately (newest 200) with their days-until-purge, and `truncated` says older photos exist beyond the window. Issue #352 phase 3/4: each asset also carries `place`, `tags` and `custody_state`; `places` is the full known place list. Issue #599: `before` is a keyset cursor (only assets captured strictly earlier), and `tail` reports the oldest timestamp this page reached — pass it back as the next `before`.",
+      "description": "A bounded recent window of live photographs (newest by taken_at, not archived, an edit folding the original it was made from) with their bytes' media type and size plus the albums they belong to — never a whole-table pull; trashed photographs ride separately (newest 200) with their days-until-purge, and `truncated` says older photographs exist beyond the window. Each photograph also carries `place` and `tags`; `places` is the full known place list. `before` is a keyset cursor (only photographs taken strictly earlier), and `tail` reports the oldest timestamp this page reached — pass it back as the next `before`.",
       "input": {
         "type": "object",
         "properties": {
@@ -534,38 +982,63 @@
       "output": {
         "type": "object",
         "properties": {
-          "assets": { "type": "array" },
-          "albums": { "type": "array" },
-          "places": { "type": "array" },
-          "trash": { "type": "array" },
-          "truncated": { "type": "boolean" },
-          "window": { "type": "integer" },
-          "tail": { "type": ["string", "null"] },
-          "vaultDenied": { "type": "object" }
+          "photos": {
+            "type": "array"
+          },
+          "albums": {
+            "type": "array"
+          },
+          "places": {
+            "type": "array"
+          },
+          "trash": {
+            "type": "array"
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "window": {
+            "type": "integer"
+          },
+          "tail": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
         }
       }
     },
     {
       "name": "search",
-      "description": "Title/caption search over the whole live library via FTS5 (issue #352) — not just the loaded window: matches core.content_item titles, joins albums/favorite the same way the library query does, and returns rows shaped for the same grid.",
+      "description": "Caption and place search over the whole live library through the vault's one search index (the caption, the place's name and its locality) — not just the loaded window; returns the ranked photograph ids a grid reads, leaving out the archive.",
       "input": {
         "type": "object",
         "properties": {
-          "term": { "type": "string" }
+          "term": {
+            "type": "string"
+          }
         },
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "assets": { "type": "array" },
-          "vaultDenied": { "type": "object" }
+          "photos": {
+            "type": "array"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
         }
       }
     },
     {
       "name": "duplicates",
-      "description": "Near-duplicate clusters over the live library (issue #352 phase 3/4, closing #299's deferred duplicates shelf): reads the standing sweep's real phash hamming clustering (media.asset_phash.cluster_id) and groups/joins client-side — a true visual-similarity signal, not a coincidence-prone fingerprint.",
+      "description": "Near-duplicate clusters over the live library: groups the photographs whose perceptual hashes (a derivative of each blob) lie within a few bits of one another, recomputed at read — a true visual-similarity signal, not a coincidence-prone fingerprint, and nothing stored.",
       "input": {
         "type": "object",
         "additionalProperties": false
@@ -573,23 +1046,12 @@
       "output": {
         "type": "object",
         "properties": {
-          "clusters": { "type": "array" },
-          "vaultDenied": { "type": "object" }
-        }
-      }
-    },
-    {
-      "name": "enrichment-status",
-      "description": "Whether face enrichment is enabled for this vault (issue #352 phase 3/4): reads enrich.policy for the photos domain. `tier` is 'off' | 'device' | 'gateway' (issue #712 C5).",
-      "input": {
-        "type": "object",
-        "additionalProperties": false
-      },
-      "output": {
-        "type": "object",
-        "properties": {
-          "tier": { "type": ["string", "null"] },
-          "vaultDenied": { "type": "object" }
+          "clusters": {
+            "type": "array"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
         }
       }
     }
@@ -601,8 +1063,14 @@
       "type": "segmented",
       "default": "narrow",
       "options": [
-        { "value": "narrow", "label": "Narrow" },
-        { "value": "wide", "label": "Wide" }
+        {
+          "value": "narrow",
+          "label": "Narrow"
+        },
+        {
+          "value": "wide",
+          "label": "Wide"
+        }
       ]
     },
     {
@@ -611,11 +1079,26 @@
       "type": "swatch",
       "default": "#B47B3F",
       "options": [
-        { "value": "#4E68DD", "label": "Indigo" },
-        { "value": "#2EA098", "label": "Teal" },
-        { "value": "#7C5BD9", "label": "Violet" },
-        { "value": "#E55772", "label": "Rose" },
-        { "value": "#B47B3F", "label": "Ochre" }
+        {
+          "value": "#4E68DD",
+          "label": "Indigo"
+        },
+        {
+          "value": "#2EA098",
+          "label": "Teal"
+        },
+        {
+          "value": "#7C5BD9",
+          "label": "Violet"
+        },
+        {
+          "value": "#E55772",
+          "label": "Rose"
+        },
+        {
+          "value": "#B47B3F",
+          "label": "Ochre"
+        }
       ]
     },
     {
@@ -624,14 +1107,22 @@
       "type": "segmented",
       "default": "show",
       "options": [
-        { "value": "show", "label": "Show" },
-        { "value": "hide", "label": "Hide" }
+        {
+          "value": "show",
+          "label": "Show"
+        },
+        {
+          "value": "hide",
+          "label": "Hide"
+        }
       ]
     }
   ],
   "seats": {
     "byteBearing": true,
-    "originActs": ["camera"],
+    "originActs": [
+      "camera"
+    ],
     "disabledOn": [],
     "northStar": "google-photos"
   },

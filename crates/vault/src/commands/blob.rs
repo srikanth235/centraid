@@ -9,6 +9,35 @@ use crate::blob;
 use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency};
 use crate::error::Result;
 
+/// A sentence when the bytes a command names cannot be claimed: they are not
+/// claimed yet and the command did not say how large they are.
+///
+/// **A command claims the bytes it names** (R-1135-5-9): the stage door only
+/// hashes and stores, so bytes staged and never named leave no row and nothing to
+/// collect, and no collector can race the command that is about to name them.
+pub(crate) fn pre_claimable(ctx: &CommandCtx<'_, '_>, key: &str) -> Result<Option<String>> {
+    let Some(hash) = ctx.optional_str(key) else {
+        return Ok(None);
+    };
+    let held: i64 =
+        ctx.connection()
+            .query_row("SELECT COUNT(*) FROM blob WHERE hash = ?1", [hash], |row| {
+                row.get(0)
+            })?;
+    let sized = ctx.input.get("size").is_some_and(|size| !size.is_null());
+    Ok((held == 0 && !sized)
+        .then(|| "those bytes have not been counted; say how large they are".to_owned()))
+}
+
+/// Claim the bytes a command names, at the size it counted (a hash already
+/// claimed is left as it is, and its size must agree).
+pub(crate) fn claim(ctx: &CommandCtx<'_, '_>, key: &str) -> Result<()> {
+    if let Some(size) = ctx.input.get("size").and_then(serde_json::Value::as_i64) {
+        blob::stage(ctx.connection(), ctx.required_str(key)?, size)?;
+    }
+    Ok(())
+}
+
 fn stage(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     let size = ctx
         .input

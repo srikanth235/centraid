@@ -36,23 +36,12 @@
 
 use rusqlite::OptionalExtension;
 
+use crate::commands::blob::{claim, pre_claimable};
 use crate::commands::entity::lookup_live;
 use crate::commands::note::BODY_BUDGET_BYTES;
 use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency};
 use crate::error::{Result, VaultError};
 use crate::model::Kind;
-
-fn bytes_refusal(ctx: &CommandCtx<'_, '_>, key: &str) -> Result<Option<String>> {
-    let Some(hash) = ctx.optional_str(key) else {
-        return Ok(None);
-    };
-    let held: i64 =
-        ctx.connection()
-            .query_row("SELECT COUNT(*) FROM blob WHERE hash = ?1", [hash], |row| {
-                row.get(0)
-            })?;
-    Ok((held == 0).then(|| "those bytes have not arrived yet".to_owned()))
-}
 
 /// A folder a document may be filed in: there, live and a folder.
 fn folder_refusal(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
@@ -113,7 +102,7 @@ fn pre_add(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     if ctx.required_str("title")?.trim().is_empty() {
         return Ok(Some("a document needs a name".to_owned()));
     }
-    if let Some(sentence) = bytes_refusal(ctx, "blob")? {
+    if let Some(sentence) = pre_claimable(ctx, "blob")? {
         return Ok(Some(sentence));
     }
     folder_refusal(ctx)
@@ -164,7 +153,7 @@ fn pre_replace(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     if let Some(sentence) = live_document(ctx)? {
         return Ok(Some(sentence));
     }
-    if let Some(sentence) = bytes_refusal(ctx, "blob")? {
+    if let Some(sentence) = pre_claimable(ctx, "blob")? {
         return Ok(Some(sentence));
     }
     title_refusal(ctx)
@@ -304,7 +293,19 @@ fn write_words(ctx: &CommandCtx<'_, '_>, words: &str) -> Result<String> {
     Ok(hash)
 }
 
+/// The words the phone read out of the bytes (a PDF's text, a scan's OCR), when it
+/// sent them with the file: they are the blob's `text` derivative, so the
+/// document is found by them from the first moment.
+fn keep_extracted_text(ctx: &CommandCtx<'_, '_>, blob: &str) -> Result<()> {
+    if let Some(text) = ctx.optional_str("text").filter(|text| !text.is_empty()) {
+        crate::blob::write_derivative(ctx.connection(), &ctx.now, blob, "text", None, Some(text))?;
+    }
+    Ok(())
+}
+
 fn add(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
+    claim(ctx, "blob")?;
+    keep_extracted_text(ctx, ctx.required_str("blob")?)?;
     let id = found(
         ctx,
         ctx.optional_str("id"),
@@ -353,6 +354,8 @@ fn replace(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
         Some(media_type) => media_type.to_owned(),
         None => media_type_of(ctx, id)?.unwrap_or_default(),
     };
+    claim(ctx, "blob")?;
+    keep_extracted_text(ctx, ctx.required_str("blob")?)?;
     let replaced = set_content(ctx, id, ctx.required_str("blob")?, &media_type)?;
     if let Some(title) = ctx.optional_str("title") {
         ctx.connection().execute(
@@ -427,7 +430,9 @@ pub fn definitions() -> Vec<CommandDefinition> {
                 "title": { "type": "string", "maxLength": 1000 },
                 "blob": { "type": "string", "minLength": 64, "maxLength": 64 },
                 "media_type": { "type": "string", "minLength": 1 },
-                "folder_id": { "type": ["string", "null"] }
+                "size": { "type": "integer", "minimum": 0 },
+                "folder_id": { "type": ["string", "null"] },
+                "text": { "type": "string", "maxLength": 200000 }
               }
             }"#,
             Idempotency::Once,
@@ -480,8 +485,10 @@ pub fn definitions() -> Vec<CommandDefinition> {
               "properties": {
                 "id": { "type": "string", "minLength": 1 },
                 "blob": { "type": "string", "minLength": 64, "maxLength": 64 },
+                "size": { "type": "integer", "minimum": 0 },
                 "media_type": { "type": "string", "minLength": 1 },
-                "title": { "type": "string", "maxLength": 1000 }
+                "title": { "type": "string", "maxLength": 1000 },
+                "text": { "type": "string", "maxLength": 200000 }
               }
             }"#,
             Idempotency::Idempotent,

@@ -837,13 +837,15 @@ fn garbage_collection_takes_what_no_foreign_key_names_and_what_only_a_collected_
             .expect("hashes")
             .is_empty()
     );
-    w.ok("entity.purge", json!({"id": "d1"}));
-    assert_eq!(
+    // The purge collects inside its own commit and says what it released.
+    let purged = w.ok("entity.purge", json!({"id": "d1"}));
+    assert_eq!(purged["released"].as_array().expect("hashes").len(), 2);
+    assert!(
         w.ok("blob.collect", json!({}))["collected"]
             .as_array()
             .expect("hashes")
-            .len(),
-        2
+            .is_empty(),
+        "nothing is left for a later sweep"
     );
     assert_eq!(w.one::<i64>("SELECT COUNT(*) FROM blob", &[]), 0);
 }

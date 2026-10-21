@@ -219,6 +219,7 @@ pub fn answer(vault: &Vault, request: &wire::AppQueryRequest) -> Result<wire::Ap
         Q::ChatCard(asked) => chat::card(vault, asked)?,
         Q::VaultSearch(asked) => vault::search(vault, &door, asked)?,
         Q::PhotosSearch(asked) => photos::search(vault, &door, asked)?,
+        Q::PhotosDuplicates(_) => photos::duplicates(&door)?,
         Q::MoneySpending(asked) => money::spending(vault, &door, &now, asked)?,
         Q::MoneyActivity(asked) => money::activity(vault, &door, &now, asked)?,
         Q::MoneyTransaction(asked) => money::transaction(vault, &door, &now, asked)?,

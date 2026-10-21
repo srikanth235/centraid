@@ -1,21 +1,29 @@
-//! THE 18 ACTIONS, as command invocations.
+//! THE NINETEEN ACTIONS, as command invocations.
 //!
 //! Every Photos action is a thin invocation of ONE typed vault command: the
-//! projection lives in the command, not the app. So this module is a
-//! table, not logic.
+//! projection lives in the command, not the app. So this module is a table, not
+//! logic. A command is either a photograph's own (`photo.*`, `album.set_cover`)
+//! or a shared verb every app uses (`entity.*`, `flag.*`, `tag.*`, `edge.*`,
+//! `container.*`): Photos does not wrap a shared verb, so two actions may name one
+//! command (`rename-album` and `name-place` are both `entity.retitle`), and an
+//! action's input is its command's input, verbatim (#1135).
 //!
-//! **Three of the eighteen invoke a command outside `media.*`**, and that is
-//! the point a schema-first port loses: `tag-asset` and `untag-asset` write
-//! through `core.tag_item`/`core.untag_item` because a free-form label is one
-//! shared "Tags" concept scheme across every app, and `request-enrichment`
-//! writes `enrich.request_enrichment` — **the only action in any app that
-//! writes to `enrich`** (census §A2).
+//! **What a photograph's two flags are.** A heart is `flag.set` of `starred` and the
+//! archive is `flag.set` of `archived`: one verb, two words, the same shape Photos'
+//! star and Notes' pin take.
+//!
+//! **Faces are gone.** `answer-face` and `request-enrichment` left with the
+//! recognition surfaces nothing produces (R-FP-10, Q-1047-2).
 //!
 //! **`invoke_key` is mandatory** (D-1020-D3-5); v0's falls back to the call's
 //! ordinal, which is stable only for a handler that makes the same call
 //! sequence every time.
 //!
 //! **A denial is a value, never an `Err`** (#1020 apps seam 10).
+//!
+//! **`confirmation` is the manifest's and `confirm` is the command's** (census
+//! §A0, two gates). Photos' two manifest-confirmed actions are `purge-photo` and
+//! `delete-album`; no command this build carries sets the command-level gate.
 
 use std::collections::BTreeMap;
 
@@ -30,8 +38,22 @@ pub struct Invocation {
     /// Which of this handler's calls this is. Mandatory; see the module note.
     pub invoke_key: String,
     /// "This decorates the answer": a seat with no gateway settles an optional
-    /// invocation as failed rather than refusing the whole run.
+    /// invocation as failed rather than refusing the whole run. Photos has none —
+    /// every action here is the member's own gesture.
     pub optional: bool,
+}
+
+impl Invocation {
+    /// One invocation of `command`, under `invoke_key`.
+    #[must_use]
+    pub fn new(command: &'static str, invoke_key: &str, input: BTreeMap<String, Value>) -> Self {
+        Self {
+            command,
+            input,
+            invoke_key: invoke_key.to_owned(),
+            optional: false,
+        }
+    }
 }
 
 /// The six states a vault invocation settles in. `Denied` is one of them.
@@ -115,317 +137,190 @@ const fn confirmed(action: &'static str, command: &'static str) -> ActionRow {
 }
 
 /// THE TABLE. Eighteen actions, eighteen commands, in the manifest's own order.
-pub const ACTIONS: [ActionRow; 18] = [
-    act("upload", "media.add_asset"),
-    act("update-asset", "media.update_asset"),
-    act("delete-asset", "media.delete_asset"),
-    act("restore", "media.restore_asset"),
-    confirmed("purge-asset", "media.purge_asset"),
-    act("create-album", "media.create_album"),
-    act("rename-album", "media.rename_album"),
-    act("set-album-cover", "media.set_album_cover"),
-    confirmed("delete-album", "media.delete_album"),
-    act("restore-album", "media.restore_album"),
-    act("add-to-album", "media.add_to_album"),
-    act("remove-from-album", "media.remove_from_album"),
-    act("answer-face", "media.answer_face_proposal"),
-    act("set-place", "media.set_asset_place"),
-    act("name-place", "media.name_place"),
-    act("tag-asset", "core.tag_item"),
-    act("untag-asset", "core.untag_item"),
-    act("request-enrichment", "enrich.request_enrichment"),
+pub const ACTIONS: [ActionRow; 19] = [
+    act("upload", "photo.add"),
+    act("edit-photo", "photo.edit"),
+    act("retitle-photo", "entity.retitle"),
+    act("flag-photo", "flag.set"),
+    act("unflag-photo", "flag.clear"),
+    act("delete-photo", "entity.trash"),
+    act("restore-photo", "entity.restore"),
+    // THE TWO CONFIRM-GATED ACTIONS: one trashed photograph forever, and an
+    // album (its photographs stay in the library).
+    confirmed("purge-photo", "entity.purge"),
+    act("create-album", "container.create"),
+    act("rename-album", "entity.retitle"),
+    act("set-album-cover", "album.set_cover"),
+    confirmed("delete-album", "entity.trash"),
+    act("restore-album", "entity.restore"),
+    act("add-to-album", "edge.add"),
+    act("remove-from-album", "edge.remove"),
+    act("set-place", "photo.set_place"),
+    act("name-place", "entity.retitle"),
+    act("tag-photo", "tag.add"),
+    act("untag-photo", "tag.remove"),
 ];
 
-/// The row for one action name.
+/// One action's row, by the name the manifest gives it.
+#[must_use]
 pub fn action_row(action: &str) -> Option<&'static ActionRow> {
     ACTIONS.iter().find(|row| row.action == action)
 }
 
-/// `core.tag_item` is polymorphic over a SUBJECT type, and Photos' subjects are
-/// always assets. The action's input names an `asset_id`; the command takes
-/// `subject_type` + `subject_id` (`crates/vault/src/commands/core.rs`'s
-/// `TAGGABLE`).
-const TAG_SUBJECT_TYPE: &str = "media.asset";
-
-/// **The capability stays pinned to `faces`, and it is the CONSENT SCOPE**
-/// (#352, `actions/request-enrichment.ts:3`). Before `enrich_request` carried
-/// one, the owner's on-demand ask was untagged, so a face-detection consent
-/// handed the same queue row to every enabled enricher and each one read the
-/// member's "detect faces" as its own permission. A port that dropped the
-/// field would re-open that.
-const ENRICH_CAPABILITY: &str = "faces";
-
-/// Run one of the app's actions.
+/// The `act` scopes Photos declares, derived from the action table.
 ///
-/// The `input` is the body the dispatcher already validated against the
-/// manifest's schema, so there is no second validation here.
-///
-/// Two translations happen, and both are v0's:
-///
-/// 1. `tag-asset`'s `{asset_id, label}` becomes `core.tag_item`'s
-///    `{subject_type: "media.asset", subject_id, label}`, and `untag-asset`'s
-///    `{tag_id}` passes straight through — **untag removes the edge by id,
-///    never by label** (`actions/tag-asset.ts`, `actions/untag-asset.ts`).
-/// 2. `request-enrichment` carries `reason: "manual"` and
-///    `capability: "faces"`, and omits `entity_id` entirely when the caller
-///    named none — the ask is "prioritise faces", not "enrich this one
-///    photograph" (`actions/request-enrichment.ts`).
-pub fn run(
-    door: &dyn Commands,
-    action: &str,
-    input: BTreeMap<String, Value>,
-    invoke_key: &str,
-) -> Result<Outcome, CommandsUnavailable> {
-    let Some(row) = action_row(action) else {
-        return Ok(Outcome::Failed {
-            reason: Some(format!("photos declares no action \"{action}\"")),
-        });
-    };
-    let mut input = input;
-    if row.action == "tag-asset" {
-        let asset = input.remove("asset_id").unwrap_or(Value::Null);
-        input.insert(
-            "subject_type".to_owned(),
-            Value::String(TAG_SUBJECT_TYPE.to_owned()),
-        );
-        input.insert("subject_id".to_owned(), asset);
-    }
-    if row.action == "request-enrichment" {
-        input
-            .entry("entity_type".to_owned())
-            .or_insert_with(|| Value::String("media.asset".to_owned()));
-        // An absent target is ABSENT, not null: `enrich_request.target_id` is
-        // nullable and a JSON `null` is a value the schema refuses.
-        if input.get("entity_id").is_some_and(Value::is_null) {
-            input.remove("entity_id");
-        }
-        // `reason: "manual"` is the owner's ask, and the only reason an app may
-        // write (`enrich_request.reason`'s CHECK admits `projected` too, and
-        // that one is minted by the vault itself).
-        input.insert("reason".to_owned(), Value::String("manual".to_owned()));
-        input.insert(
-            "capability".to_owned(),
-            Value::String(ENRICH_CAPABILITY.to_owned()),
-        );
-    }
-    door.invoke(&Invocation {
-        command: row.command,
-        input,
-        invoke_key: invoke_key.to_owned(),
-        optional: false,
-    })
+/// The manifest spells each as `{schema, table: "<command name without its
+/// schema>"}`; deriving it here is what lets the manifest test compare the two
+/// lists instead of trusting them. A command two actions share is one scope.
+#[must_use]
+pub fn act_scope_tables() -> Vec<(&'static str, &'static str)> {
+    let mut scopes: Vec<(&'static str, &'static str)> = ACTIONS
+        .iter()
+        .map(|row| {
+            row.command
+                .split_once('.')
+                .map_or((row.command, row.command), |(schema, name)| (schema, name))
+        })
+        .collect();
+    scopes.sort_unstable();
+    scopes.dedup();
+    scopes
 }
 
-#[cfg(test)]
-pub(crate) mod testing {
-    use std::cell::RefCell;
-
-    use super::{Commands, CommandsUnavailable, Invocation, Outcome};
-
-    /// An in-memory door that records what it was asked.
-    pub struct RecordingDoor {
-        pub seen: RefCell<Vec<Invocation>>,
-        pub answer: Outcome,
-        pub unavailable: bool,
-    }
-
-    impl RecordingDoor {
-        pub fn executed() -> Self {
-            Self {
-                seen: RefCell::new(Vec::new()),
-                answer: Outcome::Executed {
-                    output: serde_json::json!({}),
-                },
-                unavailable: false,
-            }
-        }
-
-        pub fn answering(answer: Outcome) -> Self {
-            Self {
-                seen: RefCell::new(Vec::new()),
-                answer,
-                unavailable: false,
-            }
-        }
-
-        pub fn absent() -> Self {
-            Self {
-                seen: RefCell::new(Vec::new()),
-                answer: Outcome::Queued,
-                unavailable: true,
-            }
-        }
-    }
-
-    impl Commands for RecordingDoor {
-        fn invoke(&self, invocation: &Invocation) -> Result<Outcome, CommandsUnavailable> {
-            self.seen.borrow_mut().push(invocation.clone());
-            if self.unavailable {
-                return Err(CommandsUnavailable {
-                    command: invocation.command,
-                });
-            }
-            Ok(self.answer.clone())
-        }
-    }
+#[must_use]
+pub fn invocation_for(
+    action: &str,
+    invoke_key: &str,
+    input: BTreeMap<String, Value>,
+) -> Option<Invocation> {
+    action_row(action).map(|row| Invocation::new(row.command, invoke_key, input))
 }
 
 #[cfg(test)]
 mod tests {
-    use super::testing::RecordingDoor;
     use super::*;
 
-    fn input(pairs: &[(&str, Value)]) -> BTreeMap<String, Value> {
-        pairs
-            .iter()
-            .map(|(key, value)| ((*key).to_owned(), value.clone()))
-            .collect()
-    }
-
     #[test]
-    fn every_action_is_named_once_and_maps_to_one_command() {
-        let mut names: Vec<&str> = ACTIONS.iter().map(|row| row.action).collect();
-        names.sort_unstable();
-        let unique = names.len();
-        names.dedup();
-        assert_eq!(names.len(), unique, "an action name appears twice");
-        assert_eq!(ACTIONS.len(), 18);
-    }
-
-    /// Fifteen `media.*`, two `core.*`, one `enrich.*`. A port that put all
-    /// eighteen under `media` would have moved the shared tag scheme into one
-    /// app and given Photos its own enrichment queue.
-    #[test]
-    fn three_actions_reach_outside_the_media_schema() {
-        let outside: Vec<&str> = ACTIONS
+    fn every_action_invokes_one_command_and_the_photo_verbs_are_the_photographs_own() {
+        assert_eq!(ACTIONS.len(), 19);
+        let own: Vec<&str> = ACTIONS
             .iter()
-            .filter(|row| !row.command.starts_with("media."))
             .map(|row| row.command)
+            .filter(|command| command.starts_with("photo.") || command.starts_with("album."))
             .collect();
         assert_eq!(
-            outside,
+            own,
             [
-                "core.tag_item",
-                "core.untag_item",
-                "enrich.request_enrichment"
+                "photo.add",
+                "photo.edit",
+                "album.set_cover",
+                "photo.set_place"
+            ],
+            "what only a photograph or an album has; everything else is a shared verb"
+        );
+        let mut schemas: Vec<&str> = ACTIONS
+            .iter()
+            .filter_map(|row| row.command.split_once('.').map(|(schema, _)| schema))
+            .collect();
+        schemas.sort_unstable();
+        schemas.dedup();
+        assert_eq!(
+            schemas,
+            [
+                "album",
+                "container",
+                "edge",
+                "entity",
+                "flag",
+                "photo",
+                "tag"
             ]
         );
     }
 
     #[test]
-    fn tagging_an_asset_names_the_target_type_the_shared_scheme_needs() {
-        let door = RecordingDoor::executed();
-        run(
-            &door,
-            "tag-asset",
-            input(&[
-                ("asset_id", Value::String("a-1".to_owned())),
-                ("label", Value::String("sunset".to_owned())),
-            ]),
-            "photos.tag-asset",
-        )
-        .unwrap();
-        let seen = door.seen.borrow();
-        assert_eq!(seen[0].command, "core.tag_item");
-        assert_eq!(
-            seen[0].input.get("subject_type"),
-            Some(&Value::String("media.asset".to_owned()))
-        );
-        assert_eq!(
-            seen[0].input.get("subject_id"),
-            Some(&Value::String("a-1".to_owned()))
-        );
+    fn a_shared_verb_serves_several_actions_without_a_wrapper() {
+        let retitle: Vec<&str> = ACTIONS
+            .iter()
+            .filter(|row| row.command == "entity.retitle")
+            .map(|row| row.action)
+            .collect();
+        assert_eq!(retitle, ["retitle-photo", "rename-album", "name-place"]);
+        let trash: Vec<&str> = ACTIONS
+            .iter()
+            .filter(|row| row.command == "entity.trash")
+            .map(|row| row.action)
+            .collect();
+        assert_eq!(trash, ["delete-photo", "delete-album"]);
+    }
+
+    /// Every command an action names is one the vault registers.
+    #[test]
+    fn every_action_names_a_command_the_vault_registers() {
+        let registry =
+            centraid_vault::commands::Registry::with_system_commands().expect("a registry");
+        let names = registry.names();
+        for row in ACTIONS {
+            assert!(
+                names.contains(&row.command),
+                "{} is not registered",
+                row.command
+            );
+        }
+    }
+
+    #[test]
+    fn the_two_destroys_are_the_only_confirmed_actions() {
+        let required: Vec<&str> = ACTIONS
+            .iter()
+            .filter(|row| row.confirm == Confirm::Required)
+            .map(|row| row.action)
+            .collect();
+        assert_eq!(required, ["purge-photo", "delete-album"]);
+    }
+
+    /// ONE ACT SCOPE PER DISTINCT COMMAND — never one `read+act` over a whole
+    /// family. Widening it would hand Photos every `entity.*` verb it never sends.
+    #[test]
+    fn the_act_scopes_are_one_per_distinct_command() {
+        assert_eq!(act_scope_tables().len(), 15);
+        assert!(act_scope_tables().contains(&("photo", "add")));
         assert!(
-            !seen[0].input.contains_key("asset_id"),
-            "the command takes subject_id, not asset_id"
+            !act_scope_tables()
+                .iter()
+                .any(|(schema, _)| *schema == "enrich")
         );
     }
 
-    /// Untag removes the EDGE, by id. A port that removed by label would delete
-    /// every photo's copy of the same word.
     #[test]
-    fn untagging_passes_the_tag_id_through_and_never_a_label() {
-        let door = RecordingDoor::executed();
-        run(
-            &door,
-            "untag-asset",
-            input(&[("tag_id", Value::String("t-9".to_owned()))]),
-            "photos.untag-asset",
-        )
-        .unwrap();
-        let seen = door.seen.borrow();
-        assert_eq!(seen[0].command, "core.untag_item");
-        assert_eq!(seen[0].input.len(), 1);
-        assert!(seen[0].input.contains_key("tag_id"));
+    fn an_invocation_carries_its_key_and_an_unknown_action_has_none() {
+        let invocation =
+            invocation_for("upload", "photos:0", BTreeMap::new()).expect("upload is in the table");
+        assert_eq!(invocation.command, "photo.add");
+        assert_eq!(invocation.invoke_key, "photos:0");
+        assert!(!invocation.optional, "Photos has no decorating invocation");
+        assert!(invocation_for("undelete-everything", "photos:1", BTreeMap::new()).is_none());
     }
 
+    /// A DENIAL IS A VALUE. The outcome enum carries it, and `output()` is
+    /// `None` for every state but `Executed` — so a caller cannot read an
+    /// output off a refusal.
     #[test]
-    fn request_enrichment_is_a_manual_ask_with_a_default_target_type() {
-        let door = RecordingDoor::executed();
-        run(&door, "request-enrichment", BTreeMap::new(), "ask").unwrap();
-        let seen = door.seen.borrow();
-        assert_eq!(seen[0].command, "enrich.request_enrichment");
+    fn a_denial_is_a_state_with_no_output() {
+        let denied = Outcome::Denied {
+            reason: Some("ask the owner".to_owned()),
+            code: Some("VAULT_DENIED".to_owned()),
+        };
+        assert!(denied.output().is_none());
+        assert!(!denied.pending());
+        assert!(Outcome::Queued.pending());
+        assert!(Outcome::Parked { reason: None }.pending());
         assert_eq!(
-            seen[0].input.get("reason"),
-            Some(&Value::String("manual".to_owned()))
+            Outcome::Executed {
+                output: serde_json::json!({ "id": "d1" })
+            }
+            .output(),
+            Some(&serde_json::json!({ "id": "d1" }))
         );
-        assert_eq!(
-            seen[0].input.get("entity_type"),
-            Some(&Value::String("media.asset".to_owned()))
-        );
-        // THE CONSENT SCOPE. Without it one enricher's consent is every
-        // enricher's.
-        assert_eq!(
-            seen[0].input.get("capability"),
-            Some(&Value::String("faces".to_owned()))
-        );
-        assert!(
-            !seen[0].input.contains_key("entity_id"),
-            "an absent target is absent, never a null"
-        );
-    }
-
-    #[test]
-    fn the_invoke_key_reaches_the_door_and_is_not_derivable_from_the_call_order() {
-        let door = RecordingDoor::executed();
-        run(
-            &door,
-            "purge-asset",
-            input(&[("asset_id", Value::String("a-1".to_owned()))]),
-            "photos.purge-asset",
-        )
-        .unwrap();
-        assert_eq!(door.seen.borrow()[0].invoke_key, "photos.purge-asset");
-    }
-
-    #[test]
-    fn a_denial_is_a_value_and_not_an_error() {
-        let door = RecordingDoor::answering(Outcome::Denied {
-            reason: Some("this app's grant was revoked".to_owned()),
-            code: Some("VAULT_ACCESS".to_owned()),
-        });
-        let outcome = run(&door, "upload", BTreeMap::new(), "upload").unwrap();
-        assert!(matches!(outcome, Outcome::Denied { .. }));
-        assert!(outcome.output().is_none());
-        assert!(!outcome.pending(), "a denial has settled");
-    }
-
-    #[test]
-    fn an_absent_door_fails_closed_and_names_the_command() {
-        let door = RecordingDoor::absent();
-        assert_eq!(
-            run(&door, "delete-asset", BTreeMap::new(), "delete"),
-            Err(CommandsUnavailable {
-                command: "media.delete_asset"
-            })
-        );
-    }
-
-    #[test]
-    fn an_undeclared_action_is_refused_rather_than_panicking() {
-        let door = RecordingDoor::executed();
-        let outcome = run(&door, "delete-library", BTreeMap::new(), "x").unwrap();
-        assert!(matches!(outcome, Outcome::Failed { .. }));
-        assert!(door.seen.borrow().is_empty(), "nothing reached the vault");
     }
 }

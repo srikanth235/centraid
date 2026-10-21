@@ -204,6 +204,44 @@ fn replacing_keeps_the_old_bytes_as_a_version_and_a_restore_keeps_what_it_replac
 }
 
 #[test]
+fn the_words_a_phone_read_out_of_a_file_are_what_it_is_found_by() {
+    let w = World::new();
+    let blob = w.bytes("scanned lease");
+    let id = w.ok(
+        "document.add",
+        json!({ "title": "Scan 0041", "blob": blob, "media_type": "application/pdf",
+                 "text": "monthly rent is due on the first" }),
+    )["id"]
+        .as_str()
+        .expect("an id")
+        .to_owned();
+    assert_eq!(w.hits("rent", &id), 1);
+    // A title found it before, and a replace brings its own words.
+    let next = w.bytes("rescanned lease");
+    w.ok(
+        "document.replace",
+        json!({ "id": id, "blob": next, "text": "deposit refunded" }),
+    );
+    assert_eq!(w.hits("rent", &id), 0);
+    assert_eq!(w.hits("deposit", &id), 1);
+}
+
+#[test]
+fn a_lapsed_grace_window_is_not_restorable() {
+    let w = World::new();
+    let id = w.document("Old lease", "old", None);
+    w.ok("entity.trash", json!({ "id": id }));
+    w.scratch.clock.advance_ms(30 * 86_400_000 - 1);
+    w.ok("entity.restore", json!({ "id": id }));
+    w.ok("entity.trash", json!({ "id": id }));
+    w.scratch.clock.advance_ms(30 * 86_400_000);
+    let sentence = w.refused("entity.restore", json!({ "id": id }));
+    assert!(sentence.contains("grace window"), "{sentence}");
+    // It waits for "delete forever", which has no window.
+    w.ok("entity.purge", json!({ "id": id }));
+}
+
+#[test]
 fn text_is_written_through_the_blob_door_and_found_by_its_words() {
     let w = World::new();
     let id = w.ok(
@@ -506,17 +544,22 @@ fn a_caption_is_found_and_an_album_keeps_its_cover_while_the_photograph_is_there
         w.one::<i64>("SELECT COUNT(*) FROM edge WHERE to_id = ?1", &[&id]),
         1
     );
-    w.ok("entity.purge", json!({ "id": id }));
+    let purged = w.ok("entity.purge", json!({ "id": id }));
     assert_eq!(
         w.one::<Option<String>>("SELECT cover FROM container WHERE id = ?1", &[&album]),
         None
     );
+    // The purge collects what nothing names any more, inside its own commit.
     assert!(
-        w.ok("blob.collect", json!({}))["collected"]
+        purged["released"]
             .as_array()
             .expect("a list")
             .iter()
             .any(|hash| hash.as_str() == Some(&blob))
+    );
+    assert_eq!(
+        w.one::<i64>("SELECT COUNT(*) FROM blob WHERE hash = ?1", &[&blob]),
+        0
     );
     assert_eq!(
         w.one::<i64>("SELECT COUNT(*) FROM derivative WHERE blob = ?1", &[&blob]),
@@ -538,7 +581,8 @@ fn files(w: &World, folder: &str, complete: bool, records: serde_json::Value) ->
 
 fn file(w: &World, path: &str, title: &str, seed: &str) -> serde_json::Value {
     json!({ "external_id": path, "fields": {
-        "title": title, "blob": w.bytes(seed), "media_type": "application/pdf" } })
+        "title": title, "blob": w.bytes(seed), "media_type": "application/pdf",
+        "stat": format!("{}:1", seed.len()) } })
 }
 
 #[test]
@@ -606,6 +650,14 @@ fn a_followed_folder_fills_its_folder_and_a_changed_file_is_a_new_version() {
     assert_eq!(
         w.one::<String>("SELECT blob FROM document WHERE id = ?1", &[&b]),
         w.bytes("b mine")
+    );
+    // The phone's pre-check is in the statement, and is never mistaken for an edit.
+    assert_eq!(
+        w.one::<String>(
+            "SELECT json_extract(stated, '$.stat') FROM source WHERE external_id = '/a.pdf'",
+            &[]
+        ),
+        "4:1"
     );
     // A file gone from a complete read goes to the trash if never touched, and is
     // kept (its source forgotten) if the member changed it.

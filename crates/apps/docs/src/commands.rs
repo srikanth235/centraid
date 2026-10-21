@@ -1,18 +1,18 @@
 //! THE EIGHTEEN ACTIONS, as command invocations.
 //!
 //! Every Docs action is a thin invocation of ONE typed vault command: the
-//! projection lives in the command, not the app. So this module is a
-//! table, not logic.
+//! projection lives in the command, not the app. So this module is a table, not
+//! logic. A command is either a document's own (`document.*`, six of them) or a
+//! shared verb every app uses (`entity.*`, `flag.*`, `tag.*`, `container.*`):
+//! Docs does not wrap a shared verb, so two actions may name one command
+//! (`rename` and `rename-folder` are both `entity.retitle`; `trash` and
+//! `delete-folder` are both `entity.trash`), and an action's input is its
+//! command's input, verbatim (#1135).
 //!
-//! **ALL EIGHTEEN ARE `core.*`** — Docs is the app whose whole command surface
-//! belongs to the core schema (census §A3), which is why "porting Docs'
-//! commands" meant editing `crates/vault/src/commands/core.rs` and not this
-//! crate. The scope list stays **explicit, one `act` scope per action**: the
-//! manifest declares eighteen `{schema: "core", table: "<command>", verbs:
-//! "act"}` entries rather than one `read+act` over the whole schema, and
-//! widening it would hand Docs every `core.*` command including the two merges.
-//! Only agenda and people use the whole-schema form, and Docs is not one of
-//! them.
+//! The scope list is **explicit, one `act` scope per distinct command**: the
+//! manifest declares `{schema: "<verb's family>", table: "<verb>", verbs: "act"}`
+//! for each command an action names, so the consent a member grants is the
+//! commands Docs sends and no wider.
 //!
 //! **`invoke_key` is mandatory** (D-1020-D3-5); v0's falls back to the call's
 //! ordinal, which is stable only for a handler that makes the same call
@@ -22,9 +22,8 @@
 //!
 //! **`confirmation` is the manifest's and `confirm` is the command's** (census
 //! §A0, two gates). Docs' two manifest-confirmed actions are `purge` and
-//! `empty-trash`, the two destroys (ruling D-1 of 2026-09-25); no
-//! `core.*` command this build carries sets `confirm: true`. Collapsing them
-//! would put a dialog in front of nothing and drop nothing in exchange.
+//! `empty-trash`, the two destroys (ruling D-1 of 2026-09-25); no command this
+//! build carries sets the command-level gate.
 
 use std::collections::BTreeMap;
 
@@ -139,27 +138,27 @@ const fn confirmed(action: &'static str, command: &'static str) -> ActionRow {
 
 /// THE TABLE. Eighteen actions, eighteen commands, in the manifest's own order.
 pub const ACTIONS: [ActionRow; 18] = [
-    act("upload", "core.add_document"),
+    act("upload", "document.add"),
     // The Add sheet's "Text" (#1047): words in, a text document out.
-    act("create-text", "core.create_text_document"),
-    act("rename", "core.rename_document"),
-    act("move", "core.move_document"),
-    act("trash", "core.trash_document"),
-    act("restore", "core.restore_document"),
+    act("create-text", "document.create_text"),
+    act("rename", "entity.retitle"),
+    act("move", "document.move"),
+    act("trash", "entity.trash"),
+    act("restore", "entity.restore"),
     // THE TWO CONFIRM-GATED ACTIONS, and the app's two destroys (D-1,
     // 2026-09-25): one trashed document, and the whole trash.
-    confirmed("purge", "core.purge_document"),
-    confirmed("empty-trash", "core.empty_document_trash"),
-    act("star", "core.star_document"),
-    act("unstar", "core.unstar_document"),
-    act("tag", "core.tag_item"),
-    act("untag", "core.untag_item"),
-    act("edit", "core.edit_document"),
-    act("replace", "core.replace_document_content"),
-    act("restore-version", "core.restore_document_version"),
-    act("create-folder", "core.create_folder"),
-    act("rename-folder", "core.rename_folder"),
-    act("delete-folder", "core.delete_folder"),
+    confirmed("purge", "entity.purge"),
+    confirmed("empty-trash", "entity.empty_trash"),
+    act("star", "flag.set"),
+    act("unstar", "flag.clear"),
+    act("tag", "tag.add"),
+    act("untag", "tag.remove"),
+    act("edit", "document.edit"),
+    act("replace", "document.replace"),
+    act("restore-version", "document.restore_version"),
+    act("create-folder", "container.create"),
+    act("rename-folder", "entity.retitle"),
+    act("delete-folder", "entity.trash"),
 ];
 
 /// One action's row, by the name the manifest gives it.
@@ -170,30 +169,24 @@ pub fn action_row(action: &str) -> Option<&'static ActionRow> {
 
 /// The `act` scopes Docs declares, derived from the action table.
 ///
-/// The manifest spells each one as `{schema: "core", table: "<command name
-/// without its schema>"}`; deriving it here is what lets
-/// `every_act_scope_is_one_action` compare the two lists instead of trusting
-/// them.
+/// The manifest spells each as `{schema, table: "<command name without its
+/// schema>"}`; deriving it here is what lets the manifest test compare the two
+/// lists instead of trusting them. A command two actions share is one scope.
 #[must_use]
-pub fn act_scope_tables() -> Vec<&'static str> {
-    let mut tables: Vec<&'static str> = ACTIONS
+pub fn act_scope_tables() -> Vec<(&'static str, &'static str)> {
+    let mut scopes: Vec<(&'static str, &'static str)> = ACTIONS
         .iter()
         .map(|row| {
             row.command
                 .split_once('.')
-                .map_or(row.command, |(_, name)| name)
+                .map_or((row.command, row.command), |(schema, name)| (schema, name))
         })
         .collect();
-    tables.sort_unstable();
-    tables.dedup();
-    tables
+    scopes.sort_unstable();
+    scopes.dedup();
+    scopes
 }
 
-/// Build one action's invocation.
-///
-/// The input is the action's own, verbatim: an action does not reshape a
-/// command's input, because the command's schema is the contract and a
-/// reshaping app is a second schema.
 #[must_use]
 pub fn invocation_for(
     action: &str,
@@ -208,22 +201,59 @@ mod tests {
     use super::*;
 
     #[test]
-    fn every_action_invokes_exactly_one_core_command() {
+    fn every_action_invokes_one_command_and_the_document_verbs_are_the_documents_own() {
         assert_eq!(ACTIONS.len(), 18);
-        let mut commands: Vec<&str> = ACTIONS.iter().map(|row| row.command).collect();
-        for command in &commands {
-            assert!(
-                command.starts_with("core."),
-                "{command} is not a core command, and Docs' whole surface is core's"
-            );
-        }
-        commands.sort_unstable();
-        let before = commands.len();
-        commands.dedup();
-        assert_eq!(before, commands.len(), "no command is invoked twice");
+        let own: Vec<&str> = ACTIONS
+            .iter()
+            .map(|row| row.command)
+            .filter(|command| command.starts_with("document."))
+            .collect();
+        assert_eq!(
+            own,
+            [
+                "document.add",
+                "document.create_text",
+                "document.move",
+                "document.edit",
+                "document.replace",
+                "document.restore_version"
+            ],
+            "what only a document has; everything else is a shared verb"
+        );
+        let mut schemas: Vec<&str> = ACTIONS
+            .iter()
+            .filter_map(|row| row.command.split_once('.').map(|(schema, _)| schema))
+            .collect();
+        schemas.sort_unstable();
+        schemas.dedup();
+        assert_eq!(schemas, ["container", "document", "entity", "flag", "tag"]);
     }
 
-    /// The two destroys are the manifest-confirmed actions, and nothing else.
+    #[test]
+    fn a_shared_verb_serves_two_actions_without_a_wrapper() {
+        let retitle: Vec<&str> = ACTIONS
+            .iter()
+            .filter(|row| row.command == "entity.retitle")
+            .map(|row| row.action)
+            .collect();
+        assert_eq!(retitle, ["rename", "rename-folder"]);
+    }
+
+    /// Every command an action names is one the vault registers.
+    #[test]
+    fn every_action_names_a_command_the_vault_registers() {
+        let registry =
+            centraid_vault::commands::Registry::with_system_commands().expect("a registry");
+        let names = registry.names();
+        for row in ACTIONS {
+            assert!(
+                names.contains(&row.command),
+                "{} is not registered",
+                row.command
+            );
+        }
+    }
+
     #[test]
     fn the_two_destroys_are_the_only_confirmed_actions() {
         let required: Vec<&str> = ACTIONS
@@ -234,20 +264,20 @@ mod tests {
         assert_eq!(required, ["purge", "empty-trash"]);
     }
 
-    /// SIXTEEN ACT SCOPES, ONE PER ACTION — never one `read+act` over the whole
-    /// schema. Widening it would hand Docs `core.merge_party`.
+    /// ONE ACT SCOPE PER DISTINCT COMMAND — never one `read+act` over a whole
+    /// family. Widening it would hand Docs every `entity.*` verb it never sends.
     #[test]
-    fn the_act_scopes_are_one_per_action() {
-        assert_eq!(act_scope_tables().len(), 18);
-        assert!(act_scope_tables().contains(&"add_document"));
-        assert!(!act_scope_tables().contains(&"merge_party"));
+    fn the_act_scopes_are_one_per_distinct_command() {
+        assert_eq!(act_scope_tables().len(), 16);
+        assert!(act_scope_tables().contains(&("document", "add")));
+        assert!(!act_scope_tables().contains(&("person", "merge")));
     }
 
     #[test]
     fn an_invocation_carries_its_key_and_an_unknown_action_has_none() {
         let invocation =
             invocation_for("upload", "docs:0", BTreeMap::new()).expect("upload is in the table");
-        assert_eq!(invocation.command, "core.add_document");
+        assert_eq!(invocation.command, "document.add");
         assert_eq!(invocation.invoke_key, "docs:0");
         assert!(!invocation.optional, "Docs has no decorating invocation");
         assert!(invocation_for("undelete-everything", "docs:1", BTreeMap::new()).is_none());
@@ -268,10 +298,10 @@ mod tests {
         assert!(Outcome::Parked { reason: None }.pending());
         assert_eq!(
             Outcome::Executed {
-                output: serde_json::json!({ "document_id": "d1" })
+                output: serde_json::json!({ "id": "d1" })
             }
             .output(),
-            Some(&serde_json::json!({ "document_id": "d1" }))
+            Some(&serde_json::json!({ "id": "d1" }))
         );
     }
 }

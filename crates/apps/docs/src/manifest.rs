@@ -41,7 +41,7 @@ mod tests {
         let manifest = manifest();
         assert_eq!(manifest.id, APP_ID);
         assert_eq!(manifest.manifest_version, 1);
-        assert_eq!(manifest.version, "0.4.0");
+        assert_eq!(manifest.version, "0.5.0");
     }
 
     #[test]
@@ -49,15 +49,9 @@ mod tests {
         let manifest = manifest();
         assert_eq!(manifest.queries.len(), 4);
         assert_eq!(manifest.actions.len(), 18);
-        // The four are `drive`, `search`, `history`, `activity` — NOT the
-        // directory listing: `queries/_shared.ts` and
-        // `queries/document-origins.ts` are helpers beside the handlers, and
-        // the dispatcher resolves `queries/<name>.ts` rather than scanning the
-        // directory (`_shared.ts:1`-`:5`).
         for name in ["drive", "search", "history", "activity"] {
             assert!(manifest.query(name).is_some(), "no query {name}");
         }
-        assert!(manifest.query("document-origins").is_none());
     }
 
     #[test]
@@ -112,14 +106,15 @@ mod tests {
         assert_eq!(required, ["purge", "empty-trash"], "the two destroys");
     }
 
-    /// DOCS' REACH IS THE `core` SCHEMA'S COMMANDS, and the table says so. What
-    /// each command wrote is the commit's own census, not a list a manifest
+    /// DOCS' REACH IS ITS OWN VERBS AND THE SHARED ONES, and the table says so.
+    /// What each command wrote is the commit's own census, not a list a manifest
     /// carries (V3).
     #[test]
-    fn every_action_invokes_a_core_command() {
+    fn every_action_invokes_a_document_verb_or_a_shared_one() {
         for row in ACTIONS {
+            let (schema, _) = row.command.split_once('.').expect("a schema.name command");
             assert!(
-                row.command.starts_with("core."),
+                ["document", "entity", "flag", "tag", "container"].contains(&schema),
                 "{} invokes {}, which is outside Docs' reach",
                 row.action,
                 row.command
@@ -127,52 +122,61 @@ mod tests {
         }
     }
 
-    /// TWENTY-NINE SCOPES: eleven reads over three schemas, and **eighteen
-    /// `act` scopes, one per action** (census §A0's table). The eight reads
-    /// over `share`, `social` and `core.party` left with the sharing plane
-    /// (#1029's scope amendment); `core.content_text` is the reader's body
-    /// (`docs.document.body`, #1046).
+    /// TWENTY-FOUR SCOPES: eight reads over the vault's own tables, and **sixteen
+    /// `act` scopes, one per distinct command**. `journal` is the activity rail's;
+    /// `derivative` is the words extracted from the bytes.
     ///
     /// The `act` half is compared against the action table rather than
-    /// transcribed, because the whole point of the narrow form is that it
-    /// tracks the actions: a nineteenth action with no scope is an action the
-    /// grant does not cover, and a scope with no action is reach nothing uses.
+    /// transcribed, because the whole point of the narrow form is that it tracks
+    /// the actions: a nineteenth action with no scope is an action the grant does
+    /// not cover, and a scope with no action is reach nothing uses.
     #[test]
-    fn it_declares_twenty_nine_scopes_with_one_act_scope_per_action() {
+    fn it_declares_twenty_four_scopes_with_one_act_scope_per_command() {
         let manifest = manifest();
         let vault = manifest.vault.as_ref().expect("Docs declares its reach");
-        assert_eq!(vault.scopes.len(), 29);
+        assert_eq!(vault.scopes.len(), 24);
 
-        let mut schemas: Vec<&str> = vault
-            .scopes
-            .iter()
-            .map(|scope| scope.schema.as_str())
-            .collect();
-        schemas.sort_unstable();
-        schemas.dedup();
-        assert_eq!(schemas, ["access", "blob", "core"]);
-
-        let mut declared_acts: Vec<&str> = vault
+        let mut declared: Vec<(&str, &str)> = vault
             .scopes
             .iter()
             .filter(|scope| scope.verbs == ScopeVerbs::Act)
             .map(|scope| {
-                scope
-                    .table
-                    .as_deref()
-                    .expect("an act scope over a whole schema would be the widest form")
+                (
+                    scope.schema.as_str(),
+                    scope
+                        .table
+                        .as_deref()
+                        .expect("an act scope over a whole schema would be the widest form"),
+                )
             })
             .collect();
-        declared_acts.sort_unstable();
-        assert_eq!(declared_acts, act_scope_tables());
-        assert_eq!(declared_acts.len(), 18);
+        declared.sort_unstable();
+        assert_eq!(declared, act_scope_tables());
+        assert_eq!(declared.len(), 16);
 
-        let reads = vault
+        let mut reads: Vec<&str> = vault
             .scopes
             .iter()
             .filter(|scope| scope.verbs == ScopeVerbs::Read)
-            .count();
-        assert_eq!(reads, 11);
+            .map(|scope| {
+                assert_eq!(scope.schema, "vault");
+                scope.table.as_deref().expect("a read names its table")
+            })
+            .collect();
+        reads.sort_unstable();
+        assert_eq!(
+            reads,
+            [
+                "blob",
+                "container",
+                "derivative",
+                "document",
+                "edge",
+                "entity",
+                "journal",
+                "revision"
+            ]
+        );
         // NOTHING WIDER, and nothing revealed: `read+act` over a whole schema
         // is the widest form and only agenda and people use it; `reveal` is
         // Locker's alone.

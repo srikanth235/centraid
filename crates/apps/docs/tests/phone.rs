@@ -49,8 +49,6 @@ fn row(id: &str, created: &str, trashed: bool) -> DocumentRow {
         title: Some(id.to_owned()),
         media_type: Some("text/plain".to_owned()),
         byte_size: Some(1),
-        content_uri: None,
-        poster_uri: None,
         created_at: Some(created.to_owned()),
         updated_at: Some(created.to_owned()),
         folder_id: None,
@@ -59,7 +57,6 @@ fn row(id: &str, created: &str, trashed: bool) -> DocumentRow {
         deleted_at: trashed.then(|| created.to_owned()),
         purge_at: None,
         tags: Vec::new(),
-        custody_state: None,
         snippet: None,
     }
 }

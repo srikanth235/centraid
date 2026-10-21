@@ -21,8 +21,8 @@ use common::*;
 fn note(handle: &centraid_core::Handle, title: &str, body: &str) {
     command(
         handle,
-        "knowledge.create_note",
-        &json!({ "title": title, "body_text": body, "format": "plain" }),
+        "note.create",
+        &json!({ "title": title, "body": body, "format": "plain" }),
         &format!("note:{title}"),
     );
 }
@@ -102,8 +102,8 @@ fn a_damaged_thumbnail_costs_a_restore_that_thumbnail_alone() {
         let photo = bytes_of(&format!("photograph {index}"), 60_000);
         let staged = stage(&old, owned("image/heic", &photo), &photo);
         let thumb = bytes_of(&format!("thumbnail {index}"), 4_000);
-        let thumb_handle = stage(&old, thumb_of(&staged, &thumb), &thumb);
         add_asset(&old, &staged, "photo");
+        let thumb_handle = stage(&old, thumb_of(&staged, &thumb), &thumb);
         thumbs.push((thumb_handle.content_hash, thumb));
     }
     drain(&old, at_home());
@@ -435,8 +435,8 @@ fn a_gateway_that_dies_after_the_claim_leaves_the_restored_vault() {
         let photo = bytes_of(&format!("photograph {index}"), 20_000);
         let staged = stage(&old, owned("image/heic", &photo), &photo);
         let thumb = bytes_of(&format!("thumbnail {index}"), 30_000);
-        thumbs.push(stage(&old, thumb_of(&staged, &thumb), &thumb).content_hash);
         add_asset(&old, &staged, "photo");
+        thumbs.push(stage(&old, thumb_of(&staged, &thumb), &thumb).content_hash);
     }
     drain(&old, at_home());
 
@@ -574,7 +574,7 @@ fn a_chain_of_restores_freezes_every_phone_but_the_last() {
     assert!(drained.acked_at_ms.is_some(), "C backs up: {drained:?}");
     assert!(
         rows(&c_path)
-            .get("knowledge_note")
+            .get("note")
             .is_some_and(|notes| notes.len() == 3),
         "C holds what A and B wrote"
     );
@@ -943,7 +943,8 @@ fn a_records_only_vault_and_a_cut_short_pass_restore_what_was_acknowledged() {
     let staged = stage(&old, owned("image/heic", &photo), &photo);
     add_asset(&old, &staged, "photo");
     note(&old, "Unsent", "written before the cut");
-    gateway.cable().cut_after(40 * 1024);
+    // The vault is a few ranges, so the cut falls inside the snapshot, before its head.
+    gateway.cable().cut_after(4096);
     let cut = drain(&old, at_home());
     assert_eq!(cut.stopped, wire::DrainStop::Unreachable as i32, "{cut:?}");
 
@@ -986,6 +987,7 @@ fn a_restored_phones_walk_is_told_which_derivatives_the_vault_already_holds() {
         original.derivatives_held.is_empty(),
         "nothing is held for a photograph the vault has never seen: {original:?}"
     );
+    add_asset(&old, &original, "photo");
     let thumb = bytes_of("its thumbnail", 4_000);
     let thumb_handle = stage(&old, thumb_of(&original, &thumb), &thumb);
     let preview = bytes_of("its preview", 9_000);
@@ -997,7 +999,6 @@ fn a_restored_phones_walk_is_told_which_derivatives_the_vault_already_holds() {
         },
         &preview,
     );
-    add_asset(&old, &original, "photo");
     drain(&old, at_home());
 
     let new_dir = tempfile::tempdir().expect("a directory");
