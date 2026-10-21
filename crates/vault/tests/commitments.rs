@@ -653,7 +653,7 @@ fn script_every_search_relevant_command(scratch: &common::Scratch, registry: &Re
         vault,
         registry,
         "note.create",
-        json!({"title": "Ledger", "body": "[[Lunch]] on the ledger"}),
+        json!({"id": "n3", "title": "Ledger", "body": "[[Lunch]] on the ledger"}),
     );
     run(
         vault,
@@ -691,6 +691,13 @@ fn script_every_search_relevant_command(scratch: &common::Scratch, registry: &Re
         registry,
         "entity.retitle",
         json!({"id": "n2", "title": "Brunch"}),
+    );
+    // And the note verbs' own last word: nothing after it re-indexes n3.
+    run(
+        vault,
+        registry,
+        "note.edit",
+        json!({"id": "n3", "body": "[[Brunch]] and the final words of the ledger"}),
     );
 }
 

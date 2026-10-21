@@ -309,9 +309,9 @@ mod tests {
     fn one_term_answers_every_app_but_locker() {
         let scratch = Scratch::founded();
         let note = scratch.run(
-            "knowledge.create_note",
-            serde_json::json!({ "title": "Cabin packing", "body_text": "bring the lantern" }),
-        )["note_id"]
+            "note.create",
+            serde_json::json!({ "title": "Cabin packing", "body": "bring the lantern" }),
+        )["id"]
             .as_str()
             .expect("a note id")
             .to_owned();
@@ -328,10 +328,7 @@ mod tests {
             .iter()
             .map(|hit| (hit.app_id.as_str(), hit.entity.as_str(), hit.id.as_str()))
             .collect();
-        assert!(
-            hits.contains(&("notes", "knowledge.note", note.as_str())),
-            "{hits:?}"
-        );
+        assert!(hits.contains(&("notes", "note", note.as_str())), "{hits:?}");
         assert!(
             hits.contains(&("tasks", "schedule.task", task.as_str())),
             "{hits:?}"
@@ -357,8 +354,8 @@ mod tests {
     fn a_typo_is_corrected_across_every_domain_and_an_exact_term_is_not() {
         let scratch = Scratch::founded();
         scratch.run(
-            "knowledge.create_note",
-            serde_json::json!({ "title": "Cabin packing", "body_text": "bring the lantern" }),
+            "note.create",
+            serde_json::json!({ "title": "Cabin packing", "body": "bring the lantern" }),
         );
         scratch.run(
             "schedule.add_task",
@@ -539,10 +536,10 @@ mod tests {
         };
         let notebook = id(
             scratch.run(
-                "knowledge.create_notebook",
-                serde_json::json!({ "name": "Heron notes" }),
+                "container.create",
+                serde_json::json!({ "kind": "notebook", "title": "Heron notes" }),
             ),
-            "notebook_id",
+            "id",
         );
         let album = id(
             scratch.run(
@@ -577,7 +574,7 @@ mod tests {
             })
             .collect();
         assert_eq!(hits.len(), 4, "{hits:?}");
-        assert_eq!(hits[&("notes", "core.collection")], (notebook.as_str(), ""));
+        assert_eq!(hits[&("notes", "notebook")], (notebook.as_str(), ""));
         assert_eq!(hits[&("photos", "core.collection")], (album.as_str(), ""));
         assert_eq!(hits[&("tasks", "schedule.project")], (project.as_str(), ""));
         assert_eq!(hits[&("docs", "core.concept")], (folder.as_str(), ""));
@@ -598,10 +595,10 @@ mod tests {
         };
         let notebook = id(
             scratch.run(
-                "knowledge.create_notebook",
-                serde_json::json!({ "name": "Ibis notes" }),
+                "container.create",
+                serde_json::json!({ "kind": "notebook", "title": "Ibis notes" }),
             ),
-            "notebook_id",
+            "id",
         );
         let album = id(
             scratch.run(
@@ -618,10 +615,7 @@ mod tests {
             "folder_id",
         );
         assert_eq!(scratch.search("ibis").hits.len(), 3);
-        scratch.run(
-            "knowledge.delete_notebook",
-            serde_json::json!({ "notebook_id": notebook }),
-        );
+        scratch.run("entity.trash", serde_json::json!({ "id": notebook }));
         scratch.run(
             "media.delete_album",
             serde_json::json!({ "album_id": album }),
@@ -644,8 +638,8 @@ mod tests {
     fn a_typo_in_a_container_name_is_corrected_on_home() {
         let scratch = Scratch::founded();
         scratch.run(
-            "knowledge.create_notebook",
-            serde_json::json!({ "name": "Marmoset recipes" }),
+            "container.create",
+            serde_json::json!({ "kind": "notebook", "title": "Marmoset recipes" }),
         );
         let slipped = scratch.search("marmsoet");
         assert_eq!(slipped.corrected, "marmoset");
