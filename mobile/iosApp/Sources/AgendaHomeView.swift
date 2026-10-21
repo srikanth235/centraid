@@ -302,22 +302,27 @@ private struct AgendaList: View {
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 0) {
-                    // NO EVENT OF THE MEMBER'S YET, only marks (due tasks,
-                    // birthdays): the phone's calendar is offered quietly above
-                    // them, at the point of use.
-                    if !importLabel(home.importSource).isEmpty, let importFromPhone {
-                        KitOutlineButton(label: importLabel(home.importSource)) {
-                            importFromPhone(home.importSource)
+                VStack(alignment: .leading, spacing: 0) {
+                    // THE PROJECTS WHOSE NAME A SEARCH MATCHED come first (Q-1128-1), in a plain
+                    // stack above the lazy one, as Notes and Docs draw theirs.
+                    AgendaSearchContainers(containers: home.containers, send: send)
+                    LazyVStack(alignment: .leading, spacing: 0) {
+                        // NO EVENT OF THE MEMBER'S YET, only marks (due tasks,
+                        // birthdays): the phone's calendar is offered quietly above
+                        // them, at the point of use.
+                        if !importLabel(home.importSource).isEmpty, let importFromPhone {
+                            KitOutlineButton(label: importLabel(home.importSource)) {
+                                importFromPhone(home.importSource)
+                            }
+                            .accessibilityIdentifier("agenda-import")
+                            .padding(.horizontal, CentraidGeometry.pageMargin)
+                            .padding(.vertical, 8)
                         }
-                        .accessibilityIdentifier("agenda-import")
-                        .padding(.horizontal, CentraidGeometry.pageMargin)
-                        .padding(.vertical, 8)
-                    }
-                    AgendaLeadBlocks(home: home, chrome: chrome, send: send)
-                    ForEach(home.days, id: \.day) { section in
-                        AgendaSectionView(section: section, chrome: chrome, send: send)
-                            .id(section.day)
+                        AgendaLeadBlocks(home: home, chrome: chrome, send: send)
+                        ForEach(home.days, id: \.day) { section in
+                            AgendaSectionView(section: section, chrome: chrome, send: send)
+                                .id(section.day)
+                        }
                     }
                 }
                 .padding(.bottom, 16)
@@ -331,14 +336,32 @@ private struct AgendaList: View {
 
     /// Where the state says to land — a day, or that day's now line — except
     /// that landing never scrolls PAST the blocks above the days (the notice,
-    /// the Overdue group, a search's task hits): when the landing day is the
-    /// first one drawn, the list stays at its top.
+    /// the Overdue group, a search's project containers and task hits): when
+    /// the landing day is the first one drawn, the list stays at its top.
     private func land(_ proxy: ScrollViewProxy) {
         guard !home.landing.day.isEmpty else { return }
-        let blocksAbove = home.hasNotice || home.hasOverdue || !home.taskHits.isEmpty
+        let blocksAbove = home.hasNotice || home.hasOverdue || !home.taskHits.isEmpty || !home.containers.isEmpty
         if blocksAbove, home.landing.day == home.days.first?.day { return }
         let target = home.landing.nowLine ? "now-\(home.landing.day)" : home.landing.day
         proxy.scrollTo(target, anchor: .top)
+    }
+}
+
+/// A SEARCH'S PROJECT CONTAINERS (Q-1128-1): the kit's one container row, each
+/// tap `ProjectPicked` with the container's id — `AgendaRouting` opens the
+/// project page, as it does for To-do's project row. Nothing without a term.
+private struct AgendaSearchContainers: View {
+    let containers: [Centraid_Screen_V1_SearchContainer]
+    let send: (Data) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(containers, id: \.id) { container in
+                SearchContainerRow(container: container) { _ in
+                    send(AgendaEvents.make { $0.projectPicked = .with { $0.projectID = container.id } })
+                }
+            }
+        }
     }
 }
 

@@ -1,6 +1,6 @@
 # Selectors, per screen
 
-One string per control, set with `Modifier.testTag` in Compose and `.accessibilityIdentifier` in SwiftUI — **the same string on both**, which is what lets one flow file drive two platforms.
+One string per control, set with `Modifier.testTag` in Compose and `.accessibilityIdentifier` in SwiftUI — **the same string on both**, which is what lets one flow file drive two platforms. On Android a test tag reaches Maestro's `id:` as a resource id because `MainActivity` sets `testTagsAsResourceId` once on the root content (#1128, Q-1128-2).
 
 | Id | Screen | What renders it |
 | --- | --- | --- |
@@ -23,7 +23,7 @@ One string per control, set with `Modifier.testTag` in Compose and `.accessibili
 | `search-ask-about` | Home search, and the search of Notes, People, Docs, Agenda (tasks included) and Photos | the no-match state's one action, "Ask about “…”": switches to the Chat tab and sends the question — **iOS only**; Android has no Chat tab, so its no-match state draws without it. **Never in Locker's search** ([#1097](https://github.com/srikanth235/centraid/issues/1097), R-1097-29) |
 | `search-container-<entity>-<id>` | Home search (inside the app's group, before its rows) and Notes', Agenda's and Docs' own search results | one container whose NAME matched — a notebook or album (`core.collection`), a project (`schedule.project`), or a Docs folder (`core.concept`) ([#1097](https://github.com/srikanth235/centraid/issues/1097)); a tap opens it in its app (the notebook's notes, the project's list, the group's ledger, the folder's page, the album's shelf) |
 | `agenda-search-open` | Agenda | the framed search bar under the title, closed; opens Agenda's search (the field is `agenda-search`) |
-| `agenda-search` | Agenda | Agenda's search field once open; it finds events and tasks, the tasks as one group above the event days |
+| `agenda-search` | Agenda | Agenda's search field once open; it finds events, tasks and projects: the projects whose name matched as `search-container-schedule.project-<id>` rows first (#1128, Q-1128-1), then the tasks as one group, then the event days |
 | `agenda-band-<key>` | Agenda | one band place, keyed on the machine's key: `day`, `schedule`, `waiting`, `todo`, `more` ([#1128](https://github.com/srikanth235/centraid/issues/1128), R-1128-1); `agenda-band-home` is the home capsule |
 | `agenda-list` | Agenda (Day, Schedule, Waiting, search) | the scrolling list of day sections |
 | `agenda-todo-list` | Agenda (To-do) | the To-do list: the Inbox's groups, then the projects by area, then "New project" |
