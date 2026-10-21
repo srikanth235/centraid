@@ -19,6 +19,7 @@ Worked as an umbrella by orchestration. One root agent holds the plan and the mo
 - **The commitment tests and the shared-verb tests** are new: `crates/vault/tests/commitments.rs` (the spec's eight, each asking the founded file, with a seeded red for the index comparison) and `crates/vault/tests/shared_verbs.rs` (24 tests over every shared verb and the follow merge).
 - **`docs/vault-ontology.md`** is rewritten as the model's current state with the eight commitments tabled against their tests; `crates/vault/README.md`, `crates/search/README.md` and the Locker README are brought to the same state.
 - **The backup plane's history and the doctor** follow the journal: `backup::snapshot::history` counts `journal` (`RECEIPT_TABLE` is `journal`), and the dangling-receipt check of `restore_check` and its two `centraid doctor` fields are gone (a journal or Locker receipt names a row by value, so evidence outliving its row is not a finding).
+- **Estate**, in a commit of its own (`3f9c4870`): six `year3` app-read rows leave `tests/journeys.json` with the tests that were their consumers; no row is added anywhere.
 
 ### Rulings
 
