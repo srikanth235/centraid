@@ -222,13 +222,13 @@ impl Snapshot {
     }
 }
 
-/// **HOW FAR A VAULT COPY HAS RUN**, from the one table that only grows: the
-/// receipt chain, one row per command, append-only by trigger. A snapshot's
+/// **HOW FAR A VAULT COPY HAS RUN**, from the journal: one row per command the
+/// gate was asked to run, never updated. A snapshot's
 /// census carries the same count, so a phone can tell whether a head holds
 /// commands its own copy never ran (#1080, the sweep's F4) without opening it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct History {
-    /// Receipts in the copy.
+    /// Journal rows in the copy.
     pub receipts: u64,
     /// When the newest command ran, on the vault's clock; `None` for a vault
     /// no command has touched.
@@ -237,7 +237,7 @@ pub struct History {
 
 /// The table [`History`] counts, and the key a manifest's census holds it
 /// under.
-pub const RECEIPT_TABLE: &str = "access_receipt";
+pub const RECEIPT_TABLE: &str = "journal";
 
 /// [`History`] of `vault`.
 ///
@@ -245,11 +245,11 @@ pub const RECEIPT_TABLE: &str = "access_receipt";
 /// SQLite's refusal.
 pub fn history(vault: &Vault) -> Result<History> {
     let (receipts, newest): (i64, Option<String>) = vault.read(|connection| {
-        Ok(connection.query_row(
-            "SELECT count(*), max(occurred_at) FROM access_receipt",
-            [],
-            |row| Ok((row.get(0)?, row.get(1)?)),
-        )?)
+        Ok(
+            connection.query_row("SELECT count(*), max(at) FROM journal", [], |row| {
+                Ok((row.get(0)?, row.get(1)?))
+            })?,
+        )
     })?;
     Ok(History {
         receipts: u64::try_from(receipts).unwrap_or(0),

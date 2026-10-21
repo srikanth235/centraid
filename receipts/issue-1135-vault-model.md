@@ -16,3 +16,312 @@ Worked as an umbrella by orchestration. One root agent holds the plan and the mo
 - **The follow engine** (`commands/follow.rs`): origin and source bookkeeping, per-field three-way merge against `source.stated`, match-then-add, R-FP-3 on absence, with a system's map as data (`SYSTEMS`).
 - **Locker** is ported off every old core table: `locker_item` gains `starred` and `memo`, a `locker_tag` table replaces `core_tag`, and a `receipt` table of its own (`seq`, `at`, `item_id` as a value, `act`, `journal_seq`) replaces `access_receipt`.
 - **Deleted from `crates/vault`**: every per-kind command module (`chat`, `core`, `core_links`, `event_time`, `health`, `knowledge`, `media`, `money`, `people`, `phone`, `schedule`, `social`, `wikilinks`), `chat.rs`, `originals.rs`, `operations/`, and the tests whose subject was a table or file the spec deletes. `crates/vault/src/time` and the backup plane stay.
+- **The commitment tests and the shared-verb tests** are new: `crates/vault/tests/commitments.rs` (the spec's eight, each asking the founded file, with a seeded red for the index comparison) and `crates/vault/tests/shared_verbs.rs` (24 tests over every shared verb and the follow merge).
+- **`docs/vault-ontology.md`** is rewritten as the model's current state with the eight commitments tabled against their tests; `crates/vault/README.md`, `crates/search/README.md` and the Locker README are brought to the same state.
+- **The backup plane's history and the doctor** follow the journal: `backup::snapshot::history` counts `journal` (`RECEIPT_TABLE` is `journal`), and the dangling-receipt check of `restore_check` and its two `centraid doctor` fields are gone (a journal or Locker receipt names a row by value, so evidence outliving its row is not a finding).
+
+### Rulings
+
+Ids R-1135-1-1 to R-1135-1-10 are in [docs/decisions.md](../docs/decisions.md#the-vault-model-from-first-principles-1135), each with its finding, choice and reason. In one line each: **1** one relation label seeded; **2** `receipt.act` is a verb grammar; **3** a journal `seq` is reserved before the handler; **4** a trashed entity leaves the search index; **5** a purge purges companions and moves the rest to the top level; **6** the blob plane is entered by a command and by the core's stage door; **7** the page door's computed columns follow the blob; **8** Locker's item keeps its own trash pair (commitment 2 names it); **9** commitment 4 follows the spec's DDL (revisions and a category's budgets and rules cascade too); **10** the index comparison reads an `fts5vocab` of type `instance`.
+
+### Falsification
+
+The two claims the rest of the lane leans on, each with a throwaway check.
+
+1. **"The incremental search index is the rebuilt one, so a command that forgets to touch is red."** Check: removed `ctx.touch(id)` from `entity.retitle` (line marked `FALSIFY`, restored after). First result: the test stayed green, because a later `person.merge` in the script re-indexed the retitled person and hid the omission. The script was the weak part, not the claim: the last command of the script is now a retitle of a note nothing re-indexes afterwards. Second result: red (`a command changed searchable text and did not touch`); restored, green. A second, permanent check (`an_edit_that_forgets_to_touch_is_caught_by_the_same_comparison`) writes a body without touching and asserts the incremental and rebuilt dumps differ.
+2. **"Garbage collection finds every reference from `PRAGMA foreign_key_list` alone."** Check (a throwaway test file, deleted): `CREATE TABLE zz (h TEXT REFERENCES blob(hash))` inside a commit, with no change to `blob.rs`; `collect_blobs` kept the blob while a row pointed at it and collected it once the row was deleted. The permanent commitment 3 populates every hash column of the model and requires each populated column to be a declared foreign key, and requires `blob::references` to equal the declared set.
+
+### Inherited red
+
+`cargo test --workspace --no-fail-fast` outside the lane's exit list: 981 failing tests in 63 targets (42 + 11 + 3 + 2 + 3 + 1 + 1 by crate), 0 in `centraid-vault`, `centraid-search`, `centraid-ontology` and `centraid-apps-locker`. Every one calls a per-kind command or reads a table the spec deleted (`core_*`, `schedule_*`, `media.*`, `core.*` commands), and goes green when its owning lane lands the per-kind commands; none is a kernel defect (spot-checked: `no such table: core_event`, `core.add_document is not a registered command`, `no command named media.add_asset`).
+
+| Crate | Red tests | Targets | Owning lane |
+| --- | --- | --- | --- |
+| `crates/nativetools` | 732 | 42 (`phase*`, `cli`, `door`, `events_local`, `fixes`, `meta`, `seed`, `tools`, `verbs`, ...) | 7 (the assistant's tool layer, its `core.*` verb map) |
+| `crates/core` | 219 | 11: `--lib` (93) and `assist_door`, `assist_native`, `assist_plane`, `backup_edges`, `call_budget`, `library_assets`, `phone_backup`, `records_backup`, `replay`, `restore_edges` | 2 to 6 for the app arms (`app_query/{notes,docs,health,money}`), 7 for `assist` and the backup tests that seed per-kind rows |
+| `crates/core-ffi` | 14 | `assist`, `contract`, `spike` | 7 |
+| `crates/centraid` | 6 | `restore_drill` (1, needs `media.add_asset`: lane 5), `seed_demo_vault` (5: the seeder writes per-kind rows) | 5 and 8 |
+| `crates/apps/agenda` | 6 | `--lib` (1), `lower_bound` (2), `trash` (3) | 4 |
+| `crates/apps/tasks` | 3 | `--lib` | 4 |
+| `crates/apps/health` | 1 | `--lib` | 6 |
+
+### Changed files (lane 1 and the checkpoint, against the merge base)
+
+Added:
+
+- `crates/ontology/src/scratch.rs`
+- `crates/ontology/tests/doctor.rs`
+- `crates/search/src/snippet.rs`
+- `crates/vault/src/blob.rs`
+- `crates/vault/src/commands/blob.rs`
+- `crates/vault/src/commands/container.rs`
+- `crates/vault/src/commands/edge.rs`
+- `crates/vault/src/commands/entity.rs`
+- `crates/vault/src/commands/flag.rs`
+- `crates/vault/src/commands/follow.rs`
+- `crates/vault/src/commands/person.rs`
+- `crates/vault/src/commands/tag.rs`
+- `crates/vault/src/index.rs`
+- `crates/vault/src/journal.rs`
+- `crates/vault/src/model.rs`
+- `crates/vault/tests/commitments.rs`
+- `crates/vault/tests/shared_verbs.rs`
+- `receipts/issue-1135-vault-model.md`
+
+Modified:
+
+- `AGENTS.md`
+- `CHANGELOG.md`
+- `Cargo.lock`
+- `Cargo.toml`
+- `contracts/migrations/001_baseline.sql`
+- `contracts/schema/vault-ddl.sql`
+- `crates/apps/kit/src/lib.rs`
+- `crates/apps/locker/README.md`
+- `crates/apps/locker/manifest.json`
+- `crates/apps/locker/src/manifest.rs`
+- `crates/apps/locker/src/phone.rs`
+- `crates/apps/locker/src/queries.rs`
+- `crates/apps/money/tests/common/mod.rs`
+- `crates/apps/notes/src/queries.rs`
+- `crates/assist/src/suggest.rs`
+- `crates/centraid/src/bin/seed-demo-vault.rs`
+- `crates/centraid/src/cmd/doctor.rs`
+- `crates/core-ffi/tests/assist.rs`
+- `crates/core-ffi/tests/contract.rs`
+- `crates/core-ffi/tests/reopen.rs`
+- `crates/core-ffi/tests/spike.rs`
+- `crates/core/src/api.rs`
+- `crates/core/src/app_query.rs`
+- `crates/core/src/app_query/chat.rs`
+- `crates/core/src/app_query/docs.rs`
+- `crates/core/src/app_query/docs_tests.rs`
+- `crates/core/src/app_query/health_tests.rs`
+- `crates/core/src/app_query/locker_tests.rs`
+- `crates/core/src/app_query/money_tests.rs`
+- `crates/core/src/app_query/named.rs`
+- `crates/core/src/app_query/notes.rs`
+- `crates/core/src/app_query/people.rs`
+- `crates/core/src/app_query/photos.rs`
+- `crates/core/src/app_query/tasks_tests.rs`
+- `crates/core/src/app_query/vault.rs`
+- `crates/core/src/assist/attach.rs`
+- `crates/core/src/assist/mod.rs`
+- `crates/core/src/assist/store.rs`
+- `crates/core/src/handle.rs`
+- `crates/core/src/locker/phone.rs`
+- `crates/core/src/originals.rs`
+- `crates/core/src/stage.rs`
+- `crates/core/tests/assist_door.rs`
+- `crates/core/tests/call_budget.rs`
+- `crates/core/tests/common/chat.rs`
+- `crates/nativetools/src/vaultio.rs`
+- `crates/nativetools/tests/meta.rs`
+- `crates/ontology/Cargo.toml`
+- `crates/ontology/README.md`
+- `crates/ontology/src/bin/export-ddl.rs`
+- `crates/ontology/src/ddl.rs`
+- `crates/ontology/src/error.rs`
+- `crates/ontology/src/lib.rs`
+- `crates/ontology/src/vault.rs`
+- `crates/search/Cargo.toml`
+- `crates/search/README.md`
+- `crates/search/src/lib.rs`
+- `crates/search/src/sqlite.rs`
+- `crates/search/tests/door.rs`
+- `crates/vault/Cargo.toml`
+- `crates/vault/README.md`
+- `crates/vault/src/backup/drill.rs`
+- `crates/vault/src/backup/files.rs`
+- `crates/vault/src/backup/naming.rs`
+- `crates/vault/src/backup/restore.rs`
+- `crates/vault/src/backup/snapshot.rs`
+- `crates/vault/src/bootstrap.rs`
+- `crates/vault/src/bytes.rs`
+- `crates/vault/src/commands/locker.rs`
+- `crates/vault/src/commands/mod.rs`
+- `crates/vault/src/file.rs`
+- `crates/vault/src/lib.rs`
+- `crates/vault/src/log/guard.rs`
+- `crates/vault/src/log/mod.rs`
+- `crates/vault/src/migrations.rs`
+- `crates/vault/src/originals.rs`
+- `crates/vault/src/page.rs`
+- `crates/vault/src/testdoor.rs`
+- `crates/vault/tests/backup_snapshot.rs`
+- `crates/vault/tests/change_census.rs`
+- `crates/vault/tests/commands.rs`
+- `crates/vault/tests/common/mod.rs`
+- `crates/vault/tests/disk_full.rs`
+- `crates/vault/tests/ladder_ddl.rs`
+- `crates/vault/tests/locker_commands.rs`
+- `crates/vault/tests/locker_plaintext_gate.rs`
+- `crates/vault/tests/one_hash.rs`
+- `docs/decisions.md`
+- `docs/vault-ontology.md`
+
+Deleted:
+
+- `contracts/apps/agenda/commands.json`
+- `contracts/apps/agenda/queries.json`
+- `contracts/apps/agenda/rows.json`
+- `contracts/apps/docs/README.md`
+- `contracts/apps/docs/commands.json`
+- `contracts/apps/docs/queries.json`
+- `contracts/apps/docs/rows.json`
+- `contracts/apps/docs/scenarios.json`
+- `contracts/apps/locker/commands.json`
+- `contracts/apps/locker/manifest.json`
+- `contracts/apps/locker/queries.json`
+- `contracts/apps/locker/rows.json`
+- `contracts/apps/money/balances.json`
+- `contracts/apps/money/cashflow.json`
+- `contracts/apps/money/recurring.json`
+- `contracts/apps/money/rows.json`
+- `contracts/apps/money/rules.json`
+- `contracts/apps/money/spending.json`
+- `contracts/apps/money/targets.json`
+- `contracts/apps/money/transfers.json`
+- `contracts/apps/notes/commands.json`
+- `contracts/apps/notes/queries.json`
+- `contracts/apps/notes/rows.json`
+- `contracts/apps/notes/scenarios.json`
+- `contracts/apps/people/README.md`
+- `contracts/apps/people/commands.json`
+- `contracts/apps/people/queries.json`
+- `contracts/apps/people/rows.json`
+- `contracts/apps/people/scenarios.json`
+- `contracts/apps/photos/README.md`
+- `contracts/apps/photos/commands.json`
+- `contracts/apps/photos/manifest.json`
+- `contracts/apps/photos/queries.json`
+- `contracts/apps/photos/recognition-placement.md`
+- `contracts/apps/photos/rows.json`
+- `contracts/apps/photos/sample/ana-and-marco-table.png`
+- `contracts/apps/photos/sample/ana-kitchen-window.png`
+- `contracts/apps/photos/sample/ana-porch-evening.png`
+- `contracts/apps/photos/sample/ana-profile-doorway.png`
+- `contracts/apps/photos/sample/ana-trailhead.png`
+- `contracts/apps/photos/sample/backyard-last-light.png`
+- `contracts/apps/photos/sample/cabin-window-morning.png`
+- `contracts/apps/photos/sample/downtown-blue-hour.png`
+- `contracts/apps/photos/sample/emerald-bay-overlook.png`
+- `contracts/apps/photos/sample/empty-hallway.png`
+- `contracts/apps/photos/sample/granite-switchback.png`
+- `contracts/apps/photos/sample/harbor-lights.png`
+- `contracts/apps/photos/sample/manifest.json`
+- `contracts/apps/photos/sample/marco-harbor-wall.png`
+- `contracts/apps/photos/sample/marco-workshop.png`
+- `contracts/apps/photos/sample/sand-harbor-dawn.png`
+- `contracts/apps/photos/sample/tahoe-dusk-ridge.png`
+- `contracts/apps/photos/sample/trailhead-sign.png`
+- `contracts/apps/photos/sample/truckee-river-bend.png`
+- `contracts/apps/photos/scenarios.json`
+- `contracts/apps/tasks/commands.json`
+- `contracts/apps/tasks/queries.json`
+- `contracts/apps/tasks/rows.json`
+- `contracts/golden/issue-1020/manifest.json`
+- `contracts/golden/issue-1020/vault-ddl.sql`
+- `contracts/golden/issue-1020/vault.db.gz`
+- `contracts/golden/issue-929/manifest.json`
+- `contracts/golden/issue-929/vault.db.gz`
+- `contracts/migrations/002_phone_link.sql`
+- `contracts/migrations/003_health.sql`
+- `contracts/migrations/004_chat_message_version.sql`
+- `contracts/migrations/005_chat_scope_agenda.sql`
+- `contracts/schema/v0-registries.json`
+- `crates/apps/agenda/tests/detail.rs`
+- `crates/apps/agenda/tests/parity.rs`
+- `crates/apps/agenda/tests/year3.rs`
+- `crates/apps/docs/tests/arms.rs`
+- `crates/apps/docs/tests/door.rs`
+- `crates/apps/docs/tests/parity.rs`
+- `crates/apps/docs/tests/year3.rs`
+- `crates/apps/kit/src/contract_vault.rs`
+- `crates/apps/kit/src/fixtures.rs`
+- `crates/apps/locker/tests/parity.rs`
+- `crates/apps/money/tests/folds.rs`
+- `crates/apps/money/tests/phone.rs`
+- `crates/apps/notes/tests/editor_contract.rs`
+- `crates/apps/notes/tests/library.rs`
+- `crates/apps/notes/tests/parity.rs`
+- `crates/apps/notes/tests/phone.rs`
+- `crates/apps/notes/tests/year3.rs`
+- `crates/apps/people/tests/parity.rs`
+- `crates/apps/people/tests/three_state.rs`
+- `crates/apps/people/tests/year3.rs`
+- `crates/apps/photos/tests/parity.rs`
+- `crates/apps/photos/tests/year3.rs`
+- `crates/apps/tasks/tests/parity.rs`
+- `crates/apps/tasks/tests/year3.rs`
+- `crates/centraid/tests/derive_sweep.rs`
+- `crates/core/src/app_query/chat_tests.rs`
+- `crates/core/tests/assist_history.rs`
+- `crates/core/tests/assist_proposals.rs`
+- `crates/ontology/src/bin/export-golden-manifest.rs`
+- `crates/ontology/src/golden.rs`
+- `crates/ontology/src/registries.rs`
+- `crates/ontology/src/snapshot.rs`
+- `crates/ontology/tests/commitments.rs`
+- `crates/ontology/tests/fixtures.rs`
+- `crates/ontology/tests/golden_vault.rs`
+- `crates/search/src/domains.rs`
+- `crates/search/src/named.rs`
+- `crates/vault/src/audit.rs`
+- `crates/vault/src/bin/export-baseline.rs`
+- `crates/vault/src/chat.rs`
+- `crates/vault/src/commands/chat.rs`
+- `crates/vault/src/commands/core.rs`
+- `crates/vault/src/commands/core_links.rs`
+- `crates/vault/src/commands/event_time.rs`
+- `crates/vault/src/commands/health.rs`
+- `crates/vault/src/commands/knowledge.rs`
+- `crates/vault/src/commands/media.rs`
+- `crates/vault/src/commands/money.rs`
+- `crates/vault/src/commands/people.rs`
+- `crates/vault/src/commands/phone.rs`
+- `crates/vault/src/commands/schedule.rs`
+- `crates/vault/src/commands/social.rs`
+- `crates/vault/src/commands/wikilinks.rs`
+- `crates/vault/src/content.rs`
+- `crates/vault/src/operations/mod.rs`
+- `crates/vault/src/operations/task_lifecycle.rs`
+- `crates/vault/src/operations/task_write.rs`
+- `crates/vault/tests/attachment_source.rs`
+- `crates/vault/tests/baseline.rs`
+- `crates/vault/tests/baseline_corpus.rs`
+- `crates/vault/tests/chat_proposals.rs`
+- `crates/vault/tests/chat_schema.rs`
+- `crates/vault/tests/chat_scope_agenda.rs`
+- `crates/vault/tests/collection_kind.rs`
+- `crates/vault/tests/derivatives.rs`
+- `crates/vault/tests/docs_commands.rs`
+- `crates/vault/tests/event_times.rs`
+- `crates/vault/tests/health_commands.rs`
+- `crates/vault/tests/health_schema.rs`
+- `crates/vault/tests/knowledge_commands.rs`
+- `crates/vault/tests/media_commands.rs`
+- `crates/vault/tests/money_commands.rs`
+- `crates/vault/tests/money_schema.rs`
+- `crates/vault/tests/originals.rs`
+- `crates/vault/tests/page_fold.rs`
+- `crates/vault/tests/people_commands.rs`
+- `crates/vault/tests/phone_commands.rs`
+- `crates/vault/tests/phone_link_schema.rs`
+- `crates/vault/tests/revision_guards.rs`
+- `crates/vault/tests/schedule_commands.rs`
+- `crates/vault/tests/search_coverage.rs`
+
+## Verification
+
+| Command | Result |
+| --- | --- |
+| `cargo build --workspace --all-targets --locked` | pass |
+| `cargo test -p centraid-vault` | pass (199 lib tests; `commands` 12, `locker_commands` 25, `shared_verbs` 24, `commitments` 9, `ladder_ddl`, `backup_snapshot`, `disk_full`, `snapshot_faults`, `time_corpus`, `properties`) |
+| `cargo test -p centraid-search -p centraid-ontology` | pass |
+| `cargo test -p centraid-apps-locker` | pass (47) |
+| `cargo test -p centraid-vault --test restore_drill` | pass |
+| `cargo clippy -p centraid-vault -p centraid-search -p centraid-ontology --all-targets -- -D warnings` | clean |
+| `cargo xtask rules` | clean |
+| `export-ladder-ddl` against `contracts/schema/vault-ddl.sql` | identical |
+| `cargo test --workspace --no-fail-fast` | 981 red, all inherited (table above) |

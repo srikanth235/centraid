@@ -19,7 +19,7 @@ Skim the relevant docs before non-trivial work:
 
 - **Core**: [ARCHITECTURE.md](ARCHITECTURE.md) · [README.md](README.md) · [CONTRIBUTING.md](CONTRIBUTING.md) · [TESTING.md](TESTING.md) · [SECURITY.md](SECURITY.md) · [CHANGELOG.md](CHANGELOG.md) · [DESIGN.md](DESIGN.md) (binding design rulebook)
 - **Decisions + vocabulary**: [docs/decisions.md](docs/decisions.md) (current decisions, non-goals, supersessions) · [docs/glossary.md](docs/glossary.md)
-- **The model**: [docs/vault-ontology.md](docs/vault-ontology.md) (the vault ontology's state, enforced commitments, drift register) · the published design at [centraid.dev/docs/ontology](https://centraid.dev/docs/ontology/)
+- **The model**: [docs/vault-ontology.md](docs/vault-ontology.md) (the vault model's current state and enforced commitments) · the published design at [centraid.dev/docs/ontology](https://centraid.dev/docs/ontology/)
 - **Design system**: [docs/design-machinery.md](docs/design-machinery.md) (includes the public-site and test-report registers)
 - **Engineering**: [docs/coding-standards.md](docs/coding-standards.md) · [docs/toolchain.md](docs/toolchain.md) · [docs/protocol.md](docs/protocol.md) · [docs/config-ownership.md](docs/config-ownership.md) · [docs/dev-environment.md](docs/dev-environment.md) · [docs/multi-agent.md](docs/multi-agent.md)
 - **Product areas**: [docs/blueprint-seats.md](docs/blueprint-seats.md) · [docs/system-signals.md](docs/system-signals.md) · [docs/photos/](docs/photos/README.md) · [docs/mobile-offline.md](docs/mobile-offline.md) · [docs/gateway.md](docs/gateway.md)

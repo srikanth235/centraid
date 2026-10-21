@@ -5,7 +5,6 @@ Everything durable a Centraid phone knows about a vault is in one SQLite file, a
 ```sh
 cargo test -p centraid-vault
 cargo run -p centraid-vault --bin export-ladder-ddl > contracts/schema/vault-ddl.sql
-cargo run -p centraid-vault --bin export-baseline > contracts/migrations/001_baseline.sql   # a squash: the whole ladder rendered as one baseline
 ```
 
 ## The map
@@ -13,14 +12,14 @@ cargo run -p centraid-vault --bin export-baseline > contracts/migrations/001_bas
 | Module | What it owns |
 | --- | --- |
 | `file` | `Vault::create` / `open`, the one writable connection, `read` under `query_only`, the pragma set, `finish`. |
-| `migrations` | The forward-only ladder (the baseline, squashed on 2026-10-15 from fifteen, and the rungs appended after it), `application_id`, the derived entity-kind registry, and `render_baseline`, which cuts the baseline. |
+| `migrations` | The ladder (one rung, `001_baseline.sql`, hand-written), `application_id`. |
 | `log` | The commit guard — `BEGIN IMMEDIATE`, the body, `COMMIT`, with an `update_hook` reporting which tables a commit touched — and SQL identifier quoting. |
 | `value`, `canonical`, `clock`, `time`, `error` | A SQLite value and its JSON; the one canonical JSON spelling; time and ids as injected facts; civil time and recurrence; `VaultError`, with `DiskFull` typed. |
 | `access` | `Principal`, `Verb`, `evaluate_access` — a deny is a value. |
-| `commands`, `operations`, `audit` | `CommandDefinition`, `Registry`, the gate order and every app's typed commands; the domain operation layer every writer reaches a canonical table through; the invocation journal and the receipt hash chain. |
+| `commands`, `journal`, `model`, `index` | `CommandDefinition`, `Registry`, the gate order and the shared verbs (`entity`, `tag`, `flag`, `edge`, `container`, `blob`, `person`, `follow`) and Locker's; the journal row every command leaves; `Kind`, `Rel`, `Flag` and `fold_label`; the re-index at commit into the one `search` table. See [docs/vault-ontology.md](../../docs/vault-ontology.md). |
 | `bootstrap` | `Vault::found`: the vault row and its owner. |
 | `page`, `testdoor` | The paged door's vault-side hook (`page_raw`, the row-filter AND, the field mask); the questions a test asks of a copy. |
-| `bytes`, `content`, `originals` | The byte door (`BlobStore`, `Located`, and `FsBlobStore` over a plain directory); where a content item's bytes are and what a reader reads them as; the originals this device holds and the albums whose originals stay. |
+| `bytes`, `blob`, `originals` | The byte door (`BlobStore`, `Located`, and `FsBlobStore` over a plain directory); claiming bytes (`blob`, `derivative`), where they are, and garbage collection from `PRAGMA foreign_key_list`; the originals this device holds and the albums whose originals stay. |
 | `custody` | The one sealed-value format (the Locker `lk1:` cell) and the phone's two Locker doors; no key material — see [`src/custody/README.md`](src/custody/README.md). |
 | `snapshot` | The pre-migration safety copy `Vault::open` takes before it climbs the ladder. |
 | `backup` | **The backup plane** (#1080): the vault as page-identical snapshots cut into 64 KiB ranges, every content file sealed under names its hash implies, a device-local ledger and spool, and the restore. See below. |
@@ -30,7 +29,7 @@ cargo run -p centraid-vault --bin export-baseline > contracts/migrations/001_bas
 | Module | What it owns |
 | --- | --- |
 | `naming` | The backup keys from the vault's root key, and the names the vault's content implies. |
-| `files` | Every file the vault knows by hash — each content item and each derivative — with what a pass decides by. |
+| `files` | Every file the vault knows by hash, read from `blob` (which includes each derivative's own bytes), with what a pass decides by. |
 | `snapshot` | The page-identical copy (`sqlite3_backup`, on the vault's own connection, off the request path once copied), its ranges and manifest, and the census counted on the copy; plan, spool, settle. |
 | `store` | The `Store` trait one destination answers, and `MemoryStore`. |
 | `ledger` | `<stem>.backup.db` beside the vault, never inside it: destinations, the queue, confirmations, snapshots, `local_bytes`. |
@@ -50,8 +49,8 @@ Each with its reason in the module, and each recorded as a decision.
 - **The commit pair is the only writable connection** (D-1020-D1-5). `Vault::read` sets `PRAGMA query_only`, so a write through a read is refused by SQLite rather than by a reviewer.
 - **The pragmas are stated, not inherited**: `journal_mode = WAL`, `synchronous = FULL`, `journal_size_limit`, no `secure_delete`, a 4 KiB page and no auto-vacuum; checkpoints are SQLite's own since #1080 ([R-1080-C33](../../docs/decisions.md#the-phone-core-and-the-cut-over-1080-lane-c)), so a last close folds the WAL into the file.
 - **`VaultError::DiskFull` is a typed answer** (D-1020-D1-8), classified on SQLite's primary code and on `ErrorKind::StorageFull`, so a handler's own `?` carries it.
-- **The vault keeps ten full-text indexes: seven are search domains and three serve containers.** Attribute text is folded into the widened domain indexes (a person's profile, reach, memos and, through the activity's live `core_link`, the notes of their interactions), a parent is re-indexed from its child tables by trigger, and seven indexes nothing read are gone ([R-1097-12](../../docs/decisions.md#the-owners-rulings-on-the-open-questions-1097)). The three container indexes ([R-1097-19 to 21](../../docs/decisions.md#containers-are-search-results-of-their-own-1097)) hold exactly the live notebooks and albums (`fts_core_collection`), projects (`fts_schedule_project`, while not archived) and Docs folders (`fts_core_concept`, the folders scheme, never its root); each of the ten has an `fts5vocab` table, and Locker has none. The rank weights are the search door's, not a row in an index (R-1097-1d).
-- **The baseline migration and its `contracts/` fixture are ONE file** (D-1020-D1-13) — squashed on 2026-10-15 from fifteen rungs (Q-1029-1); above it the ladder holds rung two, the phone link (#1127), rung three, the health pack and a mutable `core_activity` (#1129), rung four, `chat_message`'s version (#1129), and rung five, the chat scope's fold into Agenda (#1128), each appended and never edited once released — and **the entity-kind registry is derived from the DDL** (D-1020-D1-15), not transcribed, so the baseline carries no `core_entity_kind` row. It does carry the rows founding seeds (the money categories scheme, its concepts and their `core_entity` rows), ahead of the triggers so none fires over them.
+- **The vault keeps one full-text index**, `search`, contentless and keyed by `entity.n`, written by the commit guard from the entities a command touched (`index.rs`); `crates/search` only reads it.
+- **The baseline migration and its `contracts/` fixture are ONE file** (D-1020-D1-13): `contracts/migrations/001_baseline.sql`, with `contracts/schema/vault-ddl.sql` rendered from it by `export-ladder-ddl` and held equal by `tests/ladder_ddl.rs`. The model was rebuilt whole in [#1135](https://github.com/srikanth235/centraid/issues/1135).
 
 ## The interface its consumers use
 

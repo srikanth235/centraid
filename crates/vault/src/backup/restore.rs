@@ -365,15 +365,11 @@ pub struct StructuralReport {
     /// `PRAGMA integrity_check`.
     pub integrity: String,
     pub foreign_key_violations: Vec<String>,
-    pub receipts_checked: usize,
-    /// Reported, never thrown: a purge is SUPPOSED to leave its receipt behind,
-    /// so a receipt naming a row that is gone is a line in the report.
-    pub dangling_receipts: Vec<String>,
 }
 
 impl StructuralReport {
-    /// Clean means: pages sound and keys hold. Dangling receipts do **not**
-    /// make a report dirty.
+    /// Clean means: pages sound and keys hold. (A journal or Locker receipt
+    /// names a row by value, never by foreign key: evidence outlives its row.)
     #[must_use]
     pub fn is_clean(&self) -> bool {
         self.integrity == "ok" && self.foreign_key_violations.is_empty()
@@ -413,75 +409,10 @@ pub fn restore_check(file: &Path) -> Result<StructuralReport, CheckError> {
             ));
         }
     }
-    let (receipts_checked, dangling_receipts) = check_receipts(&connection)?;
     Ok(StructuralReport {
         integrity,
         foreign_key_violations: violations,
-        receipts_checked,
-        dangling_receipts,
     })
-}
-
-/// Receipts whose object row is gone. Returns `(checked, dangling)`.
-fn check_receipts(connection: &rusqlite::Connection) -> Result<(usize, Vec<String>), CheckError> {
-    let has_table: bool = connection.query_row(
-        "SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = 'access_receipt')",
-        [],
-        |row| row.get(0),
-    )?;
-    if !has_table {
-        return Ok((0, Vec::new()));
-    }
-    let tables: BTreeSet<String> = connection
-        .prepare(
-            "SELECT name FROM sqlite_schema WHERE type = 'table' AND name NOT LIKE 'sqlite_%'",
-        )?
-        .query_map([], |row| row.get::<_, String>(0))?
-        .collect::<rusqlite::Result<_>>()?;
-    let rows = connection
-        .prepare("SELECT receipt_id, object_type, object_id FROM access_receipt")?
-        .query_map([], |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, Option<String>>(2)?,
-            ))
-        })?
-        .collect::<rusqlite::Result<Vec<_>>>()?;
-    let mut checked = 0_usize;
-    let mut dangling = Vec::new();
-    for (receipt_id, object_type, object_id) in rows {
-        checked += 1;
-        // NULL means the receipt is about the act, not about a row.
-        let Some(object_id) = object_id else {
-            continue;
-        };
-        // `object_type` is an ontology entity name, which is the physical
-        // table. A name this file has no table for is a band this build does
-        // not carry — not a missing row.
-        if !tables.contains(&object_type) {
-            continue;
-        }
-        let keys: Vec<String> = connection
-            .prepare("SELECT name FROM pragma_table_info(?1) WHERE pk > 0 ORDER BY pk")?
-            .query_map([&object_type], |row| row.get::<_, String>(0))?
-            .collect::<rusqlite::Result<_>>()?;
-        // A composite key is not something a receipt addresses.
-        let [pk] = keys.as_slice() else {
-            continue;
-        };
-        let present: bool = connection.query_row(
-            &format!("SELECT EXISTS(SELECT 1 FROM \"{object_type}\" WHERE \"{pk}\" = ?1)"),
-            [&object_id],
-            |row| row.get(0),
-        )?;
-        if !present {
-            dangling.push(format!(
-                "receipt {receipt_id} references {object_type} {object_id}, which is not in the file"
-            ));
-        }
-    }
-    Ok((checked, dangling))
 }
 
 #[cfg(test)]
