@@ -15,7 +15,7 @@
 
 use centraid_api_proto::core_v1 as wire;
 use centraid_apps_notes as notes;
-use centraid_apps_notes::cards::{OwnerCards, RefCard};
+use centraid_apps_notes::cards::RefCard;
 use centraid_apps_notes::queries::{self, LibraryRow, SearchRow};
 use centraid_search::Principal;
 use centraid_vault::Vault;
@@ -74,7 +74,6 @@ pub(super) fn library(
     asked: &wire::NotesLibraryRequest,
 ) -> Result<Answer> {
     let zone = zone_of(vault, &asked.tz)?;
-    let cards = OwnerCards::new(door);
     let filter = notes::LibraryFilter {
         sort: match asked.sort() {
             wire::NotesSort::Created => notes::Sort::Created,
@@ -88,7 +87,7 @@ pub(super) fn library(
     };
     settle(
         door,
-        queries::load_library(door, &cards, window_of(asked.window)),
+        queries::load_library(door, window_of(asked.window)),
         |data| {
             let data = notes::shape_library(data, &filter);
             Answer::NotesLibrary(wire::NotesLibrary {
@@ -196,7 +195,7 @@ pub(super) fn search(
     // THE NOTEBOOKS THE TERM NAMES RIDE BESIDE THE NOTES (#1097, R-1097-19..21),
     // and the correction treats the two as one answer: it runs only when both
     // are empty, over the notes' vocabulary and the notebooks'.
-    let entities = named::entities_of(queries::NOTE_TARGET_TYPE, "notes");
+    let entities = named::entities_of("note", "notes");
     let loaded = with_search(vault, door, |search| {
         corrected_search(
             search,
@@ -316,8 +315,7 @@ pub(super) fn trash(
     asked: &wire::NotesTrashRequest,
 ) -> Result<Answer> {
     let zone = zone_of(vault, &asked.tz)?;
-    let cards = OwnerCards::new(door);
-    settle(door, notes::load_trash(door, &cards), |rows| {
+    settle(door, notes::load_trash(door), |rows| {
         Answer::NotesTrash(wire::NotesTrash {
             notes: rows
                 .into_iter()
@@ -344,13 +342,13 @@ pub(super) fn history(
                     .map(|version| wire::NotesVersion {
                         asserted_local_day: local_day(&zone, Some(version.asserted_at.as_str())),
                         asserted_local: minute_if(Some(&zone), Some(version.asserted_at.as_str())),
-                        content_id: version.content_id,
+                        seq: version.seq,
                         body: version.body,
-                        media_type: version.media_type,
                         current: version.current,
                         asserted_at: version.asserted_at,
                     })
                     .collect(),
+                truncated: data.truncated,
             })
         },
     )
@@ -377,8 +375,6 @@ pub(super) fn note(
                 format: note.format,
                 pinned: note.pinned,
                 body: note.body,
-                body_content_id: note.body_content_id,
-                current_revision_id: note.current_revision_id,
                 row_version: note.row_version,
                 created_at: note.created_at,
                 updated_at: note.updated_at,
@@ -421,11 +417,11 @@ fn with_search<T>(
 fn card_to_wire(card: RefCard) -> wire::NotesCard {
     wire::NotesCard {
         status: card.status.as_str().to_owned(),
-        entity: card.entity,
+        entity: card.kind,
         id: card.id,
         title: card.title,
         subtitle: card.subtitle,
-        thumbnail_content_id: card.thumbnail_content_id,
+        thumbnail_content_id: card.thumbnail,
     }
 }
 
@@ -433,8 +429,6 @@ fn attachment_to_wire(attachment: queries::Attachment) -> wire::NotesAttachment 
     wire::NotesAttachment {
         attachment_id: attachment.attachment_id,
         content_id: attachment.content_id,
-        role: attachment.role,
-        is_primary: attachment.is_primary == 1,
         media_type: attachment.media_type,
         content_uri: attachment.content_uri,
         byte_size: attachment.byte_size,
@@ -450,7 +444,7 @@ fn row_to_wire(row: LibraryRow, zone: &FireZone) -> wire::NotesRow {
         note_id: row.note_id,
         title: row.title,
         format: row.format,
-        pinned: row.pinned == 1,
+        pinned: row.pinned,
         created_at: row.created_at,
         updated_at: row.updated_at,
         deleted_at: row.deleted_at,
@@ -469,7 +463,6 @@ fn row_to_wire(row: LibraryRow, zone: &FireZone) -> wire::NotesRow {
             .references
             .into_iter()
             .map(|reference| wire::NotesReference {
-                link_id: reference.link_id,
                 selector_json: reference.selector.map(|selector| selector.to_string()),
                 card: Some(card_to_wire(reference.card)),
             })
@@ -478,7 +471,6 @@ fn row_to_wire(row: LibraryRow, zone: &FireZone) -> wire::NotesRow {
             .backlinks
             .into_iter()
             .map(|backlink| wire::NotesBacklink {
-                link_id: backlink.link_id,
                 card: Some(card_to_wire(backlink.card)),
             })
             .collect(),
@@ -486,7 +478,6 @@ fn row_to_wire(row: LibraryRow, zone: &FireZone) -> wire::NotesRow {
             .tags
             .into_iter()
             .map(|tag| wire::NotesTag {
-                tag_id: tag.tag_id,
                 concept_id: tag.concept_id,
                 label: tag.label,
             })
@@ -501,7 +492,7 @@ fn hit_to_wire(hit: SearchRow, zone: Option<&FireZone>) -> wire::NotesSearchHit 
         note_id: hit.note_id,
         title: hit.title,
         format: hit.format,
-        pinned: hit.pinned == 1,
+        pinned: hit.pinned,
         created_at: hit.created_at,
         updated_at: hit.updated_at,
         preview: hit.preview,
@@ -604,12 +595,26 @@ mod tests {
 
         fn create(&self, title: &str, body: &str) -> String {
             self.run(
-                "knowledge.create_note",
-                serde_json::json!({ "title": title, "body_text": body }),
-            )["note_id"]
+                "note.create",
+                serde_json::json!({ "title": title, "body": body }),
+            )["id"]
                 .as_str()
                 .expect("a note id")
                 .to_owned()
+        }
+
+        /// A note about the vault's owner: what People's journal writes.
+        fn memo(&self, body: &str) -> String {
+            let id = self.create("Journal", body);
+            let me = self
+                .handle
+                .with_vault(|vault| Ok(vault.self_id()?.expect("a founded vault has an owner")))
+                .expect("the owner");
+            self.run(
+                "edge.add",
+                serde_json::json!({ "from": id, "rel": "about", "to": me }),
+            );
+            id
         }
 
         fn library(&self) -> wire::NotesLibrary {
@@ -680,8 +685,8 @@ mod tests {
         // A LOOSE NOTE IS COUNTED ON THE "UNFILED" ROW (#1047), with no
         // notebook anywhere in the vault.
         scratch.run(
-            "knowledge.create_note",
-            serde_json::json!({ "title": "Loose", "body_text": "scratch" }),
+            "note.create",
+            serde_json::json!({ "title": "Loose", "body": "scratch" }),
         );
         let Ok(Answer::NotesNotebooks(spine)) =
             scratch.ask(Q::NotesNotebooks(wire::NotesNotebooksRequest {}))
@@ -700,14 +705,12 @@ mod tests {
         assert_eq!(refused.code(), wire::ErrorCode::InvalidRequest);
     }
 
-    /// **"NEW ENTRY FOR TODAY" IS A NOTE DATED TODAY, AND NEEDS NO COMMAND OF
-    /// ITS OWN** (Q-1047-8, owner ruling 2026-10-15). The journal sheet's Save is
-    /// `people.add_journal_entry` with the journal's own `today` as `entry_date`:
-    /// that command writes a `knowledge.note` and marks it, so the entry is a
-    /// note — dated the day the member put it on, drawn under that day in the
-    /// device's zone, and kept off the library the way every journal entry is.
+    /// **A MEMO IS A NOTE ABOUT SOMETHING, AND THE JOURNAL IS WHERE NOTES SHOWS
+    /// IT** (Q-1047-8). A People journal entry is a note with an `about` edge: it
+    /// is drawn under the day it was written, in the device's zone, and kept off
+    /// the library the way every memo is — but it is still a note, opened by id.
     #[test]
-    fn a_new_entry_for_today_is_a_note_dated_today_with_no_command_of_its_own() {
+    fn a_memo_is_a_note_in_the_journal_and_kept_off_the_shelf() {
         let scratch = Scratch::founded();
         let journal = || {
             let Ok(Answer::NotesJournal(journal)) =
@@ -723,13 +726,7 @@ mod tests {
         let today = journal().today;
         assert_eq!(today, "2099-06-01", "the device's day, not UTC's");
 
-        let entry = scratch.run(
-            "people.add_journal_entry",
-            serde_json::json!({ "mood": "Good", "text": "Lunch with Ana", "entry_date": today }),
-        )["entry_id"]
-            .as_str()
-            .expect("an entry id")
-            .to_owned();
+        let entry = scratch.memo("Lunch with Ana");
 
         let after = journal();
         assert_eq!(after.days.len(), 1);
@@ -753,15 +750,23 @@ mod tests {
         assert_eq!(spine.unfiled_count, 0);
         // AND REACHABLE BY ID, which is how the People screen opens one.
         assert!(scratch.note(&entry).found);
+        // A shelf note beside it is the shelf's, and the journal does not show it.
+        let shelf = scratch.create("Shelf", "on the shelf");
+        let ids: Vec<String> = scratch
+            .library()
+            .notes
+            .into_iter()
+            .map(|row| row.note_id)
+            .collect();
+        assert_eq!(ids, [shelf]);
+        assert_eq!(journal().days[0].entries.len(), 1);
     }
 
-    /// A JOURNAL ENTRY MADE TODAY IS FILED UNDER TODAY, east of UTC+11:59 too
-    /// (the Q-1047-8 follow-up). The vault clock reads 2 June 02:00Z, which is
-    /// 2 June, 14:00 in Auckland. An entry dated that day and filed with no zone
-    /// is stamped noon UTC, which Auckland (UTC+12) already calls 3 June; one
-    /// filed with the zone the journal answered in lands on 2 June.
+    /// A MEMO IS FILED UNDER THE DAY IT WAS WRITTEN IN THE REQUEST'S ZONE, east
+    /// of UTC+11:59 too. The vault clock reads 2 June 02:00Z, which is 2 June,
+    /// 14:00 in Auckland and still 1 June in New York.
     #[test]
-    fn a_journal_entry_made_today_is_filed_under_today_east_of_utc_plus_eleven() {
+    fn a_memo_is_filed_under_its_day_in_the_requests_zone() {
         const AUCKLAND: &str = "Pacific/Auckland";
         let scratch = Scratch::founded();
         let journal = |tz: &str| match scratch
@@ -780,39 +785,16 @@ mod tests {
             asked.tz, AUCKLAND,
             "the zone the day was read in rides back"
         );
-
-        // THE SHELL STATES BACK what the answer said: `today`, in `tz`.
-        scratch.run(
-            "people.add_journal_entry",
-            serde_json::json!({
-                "mood": "Good", "text": "In zone", "entry_date": asked.today, "tz": asked.tz,
-            }),
-        );
-        let after = journal(AUCKLAND);
-        assert_eq!(
-            after
+        scratch.memo("In zone");
+        let days = |tz: &str| {
+            journal(tz)
                 .days
                 .iter()
-                .map(|day| day.day.as_str())
-                .collect::<Vec<_>>(),
-            ["2099-06-02"],
-            "today's entry is under today"
-        );
-
-        // AND WITHOUT IT, the old behaviour is what it was: tomorrow's.
-        scratch.run(
-            "people.add_journal_entry",
-            serde_json::json!({ "mood": "Good", "text": "No zone", "entry_date": asked.today }),
-        );
-        let both = journal(AUCKLAND);
-        assert_eq!(
-            both.days
-                .iter()
-                .map(|day| day.day.as_str())
-                .collect::<Vec<_>>(),
-            ["2099-06-03", "2099-06-02"],
-            "a zoneless entry is noon UTC, which Auckland calls the next day"
-        );
+                .map(|day| day.day.clone())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(days(AUCKLAND), ["2099-06-02"]);
+        assert_eq!(days(TZ), ["2099-06-01"]);
     }
 
     /// A TYPO FINDS THE NOTE AND SAYS WHAT WAS SEARCHED (#1097, R4, R8).
@@ -820,9 +802,9 @@ mod tests {
     fn a_typo_finds_the_note_and_says_what_it_searched() {
         let scratch = Scratch::founded();
         let kept = scratch.run(
-            "knowledge.create_note",
-            serde_json::json!({ "title": "Tomato stakes", "body_text": "Buy cedar stakes" }),
-        )["note_id"]
+            "note.create",
+            serde_json::json!({ "title": "Tomato stakes", "body": "Buy cedar stakes" }),
+        )["id"]
             .as_str()
             .expect("a note id")
             .to_owned();
@@ -859,34 +841,31 @@ mod tests {
     fn a_trashed_note_leaves_the_library_and_the_search_for_the_trash() {
         let scratch = Scratch::founded();
         let notebook = scratch.run(
-            "knowledge.create_notebook",
-            serde_json::json!({ "name": "Garden" }),
-        )["notebook_id"]
+            "container.create",
+            serde_json::json!({ "kind": "notebook", "title": "Garden" }),
+        )["id"]
             .as_str()
             .expect("a notebook id")
             .to_owned();
         let kept = scratch.run(
-            "knowledge.create_note",
+            "note.create",
             serde_json::json!({
-                "title": "Tomato stakes", "body_text": "Buy cedar stakes", "notebook_id": notebook,
+                "title": "Tomato stakes", "body": "Buy cedar stakes", "notebook_id": notebook,
             }),
-        )["note_id"]
+        )["id"]
             .as_str()
             .expect("a note id")
             .to_owned();
         let gone = scratch.run(
-            "knowledge.create_note",
+            "note.create",
             serde_json::json!({
-                "title": "Old plan", "body_text": "cedar was too dear", "notebook_id": notebook,
+                "title": "Old plan", "body": "cedar was too dear", "notebook_id": notebook,
             }),
-        )["note_id"]
+        )["id"]
             .as_str()
             .expect("a note id")
             .to_owned();
-        scratch.run(
-            "knowledge.delete_note",
-            serde_json::json!({ "note_id": gone }),
-        );
+        scratch.run("entity.trash", serde_json::json!({ "id": gone }));
 
         let library = scratch.library();
         let ids: Vec<&str> = library
@@ -977,66 +956,163 @@ mod tests {
             targets
                 .targets
                 .iter()
-                .any(|target| target.entity == "knowledge.note" && target.id == kept)
+                .any(|target| target.entity == "note" && target.id == kept)
         );
     }
 
-    /// HISTORY IS NEWEST FIRST, AND THE BASE MOVES ONLY WITH THE BODY. Two body
-    /// edits are three versions with the head marked current; a title edit
-    /// bumps `row_version` and leaves `current_revision_id` where it was — the
-    /// fact an autosaving editor's conflict check rests on.
+    /// HISTORY IS NEWEST FIRST, AND THE BASE MOVES WITH EVERY WRITE. Two body
+    /// edits are three versions with the head marked current and each older
+    /// version named by its `seq`; a title edit bumps `row_version` and adds no
+    /// version — the fact an autosaving editor's conflict check rests on.
     #[test]
-    fn history_is_newest_first_and_the_base_revision_moves_only_with_the_body() {
+    fn history_is_newest_first_and_the_base_moves_with_every_write() {
         let scratch = Scratch::founded();
         let note = scratch.create("Draft", "one");
         let first = scratch.note(&note);
         assert!(first.found);
         assert_eq!(first.body, "one");
-        let base = first
-            .current_revision_id
-            .clone()
-            .expect("a created note has a head");
 
         scratch.run(
-            "knowledge.edit_note",
-            serde_json::json!({ "note_id": note, "body_text": "two" }),
+            "note.edit",
+            serde_json::json!({ "id": note, "body": "two" }),
         );
         scratch.run(
-            "knowledge.edit_note",
-            serde_json::json!({ "note_id": note, "body_text": "three" }),
+            "note.edit",
+            serde_json::json!({ "id": note, "body": "three" }),
         );
         let edited = scratch.note(&note);
-        assert_ne!(edited.current_revision_id.as_deref(), Some(base.as_str()));
         assert!(edited.row_version > first.row_version);
 
         scratch.run(
-            "knowledge.edit_note",
-            serde_json::json!({ "note_id": note, "title": "Renamed" }),
+            "note.edit",
+            serde_json::json!({ "id": note, "title": "Renamed" }),
         );
         let renamed = scratch.note(&note);
         assert_eq!(renamed.title, "Renamed");
-        assert_eq!(
-            renamed.current_revision_id, edited.current_revision_id,
-            "a title edit records no body occurrence"
-        );
         assert!(renamed.row_version > edited.row_version);
 
-        let Ok(Answer::NotesHistory(history)) =
-            scratch.ask(Q::NotesHistory(wire::NotesHistoryRequest {
-                note_id: note.clone(),
-                tz: TZ.to_owned(),
-            }))
-        else {
-            panic!("history answers");
+        let history = || {
+            let Ok(Answer::NotesHistory(history)) =
+                scratch.ask(Q::NotesHistory(wire::NotesHistoryRequest {
+                    note_id: note.clone(),
+                    tz: TZ.to_owned(),
+                }))
+            else {
+                panic!("history answers");
+            };
+            history
         };
-        let bodies: Vec<&str> = history
+        let versions = history();
+        let bodies: Vec<&str> = versions
             .versions
             .iter()
             .map(|version| version.body.as_str())
             .collect();
-        assert_eq!(bodies, ["three", "two", "one"]);
-        assert!(history.versions[0].current);
-        assert!(history.versions[1..].iter().all(|version| !version.current));
+        assert_eq!(bodies, ["three", "two", "one"], "a title edit adds none");
+        assert!(versions.versions[0].current);
+        assert!(
+            versions.versions[1..]
+                .iter()
+                .all(|version| !version.current)
+        );
+        let seqs: Vec<i64> = versions
+            .versions
+            .iter()
+            .map(|version| version.seq)
+            .collect();
+        assert_eq!(seqs, [0, 2, 1], "the current words hold no revision");
+        assert!(!versions.truncated);
+
+        // RESTORING A VERSION BRINGS ITS WORDS BACK AND KEEPS WHAT IT REPLACED.
+        scratch.run(
+            "note.restore_version",
+            serde_json::json!({ "id": note, "seq": 1 }),
+        );
+        let restored = history();
+        let bodies: Vec<&str> = restored
+            .versions
+            .iter()
+            .map(|version| version.body.as_str())
+            .collect();
+        assert_eq!(bodies, ["one", "three", "two", "one"]);
+        assert_eq!(scratch.note(&note).body, "one");
+    }
+
+    /// A NOTE ON THE SHELF CARRIES ITS PIN, ITS TAGS, ITS NOTEBOOK'S NAME, THE
+    /// LINKS ITS WORDS COMPILE TO AND THE LINKS THAT POINT AT IT — each drawn as
+    /// a card with the far end's title — and pinned notes lead every order.
+    #[test]
+    fn a_note_carries_its_pin_tags_links_and_backlinks() {
+        let scratch = Scratch::founded();
+        let book = scratch.run(
+            "container.create",
+            serde_json::json!({ "kind": "notebook", "title": "Plans" }),
+        )["id"]
+            .as_str()
+            .expect("an id")
+            .to_owned();
+        let target = scratch.create("Roadmap", "the road");
+        let source = scratch.run(
+            "note.create",
+            serde_json::json!({
+                "title": "Index", "body": "see [[roadmap]] and [[nothing]]", "notebook_id": book,
+            }),
+        )["id"]
+            .as_str()
+            .expect("an id")
+            .to_owned();
+        scratch.run(
+            "flag.set",
+            serde_json::json!({ "id": source, "flag": "pinned" }),
+        );
+        scratch.run(
+            "tag.add",
+            serde_json::json!({ "id": source, "label": "Work" }),
+        );
+        let library = scratch.library();
+        let ids: Vec<&str> = library
+            .notes
+            .iter()
+            .map(|row| row.note_id.as_str())
+            .collect();
+        assert_eq!(ids, [source.as_str(), target.as_str()], "the pin leads");
+        let row = &library.notes[0];
+        assert!(row.pinned && !library.notes[1].pinned);
+        assert_eq!(row.notebook_names, ["Plans"]);
+        assert_eq!(
+            row.tags
+                .iter()
+                .map(|tag| tag.label.as_str())
+                .collect::<Vec<_>>(),
+            ["Work"]
+        );
+        assert_eq!(library.tags.len(), 1, "the derived chips are the tags seen");
+        assert_eq!(
+            row.references.len(),
+            1,
+            "a title that names nothing links nothing"
+        );
+        let card = row.references[0].card.as_ref().expect("a card");
+        assert_eq!(
+            (
+                card.entity.as_str(),
+                card.id.as_str(),
+                card.status.as_str(),
+                card.title.as_deref()
+            ),
+            ("note", target.as_str(), "live", Some("Roadmap"))
+        );
+        assert_eq!(
+            row.references[0].selector_json.as_deref(),
+            Some(r#"{"wikilink":"roadmap"}"#)
+        );
+        let backlinks = &library.notes[1].backlinks;
+        assert_eq!(backlinks.len(), 1);
+        assert_eq!(backlinks[0].card.as_ref().expect("a card").id, source);
+        // The editor's note names the pin and the notebook too.
+        let editor = scratch.note(&source);
+        assert!(editor.pinned);
+        assert_eq!(editor.notebook_id.as_deref(), Some(book.as_str()));
     }
 
     /// A POWERBOX SUBTITLE'S DAY IS CIVIL, NEVER A UTC SLICE: 02:00Z on 2 June
@@ -1076,10 +1152,7 @@ mod tests {
         let scratch = Scratch::founded();
         let kept = scratch.create("Kept", "one");
         let gone = scratch.create("Gone", "two");
-        scratch.run(
-            "knowledge.delete_note",
-            serde_json::json!({ "note_id": gone }),
-        );
+        scratch.run("entity.trash", serde_json::json!({ "id": gone }));
         let Ok(Answer::NotesLibrary(library)) =
             scratch.ask(Q::NotesLibrary(wire::NotesLibraryRequest {
                 tz: TZ.to_owned(),
@@ -1177,15 +1250,15 @@ mod tests {
             found
         };
         let notebook = scratch.run(
-            "knowledge.create_notebook",
-            serde_json::json!({ "name": "Quokka recipes" }),
-        )["notebook_id"]
+            "container.create",
+            serde_json::json!({ "kind": "notebook", "title": "Quokka recipes" }),
+        )["id"]
             .as_str()
             .expect("a notebook id")
             .to_owned();
         scratch.run(
-            "media.create_album",
-            serde_json::json!({ "title": "Quokka holiday" }),
+            "container.create",
+            serde_json::json!({ "kind": "album", "title": "Quokka holiday" }),
         );
         let note = scratch.create("Quokka sighting", "saw one");
         let found = search("quokka");
@@ -1196,18 +1269,19 @@ mod tests {
             .collect();
         assert_eq!(
             containers,
-            [("core.collection", notebook.as_str(), "notes")],
+            [("notebook", notebook.as_str(), "notes")],
             "the notebook, and not the album, which opens in Photos"
         );
         assert_eq!(found.containers[0].title, "Quokka recipes");
-        assert!(found.containers[0].snippet.contains('⟦'));
+        // A hit on the title has no words to excerpt (`snippet_of`): the shell draws the title.
+        assert!(found.containers[0].snippet.is_empty());
         let ids: Vec<&str> = found.hits.iter().map(|hit| hit.note_id.as_str()).collect();
         assert_eq!(ids, [note.as_str()]);
 
         // A TYPO IN A WORD ONLY THE NOTEBOOK HOLDS is corrected to it.
         scratch.run(
-            "knowledge.create_notebook",
-            serde_json::json!({ "name": "Wombat shelf" }),
+            "container.create",
+            serde_json::json!({ "kind": "notebook", "title": "Wombat shelf" }),
         );
         let slipped = search("womabt");
         assert_eq!(slipped.corrected, "wombat");
@@ -1219,10 +1293,7 @@ mod tests {
         assert!(exact.corrected.is_empty() && exact.containers.len() == 1);
 
         // A DELETED NOTEBOOK IS NOT FOUND.
-        scratch.run(
-            "knowledge.delete_notebook",
-            serde_json::json!({ "notebook_id": notebook }),
-        );
+        scratch.run("entity.trash", serde_json::json!({ "id": notebook }));
         assert!(search("recipes").containers.is_empty());
         assert!(search("quokka").containers.is_empty());
     }

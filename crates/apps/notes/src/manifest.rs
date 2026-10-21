@@ -41,14 +41,14 @@ mod tests {
         let manifest = manifest();
         assert_eq!(manifest.id, APP_ID);
         assert_eq!(manifest.manifest_version, 1);
-        assert_eq!(manifest.version, "0.8.1");
+        assert_eq!(manifest.version, "0.9.0");
     }
 
     #[test]
-    fn it_declares_six_queries_and_fifteen_actions() {
+    fn it_declares_six_queries_and_seventeen_actions() {
         let manifest = manifest();
         assert_eq!(manifest.queries.len(), 6);
-        assert_eq!(manifest.actions.len(), 15);
+        assert_eq!(manifest.actions.len(), 17);
         for name in [
             "link-targets",
             "library",
@@ -142,15 +142,15 @@ mod tests {
         assert_eq!(gated("move-note"), Confirmation::None);
     }
 
-    /// A NOTE MAY BE CLEARED (owner ruling 2026-09-24): the manifest's
-    /// `body_text` accepts the empty string on both actions, in step with
-    /// `knowledge.create_note` / `knowledge.edit_note`'s own schemas.
+    /// A NOTE MAY BE CLEARED (owner ruling 2026-09-24): the manifest's `body`
+    /// accepts the empty string on both actions, in step with `note.create` /
+    /// `note.edit`'s own schemas.
     #[test]
     fn a_note_body_may_be_empty_on_create_and_edit() {
         for action in ["create-note", "edit-note"] {
             let input = &manifest().action(action).expect("declared").input;
             assert_eq!(
-                input["properties"]["body_text"]["minLength"], 0,
+                input["properties"]["body"]["minLength"], 0,
                 "{action} still refuses an empty body"
             );
         }
@@ -158,7 +158,7 @@ mod tests {
 
     /// A TITLE MAY BE CLEARED BY AN EDIT (#1047 T1): Notes draws an empty
     /// title as the body's first line, so `edit-note` takes `""` in step with
-    /// `knowledge.edit_note`. A new note still needs a name or a first line.
+    /// `note.edit`. A new note still needs a name or a first line.
     #[test]
     fn a_note_title_may_be_cleared_by_an_edit_and_not_left_empty_on_create() {
         let title = |action: &str| {
@@ -173,32 +173,34 @@ mod tests {
         assert_eq!(title("create-note"), 1);
     }
 
-    /// NOTES' ACTIONS INVOKE THE COMMANDS OF THREE SCHEMAS — its own
-    /// `knowledge`, the spine's `core` and `schedule`'s `add_task` — and the
-    /// table says so. What each command wrote is the commit's own census, not a
-    /// list a manifest carries (V3).
+    /// NOTES' ACTIONS INVOKE ITS OWN `note` COMMANDS AND THE SHARED VERBS — and
+    /// the one command Agenda owes — and the table says so. What each command
+    /// wrote is the commit's own census, not a list a manifest carries (V3).
     #[test]
-    fn the_actions_invoke_the_commands_of_three_schemas() {
+    fn the_actions_invoke_the_note_commands_the_shared_verbs_and_agendas_task_add() {
         let mut schemas: Vec<&str> = ACTIONS
             .iter()
             .filter_map(|row| row.command.split('.').next())
             .collect();
         schemas.sort_unstable();
         schemas.dedup();
-        assert_eq!(schemas, ["core", "knowledge", "schedule"]);
+        assert_eq!(
+            schemas,
+            ["container", "edge", "entity", "flag", "note", "tag", "task"]
+        );
     }
 
-    /// THIRTY-TWO SCOPES: seventeen reads over four schemas, and **fifteen
-    /// `act` scopes** (census §A0's table).
+    /// TWENTY-SEVEN SCOPES: twelve reads over the vault's tables, and **fifteen
+    /// `act` scopes**, one per distinct command the seventeen actions invoke.
     ///
     /// The `act` half is compared against the action table rather than
     /// transcribed: a sixteenth action with no scope is an action the grant does
     /// not cover, and a scope with no action is reach nothing uses.
     #[test]
-    fn it_declares_thirty_two_scopes_with_one_act_scope_per_action() {
+    fn it_declares_twenty_seven_scopes_with_one_act_scope_per_command() {
         let manifest = manifest();
         let vault = manifest.vault.as_ref().expect("Notes declares its reach");
-        assert_eq!(vault.scopes.len(), 32);
+        assert_eq!(vault.scopes.len(), 27);
 
         let mut schemas: Vec<&str> = vault
             .scopes
@@ -207,7 +209,19 @@ mod tests {
             .collect();
         schemas.sort_unstable();
         schemas.dedup();
-        assert_eq!(schemas, ["core", "knowledge", "media", "schedule"]);
+        assert_eq!(
+            schemas,
+            [
+                "container",
+                "edge",
+                "entity",
+                "flag",
+                "note",
+                "tag",
+                "task",
+                "vault"
+            ]
+        );
 
         let mut declared: Vec<(&str, &str)> = vault
             .scopes
@@ -232,12 +246,10 @@ mod tests {
             .iter()
             .filter(|scope| scope.verbs == ScopeVerbs::Read)
             .count();
-        assert_eq!(reads, 17);
+        assert_eq!(reads, 12);
         // NOTHING WIDER, and nothing revealed: `read+act` over a whole schema
         // is the widest form and only agenda and people use it; `reveal` is
-        // Locker's alone. Notes' `knowledge` read scope IS whole-schema, which
-        // is the widest READ it takes and is what `knowledge_note` plus
-        // `knowledge_annotation` amount to.
+        // Locker's alone.
         assert!(
             vault
                 .scopes
@@ -251,12 +263,12 @@ mod tests {
         );
     }
 
-    /// THE POWERBOX IS WHY `media` IS IN THE SCOPE LIST.
+    /// THE POWERBOX IS WHY `person`, `event`, `task`, `document` AND `photo` ARE
+    /// IN THE SCOPE LIST.
     ///
-    /// Notes reads other apps' domains (census §A4), and the scope nothing else
-    /// in this app touches is the proof: an asset is read ONLY as a link target.
-    /// A port that dropped it would silently shrink the sheet by a column. (An
-    /// expense was the second, until Tally left, #1099.)
+    /// Notes reads other apps' kinds (census §A4), and the scopes nothing else
+    /// in this app touches are the proof: they are read ONLY to draw the far end
+    /// of a link. A port that dropped one would silently shrink a card.
     #[test]
     fn the_scope_only_the_powerbox_needs_is_declared() {
         let vault = manifest().vault.as_ref().expect("Notes declares its reach");
@@ -267,8 +279,9 @@ mod tests {
                     && scope.verbs == ScopeVerbs::Read
             })
         };
-        assert!(declared("media", "asset"));
-        assert!(declared("schedule", "task"));
+        for table in ["person", "event", "task", "document", "photo"] {
+            assert!(declared("vault", table), "{table} is a card's table");
+        }
         // And Locker is not reachable at all — the absence is structural.
         assert!(
             vault.scopes.iter().all(|scope| scope.schema != "locker"),

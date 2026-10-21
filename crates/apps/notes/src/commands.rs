@@ -1,37 +1,29 @@
-//! THE FIFTEEN ACTIONS, as command invocations.
+//! THE SEVENTEEN ACTIONS, as command invocations.
 //!
 //! Every Notes action is a thin invocation of ONE typed vault command: the
-//! projection lives in the command, not the app. So this module is a
-//! table, not logic.
+//! projection lives in the command, not the app. So this module is a table, not
+//! logic. A command is either a note's own (`note.*`, four of them) or a shared
+//! verb every app uses (`entity.*`, `flag.*`, `tag.*`, `edge.*`, `container.*`):
+//! Notes does not wrap a shared verb, so two actions may name one command
+//! (`delete-note` and `delete-notebook` are both `entity.trash`; `link`,
+//! `attach` and `send-to-tasks`' backlink are all `edge.add`), and an action's
+//! input is its command's input, verbatim.
 //!
-//! **Notes reaches FOUR schemas from fifteen actions**, and that is the fact a
-//! port must not smooth over: nine `knowledge.*`, four `core.*` (two tags, two
-//! attachments) — `link` is a fifth `core.*` — and one `schedule.*`.
-//! `send-to-tasks` writes `schedule.add_task` and then links the task back to
-//! the note, which is why it is the only action making TWO invocations and the
-//! only one whose second call is conditional.
+//! **`send-to-tasks` is the one action making TWO invocations**: `task.add`
+//! (Agenda's lane, [`ActionRow::pending_schema`]) and then `edge.add` joining the
+//! task to the note with an `about` edge, which is conditional on the task having
+//! landed.
 //!
 //! **`invoke_key` is mandatory** (D-1020-D3-5). `send-to-tasks` is exactly why:
-//! v0 notes at its own call site that the backlink "is the SECOND invoke on the
-//! happy path and no invoke at all when the task did not land or there is no
-//! note" (`actions/send-to-tasks.ts:43`-`:48`), so an ordinal key would name a
-//! different call on two different runs of the same action.
-//!
-//! **`schedule.add_task` IS in this build now.** It was the one row carrying
-//! [`ActionRow::pending_schema`], because the Agenda and Tasks lane holds the
-//! `schedule` schema (slot 4d); that lane registered its sixteen commands, the
-//! registry test that kept the name reserved went red, and the mark came off
-//! here and in the parity fixture rather than staying a row nobody reads. The
-//! field survives for the next lane that owes one, and
-//! [`tests::no_command_is_owed_by_another_lane`] asserts the list is EMPTY
-//! rather than that the field is gone — the same shape `crates/automations`
-//! uses.
+//! the backlink is the SECOND invoke on the happy path and no invoke at all when
+//! the task did not land, so an ordinal key would name a different call on two
+//! different runs of the same action.
 //!
 //! **`confirmation` is the manifest's and `confirm` is the command's** (census
 //! §A0, two gates). Notes' two manifest-confirmed actions are `delete-notebook`
-//! and `delete-note`; no `knowledge.*` or `core.*` command this build carries
-//! sets the command-level gate. Collapsing them would put a dialog in front of
-//! nothing and drop the non-owner park in exchange.
+//! and `delete-note`; no command this build carries sets the command-level gate.
+//! Collapsing them would put a dialog in front of nothing and drop the non-owner
+//! park in exchange.
 
 use std::collections::BTreeMap;
 
@@ -127,7 +119,7 @@ pub struct ActionRow {
     pub command: &'static str,
     pub confirm: Confirm,
     /// The schema whose commands are not in this build yet, when there is one.
-    /// `send-to-tasks` is the only row that carries it (slot 4d).
+    /// `send-to-tasks` is the only row that carries it (Agenda's lane).
     pub pending_schema: Option<&'static str>,
 }
 
@@ -149,25 +141,32 @@ const fn confirmed(action: &'static str, command: &'static str) -> ActionRow {
     }
 }
 
-/// THE TABLE. Fifteen actions, in the manifest's own order.
-pub const ACTIONS: [ActionRow; 15] = [
-    act("create-note", "knowledge.create_note"),
-    act("edit-note", "knowledge.edit_note"),
-    act("move-note", "knowledge.move_note"),
-    act("create-notebook", "knowledge.create_notebook"),
-    act("rename-notebook", "knowledge.rename_notebook"),
+/// THE TABLE. Seventeen actions, in the manifest's own order.
+pub const ACTIONS: [ActionRow; 17] = [
+    act("create-note", "note.create"),
+    act("edit-note", "note.edit"),
+    act("move-note", "note.move"),
+    act("create-notebook", "container.create"),
+    act("rename-notebook", "entity.retitle"),
     // THE TWO CONFIRM-GATED ACTIONS.
-    confirmed("delete-notebook", "knowledge.delete_notebook"),
-    confirmed("delete-note", "knowledge.delete_note"),
-    act("restore-note", "knowledge.restore_note"),
-    act("restore-note-version", "knowledge.restore_note_version"),
-    act("link", "core.link_entities"),
+    confirmed("delete-notebook", "entity.trash"),
+    confirmed("delete-note", "entity.trash"),
+    act("restore-note", "entity.restore"),
+    act("restore-note-version", "note.restore_version"),
+    act("flag-note", "flag.set"),
+    act("unflag-note", "flag.clear"),
+    act("link", "edge.add"),
     // The only action that makes TWO invocations: the task, then the backlink.
-    act("send-to-tasks", "schedule.add_task"),
-    act("attach", "core.attach"),
-    act("detach", "core.detach"),
-    act("add-tag", "core.tag_item"),
-    act("remove-tag", "core.untag_item"),
+    ActionRow {
+        action: "send-to-tasks",
+        command: "task.add",
+        confirm: Confirm::None,
+        pending_schema: Some("task"),
+    },
+    act("attach", "edge.add"),
+    act("detach", "edge.remove"),
+    act("add-tag", "tag.add"),
+    act("remove-tag", "tag.remove"),
 ];
 
 /// One action's row, by the name the manifest gives it.
@@ -180,7 +179,7 @@ pub fn action_row(action: &str) -> Option<&'static ActionRow> {
 ///
 /// The manifest spells each as `{schema, table: "<command name without its
 /// schema>"}`; deriving it here is what lets the manifest test compare the two
-/// lists instead of trusting them.
+/// lists instead of trusting them. A command two actions share is one scope.
 #[must_use]
 pub fn act_scope_tables() -> Vec<(&'static str, &'static str)> {
     let mut scopes: Vec<(&'static str, &'static str)> = ACTIONS
@@ -191,8 +190,6 @@ pub fn act_scope_tables() -> Vec<(&'static str, &'static str)> {
                 .map_or((row.command, row.command), |(schema, name)| (schema, name))
         })
         .collect();
-    // `send-to-tasks` also links the task back, and the manifest declares that
-    // scope too (`core.link_entities`) — it is already in the list from `link`.
     scopes.sort_unstable();
     scopes.dedup();
     scopes
@@ -227,53 +224,51 @@ mod tests {
     use super::*;
 
     #[test]
-    fn every_action_invokes_exactly_one_command_over_four_schemas() {
-        assert_eq!(ACTIONS.len(), 15);
+    fn every_action_invokes_one_command_and_the_note_verbs_are_the_notes_own() {
+        assert_eq!(ACTIONS.len(), 17);
+        let note_own: Vec<&str> = ACTIONS
+            .iter()
+            .map(|row| row.command)
+            .filter(|command| command.starts_with("note."))
+            .collect();
+        assert_eq!(
+            note_own,
+            [
+                "note.create",
+                "note.edit",
+                "note.move",
+                "note.restore_version"
+            ],
+            "what only a note has; everything else is a shared verb"
+        );
         let mut schemas: Vec<&str> = ACTIONS
             .iter()
             .filter_map(|row| row.command.split_once('.').map(|(schema, _)| schema))
             .collect();
         schemas.sort_unstable();
         schemas.dedup();
-        assert_eq!(schemas, ["core", "knowledge", "schedule"]);
-        let knowledge = ACTIONS
-            .iter()
-            .filter(|row| row.command.starts_with("knowledge."))
-            .count();
-        assert_eq!(knowledge, 9, "the knowledge schema is nine commands");
-        let mut commands: Vec<&str> = ACTIONS.iter().map(|row| row.command).collect();
-        commands.sort_unstable();
-        let before = commands.len();
-        commands.dedup();
-        assert_eq!(before, commands.len(), "no command is invoked twice");
+        assert_eq!(
+            schemas,
+            ["container", "edge", "entity", "flag", "note", "tag", "task"]
+        );
     }
 
-    /// The five `core.*` commands Notes takes for its `knowledge` needs: the
-    /// four link/attachment ones plus the two tag ones, minus the one `link`
-    /// and `send-to-tasks` share.
     #[test]
-    fn the_core_commands_notes_takes_are_named() {
-        let mut core: Vec<&str> = ACTIONS
+    fn a_shared_verb_serves_two_actions_without_a_wrapper() {
+        let trash: Vec<&str> = ACTIONS
             .iter()
-            .map(|row| row.command)
-            .filter(|command| command.starts_with("core."))
+            .filter(|row| row.command == "entity.trash")
+            .map(|row| row.action)
             .collect();
-        core.sort_unstable();
-        assert_eq!(
-            core,
-            [
-                "core.attach",
-                "core.detach",
-                "core.link_entities",
-                "core.tag_item",
-                "core.untag_item",
-            ]
-        );
-        // `core.unlink_entities` and `core.anchor_link` have no Notes ACTION —
-        // the manifest declares neither — and they land in the vault with these
-        // because the schema moves as a whole (the common brief's rule 2).
-        assert!(!core.contains(&"core.unlink_entities"));
-        assert!(!core.contains(&"core.merge_party"));
+        assert_eq!(trash, ["delete-notebook", "delete-note"]);
+        let edges: Vec<&str> = ACTIONS
+            .iter()
+            .filter(|row| row.command == "edge.add")
+            .map(|row| row.action)
+            .collect();
+        assert_eq!(edges, ["link", "attach"]);
+        // One scope per distinct command.
+        assert_eq!(act_scope_tables().len(), 15);
     }
 
     #[test]
@@ -286,19 +281,18 @@ mod tests {
         assert_eq!(required, ["delete-notebook", "delete-note"]);
     }
 
-    /// NOTHING IS OWED ANY MORE. `send-to-tasks`' `schedule.add_task` was the
-    /// one pending row and slot 4d registered the schema; the list shrinks by
-    /// being wrong, and this is what says so.
+    /// Agenda's lane owes `task.add`; the list shrinks by being wrong, and this
+    /// is what says so.
     #[test]
-    fn no_command_is_owed_by_another_lane() {
-        assert!(pending_commands().is_empty());
+    fn the_one_command_owed_is_agendas_task_add() {
+        assert_eq!(pending_commands(), [("task", "task.add")]);
     }
 
     #[test]
     fn an_invocation_carries_its_key_and_an_unknown_action_has_none() {
         let invocation = invocation_for("create-note", "notes:0", BTreeMap::new())
             .expect("create-note is in the table");
-        assert_eq!(invocation.command, "knowledge.create_note");
+        assert_eq!(invocation.command, "note.create");
         assert_eq!(invocation.invoke_key, "notes:0");
         assert!(!invocation.optional);
         assert!(invocation_for("burn-the-notebook", "notes:1", BTreeMap::new()).is_none());
@@ -317,10 +311,10 @@ mod tests {
         assert!(Outcome::Parked { reason: None }.pending());
         assert_eq!(
             Outcome::Executed {
-                output: serde_json::json!({ "note_id": "n1" })
+                output: serde_json::json!({ "id": "n1" })
             }
             .output(),
-            Some(&serde_json::json!({ "note_id": "n1" }))
+            Some(&serde_json::json!({ "id": "n1" }))
         );
     }
 }

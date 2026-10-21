@@ -2,170 +2,146 @@
   "manifestVersion": 1,
   "id": "notes",
   "name": "Notes",
-  "description": "Your notebooks as a projection of the vault: notes live in knowledge.note over canonical content_item bodies, nothing stored here. Creating, editing, filing, pinning and deleting all run through the knowledge domain's typed commands — consent-checked, contract-checked and receipted, with act consent granted per command. Revoke the grant and the app goes dark while the notes and receipts remain the owner's.",
-  "version": "0.8.1",
+  "description": "Your notebooks as a projection of the vault: a note is an entity with its words on the note row, a notebook is a container, a pin or a tag is an edge, a past version is a revision. Creating, editing, filing, pinning and deleting all run through typed commands — the note's own (note.*) and the shared ones every app uses (entity.*, flag.*, tag.*, edge.*, container.*) — contract-checked and journalled, with act consent granted per command.",
+  "version": "0.9.0",
   "iconKey": "Book",
   "colorKey": "slate",
   "vault": {
     "why": "Shows and manages your notes and notebooks.",
     "scopes": [
       {
-        "schema": "knowledge",
+        "schema": "vault",
+        "table": "entity",
         "verbs": "read"
       },
       {
-        "schema": "core",
-        "table": "content_item",
+        "schema": "vault",
+        "table": "note",
         "verbs": "read"
       },
       {
-        "schema": "core",
-        "table": "content_representation",
+        "schema": "vault",
+        "table": "container",
         "verbs": "read"
       },
       {
-        "schema": "core",
-        "table": "entity_revision",
+        "schema": "vault",
+        "table": "edge",
         "verbs": "read"
       },
       {
-        "schema": "core",
-        "table": "attachment",
+        "schema": "vault",
+        "table": "revision",
         "verbs": "read"
       },
       {
-        "schema": "core",
-        "table": "link",
-        "verbs": "read"
-      },
-      {
-        "schema": "core",
-        "table": "link_anchor",
-        "verbs": "read"
-      },
-      {
-        "schema": "core",
-        "table": "link_entities",
-        "verbs": "act"
-      },
-      {
-        "schema": "core",
-        "table": "party",
-        "verbs": "read"
-      },
-      {
-        "schema": "core",
-        "table": "event",
-        "verbs": "read"
-      },
-      {
-        "schema": "core",
-        "table": "document",
-        "verbs": "read"
-      },
-      {
-        "schema": "schedule",
-        "table": "task",
-        "verbs": "read"
-      },
-      {
-        "schema": "schedule",
-        "table": "add_task",
-        "verbs": "act"
-      },
-      {
-        "schema": "media",
-        "table": "asset",
-        "verbs": "read"
-      },
-      {
-        "schema": "core",
-        "table": "collection",
-        "verbs": "read"
-      },
-      {
-        "schema": "core",
-        "table": "collection_entry",
-        "verbs": "read"
-      },
-      {
-        "schema": "knowledge",
-        "table": "create_note",
-        "verbs": "act"
-      },
-      {
-        "schema": "knowledge",
-        "table": "edit_note",
-        "verbs": "act"
-      },
-      {
-        "schema": "knowledge",
-        "table": "move_note",
-        "verbs": "act"
-      },
-      {
-        "schema": "knowledge",
-        "table": "create_notebook",
-        "verbs": "act"
-      },
-      {
-        "schema": "knowledge",
-        "table": "rename_notebook",
-        "verbs": "act"
-      },
-      {
-        "schema": "knowledge",
-        "table": "delete_notebook",
-        "verbs": "act"
-      },
-      {
-        "schema": "knowledge",
-        "table": "delete_note",
-        "verbs": "act"
-      },
-      {
-        "schema": "knowledge",
-        "table": "restore_note",
-        "verbs": "act"
-      },
-      {
-        "schema": "knowledge",
-        "table": "restore_note_version",
-        "verbs": "act"
-      },
-      {
-        "schema": "core",
-        "table": "attach",
-        "verbs": "act"
-      },
-      {
-        "schema": "core",
-        "table": "detach",
-        "verbs": "act"
-      },
-      {
-        "schema": "core",
-        "table": "tag",
-        "verbs": "read"
-      },
-      {
-        "schema": "core",
+        "schema": "vault",
         "table": "concept",
         "verbs": "read"
       },
       {
-        "schema": "core",
-        "table": "concept_scheme",
+        "schema": "vault",
+        "table": "person",
         "verbs": "read"
       },
       {
-        "schema": "core",
-        "table": "tag_item",
+        "schema": "vault",
+        "table": "event",
+        "verbs": "read"
+      },
+      {
+        "schema": "vault",
+        "table": "task",
+        "verbs": "read"
+      },
+      {
+        "schema": "vault",
+        "table": "document",
+        "verbs": "read"
+      },
+      {
+        "schema": "vault",
+        "table": "photo",
+        "verbs": "read"
+      },
+      {
+        "schema": "vault",
+        "table": "blob",
+        "verbs": "read"
+      },
+      {
+        "schema": "note",
+        "table": "create",
         "verbs": "act"
       },
       {
-        "schema": "core",
-        "table": "untag_item",
+        "schema": "note",
+        "table": "edit",
+        "verbs": "act"
+      },
+      {
+        "schema": "note",
+        "table": "move",
+        "verbs": "act"
+      },
+      {
+        "schema": "container",
+        "table": "create",
+        "verbs": "act"
+      },
+      {
+        "schema": "entity",
+        "table": "retitle",
+        "verbs": "act"
+      },
+      {
+        "schema": "entity",
+        "table": "trash",
+        "verbs": "act"
+      },
+      {
+        "schema": "entity",
+        "table": "restore",
+        "verbs": "act"
+      },
+      {
+        "schema": "note",
+        "table": "restore_version",
+        "verbs": "act"
+      },
+      {
+        "schema": "flag",
+        "table": "set",
+        "verbs": "act"
+      },
+      {
+        "schema": "flag",
+        "table": "clear",
+        "verbs": "act"
+      },
+      {
+        "schema": "edge",
+        "table": "add",
+        "verbs": "act"
+      },
+      {
+        "schema": "task",
+        "table": "add",
+        "verbs": "act"
+      },
+      {
+        "schema": "edge",
+        "table": "remove",
+        "verbs": "act"
+      },
+      {
+        "schema": "tag",
+        "table": "add",
+        "verbs": "act"
+      },
+      {
+        "schema": "tag",
+        "table": "remove",
         "verbs": "act"
       }
     ]
@@ -174,34 +150,40 @@
   "actions": [
     {
       "name": "create-note",
-      "description": "Create a note (optionally filed into a notebook) through knowledge.create_note; the body becomes a deduped canonical content item.",
+      "description": "Create a note (optionally filed into a notebook) through note.create; the body is the note's own column and any [[wikilink]] in it compiles to a link edge.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "note_id": {
+          "id": {
             "type": "string",
             "minLength": 1,
-            "description": "The row id the seat minted for this write (#922 G2); omitted, the vault mints one."
+            "description": "The id the shell minted for this write (#922 G2); omitted, the vault mints one."
           },
           "title": {
             "type": "string",
             "minLength": 1
           },
-          "body_text": {
+          "body": {
             "type": "string",
             "minLength": 0
           },
           "format": {
             "type": "string",
-            "enum": ["markdown", "html", "plain"]
+            "enum": [
+              "markdown",
+              "plain"
+            ]
           },
           "notebook_id": {
             "type": "string",
             "minLength": 1
           }
         },
-        "required": ["title", "body_text"],
+        "required": [
+          "title",
+          "body"
+        ],
         "additionalProperties": false
       },
       "output": {
@@ -221,12 +203,12 @@
     },
     {
       "name": "edit-note",
-      "description": "Edit a note's title, body, format, or pinned flag through knowledge.edit_note — partial update, only the fields sent change.",
+      "description": "Edit a note's title, body or format through note.edit — partial update, only the fields sent change; the body it replaces is kept as a revision.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "note_id": {
+          "id": {
             "type": "string",
             "minLength": 1
           },
@@ -234,21 +216,21 @@
             "type": "string",
             "minLength": 0
           },
-          "body_text": {
+          "body": {
             "type": "string",
             "minLength": 0
           },
           "format": {
             "type": "string",
-            "enum": ["markdown", "html", "plain"]
-          },
-          "pinned": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 1
+            "enum": [
+              "markdown",
+              "plain"
+            ]
           }
         },
-        "required": ["note_id"],
+        "required": [
+          "id"
+        ],
         "additionalProperties": false
       },
       "output": {
@@ -268,21 +250,26 @@
     },
     {
       "name": "move-note",
-      "description": "Refile a note into a notebook (or unfile it by omitting notebook_id) through knowledge.move_note — one notebook per note.",
+      "description": "Refile a note into a notebook (or unfile it by sending no notebook_id) through note.move — one notebook per note.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "note_id": {
+          "id": {
             "type": "string",
             "minLength": 1
           },
           "notebook_id": {
-            "type": "string",
+            "type": [
+              "string",
+              "null"
+            ],
             "minLength": 1
           }
         },
-        "required": ["note_id"],
+        "required": [
+          "id"
+        ],
         "additionalProperties": false
       },
       "output": {
@@ -302,26 +289,35 @@
     },
     {
       "name": "create-notebook",
-      "description": "Create a notebook through knowledge.create_notebook; the vault assigns sibling order.",
+      "description": "Create a notebook through container.create (kind notebook); the vault assigns sibling order.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "notebook_id": {
+          "id": {
             "type": "string",
             "minLength": 1,
-            "description": "The row id the seat minted for this write (#922 G2); omitted, the vault mints one."
+            "description": "The id the shell minted for this write (#922 G2); omitted, the vault mints one."
           },
-          "name": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "notebook"
+            ]
+          },
+          "title": {
             "type": "string",
             "minLength": 1
           },
-          "parent_notebook_id": {
+          "parent": {
             "type": "string",
             "minLength": 1
           }
         },
-        "required": ["name"],
+        "required": [
+          "kind",
+          "title"
+        ],
         "additionalProperties": false
       },
       "output": {
@@ -341,21 +337,24 @@
     },
     {
       "name": "rename-notebook",
-      "description": "Rename a notebook through knowledge.rename_notebook — refuses a name already used by another of your notebooks; renaming a notebook to its own name is a no-op.",
+      "description": "Rename a notebook through entity.retitle; the one verb that renames every kind of thing.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "notebook_id": {
+          "id": {
             "type": "string",
             "minLength": 1
           },
-          "name": {
+          "title": {
             "type": "string",
             "minLength": 1
           }
         },
-        "required": ["notebook_id", "name"],
+        "required": [
+          "id",
+          "title"
+        ],
         "additionalProperties": false
       },
       "output": {
@@ -375,17 +374,19 @@
     },
     {
       "name": "delete-notebook",
-      "description": "Delete a notebook through knowledge.delete_notebook — member notes are unfiled, never destroyed (the outcome reports notes_unfiled); refuses while child notebooks exist.",
+      "description": "Move a notebook to the 30-day trash through entity.trash — the notes filed in it go with it and come back with it on restore.",
       "confirmation": "required",
       "input": {
         "type": "object",
         "properties": {
-          "notebook_id": {
+          "id": {
             "type": "string",
             "minLength": 1
           }
         },
-        "required": ["notebook_id"],
+        "required": [
+          "id"
+        ],
         "additionalProperties": false
       },
       "output": {
@@ -405,17 +406,19 @@
     },
     {
       "name": "delete-note",
-      "description": "Move a note to the 30-day trash through knowledge.delete_note without removing placements, annotations or attachment edges.",
+      "description": "Move a note to the 30-day trash through entity.trash; its links, tags and attachments stay.",
       "confirmation": "required",
       "input": {
         "type": "object",
         "properties": {
-          "note_id": {
+          "id": {
             "type": "string",
             "minLength": 1
           }
         },
-        "required": ["note_id"],
+        "required": [
+          "id"
+        ],
         "additionalProperties": false
       },
       "output": {
@@ -435,17 +438,19 @@
     },
     {
       "name": "restore-note",
-      "description": "Restore a trashed note in place through knowledge.restore_note.",
+      "description": "Restore a trashed note in place through entity.restore.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "note_id": {
+          "id": {
             "type": "string",
             "minLength": 1
           }
         },
-        "required": ["note_id"],
+        "required": [
+          "id"
+        ],
         "additionalProperties": false
       },
       "output": {
@@ -465,21 +470,104 @@
     },
     {
       "name": "restore-note-version",
-      "description": "Restore one prior body from this note's append-only version chain.",
+      "description": "Restore one prior body from this note's history through note.restore_version; the words it replaces are kept as the newest version.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "note_id": {
+          "id": {
             "type": "string",
             "minLength": 1
           },
-          "content_id": {
-            "type": "string",
-            "minLength": 1
+          "seq": {
+            "type": "integer",
+            "minimum": 1
           }
         },
-        "required": ["note_id", "content_id"],
+        "required": [
+          "id",
+          "seq"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "flag-note",
+      "confirmation": "none",
+      "description": "Pin or star a note through flag.set — a tagged edge to the flag, shared with every app that flags.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "flag": {
+            "type": "string",
+            "enum": [
+              "pinned",
+              "starred"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "flag"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "unflag-note",
+      "confirmation": "none",
+      "description": "Unpin or unstar a note through flag.clear.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "flag": {
+            "type": "string",
+            "enum": [
+              "pinned",
+              "starred"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "flag"
+        ],
         "additionalProperties": false
       },
       "output": {
@@ -499,92 +587,122 @@
     },
     {
       "name": "link",
-      "description": "Compile one reviewed CommonMark [[wikilink]] into a typed, temporal core.link reference with an optional text anchor.",
+      "description": "Link a note to anything it names through edge.add (rel links), with an optional anchor naming the text range the link points at.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "note_id": { "type": "string", "minLength": 1 },
-          "target_type": { "type": "string", "minLength": 1 },
-          "target_id": { "type": "string", "minLength": 1 },
-          "exact": { "type": "string", "minLength": 1 },
-          "prefix": { "type": "string" },
-          "suffix": { "type": "string" },
-          "start": { "type": "integer", "minimum": 0 }
+          "from": {
+            "type": "string",
+            "minLength": 1
+          },
+          "rel": {
+            "type": "string",
+            "enum": [
+              "links"
+            ]
+          },
+          "to": {
+            "type": "string",
+            "minLength": 1
+          },
+          "anchor": {
+            "type": "object"
+          }
         },
-        "required": ["note_id", "target_type", "target_id"],
+        "required": [
+          "from",
+          "rel",
+          "to"
+        ],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
         }
       }
     },
     {
       "name": "send-to-tasks",
-      "description": "Hand one checklist line to Tasks: mints the canonical schedule.task row through schedule.add_task (undated unless the line carried a date) and links it back to the note through core.link_entities. Notes keeps no copy of the task.",
+      "description": "Hand one checklist line to Tasks: mints the task through task.add (undated unless the line carried a date) and joins it back to the note with an about edge through edge.add. Notes keeps no copy of the task.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "title": { "type": "string", "minLength": 1 },
-          "due_at": { "type": "string", "minLength": 1 },
-          "note_id": { "type": "string", "minLength": 1 },
-          "exact": { "type": "string" }
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "due": {
+            "type": "string",
+            "minLength": 1
+          },
+          "note_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "exact": {
+            "type": "string"
+          }
         },
-        "required": ["title", "note_id"],
+        "required": [
+          "title",
+          "note_id"
+        ],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
         }
       }
     },
     {
       "name": "attach",
-      "description": "Pin a file (image, PDF, any media) to a note through core.attach; bytes are stored as a deduped canonical content item.",
+      "description": "Attach a document or photo to a note through edge.add (rel attached); the bytes are the document's or photo's own, found by hash.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "subject_id": {
+          "from": {
             "type": "string",
             "minLength": 1
           },
-          "data_uri": {
-            "type": "string",
-            "minLength": 6
-          },
-          "staged_sha": {
-            "type": "string",
-            "minLength": 64,
-            "maxLength": 64
-          },
-          "title": {
-            "type": "string"
-          },
-          "role": {
+          "rel": {
             "type": "string",
             "enum": [
-              "photo",
-              "manual",
-              "receipt",
-              "warranty",
-              "contract",
-              "embed",
-              "other"
+              "attached"
             ]
+          },
+          "to": {
+            "type": "string",
+            "minLength": 1
           }
         },
-        "required": ["subject_id"],
+        "required": [
+          "from",
+          "rel",
+          "to"
+        ],
         "additionalProperties": false
       },
       "output": {
@@ -604,17 +722,31 @@
     },
     {
       "name": "detach",
-      "description": "Remove a file from a note through core.detach; the canonical content item is kept.",
+      "description": "Detach a document or photo from a note through edge.remove; the document or photo is kept.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "attachment_id": {
+          "from": {
+            "type": "string",
+            "minLength": 1
+          },
+          "rel": {
+            "type": "string",
+            "enum": [
+              "attached"
+            ]
+          },
+          "to": {
             "type": "string",
             "minLength": 1
           }
         },
-        "required": ["attachment_id"],
+        "required": [
+          "from",
+          "rel",
+          "to"
+        ],
         "additionalProperties": false
       },
       "output": {
@@ -634,12 +766,12 @@
     },
     {
       "name": "add-tag",
-      "description": "Tag a note through core.tag_item — a free-form label shared with every other app that tags through the same command (one shared Tags concept scheme). Idempotent.",
+      "description": "Tag a note through tag.add — a free-form label shared with every other app that tags; minted on first use. Idempotent.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "note_id": {
+          "id": {
             "type": "string",
             "minLength": 1
           },
@@ -648,7 +780,10 @@
             "minLength": 1
           }
         },
-        "required": ["note_id", "label"],
+        "required": [
+          "id",
+          "label"
+        ],
         "additionalProperties": false
       },
       "output": {
@@ -668,17 +803,24 @@
     },
     {
       "name": "remove-tag",
-      "description": "Remove one tag edge from a note through core.untag_item; the shared concept survives for other subjects.",
+      "description": "Remove one tag from a note through tag.remove; the tag survives for other things.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "tag_id": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "label": {
             "type": "string",
             "minLength": 1
           }
         },
-        "required": ["tag_id"],
+        "required": [
+          "id",
+          "label"
+        ],
         "additionalProperties": false
       },
       "output": {
@@ -700,25 +842,32 @@
   "queries": [
     {
       "name": "link-targets",
-      "description": "FTS5 powerbox search across notes, people, events, tasks, expenses, photos and documents; returns secret-free entity-aware link targets.",
+      "description": "FTS5 powerbox search across notes, people, events, tasks, documents and photos; returns secret-free entity-aware link targets.",
       "input": {
         "type": "object",
         "properties": {
-          "term": { "type": "string", "minLength": 1 }
+          "term": {
+            "type": "string",
+            "minLength": 1
+          }
         },
-        "required": ["term"],
+        "required": [
+          "term"
+        ],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "targets": { "type": "array" }
+          "targets": {
+            "type": "array"
+          }
         }
       }
     },
     {
       "name": "library",
-      "description": "A bounded recent window of notes (newest by updated_at, pinned always included) with their notebook names, a short body preview (`preview`) and checklist tally (`check`), and tags (`[{tag_id, concept_id, label}]`), plus the notebooks for filtering and the distinct tag list (`[{concept_id, label}]`) seen within the window — never a whole-table pull, and never full bodies (the editor pulls those via `note`); `truncated` says older notes exist beyond the window.",
+      "description": "A bounded recent window of notes (newest by updated_at, pinned always included) with their notebook names, a short body preview (`preview`) and checklist tally (`check`), and tags (`[{concept_id, label}]`), plus the notebooks for filtering and the distinct tag list (`[{concept_id, label}]`) seen within the window — never a whole-table pull, and never full bodies (the editor pulls those via `note`); `truncated` says older notes exist beyond the window.",
       "input": {
         "type": "object",
         "properties": {
@@ -759,7 +908,7 @@
     },
     {
       "name": "note",
-      "description": "One note's canonical body, decoded — the editor's on-open pull. The library/search projections ship only a preview, so the full text is fetched lazily here when a note is opened.",
+      "description": "One note's body — the editor's on-open pull. The library/search projections ship only a preview, so the full text is fetched lazily here when a note is opened.",
       "input": {
         "type": "object",
         "properties": {
@@ -768,7 +917,9 @@
             "minLength": 1
           }
         },
-        "required": ["note_id"],
+        "required": [
+          "note_id"
+        ],
         "additionalProperties": false
       },
       "output": {
@@ -781,7 +932,10 @@
             "type": "string"
           },
           "format": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "vaultDenied": {
             "type": "object"
@@ -799,7 +953,9 @@
             "type": "string"
           }
         },
-        "required": ["term"],
+        "required": [
+          "term"
+        ],
         "additionalProperties": false
       },
       "output": {
@@ -816,7 +972,7 @@
     },
     {
       "name": "history",
-      "description": "The selected note's append-only body version chain, newest first.",
+      "description": "The selected note's body versions, newest first: the current words, then each version they replaced (newest 200; `truncated` says more exist).",
       "input": {
         "type": "object",
         "properties": {
@@ -825,7 +981,9 @@
             "minLength": 1
           }
         },
-        "required": ["note_id"],
+        "required": [
+          "note_id"
+        ],
         "additionalProperties": false
       },
       "output": {
@@ -836,13 +994,16 @@
           },
           "vaultDenied": {
             "type": "object"
+          },
+          "truncated": {
+            "type": "boolean"
           }
         }
       }
     },
     {
       "name": "journal",
-      "description": "The Journal place: a bounded, read-only window over the People-journal entries this vault holds — the same marker set the library, search and link-target projections exclude, read the other way round. Live entries only, newest by updated_at, with a short preview and checklist tally and never a full body; `truncated` says older entries exist beyond the window.",
+      "description": "The Journal place: a bounded, read-only window over the memos this vault holds (notes that are about a person or a thing) — the set the library, search and link-target projections exclude, read the other way round. Live entries only, newest by updated_at, with a short preview and checklist tally and never a full body; `truncated` says older entries exist beyond the window.",
       "input": {
         "type": "object",
         "properties": {
@@ -941,7 +1102,10 @@
   ],
   "seats": {
     "byteBearing": true,
-    "originActs": ["capture", "voice"],
+    "originActs": [
+      "capture",
+      "voice"
+    ],
     "disabledOn": [],
     "northStar": "apple-notes"
   },

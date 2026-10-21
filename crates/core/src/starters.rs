@@ -38,7 +38,7 @@ use serde_json::json;
 use crate::example::{Report, Seeder};
 
 /// The starter notes, in the order they are written: `(title, body)`, each a
-/// plain-text `knowledge.create_note`.
+/// plain-text `note.create`.
 pub const NOTES: &[(&str, &str)] = &[
     (
         "This note is yours",
@@ -70,8 +70,8 @@ pub fn write(vault: &Vault, registry: &Registry, principal: &Principal) -> Repor
     };
     for (title, body) in NOTES {
         seeder.run(
-            "knowledge.create_note",
-            json!({ "title": title, "body_text": body, "format": "plain" }),
+            "note.create",
+            json!({ "title": title, "body": body, "format": "plain" }),
         );
     }
     for title in TASKS {

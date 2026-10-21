@@ -1,81 +1,30 @@
-//! REFERENCE CARDS — how a note renders the far end of a link it points at.
+//! REFERENCE CARDS — how a note draws the far end of a link, and the near end of
+//! a backlink.
 //!
-//! A `[[wikilink]]` compiles to a `core.link` (#272), and the shelf has to
-//! draw the thing it points at: a person's name, an event's start, a
-//! document's title. **Resolvable-if-linked is the consent rule**: a LIVE
-//! link touching the ref authorises rendering the far end even when the
-//! caller has no read scope on that entity, and a ref with neither is
-//! `denied` per ref rather than a failed screen.
-//!
-//! ## Why the fold is here and the decision is not (#1020, D-1020-N9)
-//!
-//! Everything below is a projection over rows bounded by ids already in hand —
-//! statements-as-data, which is what an app crate may hold. The **decision**
-//! (direct read consent, else `linkedAndVisible`, else `denied`) is the
-//! gateway's: it evaluates access per entity and receipts the batch. So this
-//! module takes a [`CardDoor`] for the consent half and does the drawing, and
-//! the two halves compose without either one guessing at the other.
-//!
-//! [`OwnerCards`] is the owner's view — no row filter, no field mask, every ref
-//! resolvable — which is the identity v0's parity fixtures are generated under
-//! and therefore the identity that makes them comparable.
-//!
-//! ## A trashed row's card says it is trashed (N4)
-//!
-//! v0's projections hardcoded `0 AS trashed` for seven of the eleven types
-//! (`cards.ts:42`-`:78`), so a link to a note a member deleted drew as if it
-//! were still there. Four of those seven carry the trash pair —
-//! `core.party`, `core.event`, `schedule.task` and `knowledge.note` — and their
-//! cards now read `deleted_at`, exactly as the document, the bytes and the
-//! asset always did. The other three (`core.place`, `core.collection`,
-//! `social.thread`) have no trash column to read, so `live` is the only answer
-//! they can give. The frozen parity fixture holds no trashed ref, so the fix
-//! moves no recorded case.
-//!
-//! An **uncurated** entity — one with no card projection — answers existence
-//! and status only, with a null title. There is none today: `tally.expense`,
-//! the one v0 had, left with Tally (#1099), and the machinery stays for the
-//! next entity a powerbox offers before it has a card.
+//! Every thing a note can link to is an `entity`, so a card is one read of
+//! `entity` (kind, title, trash) plus, for the few kinds that have something
+//! more to say, one read of that kind's own table. A trashed thing's card says
+//! it is trashed; a thing that is not there says it is missing. Nothing here is
+//! a consent decision: the phone is the vault and the owner is the one reading
+//! (#1029), so every id asked for is answered.
 
 use std::collections::BTreeMap;
 
 use centraid_apps_kit::error::KitResult;
 use centraid_apps_kit::reads::{JOIN_FAN_OUT, PageDoor, in_list, read_pages};
-use centraid_apps_kit::representations::{RepresentationIndex, read_representations};
-use centraid_apps_kit::row::{Row, integer_or_zero, text_of};
+use centraid_apps_kit::row::{Row, text_of};
 use centraid_apps_kit::statement::{PageOrder, PageQuery};
 
 /// Refs render in lists, not bulk exports (`cards.ts:35`).
 pub const MAX_REFS: usize = 100;
 
-/// A `(type, id)` pair a link points at.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Ref {
-    pub entity: String,
-    pub id: String,
-}
-
-impl Ref {
-    #[must_use]
-    pub fn new(entity: impl Into<String>, id: impl Into<String>) -> Self {
-        Self {
-            entity: entity.into(),
-            id: id.into(),
-        }
-    }
-}
-
-/// What a card says about the row it names.
-///
-/// `missing` is a tombstone, `denied` a consent gap, `unknown` a bad type — and
-/// the three are different sentences on a shelf (`cards.ts:20`-`:22`).
+/// What a card says about the entity it names.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CardStatus {
     Live,
     Trashed,
+    /// Nothing has this id: a tombstone the shelf draws as one.
     Missing,
-    Denied,
-    Unknown,
 }
 
 impl CardStatus {
@@ -85,8 +34,6 @@ impl CardStatus {
             Self::Live => "live",
             Self::Trashed => "trashed",
             Self::Missing => "missing",
-            Self::Denied => "denied",
-            Self::Unknown => "unknown",
         }
     }
 }
@@ -94,626 +41,156 @@ impl CardStatus {
 /// One renderable card.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RefCard {
-    pub entity: String,
+    /// The thing's kind (`person`, `event`, ...); empty when it is missing.
+    pub kind: String,
     pub id: String,
     pub status: CardStatus,
     pub title: Option<String>,
     pub subtitle: Option<String>,
-    /// A `core.content_item` id renderable as a thumbnail, if any.
-    pub thumbnail_content_id: Option<String>,
+    /// The blob a surface draws as a thumbnail, when the kind has one.
+    pub thumbnail: Option<String>,
 }
 
 impl RefCard {
-    /// The shape a ref with no card takes. v0's own fallback, and the one the
-    /// library's fold uses when a batch came back short
-    /// (`queries/library.ts:392`-`:398`).
+    /// The card of an id nothing has.
     #[must_use]
-    pub fn unresolved(entity: &str, id: &str, status: CardStatus) -> Self {
+    pub fn missing(id: &str) -> Self {
         Self {
-            entity: entity.to_owned(),
+            kind: String::new(),
             id: id.to_owned(),
-            status,
+            status: CardStatus::Missing,
             title: None,
             subtitle: None,
-            thumbnail_content_id: None,
+            thumbnail: None,
         }
     }
 }
 
-/// The consent half. One batch, one answer per ref, in the order asked.
-pub trait CardDoor {
-    /// Resolve up to [`MAX_REFS`] refs. **Never an `Err` for a refusal**: a
-    /// denied ref is a `denied` CARD, because the shelf draws it.
-    fn resolve(&self, refs: &[Ref]) -> KitResult<Vec<RefCard>>;
-}
-
-/// THE OWNER'S VIEW: every ref resolvable, nothing masked.
-pub struct OwnerCards<'door> {
-    door: &'door dyn PageDoor,
-}
-
-impl<'door> OwnerCards<'door> {
-    #[must_use]
-    pub const fn new(door: &'door dyn PageDoor) -> Self {
-        Self { door }
-    }
-}
-
-/// One carded entity: where its row lives and which columns the card reads.
-struct CardSpec {
-    entity: &'static str,
+/// What a kind adds to its card: its table, the columns to read and which of
+/// them are the subtitle and the thumbnail.
+struct Extra {
+    kind: &'static str,
     table: &'static str,
-    pk: &'static str,
     select: &'static str,
-    /// `true` where the table carries the trash pair, so the card reads
-    /// `deleted_at`. See the module note: the three that are `false` have no
-    /// such column.
-    reads_trash: bool,
+    subtitle: &'static str,
+    thumbnail: Option<&'static str>,
 }
 
-/// v0's `CARD_SQL`, as projections. The order is v0's own file order.
-const CARDS: &[CardSpec] = &[
-    CardSpec {
-        entity: "core.party",
-        table: "core_party",
-        pk: "party_id",
-        select: "party_id, display_name, kind, avatar_content_id, deleted_at",
-        reads_trash: true,
+const EXTRAS: &[Extra] = &[
+    Extra {
+        kind: "person",
+        table: "person",
+        select: "id, form, avatar",
+        subtitle: "form",
+        thumbnail: Some("avatar"),
     },
-    CardSpec {
-        entity: "core.place",
-        table: "core_place",
-        pk: "place_id",
-        select: "place_id, name, kind",
-        reads_trash: false,
+    Extra {
+        kind: "event",
+        table: "event",
+        select: "id, starts",
+        subtitle: "starts",
+        thumbnail: None,
     },
-    CardSpec {
-        entity: "core.event",
-        table: "core_event",
-        pk: "event_id",
-        select: "event_id, summary, dtstart, deleted_at",
-        reads_trash: true,
+    Extra {
+        kind: "task",
+        table: "task",
+        select: "id, status",
+        subtitle: "status",
+        thumbnail: None,
     },
-    CardSpec {
-        entity: "core.transaction",
-        table: "core_transaction",
-        pk: "txn_id",
-        select: "txn_id, description, currency, amount_minor",
-        reads_trash: false,
+    Extra {
+        kind: "document",
+        table: "document",
+        select: "id, media_type",
+        subtitle: "media_type",
+        thumbnail: None,
     },
-    CardSpec {
-        entity: "core.content_item",
-        table: "core_content_item",
-        pk: "content_id",
-        select: "content_id, deleted_at",
-        reads_trash: true,
-    },
-    CardSpec {
-        entity: "core.document",
-        table: "core_document",
-        pk: "document_id",
-        select: "document_id, title, current_content_id, deleted_at",
-        reads_trash: true,
-    },
-    CardSpec {
-        entity: "schedule.task",
-        table: "schedule_task",
-        pk: "task_id",
-        select: "task_id, title, status, deleted_at",
-        reads_trash: true,
-    },
-    CardSpec {
-        entity: "knowledge.note",
-        table: "knowledge_note",
-        pk: "note_id",
-        select: "note_id, title, deleted_at",
-        reads_trash: true,
-    },
-    CardSpec {
-        entity: "core.collection",
-        table: "core_collection",
-        pk: "collection_id",
-        select: "collection_id, name, cover_content_id",
-        reads_trash: false,
-    },
-    CardSpec {
-        entity: "social.thread",
-        table: "social_thread",
-        pk: "thread_id",
-        select: "thread_id, subject, channel",
-        reads_trash: false,
-    },
-    CardSpec {
-        entity: "media.asset",
-        table: "media_asset",
-        pk: "asset_id",
-        select: "asset_id, title, kind, captured_at, content_id, deleted_at",
-        reads_trash: true,
+    Extra {
+        kind: "photo",
+        table: "photo",
+        select: "id, form, blob",
+        subtitle: "form",
+        thumbnail: Some("blob"),
     },
 ];
 
-/// Entity types with a curated card: the picker's default kinds
-/// (`cards.ts:85`).
-#[must_use]
-pub fn carded_entities() -> Vec<&'static str> {
-    CARDS.iter().map(|spec| spec.entity).collect()
-}
-
-/// An UNCURATED entity, by the physical table its logical name underscores.
-///
-/// v0 asks the registry for the physical name and the pk; the port carries the
-/// ones it can actually be asked for. None today: the one v0 had,
-/// `tally.expense`, left with Tally (#1099).
-const UNCURATED: &[(&str, &str, &str)] = &[];
-
-impl CardDoor for OwnerCards<'_> {
-    fn resolve(&self, refs: &[Ref]) -> KitResult<Vec<RefCard>> {
-        let asked: Vec<&Ref> = refs.iter().take(MAX_REFS).collect();
-        let mut resolved: BTreeMap<Ref, RefCard> = BTreeMap::new();
-
-        for spec in CARDS {
-            let ids = ids_of(&asked, spec.entity);
-            if ids.is_empty() {
-                continue;
-            }
-            for row in read_rows(
-                self.door,
-                spec.entity,
-                spec.table,
-                spec.pk,
-                spec.select,
-                &ids,
-            )? {
-                let Some(id) = text_of(&row, spec.pk) else {
-                    continue;
-                };
-                resolved.insert(
-                    Ref::new(spec.entity, &id),
-                    RefCard {
-                        entity: spec.entity.to_owned(),
-                        id,
-                        status: if spec.reads_trash && text_of(&row, "deleted_at").is_some() {
-                            CardStatus::Trashed
-                        } else {
-                            CardStatus::Live
-                        },
-                        title: None,
-                        subtitle: None,
-                        thumbnail_content_id: None,
-                    },
-                );
-            }
-            decorate(spec.entity, &mut resolved, self.door, &ids)?;
-        }
-
-        for (entity, table, pk) in UNCURATED {
-            let ids = ids_of(&asked, entity);
-            if ids.is_empty() {
-                continue;
-            }
-            for row in read_rows(self.door, entity, table, pk, pk, &ids)? {
-                if let Some(id) = text_of(&row, pk) {
-                    // EXISTENCE AND STATUS ONLY, with a null title — v0's
-                    // uncurated answer (`cards.ts:185`-`:194`).
-                    resolved.insert(
-                        Ref::new(*entity, &id),
-                        RefCard::unresolved(entity, &id, CardStatus::Live),
-                    );
-                }
-            }
-        }
-
-        Ok(asked
-            .into_iter()
-            .map(|reference| {
-                resolved.get(reference).cloned().unwrap_or_else(|| {
-                    RefCard::unresolved(
-                        &reference.entity,
-                        &reference.id,
-                        if known(&reference.entity) {
-                            // The type resolves and the row does not: a
-                            // tombstone, which is a different sentence from a
-                            // bad type.
-                            CardStatus::Missing
-                        } else {
-                            CardStatus::Unknown
-                        },
-                    )
-                })
-            })
-            .collect())
-    }
-}
-
-fn known(entity: &str) -> bool {
-    CARDS.iter().any(|spec| spec.entity == entity)
-        || UNCURATED.iter().any(|(name, _, _)| *name == entity)
-}
-
-fn ids_of(refs: &[&Ref], entity: &str) -> Vec<String> {
-    let mut ids: Vec<String> = refs
-        .iter()
-        .filter(|reference| reference.entity == entity)
-        .map(|reference| reference.id.clone())
-        .collect();
-    ids.sort_unstable();
-    ids.dedup();
-    ids
-}
-
-fn read_rows(
+fn read_by_ids(
     door: &dyn PageDoor,
-    entity: &str,
+    name: &str,
     table: &str,
-    pk: &str,
     select: &str,
     ids: &[String],
 ) -> KitResult<Vec<Row>> {
-    let fragment = in_list(pk, ids)?;
+    let fragment = in_list("id", ids)?;
     read_pages(
         door,
-        &PageQuery::new(
-            &format!("notes.cards.{entity}"),
-            select,
-            table,
-            PageOrder::asc(pk, pk),
-        )
-        .filter(&fragment.sql, fragment.bind),
+        &PageQuery::new(name, select, table, PageOrder::asc("id", "id"))
+            .filter(&fragment.sql, fragment.bind),
         JOIN_FAN_OUT,
     )
 }
 
-/// The title, subtitle and thumbnail of one entity's cards.
+/// Resolve up to [`MAX_REFS`] ids, one card each, keyed by id. An id nothing
+/// has is a [`RefCard::missing`], never an absence: the shelf draws it.
 ///
-/// Split out of the read because three of the eleven need a SECOND bounded
-/// read — bytes have neither a title nor a media type of their own since #996
-/// R20(b), so both come from whoever owns them.
-fn decorate(
-    entity: &str,
-    resolved: &mut BTreeMap<Ref, RefCard>,
-    door: &dyn PageDoor,
-    ids: &[String],
-) -> KitResult<()> {
-    match entity {
-        "core.party" => fill(
-            &CardRead {
-                door,
-                ids,
-                entity,
-                table: "core_party",
-                pk: "party_id",
-                select: "party_id, display_name, kind, avatar_content_id",
-            },
-            resolved,
-            |row| {
-                (
-                    text_of(row, "display_name"),
-                    text_of(row, "kind"),
-                    text_of(row, "avatar_content_id"),
-                )
-            },
-        ),
-        "core.place" => fill(
-            &CardRead {
-                door,
-                ids,
-                entity,
-                table: "core_place",
-                pk: "place_id",
-                select: "place_id, name, kind",
-            },
-            resolved,
-            |row| (text_of(row, "name"), text_of(row, "kind"), None),
-        ),
-        "core.event" => fill(
-            &CardRead {
-                door,
-                ids,
-                entity,
-                table: "core_event",
-                pk: "event_id",
-                select: "event_id, summary, dtstart",
-            },
-            resolved,
-            |row| (text_of(row, "summary"), text_of(row, "dtstart"), None),
-        ),
-        "core.transaction" => fill(
-            &CardRead {
-                door,
-                ids,
-                entity,
-                table: "core_transaction",
-                pk: "txn_id",
-                select: "txn_id, description, currency, amount_minor",
-            },
-            resolved,
-            |row| {
-                // v0's `printf('%s %.2f', currency, amount_minor / 100.0)`.
-                let currency = text_of(row, "currency").unwrap_or_default();
-                let minor = integer_or_zero(row, "amount_minor");
-                #[expect(
-                    clippy::cast_precision_loss,
-                    reason = "v0 divides the same integer by 100.0 in SQL; the port reproduces the same double"
-                )]
-                let major = minor as f64 / 100.0;
-                (
-                    text_of(row, "description"),
-                    Some(format!("{currency} {major:.2}")),
-                    None,
-                )
-            },
-        ),
-        "schedule.task" => fill(
-            &CardRead {
-                door,
-                ids,
-                entity,
-                table: "schedule_task",
-                pk: "task_id",
-                select: "task_id, title, status",
-            },
-            resolved,
-            |row| (text_of(row, "title"), text_of(row, "status"), None),
-        ),
-        "knowledge.note" => fill(
-            &CardRead {
-                door,
-                ids,
-                entity,
-                table: "knowledge_note",
-                pk: "note_id",
-                select: "note_id, title",
-            },
-            resolved,
-            |row| (text_of(row, "title"), None, None),
-        ),
-        "core.collection" => fill(
-            &CardRead {
-                door,
-                ids,
-                entity,
-                table: "core_collection",
-                pk: "collection_id",
-                select: "collection_id, name, cover_content_id",
-            },
-            resolved,
-            |row| (text_of(row, "name"), None, text_of(row, "cover_content_id")),
-        ),
-        "social.thread" => fill(
-            &CardRead {
-                door,
-                ids,
-                entity,
-                table: "social_thread",
-                pk: "thread_id",
-                select: "thread_id, subject, channel",
-            },
-            resolved,
-            |row| {
-                (
-                    text_of(row, "subject").or_else(|| text_of(row, "channel")),
-                    text_of(row, "channel"),
-                    None,
-                )
-            },
-        ),
-        "core.document" => decorate_documents(resolved, door, ids),
-        "core.content_item" => decorate_content(resolved, door, ids),
-        "media.asset" => decorate_assets(resolved, door, ids),
-        _ => Ok(()),
+/// # Errors
+///
+/// The kit's own refusals.
+pub fn resolve(door: &dyn PageDoor, ids: &[String]) -> KitResult<BTreeMap<String, RefCard>> {
+    let mut asked: Vec<String> = ids.iter().take(MAX_REFS).cloned().collect();
+    asked.sort_unstable();
+    asked.dedup();
+    if asked.is_empty() {
+        return Ok(BTreeMap::new());
     }
-}
-
-type CardFields = (Option<String>, Option<String>, Option<String>);
-
-/// Where one entity's card rows come from, so the eight simple decorations take
-/// one parameter instead of five.
-struct CardRead<'read> {
-    door: &'read dyn PageDoor,
-    ids: &'read [String],
-    entity: &'read str,
-    table: &'static str,
-    pk: &'static str,
-    select: &'static str,
-}
-
-fn fill(
-    read: &CardRead<'_>,
-    resolved: &mut BTreeMap<Ref, RefCard>,
-    project: impl Fn(&Row) -> CardFields,
-) -> KitResult<()> {
-    for row in read_rows(
-        read.door,
-        read.entity,
-        read.table,
-        read.pk,
-        read.select,
-        read.ids,
+    let mut cards: BTreeMap<String, RefCard> = asked
+        .iter()
+        .map(|id| (id.clone(), RefCard::missing(id)))
+        .collect();
+    for row in read_by_ids(
+        door,
+        "notes.cards.entity",
+        "entity",
+        "id, kind, title, deleted_at",
+        &asked,
     )? {
-        let Some(id) = text_of(&row, read.pk) else {
+        let Some(id) = text_of(&row, "id") else {
             continue;
         };
-        if let Some(card) = resolved.get_mut(&Ref::new(read.entity, &id)) {
-            let (title, subtitle, thumbnail) = project(&row);
-            card.title = title;
-            card.subtitle = subtitle;
-            card.thumbnail_content_id = thumbnail;
+        cards.insert(
+            id.clone(),
+            RefCard {
+                kind: text_of(&row, "kind").unwrap_or_default(),
+                status: if text_of(&row, "deleted_at").is_some() {
+                    CardStatus::Trashed
+                } else {
+                    CardStatus::Live
+                },
+                title: text_of(&row, "title").filter(|title| !title.is_empty()),
+                subtitle: None,
+                thumbnail: None,
+                id,
+            },
+        );
+    }
+    for extra in EXTRAS {
+        let of_kind: Vec<String> = cards
+            .values()
+            .filter(|card| card.kind == extra.kind)
+            .map(|card| card.id.clone())
+            .collect();
+        if of_kind.is_empty() {
+            continue;
+        }
+        let name = format!("notes.cards.{}", extra.kind);
+        for row in read_by_ids(door, &name, extra.table, extra.select, &of_kind)? {
+            if let Some(card) = text_of(&row, "id").and_then(|id| cards.get_mut(&id)) {
+                card.subtitle = text_of(&row, extra.subtitle);
+                card.thumbnail = extra.thumbnail.and_then(|column| text_of(&row, column));
+            }
         }
     }
-    Ok(())
-}
-
-/// A document's subtitle is what IT reads its bytes as, and its thumbnail is
-/// those bytes when they are an image (#996 R20(b)).
-fn decorate_documents(
-    resolved: &mut BTreeMap<Ref, RefCard>,
-    door: &dyn PageDoor,
-    ids: &[String],
-) -> KitResult<()> {
-    let rows = read_rows(
-        door,
-        "core.document",
-        "core_document",
-        "document_id",
-        "document_id, title, current_content_id, deleted_at",
-        ids,
-    )?;
-    let content_ids: Vec<String> = rows
-        .iter()
-        .filter_map(|row| text_of(row, "current_content_id"))
-        .collect();
-    let representations = read_representations(door, &content_ids, JOIN_FAN_OUT)?;
-    for row in &rows {
-        let Some(id) = text_of(row, "document_id") else {
-            continue;
-        };
-        let media_type = representations
-            .by_owner
-            .get(&("core.document".to_owned(), id.clone()));
-        if let Some(card) = resolved.get_mut(&Ref::new("core.document", &id)) {
-            card.title = text_of(row, "title");
-            card.subtitle = media_type.cloned();
-            card.thumbnail_content_id = media_type
-                .filter(|kind| kind.starts_with("image/"))
-                .and_then(|_| text_of(row, "current_content_id"));
-        }
-    }
-    Ok(())
-}
-
-/// BYTES HAVE NO TITLE OF THEIR OWN. The card takes the owning document's, then
-/// the owning asset's, then the media type — v0's three-step `coalesce`
-/// (`cards.ts:56`-`:63`).
-fn decorate_content(
-    resolved: &mut BTreeMap<Ref, RefCard>,
-    door: &dyn PageDoor,
-    ids: &[String],
-) -> KitResult<()> {
-    let representations = read_representations(door, ids, JOIN_FAN_OUT)?;
-    let fragment = in_list("current_content_id", ids)?;
-    let documents = read_pages(
-        door,
-        &PageQuery::new(
-            "notes.cards.content.document",
-            "document_id, title, current_content_id",
-            "core_document",
-            PageOrder::asc("document_id", "document_id"),
-        )
-        .filter(&fragment.sql, fragment.bind),
-        JOIN_FAN_OUT,
-    )?;
-    let asset_fragment = in_list("content_id", ids)?;
-    let assets = read_pages(
-        door,
-        &PageQuery::new(
-            "notes.cards.content.asset",
-            "asset_id, title, content_id",
-            "media_asset",
-            PageOrder::asc("asset_id", "asset_id"),
-        )
-        .filter(&asset_fragment.sql, asset_fragment.bind),
-        JOIN_FAN_OUT,
-    )?;
-    for id in ids {
-        let Some(card) = resolved.get_mut(&Ref::new("core.content_item", id)) else {
-            continue;
-        };
-        let media_type = media_type_of(&representations, id);
-        let by_document = documents
-            .iter()
-            .find(|row| text_of(row, "current_content_id").as_deref() == Some(id.as_str()))
-            .and_then(|row| text_of(row, "title"));
-        let by_asset = assets
-            .iter()
-            .find(|row| text_of(row, "content_id").as_deref() == Some(id.as_str()))
-            .and_then(|row| text_of(row, "title"));
-        card.title = by_document.or(by_asset).or_else(|| media_type.clone());
-        card.subtitle = media_type.clone();
-        card.thumbnail_content_id = media_type
-            .filter(|kind| kind.starts_with("image/"))
-            .map(|_| id.clone());
-    }
-    Ok(())
-}
-
-/// The oldest reading of these bytes, which is the vault's own deterministic
-/// answer for a surface with no owner in hand.
-fn media_type_of(representations: &RepresentationIndex, content_id: &str) -> Option<String> {
-    representations.by_content.get(content_id).cloned()
-}
-
-/// An asset's subtitle is its capture instant, falling back to the bytes'
-/// `created_at` — v0's `coalesce(a.captured_at, ci.created_at)` over the join.
-fn decorate_assets(
-    resolved: &mut BTreeMap<Ref, RefCard>,
-    door: &dyn PageDoor,
-    ids: &[String],
-) -> KitResult<()> {
-    let rows = read_rows(
-        door,
-        "media.asset",
-        "media_asset",
-        "asset_id",
-        "asset_id, title, kind, captured_at, content_id, deleted_at",
-        ids,
-    )?;
-    let content_ids: Vec<String> = rows
-        .iter()
-        .filter_map(|row| text_of(row, "content_id"))
-        .collect();
-    let created: Vec<Row> = if content_ids.is_empty() {
-        Vec::new()
-    } else {
-        let fragment = in_list("content_id", &content_ids)?;
-        read_pages(
-            door,
-            &PageQuery::new(
-                "notes.cards.asset.content",
-                "content_id, created_at",
-                "core_content_item",
-                PageOrder::asc("content_id", "content_id"),
-            )
-            .filter(&fragment.sql, fragment.bind),
-            JOIN_FAN_OUT,
-        )?
-    };
-    for row in &rows {
-        let Some(id) = text_of(row, "asset_id") else {
-            continue;
-        };
-        let content_id = text_of(row, "content_id");
-        let born = content_id.as_deref().and_then(|content| {
-            created
-                .iter()
-                .find(|candidate| text_of(candidate, "content_id").as_deref() == Some(content))
-                .and_then(|candidate| text_of(candidate, "created_at"))
-        });
-        if let Some(card) = resolved.get_mut(&Ref::new("media.asset", &id)) {
-            card.title = text_of(row, "title").or_else(|| text_of(row, "kind"));
-            card.subtitle = text_of(row, "captured_at").or(born);
-            card.thumbnail_content_id = content_id;
-        }
-    }
-    Ok(())
-}
-
-/// A DOOR THAT RESOLVES NOTHING. Every ref comes back `denied`.
-///
-/// Not a stub that reads green: `denied` is the honest answer for a caller with
-/// no card door, and it is a state the shelf draws — "this link points
-/// somewhere you cannot see" rather than a blank row.
-pub struct NoCards;
-
-impl CardDoor for NoCards {
-    fn resolve(&self, refs: &[Ref]) -> KitResult<Vec<RefCard>> {
-        Ok(refs
-            .iter()
-            .take(MAX_REFS)
-            .map(|reference| {
-                RefCard::unresolved(&reference.entity, &reference.id, CardStatus::Denied)
-            })
-            .collect())
-    }
+    Ok(cards)
 }
 
 #[cfg(test)]
@@ -721,30 +198,20 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_carded_entities_are_v0s_eleven_and_none_is_uncurated() {
-        assert_eq!(carded_entities().len(), 11);
-        // Tally's expense was the one uncurated type; it left with Tally (#1099),
-        // so it is an unknown type now, as a secret is.
-        assert!(!known("tally.expense"));
-        assert!(known("knowledge.note"));
-        assert!(!known("locker.item"));
+    fn a_missing_card_says_so_and_carries_no_kind() {
+        let card = RefCard::missing("gone");
+        assert_eq!(card.status, CardStatus::Missing);
+        assert!(card.kind.is_empty() && card.title.is_none());
+        assert_eq!(CardStatus::Missing.as_str(), "missing");
     }
 
     #[test]
-    fn a_door_with_no_cards_denies_every_ref_rather_than_blanking_it() {
-        let cards = NoCards
-            .resolve(&[Ref::new("knowledge.note", "note-1")])
-            .expect("no door refuses nothing");
-        assert_eq!(cards.len(), 1);
-        assert_eq!(cards[0].status, CardStatus::Denied);
-        assert_eq!(cards[0].title, None);
-    }
-
-    #[test]
-    fn a_batch_is_capped_at_v0s_hundred() {
-        let refs: Vec<Ref> = (0..150)
-            .map(|index| Ref::new("knowledge.note", format!("note-{index}")))
-            .collect();
-        assert_eq!(NoCards.resolve(&refs).expect("capped").len(), MAX_REFS);
+    fn every_extra_selects_its_subtitle_and_thumbnail_columns() {
+        for extra in EXTRAS {
+            assert!(extra.select.contains(extra.subtitle), "{}", extra.kind);
+            if let Some(thumbnail) = extra.thumbnail {
+                assert!(extra.select.contains(thumbnail), "{}", extra.kind);
+            }
+        }
     }
 }

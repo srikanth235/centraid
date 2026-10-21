@@ -1,32 +1,30 @@
 #![forbid(unsafe_code)]
-//! # Notes — six queries, fifteen actions, and the one app that reads six domains
+//! # Notes — six queries, seventeen actions, and the one app that reads six kinds
 //!
-//! 9,336 lines of v0 TypeScript, 6 queries, 15 actions, 33 scopes over five
-//! schemas (#1020, wave 4 census §A4). Its doctrine, from the manifest's own
-//! description (`manifest.json`, copied verbatim from v0's `app.json`):
+//! Its doctrine, from the manifest's own description (`manifest.json`):
 //!
-//! - **NOTHING IS STORED HERE.** A note is a `knowledge.note` wrapper over a
-//!   canonical, hash-deduped `core.content_item` body. Revoke the grant and
-//!   the app goes dark while the notes and the receipts remain the owner's.
+//! - **NOTHING IS STORED HERE.** A note is an `entity` of kind `note` whose words
+//!   sit on its `note` row; a notebook is a `container`; a pin or a tag is a
+//!   `tagged` edge; a link, a memo and an attachment are `links`, `about` and
+//!   `attached` edges; a past version is a `revision` (#1135). Revoke the grant
+//!   and the app goes dark while the notes and the journal remain the owner's.
 //! - **THE LIBRARY IS A BOUNDED RECENT WINDOW PLUS *EVERY* PINNED NOTE.** A pin
 //!   survives the note ageing out of the window, so the pinned shelf is read
 //!   beside the recent one and not out of it ([`queries::load_library`]).
-//! - **THE JOURNAL ASYMMETRY IS THE CONTRACT, NOT AN OVERSIGHT** (D-1020-N3).
-//!   People-journal entries are excluded from the library, the trash shelf, the
-//!   derived tag chips, search and the powerbox — and **opening one by id still
-//!   works** (`queries/library.ts:1`-`:7`, #834 R-journal). A port that
-//!   unified the two would either leak journal entries onto the notes shelf or
-//!   break the People screen that opens one. [`queries::load_note`] is the
-//!   by-id door and it does no journal read at all; that is the asymmetry,
-//!   spelled as code.
-//! - **A LIST ROW CARRIES A PREVIEW, NEVER A BODY** (#404): six lines,
-//!   200 characters, plus the checklist tally. The editor pulls the full text
-//!   lazily through `note`, which is what keeps a 1 MiB body off the shelf.
-//! - **HISTORY IS THE NOTE'S OWN REVISION OCCURRENCES**, walked from
-//!   `current_revision_id` through `parent_revision_id` ([`version_chain`],
-//!   #996 R20(a)). A cycle is a REFUSAL, not a truncated list (D-1020-N2).
+//! - **THE MEMO ASYMMETRY IS THE CONTRACT, NOT AN OVERSIGHT** (D-1020-N3). A
+//!   memo — a note with an `about` edge, a People-journal entry among them — is
+//!   excluded from the library, the trash shelf, the derived tag chips, search
+//!   and the powerbox, and **opening one by id still works**
+//!   ([`queries::load_note`] does no memo read at all; that is the asymmetry,
+//!   spelled as code).
+//! - **A LIST ROW CARRIES A PREVIEW, NEVER A BODY** (#404): six lines, 200
+//!   characters, plus the checklist tally. The editor pulls the full text lazily
+//!   through `note`, which keeps a 64 KiB body off the shelf.
+//! - **HISTORY IS THE WORDS THAT WERE REPLACED**: the current words, then each
+//!   `revision` newest first ([`queries::load_history`]). A revision has a
+//!   `seq`, so there is no chain to walk and no cycle to refuse.
 //! - **THE POWERBOX IS SECRET-FREE BY CONSTRUCTION** ([`queries::load_link_targets`]):
-//!   six domains through `crates/search`, and Locker is not one of them.
+//!   every searchable kind through `crates/search`, and Locker is not indexed.
 //! - **A DENIAL IS A VALUE.** Every query wraps its body and answers the empty
 //!   shape plus `vaultDenied` rather than throwing.
 //!
@@ -39,14 +37,14 @@
 //! | An invocation with no `invoke_key` | the field is required on [`commands::Invocation`] (D-1020-D3-5) |
 //! | A denial turned into an error | [`commands::Outcome::Denied`] and [`Denial`] are states a surface renders |
 //! | A failed read folded into a `0` or a `[]` | every three-state answer here is a [`Reading`] (census §A seam 5) |
-//! | A body over the ceiling | `core.add_content_item`'s 1 MiB SB-text ceiling is the vault's; this crate never mints one |
+//! | A wrapper around a shared verb | [`commands::ACTIONS`] names `entity.trash`, `flag.set`, `tag.add`, `edge.add` directly; only what a note alone has is a `note.*` command |
 //!
 //! ## The phone's shelves
 //!
 //! [`shelves`], [`editor`] and [`local`] are what `crates/core` answers the
 //! phone's `notes_*` app queries with (#1046): the library's sort and filters,
-//! the trash shelf and notebook spine, the editor's note with its base
-//! revision, and the Journal by the member's local day.
+//! the trash shelf and notebook spine, the editor's note with its base version,
+//! and the Journal by the member's local day.
 
 pub mod cards;
 pub mod commands;
@@ -57,13 +55,10 @@ pub mod local;
 pub mod manifest;
 pub mod queries;
 pub mod shelves;
-pub mod version_chain;
 
-pub use cards::{CardDoor, CardStatus, NoCards, OwnerCards, Ref, RefCard};
+pub use cards::{CardStatus, RefCard};
 pub use commands::{ACTIONS, Commands, Invocation, Outcome};
-pub use derive::{
-    CheckTally, PREVIEW_CHARS, PREVIEW_LINES, check_of, decode_note_body, preview_of,
-};
+pub use derive::{CheckTally, PREVIEW_CHARS, PREVIEW_LINES, check_of, preview_of};
 pub use editor::{EditorNote, load_editor_note};
 pub use local::{JournalDay, PlacedEntry, journal_days};
 pub use manifest::{APP_ID, manifest};
@@ -75,7 +70,6 @@ pub use queries::{
 pub use shelves::{
     LibraryFilter, NotebookEntry, NotebooksData, Sort, load_notebooks, load_trash, shape_library,
 };
-pub use version_chain::{ChainWalk, MAX_CHAIN_STEPS, VersionChainError, note_version_chain};
 
 /// A CONSENT DENIAL, as the payload carries it: the kit's one type, shared by
 /// every app so the core settles all of them through one door.

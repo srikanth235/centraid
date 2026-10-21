@@ -1,10 +1,11 @@
 // NOTES' QUERIES, AS THE CORE ANSWERS THEM (#1046).
 //
 // `crates/apps/notes` folds the library (a bounded recent window plus EVERY
-// pinned note, decorated by ten `IN`-bounded joins), the People-journal
-// marker set that four surfaces exclude, the revision chain a cycle refuses
-// (D-1020-N2) and the seven-domain powerbox (D-1020-N1). These are its
-// answers, typed. A shell reaches them through `app_query.proto`'s
+// pinned note, decorated by `IN`-bounded reads of the edges that carry its
+// tags, links and attachments), the memo set that four surfaces exclude (a
+// note with an `about` edge: a People-journal entry among them), a note's
+// revisions and the powerbox over every searchable kind (D-1020-N1). These are
+// its answers, typed. A shell reaches them through `app_query.proto`'s
 // `AppQueryRequest` at numbers 40-49, and draws them; it joins nothing and
 // decodes no body.
 //
@@ -13,8 +14,8 @@
 // conversion. Instants are the vault's text form,
 // `YYYY-MM-DDTHH:MM:SS.mmmZ`; days are `YYYY-MM-DD`.
 //
-// THE JOURNAL ASYMMETRY IS THE CONTRACT (D-1020-N3): a People-journal entry
-// is absent from `library`, `trash`, the tag chips, `search` and
+// THE JOURNAL ASYMMETRY IS THE CONTRACT (D-1020-N3): a memo (a People-journal
+// entry is one) is absent from `library`, `trash`, the tag chips, `search` and
 // `link_targets`, is the whole of `journal`, and is still answered by `note`,
 // because the People screen opens one by id.
 //
@@ -186,9 +187,11 @@ message NotesTrash {
 }
 
 message NotesHistory {
-  // Newest first; `current` is the first. A cycle or an over-long chain is
-  // REFUSED as the answer's `denied` arm, never a truncated list (D-1020-N2).
+  // Newest first; `current` is the first, then each `revision` — the words a
+  // later edit replaced — newest to oldest.
   repeated NotesVersion versions = 1;
+  // More revisions exist than the newest 200 listed.
+  bool truncated = 2;
 }
 
 message NotesLinkTargets {
@@ -200,27 +203,30 @@ message NotesLinkTargets {
 // The editor's note. `found = false` is a note id nothing answers to — never
 // an empty note a save would write over.
 message NotesNote {
+  // `body_content_id` and `current_revision_id`: a body is the note's own
+  // column now and a version is a `revision` with a `seq`; `row_version` is the
+  // editor's base.
+  reserved 7, 8;
+  reserved "body_content_id", "current_revision_id";
   bool found = 1;
   string note_id = 2;
   string title = 3;
-  // `markdown`, `html` or `plain`.
+  // `markdown` or `plain`.
   string format = 4;
   bool pinned = 5;
-  // The whole decoded body.
+  // The whole body.
   string body = 6;
-  string body_content_id = 7;
-  // THE BASE REVISION: the newest body occurrence. It moves only when the
-  // BODY changes (a title, pin or format edit records no occurrence), so an
-  // editor that saw this id and reads a different one has lost a body race.
-  optional string current_revision_id = 8;
-  // Bumped by EVERY write to the row — title, pin, format, body, trash.
+  // THE EDITOR'S BASE: bumped once by every commit that changes the note — title,
+  // pin, format, body, notebook, trash. An editor that saw this version and
+  // reads a different one has lost a race; the command takes no base, so the
+  // last save wins (R-1047-K3).
   int64 row_version = 9;
   string created_at = 10;
   string updated_at = 11;
-  // Set when the note is in the trash; `knowledge.edit_note` refuses it.
+  // Set when the note is in the trash; `note.edit` refuses it.
   optional string deleted_at = 12;
   optional string purge_at = 13;
-  // The one notebook it is filed in (v1 keeps one placement).
+  // The one notebook it is filed in (`note.notebook_id`).
   optional string notebook_id = 14;
   // `created_at`'s and `updated_at`'s civil days, and `updated_at`'s wall
   // clock (`YYYY-MM-DDTHH:MM`), in the request's zone — what "Edited" says.
@@ -304,16 +310,23 @@ message NotesTagFacet {
 }
 
 message NotesTag {
-  string tag_id = 1;
+  // `tag_id`: a tag on a note is an edge, which has no id of its own; the tag's
+  // `concept_id` and the note name it.
+  reserved 1;
+  reserved "tag_id";
   string concept_id = 2;
   string label = 3;
 }
 
 message NotesAttachment {
+  // `role` and `is_primary`: an attachment is an `attached` edge and keeps
+  // neither.
+  reserved 3, 4;
+  reserved "role", "is_primary";
+  // The attached document's or photo's id: the edge has no id of its own.
   string attachment_id = 1;
+  // The bytes' blob hash.
   string content_id = 2;
-  optional string role = 3;
-  bool is_primary = 4;
   string media_type = 5;
   string content_uri = 6;
   int64 byte_size = 7;
@@ -321,24 +334,33 @@ message NotesAttachment {
 
 // The far end of a link, as a shelf draws it.
 message NotesCard {
+  // The thing's kind (`person`, `event`, `task`, `document`, `photo`, ...);
+  // EMPTY when `status` is `missing`.
   string entity = 1;
   string id = 2;
-  // `live`, `trashed`, `missing`, `denied` or `unknown`.
+  // `live`, `trashed` or `missing`.
   string status = 3;
   optional string title = 4;
+  // What the kind adds: a person's form, an event's start, a task's status, a
+  // document's media type, a photo's form.
   optional string subtitle = 5;
+  // A person's avatar or a photo's blob hash.
   optional string thumbnail_content_id = 6;
 }
 
 message NotesReference {
-  string link_id = 1;
-  // The standoff selector, as JSON. Resolving it is presentation (#282).
+  // `link_id`: a `links` edge has no id of its own.
+  reserved 1;
+  reserved "link_id";
+  // The edge's anchor, as JSON: a wikilink's names its title, a link made by
+  // hand names a range of the text. Resolving it is presentation (#282).
   optional string selector_json = 2;
   NotesCard card = 3;
 }
 
 message NotesBacklink {
-  string link_id = 1;
+  reserved 1;
+  reserved "link_id";
   NotesCard card = 2;
 }
 
@@ -362,20 +384,27 @@ message NotesJournalEntry {
 }
 
 message NotesVersion {
-  string content_id = 1;
+  // `content_id` and `media_type`: a version is a `revision`, named by its
+  // `seq`, and a note's format is the note's.
+  reserved 1, 3;
+  reserved "content_id", "media_type";
   string body = 2;
-  optional string media_type = 3;
   bool current = 4;
+  // When these words became the note's: when the words before them were
+  // replaced, or the note's creation for its first.
   string asserted_at = 5;
   // `asserted_at`'s civil day in the request's zone; EMPTY as `NotesRow`'s.
   string asserted_local_day = 6;
   // `asserted_at`'s wall clock there, `YYYY-MM-DDTHH:MM`, for the history's
   // time of day. EMPTY as `asserted_local_day`.
   string asserted_local = 7;
+  // The `revision`'s `seq`, which `note.restore_version` takes; 0 for the
+  // current words, which no revision holds.
+  int64 seq = 8;
 }
 
 message NotesLinkTarget {
-  // The logical entity, e.g. `knowledge.note`, `core.party`, `schedule.task`.
+  // The thing's kind, e.g. `note`, `person`, `task`.
   string entity = 1;
   string id = 2;
   string title = 3;

@@ -6,106 +6,14 @@
 //! constraint, so it has ONE copy: three copies of a regular expression is how
 //! the shelf and the search results start disagreeing about what a note says.
 //!
-//! ## The body, out of the row that holds it
-//!
-//! `note-body.ts:1`-`:28` is a bug report as much as a module. A canonical note
-//! body is an inline `data:` URI; six places decoded one and four called `atob`
-//! bare — and `atob` yields BYTES, so reading them as characters mangles every
-//! multi-byte one. *"An em dash in a note came back as two mojibake glyphs on
-//! the library shelf and correctly in the editor, from the same row."*
-//! [`decode_note_body`] decodes UTF-8 properly, and keeps v0's own two
-//! sentences apart:
-//!
-//! * `(external content)` — not a `data:` URI at all. It lives somewhere this
-//!   list cannot follow, and **nothing is wrong**.
-//! * `(unreadable content)` — it IS inline and the decode failed. A row that
-//!   should have had words does not, and saying "external" would hide a defect
-//!   behind a normal-sounding phrase.
-//!
-//! Only Notes' `history` query drew that line before #883 B4; the other four
-//! said "external" for both. The line is kept, because it is the honest one.
-
-/// Not a `data:` URI. Nothing is wrong.
-pub const EXTERNAL_CONTENT: &str = "(external content)";
-/// An inline body whose decode failed. Something IS wrong.
-pub const UNREADABLE_CONTENT: &str = "(unreadable content)";
+//! The body is the note's own column now, so there is nothing to decode: these
+//! two functions read the words as they are.
 
 /// How many lines of a body reach a list row (`library.ts:80`).
 pub const PREVIEW_LINES: usize = 6;
 /// How many characters of those lines reach it (`library.ts:96`).
 pub const PREVIEW_CHARS: usize = 200;
 
-/// A note's words, out of the content row's URI.
-///
-/// `None` on the input means an absent content row, which is `(external
-/// content)` — v0 passes `undefined` through `String(uri ?? "")` and lands on
-/// the same sentence.
-#[must_use]
-pub fn decode_note_body(uri: Option<&str>) -> String {
-    let Some(uri) = uri else {
-        return EXTERNAL_CONTENT.to_owned();
-    };
-    if !uri.starts_with("data:") {
-        return EXTERNAL_CONTENT.to_owned();
-    }
-    decode_data_uri(uri).unwrap_or_else(|| UNREADABLE_CONTENT.to_owned())
-}
-
-/// `_shared/format-kit.ts`'s ruled decoder, ported.
-fn decode_data_uri(uri: &str) -> Option<String> {
-    let comma = uri.find(',')?;
-    let meta = &uri[..comma];
-    let payload = &uri[comma + 1..];
-    if meta.contains(";base64") {
-        String::from_utf8(base64_decode(payload)?).ok()
-    } else {
-        percent_decode_utf8(payload)
-    }
-}
-
-fn base64_decode(payload: &str) -> Option<Vec<u8>> {
-    const ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut out = Vec::new();
-    let mut buffer = 0u32;
-    let mut bits = 0u32;
-    for byte in payload.bytes() {
-        if byte == b'=' || byte.is_ascii_whitespace() {
-            continue;
-        }
-        let value = ALPHABET.iter().position(|candidate| *candidate == byte)?;
-        buffer = (buffer << 6) | u32::try_from(value).ok()?;
-        bits += 6;
-        if bits >= 8 {
-            bits -= 8;
-            out.push(u8::try_from((buffer >> bits) & 0xff).ok()?);
-        }
-    }
-    Some(out)
-}
-
-/// `decodeURIComponent`, which is percent-decoding over UTF-8 bytes. A
-/// percent-escape that is not valid UTF-8 is a FAILED decode, not a lossy one —
-/// `String::from_utf8_lossy` would invent a replacement character and call it
-/// the member's note.
-fn percent_decode_utf8(payload: &str) -> Option<String> {
-    let bytes = payload.as_bytes();
-    let mut out: Vec<u8> = Vec::with_capacity(bytes.len());
-    let mut index = 0usize;
-    while index < bytes.len() {
-        if bytes[index] == b'%' {
-            let hex = payload.get(index + 1..index + 3)?;
-            out.push(u8::from_str_radix(hex, 16).ok()?);
-            index += 3;
-        } else {
-            out.push(bytes[index]);
-            index += 1;
-        }
-    }
-    String::from_utf8(out).ok()
-}
-
-/// A checklist line, as the preview renders it and the tally counts it.
-///
 /// v0's regular expression is `/^\s*[-*] \[(?<mark> |x|X)\]\s?(?<text>.*)$/u`:
 /// leading whitespace, a `-` or `*`, **one** space, a bracketed mark, then at
 /// most one space before the text. The single spaces are load-bearing — `- [x]`
@@ -254,40 +162,6 @@ pub fn check_of(body: &str) -> CheckTally {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn an_absent_or_non_data_uri_is_external_and_a_broken_one_is_unreadable() {
-        assert_eq!(decode_note_body(None), EXTERNAL_CONTENT);
-        assert_eq!(decode_note_body(Some("blob:blake3/aa")), EXTERNAL_CONTENT);
-        assert_eq!(
-            decode_note_body(Some("data:text/plain")),
-            UNREADABLE_CONTENT
-        );
-        assert_eq!(
-            decode_note_body(Some("data:text/plain;base64,!!!!")),
-            UNREADABLE_CONTENT
-        );
-    }
-
-    /// THE BUG `note-body.ts` WAS WRITTEN ABOUT: bytes read as characters
-    /// mangle every multi-byte one.
-    #[test]
-    fn a_multi_byte_character_survives_both_encodings() {
-        let percent = "data:text/markdown;charset=utf-8,Rent%20%E2%80%94%20due";
-        assert_eq!(decode_note_body(Some(percent)), "Rent — due");
-        let base64 = "data:text/markdown;base64,UmVudCDigJQgZHVl";
-        assert_eq!(decode_note_body(Some(base64)), "Rent — due");
-    }
-
-    #[test]
-    fn a_percent_escape_that_is_not_utf8_is_unreadable_rather_than_lossy() {
-        // `%80` alone is a continuation byte with no lead. v0's
-        // `decodeURIComponent` throws here and the catch answers null.
-        assert_eq!(
-            decode_note_body(Some("data:text/plain,%80")),
-            UNREADABLE_CONTENT
-        );
-    }
 
     #[test]
     fn a_preview_is_six_lines_of_two_hundred_characters() {

@@ -565,15 +565,21 @@ fn seed_people(seeder: &mut Seeder) {
 fn seed_notes(seeder: &mut Seeder) {
     let travel = Seeder::id(
         seeder
-            .run("knowledge.create_notebook", json!({ "name": "Travel" }))
+            .run(
+                "container.create",
+                json!({ "kind": "notebook", "title": "Travel" }),
+            )
             .as_ref(),
-        "notebook_id",
+        "id",
     );
     let recipes = Seeder::id(
         seeder
-            .run("knowledge.create_notebook", json!({ "name": "Recipes" }))
+            .run(
+                "container.create",
+                json!({ "kind": "notebook", "title": "Recipes" }),
+            )
             .as_ref(),
-        "notebook_id",
+        "id",
     );
 
     let notes: [(&str, &str, &str, Option<&String>); 5] = [
@@ -609,11 +615,11 @@ fn seed_notes(seeder: &mut Seeder) {
         ),
     ];
     for (title, body, format, notebook) in notes {
-        let mut input = json!({ "title": title, "body_text": body, "format": format });
+        let mut input = json!({ "title": title, "body": body, "format": format });
         if let Some(notebook) = notebook {
             input["notebook_id"] = json!(notebook);
         }
-        seeder.run("knowledge.create_note", input);
+        seeder.run("note.create", input);
     }
 }
 
