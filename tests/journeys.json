@@ -37,7 +37,7 @@
     "shared-album": "One album of 200 photos, shared whole. Big enough that projection dominates the grant plane's fixed cost.",
     "year3-50k-assets": "50,000 photo assets in the library, on the device that is browsing them — the volume [#1020](https://github.com/srikanth235/centraid/issues/1020) states its memory, interaction and battery targets at. Distinct from `year3-photos` (90,000 assets), which is the GATEWAY-side library profile: 50k is the size at which a phone's grid, its thumbnail cache and its sync pass are all under real pressure at once, and stating a phone ceiling at 90k would be stating it at a volume no reference device has been asked to hold.",
     "year3-docs": "The drive at year three: 8,000 documents (7,600 live / 400 trashed), 10,000 content items, 10,000 occurrences, 12,600 tags, 400 folders four levels deep, and 2,000 standing answers half of them on folders. `crates/apps/kit::fixtures::year3_docs`.",
-    "year3-notes": "The notebook at year three: 10,000 notes — 400 trashed, 200 pinned, 1,200 journal entries — with a 48 KiB body on 600 of them, the largest body the product holds. `crates/apps/kit::fixtures::year3_notes`.",
+    "year3-notes": "The notebook at year three: 10,000 notes — 400 trashed, 200 pinned, 1,200 memos (notes about a person, the Journal's entries) — with a 48 KiB body on 600 of them, the largest body the product holds. `crates/apps/kit::fixtures::year3_notes`.",
     "year3-people": "The roster at year three: 5,000 people, 12,000 important dates, 20,000 interactions. `crates/apps/kit::fixtures::year3_people`. v0's own year-3 generator writes 5,000 `core_party` rows and no `people_profile` at all, so these reads had no artifact behind them before [#1020](https://github.com/srikanth235/centraid/issues/1020).",
     "year3-agenda": "The calendar at year three: 12,000 events, 800 recurring series, 1,200 exceptions. `crates/apps/kit::fixtures::year3_agenda`. It is the volume at which a six-month `upcoming` window genuinely reaches the 1,500-instance expansion cap, which is what makes the cap's error a real answer rather than a synthetic one.",
     "year3-tasks": "The board at year three: 12,000 tasks — 8,250 open, 3,750 closed, 800 cancelled. `crates/apps/kit::fixtures::year3_tasks`."
@@ -1584,6 +1584,39 @@
             "at": "2026-09-12",
             "host": "none — no measurement was taken; see `probe`",
             "note": "A frame budget at 60 Hz is 16.7 ms, and every mobile target here is derived from it rather than from v0's numbers: [#1020](https://github.com/srikanth235/centraid/issues/1020) rules the platform move STRUCTURAL, and the only handler timing on record (188 ms for Tally's dashboard at 2,000 expenses) was taken on a 4-core Node host and says nothing about a phone, so 'better than v0' is not a target this ledger can hold. 1.5 s from launch to a screen the member can act on, at the year-3 volume, is the ceiling a member experiences as 'it opened' rather than as a wait. It is stated at year-3 and not at an empty vault deliberately: a cold start measured on a fresh install is the one number that cannot catch an O(vault-size) regression, and v0's own ledger records that failure mode. The spans named here are V1 spans and do not exist yet: `core.call` is the Rust core's own ABI call span, `client.interaction` and `client.frame` are the shell spans v0's `packages/core/src/protocol/trace.ts` already declares, and `seat.apply` is the applier span it also declares. `consumers` is EMPTY on purpose — the v1 lane that will assert this ceiling does not exist, and naming a path that is not on disk is exactly what `bun run lint:journey-ledger` refuses. The consumer named in prose: the wave 3 device lane of [#1020](https://github.com/srikanth235/centraid/issues/1020) (a self-hosted macOS runner with both reference devices attached, R-1020-20), reported through Macrobenchmark on Android and XCTest metrics on iOS."
+          }
+        }
+      }
+    },
+    "gateway/app-read/year3-notes/ci-linux-x64-4c": {
+      "surface": "gateway",
+      "journey": "app-read",
+      "volume": "year3-notes",
+      "hardware": "ci-linux-x64-4c",
+      "spans": [],
+      "consumers": ["crates/apps/notes/tests/year3.rs"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "libraryFold": {
+          "status": "projected",
+          "probe": "cargo test -p centraid-apps-notes --test year3 -- --ignored --nocapture",
+          "_observedMs": 371,
+          "_basis": "One run on ci-linux-x64-4c under concurrent lanes, through the app crate's real query path over a vault seeded by `crates/apps/kit::fixtures::year3_notes`. PROJECTED in this ledger's sense and in D-1020-D3-7's: the number is observed, but one run on one contended container is not a distribution, and the target this journey exists to protect is stated on a reference DEVICE, which this host is not. Every number here is parked under a leading underscore so the ratchet cannot read it as a ceiling; the device lane of R-1020-20 is what promotes one.",
+          "_provenance": {
+            "at": "2026-10-21",
+            "host": "ci-linux-x64-4c, 4 vCPU / 15 GB, shared with concurrent lanes",
+            "note": "`library(limit=2000)` over the declared profile folds 1,943 live rows plus 200 trashed — the window is 2,000 recent notes less the memos among them (1,743), PLUS every pinned note, which are all older than the window. Rebuilt on the new model (#1135): one table at a time over the ids the window returned."
+          }
+        },
+        "editorOpenPull": {
+          "status": "projected",
+          "probe": "cargo test -p centraid-apps-notes --test year3 -- --ignored --nocapture",
+          "_observedMs": 1.5,
+          "_basis": "One run on ci-linux-x64-4c under concurrent lanes, through the app crate's real query path over a vault seeded by `crates/apps/kit::fixtures::year3_notes`. PROJECTED in this ledger's sense and in D-1020-D3-7's: the number is observed, but one run on one contended container is not a distribution, and the target this journey exists to protect is stated on a reference DEVICE, which this host is not. Every number here is parked under a leading underscore so the ratchet cannot read it as a ceiling; the device lane of R-1020-20 is what promotes one.",
+          "_provenance": {
+            "at": "2026-10-21",
+            "host": "ci-linux-x64-4c, 4 vCPU / 15 GB, shared with concurrent lanes",
+            "note": "The on-open pull over the largest body the product holds (48 KiB). This is the RUST half of the typing target only: the round trip the target is stated on runs through the editor's state machine in Kotlin, which has no Rust twin, and that half is an owner hand-off."
           }
         }
       }
