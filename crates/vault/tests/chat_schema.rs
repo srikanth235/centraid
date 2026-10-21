@@ -741,15 +741,18 @@ fn the_thread_carries_the_membership_triggers_and_the_mutable_columns() {
             "fts_chat_thread_au",
         ]
     );
-    // `mutable` ⇒ `updated_at` + `row_version` (the half no corpus test holds).
-    for column in ["updated_at", "row_version"] {
-        assert_eq!(
-            chats.count(&format!(
-                "SELECT COUNT(*) FROM pragma_table_info('chat_thread') WHERE name = '{column}'"
-            )),
-            1,
-            "chat_thread has no {column}"
-        );
+    // `mutable` ⇒ `updated_at` + `row_version` (the half no corpus test holds), for both mutable
+    // tables of the pack: a message settles in place (rung four, #1129, F-R-1).
+    for table in ["chat_thread", "chat_message"] {
+        for column in ["updated_at", "row_version"] {
+            assert_eq!(
+                chats.count(&format!(
+                    "SELECT COUNT(*) FROM pragma_table_info('{table}') WHERE name = '{column}'"
+                )),
+                1,
+                "{table} has no {column}"
+            );
+        }
     }
     // Every table of the pack is registered, and the projections say of what.
     let registered: Vec<&str> = centraid_ontology::registries::v0_registries()

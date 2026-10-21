@@ -244,6 +244,49 @@ pub fn baseline_statement(kind: &str, name: &str) -> String {
     body[..end].to_owned()
 }
 
+/// WIND A FILE BACK FROM RUNG FOUR TO RUNG THREE (#1129, F-R-1) by undoing the rung's own
+/// statements: `chat_message` is put back as rung one wrote it (no `updated_at`, no
+/// `row_version`, no touch trigger), every row kept, with its triggers as rung one wrote them.
+/// Foreign keys are turned off for the undo and back on after it (the bundled SQLite opens with
+/// them on), so dropping the message table cascades into neither child and the children are
+/// left as they are. The caller sets `user_version`.
+pub fn undo_rung_four(connection: &rusqlite::Connection) {
+    const TRIGGERS: [&str; 5] = [
+        "chat_message_is_not_born_settled",
+        "chat_message_outcome_settles_once",
+        "fts_chat_thread_from_chat_message_ad",
+        "fts_chat_thread_from_chat_message_ai",
+        "fts_chat_thread_from_chat_message_au",
+    ];
+    let foreign_keys: i64 = connection
+        .query_row("PRAGMA foreign_keys", [], |row| row.get(0))
+        .expect("the pragma reads");
+    let mut undo = vec![
+        "PRAGMA foreign_keys = OFF;".to_owned(),
+        "DROP TRIGGER chat_message_touch_updated_at;".to_owned(),
+    ];
+    undo.extend(TRIGGERS.map(|trigger| format!("DROP TRIGGER {trigger};")));
+    undo.push(
+        "CREATE TEMP TABLE chat_message_at_four AS SELECT * FROM main.chat_message;
+         DROP TABLE main.chat_message;"
+            .to_owned(),
+    );
+    undo.push(baseline_statement("table", "chat_message"));
+    undo.push(
+        "INSERT INTO chat_message
+           (thread_id, ordinal, role, text, outcome, refusal, notice, record_json, created_at)
+         SELECT thread_id, ordinal, role, text, outcome, refusal, notice, record_json, created_at
+           FROM temp.chat_message_at_four;
+         DROP TABLE temp.chat_message_at_four;"
+            .to_owned(),
+    );
+    undo.extend(TRIGGERS.map(|trigger| baseline_statement("trigger", trigger)));
+    undo.push(format!("PRAGMA foreign_keys = {foreign_keys};"));
+    connection
+        .execute_batch(&undo.join("\n"))
+        .expect("chat_message is put back as rung one wrote it");
+}
+
 /// WIND A FILE BACK FROM RUNG THREE TO RUNG TWO (#1129) by undoing the rung's own statements:
 /// the health tables and their touch triggers go, the seeded workout kinds and their entity rows
 /// go, and `core_activity` is rebuilt to the text rung one wrote (no `updated_at`, no

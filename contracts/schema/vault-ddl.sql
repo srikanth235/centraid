@@ -863,6 +863,8 @@ CREATE TABLE chat_message (
   notice      TEXT CHECK (notice IS NULL OR notice IN ('doc_truncated')),
   record_json TEXT CHECK (record_json IS NULL OR json_valid(record_json)),
   created_at  TEXT NOT NULL,
+  updated_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
   PRIMARY KEY (thread_id, ordinal),
   CHECK ((role = 'user') = (outcome = 'sent')),
   CHECK ((outcome = 'refused') = (refusal IS NOT NULL)),
@@ -2836,6 +2838,19 @@ BEGIN
    WHERE OLD.outcome <> 'proposed';
   SELECT RAISE(ABORT, 'a proposal settles as applied, dismissed, stale or failed')
    WHERE NEW.outcome NOT IN ('applied','dismissed','stale','failed');
+END;
+
+-- trigger chat_message_touch_updated_at on chat_message
+CREATE TRIGGER chat_message_touch_updated_at
+AFTER UPDATE ON chat_message
+WHEN NEW.row_version = OLD.row_version
+BEGIN
+  UPDATE chat_message
+     SET updated_at = CASE WHEN NEW.updated_at = OLD.updated_at
+                           THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+                           ELSE NEW.updated_at END,
+         row_version = OLD.row_version + 1
+   WHERE thread_id = NEW.thread_id AND ordinal = NEW.ordinal;
 END;
 
 -- trigger chat_thread_entity_delete on chat_thread
