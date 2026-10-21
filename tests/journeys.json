@@ -1653,6 +1653,50 @@
           }
         }
       }
+    },
+    "gateway/app-read/year3-agenda/ci-linux-x64-4c": {
+      "surface": "gateway",
+      "journey": "app-read",
+      "volume": "year3-agenda",
+      "hardware": "ci-linux-x64-4c",
+      "spans": [],
+      "consumers": ["crates/apps/agenda/tests/year3.rs"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "upcomingWindow": {
+          "status": "projected",
+          "probe": "cargo test -p centraid-apps-agenda --test year3 -- --ignored --nocapture",
+          "_observedMs": 51,
+          "_basis": "One run on ci-linux-x64-4c under concurrent lanes, through the app crate's real query path over a vault seeded by `crates/apps/kit::fixtures::year3_events`. PROJECTED in this ledger's sense and in D-1020-D3-7's: the number is observed, but one run on one contended container is not a distribution, and the target this journey exists to protect is stated on a reference DEVICE, which this host is not. Every number here is parked under a leading underscore so the ratchet cannot read it as a ceiling; the device lane of R-1020-20 is what promotes one.",
+          "_provenance": {
+            "at": "2026-10-21",
+            "host": "ci-linux-x64-4c, 4 vCPU / 15 GB, shared with concurrent lanes",
+            "note": "The product's default 45-day `upcoming` window over 9,860 live events (60 series, 2,000 all-day, 3,000 with guests) expands to 725 instances, under the 1,500-instance bound: a member with twice the series reaches it and is told so rather than shown a short agenda. Rebuilt on the new model (#1135): the window's ids are read with a wide fan-out, because a set past 64 ids through the whole-table walk overran its 4,000-row cap at 10,000 events."
+          }
+        }
+      }
+    },
+    "gateway/app-read/year3-tasks/ci-linux-x64-4c": {
+      "surface": "gateway",
+      "journey": "app-read",
+      "volume": "year3-tasks",
+      "hardware": "ci-linux-x64-4c",
+      "spans": [],
+      "consumers": ["crates/apps/tasks/tests/year3.rs"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "boardWindow": {
+          "status": "projected",
+          "probe": "cargo test -p centraid-apps-tasks --test year3 -- --ignored --nocapture",
+          "_observedMs": 56,
+          "_basis": "One run on ci-linux-x64-4c under concurrent lanes, through the app crate's real query path over a vault seeded by `crates/apps/kit::fixtures::year3_tasks`. PROJECTED in this ledger's sense and in D-1020-D3-7's: the number is observed, but one run on one contended container is not a distribution, and the target this journey exists to protect is stated on a reference DEVICE, which this host is not. Every number here is parked under a leading underscore so the ratchet cannot read it as a ceiling; the device lane of R-1020-20 is what promotes one.",
+          "_provenance": {
+            "at": "2026-10-21",
+            "host": "ci-linux-x64-4c, 4 vCPU / 15 GB, shared with concurrent lanes",
+            "note": "The board's 500-row window over 3,000 open and 12,000 closed tasks walks the newest 500 entities, folds subtasks under their parents (475 roots) and reads 50 logbook rows, `truncated` true from the walk's own cursor, not a count comparison."
+          }
+        }
+      }
     }
   },
   "rigs": {
