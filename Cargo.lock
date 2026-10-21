@@ -449,6 +449,7 @@ name = "centraid-apps-agenda"
 version = "1.0.0-alpha.0"
 dependencies = [
  "centraid-apps-kit",
+ "centraid-ontology",
  "centraid-search",
  "centraid-vault",
  "rusqlite",

@@ -698,7 +698,7 @@ pub const YEAR3_EVENTS: Year3EventsShape = Year3EventsShape {
 };
 
 /// What one Agenda seeding wrote.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Year3EventsCounts {
     /// Events not trashed (cancelled ones included).
     pub live: usize,
@@ -706,6 +706,8 @@ pub struct Year3EventsCounts {
     pub overrides: usize,
     pub cancelled: usize,
     pub trashed: usize,
+    /// The trashed events' ids, so a read's answer can be checked against them.
+    pub trashed_ids: Vec<String>,
     pub attendees: usize,
 }
 
@@ -820,6 +822,7 @@ pub fn year3_events(
         .map_err(door)?;
         if trashed {
             counts.trashed += 1;
+            counts.trashed_ids.push(row);
             continue;
         }
         counts.live += 1;

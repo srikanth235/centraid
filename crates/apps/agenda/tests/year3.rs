@@ -112,19 +112,15 @@ fn a_window_holds_its_days_expanded_series_and_no_trashed_event() {
         "a series is expanded inside the window"
     );
     // None of what the window holds is in the trash.
-    let trashed: i64 = world
-        .vault
-        .read(|connection| {
-            Ok(connection
-                .query_row(
-                    "SELECT count(*) FROM entity WHERE kind = 'event' AND deleted_at IS NOT NULL AND id IN (SELECT value FROM json_each(?1))",
-                    [serde_json::to_string(&seen.keys().collect::<Vec<_>>()).expect("json")],
-                    |row| row.get(0),
-                )
-                .expect("a count"))
-        })
-        .expect("a read");
-    assert_eq!(trashed, 0);
+    assert!(!world.counts.trashed_ids.is_empty());
+    assert!(
+        world
+            .counts
+            .trashed_ids
+            .iter()
+            .all(|id| !seen.contains_key(id.as_str())),
+        "a trashed event is on the agenda"
+    );
     // The window is ordered by start.
     assert!(
         events
