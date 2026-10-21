@@ -6,6 +6,8 @@ import dev.centraid.android.theme.centraidType
 import dev.centraid.android.kit.KitGeometry
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.runtime.setValue
 import androidx.compose.material3.Text
 import androidx.compose.foundation.layout.padding
@@ -25,7 +27,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import dev.centraid.android.kit.LocalShellLine
 import dev.centraid.shared.nav.RowRoutes
+import dev.centraid.android.kit.AndroidHealth
+import dev.centraid.android.kit.AndroidPhoneFollow
 import dev.centraid.android.kit.LocalPhoneImport
+import dev.centraid.android.kit.PhoneFollowSheet
 import dev.centraid.android.kit.ShellBanner
 import dev.centraid.android.screens.agenda.rememberCalendarImport
 import dev.centraid.android.screens.people.rememberContactsImport
@@ -40,6 +45,7 @@ import dev.centraid.android.screens.AppRoutes
 import dev.centraid.android.screens.RouteNav
 import dev.centraid.android.screens.agenda.AgendaRoutes
 import dev.centraid.android.screens.docs.DocsRoutes
+import dev.centraid.android.screens.health.HealthRoutes
 import dev.centraid.android.screens.locker.LockerRoutes
 import dev.centraid.android.screens.money.MoneyRoutes
 import dev.centraid.android.screens.notes.NotesRoutes
@@ -64,6 +70,7 @@ import centraid.screen.v1.HomeEvent
 import centraid.screen.v1.ImportSource
 import dev.centraid.shared.kit.KitWords
 import dev.centraid.shared.kit.PhoneImport
+import dev.centraid.shared.sync.phone.PhoneSource
 import dev.centraid.android.backup.MediaStoreDeleter
 import dev.centraid.android.backup.ProcessSession
 import dev.centraid.android.screens.backup.BackupSheets
@@ -142,10 +149,11 @@ public class MainActivity : FragmentActivity() {
             AgendaRoutes(),
             PhotosRoutes(cacheDir),
             NotesRoutes(),
-            DocsRoutes(),
+            DocsRoutes(onFollowed = { phoneFollow.requested(PhoneSource.FILES) }),
             PeopleRoutes(),
             TasksRoutes(),
             MoneyRoutes(),
+            HealthRoutes(health),
             locker,
             homeSearch,
         )
@@ -167,6 +175,18 @@ public class MainActivity : FragmentActivity() {
             it.camera = packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY)
         }
     }
+
+    /**
+     * ANDROID FOLLOWS THE PHONE (#1127): the foreground and content-observer triggers and the
+     * question an account that left asks. Started in `onStart`, stopped in `onStop`.
+     */
+    private val phoneFollow: AndroidPhoneFollow by lazy { AndroidPhoneFollow(this, health.reader) }
+
+    /**
+     * HEALTH CONNECT (#1129): the reader the follower and Health's Connect share, the member's
+     * chosen types, and the phone's facts Health's screens are stamped with. Read only.
+     */
+    private val health: AndroidHealth by lazy { AndroidHealth(this) }
 
     /** THE BACKUP SCREEN'S SHEET (#1080), over every screen. See `BackupSheets`. */
     private val backupSheet: BackupSheets by lazy { BackupSheets() }
@@ -199,6 +219,17 @@ public class MainActivity : FragmentActivity() {
     // is looking, close it when they leave. That shape left with the gateway;
     // what arriving and leaving do now is the backup's (#1080): `onResume`
     // runs a pass and `onStop` a pass with a snapshot, below.
+
+    /**
+     * THE PHONE IS FOLLOWED WHILE THE APP IS IN VIEW (#1127): see [AndroidPhoneFollow]. Health's
+     * facts are stated first (#1129) — a locale change re-makes the activity, so this is also
+     * where a new measurement system reaches the screens.
+     */
+    override fun onStart() {
+        super.onStart()
+        health.state()
+        phoneFollow.start()
+    }
 
     /**
      * THE FOREGROUND TRIGGER (#1029 W18-6).
@@ -235,6 +266,8 @@ public class MainActivity : FragmentActivity() {
      */
     override fun onStop() {
         super.onStop()
+        // EVERY STOP, a rotation's too: this activity's observers must not outlive it.
+        phoneFollow.stop()
         if (isChangingConfigurations) return
         val open = session ?: return
         kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
@@ -358,6 +391,7 @@ public class MainActivity : FragmentActivity() {
                         routes.forEach { it.attach(opened, scope) }
                         words.attach(opened, scope)
                         backupSheet.attach(opened)
+                        phoneFollow.attach(opened)
                         opened.installLibraryDeleter(libraryDeleter)
                         value = opened
                         // AND THE FIRST FOREGROUND PASS, which `onResume` would
@@ -369,6 +403,7 @@ public class MainActivity : FragmentActivity() {
                         kotlinx.coroutines.awaitCancellation()
                     } finally {
                         session = null
+                        phoneFollow.detach()
                         // CLEARED ONLY IF STILL THIS ACTIVITY'S: after a rotation
                         // the new activity may have installed its own first.
                         if (opened.libraryDeleter === libraryDeleter) opened.installLibraryDeleter(null)
@@ -406,11 +441,19 @@ public class MainActivity : FragmentActivity() {
                 // One door keyed by source, into the member's vault. Android has no system
                 // reminders: `importLabel` names no verb for them, so the
                 // door is never called with one.
-                val contactsImport = rememberContactsImport(homeSession) { sentence, holds ->
-                    shellNote = ShellNote(sentence, holds)
-                }
-                val calendarImport = rememberCalendarImport(homeSession) { sentence, holds ->
-                    shellNote = ShellNote(sentence, holds)
+                val contactsImport = rememberContactsImport(
+                    homeSession,
+                    onStatus = { sentence, holds -> shellNote = ShellNote(sentence, holds) },
+                    onImported = { phoneFollow.requested(PhoneSource.CONTACTS) },
+                )
+                val calendarImport = rememberCalendarImport(
+                    homeSession,
+                    onStatus = { sentence, holds -> shellNote = ShellNote(sentence, holds) },
+                    onImported = { phoneFollow.requested(PhoneSource.CALENDAR) },
+                )
+                // THE QUESTION AN ACCOUNT OR CALENDAR THAT LEFT THE PHONE ASKS (R-1127-9).
+                phoneFollow.question?.let { asked ->
+                    PhoneFollowSheet(asked) { keep -> phoneFollow.answer(asked, keep) }
                 }
                 val phoneImport: ((ImportSource) -> Unit)? =
                     remember(contactsImport, calendarImport, homeSession) {
@@ -459,6 +502,10 @@ public class MainActivity : FragmentActivity() {
                 Box(
                     Modifier
                         .fillMaxSize()
+                        // EVERY TEST TAG IS A RESOURCE ID (#1128, Q-1128-2): set once on the root
+                        // content, so Maestro's `id:` selectors see the Compose `testTag`s
+                        // (`mobile/maestro/flows/selectors.md`) as they see iOS identifiers.
+                        .semantics { testTagsAsResourceId = true }
                         .background(centraidColor(if (onStage) "stage" else "bg"))
                         .safeDrawingPadding(),
                 ) {

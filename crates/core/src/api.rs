@@ -82,7 +82,7 @@ pub const MAX_CONTENT_URLS: usize = 100;
 /// a table in `from`, and a door that reads any table by name is wider than any
 /// screen needs: it would page the receipts, the provenance log, the Locker's
 /// fields and passkeys, the money ledger and every revision snapshot for a
-/// shell that asked. So it reads these twenty and refuses the rest as an
+/// shell that asked. So it reads these twenty-six and refuses the rest as an
 /// invalid request, before the vault is asked.
 ///
 /// The set is every `from` a shell sends today, read off `mobile/shared`'s
@@ -96,6 +96,7 @@ pub const MAX_CONTENT_URLS: usize = 100;
 /// | Photos (grid, shelves, lightbox, collections, search, picker, places, memories, duplicates, album choice, editor) | `media_asset`, `media_asset_phash`, `media_memory`, `media_memory_member`, `core_collection`, `core_collection_entry`, `core_concept`, `core_concept_scheme`, `core_tag`, `core_place`, `core_content_item` |
 /// | Notes' editor | `knowledge_note` |
 /// | Calendar import | `schedule_calendar` |
+/// | Phone sync (People, Agenda and Docs follow the phone, #1127) | `phone_link`, `phone_origin`, `core_event`, `social_contact_channel`, `people_important_date` (a followed contact's birthday), `schedule_recurrence_exception` (a followed series' skipped and moved occurrences) (and `core_party`, `people_profile`, which People already pages) |
 /// | `with_minor_units` | `core_account` |
 ///
 /// `core_account` has no shell caller: it is the one table whose `currency`
@@ -114,11 +115,11 @@ pub const MAX_CONTENT_URLS: usize = 100;
 ///
 /// The `where` is held to the same list: it is predicate text and could name
 /// a subquery on any table, so the vault prepares it under an authorizer that
-/// refuses a read outside these twenty
+/// refuses a read outside these twenty-six
 /// ([`Vault::keyset_page_reading_only`]). The vault's test
 /// `a_predicate_that_reads_a_table_outside_the_list_is_refused` is where that
 /// is read: the predicates it tries are SQL, which lives in that crate.
-pub const PAGE_TABLES: [&str; 20] = [
+pub const PAGE_TABLES: [&str; 26] = [
     "core_account",
     "core_collection",
     "core_collection_entry",
@@ -126,6 +127,7 @@ pub const PAGE_TABLES: [&str; 20] = [
     "core_concept_scheme",
     "core_content_item",
     "core_document",
+    "core_event",
     "core_party",
     "core_place",
     "core_tag",
@@ -136,9 +138,14 @@ pub const PAGE_TABLES: [&str; 20] = [
     "media_asset_phash",
     "media_memory",
     "media_memory_member",
+    "people_important_date",
     "people_profile",
+    "phone_link",
+    "phone_origin",
     "schedule_calendar",
+    "schedule_recurrence_exception",
     "schedule_task",
+    "social_contact_channel",
 ];
 
 /// One page of rows, as the wire spells it.
@@ -551,8 +558,7 @@ pub fn found(
     }
     let founded = vault.found(&request.display_name, &request.owner_name)?;
     if content == wire::FoundContent::Starters {
-        let today = crate::starters::local_today(&request.tz, crate::example::now_ms());
-        let report = crate::starters::write(vault, registry, principal, &today);
+        let report = crate::starters::write(vault, registry, principal);
         if !report.is_whole() {
             tracing::warn!(refused = ?report.refused, "a starter row was refused");
         }
@@ -803,7 +809,7 @@ mod tests {
     /// Every table a screen pages, with a column that can key its cursor. Spelled
     /// here, not derived from the allowlist, so the allowlist cannot grow without
     /// this list (and the paragraph above it) being read.
-    const PAGED_BY_A_SCREEN: [(&str, &str); 20] = [
+    const PAGED_BY_A_SCREEN: [(&str, &str); 26] = [
         ("core_account", "account_id"),
         ("core_collection", "collection_id"),
         ("core_collection_entry", "entry_id"),
@@ -811,6 +817,7 @@ mod tests {
         ("core_concept_scheme", "scheme_id"),
         ("core_content_item", "content_id"),
         ("core_document", "document_id"),
+        ("core_event", "event_id"),
         ("core_party", "party_id"),
         ("core_place", "place_id"),
         ("core_tag", "tag_id"),
@@ -821,9 +828,14 @@ mod tests {
         ("media_asset_phash", "asset_id"),
         ("media_memory", "memory_id"),
         ("media_memory_member", "memory_id"),
+        ("people_important_date", "date_id"),
         ("people_profile", "profile_id"),
+        ("phone_link", "link_id"),
+        ("phone_origin", "origin_id"),
         ("schedule_calendar", "calendar_id"),
+        ("schedule_recurrence_exception", "exception_id"),
         ("schedule_task", "task_id"),
+        ("social_contact_channel", "channel_id"),
     ];
 
     #[test]
@@ -882,6 +894,367 @@ mod tests {
                 panic!("`{table}` is paged by a screen and was refused: {error}")
             });
         }
+        let _ = std::fs::remove_dir_all(&scratch);
+    }
+
+    /// THE PHONE LINK PAGES THROUGH THE DOOR (#1127, lane A): the sync engine reads every link of
+    /// a source, in the phone's own id order, with a keyset cursor, and the predicate it writes
+    /// (`source = ?`) reads only `phone_link`.
+    #[test]
+    fn the_phone_link_pages_by_source_through_the_door() {
+        let scratch = centraid_ontology::golden::scratch_dir();
+        std::fs::create_dir_all(&scratch).expect("made");
+        let vault = Vault::create(scratch.join("v.db")).expect("a vault");
+        vault.found("T", "O").expect("founded");
+        let registry = Registry::with_system_commands().expect("the registry");
+        let owner = centraid_vault::Principal::owner("test-device");
+        let run = |name: &str, input: serde_json::Value| {
+            let outcome = vault
+                .execute(&registry, &owner, &Command::new(name, input))
+                .expect("the command answers");
+            assert_eq!(
+                outcome.status,
+                CommandStatus::Executed,
+                "{name}: {:?}",
+                outcome.reason
+            );
+            outcome.output
+        };
+        let origin = run(
+            "phone.origin",
+            serde_json::json!({ "source": "contacts", "device_id": "device-a", "phone_origin": "acct:1", "label": "Main" }),
+        )["origin_id"]
+            .clone();
+        for (phone_id, name) in [("c3", "Cy"), ("c1", "Ada"), ("c2", "Bo")] {
+            let person = run(
+                "people.add_person",
+                serde_json::json!({ "display_name": name, "cadence_days": 30 }),
+            );
+            run(
+                "phone.link",
+                serde_json::json!({
+                    "source": "contacts", "phone_id": phone_id, "device_id": "device-a", "origin_id": origin,
+                    "entity_id": person["party_id"], "fingerprint": format!("fp-{phone_id}"),
+                }),
+            );
+        }
+
+        let text = |value: &str| wire::Value {
+            kind: Some(wire::value::Kind::Text(value.to_owned())),
+        };
+        let mut asked = query(
+            &[
+                "link_id",
+                "phone_id",
+                "entity_id",
+                "fingerprint",
+                "detached_at",
+            ],
+            "phone_id",
+            "link_id",
+        );
+        asked.from = "phone_link".to_owned();
+        asked.r#where = Some("source = ?".to_owned());
+        asked.bind = vec![text("contacts")];
+        let phone_ids = |page: &wire::Page| -> Vec<String> {
+            page.rows
+                .iter()
+                .map(|row| match &row.values[1].kind {
+                    Some(wire::value::Kind::Text(id)) => id.clone(),
+                    other => panic!("a phone id is text, got {other:?}"),
+                })
+                .collect()
+        };
+
+        let first = page(
+            &vault,
+            &wire::PageRequest {
+                query: Some(asked.clone()),
+                limit: 2,
+                after: None,
+            },
+        )
+        .expect("the links page");
+        assert_eq!(phone_ids(&first), ["c1", "c2"], "ordered by the phone's id");
+        assert!(
+            matches!(
+                first.rows[0].values[4].kind,
+                Some(wire::value::Kind::Null(_))
+            ),
+            "a followed link has no detached_at"
+        );
+        let second = page(
+            &vault,
+            &wire::PageRequest {
+                query: Some(asked.clone()),
+                limit: 2,
+                after: first.next.clone(),
+            },
+        )
+        .expect("the next page");
+        assert_eq!(phone_ids(&second), ["c3"]);
+        assert!(second.next.is_none(), "the rows ended");
+
+        // Another source's links are not in this page. (A predicate that reaches a table off the
+        // list is refused by the vault's authorizer; its test is in `crates/vault/src/page.rs`.)
+        asked.bind = vec![text("calendar")];
+        let none = page(
+            &vault,
+            &wire::PageRequest {
+                query: Some(asked.clone()),
+                limit: 10,
+                after: None,
+            },
+        )
+        .expect("a source with no links pages empty");
+        assert!(none.rows.is_empty());
+        let _ = std::fs::remove_dir_all(&scratch);
+    }
+
+    /// THE TWO READS A FOLLOWED CONTACT AND A FOLLOWED SERIES ADD (#1127, lane C): a person's
+    /// birthday dates and a series' occurrence exceptions page through the door with the exact
+    /// predicates the stores write, including the `lower(...) LIKE` and the event-scoped bind.
+    #[test]
+    fn a_followed_birthday_and_a_followed_exception_page_through_the_door() {
+        let scratch = centraid_ontology::golden::scratch_dir();
+        std::fs::create_dir_all(&scratch).expect("made");
+        let vault = Vault::create(scratch.join("v.db")).expect("a vault");
+        vault.found("T", "O").expect("founded");
+        let registry = Registry::with_system_commands().expect("the registry");
+        let owner = centraid_vault::Principal::owner("test-device");
+        let run = |name: &str, input: serde_json::Value| {
+            let outcome = vault
+                .execute(&registry, &owner, &Command::new(name, input))
+                .expect("the command answers");
+            assert_eq!(
+                outcome.status,
+                CommandStatus::Executed,
+                "{name}: {:?}",
+                outcome.reason
+            );
+            outcome.output
+        };
+        let text = |value: &str| wire::Value {
+            kind: Some(wire::value::Kind::Text(value.to_owned())),
+        };
+        let cell = |value: &wire::Value| match &value.kind {
+            Some(wire::value::Kind::Text(text)) => text.clone(),
+            other => panic!("a text cell, got {other:?}"),
+        };
+
+        // A BIRTHDAY, AND A DATE THAT IS NOT ONE.
+        let person = run(
+            "people.add_person",
+            serde_json::json!({ "display_name": "Ada", "cadence_days": 30 }),
+        )["party_id"]
+            .as_str()
+            .expect("a party id")
+            .to_owned();
+        run(
+            "people.add_important_date",
+            serde_json::json!({ "party_id": person, "label": "Birthday", "month_day": "12-10" }),
+        );
+        run(
+            "people.add_important_date",
+            serde_json::json!({ "party_id": person, "label": "Anniversary", "month_day": "03-02" }),
+        );
+        let mut dates = query(&["date_id", "party_id", "month_day"], "date_id", "date_id");
+        dates.from = "people_important_date".to_owned();
+        dates.r#where = Some(
+            "party_id = ? AND lower(label) LIKE '%birthday%' AND deleted_at IS NULL".to_owned(),
+        );
+        dates.bind = vec![text(&person)];
+        let birthdays = page(
+            &vault,
+            &wire::PageRequest {
+                query: Some(dates),
+                limit: 10,
+                after: None,
+            },
+        )
+        .expect("the birthdays page");
+        assert_eq!(birthdays.rows.len(), 1, "only the birthday");
+        assert_eq!(cell(&birthdays.rows[0].values[2]), "12-10");
+
+        // A SERIES' EXCEPTION, scoped to the event.
+        let mut calendars = query(&["calendar_id"], "calendar_id", "calendar_id");
+        calendars.from = "schedule_calendar".to_owned();
+        let calendar = cell(
+            &page(
+                &vault,
+                &wire::PageRequest {
+                    query: Some(calendars),
+                    limit: 1,
+                    after: None,
+                },
+            )
+            .expect("the calendars page")
+            .rows[0]
+                .values[0],
+        );
+        let event = run(
+            "schedule.propose_event",
+            serde_json::json!({
+                "summary": "Standup", "calendar_id": calendar, "tz": "UTC",
+                "dtstart": "2026-10-05T09:00:00", "dtend": "2026-10-05T09:30:00",
+                "rrule": "FREQ=WEEKLY;BYDAY=MO",
+            }),
+        )["event_id"]
+            .as_str()
+            .expect("an event id")
+            .to_owned();
+        run(
+            "schedule.edit_event_occurrence",
+            serde_json::json!({
+                "event_id": event, "original_start_local": "2026-10-19T09:00:00",
+                "scope": "occurrence", "action": "skip",
+            }),
+        );
+        let mut exceptions = query(
+            &[
+                "exception_id",
+                "target_id",
+                "original_start_local",
+                "scope",
+                "action",
+                "override_json",
+            ],
+            "exception_id",
+            "exception_id",
+        );
+        exceptions.from = "schedule_recurrence_exception".to_owned();
+        exceptions.r#where = Some("target_type = 'core.event' AND target_id = ?".to_owned());
+        exceptions.bind = vec![text(&event)];
+        let held = page(
+            &vault,
+            &wire::PageRequest {
+                query: Some(exceptions.clone()),
+                limit: 10,
+                after: None,
+            },
+        )
+        .expect("the exceptions page");
+        assert_eq!(held.rows.len(), 1);
+        assert_eq!(cell(&held.rows[0].values[2]), "2026-10-19T09:00:00");
+        assert_eq!(cell(&held.rows[0].values[4]), "skip");
+        // Another event's exceptions are not in it.
+        exceptions.bind = vec![text("another-event")];
+        let none = page(
+            &vault,
+            &wire::PageRequest {
+                query: Some(exceptions),
+                limit: 10,
+                after: None,
+            },
+        )
+        .expect("an event with none pages empty");
+        assert!(none.rows.is_empty());
+        let _ = std::fs::remove_dir_all(&scratch);
+    }
+
+    /// THE DOCUMENT READ AND THE ONE REVISION A FOLLOWED FOLDER MAKES (#1127, lane F): `FilesStore`
+    /// pages documents through the door, and a changed file is `core.replace_document_content`:
+    /// the same document, a new head, a new revision. Its head-hash subquery is held in
+    /// `crates/vault/src/page.rs` (`a_followed_folders_head_hash_subquery_answers`).
+    #[test]
+    fn a_followed_folder_reads_its_documents_and_a_change_is_a_revision() {
+        let scratch = centraid_ontology::golden::scratch_dir();
+        std::fs::create_dir_all(&scratch).expect("made");
+        let vault = Vault::create(scratch.join("v.db")).expect("a vault");
+        vault.found("T", "O").expect("founded");
+        let registry = Registry::with_system_commands().expect("the registry");
+        let owner = centraid_vault::Principal::owner("test-device");
+        let run = |name: &str, input: serde_json::Value| {
+            let outcome = vault
+                .execute(&registry, &owner, &Command::new(name, input))
+                .expect("the command answers");
+            assert_eq!(
+                outcome.status,
+                CommandStatus::Executed,
+                "{name}: {:?}",
+                outcome.reason
+            );
+            outcome.output
+        };
+        let text = |value: &str| wire::Value {
+            kind: Some(wire::value::Kind::Text(value.to_owned())),
+        };
+        let cell = |value: &wire::Value| match &value.kind {
+            Some(wire::value::Kind::Text(text)) => text.clone(),
+            None | Some(wire::value::Kind::Null(_)) => String::new(),
+            other => panic!("a text cell, got {other:?}"),
+        };
+        let add = |title: &str, uri: &str| {
+            run(
+                "core.add_document",
+                serde_json::json!({ "title": title, "data_uri": uri }),
+            )["document_id"]
+                .as_str()
+                .expect("a document id")
+                .to_owned()
+        };
+        let notes = add("notes.txt", "data:text/plain,one");
+        let other = add("other.txt", "data:text/plain,elsewhere");
+
+        // THE STORE'S DOCUMENT READ, as `FilesStore.read` writes it, for one document. Its
+        // head-hash subquery is held in `crates/vault/src/page.rs`, where SQL may be written.
+        let documents_of = |only: &str| {
+            let mut documents = query(
+                &[
+                    "document_id",
+                    "title",
+                    "current_content_id",
+                    "deleted_at",
+                    "current_revision_id",
+                ],
+                "document_id",
+                "document_id",
+            );
+            documents.from = "core_document".to_owned();
+            documents.r#where = Some("document_id = ?".to_owned());
+            documents.bind = vec![text(only)];
+            page(
+                &vault,
+                &wire::PageRequest {
+                    query: Some(documents),
+                    limit: 10,
+                    after: None,
+                },
+            )
+            .expect("the documents page")
+        };
+        let before = documents_of(&notes);
+        assert_eq!(before.rows.len(), 1);
+        assert_eq!(cell(&before.rows[0].values[1]), "notes.txt");
+        assert_eq!(cell(&before.rows[0].values[3]), "", "live");
+        let (head, revision) = (
+            cell(&before.rows[0].values[2]),
+            cell(&before.rows[0].values[4]),
+        );
+        assert!(!head.is_empty() && !revision.is_empty());
+        assert_ne!(
+            cell(&documents_of(&other).rows[0].values[2]),
+            head,
+            "another document's head is not this one's"
+        );
+
+        // A CHANGED FILE: the same document, a new head, a new revision of it.
+        run(
+            "core.replace_document_content",
+            serde_json::json!({ "document_id": notes, "data_uri": "data:text/plain,two" }),
+        );
+        let after = documents_of(&notes);
+        assert_eq!(after.rows.len(), 1, "still one document");
+        assert_ne!(
+            cell(&after.rows[0].values[2]),
+            head,
+            "the head moved to the new bytes"
+        );
+        assert_ne!(
+            cell(&after.rows[0].values[4]),
+            revision,
+            "the change is a new revision of the same document"
+        );
         let _ = std::fs::remove_dir_all(&scratch);
     }
 

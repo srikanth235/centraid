@@ -17,39 +17,75 @@ import CentraidShared
 //
 // 1. **AN ASSET GOES WHOLE, OR NOT AT ALL.** A Live Photo is two rows in the
 //    vault: the still under the asset's `localIdentifier`, and its movie under
-//    the same identifier plus `#pairedVideo` (`IosMediaLibrary`'s
-//    `PAIRED_VIDEO`, which this file must spell the same way). Deleting the
-//    asset deletes both, so a Live Photo goes only when the core offered both
-//    rows, and an asset never goes on its movie's row alone.
-// 2. **AN ASSET EDITED SINCE IT WAS BACKED UP IS KEPT.** The core never offers
-//    an asset it staged as edited (A20), but the member may have edited one
-//    since: the gateway then holds the rendition before the edit, and deleting
-//    would lose the edit. `hasAdjustments` is read here, at deletion time.
+//    the same identifier plus `#pairedVideo` (`LibraryRefs.PAIRED_VIDEO`, which
+//    this file must spell the same way). Deleting the asset deletes both, so a
+//    Live Photo goes only when the core offered both rows, and an asset never
+//    goes on its movie's row alone.
+// 2. **AN EDITED ASSET GOES ONLY WHEN THE GATEWAY HAS THE VERSION THE LIBRARY
+//    HOLDS NOW** (A20(3)). The rendition's ref names the `modificationDate` it
+//    was read at (`<identifier>#r<millis>`); an asset with `hasAdjustments` is
+//    released only when one of the offered refs names the version now. An edit
+//    made since the backup, or any change that moved the date and was not
+//    walked in yet, leaves the asset where it is: the gateway then holds the
+//    render before it, and deleting would lose the edit. An asset that is not
+//    edited now goes on the camera's own row: its bare identifier, or its
+//    `#camera` row when the member reverted an edit. This replaces the blanket
+//    `hasAdjustments` keep; the camera original the edit sits on is a row of
+//    its own in the vault, so what an edit replaced is not lost either.
 // 3. **WHAT IS REPORTED IS WHAT THIS REQUEST REMOVED.** On a yes every asset
 //    in the request is gone, and the hashes reported are exactly its rows. The
 //    member's no is `declined`; any other failure is `error`, with nothing
 //    reported deleted. An offered asset the library no longer shows — deleted
 //    in Photos meanwhile, or outside a limited selection — is not reported:
 //    its absence is not proof that this request removed it.
+//
+// Nothing here mirrors a deletion INTO the vault (R-1127-4): the vault is the
+// photograph's backup, and this is only the member's own Free up space.
 
 /// The pure half, so a test can show each rule refuse without the library.
+/// Its ref spellings are `LibraryRefs` (commonMain), restated.
 enum LibraryDeletion {
-    /// `IosMediaLibrary`'s `PAIRED_VIDEO`: the suffix a Live Photo's movie row carries.
+    /// `LibraryRefs.PAIRED_VIDEO`: the suffix a Live Photo's movie row carries.
     static let pairedVideoSuffix = "#pairedVideo"
+    /// `LibraryRefs.CAMERA`: the camera's own file under an edit.
+    static let cameraSuffix = "#camera"
+    /// `LibraryRefs`' rendition marker: `<identifier>#r<millis>`.
+    static let renditionMarker = "#r"
 
-    /// The asset an `os_ref` names: the identifier, with a movie's suffix removed.
+    /// The asset an `os_ref` names: everything before the first `#`.
     static func assetIdentifier(of ref: String) -> String {
-        ref.hasSuffix(pairedVideoSuffix) ? String(ref.dropLast(pairedVideoSuffix.count)) : ref
+        ref.split(separator: "#", maxSplits: 1, omittingEmptySubsequences: false).first.map(String.init) ?? ref
+    }
+
+    /// The version a rendition's ref was read at, or nil for any other ref.
+    static func witness(of ref: String) -> Int64? {
+        guard let marker = ref.range(of: renditionMarker) else { return nil }
+        return Int64(ref[marker.upperBound...])
+    }
+
+    /// `modificationDate` as `IosMediaLibrary` writes it into a ref: epoch
+    /// milliseconds, truncated; a missing date reads as zero.
+    static func modifiedMillis(_ date: Date?) -> Int64 {
+        guard let date else { return 0 }
+        return Int64(date.timeIntervalSince1970 * 1_000.0)
     }
 
     /// RULES 1 AND 2: whether the asset [identifier] may be deleted, given the
-    /// rows the core offered, whether it is edited now, and whether it is live.
-    static func mayDelete(identifier: String, offered: Set<String>, edited: Bool, live: Bool) -> Bool {
-        guard !edited, offered.contains(identifier) else { return false }
-        return !live || offered.contains(identifier + pairedVideoSuffix)
+    /// rows the core offered, whether it is edited now, the version it is at
+    /// now ([modified], see [modifiedMillis]), and whether it is live.
+    static func mayDelete(identifier: String, offered: Set<String>, edited: Bool, modified: Int64, live: Bool) -> Bool {
+        let mine = offered.filter { assetIdentifier(of: $0) == identifier }
+        let stills = mine.filter { !$0.hasSuffix(pairedVideoSuffix) }
+        guard !stills.isEmpty else { return false }
+        if edited {
+            guard stills.contains(where: { witness(of: $0) == modified }) else { return false }
+        } else {
+            guard stills.contains(identifier) || stills.contains(identifier + cameraSuffix) else { return false }
+        }
+        return !live || mine.contains(identifier + pairedVideoSuffix)
     }
 
-    /// What a finished request came to.
+/// What a finished request came to.
     enum Answer: Equatable {
         case deleted
         case declined
@@ -101,6 +137,7 @@ final class PhotoLibraryDeleter: NSObject, LibraryDeleter {
                 identifier: asset.localIdentifier,
                 offered: offered,
                 edited: asset.hasAdjustments,
+                modified: LibraryDeletion.modifiedMillis(asset.modificationDate),
                 live: asset.mediaSubtypes.contains(.photoLive)
             )
             guard allowed else { return }

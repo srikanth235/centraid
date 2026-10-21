@@ -280,18 +280,55 @@ public class FakeMediaLibrary(
         return grant
     }
 
+    private val reported = mutableListOf<Pair<MediaLibrary.Asset, Boolean>>()
+
+    /**
+     * What the library says changed after the walk, as iOS's change token
+     * does (A20): [inserted] says the asset was ADDED, otherwise it was only
+     * UPDATED — a favourite, an album, or an edit (an item [MediaLibrary.Asset.changedInPlace]
+     * is an update the platform already knows is a change). The walk finds these once
+     * the keyset has nothing left, offers the ones [LibraryRefs.worthOffering]
+     * says are worth it, and its cursor moves past all of them.
+     */
+    public fun reportChange(asset: MediaLibrary.Asset, inserted: Boolean = false) {
+        reported += asset to inserted
+    }
+
     override suspend fun page(afterCursor: String?, limit: Int): MediaLibrary.Page {
+        val changed = afterCursor?.takeIf { it.startsWith(CHANGE_WALK) }
+        if (changed != null) return changePage(changed.removePrefix(CHANGE_WALK).toIntOrNull() ?: 0, limit)
         // Keyset over the local id, as a real enumeration must be: a camera
         // roll grows while it is being read, and an offset would skip or repeat.
         val start = afterCursor?.let { cursor ->
             assets.indexOfFirst { it.localId == cursor } + 1
         } ?: 0
         val window = assets.drop(start).take(limit).map { it.copy(after = it.localId) }
+        if (window.isEmpty() && reported.isNotEmpty()) return changePage(0, limit)
         return MediaLibrary.Page(
             assets = window,
             nextCursor = window.lastOrNull()?.localId ?: afterCursor,
             exhausted = start + window.size >= assets.size,
         )
+    }
+
+    private fun changePage(offered: Int, limit: Int): MediaLibrary.Page {
+        val window = reported.drop(offered).take(limit)
+        val offer = window.mapIndexedNotNull { at, (asset, inserted) ->
+            if (!LibraryRefs.worthOffering(inserted, asset.edited || asset.changedInPlace)) {
+                null
+            } else {
+                asset.copy(after = "$CHANGE_WALK${offered + at + 1}")
+            }
+        }
+        return MediaLibrary.Page(
+            assets = offer,
+            nextCursor = "$CHANGE_WALK${offered + window.size}",
+            exhausted = offered + window.size >= reported.size,
+        )
+    }
+
+    private companion object {
+        const val CHANGE_WALK = "c|"
     }
 }
 

@@ -54,11 +54,13 @@ pub mod chat;
 pub mod core;
 pub mod core_links;
 mod event_time;
+pub mod health;
 pub mod knowledge;
 pub mod locker;
 pub mod media;
 pub mod money;
 pub mod people;
+pub mod phone;
 pub mod schedule;
 pub mod social;
 mod wikilinks;
@@ -293,6 +295,9 @@ impl Registry {
         for definition in core_links::definitions() {
             registry.register(definition)?;
         }
+        for definition in health::definitions() {
+            registry.register(definition)?;
+        }
         for definition in knowledge::definitions() {
             registry.register(definition)?;
         }
@@ -306,6 +311,9 @@ impl Registry {
             registry.register(definition)?;
         }
         for definition in people::definitions() {
+            registry.register(definition)?;
+        }
+        for definition in phone::definitions() {
             registry.register(definition)?;
         }
         for definition in schedule::definitions() {

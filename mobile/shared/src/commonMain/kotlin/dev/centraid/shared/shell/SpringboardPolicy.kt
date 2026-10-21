@@ -31,10 +31,12 @@ public object SpringboardPolicy {
     public val SPRINGBOARD_ORDER: List<String> = listOf(
         "photos",
         "docs",
-        "notes",
+        // WIDE TILES FIRST, so the packer never has to pull a small forward:
+        // Agenda went wide with its due line (#1128).
         "agenda",
-        "tasks",
+        "notes",
         "money",
+        "health",
         "people",
         "locker",
     )
@@ -44,15 +46,19 @@ public object SpringboardPolicy {
      * area, prose needs measure, a figure or a chip needs neither.
      */
     private val TILE_SIZE: Map<String, TileSize> = mapOf(
-        "agenda" to TileSize.TILE_SIZE_SMALL,
+        // TWO LINES OF PROSE since Tasks folded in (#1128): the next event and
+        // today's due tasks, which a half width truncated. Wide, it also leaves
+        // the four smalls to pair, where five left one on its own.
+        "agenda" to TileSize.TILE_SIZE_MEDIUM,
         "docs" to TileSize.TILE_SIZE_MEDIUM,
-        // Notes' body IS the Docs preview body, and the class follows the body.
-        "notes" to TileSize.TILE_SIZE_MEDIUM,
+        "health" to TileSize.TILE_SIZE_SMALL,
+        // A SHELF NEEDS NO MEASURE: three notebook names and one title, each a
+        // single line (`HomeNotesTile`).
+        "notes" to TileSize.TILE_SIZE_SMALL,
         "locker" to TileSize.TILE_SIZE_SMALL,
         "money" to TileSize.TILE_SIZE_SMALL,
         "people" to TileSize.TILE_SIZE_SMALL,
         "photos" to TileSize.TILE_SIZE_LARGE,
-        "tasks" to TileSize.TILE_SIZE_SMALL,
     )
 
     /** An app with no first-party tile (a gateway app) takes the 1x1. */
@@ -137,12 +143,12 @@ public object SpringboardPolicy {
     public val TILE_EMPTY_COPY: Map<String, String> = mapOf(
         "agenda" to "Put something on the calendar",
         "docs" to "Add your first document",
+        "health" to "Connect your health app",
         "locker" to "Unlock to see your items",
         "money" to "Import your first statement",
         "notes" to "Write your first note",
         "people" to "Add someone you know",
         "photos" to "Import your first photo",
-        "tasks" to "Capture the next thing to do",
     )
 
     /**

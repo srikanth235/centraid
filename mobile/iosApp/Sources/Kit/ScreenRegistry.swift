@@ -32,6 +32,10 @@ protocol AppScreens {
     /// OS prompt a lock asks for, the platform sheets a bridge's seam
     /// presents. `nil` for an app with nothing there.
     @MainActor static func global(_ shell: ShellModel) -> AnyView?
+    /// THE SCREEN-ID PREFIXES THIS APP HOSTS. An app's own screens carry its id
+    /// (`agenda.event`); Agenda also hosts the task pages (`tasks.detail`,
+    /// #1128, R-1128-5), which keep their `tasks.` ids.
+    static var screenPrefixes: [String] { get }
     /// HOW A SCREEN THE SHARED SIDE NAMED IS PUSHED (`ScreenOpening`): the id and
     /// the event that screen opens by. Nearly always the event is the route's
     /// parameter as it stands; an app whose parameter wraps it (Money's nonce)
@@ -40,6 +44,7 @@ protocol AppScreens {
 }
 
 extension AppScreens {
+    static var screenPrefixes: [String] { [appID + "."] }
     @MainActor static func global(_ shell: ShellModel) -> AnyView? { nil }
     static func present(_ screen: String, _ opened: Data) -> ShellModel.Route { .screen(screen, opened) }
 }
@@ -49,21 +54,23 @@ enum AppRegistry {
     static let apps: [any AppScreens.Type] = [
         NotesScreens.self,
         AgendaScreens.self,
-        TasksScreens.self,
         PeopleScreens.self,
         DocsScreens.self,
         LockerScreens.self,
         MoneyScreens.self,
+        HealthScreens.self,
     ]
 
     static func tileRoute(_ tile: Centraid_Screen_V1_HomeTile) -> ShellModel.Route? {
         apps.first { $0.appID == tile.appID }?.tileRoute(tile)
     }
 
-    /// A screen id's app is its prefix (`tasks.detail` is Tasks'); a screen no app
-    /// claims is pushed as it stands.
+    /// A screen id's app is the one hosting its prefix (`tasks.detail` is
+    /// Agenda's); a screen no app claims is pushed as it stands.
     static func present(_ screen: String, _ opened: Data) -> ShellModel.Route {
-        guard let app = apps.first(where: { screen.hasPrefix($0.appID + ".") }) else { return .screen(screen, opened) }
+        guard let app = apps.first(where: { app in app.screenPrefixes.contains { screen.hasPrefix($0) } }) else {
+            return .screen(screen, opened)
+        }
         return app.present(screen, opened)
     }
 }

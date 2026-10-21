@@ -50,7 +50,6 @@ import dev.centraid.shared.apps.notes.NotesLinkPickerReads
 import dev.centraid.shared.apps.notes.NotesNotebooksMachine
 import dev.centraid.shared.apps.notes.NotesNotebooksReads
 import dev.centraid.shared.apps.notes.NotesRouting
-import dev.centraid.shared.apps.notes.NotesTarget
 import dev.centraid.shared.apps.notes.NotesTrashMachine
 import dev.centraid.shared.apps.notes.NotesTrashReads
 import dev.centraid.shared.nav.Destination
@@ -1024,16 +1023,17 @@ class NotesAppSpec : StringSpec({
 
     // --- Routing -----------------------------------------------------------
 
-    "routing: the tile's note, else a new note, and nothing while loading" {
+    "routing: the tile's shelf opens the Notes place, else a new note, and nothing while loading" {
         val mint = { "minted" }
-        NotesRouting.target(
+        NotesRouting.tile(
             HomeTile(app_id = "notes", status = TileStatus.TILE_STATUS_CONTENT, body = TileBody(notes = TileBody.Notes(note_id = "n-9", title = "Hi"))),
             mint,
-        ) shouldBe NotesTarget.Existing("n-9", "Hi")
-        NotesRouting.target(HomeTile(app_id = "notes", status = TileStatus.TILE_STATUS_EMPTY), mint) shouldBe NotesTarget.New("minted")
-        NotesRouting.target(null, mint) shouldBe NotesTarget.New("minted")
-        NotesRouting.target(HomeTile(app_id = "notes", status = TileStatus.TILE_STATUS_LOADING), mint).shouldBeNull()
-        NotesRouting.target(HomeTile(app_id = "notes", status = TileStatus.TILE_STATUS_UNKNOWN), mint).shouldBeNull()
+        ) shouldBe Destination.NotesLibrary()
+        NotesRouting.tile(HomeTile(app_id = "notes", status = TileStatus.TILE_STATUS_EMPTY), mint) shouldBe
+            Destination.NotesEditor("minted", isNew = true)
+        NotesRouting.tile(null, mint) shouldBe Destination.NotesEditor("minted", isNew = true)
+        NotesRouting.tile(HomeTile(app_id = "notes", status = TileStatus.TILE_STATUS_LOADING), mint).shouldBeNull()
+        NotesRouting.tile(HomeTile(app_id = "notes", status = TileStatus.TILE_STATUS_UNKNOWN), mint).shouldBeNull()
         // The id is the shape `create_note` takes.
         NotesRouting.mintNoteId().matches(Regex("^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")) shouldBe true
     }

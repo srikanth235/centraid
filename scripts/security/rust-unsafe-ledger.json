@@ -5,6 +5,7 @@
     "crates/api-proto": 0,
     "crates/apps/agenda": 0,
     "crates/apps/docs": 0,
+    "crates/apps/health": 0,
     "crates/apps/kit": 0,
     "crates/apps/locker": 0,
     "crates/apps/money": 0,

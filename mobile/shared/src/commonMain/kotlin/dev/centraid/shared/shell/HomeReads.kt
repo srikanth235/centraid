@@ -3,17 +3,14 @@ package dev.centraid.shared.shell
 import centraid.core.v1.PageOrder
 import centraid.core.v1.PageQuery
 import centraid.core.v1.Row
-import centraid.core.v1.Value
 import centraid.screen.v1.HomeEvent
 import centraid.screen.v1.TileBody
 import centraid.screen.v1.TileCount
 import centraid.screen.v1.TileStatus
 import dev.centraid.design.copy.DocsCopy
 import dev.centraid.design.copy.LockerCopy
-import dev.centraid.design.copy.NotesCopy
 import dev.centraid.design.copy.PeopleCopy
 import dev.centraid.design.copy.PhotosCopy
-import dev.centraid.design.copy.TasksCopy
 import dev.centraid.shared.design.PartyHueWheel
 
 /**
@@ -87,9 +84,6 @@ public object HomeReads {
 
     /** The trash predicate every soft-deleting table's tile read carries. */
     private const val NOT_TRASHED: String = "deleted_at IS NULL"
-
-    /** `schedule_task.status`'s two open values, from the DDL's CHECK. */
-    private val OPEN_TASK_STATUSES: List<String> = listOf("needs-action", "in-process")
 
     /**
      * One app's read: the statement, and the nouns its count is spoken with.
@@ -184,40 +178,11 @@ public object HomeReads {
             countOne = DocsCopy.DOCUMENT_ONE,
             countMany = DocsCopy.DOCUMENT_MANY,
         ),
-        TileRead(
-            appId = "notes",
-            query = PageQuery(
-                name = "home.notes",
-                select = listOf("note_id", "title", "updated_at"),
-                from = "knowledge_note",
-                // Notes' own filter (`NotesReads`), for the Docs tile's reason.
-                where_ = NOT_TRASHED,
-                order = order("updated_at", "note_id"),
-            ),
-            countOne = NotesCopy.TILE_COUNT_ONE,
-            countMany = NotesCopy.TILE_COUNT_MANY,
-        ),
-        // AGENDA IS NOT A PAGE READ (#1046). Its tile is the next occurrence
-        // of whatever repeats, which only the core's recurrence engine can
-        // answer, so it rides the app-query arm: `HomeAgendaTile`.
-        TileRead(
-            appId = "tasks",
-            query = PageQuery(
-                name = "home.tasks",
-                select = listOf("task_id", "title", "status"),
-                from = "schedule_task",
-                // OPEN WORK, NOT TRASHED (#1046's audit). The tile is "the
-                // next thing to do", and a finished or cancelled task is not
-                // one — counted, a vault with one open task reads as every
-                // task it ever held. The two open statuses are the DDL
-                // CHECK's, bound rather than spliced.
-                where_ = "$NOT_TRASHED AND status IN (?, ?)",
-                bind = OPEN_TASK_STATUSES.map { Value(text = it) },
-                order = order("task_id", "task_id"),
-            ),
-            countOne = TasksCopy.TASK_ONE,
-            countMany = TasksCopy.TASK_MANY,
-        ),
+        // NOTES AND AGENDA ARE NOT PAGE READS. Notes' tile is a shelf of
+        // notebooks with their counts, which only the Notes app's own reads
+        // can say (`HomeNotesTile`); Agenda's is the next occurrence of
+        // whatever repeats, which only the core's recurrence engine can answer
+        // (#1046, `HomeAgendaTile`). Both ride the app-query arm.
         TileRead(
             appId = "people",
             query = PageQuery(
@@ -270,18 +235,22 @@ public object HomeReads {
      * redrawing on sync, nothing fails, and the symptom is a count that is right
      * only after a relaunch. Deriving it means there is one place a table is
      * named and it is the query that reads it — and for Agenda's app query,
-     * which names no table the runtime can see, it is [HomeAgendaTile.TABLES], and
-     * for Money's, which rides the core's own arm, [HomeMoneyTile.TABLES].
+     * which names no table the runtime can see, it is [HomeAgendaTile.TABLES] —
+     * and Notes' [HomeNotesTile.TABLES] and Health's [HomeHealthTile.TABLES] for
+     * the same reason — and for Money's, which rides the core's own arm,
+     * [HomeMoneyTile.TABLES].
      */
     public val TABLES: Set<String> =
-        READS.flatMap { listOf(it.query.from) + it.alsoReads }.toSet() + HomeAgendaTile.TABLES + HomeMoneyTile.TABLES
+        READS.flatMap { listOf(it.query.from) + it.alsoReads }.toSet() + HomeAgendaTile.TABLES +
+            HomeNotesTile.TABLES + HomeMoneyTile.TABLES + HomeHealthTile.TABLES
 
     /**
      * Every app whose tile is READ — the page reads and the app queries —
      * which is every tile, Locker's included since #1047 (a count, never a row).
      */
     public val READ_APP_IDS: Set<String> =
-        READS.map { it.appId }.toSet() + HomeAgendaTile.APP_ID + HomeMoneyTile.APP_ID
+        READS.map { it.appId }.toSet() + HomeAgendaTile.APP_ID + HomeNotesTile.APP_ID + HomeMoneyTile.APP_ID +
+            HomeHealthTile.APP_ID
 
     /**
      * The text of a row's column, or empty. Positional, as the door states.
@@ -363,8 +332,8 @@ public object HomeReads {
      * One app's body out of its own rows.
      *
      * Every branch here is a v0 selector, and the shapes are deliberately
-     * unalike: Docs is ruled file rows and Notes is prose because a title over
-     * an opening line made the two indistinguishable on the grid.
+     * unalike: Docs is ruled file rows, and Notes — a shelf, not a list — is
+     * not a page read at all ([HomeNotesTile]).
      */
     private fun bodyFor(
         appId: String,
@@ -415,35 +384,6 @@ public object HomeReads {
                             // is removed from the row before it is served and
                             // there is no byte count here to format.
                             size = row.text(DOC_SIZE),
-                        )
-                    },
-                ),
-            )
-
-            "notes" -> preview.firstOrNull()?.let { row ->
-                TileBody(
-                    notes = TileBody.Notes(
-                        note_id = row.text(0),
-                        title = row.text(1).ifEmpty { "Untitled" },
-                        // The EXCERPT is the note's body, which lives in a
-                        // content item this read does not join. Absent rather
-                        // than invented: the renderer draws the title alone.
-                        excerpt = "",
-                    ),
-                )
-            }
-
-            "tasks" -> TileBody(
-                tasks = TileBody.Tasks(
-                    rows = preview.map { row ->
-                        TileBody.Tasks.Row(
-                            task_id = row.text(0),
-                            title = row.text(1),
-                            // v0's own vocabulary: `completed`, not `done`.
-                            // FALSE ON EVERY ROW THIS READ RETURNS, since it
-                            // reads open work only; kept so the field says what
-                            // the row is rather than what the filter implies.
-                            done = row.text(2) == "completed",
                         )
                     },
                 ),

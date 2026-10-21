@@ -579,6 +579,81 @@ fn an_override_carries_its_payload_and_a_repeat_updates_rather_than_duplicating(
 }
 
 #[test]
+fn an_occurrence_exception_can_be_restored_and_the_same_override_twice_writes_nothing() {
+    let bench = Bench::new("restore");
+    let event_id = recurring_series(&bench);
+    let skip = json!({
+        "event_id": event_id,
+        "original_start_local": "2026-03-05T09:00:00",
+        "scope": "occurrence",
+        "action": "skip",
+    });
+    bench.run("schedule.edit_event_occurrence", skip.clone());
+    let restore = json!({
+        "event_id": event_id,
+        "original_start_local": "2026-03-05T09:00:00",
+        "scope": "occurrence",
+        "action": "restore",
+    });
+    // RESTORED: the occurrence is the series' own again, and nothing of the exception remains.
+    let done = bench.run("schedule.edit_event_occurrence", restore.clone());
+    assert_eq!(done["restored"], json!(true));
+    assert_eq!(
+        bench.number("SELECT COUNT(*) FROM schedule_recurrence_exception", &[]),
+        0
+    );
+    assert_eq!(
+        bench.number(
+            "SELECT COUNT(*) FROM core_entity WHERE entity_type = 'schedule.recurrence_exception'",
+            &[]
+        ),
+        0,
+        "the exception's entity went with it"
+    );
+    // Restoring what is not there lands the same state.
+    let again = bench.run("schedule.edit_event_occurrence", restore);
+    assert_eq!(again["restored"], json!(false));
+    // A key that is not an occurrence is still refused, and only an occurrence is restored.
+    let message = bench.denied(
+        "schedule.edit_event_occurrence",
+        json!({
+            "event_id": event_id,
+            "original_start_local": "1999-01-01T09:00:00",
+            "scope": "occurrence",
+            "action": "restore",
+        }),
+    );
+    assert!(message.contains("not an occurrence"), "{message}");
+    let series = bench.denied(
+        "schedule.edit_event_occurrence",
+        json!({
+            "event_id": event_id,
+            "original_start_local": "2026-03-05T09:00:00",
+            "scope": "series",
+            "action": "restore",
+        }),
+    );
+    assert!(series.contains("restored"), "{series}");
+
+    // THE SAME OVERRIDE TWICE IS ONE WRITE: `row_version` stands still on the second.
+    let moved = json!({
+        "event_id": event_id,
+        "original_start_local": "2026-03-06T09:00:00",
+        "scope": "occurrence",
+        "action": "override",
+        "summary": "Moved",
+        "dtstart": "2026-03-06T05:30:00.000Z",
+    });
+    bench.run("schedule.edit_event_occurrence", moved.clone());
+    let version = bench.number("SELECT row_version FROM schedule_recurrence_exception", &[]);
+    bench.run("schedule.edit_event_occurrence", moved);
+    assert_eq!(
+        bench.number("SELECT row_version FROM schedule_recurrence_exception", &[]),
+        version
+    );
+}
+
+#[test]
 fn a_series_skip_cancels_the_series_and_is_idempotent() {
     let bench = Bench::new("series-skip");
     let event_id = recurring_series(&bench);

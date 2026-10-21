@@ -2,14 +2,25 @@ package dev.centraid.shared.apps.people
 
 import dev.centraid.core.CentraidCore
 import dev.centraid.design.copy.PeopleCopy
-import dev.centraid.shared.kit.PhoneImport
+import dev.centraid.shared.sync.phone.GoneChoice
+import dev.centraid.shared.sync.phone.OriginGone
+import dev.centraid.shared.sync.phone.PhoneDevice
+import dev.centraid.shared.sync.phone.PhoneFields
+import dev.centraid.shared.sync.phone.PhoneIds
+import dev.centraid.shared.sync.phone.PhoneOriginRef
+import dev.centraid.shared.sync.phone.PhoneRecord
+import dev.centraid.shared.sync.phone.PhoneReport
+import dev.centraid.shared.sync.phone.PhoneSnapshot
+import dev.centraid.shared.sync.phone.PhoneSource
+import dev.centraid.shared.sync.phone.PhoneStore
+import dev.centraid.shared.sync.phone.PhoneSync
 import dev.centraid.shared.shell.HomeSession
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
-import kotlin.uuid.ExperimentalUuidApi
-import kotlin.uuid.Uuid
+import kotlin.time.Clock
+import dev.centraid.shared.sync.rfc3339FromEpochMillis
 
 /**
  * ONE CONTACT AS THE PHONE'S OWN ADDRESS BOOK HOLDS IT, read by the shell
@@ -21,118 +32,196 @@ import kotlin.uuid.Uuid
  * @property emails its email addresses.
  * @property birthday `MM-DD`, or empty: the year is not asked for, because a
  *   People important date is a day of the year.
+ * @property phoneId the phone's most durable id for the contact, with its kind as a prefix
+ *   (`lookup:` Android's `LOOKUP_KEY`, `local:` a device-scoped id): R-1127-10. A contact with
+ *   none is skipped, because nothing could find it again.
+ * @property origin the account or container the contact was read in (its id, kind-prefixed), or
+ *   empty for "this phone" (R-1127-9).
+ * @property originLabel what the member calls that account ("Google: ada@example.com"); empty
+ *   shows the id.
  */
 public data class PhoneContact(
     public val name: String,
     public val phones: List<String> = emptyList(),
     public val emails: List<String> = emptyList(),
     public val birthday: String = "",
+    public val phoneId: String = "",
+    public val origin: String = "",
+    public val originLabel: String = "",
 )
 
 /**
- * CONTACTS → PEOPLE IN ONE TAP (docs/decisions.md, "Onboarding without sample
- * data").
+ * CONTACTS → PEOPLE, THE FIRST PASS OF `PhoneSync` (docs/decisions.md, "Onboarding without sample
+ * data"; #1127).
  *
- * Onboarding's goal is time to the member's own data, and the phone already
- * holds the people they keep up with. People's day-one empty state offers the
- * import (`EmptyState.import_source`), the shell reads the address book once
- * the OS has said yes, and this writes each contact through the command plane
- * as the member's own rows: `people.add_person` with a phone-minted id, then
- * `people.save_contact_channel` per number and address, then
- * `people.add_important_date` for a birthday. Nothing is marked as imported —
- * they are the member's people, edited and deleted like any other.
+ * Onboarding's goal is time to the member's own data, and the phone already holds the people they
+ * keep up with. The shell reads the address book once the OS has said yes and hands the contacts
+ * here; [sync] diffs them against what People holds through [PhoneSync] and writes each as the
+ * member's own row (`people.add_person`, `people.save_contact_channel`, a birthday). A contact is
+ * linked to the phone record it came from, so a later pass follows it: a changed number is
+ * written, a person the member edited stops following (R-1127-2), a contact gone from the phone
+ * goes to the trash (R-1127-3), and an account that left the phone is asked about (R-1127-9).
  *
- * **Offered on day one**, when the roster is empty, so there is nothing to
- * merge into; duplicates WITHIN the address book (the same name twice, a
- * number listed twice) are folded here. A refused contact is counted and the
- * rest go on: one malformed address must not cost the member the other
- * hundred people.
+ * A person that already exists with the contact's name is adopted rather than duplicated. A
+ * refused contact is counted and the rest go on: one malformed address must not cost the member
+ * the other hundred people.
  */
 public object ContactsImport {
-    /** What one import did. */
+    /** What one pass did. [addAccount] is the R-1127-8 condition: the phone returned no contacts at all. */
     public data class Outcome(
         public val added: Int,
         public val refused: Int,
+        public val updated: Int = 0,
+        public val trashed: Int = 0,
+        public val addAccount: Boolean = false,
+        public val gone: List<OriginGone> = emptyList(),
     )
 
-    /** THE PEOPLE AN ADDRESS BOOK MAKES: named, trimmed, and one per name. */
-    public fun people(contacts: List<PhoneContact>): List<PhoneContact> {
+    /** The origin of a contact that names none: this phone's own address book. */
+    public const val DEFAULT_ORIGIN: String = "local:this-phone"
+
+    /**
+     * THE FIELDS A PHONE OWNS OF A PERSON: a name, its numbers and addresses, and its birthday
+     * (`MM-DD`, or none). A member who changes any of them in People stops the person following.
+     */
+    internal fun fields(name: String, phones: List<String>, emails: List<String>, birthday: String = ""): PhoneFields =
+        PhoneFields.of {
+            text("name", name)
+            phones("phones", phones.map { it.take(VALUE_MAX) })
+            emails("emails", emails.map { it.take(VALUE_MAX) })
+            text("birthday", birthday)
+        }
+
+    internal fun matchKey(name: String): String = PhoneFields.squash(name).lowercase()
+
+    internal fun tiebreak(phones: List<String>, emails: List<String>): Set<String> =
+        phones.map(PhoneFields::phoneNumber).toSet() + emails.map { PhoneFields.squash(it).lowercase() }
+
+    /**
+     * A READ OF THE ADDRESS BOOK AS A SNAPSHOT. Named, trimmed and one per phone id; a contact
+     * with no name or no id is not a record.
+     *
+     * @param origins every account or container present, even one with no contact in it.
+     * @param complete false for a read that may have missed contacts (iOS limited access, a read
+     *   that failed part-way): nothing is then trashed.
+     */
+    public fun snapshot(
+        contacts: List<PhoneContact>,
+        origins: List<PhoneOriginRef> = emptyList(),
+        complete: Boolean = true,
+        readAt: String,
+    ): PhoneSnapshot {
         val seen = mutableSetOf<String>()
-        return contacts.mapNotNull { contact ->
-            val name = contact.name.trim()
-            if (name.isEmpty() || !seen.add(name.lowercase())) return@mapNotNull null
-            PhoneContact(
-                name = name,
-                phones = contact.phones.map(String::trim).filter(String::isNotEmpty).distinct(),
-                emails = contact.emails.map(String::trim).filter(String::isNotEmpty).distinctBy(String::lowercase),
-                birthday = contact.birthday.takeIf { MONTH_DAY.matches(it) }.orEmpty(),
+        val records = oneEach(contacts).mapNotNull { contact ->
+            val name = PhoneFields.squash(contact.name)
+            if (name.isEmpty() || !PhoneIds.isValid(contact.phoneId) || !seen.add(contact.phoneId)) return@mapNotNull null
+            val phones = contact.phones.map(String::trim).filter(String::isNotEmpty).distinct()
+            val emails = contact.emails.map(String::trim).filter(String::isNotEmpty).distinctBy(String::lowercase)
+            val birthday = contact.birthday.takeIf { MONTH_DAY.matches(it) }.orEmpty()
+            PhoneRecord(
+                phoneId = contact.phoneId,
+                origin = contact.origin.ifEmpty { DEFAULT_ORIGIN },
+                fields = fields(name, phones, emails, birthday),
+                matchKey = matchKey(name),
+                tiebreak = tiebreak(phones, emails),
+                attributes = ContactAttributes(name, phones, emails, birthday),
             )
         }
+        val labels = contacts.filter { it.originLabel.isNotEmpty() }.associate { it.origin.ifEmpty { DEFAULT_ORIGIN } to it.originLabel }
+        val present = (origins + records.map { PhoneOriginRef(it.origin, "") }).distinctBy { it.id }
+            .map { ref ->
+                val label = ref.label.ifEmpty { labels[ref.id] ?: if (ref.id == DEFAULT_ORIGIN) PeopleCopy.IMPORT_ORIGIN_THIS_PHONE else ref.id }
+                PhoneOriginRef(ref.id, label)
+            }
+        return PhoneSnapshot(PhoneSource.CONTACTS, complete, readAt, present, records)
     }
 
     /**
-     * WRITE [contacts] INTO THE VAULT [core] HOLDS. A person whose
-     * `add_person` was refused is counted as refused and none of its channels
-     * are tried; a refused channel or birthday leaves the person in.
+     * ONE CONTACT, ONE ORIGIN. A shell that reads per container (iOS reads each `CNContainer`)
+     * meets a unified contact once for every container it is in; it is one person, so one record,
+     * and the origin it is kept under must not depend on the order the containers were read in,
+     * or a person would hop between accounts from one pass to the next. **The lowest origin id
+     * wins** (compared as text), and a contact that names none counts as [DEFAULT_ORIGIN].
      */
-    @OptIn(ExperimentalUuidApi::class)
+    internal fun oneEach(contacts: List<PhoneContact>): List<PhoneContact> {
+        val chosen = linkedMapOf<String, PhoneContact>()
+        for (contact in contacts) {
+            val held = chosen[contact.phoneId]
+            if (held == null || contact.origin.ifEmpty { DEFAULT_ORIGIN } < held.origin.ifEmpty { DEFAULT_ORIGIN }) {
+                chosen[contact.phoneId] = contact
+            }
+        }
+        // A phone id that is no id keeps every row (the snapshot skips them), so nothing is merged by accident.
+        return contacts.filter { !PhoneIds.isValid(it.phoneId) } + chosen.values
+    }
+
+    /**
+     * A CONTAINER AS THE MEMBER KNOWS IT. The origin is `container:<id>` (R-1127-10); its label is
+     * the name the OS shows ("iCloud", "Gmail"), and a container with no name is the phone's own
+     * ("This phone's contacts").
+     */
+    public fun container(id: String, name: String): PhoneOriginRef =
+        PhoneOriginRef("container:$id", PhoneFields.squash(name).ifEmpty { PeopleCopy.IMPORT_ORIGIN_THIS_PHONE })
+
+    /** ONE PASS over [store] with [snapshot]; the outcome the shell shows. */
+    internal suspend fun sync(store: PhoneStore, snapshot: PhoneSnapshot): Outcome {
+        val report = PhoneSync.run(store, snapshot)
+        return outcome(report, snapshot)
+    }
+
+    /**
+     * WRITE [contacts] INTO THE VAULT [core] HOLDS, as one pass of the phone sync (the one-tap
+     * import). [complete] is false when the read may be partial; [origins] lists every account
+     * present, so one with no contact is not mistaken for gone. [device] is this install's
+     * [PhoneDevice] unless a caller names another.
+     */
     public suspend fun run(
         core: CentraidCore,
         contacts: List<PhoneContact>,
-        mintId: () -> String = { Uuid.random().toString() },
+        origins: List<PhoneOriginRef> = emptyList(),
+        complete: Boolean = true,
+        device: String? = null,
+    ): Outcome = sync(ContactsStore(core, device ?: PhoneDevice.id()), snapshot(contacts, origins, complete, readAt()))
+
+    /**
+     * The member's answer to a held account (R-1127-9): [GoneChoice.KEEP] is the default.
+     * [seenBefore] is the question's own, for an account that only lost most of its contacts.
+     */
+    public suspend fun resolveGone(
+        core: CentraidCore,
+        originId: String,
+        choice: GoneChoice,
+        seenBefore: String? = null,
+        device: String? = null,
     ): Outcome {
-        var added = 0
-        var refused = 0
-        for (person in people(contacts)) {
-            val partyId = mintId()
-            val made = write(
-                core,
-                "people.add_person",
-                "{\"party_id\":${quote(partyId)},\"display_name\":${quote(person.name)},\"cadence_days\":0}",
-            )
-            if (!made) {
-                refused += 1
-                continue
-            }
-            added += 1
-            person.phones.forEach { phone ->
-                write(core, "people.save_contact_channel", channel(partyId, "phone", phone))
-            }
-            person.emails.forEach { email ->
-                write(core, "people.save_contact_channel", channel(partyId, "email", email))
-            }
-            if (person.birthday.isNotEmpty()) {
-                write(
-                    core,
-                    "people.add_important_date",
-                    "{\"party_id\":${quote(partyId)},\"label\":${quote(PeopleCopy.IMPORT_BIRTHDAY)}," +
-                        "\"month_day\":${quote(person.birthday)}}",
-                )
-            }
-        }
-        return Outcome(added = added, refused = refused)
+        val report = PhoneSync.resolveGone(ContactsStore(core, device ?: PhoneDevice.id()), originId, choice, seenBefore)
+        return Outcome(added = 0, refused = report.refused.size, trashed = report.trashed)
     }
+
+    private fun outcome(report: PhoneReport, snapshot: PhoneSnapshot): Outcome = Outcome(
+        added = report.added,
+        refused = report.refused.size,
+        updated = report.updated,
+        trashed = report.trashed,
+        addAccount = snapshot.complete && snapshot.records.isEmpty() && snapshot.origins.isEmpty(),
+        gone = report.gone,
+    )
 
     /** The one sentence the shell shows when an import ends. */
     public fun sentence(outcome: Outcome): String = when {
+        outcome.addAccount -> PeopleCopy.IMPORT_CONTACTS_ADD_ACCOUNT
         outcome.added == 0 && outcome.refused == 0 -> PeopleCopy.IMPORT_CONTACTS_NONE
         outcome.added == 0 -> PeopleCopy.IMPORT_CONTACTS_FAILED
         outcome.added == 1 -> PeopleCopy.IMPORT_CONTACTS_ONE
         else -> PeopleCopy.IMPORT_CONTACTS_DONE.replace("{count}", outcome.added.toString())
     }
 
-    private fun channel(partyId: String, kind: String, value: String): String =
-        "{\"party_id\":${quote(partyId)},\"kind\":${quote(kind)},\"value\":${quote(value.take(VALUE_MAX))}}"
-
-    private suspend fun write(core: CentraidCore, command: String, input: String): Boolean =
-        PhoneImport.write(core, command, input)
-
-    private fun quote(value: String): String = PhoneImport.quote(value)
+    internal fun readAt(): String = rfc3339FromEpochMillis(Clock.System.now().toEpochMilliseconds())
 
     private val MONTH_DAY = Regex("^(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$")
 
     /** `people.save_contact_channel`'s `value` ceiling. */
-    private const val VALUE_MAX: Int = 500
+    internal const val VALUE_MAX: Int = 500
 }
 
 /**
@@ -152,5 +241,28 @@ public class ContactsImportBridge {
     public fun run(contacts: List<PhoneContact>, onDone: (String) -> Unit) {
         val core = session?.shelf?.core() ?: return onDone(PeopleCopy.IMPORT_CONTACTS_NO_VAULT)
         scope.launch { onDone(ContactsImport.sentence(ContactsImport.run(core, contacts))) }
+    }
+
+    /**
+     * One pass of the phone sync: [contacts] with every [origins] present, and whether the read
+     * was [complete]. [onDone] is handed the typed outcome, so the shell can show the
+     * add-your-account line (`addAccount`) and ask about an account that left (`gone`).
+     */
+    public fun sync(
+        contacts: List<PhoneContact>,
+        origins: List<PhoneOriginRef>,
+        complete: Boolean,
+        onDone: (ContactsImport.Outcome) -> Unit,
+    ) {
+        val core = session?.shelf?.core() ?: return onDone(ContactsImport.Outcome(added = 0, refused = 0))
+        scope.launch { onDone(ContactsImport.run(core, contacts, origins, complete)) }
+    }
+
+    /** The member's answer to an account that left the phone. */
+    public fun resolveGone(originId: String, keep: Boolean, onDone: (ContactsImport.Outcome) -> Unit) {
+        val core = session?.shelf?.core() ?: return onDone(ContactsImport.Outcome(added = 0, refused = 0))
+        scope.launch {
+            onDone(ContactsImport.resolveGone(core, originId, if (keep) GoneChoice.KEEP else GoneChoice.TRASH))
+        }
     }
 }

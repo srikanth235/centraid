@@ -39,6 +39,7 @@ package centraid.core.v1;
 import "centraid/core/v1/agenda.proto";
 import "centraid/core/v1/chat.proto";
 import "centraid/core/v1/docs.proto";
+import "centraid/core/v1/health.proto";
 import "centraid/core/v1/locker.proto";
 import "centraid/core/v1/money.proto";
 import "centraid/core/v1/notes.proto";
@@ -110,6 +111,15 @@ message AppQueryRequest {
     MoneyTargetSheetRequest money_target_sheet = 107;
     MoneyRecurringRequest money_recurring = 108;
     MoneySearchRequest money_search = 109;
+    // Health (#1129, R-1129-12): 120-125. 126-139 stay reserved for Health. The
+    // writes are `health.*` commands; `health_follow_view` is the follower
+    // engine's read, not a screen's.
+    HealthTodayRequest health_today = 120;
+    HealthSeriesRequest health_series = 121;
+    HealthTrendsRequest health_trends = 122;
+    HealthWorkoutsRequest health_workouts = 123;
+    HealthWorkoutRequest health_workout = 124;
+    HealthFollowViewRequest health_follow_view = 125;
   }
 }
 
@@ -170,6 +180,12 @@ message AppQueryResponse {
     MoneyTargetSheet money_target_sheet = 107;
     MoneyRecurring money_recurring = 108;
     MoneySearch money_search = 109;
+    HealthToday health_today = 120;
+    HealthSeries health_series = 121;
+    HealthTrends health_trends = 122;
+    HealthWorkouts health_workouts = 123;
+    HealthWorkout health_workout = 124;
+    HealthFollowView health_follow_view = 125;
     // The vault would not let this app read. At a number no query will take.
     AppQueryDenial denied = 15;
   }

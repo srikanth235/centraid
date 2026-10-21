@@ -1,4 +1,5 @@
-// Shared app identity; colorKey selects APP_HUES. Home has no hue.
+// Shared app identity; colorKey selects APP_HUES. Health uses olive;
+// Tasks opens in Agenda, leaving ochre free. Home has no hue.
 
 import type { IconName } from "./icons";
 import { palette } from "./palette";
@@ -46,13 +47,6 @@ const BUILTIN_APPS: readonly AppMeta[] = [
     name: "Locker",
   },
   {
-    colorKey: "ochre",
-    desc: "Capture the next thing to do.",
-    iconKey: "Check",
-    id: "tasks",
-    name: "Tasks",
-  },
-  {
     colorKey: "teal",
     desc: "Read and organize your documents.",
     iconKey: "Folder",
@@ -72,6 +66,13 @@ const BUILTIN_APPS: readonly AppMeta[] = [
     iconKey: "Coin",
     id: "money",
     name: "Money",
+  },
+  {
+    colorKey: "olive",
+    desc: "Daily totals and workouts from your phone.",
+    iconKey: "Activity",
+    id: "health",
+    name: "Health",
   },
 ];
 

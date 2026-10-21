@@ -2,7 +2,8 @@
 # app, a row opening in its own app.
 #
 # A VAULT-HOLDING INSTALL, as `home.yaml`: the onboarding starters are enough —
-# Tasks' "Tap the circle to finish me" is what "circle" finds.
+# the Tasks starter "Tap the circle to finish me" is what "circle" finds, and it
+# sits in Agenda's group (#1128: a task is grouped under the app it opens in).
 appId: dev.centraid.Centraid
 name: home-search
 ---
@@ -12,10 +13,10 @@ name: home-search
 - tapOn:
     id: "home-search-field"
 - inputText: "circle"
-# Grouped by app: the Tasks group heads the one hit.
+# Grouped by app: the Agenda group heads the one hit.
 - extendedWaitUntil:
     visible:
-      id: "home-search-group-tasks"
+      id: "home-search-group-agenda"
     timeout: 5000
 - assertVisible: "Tap the circle to finish me"
 # A row opens in its own app; back lands on the results it left.
@@ -33,7 +34,7 @@ name: home-search
     commands:
       - back
 - assertVisible:
-    id: "home-search-group-tasks"
+    id: "home-search-group-agenda"
 # Cancel goes home; the picked term comes back as a recent search.
 - tapOn:
     id: "home-search-cancel"

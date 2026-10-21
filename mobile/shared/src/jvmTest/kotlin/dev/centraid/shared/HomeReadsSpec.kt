@@ -2,9 +2,16 @@ package dev.centraid.shared
 
 import centraid.core.v1.AgendaEvent
 import centraid.core.v1.AgendaUpcoming
+import centraid.core.v1.TasksBoard
+import centraid.core.v1.TasksCounts
+import centraid.core.v1.TasksGroup
+import centraid.core.v1.TasksGroupKind
+import centraid.core.v1.TasksTask
+import centraid.core.v1.TasksView
 import centraid.screen.v1.HomeEvent
 import centraid.screen.v1.HomeState
 import centraid.screen.v1.TileStatus
+import dev.centraid.design.copy.AgendaCopy
 import dev.centraid.shared.platform.DeviceClock
 import dev.centraid.shared.shell.HomeAgendaTile
 import dev.centraid.shared.shell.HomeMachine
@@ -87,6 +94,75 @@ class HomeReadsSpec : StringSpec({
         request.to shouldBe "2026-06-29T09:00:00Z"
     }
 
+    // --- today's due tasks ride the tile (#1128, R-1128-8) -------------------
+
+    fun dueTask(title: String) = TasksTask(task_id = "t-$title", title = title, status = "needs-action")
+
+    fun board(overdue: List<String>, due: List<String>) = TasksBoard(
+        today = today,
+        now_local = now,
+        view = TasksView.TASKS_VIEW_TODAY,
+        groups = listOfNotNull(
+            overdue.takeIf { it.isNotEmpty() }?.let {
+                TasksGroup(kind = TasksGroupKind.TASKS_GROUP_KIND_OVERDUE, key = "overdue", tasks = it.map(::dueTask))
+            },
+            due.takeIf { it.isNotEmpty() }?.let {
+                TasksGroup(kind = TasksGroupKind.TASKS_GROUP_KIND_TODAY, key = "today", tasks = it.map(::dueTask))
+            },
+        ),
+        counts = TasksCounts(overdue = overdue.size, today = due.size),
+    )
+
+    "the due request asks tasks.board over today in the device's zone, in the window Today reads" {
+        val request = HomeAgendaTile.dueRequest(
+            DeviceClock.Reading(zone = "Asia/Kolkata", epochMillis = 1_781_514_000_000L),
+        ).tasks_board.shouldNotBeNull()
+        request.tz shouldBe "Asia/Kolkata"
+        request.view shouldBe TasksView.TASKS_VIEW_TODAY
+        request.limit shouldBe HomeAgendaTile.DUE_WINDOW
+    }
+
+    "the due count is overdue plus today, headed by the first overdue title, beside the next event" {
+        val arrived = HomeAgendaTile.arrived(
+            answer(timed("evt-dentist", "Dentist", "2026-06-15T14:00", "2026-06-15T15:00")),
+            due = board(overdue = listOf("File the taxes"), due = listOf("Call Mum", "Water the plants")),
+        ).tile.shouldNotBeNull()
+        arrived.status shouldBe TileStatus.TILE_STATUS_CONTENT
+        val body = arrived.body.shouldNotBeNull().agenda.shouldNotBeNull()
+        body.title shouldBe "Dentist"
+        body.due_count shouldBe 3
+        body.due_label shouldBe "3 due"
+        body.due_title shouldBe "File the taxes"
+        // The header count is what the tile draws: the event plus the three due tasks.
+        arrived.count.shouldNotBeNull().value_ shouldBe 4
+        arrived.count_label shouldBe "on your plate"
+    }
+
+    "tasks due and no event coming up is a tile with content, whose headline says there is no event" {
+        val arrived = HomeAgendaTile.arrived(answer(), due = board(overdue = emptyList(), due = listOf("Call Mum"))).tile.shouldNotBeNull()
+        arrived.status shouldBe TileStatus.TILE_STATUS_CONTENT
+        val body = arrived.body.shouldNotBeNull().agenda.shouldNotBeNull()
+        body.title shouldBe AgendaCopy.TILE_NO_EVENTS
+        body.at shouldBe ""
+        body.after shouldBe ""
+        body.due_label shouldBe "1 due"
+        body.due_title shouldBe "Call Mum"
+        // NOT "0" over "1 due": the count agrees with the line (#1128).
+        arrived.count.shouldNotBeNull().value_ shouldBe 1
+        arrived.count_label shouldBe "on your plate"
+    }
+
+    "nothing coming up and nothing due is empty, and a due read that did not land says nothing" {
+        HomeAgendaTile.arrived(answer(), due = board(emptyList(), emptyList())).tile.shouldNotBeNull().status shouldBe
+            TileStatus.TILE_STATUS_EMPTY
+        HomeAgendaTile.arrived(answer()).tile.shouldNotBeNull().status shouldBe TileStatus.TILE_STATUS_EMPTY
+        val noDue = HomeAgendaTile.arrived(answer(timed("e", "Dentist", "2026-06-15T14:00"))).tile.shouldNotBeNull()
+        val body = noDue.body.shouldNotBeNull().agenda.shouldNotBeNull()
+        body.due_count shouldBe 0
+        body.due_label shouldBe ""
+        body.due_title shouldBe ""
+    }
+
     // --- which occurrence, and how its time is said ------------------------
 
     "the next occurrence today is its clock alone, and what follows it that day is named" {
@@ -103,7 +179,7 @@ class HomeReadsSpec : StringSpec({
         body.after shouldBe "then Dentist"
         arrived.count.shouldNotBeNull().value_ shouldBe 2
         arrived.count.shouldNotBeNull().capped shouldBe false
-        arrived.count_label shouldBe "events in the next 7 days"
+        arrived.count_label shouldBe "on your plate"
     }
 
     "an occurrence already under way is next — it has not ended" {
@@ -242,9 +318,9 @@ class HomeReadsSpec : StringSpec({
 
     // --- the trash, off the other tiles ------------------------------------
 
-    "the docs, notes and tasks tiles leave the trash out, and tasks reads open work only" {
+    "the docs tile leaves the trash out" {
         val byApp = HomeReads.READS.associateBy { it.appId }
-        listOf("docs", "notes", "tasks").forEach { app ->
+        listOf("docs").forEach { app ->
             val query = byApp.getValue(app).query
             withClue(app) {
                 query.where_.shouldNotBeNull() shouldContain "deleted_at IS NULL"
@@ -257,9 +333,12 @@ class HomeReadsSpec : StringSpec({
                 query.where_.shouldNotBeNull().count { it == '?' } shouldBe query.bind.size
             }
         }
-        val tasks = byApp.getValue("tasks").query
-        tasks.where_.shouldNotBeNull() shouldContain "status IN (?, ?)"
-        tasks.bind.map { it.text } shouldBe listOf("needs-action", "in-process")
+    }
+
+    "tasks have no tile of their own: Agenda's carries them, and no page read names them (#1128)" {
+        HomeReads.READS.map { it.appId } shouldNotContain "tasks"
+        HomeReads.READ_APP_IDS shouldNotContain "tasks"
+        HomeReads.TABLES shouldContain "schedule_task"
     }
 
     "the people tile counts the roster's people — a live profile — not every party (#1047)" {
@@ -320,16 +399,12 @@ class HomeReadsSpec : StringSpec({
         val singular = mapOf(
             "photos" to "photo",
             "docs" to "document",
-            "notes" to "note",
-            "tasks" to "task",
             "people" to "person",
             "locker" to "item",
         )
         val plural = mapOf(
             "photos" to "photos",
             "docs" to "documents",
-            "notes" to "notes",
-            "tasks" to "tasks",
             "people" to "people",
             "locker" to "items",
         )
@@ -350,10 +425,10 @@ class HomeReadsSpec : StringSpec({
         }
     }
 
-    "the agenda tile says \"1 event\" for one and \"events\" for none or many" {
+    "the agenda tile's count counts events and due tasks, in one noun for none, one or many" {
         tile(timed("evt-survey", "Survey walk-through", "2026-06-15T10:00", "2026-06-15T11:00"))
-            .count_label shouldBe "event in the next 7 days"
-        HomeAgendaTile.arrived(answer()).tile.shouldNotBeNull().count_label shouldBe "events in the next 7 days"
+            .count_label shouldBe "on your plate"
+        HomeAgendaTile.arrived(answer()).tile.shouldNotBeNull().count_label shouldBe "on your plate"
     }
 
     // --- civil days: arithmetic, never a zone ------------------------------

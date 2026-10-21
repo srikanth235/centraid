@@ -123,6 +123,21 @@ struct AgendaEditorView: View {
         let draft = editor.draft
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
+                // THE ADD SHEET'S SWITCH (#1128): only a create has one, and
+                // the machine says which side is lit and what each is called.
+                if !editor.kinds.isEmpty {
+                    KitSegmented(
+                        options: editor.kinds.map { (key: $0.kind, label: $0.label) },
+                        selected: editor.kinds.first(where: { $0.selected })?.kind ?? .event,
+                        identifier: "agenda-editor-kind"
+                    ) { kind in
+                        send(event { $0.kindPicked = .with { $0.kind = kind } })
+                    }
+                    .accessibilityLabel(chrome.kindLabel)
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, CentraidGeometry.pageMargin)
+                    .padding(.vertical, 8)
+                }
                 EditableFieldRow(
                     key: chrome.fieldTitle,
                     text: $typedTitle,
@@ -146,7 +161,7 @@ struct AgendaEditorView: View {
                 .overlay(alignment: .bottom) { KitHairline() }
                 .accessibilityIdentifier("agenda-editor-all-day")
                 whenRow(
-                    key: chrome.fieldStarts,
+                    key: editor.startFieldLabel,
                     dayLabel: editor.startDayLabel,
                     timeLabel: editor.startTimeLabel,
                     chrome: chrome,
@@ -157,17 +172,19 @@ struct AgendaEditorView: View {
                 ) { day, time in
                     send(event { $0.start = .with { $0.day = day; $0.time = time } })
                 }
-                whenRow(
-                    key: chrome.fieldEnds,
-                    dayLabel: editor.endDayLabel,
-                    timeLabel: editor.endTimeLabel,
-                    chrome: chrome,
-                    day: draft.endDay,
-                    time: draft.endTime,
-                    allDay: draft.allDay,
-                    identifier: "agenda-editor-end"
-                ) { day, time in
-                    send(event { $0.end = .with { $0.day = day; $0.time = time } })
+                if editor.showEventFields {
+                    whenRow(
+                        key: chrome.fieldEnds,
+                        dayLabel: editor.endDayLabel,
+                        timeLabel: editor.endTimeLabel,
+                        chrome: chrome,
+                        day: draft.endDay,
+                        time: draft.endTime,
+                        allDay: draft.allDay,
+                        identifier: "agenda-editor-end"
+                    ) { day, time in
+                        send(event { $0.end = .with { $0.day = day; $0.time = time } })
+                    }
                 }
                 if !editor.blockedReason.isEmpty {
                     Text(editor.blockedReason)
@@ -177,48 +194,51 @@ struct AgendaEditorView: View {
                         .padding(.vertical, 6)
                         .accessibilityIdentifier("agenda-editor-blocked")
                 }
-                ChoiceFieldRow(key: chrome.fieldCalendar, value: editor.calendarLabel, identifier: "agenda-editor-calendar") {
-                    send(event { $0.sheetOpened = .with { $0.sheet = .calendar } })
+                // A TASK IS A TITLE AND A DUE DAY: the event's fields are not drawn.
+                if editor.showEventFields {
+                    ChoiceFieldRow(key: chrome.fieldCalendar, value: editor.calendarLabel, identifier: "agenda-editor-calendar") {
+                        send(event { $0.sheetOpened = .with { $0.sheet = .calendar } })
+                    }
+                    ChoiceFieldRow(key: chrome.fieldGuests, value: editor.guestsLabel, identifier: "agenda-editor-guests") {
+                        send(event { $0.sheetOpened = .with { $0.sheet = .guests } })
+                    }
+                    ChoiceFieldRow(key: chrome.fieldRepeat, value: editor.repeatLabel, identifier: "agenda-editor-repeat") {
+                        send(event { $0.sheetOpened = .with { $0.sheet = .repeat } })
+                    }
+                    .disabled(!editor.repeatEnabled)
+                    if !editor.repeatNote.isEmpty {
+                        note(editor.repeatNote)
+                    }
+                    ChoiceFieldRow(key: chrome.fieldReminder, value: editor.reminderLabel, identifier: "agenda-editor-reminder") {
+                        send(event { $0.sheetOpened = .with { $0.sheet = .reminder } })
+                    }
+                    EditableFieldRow(
+                        key: chrome.fieldLink,
+                        text: $typedLink,
+                        placeholder: chrome.linkPlaceholder,
+                        identifier: "agenda-editor-link"
+                    ) { typed in
+                        guard seeded, typed != draft.link else { return }
+                        send(event { $0.link = .with { $0.text = typed } })
+                    }
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(chrome.fieldNotes)
+                            .centraidType("annotLabel")
+                            .foregroundStyle(Theme.color("textSoft", scheme))
+                        TextField(chrome.notesPlaceholder, text: $typedNotes, axis: .vertical)
+                            .centraidType("body")
+                            .lineLimit(3...10)
+                            .accessibilityLabel(chrome.fieldNotes)
+                            .accessibilityIdentifier("agenda-editor-notes")
+                            .onChange(of: typedNotes) { _, typed in
+                                guard seeded, typed != draft.notes else { return }
+                                send(event { $0.notes = .with { $0.text = typed } })
+                            }
+                    }
+                    .padding(.horizontal, CentraidGeometry.pageMargin)
+                    .padding(.vertical, 8)
+                    .overlay(alignment: .bottom) { KitHairline() }
                 }
-                ChoiceFieldRow(key: chrome.fieldGuests, value: editor.guestsLabel, identifier: "agenda-editor-guests") {
-                    send(event { $0.sheetOpened = .with { $0.sheet = .guests } })
-                }
-                ChoiceFieldRow(key: chrome.fieldRepeat, value: editor.repeatLabel, identifier: "agenda-editor-repeat") {
-                    send(event { $0.sheetOpened = .with { $0.sheet = .repeat } })
-                }
-                .disabled(!editor.repeatEnabled)
-                if !editor.repeatNote.isEmpty {
-                    note(editor.repeatNote)
-                }
-                ChoiceFieldRow(key: chrome.fieldReminder, value: editor.reminderLabel, identifier: "agenda-editor-reminder") {
-                    send(event { $0.sheetOpened = .with { $0.sheet = .reminder } })
-                }
-                EditableFieldRow(
-                    key: chrome.fieldLink,
-                    text: $typedLink,
-                    placeholder: chrome.linkPlaceholder,
-                    identifier: "agenda-editor-link"
-                ) { typed in
-                    guard seeded, typed != draft.link else { return }
-                    send(event { $0.link = .with { $0.text = typed } })
-                }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(chrome.fieldNotes)
-                        .centraidType("annotLabel")
-                        .foregroundStyle(Theme.color("textSoft", scheme))
-                    TextField(chrome.notesPlaceholder, text: $typedNotes, axis: .vertical)
-                        .centraidType("body")
-                        .lineLimit(3...10)
-                        .accessibilityLabel(chrome.fieldNotes)
-                        .accessibilityIdentifier("agenda-editor-notes")
-                        .onChange(of: typedNotes) { _, typed in
-                            guard seeded, typed != draft.notes else { return }
-                            send(event { $0.notes = .with { $0.text = typed } })
-                        }
-                }
-                .padding(.horizontal, CentraidGeometry.pageMargin)
-                .padding(.vertical, 8)
-                .overlay(alignment: .bottom) { KitHairline() }
                 if !state.write.refusal.isEmpty {
                     Text(state.write.refusal)
                         .centraidType("small")

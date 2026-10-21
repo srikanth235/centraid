@@ -78,6 +78,8 @@
 //! `ctx.now`, never SQLite's clock, so the restore window is fixturable at any
 //! instant (lane V's rule).
 
+use rusqlite::OptionalExtension;
+
 use crate::clock::format_iso_ms;
 use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency, Risk};
 use crate::error::{Result, VaultError};
@@ -135,6 +137,8 @@ pub fn definitions() -> Vec<CommandDefinition> {
         complete_task(),
         reopen_task(),
         add_important_date(),
+        edit_important_date(),
+        delete_important_date(),
         toggle_reminder(),
         add_relationship(),
         add_gift(),
@@ -2036,6 +2040,201 @@ fn add_important_date() -> CommandDefinition {
     }
 }
 
+/// Change one important date's label or day (#1127: a followed contact's birthday moves on the
+/// phone, and People had no command to move it).
+///
+/// A birthday stays ONE LOGICAL FACT: the new day is written through to the party spine exactly
+/// as `people.add_important_date` writes it, and a date relabelled from a birthday to something
+/// else takes its day off the spine.
+fn edit_important_date() -> CommandDefinition {
+    CommandDefinition {
+        name: "people.edit_important_date",
+        owner_schema: "people",
+        input_schema: r#"{
+          "type": "object",
+          "required": ["date_id"],
+          "minProperties": 2,
+          "additionalProperties": false,
+          "properties": {
+            "date_id": { "type": "string", "minLength": 1 },
+            "label": { "type": "string", "minLength": 1 },
+            "month_day": { "type": "string", "pattern": "^(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\\d|3[01])$" }
+          }
+        }"#,
+        // The same input lands the same state, so a replay writes nothing.
+        idempotency: Idempotency::Idempotent,
+        risk: Risk::Low,
+        confirm: false,
+        preconditions: &[
+            CommandCondition {
+                predicate: "date_exists",
+                check: |ctx| {
+                    let date_id = ctx.required_str("date_id")?;
+                    let count: i64 = ctx.connection().query_row(
+                        "SELECT COUNT(*) FROM people_important_date
+                          WHERE date_id = ?1 AND deleted_at IS NULL",
+                        [date_id],
+                        |row| row.get(0),
+                    )?;
+                    Ok((count != 1).then(|| "there is no important date with that id".to_owned()))
+                },
+            },
+            CommandCondition {
+                predicate: "month_day_is_a_real_day",
+                check: |ctx| {
+                    let Some(month_day) = ctx
+                        .input
+                        .get("month_day")
+                        .and_then(serde_json::Value::as_str)
+                    else {
+                        return Ok(None);
+                    };
+                    let real: i64 = ctx.connection().query_row(
+                        "SELECT date('2000-' || ?1) = '2000-' || ?1",
+                        [month_day],
+                        |row| row.get(0),
+                    )?;
+                    Ok((real != 1).then(|| format!("{month_day} is not a day of any year")))
+                },
+            },
+        ],
+        postconditions: &[CommandCondition {
+            predicate: "birthday_reconciled",
+            check: |ctx| {
+                let date_id = ctx.required_str("date_id")?;
+                let (party_id, label, month_day): (String, String, String) =
+                    ctx.connection().query_row(
+                        "SELECT party_id, label, month_day FROM people_important_date
+                          WHERE date_id = ?1",
+                        [date_id],
+                        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+                    )?;
+                if !is_birthday(&label) {
+                    return Ok(None);
+                }
+                let count: i64 = ctx.connection().query_row(
+                    "SELECT COUNT(*) FROM core_party
+                      WHERE party_id = ?1 AND substr(birth_date, -5) = ?2",
+                    rusqlite::params![party_id, month_day],
+                    |row| row.get(0),
+                )?;
+                Ok((count != 1)
+                    .then(|| "the party's birth date disagrees with this row".to_owned()))
+            },
+        }],
+        handler: |ctx| {
+            let date_id = ctx.required_str("date_id")?.to_owned();
+            let (party_id, old_label, old_day): (String, String, String) =
+                ctx.connection().query_row(
+                    "SELECT party_id, label, month_day FROM people_important_date
+                      WHERE date_id = ?1",
+                    [&date_id],
+                    |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+                )?;
+            let label = ctx
+                .input
+                .get("label")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or(&old_label)
+                .to_owned();
+            let month_day = ctx
+                .input
+                .get("month_day")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or(&old_day)
+                .to_owned();
+            let changed = ctx.connection().execute(
+                "UPDATE people_important_date
+                    SET label = ?1, month_day = ?2, updated_at = ?3,
+                        reminder_on = CASE WHEN ?4 THEN 1 ELSE reminder_on END
+                  WHERE date_id = ?5 AND (label IS NOT ?1 OR month_day IS NOT ?2)",
+                rusqlite::params![label, month_day, ctx.now, is_birthday(&label), date_id],
+            )? > 0;
+            if is_birthday(&label) {
+                reconcile_birthday(ctx, &party_id, &date_id, &month_day)?;
+            } else if is_birthday(&old_label) {
+                clear_birthday(ctx, &party_id, &old_day)?;
+            }
+            Ok(serde_json::json!({ "date_id": date_id, "changed": changed }))
+        },
+        sealed_input: &[],
+    }
+}
+
+/// Remove one important date (#1127: a followed contact lost its birthday on the phone). A
+/// birthday that was the party's last one takes its day off the spine with it.
+fn delete_important_date() -> CommandDefinition {
+    CommandDefinition {
+        name: "people.delete_important_date",
+        owner_schema: "people",
+        input_schema: r#"{
+          "type": "object",
+          "required": ["date_id"],
+          "additionalProperties": false,
+          "properties": { "date_id": { "type": "string", "minLength": 1 } }
+        }"#,
+        // Deleting what is not there lands the state deleting it does.
+        idempotency: Idempotency::Idempotent,
+        risk: Risk::Low,
+        confirm: false,
+        preconditions: &[],
+        postconditions: &[CommandCondition {
+            predicate: "date_removed",
+            check: |ctx| {
+                let date_id = ctx.required_str("date_id")?;
+                let count: i64 = ctx.connection().query_row(
+                    "SELECT COUNT(*) FROM people_important_date WHERE date_id = ?1",
+                    [date_id],
+                    |row| row.get(0),
+                )?;
+                Ok((count != 0).then(|| "the date is still there".to_owned()))
+            },
+        }],
+        handler: |ctx| {
+            let date_id = ctx.required_str("date_id")?.to_owned();
+            let found: Option<(String, String, String)> = ctx
+                .connection()
+                .query_row(
+                    "SELECT party_id, label, month_day FROM people_important_date
+                      WHERE date_id = ?1",
+                    [&date_id],
+                    |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+                )
+                .optional()?;
+            let Some((party_id, label, month_day)) = found else {
+                return Ok(serde_json::json!({ "date_id": date_id, "deleted": false }));
+            };
+            ctx.connection().execute(
+                "DELETE FROM people_important_date WHERE date_id = ?1",
+                [&date_id],
+            )?;
+            if is_birthday(&label) {
+                let another: i64 = ctx.connection().query_row(
+                    "SELECT COUNT(*) FROM people_important_date
+                      WHERE party_id = ?1 AND lower(label) LIKE '%birthday%'",
+                    [&party_id],
+                    |row| row.get(0),
+                )?;
+                if another == 0 {
+                    clear_birthday(ctx, &party_id, &month_day)?;
+                }
+            }
+            Ok(serde_json::json!({ "date_id": date_id, "deleted": true }))
+        },
+        sealed_input: &[],
+    }
+}
+
+/// Take a birthday's day off the party spine, when the spine still holds that day.
+fn clear_birthday(ctx: &CommandCtx<'_, '_>, party_id: &str, month_day: &str) -> Result<()> {
+    ctx.connection().execute(
+        "UPDATE core_party SET birth_date = NULL, updated_at = ?1
+          WHERE party_id = ?2 AND substr(birth_date, -5) = ?3",
+        rusqlite::params![ctx.now, party_id, month_day],
+    )?;
+    Ok(())
+}
+
 /// v0's `/birthday/iu` test, which is case-insensitive and matches anywhere.
 fn is_birthday(label: &str) -> bool {
     label.to_lowercase().contains("birthday")
@@ -3229,10 +3428,12 @@ mod tests {
     /// THE WHOLE SCHEMA, and the split the census states: v0's 28 commands,
     /// **14 idempotent / 14 once**, no retry-safe — less `add_debt` (once) and
     /// `settle_debt` (idempotent), which left with Tally (#1099) — plus
-    /// `purge_person` (#1015 D1), a fourteenth `once`.
+    /// `purge_person` (#1015 D1), a fourteenth `once`, and the phone sync's
+    /// `edit_important_date` and `delete_important_date` (#1127), two more
+    /// idempotent.
     #[test]
-    fn the_schema_carries_all_twenty_six_of_v0s_and_the_purge() {
-        assert_eq!(definitions().len(), 27);
+    fn the_schema_carries_all_twenty_six_of_v0s_the_purge_and_the_phone_syncs_two() {
+        assert_eq!(definitions().len(), 29);
         let mut idempotent = 0;
         let mut once = 0;
         let mut retry_safe = 0;
@@ -3243,7 +3444,7 @@ mod tests {
                 Idempotency::RetrySafe => retry_safe += 1,
             }
         }
-        assert_eq!((idempotent, once, retry_safe), (13, 14, 0));
+        assert_eq!((idempotent, once, retry_safe), (15, 14, 0));
     }
 
     /// **NO `people.*` COMMAND PARKS A NON-OWNER** (census §A0's per-command

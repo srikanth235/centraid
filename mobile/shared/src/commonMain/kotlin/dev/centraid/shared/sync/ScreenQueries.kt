@@ -247,6 +247,8 @@ internal fun AppQueryRequest.zone(): String? =
         ?: vault_search?.tz
         ?: money_spending?.tz ?: money_activity?.tz ?: money_transaction?.tz ?: money_cashflow?.tz
         ?: money_accounts?.tz ?: money_target_sheet?.tz ?: money_recurring?.tz ?: money_search?.tz
+        ?: health_today?.tz ?: health_series?.tz ?: health_trends?.tz ?: health_workouts?.tz
+        ?: health_workout?.tz ?: health_follow_view?.tz
 
 private const val NOTHING_TO_READ = "Nothing to read here."
 private const val NO_ZONE = "This phone did not report its time zone."

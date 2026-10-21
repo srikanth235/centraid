@@ -404,8 +404,9 @@ public interface MediaLibrary {
         /** A Live Photo pair. Null for motion photos, RAW and burst members. */
         public val captureGroupId: String? = null,
         /**
-         * WHAT IS STAGED FOR IT, in order (#1080, the walker): the camera's
-         * original first, then a Live Photo's paired movie. Each [Resource.ref]
+         * WHAT IS STAGED FOR IT, in order (#1080, the walker): an edited
+         * asset's [Resource.Role.CAMERA_ORIGINAL] when there is one, then the
+         * current rendition, then a Live Photo's paired movie. Each [Resource.ref]
          * is what [open] reads and what the core keeps as the item's
          * `os_ref`, so it must find the same bytes again after a relaunch.
          */
@@ -417,12 +418,24 @@ public interface MediaLibrary {
          */
         public val after: String? = null,
         /**
-         * THE MEMBER EDITED IT (`PHAsset.hasAdjustments`; always false on
-         * Android). Its resources are the current rendition, which the next
-         * edit replaces, so the core never offers it for deletion
-         * (`StageBegin.os_edited`, seam contract A20).
+         * THE MEMBER EDITED IT IN THE LIBRARY (`PHAsset.hasAdjustments`; always
+         * false on Android). Its [Resource.Role.ORIGINAL] is the edit's render,
+         * and the camera's own bytes, when the library still holds them, are a
+         * [Resource.Role.CAMERA_ORIGINAL] listed BEFORE it (A20(1)). The walker
+         * does not read this flag: the resources say what to commit, and the
+         * rendition's ref says which version it was.
          */
         public val edited: Boolean = false,
+        /**
+         * THE LIBRARY SAYS THIS ITEM CHANGED AFTER IT WAS WALKED, in place and
+         * under the same ref (Android's `DATE_MODIFIED`; always false on iOS,
+         * whose edits carry a [Resource.Role.CAMERA_ORIGINAL] instead). The
+         * camera's bytes are gone from the phone, so the walker asks the core
+         * which asset this ref was backed up as and, if the new bytes differ,
+         * files them as an edit of it (#1127, A20). A platform that sets this
+         * also sets [captureGroupId] to the ref, the mark the grid folds on.
+         */
+        public val changedInPlace: Boolean = false,
     )
 
     /** One file of an [Asset]. */
@@ -430,12 +443,27 @@ public interface MediaLibrary {
         public enum class Role {
             /**
              * The asset's CURRENT RENDITION: the camera's bytes, or the edit's
-             * render once the member edited it (A20). Backing up the camera
-             * original and the edit's adjustment data beside it is an owner
-             * question; until then an edited asset is never deleted, so
-             * nothing is lost.
+             * render once the member edited it (A20).
+             *
+             * **An edited asset's ref names the version it was read at** — the
+             * rendition's `modificationDate`, in milliseconds, after a `#r`
+             * (`<identifier>#r1760000000000`) — and that is A20(3)'s witness.
+             * The core keeps the ref beside the bytes it names; the shell's
+             * deleter releases the asset only when the library's version now is
+             * the one a ref names, because an edit made since is on no
+             * gateway. [MediaLibrary.open] and [MediaLibrary.render] read the
+             * current rendition whatever version the ref says: the ref is
+             * evidence, not a request for an old one.
              */
             ORIGINAL,
+
+            /**
+             * What the camera wrote under an edit (A20(1)), listed before the
+             * rendition so the walker can name it as the edit's source. Its ref
+             * is `<identifier>#camera`. Never carries the edit's adjustment
+             * data (A20(2)): only Apple Photos can apply it.
+             */
+            CAMERA_ORIGINAL,
 
             /** A Live Photo's movie. */
             PAIRED_VIDEO,
