@@ -11,8 +11,8 @@
 //! vault's, kept by the writer; a test that searches rebuilds it). A generator
 //! is deterministic — a named LCG, so the bytes of a fixture never move.
 //!
-//! The generators today are Notes', People', Agenda's and Tasks'; the next lane
-//! that needs a volume adds its own beside them.
+//! The generators today are Notes', People', Agenda's, Tasks', Docs' and Photos';
+//! the next lane that needs a volume adds its own beside them.
 
 use rusqlite::{Connection, params};
 
@@ -1107,6 +1107,535 @@ pub fn year3_tasks(
         }
     }
     Ok(counts)
+}
+
+// ---------------------------------------------------------------------------
+// Docs
+// ---------------------------------------------------------------------------
+
+/// A 64-hex blob hash that is a function of a namespace and an index: unique,
+/// well formed (the `blob.hash` CHECK), and ordered the way the index is.
+fn hash_of(namespace: u64, index: usize) -> String {
+    format!("{:016x}{:048x}", namespace, index)
+}
+
+/// The volume a Docs drive is stated at.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Year3DocsShape {
+    /// Documents, live and trashed together.
+    pub documents: usize,
+    /// How many of them are in the trash (the oldest, so the window never reaches them).
+    pub trashed: usize,
+    /// How many carry a star.
+    pub starred: usize,
+    /// Folders, spread over `folder_depth` levels.
+    pub folders: usize,
+    pub folder_depth: usize,
+    /// Labels (tags), and how many documents carry one.
+    pub labels: usize,
+    pub labelled: usize,
+    /// Documents whose bytes were replaced once: a `revision` row each.
+    pub extra_versions: usize,
+}
+
+/// THE YEAR-3 DOCS PROFILE: 8,000 documents over 400 folders four levels deep.
+///
+/// Each number is the reason it is here:
+///
+/// * **8,000 documents against a 2,000-row window.** The drive's declared
+///   maximum is 2,000, so a year-3 drive is four windows deep and `truncated`
+///   has to be the page's own cursor rather than a row count.
+/// * **400 folders four levels deep**: the folder rail is read whole and the
+///   path of a document is walked up the tree.
+/// * **2,000 labels over 4,000 documents** and **600 stars**: `docs.rows.tagged`
+///   is a `(document, tag)` pair read over the window, which is why its bound is
+///   a fan-out bound and not a row count.
+/// * **2,000 replaced versions**: each is a `revision` row and a second blob, so
+///   10,000 blobs stand behind 8,000 documents.
+pub const YEAR3_DOCS: Year3DocsShape = Year3DocsShape {
+    documents: 8_000,
+    trashed: 400,
+    starred: 600,
+    folders: 400,
+    folder_depth: 4,
+    labels: 2_000,
+    labelled: 4_000,
+    extra_versions: 2_000,
+};
+
+/// What one year-3 Docs seeding wrote.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Year3DocsCounts {
+    pub documents: usize,
+    pub live_documents: usize,
+    pub trashed: usize,
+    pub starred: usize,
+    pub folders: usize,
+    /// Blob rows: one per document, one more per replaced version.
+    pub blobs: usize,
+    pub revisions: usize,
+    /// Label edges (the star is counted apart).
+    pub labelled: usize,
+}
+
+/// Write the Docs profile into a founded vault's connection. Deterministic in
+/// `seed`. Documents are numbered oldest first, and the trashed are the low
+/// indexes, so a window (newest first) never reaches them and the trash shelf
+/// has to read its own set.
+///
+/// **Creation instants repeat on purpose**: two documents share every `created_at`,
+/// because the keyset page's whole reason for carrying the pk is that the sort key
+/// is not unique.
+///
+/// # Errors
+///
+/// Whatever the vault refuses a row for; the generator writes only rows the
+/// baseline's own constraints accept.
+pub fn year3_docs(
+    connection: &Connection,
+    shape: Year3DocsShape,
+    seed: u64,
+) -> KitResult<Year3DocsCounts> {
+    let mut random = Seeded::new(seed);
+    let at = |index: usize| instant(index / 2, shape.documents.div_ceil(2));
+    let mut counts = Year3DocsCounts::default();
+
+    let mut entity = connection
+        .prepare_cached(
+            "INSERT INTO entity (id, kind, title, created_at, updated_at, deleted_at, purge_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        )
+        .map_err(door)?;
+    let mut blob = connection
+        .prepare_cached("INSERT INTO blob (hash, size) VALUES (?1, ?2)")
+        .map_err(door)?;
+    let mut edge = connection
+        .prepare_cached(
+            "INSERT OR IGNORE INTO edge (from_id, rel, to_id, anchor, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+        )
+        .map_err(door)?;
+
+    // The tree. A folder's parent is one of the previous LEVEL's, so the depth is
+    // a property of the arithmetic and not of a random pick.
+    let per_level = (shape.folders / shape.folder_depth.max(1)).max(1);
+    for index in 0..shape.folders {
+        let folder = id("folder", index);
+        let level = index / per_level;
+        let parent = (level > 0).then(|| id("folder", (index - per_level).min(shape.folders - 1)));
+        entity
+            .execute(params![
+                folder,
+                "folder",
+                format!("Folder {index:06}"),
+                at(0),
+                at(0),
+                None::<String>,
+                None::<String>
+            ])
+            .map_err(door)?;
+        connection
+            .execute(
+                "INSERT INTO container (id, kind, parent_id, position) VALUES (?1, 'folder', ?2, ?3)",
+                params![folder, parent, index as f64],
+            )
+            .map_err(door)?;
+        counts.folders += 1;
+    }
+    for index in 0..shape.labels {
+        let tag = id("label", index);
+        entity
+            .execute(params![
+                tag,
+                "tag",
+                format!("label-{index:06}"),
+                at(0),
+                at(0),
+                None::<String>,
+                None::<String>
+            ])
+            .map_err(door)?;
+        connection
+            .execute(
+                "INSERT INTO concept (id, kind, key) VALUES (?1, 'tag', ?2)",
+                params![tag, format!("label-{index:06}")],
+            )
+            .map_err(door)?;
+    }
+
+    let mut older_blobs = 0usize;
+    for index in 0..shape.documents {
+        let document = id("document", index);
+        let trashed = index < shape.trashed;
+        let stamped = at(index);
+        let body = format!("# Document {index:06}\n\nFiled {stamped}.\n");
+        let current = hash_of(0xd0c5, index);
+        blob.execute(params![current, body.len() as i64])
+            .map_err(door)?;
+        counts.blobs += 1;
+        let (deleted, purge) = if trashed {
+            (Some(stamped.clone()), Some(at(index + shape.documents)))
+        } else {
+            (None, None)
+        };
+        entity
+            .execute(params![
+                document,
+                "document",
+                format!("Document {index:06}"),
+                stamped,
+                stamped,
+                deleted,
+                purge
+            ])
+            .map_err(door)?;
+        let folder = id("folder", random.upto(shape.folders.max(1)));
+        connection
+            .execute(
+                "INSERT INTO document (id, blob, media_type, folder_id)
+                 VALUES (?1, ?2, 'text/markdown', ?3)",
+                params![document, current, (shape.folders > 0).then_some(folder)],
+            )
+            .map_err(door)?;
+        counts.documents += 1;
+        if trashed {
+            counts.trashed += 1;
+        } else {
+            counts.live_documents += 1;
+        }
+        // The replaced version: a second blob, and the revision that holds it.
+        if index < shape.extra_versions {
+            let older = hash_of(0x01d0, older_blobs);
+            older_blobs += 1;
+            blob.execute(params![older, 40_i64]).map_err(door)?;
+            counts.blobs += 1;
+            connection
+                .execute(
+                    "INSERT INTO revision (entity_id, seq, at, blob, media_type)
+                     VALUES (?1, 1, ?2, ?3, 'text/markdown')",
+                    params![document, stamped, older],
+                )
+                .map_err(door)?;
+            counts.revisions += 1;
+        }
+        if index < shape.starred {
+            edge.execute(params![
+                document,
+                "tagged",
+                "flag:starred",
+                None::<String>,
+                stamped
+            ])
+            .map_err(door)?;
+            counts.starred += 1;
+        }
+        if index < shape.labelled {
+            let label = id("label", random.upto(shape.labels.max(1)));
+            edge.execute(params![document, "tagged", label, None::<String>, stamped])
+                .map_err(door)?;
+            counts.labelled += 1;
+        }
+    }
+    Ok(counts)
+}
+
+// ---------------------------------------------------------------------------
+// Photos
+// ---------------------------------------------------------------------------
+
+/// The volume a Photos library is stated at.
+///
+/// **A count is not a distribution.** `near_duplicate_families` and `family_size`
+/// are what give the clustering something to find; without them a 90,000-photo
+/// fixture measures a table scan and calls it a duplicates screen.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Year3PhotosShape {
+    pub assets: usize,
+    /// One in this many photographs is trashed, so the trash shelf is non-empty
+    /// and the live window has to exclude something.
+    pub trashed_every: usize,
+    /// One in this many is archived: in NEITHER shelf.
+    pub archived_every: usize,
+    /// One in this many is starred: a flag edge, so the fixture exercises the
+    /// join every Photos surface makes.
+    pub starred_every: usize,
+    /// Groups of visually similar frames, so the clustering finds something.
+    pub near_duplicate_families: usize,
+    pub family_size: usize,
+    /// Places, so the grid's place join is not trivial.
+    pub places: usize,
+    /// Albums, and how many members each carries.
+    pub albums: usize,
+    pub album_members: usize,
+    /// One in this many photographs starts a burst of two stills (the older is
+    /// folded under the newer), so the library's fold has work to do.
+    pub burst_every: usize,
+}
+
+/// The `year3-photos` volume: 90,000 photographs and 3,000 near-duplicate families.
+///
+/// 3,000 families of three are 9,000 fingerprints against a 4,000-fingerprint
+/// duplicates read, so the review surface is built to trip its cap.
+pub const YEAR3_PHOTOS: Year3PhotosShape = Year3PhotosShape {
+    assets: 90_000,
+    trashed_every: 250,
+    archived_every: 500,
+    starred_every: 50,
+    near_duplicate_families: 3_000,
+    family_size: 3,
+    places: 400,
+    albums: 40,
+    album_members: 50,
+    burst_every: 100,
+};
+
+/// What a year-3 Photos seeding wrote.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Year3PhotosCounts {
+    pub assets: usize,
+    /// Neither trashed nor archived.
+    pub live_assets: usize,
+    pub trashed: usize,
+    pub archived: usize,
+    pub starred: usize,
+    pub phashes: usize,
+    /// Live photographs in a near-duplicate family.
+    pub clustered: usize,
+    pub places: usize,
+    pub album_entries: usize,
+    pub bursts: usize,
+}
+
+/// Seed the Photos axis of year-3 volume into a founded vault's connection.
+///
+/// **Capture times repeat on purpose.** Photographs share a `taken_at` in pairs,
+/// because the keyset page's whole reason for carrying the pk is that the sort
+/// key is not unique: a fixture with distinct timestamps cannot trip the page
+/// boundary the cursor exists for.
+///
+/// # Errors
+///
+/// Whatever the vault refuses a row for.
+#[expect(
+    clippy::too_many_lines,
+    reason = "one generator, one reading order, as the others here"
+)]
+pub fn year3_photos(
+    connection: &Connection,
+    shape: Year3PhotosShape,
+    seed: u64,
+) -> KitResult<Year3PhotosCounts> {
+    let mut random = Seeded::new(seed);
+    let at = |index: usize| instant(index / 2, shape.assets.div_ceil(2));
+    let created = at(0);
+    let mut counts = Year3PhotosCounts::default();
+
+    let mut entity = connection
+        .prepare_cached(
+            "INSERT INTO entity (id, kind, title, created_at, updated_at, deleted_at, purge_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        )
+        .map_err(door)?;
+    let mut edge = connection
+        .prepare_cached(
+            "INSERT OR IGNORE INTO edge (from_id, rel, to_id, position, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+        )
+        .map_err(door)?;
+
+    for index in 0..shape.places {
+        let place = id("place", index);
+        entity
+            .execute(params![
+                place,
+                "place",
+                format!("Place {index:04}"),
+                created,
+                created,
+                None::<String>,
+                None::<String>
+            ])
+            .map_err(door)?;
+        connection
+            .execute(
+                "INSERT INTO place (id, lat, lon, locality, zone) VALUES (?1, ?2, ?3, ?4, 'America/Los_Angeles')",
+                params![
+                    place,
+                    36.0 + (index as f64) / 1_000.0,
+                    -122.0 + (index as f64) / 1_000.0,
+                    format!("Town {index:04}")
+                ],
+            )
+            .map_err(door)?;
+        counts.places += 1;
+    }
+    for index in 0..shape.albums {
+        let album = id("album", index);
+        entity
+            .execute(params![
+                album,
+                "album",
+                format!("Album {index:03}"),
+                created,
+                created,
+                None::<String>,
+                None::<String>
+            ])
+            .map_err(door)?;
+        connection
+            .execute(
+                "INSERT INTO container (id, kind, position) VALUES (?1, 'album', ?2)",
+                params![album, index as f64],
+            )
+            .map_err(door)?;
+    }
+
+    for index in 0..shape.assets {
+        let photo = id("asset", index);
+        let hash = hash_of(0x9407, index);
+        let taken = at(index);
+        let trashed = index.is_multiple_of(shape.trashed_every);
+        // The LAST of each `archived_every`, never the first: `archived_every` is a
+        // multiple of `trashed_every`, and the first of each would always be trashed.
+        let archived = !trashed && index % shape.archived_every == shape.archived_every - 1;
+        connection
+            .execute(
+                "INSERT INTO blob (hash, size) VALUES (?1, ?2)",
+                params![hash, 2_000_000 + random.upto(1_000_000) as i64],
+            )
+            .map_err(door)?;
+        entity
+            .execute(params![
+                photo,
+                "photo",
+                format!("Frame {index:06}"),
+                taken,
+                taken,
+                trashed.then(|| taken.clone()),
+                trashed.then(|| at(index + shape.assets)),
+            ])
+            .map_err(door)?;
+        // A burst is a pair of stills: the older is folded under the newer.
+        let burst = (shape.burst_every > 0 && index / 2 % shape.burst_every == 0)
+            .then(|| id("burst", index / 2));
+        if burst.is_some() && index % 2 == 0 {
+            counts.bursts += 1;
+        }
+        connection
+            .execute(
+                "INSERT INTO photo
+                   (id, blob, media_type, form, taken_at, offset_min, width, height, burst, place_id)
+                 VALUES (?1, ?2, 'image/jpeg', 'photo', ?3, -420, 4032, 3024, ?4, ?5)",
+                params![
+                    photo,
+                    hash,
+                    taken,
+                    burst,
+                    (shape.places > 0).then(|| id("place", index % shape.places)),
+                ],
+            )
+            .map_err(door)?;
+        counts.assets += 1;
+        if trashed {
+            counts.trashed += 1;
+        } else if archived {
+            counts.archived += 1;
+        } else {
+            counts.live_assets += 1;
+        }
+        if archived {
+            edge.execute(params![
+                photo,
+                "tagged",
+                "flag:archived",
+                None::<f64>,
+                taken
+            ])
+            .map_err(door)?;
+        }
+        if index.is_multiple_of(shape.starred_every) {
+            edge.execute(params![photo, "tagged", "flag:starred", None::<f64>, taken])
+                .map_err(door)?;
+            counts.starred += 1;
+        }
+        // The perceptual hash, and the near-duplicate families: the first
+        // `families * family_size` photographs are grouped, every member of a
+        // family sharing a base digest with one bit flipped (two members are
+        // two bits apart, inside the threshold of six). Every later photograph
+        // gets a digest far from every other.
+        let family = index / shape.family_size.max(1);
+        let phash = if family < shape.near_duplicate_families {
+            let member = index % shape.family_size.max(1);
+            let base = (family as u64).wrapping_mul(0x9e37_79b9) & 0x0fff_ffff_ffff_ffff;
+            format!("{:016x}", base ^ (1_u64 << (member * 4)))
+        } else {
+            format!(
+                "{:016x}",
+                (index as u64).wrapping_mul(0xff51_afd7_ed55_8ccd)
+            )
+        };
+        connection
+            .execute(
+                "INSERT INTO derivative (blob, variant, text, created_at)
+                 VALUES (?1, 'phash', ?2, ?3)",
+                params![hash, phash, taken],
+            )
+            .map_err(door)?;
+        counts.phashes += 1;
+        if family < shape.near_duplicate_families && !trashed {
+            counts.clustered += 1;
+        }
+        if index < shape.album_members * shape.albums {
+            edge.execute(params![
+                id("album", index % shape.albums),
+                "contains",
+                photo,
+                (index / shape.albums) as f64,
+                taken
+            ])
+            .map_err(door)?;
+            counts.album_entries += 1;
+        }
+    }
+    Ok(counts)
+}
+
+/// Every photograph's perceptual hash, as `(photo id, phash)`: the fingerprints a
+/// test hands the clustering to prove the generator seeded a real cluster.
+///
+/// # Errors
+///
+/// Whatever the vault refuses a read for.
+pub fn photo_fingerprints(connection: &Connection) -> KitResult<Vec<(String, String)>> {
+    let mut statement = connection
+        .prepare(
+            "SELECT p.id, d.text FROM photo p JOIN derivative d ON d.blob = p.blob AND d.variant = 'phash'
+             WHERE p.id IN (SELECT id FROM entity WHERE deleted_at IS NULL) ORDER BY p.id",
+        )
+        .map_err(door)?;
+    let rows = statement
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+        .map_err(door)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(door)?;
+    Ok(rows)
+}
+
+/// How many photographs are neither trashed nor archived.
+///
+/// # Errors
+///
+/// Whatever the vault refuses a read for.
+pub fn live_photo_count(connection: &Connection) -> KitResult<i64> {
+    connection
+        .query_row(
+            "SELECT COUNT(*) FROM photo
+             WHERE id IN (SELECT id FROM entity WHERE deleted_at IS NULL)
+               AND id NOT IN (SELECT from_id FROM edge WHERE rel = 'tagged' AND to_id = 'flag:archived')",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(door)
 }
 
 #[cfg(test)]
