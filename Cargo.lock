@@ -523,13 +523,10 @@ dependencies = [
 name = "centraid-apps-notes"
 version = "1.0.0-alpha.0"
 dependencies = [
- "centraid-api-proto",
  "centraid-apps-kit",
- "centraid-media",
+ "centraid-ontology",
  "centraid-search",
  "centraid-vault",
- "prost",
- "rusqlite",
  "serde",
  "serde_json",
  "thiserror",
