@@ -92,8 +92,8 @@ fn link(vault: &Vault, link_id: &str, source: &str, phone_id: &str, entity: &str
     run(
         vault,
         &format!(
-            "INSERT OR IGNORE INTO phone_origin (origin_id, source, phone_origin, label, created_at)
-             VALUES ('o-{source}', '{source}', 'store', 'Main', '{NOW}');
+            "INSERT OR IGNORE INTO phone_origin (origin_id, source, phone_origin, label, device_id, created_at)
+             VALUES ('o-{source}', '{source}', 'store', 'Main', 'device-a', '{NOW}');
              INSERT INTO phone_link
                (link_id, source, phone_id, origin_id, entity_id, fingerprint, last_seen_at, created_at)
              VALUES ('{link_id}', '{source}', '{phone_id}', 'o-{source}', '{entity}', 'f1', '{NOW}', '{NOW}')"

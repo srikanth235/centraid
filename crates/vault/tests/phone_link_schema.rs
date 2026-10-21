@@ -55,8 +55,8 @@ fn link(vault: &Vault, link_id: &str, source: &str, phone_id: &str, entity: &str
             tx.set_producer("test.phone_link");
             tx.connection().execute(
                 "INSERT OR IGNORE INTO phone_origin
-               (origin_id, source, phone_origin, label, created_at)
-             VALUES ('o-' || ?1, ?1, 'acct', 'Main', ?2)",
+               (origin_id, source, phone_origin, label, device_id, created_at)
+             VALUES ('o-' || ?1, ?1, 'acct', 'Main', 'device-a', ?2)",
                 rusqlite::params![source, NOW],
             )?;
             tx.connection().execute(
@@ -352,15 +352,15 @@ fn a_links_origin_exists_is_of_its_source_and_cannot_be_deleted_while_named() {
     // An origin's source and phone origin pair is unique, and its label is never blank.
     assert!(
         run(
-            "INSERT INTO phone_origin (origin_id, source, phone_origin, label, created_at)
-         VALUES ('dup', 'calendar', 'acct', 'Again', '2026-10-19T09:00:00.000Z')"
+            "INSERT INTO phone_origin (origin_id, source, phone_origin, label, device_id, created_at)
+         VALUES ('dup', 'calendar', 'acct', 'Again', 'device-a', '2026-10-19T09:00:00.000Z')"
         )
         .is_err()
     );
     assert!(
         run(
-            "INSERT INTO phone_origin (origin_id, source, phone_origin, label, created_at)
-         VALUES ('blank', 'files', 'folder', '  ', '2026-10-19T09:00:00.000Z')"
+            "INSERT INTO phone_origin (origin_id, source, phone_origin, label, device_id, created_at)
+         VALUES ('blank', 'files', 'folder', '  ', 'device-a', '2026-10-19T09:00:00.000Z')"
         )
         .is_err()
     );
