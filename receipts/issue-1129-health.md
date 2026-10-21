@@ -277,10 +277,16 @@ mobile/scripts/android-core.sh && ./gradlew -Pcentraid.android=true :androidApp:
 BUILD SUCCESSFUL.
 
 ```sh
-maestro test first-launch.yaml onboarding.yaml health-connect.yaml
+maestro test --format junit first-launch.yaml onboarding.yaml health-connect.yaml
 ```
 
-All three PASS on a fresh install of the new build, over the simulator's seeded Health. Today read "Wed 21 October", the core's day in the phone's zone. Workouts drew the core's wall clocks (00:24 today, then weekdays, then months). The screenshots are in the notes folder's `screens/close/`.
+Two runs, on fresh installs of the new build over the simulator's seeded Health.
+- **First run.** All three exited 0. Its logs show `health-connect` reaching its last step. The first-launch and onboarding logs stop early, so their pass rests on the exit code alone. Today read "Wed 21 October", the core's day in the phone's zone. Workouts drew the core's wall clocks: 00:24 today, then weekdays, then months. This was seen on screen and not kept.
+- **Rerun with JUnit, under a load of 97 to 169 from other sessions.**
+  - `onboarding.yaml`: SUCCESS. It goes through first launch.
+  - `health-connect.yaml`: `1/1 Flow Passed`.
+  - `first-launch.yaml` never started: Maestro's iOS driver timed out, even at 240 s, and no step ran.
+- **Where it is kept.** The JUnit files and logs are in the notes folder's `logs/root-close-maestro-*`, and the screenshots are in `screens/close/`.
 
 Lane checks, as each lane reported them (lane R2 kept no notes file, so its figures rest on its report and on 3d2be39f1's commit message):
 - `cargo nextest -p centraid-ontology -p centraid-vault`: 676 of 676 pass (R2).
@@ -300,3 +306,14 @@ Lane checks, as each lane reported them (lane R2 kept no notes file, so its figu
 ## Audit
 
 PASS (independent auditor, 2026-10-21). The file list matches `git diff c1a914ad8..9366dc296` once #1127's merged files (`crates/vault/src/page.rs`, `receipts/issue-1127-phone-sync.md`) are set aside. The lane notes support the verification numbers, the screenshots and the falsifications. The five commitments' mechanisms and named tests are present. The iOS and Android sources contain no write path. Health is in no Chat scope list. Android remains unrun, as stated.
+
+Second audit, of "After the close" (independent auditor, 2026-10-21): **PASS, with caveats.** Every row in "What changed" names a commit in `825147509..989ac9bb6` whose diff does what it says. `LocalDays` and every `offsetMinutesAt` are gone, and the platform clocks are byte-identical to the base. The gate logs and the JVM test XML match the stated numbers. R-1129-16 to 19 match the code, and RP-R-2, RP-K-2 and RP-K-6 are struck through. The caveats are corrected in a2b7384dd and above:
+- Maestro's evidence for two flows was thin; it was rerun with JUnit, as stated.
+- One screenshot was missing.
+- `vault-ontology.md` still counted 3 rungs in one line and named no rung-four climb test.
+- The zone pre-check fix landed in a merge without being named.
+- The resolver's `getrandom` move went unmentioned.
+- Lane M2's 453.2 s run was left out.
+- R2's figures rest on its report.
+- The `device_id` departure belonged in ONT-42.
+
