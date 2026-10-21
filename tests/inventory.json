@@ -29,8 +29,8 @@
     "issue": 915,
     "expires": "2026-12-01",
     "budgets": {
-      "toBeTruthyFalsy": 378,
-      "toHaveBeenCalled": 778
+      "toBeTruthyFalsy": 11,
+      "toHaveBeenCalled": 7
     }
   },
   "commentDensity": {

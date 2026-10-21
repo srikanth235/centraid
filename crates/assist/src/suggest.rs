@@ -255,8 +255,7 @@ pub fn suggest_in(world: &World, today: Date, scope: Option<App>) -> Vec<Suggest
                 .map(|domain| candidates(domain, world, today))
                 .collect();
             let backed: Vec<&[Suggestion]> = per_domain.iter().map(|c| &c.backed[..]).collect();
-            let dataless: Vec<&[Suggestion]> =
-                per_domain.iter().map(|c| &c.dataless[..]).collect();
+            let dataless: Vec<&[Suggestion]> = per_domain.iter().map(|c| &c.dataless[..]).collect();
             interleave(&mut out, &backed);
             interleave(&mut out, &dataless);
         }
