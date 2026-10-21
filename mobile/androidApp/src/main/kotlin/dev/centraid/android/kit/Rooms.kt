@@ -42,6 +42,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.SecureFlagPolicy
@@ -403,7 +404,13 @@ public fun SheetRoom(
             shouldDismissOnClickOutside = swipeable,
         ),
     ) {
-        Column(modifier.fillMaxWidth().navigationBarsPadding().padding(bottom = 16.dp).testTag("sheet-room")) {
+        // A SHEET IS ITS OWN WINDOW, so the root's `testTagsAsResourceId` (MainActivity,
+        // Q-1128-2) does not reach it: the sheet sets it again for Maestro's `id:` selectors.
+        Column(
+            modifier.fillMaxWidth().navigationBarsPadding().padding(bottom = 16.dp)
+                .semantics { testTagsAsResourceId = true }
+                .testTag("sheet-room"),
+        ) {
             if (title.isNotEmpty()) RoomTitle(title, Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp))
             content()
             StatusLine(status)
