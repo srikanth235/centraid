@@ -353,6 +353,28 @@ public sealed interface Destination {
 
     /** The search bar's page (R-CHROME-2): `MoneySearchBridge.open()`. */
     public data object MoneySearch : Destination
+
+    // --- Health (#1129) ---
+    // `parent` on a pushed Health page is the pushing page's title: the back
+    // control's word. Empty: "Health".
+
+    /**
+     * HEALTH'S HOME. Today, Trends or Workouts, as a parameter; More is a
+     * sheet. A shell calls `HealthHomeBridge.open(destination)`.
+     */
+    public data class HealthHome(
+        val destination: centraid.screen.v1.HealthHomeState.Destination =
+            centraid.screen.v1.HealthHomeState.Destination.DESTINATION_TODAY,
+    ) : Destination
+
+    /** One metric (its key, `steps`): `HealthMetricBridge.open(metric, parent)`. */
+    public data class HealthMetric(val metric: String, val parent: String = "") : Destination
+
+    /** One workout: `HealthWorkoutBridge.open(activityId, parent)`. */
+    public data class HealthWorkout(val activityId: String, val parent: String = "") : Destination
+
+    /** What Health may read, and Connect: `HealthConnectScreenBridge.open(parent)`. */
+    public data class HealthConnect(val parent: String = "") : Destination
 }
 
 /**
@@ -432,5 +454,15 @@ public fun NavStack.withPeopleDestination(destination: PeopleHomeState.Destinati
         NavStack(entries.dropLast(1) + top.copy(destination = destination))
     } else {
         push(Destination.PeopleHome(destination))
+    }
+}
+
+/** HEALTH'S BAND, IN PLACE (#1129): Today, Trends and Workouts are one screen's parameter. */
+public fun NavStack.withHealthDestination(destination: centraid.screen.v1.HealthHomeState.Destination): NavStack {
+    val top = current
+    return if (top is Destination.HealthHome) {
+        NavStack(entries.dropLast(1) + top.copy(destination = destination))
+    } else {
+        push(Destination.HealthHome(destination))
     }
 }

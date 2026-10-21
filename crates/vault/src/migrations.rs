@@ -1,4 +1,4 @@
-//! The forward-only ladder, and the two rungs it holds.
+//! The forward-only ladder, and the four rungs it holds.
 //!
 //! ## Two axes, and v0's is not one of them (D-1020-D1-2)
 //!
@@ -32,7 +32,17 @@
 //! open it.
 //!
 //! Rung two, `002_phone_link.sql`, is that appended rung (#1127): the table that records which
-//! phone record each followed person, event or document came from.
+//! phone record each followed person, event, document or workout came from. It was amended in
+//! place to admit the `health` source before any release (#1129, R-1129-1).
+//!
+//! Rung three, `003_health.sql`, holds the health pack (#1129): `health_daily` and
+//! `health_workout`, the workout-kinds scheme seeded under fixed ids, and `core_activity` rebuilt
+//! as mutable (`updated_at`, `row_version`, the touch trigger), every row kept.
+//!
+//! Rung four, `004_chat_message_version.sql`, gives `chat_message` the `updated_at`,
+//! `row_version` and touch trigger its registered `mutable` life promised (#1129, F-R-1): a
+//! proposal settles in place. It is a rung of its own rather than an edit to rung three because
+//! the phones #1129 ran had already climbed rung three.
 //!
 //! The file is cut by `bin/export-baseline` ([`render_baseline`]), which founds
 //! a vault from whatever ladder the build embeds and renders what it holds. With
@@ -76,6 +86,13 @@ pub const BASELINE_SQL: &str = include_str!("../../../contracts/migrations/001_b
 /// document came from (#1127).
 pub const PHONE_LINK_SQL: &str = include_str!("../../../contracts/migrations/002_phone_link.sql");
 
+/// Rung three: the health pack, and `core_activity` made mutable (#1129).
+pub const HEALTH_SQL: &str = include_str!("../../../contracts/migrations/003_health.sql");
+
+/// Rung four: `chat_message` carries `updated_at`, `row_version` and the touch trigger (#1129).
+pub const CHAT_MESSAGE_VERSION_SQL: &str =
+    include_str!("../../../contracts/migrations/004_chat_message_version.sql");
+
 /// The ladder, in order. Rung one is the baseline.
 ///
 /// A NEW RUNG IS APPENDED, NEVER INSERTED, and never edited once released: a
@@ -91,6 +108,16 @@ pub const LADDER: &[Migration] = &[
         version: 2,
         name: "phone_link",
         sql: PHONE_LINK_SQL,
+    },
+    Migration {
+        version: 3,
+        name: "health",
+        sql: HEALTH_SQL,
+    },
+    Migration {
+        version: 4,
+        name: "chat_message_version",
+        sql: CHAT_MESSAGE_VERSION_SQL,
     },
 ];
 

@@ -7,6 +7,7 @@
   "ontologyPacks": [
     "chat",
     "core",
+    "health",
     "knowledge",
     "locker",
     "media",
@@ -526,7 +527,7 @@
       "logical": "core.activity",
       "table": "core_activity",
       "label": "Activity",
-      "lifecycle": "append-only",
+      "lifecycle": "mutable",
       "projectionOf": null,
       "deletionRoles": [
         {
@@ -828,6 +829,28 @@
       "label": "Enrichment requests",
       "lifecycle": "machinery",
       "projectionOf": null,
+      "deletionRoles": []
+    },
+    {
+      "logical": "health.daily",
+      "table": "health_daily",
+      "label": "Daily totals",
+      "lifecycle": "mutable",
+      "projectionOf": "core.party",
+      "deletionRoles": [
+        {
+          "column": "subject_party_id",
+          "parent": "core_party",
+          "role": "owned-child"
+        }
+      ]
+    },
+    {
+      "logical": "health.workout",
+      "table": "health_workout",
+      "label": "Workouts",
+      "lifecycle": "mutable",
+      "projectionOf": "core.activity",
       "deletionRoles": []
     },
     {

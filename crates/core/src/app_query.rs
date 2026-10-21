@@ -74,6 +74,8 @@ mod named;
 // People's arm (#1046): its conversions and tests, beside this one.
 // Docs' arm (#1046): its conversions and tests, beside this one.
 mod docs;
+// Health's arm (#1129): six answers, every figure the app crate's (R-1129-12).
+mod health;
 // Locker's arm (#1047): metadata only; a secret is the session's.
 mod locker;
 // Money's arm (#1099): ten answers, the import plan and Home's tile.
@@ -226,6 +228,13 @@ pub fn answer(vault: &Vault, request: &wire::AppQueryRequest) -> Result<wire::Ap
         Q::MoneyTargetSheet(asked) => money::target_sheet(vault, &door, &now, asked)?,
         Q::MoneyRecurring(asked) => money::recurring(vault, &door, &now, asked)?,
         Q::MoneySearch(asked) => money::search(vault, &door, &now, asked)?,
+        // Health (#1129): no zone and no clock; the request states its day.
+        Q::HealthToday(asked) => health::today(vault, &door, &now, asked)?,
+        Q::HealthSeries(asked) => health::series(vault, &door, &now, asked)?,
+        Q::HealthTrends(asked) => health::trends(vault, &door, &now, asked)?,
+        Q::HealthWorkouts(asked) => health::workouts(vault, &door, asked)?,
+        Q::HealthWorkout(asked) => health::workout(vault, &door, asked)?,
+        Q::HealthFollowView(asked) => health::follow_view(vault, &door, &now, asked)?,
     };
     Ok(wire::AppQueryResponse {
         answer: Some(answer),

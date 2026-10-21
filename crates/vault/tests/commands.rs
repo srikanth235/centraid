@@ -87,9 +87,11 @@ fn the_registry_carries_every_command_this_build_has() {
         // category, name, void and transfer, plans, rules and their history pass,
         // the stated balance and layout, and the member's own categories.
         ("money.", 20),
-        // The phone link's six (#1127): `link`, `touch`, `detach` and `forget`, and the origin's
-        // two, `origin` and `retire_origin` (R-1127-9).
-        ("phone.", 6),
+        // The phone link's seven (#1127): `link`, `relink` (#1129, F-K-1), `touch`, `detach`
+        // and `forget`, and the origin's two, `origin` and `retire_origin` (R-1127-9).
+        ("phone.", 7),
+        // Health's three (#1129): a batch of daily totals, a followed workout and its purge.
+        ("health.", 3),
     ];
     let total: usize = by_schema.iter().map(|(_, expected)| *expected).sum();
     assert_eq!(

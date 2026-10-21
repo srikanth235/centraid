@@ -9,6 +9,13 @@ package dev.centraid.shared.sync.phone
 public interface PhoneStore {
     public val source: PhoneSource
 
+    /**
+     * THE PHONE THIS PASS RUNS ON ([PhoneDevice]): a `local:` link is written under it, and another
+     * device's links and origins are re-found or forgotten, never judged lost (F-K-1). Null only for
+     * a store with no device at all, whose links are then everyone's.
+     */
+    public val device: String? get() = null
+
     /** Every `phone_link` of the source, or null when the read failed (the pass then writes nothing). */
     public suspend fun links(): List<StoredLink>?
 
@@ -23,8 +30,14 @@ public interface PhoneStore {
     /** `phone.origin`: the origin's row id. */
     public suspend fun origin(phoneOrigin: String, label: String): String?
 
-    /** `phone.link`: the link's id. */
+    /** `phone.link`: the link's id. A `local:` [phoneId] is written under [device]. */
     public suspend fun link(phoneId: String, originId: String, entityId: String, fingerprint: String): String?
+
+    /**
+     * `phone.relink`: the link [linkId] now names [phoneId] (under [device] when it is `local:`) in
+     * [originId], and keeps its row, fingerprint, detach and tombstone.
+     */
+    public suspend fun relink(linkId: String, phoneId: String, originId: String): Boolean
 
     public suspend fun touch(phoneIds: List<String>): Boolean
 
@@ -54,6 +67,16 @@ public interface PhoneStore {
     public val score: PhoneScore get() = PhoneSyncPlanner.byTiebreakOverlap
 
     /**
+     * RE-FIND A LOST ROW UNDER A NEW PHONE ID ON THIS DEVICE (R-1129-15): when one pass loses a link
+     * and meets a new record whose match key is that row's, the row is relinked rather than added
+     * again beside it. Off unless a source says so: a store whose match key names one thing exactly
+     * (a workout's kind and start minute) opts in; a person's or an event's name does not. Another
+     * device's links are re-found for every source, one to one ([PhoneSyncPlanner.plan]); this is
+     * for an id the same device re-issued.
+     */
+    public val refindLost: Boolean get() = false
+
+    /**
      * WHICH ROWS A READ COULD HAVE SEEN. A source that reads a window (Agenda reads a week back
      * and two months on) must not take a row outside it for a record that went: such a row is
      * neither trashed nor forgotten. Everything is covered unless the source says otherwise.
@@ -69,6 +92,8 @@ public data class PhoneReport(
     public val updated: Int = 0,
     public val followed: Int = 0,
     public val rehomed: Int = 0,
+    /** Links re-found under a new phone id: another device's (F-K-1), or this one's re-issued (R-1129-15). */
+    public val refound: Int = 0,
     public val detached: Int = 0,
     public val trashed: Int = 0,
     public val forgotten: Int = 0,
@@ -79,7 +104,7 @@ public data class PhoneReport(
     public val gone: List<OriginGone> = emptyList(),
 ) {
     /** Rows written to, not counting sightings. */
-    public val changed: Int get() = added + adopted + updated + followed + rehomed + detached + trashed + forgotten
+    public val changed: Int get() = added + adopted + updated + followed + rehomed + refound + detached + trashed + forgotten
 }
 
 /**
@@ -90,7 +115,9 @@ public data class PhoneReport(
  * vault row no longer as the engine left it → detached and never overwritten (R-1127-2); gone from
  * an origin that is still present, after a complete read → trashed (R-1127-3); an origin gone
  * altogether → held and asked, nothing written (R-1127-9); an incomplete read → nothing trashed.
- * A second pass over the same snapshot writes nothing (R-1088-12).
+ * A second pass over the same snapshot writes nothing (R-1088-12). Another device's `local:`
+ * links (a vault restored onto a new phone, F-K-1) are re-found by match key or forgotten, never
+ * trashed.
  */
 public object PhoneSync {
     /** Plan and perform one pass. */
@@ -99,7 +126,7 @@ public object PhoneSync {
         val origins = store.origins() ?: return PhoneReport(read = false)
         val links = store.links() ?: return PhoneReport(read = false)
         val rows = store.rows() ?: return PhoneReport(read = false)
-        val plan = PhoneSyncPlanner.plan(snapshot, origins, links, rows, store.score, store.coverage())
+        val plan = PhoneSyncPlanner.plan(snapshot, origins, links, rows, store.score, store.coverage(), store.refindLost, store.device)
         return perform(store, plan.actions, origins, rows, PhoneReport(gone = plan.gone, refused = plan.invalid))
     }
 
@@ -116,7 +143,8 @@ public object PhoneSync {
         val origins = store.origins() ?: return PhoneReport(read = false)
         val links = store.links() ?: return PhoneReport(read = false)
         val rows = store.rows() ?: return PhoneReport(read = false)
-        return perform(store, PhoneSyncPlanner.resolve(originId, choice, links, rows, seenBefore), origins, rows, PhoneReport())
+        val actions = PhoneSyncPlanner.resolve(originId, choice, links, rows, seenBefore, store.device)
+        return perform(store, actions, origins, rows, PhoneReport())
     }
 
     private suspend fun perform(
@@ -148,7 +176,12 @@ public object PhoneSync {
                             action.record.phoneId,
                             origin,
                             action.entityId,
-                            PhoneFingerprint.pack(action.record.fields.digest(), action.record.satellite.digest(), row.fields.digest()),
+                            PhoneFingerprint.pack(
+                                action.record.fields.digest(),
+                                action.record.satellite.digest(),
+                                row.fields.digest(),
+                                PhoneFingerprint.key(action.record.matchKey),
+                            ),
                         ) != null
                     if (linked) report = report.copy(adopted = report.adopted + 1) else refuse(action.record.phoneId)
                 }
@@ -168,6 +201,13 @@ public object PhoneSync {
                         store.follow(entity, action.record) &&
                         link(store, action.record, origin, entity)
                     if (done) report = report.copy(followed = report.followed + 1) else refuse(action.record.phoneId)
+                }
+                is PhoneAction.Refind -> {
+                    // The link moves; what the record then needs written (its fields, a detach) is
+                    // the plan's next step for it, as for any link of this device.
+                    val origin = originIds[action.record.origin]
+                    val done = origin != null && store.relink(action.link.linkId, action.record.phoneId, origin)
+                    if (done) report = report.copy(refound = report.refound + 1) else refuse(action.record.phoneId)
                 }
                 is PhoneAction.Rehome -> {
                     val origin = originIds[action.record.origin]
@@ -209,7 +249,12 @@ public object PhoneSync {
     /** Link [record] to [entity], held against the row as the vault reads it NOW. */
     private suspend fun link(store: PhoneStore, record: PhoneRecord, origin: String, entity: String): Boolean {
         val row = store.row(entity) ?: return false
-        val fingerprint = PhoneFingerprint.pack(record.fields.digest(), record.satellite.digest(), row.fields.digest())
+        val fingerprint = PhoneFingerprint.pack(
+            record.fields.digest(),
+            record.satellite.digest(),
+            row.fields.digest(),
+            PhoneFingerprint.key(record.matchKey),
+        )
         return store.link(record.phoneId, origin, entity, fingerprint) != null
     }
 }

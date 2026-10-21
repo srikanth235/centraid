@@ -8,8 +8,6 @@ import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -24,12 +22,10 @@ import centraid.screen.v1.DocsDocumentEvent
 import centraid.screen.v1.DocsDriveEvent
 import centraid.screen.v1.DocsDriveState
 import centraid.screen.v1.DocsSheet
-import dev.centraid.android.kit.KitLink
+import dev.centraid.android.kit.NoticeSheet
 import dev.centraid.android.kit.TrashListScreen
 import dev.centraid.android.screens.AppRoutes
 import dev.centraid.android.screens.RouteNav
-import dev.centraid.android.theme.centraidColor
-import dev.centraid.android.theme.centraidType
 import dev.centraid.design.copy.DocsCopy
 import dev.centraid.shared.apps.docs.DocsDocumentBridge
 import dev.centraid.shared.apps.docs.DocsDriveBridge
@@ -121,12 +117,13 @@ public class DocsRoutes(private val onFollowed: () -> Unit = {}) : AppRoutes {
                 ingest.routed(adding.request_seq)
             }
         }
+        // A REFUSAL IS THE KIT'S SHEET, never a dialog (DESIGN.md "The controls (mobile)").
         refusal?.let { sentence ->
-            AlertDialog(
-                onDismissRequest = { refusal = null },
-                containerColor = centraidColor("bg"),
-                text = { Text(sentence, style = centraidType("body"), color = centraidColor("textSoft")) },
-                confirmButton = { KitLink(label = DocsCopy.DONE, onClick = { refusal = null }) },
+            NoticeSheet(
+                title = following.failedTitle,
+                sentence = sentence,
+                doneLabel = DocsCopy.DONE,
+                onDone = { refusal = null },
             )
         }
     }

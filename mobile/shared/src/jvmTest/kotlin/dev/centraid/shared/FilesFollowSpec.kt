@@ -20,7 +20,13 @@ import io.kotest.matchers.shouldBe
 private class FilesBench {
     class Doc(var title: String, var hash: String, var trashed: Boolean = false, var revisions: Int = 1)
 
-    class Link(val id: String, val phoneId: String, var origin: String, var entity: String?, var fingerprint: String, var detachedAt: String?)
+    class Link(val id: String, var phoneId: String, var origin: String, var entity: String?, var fingerprint: String, var detachedAt: String?) {
+        /** The device a `local:` link was made on (F-K-1); null for a portable id. */
+        var device: String? = null
+    }
+
+    /** The device each origin was last read on. */
+    val originDevice = mutableMapOf<String, String>()
 
     val script = ScriptedCore()
     val docs = linkedMapOf<String, Doc>()
@@ -45,9 +51,9 @@ private class FilesBench {
         script.pages = { name, bound ->
             when (name) {
                 "phone.links" -> links.values.map {
-                    listOf(it.id, it.phoneId, it.origin, it.entity.orEmpty(), it.fingerprint, it.detachedAt.orEmpty(), SIGHTED)
+                    listOf(it.id, it.phoneId, it.origin, it.entity.orEmpty(), it.fingerprint, it.detachedAt.orEmpty(), SIGHTED, it.device.orEmpty())
                 }
-                "phone.origins" -> origins.map { (id, o) -> listOf(id, o.first, o.second) }
+                "phone.origins" -> origins.map { (id, o) -> listOf(id, o.first, o.second, originDevice[id].orEmpty()) }
                 "phone.follow.imported" -> origins.keys.take(1).map { listOf(it) }
                 "phone.files.documents" -> docs.filter { bound.isEmpty() || it.key == bound.single() }.map { (id, d) ->
                     listOf(id, d.title, "c:${d.hash}", if (d.trashed) "t" else "")
@@ -70,11 +76,24 @@ private class FilesBench {
                 val phone = field(input, "phone_origin")
                 val id = origins.entries.firstOrNull { it.value.first == phone }?.key ?: "o${++next}"
                 origins[id] = phone to field(input, "label")
+                originDevice[id] = field(input, "device_id")
                 return "{\"origin_id\":\"$id\"}"
+            }
+            "phone.relink" -> {
+                val phone = field(input, "phone_id")
+                val on = field(input, "device_id").ifEmpty { null }
+                val link = links[field(input, "link_id")] ?: return null
+                if (links.values.any { it !== link && it.phoneId == phone && it.device == on }) return null
+                link.phoneId = phone
+                link.device = on
+                link.origin = field(input, "origin_id")
+                return "{\"link_id\":\"${link.id}\"}"
             }
             "phone.link" -> {
                 val phone = field(input, "phone_id")
-                val link = links.values.firstOrNull { it.phoneId == phone } ?: Link("l${++next}", phone, "", null, "", null).also { links[it.id] = it }
+                val on = field(input, "device_id").ifEmpty { null }
+                val link = links.values.firstOrNull { it.phoneId == phone && it.device == on }
+                    ?: Link("l${++next}", phone, "", null, "", null).also { it.device = on; links[it.id] = it }
                 link.origin = field(input, "origin_id")
                 link.entity = field(input, "entity_id")
                 link.fingerprint = field(input, "fingerprint")
@@ -98,7 +117,10 @@ private class FilesBench {
         return null
     }
 
-    fun store() = FilesStore(script.core(), stager) { "doc${++next}" }
+    /** The phone the passes run on; a spec moves it to restore the vault onto a new phone. */
+    var device: String = kotlinx.coroutines.runBlocking { dev.centraid.shared.sync.phone.PhoneDevice.id() }
+
+    fun store() = FilesStore(script.core(), device, stager) { "doc${++next}" }
 
     val folder = FilesImport.origin("11111111")
     val photos = FilesImport.origin("22222222")
@@ -382,5 +404,59 @@ class FilesFollowSpec : StringSpec({
         }).bind(bench.script.core())
         pass.run() shouldBe null
         bench.script.commands.shouldBeEmpty()
+    }
+
+    "a vault restored onto a new phone whose shell still reaches the folder re-finds every file: no add, no trash, no question (F-K-1)" {
+        val bench = FilesBench()
+        val files = { listOf(bench.file("a.pdf", "one"), bench.file("b.pdf", "two"), bench.file("2025/c.pdf", "three")) }
+        bench.run(files())
+        val documents = bench.docs.keys.toSet()
+        bench.device = "device-b"
+        val outcome = bench.run(files())
+        outcome.added shouldBe 0
+        outcome.trashed shouldBe 0
+        outcome.gone.shouldBeEmpty()
+        bench.docs.keys shouldBe documents
+        bench.docs.values.none { it.trashed } shouldBe true
+        bench.links.values.map { it.device }.toSet() shouldBe setOf("device-b")
+        bench.writes.filter { it != "phone.origin" } shouldContainExactly List(3) { "phone.relink" }
+        bench.staged.shouldBeEmpty()
+        // B's now: the next pass is quiet.
+        bench.run(files())
+        bench.writes.shouldBeEmpty()
+    }
+
+    "on the new phone a file the old one followed and this one does not list is forgotten and kept, never trashed or asked" {
+        val bench = FilesBench()
+        bench.run(listOf(bench.file("a.pdf", "one"), bench.file("b.pdf", "two")))
+        val b = bench.docOf("b.pdf")!!
+        bench.device = "device-b"
+        val outcome = bench.run(listOf(bench.file("a.pdf", "one")))
+        outcome.trashed shouldBe 0
+        outcome.gone.shouldBeEmpty()
+        b.trashed shouldBe false
+        bench.writes.count { it == "phone.forget" } shouldBe 1
+        bench.writes.none { it == "core.trash_document" } shouldBe true
+    }
+
+    "on a new phone that cannot reach the old phone's folder, its links are forgotten, its documents kept and the folder retired" {
+        val bench = FilesBench()
+        bench.run(listOf(bench.file("a.pdf", "one"), bench.file("b.pdf", "two")))
+        bench.device = "device-b"
+        val outcome = bench.run(emptyList(), origins = emptyList())
+        outcome.gone.shouldBeEmpty()
+        outcome.trashed shouldBe 0
+        bench.docs.size shouldBe 2
+        bench.docs.values.none { it.trashed } shouldBe true
+        bench.links.size shouldBe 0
+        bench.origins.size shouldBe 0
+        // Picked again on this phone (a new folder id), the same bytes are adopted, not filed twice.
+        val again = FilesImport.origin("33333333")
+        bench.run(
+            listOf(bench.file("a.pdf", "one", origin = again), bench.file("b.pdf", "two", origin = again)),
+            origins = listOf(bench.origin(again, "Taxes")),
+        )
+        bench.docs.size shouldBe 2
+        bench.links.size shouldBe 2
     }
 })

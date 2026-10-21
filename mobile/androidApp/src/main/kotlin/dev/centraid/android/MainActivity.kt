@@ -25,9 +25,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import dev.centraid.android.kit.LocalShellLine
 import dev.centraid.shared.nav.RowRoutes
+import dev.centraid.android.kit.AndroidHealth
 import dev.centraid.android.kit.AndroidPhoneFollow
 import dev.centraid.android.kit.LocalPhoneImport
-import dev.centraid.android.kit.PhoneFollowDialog
+import dev.centraid.android.kit.PhoneFollowSheet
 import dev.centraid.android.kit.ShellBanner
 import dev.centraid.android.screens.agenda.rememberCalendarImport
 import dev.centraid.android.screens.people.rememberContactsImport
@@ -42,6 +43,7 @@ import dev.centraid.android.screens.AppRoutes
 import dev.centraid.android.screens.RouteNav
 import dev.centraid.android.screens.agenda.AgendaRoutes
 import dev.centraid.android.screens.docs.DocsRoutes
+import dev.centraid.android.screens.health.HealthRoutes
 import dev.centraid.android.screens.locker.LockerRoutes
 import dev.centraid.android.screens.money.MoneyRoutes
 import dev.centraid.android.screens.notes.NotesRoutes
@@ -149,6 +151,7 @@ public class MainActivity : FragmentActivity() {
             PeopleRoutes(),
             TasksRoutes(),
             MoneyRoutes(),
+            HealthRoutes(health),
             locker,
             homeSearch,
         )
@@ -175,7 +178,13 @@ public class MainActivity : FragmentActivity() {
      * ANDROID FOLLOWS THE PHONE (#1127): the foreground and content-observer triggers and the
      * question an account that left asks. Started in `onStart`, stopped in `onStop`.
      */
-    private val phoneFollow: AndroidPhoneFollow by lazy { AndroidPhoneFollow(this) }
+    private val phoneFollow: AndroidPhoneFollow by lazy { AndroidPhoneFollow(this, health.reader) }
+
+    /**
+     * HEALTH CONNECT (#1129): the reader the follower and Health's Connect share, the member's
+     * chosen types, and the phone's facts Health's screens are stamped with. Read only.
+     */
+    private val health: AndroidHealth by lazy { AndroidHealth(this) }
 
     /** THE BACKUP SCREEN'S SHEET (#1080), over every screen. See `BackupSheets`. */
     private val backupSheet: BackupSheets by lazy { BackupSheets() }
@@ -209,9 +218,14 @@ public class MainActivity : FragmentActivity() {
     // what arriving and leaving do now is the backup's (#1080): `onResume`
     // runs a pass and `onStop` a pass with a snapshot, below.
 
-    /** THE PHONE IS FOLLOWED WHILE THE APP IS IN VIEW (#1127): see [AndroidPhoneFollow]. */
+    /**
+     * THE PHONE IS FOLLOWED WHILE THE APP IS IN VIEW (#1127): see [AndroidPhoneFollow]. Health's
+     * facts are stated first (#1129) — a locale change re-makes the activity, so this is also
+     * where a new measurement system reaches the screens.
+     */
     override fun onStart() {
         super.onStart()
+        health.state()
         phoneFollow.start()
     }
 
@@ -437,7 +451,7 @@ public class MainActivity : FragmentActivity() {
                 )
                 // THE QUESTION AN ACCOUNT OR CALENDAR THAT LEFT THE PHONE ASKS (R-1127-9).
                 phoneFollow.question?.let { asked ->
-                    PhoneFollowDialog(asked) { keep -> phoneFollow.answer(asked, keep) }
+                    PhoneFollowSheet(asked) { keep -> phoneFollow.answer(asked, keep) }
                 }
                 val phoneImport: ((ImportSource) -> Unit)? =
                     remember(contactsImport, calendarImport, homeSession) {

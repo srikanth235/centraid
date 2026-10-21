@@ -922,7 +922,7 @@ mod tests {
         };
         let origin = run(
             "phone.origin",
-            serde_json::json!({ "source": "contacts", "phone_origin": "acct:1", "label": "Main" }),
+            serde_json::json!({ "source": "contacts", "device_id": "device-a", "phone_origin": "acct:1", "label": "Main" }),
         )["origin_id"]
             .clone();
         for (phone_id, name) in [("c3", "Cy"), ("c1", "Ada"), ("c2", "Bo")] {
@@ -933,7 +933,7 @@ mod tests {
             run(
                 "phone.link",
                 serde_json::json!({
-                    "source": "contacts", "phone_id": phone_id, "origin_id": origin,
+                    "source": "contacts", "phone_id": phone_id, "device_id": "device-a", "origin_id": origin,
                     "entity_id": person["party_id"], "fingerprint": format!("fp-{phone_id}"),
                 }),
             );

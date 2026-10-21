@@ -326,6 +326,8 @@ class HomeMachineSpec : StringSpec({
             listOf("agenda"),
             // Smalls pair.
             listOf("notes", "money"),
+            listOf("health", "people"),
+            listOf("locker"),
             listOf("people", "locker"),
         )
     }

@@ -48,6 +48,22 @@ class ChatScopeSpec : StringSpec({
         quoted(schema.groupValues[1]) shouldBe ChatMachine.SCOPABLE_APPS
     }
 
+    "health is in no chat scope: Chat does not read Health (R-1129-11)" {
+        // Off by default in "What Chat may read" (owner answer 1): until that screen grants it,
+        // no scope list names Health — the shells' menu, the vault's cards, the save_turn enum and
+        // the assistant's app set.
+        ChatMachine.SCOPABLE_APPS.contains("health") shouldBe false
+        val cards = Regex("""const CARD_APPS: \[&str; \d+\] = \[(.*?)\];""", RegexOption.DOT_MATCHES_ALL)
+            .find(source("crates/vault/src/chat.rs"))!!.groupValues[1]
+        quoted(cards).contains("health") shouldBe false
+        val schema = Regex(""""scope_app": \{\s*"enum": \[(.*?)\]""", RegexOption.DOT_MATCHES_ALL)
+            .find(source("crates/vault/src/commands/chat.rs"))!!.groupValues[1]
+        quoted(schema).contains("health") shouldBe false
+        val assist = Regex("""Self::\w+ => "([a-z]+)",""").findAll(source("crates/assist/src/app.rs")).map { it.groupValues[1] }.toSet()
+        assist.contains("money") shouldBe true
+        assist.contains("health") shouldBe false
+    }
+
     "Locker is not among them, and the list is in the order the menu draws it" {
         ChatMachine.SCOPABLE_APPS.contains("locker") shouldBe false
         ChatMachine.SCOPABLE_APPS shouldBe ChatMachine.SCOPABLE_APPS.sorted()

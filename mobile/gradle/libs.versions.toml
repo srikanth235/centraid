@@ -55,6 +55,12 @@ gms-blockstore = "16.4.0"
 # code — no Play Services, no model download, and it reads the light-on-dark
 # square a dark terminal draws. The newest releases with no alpha suffix.
 androidx-camera = "1.6.2"
+# HEALTH CONNECT, READ ONLY (#1129, R-1129-7): the daily totals and the workouts
+# Health follows. The newest release with no alpha suffix. Its AAR declares
+# minSdk 26 above the app's 24, so the manifest overrides it for this library
+# alone and every call is gated on the API level and on Health Connect's own
+# availability (`kit/HealthConnectReader.kt`).
+androidx-health-connect = "1.1.0"
 zxing = "3.5.4"
 roborazzi = "1.53.0"
 robolectric = "4.16"
@@ -93,6 +99,7 @@ androidx-camera-camera2 = { module = "androidx.camera:camera-camera2", version.r
 androidx-camera-lifecycle = { module = "androidx.camera:camera-lifecycle", version.ref = "androidx-camera" }
 androidx-camera-view = { module = "androidx.camera:camera-view", version.ref = "androidx-camera" }
 zxing-core = { module = "com.google.zxing:core", version.ref = "zxing" }
+androidx-health-connect = { module = "androidx.health.connect:connect-client", version.ref = "androidx-health-connect" }
 androidx-media3-exoplayer = { module = "androidx.media3:media3-exoplayer", version.ref = "androidx-media3" }
 androidx-media3-ui = { module = "androidx.media3:media3-ui", version.ref = "androidx-media3" }
 robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }

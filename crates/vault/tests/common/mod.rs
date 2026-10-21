@@ -230,3 +230,112 @@ pub fn plant_canary(vault: &Vault, canary: &str) -> Result<()> {
     })?;
     Ok(())
 }
+
+/// One object's statement as rung one wrote it: the block under `-- <kind> <name>` in
+/// `001_baseline.sql`, up to the blank line that ends it.
+pub fn baseline_statement(kind: &str, name: &str) -> String {
+    let baseline = centraid_vault::migrations::BASELINE_SQL;
+    let header = format!("\n-- {kind} {name}\n");
+    let at = baseline
+        .find(&header)
+        .unwrap_or_else(|| panic!("the baseline holds no {kind} `{name}`"));
+    let body = &baseline[at + header.len()..];
+    let end = body.find("\n\n").unwrap_or(body.len());
+    body[..end].to_owned()
+}
+
+/// WIND A FILE BACK FROM RUNG FOUR TO RUNG THREE (#1129, F-R-1) by undoing the rung's own
+/// statements: `chat_message` is put back as rung one wrote it (no `updated_at`, no
+/// `row_version`, no touch trigger), every row kept, with its triggers as rung one wrote them.
+/// Foreign keys are turned off for the undo and back on after it (the bundled SQLite opens with
+/// them on), so dropping the message table cascades into neither child and the children are
+/// left as they are. The caller sets `user_version`.
+pub fn undo_rung_four(connection: &rusqlite::Connection) {
+    const TRIGGERS: [&str; 5] = [
+        "chat_message_is_not_born_settled",
+        "chat_message_outcome_settles_once",
+        "fts_chat_thread_from_chat_message_ad",
+        "fts_chat_thread_from_chat_message_ai",
+        "fts_chat_thread_from_chat_message_au",
+    ];
+    let foreign_keys: i64 = connection
+        .query_row("PRAGMA foreign_keys", [], |row| row.get(0))
+        .expect("the pragma reads");
+    let mut undo = vec![
+        "PRAGMA foreign_keys = OFF;".to_owned(),
+        "DROP TRIGGER chat_message_touch_updated_at;".to_owned(),
+    ];
+    undo.extend(TRIGGERS.map(|trigger| format!("DROP TRIGGER {trigger};")));
+    undo.push(
+        "CREATE TEMP TABLE chat_message_at_four AS SELECT * FROM main.chat_message;
+         DROP TABLE main.chat_message;"
+            .to_owned(),
+    );
+    undo.push(baseline_statement("table", "chat_message"));
+    undo.push(
+        "INSERT INTO chat_message
+           (thread_id, ordinal, role, text, outcome, refusal, notice, record_json, created_at)
+         SELECT thread_id, ordinal, role, text, outcome, refusal, notice, record_json, created_at
+           FROM temp.chat_message_at_four;
+         DROP TABLE temp.chat_message_at_four;"
+            .to_owned(),
+    );
+    undo.extend(TRIGGERS.map(|trigger| baseline_statement("trigger", trigger)));
+    undo.push(format!("PRAGMA foreign_keys = {foreign_keys};"));
+    connection
+        .execute_batch(&undo.join("\n"))
+        .expect("chat_message is put back as rung one wrote it");
+}
+
+/// WIND A FILE BACK FROM RUNG THREE TO RUNG TWO (#1129) by undoing the rung's own statements:
+/// the health tables and their touch triggers go, the seeded workout kinds and their entity rows
+/// go, and `core_activity` is rebuilt to the text rung one wrote (no `updated_at`, no
+/// `row_version`), every row kept, with its indexes and entity triggers as rung one wrote them.
+/// The caller sets `user_version`.
+pub fn undo_rung_three(connection: &rusqlite::Connection) {
+    connection
+        .execute_batch(
+            "DROP TRIGGER health_workout_touch_updated_at;
+             DROP TABLE health_workout;
+             DROP TRIGGER health_daily_touch_updated_at;
+             DROP TABLE health_daily;
+             DELETE FROM core_concept WHERE scheme_id = 'health:workout-kinds';
+             DELETE FROM core_concept_scheme WHERE scheme_id = 'health:workout-kinds';
+             DELETE FROM core_entity WHERE entity_id LIKE 'health:%';
+             DROP TRIGGER core_activity_touch_updated_at;
+             DROP TRIGGER core_activity_entity_delete;
+             DROP TRIGGER core_activity_entity_insert;
+             DROP INDEX core_activity_started_page_idx;
+             DROP INDEX idx_activity_actor_party;
+             DROP INDEX idx_activity_kind_concept;
+             DROP INDEX idx_activity_location_place;
+             DROP INDEX idx_activity_source_app;
+             ALTER TABLE core_activity RENAME TO core_activity_at_three;",
+        )
+        .expect("rung three's objects are undone");
+    let mut rung_one = vec![baseline_statement("table", "core_activity")];
+    rung_one.push(
+        "INSERT INTO core_activity
+           (activity_id, actor_party_id, kind_concept_id, started_at, ended_at,
+            location_place_id, source_app_id, created_at)
+         SELECT activity_id, actor_party_id, kind_concept_id, started_at, ended_at,
+                location_place_id, source_app_id, created_at
+           FROM core_activity_at_three;
+         DROP TABLE core_activity_at_three;"
+            .to_owned(),
+    );
+    for index in [
+        "idx_activity_actor_party",
+        "idx_activity_kind_concept",
+        "idx_activity_location_place",
+        "idx_activity_source_app",
+    ] {
+        rung_one.push(baseline_statement("index", index));
+    }
+    for trigger in ["core_activity_entity_delete", "core_activity_entity_insert"] {
+        rung_one.push(baseline_statement("trigger", trigger));
+    }
+    connection
+        .execute_batch(&rung_one.join("\n"))
+        .expect("core_activity is put back as rung one wrote it");
+}

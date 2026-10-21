@@ -36,6 +36,7 @@ public object SpringboardPolicy {
         "agenda",
         "notes",
         "money",
+        "health",
         "people",
         "locker",
     )
@@ -50,6 +51,7 @@ public object SpringboardPolicy {
         // the four smalls to pair, where five left one on its own.
         "agenda" to TileSize.TILE_SIZE_MEDIUM,
         "docs" to TileSize.TILE_SIZE_MEDIUM,
+        "health" to TileSize.TILE_SIZE_SMALL,
         // A SHELF NEEDS NO MEASURE: three notebook names and one title, each a
         // single line (`HomeNotesTile`).
         "notes" to TileSize.TILE_SIZE_SMALL,
@@ -141,6 +143,7 @@ public object SpringboardPolicy {
     public val TILE_EMPTY_COPY: Map<String, String> = mapOf(
         "agenda" to "Put something on the calendar",
         "docs" to "Add your first document",
+        "health" to "Connect your health app",
         "locker" to "Unlock to see your items",
         "money" to "Import your first statement",
         "notes" to "Write your first note",

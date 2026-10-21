@@ -1134,12 +1134,13 @@ fn the_sweep_is_generated_from_the_live_schema_and_covers_three_kinds_of_pointer
         .filter(|reference| reference.predicate.is_some())
         .count();
 
-    // Twenty-seven engine foreign keys onto `core_party` in the committed DDL
+    // Twenty-eight engine foreign keys onto `core_party` in the committed DDL
     // (`grep -c 'REFERENCES core_party' contracts/schema/vault-ddl.sql`). It was
     // 44 before rung five dropped the sharing and connector planes (#1029), 40
-    // before rung fifteen dropped Tally's twelve (#1099) and 28 before the
-    // baseline stopped founding `access_device` (2026-10-16).
-    assert_eq!(engine, 27, "the engine FK walk found a different set");
+    // before rung fifteen dropped Tally's twelve (#1099), 28 before the
+    // baseline stopped founding `access_device` (2026-10-16) and 27 before rung
+    // three added `health_daily.subject_party_id` (#1129).
+    assert_eq!(engine, 28, "the engine FK walk found a different set");
     // TWELVE `(type, id)` pairs — `core_link` carries two, its from- and to-
     // endpoints. It was fifteen before rung five dropped `outbox_item`,
     // `sync_external_entity` and `share_subscription_lineage` (#1029).
@@ -1155,7 +1156,7 @@ fn the_sweep_is_generated_from_the_live_schema_and_covers_three_kinds_of_pointer
     // `share_authority.principal_id` — and rung five drops its table (#1029),
     // so the two mechanical walks are now the whole sweep.
     assert_eq!(hand_kept, 0);
-    assert_eq!(sweep.len(), 39);
+    assert_eq!(sweep.len(), 40);
     assert!(
         sweep
             .iter()
@@ -1455,7 +1456,7 @@ fn the_merge_leaves_no_row_naming_the_folded_in_party() {
         "exactly one referencing column is excluded, and the reason is in the loop"
     );
     assert_eq!(planted.len() + refused_by_the_merge.len(), sweep.len());
-    assert_eq!(planted.len(), 38);
+    assert_eq!(planted.len(), 39);
 
     // THE MERGE.
     let output = circle.run(

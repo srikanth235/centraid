@@ -100,12 +100,13 @@ public class HomeRuntime(
         }
     }
 
-    /** Every tile's read, fanned out: the page reads, and the app queries. */
+    /** Every tile's read, fanned out: the page reads, the app queries (Agenda's, Notes' and Health's), and Money's arm. */
     public fun readAllTiles() {
         HomeReads.READS.forEach { read -> scope.launch { readTile(read) } }
         scope.launch { readAgenda() }
         scope.launch { readNotes() }
         scope.launch { readMoney() }
+        scope.launch { readHealth() }
     }
 
     private suspend fun readTile(read: HomeReads.TileRead) {
@@ -201,6 +202,21 @@ public class HomeRuntime(
                     }
                 }
             }
+        }
+        host.send(event)
+    }
+
+    /**
+     * HEALTH'S TILE, THROUGH THE APP-QUERY ARM (#1129). Same law as every other tile: its own
+     * event the moment it lands, and a read that did not land, or was denied, is `TileRefused`.
+     */
+    private suspend fun readHealth() {
+        val event = when (val outcome = askCore(core(), listOf(HomeHealthTile.request(clock)))) {
+            is AppQueryOutcome.Answered -> outcome.answers.single().health_today
+                ?.let(HomeHealthTile::arrived)
+                ?: refused(HomeHealthTile.APP_ID, Reads.refused(WRONG_ANSWER))
+            is AppQueryOutcome.Denied -> refused(HomeHealthTile.APP_ID, deniedFailure(outcome.denial))
+            is AppQueryOutcome.Refused -> refused(HomeHealthTile.APP_ID, outcome.failure)
         }
         host.send(event)
     }

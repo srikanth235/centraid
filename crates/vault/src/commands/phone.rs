@@ -1,26 +1,32 @@
-//! The six `phone.*` commands — the write surface of the phone link (#1127).
+//! The seven `phone.*` commands — the write surface of the phone link (#1127).
 //!
-//! People, Agenda and Docs follow what the phone holds (R-1127-1: one way, phone → vault). A
-//! followed person, event or document is an ordinary row; `phone_link`, rung two, is the one
-//! place that says which phone record it came from. The shell's sync engine is the only caller,
-//! and it decides everything: this module stores what it is told and refuses what the schema or
-//! the rulings forbid.
+//! People, Agenda, Docs and Health follow what the phone holds (R-1127-1: one way, phone →
+//! vault). A followed person, event, document or workout is an ordinary row; `phone_link`, rung
+//! two, is the one place that says which phone record it came from. The shell's sync engine is
+//! the only caller, and it decides everything: this module stores what it is told and refuses
+//! what the schema or the rulings forbid.
 //!
 //! ## What each command is for
 //!
-//! - `phone.origin` — an account, calendar or picked folder was seen on the phone. Registers it,
-//!   or refreshes its label, and returns the `origin_id` a link names (R-1127-9). The label is
-//!   written only here and only while the origin is present, so it survives the origin leaving
-//!   the phone: the question "Keep its 214 events?" is asked after that.
+//! - `phone.origin` — an account, calendar, picked folder or health store was seen on the phone.
+//!   Registers it, or refreshes its label, and returns the `origin_id` a link names (R-1127-9).
+//!   The label is written only here and only while the origin is present, so it survives the
+//!   origin leaving the phone: the question "Keep its 214 events?" is asked after that.
 //! - `phone.retire_origin` — an origin no link names any more is dropped. Refused while any link
 //!   (attached or detached) still names it: a detached link is the tombstone that keeps a phone
 //!   record the member took over from arriving a second time.
 //! - `phone.link` — a record arrived or a followed record was seen again. Inserts the link, or
-//!   refreshes the one for `(source, phone_id)` with the origin it came from and the fingerprint
-//!   of what sync just wrote.
+//!   refreshes the one for `(source, phone_id, device_id)` with the origin it came from and the
+//!   fingerprint of what sync just wrote.
+//! - `phone.relink` — a followed record was re-found under a new phone id: the same row met on a
+//!   new phone (another device's `local:` link, F-K-1 in #1129), or a health store that issued a
+//!   new id for the same workout (R-1129-15). Moves the link to the new id, device and origin and
+//!   keeps everything else as it was — its row, its fingerprint, its detach and its tombstone — so
+//!   the new phone holds exactly what the old one did.
 //! - `phone.touch` — a followed record was seen again and nothing changed. A batch, because an
 //!   unchanged pass over a few thousand contacts through `phone.link` would be a few thousand
-//!   commits and a few thousand receipts to say "still there".
+//!   commits and a few thousand receipts to say "still there". It touches the device-independent
+//!   links and the calling device's own, never another device's.
 //! - `phone.detach` — the member edited the row (the engine saw the vault row stop matching the
 //!   fingerprint, R-1127-2), so it stops following. Sets `detached_at` once.
 //! - `phone.forget` — the link has done its job: the phone record is gone and the row went to
@@ -28,13 +34,24 @@
 //!   nothing else: the engine trashes the row itself, so forgetting is the same command whether
 //!   the row is kept, trashed or already purged (a purge leaves a tombstone link, which this ends).
 //!
+//! ## Which device a link belongs to
+//!
+//! A `local:` phone id means something on one device only (R-1127-10): an iOS contact
+//! identifier, an Android `CONTACT_ID`, a followed file's path, a workout id. Such a link names
+//! the device that made it (`device_id`, minted by the phone once per install and kept out of
+//! every backup); a `uid:` or `lookup:` link names none (`null`), because it is the same record
+//! on every device. The vault reads no prefix: the engine says which, and the record a link names
+//! is `(source, phone_id, device_id)`. An origin names the device that last read it present
+//! (`phone.origin`), so only that device may take its absence for the origin leaving.
+//!
 //! ## What a refusal looks like
 //!
 //! A value, never a panic: a precondition's sentence and its stable predicate name come back
 //! as a `Failed` outcome, and nothing is written. The predicates a shell switches on are
 //! `link_entity_is_live_and_of_the_sources_kind`, `link_is_attached`,
 //! `link_entity_is_followed_once`, `link_origin_is_of_the_source`, `link_row_was_not_purged`,
-//! `link_exists` and `origin_has_no_links`.
+//! `link_exists`, `relink_origin_is_of_the_links_source`, `relink_record_has_no_other_link` and
+//! `origin_has_no_links`.
 //!
 //! ## Three rules, each a bug if dropped
 //!
@@ -42,7 +59,8 @@
 //!    rather than quietly ignored: the engine would otherwise write the phone's version over
 //!    the member's edit (R-1127-2). The schema backs it (`phone_link_detach_is_one_way`).
 //! 2. **A link points at a live row of the kind its source implies**: contacts → party,
-//!    calendar → event, files → document, and not in the trash. The schema holds the kind
+//!    calendar → event, files → document, health → activity (a workout, #1129), and not in the
+//!    trash (an activity has none: present is live). The schema holds the kind
 //!    (`phone_link_kind_matches_source`); liveness is the command's, because a trashed row may
 //!    keep its link (R-1127-3) but a fresh link to one is a mistake.
 //! 3. **One vault row, one link.** A row already followed from another phone record is refused,
@@ -61,7 +79,7 @@ use crate::error::{Result, VaultError};
 /// LIVE: present, and not in the trash. `?1` is the entity id.
 ///
 /// An ALLOW-LIST, not a lookup: the table name goes into SQL, so it comes from here and never
-/// from an input. The same three words are the table's own `CHECK`.
+/// from an input. The same four words are the table's own `CHECK`.
 ///
 /// **A person is trashed on its PROFILE, not on `core_party`** (`people.trash_person` stamps
 /// `people_profile.deleted_at`; `core_party.deleted_at` is not what People writes), so the
@@ -83,17 +101,24 @@ const SOURCES: &[(&str, &str)] = &[
         "files",
         "SELECT COUNT(*) FROM core_document WHERE document_id = ?1 AND deleted_at IS NULL",
     ),
+    // A workout is an activity (#1129, R-1129-2), and an activity has no trash: a delete is a
+    // purge (`health.purge_workout`), so present is live.
+    (
+        "health",
+        "SELECT COUNT(*) FROM core_activity WHERE activity_id = ?1",
+    ),
 ];
 
 /// The most phone ids one `phone.touch` may name; the schema's `maxItems`. A contact book of
 /// this size is far beyond any phone's, and a bound is how an unbounded statement is refused.
 pub const TOUCH_IDS_MAX: usize = 20_000;
 
-/// The six, in the order a pass uses them.
+/// The seven, in the order a pass uses them.
 #[must_use]
 pub fn definitions() -> Vec<CommandDefinition> {
     vec![
         origin(),
+        relink(),
         link(),
         touch(),
         detach(),
@@ -141,19 +166,26 @@ fn str_of<'a>(ctx: &'a CommandCtx<'_, '_>, key: &str) -> Option<&'a str> {
     ctx.input.get(key).and_then(serde_json::Value::as_str)
 }
 
-/// The link a `(source, phone_id)` pair holds, with the row it follows (`None` for the tombstone a
-/// purge leaves) and whether it is detached.
+/// The `device_id` an input names: `None` for `null`, an id that is the same record on every
+/// device.
+fn device_of<'a>(ctx: &'a CommandCtx<'_, '_>) -> Option<&'a str> {
+    str_of(ctx, "device_id")
+}
+
+/// The link a `(source, phone_id, device_id)` record holds, with the row it follows (`None` for
+/// the tombstone a purge leaves) and whether it is detached.
 fn link_of(
     ctx: &CommandCtx<'_, '_>,
     source: &str,
     phone_id: &str,
+    device: Option<&str>,
 ) -> Result<Option<(String, Option<String>, bool)>> {
     Ok(ctx
         .connection()
         .query_row(
             "SELECT link_id, entity_id, detached_at IS NOT NULL
-               FROM phone_link WHERE source = ?1 AND phone_id = ?2",
-            [source, phone_id],
+               FROM phone_link WHERE source = ?1 AND phone_id = ?2 AND device_id IS ?3",
+            rusqlite::params![source, phone_id, device],
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
         )
         .optional()?)
@@ -168,22 +200,25 @@ fn origin() -> CommandDefinition {
         "phone.origin",
         r#"{
           "type": "object",
-          "required": ["source", "phone_origin", "label"],
+          "required": ["source", "phone_origin", "label", "device_id"],
           "additionalProperties": false,
           "properties": {
-            "source": { "enum": ["contacts", "calendar", "files"] },
+            "source": { "enum": ["contacts", "calendar", "files", "health"] },
             "phone_origin": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "\\S" },
-            "label": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "\\S" }
+            "label": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "\\S" },
+            "device_id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "\\S" }
           }
         }"#,
-        // The same input lands the same state: a known origin with this label is not written
-        // again, so `row_version` stands still.
+        // The same input lands the same state: a known origin with this label, read by this
+        // device, is not written again, so `row_version` stands still. A device that reads an
+        // origin another one registered takes it over: it is that device's to judge from now on.
         Idempotency::Idempotent,
         &[],
         |ctx| {
             let source = ctx.required_str("source")?.to_owned();
             let phone_origin = ctx.required_str("phone_origin")?.to_owned();
             let label = ctx.required_str("label")?.trim().to_owned();
+            let device = ctx.required_str("device_id")?.to_owned();
             let known = ctx
                 .connection()
                 .query_row(
@@ -194,8 +229,9 @@ fn origin() -> CommandDefinition {
                 .optional()?;
             if let Some(origin_id) = known {
                 let changed = ctx.connection().execute(
-                    "UPDATE phone_origin SET label = ?2 WHERE origin_id = ?1 AND label IS NOT ?2",
-                    rusqlite::params![origin_id, label],
+                    "UPDATE phone_origin SET label = ?2, device_id = ?3
+                      WHERE origin_id = ?1 AND (label IS NOT ?2 OR device_id IS NOT ?3)",
+                    rusqlite::params![origin_id, label, device],
                 )? > 0;
                 return Ok(serde_json::json!({
                     "origin_id": origin_id, "created": false, "changed": changed,
@@ -203,9 +239,10 @@ fn origin() -> CommandDefinition {
             }
             let origin_id = ctx.next_id();
             ctx.connection().execute(
-                "INSERT INTO phone_origin (origin_id, source, phone_origin, label, created_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5)",
-                rusqlite::params![origin_id, source, phone_origin, label, ctx.now],
+                "INSERT INTO phone_origin
+                   (origin_id, source, phone_origin, label, device_id, created_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                rusqlite::params![origin_id, source, phone_origin, label, device, ctx.now],
             )?;
             Ok(serde_json::json!({ "origin_id": origin_id, "created": true, "changed": true }))
         },
@@ -270,7 +307,7 @@ fn link() -> CommandDefinition {
                 else {
                     return Ok(None);
                 };
-                Ok(link_of(ctx, source, phone_id)?
+                Ok(link_of(ctx, source, phone_id, device_of(ctx))?
                     .is_some_and(|(_, entity, _)| entity.is_none())
                     .then(|| {
                         "That record's row was deleted forever here, so it does not come back \
@@ -326,7 +363,7 @@ fn link() -> CommandDefinition {
                 else {
                     return Ok(None);
                 };
-                Ok(link_of(ctx, source, phone_id)?
+                Ok(link_of(ctx, source, phone_id, device_of(ctx))?
                     .is_some_and(|(_, _, detached)| detached)
                     .then(|| {
                         "That record stopped following the phone when it was edited here, and \
@@ -348,8 +385,9 @@ fn link() -> CommandDefinition {
                 // The row may be followed from THIS phone record and no other.
                 let elsewhere: i64 = ctx.connection().query_row(
                     "SELECT COUNT(*) FROM phone_link
-                      WHERE entity_id = ?1 AND NOT (source = ?2 AND phone_id = ?3)",
-                    [entity, source, phone_id],
+                      WHERE entity_id = ?1
+                        AND NOT (source = ?2 AND phone_id = ?3 AND device_id IS ?4)",
+                    rusqlite::params![entity, source, phone_id, device_of(ctx)],
                     |row| row.get(0),
                 )?;
                 Ok((elsewhere != 0)
@@ -361,11 +399,12 @@ fn link() -> CommandDefinition {
         "phone.link",
         r#"{
           "type": "object",
-          "required": ["source", "phone_id", "origin_id", "entity_id", "fingerprint"],
+          "required": ["source", "phone_id", "device_id", "origin_id", "entity_id", "fingerprint"],
           "additionalProperties": false,
           "properties": {
-            "source": { "enum": ["contacts", "calendar", "files"] },
+            "source": { "enum": ["contacts", "calendar", "files", "health"] },
             "phone_id": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "\\S" },
+            "device_id": { "type": ["string", "null"], "minLength": 1, "maxLength": 128, "pattern": "\\S" },
             "origin_id": { "type": "string", "minLength": 1 },
             "entity_id": { "type": "string", "minLength": 1 },
             "fingerprint": { "type": "string", "minLength": 1, "maxLength": 512 }
@@ -378,10 +417,11 @@ fn link() -> CommandDefinition {
         |ctx| {
             let source = ctx.required_str("source")?.to_owned();
             let phone_id = ctx.required_str("phone_id")?.to_owned();
+            let device = device_of(ctx).map(str::to_owned);
             let origin_id = ctx.required_str("origin_id")?.to_owned();
             let entity_id = ctx.required_str("entity_id")?.to_owned();
             let fingerprint = ctx.required_str("fingerprint")?.to_owned();
-            if let Some((link_id, _, _)) = link_of(ctx, &source, &phone_id)? {
+            if let Some((link_id, _, _)) = link_of(ctx, &source, &phone_id, device.as_deref())? {
                 // Re-point and refresh. `detached_at` is not touched: a detached link was
                 // refused above, so this one is attached and stays so. A record that moved to
                 // another account or calendar on the phone changes its origin here.
@@ -400,13 +440,14 @@ fn link() -> CommandDefinition {
             let link_id = ctx.next_id();
             ctx.connection().execute(
                 "INSERT INTO phone_link
-                   (link_id, source, phone_id, origin_id, entity_id, fingerprint, last_seen_at,
-                    created_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7)",
+                   (link_id, source, phone_id, device_id, origin_id, entity_id, fingerprint,
+                    last_seen_at, created_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?8)",
                 rusqlite::params![
                     link_id,
                     source,
                     phone_id,
+                    device,
                     origin_id,
                     entity_id,
                     fingerprint,
@@ -414,6 +455,92 @@ fn link() -> CommandDefinition {
                 ],
             )?;
             Ok(serde_json::json!({ "link_id": link_id, "created": true, "changed": true }))
+        },
+    )
+}
+
+// ---------------------------------------------------------------------------
+// phone.relink
+// ---------------------------------------------------------------------------
+
+fn relink() -> CommandDefinition {
+    static PRE: &[CommandCondition] = &[
+        LINK_EXISTS,
+        CommandCondition {
+            predicate: "relink_origin_is_of_the_links_source",
+            check: |ctx| {
+                let (Some(link_id), Some(origin)) =
+                    (str_of(ctx, "link_id"), str_of(ctx, "origin_id"))
+                else {
+                    return Ok(None);
+                };
+                let found: i64 = ctx.connection().query_row(
+                    "SELECT COUNT(*) FROM phone_link l
+                       JOIN phone_origin o ON o.source = l.source
+                      WHERE l.link_id = ?1 AND o.origin_id = ?2",
+                    [link_id, origin],
+                    |row| row.get(0),
+                )?;
+                Ok((found != 1).then(|| {
+                    "That account, calendar or folder is not known for this source.".to_owned()
+                }))
+            },
+        },
+        CommandCondition {
+            predicate: "relink_record_has_no_other_link",
+            check: |ctx| {
+                let (Some(link_id), Some(phone_id)) =
+                    (str_of(ctx, "link_id"), str_of(ctx, "phone_id"))
+                else {
+                    return Ok(None);
+                };
+                // The record the link moves to is followed by no OTHER link: one record, one row.
+                let taken: i64 = ctx.connection().query_row(
+                    "SELECT COUNT(*) FROM phone_link l
+                       JOIN phone_link m ON m.link_id = ?1 AND l.source = m.source
+                      WHERE l.phone_id = ?2 AND l.device_id IS ?3 AND l.link_id <> ?1",
+                    rusqlite::params![link_id, phone_id, device_of(ctx)],
+                    |row| row.get(0),
+                )?;
+                Ok((taken != 0)
+                    .then(|| "That phone record already follows a different row.".to_owned()))
+            },
+        },
+    ];
+    definition(
+        "phone.relink",
+        r#"{
+          "type": "object",
+          "required": ["link_id", "phone_id", "device_id", "origin_id"],
+          "additionalProperties": false,
+          "properties": {
+            "link_id": { "type": "string", "minLength": 1 },
+            "phone_id": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "\\S" },
+            "device_id": { "type": ["string", "null"], "minLength": 1, "maxLength": 128, "pattern": "\\S" },
+            "origin_id": { "type": "string", "minLength": 1 }
+          }
+        }"#,
+        // The same input lands the same state: a link already at this record and origin, sighted
+        // now, is not written again.
+        Idempotency::Idempotent,
+        PRE,
+        |ctx| {
+            let link_id = ctx.required_str("link_id")?.to_owned();
+            let phone_id = ctx.required_str("phone_id")?.to_owned();
+            let device = device_of(ctx).map(str::to_owned);
+            let origin_id = ctx.required_str("origin_id")?.to_owned();
+            // The row, the fingerprint, the detach and the tombstone stay as they are: the link is
+            // the same link, found again under another name. None of the schema's one-way
+            // triggers is on the columns this writes.
+            let changed = ctx.connection().execute(
+                "UPDATE phone_link
+                    SET phone_id = ?2, device_id = ?3, origin_id = ?4, last_seen_at = ?5
+                  WHERE link_id = ?1
+                    AND (phone_id IS NOT ?2 OR device_id IS NOT ?3 OR origin_id IS NOT ?4
+                         OR last_seen_at IS NOT ?5)",
+                rusqlite::params![link_id, phone_id, device, origin_id, ctx.now],
+            )? > 0;
+            Ok(serde_json::json!({ "link_id": link_id, "changed": changed }))
         },
     )
 }
@@ -427,10 +554,11 @@ fn touch() -> CommandDefinition {
         "phone.touch",
         r#"{
           "type": "object",
-          "required": ["source", "phone_ids"],
+          "required": ["source", "device_id", "phone_ids"],
           "additionalProperties": false,
           "properties": {
-            "source": { "enum": ["contacts", "calendar", "files"] },
+            "source": { "enum": ["contacts", "calendar", "files", "health"] },
+            "device_id": { "type": ["string", "null"], "minLength": 1, "maxLength": 128, "pattern": "\\S" },
             "phone_ids": {
               "type": "array",
               "maxItems": 20000,
@@ -450,18 +578,23 @@ fn touch() -> CommandDefinition {
             if ids.len() > TOUCH_IDS_MAX {
                 return Err(invalid("phone_ids", "too many phone ids for one touch"));
             }
+            let device = device_of(ctx).map(str::to_owned);
             let mut touched = 0_i64;
+            // The device-independent link for an id, and this device's own: another device's
+            // `local:` link of the same spelling is another record (`phone_link`'s comment).
             let mut statement = ctx.connection().prepare(
                 "UPDATE phone_link SET last_seen_at = ?3
-                  WHERE source = ?1 AND phone_id = ?2 AND last_seen_at IS NOT ?3",
+                  WHERE source = ?1 AND phone_id = ?2 AND last_seen_at IS NOT ?3
+                    AND (device_id IS NULL OR device_id IS ?4)",
             )?;
             for id in ids {
                 let id = id
                     .as_str()
                     .ok_or_else(|| invalid("phone_ids", "a phone id is a string"))?;
-                touched +=
-                    i64::try_from(statement.execute(rusqlite::params![source, id, ctx.now])?)
-                        .unwrap_or(0);
+                touched += i64::try_from(
+                    statement.execute(rusqlite::params![source, id, ctx.now, device])?,
+                )
+                .unwrap_or(0);
             }
             // An id with no link is not an error: the engine touches what it saw, and a
             // record it saw and did not follow (a refused one) has nothing to touch.
@@ -474,21 +607,24 @@ fn touch() -> CommandDefinition {
 // phone.detach
 // ---------------------------------------------------------------------------
 
+/// The link an input's `link_id` names exists.
+const LINK_EXISTS: CommandCondition = CommandCondition {
+    predicate: "link_exists",
+    check: |ctx| {
+        let Some(link_id) = str_of(ctx, "link_id") else {
+            return Ok(None);
+        };
+        let found: i64 = ctx.connection().query_row(
+            "SELECT COUNT(*) FROM phone_link WHERE link_id = ?1",
+            [link_id],
+            |row| row.get(0),
+        )?;
+        Ok((found != 1).then(|| "There is no such phone link.".to_owned()))
+    },
+};
+
 fn detach() -> CommandDefinition {
-    static PRE: &[CommandCondition] = &[CommandCondition {
-        predicate: "link_exists",
-        check: |ctx| {
-            let Some(link_id) = str_of(ctx, "link_id") else {
-                return Ok(None);
-            };
-            let found: i64 = ctx.connection().query_row(
-                "SELECT COUNT(*) FROM phone_link WHERE link_id = ?1",
-                [link_id],
-                |row| row.get(0),
-            )?;
-            Ok((found != 1).then(|| "There is no such phone link.".to_owned()))
-        },
-    }];
+    static PRE: &[CommandCondition] = &[LINK_EXISTS];
     definition(
         "phone.detach",
         r#"{

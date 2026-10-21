@@ -64,13 +64,13 @@ class PhoneStoresSpec : StringSpec({
                 else -> emptyList()
             }
         }
-        val rows = ContactsStore(script.core()).rows()!!
+        val rows = ContactsStore(script.core(), "device-a").rows()!!
         rows.getValue("p1").fields shouldBe record("08-14").fields
     }
 
     "a birthday that arrived on the phone is added" {
         val script = birthdayScript()
-        ContactsStore(script.core()).update("p1", record("08-14")) shouldBe true
+        ContactsStore(script.core(), "device-a").update("p1", record("08-14")) shouldBe true
         birthdayCommands(script).map { it.first } shouldContainExactly listOf("people.add_important_date")
         birthdayCommands(script).single().second shouldContain "\"month_day\":\"08-14\""
         birthdayCommands(script).single().second shouldContain "\"party_id\":\"p1\""
@@ -78,29 +78,29 @@ class PhoneStoresSpec : StringSpec({
 
     "a birthday that moved on the phone is edited in place" {
         val script = birthdayScript("d1" to "08-14")
-        ContactsStore(script.core()).update("p1", record("09-01")) shouldBe true
+        ContactsStore(script.core(), "device-a").update("p1", record("09-01")) shouldBe true
         birthdayCommands(script) shouldContainExactly listOf("people.edit_important_date" to "{\"date_id\":\"d1\",\"month_day\":\"09-01\"}")
     }
 
     "a birthday that went from the phone is deleted, every row of it" {
         val script = birthdayScript("d1" to "08-14", "d2" to "08-14")
-        ContactsStore(script.core()).update("p1", record("")) shouldBe true
+        ContactsStore(script.core(), "device-a").update("p1", record("")) shouldBe true
         birthdayCommands(script).map { it.second } shouldContainExactly listOf("{\"date_id\":\"d1\"}", "{\"date_id\":\"d2\"}")
     }
 
     "a birthday the vault already has changes nothing" {
         val script = birthdayScript("d1" to "08-14")
-        ContactsStore(script.core()).update("p1", record("08-14")) shouldBe true
+        ContactsStore(script.core(), "device-a").update("p1", record("08-14")) shouldBe true
         birthdayCommands(script).shouldBeEmpty()
         val none = birthdayScript()
-        ContactsStore(none.core()).update("p1", record("")) shouldBe true
+        ContactsStore(none.core(), "device-a").update("p1", record("")) shouldBe true
         birthdayCommands(none).shouldBeEmpty()
     }
 
     "a refused birthday write is a refused update, so the pass tries again" {
         val script = birthdayScript("d1" to "08-14")
         script.refuses = { it == "people.edit_important_date" }
-        ContactsStore(script.core()).update("p1", record("09-01")) shouldBe false
+        ContactsStore(script.core(), "device-a").update("p1", record("09-01")) shouldBe false
     }
 
     // -----------------------------------------------------------------------------------------
@@ -238,7 +238,7 @@ class PhoneStoresSpec : StringSpec({
             upcoming = listOf(vaultOccurrence("2026-10-19"), vaultOccurrence("2026-10-26")),
         )
         val followed = snapshotOf(occurrence("2026-10-19"), occurrence("2026-11-02"))
-        CalendarStore(script.core(), "cal", "UTC", now).follow("ev1", followed) shouldBe true
+        CalendarStore(script.core(), "cal", "UTC", now, "device-a").follow("ev1", followed) shouldBe true
         script.commands.map { it.first }.distinct() shouldContainExactly listOf("schedule.edit_event_occurrence")
         script.commands.map { c -> listOf("skip", "restore").first { c.second.contains("\"action\":\"$it\"") } } shouldContainExactly
             listOf("skip", "restore")
@@ -246,20 +246,20 @@ class PhoneStoresSpec : StringSpec({
 
     "a vault read that fails writes nothing, and a refused write is a refused follow" {
         val unread = calendarScript(upcoming = null)
-        CalendarStore(unread.core(), "cal", "UTC", now)
+        CalendarStore(unread.core(), "cal", "UTC", now, "device-a")
             .follow("ev1", snapshotOf(occurrence("2026-10-19"))) shouldBe false
         unread.commands.shouldBeEmpty()
 
         val refusing = calendarScript(upcoming = listOf(vaultOccurrence("2026-10-19"), vaultOccurrence("2026-10-26")))
         refusing.refuses = { true }
-        CalendarStore(refusing.core(), "cal", "UTC", now)
+        CalendarStore(refusing.core(), "cal", "UTC", now, "device-a")
             .follow("ev1", snapshotOf(occurrence("2026-10-19"))) shouldBe false
     }
 
     "an event that is not a series has nothing to follow" {
         val script = calendarScript()
         val lunch = PhoneEvent("Lunch", start = "2026-10-21T12:00:00", end = "2026-10-21T13:00:00", tz = "UTC", phoneId = "uid:lunch")
-        CalendarStore(script.core(), "cal", "UTC", now).follow("ev1", snapshotOf(lunch)) shouldBe true
+        CalendarStore(script.core(), "cal", "UTC", now, "device-a").follow("ev1", snapshotOf(lunch)) shouldBe true
         script.commands.shouldBeEmpty()
     }
 })

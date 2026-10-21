@@ -1,6 +1,7 @@
 package dev.centraid.shared
 
 import dev.centraid.shared.sync.phone.PhoneFields
+import dev.centraid.shared.sync.phone.PhoneIds
 import dev.centraid.shared.sync.phone.PhoneRecord
 import dev.centraid.shared.sync.phone.PhoneSource
 import dev.centraid.shared.sync.phone.PhoneStore
@@ -11,9 +12,13 @@ import dev.centraid.shared.sync.phone.VaultRow
 /**
  * AN IN-MEMORY VAULT THAT KEEPS THE COMMANDS' OWN RULES: a link refreshes in place and never
  * re-attaches, a detach is set once, a forget deletes, an origin is retired only when no link
- * names it. Every write is logged (`add`, `update`, `trash`, `link`, `touch`…), reads are not.
+ * names it, a `local:` link is the [device]'s own and a relink keeps the row. Every write is logged
+ * (`add`, `update`, `trash`, `link`, `relink`, `touch`…), reads are not.
  */
 internal class FakeStore(override val source: PhoneSource = PhoneSource.CONTACTS) : PhoneStore {
+    /** The phone the passes run on; null, every link is everyone's. A spec moves it to restore onto a new phone. */
+    override var device: String? = null
+
     val rows = linkedMapOf<String, VaultRow>()
     val links = linkedMapOf<String, StoredLink>()
     val origins = linkedMapOf<String, StoredOrigin>()
@@ -23,6 +28,8 @@ internal class FakeStore(override val source: PhoneSource = PhoneSource.CONTACTS
     var covered: (VaultRow) -> Boolean = { true }
     var unreadable: Boolean = false
     var refuseFollow: Boolean = false
+    var refind: Boolean = false
+    override val refindLost: Boolean get() = refind
     private var next = 0
 
     private fun id(prefix: String) = "$prefix-${++next}"
@@ -60,23 +67,29 @@ internal class FakeStore(override val source: PhoneSource = PhoneSource.CONTACTS
     override suspend fun origin(phoneOrigin: String, label: String): String {
         val known = origins.values.firstOrNull { it.phoneOrigin == phoneOrigin }
         if (known == null) {
-            val created = StoredOrigin(id("origin"), phoneOrigin, label)
+            val created = StoredOrigin(id("origin"), phoneOrigin, label, device)
             origins[created.originId] = created
             writes += "origin"
             return created.originId
         }
-        if (known.label != label) {
-            origins[known.originId] = known.copy(label = label)
+        if (known.label != label || known.deviceId != device) {
+            origins[known.originId] = known.copy(label = label, deviceId = device)
             writes += "origin"
         }
         return known.originId
     }
 
+    /** The device a link for [phoneId] is made under: none for a portable id. */
+    private fun deviceOf(phoneId: String): String? = if (PhoneIds.isPortable(phoneId)) null else device
+
     override suspend fun link(phoneId: String, originId: String, entityId: String, fingerprint: String): String? {
-        val known = links.values.firstOrNull { it.phoneId == phoneId }
+        val on = deviceOf(phoneId)
+        val known = links.values.firstOrNull { it.phoneId == phoneId && it.deviceId == on }
         if (known != null && known.entityId == null) return null
         if (known?.detached == true) return null
-        val refreshed = (known ?: StoredLink(id("link"), phoneId, originId, entityId, fingerprint, false, now))
+        // One row, one link: a row another record follows is refused, not stolen.
+        if (links.values.any { it.entityId == entityId && it !== known }) return null
+        val refreshed = (known ?: StoredLink(id("link"), phoneId, originId, entityId, fingerprint, false, now, on))
             .copy(originId = originId, entityId = entityId, fingerprint = fingerprint, lastSeenAt = now)
         if (known != refreshed) {
             links[refreshed.linkId] = refreshed
@@ -85,9 +98,21 @@ internal class FakeStore(override val source: PhoneSource = PhoneSource.CONTACTS
         return refreshed.linkId
     }
 
+    override suspend fun relink(linkId: String, phoneId: String, originId: String): Boolean {
+        val link = links[linkId] ?: return false
+        val on = deviceOf(phoneId)
+        if (links.values.any { it.linkId != linkId && it.phoneId == phoneId && it.deviceId == on }) return false
+        links[linkId] = link.copy(phoneId = phoneId, deviceId = on, originId = originId, lastSeenAt = now)
+        writes += "relink"
+        return true
+    }
+
     override suspend fun touch(phoneIds: List<String>): Boolean {
         writes += "touch"
-        links.replaceAll { _, link -> if (link.phoneId in phoneIds) link.copy(lastSeenAt = now) else link }
+        links.replaceAll { _, link ->
+            val mine = link.deviceId == null || link.deviceId == device
+            if (mine && link.phoneId in phoneIds) link.copy(lastSeenAt = now) else link
+        }
         return true
     }
 

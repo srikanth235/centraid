@@ -2,6 +2,7 @@ package dev.centraid.shared
 
 import centraid.core.v1.AgendaEvent
 import centraid.core.v1.AgendaUpcoming
+import centraid.core.v1.AppQueryRequest
 import centraid.core.v1.AppQueryResponse
 import centraid.core.v1.CommandOutcome
 import centraid.core.v1.CommandStatus
@@ -16,8 +17,8 @@ import okio.ByteString.Companion.encodeUtf8
 
 /**
  * A CORE THAT ANSWERS WHAT A SPEC SCRIPTS: the page reads a store makes (by their `name`, with the
- * bound values), the agenda's upcoming read, and every command (recorded, executed unless
- * [refuses] says otherwise). The stores' own logic is then run for real, over a scripted vault.
+ * bound values), the agenda's upcoming read, any other app query ([queries]), and every command
+ * (recorded, executed unless [refuses] says otherwise). The stores' own logic is then run for real, over a scripted vault.
  */
 internal class ScriptedCore {
     /** Every command run, in order: its name and its input JSON. */
@@ -28,6 +29,9 @@ internal class ScriptedCore {
 
     /** The events `agenda_upcoming` answers, or null for a read that fails. */
     var upcoming: List<AgendaEvent>? = emptyList()
+
+    /** What any other app query answers (Health's reads, #1129), or null for no answer. */
+    var queries: (AppQueryRequest) -> AppQueryResponse? = { null }
 
     /** Commands to refuse, by name. */
     var refuses: (String) -> Boolean = { false }
@@ -55,6 +59,8 @@ internal class ScriptedCore {
                 val output = if (status == CommandStatus.COMMAND_STATUS_EXECUTED) answers(command.name, command.input.utf8()) else null
                 Response(command = CommandOutcome(status = status, output = (output ?: "{\"event_id\":\"e\"}").encodeUtf8()))
             }
+            request.app_query != null && request.app_query!!.agenda_upcoming == null ->
+                queries(request.app_query!!)?.let { Response(app_query = it) } ?: Response()
             request.app_query?.agenda_upcoming != null ->
                 upcoming?.let { Response(app_query = AppQueryResponse(agenda_upcoming = AgendaUpcoming(events = it))) } ?: Response()
             else -> Response()

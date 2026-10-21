@@ -1,0 +1,21 @@
+[package]
+name = "centraid-apps-health"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[lib]
+name = "centraid_apps_health"
+path = "src/lib.rs"
+
+[dependencies]
+centraid-apps-kit = { path = "../kit" }
+
+[dev-dependencies]
+# The manifest's actions are the vault's commands, schema for schema: the test asks the
+# registry itself rather than a copy of it.
+centraid-vault = { path = "../../vault" }
+serde_json.workspace = true

@@ -1,5 +1,6 @@
 package dev.centraid.shared.shell
 
+import centraid.screen.v1.Confirm
 import dev.centraid.shared.sync.phone.FollowGate
 import dev.centraid.shared.sync.phone.FollowStep
 import dev.centraid.shared.sync.phone.OriginGone
@@ -12,8 +13,9 @@ import kotlinx.coroutines.launch
 
 /**
  * THE QUESTION AN ORIGIN HELD FOR THE MEMBER LEAVES (R-1127-9), every word already chosen: the
- * shell draws [title], [body] and two buttons and calls [PhoneFollowBridge.answer]. **[keepLabel]
- * is the default and the one drawn bold**; a dismissal that is not a button is a Keep too.
+ * shell draws [confirm] in the kit's `ConfirmSheet` with [keepLabel] as its cancel, and calls
+ * [PhoneFollowBridge.answer]. **Keep is the default**: the sheet's cancel, and what a dismissal
+ * that is not a button means.
  */
 public data class PhoneFollowQuestion(
     public val source: PhoneSource,
@@ -22,7 +24,18 @@ public data class PhoneFollowQuestion(
     public val body: String,
     public val keepLabel: String,
     public val trashLabel: String,
-)
+) {
+    /**
+     * THE QUESTION AS THE KIT'S CONFIRM (DESIGN.md: a destructive confirm goes through
+     * `ConfirmSheet`, never an alert): Move to trash is the one destructive verb, drawn as the
+     * `net` outline; Keep is not in it, because it is the sheet's cancel ([keepLabel]).
+     */
+    public val confirm: Confirm
+        get() = Confirm(title = title, body = body, confirm_label = trashLabel, destructive = true)
+
+    /** [confirm], encoded for SwiftUI. */
+    public val confirmBytes: ByteArray get() = confirm.encode()
+}
 
 /**
  * THE FOLLOWER: TRIGGERS IN, ONE PASS AT A TIME, QUESTIONS OUT (#1127).

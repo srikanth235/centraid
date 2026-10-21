@@ -19,6 +19,10 @@
 //! dismissed by the next turn saved into its thread, as a new message dismisses
 //! the card in a live session, so a thread holds at most one and it is its last.
 //!
+//! Settling and dismissing are the two edits a message has, so `chat_message` is
+//! mutable: each states `updated_at` from the command's clock and the touch
+//! trigger moves its `row_version` (`004_chat_message_version.sql`, #1129).
+//!
 //! ## One turn is one commit
 //!
 //! [`save_turn`] writes the member's question AND the assistant's answer (or
@@ -393,9 +397,9 @@ fn save_turn() -> CommandDefinition {
             // answered is over, so the thread never holds a second one and the one it holds is
             // its last. Its words stay as the member last saw them.
             ctx.connection().execute(
-                "UPDATE chat_message SET outcome = 'dismissed'
+                "UPDATE chat_message SET outcome = 'dismissed', updated_at = ?2
                   WHERE thread_id = ?1 AND outcome = 'proposed'",
-                [&thread_id],
+                rusqlite::params![thread_id, ctx.now],
             )?;
 
             let next: i64 = ctx.connection().query_row(
@@ -407,14 +411,16 @@ fn save_turn() -> CommandDefinition {
 
             ctx.connection().execute(
                 "INSERT INTO chat_message
-                   (thread_id, ordinal, role, text, outcome, refusal, notice, record_json, created_at)
-                 VALUES (?1, ?2, 'user', ?3, 'sent', NULL, NULL, NULL, ?4)",
+                   (thread_id, ordinal, role, text, outcome, refusal, notice, record_json, created_at,
+                    updated_at)
+                 VALUES (?1, ?2, 'user', ?3, 'sent', NULL, NULL, NULL, ?4, ?4)",
                 rusqlite::params![thread_id, user_ordinal, text_of(question, "text"), ctx.now],
             )?;
             ctx.connection().execute(
                 "INSERT INTO chat_message
-                   (thread_id, ordinal, role, text, outcome, refusal, notice, record_json, created_at)
-                 VALUES (?1, ?2, 'assistant', ?3, ?4, ?5, ?6, ?7, ?8)",
+                   (thread_id, ordinal, role, text, outcome, refusal, notice, record_json, created_at,
+                    updated_at)
+                 VALUES (?1, ?2, 'assistant', ?3, ?4, ?5, ?6, ?7, ?8, ?8)",
                 rusqlite::params![
                     thread_id,
                     assistant_ordinal,
@@ -609,9 +615,15 @@ fn settle_proposal() -> CommandDefinition {
             // The settled line replaces the proposal's, in the statement that moves the outcome
             // (the trigger lets the outcome move only from `proposed`).
             ctx.connection().execute(
-                "UPDATE chat_message SET outcome = ?1, text = COALESCE(?2, text)
+                "UPDATE chat_message SET outcome = ?1, text = COALESCE(?2, text), updated_at = ?5
                   WHERE thread_id = ?3 AND ordinal = ?4",
-                rusqlite::params![outcome, ctx.optional_str("text"), thread_id, ordinal],
+                rusqlite::params![
+                    outcome,
+                    ctx.optional_str("text"),
+                    thread_id,
+                    ordinal,
+                    ctx.now
+                ],
             )?;
             // Settling is activity in the chat, and states its own instant for the reason
             // `save_turn` does.

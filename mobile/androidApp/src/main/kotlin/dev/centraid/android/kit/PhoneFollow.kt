@@ -8,8 +8,6 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.CalendarContract
 import android.provider.ContactsContract
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -18,12 +16,12 @@ import androidx.core.content.ContextCompat
 import dev.centraid.android.screens.agenda.readPhoneEvents
 import dev.centraid.android.screens.docs.AndroidFolderReader
 import dev.centraid.android.screens.people.readPhoneContacts
-import dev.centraid.android.theme.centraidColor
-import dev.centraid.android.theme.centraidType
 import dev.centraid.shared.apps.agenda.CalendarFollow
 import dev.centraid.shared.apps.agenda.CalendarRead
 import dev.centraid.shared.apps.agenda.CalendarReader
 import dev.centraid.shared.apps.docs.FilesFollow
+import dev.centraid.shared.apps.health.HealthFollow
+import dev.centraid.shared.apps.health.HealthReader
 import dev.centraid.shared.apps.people.ContactsFollow
 import dev.centraid.shared.apps.people.ContactsRead
 import dev.centraid.shared.apps.people.ContactsReader
@@ -49,12 +47,15 @@ import java.util.TimeZone
  *   member's Import tap does (R-ONBOARD-4). Docs' folders are read by `AndroidFolderReader`, over
  *   the tree grants the member gave when they picked each folder; triggers for them are the app
  *   coming forward and the picker returning (`requested(PhoneSource.FILES)`), with no watcher.
- * - **The question.** [question] holds the one the bridge is waiting on; [PhoneFollowDialog]
+ *   Health Connect is read by [health] (`HealthConnectReader`), over the types the member chose
+ *   on Health's Connect page; its triggers are the app coming forward and Connect itself, with no
+ *   watcher (#1129).
+ * - **The question.** [question] holds the one the bridge is waiting on; [PhoneFollowSheet]
  *   draws it and [answer] sends the member's choice back.
  *
  * Held by the activity and built on the application context, so it keeps no activity alive.
  */
-internal class AndroidPhoneFollow(context: Context) {
+internal class AndroidPhoneFollow(context: Context, private val health: HealthReader) {
     private val context: Context = context.applicationContext
     private val bridge = PhoneFollowBridge()
     private val io = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -64,13 +65,19 @@ internal class AndroidPhoneFollow(context: Context) {
     private var started = false
     private var attached = false
 
-    /** The question the member is being asked, or null. Read by [PhoneFollowDialog]. */
+    /** The question the member is being asked, or null. Read by [PhoneFollowSheet]. */
     var question: PhoneFollowQuestion? by mutableStateOf(null)
         private set
 
     /** The foreground vault's session is open: followed from now on, and followed once at once. */
     fun attach(session: HomeSession) {
-        bridge.attach(session, listOf(ContactsFollow(contactsReader), CalendarFollow(calendarReader), FilesFollow(AndroidFolderReader(context)))) { question = it }
+        val sources = listOf(
+            ContactsFollow(contactsReader),
+            CalendarFollow(calendarReader),
+            FilesFollow(AndroidFolderReader(context)),
+            HealthFollow(health),
+        )
+        bridge.attach(session, sources) { question = it }
         attached = true
         if (started) requestAll()
     }
@@ -115,6 +122,7 @@ internal class AndroidPhoneFollow(context: Context) {
         bridge.requested(PhoneSource.CONTACTS)
         bridge.requested(PhoneSource.CALENDAR)
         bridge.requested(PhoneSource.FILES)
+        bridge.requested(PhoneSource.HEALTH)
     }
 
     private fun observer(source: PhoneSource): ContentObserver = object : ContentObserver(main) {
@@ -149,18 +157,17 @@ internal class AndroidPhoneFollow(context: Context) {
 }
 
 /**
- * THE QUESTION AN ACCOUNT OR CALENDAR THAT LEFT THE PHONE LEAVES (R-1127-9). **Keep is the
- * default**: the confirm button, and what dismissing the dialog means. Every word is the
- * question's own, from the shared copy.
+ * THE QUESTION AN ACCOUNT OR CALENDAR THAT LEFT THE PHONE LEAVES (R-1127-9), in the kit's
+ * [ConfirmSheet] (DESIGN.md: a destructive confirm is never a dialog). The shared question chose
+ * every word and built the confirm: Move to trash is its destructive verb, and **Keep, the
+ * default**, is the sheet's cancel and what the grabber, the scrim and back mean.
  */
 @Composable
-internal fun PhoneFollowDialog(question: PhoneFollowQuestion, onAnswer: (keep: Boolean) -> Unit) {
-    AlertDialog(
-        onDismissRequest = { onAnswer(true) },
-        containerColor = centraidColor("bg"),
-        title = { Text(question.title, style = centraidType("smallStrong"), color = centraidColor("text")) },
-        text = { Text(question.body, style = centraidType("body"), color = centraidColor("textSoft")) },
-        confirmButton = { KitLink(label = question.keepLabel, onClick = { onAnswer(true) }) },
-        dismissButton = { KitLink(label = question.trashLabel, onClick = { onAnswer(false) }) },
+internal fun PhoneFollowSheet(question: PhoneFollowQuestion, onAnswer: (keep: Boolean) -> Unit) {
+    ConfirmSheet(
+        confirm = question.confirm,
+        cancelLabel = question.keepLabel,
+        onConfirm = { onAnswer(false) },
+        onDismiss = { onAnswer(true) },
     )
 }

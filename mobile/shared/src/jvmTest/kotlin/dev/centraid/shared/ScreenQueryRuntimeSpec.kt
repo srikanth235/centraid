@@ -309,6 +309,8 @@ class ScreenQueryRuntimeSpec : StringSpec({
                 val query = envelope.request.shouldNotBeNull().app_query
                 when {
                     query == null -> Envelope(request_id = 0, response = Response(page = Page()))
+                    // Health's tile is Home's other app query (#1129); it is not this case's.
+                    query.health_today != null -> answered(AppQueryResponse())
                     // Home asks two arms for Agenda's tile (#1128): the events, then the due tasks.
                     query.agenda_upcoming != null || query.tasks_board != null -> {
                         zones += (query.agenda_upcoming?.tz ?: query.tasks_board.shouldNotBeNull().tz)

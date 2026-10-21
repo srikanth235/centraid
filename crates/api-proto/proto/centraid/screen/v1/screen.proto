@@ -1048,7 +1048,7 @@ message TileCount {
 }
 
 // What one app's tile renders. A discriminated union and not a bag of
-// optionals: the eight bodies share no field, and a reader of `photos` must not
+// optionals: the bodies share no field, and a reader of `photos` must not
 // be able to ask for `figure`.
 message TileBody {
   // 6 was `tally`, the Tally tile's body; the app was deleted from v0 (#1099), so
@@ -1069,6 +1069,8 @@ message TileBody {
     Notes notes = 8;
     // Money's body: what this month's spending came to, per currency (#1099).
     Spent money = 9;
+    // Health's body: today's steps and last night's sleep (#1129).
+    HealthTile health = 10;
   }
 
   message Photos {
@@ -1192,6 +1194,19 @@ message TileBody {
   message Spent {
     repeated centraid.screen.v1.Money amounts = 1;
     string caption = 2;
+  }
+
+  // TODAY'S STEPS AND LAST NIGHT'S SLEEP, as `health.today` answered them
+  // (#1129). Finished words: the figure is the core's, formatted by
+  // `HomeHealthTile` ("8,412"); an absent figure is an EMPTY string, never
+  // "0", because a day with no row is not a day of no steps.
+  message HealthTile {
+    // "8,412"; EMPTY when the store gave no steps today.
+    string figure = 1;
+    // "steps today".
+    string caption = 2;
+    // "Slept 7 h 12 m"; EMPTY when there is no sleep for last night.
+    string line = 3;
   }
 }
 
@@ -12649,5 +12664,566 @@ message MoneySearchEvent {
 
   message TransactionPicked {
     string txn_id = 1;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// --- Health ---
+// ---------------------------------------------------------------------------
+//
+// Health on the phone (#1129): the home place (Today, Trends, Workouts, and
+// More as a sheet), one metric over a week, a month or a year, one workout,
+// and Connect, where the member chooses what Health reads from the phone's
+// health store. Every screen but Connect reads through the core's `health.*`
+// app queries (`core/v1/health.proto`, arms 120-125).
+//
+// VIEWS DECIDE NOTHING. Every label, figure, sentence, bar position, chip and
+// empty state below is computed in `apps/health`. FIGURES ARE THE CORE'S
+// (R-1129-12): the typical, the range, an average, a delta and a series are
+// folded in `crates/apps/health`; Kotlin formats them in the member's units
+// and turns them into words. A bar's length or a sparkline's height is
+// DRAWING, in basis points of its own span (10,000 is full), never a figure.
+//
+// THE SHELL'S FACTS (`HealthDevice`) are the phone's, never the vault's: which
+// store this phone has, the measurement system the member uses, and the types
+// the member chose on Connect (R-1129-6). They ride on each screen's `Opened`.
+
+// ---------------------------------------------------------------------------
+// The shared parts.
+// ---------------------------------------------------------------------------
+
+// WHAT THE PHONE SAYS, never stored in the vault.
+message HealthDevice {
+  Store store = 1;
+  Units units = 2;
+  // The types the member chose on Connect, by key: `steps`, `sleep_min`,
+  // `active_energy_kcal`, `exercise_min`, `resting_hr_bpm`, `weight_kg`,
+  // `workouts`. A pass reads only these (R-1129-6).
+  repeated string chosen = 3;
+  // The chosen types the OS refused, by the same keys. Health Connect names a
+  // refusal; HealthKit hides one, so iOS leaves this empty and Health names a
+  // chosen type that read nothing instead.
+  repeated string refused = 4;
+
+  enum Store {
+    STORE_UNSPECIFIED = 0;
+    STORE_APPLE_HEALTH = 1;
+    STORE_HEALTH_CONNECT = 2;
+  }
+
+  // Display only: storage is always the metric's own unit (`weight_kg`).
+  enum Units {
+    UNITS_UNSPECIFIED = 0;
+    UNITS_METRIC = 1;
+    UNITS_IMPERIAL = 2;
+  }
+}
+
+message HealthBandTab {
+  // `today`, `trends`, `workouts`, `more` - what `BandPicked` sends.
+  string key = 1;
+  string label = 2;
+  string icon_key = 3;
+  bool current = 4;
+}
+
+// A row of More (an OptionSheet): `reads`, `choose`, `stop`.
+message HealthMoreRow {
+  string key = 1;
+  string label = 2;
+  string meta = 3;
+  string icon_key = 4;
+  // NET for the row that stops reading; NEUTRAL otherwise.
+  StatusChip.Tone tone = 5;
+}
+
+message HealthFact {
+  string label = 1;
+  string detail = 2;
+}
+
+// A filter chip (a workout kind) or a segment (a range): `active` is the one
+// in force.
+message HealthChip {
+  string key = 1;
+  string label = 2;
+  bool active = 3;
+}
+
+message HealthPageChrome {
+  string title = 1;
+  // The page it was pushed from, by its title: the back control says it.
+  string back_label = 2;
+  string retry = 3;
+}
+
+// A figure and its unit, drawn large and small: "5.2" "km".
+message HealthFigure {
+  string label = 1;
+  string value = 2;
+  string unit = 3;
+}
+
+// WHERE A DAY'S NUMBER SITS AGAINST THE MEMBER'S OWN USUAL RANGE (R-1129-8).
+// Positions are basis points of the bar's length.
+message HealthRangeBar {
+  uint32 low_bp = 1;
+  uint32 high_bp = 2;
+  // False when there is no figure today: the range is drawn without a dot.
+  bool has_value = 3;
+  uint32 value_bp = 4;
+  // Under the hero's bar only: "0", "your typical day", "14,000".
+  string start_label = 5;
+  string middle_label = 6;
+  string end_label = 7;
+}
+
+// One daily metric as Today lists it.
+message HealthMetricLine {
+  // The metric's key: `steps`, `sleep_min`, ... - what `MetricPicked` sends.
+  string metric = 1;
+  string label = 2;
+  // "8,412", "7 h 12 m", "71.4"; EMPTY when there is no figure.
+  string value = 3;
+  // "kcal", "bpm", "kg"; EMPTY when the value carries its own.
+  string unit = 4;
+  // "So far today", "Last night", "Monday".
+  string when_label = 5;
+  // "6 h 50 m typical"; EMPTY when no day fed a typical.
+  string typical = 6;
+  // ABSENT when there is no range to draw.
+  optional HealthRangeBar bar = 7;
+  string accessibility_label = 8;
+}
+
+// One workout as a list draws it.
+message HealthWorkoutLine {
+  string activity_id = 1;
+  // The kind and the part of the day: "Morning run".
+  string title = 2;
+  // "5.2 km · 31 min".
+  string meta = 3;
+  // "07:10" today, "Sun" this week, "11 Oct" before.
+  string when_label = 4;
+  string icon_key = 5;
+  string accessibility_label = 6;
+}
+
+message HealthWorkoutSection {
+  // "This week", "October", "September 2025".
+  string heading = 1;
+  repeated HealthWorkoutLine rows = 2;
+}
+
+// ---------------------------------------------------------------------------
+// --- health.home: Today - Trends - Workouts, More as a sheet ---------------
+// ---------------------------------------------------------------------------
+
+message HealthHomeState {
+  SeatState seat = 1;
+  // WHICH TAB, as a parameter (the navigation model's first doctrine).
+  Destination destination = 2;
+  oneof content {
+    Loading loading = 3;
+    ReadFailure failure = 4;
+    Denied denied = 5;
+    HealthHomeData data = 6;
+  }
+  Sheet sheet = 7;
+  // Four tabs in order; EMPTY while denied.
+  repeated HealthBandTab band = 8;
+  HealthHomeChrome chrome = 9;
+  HealthDevice device = 10;
+  // Trends' range.
+  TrendRange trend_range = 11;
+  // Workouts' kind filter: EMPTY is every kind.
+  string kind_concept_id = 12;
+  // Workouts asked for: the window end. Show more asks for another page.
+  uint32 workouts_shown = 13;
+  // The chip row (Workouts: All, then each kind with a workout); EMPTY elsewhere.
+  repeated HealthChip chips = 14;
+  // The segmented control (Trends: 30 days, 90 days, Year); EMPTY elsewhere.
+  repeated HealthChip segments = 15;
+  // More's rows, as the store and the connection make them.
+  repeated HealthMoreRow more_rows = 16;
+  // "What Health may read" (`SHEET_READS`): the facts, then a line per chosen
+  // type that read nothing or that the OS refused (R-1129-6), and that Chat
+  // does not read Health (R-1129-11).
+  repeated HealthFact reads_facts = 17;
+
+  enum Destination {
+    DESTINATION_UNSPECIFIED = 0;
+    DESTINATION_TODAY = 1;
+    DESTINATION_TRENDS = 2;
+    DESTINATION_WORKOUTS = 3;
+  }
+
+  enum Sheet {
+    SHEET_UNSPECIFIED = 0;
+    SHEET_NONE = 1;
+    SHEET_MORE = 2;
+    SHEET_READS = 3;
+    // The confirm before Health stops reading the store.
+    SHEET_STOP = 4;
+  }
+
+  enum TrendRange {
+    TREND_RANGE_UNSPECIFIED = 0;
+    TREND_RANGE_DAYS_30 = 1;
+    TREND_RANGE_DAYS_90 = 2;
+    TREND_RANGE_YEAR = 3;
+  }
+}
+
+message HealthHomeChrome {
+  string title = 1;
+  string retry = 2;
+  // The band's home capsule.
+  string home = 3;
+  string more_title = 4;
+  string reads_title = 5;
+  string close_label = 6;
+  // The stop confirm: a disclosure, so full sentences.
+  string stop_title = 7;
+  string stop_body = 8;
+  string stop_confirm = 9;
+  string stop_cancel = 10;
+  // Workouts' Show more.
+  string show_more = 11;
+}
+
+message HealthHomeData {
+  // `YYYY-MM-DD`, the phone's day.
+  string today = 1;
+  // The header's subtitle: "Tuesday 20 October".
+  string day_label = 2;
+  // No store connected: one sentence and Connect, on every tab.
+  optional EmptyState empty = 3;
+  HealthTodayData today_data = 4;
+  HealthTrendsData trends = 5;
+  HealthWorkoutsData workouts = 6;
+}
+
+message HealthTodayData {
+  // Steps, drawn large, with its bar's labels.
+  HealthMetricLine hero = 1;
+  // "Against your own typical".
+  string metrics_heading = 2;
+  repeated HealthMetricLine metrics = 3;
+  // "Workouts today"; EMPTY when there were none.
+  string workouts_heading = 4;
+  repeated HealthWorkoutLine workouts = 5;
+  // Where the numbers come from, never when (R-1129-13).
+  string foot = 6;
+}
+
+message HealthTrendsData {
+  // "Last 30 days, against the 30 days before".
+  string compare_line = 1;
+  repeated HealthTrendRow rows = 2;
+  // Nothing in either period yet.
+  optional EmptyState empty = 3;
+}
+
+message HealthTrendRow {
+  string metric = 1;
+  string label = 2;
+  string value = 3;
+  // "a day", "kcal a day", "a night".
+  string unit = 4;
+  // "+4%", "−12 min"; EMPTY when there is no period before to compare.
+  string delta = 5;
+  Direction direction = 6;
+  // The sparkline, oldest first: each bucket's height in basis points of the
+  // row's own span, or -1 for a bucket with no value (a gap, never a zero).
+  repeated int32 points_bp = 7;
+  // The period's average on the same scale; -1 for none.
+  int32 average_bp = 8;
+  string accessibility_label = 9;
+
+  enum Direction {
+    DIRECTION_UNSPECIFIED = 0;
+    DIRECTION_UP = 1;
+    DIRECTION_DOWN = 2;
+    DIRECTION_FLAT = 3;
+  }
+}
+
+message HealthWorkoutsData {
+  // Newest first.
+  repeated HealthWorkoutSection sections = 1;
+  // There is another page.
+  bool more = 2;
+  // No workout at all, or none of the kind chosen.
+  optional EmptyState empty = 3;
+}
+
+message HealthHomeEvent {
+  oneof kind {
+    Opened opened = 1;
+    Refreshed refreshed = 2;
+    BandPicked band = 3;
+    RangePicked range = 4;
+    KindPicked kind_picked = 5;
+    ShowMore show_more = 6;
+    SheetClosed sheet_closed = 7;
+    // `reads` and `stop` open their sheet; `choose` is an intent the shell
+    // routes to `health.connect`.
+    MorePicked more = 8;
+    // INTENTS: the machine changes nothing; the shell routes them.
+    ConnectOpened connect = 9;
+    MetricPicked metric = 10;
+    WorkoutPicked workout = 11;
+    // The member confirmed the stop: the shell calls `HealthConnectBridge.stop`.
+    StopConfirmed stop = 12;
+  }
+
+  // Lands on `destination` (Today when unspecified).
+  message Opened {
+    HealthHomeState.Destination destination = 1;
+    HealthDevice device = 2;
+  }
+
+  message Refreshed {}
+
+  message BandPicked {
+    string key = 1;
+  }
+
+  // `days_30`, `days_90`, `year`.
+  message RangePicked {
+    string key = 1;
+  }
+
+  // EMPTY is every kind.
+  message KindPicked {
+    string kind_concept_id = 1;
+  }
+
+  message ShowMore {}
+
+  message SheetClosed {}
+
+  message MorePicked {
+    string key = 1;
+  }
+
+  // The day-one action: the shell pushes `health.connect`.
+  message ConnectOpened {}
+
+  message MetricPicked {
+    string metric = 1;
+  }
+
+  message WorkoutPicked {
+    string activity_id = 1;
+  }
+
+  message StopConfirmed {}
+}
+
+// ---------------------------------------------------------------------------
+// --- health.metric: one metric over a week, a month or a year --------------
+// ---------------------------------------------------------------------------
+
+message HealthMetricState {
+  SeatState seat = 1;
+  // The metric's key: `steps`, `sleep_min`, ...
+  string metric = 2;
+  Range range = 3;
+  oneof content {
+    Loading loading = 4;
+    ReadFailure failure = 5;
+    Denied denied = 6;
+    HealthMetricData data = 7;
+  }
+  HealthPageChrome chrome = 8;
+  HealthDevice device = 9;
+  // Week, Month, Year.
+  repeated HealthChip segments = 10;
+
+  enum Range {
+    RANGE_UNSPECIFIED = 0;
+    RANGE_WEEK = 1;
+    RANGE_MONTH = 2;
+    RANGE_YEAR = 3;
+  }
+}
+
+message HealthMetricData {
+  // "Wed 14 – Tue 20 October", "Last 30 days", "November – October".
+  string caption = 1;
+  // "7,840", and its unit: "a day".
+  string average = 2;
+  string average_unit = 3;
+  // "6% more than your typical day"; EMPTY when there is nothing to compare.
+  string versus = 4;
+  // Oldest first.
+  repeated HealthChartBar bars = 5;
+  // The typical line across the chart, in basis points of its height.
+  bool has_typical = 6;
+  uint32 typical_bp = 7;
+  string typical_label = 8;
+  // Under the chart: weekday initials, dates, months.
+  repeated string ticks = 9;
+  // Best day, Total, Days above typical.
+  repeated HealthFact facts = 10;
+  // What the figures are, in one line.
+  string foot = 11;
+  string chart_label = 12;
+  // No row in the period at all.
+  optional EmptyState empty = 13;
+}
+
+message HealthChartBar {
+  // False for a bucket with no value: no bar, never a zero-height one.
+  bool has_value = 1;
+  uint32 height_bp = 2;
+  // The bucket today falls in: the identity hue's one mark (R-1129-10).
+  bool current = 3;
+  bool above_typical = 4;
+  string accessibility_label = 5;
+}
+
+message HealthMetricEvent {
+  oneof kind {
+    Opened opened = 1;
+    Refreshed refreshed = 2;
+    // `week`, `month`, `year`.
+    RangePicked range = 3;
+  }
+
+  message Opened {
+    string metric = 1;
+    HealthMetricState.Range range = 2;
+    string parent = 3;
+    HealthDevice device = 4;
+  }
+
+  message Refreshed {}
+
+  message RangePicked {
+    string key = 1;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// --- health.workout ---------------------------------------------------------
+// ---------------------------------------------------------------------------
+
+message HealthWorkoutState {
+  SeatState seat = 1;
+  string activity_id = 2;
+  oneof content {
+    Loading loading = 3;
+    ReadFailure failure = 4;
+    Denied denied = 5;
+    HealthWorkoutData data = 6;
+  }
+  HealthPageChrome chrome = 7;
+  HealthDevice device = 8;
+}
+
+message HealthWorkoutData {
+  // "Run".
+  string kind_label = 1;
+  // "Morning run".
+  string title = 2;
+  // "Tuesday 20 October, 07:10 to 07:41".
+  string when_label = 3;
+  // Distance, Time, Average pace, Active energy, Average heart rate,
+  // Elevation gain: each only when the store measured it.
+  repeated HealthFigure figures = 4;
+  // Who recorded it and where it was read from. Splits stay on the phone
+  // (R-1129-9).
+  string foot = 5;
+  // The workout is no longer in the vault.
+  optional EmptyState gone = 6;
+}
+
+message HealthWorkoutEvent {
+  oneof kind {
+    Opened opened = 1;
+    Refreshed refreshed = 2;
+  }
+
+  message Opened {
+    string activity_id = 1;
+    string parent = 2;
+    HealthDevice device = 3;
+  }
+
+  message Refreshed {}
+}
+
+// ---------------------------------------------------------------------------
+// --- health.connect: what Health may read, and the one Ink button ----------
+// ---------------------------------------------------------------------------
+//
+// Reads nothing from the vault. The member's choice is the shell's (device),
+// like a followed folder's access (R-1127-7): `ConnectTapped` is the shell's
+// cue to ask the OS for exactly `chosen`, read only, then to call
+// `HealthConnectBridge.connect`, and to report the outcome back as
+// `Connected` or `Failed`. Nothing is ever written to the store (R-1129-7).
+
+message HealthConnectState {
+  SeatState seat = 1;
+  HealthPageChrome chrome = 2;
+  HealthDevice device = 3;
+  string headline = 4;
+  string lede = 5;
+  // "What Health may read".
+  string choices_title = 6;
+  repeated HealthChoice choices = 7;
+  // What happens next, in one line.
+  string note = 8;
+  // "Connect Apple Health", the one Ink button; disabled while nothing is
+  // chosen or while the OS is asking.
+  string connect_label = 9;
+  bool can_connect = 10;
+  // The keys the shell asks the OS for: every choice that is on, in order.
+  repeated string chosen = 11;
+  // The OS is asking, or the first read is running.
+  bool working = 12;
+  // The status line: "Choose at least one", a failure's sentence.
+  string status = 13;
+}
+
+message HealthChoice {
+  // `steps`, `sleep_min`, `energy` (active energy and exercise together),
+  // `resting_hr_bpm`, `weight_kg`, `workouts`.
+  string key = 1;
+  string label = 2;
+  string detail = 3;
+  bool on = 4;
+}
+
+message HealthConnectEvent {
+  oneof kind {
+    Opened opened = 1;
+    Toggled toggled = 2;
+    // INTENT: the shell asks the OS for `chosen`, then connects.
+    ConnectTapped connect = 3;
+    // The shell's report: the store is connected and the first read ran.
+    Connected connected = 4;
+    // The shell's report: the OS or the vault refused.
+    Failed failed = 5;
+  }
+
+  message Opened {
+    string parent = 1;
+    HealthDevice device = 2;
+  }
+
+  message Toggled {
+    string key = 1;
+  }
+
+  message ConnectTapped {}
+
+  message Connected {}
+
+  message Failed {
+    string sentence = 1;
   }
 }

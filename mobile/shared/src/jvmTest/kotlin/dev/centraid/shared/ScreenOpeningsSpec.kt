@@ -14,6 +14,7 @@ import centraid.screen.v1.TasksListState
 import dev.centraid.shared.apps.agenda.AgendaEventMachine
 import dev.centraid.shared.apps.docs.DocsDocumentMachine
 import dev.centraid.shared.apps.docs.DocsDriveMachine
+import dev.centraid.shared.apps.health.HealthHomeMachine
 import dev.centraid.shared.apps.money.MoneyHomeMachine
 import dev.centraid.shared.apps.money.MoneyTransactionMachine
 import dev.centraid.shared.apps.notes.NotesEditorMachine
@@ -107,6 +108,7 @@ class ScreenOpeningsSpec : StringSpec({
         RowRoutes.route(row("tasks", "tag", "x"))!!.screenId shouldBe AgendaHomeMachine.SCREEN_ID
         RowRoutes.route(row("people", "tag", "x"))!!.screenId shouldBe PeopleHomeMachine.SCREEN_ID
         RowRoutes.route(row("money", "tag", "x"))!!.screenId shouldBe MoneyHomeMachine.SCREEN_ID
+        RowRoutes.route(row("health", "activity", "x"))!!.screenId shouldBe HealthHomeMachine.SCREEN_ID
         RowRoutes.route(row("photos", "tag", "x"))!!.screenId shouldBe PhotosGridMachine.SCREEN_ID
         RowRoutes.route(row("weather", "forecast", "x")).shouldBeNull()
         // TASKS IS A DOMAIN, NOT AN APP (R-1128-7): its front door is Agenda's To-do.

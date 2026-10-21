@@ -871,6 +871,7 @@ private fun ColumnScope.FilledBody(body: TileBody) {
     val people = body.people
     val locker = body.locker
     val spent = body.money
+    val health = body.health
     when {
         photos != null -> {
             val cells = photos.cells
@@ -1119,6 +1120,31 @@ private fun ColumnScope.FilledBody(body: TileBody) {
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
+        }
+
+        // TODAY'S STEPS AND LAST NIGHT'S SLEEP (#1129). The figure is the machine's, in text ink:
+        // Health's hue stays on its mark (R-1129-10). No figure is an empty string, never a 0.
+        health != null -> Column(column, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            if (health.figure.isNotEmpty()) {
+                Text(health.figure, style = centraidType("title"), color = centraidColor("text"), maxLines = 1)
+            }
+            Text(
+                health.caption,
+                style = centraidType("small"),
+                color = centraidColor("textSoft"),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.weight(1f))
+            if (health.line.isNotEmpty()) {
+                Text(
+                    health.line,
+                    style = centraidType("small"),
+                    color = centraidColor("textSoft"),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
 
         locker != null -> Column(column, verticalArrangement = Arrangement.spacedBy(4.dp)) {

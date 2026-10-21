@@ -43,7 +43,7 @@ public data class NativeIconPath(
 
 public object CentraidCatalog {
     /**
-     * The eight first-party apps, in CATALOGUE order.
+     * The first-party apps, in CATALOGUE order.
      *
      * This is the all-apps listing's order and says nothing about the grid
      * — `SpringboardPolicy.SPRINGBOARD_ORDER` owns that.
@@ -56,6 +56,7 @@ public object CentraidCatalog {
         NativeApp(id = "docs", name = "Docs", desc = "Read and organize your documents.", iconKey = "Folder", colorKey = "teal"),
         NativeApp(id = "agenda", name = "Agenda", desc = "Your calendar, events and plans.", iconKey = "Calendar", colorKey = "forest"),
         NativeApp(id = "money", name = "Money", desc = "Spending, targets and cash flow.", iconKey = "Coin", colorKey = "indigo"),
+        NativeApp(id = "health", name = "Health", desc = "Daily totals and workouts from your phone.", iconKey = "Activity", colorKey = "olive"),
     )
 
     /** By id, for the header that names one app. */
@@ -69,6 +70,7 @@ public object CentraidCatalog {
         "docs" to NativeAppMark(hue = 0xFF00707EL, chipBackground = 0xFFDCEBECL, markColor = 0xFF006774L),
         "agenda" to NativeAppMark(hue = 0xFF397247L, chipBackground = 0xFFE4EBE4L, markColor = 0xFF346841L),
         "money" to NativeAppMark(hue = 0xFF635A93L, chipBackground = 0xFFE9E8EEL, markColor = 0xFF5F568DL),
+        "health" to NativeAppMark(hue = 0xFF666723L, chipBackground = 0xFFE9EAE0L, markColor = 0xFF5E5F20L),
     )
 
     public val darkMarks: Map<String, NativeAppMark> = mapOf(
@@ -79,6 +81,7 @@ public object CentraidCatalog {
         "docs" to NativeAppMark(hue = 0xFF58B4C4L, chipBackground = 0xFF1D2F32L, markColor = 0xFF58B4C4L),
         "agenda" to NativeAppMark(hue = 0xFF7BB587L, chipBackground = 0xFF242F26L, markColor = 0xFF7BB587L),
         "money" to NativeAppMark(hue = 0xFFA39BDAL, chipBackground = 0xFF2C2A37L, markColor = 0xFFA39BDAL),
+        "health" to NativeAppMark(hue = 0xFFA8AA66L, chipBackground = 0xFF2D2D20L, markColor = 0xFFA8AA66L),
     )
 
     /**
