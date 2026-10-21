@@ -1,16 +1,16 @@
-//! THE 20 ACTIONS, as command invocations.
+//! THE TWENTY-TWO ACTIONS, as command invocations.
 //!
 //! Every Money action is a thin invocation of ONE typed vault command
-//! (`crates/vault/src/commands/money.rs`): the projection lives in the command,
-//! not the app. So this module is a table, not logic — it names which command
-//! each action invokes and hands the input through.
+//! (`crates/vault/src/commands/{money,rule}.rs`, `follow.rs`, or a shared verb):
+//! the projection lives in the command, not the app. So this module is a table,
+//! not logic — it names which command each action invokes and hands the input
+//! through.
 //!
 //! **`invoke_key` is mandatory** (D-1020-D3-5). It is the caller's correlation
 //! key: it pairs an answer with the call that caused it, and it never reaches
 //! the vault, which keeps no replay ledger (#1029 §1, R-1088-12). A write the
 //! shell may re-offer is idempotent by its content or by an id the phone minted
-//! first — seventeen of these commands are the first, three (`add_account`,
-//! `add_rule`, `add_category`) the second.
+//! first (`account.add` and `rule.add` take one; `category.add` is its own key).
 //!
 //! **A denial is a value, never an `Err`.** [`Outcome`] carries `Denied` as one
 //! of its states; `Err` is reserved for a door that is not there at all.
@@ -105,110 +105,68 @@ pub struct ActionRow {
     pub confirm: Confirm,
 }
 
-/// THE TABLE. Twenty actions, twenty commands, in the manifest's own order.
+const fn act(action: &'static str, command: &'static str) -> ActionRow {
+    ActionRow {
+        action,
+        command,
+        confirm: Confirm::None,
+    }
+}
+
+const fn confirmed(action: &'static str, command: &'static str) -> ActionRow {
+    ActionRow {
+        action,
+        command,
+        confirm: Confirm::Required,
+    }
+}
+
+/// THE TABLE. Twenty-two actions, in the manifest's own order. A close, an archive
+/// and a name for a line are the shared verbs (`flag.set`, `flag.clear`,
+/// `entity.retitle`): Money wraps none of them, so two actions may name one command.
 /// Confirmation is asked for what cannot be taken back or touches many rows.
-pub const ACTIONS: [ActionRow; 20] = [
-    ActionRow {
-        action: "add-account",
-        command: "money.add_account",
-        confirm: Confirm::None,
-    },
-    ActionRow {
-        action: "edit-account",
-        command: "money.edit_account",
-        confirm: Confirm::None,
-    },
-    ActionRow {
-        action: "set-opening-balance",
-        command: "money.set_opening_balance",
-        confirm: Confirm::Required,
-    },
-    ActionRow {
-        action: "import-transactions",
-        command: "money.import_transactions",
-        confirm: Confirm::None,
-    },
-    ActionRow {
-        action: "record-checkpoint",
-        command: "money.record_checkpoint",
-        confirm: Confirm::None,
-    },
-    ActionRow {
-        action: "save-import-profile",
-        command: "money.save_import_profile",
-        confirm: Confirm::None,
-    },
-    ActionRow {
-        action: "categorize",
-        command: "money.categorize",
-        confirm: Confirm::None,
-    },
-    ActionRow {
-        action: "void-transaction",
-        command: "money.void_transaction",
-        confirm: Confirm::Required,
-    },
-    ActionRow {
-        action: "set-display-name",
-        command: "money.set_display_name",
-        confirm: Confirm::None,
-    },
-    ActionRow {
-        action: "link-transfer",
-        command: "money.link_transfer",
-        confirm: Confirm::None,
-    },
-    ActionRow {
-        action: "unlink-transfer",
-        command: "money.unlink_transfer",
-        confirm: Confirm::None,
-    },
-    ActionRow {
-        action: "set-target",
-        command: "money.set_target",
-        confirm: Confirm::None,
-    },
-    ActionRow {
-        action: "set-carry",
-        command: "money.set_carry",
-        confirm: Confirm::None,
-    },
-    ActionRow {
-        action: "add-rule",
-        command: "money.add_rule",
-        confirm: Confirm::None,
-    },
-    ActionRow {
-        action: "edit-rule",
-        command: "money.edit_rule",
-        confirm: Confirm::None,
-    },
-    ActionRow {
-        action: "delete-rule",
-        command: "money.delete_rule",
-        confirm: Confirm::Required,
-    },
-    ActionRow {
-        action: "apply-rule-to-history",
-        command: "money.apply_rule_to_history",
-        confirm: Confirm::Required,
-    },
-    ActionRow {
-        action: "add-category",
-        command: "money.add_category",
-        confirm: Confirm::None,
-    },
-    ActionRow {
-        action: "merge-category",
-        command: "money.merge_category",
-        confirm: Confirm::Required,
-    },
-    ActionRow {
-        action: "archive-category",
-        command: "money.archive_category",
-        confirm: Confirm::None,
-    },
+pub const ACTIONS: [ActionRow; 22] = [
+    act("add-account", "account.add"),
+    act("edit-account", "account.edit"),
+    act("close-account", "flag.set"),
+    act("reopen-account", "flag.clear"),
+    confirmed("set-opening-balance", "account.set_opening"),
+    act("import-transactions", "follow.statement"),
+    act("record-checkpoint", "checkpoint.record"),
+    act("save-import-profile", "account.remember_layout"),
+    act("categorize", "txn.categorize"),
+    confirmed("void-transaction", "txn.void"),
+    act("set-display-name", "entity.retitle"),
+    act("link-transfer", "txn.link_transfer"),
+    act("unlink-transfer", "txn.unlink_transfer"),
+    act("set-target", "budget.set"),
+    act("set-carry", "budget.set_carry"),
+    act("add-rule", "rule.add"),
+    act("edit-rule", "rule.edit"),
+    confirmed("delete-rule", "rule.delete"),
+    confirmed("apply-rule-to-history", "rule.apply"),
+    act("add-category", "category.add"),
+    confirmed("merge-category", "category.merge"),
+    act("archive-category", "flag.set"),
 ];
+
+/// The `act` scopes Money declares, derived from the action table: one per
+/// distinct command, spelled `{schema, table: "<command name without its
+/// schema>"}`.
+#[must_use]
+pub fn act_scope_tables() -> Vec<(&'static str, &'static str)> {
+    let mut scopes: Vec<(&'static str, &'static str)> = ACTIONS
+        .iter()
+        .map(|row| {
+            row.command
+                .split_once('.')
+                .map_or((row.command, row.command), |(schema, name)| (schema, name))
+        })
+        .collect();
+    scopes.sort_unstable();
+    scopes.dedup();
+    scopes
+}
 
 /// The row for an action, if it is declared.
 pub fn action_row(action: &str) -> Option<&'static ActionRow> {
@@ -298,16 +256,11 @@ mod tests {
     }
 
     #[test]
-    fn every_action_is_named_once_and_maps_to_one_command() {
+    fn every_action_is_named_once() {
         let mut names: Vec<&str> = ACTIONS.iter().map(|row| row.action).collect();
         names.sort_unstable();
         names.dedup();
         assert_eq!(names.len(), ACTIONS.len());
-        let mut commands: Vec<&str> = ACTIONS.iter().map(|row| row.command).collect();
-        commands.sort_unstable();
-        commands.dedup();
-        assert_eq!(commands.len(), ACTIONS.len(), "one action per command");
-        assert!(ACTIONS.iter().all(|row| row.command.starts_with("money.")));
     }
 
     #[test]
@@ -316,7 +269,7 @@ mod tests {
         let outcome = run(
             &door,
             "categorize",
-            input(&[("txn_ids", Value::Array(vec![]))]),
+            input(&[("ids", Value::Array(vec![]))]),
             "key-1",
         );
         assert!(matches!(outcome, Ok(Outcome::Executed { .. })));
@@ -327,7 +280,7 @@ mod tests {
                 seen[0].invoke_key.as_str(),
                 seen[0].optional
             ),
-            ("money.categorize", "key-1", false)
+            ("txn.categorize", "key-1", false)
         );
     }
 
@@ -346,7 +299,7 @@ mod tests {
     fn an_absent_door_fails_closed_and_names_the_command() {
         let door = RecordingDoor::absent();
         let error = run(&door, "set-target", input(&[]), "k").expect_err("an Err");
-        assert_eq!(error.command, "money.set_target");
+        assert_eq!(error.command, "budget.set");
     }
 
     #[test]

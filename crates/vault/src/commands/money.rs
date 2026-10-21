@@ -232,6 +232,17 @@ fn pre_edit_account(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     }
     let connection = ctx.connection();
     let id = ctx.required_str("id")?;
+    if let Some(title) = ctx.optional_str("title") {
+        let name = squash(title);
+        if name.is_empty() {
+            return Ok(Some("An account needs a name.".to_owned()));
+        }
+        if name_is_taken(connection, &name, Some(id))? {
+            return Ok(Some(
+                "You already have an account with that name.".to_owned(),
+            ));
+        }
+    }
     if let Some(wanted) = ctx.optional_str("type") {
         let current: String =
             connection.query_row("SELECT type FROM account WHERE id = ?1", [id], |row| {
@@ -259,6 +270,18 @@ fn edit_account(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
     let connection = ctx.connection();
     let id = ctx.required_str("id")?;
     let mut changed = false;
+    if let Some(title) = ctx.optional_str("title") {
+        let name = squash(title);
+        changed |= connection.execute(
+            "UPDATE entity SET title = ?2 WHERE id = ?1 AND title IS NOT ?2",
+            [id, &name],
+        )? > 0;
+        // The origin is labelled by the account's name.
+        connection.execute(
+            "UPDATE origin SET label = ?2 WHERE system = 'statement' AND fills = ?1",
+            [id, &name],
+        )?;
+    }
     if let Some(account_type) = ctx.optional_str("type") {
         changed |= connection.execute(
             "UPDATE account SET type = ?2 WHERE id = ?1 AND type IS NOT ?2",
@@ -881,6 +904,7 @@ pub fn definitions() -> Vec<CommandDefinition> {
               "additionalProperties": false,
               "properties": {
                 "id": { "type": "string", "minLength": 1 },
+                "title": { "type": "string", "minLength": 1, "maxLength": 80 },
                 "type": { "enum": ["checking", "savings", "credit_card", "cash"] },
                 "on_budget": { "type": "boolean" },
                 "external_ref": { "type": ["string", "null"], "minLength": 1, "maxLength": 64 }

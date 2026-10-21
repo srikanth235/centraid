@@ -17,5 +17,6 @@ centraid-apps-kit = { path = "../kit" }
 [dev-dependencies]
 # The manifest's actions are the vault's commands, schema for schema: the test asks the
 # registry itself rather than a copy of it.
+centraid-ontology = { path = "../../ontology" }
 centraid-vault = { path = "../../vault" }
 serde_json.workspace = true

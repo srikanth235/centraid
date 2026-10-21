@@ -100,8 +100,10 @@ message HealthWorkoutRow {
   string kind_concept_id = 2;
   string kind_key = 3;
   string kind_label = 4;
-  // The store's own word for the kind, kept whole.
-  string phone_kind = 5;
+  // The vault keeps a workout's kind and not the store's own word for it
+  // (#1135).
+  reserved 5;
+  reserved "phone_kind";
   // Instants, `YYYY-MM-DDTHH:MM:SS.sssZ`.
   string started_at = 6;
   string ended_at = 7;
@@ -167,7 +169,7 @@ message HealthToday {
   repeated HealthTodayMetric metrics = 2;
   // The workouts that started today, newest first.
   repeated HealthWorkoutRow workouts = 3;
-  // A health store has been connected: a `phone_origin` of source `health`
+  // A health store has been connected: an `origin` of system `health`
   // exists.
   bool connected = 4;
   // The metrics with any row in the 365 days to today (R-1129-6: a chosen

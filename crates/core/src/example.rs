@@ -233,8 +233,8 @@ impl Seeder<'_> {
 // Money.
 //
 // "Three accounts and about three months of statement lines, imported the way a
-// member imports them: through `money.import_transactions`, with the dedupe key
-// the app's own reader would have computed. A few rules file the regulars; a
+// member imports them: through `follow.statement`, with the dedupe key the app's
+// own reader would have computed. A few rules file the regulars; a
 // handful of lines stay unfiled so Activity has something to ask, and one move
 // between checking and savings is left for the member to accept." (#1099, R-1099-9)
 //
@@ -249,12 +249,12 @@ struct MoneyLine {
     text: String,
 }
 
-/// A line the seed writes into `account`, at most once per (day, amount, text).
+/// A line the seed writes into `account`, at most once per (day, amount, text):
+/// a record the account's statement origin follows.
 fn money_rows(
     now: i64,
     lines: &[MoneyLine],
     ordinals: &mut centraid_apps_money::import::keys::Ordinals,
-    first_id: &mut u32,
 ) -> Vec<Value> {
     lines
         .iter()
@@ -266,14 +266,14 @@ fn money_rows(
                 line.signed_minor,
                 &line.text,
             );
-            *first_id += 1;
             json!({
-                "txn_id": format!("demo-money-txn-{first_id}"),
                 "external_id": external_id,
-                "posted_on": posted_on,
-                "amount_minor": line.signed_minor.abs(),
-                "direction": if line.signed_minor < 0 { "debit" } else { "credit" },
-                "description": line.text,
+                "fields": {
+                    "title": line.text,
+                    "posted_on": posted_on,
+                    "amount_minor": line.signed_minor,
+                    "line": { "imported_from": "csv" },
+                },
             })
         })
         .collect()
@@ -296,12 +296,12 @@ fn seed_money(seeder: &mut Seeder, now: i64) {
         ("demo-money-visa", "Visa", "credit_card", None),
     ] {
         let mut input = json!({
-            "account_id": id, "name": name, "kind": kind, "currency": "USD",
+            "id": id, "title": name, "type": kind, "currency": "USD",
         });
         if let Some(reference) = reference {
             input["external_ref"] = json!(reference);
         }
-        seeder.run("money.add_account", input);
+        seeder.run("account.add", input);
     }
 
     let line = |days_ago: i64, signed_minor: i64, text: &str| MoneyLine {
@@ -361,93 +361,79 @@ fn seed_money(seeder: &mut Seeder, now: i64) {
 
     // Dated oldest first within each account, as a statement is; the keys carry
     // an ordinal per (day, amount, text) triple so identical lines stay two.
-    let mut next_id = 0;
-    for (account, mut lines) in [
-        ("demo-money-everyday", everyday),
-        ("demo-money-rainy", rainy),
-        ("demo-money-visa", visa),
+    for (account, reference, mut lines) in [
+        ("demo-money-everyday", "000123456789", everyday),
+        ("demo-money-rainy", "000987654321", rainy),
+        ("demo-money-visa", "demo-money-visa", visa),
     ] {
         lines.sort_by_key(|l| std::cmp::Reverse(l.days_ago));
         let mut ordinals = centraid_apps_money::import::keys::Ordinals::default();
-        let rows = money_rows(now, &lines, &mut ordinals, &mut next_id);
+        let records = money_rows(now, &lines, &mut ordinals);
+        // The statement origin's `ref` is the bank's number, or the account's own id.
         seeder.run(
-            "money.import_transactions",
-            json!({ "account_id": account, "source": "csv", "rows": rows }),
+            "follow.statement",
+            json!({
+                "origin": { "ref": reference, "label": account, "fills": account },
+                "records": records,
+            }),
         );
     }
 
     // The regulars are filed by rules, applied to what is already in.
-    for (rule, pattern, category, name) in [
-        (
-            "demo-money-rule-pay",
-            "PAYROLL",
-            "money:cat:income.pay",
-            "Payroll",
-        ),
+    for (rule, pattern, category) in [
+        ("demo-money-rule-pay", "PAYROLL", "category:income.pay"),
         (
             "demo-money-rule-rent",
             "RENT PAYMENT",
-            "money:cat:housing.rent",
-            "Rent",
+            "category:housing.rent",
         ),
         (
             "demo-money-rule-netflix",
             "NETFLIX",
-            "money:cat:fun.subscriptions",
-            "Netflix",
+            "category:fun.subscriptions",
         ),
         (
             "demo-money-rule-comcast",
             "COMCAST",
-            "money:cat:utilities.phone",
-            "Comcast",
+            "category:utilities.phone",
         ),
         (
             "demo-money-rule-wf",
             "WHOLE FOODS",
-            "money:cat:food.groceries",
-            "Whole Foods",
+            "category:food.groceries",
         ),
-        (
-            "demo-money-rule-sbux",
-            "STARBUCKS",
-            "money:cat:food.dining",
-            "Starbucks",
-        ),
+        ("demo-money-rule-sbux", "STARBUCKS", "category:food.dining"),
         (
             "demo-money-rule-shell",
             "SHELL OIL",
-            "money:cat:transport.fuel",
-            "Shell",
+            "category:transport.fuel",
         ),
         (
             "demo-money-rule-bistro",
             "CORNER BISTRO",
-            "money:cat:food.dining",
-            "Corner Bistro",
+            "category:food.dining",
         ),
     ] {
         seeder.run(
-            "money.add_rule",
+            "rule.add",
             json!({
-                "rule_id": rule, "match_kind": "contains", "pattern": pattern,
-                "set_category_concept_id": category, "set_display_name": name,
+                "id": rule, "match": "contains", "text": pattern, "category_id": category,
             }),
         );
-        seeder.run("money.apply_rule_to_history", json!({ "rule_id": rule }));
+        seeder.run("rule.apply", json!({ "id": rule }));
     }
 
     // A plan for this month, so Spending has something to be measured against.
     let month = day(now, 0)[..7].to_owned();
     for (category, minor) in [
-        ("money:cat:food.groceries", 55_000),
-        ("money:cat:food.dining", 30_000),
-        ("money:cat:transport.fuel", 25_000),
+        ("category:food.groceries", 55_000),
+        ("category:food.dining", 30_000),
+        ("category:transport.fuel", 25_000),
     ] {
         seeder.run(
-            "money.set_target",
+            "budget.set",
             json!({
-                "month": month, "category_concept_id": category,
+                "month": month, "category_id": category,
                 "amount_minor": minor, "currency": "USD", "carry": true,
             }),
         );

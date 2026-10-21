@@ -70,7 +70,6 @@ fn read_days(
 pub struct Workout {
     pub activity_id: String,
     pub kind: KindRow,
-    pub phone_kind: String,
     pub started_at: String,
     pub ended_at: String,
     pub moving_sec: Option<i64>,
@@ -101,8 +100,10 @@ fn joined(
     }
     let ids: Vec<String> = activities.iter().map(|a| a.activity_id.clone()).collect();
     let mut measures = door::measures(door, &ids)?;
+    let trashed = door::trashed(door, &ids)?;
     Ok(activities
         .into_iter()
+        .filter(|activity| !trashed.contains(&activity.activity_id))
         .filter_map(|activity| {
             let measure: MeasureRow = measures.remove(&activity.activity_id)?;
             let kind = kinds
@@ -116,7 +117,6 @@ fn joined(
             Some(Workout {
                 activity_id: activity.activity_id,
                 kind,
-                phone_kind: measure.phone_kind,
                 ended_at: activity
                     .ended_at
                     .unwrap_or_else(|| activity.started_at.clone()),

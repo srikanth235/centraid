@@ -683,6 +683,7 @@ mod tests {
             description: description.into(),
             category_concept_id: None,
             external_id: None,
+            transfer_id: None,
             display_name: None,
             display_name_source: None,
             memo: None,

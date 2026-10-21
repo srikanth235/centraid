@@ -603,7 +603,6 @@ pub struct RuleOffer {
     pub pattern: String,
     pub category_id: String,
     pub category_label: String,
-    pub display_name: String,
     pub support: usize,
     pub of: usize,
 }
@@ -649,7 +648,6 @@ fn offer_of(rule: RuleProposal, data: &MoneyData) -> RuleOffer {
         pattern: rule.pattern,
         category_label: data.label(&rule.category_concept_id),
         category_id: rule.category_concept_id,
-        display_name: rule.display_name,
         support: rule.support,
         of: rule.of,
     }
@@ -728,7 +726,6 @@ pub fn transaction(
             description: r.description.clone(),
             posted_on: r.posted_on.clone(),
             category_concept_id: r.category_concept_id.clone(),
-            member_name: None,
         })
         .collect();
     let rule_proposal = row.category_concept_id.as_ref().and_then(|_| {
@@ -737,10 +734,6 @@ pub fn transaction(
             description: row.description.clone(),
             posted_on: row.posted_on.clone(),
             category_concept_id: row.category_concept_id.clone(),
-            member_name: row
-                .display_name
-                .clone()
-                .filter(|_| row.display_name_source.as_deref() == Some("member")),
         };
         rules::propose_rule(
             &data.rules,
@@ -975,7 +968,6 @@ pub struct RuleLine {
     pub amount_max: Option<i64>,
     pub account_label: Option<String>,
     pub category_label: Option<String>,
-    pub display_name: Option<String>,
     pub specificity: u32,
 }
 
@@ -1001,7 +993,6 @@ pub fn rules(door: &dyn PageDoor) -> KitResult<MoneyRules> {
                 amount_max: rule.amount_max_minor,
                 account_label: rule.account_id.as_deref().map(|id| data.account_name(id)),
                 category_label: rule.category_concept_id.as_deref().map(|id| data.label(id)),
-                display_name: rule.display_name.clone(),
                 specificity: rules::specificity(rule),
             })
             .collect(),
@@ -1175,19 +1166,8 @@ pub fn recurring_screen(door: &dyn PageDoor, today: &str) -> KitResult<MoneyRecu
                 .find(|p| p.status != Status::Paid)
                 .or_else(|| projected.last())
                 .map_or(Status::Due, |p| p.status);
-            // A member sees the name a rule would give it, else the merchant.
-            let applied = rules::apply(
-                &data.rules,
-                &rules::Candidate {
-                    description: &s.merchant_key,
-                    amount_minor: s.median_amount_minor,
-                    account_id: &s.account_id,
-                },
-            );
             RecurringLine {
-                merchant: applied
-                    .display_name
-                    .unwrap_or_else(|| s.merchant_key.clone()),
+                merchant: s.merchant_key.clone(),
                 account_label: data.account_name(&s.account_id),
                 cadence: s.cadence,
                 cadence_words: s.cadence.words(),
@@ -1293,8 +1273,6 @@ pub struct ImportPlanRow {
     pub posted_on: Option<String>,
     pub amount: Option<Money>,
     pub description: Option<String>,
-    /// After the rules.
-    pub display_name: Option<String>,
     pub category_label: Option<String>,
     pub future_dated: bool,
     /// The existing transaction an `AlreadyIn` or a proposal points at.
@@ -1372,7 +1350,6 @@ pub fn import_plan(
                     .as_ref()
                     .map(|r| money(r.signed_minor(), currency)),
                 description: entry.row.as_ref().map(|r| r.description.clone()),
-                display_name: entry.row.as_ref().and_then(|r| r.display_name.clone()),
                 category_label: entry
                     .row
                     .as_ref()

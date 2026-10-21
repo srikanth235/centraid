@@ -477,6 +477,7 @@ name = "centraid-apps-health"
 version = "1.0.0-alpha.0"
 dependencies = [
  "centraid-apps-kit",
+ "centraid-ontology",
  "centraid-vault",
  "serde_json",
 ]

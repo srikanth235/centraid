@@ -19,8 +19,6 @@
 
 pub mod civil;
 pub mod commands;
-#[cfg(feature = "vault-door")]
-pub mod door;
 pub mod engine;
 pub mod import;
 pub mod manifest;

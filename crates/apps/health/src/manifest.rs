@@ -3,7 +3,7 @@
 //! It is embedded with `include_str!` so a shipped binary carries the manifest it was built with,
 //! and parsed by the kit at load time. Each action's `input` is the vault command's own schema,
 //! copied verbatim; `every_action_is_a_vault_command_with_its_schema` proves it, because two
-//! copies of "what does `health.record_days` take" is how the two answers drift.
+//! copies of "what does `measurement.record` take" is how the two answers drift.
 
 use std::sync::OnceLock;
 
@@ -17,9 +17,9 @@ pub const APP_ID: &str = "health";
 
 /// The action each vault command is declared as.
 pub const ACTIONS: [(&str, &str); 3] = [
-    ("record-days", "health.record_days"),
-    ("follow-workout", "health.follow_workout"),
-    ("purge-workout", "health.purge_workout"),
+    ("record-days", "measurement.record"),
+    ("follow-workouts", "follow.health"),
+    ("delete-workout", "entity.trash"),
 ];
 
 /// The parsed manifest.
@@ -45,7 +45,7 @@ mod tests {
         let manifest = manifest();
         assert_eq!(manifest.id, APP_ID);
         assert_eq!(manifest.manifest_version, 1);
-        assert_eq!(manifest.version, "0.1.0");
+        assert_eq!(manifest.version, "0.2.0");
         let raw: serde_json::Value = serde_json::from_str(MANIFEST_JSON).unwrap();
         assert_eq!(raw["iconKey"], "Activity");
         // Identity hue 110, the widest free gap on the ring (R-1129-10).
@@ -89,23 +89,26 @@ mod tests {
         }
     }
 
-    /// HEALTH READS THE SPINE AND THE PHONE BAND AND WRITES ONLY ITS OWN PACK; it reaches no
-    /// other app's schema, and it writes nothing of the spine's directly (a workout's activity is
-    /// written by `health.follow_workout`).
+    /// HEALTH READS THE VAULT'S OWN TABLES AND WRITES THROUGH THREE COMMANDS: its days, the health
+    /// follow and the shared trash. It reaches no other app's verbs.
     #[test]
-    fn health_reaches_its_pack_the_spine_and_the_phone_band() {
+    fn health_reads_the_vaults_tables_and_acts_through_three_commands() {
+        use centraid_apps_kit::manifest::ScopeVerbs;
         let vault = manifest().vault.as_ref().expect("a vault block");
         for scope in &vault.scopes {
-            assert!(
-                ["health", "core", "phone"].contains(&scope.schema.as_str()),
-                "{}.{:?} is outside Health's reach",
+            assert_eq!(
+                scope.verbs == ScopeVerbs::Read,
+                scope.schema == "vault",
+                "{}.{:?} is neither a read of the vault's tables nor an act on a command",
                 scope.schema,
                 scope.table
             );
         }
-        for (_, command) in ACTIONS {
-            assert!(command.starts_with("health."), "{command}");
-        }
+        let commands: Vec<&str> = ACTIONS.iter().map(|(_, command)| *command).collect();
+        assert_eq!(
+            manifest().act_scope_disagreements(&commands),
+            Vec::<String>::new()
+        );
     }
 
     #[test]

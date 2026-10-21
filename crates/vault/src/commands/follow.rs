@@ -374,7 +374,7 @@ pub const SYSTEMS: &[SystemMap] = &[
         gone: Gone::Forget,
         defaults: no_defaults,
         shape: workout::shape,
-        settle: nothing_to_settle,
+        settle: workout::settle,
         replaced: nothing_replaced,
     },
     // A line of a statement: its title is the bank's words until the member

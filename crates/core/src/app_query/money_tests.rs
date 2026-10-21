@@ -1,6 +1,6 @@
 //! Money's arm, its import plan and Home's tile, through `Handle::call` — the
-//! door a shell uses — over a ledger written by the real `money.*` commands
-//! (#1099).
+//! door a shell uses — over a ledger written by the real Money commands
+//! (#1099, #1135).
 //!
 //! What each test holds:
 //!
@@ -11,7 +11,7 @@
 //!    again finds every row already in and offers nothing to publish.
 //! 3. **An OFX statement finds its account by the full ACCTID** the member
 //!    stored (`external_ref`), and one that matches nothing is a sentence.
-//! 4. **The 17 statements the Money crate declares are served by the core's own
+//! 4. **The 19 statements the Money crate declares are served by the core's own
 //!    door** — each one is observed being asked, not assumed.
 //! 5. **Refusals are values or typed errors**, and the bytes of a statement
 //!    appear nowhere in an answer.
@@ -33,8 +33,8 @@ use wire::app_query_request::Query as Q;
 /// 15:00Z on 10 February 2024 is the 10th in Toronto too.
 const NOW: &str = "2024-02-10T15:00:00.000Z";
 const TZ: &str = "America/Toronto";
-const GROCERIES: &str = "money:cat:food.groceries";
-const DINING: &str = "money:cat:food.dining";
+const GROCERIES: &str = "category:food.groceries";
+const DINING: &str = "category:food.dining";
 
 struct Scratch {
     dir: std::path::PathBuf,
@@ -155,12 +155,12 @@ impl Scratch {
 
     fn account(&self, id: &str, name: &str, kind: &str, currency: &str, reference: Option<&str>) {
         let mut input = json!({
-            "account_id": id, "name": name, "kind": kind, "currency": currency,
+            "id": id, "title": name, "type": kind, "currency": currency,
         });
         if let Some(reference) = reference {
             input["external_ref"] = json!(reference);
         }
-        self.run("money.add_account", input);
+        self.run("account.add", input);
     }
 
     fn csv(&self, account: &str, text: &str) -> wire::MoneyImportPlan {
@@ -182,14 +182,10 @@ impl Scratch {
             "nothing new to publish"
         );
         let out = self
-            .run_bytes("money.import_transactions", statement.publish_input.clone())
+            .run_bytes("follow.statement", statement.publish_input.clone())
             .expect("the import runs");
         assert!(
-            out["outcomes"]
-                .as_array()
-                .expect("outcomes")
-                .iter()
-                .all(|o| o["outcome"] == "inserted"),
+            out["added"].as_u64() > Some(0) && out["refused"] == 0 && out["matched"] == 0,
             "{out}"
         );
         statement
@@ -330,8 +326,8 @@ fn activity_pages_a_month_with_a_cursor_and_filters() {
         .txn_id
         .clone();
     scratch.run(
-        "money.categorize",
-        json!({ "txn_ids": [grocery], "category_concept_id": GROCERIES }),
+        "txn.categorize",
+        json!({ "ids": [grocery], "category_id": GROCERIES }),
     );
     let filed = scratch.activity(wire::MoneyActivityRequest {
         tz: TZ.to_owned(),
@@ -379,8 +375,8 @@ fn one_transaction_with_its_proposals_and_a_missing_one_is_not_found() {
     assert!(detail.transferred_with.is_none());
 
     scratch.run(
-        "money.link_transfer",
-        json!({ "txn_id": outgoing, "other_txn_id": offer.other_txn_id }),
+        "txn.link_transfer",
+        json!({ "id": outgoing, "other_id": offer.other_txn_id }),
     );
     let linked = match scratch.ask(Q::MoneyTransaction(wire::MoneyTransactionRequest {
         tz: TZ.to_owned(),
@@ -454,9 +450,8 @@ fn cashflow_accounts_rules_categories_targets_recurring_and_search() {
 
     // A rule, then the screens that read it.
     scratch.run(
-        "money.add_rule",
-        json!({ "rule_id": "r1", "match_kind": "contains", "pattern": "starbucks",
-                "set_category_concept_id": DINING, "set_display_name": "Starbucks" }),
+        "rule.add",
+        json!({ "id": "r1", "match": "contains", "text": "starbucks", "category_id": DINING }),
     );
     let rules = match scratch.ask(Q::MoneyRules(wire::MoneyRulesRequest {})) {
         Answer::MoneyRules(rules) => rules,
@@ -481,8 +476,8 @@ fn cashflow_accounts_rules_categories_targets_recurring_and_search() {
 
     // A target and its sheet.
     scratch.run(
-        "money.set_target",
-        json!({ "month": "2024-02", "category_concept_id": GROCERIES,
+        "budget.set",
+        json!({ "month": "2024-02", "category_id": GROCERIES,
                 "amount_minor": 40_000, "currency": "USD", "carry": false }),
     );
     let sheet = match scratch.ask(Q::MoneyTargetSheet(wire::MoneyTargetSheetRequest {
@@ -565,9 +560,9 @@ fn a_plan_publishes_through_the_command_and_a_replan_offers_nothing() {
     assert!(before.rows.is_empty());
 
     let out = scratch
-        .run_bytes("money.import_transactions", statement.publish_input.clone())
+        .run_bytes("follow.statement", statement.publish_input.clone())
         .expect("the import runs");
-    assert_eq!(out["outcomes"].as_array().map(Vec::len), Some(9));
+    assert_eq!(out["added"], 9);
 
     // The same file again: every row is already in; there is nothing to publish.
     let again = scratch.csv("chq", CHECKING);
@@ -652,8 +647,8 @@ fn an_ofx_statement_finds_its_account_by_the_full_acctid_the_member_stored() {
 
     // The member stores the bank's number on the account (W4-b) and it matches.
     scratch.run(
-        "money.edit_account",
-        json!({ "account_id": "cad", "external_ref": "9876543210" }),
+        "account.edit",
+        json!({ "id": "cad", "external_ref": "9876543210" }),
     );
     let plan = scratch.plan(ofx(OFX, None));
     let statement = &plan.statements[0];
@@ -672,9 +667,19 @@ fn an_ofx_statement_finds_its_account_by_the_full_acctid_the_member_stored() {
         Some((198_750, "CAD"))
     );
     let out = scratch
-        .run_bytes("money.import_transactions", statement.publish_input.clone())
+        .run_bytes("follow.statement", statement.publish_input.clone())
         .expect("the import runs");
-    assert_eq!(out["checkpoint_written"], true);
+    assert_eq!(out["added"], 2);
+    // The statement's stated balance is the shell's second command.
+    let stated = statement.checkpoint.as_ref().expect("a stated balance");
+    let written = scratch.run(
+        "checkpoint.record",
+        json!({
+            "account_id": "cad", "day": stated.as_of,
+            "balance_minor": stated.balance.as_ref().map(|b| b.minor),
+        }),
+    );
+    assert_eq!(written["written"], true);
     let again = scratch.plan(ofx(OFX, None));
     assert_eq!(again.statements[0].already_in, 2);
     assert!(again.statements[0].publish_input.is_empty());
@@ -699,28 +704,30 @@ fn an_ofx_statement_finds_its_account_by_the_full_acctid_the_member_stored() {
 }
 
 // ---------------------------------------------------------------------------
-// 4. The 17 statements, through the core's own door.
+// 4. The 19 statements, through the core's own door.
 // ---------------------------------------------------------------------------
 
-/// The statements `crates/apps/money` declares (`HANDOFF-p`), by `PageQuery.name`.
-const STATEMENTS: [&str; 17] = [
+/// The statements `crates/apps/money` declares, by `PageQuery.name`.
+const STATEMENTS: [&str; 19] = [
     "money.transactions.month",
-    "money.transactions.decorations",
+    "money.transactions.entities",
+    "money.transactions.statements",
+    "money.transactions.trashed",
     "money.transaction",
     "money.imports.last",
     "money.accounts",
-    "money.accounts.spine",
+    "money.accounts.entities",
+    "money.accounts.origins",
+    "money.archived",
     "money.account.ledger",
     "money.account.recent",
     "money.targets",
     "money.rules",
     "money.checkpoints",
     "money.categories",
-    "money.categories.archived.concept",
-    "money.categories.archived",
+    "money.categories.entities",
     "money.links.transfer",
     "money.import.existing",
-    "money.import.profile",
 ];
 
 /// A door that remembers which statements were asked, then asks the core's.
@@ -745,39 +752,38 @@ fn every_statement_the_crate_declares_is_served_by_the_cores_door() {
     let scratch = ledger();
     // The rows each statement needs to be asked at all.
     scratch.run(
-        "money.record_checkpoint",
-        json!({ "account_id": "chq", "as_of": "2024-02-08", "balance_minor": 1 }),
+        "checkpoint.record",
+        json!({ "account_id": "chq", "day": "2024-02-08", "balance_minor": 1 }),
     );
     scratch.run(
-        "money.set_target",
-        json!({ "month": "2024-02", "category_concept_id": GROCERIES,
+        "budget.set",
+        json!({ "month": "2024-02", "category_id": GROCERIES,
                 "amount_minor": 40_000, "currency": "USD", "carry": true }),
     );
     scratch.run(
-        "money.add_rule",
-        json!({ "rule_id": "r1", "match_kind": "contains", "pattern": "NETFLIX",
-                "set_display_name": "Netflix" }),
+        "rule.add",
+        json!({ "id": "r1", "match": "contains", "text": "NETFLIX",
+                "category_id": GROCERIES }),
     );
-    scratch.run(
-        "money.archive_category",
-        json!({ "concept_id": DINING, "archived": true }),
-    );
+    scratch.run("flag.set", json!({ "id": DINING, "flag": "archived" }));
     // A saved layout, so the profile statement has a row to return.
     let saved = scratch.csv("chq", CHECKING).statements[0]
         .profile_to_save
         .clone()
         .expect("a layout to remember");
     scratch.run(
-        "money.save_import_profile",
+        "account.remember_layout",
         json!({
-            "account_id": "chq", "header_fingerprint": saved.header_fingerprint,
-            "delimiter": saved.delimiter, "skip_lines": saved.skip_lines,
-            "date_order": saved.date_order, "sign_mode": saved.sign_mode,
-            "date_col": saved.date_col, "amount_col": saved.amount_col,
-            "desc_col": saved.desc_col,
+            "id": "chq",
+            "layout": {
+                "header_fingerprint": saved.header_fingerprint,
+                "delimiter": saved.delimiter, "skip_lines": saved.skip_lines,
+                "date_order": saved.date_order, "sign_mode": saved.sign_mode,
+                "date_col": saved.date_col, "amount_col": saved.amount_col,
+                "desc_col": saved.desc_col,
+            },
         }),
     );
-
     scratch
         .handle
         .with_vault(|vault| {

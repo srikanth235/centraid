@@ -207,7 +207,7 @@ fn an_account_has_one_statement_origin_from_birth_and_keeps_its_bank_number_ther
             .contains("own kind of account")
     );
     world.ok("account.edit", json!({ "id": plain, "type": "savings" }));
-    // Closing is the archived flag; renaming is the shared retitle.
+    // Closing is the archived flag; a rename is the account's own edit (or the shared retitle).
     world.ok("flag.set", json!({ "id": plain, "flag": "archived" }));
     world.ok(
         "entity.retitle",
@@ -818,6 +818,17 @@ fn a_workout_is_an_activity_of_a_workout_kind_with_what_the_store_measured() {
             )
             .as_deref(),
         Some("Watch 2700 5234.5 148")
+    );
+    // A workout the store measured nothing of is still a workout: it has its row.
+    follow_health(
+        &world,
+        "phone-a",
+        &[workout("local:0", "walk", "2026-03-03T07:00:00Z", 0.0)],
+        false,
+    );
+    assert_eq!(
+        world.count("SELECT COUNT(*) FROM workout", &[]),
+        world.count("SELECT COUNT(*) FROM activity", &[])
     );
     // Seen again, unchanged: nothing is written. Changed: only the figure moves.
     let version = world.version(&id);

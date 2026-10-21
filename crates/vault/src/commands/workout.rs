@@ -128,6 +128,15 @@ fn merge(ctx: &CommandCtx<'_, '_>, id: &str, _: Option<&Json>, new: &Json) -> Re
     Ok(changed > 0)
 }
 
+/// Every workout has its `workout` row, however little the store measured: a
+/// walk with no figures is still a workout, and an activity of a workout kind
+/// without the row is not one.
+pub fn settle(ctx: &CommandCtx<'_, '_>, id: &str) -> Result<()> {
+    ctx.connection()
+        .execute("INSERT OR IGNORE INTO workout (id) VALUES (?1)", [id])?;
+    Ok(())
+}
+
 /// Read a store's record into the form the vault holds: the store's word for the
 /// kind becomes the workout kind it names (minted when this vault has not met the
 /// word), the instants become the one spelling the vault writes, and an

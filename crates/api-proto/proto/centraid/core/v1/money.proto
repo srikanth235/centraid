@@ -292,7 +292,9 @@ message MoneyTransaction {
     string pattern = 2;
     string category_id = 3;
     string category_label = 4;
-    string display_name = 5;
+    // A rule files a line and no longer names it (#1135).
+    reserved 5;
+    reserved "display_name";
     uint32 support = 6;
     uint32 of = 7;
   }
@@ -398,7 +400,9 @@ message MoneyRules {
     optional int64 amount_max = 5;
     optional string account_label = 6;
     optional string category_label = 7;
-    optional string display_name = 8;
+    // A rule files a line and no longer names it (#1135).
+    reserved 8;
+    reserved "display_name";
     uint32 specificity = 9;
   }
 }
@@ -646,8 +650,9 @@ message MoneyImportPlanRow {
   // Signed.
   optional MoneyAmount amount = 4;
   optional string description = 5;
-  // After the rules.
-  optional string display_name = 6;
+  // The rules file a line and no longer name it (#1135).
+  reserved 6;
+  reserved "display_name";
   optional string category_label = 7;
   bool future_dated = 8;
   // The existing transaction an ALREADY_IN or a proposal points at.

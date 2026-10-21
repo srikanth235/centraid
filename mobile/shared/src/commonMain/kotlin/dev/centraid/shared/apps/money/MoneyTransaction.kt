@@ -42,12 +42,14 @@ public object MoneyTransactionMachine :
     MoneyQueryMachine<MoneyTransactionState, MoneyTransactionEvent, MoneyTransactionData>(ScreenIds.MONEY_TRANSACTION, MONEY_TABLES) {
     public const val SCREEN_ID: String = ScreenIds.MONEY_TRANSACTION
 
-    public const val CMD_CATEGORIZE: String = "money.categorize"
-    public const val CMD_VOID: String = "money.void_transaction"
-    public const val CMD_NAME: String = "money.set_display_name"
-    public const val CMD_LINK: String = "money.link_transfer"
-    public const val CMD_UNLINK: String = "money.unlink_transfer"
-    public const val CMD_ADD_RULE: String = "money.add_rule"
+    public const val CMD_CATEGORIZE: String = "txn.categorize"
+    public const val CMD_VOID: String = "txn.void"
+
+    /** A line's name is its entity's title: the shared verb. */
+    public const val CMD_NAME: String = "entity.retitle"
+    public const val CMD_LINK: String = "txn.link_transfer"
+    public const val CMD_UNLINK: String = "txn.unlink_transfer"
+    public const val CMD_ADD_RULE: String = "rule.add"
 
     public const val ACTION_CATEGORY: String = "category"
     public const val ACTION_NAME: String = "name"
@@ -90,8 +92,8 @@ public object MoneyTransactionMachine :
             event.category != null -> {
                 val id = event.category.category_id
                 val input = MoneyFold.json(
-                    "txn_ids" to "[${MoneyFold.str(screen.txn_id)}]",
-                    "category_concept_id" to MoneyFold.strOrNull(id.ifEmpty { null }),
+                    "ids" to "[${MoneyFold.str(screen.txn_id)}]",
+                    "category_id" to MoneyFold.strOrNull(id.ifEmpty { null }),
                 )
                 submit(held.copy(screen = screen.copy(sheet = MoneyTransactionState.Sheet.SHEET_NONE)), CMD_CATEGORIZE, input, id)
             }
@@ -99,12 +101,15 @@ public object MoneyTransactionMachine :
             event.name_edited != null -> Step(held.copy(screen = screen.copy(name_draft = event.name_edited.text)))
 
             event.name_saved != null -> {
-                val text = screen.name_draft.trim()
-                val input = MoneyFold.json(
-                    "txn_id" to MoneyFold.str(screen.txn_id),
-                    "display_name" to MoneyFold.strOrNull(text.ifEmpty { null }),
-                )
-                submit(held.copy(screen = screen.copy(sheet = MoneyTransactionState.Sheet.SHEET_NONE)), CMD_NAME, input, text)
+                // A cleared name goes back to the bank's own words.
+                val text = screen.name_draft.trim().ifEmpty { held.answers.transaction?.raw.orEmpty() }
+                val closed = held.copy(screen = screen.copy(sheet = MoneyTransactionState.Sheet.SHEET_NONE))
+                if (text.isEmpty()) {
+                    Step(closed)
+                } else {
+                    val input = MoneyFold.json("id" to MoneyFold.str(screen.txn_id), "title" to MoneyFold.str(text))
+                    submit(closed, CMD_NAME, input, text)
+                }
             }
 
             event.sheet_closed != null ->
@@ -116,7 +121,7 @@ public object MoneyTransactionMachine :
                 Step(held.copy(screen = screen.copy(dismissed = (screen.dismissed + event.offer_dismissed.key).distinct())))
 
             event.confirm_accepted != null && screen.confirm != null -> {
-                val input = MoneyFold.json("txn_id" to MoneyFold.str(screen.txn_id))
+                val input = MoneyFold.json("id" to MoneyFold.str(screen.txn_id))
                 submit(held.copy(screen = screen.copy(confirm = null)), CMD_VOID, input, "")
             }
 
@@ -139,7 +144,7 @@ public object MoneyTransactionMachine :
                     ),
                 ),
             )
-            ACTION_UNLINK -> submit(held, CMD_UNLINK, MoneyFold.json("txn_id" to MoneyFold.str(screen.txn_id)), "")
+            ACTION_UNLINK -> submit(held, CMD_UNLINK, MoneyFold.json("id" to MoneyFold.str(screen.txn_id)), "")
             ACTION_VOID -> Step(
                 held.copy(
                     screen = screen.copy(
@@ -163,19 +168,18 @@ public object MoneyTransactionMachine :
             OFFER_TRANSFER -> {
                 val other = answer.transfer_proposal ?: return Step(held)
                 val input = MoneyFold.json(
-                    "txn_id" to MoneyFold.str(screen.txn_id),
-                    "other_txn_id" to MoneyFold.str(other.other_txn_id),
+                    "id" to MoneyFold.str(screen.txn_id),
+                    "other_id" to MoneyFold.str(other.other_txn_id),
                 )
                 submit(held, CMD_LINK, input, other.other_txn_id)
             }
             OFFER_RULE -> {
                 val offer = answer.rule_proposal ?: return Step(held)
                 val input = MoneyFold.json(
-                    "rule_id" to MoneyFold.str("rule-${screen.draft_token}"),
-                    "match_kind" to MoneyFold.str(MoneyFold.matchKindKey(offer.kind)),
-                    "pattern" to MoneyFold.str(offer.pattern),
-                    "set_category_concept_id" to MoneyFold.str(offer.category_id),
-                    "set_display_name" to MoneyFold.strOrNull(offer.display_name.ifEmpty { null }),
+                    "id" to MoneyFold.str("rule-${screen.draft_token}"),
+                    "match" to MoneyFold.str(MoneyFold.matchKindKey(offer.kind)),
+                    "text" to MoneyFold.str(offer.pattern),
+                    "category_id" to MoneyFold.str(offer.category_id),
                 )
                 submit(held, CMD_ADD_RULE, input, screen.draft_token)
             }

@@ -99,16 +99,17 @@ pub const MAX_CONTENT_URLS: usize = 100;
 /// | Trash (Docs, Photos, Tasks, People, Locker) | `entity`, `locker_item` |
 /// | Photos (grid, shelves, lightbox, collections, search, picker, places, album choice, editor) | `photo`, `entity`, `edge`, `container`, `place`, `derivative`, `blob` |
 /// | Phone sync (Docs follows the phone through `follow.files`, #1127; whether a source was imported is its `origin`, and what a followed file last stated is its `source`) | `origin`, `source` |
-/// | `with_minor_units` | `core_account` |
+/// | `with_minor_units` | `account` |
 ///
-/// `core_account` has no shell caller: it is the one table whose `currency`
+/// `account` has no shell caller: it is the one table whose `currency`
 /// the `with_minor_units` arm is specified over, so the arm stays reachable
 /// and tested; Home's money tile rides its own arm (`Request.money`).
 ///
 /// NOT HERE, ON PURPOSE: every other Locker table (`locker_item_field`,
 /// `locker_item_passkey`, `locker_item_address`, `locker_item_alias`), the
 /// the journal and Locker's receipts, the `revision` snapshots, the money
-/// tables and `core_transaction`. The apps that read
+/// tables (`txn`, `budget`, `checkpoint`, `rule`) and Health's (`measurement`,
+/// `activity`, `workout`). The apps that read
 /// those do it in the core (`Request.app_query`, `Request.money`), through
 /// [`crate::app_query::VaultDoor`], which this list does not govern. A screen
 /// that starts paging a new table adds it here, in the same change, and the
@@ -122,9 +123,9 @@ pub const MAX_CONTENT_URLS: usize = 100;
 /// `a_predicate_that_reads_a_table_outside_the_list_is_refused` is where that
 /// is read: the predicates it tries are SQL, which lives in that crate.
 pub const PAGE_TABLES: [&str; 15] = [
+    "account",
     "blob",
     "container",
-    "core_account",
     "core_vault",
     "derivative",
     "document",
@@ -719,9 +720,9 @@ mod tests {
                     &registry,
                     &owner,
                     &Command::new(
-                        "money.add_account",
+                        "account.add",
                         serde_json::json!({
-                            "account_id": name, "name": name, "kind": "cash", "currency": currency,
+                            "id": name, "title": name, "type": "cash", "currency": currency,
                         }),
                     ),
                 )
@@ -734,8 +735,8 @@ mod tests {
             );
         }
 
-        let mut asked = query(&["account_id", "currency"], "account_id", "account_id");
-        asked.from = "core_account".to_owned();
+        let mut asked = query(&["id", "currency"], "id", "id");
+        asked.from = "account".to_owned();
         asked.with_minor_units = true;
         let answer = page(
             &vault,
@@ -765,7 +766,7 @@ mod tests {
             ]
         );
 
-        asked.select = vec!["account_id".to_owned()];
+        asked.select = vec!["id".to_owned()];
         let refused = page(
             &vault,
             &wire::PageRequest {
@@ -792,9 +793,9 @@ mod tests {
     /// here, not derived from the allowlist, so the allowlist cannot grow without
     /// this list (and the paragraph above it) being read.
     const PAGED_BY_A_SCREEN: [(&str, &str); 15] = [
+        ("account", "id"),
         ("blob", "hash"),
         ("container", "id"),
-        ("core_account", "account_id"),
         ("core_vault", "vault_id"),
         ("derivative", "blob"),
         ("document", "id"),
@@ -821,8 +822,8 @@ mod tests {
             ("locker_item_field", "field_id"),
             ("locker_item_passkey", "item_id"),
             ("locker_item_address", "address_id"),
-            ("core_transaction", "txn_id"),
-            ("money_transaction", "txn_id"),
+            ("txn", "id"),
+            ("measurement", "person_id"),
             ("revision", "entity_id"),
             ("sqlite_master", "name"),
         ] {

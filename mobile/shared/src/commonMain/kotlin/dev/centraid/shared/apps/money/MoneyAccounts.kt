@@ -25,6 +25,7 @@ import dev.centraid.shared.kit.InvokeKeys
 import dev.centraid.shared.kit.ReadContent
 import dev.centraid.shared.kit.WriteLaw
 import dev.centraid.shared.kit.WriteLens
+import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.Step
 import dev.centraid.shared.nav.ScreenIds
 
@@ -44,8 +45,13 @@ import dev.centraid.shared.nav.ScreenIds
 public object MoneyAccountsMachine :
     MoneyQueryMachine<MoneyAccountsState, MoneyAccountsEvent, MoneyAccountsData>("money.accounts", MONEY_TABLES) {
     public const val SCREEN_ID: String = ScreenIds.MONEY_ACCOUNTS
-    public const val CMD_ADD: String = "money.add_account"
-    public const val CMD_EDIT: String = "money.edit_account"
+    public const val CMD_ADD: String = "account.add"
+    public const val CMD_EDIT: String = "account.edit"
+
+    /** Closing is the archived flag, a shared verb: the sheet sends it beside the edit. */
+    public const val CMD_CLOSE: String = "flag.set"
+    public const val CMD_REOPEN: String = "flag.clear"
+    private const val ARCHIVED: String = "archived"
 
     private const val PENDING_REMOVE_NUMBER: String = "remove_number"
 
@@ -162,7 +168,7 @@ public object MoneyAccountsMachine :
         if (screen.pending != PENDING_REMOVE_NUMBER || editor == null || editor.account_id.isEmpty()) return Step(cleared)
         // ONLY THE NUMBER: the rest of the sheet is unsaved typing, and stays unsent.
         val input = MoneyFold.json(
-            "account_id" to MoneyFold.str(editor.account_id),
+            "id" to MoneyFold.str(editor.account_id),
             "external_ref" to "null",
         )
         val key = InvokeKeys.of(CMD_EDIT, editor.account_id, INTENT_REMOVE_NUMBER, (held.tokens + 1).toString())
@@ -205,9 +211,9 @@ public object MoneyAccountsMachine :
         if (checked.mode == MoneyAccountEditor.Mode.MODE_ADD) {
             val id = "account-${screen.draft_token}-${held.tokens + 1}"
             val input = MoneyFold.json(
-                "account_id" to MoneyFold.str(id),
-                "name" to MoneyFold.str(checked.name.trim()),
-                "kind" to MoneyFold.str(checked.kind),
+                "id" to MoneyFold.str(id),
+                "title" to MoneyFold.str(checked.name.trim()),
+                "type" to MoneyFold.str(checked.kind),
                 "currency" to checked.currency.takeIf { it.isNotEmpty() }?.let(MoneyFold::str),
                 "on_budget" to checked.on_budget.toString(),
                 "external_ref" to number?.let(MoneyFold::str),
@@ -215,18 +221,24 @@ public object MoneyAccountsMachine :
             return WriteLaw.submit(Writes, held.copy(tokens = held.tokens + 1), CMD_ADD, input, InvokeKeys.of(CMD_ADD, id))
         }
         val before = lines(held).firstOrNull { it.first.account_id == checked.account_id }
-        val today = held.answers.accounts?.today.orEmpty()
         val closedChanged = before != null && before.first.closed != checked.closed
         val input = MoneyFold.json(
-            "account_id" to MoneyFold.str(checked.account_id),
-            "name" to MoneyFold.str(checked.name.trim()),
-            "kind" to MoneyFold.str(checked.kind),
+            "id" to MoneyFold.str(checked.account_id),
+            "title" to MoneyFold.str(checked.name.trim()),
+            "type" to MoneyFold.str(checked.kind),
             "on_budget" to checked.on_budget.toString(),
             "external_ref" to number?.let(MoneyFold::str),
-            "closed_on" to if (closedChanged) (if (checked.closed && today.isNotEmpty()) MoneyFold.str(today) else "null") else null,
         )
         val key = InvokeKeys.of(CMD_EDIT, checked.account_id, (held.tokens + 1).toString())
-        return WriteLaw.submit(Writes, held.copy(tokens = held.tokens + 1), CMD_EDIT, input, key)
+        val step = WriteLaw.submit(Writes, held.copy(tokens = held.tokens + 1), CMD_EDIT, input, key)
+        if (!closedChanged) return step
+        // A closed account is the archived flag on it: its own command, sent beside the edit.
+        val flag = MoneyFold.json("id" to MoneyFold.str(checked.account_id), "flag" to MoneyFold.str(ARCHIVED))
+        val close = if (checked.closed) CMD_CLOSE else CMD_REOPEN
+        return Step(
+            step.state,
+            step.effects + ScreenEffect.SubmitWrite(close, flag, InvokeKeys.of(close, checked.account_id, (held.tokens + 1).toString())),
+        )
     }
 
     override fun settled(held: MoneyHeld<MoneyAccountsState>, settled: WriteSettled): Step<MoneyHeld<MoneyAccountsState>> {

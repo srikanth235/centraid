@@ -1,14 +1,13 @@
-//! RULES: a description to a category and a display name (R-1099-4, seam S2).
+//! RULES: a description to a category (R-1099-4, seam S2).
 //!
-//! The vault's `apply_rule_to_history` and this module MUST agree on every
+//! The vault's `rule.apply` (`centraid_vault::commands::rule`) and this module MUST agree on every
 //! case; wave 3's test proves it against the real vault. A rule matches by
 //! **what the description says** — `is`, `contains` or `matches` (a wildcard:
 //! `*` any run, `?` one character, everything else literal; no regex crate) —
 //! and optionally by an amount range on the **magnitude** and by account.
 //!
 //! All matching rules apply. They are ordered by `(specificity, position,
-//! rule_id)` ascending and, for each action field, **the last rule that sets it
-//! wins** — so the most specific rule decides, and a tie goes to the later
+//! rule_id)` ascending and **the last rule to set the category wins** — so the most specific rule decides, and a tie goes to the later
 //! position. Specificity is the kind's weight (three for `is`, two for `matches`,
 //! one for `contains`) plus one for each of the lower amount bound, the upper
 //! amount bound and the account that is set.
@@ -71,7 +70,6 @@ pub struct Rule {
     /// `None` is any account.
     pub account_id: Option<String>,
     pub category_concept_id: Option<String>,
-    pub display_name: Option<String>,
     pub position: i64,
 }
 
@@ -162,7 +160,6 @@ pub fn specificity(rule: &Rule) -> u32 {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Applied {
     pub category_concept_id: Option<String>,
-    pub display_name: Option<String>,
     /// The matching rules in application order (least specific first).
     pub rule_ids: Vec<String>,
 }
@@ -182,15 +179,12 @@ pub fn apply(rules: &[Rule], candidate: &Candidate<'_>) -> Applied {
         if let Some(category) = &rule.category_concept_id {
             applied.category_concept_id = Some(category.clone());
         }
-        if let Some(name) = &rule.display_name {
-            applied.display_name = Some(name.clone());
-        }
         applied.rule_ids.push(rule.rule_id.clone());
     }
     applied
 }
 
-/// Sets `row`'s category and display name from the rules.
+/// Sets `row`'s category from the rules.
 pub fn apply_to_row(rules: &[Rule], account_id: &str, row: &mut ImportRow) {
     let applied = apply(
         rules,
@@ -201,7 +195,6 @@ pub fn apply_to_row(rules: &[Rule], account_id: &str, row: &mut ImportRow) {
         },
     );
     row.category_concept_id = applied.category_concept_id;
-    row.display_name = applied.display_name;
 }
 
 // ---------------------------------------------------------------------------
@@ -277,8 +270,6 @@ pub struct Categorised {
     pub posted_on: String,
     /// `None` while the row has no category.
     pub category_concept_id: Option<String>,
-    /// A name the member set by hand, if any.
-    pub member_name: Option<String>,
 }
 
 /// A rule the learner suggests; written by nobody until the member accepts.
@@ -287,7 +278,6 @@ pub struct RuleProposal {
     pub kind: MatchKind,
     pub pattern: String,
     pub category_concept_id: String,
-    pub display_name: String,
     /// How many of the last `of` rows share the category.
     pub support: usize,
     pub of: usize,
@@ -333,27 +323,10 @@ pub fn propose_rule(
     if support < LEARNER_SUPPORT {
         return None;
     }
-    let mut names: Vec<(String, usize)> = Vec::new();
-    for row in history
-        .iter()
-        .filter(|row| merchant_key(&row.description) == key)
-    {
-        if let Some(name) = &row.member_name {
-            match names.iter_mut().find(|(seen, _)| seen == name) {
-                Some((_, count)) => *count += 1,
-                None => names.push((name.clone(), 1)),
-            }
-        }
-    }
-    names.sort_by(|a, b| b.1.cmp(&a.1));
-    let display_name = names
-        .first()
-        .map_or_else(|| key.clone(), |(name, _)| name.clone());
     Some(RuleProposal {
         kind: MatchKind::Contains,
         pattern: key,
         category_concept_id: category.to_owned(),
-        display_name,
         support,
         of: same.len(),
     })
@@ -372,7 +345,6 @@ mod tests {
             amount_max_minor: None,
             account_id: None,
             category_concept_id: Some(format!("cat-{id}")),
-            display_name: None,
             position: 0,
         }
     }
@@ -421,9 +393,8 @@ mod tests {
     }
 
     #[test]
-    fn the_most_specific_rule_wins_each_field_and_a_tie_goes_to_the_later_position() {
-        let mut broad = rule("broad", MatchKind::Contains, "amazon");
-        broad.display_name = Some("Amazon".to_owned());
+    fn the_most_specific_rule_wins_the_category_and_a_tie_goes_to_the_later_position() {
+        let broad = rule("broad", MatchKind::Contains, "amazon");
         let mut exact = rule("exact", MatchKind::Is, "amazon prime");
         exact.category_concept_id = Some("subscriptions".to_owned());
         let applied = apply(
@@ -434,7 +405,6 @@ mod tests {
             applied.category_concept_id.as_deref(),
             Some("subscriptions")
         );
-        assert_eq!(applied.display_name.as_deref(), Some("Amazon"));
         assert_eq!(applied.rule_ids, vec!["broad", "exact"]);
         let mut early = rule("a", MatchKind::Contains, "x");
         early.position = 1;
@@ -462,7 +432,6 @@ mod tests {
             description: "Starbucks #12".to_owned(),
             posted_on: day.to_owned(),
             category_concept_id: category.map(str::to_owned),
-            member_name: None,
         }
     }
 
