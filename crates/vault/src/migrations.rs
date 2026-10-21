@@ -115,7 +115,7 @@ pub fn run_from(connection: &Connection, from: i64) -> Result<i64> {
 
 /// [`run_from`] over any ladder, so the climb itself — its order, its
 /// contiguity guard and its per-rung transaction — stays under test while the
-/// real ladder holds one rung.
+/// real ladder holds only the rungs it has.
 fn run_rungs(connection: &Connection, ladder: &[Migration], from: i64) -> Result<i64> {
     let mut at = from;
     for rung in ladder.iter().filter(|rung| rung.version > from) {
