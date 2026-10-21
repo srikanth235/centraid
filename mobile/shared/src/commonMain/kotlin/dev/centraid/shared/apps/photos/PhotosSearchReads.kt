@@ -161,7 +161,7 @@ public object PhotosSearchReads {
      * photographs would hand a member back what they put away, from a screen
      * that gives no sign it is doing so.
      */
-    private const val LIVE: String = "deleted_at IS NULL AND archived_at IS NULL"
+    private const val LIVE: String = PhotoFold.LIVE
 
     private const val LIVE_ASSETS: String = "SELECT asset_id FROM media_asset WHERE $LIVE"
 

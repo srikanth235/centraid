@@ -39,12 +39,14 @@
 	<string>Centraid copies the contacts you choose into People, in your own vault on this phone.</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>Centraid uses Face ID to unlock Locker.</string>
+	<key>NSHealthShareUsageDescription</key>
+	<string>Centraid reads the daily totals and workouts you choose from Apple Health into Health, in your own vault on this phone, and never writes anything back.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Centraid finds and reaches your laptop on this network to back up your vault and to bring it back.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Centraid backs up your camera roll into your own vault.</string>
 	<key>NSRemindersFullAccessUsageDescription</key>
-	<string>Centraid copies your open reminders into Tasks, in your own vault on this phone.</string>
+	<string>Centraid copies your open reminders into Agenda, in your own vault on this phone.</string>
 	<key>UIAppFonts</key>
 	<array>
 		<string>InstrumentSans_470Book.ttf</string>

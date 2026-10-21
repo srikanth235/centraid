@@ -74,6 +74,33 @@ public fun ConfirmSheet(
 }
 
 /**
+ * A REFUSAL TOLD IN A SHEET, NOT A DIALOG (DESIGN.md "The controls (mobile)"):
+ * the act that was refused as the title, the sentence saying what happened and
+ * what to do, and one way out, the outline [doneLabel]. The grabber, the scrim
+ * and back are the same as Done.
+ */
+@Composable
+public fun NoticeSheet(
+    title: String,
+    sentence: String,
+    doneLabel: String,
+    onDone: () -> Unit,
+) {
+    SheetRoom(
+        title = title,
+        onDismiss = onDone,
+        outlines = listOf(SheetOutline(label = doneLabel, testTag = "notice-done", onPress = onDone)),
+    ) {
+        Text(
+            sentence,
+            style = centraidType("body"),
+            color = centraidColor("textSoft"),
+            modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp),
+        )
+    }
+}
+
+/**
  * ONE ROW OF A SHEET: an optional catalog mark, the label, an optional detail
  * under it. [destructive] draws the words in `net`. [selected] draws a check,
  * for a choice sheet.

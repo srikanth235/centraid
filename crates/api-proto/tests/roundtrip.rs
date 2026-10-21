@@ -406,3 +406,72 @@ fn money_takes_its_ten_arms_and_keeps_absence_and_bytes_intact() {
         core::money_accounts::AccountLine::decode(zero.encode_to_vec().as_slice()).expect("decode");
     assert_eq!(decoded.balance, Some(core::MoneyAmount::default()));
 }
+
+/// HEALTH'S ARMS (#1129): the six queries sit at 120-125 in both oneofs and 126-139 are
+/// Health's, unclaimed; an absent figure stays absent through the encoder and a zero stays a
+/// zero, because a day with no row is not a day of nothing.
+#[test]
+fn health_takes_its_six_arms_and_keeps_an_absent_figure_absent() {
+    use core::app_query_request::Query as Q;
+    use core::app_query_response::Answer as A;
+    let asked = [
+        (Q::HealthToday(core::HealthTodayRequest::default()), 120u32),
+        (Q::HealthSeries(core::HealthSeriesRequest::default()), 121),
+        (Q::HealthTrends(core::HealthTrendsRequest::default()), 122),
+        (
+            Q::HealthWorkouts(core::HealthWorkoutsRequest::default()),
+            123,
+        ),
+        (Q::HealthWorkout(core::HealthWorkoutRequest::default()), 124),
+        (
+            Q::HealthFollowView(core::HealthFollowViewRequest::default()),
+            125,
+        ),
+    ];
+    let answered = [
+        (A::HealthToday(core::HealthToday::default()), 120u32),
+        (A::HealthSeries(core::HealthSeries::default()), 121),
+        (A::HealthTrends(core::HealthTrends::default()), 122),
+        (A::HealthWorkouts(core::HealthWorkouts::default()), 123),
+        (A::HealthWorkout(core::HealthWorkout::default()), 124),
+        (A::HealthFollowView(core::HealthFollowView::default()), 125),
+    ];
+    let starts_with_tag = |bytes: &[u8], number: u32| {
+        let tag = u64::from(number) << 3 | 2;
+        let mut expected = Vec::new();
+        prost::encoding::encode_varint(tag, &mut expected);
+        bytes.starts_with(&expected)
+    };
+    for (query, number) in asked {
+        let request = core::AppQueryRequest { query: Some(query) };
+        assert!(
+            starts_with_tag(&request.encode_to_vec(), number),
+            "query arm {number} is not at its number"
+        );
+        roundtrip(&request);
+    }
+    for (answer, number) in answered {
+        let response = core::AppQueryResponse {
+            answer: Some(answer),
+        };
+        assert!(
+            starts_with_tag(&response.encode_to_vec(), number),
+            "answer arm {number} is not at its number"
+        );
+        roundtrip(&response);
+    }
+
+    let nothing = core::HealthTodayMetric {
+        metric: core::HealthMetric::Steps as i32,
+        ..Default::default()
+    };
+    let decoded =
+        core::HealthTodayMetric::decode(nothing.encode_to_vec().as_slice()).expect("decode");
+    assert!(decoded.value.is_none() && decoded.typical.is_none());
+    let zero = core::HealthTodayMetric {
+        value: Some(0.0),
+        ..nothing
+    };
+    let decoded = core::HealthTodayMetric::decode(zero.encode_to_vec().as_slice()).expect("decode");
+    assert_eq!(decoded.value, Some(0.0));
+}

@@ -223,11 +223,11 @@ class ChatFlowSpec : StringSpec({
 
     "opening a ready model starts a session and shows three suggestions" {
         val rig = Rig()
-        rig.open("tasks")
-        rig.door.calls shouldBe listOf("status", "start:tasks", "suggest:tasks")
+        rig.open("agenda")
+        rig.door.calls shouldBe listOf("status", "start:agenda", "suggest:agenda")
         rig.state.phase shouldBe ChatState.Phase.PHASE_READY
         rig.state.suggestions shouldBe listOf("What is due today?", "Who owes me money?", "Find photos of Ana")
-        rig.state.scope_app shouldBe "tasks"
+        rig.state.scope_app shouldBe "agenda"
     }
 
     "a model that is not there draws the download step, and the whole download runs to a ready chat" {
@@ -304,7 +304,7 @@ class ChatFlowSpec : StringSpec({
         rig.state.messages shouldHaveSize 2
 
         rig.door.bus.tryEmit(AssistEvent(session_id = 7, turn_id = 1, activity = AssistActivity(app = "tasks", tool = "tasks.list")))
-        rig.state.activity shouldBe "Looking in Tasks"
+        rig.state.activity shouldBe "Looking in Agenda"
         rig.door.bus.tryEmit(AssistEvent(session_id = 7, turn_id = 1, cards = AssistCards(cards = listOf(card("t1", "Pick up the dry cleaning")))))
         rig.state.messages.last().cards shouldHaveSize 1
         rig.door.bus.tryEmit(AssistEvent(session_id = 7, turn_id = 1, token = AssistToken(text = "One thing")))

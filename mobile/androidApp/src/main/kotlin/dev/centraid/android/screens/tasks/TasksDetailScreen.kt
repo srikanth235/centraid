@@ -125,7 +125,7 @@ private fun TasksDetailBody(state: TasksDetailState, data: TasksDetailData, onEv
                 placeholder = data.title_placeholder,
                 style = "title",
                 onEdit = { onEvent(TasksDetailEvent(title = TasksDetailEvent.TitleChanged(title = it))) },
-                testTag = "tasks-detail-title",
+                testTag = "tasks-title-field",
             )
         }
         if (data.status_label.isNotEmpty()) {

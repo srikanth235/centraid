@@ -107,14 +107,14 @@ enum ChatPreview {
         case "empty":
             state.emptyLine = "Ask about anything in your vault."
             state.suggestions = ["What is due this week?", "What is on my packing list?", "What is on my calendar this week?"]
-            state.scopeApp = "tasks"
+            state.scopeApp = "agenda"
         case "streaming":
             state.messages = [
                 message(1, .user, "What is due this week?"),
                 message(2, .assistant, "You have three tasks due this we", streaming: true),
             ]
             state.streaming = true
-            state.activity = "Looking in Tasks"
+            state.activity = "Looking in Agenda"
             state.canNewChat = true
         case "error":
             state.messages = [message(1, .user, "What is due this week?")]

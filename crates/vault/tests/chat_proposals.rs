@@ -17,6 +17,13 @@
 //! 6. **The founded chat carries the widened list, both guards and the cascades.**
 //!    `chat_message` is the parent of two child tables, and a delete runs the
 //!    children's `ON DELETE CASCADE` from the thread down.
+//! 7. **A message that settles or lapses moves its version** (#1129, F-R-1):
+//!    `chat_message` is registered mutable, and an edit bumps its `row_version`
+//!    while a told answer stays at one.
+//! 8. **Rung four is a climb.** A file wound back to rung three, holding a
+//!    settled proposal, a card and an attachment, opens at the head with every
+//!    row kept at `row_version = 1`, the chat index untouched and every trigger
+//!    live.
 //!
 //! (How a vault written before a proposal had a life was migrated is not proved
 //! here: the ladder was squashed into one baseline on 2026-10-15, Q-1029-1, and
@@ -25,6 +32,7 @@
 mod common;
 
 use centraid_vault::access::Principal;
+use centraid_vault::clock::{FixedClock, SeededIds};
 use centraid_vault::commands::Registry;
 use centraid_vault::{Command, CommandOutcome, CommandStatus, Vault};
 use serde_json::{Value, json};
@@ -562,4 +570,205 @@ fn the_founded_chat_carries_the_widened_list_both_guards_and_the_cascades() {
             "{table} outlived its thread"
         );
     }
+}
+
+// ---------------------------------------------------------------------------
+// 7. A message that settles or lapses moves its version (#1129, F-R-1)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn a_message_that_settles_or_lapses_moves_its_version_and_a_told_answer_does_not() {
+    let chats = Chats::open("proposal-version");
+    let version = |thread: &str, outcome: &str| {
+        chats.count(&format!(
+            "SELECT row_version FROM chat_message WHERE thread_id = '{thread}' AND outcome = '{outcome}'"
+        ))
+    };
+    let settled = chats.propose(None, "complete it")["thread_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert_eq!(
+        version(&settled, "proposed"),
+        1,
+        "a proposal is born at one"
+    );
+    assert_eq!(
+        chats.settle(&settled, "applied", Some("Done.")).status,
+        CommandStatus::Executed
+    );
+    assert_eq!(version(&settled, "applied"), 2, "settling is an edit");
+    assert_eq!(version(&settled, "sent"), 1, "the question did not move");
+
+    let lapsed = chats.propose(None, "complete it")["thread_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    chats.answer(&lapsed, "never mind, what is due?");
+    assert_eq!(version(&lapsed, "dismissed"), 2, "a lapse is an edit");
+    assert_eq!(
+        version(&lapsed, "answered"),
+        1,
+        "a told answer stays at one"
+    );
+    assert_eq!(
+        chats.count("SELECT COUNT(*) FROM chat_message WHERE updated_at < created_at"),
+        0,
+        "no message is stamped before it was made"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// 8. Rung four is a climb
+// ---------------------------------------------------------------------------
+
+#[test]
+fn rung_four_is_a_climb_a_file_at_three_reaches_four_with_every_message_kept() {
+    let dir = centraid_ontology::golden::scratch_dir();
+    std::fs::create_dir_all(&dir).expect("a directory");
+    let path = dir.join("vault.db");
+    let registry = Registry::with_system_commands().expect("the registry builds");
+    let principal = Principal::owner("phone");
+    let run = |vault: &Vault, command: &str, input: Value| -> Value {
+        let outcome = vault
+            .execute(&registry, &principal, &Command::new(command, input))
+            .unwrap_or_else(|error| panic!("`{command}` errored: {error}"));
+        assert_eq!(
+            outcome.status,
+            CommandStatus::Executed,
+            "`{command}` refused: {:?}",
+            outcome.reason
+        );
+        outcome.output
+    };
+    let propose = |vault: &Vault, question: &str| -> String {
+        run(
+            vault,
+            "chat.save_turn",
+            json!({ "turn": {
+                "question": { "text": question },
+                "answer": {
+                    "outcome": "proposed",
+                    "text": PROPOSED_LINE,
+                    "cards": [{ "app": "tasks", "entity": "task", "id": "t-dry", "title": "Dry cleaning" }]
+                }
+            }}),
+        )["thread_id"]
+            .as_str()
+            .expect("a thread id")
+            .to_owned()
+    };
+    let (settled, waiting);
+    {
+        let vault = Vault::create_with(
+            &path,
+            Box::new(FixedClock::frozen()),
+            Box::new(SeededIds::new("chat-climb")),
+        )
+        .expect("a vault is founded");
+        vault.found("Test", "Test Owner").expect("an owner");
+        registry.install(&vault).expect("the record installs");
+        settled = propose(&vault, "complete the quokka errand");
+        run(
+            &vault,
+            "chat.settle_proposal",
+            json!({ "thread_id": settled, "outcome": "applied", "text": "Done." }),
+        );
+        waiting = propose(&vault, "complete the wombat errand");
+    }
+    // WIND IT BACK to rung three, then write what the old shape let through: an attachment on the
+    // settled thread's question, which the rebuild must carry across with the cards.
+    {
+        let connection = rusqlite::Connection::open(&path).expect("the file opens");
+        common::undo_rung_four(&connection);
+        connection
+            .execute_batch(&format!(
+                "PRAGMA user_version = 3;
+                 INSERT INTO chat_message_attachment
+                   (thread_id, message_ordinal, position, kind, label)
+                 VALUES ('{settled}', 0, 0, 'photo', 'IMG_0001.HEIC');"
+            ))
+            .expect("the old shape takes a row");
+        let columns: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('chat_message')
+                  WHERE name IN ('updated_at', 'row_version')",
+                [],
+                |row| row.get(0),
+            )
+            .expect("the columns read");
+        assert_eq!(columns, 0, "the file really is at rung three's shape");
+    }
+    assert_eq!(centraid_vault::head_version(), 5);
+
+    let vault = Vault::open(&path).expect("a file at rung three opens and climbs");
+    registry.install(&vault).expect("the record installs");
+    let count = |sql: &str| -> i64 {
+        vault
+            .read(|connection| Ok(connection.query_row(sql, [], |row| row.get(0))?))
+            .unwrap_or_else(|error| panic!("{sql}: {error}"))
+    };
+    assert_eq!(count("PRAGMA user_version"), 5);
+    // EVERY MESSAGE IS KEPT, stamped as of its making, at its first version; the settled one came
+    // back settled, because the rows return before the trigger that refuses a born-settled row.
+    assert_eq!(count("SELECT COUNT(*) FROM chat_message"), 4);
+    assert_eq!(
+        count(
+            "SELECT COUNT(*) FROM chat_message WHERE updated_at = created_at AND row_version = 1"
+        ),
+        4
+    );
+    assert_eq!(
+        count(&format!(
+            "SELECT COUNT(*) FROM chat_message
+              WHERE thread_id = '{settled}' AND outcome = 'applied' AND text = 'Done.'"
+        )),
+        1
+    );
+    // THE CHILDREN CAME ACROSS, and the chat index was left as it was.
+    assert_eq!(count("SELECT COUNT(*) FROM chat_message_card"), 2);
+    assert_eq!(count("SELECT COUNT(*) FROM chat_message_attachment"), 1);
+    assert_eq!(
+        count("SELECT COUNT(*) FROM fts_chat_thread WHERE fts_chat_thread MATCH 'quokka'"),
+        1
+    );
+    assert_eq!(count("SELECT COUNT(*) FROM pragma_foreign_key_check"), 0);
+    // EVERY TRIGGER IS LIVE: the waiting proposal settles and moves its version, a settled one
+    // does not settle again, and a thread's delete still cascades through the rebuilt family.
+    run(
+        &vault,
+        "chat.settle_proposal",
+        json!({ "thread_id": waiting, "outcome": "dismissed" }),
+    );
+    assert_eq!(
+        count(&format!(
+            "SELECT row_version FROM chat_message
+              WHERE thread_id = '{waiting}' AND outcome = 'dismissed'"
+        )),
+        2
+    );
+    let again = vault.commit(|tx| {
+        tx.connection().execute(
+            &format!(
+                "UPDATE chat_message SET outcome = 'failed'
+                  WHERE thread_id = '{settled}' AND outcome = 'applied'"
+            ),
+            [],
+        )?;
+        Ok(())
+    });
+    assert!(again.is_err(), "a settled answer does not settle again");
+    run(
+        &vault,
+        "chat.delete_thread",
+        json!({ "thread_id": settled }),
+    );
+    assert_eq!(count("SELECT COUNT(*) FROM chat_message_attachment"), 0);
+    assert_eq!(count("SELECT COUNT(*) FROM chat_message_card"), 1);
+    assert_eq!(
+        count("SELECT COUNT(*) FROM fts_chat_thread WHERE fts_chat_thread MATCH 'quokka'"),
+        0
+    );
+    drop(vault);
+    let _ = std::fs::remove_dir_all(dir);
 }

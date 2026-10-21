@@ -4,6 +4,9 @@ import centraid.screen.v1.AgendaEditorEvent
 import centraid.screen.v1.AgendaEditorState
 import centraid.screen.v1.AgendaEventEvent
 import centraid.screen.v1.AgendaEventState
+import centraid.screen.v1.WriteState
+import dev.centraid.shared.platform.SecureStore
+import dev.centraid.shared.platform.platformServices
 import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.ScreenHost
 import dev.centraid.shared.shell.HomeSession
@@ -105,16 +108,34 @@ public class AgendaEventBridge(
  *
  * ## Routing
  *
- * - New event: push `Destination.AgendaEditor()` and call [openNew] with the
- *   home's `anchor_day`.
+ * - New event or task: push `Destination.AgendaEditor()` and call [openNew]
+ *   with the home's `anchor_day` (#1128). The bridge opens the sheet on the
+ *   kind this device last added; a shell that sends `Opened` itself leaves
+ *   `kind` unspecified for the same.
  * - Edit: push `Destination.AgendaEditor(eventId, …)` and call [openEdit].
  * - Back or close: forward `LeaveRequested` — never pop directly; the machine
  *   asks first when there are changes.
  * - `AgendaEditorState.dismissed`: pop.
+ *
+ * ## The add sheet's two bridge duties (#1128)
+ *
+ * - THE KIND MEMORY ([AgendaAddKind], this device's, R-1128-9): read when a
+ *   create opens and filled into its `Opened`; written when an add COMMITS.
+ * - THE TASK'S ID: `SaveTapped` while the sheet adds a task goes to the
+ *   machine as `SaveTask(mint())`, as Tasks' quick add mints its ids.
+ *
+ * [mint] and [kinds] are a spec's seams; the constructors a shell calls take
+ * the [marks] alone (Kotlin's default arguments do not reach Swift).
  */
 public class AgendaEditorBridge(
-    private val marks: AgendaMarks = AgendaMarks(),
+    private val marks: AgendaMarks,
+    private val mint: () -> String,
+    private val kinds: SecureStore,
 ) {
+    public constructor(marks: AgendaMarks) : this(marks, { AgendaWrites.mintTaskId() }, platformServices().secureStore)
+
+    public constructor() : this(AgendaMarks())
+
     public val host: ScreenHost<AgendaEditorScreen, AgendaEditorInput> = ScreenHost(AgendaEditorMachine)
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -128,6 +149,14 @@ public class AgendaEditorBridge(
         feedMarks(session.outliving, host.effects, marks)
         scope.launch {
             host.state.map { it.screen }.distinctUntilChanged().collect { onState?.invoke(it.encode()) }
+        }
+        // THE KIND OF AN ADD THAT COMMITTED is what the next sheet opens on.
+        scope.launch {
+            host.state
+                .map { it.screen }
+                .map { s -> s.kind.takeIf { s.mode == AgendaEditorState.Mode.MODE_CREATE && s.write?.phase == WriteState.Phase.PHASE_COMMITTED } }
+                .distinctUntilChanged()
+                .collect { kind -> if (kind != null) runCatching { AgendaAddKind.write(kinds, kind) } }
         }
     }
 
@@ -168,7 +197,17 @@ public class AgendaEditorBridge(
 
     public fun forward(event: AgendaEditorEvent) {
         hasLeft = false
-        scope.launch { host.send(AgendaEditorInput.View(event)) }
+        scope.launch { host.send(inputOf(event)) }
+    }
+
+    /** What the machine is sent for [event]: the bridge's two duties (see the class comment). */
+    private suspend fun inputOf(event: AgendaEditorEvent): AgendaEditorInput {
+        val remembered = if (opensCreateUnkinded(event)) {
+            runCatching { AgendaAddKind.read(kinds) }.getOrDefault(AgendaEditorState.Kind.KIND_EVENT)
+        } else {
+            AgendaEditorState.Kind.KIND_EVENT
+        }
+        return editorInput(event, screen.kind, remembered, mint)
     }
 
     public fun current(): ByteArray = screen.encode()
@@ -180,6 +219,39 @@ public class AgendaEditorBridge(
     public fun close() {
         hasLeft = true
         scope.cancel()
+    }
+
+    internal companion object {
+        /** A CREATE's `Opened` that names no kind: the one the device's memory fills in. */
+        fun opensCreateUnkinded(event: AgendaEditorEvent): Boolean {
+            val opened = event.opened ?: return false
+            return opened.kind == AgendaEditorState.Kind.KIND_UNSPECIFIED &&
+                (
+                    opened.mode == AgendaEditorState.Mode.MODE_CREATE ||
+                        (opened.mode == AgendaEditorState.Mode.MODE_UNSPECIFIED && opened.event_id.isEmpty())
+                    )
+        }
+
+        /**
+         * THE MACHINE'S INPUT FOR [event], given the sheet's [current] kind
+         * and the kind the device [remembered]: a create's `Opened` opens on
+         * the memory, and a Save of a task carries a freshly minted id.
+         */
+        fun editorInput(
+            event: AgendaEditorEvent,
+            current: AgendaEditorState.Kind,
+            remembered: AgendaEditorState.Kind,
+            mint: () -> String,
+        ): AgendaEditorInput {
+            val opened = event.opened
+            return when {
+                opened != null && opensCreateUnkinded(event) ->
+                    AgendaEditorInput.View(event.copy(opened = opened.copy(kind = remembered)))
+                event.save != null && current == AgendaEditorState.Kind.KIND_TASK ->
+                    AgendaEditorInput.SaveTask(mint())
+                else -> AgendaEditorInput.View(event)
+            }
+        }
     }
 }
 

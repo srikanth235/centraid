@@ -44,7 +44,6 @@ fn pair() -> Pair {
                 display_name: "Sample".to_owned(),
                 owner_name: "Me".to_owned(),
                 content: wire::FoundContent::Unspecified as i32,
-                tz: String::new(),
             })),
         })
         .expect("the vault founds");

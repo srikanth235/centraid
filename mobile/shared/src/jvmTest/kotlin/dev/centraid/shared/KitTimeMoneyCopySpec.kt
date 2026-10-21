@@ -93,7 +93,8 @@ class KitTimeMoneyCopySpec : StringSpec({
         // COMPILED object against the JSON: what it proves is the generator's
         // escaping (a `$`, a quote, a newline) and that no key is dropped.
         val files = root.resolve("copy").listFiles { file -> file.name.endsWith(".json") }!!.sorted()
-        files.size shouldBe 11
+        // Twelve since Health's (#1129): a new app's words are a new file.
+        files.size shouldBe 12
         files.forEach { file ->
             val app = file.name.removeSuffix(".json")
             val table = Class.forName("dev.centraid.design.copy.${app.replaceFirstChar { it.uppercase() }}Copy")

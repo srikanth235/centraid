@@ -55,7 +55,12 @@ export ANDROID_PLATFORM="android-$api"
 # by default so the PR gate's workspace build compiles no llama.cpp (R-CHAT-10).
 (cd "$root" && cargo build -p centraid-core-ffi --features llama --target "$triple")
 
+# Cargo writes where CARGO_TARGET_DIR says (one target dir per worktree), and a
+# relative one is read from the workspace root, where the build above ran.
+target_dir="${CARGO_TARGET_DIR:-$root/target}"
+case "$target_dir" in /*) ;; *) target_dir="$root/$target_dir" ;; esac
+
 out="$root/mobile/androidApp/src/main/jniLibs/$abi"
 mkdir -p "$out"
-cp "$root/target/$triple/debug/libcentraid_core_ffi.so" "$out/"
+cp "$target_dir/$triple/debug/libcentraid_core_ffi.so" "$out/"
 echo "==> $out/libcentraid_core_ffi.so"

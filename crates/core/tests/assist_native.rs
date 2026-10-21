@@ -44,7 +44,7 @@ fn refusal_of(sent: &wire::AssistSent) -> i32 {
     }
 }
 
-/// The turn's events in order, in a word each: `activity:tasks/find`, `cards:6`, `pending:<steps>`,
+/// The turn's events in order, in a word each: `activity:agenda/find`, `cards:6`, `pending:<steps>`,
 /// `answer`, `failed:<reason>`.
 fn story(events: &[wire::AssistEvent]) -> Vec<String> {
     events
@@ -179,8 +179,8 @@ fn a_read_turn_finds_then_answers_with_its_events_in_order_its_cards_mapped_and_
     assert_eq!(
         story(&events),
         [
-            "activity:tasks/find",
-            "activity:tasks/answer",
+            "activity:agenda/find",
+            "activity:agenda/answer",
             "cards:6",
             "answer"
         ]
@@ -406,8 +406,8 @@ fn a_write_parks_behind_a_card_and_nothing_is_written_until_the_member_taps() {
     assert_eq!(
         story(&sample.drain_assist_events()),
         [
-            "activity:tasks/find",
-            "activity:tasks/act",
+            "activity:agenda/find",
+            "activity:agenda/act",
             "pending:1",
             "answer"
         ],

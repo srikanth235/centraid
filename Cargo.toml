@@ -9,6 +9,7 @@ members = [
   "crates/*",
   "crates/apps/agenda",
   "crates/apps/docs",
+  "crates/apps/health",
   "crates/apps/kit",
   "crates/apps/locker",
   "crates/apps/money",

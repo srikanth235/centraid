@@ -131,6 +131,7 @@ class ChatMachineSpec : StringSpec({
     }
 
     "a model on the phone is loaded, then a session is started, then suggestions are asked for" {
+        // Opened from a task page: the `tasks` domain is read through Agenda's scope (R-1128-F2).
         val begun = reduce(ChatMachine.initial(), opened("tasks")).chat
         val loadStep = reduce(begun, status(present))
         loadStep.chat.state.phase shouldBe ChatState.Phase.PHASE_LOADING
@@ -139,10 +140,10 @@ class ChatMachineSpec : StringSpec({
 
         val loaded = reduce(loadStep.chat, ChatInput.Loaded(modelReady))
         loaded.chat.state.phase shouldBe ChatState.Phase.PHASE_READY
-        loaded.effects shouldBe listOf(ChatEffect.Start("tasks"))
+        loaded.effects shouldBe listOf(ChatEffect.Start("agenda"))
 
         val started = reduce(loaded.chat, ChatInput.Started(7L))
-        started.effects shouldBe listOf(ChatEffect.Suggest("tasks", 7L))
+        started.effects shouldBe listOf(ChatEffect.Suggest("agenda", 7L))
     }
 
     "a model that will not load is a model to fetch again, with one line saying so" {
@@ -281,7 +282,7 @@ class ChatMachineSpec : StringSpec({
     "a turn draws its activity, then its cards, then its sentence as it comes, then the answer" {
         var chat = asked()
         chat = reduce(chat, coreEvent(1) { it.copy(activity = AssistActivity(app = "tasks", tool = "tasks.list")) }).chat
-        chat.state.activity shouldBe "Looking in Tasks"
+        chat.state.activity shouldBe "Looking in Agenda"
 
         chat = reduce(
             chat,
@@ -321,7 +322,7 @@ class ChatMachineSpec : StringSpec({
             asked(),
             coreEvent(1) { it.copy(activity = AssistActivity(app = "tasks", tool = "tasks.find")) },
         ).chat
-        chat.state.activity shouldBe "Looking in Tasks"
+        chat.state.activity shouldBe "Looking in Agenda"
     }
 
     "the answer to the send call settles the turn exactly as the terminal event does, whichever comes first" {
@@ -514,7 +515,9 @@ class ChatMachineSpec : StringSpec({
     }
 
     "an app id reads as its name" {
-        ChatMachine.appName("tasks") shouldBe "Tasks"
+        ChatMachine.appName("money") shouldBe "Money"
+        // A domain reads as the app it opens in (#1128, R-1128-7).
+        ChatMachine.appName("tasks") shouldBe "Agenda"
         ChatMachine.appName("") shouldBe ""
     }
 

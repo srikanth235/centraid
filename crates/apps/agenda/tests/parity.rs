@@ -36,6 +36,14 @@
 //! occurrence the expansion's reach-back found that was over before the range
 //! began), [#1046](https://github.com/srikanth235/centraid/issues/1046).
 //!
+//! ## One key v0 answers and the port no longer does
+//!
+//! `day-context`'s `due`, the per-day list of open tasks due, retired with the
+//! shelf that drew it ([`DAY_CONTEXT_RETIRED_KEYS`], R-1128-F1,
+//! [#1128](https://github.com/srikanth235/centraid/issues/1128)). It is removed
+//! from the expected answer BY NAME, and every case is held to carrying it, so
+//! the comparison still covers every other key v0 answers.
+//!
 //! The corpus's rows are all `zoned`, so the zone the port reads them in does
 //! not move an answer; the suite states UTC — v0's `today` was 00:00Z.
 //!
@@ -72,6 +80,11 @@ const NOW: &str = "2099-06-01T09:00:00.000Z";
 /// projection (`EVENT_COLUMNS`) does not — so a hit row is WIDER than a window
 /// row in v0, which is a fact about the two reads and not about the app.
 const SEARCH_ONLY_KEYS: [&str; 4] = ["_rank", "deleted_at", "purge_at", "row_version"];
+
+/// The keys v0's `day-context` answers that the port retired: `due` read open
+/// tasks for a shelf no shell draws since a dated task became a row in its day
+/// (R-1128-2, R-1128-F1, [#1128](https://github.com/srikanth235/centraid/issues/1128)).
+const DAY_CONTEXT_RETIRED_KEYS: [&str; 1] = ["due"];
 
 /// THE ONE ROW v0 ANSWERS AND THE PORT REFUSES TO: an event in the trash
 /// ([#1046](https://github.com/srikanth235/centraid/issues/1046)).
@@ -705,17 +718,19 @@ fn every_day_context_case_agrees_with_v0() {
                 "day": birthday.day,
                 "tier": birthday.tier,
             })).collect::<Vec<Value>>(),
-            "due": data.due.iter().map(|due| json!({
-                "day": due.day,
-                "count": due.count,
-                "tasks": due.tasks.iter().map(|task| json!({
-                    "task_id": task.task_id,
-                    "title": task.title,
-                })).collect::<Vec<Value>>(),
-            })).collect::<Vec<Value>>(),
             "holidays": data.holidays,
         });
-        assert_eq!(found, case["output"], "{label}");
+        for key in DAY_CONTEXT_RETIRED_KEYS {
+            assert!(
+                case["output"].get(key).is_some(),
+                "{label}: v0 no longer answers `{key}`, so the exclusion is stale"
+            );
+        }
+        assert_eq!(
+            found,
+            without(&case["output"], &DAY_CONTEXT_RETIRED_KEYS),
+            "{label}"
+        );
     }
 }
 

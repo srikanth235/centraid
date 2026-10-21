@@ -16,7 +16,11 @@ internal object HomeTileWords {
         val open = SharedCopy.OPEN_APP.replace("{name}", name)
         // The withheld glyph (an absent count) is never spoken: the noun alone.
         val count = tile.count
+        val health = tile.body?.health
         val said = when {
+            // HEALTH'S TILE SAYS ITS DAY (#1129): "8,412 steps today, Slept 7 h 12 m".
+            health != null -> listOf(listOf(health.figure, health.caption).filter { it.isNotEmpty() }.joinToString(" "), health.line)
+                .filter { it.isNotEmpty() }.joinToString(", ")
             count == null -> tile.count_label
             count.capped -> "${count.value_}+ ${tile.count_label}"
             else -> "${count.value_} ${tile.count_label}"

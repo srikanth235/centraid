@@ -31,7 +31,8 @@ import java.io.File
 class NativeThemeSpec : StringSpec({
 
     "both schemes carry every colour role the contract names" {
-        NATIVE_COLOR_ROLES.size shouldBe 51
+        // 52 since Health's identity hue, `olive` (#1129, R-1129-10): one more app hue is one more role.
+        NATIVE_COLOR_ROLES.size shouldBe 52
         listOf(CentraidTokens.light, CentraidTokens.dark).forEach { theme ->
             theme.colors.keys.sorted() shouldContainExactly NATIVE_COLOR_ROLES.sorted()
             // NO HOLES. A role mapped to zero would paint transparent black,

@@ -173,3 +173,29 @@ fn a_photograph_in_a_kept_album_is_kept_once_however_many_albums_hold_it() {
         }
     );
 }
+
+/// **A LIVE ASSET ANSWERS FOR ITS BYTES, AND NOTHING ELSE DOES** (#1127, A20).
+/// An edit made in place names the asset the ledger backed the ref up as; a
+/// photograph in the trash, and bytes the vault holds no row for, are not
+/// something to name.
+#[test]
+fn only_a_live_asset_answers_for_its_hash() {
+    let world = World::new("live-assets");
+    world.photograph("live", b"a live photograph", true, false);
+    world.photograph("trashed", b"a trashed photograph", true, true);
+    let hash = |bytes: &[u8]| centraid_vault::content::content_digest(bytes);
+    let asked = [
+        hash(b"a live photograph"),
+        hash(b"a trashed photograph"),
+        hash(b"bytes no row wraps"),
+    ];
+    assert_eq!(
+        originals::live_assets_for_hashes(&world.scratch.vault, &asked).expect("reads"),
+        vec![(hash(b"a live photograph"), "live".to_owned())]
+    );
+    assert!(
+        originals::live_assets_for_hashes(&world.scratch.vault, &[])
+            .expect("reads")
+            .is_empty()
+    );
+}

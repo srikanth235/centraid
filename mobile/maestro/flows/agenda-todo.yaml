@@ -1,0 +1,64 @@
+# Agenda's To-do place (#1128, R-1128-1): the Inbox, then the projects by area.
+# The Plus opens the quick-add bar on the keyboard (R-CHROME-1, #1130): an add
+# lands in the Inbox and the bar stays for the next; an empty bar closes when
+# the keyboard leaves. More holds the Tasks places, and a page pushed from it
+# names Agenda as its back.
+#
+# A VAULT-HOLDING INSTALL, as `home.yaml`. Re-runnable, but each run leaves one
+# task titled "Flow task" in the Inbox (the flow does not touch the starters).
+appId: dev.centraid.Centraid
+name: agenda-todo
+---
+- launchApp
+- tapOn:
+    id: "home-tile-agenda"
+- tapOn:
+    id: "agenda-band-todo"
+- extendedWaitUntil:
+    visible:
+      id: "agenda-todo-list"
+    timeout: 5000
+# The bar is not drawn until the Plus opens it.
+- assertNotVisible:
+    id: "agenda-quick-add"
+- tapOn:
+    id: "agenda-add-task"
+- extendedWaitUntil:
+    visible:
+      id: "agenda-quick-add"
+    timeout: 5000
+- inputText: "Flow task"
+- tapOn:
+    id: "agenda-quick-add-verb"
+- extendedWaitUntil:
+    visible: "Flow task"
+    timeout: 5000
+# A task's row opens its page; Done returns to the list.
+- tapOn: "Flow task"
+- extendedWaitUntil:
+    visible:
+      id: "tasks-title-field"
+    timeout: 5000
+# iOS closes the page with Done, Android with back.
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - tapOn: "Done"
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - back
+- assertVisible:
+    id: "agenda-todo-list"
+# More: the Tasks places, then back to Agenda.
+- tapOn:
+    id: "agenda-band-more"
+- tapOn:
+    id: "agenda-more-anytime"
+- extendedWaitUntil:
+    visible:
+      id: "tasks-list"
+    timeout: 5000
+- assertVisible: "Agenda"

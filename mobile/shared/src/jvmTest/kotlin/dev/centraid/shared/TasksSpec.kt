@@ -20,8 +20,6 @@ import centraid.screen.v1.TasksCatchUpEvent
 import centraid.screen.v1.TasksCheck
 import centraid.screen.v1.TasksDetailEvent
 import centraid.screen.v1.TasksDetailState
-import centraid.screen.v1.TasksHomeEvent
-import centraid.screen.v1.TasksHomeState
 import centraid.screen.v1.TasksListEvent
 import centraid.screen.v1.TasksListState
 import centraid.screen.v1.TasksProjectEvent
@@ -38,10 +36,6 @@ import dev.centraid.shared.apps.tasks.TasksDetail
 import dev.centraid.shared.apps.tasks.TasksDetailInput
 import dev.centraid.shared.apps.tasks.TasksDetailMachine
 import dev.centraid.shared.apps.tasks.TasksDetailReads
-import dev.centraid.shared.apps.tasks.TasksHome
-import dev.centraid.shared.apps.tasks.TasksHomeInput
-import dev.centraid.shared.apps.tasks.TasksHomeMachine
-import dev.centraid.shared.apps.tasks.TasksHomeReads
 import dev.centraid.shared.apps.tasks.TasksList
 import dev.centraid.shared.apps.tasks.TasksListInput
 import dev.centraid.shared.apps.tasks.TasksListMachine
@@ -50,13 +44,9 @@ import dev.centraid.shared.apps.tasks.TasksProjectInput
 import dev.centraid.shared.apps.tasks.TasksProjectMachine
 import dev.centraid.shared.apps.tasks.TasksProjectPage
 import dev.centraid.shared.apps.tasks.TasksProjectReads
-import dev.centraid.shared.apps.tasks.TasksRows
 import dev.centraid.shared.apps.tasks.TasksTrashMachine
 import dev.centraid.shared.kit.AutosaveLaw
 import dev.centraid.shared.kit.WriteLaw
-import dev.centraid.shared.nav.Destination
-import dev.centraid.shared.nav.NavStack
-import dev.centraid.shared.nav.withTasksDestination
 import dev.centraid.shared.platform.DeviceClock
 import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.Step
@@ -68,6 +58,7 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
+import dev.centraid.shared.kit.tasks.TasksRows
 
 /**
  * TASKS ON THE PHONE (#1029 port): from the core's typed answers to what a
@@ -82,436 +73,19 @@ import io.kotest.matchers.string.shouldNotContain
 class TasksSpec : StringSpec({
 
     val clock = DeviceClock.Reading(zone = "Europe/London", epochMillis = 1_781_516_520_000L)
-    val home = TasksHomeState.Destination.DESTINATION_TODAY
-    val upcoming = TasksHomeState.Destination.DESTINATION_UPCOMING
-    val inbox = TasksHomeState.Destination.DESTINATION_INBOX
-    val projects = TasksHomeState.Destination.DESTINATION_PROJECTS
 
     // -----------------------------------------------------------------
-    // Home: reads per destination
+    // Rows
     // -----------------------------------------------------------------
-
-    "home reads the board for its place, in the device's zone — Today also asks catch-up" {
-        val today = opened(home).state
-        val reads = TasksHomeReads.requests(today, clock).shouldNotBeNull()
-        reads.size shouldBe 2
-        reads[0].tasks_board.shouldNotBeNull().let {
-            it.view shouldBe TasksView.TASKS_VIEW_TODAY
-            it.tz shouldBe "Europe/London"
-            it.limit shouldBe TasksHomeMachine.PAGE
-        }
-        reads[1].tasks_catch_up.shouldNotBeNull().tz shouldBe "Europe/London"
-
-        TasksHomeReads.requests(opened(upcoming).state, clock)!!.single().tasks_board!!.view shouldBe TasksView.TASKS_VIEW_UPCOMING
-        TasksHomeReads.requests(opened(inbox).state, clock)!!.single().tasks_board!!.view shouldBe TasksView.TASKS_VIEW_INBOX
-        TasksHomeReads.requests(opened(projects).state, clock)!!.single().tasks_projects.shouldNotBeNull()
-    }
-
-    "Today: overdue first with Catch up, then today — in the core's today, with the band computed" {
-        val landed = homeOn(home, board(TasksView.TASKS_VIEW_TODAY, overdueGroup(task("a", "Pay rent", due = "2026-06-13", days = -2, overdue = true)), todayGroup(task("b", "Call Ana", due = "2026-06-15", time = "09:00", days = 0, landsToday = true))))
-        val data = landed.screen.data_.shouldNotBeNull()
-        data.today shouldBe TODAY
-        data.groups.map { it.title } shouldBe listOf("Overdue", "Today")
-        data.groups[0].verb_label shouldBe "Catch up"
-        data.groups[0].verb_key shouldBe "catch_up"
-        data.groups[0].rows.single().let {
-            it.due_label shouldBe "2 days ago"
-            it.overdue shouldBe true
-            it.check_label shouldBe "Mark Pay rent done"
-        }
-        // THE HEAD NAMES THE DAY; the row says the time.
-        data.groups[1].rows.single().due_label shouldBe "09:00"
-        data.count_label shouldBe "2 tasks"
-        landed.screen.band.map { it.key } shouldBe listOf("today", "upcoming", "inbox", "projects", "more")
-        landed.screen.band.filter { it.current }.map { it.key } shouldBe listOf("today")
-        landed.screen.quick_add.shouldNotBeNull().let {
-            it.shown shouldBe true
-            it.lands_label shouldBe "Lands in Today"
-            // THE HEADER'S PLUS (R-CHROME-1) is the quick add's door, and says so.
-            it.add_label shouldBe "Add task"
-        }
-        landed.screen.band.last().let {
-            it.key shouldBe "more"
-            it.icon_key shouldBe "MoreHoriz"
-        }
-    }
-
-    "an absence the core names is a notice over Today" {
-        val step = TasksHomeMachine.reduce(
-            opened(home).state,
-            TasksHomeInput.Answered(
-                board = board(TasksView.TASKS_VIEW_TODAY, todayGroup(task("b", "Call Ana", due = TODAY, days = 0, landsToday = true))),
-                catchUp = TasksCatchUp(today = TODAY, away_days = 16, overdue = 34, absent = true),
-            ),
-        )
-        step.state.screen.data_!!.notice.shouldNotBeNull().let {
-            it.sentence shouldBe "You were away 16 days · 34 tasks came due"
-            it.verb_label shouldBe "Catch up"
-        }
-    }
-
-    "Upcoming: a group per civil day, words from CivilWords, a month heading where the month turns" {
-        val landed = homeOn(
-            upcoming,
-            board(
-                TasksView.TASKS_VIEW_UPCOMING,
-                dayGroup("2026-06-16", task("a", "Bins", due = "2026-06-16", days = 1)),
-                dayGroup("2026-06-30", task("b", "Invoice", due = "2026-06-30", days = 15)),
-                dayGroup("2026-07-02", task("c", "Dentist", due = "2026-07-02", time = "14:30", days = 17)),
-            ),
-        )
-        val groups = landed.screen.data_!!.groups
-        groups.map { it.title } shouldBe listOf("Tomorrow", "Tue 30 June", "Thu 2 July")
-        groups.map { it.month_heading } shouldBe listOf(null, null, "July 2026")
-        groups[2].rows.single().due_label shouldBe "14:30"
-    }
-
-    "Inbox and Projects: unfiled work, and projects by area" {
-        val inboxed = homeOn(inbox, board(TasksView.TASKS_VIEW_INBOX, TasksGroup(kind = TasksGroupKind.TASKS_GROUP_KIND_INBOX, key = "inbox", tasks = listOf(task("a", "Idea")))))
-        inboxed.screen.data_!!.groups.single().title shouldBe "Inbox"
-
-        val step = TasksHomeMachine.reduce(
-            opened(projects).state,
-            TasksHomeInput.Answered(
-                projects = TasksProjects(
-                    projects = listOf(
-                        TasksProject(project_id = "p1", name = "Garden", area = "Home", open_count = 3),
-                        TasksProject(project_id = "p2", name = "Taxes", open_count = 1),
-                        TasksProject(project_id = "p3", name = "Launch", area = "Work", open_count = 0),
-                    ),
-                ),
-            ),
-        )
-        val data = step.state.screen.data_.shouldNotBeNull()
-        data.projects.map { it.title } shouldBe listOf("Home", "Work", "Projects")
-        data.projects[0].rows.single().let {
-            it.title shouldBe "Garden"
-            it.meta shouldBe "3 tasks"
-            it.hue_key shouldNotBe ""
-        }
-        data.count_label shouldBe "3 projects"
-        step.state.screen.quick_add!!.shown shouldBe false
-    }
 
     "a project's hue is a colour role like People's and Agenda's — cTeal, never the wheel's word (#1047)" {
-        val rows = dev.centraid.shared.apps.tasks.TasksRows
+        val rows = TasksRows
         rows.hueOf("p1", TasksProject(project_id = "p1", color = "var(--c-teal)")) shouldBe "cTeal"
         // No stored hue: the id's own, still a role.
         val own = rows.hueOf("p1", TasksProject(project_id = "p1"))
         own shouldBe dev.centraid.shared.design.PartyHueWheel.role(dev.centraid.shared.design.PartyHueWheel.identityHueKey("p1"))
         own.startsWith("c") shouldBe true
         rows.hueOf("p1", null).startsWith("c") shouldBe true
-    }
-
-    "every destination says its own empty sentence, and day one says one" {
-        val empty = TasksCounts(open_ = 1, closed = 0)
-        homeOn(home, board(TasksView.TASKS_VIEW_TODAY).copy(counts = empty)).screen.data_!!.empty!!.headline shouldBe "Nothing is scheduled for today."
-        homeOn(upcoming, board(TasksView.TASKS_VIEW_UPCOMING).copy(counts = empty)).screen.data_!!.empty!!.headline shouldBe "Nothing is due after today."
-        homeOn(inbox, board(TasksView.TASKS_VIEW_INBOX).copy(counts = empty)).screen.data_!!.empty!!.headline shouldBe "Nothing is waiting to be filed."
-        homeOn(home, board(TasksView.TASKS_VIEW_TODAY).copy(counts = TasksCounts())).screen.data_!!.empty!!.headline shouldBe "Add the first thing you must not forget."
-        val noProjects = TasksHomeMachine.reduce(opened(projects).state, TasksHomeInput.Answered(projects = TasksProjects())).state
-        noProjects.screen.data_!!.empty!!.let {
-            it.headline shouldBe "No projects yet."
-            it.action_label shouldBe "New project"
-        }
-        // The action opens the new-project sheet.
-        TasksHomeMachine.reduce(noProjects, view(TasksHomeEvent(empty_acted = TasksHomeEvent.EmptyActed()))).state.screen.sheet shouldBe TasksHomeState.Sheet.SHEET_NEW_PROJECT
-    }
-
-    // -----------------------------------------------------------------
-    // Home: writes
-    // -----------------------------------------------------------------
-
-    "quick add: a bare title, the bridge's id, dated today on Today, drawn at once" {
-        val landed = homeOn(home, board(TasksView.TASKS_VIEW_TODAY))
-        val typed = TasksHomeMachine.reduce(landed, view(TasksHomeEvent(quick_add_changed = TasksHomeEvent.QuickAddChanged(title = " Buy milk ")))).state
-        typed.screen.quick_add!!.can_submit shouldBe true
-        // The proto event alone mints nothing: the bridge supplies the id.
-        TasksHomeMachine.reduce(typed, view(TasksHomeEvent(quick_add_submitted = TasksHomeEvent.QuickAddSubmitted()))).effects.shouldBeEmpty()
-
-        val added = TasksHomeMachine.reduce(typed, TasksHomeInput.Add(ID))
-        val write = added.effects.single() as ScreenEffect.SubmitWrite
-        write.command shouldBe "schedule.add_task"
-        write.inputJson shouldBe """{"task_id":"$ID","title":"Buy milk","due_at":"$TODAY"}"""
-        write.invokeKey shouldBe "schedule.add_task:$ID"
-        added.state.screen.quick_add!!.title shouldBe ""
-        val row = added.state.screen.data_!!.groups.single { it.title == "Today" }.rows.single()
-        row.task_id shouldBe ID
-        row.pending shouldBe true
-        row.can_check shouldBe false
-        row.meta shouldBe "not saved yet"
-        // A SECOND ADD with nothing typed — the title cleared at the first, and the bridge mints a
-        // new id for every gesture — files no second task (#1089).
-        TasksHomeMachine.reduce(added.state, TasksHomeInput.Add("another-id")).effects.shouldBeEmpty()
-
-        // COMMITTED: the status line says where it landed, and the next
-        // answer — which carries the task — replaces the pending row.
-        val committed = TasksHomeMachine.reduce(added.state, settle(write.invokeKey, committed = true)).state
-        committed.screen.status!!.sentence shouldBe "Added to Today"
-        val answered = TasksHomeMachine.reduce(
-            TasksHomeMachine.reduce(committed, view(TasksHomeEvent(rows_changed = TasksHomeEvent.RowsChanged(table = "schedule_task")))).state,
-            TasksHomeInput.Answered(board = board(TasksView.TASKS_VIEW_TODAY, todayGroup(task(ID, "Buy milk", due = TODAY, days = 0, landsToday = true)))),
-        ).state
-        answered.screen.data_!!.groups.single().rows.single().pending shouldBe false
-    }
-
-    "quick add refused: the row is taken back and the core's sentence is the status line" {
-        val landed = homeOn(inbox, board(TasksView.TASKS_VIEW_INBOX))
-        val typed = TasksHomeMachine.reduce(landed, view(TasksHomeEvent(quick_add_changed = TasksHomeEvent.QuickAddChanged(title = "Idea")))).state
-        val added = TasksHomeMachine.reduce(typed, TasksHomeInput.Add(ID))
-        (added.effects.single() as ScreenEffect.SubmitWrite).inputJson shouldNotContain "due_at"
-        added.state.screen.data_!!.groups.single().title shouldBe "Inbox"
-        val refused = TasksHomeMachine.reduce(added.state, settle("schedule.add_task:$ID", committed = false, sentence = "The vault is read-only.")).state
-        refused.screen.data_!!.groups.shouldBeEmpty()
-        refused.screen.status!!.let {
-            it.sentence shouldBe "The vault is read-only."
-            it.refused shouldBe true
-        }
-    }
-
-    "check-off hides the row, says Task done with Undo; Undo is a NEW command and the row comes back" {
-        val landed = homeOn(home, board(TasksView.TASKS_VIEW_TODAY, todayGroup(task("a", "Call Ana", due = TODAY, days = 0, landsToday = true))))
-        val checked = TasksHomeMachine.reduce(landed, view(TasksHomeEvent(row_checked = TasksHomeEvent.RowChecked(task_id = "a"))))
-        val done = checked.effects.single() as ScreenEffect.SubmitWrite
-        done.command shouldBe "schedule.set_task_status"
-        done.inputJson shouldBe """{"task_id":"a","status":"completed"}"""
-        checked.state.screen.data_!!.groups.shouldBeEmpty()
-        checked.state.screen.status!!.let {
-            it.sentence shouldBe "Task done"
-            it.action_label shouldBe "Undo"
-        }
-        // THE EARNED QUIET: Today empty after a check-off says so.
-        checked.state.screen.data_.empty!!.headline shouldBe "Everything due today is done."
-
-        val undone = TasksHomeMachine.reduce(checked.state, view(TasksHomeEvent(status_acted = TasksHomeEvent.StatusActed())))
-        val back = undone.effects.single() as ScreenEffect.SubmitWrite
-        back.inputJson shouldBe """{"task_id":"a","status":"needs-action"}"""
-        back.invokeKey shouldNotBe done.invokeKey
-        undone.state.screen.data_!!.groups.single().rows.single().task_id shouldBe "a"
-        undone.state.screen.status.shouldBeNull()
-
-        // Checking it off again is not a replay of the first.
-        val again = TasksHomeMachine.reduce(undone.state, view(TasksHomeEvent(row_checked = TasksHomeEvent.RowChecked(task_id = "a"))))
-        (again.effects.single() as ScreenEffect.SubmitWrite).invokeKey shouldNotBe done.invokeKey
-    }
-
-    "a repeating task offers no Undo, and names where its next one landed" {
-        val daily = task("r", "Water plants", due = TODAY, days = 0, landsToday = true).copy(repeats = true, recurrence_summary = "Daily", series_id = "s1")
-        val landed = homeOn(home, board(TasksView.TASKS_VIEW_TODAY, todayGroup(daily)))
-        landed.screen.data_!!.groups.single().rows.single().meta shouldContain "Daily"
-        val checked = TasksHomeMachine.reduce(landed, view(TasksHomeEvent(row_checked = TasksHomeEvent.RowChecked(task_id = "r"))))
-        checked.state.screen.status!!.action_label shouldBe ""
-        val key = (checked.effects.single() as ScreenEffect.SubmitWrite).invokeKey
-        val committed = TasksHomeMachine.reduce(checked.state, settle(key, committed = true)).state
-        val reread = TasksHomeMachine.reduce(committed, view(TasksHomeEvent(rows_changed = TasksHomeEvent.RowsChanged(table = "schedule_task")))).state
-        val next = daily.copy(task_id = "r2", due_day = "2026-06-16", days_from_today = 1, lands_today = false)
-        val answered = TasksHomeMachine.reduce(reread, TasksHomeInput.Answered(board = board(TasksView.TASKS_VIEW_TODAY).copy(groups = emptyList()).let { it.copy(groups = listOf(TasksGroup(kind = TasksGroupKind.TASKS_GROUP_KIND_DAY, day = "2026-06-16", tasks = listOf(next)))) })).state
-        answered.screen.status!!.sentence shouldBe "Task done · the next one is Tomorrow"
-    }
-
-    "filing: a sheet of Inbox, projects and sections; a project clears the section; Inbox loses the row" {
-        val b = board(TasksView.TASKS_VIEW_INBOX, TasksGroup(kind = TasksGroupKind.TASKS_GROUP_KIND_INBOX, key = "inbox", tasks = listOf(task("a", "Seeds"))))
-            .copy(
-                projects = listOf(TasksProject(project_id = "p1", name = "Garden")),
-                sections = listOf(TasksSection(section_id = "s1", project_id = "p1", name = "Beds")),
-            )
-        val landed = homeOn(inbox, b)
-        landed.screen.data_!!.groups.single().rows.single().can_file shouldBe true
-        val sheet = TasksHomeMachine.reduce(landed, view(TasksHomeEvent(file_requested = TasksHomeEvent.FileRequested(task_id = "a")))).state
-        sheet.screen.sheet shouldBe TasksHomeState.Sheet.SHEET_FILE
-        sheet.screen.file_choices.map { it.key } shouldBe listOf("inbox", "project:p1", "section:s1")
-        sheet.screen.file_choices.first().selected shouldBe true
-        sheet.screen.file_choices.last().indented shouldBe true
-
-        val filed = TasksHomeMachine.reduce(sheet, view(TasksHomeEvent(file_chosen = TasksHomeEvent.FileChosen(key = "project:p1"))))
-        val write = filed.effects.single() as ScreenEffect.SubmitWrite
-        write.command shouldBe "schedule.organize_task"
-        write.inputJson shouldBe """{"task_id":"a","project_id":"p1","clear_section":true,"sort_order":0}"""
-        filed.state.screen.sheet shouldBe TasksHomeState.Sheet.SHEET_NONE
-        filed.state.screen.data_!!.groups.shouldBeEmpty()
-        TasksHomeMachine.reduce(filed.state, settle(write.invokeKey, committed = true)).state.screen.status!!.sentence shouldBe "Filed in Garden"
-
-        val toSection = TasksHomeMachine.reduce(sheet, view(TasksHomeEvent(file_chosen = TasksHomeEvent.FileChosen(key = "section:s1"))))
-        (toSection.effects.single() as ScreenEffect.SubmitWrite).inputJson shouldBe
-            """{"task_id":"a","project_id":"p1","section_id":"s1","sort_order":0}"""
-    }
-
-    "a new project is a save_project write from the sheet" {
-        val landed = TasksHomeMachine.reduce(opened(projects).state, TasksHomeInput.Answered(projects = TasksProjects())).state
-        val named = TasksHomeMachine.reduce(landed, view(TasksHomeEvent(new_project_name = TasksHomeEvent.NewProjectNameChanged(name = "Garden")))).state
-        named.screen.new_project_can_submit shouldBe true
-        val made = TasksHomeMachine.reduce(named, view(TasksHomeEvent(new_project_submitted = TasksHomeEvent.NewProjectSubmitted())))
-        (made.effects.single() as ScreenEffect.SubmitWrite).let {
-            it.command shouldBe "schedule.save_project"
-            it.inputJson shouldBe """{"name":"Garden"}"""
-        }
-    }
-
-    // -----------------------------------------------------------------
-    // Home: search, band, sheets, denied, re-reads
-    // -----------------------------------------------------------------
-
-    "search is a field: a term reads search alone, and closing CLEARS it and re-folds without a read" {
-        val landed = homeOn(home, board(TasksView.TASKS_VIEW_TODAY, todayGroup(task("a", "Call Ana", due = TODAY, days = 0, landsToday = true))))
-        val open = TasksHomeMachine.reduce(landed, view(TasksHomeEvent(search_opened = TasksHomeEvent.SearchOpened()))).state
-        open.screen.search!!.open_ shouldBe true
-        val typed = TasksHomeMachine.reduce(open, view(TasksHomeEvent(search_term = TasksHomeEvent.SearchTermChanged(term = "ana"))))
-        typed.effects shouldBe listOf(ScreenEffect.ReadPage(TasksHomeMachine.SCREEN_ID, null))
-        val reads = TasksHomeReads.requests(typed.state, clock)!!
-        reads.single().tasks_search.shouldNotBeNull().let {
-            it.term shouldBe "ana"
-            it.limit shouldBe TasksHomeReads.SEARCH_LIMIT
-        }
-        // THE ROWS STAY while the hits read.
-        typed.state.screen.data_!!.searching shouldBe false
-        val hits = TasksHomeMachine.reduce(typed.state, TasksHomeInput.Answered(search = TasksSearch(today = TODAY, tasks = listOf(task("a", "Call Ana"))))).state
-        hits.screen.data_!!.searching shouldBe true
-        hits.screen.data_.count_label shouldBe "1 hit"
-        hits.screen.search!!.answered_term shouldBe "ana"
-        hits.screen.band.none { it.current } shouldBe true
-
-        val none = TasksHomeMachine.reduce(typed.state, TasksHomeInput.Answered(search = TasksSearch(today = TODAY))).state
-        none.screen.data_!!.empty!!.headline shouldBe "No task matches."
-
-        val closed = TasksHomeMachine.reduce(hits, view(TasksHomeEvent(search_closed = TasksHomeEvent.SearchClosed())))
-        closed.effects.shouldBeEmpty()
-        closed.state.screen.search!!.term shouldBe ""
-        closed.state.screen.data_!!.searching shouldBe false
-        closed.state.screen.data_.groups.single().title shouldBe "Today"
-    }
-
-    "search: the words the core corrected are on the field, a new term clears them, and an answer for a closed search draws none (#1097)" {
-        val landed = homeOn(home, board(TasksView.TASKS_VIEW_TODAY, todayGroup(task("a", "Call Ana", due = TODAY, days = 0, landsToday = true))))
-        val open = TasksHomeMachine.reduce(landed, view(TasksHomeEvent(search_opened = TasksHomeEvent.SearchOpened()))).state
-        val typed = TasksHomeMachine.reduce(open, view(TasksHomeEvent(search_term = TasksHomeEvent.SearchTermChanged(term = "sunscren")))).state
-        val fixed = TasksHomeMachine.reduce(
-            typed,
-            TasksHomeInput.Answered(search = TasksSearch(today = TODAY, tasks = listOf(task("a", "Buy sunscreen")), corrected = "sunscreen")),
-        ).state
-        fixed.screen.search!!.corrected shouldBe "sunscreen"
-        // An exact answer says nothing was corrected.
-        TasksHomeMachine.reduce(typed, TasksHomeInput.Answered(search = TasksSearch(today = TODAY, tasks = listOf(task("a", "Call Ana")))))
-            .state.screen.search!!.corrected shouldBe ""
-        // A NEW TERM clears it; the rows stay until its answer lands.
-        TasksHomeMachine.reduce(fixed, view(TasksHomeEvent(search_term = TasksHomeEvent.SearchTermChanged(term = "sunscree"))))
-            .state.screen.search!!.corrected shouldBe ""
-        // A SEARCH CLOSED WHILE ITS HITS WERE READING draws no correction.
-        val closed = TasksHomeMachine.reduce(typed, view(TasksHomeEvent(search_closed = TasksHomeEvent.SearchClosed()))).state
-        TasksHomeMachine.reduce(
-            closed,
-            TasksHomeInput.Answered(search = TasksSearch(today = TODAY, tasks = listOf(task("a", "Buy sunscreen")), corrected = "sunscreen")),
-        ).state.screen.search!!.corrected shouldBe ""
-        TasksHomeMachine.reduce(fixed, view(TasksHomeEvent(search_closed = TasksHomeEvent.SearchClosed())))
-            .state.screen.search!!.corrected shouldBe ""
-    }
-
-    "search: a project found by name is a container on the field, with no nothing-found over it, cleared by a new term or a close, and a stale answer sets none (#1097)" {
-        val landed = homeOn(home, board(TasksView.TASKS_VIEW_TODAY, todayGroup(task("a", "Call Ana", due = TODAY, days = 0, landsToday = true))))
-        val open = TasksHomeMachine.reduce(landed, view(TasksHomeEvent(search_opened = TasksHomeEvent.SearchOpened()))).state
-        val typed = TasksHomeMachine.reduce(open, view(TasksHomeEvent(search_term = TasksHomeEvent.SearchTermChanged(term = "garden")))).state
-        val project = centraid.core.v1.ContainerHit(entity = "schedule.project", id = "p-1", title = "Garden", app_id = "tasks")
-        val answer = TasksHomeInput.Answered(search = TasksSearch(today = TODAY, containers = listOf(project)))
-        val found = TasksHomeMachine.reduce(typed, answer).state
-        val container = found.screen.search!!.containers.single()
-        container.kind_label shouldBe "Project"
-        container.target shouldBe centraid.screen.v1.ChatCard(app = "tasks", entity = "project", id = "p-1", title = "Garden")
-        // A project that matched is an answer: no tasks, and no nothing-found.
-        found.screen.data_!!.groups.shouldBeEmpty()
-        found.screen.data_.empty!!.headline shouldBe ""
-        TasksHomeMachine.reduce(found, view(TasksHomeEvent(search_term = TasksHomeEvent.SearchTermChanged(term = "gard"))))
-            .state.screen.search!!.containers.shouldBeEmpty()
-        TasksHomeMachine.reduce(found, view(TasksHomeEvent(search_closed = TasksHomeEvent.SearchClosed())))
-            .state.screen.search!!.containers.shouldBeEmpty()
-        val closed = TasksHomeMachine.reduce(typed, view(TasksHomeEvent(search_closed = TasksHomeEvent.SearchClosed()))).state
-        TasksHomeMachine.reduce(closed, answer).state.screen.search!!.containers.shouldBeEmpty()
-    }
-
-    "search: Ask is the no-match question: set by a wholly empty current answer, cleared by a new term, a close, a denial or a stale answer, and never set when anything was found (#1097, R-1097-28)" {
-        val landed = homeOn(home, board(TasksView.TASKS_VIEW_TODAY, todayGroup(task("a", "Call Ana", due = TODAY, days = 0, landsToday = true))))
-        val open = TasksHomeMachine.reduce(landed, view(TasksHomeEvent(search_opened = TasksHomeEvent.SearchOpened()))).state
-        val typed = TasksHomeMachine.reduce(open, view(TasksHomeEvent(search_term = TasksHomeEvent.SearchTermChanged(term = "zzqx")))).state
-        val none = TasksHomeMachine.reduce(typed, TasksHomeInput.Answered(search = TasksSearch(today = TODAY))).state
-        none.screen.search!!.ask shouldBe "Find zzqx"
-        none.screen.data_!!.empty!!.action_label shouldBe "Ask about “zzqx”"
-        // Anything found is no Ask: a task, or a project.
-        TasksHomeMachine.reduce(typed, TasksHomeInput.Answered(search = TasksSearch(today = TODAY, tasks = listOf(task("a", "Call Ana")))))
-            .state.screen.search!!.ask shouldBe ""
-        val project = centraid.core.v1.ContainerHit(entity = "schedule.project", id = "p-1", title = "Garden", app_id = "tasks")
-        TasksHomeMachine.reduce(typed, TasksHomeInput.Answered(search = TasksSearch(today = TODAY, containers = listOf(project))))
-            .state.screen.search!!.ask shouldBe ""
-        // A new term, a close and a denial clear it; an answer for a closed search sets none.
-        TasksHomeMachine.reduce(none, view(TasksHomeEvent(search_term = TasksHomeEvent.SearchTermChanged(term = "zzq"))))
-            .state.screen.search!!.ask shouldBe ""
-        TasksHomeMachine.reduce(none, view(TasksHomeEvent(search_closed = TasksHomeEvent.SearchClosed())))
-            .state.screen.search!!.ask shouldBe ""
-        TasksHomeMachine.reduce(none, TasksHomeInput.Denied(AppQueryDenial(code = "rcp_8802"))).state.screen.search!!.ask shouldBe ""
-        val closed = TasksHomeMachine.reduce(typed, view(TasksHomeEvent(search_closed = TasksHomeEvent.SearchClosed()))).state
-        TasksHomeMachine.reduce(closed, TasksHomeInput.Answered(search = TasksSearch(today = TODAY))).state.screen.search!!.ask shouldBe ""
-    }
-
-    "the band: the tab you are on is nothing; another reads; More is a sheet without Search; the search bar opens the field" {
-        val landed = homeOn(home, board(TasksView.TASKS_VIEW_TODAY))
-        TasksHomeMachine.reduce(landed, view(TasksHomeEvent(band = TasksHomeEvent.BandPicked(key = "today")))).effects.shouldBeEmpty()
-        val moved = TasksHomeMachine.reduce(landed, view(TasksHomeEvent(band = TasksHomeEvent.BandPicked(key = "upcoming"))))
-        moved.state.screen.destination shouldBe upcoming
-        moved.state.screen.loading.shouldNotBeNull()
-        moved.effects shouldBe listOf(ScreenEffect.ReadPage(TasksHomeMachine.SCREEN_ID, null))
-        NavStack().withTasksDestination(upcoming).current shouldBe Destination.TasksHome(upcoming)
-        NavStack().push(Destination.TasksHome()).withTasksDestination(inbox).entries.size shouldBe 2
-
-        val more = TasksHomeMachine.reduce(landed, view(TasksHomeEvent(band = TasksHomeEvent.BandPicked(key = "more")))).state
-        more.screen.sheet shouldBe TasksHomeState.Sheet.SHEET_MORE
-        // SEARCH IS THE BAR UNDER THE TITLE, never a More row (R-CHROME-2).
-        more.screen.more_rows.map { it.key } shouldBe listOf("anytime", "all", "logbook", "reminders", "catch_up", "trash", "reads")
-        more.screen.more_rows.none { it.icon_key == "Search" } shouldBe true
-        more.screen.band.single { it.current }.key shouldBe "more"
-        val searching = TasksHomeMachine.reduce(landed, view(TasksHomeEvent(search_opened = TasksHomeEvent.SearchOpened()))).state
-        searching.screen.search!!.open_ shouldBe true
-        searching.screen.quick_add!!.shown shouldBe false
-        // A stale "search" row key is an intent no one routes: the sheet closes, the field stays shut.
-        TasksHomeMachine.reduce(more, view(TasksHomeEvent(more_row = TasksHomeEvent.MoreRowPicked(key = "search")))).state.let {
-            it.screen.sheet shouldBe TasksHomeState.Sheet.SHEET_NONE
-            it.screen.search?.open_ shouldBe false
-        }
-        val reads = TasksHomeMachine.reduce(more, view(TasksHomeEvent(more_row = TasksHomeEvent.MoreRowPicked(key = "reads")))).state
-        reads.screen.sheet shouldBe TasksHomeState.Sheet.SHEET_READS
-        reads.screen.chrome!!.reads_facts.map { it.label } shouldBe listOf("Reads", "Writes", "Leaves this phone")
-        // An intent closes the sheet and changes nothing else.
-        TasksHomeMachine.reduce(more, view(TasksHomeEvent(more_row = TasksHomeEvent.MoreRowPicked(key = "logbook")))).let {
-            it.effects.shouldBeEmpty()
-            it.state.screen.sheet shouldBe TasksHomeState.Sheet.SHEET_NONE
-        }
-    }
-
-    "denied is the kit's gate: no band, no quick add, the receipt named" {
-        val denied = TasksHomeMachine.reduce(opened(home).state, TasksHomeInput.Denied(AppQueryDenial(code = "rcp_8802"))).state
-        denied.screen.denied.shouldNotBeNull().let {
-            it.title shouldBe "Tasks cannot read this vault"
-            it.receipt shouldBe "rcp_8802"
-        }
-        denied.screen.band.shouldBeEmpty()
-        denied.screen.quick_add!!.shown shouldBe false
-        TasksHomeReads.denied(AppQueryDenial()) shouldBe TasksHomeInput.Denied(AppQueryDenial())
-    }
-
-    "a change re-reads over the rows; an answer that raced a newer read is dropped" {
-        val landed = homeOn(home, board(TasksView.TASKS_VIEW_TODAY, todayGroup(task("a", "Call Ana", due = TODAY, days = 0, landsToday = true))))
-        TasksHomeMachine.rowsChanged("schedule_task", listOf("a")).shouldNotBeNull()
-        TasksHomeMachine.rowsChanged("core_event", listOf("e")).shouldBeNull()
-        val reading = TasksHomeMachine.reduce(landed, view(TasksHomeEvent(rows_changed = TasksHomeEvent.RowsChanged(table = "schedule_task"))))
-        reading.effects shouldBe listOf(ScreenEffect.ReadPage(TasksHomeMachine.SCREEN_ID, null))
-        reading.state.screen.data_.shouldNotBeNull()
-        val queued = TasksHomeMachine.reduce(reading.state, view(TasksHomeEvent(rows_changed = TasksHomeEvent.RowsChanged(table = "schedule_project"))))
-        queued.effects.shouldBeEmpty()
-        val stale = TasksHomeMachine.reduce(queued.state, TasksHomeInput.Answered(board = board(TasksView.TASKS_VIEW_TODAY)))
-        stale.effects shouldBe listOf(ScreenEffect.ReadPage(TasksHomeMachine.SCREEN_ID, null))
-        stale.state.screen.data_!!.groups.single().rows.single().task_id shouldBe "a"
-    }
-
-    "a failed read is not an empty list" {
-        val failed = TasksHomeMachine.reduce(opened(home).state, TasksHomeReads.refused(dev.centraid.shared.screen.Reads.refused("No vault is open on this device."))).state
-        failed.screen.failure!!.sentence shouldBe "No vault is open on this device."
-        failed.screen.data_.shouldBeNull()
     }
 
     // -----------------------------------------------------------------
@@ -628,7 +202,9 @@ class TasksSpec : StringSpec({
 
         // POINT THE QUICK ADD AT BEDS: add_task, then organize into it.
         val pointed = TasksProjectMachine.reduce(page, TasksProjectInput.View(TasksProjectEvent(group_verb = TasksProjectEvent.GroupVerb(key = "add:s1")))).state
-        pointed.screen.quick_add!!.lands_label shouldBe "Lands in Garden · Beds"
+        pointed.screen.quick_add!!.lands_label shouldBe "Add to Garden · Beds"
+        // A PUSHED PAGE HAS NO PLUS: its bar is always drawn.
+        pointed.screen.quick_add!!.drawn shouldBe true
         val typed = TasksProjectMachine.reduce(pointed, TasksProjectInput.View(TasksProjectEvent(quick_add_changed = TasksProjectEvent.QuickAddChanged(title = "Tulips")))).state
         val added = TasksProjectMachine.reduce(typed, TasksProjectInput.Add(ID))
         val add = added.effects.single() as ScreenEffect.SubmitWrite
@@ -933,14 +509,6 @@ class TasksSpec : StringSpec({
         const val TODAY: String = "2026-06-15"
         const val ID: String = "1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed"
 
-        fun view(event: TasksHomeEvent): TasksHomeInput = TasksHomeInput.View(event)
-
-        fun opened(to: TasksHomeState.Destination): Step<TasksHome> =
-            TasksHomeMachine.reduce(TasksHomeMachine.initial(), view(TasksHomeEvent(opened = TasksHomeEvent.Opened(destination = to))))
-
-        fun homeOn(to: TasksHomeState.Destination, board: TasksBoard): TasksHome =
-            TasksHomeMachine.reduce(opened(to).state, TasksHomeInput.Answered(board = board)).state
-
         fun openList(view: TasksListState.View): Step<TasksList> =
             TasksListMachine.reduce(TasksListMachine.initial(), TasksListInput.View(TasksListEvent(opened = TasksListEvent.Opened(view = view))))
 
@@ -970,16 +538,6 @@ class TasksSpec : StringSpec({
 
         fun choice(field: String, key: String): TasksDetailInput =
             TasksDetailInput.View(TasksDetailEvent(field_choice = TasksDetailEvent.FieldChoice(field_ = field, key = key)))
-
-        fun settle(key: String, committed: Boolean, sentence: String = ""): TasksHomeInput = view(
-            TasksHomeEvent(
-                write_settled = WriteLaw.settledOf(
-                    if (committed) CommandStatus.COMMAND_STATUS_EXECUTED else CommandStatus.COMMAND_STATUS_FAILED,
-                    sentence,
-                    key,
-                ),
-            ),
-        )
 
         fun task(
             id: String,

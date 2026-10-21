@@ -178,6 +178,7 @@ Test: `the_words_are_minted_judged_and_seeded_over_a_core_with_no_vault` (and, b
 | `refresh_destination` (33) | a paired gateway found again at new addresses (Q-1080-D3): at most eight IP-literal candidates from the shell's foreground browse, each dialled with the certificate pinned at pairing and kept only if `GET /v2/info` answers with that gateway's own id; the kept ones go first in the ledger's list, and the token, certificate and acknowledgements stay; a phone a gateway superseded refuses it `VAULT_MOVED` | bounded |
 | `releasable` (29) | originals only the library holds, every part acknowledged, not in a kept album, never edited in the library, a library item whole or not at all, oldest first | bounded |
 | `released` (30) | the library items the member deleted: the ledger forgets them in the library and a `media_asset` change event tells the grid they are fetchable | bounded |
+| `library_assets` (34) | which live asset each library ref was last backed up as, with the bytes it wraps: the newest item staged under the ref, absent when the vault holds no live asset for it; at most 100 refs, more is `INVALID_REQUEST`; how an edit made in place (Android) names the photograph it is an edit of (#1127, A20) | bounded |
 
 A zero limit — `handoff`'s `max_bytes` or `max_parts`, `releasable`'s `limit` — is `INVALID_REQUEST`, never "no limit". **The core never deletes from the operating system's library**: the shell does, behind the system's own confirmation, and reports it through `released`.
 

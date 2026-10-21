@@ -43,7 +43,7 @@ public data class NativeIconPath(
 
 public object CentraidCatalog {
     /**
-     * The eight first-party apps, in CATALOGUE order.
+     * The first-party apps, in CATALOGUE order.
      *
      * This is the all-apps listing's order and says nothing about the grid
      * — `SpringboardPolicy.SPRINGBOARD_ORDER` owns that.
@@ -53,10 +53,10 @@ public object CentraidCatalog {
         NativeApp(id = "people", name = "People", desc = "Contacts and relationships.", iconKey = "AddressBook", colorKey = "violet"),
         NativeApp(id = "photos", name = "Photos", desc = "Browse and back up your photos.", iconKey = "Camera", colorKey = "amber"),
         NativeApp(id = "locker", name = "Locker", desc = "Private items behind a lock.", iconKey = "Lock", colorKey = "rose"),
-        NativeApp(id = "tasks", name = "Tasks", desc = "Capture the next thing to do.", iconKey = "Check", colorKey = "ochre"),
         NativeApp(id = "docs", name = "Docs", desc = "Read and organize your documents.", iconKey = "Folder", colorKey = "teal"),
         NativeApp(id = "agenda", name = "Agenda", desc = "Your calendar, events and plans.", iconKey = "Calendar", colorKey = "forest"),
         NativeApp(id = "money", name = "Money", desc = "Spending, targets and cash flow.", iconKey = "Coin", colorKey = "indigo"),
+        NativeApp(id = "health", name = "Health", desc = "Daily totals and workouts from your phone.", iconKey = "Activity", colorKey = "olive"),
     )
 
     /** By id, for the header that names one app. */
@@ -67,10 +67,10 @@ public object CentraidCatalog {
         "people" to NativeAppMark(hue = 0xFF7A5283L, chipBackground = 0xFFECE7ECL, markColor = 0xFF744E7DL),
         "photos" to NativeAppMark(hue = 0xFF904E46L, chipBackground = 0xFFEFE6E4L, markColor = 0xFF894A43L),
         "locker" to NativeAppMark(hue = 0xFF8C4C61L, chipBackground = 0xFFEEE6E8L, markColor = 0xFF894A5FL),
-        "tasks" to NativeAppMark(hue = 0xFF845922L, chipBackground = 0xFFEDE8E0L, markColor = 0xFF7C5420L),
         "docs" to NativeAppMark(hue = 0xFF00707EL, chipBackground = 0xFFDCEBECL, markColor = 0xFF006774L),
         "agenda" to NativeAppMark(hue = 0xFF397247L, chipBackground = 0xFFE4EBE4L, markColor = 0xFF346841L),
         "money" to NativeAppMark(hue = 0xFF635A93L, chipBackground = 0xFFE9E8EEL, markColor = 0xFF5F568DL),
+        "health" to NativeAppMark(hue = 0xFF666723L, chipBackground = 0xFFE9EAE0L, markColor = 0xFF5E5F20L),
     )
 
     public val darkMarks: Map<String, NativeAppMark> = mapOf(
@@ -78,10 +78,10 @@ public object CentraidCatalog {
         "people" to NativeAppMark(hue = 0xFFBE92C8L, chipBackground = 0xFF312833L, markColor = 0xFFBE92C8L),
         "photos" to NativeAppMark(hue = 0xFFD78F85L, chipBackground = 0xFF362826L, markColor = 0xFFD78F85L),
         "locker" to NativeAppMark(hue = 0xFFD48DA2L, chipBackground = 0xFF36272CL, markColor = 0xFFD48DA2L),
-        "tasks" to NativeAppMark(hue = 0xFFC99B65L, chipBackground = 0xFF332A1FL, markColor = 0xFFC99B65L),
         "docs" to NativeAppMark(hue = 0xFF58B4C4L, chipBackground = 0xFF1D2F32L, markColor = 0xFF58B4C4L),
         "agenda" to NativeAppMark(hue = 0xFF7BB587L, chipBackground = 0xFF242F26L, markColor = 0xFF7BB587L),
         "money" to NativeAppMark(hue = 0xFFA39BDAL, chipBackground = 0xFF2C2A37L, markColor = 0xFFA39BDAL),
+        "health" to NativeAppMark(hue = 0xFFA8AA66L, chipBackground = 0xFF2D2D20L, markColor = 0xFFA8AA66L),
     )
 
     /**

@@ -1,6 +1,8 @@
 package dev.centraid.android.screens.docs
 
 import android.content.ActivityNotFoundException
+import android.content.Context
+import android.net.Uri
 import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -20,6 +22,7 @@ import centraid.screen.v1.DocsDocumentEvent
 import centraid.screen.v1.DocsDriveEvent
 import centraid.screen.v1.DocsDriveState
 import centraid.screen.v1.DocsSheet
+import dev.centraid.android.kit.NoticeSheet
 import dev.centraid.android.kit.TrashListScreen
 import dev.centraid.android.screens.AppRoutes
 import dev.centraid.android.screens.RouteNav
@@ -28,6 +31,7 @@ import dev.centraid.shared.apps.docs.DocsDocumentBridge
 import dev.centraid.shared.apps.docs.DocsDriveBridge
 import dev.centraid.shared.apps.docs.DocsDriveMachine
 import dev.centraid.shared.apps.docs.DocsEditorBridge
+import dev.centraid.shared.apps.docs.DocsFollowBridge
 import dev.centraid.shared.apps.docs.DocsIngestBridge
 import dev.centraid.shared.apps.docs.DocsRouting
 import dev.centraid.shared.apps.docs.DocsTrashBridge
@@ -60,13 +64,17 @@ import java.io.File
  * its status line on whichever drive page is up, and pushes the filed
  * document once per request from [Global] — wherever the member is then.
  */
-public class DocsRoutes : AppRoutes {
+public class DocsRoutes(private val onFollowed: () -> Unit = {}) : AppRoutes {
     private val drive = DocsDriveBridge()
     private val folder = DocsDriveBridge()
     private val document = DocsDocumentBridge()
     private val editor = DocsEditorBridge()
     private val trash = DocsTrashBridge()
     private val ingest = DocsIngestBridge()
+    private val following = DocsFollowBridge()
+
+    /** A refused "Follow a folder", in the member's words, until they put it away. */
+    private var refusal: String? by mutableStateOf(null)
 
     override fun handles(destination: Destination): Boolean = when (destination) {
         is Destination.DocsHome, is Destination.DocsFolder, is Destination.DocsDocument, is Destination.DocsEditor,
@@ -91,6 +99,7 @@ public class DocsRoutes : AppRoutes {
         editor.attach(session)
         trash.attach(session)
         ingest.attach(session)
+        following.attach(session)
     }
 
     /**
@@ -107,6 +116,15 @@ public class DocsRoutes : AppRoutes {
                 nav.push(filed)
                 ingest.routed(adding.request_seq)
             }
+        }
+        // A REFUSAL IS THE KIT'S SHEET, never a dialog (DESIGN.md "The controls (mobile)").
+        refusal?.let { sentence ->
+            NoticeSheet(
+                title = following.failedTitle,
+                sentence = sentence,
+                doneLabel = DocsCopy.DONE,
+                onDone = { refusal = null },
+            )
         }
     }
 
@@ -233,6 +251,17 @@ public class DocsRoutes : AppRoutes {
                 }
             }
         }
+        // FOLLOW A FOLDER (#1127, R-1127-7): the system's folder picker, raised only by
+        // the member's own tap. The grant is kept (`FolderAccess`), the vault told, and the
+        // follower asked for a pass; a pick of a folder already followed is a pass and no more.
+        val folders = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { tree ->
+            if (tree != null) followFolder(context.applicationContext, tree)
+        }
+        // THE FOLLOWED LIST, REPORTED (law 4): the More sheet lists these.
+        LaunchedEffect(Unit) {
+            following.report(drive)
+            following.report(folder)
+        }
         // SCAN: the camera writes a photograph into `docs-scans/`; it is filed
         // as a one-page PDF with no name, so the machine titles it. The target
         // survives the activity being recreated behind the camera.
@@ -335,6 +364,27 @@ public class DocsRoutes : AppRoutes {
                         bridge.forward(opened)
                         nav.push(DocsRouting.drive(opened, state))
                     }
+                    // "Follow a folder" is the shell's route: the system picker, then the vault.
+                    sheet == DocsSheet.Kind.KIND_ADD && key == DocsWrites.KEY_FOLLOW_FOLDER -> {
+                        bridge.forward(DocsDriveEvent(follow_folder_requested = DocsDriveEvent.FollowFolderRequested()))
+                        try {
+                            folders.launch(null)
+                        } catch (why: ActivityNotFoundException) {
+                            // No app on this phone offers a folder picker.
+                            refusal = following.failed
+                        }
+                    }
+                    // A followed folder's "Stop following": the vault forgets its links (every
+                    // document stays), then the grant goes.
+                    sheet == DocsSheet.Kind.KIND_FOLLOWED && key != null && following.stopTarget(key) != null -> {
+                        val origin = following.stopTarget(key).orEmpty()
+                        bridge.forward(DocsDriveEvent(stop_following_requested = DocsDriveEvent.StopFollowingRequested(origin_id = origin)))
+                        following.stop(origin) { stopped ->
+                            if (stopped) FolderAccess.forget(context.applicationContext, origin)
+                            following.report(drive)
+                            following.report(folder)
+                        }
+                    }
                     // The Add sheet's capture rows are the ingest's: the drive
                     // puts its sheet away (`AddRequested`), the bridge does the rest.
                     sheet == DocsSheet.Kind.KIND_ADD && key != null && key in CAPTURE -> {
@@ -355,6 +405,29 @@ public class DocsRoutes : AppRoutes {
                 }
             },
         )
+    }
+
+    /** The picker returned [tree]: keep the grant, tell the vault, and ask for a pass. */
+    private fun followFolder(context: Context, tree: Uri) {
+        FolderAccess.following(context, tree)?.let {
+            onFollowed()
+            return
+        }
+        val origin = following.mintOrigin()
+        if (!FolderAccess.remember(context, origin, tree)) {
+            refusal = following.failed
+            return
+        }
+        following.follow(origin, FolderAccess.name(context, tree).ifEmpty { tree.lastPathSegment.orEmpty() }) { followed ->
+            if (followed) {
+                onFollowed()
+                following.report(drive)
+                following.report(folder)
+            } else {
+                FolderAccess.forget(context, origin)
+                refusal = following.failed
+            }
+        }
     }
 
     /**

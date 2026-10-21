@@ -176,3 +176,32 @@ pub fn assets_for_hashes(vault: &Vault, hashes: &[String]) -> Result<Vec<String>
         Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
     })
 }
+
+/// The LIVE asset wrapping each of `hashes` (64 lowercase hex each), as
+/// `(hash, asset_id)`: a trashed asset is not an answer, and neither is a hash
+/// the vault holds no content row for (#1127, A20 — an edit made in place
+/// names the asset it is an edit of, and a trashed or absent one is not
+/// something to name).
+///
+/// # Errors
+/// [`crate::error::VaultError`] for anything SQLite refused.
+pub fn live_assets_for_hashes(vault: &Vault, hashes: &[String]) -> Result<Vec<(String, String)>> {
+    if hashes.is_empty() {
+        return Ok(Vec::new());
+    }
+    let hashes_json = serde_json::to_string(hashes).unwrap_or_else(|_| "[]".to_owned());
+    vault.read(|connection| {
+        let mut statement = connection.prepare(
+            "SELECT c.content_hash, a.asset_id
+               FROM media_asset a
+               JOIN core_content_item c ON c.content_id = a.content_id
+              WHERE a.deleted_at IS NULL
+                AND c.content_hash IN (SELECT value FROM json_each(?1))
+              ORDER BY a.asset_id",
+        )?;
+        let rows = statement.query_map([hashes_json], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })?;
+        Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+    })
+}

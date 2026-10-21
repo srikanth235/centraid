@@ -311,7 +311,7 @@ export function emitNativeCatalog(repositoryRoot: string): {
     "",
     "public object CentraidCatalog {",
     "    /**",
-    "     * The eight first-party apps, in CATALOGUE order.",
+    "     * The first-party apps, in CATALOGUE order.",
     "     *",
     "     * This is the all-apps listing's order and says nothing about the grid",
     "     * — `SpringboardPolicy.SPRINGBOARD_ORDER` owns that.",
@@ -409,7 +409,7 @@ export function emitNativeCatalog(repositoryRoot: string): {
     "}",
     "",
     "public enum CentraidCatalog {",
-    "    /// The eight first-party apps, in CATALOGUE order — the all-apps",
+    "    /// The first-party apps, in CATALOGUE order — the all-apps",
     "    /// listing's order, which says nothing about the grid.",
     "    public static let apps: [CentraidAppMeta] = [",
     ...apps.map(

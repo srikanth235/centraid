@@ -3,7 +3,7 @@
 # “circle”"); a term nothing matches offers the assistant.
 #
 # A VAULT-HOLDING INSTALL, as `home-search.yaml`: the onboarding starters are
-# enough — Tasks' "Tap the circle to finish me" holds the word "circle", and
+# enough — the Tasks starter "Tap the circle to finish me" (an Agenda group row) holds the word "circle", and
 # "circel" is its two neighbours swapped. Re-runnable: the flow relaunches and
 # leaves nothing behind but a recent search.
 #
@@ -29,14 +29,14 @@ name: search-correction
     timeout: 5000
 - assertVisible: "Showing results for “circle”"
 - assertVisible:
-    id: "home-search-group-tasks"
+    id: "home-search-group-agenda"
 - assertVisible: "Tap the circle to finish me"
 # An exact term says nothing: no line over rows it did not correct.
 - eraseText: 6
 - inputText: "circle"
 - extendedWaitUntil:
     visible:
-      id: "home-search-group-tasks"
+      id: "home-search-group-agenda"
     timeout: 5000
 - assertNotVisible:
     id: "search-corrected"

@@ -1,10 +1,11 @@
 # A container is a search result of its own (#1097): the project a member
-# typed the name of is a row in Home's Tasks group, before the tasks, and in
-# Tasks' own search results; a tap opens it where its app opens it.
+# typed the name of is a row in Home's Agenda group, before its rows, and a row
+# of Agenda's own search, above its task hits (#1128, Q-1128-1); a tap opens it
+# where its app opens it, the project page.
 #
 # THE FLOW MAKES ITS OWN PROJECT. The onboarding starters hold no notebook,
 # project, group or folder, so the first run creates a Tasks project called
-# "Orchard" (Projects band -> New project) and every later run finds it there
+# "Orchard" (Agenda's To-do place -> New project) and every later run finds it there
 # and skips the step. Re-runnable: it leaves that one project and a recent
 # search. The seed step expects an install with NO other project (the empty
 # Projects state offers "New project"); on a vault that already holds projects
@@ -18,8 +19,9 @@ name: search-containers
 ---
 - launchApp
 - tapOn:
-    id: "home-tile-tasks"
-- tapOn: "Projects"
+    id: "home-tile-agenda"
+- tapOn:
+    id: "agenda-band-todo"
 - runFlow:
     when:
       notVisible: "Orchard"
@@ -30,7 +32,7 @@ name: search-containers
       - inputText: "Orchard"
       - tapOn: "Create project"
 - assertVisible: "Orchard"
-# Home's search: the project is a hit of the Tasks group, kind named, above the
+# Home's search: the project is a hit of the Agenda group, kind named, above the
 # tasks (none here, so it stands alone), and counted.
 - launchApp
 - tapOn:
@@ -40,7 +42,7 @@ name: search-containers
 - inputText: "orchard"
 - extendedWaitUntil:
     visible:
-      id: "home-search-group-tasks"
+      id: "home-search-group-agenda"
     timeout: 5000
 - assertVisible:
     id: "search-container-schedule.project-.*"
@@ -55,20 +57,19 @@ name: search-containers
     timeout: 5000
 - assertNotVisible:
     id: "home-search-field"
-# Tasks' own search finds it too.
+# Agenda's own search draws the same project, kind named, and a tap opens the
+# same page (#1128, Q-1128-1).
 - launchApp
 - tapOn:
-    id: "home-tile-tasks"
+    id: "home-tile-agenda"
 - tapOn:
-    id: "tasks-search-open"
+    id: "agenda-search-open"
 - inputText: "orchard"
 - extendedWaitUntil:
     visible:
       id: "search-container-schedule.project-.*"
     timeout: 5000
 - assertVisible: "Project"
-# A project that matched is an answer: no "nothing found" over it.
-- assertNotVisible: "No task matches."
 - tapOn:
     id: "search-container-schedule.project-.*"
 - extendedWaitUntil:

@@ -13,3 +13,4 @@ Read the matching trap before working near its area; each one was paid for once.
 | [stale-core-slice.md](stale-core-slice.md) | A Kotlin/Native framework links `libcentraid_core_ffi.a` by PATH, so a changed Rust core ships as the old one with no error |
 | [shared-cargo-target.md](shared-cargo-target.md) | Two worktrees on one `CARGO_TARGET_DIR`: a build script's `OUT_DIR` is keyed by package identity, and a gate verdict is then worthless |
 | [serde-json-preserve-order.md](serde-json-preserve-order.md) | A `serde_json::Value`'s printed text is not canonical — `preserve_order` unifies across a build, so one crate's feature decides another crate's sort |
+| [fresh-executable-first-exec.md](fresh-executable-first-exec.md) | On macOS the first exec of a just-written file waits on a serialized code assessment, so a test's fixed window for a fake tool is a guess about the whole machine |

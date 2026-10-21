@@ -9,7 +9,7 @@ seat {
 destination: DESTINATION_DAY
 anchor_day: ""
 denied {
-  title: "Agenda cannot read your calendar"
+  title: "Agenda cannot read this vault"
   body: "Ask the owner of this vault for access."
   receipt: "grant.missing"
 }

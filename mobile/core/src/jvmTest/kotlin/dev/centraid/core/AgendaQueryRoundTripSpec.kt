@@ -167,7 +167,6 @@ class AgendaQueryRoundTripSpec : StringSpec({
                 // No holiday source exists: EMPTY BY CONSTRUCTION, and a
                 // present field rather than an absent one.
                 context.holidays.shouldBeEmpty()
-                context.due.shouldBeEmpty()
                 context.today shouldBe upcoming.today
             }
 

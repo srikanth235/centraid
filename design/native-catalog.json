@@ -31,13 +31,6 @@
       "name": "Locker"
     },
     {
-      "colorKey": "ochre",
-      "desc": "Capture the next thing to do.",
-      "iconKey": "Check",
-      "id": "tasks",
-      "name": "Tasks"
-    },
-    {
       "colorKey": "teal",
       "desc": "Read and organize your documents.",
       "iconKey": "Folder",
@@ -57,6 +50,13 @@
       "iconKey": "Coin",
       "id": "money",
       "name": "Money"
+    },
+    {
+      "colorKey": "olive",
+      "desc": "Daily totals and workouts from your phone.",
+      "iconKey": "Activity",
+      "id": "health",
+      "name": "Health"
     }
   ],
   "geometry": {
@@ -1125,11 +1125,6 @@
         "hue": "#8c4c61",
         "markColor": "#894a5f"
       },
-      "tasks": {
-        "chipBackground": "#ede8e0",
-        "hue": "#845922",
-        "markColor": "#7c5420"
-      },
       "docs": {
         "chipBackground": "#dcebec",
         "hue": "#00707e",
@@ -1144,6 +1139,11 @@
         "chipBackground": "#e9e8ee",
         "hue": "#635a93",
         "markColor": "#5f568d"
+      },
+      "health": {
+        "chipBackground": "#e9eae0",
+        "hue": "#666723",
+        "markColor": "#5e5f20"
       }
     },
     "dark": {
@@ -1167,11 +1167,6 @@
         "hue": "#d48da2",
         "markColor": "#d48da2"
       },
-      "tasks": {
-        "chipBackground": "#332a1f",
-        "hue": "#c99b65",
-        "markColor": "#c99b65"
-      },
       "docs": {
         "chipBackground": "#1d2f32",
         "hue": "#58b4c4",
@@ -1186,6 +1181,11 @@
         "chipBackground": "#2c2a37",
         "hue": "#a39bda",
         "markColor": "#a39bda"
+      },
+      "health": {
+        "chipBackground": "#2d2d20",
+        "hue": "#a8aa66",
+        "markColor": "#a8aa66"
       }
     }
   }

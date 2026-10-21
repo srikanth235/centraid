@@ -7,7 +7,6 @@ import centraid.screen.v1.PhotoShelf
 import centraid.screen.v1.PhotoStateView
 import centraid.screen.v1.PhotosGridState
 import centraid.screen.v1.PlacesState
-import centraid.screen.v1.TasksHomeState
 import centraid.screen.v1.TasksListState
 
 /**
@@ -61,13 +60,17 @@ public sealed interface Destination {
     public data object Copies : Destination
 
     /**
-     * AGENDA'S HOME (#1046). Day, Schedule or Waiting, as a parameter; Search
-     * is a mode over it and More a sheet, so neither is a value here. A shell
-     * pushes this and calls `AgendaBridge.open(destination)`.
+     * AGENDA'S HOME (#1046, #1128). Day, Schedule, Waiting or To-do, as a
+     * parameter; Search is a mode over it and More a sheet, so neither is a
+     * value here. A shell pushes this and calls `AgendaBridge.open(destination)`
+     * — or, with [quickAdd] (Notes' "Send to Agenda"), `open(destination,
+     * quickAdd)`, which lands on To-do with those words in the quick add.
      */
     public data class AgendaHome(
         val destination: AgendaHomeState.Destination =
             AgendaHomeState.Destination.DESTINATION_DAY,
+        /** Words waiting in To-do's quick add, focused (Notes' "Send to Agenda"); empty is none. */
+        val quickAdd: String = "",
     ) : Destination
 
     /**
@@ -177,7 +180,7 @@ public sealed interface Destination {
         val title: String? = null,
         /**
          * The id was minted on the phone for a note not yet written
-         * (`NotesRouting.target`): the editor opens empty and creates it on
+         * (`NotesRouting.tile`): the editor opens empty and creates it on
          * its first save.
          */
         val isNew: Boolean = false,
@@ -260,17 +263,6 @@ public sealed interface Destination {
     public data object PeopleTrash : Destination
 
     // --- Tasks (#1029 port) ---
-
-    /**
-     * TASKS' HOME: Today, Upcoming, Inbox or Projects, as a parameter; search
-     * is a field and More a sheet. A shell calls `TasksHomeBridge.open(destination)`
-     * — or, with [quickAdd] (Notes' "Send to Tasks"), `openQuickAdd(quickAdd)`,
-     * which lands on the Inbox with those words in the quick add.
-     */
-    public data class TasksHome(
-        val destination: TasksHomeState.Destination = TasksHomeState.Destination.DESTINATION_TODAY,
-        val quickAdd: String = "",
-    ) : Destination
 
     /** Anytime, All, Logbook or Reminders — one screen, the view a parameter. */
     public data class TasksList(val view: TasksListState.View) : Destination
@@ -361,6 +353,28 @@ public sealed interface Destination {
 
     /** The search bar's page (R-CHROME-2): `MoneySearchBridge.open()`. */
     public data object MoneySearch : Destination
+
+    // --- Health (#1129) ---
+    // `parent` on a pushed Health page is the pushing page's title: the back
+    // control's word. Empty: "Health".
+
+    /**
+     * HEALTH'S HOME. Today, Trends or Workouts, as a parameter; More is a
+     * sheet. A shell calls `HealthHomeBridge.open(destination)`.
+     */
+    public data class HealthHome(
+        val destination: centraid.screen.v1.HealthHomeState.Destination =
+            centraid.screen.v1.HealthHomeState.Destination.DESTINATION_TODAY,
+    ) : Destination
+
+    /** One metric (its key, `steps`): `HealthMetricBridge.open(metric, parent)`. */
+    public data class HealthMetric(val metric: String, val parent: String = "") : Destination
+
+    /** One workout: `HealthWorkoutBridge.open(activityId, parent)`. */
+    public data class HealthWorkout(val activityId: String, val parent: String = "") : Destination
+
+    /** What Health may read, and Connect: `HealthConnectScreenBridge.open(parent)`. */
+    public data class HealthConnect(val parent: String = "") : Destination
 }
 
 /**
@@ -416,7 +430,7 @@ public data class NavStack(val entries: List<Destination> = listOf(Destination.H
     public fun withAgendaDestination(destination: AgendaHomeState.Destination): NavStack {
         val top = current
         return if (top is Destination.AgendaHome) {
-            NavStack(entries.dropLast(1) + top.copy(destination = destination))
+            NavStack(entries.dropLast(1) + top.copy(destination = destination, quickAdd = ""))
         } else {
             push(Destination.AgendaHome(destination))
         }
@@ -443,12 +457,12 @@ public fun NavStack.withPeopleDestination(destination: PeopleHomeState.Destinati
     }
 }
 
-/** TASKS' BAND, IN PLACE (#1029 port): Today, Upcoming, Inbox and Projects are one screen's parameter. */
-public fun NavStack.withTasksDestination(destination: TasksHomeState.Destination): NavStack {
+/** HEALTH'S BAND, IN PLACE (#1129): Today, Trends and Workouts are one screen's parameter. */
+public fun NavStack.withHealthDestination(destination: centraid.screen.v1.HealthHomeState.Destination): NavStack {
     val top = current
-    return if (top is Destination.TasksHome) {
+    return if (top is Destination.HealthHome) {
         NavStack(entries.dropLast(1) + top.copy(destination = destination))
     } else {
-        push(Destination.TasksHome(destination))
+        push(Destination.HealthHome(destination))
     }
 }
