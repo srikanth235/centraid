@@ -1,5 +1,6 @@
 package dev.centraid.shared
 
+import centraid.screen.v1.Confirm
 import dev.centraid.shared.shell.PhoneFollowWords
 import dev.centraid.shared.sync.phone.GoneReason
 import dev.centraid.shared.sync.phone.OriginGone
@@ -34,5 +35,16 @@ class PhoneFollowWordsSpec : StringSpec({
         asked.source shouldBe PhoneSource.CONTACTS
         asked.keepLabel shouldBe "Keep"
         asked.trashLabel shouldBe "Move to trash"
+    }
+
+    "the question is the kit's destructive confirm: Move to trash is its verb, Keep its cancel" {
+        val asked = PhoneFollowWords.question(gone(PhoneSource.CALENDAR, 4, GoneReason.LEFT))
+        asked.confirm shouldBe Confirm(
+            title = "Work is no longer on this phone",
+            body = "Keep its 4 events in Agenda?",
+            confirm_label = "Move to trash",
+            destructive = true,
+        )
+        Confirm.ADAPTER.decode(asked.confirmBytes) shouldBe asked.confirm
     }
 })

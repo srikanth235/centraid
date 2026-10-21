@@ -246,11 +246,14 @@ struct DocsFollowRoot: View {
             .fileImporter(isPresented: $model.picking, allowedContentTypes: [.folder], allowsMultipleSelection: false) { result in
                 model.picked(result)
             }
-            .alert(
-                model.message ?? "",
-                isPresented: Binding(get: { model.message != nil }, set: { if !$0 { model.message = nil } })
-            ) {
-                Button(DocsCopy.shared.DONE, role: .cancel) { model.message = nil }
+            // A REFUSAL IS THE KIT'S SHEET, never an alert (DESIGN.md "The controls (mobile)").
+            .sheet(isPresented: Binding(get: { model.message != nil }, set: { if !$0 { model.message = nil } })) {
+                NoticeSheet(
+                    title: model.bridge.failedTitle,
+                    sentence: model.message ?? "",
+                    doneLabel: DocsCopy.shared.DONE,
+                    onDone: { model.message = nil }
+                )
             }
     }
 }

@@ -28,7 +28,7 @@ import dev.centraid.shared.nav.RowRoutes
 import dev.centraid.android.kit.AndroidHealth
 import dev.centraid.android.kit.AndroidPhoneFollow
 import dev.centraid.android.kit.LocalPhoneImport
-import dev.centraid.android.kit.PhoneFollowDialog
+import dev.centraid.android.kit.PhoneFollowSheet
 import dev.centraid.android.kit.ShellBanner
 import dev.centraid.android.screens.agenda.rememberCalendarImport
 import dev.centraid.android.screens.people.rememberContactsImport
@@ -451,7 +451,7 @@ public class MainActivity : FragmentActivity() {
                 )
                 // THE QUESTION AN ACCOUNT OR CALENDAR THAT LEFT THE PHONE ASKS (R-1127-9).
                 phoneFollow.question?.let { asked ->
-                    PhoneFollowDialog(asked) { keep -> phoneFollow.answer(asked, keep) }
+                    PhoneFollowSheet(asked) { keep -> phoneFollow.answer(asked, keep) }
                 }
                 val phoneImport: ((ImportSource) -> Unit)? =
                     remember(contactsImport, calendarImport, homeSession) {

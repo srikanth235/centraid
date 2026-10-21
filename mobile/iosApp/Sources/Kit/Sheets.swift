@@ -58,6 +58,34 @@ struct ConfirmSheet: View {
     }
 }
 
+/// A REFUSAL TOLD IN A SHEET, NOT AN ALERT (DESIGN.md "The controls (mobile)"):
+/// the act that was refused as the title, the sentence saying what happened
+/// and what to do, and one way out, the outline [doneLabel]. A swipe away is
+/// the same as Done.
+struct NoticeSheet: View {
+    static let detents: Set<PresentationDetent> = [.height(240), .medium]
+
+    let title: String
+    let sentence: String
+    let doneLabel: String
+    let onDone: () -> Void
+
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        SheetRoom(
+            title: title,
+            outlines: [SheetOutline(label: doneLabel, identifier: "kit-notice-done", action: onDone)],
+            titleIdentifier: "kit-notice"
+        ) {
+            Text(sentence)
+                .centraidType("body")
+                .foregroundStyle(Theme.color("textSoft", scheme))
+        }
+        .presentationDetents(Self.detents)
+    }
+}
+
 /// ONE ROW OF A SHEET OF CHOICES: a mark and a verb, 44pt, the whole row the
 /// target. A destructive row is `net` ink, never a red fill.
 struct SheetRow: View {

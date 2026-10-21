@@ -492,23 +492,31 @@ final class CalendarFollowReader: NSObject, CalendarReader {
     }
 }
 
-/// THE QUESTION A HELD ACCOUNT OR CALENDAR LEAVES (R-1127-9): the shared
-/// bridge chose every word, and Keep, the default, is the bold button.
+/// THE QUESTION A HELD ACCOUNT OR CALENDAR LEAVES (R-1127-9), in the kit's
+/// `ConfirmSheet` (DESIGN.md: a destructive confirm is never an alert). The
+/// shared question chose every word and built the confirm: Move to trash is
+/// its destructive verb, and KEEP, THE DEFAULT, is the sheet's cancel and what
+/// a swipe away means.
 struct PhoneFollowQuestionHost: ViewModifier {
     @ObservedObject var shell: ShellModel
 
+    /// One sheet per question: a second question is a new sheet, not the first one's words swapped.
+    private struct Asked: Identifiable {
+        let question: PhoneFollowQuestion
+        var id: String { question.originId }
+    }
+
     func body(content: Content) -> some View {
-        content.alert(
-            shell.followQuestion?.title ?? "",
-            isPresented: Binding(get: { shell.followQuestion != nil }, set: { _ in }),
-            presenting: shell.followQuestion
-        ) { question in
-            // KEEP IS THE DEFAULT, drawn bold: the alert's default action, and what a dismissal means.
-            Button(question.keepLabel, role: .cancel) { shell.answerFollowQuestion(keep: true) }
-                .keyboardShortcut(.defaultAction)
-            Button(question.trashLabel, role: .destructive) { shell.answerFollowQuestion(keep: false) }
-        } message: { question in
-            Text(question.body)
+        content.sheet(item: Binding(
+            get: { shell.followQuestion.map(Asked.init) },
+            set: { if $0 == nil, shell.followQuestion != nil { shell.answerFollowQuestion(keep: true) } }
+        )) { asked in
+            ConfirmSheet(
+                (try? Centraid_Screen_V1_Confirm(serializedBytes: asked.question.confirmBytes.data)) ?? .init(),
+                cancelLabel: asked.question.keepLabel,
+                onConfirm: { shell.answerFollowQuestion(keep: false) },
+                onDismiss: { shell.answerFollowQuestion(keep: true) }
+            )
         }
     }
 }

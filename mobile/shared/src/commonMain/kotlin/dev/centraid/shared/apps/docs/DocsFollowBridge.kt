@@ -77,6 +77,9 @@ public class DocsFollowBridge {
         }
     }
 
+    /** The title of the sheet a refused pick is told in: the act that was refused. */
+    public val failedTitle: String get() = DocsCopy.ADD_FOLLOW
+
     /** The sentence a refused pick is told in. */
     public val failed: String get() = DocsCopy.FOLLOW_FAILED
 
