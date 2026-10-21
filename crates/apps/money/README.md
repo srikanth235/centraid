@@ -26,8 +26,8 @@ The crate has two halves: the import (`import`, `rules`) and the reads and folds
 | `engine` | The folds, pure and per currency: spending (refund credit, uncategorised, transfers and future rows left out and counted), in/out/net, cash flow and savings rate, balances against checkpoints, net worth, the target reducer with carry (envelope mode dormant) and transfer proposals (moved from Tally, R-1099-38) |
 | `recurring` | Detection of weekly, biweekly, monthly, quarterly and yearly charges, projected through `centraid_vault::time` (no second expander, no stored series), the due/late/paid statuses, "seen N times" and the month-end forecast |
 | `phone` | The typed answer to each screen: Spending, Activity, Cash flow, a transaction, Accounts, Rules, Categories, the target sheet, Recurring, Home's tile, search and the import plan. No clock and no zone: `today` and the month come in as text |
-| `manifest`, `commands`, `door` | `manifest.json` (id `money`, `Coin`, `indigo`) parsed by the kit; the 20-row action table, one vault command each, `invoke_key` required, a denial a value; the real door over the vault's `execute` behind `vault-door` |
-| `year3` | A deterministic generator: 4 accounts, 18,000 rows, as Chase-shaped CSV text |
+| `manifest`, `commands` | `manifest.json` (id `money`, `Coin`, `indigo`) parsed by the kit; the 22-row action table, one vault command each (`account.*`, `txn.*`, `budget.*`, `checkpoint.*`, `rule.*`, `category.*`, `follow.statement`), `invoke_key` required, a denial a value |
+| `year3` | A deterministic generator: 4 accounts, 18,000 rows, as Chase-shaped CSV text; `tests/year3.rs` follows it through `follow.statement` |
 
 ## What this crate may not contain, and what stops it
 
@@ -74,7 +74,7 @@ Every figure is derived at read time and keyed by currency; the definitions the 
 
 ## Tests
 
-`tests/folds.rs`, `tests/phone.rs` and `tests/door.rs` run the reads, the folds and the door over the fixtures in `contracts/apps/money/` (`rows.json`, `spending.json`, `cashflow.json`, `balances.json`, `targets.json`, `transfers.json`, `recurring.json`, `rules.json`, each hand-computed and explained in its `_` field). `rules.json` is seam S2: the crate's `rules::apply` and the vault's `money.apply_rule_to_history` read the same cases. `tests/year3.rs` imports 18,000 rows through the real command path and reconciles the screens over both keyset assemblers.
+The folds, the screens and the rules are unit-tested beside their modules (`engine`, `phone`, `recurring`, `rules`). `tests/vault.rs` reads a founded vault the commands fill and holds seam S2: the crate's `rules::apply` and the vault's `rule.apply` agree on every shared case. `tests/year3.rs` follows 18,000 lines through `follow.statement` and reconciles the screens to the cent (the full profile is `#[ignore]`; a quarter of it runs by default).
 
 The import corpus:
 

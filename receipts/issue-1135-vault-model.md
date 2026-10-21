@@ -552,3 +552,61 @@ The change feed names a table and no keys for a locally committed command, and e
 #### Left for later lanes
 
 Lane 7 owns `schedule.*`, `core.*` and `media.*` in `assist`, `nativetools` and `core/tests/assist_*`, and the `ChatScopeSpec`. Money and Health own their `HomeReads.TABLES` entries and their `ShellCommandsExistSpec` names. The Swift and Compose files above want a device build and the Photos legs want a device run (the phone's grid at 50k assets is the owner's measurement).
+
+### Lane 6 — Money and Health
+
+#### What changed
+
+- **Commands** (`/home/user/centraid/crates/vault/src/commands/{money,rule,measurement,workout}.rs`): `account.add|edit|set_opening|remember_layout`, `txn.categorize|void|link_transfer|unlink_transfer`, `budget.set|set_carry`, `checkpoint.record`, `category.add|merge`, `rule.add|edit|delete|apply`, `measurement.record`. Every command is idempotent by content and no figure is stored.
+- **The follow engine** (`/home/user/centraid/crates/vault/src/commands/follow.rs`): `follow.statement` (a line is a `source` under the account's origin; `Gone::Keep`) and `follow.health` (a workout is an `activity` plus a `workout` row; matched by kind and start minute; `Gone::Forget`; new `window` knob and a `since` input so a complete read judges only what it covers).
+- **Reads** (`/home/user/centraid/crates/apps/{money,health}`): both rewritten over the model's tables, one table at a time; the `vault-door` feature and the second door are deleted; the core's arms (`/home/user/centraid/crates/core/src/app_query/{money,health}.rs`) answer the same messages, with the unfillable fields `reserved`; the demo ledger is seeded through the commands (`crates/core/src/example.rs`).
+- **Shell**: Money and Health machines send the new commands; `PhoneSync`, `PhonePlan`, `CorePhoneStore` and every fingerprint and detach path are deleted; `HealthImport` follows through `follow.health` and `measurement.record`; `PhonePages` keeps the Files page reads. `MONEY_TABLES`, the Health table sets and the tiles name only tables that exist.
+- **Scale**: `/home/user/centraid/crates/apps/money/tests/year3.rs` (18,000 lines through `follow.statement`) and `/home/user/centraid/crates/apps/health/tests/year3.rs` (6,570 values and 1,200 workouts), each a default sample and an `#[ignore]` full run; two journey volumes and entries in `/home/user/centraid/tests/journeys.json`, in a commit that changes only that file, every number parked under an underscore with `status: projected`.
+- **Docs**: `docs/decisions.md` records R-1135-6-1 to 13; `docs/vault-ontology.md` gains Money's and Health's verbs; `crates/apps/{money,health}/README.md`.
+
+Files: `/home/user/centraid/crates/vault/src/commands/{money,rule,measurement,workout,follow,mod,entity,tag,flag}.rs`, `/home/user/centraid/crates/vault/tests/{money_health,commands,shared_verbs}.rs`, `/home/user/centraid/crates/apps/money/{src,tests,manifest.json}`, `/home/user/centraid/crates/apps/health/{src,tests,manifest.json,Cargo.toml}`, `/home/user/centraid/crates/core/src/{app_query/{money,health,money_tests,health_tests}.rs,example.rs,api.rs}`, `/home/user/centraid/crates/core/tests/replay.rs`, `/home/user/centraid/crates/api-proto/proto/centraid/core/v1/{money,health}.proto`, `/home/user/centraid/crates/api-proto/proto/centraid/screen/v1/screen.proto`, `/home/user/centraid/copy/money.json`, `/home/user/centraid/mobile/shared/src/commonMain/kotlin/dev/centraid/shared/{apps/money,apps/health,sync/phone,shell}/`, `/home/user/centraid/mobile/shared/src/jvmTest/kotlin/dev/centraid/shared/{MoneyScreensSpec,HealthScreensSpec,HealthFollowSpec,ShellCommandsExistSpec}.kt`.
+
+**Native files changed and not compiled** (no Xcode or Android SDK on this host), 2: `/home/user/centraid/mobile/iosApp/Sources/Money/MoneyManageViews.swift` and `/home/user/centraid/mobile/androidApp/src/main/kotlin/dev/centraid/android/screens/money/MoneyPages.kt` (the rule name field removed). `HealthConnectReader` and `HealthKitReader` use only `HealthImport.instantOf` and `PhoneWorkout`, which kept their signatures.
+
+#### Rulings
+
+R-1135-6-1 to R-1135-6-13 are in [docs/decisions.md](../docs/decisions.md#lane-6--money-and-health-1135). In one line each: **1** a line is a source under the account's one statement origin; **2** a restatement never overwrites what the member decided; **3** a rule has no name; **4** `rule.apply` files by the bank's words and the most specific rule decides; **5** a transfer is `transfer_id` on both halves; **6** no figure is stored; **7** a workout is found again by kind and start minute; **8** a complete read judges only the window it began at; **9** no fingerprint, detach or store-gone question; **10** unfillable fields are reserved; **11** the known-commands floor is 100; **12** the tiles name their tables as literals; **13** the profiles are the old scale and the full run is ignored.
+
+#### Falsification
+
+1. **"A complete read judges only the workouts dated inside the window it began at."** Check: `window: Some("starts")` set to `None` on the health map (throwaway, restored). Red: `a_complete_read_judges_only_the_workouts_inside_the_window_it_began_at` (`crates/vault/tests/money_health.rs`), `forgotten` 1 where 0 is expected: the 90-day read took the older run's source.
+2. **"Only a changed day value is written."** Check: the comparison in `measurement.record` replaced by `was.is_some()` (throwaway, restored). Red: `days_are_recorded_once_and_only_a_changed_value_is_written`, `(written, unchanged)` `(0, 2)` where `(1, 1)` is expected.
+
+Two claims the first run got wrong, found by running them: the `since` bound did not exist (a complete 90-day read forgot every older workout), and a record with no `workout` object created no `workout` row, so page two of the workouts was empty (`workout::settle` writes it).
+
+#### Verification
+
+| Command | Result |
+| --- | --- |
+| `cargo build --workspace --all-targets --locked` | clean |
+| `cargo test -p centraid-vault -p centraid-apps-money -p centraid-apps-health -p centraid-apps-kit -p centraid-search` | pass (vault `money_health` 14, money 57 + 41 + 6 + 2, health 19 + 3 + 2) |
+| `cargo test -p centraid-core` | Money and Health pass (20), `replay` passes; the reds are listed below |
+| `cargo clippy -p centraid-vault -p centraid-apps-money -p centraid-apps-health -p centraid-core --all-targets --locked -- -D warnings` | clean |
+| `cargo xtask rules` | clean |
+| `export-ladder-ddl` against `contracts/schema/vault-ddl.sql` | identical |
+| `./gradlew -p mobile :shared:jvmTest` (`LC_ALL=C.UTF-8`) | 1,546 run, 8 red, none Money, Health or Phone |
+| `./gradlew -p mobile :core:jvmTest` | pass |
+| `year3` (full, debug build) | Money: 18,000 lines follow in 4.4 s, six screens 19.8 s; Health: 6,570 values and 1,200 workouts in 0.8 s, the screens 92 ms |
+| `git push -u origin claude/amazing-fermat-9nt6tr` | pass |
+
+#### Inherited red this lane leaves
+
+| Crate / target | Red | Why, and who |
+| --- | --- | --- |
+| `crates/core` | `assist_*` and `send`; lib `api` 2 (the `core_vault` allowlist; an empty vault name against the new `CHECK(length(trim(name)) > 0)`); Locker 1 (`the_shelf_is_metadata...`) | lane 7 for the first; lane 1 residue for the rest |
+| `mobile/shared` `:jvmTest` | 8 | `ChatScopeSpec` 4 (lane 7); `ShellCommandsExistSpec` 2 (`chat.*`, `chat.thread`, `core.rename_vault`; lanes 7 and 8); `AppReadsSpec` 1 (Locker's old tables); `HomeMachineSpec` 1 (tile packing, red before this lane) |
+| `mobile/core` `:core:jvmTest` | 0 | |
+
+#### Where the kernel and the earlier lanes were awkward
+
+Commit `dc3cb1e22`'s subject is 109 characters, over the limit, and was pushed before it was noticed. `receipt_id` in a replayed command's output is intentionally empty (the journal row is the evidence), which the old `replay` test asserted on. The vault's `keyset_page` quotes the `from` as one identifier, so a read that wants a join must be several pages; Money's month read is four. `tests/common` in the Money crate and `reads.rs` in Health each carry a `World`; the kit could own one, which a later lane may do.
+
+#### Left for later lanes
+
+Lane 7 owns `chat.*`, `schedule.*` and the `ChatScopeSpec`. The two native Money files want a device build. `bun run format` and `cargo xtask doc-links` were not run whole.
+

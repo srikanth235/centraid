@@ -93,11 +93,7 @@
                   "type": "number"
                 }
               },
-              "required": [
-                "day",
-                "metric",
-                "value"
-              ],
+              "required": ["day", "metric", "value"],
               "type": "object"
             },
             "maxItems": 4000,
@@ -108,9 +104,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "days"
-        ],
+        "required": ["days"],
         "type": "object"
       },
       "output": {
@@ -142,22 +136,13 @@
             "additionalProperties": false,
             "properties": {
               "config": {
-                "type": [
-                  "object",
-                  "null"
-                ]
+                "type": ["object", "null"]
               },
               "device_id": {
-                "type": [
-                  "string",
-                  "null"
-                ]
+                "type": ["string", "null"]
               },
               "fills": {
-                "type": [
-                  "string",
-                  "null"
-                ]
+                "type": ["string", "null"]
               },
               "label": {
                 "type": "string"
@@ -166,10 +151,7 @@
                 "type": "string"
               }
             },
-            "required": [
-              "ref",
-              "label"
-            ],
+            "required": ["ref", "label"],
             "type": "object"
           },
           "records": {
@@ -177,10 +159,7 @@
               "additionalProperties": false,
               "properties": {
                 "device_id": {
-                  "type": [
-                    "string",
-                    "null"
-                  ]
+                  "type": ["string", "null"]
                 },
                 "external_id": {
                   "type": "string"
@@ -189,10 +168,7 @@
                   "type": "object"
                 }
               },
-              "required": [
-                "external_id",
-                "fields"
-              ],
+              "required": ["external_id", "fields"],
               "type": "object"
             },
             "type": "array"
@@ -201,10 +177,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "origin",
-          "records"
-        ],
+        "required": ["origin", "records"],
         "type": "object"
       },
       "output": {
@@ -234,9 +207,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "id"
-        ],
+        "required": ["id"],
         "type": "object"
       },
       "output": {
@@ -274,11 +245,7 @@
           }
         },
         "additionalProperties": false,
-        "required": [
-          "today",
-          "day_start",
-          "day_end"
-        ]
+        "required": ["today", "day_start", "day_end"]
       },
       "output": {
         "type": "object",
@@ -302,11 +269,7 @@
             ]
           },
           "range": {
-            "enum": [
-              "week",
-              "month",
-              "year"
-            ]
+            "enum": ["week", "month", "year"]
           },
           "today": {
             "type": "string",
@@ -314,11 +277,7 @@
           }
         },
         "additionalProperties": false,
-        "required": [
-          "metric",
-          "range",
-          "today"
-        ]
+        "required": ["metric", "range", "today"]
       },
       "output": {
         "type": "object",
@@ -332,11 +291,7 @@
         "type": "object",
         "properties": {
           "range": {
-            "enum": [
-              "days_30",
-              "days_90",
-              "year"
-            ]
+            "enum": ["days_30", "days_90", "year"]
           },
           "today": {
             "type": "string",
@@ -344,10 +299,7 @@
           }
         },
         "additionalProperties": false,
-        "required": [
-          "range",
-          "today"
-        ]
+        "required": ["range", "today"]
       },
       "output": {
         "type": "object",
@@ -373,9 +325,7 @@
           }
         },
         "additionalProperties": false,
-        "required": [
-          "limit"
-        ]
+        "required": ["limit"]
       },
       "output": {
         "type": "object",
@@ -394,9 +344,7 @@
           }
         },
         "additionalProperties": false,
-        "required": [
-          "activity_id"
-        ]
+        "required": ["activity_id"]
       },
       "output": {
         "type": "object",
@@ -415,9 +363,7 @@
           }
         },
         "additionalProperties": false,
-        "required": [
-          "since"
-        ]
+        "required": ["since"]
       },
       "output": {
         "type": "object",

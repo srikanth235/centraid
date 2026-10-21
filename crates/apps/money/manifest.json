@@ -201,18 +201,10 @@
             "type": "string"
           },
           "type": {
-            "enum": [
-              "checking",
-              "savings",
-              "credit_card",
-              "cash"
-            ]
+            "enum": ["checking", "savings", "credit_card", "cash"]
           }
         },
-        "required": [
-          "title",
-          "type"
-        ],
+        "required": ["title", "type"],
         "type": "object"
       },
       "output": {
@@ -240,10 +232,7 @@
           "external_ref": {
             "maxLength": 64,
             "minLength": 1,
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "id": {
             "minLength": 1,
@@ -258,17 +247,10 @@
             "type": "string"
           },
           "type": {
-            "enum": [
-              "checking",
-              "savings",
-              "credit_card",
-              "cash"
-            ]
+            "enum": ["checking", "savings", "credit_card", "cash"]
           }
         },
-        "required": [
-          "id"
-        ],
+        "required": ["id"],
         "type": "object"
       },
       "output": {
@@ -294,11 +276,7 @@
         "additionalProperties": false,
         "properties": {
           "flag": {
-            "enum": [
-              "starred",
-              "pinned",
-              "archived"
-            ],
+            "enum": ["starred", "pinned", "archived"],
             "type": "string"
           },
           "id": {
@@ -306,10 +284,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "id",
-          "flag"
-        ],
+        "required": ["id", "flag"],
         "type": "object"
       },
       "output": {
@@ -335,11 +310,7 @@
         "additionalProperties": false,
         "properties": {
           "flag": {
-            "enum": [
-              "starred",
-              "pinned",
-              "archived"
-            ],
+            "enum": ["starred", "pinned", "archived"],
             "type": "string"
           },
           "id": {
@@ -347,10 +318,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "id",
-          "flag"
-        ],
+        "required": ["id", "flag"],
         "type": "object"
       },
       "output": {
@@ -383,10 +351,7 @@
             "type": "integer"
           }
         },
-        "required": [
-          "id",
-          "opening_minor"
-        ],
+        "required": ["id", "opening_minor"],
         "type": "object"
       },
       "output": {
@@ -418,22 +383,13 @@
             "additionalProperties": false,
             "properties": {
               "config": {
-                "type": [
-                  "object",
-                  "null"
-                ]
+                "type": ["object", "null"]
               },
               "device_id": {
-                "type": [
-                  "string",
-                  "null"
-                ]
+                "type": ["string", "null"]
               },
               "fills": {
-                "type": [
-                  "string",
-                  "null"
-                ]
+                "type": ["string", "null"]
               },
               "label": {
                 "type": "string"
@@ -442,10 +398,7 @@
                 "type": "string"
               }
             },
-            "required": [
-              "ref",
-              "label"
-            ],
+            "required": ["ref", "label"],
             "type": "object"
           },
           "records": {
@@ -453,10 +406,7 @@
               "additionalProperties": false,
               "properties": {
                 "device_id": {
-                  "type": [
-                    "string",
-                    "null"
-                  ]
+                  "type": ["string", "null"]
                 },
                 "external_id": {
                   "type": "string"
@@ -465,10 +415,7 @@
                   "type": "object"
                 }
               },
-              "required": [
-                "external_id",
-                "fields"
-              ],
+              "required": ["external_id", "fields"],
               "type": "object"
             },
             "type": "array"
@@ -477,10 +424,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "origin",
-          "records"
-        ],
+        "required": ["origin", "records"],
         "type": "object"
       },
       "output": {
@@ -517,11 +461,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "account_id",
-          "day",
-          "balance_minor"
-        ],
+        "required": ["account_id", "day", "balance_minor"],
         "type": "object"
       },
       "output": {
@@ -555,35 +495,22 @@
             "properties": {
               "amount_col": {
                 "minimum": 0,
-                "type": [
-                  "integer",
-                  "null"
-                ]
+                "type": ["integer", "null"]
               },
               "credit_col": {
                 "minimum": 0,
-                "type": [
-                  "integer",
-                  "null"
-                ]
+                "type": ["integer", "null"]
               },
               "date_col": {
                 "minimum": 0,
                 "type": "integer"
               },
               "date_order": {
-                "enum": [
-                  "mdy",
-                  "dmy",
-                  "ymd"
-                ]
+                "enum": ["mdy", "dmy", "ymd"]
               },
               "debit_col": {
                 "minimum": 0,
-                "type": [
-                  "integer",
-                  "null"
-                ]
+                "type": ["integer", "null"]
               },
               "delimiter": {
                 "maxLength": 1,
@@ -601,31 +528,17 @@
               },
               "indicator_col": {
                 "minimum": 0,
-                "type": [
-                  "integer",
-                  "null"
-                ]
+                "type": ["integer", "null"]
               },
               "indicator_out_value": {
-                "type": [
-                  "string",
-                  "null"
-                ]
+                "type": ["string", "null"]
               },
               "memo_col": {
                 "minimum": 0,
-                "type": [
-                  "integer",
-                  "null"
-                ]
+                "type": ["integer", "null"]
               },
               "sign_mode": {
-                "enum": [
-                  "signed",
-                  "debit_credit",
-                  "indicator",
-                  "flip"
-                ]
+                "enum": ["signed", "debit_credit", "indicator", "flip"]
               },
               "skip_lines": {
                 "maximum": 1000,
@@ -644,10 +557,7 @@
             "type": "object"
           }
         },
-        "required": [
-          "id",
-          "layout"
-        ],
+        "required": ["id", "layout"],
         "type": "object"
       },
       "output": {
@@ -674,10 +584,7 @@
         "properties": {
           "category_id": {
             "minLength": 1,
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "ids": {
             "items": {
@@ -689,10 +596,7 @@
             "type": "array"
           }
         },
-        "required": [
-          "ids",
-          "category_id"
-        ],
+        "required": ["ids", "category_id"],
         "type": "object"
       },
       "output": {
@@ -722,9 +626,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "id"
-        ],
+        "required": ["id"],
         "type": "object"
       },
       "output": {
@@ -758,10 +660,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "id",
-          "title"
-        ],
+        "required": ["id", "title"],
         "type": "object"
       },
       "output": {
@@ -795,10 +694,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "id",
-          "other_id"
-        ],
+        "required": ["id", "other_id"],
         "type": "object"
       },
       "output": {
@@ -828,9 +724,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "id"
-        ],
+        "required": ["id"],
         "type": "object"
       },
       "output": {
@@ -857,10 +751,7 @@
         "properties": {
           "amount_minor": {
             "minimum": 0,
-            "type": [
-              "integer",
-              "null"
-            ]
+            "type": ["integer", "null"]
           },
           "carry": {
             "type": "boolean"
@@ -879,11 +770,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "month",
-          "category_id",
-          "amount_minor"
-        ],
+        "required": ["month", "category_id", "amount_minor"],
         "type": "object"
       },
       "output": {
@@ -920,11 +807,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "month",
-          "category_id",
-          "carry"
-        ],
+        "required": ["month", "category_id", "carry"],
         "type": "object"
       },
       "output": {
@@ -951,10 +834,7 @@
         "properties": {
           "account_id": {
             "minLength": 1,
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "category_id": {
             "minLength": 1,
@@ -965,25 +845,15 @@
             "type": "string"
           },
           "match": {
-            "enum": [
-              "is",
-              "contains",
-              "matches"
-            ]
+            "enum": ["is", "contains", "matches"]
           },
           "max": {
             "minimum": 0,
-            "type": [
-              "integer",
-              "null"
-            ]
+            "type": ["integer", "null"]
           },
           "min": {
             "minimum": 0,
-            "type": [
-              "integer",
-              "null"
-            ]
+            "type": ["integer", "null"]
           },
           "position": {
             "minimum": 0,
@@ -995,11 +865,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "match",
-          "text",
-          "category_id"
-        ],
+        "required": ["match", "text", "category_id"],
         "type": "object"
       },
       "output": {
@@ -1026,10 +892,7 @@
         "properties": {
           "account_id": {
             "minLength": 1,
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "category_id": {
             "minLength": 1,
@@ -1040,25 +903,15 @@
             "type": "string"
           },
           "match": {
-            "enum": [
-              "is",
-              "contains",
-              "matches"
-            ]
+            "enum": ["is", "contains", "matches"]
           },
           "max": {
             "minimum": 0,
-            "type": [
-              "integer",
-              "null"
-            ]
+            "type": ["integer", "null"]
           },
           "min": {
             "minimum": 0,
-            "type": [
-              "integer",
-              "null"
-            ]
+            "type": ["integer", "null"]
           },
           "position": {
             "minimum": 0,
@@ -1070,9 +923,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "id"
-        ],
+        "required": ["id"],
         "type": "object"
       },
       "output": {
@@ -1102,9 +953,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "id"
-        ],
+        "required": ["id"],
         "type": "object"
       },
       "output": {
@@ -1171,9 +1020,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "title"
-        ],
+        "required": ["title"],
         "type": "object"
       },
       "output": {
@@ -1207,10 +1054,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "from_id",
-          "into_id"
-        ],
+        "required": ["from_id", "into_id"],
         "type": "object"
       },
       "output": {
@@ -1236,11 +1080,7 @@
         "additionalProperties": false,
         "properties": {
           "flag": {
-            "enum": [
-              "starred",
-              "pinned",
-              "archived"
-            ],
+            "enum": ["starred", "pinned", "archived"],
             "type": "string"
           },
           "id": {
@@ -1248,10 +1088,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "id",
-          "flag"
-        ],
+        "required": ["id", "flag"],
         "type": "object"
       },
       "output": {
@@ -1283,9 +1120,7 @@
           }
         },
         "additionalProperties": false,
-        "required": [
-          "month"
-        ]
+        "required": ["month"]
       },
       "output": {
         "type": "object",
@@ -1321,9 +1156,7 @@
           }
         },
         "additionalProperties": false,
-        "required": [
-          "month"
-        ]
+        "required": ["month"]
       },
       "output": {
         "type": "object",
@@ -1341,9 +1174,7 @@
           }
         },
         "additionalProperties": false,
-        "required": [
-          "txn_id"
-        ]
+        "required": ["txn_id"]
       },
       "output": {
         "type": "object",
@@ -1362,9 +1193,7 @@
           }
         },
         "additionalProperties": false,
-        "required": [
-          "through"
-        ]
+        "required": ["through"]
       },
       "output": {
         "type": "object",
@@ -1435,11 +1264,7 @@
           }
         },
         "additionalProperties": false,
-        "required": [
-          "month",
-          "category_id",
-          "currency"
-        ]
+        "required": ["month", "category_id", "currency"]
       },
       "output": {
         "type": "object",
@@ -1471,9 +1296,7 @@
           }
         },
         "additionalProperties": false,
-        "required": [
-          "month"
-        ]
+        "required": ["month"]
       },
       "output": {
         "type": "object",
@@ -1500,10 +1323,7 @@
           }
         },
         "additionalProperties": false,
-        "required": [
-          "month",
-          "term"
-        ]
+        "required": ["month", "term"]
       },
       "output": {
         "type": "object",
