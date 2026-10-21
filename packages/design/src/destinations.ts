@@ -1,18 +1,8 @@
-// Concept map of which glyph stands for which place — not the destination table.
-// Shell (`launcherModel.ts`) and phone (`places.ts`) keep their own lists:
-// ids disagree (`insights`/`stats`, `atlas`/`data`, `household`/`devices`) and
-// each surface persists its own pin keys. Merging would orphan stored pin sets.
-// Each surface maps its id here; a one-surface place simply has no entry.
+// Shared glyph concepts; surface-specific destination IDs retain their pin keys.
 
 import type { IconName } from "./icons";
 
-/**
- * The ID of a place's glyph concept — NOT the member's word for it (#1015,
- * R-SH-12). Three keys already diverge from what the surfaces print
- * (`analytics` is "Activity", `data` is "Vault", `devices` is "Household"),
- * and `automations` is "Rules" on both seats; the label lives in
- * `launcherModel.ts` / `places.ts`, which is the only place it may live.
- */
+/** Glyph concepts; surface labels and persisted pin keys remain surface-owned (#1015). */
 export type DestinationConcept =
   | "analytics"
   | "assistant"

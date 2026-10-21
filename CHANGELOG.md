@@ -12,6 +12,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+- CI scans the root Rust workspace lockfile, refuses empty supply-chain scans, installs buf in both nightly consumers, and records the existing assistant unsafe surface with its safety evidence ([#1108](https://github.com/srikanth235/centraid/issues/1108)).
+
 ### Added
 
 - **Health: the phone's daily totals in the vault** ([#1129](https://github.com/srikanth235/centraid/issues/1129)). A new Health app follows the phone's health store, Apple Health on iOS and Health Connect on Android, one way and read only: nothing is ever written back. After a member taps Connect and chooses what Health may read, the vault keeps a daily total of steps, active energy, exercise minutes, sleep, resting heart rate and weight, and each workout with its distance, energy, heart rate and climb. The first connect brings in a year of days and 90 days of workouts. Each time the app comes forward it re-reads the last seven days, so a watch that syncs late corrects a day instead of adding to it. **Today** compares each number with the member's own 30-day typical, not a target; **Trends** draws a week, month and year per metric; **Workouts** lists them; and Home's tile shows today's steps and last night's sleep. Units follow the phone's locale. A type the phone refused or never answered is named, and a workout deleted on the phone stays in the vault. Health is off for Chat. Every Health read states the phone's time zone and the core places the day, a workout's time and every difference in it. Rung three adds the `health` pack and makes `core.activity` mutable. Android is compiled and was not run on a device.
@@ -236,3 +238,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Read-only CLI verbs (`devices list`, `backup status`, `backup list`) report that the running daemon owns the database instead of a raw `database is locked` stack trace ([#568](https://github.com/srikanth235/centraid/issues/568))
 - macOS network-filesystem detection reads the mount table's filesystem type; the previous probe could never match and also suppressed its own fallback ([#568](https://github.com/srikanth235/centraid/issues/568))
 - Re-opening the founding QR while a restore is downloading no longer destroys that restore ([#568](https://github.com/srikanth235/centraid/issues/568))
+
+- #1108: Retry transient lane-health gateway failures without suppressing errors; reconcile deleted push commands and pin surviving bundle identities.
+
+- #1108: Repair Money protobuf enum sizing, existing card-route metadata, synthetic secret-scanner fixture naming and runtime test handles after #1112; preserve checks and budgets.

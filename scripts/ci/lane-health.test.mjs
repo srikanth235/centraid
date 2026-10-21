@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   chronicRed,
+  gh,
   firstAttemptRates,
   liveLanes,
   onlyLive,
@@ -424,5 +425,43 @@ test("the scorer is never judged by its own history", () => {
   assert.ok(
     liveLanes(runs).has("lane-health"),
     "without the exclusion it is judged"
+  );
+});
+
+test("GitHub gateway failures retry visibly and preserve the fetched data", async () => {
+  const statuses = [502, 503, 200];
+  const waits = [],
+    warnings = [];
+  const result = await gh("https://api.github.com/example", "test-token", {
+    request: async () =>
+      new Response(JSON.stringify({ runs: [1] }), { status: statuses.shift() }),
+    wait: async (ms) => {
+      waits.push(ms);
+    },
+    warn: (message) => warnings.push(message),
+  });
+  assert.deepEqual(result, { runs: [1] });
+  assert.deepEqual(waits, [1000, 2000]);
+  assert.equal(warnings.length, 2);
+  assert.ok(warnings.every((message) => !message.includes("test-token")));
+});
+
+test("persistent gateway failures and authorization failures remain fatal", async () => {
+  await Promise.all(
+    [502, 503, 504, 401, 403].map(async (status) => {
+      let calls = 0;
+      await assert.rejects(
+        gh("https://api.github.com/example", undefined, {
+          request: async () => {
+            calls += 1;
+            return new Response(null, { status });
+          },
+          wait: async () => {},
+          warn: () => {},
+        }),
+        new RegExp(String(status), "u")
+      );
+      assert.equal(calls, status >= 500 ? 3 : 1);
+    })
   );
 });

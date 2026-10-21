@@ -260,7 +260,10 @@ fn a_thread_scoped_to_the_task_domain_climbs_to_agenda_with_everything_it_holds(
         ),
         0
     );
-    assert_eq!(one::<i64>(&vault, "SELECT COUNT(*) FROM fts_chat_thread"), 2);
+    assert_eq!(
+        one::<i64>(&vault, "SELECT COUNT(*) FROM fts_chat_thread"),
+        2
+    );
 
     // THE CLIMBED FILE IS THE FOUNDED FILE: object for object, the same schema.
     let fresh = dir.join("fresh.db");

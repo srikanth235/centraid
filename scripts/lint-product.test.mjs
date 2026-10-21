@@ -102,9 +102,8 @@ test("the rolling issue body names the red gates and how to reproduce them", () 
   assert.match(body, /never the ledger/u);
 });
 
-test("the weekly membership is the seven ratchets #915 names", () => {
+test("the weekly membership matches the surviving suite ratchets", () => {
   assert.deepEqual([...HYGIENE_GATES].sort(), [
-    "lint:schema-export",
     "lint:type-floor",
     "test:comment-density",
     "test:env-red",

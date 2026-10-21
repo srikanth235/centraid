@@ -79,6 +79,8 @@ The drift line is the gate: `emitters` in `cargo xtask gate --profile pr` and th
 
 ## The public web surfaces
 
+After changing the design palette, run `bun run site:tokens` and commit all three outputs: the home and docs `centraid-tokens.css` files and `scripts/test-report/report-tokens.css`. Then run `bun run lint:site-tokens` to verify byte-for-byte emitter freshness. These generated sheets are not hand-formatted.
+
 `centraid.dev` and `centraid.dev/docs/` render in the product's design ([decisions.md](decisions.md#product-grammar-and-block-composition), 2026-08-21): `scripts/site-tokens.mjs` lowers `packages/design`'s `toCss()` and its vendored Instrument Sans into a committed `centraid-tokens.css` per surface, and `bun run lint:site-tokens` fails on drift. The rows below are what a long-form public page does that a product screen does not. Each is a current decision, not a to-do.
 
 | Divergence | Decision | Enforcement / reason |

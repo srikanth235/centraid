@@ -1,13 +1,5 @@
-// Built-in product catalog — the shipped blueprint apps, not demo placeholders.
-// Shared across desktop + mobile so launcher identity cannot drift by client.
-//
-// `colorKey` names the app's slot on the identity hue wheel (`APP_HUES` in
-// palette.ts). The Binding Layer assigns them by content character, not by
-// taste: locker 0 (rose), photos 28 (amber), health 110 (olive, #1129,
-// R-1129-10), agenda 150 (forest), docs 210 (teal), notes 255 (slate), people
-// 320 (violet), money 290 (indigo, taken from the freed Tally slot, #1099). The
-// ochre slot (70) is free since Tasks folded into Agenda (#1128). Home takes no
-// hue at all — it renders in `--text-soft`.
+// Shared app identity; colorKey selects APP_HUES. Health uses olive;
+// Tasks opens in Agenda, leaving ochre free. Home has no hue.
 
 import type { IconName } from "./icons";
 import { palette } from "./palette";

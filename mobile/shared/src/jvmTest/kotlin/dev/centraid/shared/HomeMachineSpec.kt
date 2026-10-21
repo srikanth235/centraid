@@ -327,8 +327,8 @@ class HomeMachineSpec : StringSpec({
             // Smalls pair.
             listOf("notes", "money"),
             listOf("health", "people"),
+            // Each app appears once; Locker is the final unpaired small.
             listOf("locker"),
-            listOf("people", "locker"),
         )
     }
 

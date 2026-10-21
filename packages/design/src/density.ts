@@ -19,20 +19,13 @@ export const spacing = {
   6: 32,
 } as const satisfies DensityScale;
 
-/** The only values below the 4px base, NAMED so the exception is claimed
- *  rather than eyeballed: seams, not rhythm steps. A third is a system
- *  change, never a call-site decision. */
+/** Named sub-4px seams; additions require a system decision. */
 export const subBase = {
   /** The seam between two images in a mosaic — a cut, not a gap. */
   gutter: 2,
   /** The rule inside a tight text stack. */
   hair: 1,
-  /** The inline inset of a chip drawn ON a photograph tile — the photo
-   *  tile's custody mark and state chip (proto:4019, `padding: 1px 3px`).
-   *  The third seam, recorded as a system change (#1015, R-NY-15): a tile is
-   *  a quarter of a phone's width, so the chip is a seam on the image, not a
-   *  row on a page — the page margin would swallow the cell and the nearest
-   *  rung (4) visibly fattens the chip. */
+  /** Photo-tile chip inset: a seam, not page rhythm (#1015, R-NY-15). */
   chip: 3,
 } as const;
 

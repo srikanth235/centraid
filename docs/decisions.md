@@ -2767,6 +2767,10 @@ Ruled 2026-10-14. The owner adopted the proposed answers to the wave-0 questions
 | **R-1099-68**'s "a rule's amount limits and account stay as they are" and "the number cannot be cleared from the phone" | **R-1119-2**: the rule editor sends its limits and account, and the account editor removes the number after a confirm ([#1119](https://github.com/srikanth235/centraid/issues/1119)). |
 | **R-1099-83**'s "A transaction card opens Money's home until the shell has a row route" | **R-1099-86** ([#1115](https://github.com/srikanth235/centraid/issues/1115)): the shell has the route, so the card opens the row. |
 
+## Current-main CI integration repair (#1108)
+
+The repair under #1108 follows [typography and design contracts](#typography-and-design-contracts): the earlier comment condensation changes no tokens or executable TypeScript. Money's existing iOS transaction route satisfies R-1099-83's conditional hand-off, so the Rust card table records a row route. Existing enum-size, secret-scan, runtime compiler and feedback-time checks remain enforced; no gate budget or device park changes. Evidence is in [the receipt](../receipts/issue-1108-main-ci.md).
+
 ## Month-position recurrence (#1119)
 
 Ruled 2026-10-15 by the owner on [#1119](https://github.com/srikanth235/centraid/issues/1119), item 1.
