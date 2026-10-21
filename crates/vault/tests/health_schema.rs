@@ -441,10 +441,11 @@ fn the_rung_is_a_climb_a_file_at_two_reaches_three_with_its_activities_kept() {
         event(&vault, "e1");
         link(&vault, "l1", "calendar", "k-1", "e1").expect("a calendar link");
     }
-    // WIND IT BACK to rung two, then write the rows the old shape let through: an activity with
-    // no `updated_at` or `row_version`, under a concept rung one seeds.
+    // WIND IT BACK to rung two (rung four first), then write the rows the old shape let through:
+    // an activity with no `updated_at` or `row_version`, under a concept rung one seeds.
     {
         let connection = Connection::open(&path).expect("the file opens");
+        common::undo_rung_four(&connection);
         common::undo_rung_three(&connection);
         connection
             .execute_batch(&format!(
@@ -468,10 +469,10 @@ fn the_rung_is_a_climb_a_file_at_two_reaches_three_with_its_activities_kept() {
             "the file really is at rung two's shape"
         );
     }
-    assert_eq!(head_version(), 3);
+    assert_eq!(head_version(), 4);
 
     let vault = Vault::open(&path).expect("a file at rung two opens and climbs");
-    assert_eq!(count(&vault, "PRAGMA user_version"), 3);
+    assert_eq!(count(&vault, "PRAGMA user_version"), 4);
     // The row is kept whole, stamped as of its making, at its first version.
     assert_eq!(
         count(

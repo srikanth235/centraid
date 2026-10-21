@@ -52,6 +52,9 @@ pub const DNS_SD_TYPE: &str = "_centraid-gateway._tcp";
 /// are refused.
 const SETTLE: Duration = Duration::from_millis(400);
 
+/// How often the tool is looked at while it settles.
+const WATCH: Duration = Duration::from_millis(20);
+
 /// The shell that holds `dns-sd` for as long as this process holds its
 /// standard input. `$@` is the tool and its arguments, passed positionally:
 /// nothing is interpolated into the script. Standard input is duplicated to
@@ -98,7 +101,11 @@ impl SystemRegistration {
         Self::start_after(program, gateway_id, port, SETTLE).await
     }
 
-    /// [`Self::start`], judging the tool after `settle` rather than the usual wait.
+    /// [`Self::start`], judging the tool over `settle` rather than the usual wait.
+    ///
+    /// The tool is watched for the whole window and a failure is answered the
+    /// moment it exits, so a long window costs nothing when the tool fails: only
+    /// a registration that holds waits it out.
     ///
     /// # Errors
     ///
@@ -119,14 +126,20 @@ impl SystemRegistration {
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .spawn()?;
-        tokio::time::sleep(settle).await;
-        if let Some(status) = child.try_wait()? {
-            return Err(std::io::Error::other(format!(
-                "{} exited at once: {status}",
-                program.display()
-            )));
+        let deadline = tokio::time::Instant::now() + settle;
+        loop {
+            if let Some(status) = child.try_wait()? {
+                return Err(std::io::Error::other(format!(
+                    "{} exited at once: {status}",
+                    program.display()
+                )));
+            }
+            let now = tokio::time::Instant::now();
+            if now >= deadline {
+                return Ok(Self { child: Some(child) });
+            }
+            tokio::time::sleep(WATCH.min(deadline - now)).await;
         }
-        Ok(Self { child: Some(child) })
     }
 }
 
@@ -255,6 +268,32 @@ mod tests {
             .is_ok_and(|status| status.success())
     }
 
+    /// How long a fake is given to START. A fake is a file written a moment
+    /// ago, and on macOS the first exec of a new executable waits on the
+    /// system's code assessment, which it runs one file at a time: about half
+    /// a second each on the owner's Mac, and 7.7 s for sixteen written at once
+    /// (2026-10-21). Under a parallel gate a fake can start seconds late, so a
+    /// fixed few seconds was a guess about the rest of the machine. Every wait
+    /// answers the moment its condition holds; this only bounds a failure.
+    const FIRST_EXEC: Duration = Duration::from_secs(60);
+
+    /// The line a fake noted at `path`, once it is WHOLE. The shell creates the
+    /// file before `echo` writes into it, so a file that exists can still be
+    /// empty; `echo` writes its line in one `write`, so a file that ends in a
+    /// newline holds all of it.
+    async fn noted(path: &Path) -> Option<String> {
+        let deadline = tokio::time::Instant::now() + FIRST_EXEC;
+        loop {
+            match std::fs::read_to_string(path) {
+                Ok(line) if line.ends_with('\n') => return Some(line.trim().to_owned()),
+                _ if tokio::time::Instant::now() >= deadline => return None,
+                _ => tokio::time::sleep(Duration::from_millis(20)).await,
+            }
+        }
+    }
+
+    /// `done` holds within five seconds: for a process already running, which
+    /// no assessment delays.
     async fn eventually(mut done: impl FnMut() -> bool) -> bool {
         for _ in 0..100 {
             if done() {
@@ -271,32 +310,28 @@ mod tests {
     #[tokio::test]
     async fn dns_sd_is_run_with_the_registration_and_withdrawn_when_dropped() {
         let dir = tempfile::tempdir().expect("a directory");
-        let noted = dir.path().join("noted");
+        let notes = dir.path().join("noted");
         let program = fake_dns_sd(
             dir.path(),
             &format!(
-                "echo $$ > {noted}.pid\necho \"$@\" > {noted}.args\nexec sleep 60",
-                noted = noted.display()
+                "echo $$ > {notes}.pid\necho \"$@\" > {notes}.args\nexec sleep 60",
+                notes = notes.display()
             ),
         );
         let registration = SystemRegistration::start(&program, &id(), 8443)
             .await
             .expect("the tool stays registered");
-        assert!(
-            eventually(|| dir.path().join("noted.args").is_file()).await,
-            "the tool ran"
-        );
-        let args = std::fs::read_to_string(dir.path().join("noted.args")).expect("it ran");
+        let pid = noted(&dir.path().join("noted.pid"))
+            .await
+            .expect("the tool ran and noted itself");
+        let args = noted(&dir.path().join("noted.args"))
+            .await
+            .expect("the tool noted its arguments");
         assert_eq!(
-            args.trim(),
+            args,
             "-R centraid-gateway-01234567 _centraid-gateway._tcp local 8443 \
              gw=0123456789abcdef0123456789abcdef v=2"
         );
-        assert!(eventually(|| dir.path().join("noted.pid").is_file()).await);
-        let pid = std::fs::read_to_string(dir.path().join("noted.pid"))
-            .expect("it noted itself")
-            .trim()
-            .to_owned();
         assert!(alive(&pid), "registered while the gateway holds it");
 
         drop(registration);
@@ -313,13 +348,15 @@ mod tests {
     async fn a_tool_that_exits_at_once_is_not_a_registration() {
         let dir = tempfile::tempdir().expect("a directory");
         let failing = fake_dns_sd(dir.path(), "exit 3");
-        let error = SystemRegistration::start_after(&failing, &id(), 8443, Duration::from_secs(3))
+        // The window is the fake's first exec, not a guess at "at once": a
+        // failure is answered the moment the tool exits, however late it ran.
+        let error = SystemRegistration::start_after(&failing, &id(), 8443, FIRST_EXEC)
             .await
             .expect_err("it exited");
         assert!(error.to_string().contains("exited at once"), "{error}");
         let missing = dir.path().join("no-such-dns-sd");
         assert!(
-            SystemRegistration::start_after(&missing, &id(), 8443, Duration::from_secs(3))
+            SystemRegistration::start_after(&missing, &id(), 8443, FIRST_EXEC)
                 .await
                 .is_err(),
             "a program that is not there registers nothing"
@@ -344,11 +381,9 @@ mod tests {
         let mut registration = SystemRegistration::start(&program, &id(), 8443)
             .await
             .expect("registered");
-        assert!(eventually(|| dir.path().join("pid").is_file()).await);
-        let pid = std::fs::read_to_string(dir.path().join("pid"))
-            .expect("it noted itself")
-            .trim()
-            .to_owned();
+        let pid = noted(&dir.path().join("pid"))
+            .await
+            .expect("the tool ran and noted itself");
         assert!(alive(&pid));
         // What the kernel does when the gateway dies: close its end.
         let child = registration.child.as_mut().expect("held");

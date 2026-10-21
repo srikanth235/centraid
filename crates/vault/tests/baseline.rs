@@ -22,8 +22,8 @@
 //!
 //! - what v1 ADDED — the revision graph's four guards (#1020, D-1020-N2), the
 //!   collection kind's guard, the Locker's one-generation index, the chat, the
-//!   widened search indexes and their vocabularies, Money, rung two's phone link and rung
-//!   three's health pack — named in `ADDED_OBJECTS`;
+//!   widened search indexes and their vocabularies, Money, rung two's phone link, rung
+//!   three's health pack and rung four's message touch — named in `ADDED_OBJECTS`;
 //! - what v1 DROPPED — the planes #1029 struck, Tally (#1099), the Locker's
 //!   `retired_at` index and `notifications_notice`, and `sqlite_sequence`, which
 //!   SQLite stopped keeping once the last `AUTOINCREMENT` table went — named in
@@ -103,18 +103,20 @@ fn undo_renames(text: &str) -> String {
 /// one way, the touch), and `phone_origin` with its touch trigger (R-1127-9); and rung three
 /// (#1129): `health_daily` and `health_workout` with their touch triggers, and the two objects
 /// `core_activity` gains as it becomes mutable, its touch trigger and the page index the Workouts
-/// list and the follower walk.
+/// list and the follower walk; and rung four (#1129, F-R-1): `chat_message`'s touch trigger, as
+/// a settled or dismissed message moves its `row_version`.
 ///
 /// The corpus is a v0 file and knows nothing of v1's additions, so a founded v1
 /// file legitimately carries exactly these and nothing else. Named here rather
 /// than filtered by prefix: a guard that stopped being created, or an object
 /// arriving from somewhere, both have to show up as a failure.
-const ADDED_OBJECTS: [&str; 103] = [
+const ADDED_OBJECTS: [&str; 104] = [
     "chat_message",
     "chat_message_attachment",
     "chat_message_card",
     "chat_message_is_not_born_settled",
     "chat_message_outcome_settles_once",
+    "chat_message_touch_updated_at",
     "chat_thread",
     "chat_thread_entity_delete",
     "chat_thread_entity_insert",
@@ -857,9 +859,10 @@ fn the_two_pragmas_are_written_and_the_file_is_in_wal() {
     assert_eq!(user_version, head_version());
     // Spelled out rather than left as `head_version()` alone: a rung silently
     // vanishing would still satisfy the line above. The ladder is the baseline
-    // (squashed on 2026-10-15, Q-1029-1), rung two, the phone link (#1127), and rung three,
-    // the health pack (#1129); the next schema change makes this 4.
-    assert_eq!(user_version, 3);
+    // (squashed on 2026-10-15, Q-1029-1), rung two, the phone link (#1127), rung three, the
+    // health pack (#1129), and rung four, `chat_message`'s version (#1129, F-R-1); the next
+    // schema change makes this 5.
+    assert_eq!(user_version, 4);
     assert_eq!(journal, "wal");
 }
 

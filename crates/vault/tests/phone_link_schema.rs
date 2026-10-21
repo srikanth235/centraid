@@ -92,9 +92,10 @@ fn the_rung_is_a_climb_a_file_at_one_reaches_the_head_with_its_rows_intact() {
         vault.found("Test", "Test Owner").expect("an owner");
         party(&vault, "p-old");
     }
-    // WIND IT BACK: undo rung three, then this rung's own statements, then the version.
+    // WIND IT BACK: undo rungs four and three, then this rung's own statements, then the version.
     {
         let connection = rusqlite::Connection::open(&path).expect("the file opens");
+        common::undo_rung_four(&connection);
         common::undo_rung_three(&connection);
         connection
             .execute_batch(
@@ -110,12 +111,12 @@ fn the_rung_is_a_climb_a_file_at_one_reaches_the_head_with_its_rows_intact() {
             )
             .expect("the rung is undone");
     }
-    assert_eq!(head_version(), 3);
+    assert_eq!(head_version(), 4);
 
     let vault = Vault::open(&path).expect("a file at rung one opens and climbs");
     assert_eq!(
         count(&vault, "PRAGMA user_version"),
-        3,
+        4,
         "the file reached the head"
     );
     assert_eq!(
