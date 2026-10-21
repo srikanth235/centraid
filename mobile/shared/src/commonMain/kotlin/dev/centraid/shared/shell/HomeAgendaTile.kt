@@ -22,7 +22,7 @@ import dev.centraid.shared.sync.rfc3339FromEpochMillis
 /**
  * HOME'S AGENDA TILE, ON THE CORE'S `agenda.upcoming` (#1046).
  *
- * It read `core_event` through the page door: every row, cancelled and trashed
+ * It read `event` through the page door: every row, cancelled and trashed
  * ones included, no series expanded, and `dtstart` printed as raw ISO. A
  * weekly run showed once, at its first week, for ever. Now it asks the one
  * recurrence engine (D-1020-S1) through the app-query arm and draws what that
@@ -78,15 +78,13 @@ public object HomeAgendaTile {
      * THE TABLES WHOSE CHANGES MOVE THIS TILE, and `HomeReads.TABLES` carries
      * them, so `HomeMachine.rowsChanged` re-reads on them.
      *
-     * The event itself, its calendar edge, and a series' skipped or moved
-     * occurrences — each changes which occurrence is next or what it is
-     * called. Attendees, attachments and parties decorate a row the tile does
-     * not draw, and a re-read of Home on every RSVP would be read load for a
-     * launcher that looks the same afterwards. `schedule_task` moves the due
-     * line (#1128).
+     * The event itself (`entity` carries its title and the trash), its row, and a
+     * series' skipped or moved occurrences — each changes which occurrence is next or
+     * what it is called. Guests and attachments are `edge`s and decorate a row the tile
+     * does not draw, and a re-read of Home on every RSVP would be read load for a
+     * launcher that looks the same afterwards. `task` moves the due line (#1128).
      */
-    public val TABLES: Set<String> =
-        setOf("core_event", "schedule_event_ext", "schedule_recurrence_exception", "schedule_task")
+    public val TABLES: Set<String> = setOf("entity", "event", "occurrence", "task")
 
     /** The one query, in the device's zone, over the next [WINDOW_DAYS]. */
     public fun request(now: DeviceClock.Reading): AppQueryRequest = AppQueryRequest(

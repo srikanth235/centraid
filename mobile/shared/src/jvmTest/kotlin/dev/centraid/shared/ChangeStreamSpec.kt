@@ -17,7 +17,7 @@ import centraid.screen.v1.PhotosGridData
 import centraid.screen.v1.PhotosGridEvent
 import dev.centraid.shared.apps.notes.NotesEditorMachine
 import dev.centraid.shared.apps.photos.PhotosGridMachine
-import dev.centraid.shared.apps.tasks.TasksTrashMachine
+import dev.centraid.shared.apps.notes.NotesTrashMachine
 import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.ScreenHost
 import dev.centraid.shared.shell.HomeMachine
@@ -74,9 +74,9 @@ class ChangeStreamSpec : StringSpec({
             host.effects.collect { into += it }
         }
 
-    /** A paged list showing [ids]: Tasks' trash, the kit's machine. */
+    /** A paged list showing [ids]: Notes' trash, the kit's machine. */
     suspend fun listShowing(vararg ids: String): ScreenHost<*, TrashListEvent> {
-        val host = ScreenHost(TasksTrashMachine.machine)
+        val host = ScreenHost(NotesTrashMachine)
         host.send(
             TrashListEvent(
                 data_ = TrashListEvent.DataArrived(
@@ -106,13 +106,13 @@ class ChangeStreamSpec : StringSpec({
 
         val stream = ChangeStream()
         stream.route(host)
-        stream.deliver(change("schedule_task", "t-1"))
+        stream.deliver(change("entity", "t-1"))
 
         // THE SCREEN ASKED FOR ITS PAGE AGAIN. Not "the state changed" — the
         // state cannot change until rows are read, and the re-read IS the
         // deliverable: without it a member sees a gateway's write on the next
         // relaunch.
-        effects shouldBe listOf(ScreenEffect.ReadPage(TasksTrashMachine.machine.screenId, null))
+        effects shouldBe listOf(ScreenEffect.ReadPage(NotesTrashMachine.screenId, null))
         watcher.cancel()
     }
 
@@ -123,7 +123,7 @@ class ChangeStreamSpec : StringSpec({
 
         val stream = ChangeStream()
         stream.route(host)
-        stream.deliver(change("schedule_task", "t-99"))
+        stream.deliver(change("entity", "t-99"))
 
         // A TAILING PASS APPLIES THOUSANDS OF ROWS. If every one of them made
         // every open screen re-read its page, catching up would cost a page
@@ -136,8 +136,8 @@ class ChangeStreamSpec : StringSpec({
         // The routing decision is the MACHINE's, so it is asserted on the
         // machine: a stream holding its own table map would be a second place
         // every screen's reads are written down.
-        TasksTrashMachine.machine.rowsChanged("media_asset", listOf("ast-1")).shouldBeNull()
-        PhotosGridMachine.rowsChanged("schedule_task", listOf("t-1")).shouldBeNull()
+        NotesTrashMachine.rowsChanged("media_asset", listOf("ast-1")).shouldBeNull()
+        PhotosGridMachine.rowsChanged("entity", listOf("t-1")).shouldBeNull()
         NotesEditorMachine.rowsChanged("media_asset", listOf("ast-1")).shouldBeNull()
         // Home COUNTS Locker's items since #1047 (ids only), so `locker_item`
         // is Home's table now; a Locker sidecar is not.
@@ -251,7 +251,7 @@ class ChangeStreamSpec : StringSpec({
 
         photosEffects shouldBe listOf(ScreenEffect.ReadPage(PhotosGridMachine.SCREEN_ID, null))
         listEffects shouldBe emptyList()
-        TasksTrashMachine.machine.conditionsChanged().shouldBeNull()
+        NotesTrashMachine.conditionsChanged().shouldBeNull()
         NotesEditorMachine.conditionsChanged().shouldBeNull()
         PhotosGridMachine.conditionsChanged().shouldNotBeNull()
         a.cancel()

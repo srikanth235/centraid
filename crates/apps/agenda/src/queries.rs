@@ -78,6 +78,11 @@ pub const PARTY_CAP: usize = 2_000;
 pub const SEARCH_LIMIT: usize = 100;
 /// The fan-out of a join over a bounded set.
 pub const EVENT_JOIN_BOUND: FanOutBound = FanOutBound::new(500, 8);
+/// The fan-out for a read keyed by the ids a window named: those are at most
+/// [`EVENT_WINDOW_CAP`] + [`RECURRING_ANCHOR_CAP`], and their rows past what a
+/// 4,000-row join reaches. `Read::among` is not used for them: past 64 ids it
+/// walks the whole table, which at year 3 is every event the vault holds.
+pub const WIDE: FanOutBound = FanOutBound::new(500, 64);
 
 const STARRED: &str = "flag:starred";
 const EVENT_COLUMNS: &str = "id, starts, ends, timing, zone, rule, rule_supported, status, \
@@ -287,8 +292,8 @@ fn live_events(door: &dyn PageDoor, rows: &[Row]) -> KitResult<Vec<EventRow>> {
     }
     let entities: BTreeMap<String, Row> =
         by_ids("agenda.events.entity", "entity", ENTITY_COLUMNS, "id")
-            .among(
-                EVENT_JOIN_BOUND,
+            .within(
+                WIDE,
                 door,
                 &ids,
                 Some(("kind = ? AND deleted_at IS NULL", vec![text("event")])),
@@ -369,7 +374,7 @@ pub(crate) fn decorate(door: &dyn PageDoor, events: &mut [EventRow]) -> KitResul
         "from_id, to_id, state",
         "from_id",
     )
-    .of(door, &ids, Some(("rel = ?", vec![text("attendee")])))?;
+    .within(WIDE, door, &ids, Some(("rel = ?", vec![text("attendee")])))?;
     let people = ids_of(&invited, "to_id");
     let names = names_of(door, &people)?;
     let mut guests: BTreeMap<String, Vec<Attendee>> = BTreeMap::new();
@@ -425,7 +430,7 @@ fn names_of(door: &dyn PageDoor, ids: &[String]) -> KitResult<BTreeMap<String, S
         return Ok(BTreeMap::new());
     }
     Ok(by_ids("agenda.names", "entity", "id, title", "id")
-        .among(EVENT_JOIN_BOUND, door, ids, None)?
+        .within(WIDE, door, ids, None)?
         .iter()
         .filter_map(|row| Some((text_of(row, "id")?, text_of(row, "title")?)))
         .collect())
@@ -461,7 +466,7 @@ pub(crate) fn read_exceptions(
         "series_id, original_start, scope, cancelled, starts, ends, title, description",
         "series_id",
     )
-    .of(door, &ids, None)?
+    .within(WIDE, door, &ids, None)?
     .iter()
     .map(|row| exception_of(row, &timing))
     .collect())
@@ -875,12 +880,7 @@ pub fn load_day_context(
     // A trashed person has no birthday on the grid.
     let names: BTreeMap<String, String> =
         by_ids("agenda.dayContext.names", "entity", "id, title", "id")
-            .among(
-                EVENT_JOIN_BOUND,
-                door,
-                &ids,
-                Some(("deleted_at IS NULL", Vec::new())),
-            )?
+            .within(WIDE, door, &ids, Some(("deleted_at IS NULL", Vec::new())))?
             .iter()
             .filter_map(|row| Some((text_of(row, "id")?, text_of(row, "title")?)))
             .collect();
@@ -891,8 +891,8 @@ pub fn load_day_context(
         "from_id, to_id",
         "from_id",
     )
-    .among(
-        EVENT_JOIN_BOUND,
+    .within(
+        WIDE,
         door,
         &ids,
         Some(("rel = ? AND to_id = ?", vec![text("tagged"), text(STARRED)])),
@@ -960,12 +960,7 @@ pub fn load_parties(door: &dyn PageDoor) -> KitResult<(PartiesData, Option<Denia
     )?;
     let ids = ids_of(&named.rows, "id");
     let people: BTreeSet<String> = by_ids("agenda.parties.forms", "person", "id, form", "id")
-        .among(
-            EVENT_JOIN_BOUND,
-            door,
-            &ids,
-            Some(("form = ?", vec![text("person")])),
-        )?
+        .within(WIDE, door, &ids, Some(("form = ?", vec![text("person")])))?
         .iter()
         .filter_map(|row| text_of(row, "id"))
         .collect();

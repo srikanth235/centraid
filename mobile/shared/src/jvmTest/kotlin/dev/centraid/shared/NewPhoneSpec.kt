@@ -1,7 +1,5 @@
 package dev.centraid.shared
 
-import dev.centraid.shared.apps.agenda.CalendarImport
-import dev.centraid.shared.apps.agenda.PhoneEvent
 import dev.centraid.shared.platform.FakePlatformServices
 import dev.centraid.shared.sync.phone.PhoneDevice
 import dev.centraid.shared.sync.phone.PhoneFields
@@ -21,9 +19,9 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 
 /**
- * A VAULT RESTORED ONTO A NEW PHONE (#1129, F-K-1), for the engine's sources (Agenda's, and the
- * person-shaped records the engine's own tests use); Docs' and Health's are in `FilesFollowSpec` and
- * `HealthFollowSpec`. People's is the vault's merge: `crates/vault/tests/people.rs`. Device A makes the links; device B, holding the
+ * A VAULT RESTORED ONTO A NEW PHONE (#1129, F-K-1), for the engine's person-shaped records its own tests
+ * use; Docs' and Health's are in `FilesFollowSpec` and `HealthFollowSpec`. People's and Agenda's are the
+ * vault's merge: `crates/vault/tests/people.rs` and `crates/vault/tests/agenda.rs`. Device A makes the links; device B, holding the
  * same records under its own `local:` ids, re-finds every one by its match key, one to one:
  * nothing is added twice, nothing is trashed, and no question is asked. A record of A that B does
  * not hold is forgotten and its row kept; a match key two records share is not guessed at.
@@ -175,62 +173,6 @@ class NewPhoneSpec : StringSpec({
         outcome.gone.shouldBeEmpty()
         store.origins.values.map { it.phoneOrigin } shouldContainExactly listOf("container:b-icloud")
         store.links.values.map { it.originId }.toSet() shouldBe setOf(store.origins.keys.single())
-    }
-
-    val now = 1_792_000_000_000L
-
-    fun event(title: String, id: String, day: Int = 21) = PhoneEvent(
-        title = title, start = "2026-10-${day}T12:00:00", end = "2026-10-${day}T13:00:00", tz = "UTC",
-        phoneId = id, origin = "calendar:work", originLabel = "Work",
-    )
-
-    "calendar: device B re-finds device A's events with no UID, and adds, trashes and asks nothing" {
-        val store = FakeStore(PhoneSource.CALENDAR).apply { device = "device-a" }
-        val titles = listOf("Lunch", "Dentist", "Review", "Gym", "Call mum", "Standup notes")
-        CalendarImport.sync(store, titles.mapIndexed { i, t -> event(t, "local:ek-a$i", 21 + i) }, emptyList(), complete = true, now = now)
-        val rows = store.rows.keys.toSet()
-        store.device = "device-b"
-        store.writes.clear()
-        // B's calendar is a new id too: an EventKit calendar identifier means nothing on another phone.
-        val fresh = titles.mapIndexed { i, t -> event(t, "local:ek-b$i", 21 + i).copy(origin = "calendar:b-work") }
-        val outcome = CalendarImport.sync(store, fresh, emptyList(), complete = true, now = now)
-        outcome.added shouldBe 0
-        outcome.trashed shouldBe 0
-        outcome.gone.shouldBeEmpty()
-        store.rows.keys shouldBe rows
-        store.links.values.map { it.phoneId }.sorted() shouldContainExactly titles.indices.map { "local:ek-b$it" }
-        store.writes.count { it == "relink" } shouldBe 6
-        store.origins.values.map { it.phoneOrigin } shouldContainExactly listOf("calendar:b-work")
-    }
-
-    "calendar: an event of device A missing on device B is forgotten and kept; two events of one title are not merged" {
-        val store = FakeStore(PhoneSource.CALENDAR).apply { device = "device-a" }
-        CalendarImport.sync(
-            store,
-            listOf(event("Lunch", "local:a1", 21), event("Lunch", "local:a2", 22), event("Dentist", "local:a3", 23)),
-            emptyList(),
-            complete = true,
-            now = now,
-        )
-        val dentist = store.links.values.single { it.phoneId == "local:a3" }.entityId!!
-        store.device = "device-b"
-        store.writes.clear()
-        val outcome = CalendarImport.sync(store, listOf(event("Lunch", "local:b1", 21), event("Lunch", "local:b2", 22)), emptyList(), complete = true, now = now)
-        outcome.trashed shouldBe 0
-        outcome.gone.shouldBeEmpty()
-        store.rows.getValue(dentist).trashed shouldBe false
-        store.links.values.none { it.entityId == dentist } shouldBe true
-        store.writes.none { it == "relink" || it == "trash" } shouldBe true
-        store.rows.values.count { it.fields.canonical().contains("title=Lunch") } shouldBe 4
-    }
-
-    "a uid event is the same record on device B: no relink, no forget" {
-        val store = FakeStore(PhoneSource.CALENDAR).apply { device = "device-a" }
-        CalendarImport.sync(store, listOf(event("Lunch", "uid:lunch@google")), emptyList(), complete = true, now = now)
-        store.device = "device-b"
-        store.writes.clear()
-        CalendarImport.sync(store, listOf(event("Lunch", "uid:lunch@google")), emptyList(), complete = true, now = now)
-        store.writes.none { it == "relink" || it == "forget" || it == "add" } shouldBe true
     }
 
     "a link's fingerprint carries its record's match key, as a digest" {

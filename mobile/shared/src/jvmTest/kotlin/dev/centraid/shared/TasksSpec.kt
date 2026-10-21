@@ -95,7 +95,7 @@ class TasksSpec : StringSpec({
     "the list reads its view; the Logbook's box REOPENS, and a done row is drawn there only" {
         TasksListReads.requests(openList(TasksListState.View.VIEW_LOGBOOK).state, clock)!!.single().tasks_board!!.view shouldBe TasksView.TASKS_VIEW_LOGBOOK
         TasksListReads.requests(openList(TasksListState.View.VIEW_ANYTIME).state, clock)!!.single().tasks_board!!.view shouldBe TasksView.TASKS_VIEW_ANYTIME
-        val done = task("d", "Filed taxes").copy(status = "completed", completed_day = "2026-06-14")
+        val done = task("d", "Filed taxes").copy(status = "done", completed_day = "2026-06-14")
         val released = task("w", "Old idea").copy(status = "cancelled", completed_day = "2026-06-10")
         val logbook = listOn(
             TasksListState.View.VIEW_LOGBOOK,
@@ -116,7 +116,7 @@ class TasksSpec : StringSpec({
         }
         data.groups[1].rows.single().check shouldBe TasksCheck.TASKS_CHECK_WONT_DO
         val reopened = TasksListMachine.reduce(logbook, TasksListInput.View(TasksListEvent(row_checked = TasksListEvent.RowChecked(task_id = "d"))))
-        (reopened.effects.single() as ScreenEffect.SubmitWrite).inputJson shouldBe """{"task_id":"d","status":"needs-action"}"""
+        (reopened.effects.single() as ScreenEffect.SubmitWrite).inputJson shouldBe """{"id":"d"}"""
         reopened.state.screen.status!!.sentence shouldBe "Task reopened"
         reopened.state.screen.data_!!.groups.map { it.title } shouldBe listOf("Won't do")
     }
@@ -152,8 +152,8 @@ class TasksSpec : StringSpec({
             recurrence_summary = "Monthly",
             missed = 2,
             effort_min = 25,
-            tags = listOf(TasksTag(tag_id = "t", concept_id = "c", label = "home")),
-            children = listOf(task("c1", "Transfer"), task("c2", "Receipt").copy(status = "completed")),
+            tags = listOf(TasksTag(concept_id = "c", label = "home")),
+            children = listOf(task("c1", "Transfer"), task("c2", "Receipt").copy(status = "done")),
             done_children = 1,
             priority = 3,
         )
@@ -208,20 +208,20 @@ class TasksSpec : StringSpec({
         val typed = TasksProjectMachine.reduce(pointed, TasksProjectInput.View(TasksProjectEvent(quick_add_changed = TasksProjectEvent.QuickAddChanged(title = "Tulips")))).state
         val added = TasksProjectMachine.reduce(typed, TasksProjectInput.Add(ID))
         val add = added.effects.single() as ScreenEffect.SubmitWrite
-        add.inputJson shouldBe """{"task_id":"$ID","title":"Tulips"}"""
+        add.inputJson shouldBe """{"id":"$ID","title":"Tulips"}"""
         added.state.screen.data_!!.groups[1].rows.single().pending shouldBe true
         val filed = TasksProjectMachine.reduce(added.state, TasksProjectInput.View(TasksProjectEvent(write_settled = WriteLaw.settledOf(CommandStatus.COMMAND_STATUS_EXECUTED, "", add.invokeKey))))
         (filed.effects.single() as ScreenEffect.SubmitWrite).let {
-            it.command shouldBe "schedule.organize_task"
-            it.inputJson shouldBe """{"task_id":"$ID","project_id":"p1","section_id":"s1","sort_order":0}"""
+            it.command shouldBe "task.organize"
+            it.inputJson shouldBe """{"id":"$ID","project_id":"p1","section_id":"s1","position":0}"""
         }
 
         val sheet = TasksProjectMachine.reduce(page, TasksProjectInput.View(TasksProjectEvent(add_section = TasksProjectEvent.AddSectionRequested()))).state
         val named = TasksProjectMachine.reduce(sheet, TasksProjectInput.View(TasksProjectEvent(section_name = TasksProjectEvent.SectionNameChanged(name = "Pots")))).state
         val made = TasksProjectMachine.reduce(named, TasksProjectInput.View(TasksProjectEvent(section_submitted = TasksProjectEvent.SectionSubmitted())))
         (made.effects.single() as ScreenEffect.SubmitWrite).let {
-            it.command shouldBe "schedule.save_section"
-            it.inputJson shouldBe """{"project_id":"p1","name":"Pots"}"""
+            it.command shouldBe "container.create"
+            it.inputJson shouldBe """{"kind":"section","title":"Pots","parent":"p1"}"""
         }
     }
 
@@ -291,14 +291,14 @@ class TasksSpec : StringSpec({
         typed.state.screen.autosave!!.phase shouldBe Autosave.Phase.PHASE_DIRTY
         val saved = TasksDetailMachine.reduce(typed.state, TasksDetailInput.View(TasksDetailEvent(tick = TasksDetailEvent.Tick(token = AutosaveLaw.tokenOf(1)))))
         val write = saved.effects.single() as ScreenEffect.SubmitWrite
-        write.command shouldBe "schedule.edit_task"
-        write.inputJson shouldBe """{"task_id":"a","title":"Rent, June"}"""
-        write.invokeKey shouldBe "schedule.edit_task:a:seq=1"
+        write.command shouldBe "task.edit"
+        write.inputJson shouldBe """{"id":"a","title":"Rent, June"}"""
+        write.invokeKey shouldBe "task.edit:a:seq=1"
 
         // CLOSE = DONE: the notes typed and not yet ticked are saved on leave.
         val notes = TasksDetailMachine.reduce(detail, TasksDetailInput.View(TasksDetailEvent(notes = TasksDetailEvent.NotesChanged(notes = "")))).state
         val left = TasksDetailMachine.reduce(notes, TasksDetailMachine.left())
-        (left.effects.single() as ScreenEffect.SubmitWrite).inputJson shouldBe """{"task_id":"a","clear_description":true}"""
+        (left.effects.single() as ScreenEffect.SubmitWrite).inputJson shouldBe """{"id":"a","description":null}"""
         TasksDetailMachine.ticked("save:9") shouldBe TasksDetailInput.View(TasksDetailEvent(tick = TasksDetailEvent.Tick(token = "save:9")))
 
         // An emptied title is kept on screen and not sent.
@@ -311,7 +311,7 @@ class TasksSpec : StringSpec({
     "a vault change never overwrites typing — the fields refresh around the words" {
         val detail = detailOn(task("a", "Rent", due = "2026-06-19", days = 4))
         val typed = TasksDetailMachine.reduce(detail, TasksDetailInput.View(TasksDetailEvent(title = TasksDetailEvent.TitleChanged(title = "Rent!")))).state
-        TasksDetailMachine.reduce(typed, TasksDetailInput.View(TasksDetailEvent(rows_changed = TasksDetailEvent.RowsChanged(table = "schedule_task", ids = listOf("a"))))).let {
+        TasksDetailMachine.reduce(typed, TasksDetailInput.View(TasksDetailEvent(rows_changed = TasksDetailEvent.RowsChanged(table = "task", ids = listOf("a"))))).let {
             it.effects.shouldBeEmpty()
             it.state.screen.autosave!!.remote_changed shouldBe true
         }
@@ -324,34 +324,34 @@ class TasksSpec : StringSpec({
         val detail = detailOn(task("a", "Call", due = "2026-06-19", time = "09:00", days = 4))
         val tomorrow = TasksDetailMachine.reduce(detail, choice("when", "tomorrow"))
         val w = tomorrow.effects.single() as ScreenEffect.SubmitWrite
-        w.command shouldBe "schedule.edit_task"
-        w.inputJson shouldBe """{"task_id":"a","due_at":"2026-06-16T09:00"}"""
+        w.command shouldBe "task.edit"
+        w.inputJson shouldBe """{"id":"a","due":"2026-06-16T09:00"}"""
         tomorrow.state.screen.write!!.phase shouldBe centraid.screen.v1.WriteState.Phase.PHASE_IN_FLIGHT
         // This weekend from a Monday is Saturday; next week is the Monday after.
         TasksDetailMachine.dayFor("weekend", TODAY) shouldBe "2026-06-20"
         TasksDetailMachine.dayFor("next_week", TODAY) shouldBe "2026-06-22"
         TasksDetailMachine.dayFor("weekend", "2026-06-21") shouldBe "2026-06-21"
 
-        (TasksDetailMachine.reduce(detail, choice("when", "none")).effects.single() as ScreenEffect.SubmitWrite).inputJson shouldBe """{"task_id":"a","clear_due":true}"""
-        (TasksDetailMachine.reduce(detail, choice("time", "none")).effects.single() as ScreenEffect.SubmitWrite).inputJson shouldBe """{"task_id":"a","due_at":"2026-06-19"}"""
-        (TasksDetailMachine.reduce(detail, TasksDetailInput.View(TasksDetailEvent(time_picked = TasksDetailEvent.TimePicked(time = "18:30")))).effects.single() as ScreenEffect.SubmitWrite).inputJson shouldBe """{"task_id":"a","due_at":"2026-06-19T18:30"}"""
-        (TasksDetailMachine.reduce(detail, choice("reminder", "30")).effects.single() as ScreenEffect.SubmitWrite).inputJson shouldBe """{"task_id":"a","remind_before_min":30}"""
-        (TasksDetailMachine.reduce(detail, choice("repeats", "weekly")).effects.single() as ScreenEffect.SubmitWrite).inputJson shouldBe """{"task_id":"a","rrule":"FREQ=WEEKLY"}"""
+        (TasksDetailMachine.reduce(detail, choice("when", "none")).effects.single() as ScreenEffect.SubmitWrite).inputJson shouldBe """{"id":"a","due":null}"""
+        (TasksDetailMachine.reduce(detail, choice("time", "none")).effects.single() as ScreenEffect.SubmitWrite).inputJson shouldBe """{"id":"a","due":"2026-06-19"}"""
+        (TasksDetailMachine.reduce(detail, TasksDetailInput.View(TasksDetailEvent(time_picked = TasksDetailEvent.TimePicked(time = "18:30")))).effects.single() as ScreenEffect.SubmitWrite).inputJson shouldBe """{"id":"a","due":"2026-06-19T18:30"}"""
+        (TasksDetailMachine.reduce(detail, choice("reminder", "30")).effects.single() as ScreenEffect.SubmitWrite).inputJson shouldBe """{"id":"a","remind_before_min":30}"""
+        (TasksDetailMachine.reduce(detail, choice("repeats", "weekly")).effects.single() as ScreenEffect.SubmitWrite).inputJson shouldBe """{"id":"a","rule":"FREQ=WEEKLY"}"""
         val now = TasksDetailMachine.reduce(detail, choice("priority", "3"))
-        (now.effects.single() as ScreenEffect.SubmitWrite).inputJson shouldBe """{"task_id":"a","priority":3}"""
-        (TasksDetailMachine.reduce(detail, choice("effort", "25")).effects.single() as ScreenEffect.SubmitWrite).inputJson shouldBe """{"task_id":"a","effort_min":25}"""
+        (now.effects.single() as ScreenEffect.SubmitWrite).inputJson shouldBe """{"id":"a","priority":3}"""
+        (TasksDetailMachine.reduce(detail, choice("effort", "25")).effects.single() as ScreenEffect.SubmitWrite).inputJson shouldBe """{"id":"a","effort_min":25}"""
         // "None" clears an effort; on a task with none it is nothing.
-        (TasksDetailMachine.reduce(detailOn(task("e", "Walk", due = "2026-06-19", days = 4).copy(effort_min = 25)), choice("effort", "none")).effects.single() as ScreenEffect.SubmitWrite).inputJson shouldBe """{"task_id":"e","clear_effort":true}"""
+        (TasksDetailMachine.reduce(detailOn(task("e", "Walk", due = "2026-06-19", days = 4).copy(effort_min = 25)), choice("effort", "none")).effects.single() as ScreenEffect.SubmitWrite).inputJson shouldBe """{"id":"e","effort_min":null}"""
         TasksDetailMachine.reduce(detail, choice("effort", "none")).effects.shouldBeEmpty()
         // A PICK CLOSES THE FIELD it was made from.
         val open = TasksDetailMachine.reduce(detail, TasksDetailInput.View(TasksDetailEvent(field_opened = TasksDetailEvent.FieldOpened(field_ = "when")))).state
         open.screen.open_field shouldBe "when"
         val picked = TasksDetailMachine.reduce(open, TasksDetailInput.View(TasksDetailEvent(date_picked = TasksDetailEvent.DatePicked(day = "2026-06-24"))))
         picked.state.screen.open_field shouldBe ""
-        (picked.effects.single() as ScreenEffect.SubmitWrite).inputJson shouldBe """{"task_id":"a","due_at":"2026-06-24T09:00"}"""
+        (picked.effects.single() as ScreenEffect.SubmitWrite).inputJson shouldBe """{"id":"a","due":"2026-06-24T09:00"}"""
         (TasksDetailMachine.reduce(detail, TasksDetailInput.View(TasksDetailEvent(tag_added = TasksDetailEvent.TagAdded(label = "home")))).effects.single() as ScreenEffect.SubmitWrite).let {
-            it.command shouldBe "core.tag_item"
-            it.inputJson shouldBe """{"subject_type":"schedule.task","subject_id":"a","label":"home"}"""
+            it.command shouldBe "tag.add"
+            it.inputJson shouldBe """{"id":"a","label":"home"}"""
         }
         // Already so: nothing.
         TasksDetailMachine.reduce(detail, choice("priority", "none")).effects.shouldBeEmpty()
@@ -380,7 +380,7 @@ class TasksSpec : StringSpec({
     }
 
     "subtasks: a done count, add as a write, one level only" {
-        val parent = task("a", "Move house").copy(children = listOf(task("c1", "Boxes").copy(parent_task_id = "a"), task("c2", "Van").copy(parent_task_id = "a", status = "completed")), done_children = 1)
+        val parent = task("a", "Move house").copy(children = listOf(task("c1", "Boxes").copy(parent_task_id = "a"), task("c2", "Van").copy(parent_task_id = "a", status = "done")), done_children = 1)
         val detail = detailOn(parent)
         detail.screen.data_!!.let {
             it.subtasks_label shouldBe "Subtasks · 1 of 2"
@@ -388,8 +388,8 @@ class TasksSpec : StringSpec({
             it.can_add_subtask shouldBe true
         }
         (TasksDetailMachine.reduce(detail, TasksDetailInput.View(TasksDetailEvent(subtask_added = TasksDetailEvent.SubtaskAdded(title = "Keys")))).effects.single() as ScreenEffect.SubmitWrite).let {
-            it.command shouldBe "schedule.add_task"
-            it.inputJson shouldBe """{"title":"Keys","parent_task_id":"a"}"""
+            it.command shouldBe "task.add"
+            it.inputJson shouldBe """{"title":"Keys","parent_id":"a"}"""
         }
         val child = detailOn(task("c1", "Boxes").copy(parent_task_id = "a"))
         child.screen.data_!!.let {
@@ -409,15 +409,15 @@ class TasksSpec : StringSpec({
         asked.screen.asking shouldBe TasksDetailState.Asking.ASKING_DELETE
         val confirmed = TasksDetailMachine.reduce(asked, TasksDetailInput.View(TasksDetailEvent(confirmed = TasksDetailEvent.Confirmed())))
         val write = confirmed.effects.single() as ScreenEffect.SubmitWrite
-        write.command shouldBe "schedule.delete_task"
-        write.inputJson shouldBe """{"task_id":"a"}"""
+        write.command shouldBe "entity.trash"
+        write.inputJson shouldBe """{"id":"a"}"""
         val done = TasksDetailMachine.reduce(confirmed.state, TasksDetailInput.View(TasksDetailEvent(write_settled = WriteLaw.settledOf(CommandStatus.COMMAND_STATUS_EXECUTED, "", write.invokeKey)))).state
         done.screen.finished shouldBe true
 
         val release = TasksDetailMachine.reduce(detail, TasksDetailInput.View(TasksDetailEvent(release = TasksDetailEvent.ReleaseRequested()))).state
         release.screen.confirm!!.destructive shouldBe false
         (TasksDetailMachine.reduce(release, TasksDetailInput.View(TasksDetailEvent(confirmed = TasksDetailEvent.Confirmed()))).effects.single() as ScreenEffect.SubmitWrite).inputJson shouldBe
-            """{"task_id":"a","status":"cancelled"}"""
+            """{"id":"a"}"""
     }
 
     "a task no live row has is drawn as gone, not as a failed read" {
@@ -464,8 +464,8 @@ class TasksSpec : StringSpec({
         asked.screen.asking_pile shouldBe "dated"
         val all = TasksCatchUpMachine.reduce(asked, TasksCatchUpInput.View(TasksCatchUpEvent(confirmed = TasksCatchUpEvent.Confirmed())))
         all.effects.map { (it as ScreenEffect.SubmitWrite).inputJson } shouldBe listOf(
-            """{"task_id":"d1","status":"completed"}""",
-            """{"task_id":"d2","status":"completed"}""",
+            """{"id":"d1"}""",
+            """{"id":"d2"}""",
         )
         all.effects.map { (it as ScreenEffect.SubmitWrite).invokeKey }.toSet().size shouldBe 2
         all.state.screen.status!!.let {
@@ -483,10 +483,10 @@ class TasksSpec : StringSpec({
     // tasks.trash
     // -----------------------------------------------------------------
 
-    "the trash is the kit's: restore, and delete forever behind a confirm; nothing empties it" {
+    "the trash is the kit's machine over `tasks.trash`: restore, and delete forever behind a confirm; nothing empties it" {
         val machine = TasksTrashMachine.machine
         machine.screenId shouldBe "tasks.trash"
-        TasksTrashMachine.reads.table shouldBe "schedule_task"
+        TasksTrashMachine.reads.tables shouldBe setOf("entity")
         val opened = machine.reduce(machine.initial(), TrashListEvent(opened = TrashListEvent.Opened())).state
         val listed = machine.reduce(opened, TrashListEvent(data_ = TrashListEvent.DataArrived(data_ = TrashListData(rows = listOf(TrashRow(id = "a", title = "Rent"))), answered_cursor = ""))).state
         listed.data_!!.rows.single().purge_label shouldBe SharedCopy.TRASH_PURGE
@@ -495,13 +495,13 @@ class TasksSpec : StringSpec({
         val asked = machine.reduce(listed, TrashListEvent(purge = TrashListEvent.PurgeTapped(id = "a"))).state
         asked.confirm.shouldNotBeNull().body shouldBe TasksCopy.TRASH_PURGE_BODY
         (machine.reduce(asked, TrashListEvent(confirmed = TrashListEvent.Confirmed())).effects.single() as ScreenEffect.SubmitWrite).let {
-            it.command shouldBe "schedule.purge_task"
-            it.inputJson shouldBe """{"task_id":"a"}"""
+            it.command shouldBe "entity.purge"
+            it.inputJson shouldBe """{"id":"a"}"""
         }
         machine.reduce(listed, TrashListEvent(empty = TrashListEvent.EmptyTapped())).state.confirm.shouldBeNull()
         (machine.reduce(listed, TrashListEvent(restore = TrashListEvent.RestoreTapped(id = "a"))).effects.single() as ScreenEffect.SubmitWrite).let {
-            it.command shouldBe "schedule.restore_task"
-            it.inputJson shouldBe """{"task_id":"a"}"""
+            it.command shouldBe "entity.restore"
+            it.inputJson shouldBe """{"id":"a"}"""
         }
     }
 }) {
@@ -551,7 +551,7 @@ class TasksSpec : StringSpec({
         ): TasksTask = TasksTask(
             task_id = id,
             title = title,
-            status = "needs-action",
+            status = "open",
             due_day = due,
             due_time = time,
             due_local = if (time.isEmpty()) due else "${due}T$time",

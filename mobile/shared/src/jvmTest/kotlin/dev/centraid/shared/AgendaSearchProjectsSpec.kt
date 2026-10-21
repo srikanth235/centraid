@@ -57,7 +57,7 @@ class AgendaSearchProjectsSpec : StringSpec({
         )
         val data = found.screen.data_.shouldNotBeNull()
         data.containers.single().let {
-            it.entity shouldBe "schedule.project"
+            it.entity shouldBe "project"
             it.id shouldBe "p-garden"
             it.app_id shouldBe "tasks"
             it.title shouldBe "Garden"
@@ -146,7 +146,7 @@ class AgendaSearchProjectsSpec : StringSpec({
     }
 }) {
     companion object {
-        fun garden(): ContainerHit = ContainerHit(entity = "schedule.project", id = "p-garden", title = "Garden", app_id = "tasks")
+        fun garden(): ContainerHit = ContainerHit(entity = "project", id = "p-garden", title = "Garden", app_id = "tasks")
 
         /** A search answer for the term on screen: no event, [tasks] as `tasks.search` answered it. */
         fun answered(state: AgendaHome, tasks: TasksSearch): AgendaHome =

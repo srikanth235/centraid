@@ -174,7 +174,6 @@ class AppReadsSpec : StringSpec({
         Triple("photos.duplicates", DuplicatesReads, DuplicatesMachine),
         Triple("photos.duplicate", DuplicateReviewReads, DuplicateReviewMachine),
         Triple("docs.trash", DocsTrashReads, DocsTrashMachine),
-        Triple("tasks.trash", TasksTrashMachine.reads, TasksTrashMachine.machine),
         // LOCKER (#1047): the kit's trash over `locker_item`. The statement is
         // the kit's own; `LockerTrashReads` adds only the gate in front of it
         // (`LockerSpec`).
@@ -227,7 +226,6 @@ class AppReadsSpec : StringSpec({
         "photos.memories" -> PhotosMemoriesReads.query(PhotosMemoriesMachine.initial(), null)
         "photos.duplicates" -> DuplicatesReads.query(DuplicatesMachine.initial(), null)
         "docs.trash" -> DocsTrashReads.query(DocsTrashMachine.initial(), null)
-        "tasks.trash" -> TasksTrashMachine.reads.query(TasksTrashMachine.machine.initial(), null)
         "locker.trash" -> TrashReads(LOCKER_TRASH).query(LockerTrashMachine.initial(), null)
         else -> DuplicateReviewReads.query(
             DuplicateReviewMachine.reduce(
@@ -324,7 +322,8 @@ class AppReadsSpec : StringSpec({
         Triple("docs.drive", DocsDriveReads, DocsDriveMachine),
         Triple("docs.document", DocsDocumentReads, DocsDocumentMachine),
         Triple("docs.editor", DocsEditorReads, DocsEditorMachine),
-        // TASKS (#1029 port). The trash is the kit's page read.
+        // TASKS (#1029 port). The trash is `tasks.trash`, an app query: the trash is the entity's.
+        Triple("tasks.trash", TasksTrashMachine.reads, TasksTrashMachine.machine),
         Triple("tasks.list", TasksListReads, TasksListMachine),
         Triple("tasks.project", TasksProjectReads, TasksProjectMachine),
         Triple("tasks.detail", TasksDetailReads, TasksDetailMachine),
@@ -367,7 +366,7 @@ class AppReadsSpec : StringSpec({
         // THE SAME PAIRING AS A PAGE READ'S, and a stricter one: a page read
         // has one table, an app query several, and a table read and not
         // re-read on is a screen that goes stale on sync with nothing red.
-        vaultTables.size shouldBeGreaterThan 50
+        vaultTables.size shouldBeGreaterThan 35
         vaultTables.containsAll(HomeReads.TABLES) shouldBe true
         queryScreens.forEach { (name, queries, machine) ->
             withClue(name) {

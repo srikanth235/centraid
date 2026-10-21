@@ -191,8 +191,8 @@ class AgendaDatedTasksSpec : StringSpec({
         )
         val checked = drive(home, view(AgendaHomeEvent(task_checked = AgendaHomeEvent.TaskChecked(task_id = "a"))))
         val done = checked.effects.single() as ScreenEffect.SubmitWrite
-        done.command shouldBe "schedule.set_task_status"
-        done.inputJson shouldBe """{"task_id":"a","status":"completed"}"""
+        done.command shouldBe "task.complete"
+        done.inputJson shouldBe """{"id":"a"}"""
         // IN PLACE: re-folded without a read.
         checked.state.screen.data_.shouldNotBeNull().let {
             it.days.shouldBeEmpty()
@@ -204,7 +204,10 @@ class AgendaDatedTasksSpec : StringSpec({
             it.action_label shouldBe "Undo"
         }
         val undone = drive(checked.state, view(AgendaHomeEvent(status_acted = AgendaHomeEvent.StatusActed())))
-        (undone.effects.single() as ScreenEffect.SubmitWrite).inputJson shouldBe """{"task_id":"a","status":"needs-action"}"""
+        (undone.effects.single() as ScreenEffect.SubmitWrite).let {
+            it.command shouldBe "task.reopen"
+            it.inputJson shouldBe """{"id":"a"}"""
+        }
         undone.state.screen.data_.shouldNotBeNull().days.single().items.mapNotNull { it.task }.single().task_id shouldBe "a"
         undone.state.screen.status.shouldBeNull()
 
@@ -337,7 +340,7 @@ class AgendaDatedTasksSpec : StringSpec({
     "a change clears the held boards: coming back to Schedule from Waiting reads again" {
         val home = landed(schedule)
         val onWaiting = drive(home, view(AgendaHomeEvent(band = AgendaHomeEvent.BandPicked(key = "waiting")))).state
-        val changed = drive(onWaiting, AgendaHomeMachine.rowsChanged("schedule_task", listOf("a"))!!).state
+        val changed = drive(onWaiting, AgendaHomeMachine.rowsChanged("task", listOf("a"))!!).state
         val answered = drive(changed, AgendaInput.Answered(upcoming(), context(), null)).state
         answered.screen.destination shouldBe waiting
         val back = drive(answered, view(AgendaHomeEvent(band = AgendaHomeEvent.BandPicked(key = "schedule"))))

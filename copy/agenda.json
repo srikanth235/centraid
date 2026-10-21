@@ -187,6 +187,7 @@
     "SCOPE_QUESTION": "Which occurrences does this change?",
     "SCOPE_RULE_NOTE": "A new repeat rule reaches the whole series.",
     "SCOPE_SERIES": "The whole series",
+    "SCOPE_SERIES_NOTE": "Guests, reminders, the link and the calendar belong to the whole series.",
     "SCOPE_SKIP": "Skip this occurrence",
     "SCOPE_TITLE": "This event repeats",
     "SEARCH_LABEL": "Search agenda",

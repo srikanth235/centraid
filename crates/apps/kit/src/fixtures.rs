@@ -11,8 +11,8 @@
 //! vault's, kept by the writer; a test that searches rebuilds it). A generator
 //! is deterministic — a named LCG, so the bytes of a fixture never move.
 //!
-//! The generators today are Notes' and People's; the next lane that needs a
-//! volume adds its own beside them.
+//! The generators today are Notes', People', Agenda's and Tasks'; the next lane
+//! that needs a volume adds its own beside them.
 
 use rusqlite::{Connection, params};
 
@@ -650,6 +650,451 @@ pub fn year3_people(
             ])
             .map_err(door)?;
         counts.contact_points += 1;
+    }
+    Ok(counts)
+}
+
+// ---------------------------------------------------------------------------
+// Agenda
+// ---------------------------------------------------------------------------
+
+/// The volume an Agenda is stated at.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Year3EventsShape {
+    /// Zoned one-off events across three years, and all-day ones.
+    pub timed: usize,
+    pub all_day: usize,
+    /// Series: mostly weekly, some monthly, a tenth every third day; the first
+    /// `overridden` of them carry occurrence rows (one moved, one cancelled).
+    pub series: usize,
+    pub overridden: usize,
+    /// Events carrying the cancelled status, and events in the trash.
+    pub cancelled: usize,
+    pub trashed: usize,
+    /// Guests: people on the roster, and how many events have two of them.
+    pub guests: usize,
+    pub guested: usize,
+}
+
+/// THE YEAR-3 AGENDA PROFILE: 8,000 one-off events, 2,000 all-day, 60 series
+/// (20 with overrides), 300 cancelled, 200 trashed and 3,000 with guests.
+///
+/// * **60 series, a tenth of them every third day**: the product's default
+///   45-day window (read from 31 days back) expands to about 600 instances and
+///   its one-offs add about 450, under the 1,500-instance bound; a member with
+///   twice the series reaches the bound and is told so rather than shown a
+///   short agenda.
+/// * **10,000 one-offs over three years**: a 45-day window sees about 450 and
+///   the 2,000-row window cap is never the answer.
+pub const YEAR3_EVENTS: Year3EventsShape = Year3EventsShape {
+    timed: 8_000,
+    all_day: 2_000,
+    series: 60,
+    overridden: 20,
+    cancelled: 300,
+    trashed: 200,
+    guests: 300,
+    guested: 3_000,
+};
+
+/// What one Agenda seeding wrote.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Year3EventsCounts {
+    /// Events not trashed (cancelled ones included).
+    pub live: usize,
+    pub series: usize,
+    pub overrides: usize,
+    pub cancelled: usize,
+    pub trashed: usize,
+    pub attendees: usize,
+}
+
+/// Write the Agenda profile into a founded vault's connection.
+///
+/// Events are numbered oldest first; the trashed and the cancelled are spread
+/// by stride so a window finds both. Every event is in the default calendar.
+///
+/// # Errors
+///
+/// Whatever the vault refuses a row for.
+pub fn year3_events(
+    connection: &Connection,
+    shape: Year3EventsShape,
+    seed: u64,
+) -> KitResult<Year3EventsCounts> {
+    let mut random = Seeded::new(seed);
+    let total = shape.timed + shape.all_day + shape.series;
+    let at = |index: usize| instant(index, total);
+    let mut counts = Year3EventsCounts::default();
+    let mut entity = connection
+        .prepare_cached(
+            "INSERT INTO entity (id, kind, title, created_at, updated_at, deleted_at, purge_at)
+             VALUES (?1, ?2, ?3, ?4, ?4, ?5, ?6)",
+        )
+        .map_err(door)?;
+    let mut event = connection
+        .prepare_cached(
+            "INSERT INTO event (id, starts, ends, timing, zone, rule, status, calendar_id, description)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 'calendar:default', ?8)",
+        )
+        .map_err(door)?;
+    let mut edge = connection
+        .prepare_cached(
+            "INSERT OR IGNORE INTO edge (from_id, rel, to_id, state, created_at)
+             VALUES (?1, 'attendee', ?2, ?3, ?4)",
+        )
+        .map_err(door)?;
+    for k in 0..shape.guests {
+        let guest = id("guest", k);
+        connection
+            .execute(
+                "INSERT INTO entity (id, kind, title, created_at, updated_at) VALUES (?1, 'person', ?2, ?3, ?3)",
+                params![guest, format!("Guest {k}"), at(0)],
+            )
+            .map_err(door)?;
+        connection
+            .execute("INSERT INTO person (id) VALUES (?1)", params![guest])
+            .map_err(door)?;
+    }
+    // A member's series are mostly weekly, some monthly and a few daily.
+    let rule_of = |ordinal: usize| match ordinal % 10 {
+        0 => "FREQ=DAILY;INTERVAL=3",
+        1..=3 => "FREQ=MONTHLY",
+        _ => "FREQ=WEEKLY",
+    };
+    let zones = ["Europe/London", "America/New_York", "Asia/Kolkata"];
+    let cancel_every = total / shape.cancelled.max(1);
+    let trash_every = total / shape.trashed.max(1);
+    for index in 0..total {
+        let (kind, ordinal) = if index < shape.series {
+            ("series", index)
+        } else if index < shape.series + shape.timed {
+            ("timed", index - shape.series)
+        } else {
+            ("all-day", index - shape.series - shape.timed)
+        };
+        let row = id("event", index);
+        let start = at(index);
+        let trashed = counts.trashed < shape.trashed && index % trash_every.max(1) == 1;
+        let cancelled =
+            !trashed && counts.cancelled < shape.cancelled && index % cancel_every.max(1) == 2;
+        entity
+            .execute(params![
+                row,
+                "event",
+                format!("Event {index} of {}", random.upto(900)),
+                start,
+                trashed.then(|| at(index + 1)),
+                trashed.then(|| at(index + total)),
+            ])
+            .map_err(door)?;
+        let status = if cancelled { "cancelled" } else { "confirmed" };
+        let note = (index % 5 == 0).then(|| format!("agenda item {index}"));
+        match kind {
+            "all-day" => event.execute(params![
+                row,
+                &start[..10],
+                None::<String>,
+                "all-day",
+                None::<String>,
+                None::<String>,
+                status,
+                note
+            ]),
+            _ => {
+                let rule = (kind == "series").then(|| rule_of(ordinal).to_owned());
+                let end = at(index + 1);
+                event.execute(params![
+                    row,
+                    start,
+                    // A series spans an hour; a one-off is the next step in the span.
+                    if rule.is_some() { start.clone() } else { end },
+                    "zoned",
+                    zones[index % zones.len()],
+                    rule,
+                    status,
+                    note
+                ])
+            }
+        }
+        .map_err(door)?;
+        if trashed {
+            counts.trashed += 1;
+            continue;
+        }
+        counts.live += 1;
+        counts.cancelled += usize::from(cancelled);
+        if kind == "series" {
+            counts.series += 1;
+            if ordinal < shape.overridden {
+                for (day, cancel) in [(7_i64, false), (14, true)] {
+                    connection
+                        .execute(
+                            "INSERT INTO occurrence (series_id, original_start, scope, cancelled, starts, ends)
+                             VALUES (?1, ?2, 'occurrence', ?3, ?4, ?5)",
+                            params![
+                                row,
+                                format!("{}T{}", plus_days(&start, day), &start[11..23]),
+                                i64::from(cancel),
+                                (!cancel).then(|| format!("{}T{}", plus_days(&start, day), "17:00:00.000Z")),
+                                (!cancel).then(|| format!("{}T{}", plus_days(&start, day), "18:00:00.000Z")),
+                            ],
+                        )
+                        .map_err(door)?;
+                    counts.overrides += 1;
+                }
+            }
+        }
+        if counts.attendees / 2 < shape.guested && shape.guests > 1 && index % 3 == 0 {
+            for _ in 0..2 {
+                let inserted = edge
+                    .execute(params![
+                        row,
+                        id("guest", random.upto(shape.guests)),
+                        ["accepted", "needs-action", "tentative", "declined"][random.upto(4)],
+                        start
+                    ])
+                    .map_err(door)?;
+                counts.attendees += inserted;
+            }
+        }
+    }
+    Ok(counts)
+}
+
+/// `start` (the vault's instant text) moved `days` later, as its date only.
+fn plus_days(start: &str, days: i64) -> String {
+    let parse = |from: usize, to: usize| start[from..to].parse::<i64>().unwrap_or(1);
+    let (mut year, mut month, mut day) = (parse(0, 4), parse(5, 7), parse(8, 10) + days);
+    loop {
+        let length = match month {
+            2 if year % 4 == 0 => 29,
+            2 => 28,
+            4 | 6 | 9 | 11 => 30,
+            _ => 31,
+        };
+        if day <= length {
+            break;
+        }
+        day -= length;
+        month += 1;
+        if month > 12 {
+            month = 1;
+            year += 1;
+        }
+    }
+    format!("{year:04}-{month:02}-{day:02}")
+}
+
+// ---------------------------------------------------------------------------
+// Tasks
+// ---------------------------------------------------------------------------
+
+/// The volume a Tasks board is stated at.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Year3TasksShape {
+    /// Open, done and cancelled tasks, live; the trashed are besides these.
+    pub open: usize,
+    pub done: usize,
+    pub cancelled: usize,
+    pub trashed: usize,
+    /// Projects, and sections in each.
+    pub projects: usize,
+    pub sections: usize,
+    /// Open tasks with a due day (the rest are the Inbox), and repeating ones.
+    pub dated: usize,
+    pub repeating: usize,
+    /// Open tasks that are a subtask of another, and tagged ones.
+    pub subtasks: usize,
+    pub tagged: usize,
+}
+
+/// THE YEAR-3 TASKS PROFILE: 3,000 open and 12,000 done tasks over three
+/// years, 40 projects of 4 sections, 200 repeating.
+///
+/// * **12,000 closed**: the logbook is a bounded read of the newest, and the
+///   open walk never touches them.
+/// * **3,000 open against a 32,000-row walk**: the board fits.
+pub const YEAR3_TASKS: Year3TasksShape = Year3TasksShape {
+    open: 3_000,
+    done: 12_000,
+    cancelled: 400,
+    trashed: 300,
+    projects: 40,
+    sections: 4,
+    dated: 1_800,
+    repeating: 200,
+    subtasks: 600,
+    tagged: 1_200,
+};
+
+/// What one Tasks seeding wrote.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Year3TasksCounts {
+    pub open: usize,
+    pub done: usize,
+    pub cancelled: usize,
+    pub trashed: usize,
+    pub projects: usize,
+    pub sections: usize,
+    pub dated: usize,
+    pub repeating: usize,
+    pub subtasks: usize,
+    pub tagged: usize,
+}
+
+/// Write the Tasks profile into a founded vault's connection.
+///
+/// Tasks are numbered oldest first. A subtask is the open task before it, so a
+/// parent is never trashed or closed under its child; a repeating task is its
+/// own series.
+///
+/// # Errors
+///
+/// Whatever the vault refuses a row for.
+pub fn year3_tasks(
+    connection: &Connection,
+    shape: Year3TasksShape,
+    seed: u64,
+) -> KitResult<Year3TasksCounts> {
+    let mut random = Seeded::new(seed);
+    let total = shape.open + shape.done + shape.cancelled + shape.trashed;
+    let at = |index: usize| instant(index, total);
+    let mut counts = Year3TasksCounts::default();
+    let plain = |kind: &str, row: &str, title: String, created: &str| -> KitResult<()> {
+        connection
+            .prepare_cached(
+                "INSERT INTO entity (id, kind, title, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?4)",
+            )
+            .map_err(door)?
+            .execute(params![row, kind, title, created])
+            .map_err(door)?;
+        Ok(())
+    };
+    for p in 0..shape.projects {
+        let project = id("project", p);
+        plain("project", &project, format!("Project {p}"), &at(0))?;
+        connection
+            .execute(
+                "INSERT INTO container (id, kind, position) VALUES (?1, 'project', ?2)",
+                params![project, p as f64],
+            )
+            .map_err(door)?;
+        counts.projects += 1;
+        for q in 0..shape.sections {
+            let section = id(&format!("section-{p}"), q);
+            plain("section", &section, format!("Section {q}"), &at(0))?;
+            connection
+                .execute(
+                    "INSERT INTO container (id, kind, parent_id, position) VALUES (?1, 'section', ?2, ?3)",
+                    params![section, project, q as f64],
+                )
+                .map_err(door)?;
+            counts.sections += 1;
+        }
+    }
+    let tags = 20;
+    for t in 0..tags {
+        let tag = id("tag", t);
+        plain("tag", &tag, format!("tag{t}"), &at(0))?;
+        connection
+            .execute(
+                "INSERT INTO concept (id, kind, key) VALUES (?1, 'tag', ?2)",
+                params![tag, format!("tag{t}")],
+            )
+            .map_err(door)?;
+    }
+    let mut entity = connection
+        .prepare_cached(
+            "INSERT INTO entity (id, kind, title, created_at, updated_at, deleted_at, purge_at)
+             VALUES (?1, 'task', ?2, ?3, ?3, ?4, ?5)",
+        )
+        .map_err(door)?;
+    let mut task = connection
+        .prepare_cached(
+            "INSERT INTO task (id, status, priority, due, done_at, rule, series_id, parent_id,
+                               project_id, section_id, description, position)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, NULL, ?7, ?8, ?9, ?10, ?11)",
+        )
+        .map_err(door)?;
+    let mut tagged = connection
+        .prepare_cached(
+            "INSERT OR IGNORE INTO edge (from_id, rel, to_id, created_at) VALUES (?1, 'tagged', ?2, ?3)",
+        )
+        .map_err(door)?;
+    let (closed_end, cancelled_end) = (shape.done, shape.done + shape.cancelled);
+    let mut last_open: Option<String> = None;
+    for index in 0..total {
+        let row = id("task", index);
+        let created = at(index);
+        let (status, trashed) = if index < closed_end {
+            ("done", false)
+        } else if index < cancelled_end {
+            ("cancelled", false)
+        } else if index < cancelled_end + shape.trashed {
+            ("open", true)
+        } else {
+            ("open", false)
+        };
+        entity
+            .execute(params![
+                row,
+                format!("Task {index} of {}", random.upto(900)),
+                created,
+                trashed.then(|| at(index + 1)),
+                trashed.then(|| at(index + total)),
+            ])
+            .map_err(door)?;
+        let live_open = status == "open" && !trashed;
+        let open_ordinal = counts.open;
+        let dated = live_open && open_ordinal < shape.dated;
+        let repeating = dated && open_ordinal < shape.repeating;
+        let subtask = live_open
+            && !repeating
+            && counts.subtasks < shape.subtasks
+            && open_ordinal % 4 == 3
+            && last_open.is_some();
+        let number = index % shape.projects.max(1);
+        let project = (index % 3 != 0 && !trashed).then(|| id("project", number));
+        let section = project
+            .as_ref()
+            .filter(|_| index % 2 == 0)
+            .map(|_| id(&format!("section-{number}"), index % shape.sections.max(1)));
+        task.execute(params![
+            row,
+            status,
+            (index % 10).min(9) as i64,
+            (dated || (status == "done" && index % 2 == 0))
+                .then(|| format!("{}", &at(index.saturating_sub(1))[..10])),
+            (status == "done").then(|| at(index)),
+            repeating.then_some("FREQ=WEEKLY"),
+            subtask.then(|| last_open.clone()).flatten(),
+            project,
+            section,
+            (index % 7 == 0).then(|| format!("remember {index}")),
+            index as f64,
+        ])
+        .map_err(door)?;
+        match status {
+            "done" => counts.done += 1,
+            "cancelled" => counts.cancelled += 1,
+            _ if trashed => counts.trashed += 1,
+            _ => {
+                counts.open += 1;
+                counts.dated += usize::from(dated);
+                counts.repeating += usize::from(repeating);
+                counts.subtasks += usize::from(subtask);
+                if !subtask {
+                    last_open = Some(row.clone());
+                }
+            }
+        }
+        if live_open && counts.tagged < shape.tagged && index % 2 == 1 {
+            tagged
+                .execute(params![row, id("tag", random.upto(tags)), created])
+                .map_err(door)?;
+            counts.tagged += 1;
+        }
     }
     Ok(counts)
 }

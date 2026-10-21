@@ -208,6 +208,7 @@ pub fn answer(vault: &Vault, request: &wire::AppQueryRequest) -> Result<wire::Ap
         Q::TasksProjects(asked) => tasks::projects(vault, &door, &now, asked)?,
         Q::TasksSearch(asked) => tasks::search(vault, &door, &now, asked)?,
         Q::TasksCatchUp(asked) => tasks::catch_up(vault, &door, &now, asked)?,
+        Q::TasksTrash(asked) => tasks::trash(vault, &door, asked)?,
         Q::LockerItems(asked) => locker::items(vault, &door, &now, asked)?,
         Q::LockerItem(asked) => locker::item(vault, &door, &now, asked)?,
         Q::LockerSearch(asked) => locker::search(vault, &door, asked)?,

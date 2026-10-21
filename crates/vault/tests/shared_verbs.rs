@@ -345,16 +345,27 @@ fn a_category_a_place_and_a_task_release_what_points_at_them() {
 
     w.task("parent", None, None, None);
     w.task("child", None, None, Some("parent"));
+    // A subtask goes to the trash with its parent; one the member restored on its
+    // own is live and is not theirs to lose, so the purge releases it.
     w.ok("entity.trash", json!({"id": "parent"}));
+    assert_eq!(
+        w.one::<i64>(
+            "SELECT COUNT(*) FROM entity WHERE id = 'child' AND deleted_at IS NOT NULL",
+            &[]
+        ),
+        1
+    );
+    w.ok("entity.restore", json!({"id": "child"}));
     w.ok("entity.purge", json!({"id": "parent"}));
     assert_eq!(
         w.one::<Option<String>>("SELECT parent_id FROM task WHERE id = 'child'", &[]),
         None
     );
-    // A release is a change to what was released: it is touched.
+    // A release is a change to what was released: it is touched (created, trashed,
+    // restored, released).
     assert_eq!(
         w.one::<i64>("SELECT version FROM entity WHERE id = 'child'", &[]),
-        2
+        4
     );
 }
 

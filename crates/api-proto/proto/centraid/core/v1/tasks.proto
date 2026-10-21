@@ -98,6 +98,14 @@ message TasksCatchUpRequest {
   string tz = 1;
 }
 
+// `tasks.trash`: the trashed tasks, most recently trashed first.
+message TasksTrashRequest {
+  // The zone the rows' days are read in: the stated IANA name, else the vault's;
+  // a vault that names none and a request that states none answer EMPTY days,
+  // never UTC ones.
+  string tz = 1;
+}
+
 // ---------------------------------------------------------------------------
 // The rows.
 // ---------------------------------------------------------------------------
@@ -365,4 +373,24 @@ message TasksCatchUp {
   // Away a week or more with something overdue: the one moment the screen
   // names the time away.
   bool absent = 8;
+}
+
+// One trashed task: a subtask trashed with its parent is a row of its own.
+message TasksTrashRow {
+  string task_id = 1;
+  string title = 2;
+  // When it was trashed, when the sweep erases it, and the two civil days
+  // (`YYYY-MM-DD`) in the request's zone. EMPTY when the instant is absent or no
+  // zone resolved.
+  string deleted_at = 3;
+  optional string purge_at = 4;
+  string deleted_local_day = 5;
+  string purge_local_day = 6;
+}
+
+message TasksTrash {
+  // Most recently trashed first.
+  repeated TasksTrashRow tasks = 1;
+  // The shelf is longer than its 500-row window.
+  bool truncated = 2;
 }

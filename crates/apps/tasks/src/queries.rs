@@ -1015,3 +1015,68 @@ pub fn load_search_term(
         .collect();
     load_search(door, &hits, now, zone)
 }
+
+// ---------------------------------------------------------------------------
+// The trash shelf.
+// ---------------------------------------------------------------------------
+
+/// The trash shelf's own size.
+pub const TRASH_ROWS: usize = 500;
+
+/// One trashed task.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TrashRow {
+    pub task_id: String,
+    pub title: String,
+    pub deleted_at: Option<String>,
+    pub purge_at: Option<String>,
+}
+
+/// What `trash` answers.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct TrashData {
+    pub tasks: Vec<TrashRow>,
+    /// The shelf is longer than its window.
+    pub truncated: bool,
+}
+
+/// `trash`: the trashed tasks, most recently trashed first. The trash is the
+/// entity's, so the shelf is read from `entity` and needs no other table.
+///
+/// # Errors
+///
+/// A reached bound is an `Err`; a door refusal is the payload's denial.
+pub fn load_trash(door: &dyn PageDoor) -> KitResult<(TrashData, Option<Denial>)> {
+    let query = PageQuery::new(
+        "tasks.trash",
+        "id, title, deleted_at, purge_at",
+        "entity",
+        PageOrder::desc("deleted_at", "id"),
+    )
+    .filter("kind = ? AND deleted_at IS NOT NULL", vec![text("task")]);
+    let shelf = match centraid_apps_kit::reads::read_window(door, &query, TRASH_ROWS) {
+        Ok(shelf) => shelf,
+        Err(KitError::Door(message)) => {
+            return Ok((TrashData::default(), Some(denial_of(message))));
+        }
+        Err(other) => return Err(other),
+    };
+    Ok((
+        TrashData {
+            tasks: shelf
+                .rows
+                .iter()
+                .filter_map(|row| {
+                    Some(TrashRow {
+                        task_id: text_of(row, "id")?,
+                        title: text_of(row, "title").unwrap_or_default(),
+                        deleted_at: text_of(row, "deleted_at"),
+                        purge_at: text_of(row, "purge_at"),
+                    })
+                })
+                .collect(),
+            truncated: shelf.filled,
+        },
+        None,
+    ))
+}

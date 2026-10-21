@@ -58,8 +58,8 @@ pub use board::{
 pub use commands::{ACTIONS, Commands, Invocation, Outcome};
 pub use manifest::{APP_ID, manifest};
 pub use queries::{
-    BoardData, SearchData, TaskDetailData, TaskRow, load_board, load_search, load_search_term,
-    load_task,
+    BoardData, SearchData, TaskDetailData, TaskRow, TrashData, TrashRow, load_board, load_search,
+    load_search_term, load_task, load_trash,
 };
 
 /// A CONSENT DENIAL, as the payload carries it: the kit's one type, shared by

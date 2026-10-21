@@ -11,9 +11,9 @@ import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 
 /**
- * THE `schedule.*` COMMANDS AGENDA'S EVENT SCREENS WRITE, AND HOW (#1046).
+ * THE `event.*` COMMANDS AGENDA'S EVENT SCREENS WRITE, AND HOW (#1046, #1135).
  *
- * The inputs are built against `crates/vault/src/commands/schedule.rs`'s
+ * The inputs are built against `crates/vault/src/commands/event.rs`'s
  * schemas exactly — every one is `additionalProperties: false`, so a field the
  * schema does not name refuses the whole write (v0's `edit-occurrence` did,
  * a defect not carried).
@@ -25,14 +25,14 @@ import kotlin.uuid.Uuid
  * sitting on the commit, because the core remembers no key (R-1088-12).
  */
 public object AgendaWrites {
-    public const val PROPOSE: String = "schedule.propose_event"
-    public const val EDIT: String = "schedule.edit_event"
-    public const val OCCURRENCE: String = "schedule.edit_event_occurrence"
-    public const val RSVP: String = "schedule.respond_rsvp"
-    public const val CANCEL: String = "schedule.cancel_event"
+    public const val PROPOSE: String = "event.propose"
+    public const val EDIT: String = "event.edit"
+    public const val OCCURRENCE: String = "event.edit_occurrence"
+    public const val RSVP: String = "event.respond"
+    public const val CANCEL: String = "event.cancel"
 
     /** The add sheet's task kind (#1128): Tasks' own command, written from the Agenda sheet. */
-    public const val ADD_TASK: String = "schedule.add_task"
+    public const val ADD_TASK: String = "task.add"
 
     /** How [AgendaMarks] tells a skipped occurrence (a cancellation) from an override. */
     public const val SKIP_MARK: String = "\"action\":\"skip\""
@@ -50,30 +50,30 @@ public object AgendaWrites {
     // Inputs
     // ---------------------------------------------------------------------
 
-    public fun rsvp(eventId: String, partyId: String, partstat: String): String =
-        Json().str("event_id", eventId).str("party_id", partyId).str("partstat", partstat).build()
+    public fun rsvp(eventId: String, personId: String, state: String): String =
+        Json().str("id", eventId).str("person_id", personId).str("state", state).build()
 
-    public fun cancel(eventId: String): String = Json().str("event_id", eventId).build()
+    public fun cancel(eventId: String): String = Json().str("id", eventId).build()
 
     /**
-     * `schedule.add_task` from the add sheet (#1128): the id the bridge
+     * `task.add` from the add sheet (#1128): the id the bridge
      * minted (the vault's guard against a second copy of one add), the title,
      * and the due — a bare day, or a floating local `YYYY-MM-DDTHH:MM`
-     * (`due_at` takes an instant, a floating time or a date; Tasks' detail
+     * (`due` takes an instant, a floating time or a date; Tasks' detail
      * writes a time the same way).
      */
     /** A fresh task id: a v4 UUID, the shape `add_task` honours. */
     @OptIn(ExperimentalUuidApi::class)
     public fun mintTaskId(): String = Uuid.random().toString()
 
-    public fun addTask(taskId: String, title: String, dueAt: String): String =
-        Json().str("task_id", taskId).str("title", title).str("due_at", dueAt).build()
+    public fun addTask(taskId: String, title: String, due: String): String =
+        Json().str("id", taskId).str("title", title).str("due", due).build()
 
     /** Skip one occurrence, or it and the ones after. The series itself is [cancel]. */
-    public fun skip(eventId: String, originalStartLocal: String, scope: String): String =
+    public fun skip(eventId: String, originalStart: String, scope: String): String =
         Json()
-            .str("event_id", eventId)
-            .str("original_start_local", originalStartLocal)
+            .str("id", eventId)
+            .str("original_start", originalStart)
             .str("scope", scope)
             .str("action", "skip")
             .build()
@@ -90,13 +90,18 @@ public object AgendaWrites {
             fields += "${jsonString(name)}:$value"
         }
 
+        /** A key stated as `null`: the command clears what it names. */
+        public fun clear(name: String): Json = apply {
+            fields += "${jsonString(name)}:null"
+        }
+
         public fun strings(name: String, values: List<String>): Json = apply {
             fields += "${jsonString(name)}:[${values.joinToString(",") { jsonString(it) }}]"
         }
 
-        /** `reminders`: `[{"minutes_before":N}]`, or `[]` for none. */
+        /** `reminders`: the minutes before it starts, `[N]`, or `[]` for none. */
         public fun reminders(name: String, minutes: Int?): Json = apply {
-            fields += "${jsonString(name)}:[${minutes?.let { "{\"minutes_before\":$it}" } ?: ""}]"
+            fields += "${jsonString(name)}:[${minutes ?: ""}]"
         }
 
         public fun build(): String = fields.joinToString(",", prefix = "{", postfix = "}")

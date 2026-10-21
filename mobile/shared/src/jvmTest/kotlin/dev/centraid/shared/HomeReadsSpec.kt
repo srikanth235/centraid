@@ -96,7 +96,7 @@ class HomeReadsSpec : StringSpec({
 
     // --- today's due tasks ride the tile (#1128, R-1128-8) -------------------
 
-    fun dueTask(title: String) = TasksTask(task_id = "t-$title", title = title, status = "needs-action")
+    fun dueTask(title: String) = TasksTask(task_id = "t-$title", title = title, status = "open")
 
     fun board(overdue: List<String>, due: List<String>) = TasksBoard(
         today = today,
@@ -338,7 +338,7 @@ class HomeReadsSpec : StringSpec({
     "tasks have no tile of their own: Agenda's carries them, and no page read names them (#1128)" {
         HomeReads.READS.map { it.appId } shouldNotContain "tasks"
         HomeReads.READ_APP_IDS shouldNotContain "tasks"
-        HomeReads.TABLES shouldContain "schedule_task"
+        HomeReads.TABLES shouldContain "task"
     }
 
     "the people tile counts the roster's people — the live circle, not the owner or a pet (#1047, #1135)" {

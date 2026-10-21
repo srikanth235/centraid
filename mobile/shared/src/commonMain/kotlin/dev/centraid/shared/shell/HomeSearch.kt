@@ -263,8 +263,8 @@ public object HomeSearchMachine : ScreenMachine<HomeSearchState, HomeSearchEvent
     private fun kindOf(entity: String): String = when (entity) {
         "note" -> SharedCopy.SEARCH_KIND_NOTE
         "person" -> SharedCopy.SEARCH_KIND_PERSON
-        "core.event" -> SharedCopy.SEARCH_KIND_EVENT
-        "schedule.task" -> SharedCopy.SEARCH_KIND_TASK
+        "event" -> SharedCopy.SEARCH_KIND_EVENT
+        "task" -> SharedCopy.SEARCH_KIND_TASK
         "core.content_item", "media.asset" -> SharedCopy.SEARCH_KIND_PHOTO
         "core.document" -> SharedCopy.SEARCH_KIND_DOCUMENT
         CHAT_THREAD -> SharedCopy.SEARCH_KIND_CHAT
@@ -279,8 +279,8 @@ public object HomeSearchMachine : ScreenMachine<HomeSearchState, HomeSearchEvent
     private fun routeEntityOf(entity: String): String = when (entity) {
         "note" -> "note"
         "person" -> "person"
-        "core.event" -> "event"
-        "schedule.task" -> "task"
+        "event" -> "event"
+        "task" -> "task"
         "core.content_item", "media.asset" -> "photo"
         "core.document" -> "document"
         CHAT_THREAD -> CHAT_THREAD_NOUN

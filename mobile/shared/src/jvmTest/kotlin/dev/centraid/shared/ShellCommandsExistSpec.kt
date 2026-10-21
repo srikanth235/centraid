@@ -124,7 +124,7 @@ class ShellCommandsExistSpec : StringSpec({
             .toSet()
         listOf(
             "note.edit", // a `const val SAVE_COMMAND`
-            "schedule.set_task_status", // a bare `const val STATUS`
+            "task.complete", // a bare `const val STATUS`
             "people.purge_person", // an argument to a trash spec
             "locker.edit_item", // an `if` branch
             "chat.clear", // an argument to a helper

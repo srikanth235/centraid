@@ -69,7 +69,7 @@ public object AgendaReads : ScreenQueries<AgendaHome, AgendaInput>, ScreenWrites
     /** `AgendaHomeMachine.rowsChanged` answers for exactly these. */
     override val tables: Set<String> = AgendaHomeMachine.TABLES
 
-    /** The task writes (`schedule.*`) are Agenda's: it is the app the member is in (R-1128-5). */
+    /** The task writes (`task.*`) are Agenda's: it is the app the member is in (R-1128-5). */
     override val appId: String = "agenda"
 
     /** `agenda.search`'s own ceiling. */

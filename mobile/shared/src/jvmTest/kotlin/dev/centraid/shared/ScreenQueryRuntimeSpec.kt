@@ -75,7 +75,7 @@ import java.util.concurrent.ConcurrentLinkedQueue
 class ScreenQueryRuntimeSpec : StringSpec({
 
     /** A screen that records what reached it, and asks for a read when opened. */
-    val probeTables = setOf("core_event", "schedule_attendee")
+    val probeTables = setOf("event", "edge")
 
     val probeMachine = object : ScreenMachine<List<Probe>, Probe> {
         override fun initial(): List<Probe> = emptyList()
@@ -350,7 +350,7 @@ class ScreenQueryRuntimeSpec : StringSpec({
                                 TasksGroup(
                                     kind = TasksGroupKind.TASKS_GROUP_KIND_TODAY,
                                     key = "today",
-                                    tasks = listOf(TasksTask(task_id = "t1", title = "Call Mum", status = "needs-action")),
+                                    tasks = listOf(TasksTask(task_id = "t1", title = "Call Mum", status = "open")),
                                 ),
                             ),
                             counts = TasksCounts(today = 1),

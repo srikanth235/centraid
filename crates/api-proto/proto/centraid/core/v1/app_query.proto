@@ -61,12 +61,14 @@ message AppQueryRequest {
     AgendaPartiesRequest agenda_parties = 3;
     AgendaSearchRequest agenda_search = 4;
     AgendaEventRequest agenda_event = 5;
-    // Tasks (#1046): 10-14. 15 is `denied`'s in the answer, so no query takes it.
+    // Tasks (#1046): 10-14 and 16. 15 is `denied`'s in the answer, so no query takes it.
     TasksBoardRequest tasks_board = 10;
     TasksTaskRequest tasks_task = 11;
     TasksProjectsRequest tasks_projects = 12;
     TasksSearchRequest tasks_search = 13;
     TasksCatchUpRequest tasks_catch_up = 14;
+    // The trashed tasks (#1135): the shelf the page door cannot read, since the trash is the entity's.
+    TasksTrashRequest tasks_trash = 16;
     DocsDriveRequest docs_drive = 30;
     DocsSearchRequest docs_search = 31;
     DocsDocumentRequest docs_document = 32;
@@ -143,6 +145,7 @@ message AppQueryResponse {
     TasksProjects tasks_projects = 12;
     TasksSearch tasks_search = 13;
     TasksCatchUp tasks_catch_up = 14;
+    TasksTrash tasks_trash = 16;
     DocsDrive docs_drive = 30;
     DocsSearch docs_search = 31;
     DocsDocument docs_document = 32;

@@ -18,7 +18,7 @@ use centraid_apps_tasks::views::{self, GroupKind, Placed, View};
 use centraid_vault::Vault;
 use centraid_vault::time::zone::FireZone;
 
-use super::{RecordingSearch, VaultDoor, corrected_search, named, settle, zone_of};
+use super::{RecordingSearch, VaultDoor, corrected_search, named, settle, zone_if_any, zone_of};
 use crate::error::{CoreError, Result};
 
 type Answer = wire::app_query_response::Answer;
@@ -189,6 +189,40 @@ pub(super) fn projects(
                 .map(|section| section_to_wire(section, &open))
                 .collect(),
             inbox_count: count(views::counts(&open).inbox),
+        })
+    })
+}
+
+/// `tasks.trash`: the trashed tasks, each day read in the request's zone (none
+/// when no zone resolved).
+pub(super) fn trash(
+    vault: &Vault,
+    door: &VaultDoor<'_>,
+    asked: &wire::TasksTrashRequest,
+) -> Result<Answer> {
+    let zone = zone_if_any(vault, &asked.tz)?;
+    let day_in = |instant: Option<&str>| {
+        zone.as_ref()
+            .zip(instant)
+            .and_then(|(zone, instant)| local::read(instant, zone))
+            .map(|civil| civil.day_text())
+            .unwrap_or_default()
+    };
+    settle(door, tasks::load_trash(door), |data| {
+        Answer::TasksTrash(wire::TasksTrash {
+            tasks: data
+                .tasks
+                .into_iter()
+                .map(|row| wire::TasksTrashRow {
+                    deleted_local_day: day_in(row.deleted_at.as_deref()),
+                    purge_local_day: day_in(row.purge_at.as_deref()),
+                    deleted_at: row.deleted_at.unwrap_or_default(),
+                    task_id: row.task_id,
+                    title: row.title,
+                    purge_at: row.purge_at,
+                })
+                .collect(),
+            truncated: data.truncated,
         })
     })
 }

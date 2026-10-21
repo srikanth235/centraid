@@ -156,7 +156,7 @@ class AgendaHomeSpec : StringSpec({
             it.tz shouldBe "Europe/London"
         }
         // A ROW MOVED: the held list is stale, so it is read again too.
-        val stale = drive(typed.state, AgendaHomeMachine.rowsChanged("core_event", emptyList())!!)
+        val stale = drive(typed.state, AgendaHomeMachine.rowsChanged("event", emptyList())!!)
         AgendaReads.requests(stale.state, clock).shouldNotBeNull().map { it.kind() } shouldBe
             listOf("upcoming", "context", "tasks-today", "tasks-upcoming", "tasks-search", "search")
         reads[1].tasks_search.shouldNotBeNull().let {
@@ -608,7 +608,7 @@ class AgendaHomeSpec : StringSpec({
 
     "a row moved re-reads over the rows on screen, and only for the tables the queries read" {
         val home = landed(schedule, upcoming(timed("a", "Stand-up", "2026-06-16T09:00")))
-        val moved = drive(home, AgendaHomeMachine.rowsChanged("schedule_attendee", listOf("att-1"))!!)
+        val moved = drive(home, AgendaHomeMachine.rowsChanged("edge", listOf("att-1"))!!)
         moved.effects shouldBe listOf(ScreenEffect.ReadPage(AgendaHomeMachine.SCREEN_ID, null))
         moved.state.screen.data_.shouldNotBeNull()
         AgendaHomeMachine.rowsChanged("locker_item", listOf("x")).shouldBeNull()

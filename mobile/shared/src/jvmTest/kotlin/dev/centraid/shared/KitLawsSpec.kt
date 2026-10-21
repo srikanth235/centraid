@@ -461,10 +461,10 @@ class KitLawsSpec : StringSpec({
         refused.write.shouldNotBeNull().phase shouldBe WriteState.Phase.PHASE_REFUSED
 
         val query = TrashReads(tasksTrash).query(machine.initial(), null)
-        query.from shouldBe "schedule_task"
+        query.from shouldBe "task"
         query.where_ shouldBe "deleted_at IS NOT NULL"
         query.select shouldBe listOf("task_id", "title", "deleted_at")
-        machine.rowsChanged("schedule_task", emptyList()).shouldNotBeNull()
+        machine.rowsChanged("task", emptyList()).shouldNotBeNull()
         machine.rowsChanged("other", emptyList()).shouldBeNull()
     }
 
@@ -545,7 +545,7 @@ class KitLawsSpec : StringSpec({
 
     "trash: a table keyed unlike its rows re-reads on any change" {
         val machine = TrashMachine(tasksTrash.copy(reReadOnAnyChange = true))
-        machine.rowsChanged("schedule_task", listOf("profile-9")).shouldNotBeNull().rows_changed
+        machine.rowsChanged("task", listOf("profile-9")).shouldNotBeNull().rows_changed
             .shouldNotBeNull().ids.shouldBeEmpty()
         machine.rowsChanged("other", listOf("k")).shouldBeNull()
     }
@@ -553,7 +553,7 @@ class KitLawsSpec : StringSpec({
     private companion object {
         val tasksTrash = TrashSpec(
             appId = "tasks",
-            table = "schedule_task",
+            table = "task",
             restoreCommand = "tasks.restore_task",
             purgeCommand = "tasks.purge_task",
             emptyCommand = "tasks.empty_trash",

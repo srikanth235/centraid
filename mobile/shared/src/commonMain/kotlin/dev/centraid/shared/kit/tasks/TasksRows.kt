@@ -91,14 +91,13 @@ public object TasksRows {
         if (open) "${TasksCopy.MARK} $title ${TasksCopy.DONE_SUFFIX}" else "${TasksCopy.REOPEN} $title"
 
     public fun checkOf(status: String): TasksCheck = when (status) {
-        STATUS_COMPLETED -> TasksCheck.TASKS_CHECK_DONE
+        STATUS_DONE -> TasksCheck.TASKS_CHECK_DONE
         STATUS_CANCELLED -> TasksCheck.TASKS_CHECK_WONT_DO
-        STATUS_IN_PROCESS -> TasksCheck.TASKS_CHECK_IN_PROCESS
         else -> TasksCheck.TASKS_CHECK_OPEN
     }
 
     public fun isOpen(task: TasksTask): Boolean =
-        task.status != STATUS_COMPLETED && task.status != STATUS_CANCELLED
+        task.status != STATUS_DONE && task.status != STATUS_CANCELLED
 
     /**
      * THE DUE, IN WORDS. Overdue says how long ago — a fact, in the attention
@@ -326,11 +325,13 @@ public object TasksRows {
      * sections, and the tags on a row's meta line.
      */
     public val TABLES: Set<String> = setOf(
-        "schedule_task",
-        "schedule_project",
-        "schedule_section",
-        "core_tag",
-        "core_concept",
+        "entity",
+        "task",
+        "container",
+        "edge",
+        "document",
+        "photo",
+        "blob",
     )
 
     /** The board window, and how far "Show more" may widen it (the manifest's 20…500). */
@@ -342,9 +343,9 @@ public object TasksRows {
     public const val FILE_PROJECT: String = "project:"
     public const val FILE_SECTION: String = "section:"
 
-    public const val STATUS_NEEDS_ACTION: String = "needs-action"
-    public const val STATUS_IN_PROCESS: String = "in-process"
-    public const val STATUS_COMPLETED: String = "completed"
+    /** A task's status, as the vault holds it (#1135): open, done or cancelled. */
+    public const val STATUS_OPEN: String = "open"
+    public const val STATUS_DONE: String = "done"
     public const val STATUS_CANCELLED: String = "cancelled"
 
     /** A group verb's keys: Overdue's way out, and a section's add target. */

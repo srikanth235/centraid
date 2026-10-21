@@ -196,10 +196,10 @@ class AgendaTodoSpec : StringSpec({
 
         val added = drive(typed, AgendaInput.Add(ID))
         val write = added.effects.single() as ScreenEffect.SubmitWrite
-        write.command shouldBe "schedule.add_task"
+        write.command shouldBe "task.add"
         // TO-DO DATES NOTHING: the Inbox is for work with no day.
-        write.inputJson shouldBe """{"task_id":"$ID","title":"Buy milk"}"""
-        write.invokeKey shouldBe "schedule.add_task:$ID"
+        write.inputJson shouldBe """{"id":"$ID","title":"Buy milk"}"""
+        write.invokeKey shouldBe "task.add:$ID"
         added.state.screen.quick_add!!.title shouldBe ""
         val row = added.state.screen.data_!!.todo!!.groups.single { it.title == "Inbox" }.rows.single()
         row.task_id shouldBe ID
@@ -214,7 +214,7 @@ class AgendaTodoSpec : StringSpec({
         // answer — which carries the task — replaces the pending row.
         val committed = drive(added.state, settle(write.invokeKey, committed = true)).state
         committed.screen.status!!.sentence shouldBe "Added to Inbox"
-        val reread = drive(committed, AgendaHomeMachine.rowsChanged("schedule_task", listOf(ID))!!).state
+        val reread = drive(committed, AgendaHomeMachine.rowsChanged("task", listOf(ID))!!).state
         val answered = drive(reread, answerTodo(inboxBoard(task(ID, "Buy milk")))).state
         answered.screen.data_!!.todo!!.groups.single().rows.single().pending shouldBe false
     }
@@ -227,7 +227,7 @@ class AgendaTodoSpec : StringSpec({
         added.state.screen.data_!!.todo!!.groups.single().title shouldBe "Inbox"
         val refused = drive(
             added.state,
-            settle("schedule.add_task:$ID", committed = false, sentence = "The vault is read-only."),
+            settle("task.add:$ID", committed = false, sentence = "The vault is read-only."),
         ).state
         refused.screen.data_!!.todo!!.groups.shouldBeEmpty()
         refused.screen.status!!.let {
@@ -240,8 +240,8 @@ class AgendaTodoSpec : StringSpec({
         val landed = todoOn(inboxBoard(task("a", "Call Ana")))
         val checked = drive(landed, view(AgendaHomeEvent(task_checked = AgendaHomeEvent.TaskChecked(task_id = "a"))))
         val done = checked.effects.single() as ScreenEffect.SubmitWrite
-        done.command shouldBe "schedule.set_task_status"
-        done.inputJson shouldBe """{"task_id":"a","status":"completed"}"""
+        done.command shouldBe "task.complete"
+        done.inputJson shouldBe """{"id":"a"}"""
         checked.state.screen.data_!!.todo!!.groups.shouldBeEmpty()
         checked.state.screen.status!!.let {
             it.sentence shouldBe "Task done"
@@ -250,7 +250,8 @@ class AgendaTodoSpec : StringSpec({
 
         val undone = drive(checked.state, view(AgendaHomeEvent(status_acted = AgendaHomeEvent.StatusActed())))
         val back = undone.effects.single() as ScreenEffect.SubmitWrite
-        back.inputJson shouldBe """{"task_id":"a","status":"needs-action"}"""
+        back.command shouldBe "task.reopen"
+        back.inputJson shouldBe """{"id":"a"}"""
         back.invokeKey shouldNotBe done.invokeKey
         undone.state.screen.data_!!.todo!!.groups.single().rows.single().task_id shouldBe "a"
         undone.state.screen.status.shouldBeNull()
@@ -269,7 +270,7 @@ class AgendaTodoSpec : StringSpec({
         checked.state.screen.status!!.action_label shouldBe ""
         val key = (checked.effects.single() as ScreenEffect.SubmitWrite).invokeKey
         val committed = drive(checked.state, settle(key, committed = true)).state
-        val reread = drive(committed, AgendaHomeMachine.rowsChanged("schedule_task", listOf("r"))!!).state
+        val reread = drive(committed, AgendaHomeMachine.rowsChanged("task", listOf("r"))!!).state
         val next = daily.copy(task_id = "r2", due_day = "2026-06-16", days_from_today = 1, lands_today = false)
         val board = inboxBoard().copy(
             groups = listOf(TasksGroup(kind = TasksGroupKind.TASKS_GROUP_KIND_INBOX, key = "inbox", tasks = listOf(next))),
@@ -292,15 +293,15 @@ class AgendaTodoSpec : StringSpec({
 
         val filed = drive(sheet, view(AgendaHomeEvent(file_chosen = AgendaHomeEvent.FileChosen(key = "project:p1"))))
         val write = filed.effects.single() as ScreenEffect.SubmitWrite
-        write.command shouldBe "schedule.organize_task"
-        write.inputJson shouldBe """{"task_id":"a","project_id":"p1","clear_section":true,"sort_order":0}"""
+        write.command shouldBe "task.organize"
+        write.inputJson shouldBe """{"id":"a","project_id":"p1","section_id":null,"position":0}"""
         filed.state.screen.sheet shouldBe AgendaHomeState.Sheet.SHEET_NONE
         filed.state.screen.data_!!.todo!!.groups.shouldBeEmpty()
         drive(filed.state, settle(write.invokeKey, committed = true)).state.screen.status!!.sentence shouldBe "Filed in Garden"
 
         val toSection = drive(sheet, view(AgendaHomeEvent(file_chosen = AgendaHomeEvent.FileChosen(key = "section:s1"))))
         (toSection.effects.single() as ScreenEffect.SubmitWrite).inputJson shouldBe
-            """{"task_id":"a","project_id":"p1","section_id":"s1","sort_order":0}"""
+            """{"id":"a","project_id":"p1","section_id":"s1","position":0}"""
         // A KEY THE SHEET NO LONGER HOLDS files nothing and shuts it.
         drive(sheet, view(AgendaHomeEvent(file_chosen = AgendaHomeEvent.FileChosen(key = "project:gone")))).let {
             it.effects.shouldBeEmpty()
@@ -318,8 +319,8 @@ class AgendaTodoSpec : StringSpec({
         named.screen.new_project_can_submit shouldBe true
         val made = drive(named, view(AgendaHomeEvent(new_project_submitted = AgendaHomeEvent.NewProjectSubmitted())))
         (made.effects.single() as ScreenEffect.SubmitWrite).let {
-            it.command shouldBe "schedule.save_project"
-            it.inputJson shouldBe """{"name":"Garden"}"""
+            it.command shouldBe "container.create"
+            it.inputJson shouldBe """{"kind":"project","title":"Garden"}"""
         }
         made.state.screen.sheet shouldBe AgendaHomeState.Sheet.SHEET_NONE
         drive(made.state, settle((made.effects.single() as ScreenEffect.SubmitWrite).invokeKey, committed = true)).state
@@ -375,7 +376,7 @@ class AgendaTodoSpec : StringSpec({
         back.effects.shouldBeEmpty()
         back.state.screen.data_!!.todo!!.groups.single().rows.single().title shouldBe "Idea"
         // A change makes the held answers stale: they are read again after leaving.
-        val stale = drive(landed, AgendaHomeMachine.rowsChanged("schedule_task", listOf("a"))!!).state
+        val stale = drive(landed, AgendaHomeMachine.rowsChanged("task", listOf("a"))!!).state
         val away = drive(drive(stale, answerTodo(inboxBoard(task("a", "Idea")))).state, view(AgendaHomeEvent(band = AgendaHomeEvent.BandPicked(key = "day")))).state
         away.screen.destination shouldBe AgendaHomeState.Destination.DESTINATION_DAY
     }
@@ -392,14 +393,14 @@ class AgendaTodoSpec : StringSpec({
 
     "a change re-reads over the rows; an answer that raced a newer read is dropped; a failed read is no empty list" {
         val landed = todoOn(inboxBoard(task("a", "Call Ana")))
-        AgendaHomeMachine.rowsChanged("schedule_task", listOf("a")).shouldNotBeNull()
-        AgendaHomeMachine.rowsChanged("schedule_project", listOf("p")).shouldNotBeNull()
-        AgendaHomeMachine.rowsChanged("core_tag", listOf("t")).shouldNotBeNull()
+        AgendaHomeMachine.rowsChanged("task", listOf("a")).shouldNotBeNull()
+        AgendaHomeMachine.rowsChanged("container", listOf("p")).shouldNotBeNull()
+        AgendaHomeMachine.rowsChanged("edge", listOf("t")).shouldNotBeNull()
         AgendaHomeMachine.rowsChanged("locker_item", listOf("x")).shouldBeNull()
-        val reading = drive(landed, AgendaHomeMachine.rowsChanged("schedule_task", listOf("a"))!!)
+        val reading = drive(landed, AgendaHomeMachine.rowsChanged("task", listOf("a"))!!)
         reading.effects shouldBe listOf(ScreenEffect.ReadPage(AgendaHomeMachine.SCREEN_ID, null))
         reading.state.screen.data_.shouldNotBeNull()
-        val queued = drive(reading.state, AgendaHomeMachine.rowsChanged("schedule_project", listOf("p"))!!)
+        val queued = drive(reading.state, AgendaHomeMachine.rowsChanged("container", listOf("p"))!!)
         queued.effects.shouldBeEmpty()
         val stale = drive(queued.state, answerTodo(inboxBoard()))
         stale.effects shouldBe listOf(ScreenEffect.ReadPage(AgendaHomeMachine.SCREEN_ID, null))

@@ -90,10 +90,10 @@ public object TasksDetailMachine : ScreenMachine<TasksDetail, TasksDetailInput> 
 
     public val TABLES: Set<String> = TasksRows.TABLES
 
-    public const val EDIT: String = "schedule.edit_task"
-    public const val DELETE: String = "schedule.delete_task"
-    public const val TAG: String = "core.tag_item"
-    public const val UNTAG: String = "core.untag_item"
+    public const val EDIT: String = "task.edit"
+    public const val DELETE: String = "entity.trash"
+    public const val TAG: String = "tag.add"
+    public const val UNTAG: String = "tag.remove"
 
     /** `TasksField.key`s. */
     public const val WHEN: String = "when"
@@ -221,7 +221,7 @@ public object TasksDetailMachine : ScreenMachine<TasksDetail, TasksDetailInput> 
                 when {
                     isoWeekdayOf(day) == null -> Step(closed)
                     day == task.due_day -> Step(closed)
-                    else -> edit(closed, WHEN, "{${id(task)},\"due_at\":${jsonString(withTime(task, day))}}", day)
+                    else -> edit(closed, WHEN, "{${id(task)},\"due\":${jsonString(withTime(task, day))}}", day)
                 }
             }
 
@@ -233,7 +233,7 @@ public object TasksDetailMachine : ScreenMachine<TasksDetail, TasksDetailInput> 
                     Step(closed)
                 } else {
                     val day = task.due_day.ifEmpty { todayOf(state) }
-                    if (day.isEmpty()) Step(closed) else edit(closed, TIME, "{${id(task)},\"due_at\":${jsonString("${day}T$time")}}", time)
+                    if (day.isEmpty()) Step(closed) else edit(closed, TIME, "{${id(task)},\"due\":${jsonString("${day}T$time")}}", time)
                 }
             }
 
@@ -246,7 +246,7 @@ public object TasksDetailMachine : ScreenMachine<TasksDetail, TasksDetailInput> 
                 if (label.isEmpty()) {
                     Step(state)
                 } else {
-                    val input = "{\"subject_type\":\"schedule.task\",\"subject_id\":${jsonString(task.task_id)},\"label\":${jsonString(label)}}"
+                    val input = "{${id(task)},\"label\":${jsonString(label)}}"
                     submit(state, TAG, input, InvokeKeys.of(TAG, task.task_id, label, "n=${state.seq + 1}"), TAGS)
                 }
             }
@@ -275,7 +275,7 @@ public object TasksDetailMachine : ScreenMachine<TasksDetail, TasksDetailInput> 
                 if (title.isEmpty() || task.parent_task_id != null) {
                     Step(state)
                 } else {
-                    val input = "{\"title\":${jsonString(title)},\"parent_task_id\":${jsonString(task.task_id)}}"
+                    val input = "{\"title\":${jsonString(title)},\"parent_id\":${jsonString(task.task_id)}}"
                     submit(state, TaskOpsLaw.ADD, input, InvokeKeys.of(TaskOpsLaw.ADD, task.task_id, "sub=$title", "n=${state.seq + 1}"), "subtask")
                 }
             }
@@ -338,35 +338,35 @@ public object TasksDetailMachine : ScreenMachine<TasksDetail, TasksDetailInput> 
         return when (field) {
             WHEN -> {
                 if (key == NONE) {
-                    if (task.due_day.isEmpty()) Step(closed) else edit(closed, WHEN, "{$id,\"clear_due\":true}", key)
+                    if (task.due_day.isEmpty()) Step(closed) else edit(closed, WHEN, "{$id,\"due\":null}", key)
                 } else {
                     val day = dayFor(key, today) ?: return Step(closed)
-                    edit(closed, WHEN, "{$id,\"due_at\":${jsonString(withTime(task, day))}}", day)
+                    edit(closed, WHEN, "{$id,\"due\":${jsonString(withTime(task, day))}}", day)
                 }
             }
             TIME -> if (key == NONE && task.due_time.isNotEmpty()) {
-                edit(closed, TIME, "{$id,\"due_at\":${jsonString(task.due_day)}}", key)
+                edit(closed, TIME, "{$id,\"due\":${jsonString(task.due_day)}}", key)
             } else {
                 Step(closed)
             }
             REMINDER -> when {
                 task.due_day.isEmpty() -> Step(closed)
-                key == NONE -> if (task.remind_before_min == null) Step(closed) else edit(closed, REMINDER, "{$id,\"clear_remind\":true}", key)
+                key == NONE -> if (task.remind_before_min == null) Step(closed) else edit(closed, REMINDER, "{$id,\"remind_before_min\":null}", key)
                 else -> {
                     val lead = key.toLongOrNull()?.takeIf { l -> REMINDER_LEADS.any { it.first == l } } ?: return Step(closed)
                     edit(closed, REMINDER, "{$id,\"remind_before_min\":$lead}", key)
                 }
             }
             REPEATS -> when {
-                key == NONE -> if (!task.repeats) Step(closed) else edit(closed, REPEATS, "{$id,\"clear_rrule\":true}", key)
+                key == NONE -> if (!task.repeats) Step(closed) else edit(closed, REPEATS, "{$id,\"rule\":null}", key)
                 task.due_day.isEmpty() -> Step(closed)
                 else -> {
                     val rule = REPEAT_RULES.firstOrNull { it.first == key }?.third ?: return Step(closed)
-                    if (rule == task.rrule) Step(closed) else edit(closed, REPEATS, "{$id,\"rrule\":${jsonString(rule)}}", key)
+                    if (rule == task.rrule) Step(closed) else edit(closed, REPEATS, "{$id,\"rule\":${jsonString(rule)}}", key)
                 }
             }
             ANCHOR -> if ((key == "scheduled" || key == "completion") && task.repeats) {
-                val input = "{$id,\"sort_order\":${task.sort_order},\"recurrence_anchor\":${jsonString(key)}}"
+                val input = "{$id,\"anchor\":${jsonString(key)}}"
                 submit(closed, TaskOpsLaw.ORGANIZE, input, key(TaskOpsLaw.ORGANIZE, task, ANCHOR, key, closed), ANCHOR)
             } else {
                 Step(closed)
@@ -378,9 +378,9 @@ public object TasksDetailMachine : ScreenMachine<TasksDetail, TasksDetailInput> 
                 }
                 if (level == task.priority) Step(closed) else edit(closed, PRIORITY, "{$id,\"priority\":$level}", key)
             }
-            // "None" is `edit_task`'s `clear_effort`.
+            // "None" is `task.edit`'s `effort_min: null`.
             EFFORT -> if (key == NONE) {
-                if (task.effort_min == null) Step(closed) else edit(closed, EFFORT, "{$id,\"clear_effort\":true}", key)
+                if (task.effort_min == null) Step(closed) else edit(closed, EFFORT, "{$id,\"effort_min\":null}", key)
             } else {
                 val minutes = key.toLongOrNull()?.takeIf { it in EFFORTS } ?: return Step(closed)
                 if (minutes == task.effort_min) Step(closed) else edit(closed, EFFORT, "{$id,\"effort_min\":$minutes}", key)
@@ -405,8 +405,8 @@ public object TasksDetailMachine : ScreenMachine<TasksDetail, TasksDetailInput> 
             }
             // A TAG CHIP IS ITS OWN REMOVAL: tapping it untags.
             TAGS -> {
-                val tag = task.tags.firstOrNull { it.tag_id == key } ?: return Step(closed)
-                submit(closed, UNTAG, "{\"tag_id\":${jsonString(tag.tag_id)}}", InvokeKeys.of(UNTAG, tag.tag_id), TAGS)
+                val tag = task.tags.firstOrNull { it.concept_id == key } ?: return Step(closed)
+                submit(closed, UNTAG, "{${id(task)},\"label\":${jsonString(tag.label)}}", InvokeKeys.of(UNTAG, task.task_id, tag.concept_id), TAGS)
             }
             else -> Step(closed)
         }
@@ -426,9 +426,9 @@ public object TasksDetailMachine : ScreenMachine<TasksDetail, TasksDetailInput> 
             )
             TasksDetailState.Asking.ASKING_RELEASE -> submit(
                 cleared,
-                TaskOpsLaw.STATUS,
-                "{${id(task)},\"status\":\"${TasksRows.STATUS_CANCELLED}\"}",
-                key(TaskOpsLaw.STATUS, task, "release", TasksRows.STATUS_CANCELLED, cleared),
+                TaskOpsLaw.CANCEL,
+                "{${id(task)}}",
+                key(TaskOpsLaw.CANCEL, task, "release", TasksRows.STATUS_CANCELLED, cleared),
                 VERB_RELEASE,
             )
             else -> Step(cleared)
@@ -696,7 +696,7 @@ public object TasksDetailMachine : ScreenMachine<TasksDetail, TasksDetailInput> 
             label = TasksCopy.FIELD_TAGS,
             value_ = if (task.tags.isEmpty()) TasksCopy.FIELD_EMPTY else task.tags.joinToString(" ") { "#${it.label}" },
             note = if (task.tags.isEmpty()) "" else TasksCopy.TAGS_NOTE_B,
-            choices = task.tags.map { chip(it.tag_id, it.label, selected = true) },
+            choices = task.tags.map { chip(it.concept_id, it.label, selected = true) },
             add_text = true,
             add_placeholder = TasksCopy.TAGS_ADD,
             enabled = true,
@@ -784,7 +784,7 @@ public object TasksDetailMachine : ScreenMachine<TasksDetail, TasksDetailInput> 
 
     private fun todayOf(state: TasksDetail): String = state.answer?.today ?: ""
 
-    private fun id(task: TasksTask): String = "\"task_id\":${jsonString(task.task_id)}"
+    private fun id(task: TasksTask): String = "\"id\":${jsonString(task.task_id)}"
 
     private fun projectsOf(state: TasksDetail): Pair<List<centraid.core.v1.TasksProject>, List<centraid.core.v1.TasksSection>> {
         val answer = state.projects
@@ -826,17 +826,17 @@ public object TasksDetailMachine : ScreenMachine<TasksDetail, TasksDetailInput> 
         override fun withSending(state: TasksDetail, sending: TasksDetailData?): TasksDetail =
             state.copy(screen = state.screen.copy(sending = sending?.draft))
 
-        /** `edit_task`'s input: the task, and ONLY the words that changed. */
+        /** `task.edit`'s input: the task, and ONLY the words that changed. */
         override fun input(state: TasksDetail, draft: TasksDetailData, baseline: TasksDetailData?): String? {
             val now = draft.draft ?: TasksDraft()
             val was = baseline?.draft ?: TasksDraft()
             val parts = mutableListOf<String>()
             if (now.title.trim() != was.title.trim()) parts += "\"title\":${jsonString(now.title.trim())}"
             if (now.notes != was.notes) {
-                parts += if (now.notes.isBlank()) "\"clear_description\":true" else "\"description\":${jsonString(now.notes)}"
+                parts += if (now.notes.isBlank()) "\"description\":null" else "\"description\":${jsonString(now.notes)}"
             }
             if (parts.isEmpty()) return null
-            return "{\"task_id\":${jsonString(state.screen.task_id)},${parts.joinToString(",")}}"
+            return "{\"id\":${jsonString(state.screen.task_id)},${parts.joinToString(",")}}"
         }
 
         /** A task needs a name: an emptied title is kept on screen and not sent. */

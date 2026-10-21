@@ -619,7 +619,7 @@ internal object AgendaFold {
     private const val NO_CALENDAR_HUE: String = "cSlate"
 
     /** The index entity a project container carries (`SearchContainers`). */
-    private const val PROJECT_ENTITY: String = "schedule.project"
+    private const val PROJECT_ENTITY: String = "project"
 
     private const val CANCELLED: String = "cancelled"
     private const val NEEDS_ACTION: String = "needs-action"

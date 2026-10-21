@@ -29,7 +29,7 @@ public data class PhoneReminder(
  * data", R-ONBOARD-4).
  *
  * Tasks' day one offers the import (`EmptyState.import_source`); each open
- * reminder becomes `schedule.add_task` with its notes and due day — an ordinary
+ * reminder becomes `task.add` with its notes and due day — an ordinary
  * task of the member's, no mark. Android has no system reminders, so its shell
  * offers nothing and draws Tasks' own action. Duplicates within the read (one
  * title, one due day) are folded.
@@ -39,7 +39,7 @@ public object RemindersImport {
         var added = 0
         var refused = 0
         for (reminder in reminders(reminders)) {
-            if (PhoneImport.write(core, "schedule.add_task", input(reminder))) added += 1 else refused += 1
+            if (PhoneImport.write(core, "task.add", input(reminder))) added += 1 else refused += 1
         }
         return PhoneImport.Outcome(added = added, refused = refused)
     }
@@ -58,11 +58,11 @@ public object RemindersImport {
         }
     }
 
-    /** `schedule.add_task`'s input for one reminder. */
+    /** `task.add`'s input for one reminder. */
     public fun input(reminder: PhoneReminder): String {
         val fields = mutableListOf("\"title\":${PhoneImport.quote(reminder.title)}")
         if (reminder.notes.isNotEmpty()) fields += "\"description\":${PhoneImport.quote(reminder.notes)}"
-        if (reminder.due.isNotEmpty()) fields += "\"due_at\":${PhoneImport.quote(reminder.due)}"
+        if (reminder.due.isNotEmpty()) fields += "\"due\":${PhoneImport.quote(reminder.due)}"
         return fields.joinToString(",", prefix = "{", postfix = "}")
     }
 

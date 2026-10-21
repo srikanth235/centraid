@@ -803,3 +803,40 @@ fn priority_runs_higher_more_urgent_and_subtasks_are_ordered_that_way() {
         centraid_assist::native::meta::PRIORITY_SCALE
     );
 }
+
+/// THE TRASH SHELF is the entity's: the trashed tasks and the subtasks that went with
+/// them, each day read in the request zone, and a restore empties it.
+#[test]
+fn the_trash_shelf_lists_what_was_trashed_with_its_days_in_the_request_zone() {
+    let scratch = Scratch::founded();
+    let parent = scratch.titled("Move house", None);
+    let child = scratch.add(serde_json::json!({ "title": "Pack the books", "parent_id": parent }));
+    scratch.titled("Kept", None);
+    let shelf = || {
+        let A::TasksTrash(shelf) = scratch
+            .ask(Q::TasksTrash(wire::TasksTrashRequest { tz: TZ.to_owned() }))
+            .expect("the shelf answers")
+        else {
+            panic!("the shelf answered as something else");
+        };
+        shelf
+    };
+    assert!(shelf().tasks.is_empty());
+    scratch.run("entity.trash", serde_json::json!({ "id": parent }));
+    let trashed = shelf();
+    let mut titles: Vec<&str> = trashed.tasks.iter().map(|row| row.title.as_str()).collect();
+    titles.sort_unstable();
+    assert_eq!(titles, ["Move house", "Pack the books"]);
+    let row = trashed
+        .tasks
+        .iter()
+        .find(|row| row.task_id == child)
+        .expect("the subtask is a row of its own");
+    assert_eq!(
+        row.deleted_local_day, "2099-06-01",
+        "22:00 on the 1st in New York"
+    );
+    assert_eq!(row.purge_local_day, "2099-07-01", "thirty days on");
+    scratch.run("entity.restore", serde_json::json!({ "id": parent }));
+    assert!(shelf().tasks.is_empty());
+}

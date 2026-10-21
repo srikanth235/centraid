@@ -10,8 +10,7 @@ import io.kotest.matchers.shouldBe
  * The vault's one expander takes a `FREQ=MONTHLY` rule with ONE positional
  * `BYDAY` or ONE `BYMONTHDAY`, so the import keeps both; it still refuses
  * `BYSETPOS`, a `BYDAY` or `BYMONTHDAY` list and the rest, so those are left
- * in the rule for the vault to refuse (the import then writes the window's
- * occurrences one by one). `crates/vault/src/time/rrule.rs` is the rule's home.
+ * in the rule for the vault to flag (the event then shows at its anchor). `crates/vault/src/time/rrule.rs` is the rule's home.
  */
 class CalendarImportRuleSpec : StringSpec({
 

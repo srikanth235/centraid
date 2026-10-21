@@ -138,26 +138,13 @@ public object AgendaHomeMachine : ScreenMachine<AgendaHome, AgendaInput> {
     public const val LIST_DAYS: Int = 120
 
     /**
-     * THE TABLES THIS SCREEN'S QUERIES READ — the event and its calendar
-     * edge, guests, a series' skipped and moved occurrences, calendars, the
-     * people a birthday and a guest name come from, and the tasks, their
-     * projects and sections, and the tags on a row's meta line. `AgendaReads.tables`
-     * is this set, and `AppReadsSpec` asserts [rowsChanged] answers for exactly
-     * it over every vault table.
+     * THE TABLES THIS SCREEN'S QUERIES READ — the event and its guests, a series' skipped and
+     * moved days, the calendars, the people a birthday and a guest name come from, and the tasks,
+     * their projects and sections, and the tags on a row's meta line. `AgendaReads.tables` is
+     * this set, and `AppReadsSpec` asserts [rowsChanged] answers for exactly it over every vault
+     * table.
      */
-    public val TABLES: Set<String> = setOf(
-        "core_event",
-        "schedule_event_ext",
-        "schedule_attendee",
-        "schedule_recurrence_exception",
-        "schedule_calendar",
-        "core_party",
-        "schedule_task",
-        "schedule_project",
-        "schedule_section",
-        "core_tag",
-        "core_concept",
-    )
+    public val TABLES: Set<String> = AgendaTables.HOME
 
     override fun initial(): AgendaHome = decorate(
         AgendaHome(
@@ -436,8 +423,8 @@ public object AgendaHomeMachine : ScreenMachine<AgendaHome, AgendaInput> {
                 } else {
                     val out = TaskOpsLaw.created(
                         state.tasks.ops,
-                        TaskOpsLaw.SAVE_PROJECT,
-                        "{\"name\":${jsonString(name)}}",
+                        TaskOpsLaw.CREATE_CONTAINER,
+                        "{\"kind\":\"project\",\"title\":${jsonString(name)}}",
                         name,
                         TasksCopy.PROJECT_CREATED,
                     )

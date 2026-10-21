@@ -34,7 +34,7 @@ class SearchContainersSpec : StringSpec({
         val hits = listOf(
             ContainerHit(entity = "notebook", id = "nb", title = "Cabin", app_id = "notes"),
             ContainerHit(entity = "core.collection", id = "al", title = "Summer", app_id = "photos"),
-            ContainerHit(entity = "schedule.project", id = "pr", title = "Garden", app_id = "tasks"),
+            ContainerHit(entity = "project", id = "pr", title = "Garden", app_id = "tasks"),
             ContainerHit(entity = "core.concept", id = "fo", title = "Taxes", app_id = "docs"),
         )
         val rows = SearchContainers.fold(hits)

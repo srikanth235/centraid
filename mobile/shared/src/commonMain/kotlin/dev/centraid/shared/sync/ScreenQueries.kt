@@ -238,7 +238,7 @@ internal fun deniedFailure(denial: AppQueryDenial): ReadFailure =
  */
 internal fun AppQueryRequest.zone(): String? =
     agenda_upcoming?.tz ?: agenda_day_context?.tz ?: agenda_search?.tz ?: agenda_event?.tz
-        ?: tasks_board?.tz ?: tasks_task?.tz ?: tasks_projects?.tz ?: tasks_search?.tz ?: tasks_catch_up?.tz
+        ?: tasks_board?.tz ?: tasks_task?.tz ?: tasks_projects?.tz ?: tasks_search?.tz ?: tasks_catch_up?.tz ?: tasks_trash?.tz
         ?: docs_drive?.tz ?: docs_search?.tz ?: docs_document?.tz ?: docs_activity?.tz
         ?: notes_library?.tz ?: notes_journal?.tz ?: notes_trash?.tz ?: notes_history?.tz
         ?: notes_search?.tz ?: notes_note?.tz ?: notes_link_targets?.tz

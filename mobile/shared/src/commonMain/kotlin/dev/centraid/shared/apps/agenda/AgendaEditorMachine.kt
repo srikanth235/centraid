@@ -99,24 +99,23 @@ public sealed interface AgendaEditorInput {
  *
  * ## Which command
  *
- * - CREATE: `schedule.propose_event`.
+ * - CREATE: `event.propose`.
  * - EDIT of a one-off, or of a series with "the whole series":
- *   `schedule.edit_event`, with the CHANGED fields only, clears spelt as the
- *   schema's `clear_*` flags.
+ *   `event.edit`, with the CHANGED fields only, a clear spelt `null`.
  * - EDIT of one occurrence, or it and the ones after:
- *   `schedule.edit_event_occurrence`, `action: "override"`, keyed on the
- *   occurrence's `original_start_local`. A new repeat rule cannot ride it —
- *   the schema has no `rrule` — so a rule change is the whole series' alone,
- *   and moving the whole series' time is offered only from its first
- *   occurrence (moving the anchor from a later one would drop every
- *   occurrence before it).
- * - Skip: `edit_event_occurrence`, `action: "skip"`, scope `occurrence`.
+ *   `event.edit_occurrence`, `action: "override"`, keyed on the
+ *   occurrence's `original_start`. Only the day's own times and words ride it: a new repeat
+ *   rule, a guest, a reminder, a link or a calendar belong to the whole series, so
+ *   changing one of them is offered for the series alone, and moving the whole series'
+ *   time is offered only from its first occurrence (moving the anchor from a later one
+ *   would drop every occurrence before it).
+ * - Skip: `event.edit_occurrence`, `action: "skip"`, scope `occurrence`.
  *
  * ## Time is civil, and the core resolves it
  *
  * A timed event is written as the wall clock the member picked —
- * `YYYY-MM-DDTHH:MM:00` — with `tz`, the device's zone the read was asked in:
- * the core turns the pair into an instant (`commands/event_time.rs`), because
+ * `YYYY-MM-DDTHH:MM:00` — with `zone`, the device's zone the read was asked in:
+ * the vault turns the pair into an instant (`commands/event.rs`), because
  * `commonMain` computes no offset (`sync/Instants.kt`), and a clock the zone
  * skips is refused with the core's sentence. Only while no zone is known yet
  * does a save fall back to FLOATING, the wall clock alone. An all-day event is
@@ -133,7 +132,7 @@ public sealed interface AgendaEditorInput {
  * date). Everything else is an event's alone: [AgendaEditorData.show_event_fields]
  * is false for a task and the machine ignores those events then.
  *
- * A task saves as `schedule.add_task` (`task_id`, `title`, `due_at`): the
+ * A task saves as `task.add` (`id`, `title`, `due`): the
  * due is the bare day, or the floating local `YYYY-MM-DDTHH:MM` — the
  * command's own spelling of a date and of a wall clock, which Tasks' detail
  * writes too. The sitting ends on the commit as an event's does (#1089).
@@ -704,7 +703,7 @@ public object AgendaEditorMachine : ScreenMachine<AgendaEditorScreen, AgendaEdit
     private fun shaped(draft: AgendaDraft, kind: AgendaEditorState.Kind): AgendaDraft =
         if (kind == AgendaEditorState.Kind.KIND_TASK) allDay(draft, true) else allDay(draft, false)
 
-    /** A task's due, as `schedule.add_task` takes it: a bare day, or a floating local time. */
+    /** A task's due, as `task.add` takes it: a bare day, or a floating local time. */
     internal fun dueOf(draft: AgendaDraft): String =
         if (draft.all_day) draft.start_day else "${draft.start_day}T${draft.start_time}"
 
@@ -762,80 +761,85 @@ public object AgendaEditorMachine : ScreenMachine<AgendaEditorScreen, AgendaEdit
 
     /**
      * A draft's times, as the command takes them: all-day civil days with
-     * their semantics; a timed wall clock with the device's [zone] (`tz`),
-     * which the core resolves — or, with no zone known, floating.
+     * their timing; a timed wall clock with the device's [zone], which the
+     * vault resolves to the instant it is — or, with no zone known, floating.
      */
     internal fun times(json: AgendaWrites.Json, draft: AgendaDraft, zone: String): AgendaWrites.Json = when {
         draft.all_day ->
-            json.str("dtstart", draft.start_day).str("dtend", draft.end_day).str("recurrence_semantics", ALL_DAY)
+            json.str("starts", draft.start_day).str("ends", draft.end_day).str("timing", ALL_DAY)
         zone.isNotEmpty() ->
-            json.str("dtstart", "${draft.start_day}T${draft.start_time}:00")
-                .str("dtend", "${draft.end_day}T${draft.end_time}:00")
-                .str("tz", zone)
+            json.str("starts", "${draft.start_day}T${draft.start_time}:00")
+                .str("ends", "${draft.end_day}T${draft.end_time}:00")
+                .str("zone", zone)
         else ->
-            json.str("dtstart", "${draft.start_day}T${draft.start_time}:00")
-                .str("dtend", "${draft.end_day}T${draft.end_time}:00")
-                .str("recurrence_semantics", FLOATING)
+            json.str("starts", "${draft.start_day}T${draft.start_time}:00")
+                .str("ends", "${draft.end_day}T${draft.end_time}:00")
+                .str("timing", FLOATING)
     }
 
     internal fun propose(state: AgendaEditorScreen): Write {
         val draft = state.draft!!
         val json = AgendaWrites.Json()
-            .str("summary", draft.title.trim())
+            .str("title", draft.title.trim())
         if (draft.notes.isNotBlank()) json.str("description", draft.notes.trim())
         times(json, draft, state.zone).str("calendar_id", draft.calendar_id)
-        if (draft.guest_ids.isNotEmpty()) json.strings("attendee_party_ids", draft.guest_ids)
-        RULES[draft.repeat_key]?.let { json.str("rrule", it) }
-        if (draft.link.isNotBlank()) json.str("conferencing_uri", draft.link.trim())
+        if (draft.guest_ids.isNotEmpty()) json.strings("attendees", draft.guest_ids)
+        RULES[draft.repeat_key]?.let { json.str("rule", it) }
+        if (draft.link.isNotBlank()) json.str("url", draft.link.trim())
         reminderOf(draft)?.let { json.reminders("reminders", it) }
         return Write(AgendaWrites.PROPOSE, AgendaWrites.NEW_SUBJECT, json.build())
     }
 
-    /** `schedule.edit_event`: the changed fields, clears as `clear_*`. */
+    /** `event.edit`: the changed fields; a key stated `null` clears what it names. */
     internal fun editEvent(state: AgendaEditorScreen, event: AgendaEvent): Write {
         val draft = state.draft!!
         val base = state.baseline!!
-        val json = AgendaWrites.Json().str("event_id", event.event_id)
-        if (draft.title.trim() != base.title.trim()) json.str("summary", draft.title.trim())
+        val json = AgendaWrites.Json().str("id", event.event_id)
+        if (draft.title.trim() != base.title.trim()) json.str("title", draft.title.trim())
         if (draft.notes.trim() != base.notes.trim()) {
-            if (draft.notes.isBlank()) json.bool("clear_description", true) else json.str("description", draft.notes.trim())
+            if (draft.notes.isBlank()) json.clear("description") else json.str("description", draft.notes.trim())
         }
         if (timesChanged(draft, base)) times(json, draft, state.zone)
         if (draft.repeat_key != base.repeat_key) {
             val rule = RULES[draft.repeat_key]
-            if (rule == null) json.bool("clear_rrule", true) else json.str("rrule", rule)
+            if (rule == null) json.clear("rule") else json.str("rule", rule)
         }
         if (draft.calendar_id != base.calendar_id && draft.calendar_id.isNotEmpty()) {
             json.str("calendar_id", draft.calendar_id)
         }
         if (draft.link.trim() != base.link.trim()) {
-            if (draft.link.isBlank()) json.bool("clear_conferencing", true) else json.str("conferencing_uri", draft.link.trim())
+            if (draft.link.isBlank()) json.clear("url") else json.str("url", draft.link.trim())
         }
         if (draft.reminder_key != base.reminder_key) json.reminders("reminders", reminderOf(draft))
-        if (draft.guest_ids.toSet() != base.guest_ids.toSet()) json.strings("attendee_party_ids", guestsToSend(event, draft))
+        if (draft.guest_ids.toSet() != base.guest_ids.toSet()) json.strings("attendees", guestsToSend(event, draft))
         return Write(AgendaWrites.EDIT, event.event_id, json.build())
     }
 
-    /** `schedule.edit_event_occurrence`, `override`: the changed fields its schema takes. */
+    /**
+     * `event.edit_occurrence`, `override`: the day's own times and words, and nothing else. A
+     * guest, a reminder, a link or a calendar belongs to the whole event ([seriesOnly]), so
+     * [scopes] offers this change only for the series.
+     */
     internal fun override(state: AgendaEditorScreen, event: AgendaEvent, scope: String): Write {
         val draft = state.draft!!
         val base = state.baseline!!
         val json = AgendaWrites.Json()
-            .str("event_id", event.event_id)
-            .str("original_start_local", event.original_start_local ?: "")
+            .str("id", event.event_id)
+            .str("original_start", event.original_start_local ?: "")
             .str("scope", scope)
             .str("action", "override")
         if (timesChanged(draft, base)) times(json, draft, state.zone)
-        if (draft.title.trim() != base.title.trim()) json.str("summary", draft.title.trim())
+        if (draft.title.trim() != base.title.trim()) json.str("title", draft.title.trim())
         if (draft.notes.trim() != base.notes.trim()) json.str("description", draft.notes.trim())
-        if (draft.calendar_id != base.calendar_id && draft.calendar_id.isNotEmpty()) {
-            json.str("calendar_id", draft.calendar_id)
-        }
-        if (draft.reminder_key != base.reminder_key) json.reminders("reminders", reminderOf(draft))
-        if (draft.link.trim() != base.link.trim()) json.str("conferencing_uri", draft.link.trim())
-        if (draft.guest_ids.toSet() != base.guest_ids.toSet()) json.strings("attendee_party_ids", guestsToSend(event, draft))
         return Write(AgendaWrites.OCCURRENCE, event.event_id, json.build())
     }
+
+    /** Whether the draft changes what only the whole event has: its calendar, link, reminder or guests. */
+    private fun seriesOnly(draft: AgendaDraft, base: AgendaDraft): Boolean =
+        (draft.calendar_id != base.calendar_id && draft.calendar_id.isNotEmpty()) ||
+            draft.link.trim() != base.link.trim() ||
+            draft.reminder_key != base.reminder_key ||
+            draft.guest_ids.toSet() != base.guest_ids.toSet()
 
     /** THE OWNER STAYS ON THEIR OWN INVITATION: replacing the list never drops `is_you`. */
     private fun guestsToSend(event: AgendaEvent, draft: AgendaDraft): List<String> =
@@ -912,13 +916,18 @@ public object AgendaEditorMachine : ScreenMachine<AgendaEditorScreen, AgendaEdit
         val base = state.baseline ?: return emptyList()
         val event = eventOf(state) ?: return emptyList()
         val ruleChanged = draft.repeat_key != base.repeat_key
+        val wholeEventOnly = seriesOnly(draft, base)
         val movesSeries = timesChanged(draft, base) && event.is_recurrence_instance
         return AgendaEventMachine.scopes(state.scope).map { choice ->
             when (choice.scope) {
                 AgendaScope.AGENDA_SCOPE_SERIES ->
                     if (movesSeries) choice.copy(enabled = false, selected = false, note = AgendaCopy.SCOPE_MOVE_NOTE) else choice
                 else ->
-                    if (ruleChanged) choice.copy(enabled = false, selected = false, note = AgendaCopy.SCOPE_RULE_NOTE) else choice
+                    when {
+                        ruleChanged -> choice.copy(enabled = false, selected = false, note = AgendaCopy.SCOPE_RULE_NOTE)
+                        wholeEventOnly -> choice.copy(enabled = false, selected = false, note = AgendaCopy.SCOPE_SERIES_NOTE)
+                        else -> choice
+                    }
             }
         }
     }

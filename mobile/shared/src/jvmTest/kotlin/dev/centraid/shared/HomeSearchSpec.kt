@@ -51,7 +51,7 @@ class HomeSearchSpec : StringSpec({
         fun answered(term: String, corrected: String) = HomeSearchReads.arrived(
             listOf(
                 AppQueryResponse(
-                    vault_search = VaultSearch(hits = listOf(hit("tasks", "schedule.task", "t1", "Buy sunscreen")), corrected = corrected),
+                    vault_search = VaultSearch(hits = listOf(hit("tasks", "task", "t1", "Buy sunscreen")), corrected = corrected),
                 ),
             ),
             listOf(AppQueryRequest(vault_search = VaultSearchRequest(term = term, tz = now.zone))),
@@ -88,10 +88,10 @@ class HomeSearchSpec : StringSpec({
         val data = HomeSearchMachine.fold(
             listOf(
                 hit("notes", "note", "n1", "Cabin packing"),
-                hit("agenda", "core.event", "e1", "Cabin weekend"),
+                hit("agenda", "event", "e1", "Cabin weekend"),
                 hit("notes", "note", "n2", "Cabin key"),
                 hit("photos", "core.content_item", "c1", "Cabin at dusk", openId = "a1"),
-                hit("tasks", "schedule.task", "t1", "Book the cabin"),
+                hit("tasks", "task", "t1", "Book the cabin"),
             ),
         )
         // SPRINGBOARD_ORDER: photos, docs, agenda, notes, money, people. The task hit is
@@ -203,8 +203,8 @@ class HomeSearchSpec : StringSpec({
             listOf(
                 hit("notes", "note", "n1", "Cabin packing"),
                 hit("people", "person", "p1", "Kate Bell"),
-                hit("agenda", "core.event", "e1", "Cabin weekend"),
-                hit("tasks", "schedule.task", "t1", "Book the cabin"),
+                hit("agenda", "event", "e1", "Cabin weekend"),
+                hit("tasks", "task", "t1", "Book the cabin"),
                 hit("docs", "core.document", "d1", "Cabin lease"),
                 hit("photos", "core.content_item", "c1", "Cabin at dusk", openId = "a1"),
             ),

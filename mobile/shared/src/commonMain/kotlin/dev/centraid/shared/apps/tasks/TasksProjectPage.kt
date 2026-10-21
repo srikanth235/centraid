@@ -142,8 +142,8 @@ public object TasksProjectMachine : ScreenMachine<TasksProjectPage, TasksProject
                 if (name.isEmpty() || screen.project_id.isEmpty()) {
                     Step(state)
                 } else {
-                    val input = "{\"project_id\":${jsonString(screen.project_id)},\"name\":${jsonString(name)}}"
-                    val out = TaskOpsLaw.created(state.ops, TaskOpsLaw.SAVE_SECTION, input, "${screen.project_id}/$name", TasksCopy.SECTION_ADDED)
+                    val input = "{\"kind\":\"section\",\"title\":${jsonString(name)},\"parent\":${jsonString(screen.project_id)}}"
+                    val out = TaskOpsLaw.created(state.ops, TaskOpsLaw.CREATE_CONTAINER, input, "${screen.project_id}/$name", TasksCopy.SECTION_ADDED)
                     Step(state.copy(ops = out.ops, screen = screen.copy(sheet = NONE, new_section_name = "")), out.effects)
                 }
             }
