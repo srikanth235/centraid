@@ -243,8 +243,10 @@ private fun declaredCommands(repositoryRoot: File): Set<String> {
         // A file with the helper has one `owner_schema:` (the helper's own body)
         // and many calls; every other file has one field per `name:`.
         val helper = "fn definition(" in text
+        // The registry's own `plain` constructor names `owner_schema:` once, as a parameter.
+        val constructor = if ("const fn plain(" in text) 1 else 0
         withClue("${file.name}: $fields `owner_schema:` fields, ${byName.size} by name, ${byHelper.size} by helper") {
-            fields shouldBe if (helper) 1 else byName.size
+            fields shouldBe (if (helper) 1 else byName.size) + constructor
             if (helper) byHelper.isNotEmpty().shouldBeTrue() else byHelper shouldBe emptyList()
         }
         byName + byHelper + byPlain

@@ -32,7 +32,7 @@ class SearchContainersSpec : StringSpec({
 
     "the four kinds are named once, each with its word, its glyph and the key it opens by" {
         val hits = listOf(
-            ContainerHit(entity = "core.collection", id = "nb", title = "Cabin", app_id = "notes"),
+            ContainerHit(entity = "notebook", id = "nb", title = "Cabin", app_id = "notes"),
             ContainerHit(entity = "core.collection", id = "al", title = "Summer", app_id = "photos"),
             ContainerHit(entity = "schedule.project", id = "pr", title = "Garden", app_id = "tasks"),
             ContainerHit(entity = "core.concept", id = "fo", title = "Taxes", app_id = "docs"),
@@ -59,7 +59,7 @@ class SearchContainersSpec : StringSpec({
             listOf(
                 hit("notes", "note", "n1", "Cabin packing"),
                 hit("notes", "note", "n2", "Cabin key"),
-                hit("notes", "core.collection", "nb", "Cabin"),
+                hit("notes", "notebook", "nb", "Cabin"),
                 hit("docs", "core.concept", "fo", "Cabin papers"),
             ),
         )
@@ -81,7 +81,7 @@ class SearchContainersSpec : StringSpec({
         fun typed(state: centraid.screen.v1.HomeSearchState, term: String) =
             HomeSearchMachine.reduce(state, HomeSearchEvent(term = HomeSearchEvent.TermChanged(term = term))).state
         fun answer(term: String) = HomeSearchReads.arrived(
-            listOf(AppQueryResponse(vault_search = VaultSearch(hits = listOf(hit("notes", "core.collection", "nb", "Cabin"))))),
+            listOf(AppQueryResponse(vault_search = VaultSearch(hits = listOf(hit("notes", "notebook", "nb", "Cabin"))))),
             listOf(AppQueryRequest(vault_search = VaultSearchRequest(term = term, tz = "Europe/Lisbon"))),
         )
         val second = typed(typed(opened, "ca"), "cabin")

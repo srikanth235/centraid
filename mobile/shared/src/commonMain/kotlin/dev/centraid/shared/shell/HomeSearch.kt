@@ -261,7 +261,7 @@ public object HomeSearchMachine : ScreenMachine<HomeSearchState, HomeSearchEvent
 
     /** What one row IS, in a word — the soft column beside its title. */
     private fun kindOf(entity: String): String = when (entity) {
-        "knowledge.note" -> SharedCopy.SEARCH_KIND_NOTE
+        "note" -> SharedCopy.SEARCH_KIND_NOTE
         "core.party" -> SharedCopy.SEARCH_KIND_PERSON
         "core.event" -> SharedCopy.SEARCH_KIND_EVENT
         "schedule.task" -> SharedCopy.SEARCH_KIND_TASK
@@ -277,7 +277,7 @@ public object HomeSearchMachine : ScreenMachine<HomeSearchState, HomeSearchEvent
      * opens as the app's home.
      */
     private fun routeEntityOf(entity: String): String = when (entity) {
-        "knowledge.note" -> "note"
+        "note" -> "note"
         "core.party" -> "person"
         "core.event" -> "event"
         "schedule.task" -> "task"

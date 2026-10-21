@@ -359,11 +359,11 @@ class NotesAppSpec : StringSpec({
         val state = loadedLibrary(row("n-1", "A"))
         val open = NotesLibraryMachine.reduce(state, NotesLibraryEvent(search_opened = NotesLibraryEvent.SearchOpened()))
         val typed = NotesLibraryMachine.reduce(open.state, NotesLibraryEvent(search_term = NotesLibraryEvent.SearchTermChanged(term = "cabin"))).state
-        val notebook = centraid.core.v1.ContainerHit(entity = "core.collection", id = "nb-1", title = "Cabin", app_id = "notes")
+        val notebook = centraid.core.v1.ContainerHit(entity = "notebook", id = "nb-1", title = "Cabin", app_id = "notes")
         val answer = NotesLibraryReads.arrived(listOf(AppQueryResponse(notes_search = NotesSearch(containers = listOf(notebook)))))
         val found = NotesLibraryMachine.reduce(typed, answer).state
         val container = found.search!!.containers.single()
-        container.entity shouldBe "core.collection"
+        container.entity shouldBe "notebook"
         container.kind_label shouldBe "Notebook"
         container.target shouldBe centraid.screen.v1.ChatCard(app = "notes", entity = "notebook", id = "nb-1", title = "Cabin")
         // A notebook that matched is an answer: rows are empty and the sentence is not drawn.
@@ -389,7 +389,7 @@ class NotesAppSpec : StringSpec({
         // Anything found is no Ask: a note, or a notebook.
         val hit = NotesSearchHit(note_id = "n-1", title = "A", preview = "p", snippet = "p")
         NotesLibraryMachine.reduce(typed, answer(NotesSearch(hits = listOf(hit)))).state.search!!.ask shouldBe ""
-        val notebook = centraid.core.v1.ContainerHit(entity = "core.collection", id = "nb-1", title = "Cabin", app_id = "notes")
+        val notebook = centraid.core.v1.ContainerHit(entity = "notebook", id = "nb-1", title = "Cabin", app_id = "notes")
         NotesLibraryMachine.reduce(typed, answer(NotesSearch(containers = listOf(notebook)))).state.search!!.ask shouldBe ""
         // A new term, a close and a denial clear it; an answer for a closed search sets none.
         NotesLibraryMachine.reduce(none, NotesLibraryEvent(search_term = NotesLibraryEvent.SearchTermChanged(term = "zzq")))
@@ -534,7 +534,7 @@ class NotesAppSpec : StringSpec({
     }
 
     "powerbox: a subtitle is a clean excerpt or the core's local day in words, never a raw column or a UTC slice (#1047)" {
-        fun sub(raw: String, day: String = "", entity: String = "core.event") =
+        fun sub(raw: String, day: String = "", entity: String = "event") =
             NotesLinkPickerMachine.subtitleOf(NotesLinkTarget(entity = entity, subtitle = raw, subtitle_local_day = day, app_id = "agenda"))
         // 23:30Z on 11 March is 12 March east of UTC: the core's day wins, never the date part.
         sub("2026-03-11T23:30:00Z", day = "2026-03-12") shouldBe "Thu 12 March"
@@ -543,7 +543,7 @@ class NotesAppSpec : StringSpec({
         // A when the core could not place (no zone): what it is, not a sliced date.
         sub("2026-03-11T09:00:00Z") shouldBe NotesCopy.LINK_KIND_EVENT
         sub("\n## **Plans** for [[Ana]]\n- more", entity = "note") shouldBe "Plans for Ana"
-        sub("- [ ] call the [bank](https://x.example) `today`", entity = "schedule.task") shouldBe "call the bank today"
+        sub("- [ ] call the [bank](https://x.example) `today`", entity = "task") shouldBe "call the bank today"
         sub("2026-03-11 standup notes", entity = "note") shouldBe "2026-03-11 standup notes"
         sub("snake_case stays") shouldBe "snake_case stays"
         sub("People") shouldBe "People"
@@ -551,7 +551,7 @@ class NotesAppSpec : StringSpec({
         val folded = NotesLinkPickerMachine.fold(
             listOf(
                 NotesLinkTarget(
-                    entity = "core.event", id = "e-1", title = "Dentist", subtitle = "2026-03-11T09:00:00Z",
+                    entity = "event", id = "e-1", title = "Dentist", subtitle = "2026-03-11T09:00:00Z",
                     subtitle_local_day = "2026-03-11", app_id = "agenda",
                 ),
             ),
@@ -567,8 +567,8 @@ class NotesAppSpec : StringSpec({
     "powerbox: a row whose subtitle is only its app key says what it is, never \"photos\" or \"docs\" (#1047)" {
         val folded = NotesLinkPickerMachine.fold(
             listOf(
-                NotesLinkTarget(entity = "core.document", id = "d-1", title = "Lease", subtitle = "docs", app_id = "docs"),
-                NotesLinkTarget(entity = "core.content_item", id = "p-1", title = "Beach", subtitle = "photos", app_id = "photos"),
+                NotesLinkTarget(entity = "document", id = "d-1", title = "Lease", subtitle = "docs", app_id = "docs"),
+                NotesLinkTarget(entity = "photo", id = "p-1", title = "Beach", subtitle = "photos", app_id = "photos"),
                 NotesLinkTarget(entity = "some.thing", id = "o-1", title = "Odd", subtitle = "elsewhere", app_id = "elsewhere"),
             ),
         )
@@ -779,7 +779,7 @@ class NotesAppSpec : StringSpec({
         typed.state.link_replaces shouldBe true
         val picked = NotesEditorMachine.reduce(
             typed.state,
-            NotesEditorEvent(link_picked = NotesEditorEvent.LinkPicked(target = NotesLinkTargetRow(entity = "core.party", id = "p-1", title = "Ana"))),
+            NotesEditorEvent(link_picked = NotesEditorEvent.LinkPicked(target = NotesLinkTargetRow(entity = "person", id = "p-1", title = "Ana"))),
         )
         picked.state.draft!!.body shouldBe "hello [[Ana]] world"
         picked.state.link_sheet_open shouldBe false
@@ -822,7 +822,7 @@ class NotesAppSpec : StringSpec({
         val answer = NotesLinkTargets(
             targets = listOf(
                 NotesLinkTarget(entity = "note", id = "n-2", title = "Plans", app_id = "notes"),
-                NotesLinkTarget(entity = "core.party", id = "p-1", title = "Ana", app_id = "people"),
+                NotesLinkTarget(entity = "person", id = "p-1", title = "Ana", app_id = "people"),
             ),
         )
         val loaded = NotesLinkPickerMachine.reduce(typed.state, NotesLinkPickerReads.arrived(listOf(AppQueryResponse(notes_link_targets = answer)))).state

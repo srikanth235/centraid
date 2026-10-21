@@ -170,20 +170,14 @@
           },
           "format": {
             "type": "string",
-            "enum": [
-              "markdown",
-              "plain"
-            ]
+            "enum": ["markdown", "plain"]
           },
           "notebook_id": {
             "type": "string",
             "minLength": 1
           }
         },
-        "required": [
-          "title",
-          "body"
-        ],
+        "required": ["title", "body"],
         "additionalProperties": false
       },
       "output": {
@@ -222,15 +216,10 @@
           },
           "format": {
             "type": "string",
-            "enum": [
-              "markdown",
-              "plain"
-            ]
+            "enum": ["markdown", "plain"]
           }
         },
-        "required": [
-          "id"
-        ],
+        "required": ["id"],
         "additionalProperties": false
       },
       "output": {
@@ -260,16 +249,11 @@
             "minLength": 1
           },
           "notebook_id": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "minLength": 1
           }
         },
-        "required": [
-          "id"
-        ],
+        "required": ["id"],
         "additionalProperties": false
       },
       "output": {
@@ -301,9 +285,7 @@
           },
           "kind": {
             "type": "string",
-            "enum": [
-              "notebook"
-            ]
+            "enum": ["notebook"]
           },
           "title": {
             "type": "string",
@@ -314,10 +296,7 @@
             "minLength": 1
           }
         },
-        "required": [
-          "kind",
-          "title"
-        ],
+        "required": ["kind", "title"],
         "additionalProperties": false
       },
       "output": {
@@ -351,10 +330,7 @@
             "minLength": 1
           }
         },
-        "required": [
-          "id",
-          "title"
-        ],
+        "required": ["id", "title"],
         "additionalProperties": false
       },
       "output": {
@@ -384,9 +360,7 @@
             "minLength": 1
           }
         },
-        "required": [
-          "id"
-        ],
+        "required": ["id"],
         "additionalProperties": false
       },
       "output": {
@@ -416,9 +390,7 @@
             "minLength": 1
           }
         },
-        "required": [
-          "id"
-        ],
+        "required": ["id"],
         "additionalProperties": false
       },
       "output": {
@@ -448,9 +420,7 @@
             "minLength": 1
           }
         },
-        "required": [
-          "id"
-        ],
+        "required": ["id"],
         "additionalProperties": false
       },
       "output": {
@@ -484,10 +454,7 @@
             "minimum": 1
           }
         },
-        "required": [
-          "id",
-          "seq"
-        ],
+        "required": ["id", "seq"],
         "additionalProperties": false
       },
       "output": {
@@ -518,16 +485,10 @@
           },
           "flag": {
             "type": "string",
-            "enum": [
-              "pinned",
-              "starred"
-            ]
+            "enum": ["pinned", "starred"]
           }
         },
-        "required": [
-          "id",
-          "flag"
-        ],
+        "required": ["id", "flag"],
         "additionalProperties": false
       },
       "output": {
@@ -558,16 +519,10 @@
           },
           "flag": {
             "type": "string",
-            "enum": [
-              "pinned",
-              "starred"
-            ]
+            "enum": ["pinned", "starred"]
           }
         },
-        "required": [
-          "id",
-          "flag"
-        ],
+        "required": ["id", "flag"],
         "additionalProperties": false
       },
       "output": {
@@ -598,9 +553,7 @@
           },
           "rel": {
             "type": "string",
-            "enum": [
-              "links"
-            ]
+            "enum": ["links"]
           },
           "to": {
             "type": "string",
@@ -610,11 +563,7 @@
             "type": "object"
           }
         },
-        "required": [
-          "from",
-          "rel",
-          "to"
-        ],
+        "required": ["from", "rel", "to"],
         "additionalProperties": false
       },
       "output": {
@@ -655,10 +604,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "title",
-          "note_id"
-        ],
+        "required": ["title", "note_id"],
         "additionalProperties": false
       },
       "output": {
@@ -689,20 +635,14 @@
           },
           "rel": {
             "type": "string",
-            "enum": [
-              "attached"
-            ]
+            "enum": ["attached"]
           },
           "to": {
             "type": "string",
             "minLength": 1
           }
         },
-        "required": [
-          "from",
-          "rel",
-          "to"
-        ],
+        "required": ["from", "rel", "to"],
         "additionalProperties": false
       },
       "output": {
@@ -733,20 +673,14 @@
           },
           "rel": {
             "type": "string",
-            "enum": [
-              "attached"
-            ]
+            "enum": ["attached"]
           },
           "to": {
             "type": "string",
             "minLength": 1
           }
         },
-        "required": [
-          "from",
-          "rel",
-          "to"
-        ],
+        "required": ["from", "rel", "to"],
         "additionalProperties": false
       },
       "output": {
@@ -780,10 +714,7 @@
             "minLength": 1
           }
         },
-        "required": [
-          "id",
-          "label"
-        ],
+        "required": ["id", "label"],
         "additionalProperties": false
       },
       "output": {
@@ -817,10 +748,7 @@
             "minLength": 1
           }
         },
-        "required": [
-          "id",
-          "label"
-        ],
+        "required": ["id", "label"],
         "additionalProperties": false
       },
       "output": {
@@ -851,9 +779,7 @@
             "minLength": 1
           }
         },
-        "required": [
-          "term"
-        ],
+        "required": ["term"],
         "additionalProperties": false
       },
       "output": {
@@ -917,9 +843,7 @@
             "minLength": 1
           }
         },
-        "required": [
-          "note_id"
-        ],
+        "required": ["note_id"],
         "additionalProperties": false
       },
       "output": {
@@ -932,10 +856,7 @@
             "type": "string"
           },
           "format": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "vaultDenied": {
             "type": "object"
@@ -953,9 +874,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "term"
-        ],
+        "required": ["term"],
         "additionalProperties": false
       },
       "output": {
@@ -981,9 +900,7 @@
             "minLength": 1
           }
         },
-        "required": [
-          "note_id"
-        ],
+        "required": ["note_id"],
         "additionalProperties": false
       },
       "output": {
@@ -1102,10 +1019,7 @@
   ],
   "seats": {
     "byteBearing": true,
-    "originActs": [
-      "capture",
-      "voice"
-    ],
+    "originActs": ["capture", "voice"],
     "disabledOn": [],
     "northStar": "apple-notes"
   },

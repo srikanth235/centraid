@@ -272,15 +272,16 @@ class KitLawsSpec : StringSpec({
     "autosave: only the changed fields are sent" {
         val titleOnly = notes(notes(loaded(), title("New")).state, tick("save:1"))
         val input = (titleOnly.effects.single() as ScreenEffect.SubmitWrite).inputJson
-        input shouldBe "{\"note_id\":\"note-1\",\"title\":\"New\"}"
-        input shouldNotContain "body_text"
+        input shouldBe "{\"id\":\"note-1\",\"title\":\"New\"}"
+        input shouldNotContain "body"
         input shouldNotContain "pinned"
     }
 
-    "autosave: a pin saves at once, with no debounce" {
+    "autosave: a pin is the shared flag verb, sent at once with no debounce" {
         val pinned = notes(loaded(), NotesEditorEvent(pin = NotesEditorEvent.PinToggled()))
         val write = pinned.effects.single() as ScreenEffect.SubmitWrite
-        write.inputJson shouldBe "{\"note_id\":\"note-1\",\"pinned\":1}"
+        write.command shouldBe "flag.set"
+        write.inputJson shouldBe "{\"id\":\"note-1\",\"flag\":\"pinned\"}"
     }
 
     "autosave: a change from the vault never replaces words being typed" {
@@ -319,17 +320,17 @@ class KitLawsSpec : StringSpec({
         // Their tick comes due against a SAVING editor, and does nothing.
         notes(more, tick("save:2")).effects.shouldBeEmpty()
         val next = notes(more, settled(key, committed = true))
-        (next.effects.single() as ScreenEffect.SubmitWrite).inputJson shouldContain "\"body_text\":\"xy\""
+        (next.effects.single() as ScreenEffect.SubmitWrite).inputJson shouldContain "\"body\":\"xy\""
     }
 
     "autosave: an untitled note is titled from its first line; an emptied body is saved empty" {
         val untitled = notes(notes(loaded(title = ""), body("\n  Shopping list \nmilk")).state, tick("save:1"))
         (untitled.effects.single() as ScreenEffect.SubmitWrite).inputJson shouldContain "\"title\":\"Shopping list\""
 
-        // `body_text` takes an empty string: clearing a note is the member's words.
+        // `body` takes an empty string: clearing a note is the member's words.
         val emptied = notes(notes(loaded(), body("")).state, tick("save:1"))
         (emptied.effects.single() as ScreenEffect.SubmitWrite).inputJson shouldBe
-            "{\"note_id\":\"note-1\",\"body_text\":\"\"}"
+            "{\"id\":\"note-1\",\"body\":\"\"}"
         emptied.state.save shouldBe NotesEditorState.SaveState.SAVE_STATE_SAVING
     }
 
