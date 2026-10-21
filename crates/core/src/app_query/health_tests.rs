@@ -7,8 +7,10 @@
 //!    today against the typical of the whole days before it, a week's series and its facts, the
 //!    trends, a page of workouts with the kind counts and its cursor, one workout, and the
 //!    follower's view.
-//! 2. **What the request states is checked, never guessed**: a day the calendar has not got, an
-//!    instant with an offset, a page with no limit and an unnamed metric are
+//! 2. **The core places the day in the request's zone**: today, today's workouts, a workout's
+//!    wall clock and the follower's window all move with `tz`, and a shell states no day.
+//! 3. **What the request states is checked, never guessed**: no zone on a vault that names none,
+//!    a zone the database does not know, a page with no limit and an unnamed metric are
 //!    `ERROR_CODE_INVALID_REQUEST`.
 
 use super::*;
@@ -17,9 +19,10 @@ use crate::handle::{Core, Handle};
 use serde_json::json;
 use wire::app_query_request::Query as Q;
 
-/// 15:00Z on 20 October 2026; the caller's day is the 20th.
+/// 15:00Z on 20 October 2026; in UTC the caller's day is the 20th.
 const NOW: &str = "2026-10-20T15:00:00.000Z";
 const TODAY: &str = "2026-10-20";
+const UTC: &str = "UTC";
 
 struct Scratch {
     dir: std::path::PathBuf,
@@ -135,10 +138,12 @@ impl Scratch {
     }
 
     fn today(&self) -> wire::HealthToday {
+        self.today_in(UTC)
+    }
+
+    fn today_in(&self, tz: &str) -> wire::HealthToday {
         match self.ask(Q::HealthToday(wire::HealthTodayRequest {
-            today: TODAY.to_owned(),
-            day_start: "2026-10-20T00:00:00Z".to_owned(),
-            day_end: "2026-10-21T00:00:00Z".to_owned(),
+            tz: tz.to_owned(),
         })) {
             Answer::HealthToday(today) => today,
             other => panic!("today answered as {other:?}"),
@@ -149,7 +154,7 @@ impl Scratch {
         match self.ask(Q::HealthSeries(wire::HealthSeriesRequest {
             metric: metric as i32,
             range: range as i32,
-            today: TODAY.to_owned(),
+            tz: UTC.to_owned(),
         })) {
             Answer::HealthSeries(series) => series,
             other => panic!("a series answered as {other:?}"),
@@ -166,6 +171,7 @@ impl Scratch {
             kind_concept_id: kind.map(str::to_owned),
             limit,
             after,
+            tz: UTC.to_owned(),
         })) {
             Answer::HealthWorkouts(workouts) => workouts,
             other => panic!("workouts answered as {other:?}"),
@@ -279,6 +285,9 @@ fn a_weeks_series_carries_its_buckets_and_the_facts_under_the_chart() {
     assert_eq!(best.start, TODAY);
     assert!(close(best.value, 6_300.0));
     assert_eq!((week.above_typical, week.counted), (7, 7));
+    // The distance from the typical is the core's, signed, and as a share of the typical.
+    assert!(close(week.versus_typical, 400.0));
+    assert!(close(week.versus_typical_pct, 400.0 / 56.0));
 
     // Weight has no total and no best; its week's figure is its newest.
     let weight = scratch.series(wire::HealthMetric::WeightKg, wire::HealthRange::Week);
@@ -306,7 +315,7 @@ fn the_trends_leave_out_a_metric_with_no_data_and_split_thirty_days_in_nine() {
     let scratch = Scratch::fortnight();
     let Answer::HealthTrends(trends) = scratch.ask(Q::HealthTrends(wire::HealthTrendsRequest {
         range: wire::HealthTrendRange::Days30 as i32,
-        today: TODAY.to_owned(),
+        tz: UTC.to_owned(),
     })) else {
         panic!("trends answered as something else");
     };
@@ -322,6 +331,11 @@ fn the_trends_leave_out_a_metric_with_no_data_and_split_thirty_days_in_nine() {
     let steps = &trends.trends[0];
     assert!(close(steps.average, 5_650.0));
     assert_eq!(steps.previous, None);
+    assert_eq!(
+        (steps.change, steps.change_pct),
+        (None, None),
+        "no change against a period with nothing in it"
+    );
     assert_eq!(steps.buckets.len(), 9);
     assert_eq!(steps.buckets[0].start, "2026-09-21");
     assert_eq!(steps.buckets.last().map(|b| b.end.as_str()), Some(TODAY));
@@ -347,6 +361,11 @@ fn workouts_page_newest_first_with_every_kind_counted() {
     assert_eq!(run.phone_kind, "running");
     assert_eq!(run.ended_at, "2026-10-20T07:41:00.000Z");
     assert_eq!(run.moving_sec, Some(2400));
+    assert_eq!(
+        (run.local_start.as_str(), run.local_end.as_str()),
+        ("2026-10-20T07:00", "2026-10-20T07:41")
+    );
+    assert_eq!(run.length_sec, 2400, "its moving time");
     assert!(close(run.distance_m, 8_012.5));
     assert_eq!(run.avg_hr_bpm, Some(151));
     assert_eq!(run.recorded_by.as_deref(), Some("Apple Watch"));
@@ -368,6 +387,10 @@ fn workouts_page_newest_first_with_every_kind_counted() {
         ),
         (None, None, None)
     );
+    assert_eq!(
+        walk.length_sec, 2400,
+        "no moving time: its span, 40 minutes"
+    );
     assert_eq!(second.next, None, "the walk was the last workout");
 
     let walks = scratch.workouts(Some("health:kind:walk"), 50, None);
@@ -384,6 +407,18 @@ fn one_workout_reads_whole_and_an_activity_that_is_not_one_reads_as_none() {
     let scratch = Scratch::fortnight();
     let Answer::HealthWorkout(found) = scratch.ask(Q::HealthWorkout(wire::HealthWorkoutRequest {
         activity_id: "wk-run".to_owned(),
+        tz: "America/Los_Angeles".to_owned(),
+    })) else {
+        panic!("a workout answered as something else");
+    };
+    assert_eq!(
+        found.workout.as_ref().map(|run| run.local_start.as_str()),
+        Some("2026-10-20T00:00"),
+        "07:00Z is midnight on the Pacific's wall clock"
+    );
+    let Answer::HealthWorkout(found) = scratch.ask(Q::HealthWorkout(wire::HealthWorkoutRequest {
+        activity_id: "wk-run".to_owned(),
+        tz: UTC.to_owned(),
     })) else {
         panic!("a workout answered as something else");
     };
@@ -408,6 +443,7 @@ fn one_workout_reads_whole_and_an_activity_that_is_not_one_reads_as_none() {
         let Answer::HealthWorkout(none) =
             scratch.ask(Q::HealthWorkout(wire::HealthWorkoutRequest {
                 activity_id: id.to_owned(),
+                tz: UTC.to_owned(),
             }))
         else {
             panic!("a workout answered as something else");
@@ -416,35 +452,44 @@ fn one_workout_reads_whole_and_an_activity_that_is_not_one_reads_as_none() {
     }
 }
 
-#[test]
-fn the_follow_view_names_the_two_latests_and_every_day_since() {
-    let scratch = Scratch::fortnight();
+fn follow_view(scratch: &Scratch, tz: &str) -> wire::HealthFollowView {
     let Answer::HealthFollowView(view) =
         scratch.ask(Q::HealthFollowView(wire::HealthFollowViewRequest {
-            since: "2026-10-14".to_owned(),
+            tz: tz.to_owned(),
         }))
     else {
         panic!("the follow view answered as something else");
     };
+    view
+}
+
+#[test]
+fn the_follow_view_places_the_window_and_names_every_day_in_it() {
+    let scratch = Scratch::fortnight();
+    let view = follow_view(&scratch, UTC);
+    assert_eq!(view.today, TODAY);
     assert_eq!(view.latest_day.as_deref(), Some(TODAY));
     assert_eq!(
         view.latest_workout_started_at.as_deref(),
         Some("2026-10-20T07:00:00.000Z")
     );
-    // Seven days of steps and sleep, and the weigh-in on the 17th.
-    assert_eq!(view.days.len(), 15);
-    assert_eq!(view.days[0].day, "2026-10-14");
-    assert!(view.days.iter().all(|day| day.day.as_str() >= "2026-10-14"));
+    // Held up to today: the window re-reads the seven days behind it (R-1129-4).
+    assert_eq!(
+        (view.totals_from.as_str(), view.workouts_from.as_str()),
+        ("2026-10-13", "2026-10-13")
+    );
+    assert_eq!(view.workouts_since, "2026-10-13T00:00:00.000Z");
+    // Eight days of steps and sleep, and the weigh-in on the 17th.
+    assert_eq!(view.days.len(), 17);
+    assert_eq!(view.days[0].day, "2026-10-13");
 
-    // An empty vault answers with nothing rather than refusing.
+    // The window's first instant is that day's midnight in the zone, not UTC's.
+    let pacific = follow_view(&scratch, "America/Los_Angeles");
+    assert_eq!(pacific.workouts_since, "2026-10-13T07:00:00.000Z");
+
+    // An empty vault reads the first window: a year of totals, 90 days of workouts.
     let empty = Scratch::founded();
-    let Answer::HealthFollowView(view) =
-        empty.ask(Q::HealthFollowView(wire::HealthFollowViewRequest {
-            since: "2026-10-14".to_owned(),
-        }))
-    else {
-        panic!("the follow view answered as something else");
-    };
+    let view = follow_view(&empty, UTC);
     assert_eq!(
         (
             view.latest_day,
@@ -453,6 +498,30 @@ fn the_follow_view_names_the_two_latests_and_every_day_since() {
         ),
         (None, None, 0)
     );
+    assert_eq!(
+        (view.totals_from.as_str(), view.workouts_from.as_str()),
+        ("2025-10-20", "2026-07-22")
+    );
+}
+
+#[test]
+fn today_is_the_vault_clocks_day_in_the_requests_zone() {
+    let scratch = Scratch::fortnight();
+    // 15:00Z is 04:00 on the 21st in Auckland: a new day with no row, and the run (20:00 on
+    // the 20th there) is not today's.
+    let auckland = scratch.today_in("Pacific/Auckland");
+    assert_eq!(auckland.today, "2026-10-21");
+    assert!(auckland.workouts.is_empty());
+    assert_eq!(
+        metric(&auckland, wire::HealthMetric::Steps).value,
+        None,
+        "a day with no row is not a day of no steps"
+    );
+    // 08:00 on the 20th in Los Angeles: the run, at midnight there, is today's.
+    let pacific = scratch.today_in("America/Los_Angeles");
+    assert_eq!(pacific.today, TODAY);
+    let run = pacific.workouts.first().expect("the run");
+    assert_eq!(run.local_start, "2026-10-20T00:00");
 }
 
 #[test]
@@ -464,29 +533,25 @@ fn what_a_request_states_is_checked_never_guessed() {
             Err(CoreError::InvalidRequest { .. })
         )
     };
+    // A vault that names no zone, asked with none: never UTC by default.
     assert!(refused(Q::HealthToday(wire::HealthTodayRequest {
-        today: "2026-02-30".to_owned(),
-        day_start: "2026-02-28T00:00:00Z".to_owned(),
-        day_end: "2026-03-01T00:00:00Z".to_owned(),
+        tz: String::new()
     })));
     assert!(refused(Q::HealthToday(wire::HealthTodayRequest {
-        today: TODAY.to_owned(),
-        day_start: "2026-10-20T00:00:00+02:00".to_owned(),
-        day_end: "2026-10-21T00:00:00Z".to_owned(),
+        tz: "Mars/Olympus_Mons".to_owned(),
     })));
     assert!(refused(Q::HealthSeries(wire::HealthSeriesRequest {
         metric: wire::HealthMetric::Unspecified as i32,
         range: wire::HealthRange::Week as i32,
-        today: TODAY.to_owned(),
+        tz: UTC.to_owned(),
     })));
     assert!(refused(Q::HealthWorkouts(wire::HealthWorkoutsRequest {
         kind_concept_id: None,
         limit: 0,
         after: None,
+        tz: UTC.to_owned(),
     })));
     assert!(refused(Q::HealthFollowView(
-        wire::HealthFollowViewRequest {
-            since: String::new(),
-        }
+        wire::HealthFollowViewRequest { tz: String::new() }
     )));
 }

@@ -31,10 +31,8 @@ import dev.centraid.shared.apps.health.HealthHomeMachine
 import dev.centraid.shared.apps.health.HealthHomeReads
 import dev.centraid.shared.apps.health.HealthInput
 import dev.centraid.shared.apps.health.HealthMetricMachine
-import dev.centraid.shared.apps.health.HealthPlaces
 import dev.centraid.shared.apps.health.HealthRouting
 import dev.centraid.shared.apps.health.HealthWorkoutMachine
-import dev.centraid.shared.kit.time.LocalDays
 import dev.centraid.shared.nav.Destination
 import dev.centraid.shared.nav.NavMove
 import dev.centraid.shared.platform.DeviceClock
@@ -58,7 +56,6 @@ class HealthScreensSpec : StringSpec({
         units = HealthDevice.Units.UNITS_METRIC,
         chosen = listOf("steps", "sleep_min", "weight_kg", "workouts"),
     )
-    val places = HealthPlaces(today, mapOf("2026-10-20T06:10:00.000Z" to "2026-10-20T07:10", "2026-10-20T06:41:00.000Z" to "2026-10-20T07:41"))
     val run = HealthWorkoutRow(
         activity_id = "a1",
         kind_concept_id = "health:kind:run",
@@ -73,6 +70,10 @@ class HealthScreensSpec : StringSpec({
         avg_hr_bpm = 148,
         elevation_gain_m = 42.0,
         recorded_by = "Apple Watch",
+        // The core's readings in the device's zone (Europe/Berlin, +01:00 that morning).
+        local_start = "2026-10-20T07:10",
+        local_end = "2026-10-20T07:41",
+        length_sec = 1_864,
     )
 
     fun metric(m: HealthMetric, value: Double?, typical: Double?, low: Double? = null, high: Double? = null, day: String? = today) =
@@ -98,8 +99,8 @@ class HealthScreensSpec : StringSpec({
         return machine.reduce(machine.initial(), HealthInput.View(HealthHomeEvent(opened = HealthHomeEvent.Opened(destination = destination, device = device)))).state
     }
 
-    fun HealthHeld<HealthHomeState>.answered(vararg answers: AppQueryResponse, at: HealthPlaces = places) =
-        HealthHomeMachine.reduce(this, HealthInput.Answered(answers.toList(), at)).state
+    fun HealthHeld<HealthHomeState>.answered(vararg answers: AppQueryResponse) =
+        HealthHomeMachine.reduce(this, HealthInput.Answered(answers.toList())).state
 
     fun HealthHeld<HealthHomeState>.on(event: HealthHomeEvent) = HealthHomeMachine.reduce(this, HealthInput.View(event))
 
@@ -203,10 +204,12 @@ class HealthScreensSpec : StringSpec({
                             metric = HealthMetric.HEALTH_METRIC_STEPS,
                             average = 7_310.0,
                             previous = 7_030.0,
+                            change = 280.0,
+                            change_pct = 280.0 / 7_030.0 * 100.0,
                             buckets = listOf(HealthBucket(value_ = 6_800.0), HealthBucket(), HealthBucket(value_ = 8_100.0)),
                         ),
-                        HealthTrend(metric = HealthMetric.HEALTH_METRIC_EXERCISE_MIN, average = 26.0, previous = 21.0),
-                        HealthTrend(metric = HealthMetric.HEALTH_METRIC_RESTING_HR_BPM, average = 58.2, previous = 58.4),
+                        HealthTrend(metric = HealthMetric.HEALTH_METRIC_EXERCISE_MIN, average = 26.0, previous = 21.0, change = 5.0, change_pct = 5.0 / 21.0 * 100.0),
+                        HealthTrend(metric = HealthMetric.HEALTH_METRIC_RESTING_HR_BPM, average = 58.2, previous = 58.4, change = -0.2, change_pct = -0.2 / 58.4 * 100.0),
                         HealthTrend(metric = HealthMetric.HEALTH_METRIC_SLEEP_MIN, average = 418.0),
                     ),
                 ),
@@ -233,8 +236,10 @@ class HealthScreensSpec : StringSpec({
     }
 
     "workouts: All and each kind present, this week then by month, newest first, a page at a time" {
-        val older = run.copy(activity_id = "a2", kind_key = "cycle", started_at = "2026-09-30T16:00:00.000Z", ended_at = "2026-09-30T17:00:00.000Z", moving_sec = null)
-        val at = places.copy(local = places.local + ("2026-09-30T16:00:00.000Z" to "2026-09-30T18:00"))
+        val older = run.copy(
+            activity_id = "a2", kind_key = "cycle", started_at = "2026-09-30T16:00:00.000Z", ended_at = "2026-09-30T17:00:00.000Z", moving_sec = null,
+            local_start = "2026-09-30T18:00", local_end = "2026-09-30T19:00", length_sec = 3_600,
+        )
         val held = home(destination = HealthHomeState.Destination.DESTINATION_WORKOUTS).answered(
             AppQueryResponse(health_today = connectedToday),
             AppQueryResponse(
@@ -247,7 +252,6 @@ class HealthScreensSpec : StringSpec({
                     next = HealthWorkoutsCursor(started_at = older.started_at, activity_id = "a2"),
                 ),
             ),
-            at = at,
         )
         val data = held.screen.data_!!.workouts.shouldNotBeNull()
         data.sections.map { it.heading } shouldContainExactly listOf("This week", "September")
@@ -268,36 +272,14 @@ class HealthScreensSpec : StringSpec({
         HealthRouting.home(HealthHomeEvent(metric = HealthHomeEvent.MetricPicked(metric = "nonsense")), held.screen).shouldBeNull()
     }
 
-    "home reads health.today first, with the phone's day and the instants it begins and ends" {
-        val clock = object : DeviceClock {
-            override fun read() = DeviceClock.Reading("Europe/Berlin", LocalDays.epochMillisOf("2026-10-19T23:30:00Z")!!, 120)
-
-            override fun offsetMinutesAt(epochMillis: Long) = if (epochMillis < LocalDays.epochMillisOf("2026-10-25T01:00:00Z")!!) 120 else 60
-        }
-        val reads = dev.centraid.shared.apps.health.HealthQueries<HealthHomeState, HealthHomeEvent>(
-            screenId = HealthHomeMachine.SCREEN_ID,
-            tables = emptySet(),
-            clock = { clock },
-            ask = { _, day -> listOf(centraid.core.v1.AppQueryRequest(health_today = centraid.core.v1.HealthTodayRequest(today = day.today, day_start = day.start, day_end = day.end))) },
-        )
-        val asked = reads.requests(home(), clock.read())!!.single().health_today!!
-        asked.today shouldBe "2026-10-20"
-        asked.day_start shouldBe "2026-10-19T22:00:00Z"
-        asked.day_end shouldBe "2026-10-20T22:00:00Z"
-        // The day the clocks go back is twenty-five hours long.
-        val dst = object : DeviceClock by clock {
-            override fun read() = DeviceClock.Reading("Europe/Berlin", LocalDays.epochMillisOf("2026-10-25T10:00:00Z")!!, 60)
-        }
-        val long = dev.centraid.shared.apps.health.HealthQueries<HealthHomeState, HealthHomeEvent>(
-            HealthHomeMachine.SCREEN_ID, emptySet(), { dst },
-            { _, day -> listOf(centraid.core.v1.AppQueryRequest(health_today = centraid.core.v1.HealthTodayRequest(today = day.today, day_start = day.start, day_end = day.end))) },
-        ).requests(home(), dst.read())!!.single().health_today!!
-        long.day_start shouldBe "2026-10-24T22:00:00Z"
-        long.day_end shouldBe "2026-10-25T23:00:00Z"
+    "home reads health.today first, in the device's zone, and the core places the day" {
+        val clock = dev.centraid.shared.platform.FakeDeviceClock(zone = "Europe/Berlin")
+        HealthHomeReads.requests(home(), clock.read())!!.single().health_today!!.tz shouldBe "Europe/Berlin"
         HealthHomeReads.requests(home(destination = HealthHomeState.Destination.DESTINATION_WORKOUTS), clock.read())!!.let {
             it.size shouldBe 2
             it[0].health_today.shouldNotBeNull()
             it[1].health_workouts.shouldNotBeNull().limit shouldBe HealthHomeMachine.PAGE
+            it[1].health_workouts!!.tz shouldBe "Europe/Berlin"
         }
     }
 
@@ -323,8 +305,10 @@ class HealthScreensSpec : StringSpec({
             total = 47_412.0,
             above_typical = 4,
             counted = 6,
+            versus_typical = 802.0,
+            versus_typical_pct = 802.0 / 7_100.0 * 100.0,
         )
-        val held = machine.reduce(opened, HealthInput.Answered(listOf(AppQueryResponse(health_series = series)), places)).state
+        val held = machine.reduce(opened, HealthInput.Answered(listOf(AppQueryResponse(health_series = series)))).state
         val data = held.screen.data_.shouldNotBeNull()
         data.caption shouldBe "Wed 14 – Tue 20 October"
         data.average shouldBe "7,902"
@@ -353,7 +337,7 @@ class HealthScreensSpec : StringSpec({
             machine.initial(),
             HealthInput.View(HealthWorkoutEvent(opened = HealthWorkoutEvent.Opened(activity_id = "a1", parent = "Today", device = apple))),
         ).state
-        val held = machine.reduce(opened, HealthInput.Answered(listOf(AppQueryResponse(health_workout = HealthWorkout(workout = run))), places)).state
+        val held = machine.reduce(opened, HealthInput.Answered(listOf(AppQueryResponse(health_workout = HealthWorkout(workout = run))))).state
         val data = held.screen.data_.shouldNotBeNull()
         held.screen.chrome!!.title shouldBe "Run"
         data.title shouldBe "Morning run"
@@ -367,7 +351,7 @@ class HealthScreensSpec : StringSpec({
             Triple("Elevation gain", "42", "m"),
         )
         data.foot shouldBe "Recorded by Apple Watch, read from Apple Health. Route and splits stay in Apple Health."
-        val gone = machine.reduce(opened, HealthInput.Answered(listOf(AppQueryResponse(health_workout = HealthWorkout())), places)).state
+        val gone = machine.reduce(opened, HealthInput.Answered(listOf(AppQueryResponse(health_workout = HealthWorkout())))).state
         gone.screen.data_!!.gone.shouldNotBeNull().headline shouldBe "This workout is no longer here."
     }
 
@@ -441,12 +425,8 @@ class HealthScreensSpec : StringSpec({
         quiet.line shouldBe ""
         dev.centraid.shared.shell.HomeHealthTile.arrived(HealthToday(today = today, connected = false)).tile!!.status shouldBe
             centraid.screen.v1.TileStatus.TILE_STATUS_EMPTY
-        val clock = dev.centraid.shared.platform.FakeDeviceClock(epochMillis = LocalDays.epochMillisOf("2026-10-20T10:00:00Z")!!, utcOffsetMinutes = -240)
-        dev.centraid.shared.shell.HomeHealthTile.request(clock)!!.health_today!!.let {
-            it.today shouldBe "2026-10-20"
-            it.day_start shouldBe "2026-10-20T04:00:00Z"
-            it.day_end shouldBe "2026-10-21T04:00:00Z"
-        }
+        val clock = dev.centraid.shared.platform.FakeDeviceClock(zone = "America/New_York")
+        dev.centraid.shared.shell.HomeHealthTile.request(clock).health_today!!.tz shouldBe "America/New_York"
         dev.centraid.shared.shell.SpringboardPolicy.SPRINGBOARD_ORDER.indexOf("health") shouldBe
             dev.centraid.shared.shell.SpringboardPolicy.SPRINGBOARD_ORDER.indexOf("money") + 1
         dev.centraid.shared.shell.SpringboardPolicy.tileSize("health") shouldBe centraid.screen.v1.TileSize.TILE_SIZE_SMALL
@@ -461,7 +441,7 @@ class HealthScreensSpec : StringSpec({
         }
         dev.centraid.shared.apps.health.HealthFold.kindIcon("strength") shouldBe "Gym"
         dev.centraid.shared.apps.health.HealthFold.kindIcon("EXERCISE_TYPE_TENNIS") shouldBe "Gym"
-        dev.centraid.shared.apps.health.HealthFold.line(run, "2026-10-20T07:10", today, HealthDevice.Units.UNITS_METRIC).icon_key shouldBe "Activity"
+        dev.centraid.shared.apps.health.HealthFold.line(run, today, HealthDevice.Units.UNITS_METRIC).icon_key shouldBe "Activity"
     }
 
     "a chart's ticks are marked back from today at one step, so the last two never collide" {

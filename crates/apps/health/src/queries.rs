@@ -2,8 +2,8 @@
 //!
 //! Each loader reads through [`crate::door`] and folds with [`crate::figures`]; `health.proto`
 //! mirrors every struct here and `crates/core`'s `app_query/health.rs` is the one conversion.
-//! A loader takes `today` as a day count the caller already validated: the core reads no zone,
-//! and the caller's local day is the caller's to state.
+//! A loader takes `today` as a day count: the core places it in the request's zone (the vault
+//! clock's day there) before it asks, so nothing in this crate reads a zone or a clock.
 //!
 //! | Answer | Reads | Folds |
 //! | --- | --- | --- |
@@ -12,7 +12,7 @@
 //! | [`Trends`] | all six over the period and the one before | per-metric average, previous, sparkline buckets |
 //! | [`Workouts`] | a page of workouts, every workout's kind | rows, kind counts |
 //! | [`Workout`] | one activity and its workout row | — |
-//! | [`FollowView`] | the days since `since`, the two latests | — (R-1129-3, R-1129-4) |
+//! | [`FollowView`] | the two latests, the days in the window | the window (R-1129-3, R-1129-4) |
 
 use std::collections::BTreeMap;
 
@@ -249,6 +249,9 @@ pub struct Series {
     pub total: Option<f64>,
     pub above_typical: usize,
     pub counted: usize,
+    /// `average` less `typical`, and as a percentage of `typical` ([`figures::difference`]).
+    pub versus_typical: Option<f64>,
+    pub versus_typical_pct: Option<f64>,
 }
 
 /// `health.series`.
@@ -284,6 +287,7 @@ pub fn series(door: &dyn PageDoor, metric: Metric, range: Range, today: i64) -> 
         Range::Year => previous_average,
     };
     let (above_typical, counted) = figures::above(&buckets, typical);
+    let (versus_typical, versus_typical_pct) = figures::difference(average, typical);
     Ok(Series {
         metric,
         range,
@@ -296,6 +300,8 @@ pub fn series(door: &dyn PageDoor, metric: Metric, range: Range, today: i64) -> 
         typical,
         above_typical,
         counted,
+        versus_typical,
+        versus_typical_pct,
     })
 }
 
@@ -322,6 +328,9 @@ pub struct Trend {
     pub average: Option<f64>,
     pub previous: Option<f64>,
     pub buckets: Vec<Bucket>,
+    /// `average` less `previous`, and as a percentage of `previous` ([`figures::difference`]).
+    pub change: Option<f64>,
+    pub change_pct: Option<f64>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -366,11 +375,14 @@ pub fn trends(door: &dyn PageDoor, range: TrendRange, today: i64) -> KitResult<T
                         .collect()
                 }
             };
+            let (change, change_pct) = figures::difference(average, previous);
             Some(Trend {
                 metric,
                 average,
                 previous,
                 buckets,
+                change,
+                change_pct,
             })
         })
         .collect();
@@ -474,12 +486,36 @@ pub fn workout(door: &dyn PageDoor, activity_id: &str) -> KitResult<Option<Worko
 // health.follow_view
 // ---------------------------------------------------------------------------
 
-/// What the follower engine reads before a pass (R-1129-3, R-1129-4).
+/// How far back a first read of the totals goes (owner answer 3).
+pub const TOTALS_BACK: i64 = 365;
+/// How far back a first read of the workouts goes (owner answer 3).
+pub const WORKOUTS_BACK: i64 = 90;
+/// Days re-read behind the latest one held, because watches upload late.
+pub const REREAD: i64 = 7;
+
+/// THE FIRST DAY A PASS READS (R-1129-4). With nothing held: `back` days before `today`.
+/// Otherwise [`REREAD`] days before the latest day held, or before today when that is earlier
+/// still (a member who has not opened the app for a month gets the month), and never more than
+/// `back` days before today (RP-K-4: the window always covers the last [`REREAD`] days).
+#[must_use]
+pub fn window_from(today: i64, latest: Option<i64>, back: i64) -> i64 {
+    let floor = today - back;
+    latest.map_or(floor, |latest| {
+        floor.max((latest - REREAD).min(today - REREAD))
+    })
+}
+
+/// What the follower engine reads before a pass (R-1129-3, R-1129-4): the window, and what
+/// the vault holds in it.
 #[derive(Debug, Clone, PartialEq)]
 pub struct FollowView {
     pub latest_day: Option<String>,
     pub latest_workout_started_at: Option<String>,
-    /// Every (day, metric, value) with day >= `since`, oldest first.
+    pub today: String,
+    /// The first day of the totals' window and of the workouts' ([`window_from`]).
+    pub totals_from: i64,
+    pub workouts_from: i64,
+    /// Every (day, metric, value) with day >= `totals_from`, oldest first.
     pub days: Vec<DayRow>,
 }
 
@@ -511,34 +547,88 @@ fn latest_workout(door: &dyn PageDoor) -> KitResult<Option<String>> {
     Ok(None)
 }
 
-/// `health.follow_view`.
+/// `health.follow_view`. `workout_day` places the newest workout's start on a day in the
+/// request's zone — the caller's to do, since this crate reads no zone.
 ///
 /// # Errors
 ///
 /// A door failure, or a window holding more than [`FOLLOW_DAY_ROWS`].
-pub fn follow_view(door: &dyn PageDoor, since: i64) -> KitResult<FollowView> {
-    let Some(subject) = door::self_party(door)? else {
-        return Ok(FollowView {
-            latest_day: None,
-            latest_workout_started_at: latest_workout(door)?,
-            days: Vec::new(),
-        });
+pub fn follow_view(
+    door: &dyn PageDoor,
+    today: i64,
+    workout_day: impl Fn(&str) -> Option<i64>,
+) -> KitResult<FollowView> {
+    let latest_workout_started_at = latest_workout(door)?;
+    let workouts_from = window_from(
+        today,
+        latest_workout_started_at.as_deref().and_then(&workout_day),
+        WORKOUTS_BACK,
+    );
+    let subject = door::self_party(door)?;
+    let latest_day = match &subject {
+        Some(subject) => door::latest_day(door, subject)?,
+        None => None,
     };
-    let latest_day = door::latest_day(door, &subject)?;
-    let days = match &latest_day {
-        Some(latest) => door::days(
+    let totals_from = window_from(
+        today,
+        latest_day.as_deref().and_then(parse_day),
+        TOTALS_BACK,
+    );
+    let days = match (&subject, &latest_day) {
+        (Some(subject), Some(latest)) => door::days(
             door,
-            &subject,
-            &format_day(since),
+            subject,
+            &format_day(totals_from),
             latest,
             None,
             FOLLOW_DAY_ROWS,
         )?,
-        None => Vec::new(),
+        _ => Vec::new(),
     };
     Ok(FollowView {
         latest_day,
-        latest_workout_started_at: latest_workout(door)?,
+        latest_workout_started_at,
+        today: format_day(today),
+        totals_from,
+        workouts_from,
         days,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn day(text: &str) -> i64 {
+        parse_day(text).expect("a day")
+    }
+
+    #[test]
+    fn the_window_reads_a_year_and_ninety_days_with_nothing_held() {
+        let today = day("2026-10-20");
+        assert_eq!(
+            format_day(window_from(today, None, TOTALS_BACK)),
+            "2025-10-20"
+        );
+        assert_eq!(
+            format_day(window_from(today, None, WORKOUTS_BACK)),
+            "2026-07-22"
+        );
+    }
+
+    #[test]
+    fn the_window_rereads_seven_days_behind_the_latest_always_the_last_seven_never_past_the_floor()
+    {
+        let today = day("2026-10-20");
+        let from =
+            |latest: &str, back: i64| format_day(window_from(today, Some(day(latest)), back));
+        assert_eq!(from("2026-10-19", TOTALS_BACK), "2026-10-12");
+        assert_eq!(from("2026-10-20", TOTALS_BACK), "2026-10-13");
+        // A month away: the month is read.
+        assert_eq!(from("2026-09-10", TOTALS_BACK), "2026-09-03");
+        // A latest day the clock has not reached yet still reads the last seven.
+        assert_eq!(from("2026-11-01", TOTALS_BACK), "2026-10-13");
+        assert_eq!(from("2024-01-01", TOTALS_BACK), "2025-10-20");
+        assert_eq!(from("2026-01-01", WORKOUTS_BACK), "2026-07-22");
+    }
 }

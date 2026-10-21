@@ -1,6 +1,7 @@
 package dev.centraid.shared.sync
 
 import dev.centraid.shared.kit.time.civilFromDays
+import dev.centraid.shared.kit.time.epochDayOf
 import dev.centraid.shared.kit.time.floorDiv
 
 /**
@@ -66,6 +67,31 @@ public fun rfc3339FromEpochMillis(epochMillis: Long): String {
     }
 }
 
+/**
+ * THE INVERSE: epoch milliseconds of an instant as the vault spells one, in UTC
+ * (`2026-10-20T07:10:00.000Z`, fraction optional), or null for anything else. An instant with
+ * an offset is not one the vault writes. A parse, not a placement: no zone is involved (#1129).
+ */
+public fun epochMillisFromRfc3339(instant: String): Long? {
+    if (instant.length < INSTANT_SECONDS_END + 1 || !instant.endsWith("Z") || instant[INSTANT_DAY_END] != 'T') return null
+    if (instant[INSTANT_HOUR_END] != ':' || instant[INSTANT_MINUTE_END] != ':') return null
+    val day = epochDayOf(instant.substring(0, INSTANT_DAY_END)) ?: return null
+    val hour = instant.substring(INSTANT_DAY_END + 1, INSTANT_HOUR_END).toIntOrNull()?.takeIf { it in 0..23 } ?: return null
+    val minute = instant.substring(INSTANT_HOUR_END + 1, INSTANT_MINUTE_END).toIntOrNull()?.takeIf { it in 0..59 } ?: return null
+    val second = instant.substring(INSTANT_MINUTE_END + 1, INSTANT_SECONDS_END).toIntOrNull()?.takeIf { it in 0..59 } ?: return null
+    val rest = instant.substring(INSTANT_SECONDS_END, instant.length - 1)
+    val millis = when {
+        rest.isEmpty() -> 0
+        rest.length > 1 && rest[0] == '.' && rest.drop(1).all { it in '0'..'9' } -> rest.drop(1).padEnd(3, '0').take(3).toInt()
+        else -> return null
+    }
+    return day * SECONDS_PER_DAY * MILLIS_PER_SECOND + ((hour * 60L + minute) * 60L + second) * MILLIS_PER_SECOND + millis
+}
+
+private const val INSTANT_DAY_END: Int = 10
+private const val INSTANT_HOUR_END: Int = 13
+private const val INSTANT_MINUTE_END: Int = 16
+private const val INSTANT_SECONDS_END: Int = 19
 
 private fun pad(value: Long, width: Int): String {
     val negative = value < 0

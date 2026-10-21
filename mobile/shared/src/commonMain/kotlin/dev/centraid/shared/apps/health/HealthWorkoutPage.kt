@@ -58,9 +58,9 @@ public object HealthWorkoutMachine :
         if (row.activity_id != held.screen.activity_id) return null
         val device = HealthFold.device(held.screen.device)
         val units = device.units
-        val start = held.places.localOf(row.started_at)
-        val end = held.places.localOf(row.ended_at)
-        val seconds = HealthFold.seconds(row)
+        val start = row.local_start
+        val end = row.local_end
+        val seconds = row.length_sec.takeIf { it > 0 }
         val figures = buildList {
             row.distance_m?.takeIf { it > 0.0 }?.let { metres ->
                 HealthFold.distance(metres, units).let { (n, u) -> add(HealthFigure(label = HealthCopy.FIGURE_DISTANCE, value_ = n, unit = u)) }
@@ -132,9 +132,9 @@ public object HealthWorkoutMachine :
 public object HealthWorkoutReads : HealthQueries<HealthWorkoutState, HealthWorkoutEvent>(
     screenId = HealthWorkoutMachine.SCREEN_ID,
     tables = HEALTH_WORKOUT_TABLES,
-    ask = { held, _ ->
+    ask = { held, tz ->
         held.screen.activity_id.takeIf { it.isNotEmpty() }?.let {
-            listOf(AppQueryRequest(health_workout = HealthWorkoutRequest(activity_id = it)))
+            listOf(AppQueryRequest(health_workout = HealthWorkoutRequest(activity_id = it, tz = tz)))
         }
     },
 )

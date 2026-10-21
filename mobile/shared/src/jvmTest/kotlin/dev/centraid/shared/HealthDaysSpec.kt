@@ -9,8 +9,9 @@ import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
 
 /**
- * THE PURE HALF OF A HEALTH PASS (#1129): which day totals a pass sends (R-1129-3), the window it
- * reads (R-1129-4), and the store's word for a kind as the vault's key.
+ * THE PURE HALF OF A HEALTH PASS (#1129): which day totals a pass sends (R-1129-3) and the store's
+ * word for a kind as the vault's key. The window a pass reads (R-1129-4) is the core's, and
+ * `crates/apps/health`'s `window_from` tests hold it.
  */
 class HealthDaysSpec : StringSpec({
     val today = "2026-10-20"
@@ -68,22 +69,6 @@ class HealthDaysSpec : StringSpec({
         // A zero is only ever sent for a day inside the window, too.
         val held = listOf(t("2026-10-01", "active_energy_kcal", 200.0))
         HealthDays.changes(read, held, "2026-10-13", today) shouldContainExactly listOf(t("2026-10-19", "active_energy_kcal", 310.0))
-    }
-
-    "the window: a year of days and 90 days of workouts with nothing held" {
-        HealthDays.from(today, null, HealthDays.TOTALS_BACK) shouldBe "2025-10-20"
-        HealthDays.from(today, null, HealthDays.WORKOUTS_BACK) shouldBe "2026-07-22"
-    }
-
-    "the window: seven days behind the latest held, always the last seven, never past the floor" {
-        HealthDays.from(today, "2026-10-19", HealthDays.TOTALS_BACK) shouldBe "2026-10-12"
-        HealthDays.from(today, today, HealthDays.TOTALS_BACK) shouldBe "2026-10-13"
-        // A month away: the month is read.
-        HealthDays.from(today, "2026-09-10", HealthDays.TOTALS_BACK) shouldBe "2026-09-03"
-        // A latest day the clock has not reached yet still reads the last seven.
-        HealthDays.from(today, "2026-11-01", HealthDays.TOTALS_BACK) shouldBe "2026-10-13"
-        HealthDays.from(today, "2024-01-01", HealthDays.TOTALS_BACK) shouldBe "2025-10-20"
-        HealthDays.from(today, "2026-01-01", HealthDays.WORKOUTS_BACK) shouldBe "2026-07-22"
     }
 
     "every word the table names maps to one of the eight kinds the rung seeds" {

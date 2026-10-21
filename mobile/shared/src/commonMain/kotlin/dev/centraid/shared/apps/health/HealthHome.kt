@@ -187,7 +187,7 @@ public object HealthHomeMachine :
     override fun fold(held: HealthHeld<HealthHomeState>): HealthHomeData? {
         val today = held.answers.today ?: return null
         val screen = held.screen
-        val day = held.places.today.ifEmpty { today.today }
+        val day = today.today
         val base = HealthHomeData(today = day, day_label = CivilWords.dayMonth(day))
         if (!today.connected) {
             val store = HealthFold.store(HealthFold.device(screen.device))
@@ -212,7 +212,7 @@ public object HealthHomeMachine :
         val lines = HealthMetrics.entries.map { metric ->
             metricLine(metric, answer.metrics.firstOrNull { it.metric == metric.wire }, day, units, hero = metric == HealthMetrics.STEPS)
         }
-        val workouts = answer.workouts.map { HealthFold.line(it, held.places.localOf(it.started_at), day, units) }
+        val workouts = answer.workouts.map { HealthFold.line(it, day, units) }
         return HealthTodayData(
             hero = lines.first(),
             metrics_heading = HealthCopy.TODAY_METRICS_HEADING,
@@ -295,7 +295,7 @@ public object HealthHomeMachine :
             val metric = HealthMetrics.ofWire(trend.metric) ?: return@mapNotNull null
             val average = trend.average ?: return@mapNotNull null
             val (number, unit) = HealthFold.figure(metric, average, units)
-            val (delta, sign) = trend.previous?.let { HealthFold.delta(metric, average, it, units) } ?: ("" to 0)
+            val (delta, sign) = HealthFold.delta(metric, trend.change, trend.change_pct, units)
             val values = trend.buckets.mapNotNull { it.value_ }
             val lo = values.minOrNull() ?: average
             val hi = values.maxOrNull() ?: average
@@ -348,10 +348,9 @@ public object HealthHomeMachine :
         val week = plusDays(today, -WEEK_BACK) ?: today
         val sections = linkedMapOf<String, MutableList<centraid.screen.v1.HealthWorkoutLine>>()
         for (row in answer.workouts) {
-            val local = held.places.localOf(row.started_at)
-            val day = local.take(DAY)
+            val day = row.local_start.take(DAY)
             val heading = if (day >= week) HealthCopy.SECTION_THIS_WEEK else HealthFold.monthHeading(day, today)
-            sections.getOrPut(heading) { mutableListOf() } += HealthFold.line(row, local, today, units)
+            sections.getOrPut(heading) { mutableListOf() } += HealthFold.line(row, today, units)
         }
         val shown = answer.workouts.size
         return HealthWorkoutsData(
@@ -473,9 +472,9 @@ public object HealthHomeMachine :
 public object HealthHomeReads : HealthQueries<HealthHomeState, HealthHomeEvent>(
     screenId = HealthHomeMachine.SCREEN_ID,
     tables = HEALTH_HOME_TABLES,
-    ask = { held, day ->
+    ask = { held, tz ->
         val screen = held.screen
-        val today = AppQueryRequest(health_today = HealthTodayRequest(today = day.today, day_start = day.start, day_end = day.end))
+        val today = AppQueryRequest(health_today = HealthTodayRequest(tz = tz))
         when (screen.destination) {
             HealthHomeState.Destination.DESTINATION_TRENDS -> listOf(
                 today,
@@ -486,7 +485,7 @@ public object HealthHomeReads : HealthQueries<HealthHomeState, HealthHomeEvent>(
                             HealthHomeState.TrendRange.TREND_RANGE_YEAR -> HealthTrendRange.HEALTH_TREND_RANGE_YEAR
                             else -> HealthTrendRange.HEALTH_TREND_RANGE_DAYS_30
                         },
-                        today = day.today,
+                        tz = tz,
                     ),
                 ),
             )
@@ -496,6 +495,7 @@ public object HealthHomeReads : HealthQueries<HealthHomeState, HealthHomeEvent>(
                     health_workouts = HealthWorkoutsRequest(
                         kind_concept_id = screen.kind_concept_id.ifEmpty { null },
                         limit = screen.workouts_shown.coerceIn(1, HealthHomeMachine.MAX_ROWS),
+                        tz = tz,
                     ),
                 ),
             )

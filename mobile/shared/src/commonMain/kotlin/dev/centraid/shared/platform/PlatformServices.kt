@@ -70,24 +70,10 @@ public interface PowerAndLink {
  * [Reading.epochMillis] is here for a BOUND, not a calendar: a read that says
  * "the next fourteen days" needs an instant fourteen days on, which is
  * arithmetic on milliseconds and needs no zone. Which day is TODAY is never
- * derived from it in `commonMain` for an app whose core reads a zone — the core
- * answers that. Health is the exception its proto states: its days are the
- * health store's, so its reads place today through [offsetMinutesAt].
+ * derived from it in `commonMain` — the core answers that.
  */
 public interface DeviceClock {
     public fun read(): Reading
-
-    /**
-     * THE ZONE'S OFFSET FROM UTC AT ANY INSTANT, in minutes (east is positive),
-     * from the platform's own zone database. Health's queries take the
-     * caller's day and the instants it starts and ends (`health.proto`, #1129),
-     * because its days are the health store's and the core reads no zone for
-     * them; this is how a Health reads object places "today", a day's bounds and
-     * a workout's start without a calendar of its own (`LocalDays`). The
-     * default is the offset NOW, which is exact for today and an hour out across
-     * a daylight-saving change; both platforms answer exactly.
-     */
-    public fun offsetMinutesAt(epochMillis: Long): Int = read().utcOffsetMinutes
 
     public data class Reading(
         /** The IANA name, e.g. `America/New_York`. Never an offset, never empty. */
@@ -98,9 +84,9 @@ public interface DeviceClock {
          * The zone's offset from UTC AT [epochMillis], in minutes (east is
          * positive). **Read by nothing in `commonMain` since the founding-day
          * notice was retired** (docs/decisions.md, "Onboarding without sample
-         * data") but Health's `LocalDays`, which places the phone's today with
-         * it (#1129). Never a calendar and never used to place an agenda — the
-         * core does that, in [zone].
+         * data"); each platform still fills it, and dropping it is a follow-up
+         * across the three actuals. Never a calendar and never used to place
+         * an agenda — the core does that, in [zone].
          */
         public val utcOffsetMinutes: Int = 0,
     )

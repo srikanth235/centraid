@@ -8,7 +8,6 @@ import centraid.core.v1.Request
 import dev.centraid.core.CentraidCore
 import dev.centraid.core.CoreOutcome
 import dev.centraid.shared.kit.PhoneImport
-import dev.centraid.shared.kit.time.LocalDays
 import dev.centraid.shared.platform.DeviceClock
 import dev.centraid.shared.sync.phone.GoneChoice
 import dev.centraid.shared.sync.phone.OriginGone
@@ -20,6 +19,7 @@ import dev.centraid.shared.sync.phone.PhoneRecord
 import dev.centraid.shared.sync.phone.PhoneSnapshot
 import dev.centraid.shared.sync.phone.PhoneSource
 import dev.centraid.shared.sync.phone.PhoneSync
+import dev.centraid.shared.sync.epochMillisFromRfc3339
 import dev.centraid.shared.sync.rfc3339FromEpochMillis
 
 /**
@@ -114,7 +114,7 @@ public object HealthImport {
 
     /** An instant as the vault spells it, `YYYY-MM-DDTHH:MM:SS.sssZ`, or null for one it would refuse. */
     public fun canonicalInstant(instant: String): String? =
-        LocalDays.epochMillisOf(instant.trim())?.let(::instantOf)
+        epochMillisFromRfc3339(instant.trim())?.let(::instantOf)
 
     /** `YYYY-MM-DDTHH:MM:SS.sssZ` for [epochMillis]: the form `health.follow_workout` is sent (RP-R-4). */
     public fun instantOf(epochMillis: Long): String {
@@ -134,8 +134,8 @@ public object HealthImport {
         val origin = origin(read.store)
         val seen = mutableSetOf<String>()
         val records = read.workouts.mapNotNull { workout ->
-            val started = LocalDays.epochMillisOf(workout.startedAt.trim()) ?: return@mapNotNull null
-            val ended = LocalDays.epochMillisOf(workout.endedAt.trim()) ?: return@mapNotNull null
+            val started = epochMillisFromRfc3339(workout.startedAt.trim()) ?: return@mapNotNull null
+            val ended = epochMillisFromRfc3339(workout.endedAt.trim()) ?: return@mapNotNull null
             val id = phoneId(workout.id.trim())
             if (workout.id.isBlank() || workout.kind.isBlank() || ended < started || started < window.workoutsSince || !seen.add(id)) {
                 return@mapNotNull null
@@ -192,29 +192,27 @@ public object HealthImport {
         "{\"day\":${q(it.day)},\"metric\":${q(it.metric)},\"value\":${it.value}}"
     }
 
-    /** What the vault holds for the follower: the two latests and every day since [since]. Null when unreadable. */
-    public suspend fun view(core: CentraidCore, since: String): HealthFollowView? {
+    /** What the vault holds for the follower in [tz]: the window and every day in it. Null when unreadable. */
+    public suspend fun view(core: CentraidCore, tz: String): HealthFollowView? {
         val answer = core.call(
-            Envelope(request_id = 0, request = Request(app_query = AppQueryRequest(health_follow_view = HealthFollowViewRequest(since = since)))),
+            Envelope(request_id = 0, request = Request(app_query = AppQueryRequest(health_follow_view = HealthFollowViewRequest(tz = tz)))),
         )
         val response = (answer as? CoreOutcome.Answered)?.value?.response?.app_query ?: return null
         return response.health_follow_view
     }
 
     /**
-     * THE WINDOW THE NEXT PASS READS (R-1129-4), out of what the vault holds now. Null when the
-     * vault would not say. The phone's day and a workout's day are placed through [clock].
+     * THE WINDOW THE NEXT PASS READS (R-1129-4), as the core placed it in the device's zone out
+     * of what the vault holds now, with the days the vault holds in it. Null when the vault would
+     * not say.
      */
     public suspend fun window(core: CentraidCore, clock: DeviceClock): HealthWindow? {
-        val today = LocalDays.today(clock.read())
-        val latests = view(core, today) ?: return null
-        val latestWorkoutDay = latests.latest_workout_started_at
-            ?.let(LocalDays::epochMillisOf)
-            ?.let { LocalDays.localOf(it, clock).take(DAY) }
-        val totalsFrom = HealthDays.from(today, latests.latest_day, HealthDays.TOTALS_BACK)
-        val workoutsFrom = HealthDays.from(today, latestWorkoutDay, HealthDays.WORKOUTS_BACK)
-        val since = LocalDays.startOf(workoutsFrom, clock) ?: return null
-        return HealthWindow(today, totalsFrom, workoutsFrom, since)
+        val view = view(core, clock.read().zone) ?: return null
+        val since = epochMillisFromRfc3339(view.workouts_since) ?: return null
+        val held = view.days.mapNotNull { day ->
+            HealthMetrics.ofWire(day.metric)?.let { HealthDayTotal(day.day, it.key, day.value_) }
+        }
+        return HealthWindow(view.today, view.totals_from, view.workouts_from, since, held)
     }
 
     /**
@@ -226,11 +224,7 @@ public object HealthImport {
         var days = 0
         var refused = 0
         if (read.storePresent) {
-            val held = view(core, window.totalsFrom) ?: return Outcome(read = false)
-            val vault = held.days.mapNotNull { day ->
-                HealthMetrics.ofWire(day.metric)?.let { HealthDayTotal(day.day, it.key, day.value_) }
-            }
-            for (batch in HealthDays.changes(read.days, vault, window.totalsFrom, window.today).chunked(HealthDays.BATCH)) {
+            for (batch in HealthDays.changes(read.days, window.held, window.totalsFrom, window.today).chunked(HealthDays.BATCH)) {
                 if (PhoneImport.executed(core, HealthStore.RECORD, recordInput(batch)) != null) days += batch.size else refused += batch.size
             }
         }
@@ -296,7 +290,6 @@ public object HealthImport {
     private fun q(value: String): String = PhoneImport.quote(value)
 
     private const val MINUTE: Int = 16
-    private const val DAY: Int = 10
     private const val DECIMALS: Int = 3
     private const val SCALE: Double = 1_000.0
     private const val SECOND_MS: Long = 1_000L

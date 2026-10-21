@@ -255,7 +255,7 @@ final class HealthKitReader: NSObject, HealthReader {
 }
 
 /// THE PHONE'S CALENDAR DAYS: local midnight for a `YYYY-MM-DD`, and the `YYYY-MM-DD` a moment
-/// falls on — Gregorian, in the device's zone, as `LocalDays` places them on the shared side.
+/// falls on — Gregorian, in the device's zone, the zone the core places Health's window in.
 struct HealthCalendarDays {
     let calendar: Calendar = {
         var calendar = Calendar(identifier: .gregorian)

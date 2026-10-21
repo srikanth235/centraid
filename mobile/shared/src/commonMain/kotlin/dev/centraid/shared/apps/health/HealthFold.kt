@@ -6,7 +6,6 @@ import centraid.screen.v1.HealthWorkoutLine
 import dev.centraid.design.copy.HealthCopy
 import dev.centraid.shared.kit.groupedDigits
 import dev.centraid.shared.kit.time.CivilWords
-import dev.centraid.shared.kit.time.LocalDays
 import dev.centraid.shared.kit.time.epochDayOf
 import dev.centraid.shared.kit.time.plusDays
 import kotlin.math.abs
@@ -123,18 +122,19 @@ public object HealthFold {
     }
 
     /**
-     * THE DIFFERENCE OF TWO OF THE CORE'S FIGURES, IN WORDS, and its sign (−1, 0, 1). Steps and
-     * active energy say a percentage; minutes, beats and kilograms say themselves (`+12 min`).
-     * Zero when the difference rounds to nothing in the words it would be said in.
+     * THE CORE'S DIFFERENCE OF TWO FIGURES, IN WORDS, and its sign (−1, 0, 1): [change] in the
+     * metric's unit, [pct] as a percentage (`health.proto`; the core subtracts, RP-K-6). Steps and
+     * active energy say the percentage; minutes, beats and kilograms say themselves (`+12 min`).
+     * Empty when the core sent none; zero when it rounds to nothing in the words it would be said in.
      */
-    public fun delta(metric: HealthMetrics, now: Double, before: Double, units: HealthDevice.Units): Pair<String, Int> {
+    public fun delta(metric: HealthMetrics, change: Double?, pct: Double?, units: HealthDevice.Units): Pair<String, Int> {
         val percent = metric == HealthMetrics.STEPS || metric == HealthMetrics.ENERGY
+        val signed = (if (percent) pct else change) ?: return "" to 0
         val (magnitude, words) = if (percent) {
-            if (before == 0.0) return "" to 0
-            val p = ((now - before) / before * 100.0).roundToLong()
+            val p = signed.roundToLong()
             abs(p) to "${abs(p)}%"
         } else {
-            val d = now - before
+            val d = signed
             when (metric) {
                 HealthMetrics.SLEEP, HealthMetrics.EXERCISE -> abs(d.roundToLong()).let { it to "$it ${HealthCopy.UNIT_MIN}" }
                 HealthMetrics.RESTING_HR -> abs(d.roundToLong()).let { it to "$it ${HealthCopy.UNIT_BPM}" }
@@ -144,7 +144,7 @@ public object HealthFold {
                 }
             }
         }
-        val sign = if (magnitude == 0L) 0 else if (now > before) 1 else -1
+        val sign = if (magnitude == 0L) 0 else if (signed > 0.0) 1 else -1
         return when (sign) {
             0 -> words to 0
             1 -> "+$words" to 1
@@ -202,13 +202,6 @@ public object HealthFold {
         return fill(part, "kind" to kindWord(kind).lowercase())
     }
 
-    /** A workout's length in seconds: its moving time, else its span. */
-    public fun seconds(row: HealthWorkoutRow): Long? = row.moving_sec ?: run {
-        val start = LocalDays.epochMillisOf(row.started_at) ?: return null
-        val end = LocalDays.epochMillisOf(row.ended_at) ?: return null
-        (end - start) / 1_000L
-    }
-
     /** `11 Oct`. */
     public fun shortDate(day: String): String {
         val month = day.drop(MONTH_AT).take(2).toIntOrNull()?.let(CivilWords::monthName)?.take(3) ?: return day
@@ -221,13 +214,14 @@ public object HealthFold {
         return if (day.take(4) == today.take(4)) month else "$month ${day.take(4)}"
     }
 
-    /** One workout as a list draws it; [local] is its start on the phone's wall clock. */
-    public fun line(row: HealthWorkoutRow, local: String, today: String, units: HealthDevice.Units): HealthWorkoutLine {
+    /** One workout as a list draws it, on the wall clock the core read its start on. */
+    public fun line(row: HealthWorkoutRow, today: String, units: HealthDevice.Units): HealthWorkoutLine {
+        val local = row.local_start
         val day = local.take(DAY)
         val clock = CivilWords.clock(local)
         val meta = listOfNotNull(
             row.distance_m?.takeIf { it > 0.0 }?.let { distance(it, units).let { (n, u) -> "$n $u" } },
-            seconds(row)?.takeIf { it > 0 }?.let(::span),
+            row.length_sec.takeIf { it > 0 }?.let(::span),
         ).joinToString(" · ")
         val week = plusDays(today, -WEEK_BACK) ?: today
         val whenWords = when {

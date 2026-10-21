@@ -9,15 +9,13 @@ import centraid.screen.v1.TileBody
 import centraid.screen.v1.TileStatus
 import dev.centraid.design.copy.HealthCopy
 import dev.centraid.shared.kit.groupedDigits
-import dev.centraid.shared.kit.time.LocalDays
-import dev.centraid.shared.kit.time.plusDays
 import dev.centraid.shared.platform.DeviceClock
 import kotlin.math.roundToLong
 
 /**
- * HOME'S HEALTH TILE (#1129): today's steps and last night's sleep, from `health.today`. It asks
- * for the phone's day and the instants it begins and ends, placed through the platform's zone
- * ([LocalDays]), as every Health read does: the store's days are the phone's.
+ * HOME'S HEALTH TILE (#1129): today's steps and last night's sleep, from `health.today`. It
+ * states the device's zone and the core places today in it, as every Health read does: the
+ * store's days are the phone's.
  *
  * No store connected is `EMPTY`, and the tile says what to do. A connected store with nothing
  * today is CONTENT with no figure: a day with no row is not a day of no steps, so the tile never
@@ -29,13 +27,9 @@ public object HomeHealthTile {
     /** The tables whose changes move this tile: the days, and the store's origin (connected or not). */
     public val TABLES: Set<String> = setOf("health_daily", "phone_origin")
 
-    /** The one request, for the phone's day; null when the day could not be placed. */
-    public fun request(clock: DeviceClock): AppQueryRequest? {
-        val today = LocalDays.today(clock.read())
-        val start = LocalDays.startInstant(today, clock) ?: return null
-        val end = plusDays(today, 1)?.let { LocalDays.startInstant(it, clock) } ?: return null
-        return AppQueryRequest(health_today = HealthTodayRequest(today = today, day_start = start, day_end = end))
-    }
+    /** The one request, in the device's zone. */
+    public fun request(clock: DeviceClock): AppQueryRequest =
+        AppQueryRequest(health_today = HealthTodayRequest(tz = clock.read().zone))
 
     /** The tile, out of one answer. */
     public fun arrived(answer: HealthToday): HomeEvent {

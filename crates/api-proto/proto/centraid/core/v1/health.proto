@@ -17,11 +17,21 @@
 // `sleep_min`, `distance_m`): SI or the store's own count, never converted.
 //
 // DAYS ARE THE PHONE'S. A day is `YYYY-MM-DD` as the health store reckoned it
-// in the device's zone when it was read; a request states `today`, the caller's
-// local day, and the core reads no zone to find it. The one request that has to
-// place instants on a day (`HealthTodayRequest`, for today's workouts) states
-// the instants the caller's day begins and ends. A `today` that is not a day of
-// the calendar is `ERROR_CODE_INVALID_REQUEST`.
+// in the device's zone when it was read. Every request states `tz`, the
+// device's zone, and the core places everything civil in it: `today` (the
+// vault clock's day there), the instants today begins and ends, a workout's
+// wall clock, and the follower's read window. A shell does no zone arithmetic
+// (agenda.proto's rule, #1046).
+//
+// THE ZONE RULE is agenda.proto's: an IANA name; EMPTY is the vault's zone
+// (`core_vault.settings_json`'s `timeZone`), and a vault that names none either
+// is `ERROR_CODE_INVALID_REQUEST`, as is a name the bundled database does not
+// know. Never UTC by default.
+//
+// DIFFERENCES ARE THE CORE'S TOO (R-1129-12): a trend's change on the period
+// before and a series' distance from the typical come as numbers, signed, in the
+// metric's unit and as a percentage. The shell picks which one a metric says
+// and rounds it for words; it subtracts nothing.
 //
 // A FIGURE NOTHING FEEDS IS ABSENT, never zero: a day with no row is not a
 // day of zero steps, and an average of no days is not an average.
@@ -103,6 +113,13 @@ message HealthWorkoutRow {
   optional double elevation_gain_m = 12;
   // The app or device that recorded it ("Apple Watch").
   optional string recorded_by = 13;
+  // The start and end on the request zone's wall clock, `YYYY-MM-DDTHH:MM`:
+  // what a list groups by and prints.
+  string local_start = 14;
+  string local_end = 15;
+  // Its length in seconds: `moving_sec` when the store measured it, else the
+  // span from start to end.
+  int64 length_sec = 16;
 }
 
 // The keyset position of the next page of workouts: the start and the id of
@@ -118,14 +135,12 @@ message HealthWorkoutsCursor {
 
 // `health.today`: today's numbers against the member's own typical (R-1129-8).
 message HealthTodayRequest {
-  // The caller's local day, `YYYY-MM-DD`.
-  string today = 1;
-  // The instants the caller's day begins and the next one begins, in UTC
-  // (`2026-10-19T22:00:00Z`, fraction optional): a workout that started in
-  // [day_start, day_end) is today's. The core reads no zone to find them; an
-  // instant not of that shape is `ERROR_CODE_INVALID_REQUEST`.
-  string day_start = 2;
-  string day_end = 3;
+  reserved 1, 2, 3;
+  reserved "today", "day_start", "day_end";
+  // The zone (the file header's rule). Today is the vault clock's day in it,
+  // and a workout that started between that day's first instant and the
+  // next day's is today's.
+  string tz = 4;
 }
 
 message HealthTodayMetric {
@@ -162,10 +177,12 @@ message HealthToday {
 
 // `health.series`: one metric over a week, a month or a year.
 message HealthSeriesRequest {
+  reserved 3;
+  reserved "today";
   HealthMetric metric = 1;
   HealthRange range = 2;
-  // The caller's local day, `YYYY-MM-DD`.
-  string today = 3;
+  // The zone (the file header's rule); the period ends on today in it.
+  string tz = 4;
 }
 
 message HealthSeries {
@@ -192,13 +209,19 @@ message HealthSeries {
   // value.
   uint32 above_typical = 10;
   uint32 counted = 11;
+  // `average` less `typical`, in the metric's unit, and as a percentage of
+  // `typical` (absent when `typical` is 0). Absent when either is.
+  optional double versus_typical = 12;
+  optional double versus_typical_pct = 13;
 }
 
 // `health.trends`: every metric over a range, with a sparkline.
 message HealthTrendsRequest {
+  reserved 2;
+  reserved "today";
   HealthTrendRange range = 1;
-  // The caller's local day, `YYYY-MM-DD`.
-  string today = 2;
+  // The zone (the file header's rule); the period ends on today in it.
+  string tz = 3;
 }
 
 message HealthTrend {
@@ -210,6 +233,10 @@ message HealthTrend {
   // 9 buckets for 30 and 90 days (the days split as evenly as they go, the
   // later buckets taking the extra day), 12 months for a year. Oldest first.
   repeated HealthBucket buckets = 4;
+  // `average` less `previous`, in the metric's unit, and as a percentage of
+  // `previous` (absent when `previous` is 0). Absent when either is.
+  optional double change = 5;
+  optional double change_pct = 6;
 }
 
 message HealthTrends {
@@ -227,6 +254,10 @@ message HealthWorkoutsRequest {
   uint32 limit = 2;
   // The previous page's `next`; absent is the first page.
   optional HealthWorkoutsCursor after = 3;
+  // The zone each row's wall clock is read in. The file header's rule, except
+  // that EMPTY on a vault that names no zone is not refused: the rows come
+  // with empty wall clocks (the follower diffs instants and reads none).
+  string tz = 4;
 }
 
 message HealthKindCount {
@@ -248,6 +279,8 @@ message HealthWorkouts {
 // `health.workout`: one workout.
 message HealthWorkoutRequest {
   string activity_id = 1;
+  // The zone its wall clock is read in, as `HealthWorkoutsRequest.tz`.
+  string tz = 2;
 }
 
 message HealthWorkout {
@@ -256,13 +289,15 @@ message HealthWorkout {
 }
 
 // `health.follow_view`: what the follower engine reads before a pass
-// (R-1129-3, R-1129-4). It derives its read window from the two latests and
-// diffs the store's totals against `days`, sending only what moved.
+// (R-1129-3, R-1129-4): the window to read, placed by the core out of the two
+// latests, and what the vault holds in it, so the engine diffs the store's
+// totals against `days` and sends only what moved.
 message HealthFollowViewRequest {
-  // `YYYY-MM-DD`: the first day of the window the engine is about to read.
-  // A window holding more than 2,400 rows (400 days of the six metrics) is
-  // `ERROR_CODE_READ_BOUND_REACHED`, never a short answer.
-  string since = 1;
+  reserved 1;
+  reserved "since";
+  // The zone (the file header's rule): today, and the day the newest
+  // workout started on, are read in it.
+  string tz = 2;
 }
 
 message HealthDayValue {
@@ -276,7 +311,20 @@ message HealthFollowView {
   optional string latest_day = 1;
   // The newest followed workout's start; absent when there is none.
   optional string latest_workout_started_at = 2;
-  // Every (day, metric, value) the vault holds with day >= `since`, oldest
-  // first.
+  // Every (day, metric, value) the vault holds from `totals_from` on, oldest
+  // first. More than 2,400 rows (400 days of the six metrics) is
+  // `ERROR_CODE_READ_BOUND_REACHED`, never a short answer.
   repeated HealthDayValue days = 3;
+  // The vault clock's day in the zone.
+  string today = 4;
+  // THE WINDOW (R-1129-4), each `YYYY-MM-DD`: with nothing held, 365 days
+  // before today for the totals and 90 for the workouts; otherwise 7 days
+  // before the latest held (the totals' latest day, the newest workout's day
+  // in the zone) or before today when that is earlier, never further back
+  // than the first read's.
+  string totals_from = 5;
+  string workouts_from = 6;
+  // The instant `workouts_from` begins in the zone, `YYYY-MM-DDTHH:MM:SS.sssZ`:
+  // a workout that started at or after it is in the window.
+  string workouts_since = 7;
 }

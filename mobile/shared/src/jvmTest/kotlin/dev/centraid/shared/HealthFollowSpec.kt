@@ -13,8 +13,8 @@ import dev.centraid.shared.apps.health.HealthRead
 import dev.centraid.shared.apps.health.HealthStoreKind
 import dev.centraid.shared.apps.health.HealthWindow
 import dev.centraid.shared.apps.health.PhoneWorkout
-import dev.centraid.shared.kit.time.LocalDays
 import dev.centraid.shared.shell.PhoneFollowWords
+import dev.centraid.shared.sync.epochMillisFromRfc3339
 import dev.centraid.shared.sync.phone.GoneChoice
 import dev.centraid.shared.sync.phone.GoneReason
 import dev.centraid.shared.sync.phone.OriginGone
@@ -39,7 +39,11 @@ private class HealthBench {
     val days = linkedMapOf<Pair<String, String>, Double>()
     val origins = linkedMapOf<String, Pair<String, String>>()
     val links = linkedMapOf<String, Link>()
+    val zones = mutableListOf<String>()
     private var next = 0
+
+    /** What the vault holds in the totals' window, as `health.follow_view` hands it to a pass. */
+    val held: List<HealthDayTotal> get() = days.filter { it.key.first >= TOTALS_FROM }.map { HealthDayTotal(it.key.first, it.key.second, it.value) }
 
     /** Every write, in order, the touches left out. */
     val writes: List<String> get() = script.commands.map { it.first }.filter { it != "phone.touch" }
@@ -63,15 +67,21 @@ private class HealthBench {
                 query.health_workout != null -> AppQueryResponse(
                     health_workout = HealthWorkout(workout = workouts[query.health_workout!!.activity_id]?.let(::drifted)),
                 )
+                // THE WINDOW IS THE CORE'S (crates/core's health tests hold its placement); the
+                // bench answers a fixed one, and every day it holds from its first day on.
                 query.health_follow_view != null -> {
-                    val since = query.health_follow_view!!.since
+                    zones += query.health_follow_view!!.tz
                     AppQueryResponse(
                         health_follow_view = HealthFollowView(
                             latest_day = days.keys.maxOfOrNull { it.first },
                             latest_workout_started_at = workouts.values.maxOfOrNull { it.started_at },
-                            days = days.filter { it.key.first >= since }.map { (key, value) ->
+                            days = days.filter { it.key.first >= TOTALS_FROM }.map { (key, value) ->
                                 HealthDayValue(day = key.first, metric = HealthMetrics.ofKey(key.second)!!.wire, value_ = value)
                             },
+                            today = "2026-10-20",
+                            totals_from = TOTALS_FROM,
+                            workouts_from = "2026-10-13",
+                            workouts_since = "2026-10-12T22:00:00.000Z",
                         ),
                     )
                 }
@@ -154,6 +164,7 @@ private class HealthBench {
 
     companion object {
         const val SIGHTED = "2026-10-20T00:00:00.000Z"
+        const val TOTALS_FROM = "2026-10-13"
     }
 }
 
@@ -162,7 +173,7 @@ class HealthFollowSpec : StringSpec({
         today = "2026-10-20",
         totalsFrom = "2026-10-13",
         workoutsFrom = "2026-10-13",
-        workoutsSince = LocalDays.epochMillisOf("2026-10-13T00:00:00Z")!!,
+        workoutsSince = epochMillisFromRfc3339("2026-10-13T00:00:00Z")!!,
     )
     val readAt = "2026-10-20T10:00:00.000Z"
 
@@ -185,7 +196,7 @@ class HealthFollowSpec : StringSpec({
         workoutsComplete = complete,
     )
 
-    suspend fun HealthBench.pass(read: HealthRead) = HealthImport.run(script.core(), read, window, readAt)
+    suspend fun HealthBench.pass(read: HealthRead) = HealthImport.run(script.core(), read, window.copy(held = held), readAt)
 
     "a new workout is added as an activity, linked under the store's one origin" {
         val bench = HealthBench()
@@ -316,7 +327,7 @@ class HealthFollowSpec : StringSpec({
         val bench = HealthBench()
         val old = run(0).copy(id = "old", startedAt = "2026-09-01T07:00:00Z", endedAt = "2026-09-01T07:30:00Z")
         // A first pass, whose window reached back further, brought the old one in.
-        val wide = window.copy(workoutsFrom = "2026-08-01", workoutsSince = LocalDays.epochMillisOf("2026-08-01T00:00:00Z")!!)
+        val wide = window.copy(workoutsFrom = "2026-08-01", workoutsSince = epochMillisFromRfc3339("2026-08-01T00:00:00Z")!!)
         HealthImport.run(bench.script.core(), read(old, run(1)), wide, readAt)
         bench.workouts.size shouldBe 2
         bench.script.commands.clear()
@@ -401,24 +412,20 @@ class HealthFollowSpec : StringSpec({
         bench.writes.shouldBeEmpty()
     }
 
-    "the window is derived from what the vault holds" {
+    "the window is the core's, asked in the device's zone, with the days it holds" {
         val bench = HealthBench()
-        val clock = dev.centraid.shared.platform.FakeDeviceClock(epochMillis = LocalDays.epochMillisOf("2026-10-20T10:00:00Z")!!)
-        HealthImport.window(bench.script.core(), clock) shouldBe HealthWindow(
-            "2026-10-20",
-            "2025-10-20",
-            "2026-07-22",
-            LocalDays.epochMillisOf("2026-07-22T00:00:00Z")!!,
-        )
+        bench.days[("2026-10-10" to "steps")] = 9.0
         bench.days[("2026-10-18" to "steps")] = 10.0
-        bench.workouts["a"] = HealthWorkoutRow(activity_id = "a", kind_key = "run", started_at = "2026-10-19T23:30:00.000Z", ended_at = "2026-10-20T00:10:00.000Z")
-        // East of UTC, the workout's start is already the 20th on the phone.
-        clock.utcOffsetMinutes = 120
-        HealthImport.window(bench.script.core(), clock)!!.let {
-            it.totalsFrom shouldBe "2026-10-11"
-            it.workoutsFrom shouldBe "2026-10-13"
-            it.workoutsSince shouldBe LocalDays.epochMillisOf("2026-10-12T22:00:00Z")!!
-        }
+        val clock = dev.centraid.shared.platform.FakeDeviceClock(epochMillis = epochMillisFromRfc3339("2026-10-20T10:00:00Z")!!)
+        val placed = HealthImport.window(bench.script.core(), clock)!!
+        bench.zones shouldContainExactly listOf(clock.read().zone)
+        placed shouldBe HealthWindow(
+            "2026-10-20",
+            "2026-10-13",
+            "2026-10-13",
+            epochMillisFromRfc3339("2026-10-12T22:00:00Z")!!,
+            listOf(HealthDayTotal("2026-10-18", "steps", 10.0)),
+        )
     }
 
     "the follow-gone question for the health store counts workouts and deletes, since a workout has no trash" {

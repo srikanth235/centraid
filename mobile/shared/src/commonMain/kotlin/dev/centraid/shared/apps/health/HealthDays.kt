@@ -1,12 +1,12 @@
 package dev.centraid.shared.apps.health
 
 import dev.centraid.shared.kit.time.epochDayOf
-import dev.centraid.shared.kit.time.plusDays
 
 /**
  * THE PURE HALF OF A DAYS PASS (#1129): the store's totals against the vault's, in; the changed
  * set, out. Days bypass `phone_link` (R-1129-3): the store gives a day no identity, so the window
- * re-read is what corrects a late watch upload, and a day is never deleted.
+ * re-read is what corrects a late watch upload, and a day is never deleted. The window itself is
+ * the core's (`health.follow_view`, R-1129-4), placed in the device's zone.
  *
  * - **Only what changed is sent.** A value the vault holds bit for bit is not sent again, so a
  *   second pass over the same store sends nothing (R-1088-12); `health.record_days` compares the
@@ -50,29 +50,5 @@ public object HealthDays {
             if (key !in stated && was != 0.0) out += HealthDayTotal(key.first, key.second, 0.0)
         }
         return out.sortedWith(compareBy({ it.day }, { HealthMetrics.ofKey(it.metric)?.ordinal ?: Int.MAX_VALUE }))
-    }
-
-    /** How far back a first read of the totals goes (owner answer 3). */
-    public const val TOTALS_BACK: Int = 365
-
-    /** How far back a first read of the workouts goes (owner answer 3). */
-    public const val WORKOUTS_BACK: Int = 90
-
-    /** Days re-read behind the latest one held, because watches upload late. */
-    public const val REREAD: Int = 7
-
-    /**
-     * THE FIRST DAY A PASS READS (R-1129-4). With nothing held: [back] days before [today].
-     * Otherwise [REREAD] days before the latest day held, or before today when that is earlier
-     * still (a member who has not opened the app for a month gets the month), and never more
-     * than [back] days before today (RP-K-4 reads the ruling's "or today-7 if later" as: the
-     * window always covers the last [REREAD] days).
-     */
-    public fun from(today: String, latest: String?, back: Int): String {
-        val floor = plusDays(today, -back) ?: today
-        if (latest == null || epochDayOf(latest) == null) return floor
-        val behindLatest = plusDays(latest, -REREAD) ?: floor
-        val behindToday = plusDays(today, -REREAD) ?: floor
-        return maxOf(floor, minOf(behindLatest, behindToday))
     }
 }

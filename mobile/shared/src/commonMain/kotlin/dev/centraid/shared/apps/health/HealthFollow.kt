@@ -101,6 +101,7 @@ public data class HealthWindow(
     public val totalsFrom: String,
     public val workoutsFrom: String,
     public val workoutsSince: Long,
+    public val held: List<HealthDayTotal> = emptyList(),
 )
 
 /** THE SHELL'S HEALTH READER: HealthKit's statistics collection and workout queries, Health Connect's aggregate and `ExerciseSessionRecord`. */

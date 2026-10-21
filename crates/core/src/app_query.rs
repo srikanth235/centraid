@@ -229,12 +229,12 @@ pub fn answer(vault: &Vault, request: &wire::AppQueryRequest) -> Result<wire::Ap
         Q::MoneyRecurring(asked) => money::recurring(vault, &door, &now, asked)?,
         Q::MoneySearch(asked) => money::search(vault, &door, &now, asked)?,
         // Health (#1129): no zone and no clock; the request states its day.
-        Q::HealthToday(asked) => health::today(&door, asked)?,
-        Q::HealthSeries(asked) => health::series(&door, asked)?,
-        Q::HealthTrends(asked) => health::trends(&door, asked)?,
-        Q::HealthWorkouts(asked) => health::workouts(&door, asked)?,
-        Q::HealthWorkout(asked) => health::workout(&door, asked)?,
-        Q::HealthFollowView(asked) => health::follow_view(&door, asked)?,
+        Q::HealthToday(asked) => health::today(vault, &door, &now, asked)?,
+        Q::HealthSeries(asked) => health::series(vault, &door, &now, asked)?,
+        Q::HealthTrends(asked) => health::trends(vault, &door, &now, asked)?,
+        Q::HealthWorkouts(asked) => health::workouts(vault, &door, asked)?,
+        Q::HealthWorkout(asked) => health::workout(vault, &door, asked)?,
+        Q::HealthFollowView(asked) => health::follow_view(vault, &door, &now, asked)?,
     };
     Ok(wire::AppQueryResponse {
         answer: Some(answer),

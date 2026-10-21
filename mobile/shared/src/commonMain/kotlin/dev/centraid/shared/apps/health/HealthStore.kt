@@ -10,10 +10,10 @@ import centraid.core.v1.HealthWorkoutsRequest
 import centraid.core.v1.Request
 import dev.centraid.core.CentraidCore
 import dev.centraid.core.CoreOutcome
-import dev.centraid.shared.kit.time.LocalDays
 import dev.centraid.shared.sync.phone.CorePhoneStore
 import dev.centraid.shared.sync.phone.PhoneRecord
 import dev.centraid.shared.sync.phone.PhoneSource
+import dev.centraid.shared.sync.epochMillisFromRfc3339
 import dev.centraid.shared.sync.phone.VaultRow
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
@@ -80,7 +80,7 @@ internal class HealthStore(
     override suspend fun coverage(): (VaultRow) -> Boolean {
         val from = since ?: return { true }
         return { row ->
-            val started = (row.attributes as? HealthWorkoutRow)?.started_at?.let(LocalDays::epochMillisOf)
+            val started = (row.attributes as? HealthWorkoutRow)?.started_at?.let(::epochMillisFromRfc3339)
             started != null && started >= from
         }
     }

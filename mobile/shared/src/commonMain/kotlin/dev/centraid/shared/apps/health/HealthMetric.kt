@@ -96,7 +96,7 @@ public object HealthMetricMachine :
         val (number, unit) = average?.let { HealthFold.figure(metric, it, units) } ?: ("" to "")
         val typical = answer.typical
         val versus = if (average != null && typical != null) {
-            val (diff, sign) = HealthFold.delta(metric, average, typical, units)
+            val (diff, sign) = HealthFold.delta(metric, answer.versus_typical, answer.versus_typical_pct, units)
             when {
                 sign > 0 -> HealthFold.fill(if (year) HealthCopy.VERSUS_YEAR_ABOVE else HealthCopy.VERSUS_ABOVE, "diff" to diff.drop(1))
                 sign < 0 -> HealthFold.fill(if (year) HealthCopy.VERSUS_YEAR_BELOW else HealthCopy.VERSUS_BELOW, "diff" to diff.drop(1))
@@ -240,14 +240,14 @@ public object HealthMetricMachine :
 public object HealthMetricReads : HealthQueries<HealthMetricState, HealthMetricEvent>(
     screenId = HealthMetricMachine.SCREEN_ID,
     tables = setOf("health_daily"),
-    ask = { held, day ->
+    ask = { held, tz ->
         val metric = HealthMetrics.ofKey(held.screen.metric)
         if (metric == null) {
             null
         } else {
             listOf(
                 AppQueryRequest(
-                    health_series = HealthSeriesRequest(metric = metric.wire, range = HealthMetricMachine.wire(held.screen.range), today = day.today),
+                    health_series = HealthSeriesRequest(metric = metric.wire, range = HealthMetricMachine.wire(held.screen.range), tz = tz),
                 ),
             )
         }

@@ -175,17 +175,12 @@ public class HomeRuntime(
      * event the moment it lands, and a read that did not land, or was denied, is `TileRefused`.
      */
     private suspend fun readHealth() {
-        val request = HomeHealthTile.request(clock)
-        val event = if (request == null) {
-            refused(HomeHealthTile.APP_ID, Reads.refused(WRONG_ANSWER))
-        } else {
-            when (val outcome = askCore(core(), listOf(request))) {
-                is AppQueryOutcome.Answered -> outcome.answers.single().health_today
-                    ?.let(HomeHealthTile::arrived)
-                    ?: refused(HomeHealthTile.APP_ID, Reads.refused(WRONG_ANSWER))
-                is AppQueryOutcome.Denied -> refused(HomeHealthTile.APP_ID, deniedFailure(outcome.denial))
-                is AppQueryOutcome.Refused -> refused(HomeHealthTile.APP_ID, outcome.failure)
-            }
+        val event = when (val outcome = askCore(core(), listOf(HomeHealthTile.request(clock)))) {
+            is AppQueryOutcome.Answered -> outcome.answers.single().health_today
+                ?.let(HomeHealthTile::arrived)
+                ?: refused(HomeHealthTile.APP_ID, Reads.refused(WRONG_ANSWER))
+            is AppQueryOutcome.Denied -> refused(HomeHealthTile.APP_ID, deniedFailure(outcome.denial))
+            is AppQueryOutcome.Refused -> refused(HomeHealthTile.APP_ID, outcome.failure)
         }
         host.send(event)
     }

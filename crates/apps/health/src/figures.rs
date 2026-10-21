@@ -275,6 +275,18 @@ pub fn above(buckets: &[Bucket], typical: Option<f64>) -> (usize, usize) {
     (above, valued.len())
 }
 
+/// THE DIFFERENCE OF TWO FIGURES (RP-K-6): `now` less `before`, in the metric's unit, and as a
+/// percentage of `before` (absent when `before` is 0). Both absent when either figure is. The
+/// shell rounds and words it; it subtracts nothing.
+#[must_use]
+pub fn difference(now: Option<f64>, before: Option<f64>) -> (Option<f64>, Option<f64>) {
+    let (Some(now), Some(before)) = (now, before) else {
+        return (None, None);
+    };
+    let pct = (before != 0.0).then(|| (now - before) / before * 100.0);
+    (Some(now - before), pct)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -425,6 +437,21 @@ mod tests {
         assert_eq!(best(Metric::Steps, &buckets(&[None, None])), None);
         assert_eq!(above(&series, Some(4.0)), (2, 3));
         assert_eq!(above(&series, None), (0, 3));
+    }
+
+    #[test]
+    fn a_difference_is_signed_and_a_percentage_of_the_before() {
+        assert_eq!(
+            difference(Some(110.0), Some(100.0)),
+            (Some(10.0), Some(10.0))
+        );
+        assert_eq!(
+            difference(Some(90.0), Some(100.0)),
+            (Some(-10.0), Some(-10.0))
+        );
+        assert_eq!(difference(Some(5.0), Some(0.0)), (Some(5.0), None));
+        assert_eq!(difference(None, Some(1.0)), (None, None));
+        assert_eq!(difference(Some(1.0), None), (None, None));
     }
 
     #[test]

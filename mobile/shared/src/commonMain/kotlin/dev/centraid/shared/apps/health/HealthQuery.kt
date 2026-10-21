@@ -14,36 +14,21 @@ import centraid.screen.v1.SeatState
 import dev.centraid.design.copy.HealthCopy
 import dev.centraid.shared.kit.ContentLens
 import dev.centraid.shared.kit.ReadContent
-import dev.centraid.shared.kit.time.LocalDays
 import dev.centraid.shared.platform.DeviceClock
-import dev.centraid.shared.platform.platformServices
 import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.ScreenMachine
 import dev.centraid.shared.screen.Step
 import dev.centraid.shared.sync.ScreenQueries
 
 /**
- * WHERE THE PHONE'S CLOCK PUT THINGS, for one answer (#1129): the phone's [today] and each
- * instant the answer carries as the phone's wall clock (`YYYY-MM-DDTHH:MM`). Placed by the reads
- * object through [LocalDays], never by a machine, which is handed them as data and stays pure.
- */
-public data class HealthPlaces(
-    public val today: String = "",
-    public val local: Map<String, String> = emptyMap(),
-) {
-    /** [instant] on the phone's wall clock, or empty when it was not placed. */
-    public fun localOf(instant: String): String = local[instant].orEmpty()
-}
-
-/**
  * WHAT A HEALTH MACHINE HOLDS (#1129): the state a view draws, the core's raw typed answers
  * (kept so a tab, a range or a sheet re-folds without a read; `screen.proto` cannot import
- * `centraid.core.v1`), where the clock put them, and ONE read in flight — Money's shape.
+ * `centraid.core.v1`), and ONE read in flight — Money's shape. Everything civil in an answer
+ * (today, a workout's wall clock) is the core's, placed in the zone the request stated.
  */
 public data class HealthHeld<S>(
     public val screen: S,
     public val answers: HealthAnswers = HealthAnswers(),
-    public val places: HealthPlaces = HealthPlaces(),
     public val reading: Boolean = false,
     public val readQueued: Boolean = false,
 )
@@ -69,7 +54,7 @@ public data class HealthAnswers(
 public sealed interface HealthInput<out E> {
     public data class View<E>(public val event: E) : HealthInput<E>
 
-    public data class Answered(public val answers: List<AppQueryResponse>, public val places: HealthPlaces) : HealthInput<Nothing>
+    public data class Answered(public val answers: List<AppQueryResponse>) : HealthInput<Nothing>
 
     public data class Refused(public val failure: ReadFailure) : HealthInput<Nothing>
 
@@ -110,7 +95,7 @@ public abstract class HealthQueryMachine<S, E, D>(
     override fun reduce(state: HealthHeld<S>, event: HealthInput<E>): Step<HealthHeld<S>> {
         val step = when (event) {
             is HealthInput.View -> refoldView(view(state, event.event))
-            is HealthInput.Answered -> answered(state, event.answers, event.places)
+            is HealthInput.Answered -> answered(state, event.answers)
             is HealthInput.Refused -> ended(state, ReadContent.Failed(event.failure))
             is HealthInput.Denied -> ended(state, ReadContent.Denied(denied()))
             is HealthInput.Changed -> read(overRows(state))
@@ -154,16 +139,9 @@ public abstract class HealthQueryMachine<S, E, D>(
             held.copy(screen = lens.with(held.screen, ReadContent.Loading(firstLoad = true)))
         }
 
-    private fun answered(held: HealthHeld<S>, responses: List<AppQueryResponse>, places: HealthPlaces): Step<HealthHeld<S>> {
+    private fun answered(held: HealthHeld<S>, responses: List<AppQueryResponse>): Step<HealthHeld<S>> {
         if (held.readQueued) return reissue(held)
-        val next = held.copy(
-            answers = held.answers.with(responses),
-            places = HealthPlaces(
-                today = places.today.ifEmpty { held.places.today },
-                local = held.places.local + places.local,
-            ),
-            reading = false,
-        )
+        val next = held.copy(answers = held.answers.with(responses), reading = false)
         val data = fold(next)
             // A SHORT ANSWER IS NOT A WHOLE ONE, and none is made up.
             ?: return Step(next.copy(screen = lens.with(next.screen, ReadContent.Failed(incomplete()))))
@@ -192,42 +170,19 @@ public abstract class HealthQueryMachine<S, E, D>(
 }
 
 /**
- * WHAT ONE HEALTH SCREEN ASKS THE CORE: one object per screen, [ask] its only difference. The
- * phone's day and its bounds are placed here, at every read, through the platform's zone
- * ([LocalDays]); every instant an answer carries is placed on the phone's wall clock before the
- * machine sees it.
+ * WHAT ONE HEALTH SCREEN ASKS THE CORE: one object per screen, [ask] its only difference. Every
+ * request states the device's zone, and the core places today, a day's bounds and each
+ * workout's wall clock in it (RP-K-2): nothing here does date arithmetic.
  */
 public open class HealthQueries<S, E>(
     override val screenId: String,
     override val tables: Set<String>,
-    private val clock: () -> DeviceClock = { platformServices().clock },
-    private val ask: (state: HealthHeld<S>, day: HealthDay) -> List<AppQueryRequest>?,
+    private val ask: (state: HealthHeld<S>, tz: String) -> List<AppQueryRequest>?,
 ) : ScreenQueries<HealthHeld<S>, HealthInput<E>> {
-    /** The phone's day for one read, and the UTC instants it begins and the next begins. */
-    public data class HealthDay(val today: String, val start: String, val end: String)
+    override fun requests(state: HealthHeld<S>, now: DeviceClock.Reading): List<AppQueryRequest>? = ask(state, now.zone)
 
-    override fun requests(state: HealthHeld<S>, now: DeviceClock.Reading): List<AppQueryRequest>? {
-        val today = LocalDays.today(now)
-        val clock = clock()
-        val start = LocalDays.startInstant(today, clock) ?: return null
-        val next = dev.centraid.shared.kit.time.plusDays(today, 1) ?: return null
-        val end = LocalDays.startInstant(next, clock) ?: return null
-        return ask(state, HealthDay(today, start, end))
-    }
-
-    override fun arrived(answers: List<AppQueryResponse>, requests: List<AppQueryRequest>): HealthInput<E> {
-        val today = requests.firstNotNullOfOrNull { it.health_today?.today ?: it.health_series?.today ?: it.health_trends?.today }
-            ?: LocalDays.today(clock().read())
-        val instants = answers.flatMap { answer ->
-            answer.health_today?.workouts.orEmpty() + answer.health_workouts?.workouts.orEmpty() +
-                listOfNotNull(answer.health_workout?.workout)
-        }.flatMap { listOf(it.started_at, it.ended_at) }
-        val clock = clock()
-        val local = instants.distinct().mapNotNull { instant ->
-            LocalDays.epochMillisOf(instant)?.let { instant to LocalDays.localOf(it, clock) }
-        }.toMap()
-        return HealthInput.Answered(answers, HealthPlaces(today, local))
-    }
+    override fun arrived(answers: List<AppQueryResponse>, requests: List<AppQueryRequest>): HealthInput<E> =
+        HealthInput.Answered(answers)
 
     override fun refused(failure: ReadFailure): HealthInput<E> = HealthInput.Refused(failure)
 

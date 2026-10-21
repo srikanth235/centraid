@@ -722,9 +722,6 @@ public class AndroidDeviceClock : DeviceClock {
         )
     }
 
-    override fun offsetMinutesAt(epochMillis: Long): Int =
-        java.util.TimeZone.getDefault().getOffset(epochMillis) / MILLIS_PER_MINUTE
-
     private companion object {
         const val MILLIS_PER_MINUTE: Int = 60_000
     }
