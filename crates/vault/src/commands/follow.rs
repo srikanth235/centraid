@@ -15,9 +15,11 @@
 //! and then `source.stated` becomes the new statement. A record that is new is
 //! **matched** first, by the system's match key (a name; a title and a start; a
 //! file name; a workout kind and its start) against rows nothing follows yet,
-//! and only then added. A record gone from a *complete* read trashes its row if
-//! the member never edited it, and otherwise forgets the source and keeps the
-//! row (R-FP-3); a statement line is never removed. There is no fingerprint and
+//! and only then added. What a record gone from a *complete* read does is the
+//! system's ([`Gone`]): contacts, events and files trash the row if the member
+//! never edited it and otherwise forget the source and keep the row (R-FP-3);
+//! the health store's workouts always keep the row and forget the source
+//! (R-1129-14); a statement line is never removed. There is no fingerprint and
 //! no detach.
 //!
 //! **A system's map is data** ([`SystemMap`]): which kind it fills, which
@@ -32,7 +34,7 @@ use serde_json::{Map, Value as Json};
 
 use crate::commands::entity::{self, trash_stamp};
 use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency};
-use crate::commands::{contact_point, document, event};
+use crate::commands::{contact_point, document, event, workout};
 use crate::error::{Result, VaultError};
 use crate::model::{DEFAULT_CALENDAR_ID, Kind};
 
@@ -65,6 +67,42 @@ pub struct Child {
     pub merge: fn(&CommandCtx<'_, '_>, &str, Option<&Json>, &Json) -> Result<bool>,
 }
 
+/// What a record gone from a complete read does to its row.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Gone {
+    /// Trash the row if the member never edited it; else forget the source and
+    /// keep the row (R-FP-3).
+    Trash,
+    /// Forget the source and keep the row, edited or not: the vault is the
+    /// copy that outlives the phone's store (R-1129-14).
+    Forget,
+    /// Nothing: a record's absence says nothing (a statement line is never
+    /// removed, a month later's statement does not hold this month's).
+    Keep,
+}
+
+/// One field of a record that identifies a row nothing follows yet.
+#[derive(Debug, Clone, Copy)]
+pub enum Match {
+    /// The entity's title, without regard to case.
+    Title,
+    /// A column of the kind's own row, exactly.
+    Column(&'static str),
+    /// A column holding an instant, to the minute (`YYYY-MM-DDTHH:MM`): a phone
+    /// that re-reads a workout may state the seconds differently.
+    Minute(&'static str),
+}
+
+impl Match {
+    /// The record field this key reads.
+    const fn field(self) -> &'static str {
+        match self {
+            Self::Title => "title",
+            Self::Column(name) | Self::Minute(name) => name,
+        }
+    }
+}
+
 /// One system, as data.
 pub struct SystemMap {
     /// The `origin.system` CHECK's word, and the command's suffix.
@@ -77,17 +115,22 @@ pub struct SystemMap {
     /// The columns of the kind's own table the system owns. `title` is always
     /// owned, and is the entity's.
     pub fields: &'static [&'static str],
+    /// The fields (`title` among them) that are written when a row is added and
+    /// never after: a statement line is never edited, whatever a later
+    /// statement says.
+    pub fixed: &'static [&'static str],
     /// The fields that are rows of their own, after the columns.
     pub children: &'static [Child],
-    /// The fields that identify a row nothing follows yet (`title` compares
-    /// without regard to case). A record missing one is not matched.
-    pub match_on: &'static [&'static str],
-    /// Whether a record gone from a complete read may take its row away.
-    pub removes: bool,
+    /// The fields that identify a row nothing follows yet. A record missing one
+    /// is not matched.
+    pub match_on: &'static [Match],
+    /// What a record gone from a complete read does to its row.
+    pub gone: Gone,
     pub defaults: Defaults,
     /// Read what a record states into the form the vault holds it (a wall clock
-    /// and its zone become the instant), so the statement and the row compare
-    /// equal. A record it refuses is counted and left out.
+    /// and its zone become the instant, a store's word for a workout becomes a
+    /// kind), so the statement and the row compare equal. A record it refuses is
+    /// counted and left out.
     pub shape: Shape,
     /// What a row derives from what the source stated (a rule's support), run
     /// after the fields are written.
@@ -99,7 +142,7 @@ pub struct SystemMap {
 }
 
 /// See [`SystemMap::shape`].
-pub type Shape = fn(&mut Map<String, Json>) -> std::result::Result<(), String>;
+pub type Shape = fn(&CommandCtx<'_, '_>, &mut Map<String, Json>) -> std::result::Result<(), String>;
 
 /// See [`SystemMap::settle`].
 pub type Settle = fn(&CommandCtx<'_, '_>, &str) -> Result<()>;
@@ -107,8 +150,15 @@ pub type Settle = fn(&CommandCtx<'_, '_>, &str) -> Result<()>;
 /// See [`SystemMap::replaced`].
 pub type Replaced = fn(&CommandCtx<'_, '_>, &str, &[(&str, &Json)]) -> Result<()>;
 
-fn as_stated(_: &mut Map<String, Json>) -> std::result::Result<(), String> {
+fn as_stated(_: &CommandCtx<'_, '_>, _: &mut Map<String, Json>) -> std::result::Result<(), String> {
     Ok(())
+}
+
+fn event_shape(
+    _: &CommandCtx<'_, '_>,
+    fields: &mut Map<String, Json>,
+) -> std::result::Result<(), String> {
+    event::shape(fields)
 }
 
 fn nothing_to_settle(_: &CommandCtx<'_, '_>, _: &str) -> Result<()> {
@@ -196,32 +246,52 @@ fn statement_defaults(
     ])
 }
 
+/// A child that is only ever stated, never a row of the vault's: what the
+/// source last said of it, read back from `source.stated`. The member cannot
+/// edit it, so the row always agrees with what was stated, and a changed
+/// statement is recorded by the engine and written nowhere else.
+fn stated_read(connection: &Connection, id: &str, name: &str) -> Result<Json> {
+    let stated: Option<String> = connection
+        .query_row(
+            "SELECT stated FROM source WHERE entity_id = ?1",
+            [id],
+            |row| row.get(0),
+        )
+        .optional()?;
+    Ok(stated
+        .and_then(|text| serde_json::from_str::<Json>(&text).ok())
+        .and_then(|stated| stated.get(name).cloned())
+        .unwrap_or(Json::Null))
+}
+
+fn stated_canon(value: &Json) -> Json {
+    value.clone()
+}
+
+fn stated_merge(_: &CommandCtx<'_, '_>, _: &str, _: Option<&Json>, _: &Json) -> Result<bool> {
+    Ok(false)
+}
+
 /// A file's size and modification time as the phone last stated them.
 ///
 /// The phone's cheap pre-check rides in the statement: a rescan of an unchanged
 /// folder reads no bytes, because the phone asks the vault what each file last
 /// stated (`source.stated`) and stages a file only when its size or time moved.
-/// It is not a column of the document and the member cannot edit it, so the row
-/// always agrees with what was stated.
-fn stat_read(connection: &Connection, id: &str) -> Result<Json> {
-    let stated: Option<String> = connection
-        .query_row(
-            "SELECT json_extract(stated, '$.stat') FROM source WHERE entity_id = ?1",
-            [id],
-            |row| row.get(0),
-        )
-        .optional()?
-        .flatten();
-    Ok(stated.map_or(Json::Null, Json::String))
-}
+const STAT: Child = Child {
+    name: "stat",
+    read: |connection, id| stated_read(connection, id, "stat"),
+    canon: stated_canon,
+    merge: stated_merge,
+};
 
-fn stat_canon(value: &Json) -> Json {
-    value.clone()
-}
-
-fn stat_merge(_: &CommandCtx<'_, '_>, _: &str, _: Option<&Json>, _: &Json) -> Result<bool> {
-    Ok(false)
-}
+/// What a statement said of a line beyond what the model keeps: its memo, its
+/// check number, the bank's own type and the file format it came in.
+const LINE: Child = Child {
+    name: "line",
+    read: |connection, id| stated_read(connection, id, "line"),
+    canon: stated_canon,
+    merge: stated_merge,
+};
 
 /// The five systems the vault follows.
 pub const SYSTEMS: &[SystemMap] = &[
@@ -231,14 +301,15 @@ pub const SYSTEMS: &[SystemMap] = &[
         kind: Kind::Person,
         fills: None,
         fields: &["sort_name", "nickname", "role", "birthday"],
+        fixed: &[],
         children: &[Child {
             name: "points",
             read: contact_point::read,
             canon: contact_point::canon,
             merge: contact_point::merge,
         }],
-        match_on: &["title"],
-        removes: true,
+        match_on: &[Match::Title],
+        gone: Gone::Trash,
         defaults: no_defaults,
         shape: as_stated,
         settle: nothing_to_settle,
@@ -258,16 +329,17 @@ pub const SYSTEMS: &[SystemMap] = &[
             "rule",
             "busy",
         ],
+        fixed: &[],
         children: &[Child {
             name: "overrides",
             read: event::overrides_read,
             canon: event::overrides_canon,
             merge: event::overrides_merge,
         }],
-        match_on: &["title", "starts"],
-        removes: true,
+        match_on: &[Match::Title, Match::Column("starts")],
+        gone: Gone::Trash,
         defaults: calendar_defaults,
-        shape: event::shape,
+        shape: event_shape,
         settle: event::settle,
         replaced: nothing_replaced,
     },
@@ -277,44 +349,47 @@ pub const SYSTEMS: &[SystemMap] = &[
         kind: Kind::Document,
         fills: Some(Kind::Folder),
         fields: &["blob", "media_type"],
-        children: &[Child {
-            name: "stat",
-            read: stat_read,
-            canon: stat_canon,
-            merge: stat_merge,
-        }],
-        match_on: &["title"],
-        removes: true,
+        fixed: &[],
+        children: &[STAT],
+        match_on: &[Match::Title],
+        gone: Gone::Trash,
         defaults: folder_defaults,
         shape: as_stated,
         settle: nothing_to_settle,
         replaced: document::keep_replaced_by_write,
     },
+    // A workout: an activity of a workout kind, its span, and what the store
+    // measured. A record states the store's word for the kind and the vault
+    // places it ([`workout::shape`]); the member edits none of it, and one gone
+    // from the phone stays (R-1129-14).
     SystemMap {
         system: "health",
         command: "follow.health",
         kind: Kind::Activity,
         fills: None,
         fields: &["type_id", "type_kind", "starts", "ends"],
-        children: &[],
-        match_on: &["type_id", "starts"],
-        removes: true,
+        fixed: &[],
+        children: &[workout::MEASURES],
+        match_on: &[Match::Column("type_id"), Match::Minute("starts")],
+        gone: Gone::Forget,
         defaults: no_defaults,
-        shape: as_stated,
+        shape: workout::shape,
         settle: nothing_to_settle,
         replaced: nothing_replaced,
     },
+    // A line of a statement: its title is the bank's words until the member
+    // renames it, its day and amount are the bank's and never edited, and the
+    // category is the member's to change.
     SystemMap {
         system: "statement",
         command: "follow.statement",
         kind: Kind::Txn,
         fills: Some(Kind::Account),
-        fields: &["posted_on", "amount_minor", "status", "category_id"],
-        children: &[],
+        fields: &["posted_on", "amount_minor", "category_id"],
+        fixed: &["title", "posted_on", "amount_minor"],
+        children: &[LINE],
         match_on: &[],
-        // A statement line is never removed: a month later's statement does not
-        // contain this month's.
-        removes: false,
+        gone: Gone::Keep,
         defaults: statement_defaults,
         shape: as_stated,
         settle: nothing_to_settle,
@@ -515,12 +590,6 @@ fn records_of(ctx: &CommandCtx<'_, '_>, map: &SystemMap) -> Result<(Vec<Record>,
             .and_then(Json::as_object)
             .cloned()
             .unwrap_or_default();
-        if let Some(unowned) = fields.keys().find(|name| !map.states(name)) {
-            return Err(VaultError::InvalidInput {
-                name: format!("fields.{unowned}"),
-                detail: format!("`{}` does not state `{unowned}`", map.system),
-            });
-        }
         let record = Record {
             external_id: raw
                 .get("external_id")
@@ -533,11 +602,19 @@ fn records_of(ctx: &CommandCtx<'_, '_>, map: &SystemMap) -> Result<(Vec<Record>,
                 .map(str::to_owned),
             fields: Map::new(),
         };
-        if (map.shape)(&mut fields).is_err() {
+        if (map.shape)(ctx, &mut fields).is_err() {
             refused.push((record.external_id, record.device_id));
-        } else {
-            records.push(Record { fields, ..record });
+            continue;
         }
+        // What a record may state is what the vault holds, not what a phone
+        // spelled: the check follows the shape.
+        if let Some(unowned) = fields.keys().find(|name| !map.states(name)) {
+            return Err(VaultError::InvalidInput {
+                name: format!("fields.{unowned}"),
+                detail: format!("`{}` does not state `{unowned}`", map.system),
+            });
+        }
+        records.push(Record { fields, ..record });
     }
     Ok((records, refused))
 }
@@ -714,7 +791,7 @@ fn match_existing(
         || map
             .match_on
             .iter()
-            .any(|name| !record.fields.contains_key(*name))
+            .any(|key| !record.fields.contains_key(key.field()))
     {
         return Ok(None);
     }
@@ -723,13 +800,17 @@ fn match_existing(
         map.kind.as_str().to_owned().into(),
         record.device_id.clone().into(),
     ];
-    for name in map.match_on {
-        let value = to_sql(&record.fields[*name]);
+    for key in map.match_on {
+        let value = to_sql(&record.fields[key.field()]);
         values.push(value);
-        clauses.push(if *name == "title" {
-            format!("e.title = ?{} COLLATE NOCASE", values.len())
-        } else {
-            format!("k.{} IS ?{}", crate::log::quoted(name), values.len())
+        let at = values.len();
+        clauses.push(match key {
+            Match::Title => format!("e.title = ?{at} COLLATE NOCASE"),
+            Match::Column(name) => format!("k.{} IS ?{at}", crate::log::quoted(name)),
+            Match::Minute(name) => format!(
+                "substr(k.{}, 1, 16) IS substr(?{at}, 1, 16)",
+                crate::log::quoted(name)
+            ),
         });
     }
     let sql = format!(
@@ -810,7 +891,7 @@ fn merge_record(
     for (name, new) in record
         .fields
         .iter()
-        .filter(|(name, _)| map.child(name).is_none())
+        .filter(|(name, _)| map.child(name).is_none() && !map.fixed.contains(&name.as_str()))
     {
         let mine = now.get(name.as_str());
         let theirs = stated.get(name.as_str());
@@ -878,6 +959,11 @@ fn settle_absent(
             continue;
         }
         let held = entity::require(connection, &entity_id)?;
+        if map.gone == Gone::Forget {
+            connection.execute("DELETE FROM source WHERE id = ?1", [&source_id])?;
+            tally.forgotten += 1;
+            continue;
+        }
         let now = current(connection, map, &entity_id)?;
         let edited = stated
             .as_object()
@@ -917,7 +1003,7 @@ pub fn apply(ctx: &CommandCtx<'_, '_>, map: &SystemMap) -> Result<serde_json::Va
         .get("complete")
         .and_then(Json::as_bool)
         .unwrap_or(false);
-    if complete && map.removes {
+    if complete && map.gone != Gone::Keep {
         settle_absent(ctx, map, &origin, &seen, &mut tally)?;
     }
     Ok(serde_json::json!({

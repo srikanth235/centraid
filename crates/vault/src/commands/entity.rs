@@ -316,6 +316,15 @@ pub(crate) fn purge_one(
             ctx.touch(&album)?;
         }
     }
+    // An account's statement origin goes with it, and the lines it followed
+    // (their rows are gone, so what is left of them is only their tombstones).
+    if found.kind == Kind::Account {
+        connection.execute(
+            "DELETE FROM source WHERE origin_id IN (SELECT id FROM origin WHERE fills = ?1)",
+            [id],
+        )?;
+        connection.execute("DELETE FROM origin WHERE fills = ?1", [id])?;
+    }
     // The people and things a note was about lose its words from their search
     // text; they are not touched, only re-indexed.
     for target in ids(

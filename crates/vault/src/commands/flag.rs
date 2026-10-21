@@ -4,7 +4,7 @@
 //! it, on any entity that is not itself a word. A star, a pinned note, an
 //! archived project and an archived category are the same row shape.
 
-use crate::commands::tag::{pre_taggable, set_tagged};
+use crate::commands::tag::{pre_flaggable, set_tagged};
 use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency};
 use crate::error::{Result, VaultError};
 use crate::model::Flag;
@@ -41,7 +41,7 @@ const SCHEMA: &str = r#"{
 pub fn definitions() -> Vec<CommandDefinition> {
     const TAKES: &[CommandCondition] = &[CommandCondition {
         predicate: "entity_takes_a_flag",
-        check: pre_taggable,
+        check: pre_flaggable,
     }];
     vec![
         CommandDefinition::plain(

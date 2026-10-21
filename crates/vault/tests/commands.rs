@@ -110,11 +110,29 @@ fn the_registry_carries_the_shared_verbs_and_lockers_and_nothing_else() {
         "album.set_cover",
         "place.add",
         "place.locate",
+        "account.add",
+        "account.edit",
+        "account.set_opening",
+        "account.remember_layout",
+        "txn.categorize",
+        "txn.void",
+        "txn.link_transfer",
+        "txn.unlink_transfer",
+        "budget.set",
+        "budget.set_carry",
+        "checkpoint.record",
+        "category.add",
+        "category.merge",
+        "rule.add",
+        "rule.edit",
+        "rule.delete",
+        "rule.apply",
+        "measurement.record",
     ] {
         assert!(names.contains(&expected), "`{expected}` is not registered");
     }
     // A per-kind verb belongs to its app's lane; a lane's schema joins this list
-    // when its commands land (`note` is lane 2's, `event` and `task` lane 4's, `document`, `photo`, `album` and `place` lane 5's).
+    // when its commands land (`note` is lane 2's, `event` and `task` lane 4's, `document`, `photo`, `album` and `place` lane 5's, `account`, `txn`, `budget`, `checkpoint`, `category`, `rule` and `measurement` lane 6's).
     for name in &names {
         let schema = name.split('.').next().unwrap_or_default();
         assert!(
@@ -135,7 +153,14 @@ fn the_registry_carries_the_shared_verbs_and_lockers_and_nothing_else() {
                 "document",
                 "photo",
                 "album",
-                "place"
+                "place",
+                "account",
+                "txn",
+                "budget",
+                "checkpoint",
+                "category",
+                "rule",
+                "measurement"
             ]
             .contains(&schema),
             "`{name}` is not a shared verb or Locker's"

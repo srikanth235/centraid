@@ -500,8 +500,13 @@ fn a_flag_is_a_seeded_tagging_on_anything_that_is_not_a_word() {
         false
     );
     assert!(
-        w.refused("flag.set", json!({"id": "category:food", "flag": "pinned"}))
+        w.refused("flag.set", json!({"id": "flag:starred", "flag": "pinned"}))
             .contains("is a word")
+    );
+    // A category is a word the member manages: it can be archived.
+    w.ok(
+        "flag.set",
+        json!({"id": "category:food", "flag": "archived"}),
     );
 }
 
