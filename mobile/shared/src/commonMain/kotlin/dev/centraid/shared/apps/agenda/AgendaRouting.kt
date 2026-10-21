@@ -21,8 +21,9 @@ import dev.centraid.shared.nav.ScreenMoves
  *
  * `EventPicked`, `NewEventRequested` and the detail's `ActionPicked{edit}`
  * change nothing in their machines; the shell pushes. So do the task intents
- * (R-1128-5): a task or project picked on Day, Schedule or To-do, the Overdue
- * group's and the notice's "Reschedule", a Tasks place in More, and a row
+ * (R-1128-5): a task or project picked on Day, Schedule or To-do (a project
+ * also as a search's container, Q-1128-1), the Overdue group's and the
+ * notice's "Reschedule", a Tasks place in More, and a row
  * picked on the pushed Tasks pages (a list, a project, Catch up, a task's
  * subtask or parent). WHICH page lives here: Android pushes the [Destination]
  * (opening the bridge on the push), and iOS asks [route] for the same push
@@ -41,9 +42,13 @@ public object AgendaRouting {
             event.new_event != null -> Destination.AgendaEditor(day = state.anchor_day)
             task != null -> detailOf(task.task_id)
             project != null && project.project_id.isNotEmpty() -> {
-                val name = state.data_?.todo?.projects.orEmpty().flatMap { it.rows }
-                    .firstOrNull { it.id == project.project_id }?.title.orEmpty()
-                Destination.TasksProject(project.project_id, name)
+                // THE NAME RIDES ALONG from whichever row was picked: To-do's project row, or a
+                // search's project container (Q-1128-1), so the page's head has words before it reads.
+                val data = state.data_
+                val name = data?.todo?.projects.orEmpty().flatMap { it.rows }
+                    .firstOrNull { it.id == project.project_id }?.title
+                    ?: data?.containers.orEmpty().firstOrNull { it.id == project.project_id }?.title
+                Destination.TasksProject(project.project_id, name.orEmpty())
             }
             more != null -> when (more.key) {
                 AgendaHomeMachine.MORE_ANYTIME -> Destination.TasksList(TasksListState.View.VIEW_ANYTIME)
