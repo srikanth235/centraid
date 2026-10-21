@@ -1,9 +1,9 @@
 //! THE YEAR-3 AGENDA AXIS (#1020, D-1020-D3-7, D-1020-S4).
 //!
 //! v0's year-3 generator writes **no `core_event` rows at all** (#1020 apps
-//! §5.2), so Agenda's five declared bounds — `EVENT_WINDOW_CAP`,
-//! `RECURRING_ANCHOR_CAP`, `MAX_TOTAL_INSTANCES`, `PARTY_CAP` and `TASK_CAP` —
-//! had no golden artifact behind them. [`centraid_apps_kit::fixtures::year3_agenda`]
+//! §5.2), so Agenda's four declared bounds — `EVENT_WINDOW_CAP`,
+//! `RECURRING_ANCHOR_CAP`, `MAX_TOTAL_INSTANCES` and `PARTY_CAP` — had no
+//! golden artifact behind them. [`centraid_apps_kit::fixtures::year3_agenda`]
 //! is that artifact.
 //!
 //! The full run is `#[ignore]`d for the reason Docs' and Photos' are: it seeds
@@ -63,7 +63,6 @@ const SHRUNKEN: Year3AgendaShape = Year3AgendaShape {
     calendars: 3,
     parties: 40,
     starred: 6,
-    due_tasks: 120,
 };
 
 #[test]
@@ -75,7 +74,6 @@ fn the_shrunken_axis_seeds_and_every_query_reads_it() {
     assert_eq!(counts.calendars, SHRUNKEN.calendars);
     assert_eq!(counts.parties, SHRUNKEN.parties);
     assert_eq!(counts.starred, SHRUNKEN.starred);
-    assert_eq!(counts.due_tasks, SHRUNKEN.due_tasks);
 
     let door = TestDoor::new(&connection);
     // A NARROW window, so the expansion stays under the cap and the rows can
@@ -117,11 +115,6 @@ fn the_shrunken_axis_seeds_and_every_query_reads_it() {
             .iter()
             .any(|birthday| birthday.tier == "inner"),
         "a starred party reads as `inner`"
-    );
-    assert!(!grid.due.is_empty(), "the due shelf is not empty");
-    assert!(
-        grid.due.iter().all(|due| due.tasks.len() <= 8),
-        "a shelf LISTS at most SHELF_CAP"
     );
 
     let (directory, denial) = load_parties(&door).expect("the directory reads");

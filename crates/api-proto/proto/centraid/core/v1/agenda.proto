@@ -57,8 +57,7 @@ message AgendaUpcomingRequest {
   string tz = 3;
 }
 
-// `agenda.day-context`: the birthdays and due work a calendar grid decorates
-// its days with.
+// `agenda.day-context`: the birthdays a calendar grid decorates its days with.
 message AgendaDayContextRequest {
   // The first day, `YYYY-MM-DD` (an instant is read for its day). Empty, or a
   // day that does not parse, is TODAY — an unusable range is not an error and
@@ -69,7 +68,7 @@ message AgendaDayContextRequest {
   string to = 2;
   // The zone (the file header's rule). It decides which day TODAY is — for an
   // empty `from`, and for the answer's `today` — and nothing else: a birthday
-  // and a due date are civil days already.
+  // is a civil day already.
   string tz = 3;
 }
 
@@ -280,22 +279,6 @@ enum AgendaBirthdayTier {
   AGENDA_BIRTHDAY_TIER_OUTER = 2;
 }
 
-// One day with open work due on it. DAYS WITH NONE ARE ABSENT, not zero-filled.
-message AgendaDueDay {
-  // `YYYY-MM-DD`.
-  string day = 1;
-  // Every open task due that day — which can be more than `tasks` holds.
-  uint32 count = 2;
-  // In due order, at most eight: a shelf lists, it never pages. `count` says
-  // how many there are.
-  repeated AgendaDueTask tasks = 3;
-}
-
-message AgendaDueTask {
-  string task_id = 1;
-  string title = 2;
-}
-
 // One person the create-event picker can invite.
 message AgendaParty {
   string party_id = 1;
@@ -330,8 +313,11 @@ message AgendaUpcoming {
 message AgendaDayContext {
   // By month, then day, then name.
   repeated AgendaBirthday birthdays = 1;
-  // By day.
-  repeated AgendaDueDay due = 2;
+  // The per-day list of open tasks due, which only the retired due shelf read:
+  // a dated task is a row in its day, read from `tasks.board` (R-1128-2), so
+  // the grid's decorations read no task (#1128).
+  reserved 2;
+  reserved "due";
   // No holiday source exists in the vault: EMPTY BY CONSTRUCTION, and the field
   // holds the shape open rather than a shell inventing one.
   repeated string holidays = 3;
