@@ -130,13 +130,13 @@ fn identity_is_the_wrapper_two_documents_may_share_their_bytes() {
 }
 
 #[test]
-fn a_document_over_bytes_that_never_arrived_is_refused_with_a_sentence() {
+fn a_document_over_bytes_nobody_counted_is_refused_with_a_sentence() {
     let w = World::new();
     let sentence = w.refused(
         "document.add",
         json!({ "title": "Ghost", "blob": "ab".repeat(32), "media_type": "text/plain" }),
     );
-    assert!(sentence.contains("have not arrived"), "{sentence}");
+    assert!(sentence.contains("not been counted"), "{sentence}");
     let folder = w.folder("Taxes", None);
     w.ok("entity.trash", json!({ "id": folder }));
     let sentence = w.refused(
@@ -674,4 +674,54 @@ fn a_followed_folder_fills_its_folder_and_a_changed_file_is_a_new_version() {
         w.one::<Option<String>>("SELECT deleted_at FROM entity WHERE id = ?1", &[&b])
             .is_none()
     );
+}
+
+#[test]
+fn stopping_a_followed_folder_keeps_every_document_and_forgets_the_follow() {
+    let w = World::new();
+    let folder = w.folder("Taxes", None);
+    files(
+        &w,
+        &folder,
+        true,
+        json!([file(&w, "/a.pdf", "a.pdf", "a v1")]),
+    );
+    let a = w.one::<String>(
+        "SELECT entity_id FROM source WHERE external_id = '/a.pdf'",
+        &[],
+    );
+    let stopped = w.ok(
+        "follow.stop",
+        json!({ "system": "files", "ref": "/Documents/Taxes" }),
+    );
+    assert_eq!(stopped["stopped"], json!(true));
+    assert_eq!(
+        w.one::<i64>("SELECT COUNT(*) FROM source", &[]),
+        0,
+        "no source names the document any more"
+    );
+    assert_eq!(w.one::<i64>("SELECT COUNT(*) FROM origin", &[]), 0);
+    assert!(
+        w.one::<Option<String>>("SELECT deleted_at FROM entity WHERE id = ?1", &[&a])
+            .is_none(),
+        "the document is the member's own, not trashed"
+    );
+    // The next read of the folder files it as new again, beside the one kept.
+    let again = files(
+        &w,
+        &folder,
+        true,
+        json!([file(&w, "/a.pdf", "a.pdf", "a v1")]),
+    );
+    assert_eq!(
+        (again["added"].clone(), again["matched"].clone()),
+        (json!(0), json!(1)),
+        "the kept document is found by its name, not filed twice"
+    );
+    // Stopping what is not followed is nothing.
+    let none = w.ok(
+        "follow.stop",
+        json!({ "system": "files", "ref": "/nowhere" }),
+    );
+    assert_eq!(none["stopped"], json!(false));
 }

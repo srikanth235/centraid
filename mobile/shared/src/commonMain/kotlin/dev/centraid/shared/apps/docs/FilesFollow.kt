@@ -1,7 +1,6 @@
 package dev.centraid.shared.apps.docs
 
 import dev.centraid.core.CentraidCore
-import dev.centraid.shared.sync.phone.GoneChoice
 import dev.centraid.shared.sync.phone.OriginGone
 import dev.centraid.shared.sync.phone.PhoneFollowPass
 import dev.centraid.shared.sync.phone.PhoneFollowReads
@@ -14,7 +13,7 @@ import dev.centraid.shared.sync.phone.PhoneSource
  *
  * @property origins every followed folder that resolved and could be listed, empty ones too. **A
  *   folder the shell has no access to any more (deleted, moved, its grant lost) is left out**,
- *   and the engine takes it for gone and asks (R-1127-9).
+ *   and nothing is sent or trashed for it.
  * @property complete false when a listing failed part-way: nothing is then trashed or held.
  */
 public data class FilesRead(
@@ -34,7 +33,13 @@ public interface FilesReader {
     public fun read(followed: List<String>, deliver: (FilesRead?) -> Unit)
 }
 
-/** FOLDERS → DOCS, FOLLOWED (#1127): the shell hands this to the follower with its [reader]. */
+/**
+ * FOLDERS → DOCS, FOLLOWED (#1127, #1135): the shell hands this to the follower with its [reader].
+ * A pass sends each folder's records to the vault, which merges them ([FilesImport.run]); nothing
+ * is held for a question, because the vault decides what a file gone from a complete read does
+ * (a document the member never touched goes to the trash, one they did keeps its row and stops
+ * following), and a folder the shell could not reach is not sent at all.
+ */
 public class FilesFollow(private val reader: FilesReader) : PhoneFollowSource {
     override val source: PhoneSource = PhoneSource.FILES
 
@@ -44,16 +49,10 @@ public class FilesFollow(private val reader: FilesReader) : PhoneFollowSource {
         override suspend fun run(): List<OriginGone>? {
             val followed = FilesImport.followed(core)?.map { it.phoneOrigin } ?: return null
             val read = PhoneFollowReads.await<FilesRead> { reader.read(followed, it) } ?: return null
-            return FilesImport.run(core, read.files, read.origins, read.complete).gone
+            FilesImport.run(core, read.files, read.origins, read.complete)
+            return emptyList()
         }
 
-        override suspend fun resolve(gone: OriginGone, keep: Boolean) {
-            FilesImport.resolveGone(
-                core,
-                gone.originId,
-                if (keep) GoneChoice.KEEP else GoneChoice.TRASH,
-                gone.seenBefore.ifEmpty { null },
-            )
-        }
+        override suspend fun resolve(gone: OriginGone, keep: Boolean) = Unit
     }
 }

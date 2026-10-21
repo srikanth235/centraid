@@ -1,21 +1,18 @@
 package dev.centraid.shared.apps.docs
 
+import centraid.core.v1.Value
 import dev.centraid.core.CentraidCore
-import dev.centraid.shared.sync.phone.GoneChoice
+import dev.centraid.shared.kit.PhoneImport
+import dev.centraid.shared.kit.jsonString
+import dev.centraid.shared.shell.Staging
 import dev.centraid.shared.sync.phone.PhoneDevice
 import dev.centraid.shared.sync.phone.PhoneFields
-import dev.centraid.shared.sync.phone.PhoneIds
 import dev.centraid.shared.sync.phone.PhoneOriginRef
-import dev.centraid.shared.sync.phone.PhoneRecord
-import dev.centraid.shared.sync.phone.PhoneReport
-import dev.centraid.shared.sync.phone.PhoneSnapshot
-import dev.centraid.shared.sync.phone.PhoneSource
-import dev.centraid.shared.sync.phone.PhoneStore
-import dev.centraid.shared.sync.phone.PhoneSync
-import dev.centraid.shared.sync.rfc3339FromEpochMillis
+import dev.centraid.shared.sync.phone.PhonePages
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import okio.Path.Companion.toPath
 import okio.buffer
-import kotlin.time.Clock
 
 /**
  * THE BYTES OF ONE FILE, as the shell opens them: `read` answers the next slice (empty at the end)
@@ -81,28 +78,62 @@ public data class FollowedFolder(
     public val documents: Int,
 )
 
+/** WHAT STAGING A FILE ANSWERED: the content hash the core named, and the bytes it counted. */
+internal class StagedFile(val hash: String, val size: Long)
+
 /**
- * FILES → DOCS (#1127, R-1127-7): a picked folder is followed one way, phone → vault (R-1127-1).
- * A file the vault lacks becomes a document, a changed file becomes a **new revision of the same
- * document** (never a second one), a removed file sends its document to the trash (R-1127-3), a
- * document the member edited in Centraid (a new revision, a rename) detaches and is never
- * overwritten (R-1127-2), and a folder that is no longer reachable is held and asked about
- * (R-1127-9). Nothing is written to the folder.
+ * HOW A FILE'S BYTES REACH THE VAULT: stream [file] through the stage frames and answer what the
+ * core named, or null when it would not take them (unreadable, refused). A seam so a spec drives
+ * [FilesImport] without a core that can stage.
+ */
+internal fun interface FileStager {
+    suspend fun stage(file: PhoneFile): StagedFile?
+}
+
+/** The session core's stager: the camera roll's door, with the media type read off the name. */
+internal class CoreFileStager(private val core: CentraidCore) : FileStager {
+    override suspend fun stage(file: PhoneFile): StagedFile? {
+        val bytes = file.open() ?: return null
+        return try {
+            // Off the main thread: the follower runs there, and a read of a big file blocks.
+            val outcome = Staging.stage(core, FilesImport.mediaTypeOf(file), file.size) { max ->
+                withContext(Dispatchers.Default) { bytes.read(max) }
+            }
+            (outcome as? Staging.Outcome.Ok)?.staged?.let { StagedFile(it.contentHash, it.byteSize) }
+        } catch (@Suppress("TooGenericExceptionCaught") failed: Exception) {
+            // A file that vanished or would not read mid-stream is a refused file, not a failed pass.
+            null
+        } finally {
+            runCatching { bytes.close() }
+        }
+    }
+}
+
+/**
+ * FILES → DOCS (#1127, R-1127-7; #1135): a picked folder is followed one way, phone → vault
+ * (R-1127-1). The phone sends RECORDS and **the vault merges**, in one command per folder,
+ * `follow.files`: a file the vault lacks becomes a document in the folder's own Docs folder, a
+ * changed file is **a new revision of the same document** (never a second one), a file gone from a
+ * complete read goes to the trash if the member never touched its document, and a document the
+ * member edited in Centraid (a new revision, a rename) stands and is never overwritten
+ * (R-1127-2). Nothing is written to the folder.
  *
  * ## What is followed
  *
- * A file's phone id is `local:<folder uuid>/<path>` (R-1127-10): the path alone would be the same
- * id in two followed folders, and a link is unique by its phone id. **A rename on the phone is a
- * remove plus an add**: the old document goes to the trash and the new name files a new one.
- * Recursive; hidden files, packages and bundles, empty files, and anything the Docs ingest
- * refuses are not read as records (the shell skips the first two, [snapshot] the rest).
+ * A file's record is its path under its folder (the folder is the origin: `folder:<uuid>`,
+ * R-1127-10), the title it is filed under, its bytes' hash and media type, and its `stat`, the
+ * file's size and modification time. **A rename on the phone is a remove plus an add**: the old
+ * document goes to the trash if untouched and the new name files a new one, or is found by its
+ * name among the documents nothing follows. Recursive; hidden files, empty files and packages are
+ * not read as records. A folder the shell cannot reach is simply not sent: nothing is trashed on
+ * the strength of a folder nobody could read.
  *
- * ## The fingerprint
+ * ## The pre-check
  *
- * The phone's half is the file's size and modification time with its title: the cheap pre-check
- * that decides whether a file is read at all. The vault's half is the CONTENT HASH of the bytes
- * Centraid last stored and the document's title ([VaultRow.fields]): a new revision or a rename
- * made in Docs moves it, and that is how an edit is told from the phone's own change.
+ * The phone reads no bytes of a file whose `stat` the vault already holds as last stated
+ * (`source.stated`): a rescan of an unchanged folder stages nothing and sends the stat alone. A
+ * file that is new or moved is streamed through the stage door, claimed (`blob.stage`, the size
+ * the core counted) and named by the record, so no bytes sit in the vault that nothing names.
  */
 public object FilesImport {
     /** What one pass did. */
@@ -111,7 +142,6 @@ public object FilesImport {
         public val refused: Int,
         public val updated: Int = 0,
         public val trashed: Int = 0,
-        public val gone: List<dev.centraid.shared.sync.phone.OriginGone> = emptyList(),
     )
 
     /** The origin id the shell mints when the member picks a folder. */
@@ -121,65 +151,18 @@ public object FilesImport {
     public fun folder(origin: String, name: String): PhoneOriginRef =
         PhoneOriginRef(origin, PhoneFields.squash(name).ifEmpty { origin })
 
-    /** A file's phone id: its folder's uuid and its path (R-1127-10). */
-    public fun phoneId(origin: String, path: String): String =
-        PhoneIds.local("${origin.removePrefix("$FOLDER:")}/$path")
+    /** The prefix of a folder origin: `folder:<uuid>`. */
+    public const val FOLDER: String = "folder"
 
-    /**
-     * WHAT RE-FINDS A FILE ON ANOTHER PHONE (F-K-1): the same path in the same followed folder. A
-     * restored phone whose shell still resolves the folder lists the file under the folder's own
-     * id, so its link is re-found; a folder picked again is a new id, and its files are adopted by
-     * title and bytes ([FilesStore.add]) once the old phone's links have been forgotten. Never a
-     * key for adopting an unlinked document: a document holds no path.
-     */
-    internal fun matchKey(origin: String, path: String): String = "$origin/$path"
+    /** A media type for a file the platform named none for, off its name. */
+    internal fun mediaTypeOf(file: PhoneFile): String = DocsIngestMachine.mediaTypeOf(file.name, file.mediaType)
 
-    /** The phone's half of a link's fingerprint: the pre-check and the title. */
-    internal fun fields(size: Long, modifiedMs: Long, title: String): PhoneFields = PhoneFields.of {
-        exact("stat", "$size:$modifiedMs")
-        text("title", title)
-    }
+    /** The phone's half of a record: the cheap pre-check. */
+    internal fun statOf(file: PhoneFile): String = "${file.size}:${file.modifiedMs}"
 
-    /** The vault's half: the content hash of the bytes Centraid holds and the title it holds them under. */
-    internal fun vaultFields(contentHash: String, title: String): PhoneFields = PhoneFields.of {
-        exact("content", contentHash)
-        text("title", title)
-    }
-
-    /**
-     * A READ OF THE FOLDERS AS A SNAPSHOT: one record per file, named, non-empty, hidden ones
-     * dropped, one per phone id. [origins] lists every folder that resolved, empty ones too; a
-     * folder the shell could not reach is left out of it, which is what [PhoneSync] reads as gone.
-     */
-    public fun snapshot(
-        files: List<PhoneFile>,
-        origins: List<PhoneOriginRef>,
-        complete: Boolean,
-        readAt: String,
-    ): PhoneSnapshot {
-        val present = origins.map { it.id }.toSet()
-        val seen = mutableSetOf<String>()
-        val records = files.mapNotNull { file ->
-            val title = PhoneFields.squash(file.name)
-            val id = phoneId(file.origin, file.path)
-            val hidden = file.path.split('/').any { it.startsWith(".") }
-            if (title.isEmpty() || hidden || file.size <= 0 || file.origin !in present || !seen.add(id)) return@mapNotNull null
-            PhoneRecord(
-                phoneId = id,
-                origin = file.origin,
-                fields = fields(file.size, file.modifiedMs, title),
-                matchKey = matchKey(file.origin, file.path),
-                attributes = FileAttributes(file, title),
-            )
-        }
-        return PhoneSnapshot(PhoneSource.FILES, complete, readAt, origins, records)
-    }
-
-    /** ONE PASS over [store] with [snapshot]. */
-    internal suspend fun sync(store: PhoneStore, snapshot: PhoneSnapshot): Outcome {
-        val report = PhoneSync.run(store, snapshot)
-        return outcome(report)
-    }
+    /** Whether a file is a record at all: named, not hidden, not empty. */
+    internal fun usable(file: PhoneFile): Boolean =
+        PhoneFields.squash(file.name).isNotEmpty() && file.size > 0 && file.path.split('/').none { it.startsWith(".") }
 
     /** One pass over [files] in the vault [core] holds, on [device] (this install's [PhoneDevice] unless named). */
     public suspend fun run(
@@ -188,53 +171,164 @@ public object FilesImport {
         origins: List<PhoneOriginRef>,
         complete: Boolean,
         device: String? = null,
-    ): Outcome = sync(FilesStore(core, device ?: PhoneDevice.id()), snapshot(files, origins, complete, readAt()))
+    ): Outcome = run(core, files, origins, complete, device ?: PhoneDevice.id(), CoreFileStager(core))
 
-    /** The member's answer to a folder held (R-1127-9): [GoneChoice.KEEP] is the default. */
-    public suspend fun resolveGone(
+    internal suspend fun run(
         core: CentraidCore,
-        originId: String,
-        choice: GoneChoice,
-        seenBefore: String? = null,
-        device: String? = null,
+        files: List<PhoneFile>,
+        origins: List<PhoneOriginRef>,
+        complete: Boolean,
+        device: String,
+        stager: FileStager,
     ): Outcome {
-        val report = PhoneSync.resolveGone(FilesStore(core, device ?: PhoneDevice.id()), originId, choice, seenBefore)
-        return Outcome(added = 0, refused = report.refused.size, trashed = report.trashed)
+        val stated = statsOf(core)
+        var outcome = Outcome(added = 0, refused = 0)
+        for (origin in origins) {
+            val seen = mutableSetOf<String>()
+            val mine = files.filter { it.origin == origin.id && usable(it) && seen.add(it.path) }
+            val held = stated?.get(origin.id).orEmpty()
+            val records = mutableListOf<String>()
+            var whole = complete && stated != null
+            var refused = 0
+            for (file in mine) {
+                val record = record(core, file, held[file.path], stager)
+                if (record == null) {
+                    // A file that would not read is neither sent nor missed: the read is not whole.
+                    refused += 1
+                    whole = false
+                } else {
+                    records += record
+                }
+            }
+            val told = PhoneImport.executed(core, "follow.files", input(origin, records, whole, device))
+            outcome = if (told == null) {
+                outcome.copy(refused = outcome.refused + refused + records.size)
+            } else {
+                outcome.copy(
+                    added = outcome.added + count(told, "added") + count(told, "matched"),
+                    updated = outcome.updated + count(told, "updated"),
+                    trashed = outcome.trashed + count(told, "trashed"),
+                    refused = outcome.refused + refused,
+                )
+            }
+        }
+        return outcome
     }
-
-    /** The folders the vault follows, with the documents each holds; null when the vault would not say. */
-    public suspend fun followed(core: CentraidCore): List<FollowedFolder>? = FilesStore(core, PhoneDevice.id()).followed()
-
-    /** Follow a folder the member just picked: its origin, so the next pass reads it. False when refused. */
-    public suspend fun follow(core: CentraidCore, folder: PhoneOriginRef): Boolean =
-        FilesStore(core, PhoneDevice.id()).origin(folder.id, folder.label) != null
 
     /**
-     * STOP FOLLOWING [originId]: its links are forgotten and the origin retired. **Every document
-     * stays** and is an ordinary one from now on; nothing is trashed. False when the vault refused
-     * part of it (the rest is done, and stopping again finishes it).
+     * ONE FILE AS A RECORD: its stat alone when the vault already holds it as last stated, else its
+     * bytes staged and claimed too. Null when the bytes could not be staged or claimed.
      */
-    public suspend fun stop(core: CentraidCore, originId: String): Boolean {
-        val store = FilesStore(core, PhoneDevice.id())
-        val links = store.links() ?: return false
-        var clean = true
-        for (link in links.filter { it.originId == originId }) clean = store.forget(link.linkId) && clean
-        return store.retireOrigin(originId) && clean
+    private suspend fun record(core: CentraidCore, file: PhoneFile, held: String?, stager: FileStager): String? {
+        val title = PhoneFields.squash(file.name)
+        val stat = statOf(file)
+        val fields = StringBuilder("{\"title\":").append(jsonString(title))
+        if (held != stat) {
+            val staged = stager.stage(file) ?: return null
+            // The stage door only stores and hashes: the vault counts bytes a command names.
+            PhoneImport.executed(core, "blob.stage", "{\"hash\":${jsonString(staged.hash)},\"size\":${staged.size}}") ?: return null
+            fields.append(",\"blob\":").append(jsonString(staged.hash))
+                .append(",\"media_type\":").append(jsonString(mediaTypeOf(file)))
+        }
+        fields.append(",\"stat\":").append(jsonString(stat)).append('}')
+        return "{\"external_id\":${jsonString(file.path)},\"fields\":$fields}"
     }
 
-    private fun outcome(report: PhoneReport): Outcome = Outcome(
-        added = report.added,
-        refused = report.refused.size,
-        updated = report.updated,
-        trashed = report.trashed,
-        gone = report.gone,
-    )
+    /** The `follow.files` input for one folder. */
+    internal fun input(origin: PhoneOriginRef, records: List<String>, complete: Boolean, device: String, fills: String? = null): String =
+        buildString {
+            append("{\"origin\":{\"ref\":").append(jsonString(origin.id))
+            append(",\"label\":").append(jsonString(origin.label))
+            append(",\"device_id\":").append(jsonString(device))
+            if (fills != null) append(",\"fills\":").append(jsonString(fills))
+            append("},\"records\":[").append(records.joinToString(",")).append("],\"complete\":").append(complete).append('}')
+        }
 
-    internal fun readAt(): String = rfc3339FromEpochMillis(Clock.System.now().toEpochMilliseconds())
+    /** A count of the command's output: `"added":3`. */
+    private fun count(output: String, name: String): Int =
+        Regex("\"$name\"\\s*:\\s*(\\d+)").find(output)?.groupValues?.get(1)?.toIntOrNull() ?: 0
 
-    /** The prefix of a folder origin: `folder:<uuid>`. */
-    public const val FOLDER: String = "folder"
+    /**
+     * THE STATS THE VAULT HOLDS, by folder and path: what each file last stated. Null when the
+     * vault would not say, and then nothing is trashed (a read planned against a half-read table).
+     */
+    private suspend fun statsOf(core: CentraidCore): Map<String, Map<String, String>>? {
+        val origins = PhonePages.all(core, "files.origins", listOf("id", "ref"), "origin", "id", "system = ?", listOf(Value(text = "files")))
+            ?: return null
+        val refOf = origins.associate { it.text(0) to it.text(1) }
+        val sources = PhonePages.all(
+            core,
+            "files.sources",
+            listOf("id", "origin_id", "external_id", "stated"),
+            "source",
+            "id",
+            "system = ?",
+            listOf(Value(text = "files")),
+        ) ?: return null
+        val stats = mutableMapOf<String, MutableMap<String, String>>()
+        for (row in sources) {
+            val ref = refOf[row.text(1)] ?: continue
+            val stat = STAT.find(row.text(3))?.groupValues?.get(1) ?: continue
+            stats.getOrPut(ref) { mutableMapOf() }[row.text(2)] = stat
+        }
+        return stats
+    }
+
+    private val STAT = Regex("\"stat\"\\s*:\\s*\"([^\"]*)\"")
+
+    private fun List<Value>.text(index: Int): String = getOrNull(index)?.text.orEmpty()
+
+    /** The folders the vault follows, with the documents each holds; null when the vault would not say. */
+    public suspend fun followed(core: CentraidCore): List<FollowedFolder>? {
+        val origins = PhonePages.all(
+            core,
+            "files.followed",
+            listOf("id", "ref", "label"),
+            "origin",
+            "id",
+            "system = ?",
+            listOf(Value(text = "files")),
+        ) ?: return null
+        val sources = PhonePages.all(
+            core,
+            "files.followed.documents",
+            listOf("id", "origin_id", "entity_id"),
+            "source",
+            "id",
+            "system = ?",
+            listOf(Value(text = "files")),
+        ) ?: return null
+        val live = sources.filter { it.text(2).isNotEmpty() }.groupingBy { it.text(1) }.eachCount()
+        return origins.map { FollowedFolder(it.text(0), it.text(1), it.text(2), live[it.text(0)] ?: 0) }
+            .sortedBy { it.name.lowercase() }
+    }
+
+    /**
+     * Follow a folder the member just picked: its Docs folder (made here, named as the member
+     * names the folder) and its origin, so the next pass reads it. A folder already followed keeps
+     * its Docs folder. False when refused.
+     */
+    public suspend fun follow(core: CentraidCore, folder: PhoneOriginRef, device: String? = null): Boolean {
+        val phone = device ?: PhoneDevice.id()
+        val known = followed(core) ?: return false
+        val fills = if (known.any { it.phoneOrigin == folder.id }) {
+            null
+        } else {
+            val made = PhoneImport.executed(
+                core,
+                "container.create",
+                "{\"kind\":\"folder\",\"title\":${jsonString(folder.label)}}",
+            ) ?: return false
+            Regex("\"id\"\\s*:\\s*\"([^\"]+)\"").find(made)?.groupValues?.get(1) ?: return false
+        }
+        return PhoneImport.executed(core, "follow.files", input(folder, emptyList(), complete = false, device = phone, fills = fills)) != null
+    }
+
+    /**
+     * STOP FOLLOWING the folder [phoneOrigin]: its sources are forgotten and the origin retired.
+     * **Every document stays** and is an ordinary one from now on; nothing is trashed. False when
+     * the vault refused.
+     */
+    public suspend fun stop(core: CentraidCore, phoneOrigin: String): Boolean =
+        PhoneImport.executed(core, "follow.stop", "{\"system\":\"files\",\"ref\":${jsonString(phoneOrigin)}}") != null
 }
-
-/** What a file's writer needs and the engine never reads. */
-internal class FileAttributes(val file: PhoneFile, val title: String)

@@ -1007,9 +1007,40 @@ const SCHEMA: &str = r#"{
   }
 }"#;
 
+const STOP_SCHEMA: &str = r#"{
+  "type": "object",
+  "required": ["system", "ref"],
+  "additionalProperties": false,
+  "properties": {
+    "system": { "type": "string", "enum": ["contacts", "calendar", "files", "health", "statement"] },
+    "ref": { "type": "string", "minLength": 1 }
+  }
+}"#;
+
+/// Stop following one origin: the sources that name its rows are forgotten and
+/// the origin is retired. **Every row stays** and is the member's own from now
+/// on; nothing is trashed. Stopping what is not followed is nothing.
+fn stop(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
+    let (system, reference) = (ctx.required_str("system")?, ctx.required_str("ref")?);
+    let connection = ctx.connection();
+    let origin: Option<String> = connection
+        .query_row(
+            "SELECT id FROM origin WHERE system = ?1 AND ref = ?2",
+            [system, reference],
+            |row| row.get(0),
+        )
+        .optional()?;
+    let Some(origin) = origin else {
+        return Ok(serde_json::json!({ "stopped": false, "forgotten": 0 }));
+    };
+    let forgotten = connection.execute("DELETE FROM source WHERE origin_id = ?1", [&origin])?;
+    connection.execute("DELETE FROM origin WHERE id = ?1", [&origin])?;
+    Ok(serde_json::json!({ "stopped": true, "forgotten": forgotten }))
+}
+
 #[must_use]
 pub fn definitions() -> Vec<CommandDefinition> {
-    SYSTEMS
+    let mut definitions: Vec<CommandDefinition> = SYSTEMS
         .iter()
         .map(|map| {
             CommandDefinition::plain(
@@ -1024,5 +1055,14 @@ pub fn definitions() -> Vec<CommandDefinition> {
                 follow,
             )
         })
-        .collect()
+        .collect();
+    definitions.push(CommandDefinition::plain(
+        "follow.stop",
+        "follow",
+        STOP_SCHEMA,
+        Idempotency::Idempotent,
+        &[],
+        stop,
+    ));
+    definitions
 }

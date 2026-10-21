@@ -108,6 +108,35 @@ public abstract class CorePhoneStore(
         key: String,
         where: String? = null,
         bind: List<Value> = emptyList(),
+    ): List<List<Value>>? = PhonePages.all(core, name, select, from, key, where, bind)
+
+    protected fun List<Value>.text(index: Int): String = getOrNull(index)?.text.orEmpty()
+
+    protected fun q(value: String): String = PhoneImport.quote(value)
+
+    /** A string field of a command's JSON output. */
+    protected fun field(output: String, name: String): String? =
+        Regex("\"$name\"\\s*:\\s*\"([^\"]+)\"").find(output)?.groupValues?.getOrNull(1)
+
+    private companion object {
+        const val TOUCH_SLICE: Int = 5_000
+    }
+}
+
+/** EVERY ROW OF A PAGE QUERY, for a follower that plans against what the vault holds. */
+public object PhonePages {
+    /**
+     * Every row of the query, a page at a time by its keyset cursor; null when any page failed,
+     * because a half-read table planned against would trash what it did not see.
+     */
+    public suspend fun all(
+        core: CentraidCore,
+        name: String,
+        select: List<String>,
+        from: String,
+        key: String,
+        where: String? = null,
+        bind: List<Value> = emptyList(),
     ): List<List<Value>>? {
         val query = PageQuery(
             name = name,
@@ -130,17 +159,6 @@ public abstract class CorePhoneStore(
         return null
     }
 
-    protected fun List<Value>.text(index: Int): String = getOrNull(index)?.text.orEmpty()
-
-    protected fun q(value: String): String = PhoneImport.quote(value)
-
-    /** A string field of a command's JSON output. */
-    protected fun field(output: String, name: String): String? =
-        Regex("\"$name\"\\s*:\\s*\"([^\"]+)\"").find(output)?.groupValues?.getOrNull(1)
-
-    private companion object {
-        const val PAGE_LIMIT: Int = 500
-        const val MAX_PAGES: Int = 10_000
-        const val TOUCH_SLICE: Int = 5_000
-    }
+    private const val PAGE_LIMIT: Int = 500
+    private const val MAX_PAGES: Int = 10_000
 }

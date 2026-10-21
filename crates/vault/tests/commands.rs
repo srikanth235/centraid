@@ -80,6 +80,7 @@ fn the_registry_carries_the_shared_verbs_and_lockers_and_nothing_else() {
         "follow.files",
         "follow.health",
         "follow.statement",
+        "follow.stop",
         "locker.add_item",
         "locker.reveal_receipt",
         "note.create",

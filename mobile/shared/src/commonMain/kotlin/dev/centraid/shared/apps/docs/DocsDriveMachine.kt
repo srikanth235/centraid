@@ -90,21 +90,12 @@ public object DocsDriveMachine : ScreenMachine<DocsDriveState, DocsDriveEvent> {
     public const val FOLDER_SCREEN_ID: String = ScreenIds.DOCS_FOLDER
 
     /**
-     * THE TABLES `docs.drive` AND `docs.search` READ: the document, its folder
-     * and label edges, the folders scheme, the content rows, their
-     * representations, custody and decoded text. `DocsDriveReads.tables` is
-     * this set, and `AppReadsSpec` holds [rowsChanged] to exactly it.
+     * THE TABLES `docs.drive` AND `docs.search` READ: the document and its
+     * entity, the star and label edges, the folders, and the bytes' sizes and
+     * text. `DocsDriveReads.tables` is this set, and `AppReadsSpec` holds
+     * [rowsChanged] to exactly it.
      */
-    public val TABLES: Set<String> = setOf(
-        "core_document",
-        "core_tag",
-        "core_concept",
-        "core_concept_scheme",
-        "core_content_item",
-        "core_content_representation",
-        "core_content_text",
-        "blob_custody_state",
-    )
+    public val TABLES: Set<String> = DocsTables.SHELF
 
     public const val BAND_ALL: String = "all"
     public const val BAND_FOLDERS: String = "folders"
@@ -291,11 +282,19 @@ public object DocsDriveMachine : ScreenMachine<DocsDriveState, DocsDriveEvent> {
         event.label_added != null -> labelAdded(state, event.label_added.label)
 
         event.label_removed != null -> {
-            val tagId = event.label_removed.tag_id
-            if (tagId.isEmpty()) {
+            // The vault removes a label by its words: the row's label this tag stands for.
+            val documentId = state.sheet?.document_id.orEmpty()
+            val label = row(state, documentId)?.labels?.firstOrNull { it.tag_id == event.label_removed.tag_id }?.label
+            if (label == null) {
                 Step(state)
             } else {
-                WriteLaw.submit(Writes, state, DocsWrites.UNTAG, DocsWrites.untag(tagId), InvokeKeys.of(DocsWrites.UNTAG, tagId))
+                WriteLaw.submit(
+                    Writes,
+                    state,
+                    DocsWrites.UNTAG,
+                    DocsWrites.untag(documentId, label),
+                    InvokeKeys.of(DocsWrites.UNTAG, documentId, label),
+                )
             }
         }
 
@@ -442,7 +441,7 @@ public object DocsDriveMachine : ScreenMachine<DocsDriveState, DocsDriveEvent> {
         return when (key) {
             DocsWrites.KEY_STAR, DocsWrites.KEY_UNSTAR -> {
                 val command = if (key == DocsWrites.KEY_STAR) DocsWrites.STAR else DocsWrites.UNSTAR
-                WriteLaw.submit(Writes, closed, command, DocsWrites.documentOnly(documentId), InvokeKeys.of(command, documentId))
+                WriteLaw.submit(Writes, closed, command, DocsWrites.star(documentId), InvokeKeys.of(command, documentId))
             }
             DocsWrites.KEY_RENAME -> DocsRenameLaw.opened(Rename, closed, documentId, row.title)
             DocsWrites.KEY_MOVE -> Step(openSheet(state, DocsSheet.Kind.KIND_MOVE, documentId))
