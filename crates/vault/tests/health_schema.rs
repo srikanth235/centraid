@@ -469,10 +469,10 @@ fn the_rung_is_a_climb_a_file_at_two_reaches_three_with_its_activities_kept() {
             "the file really is at rung two's shape"
         );
     }
-    assert_eq!(head_version(), 4);
+    assert_eq!(head_version(), 5);
 
     let vault = Vault::open(&path).expect("a file at rung two opens and climbs");
-    assert_eq!(count(&vault, "PRAGMA user_version"), 4);
+    assert_eq!(count(&vault, "PRAGMA user_version"), 5);
     // The row is kept whole, stamped as of its making, at its first version.
     assert_eq!(
         count(

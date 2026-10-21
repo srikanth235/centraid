@@ -1,8 +1,7 @@
 # A container is a search result of its own (#1097): the project a member
-# typed the name of is a row in Home's Agenda group, before its rows; a tap
-# opens it where its app opens it. (Agenda's own search draws no project
-# containers since #1128 folded Tasks into it: its state carries task hits and
-# event days only, and projects live in To-do.)
+# typed the name of is a row in Home's Agenda group, before its rows, and a row
+# of Agenda's own search, above its task hits (#1128, Q-1128-1); a tap opens it
+# where its app opens it, the project page.
 #
 # THE FLOW MAKES ITS OWN PROJECT. The onboarding starters hold no notebook,
 # project, group or folder, so the first run creates a Tasks project called
@@ -58,3 +57,22 @@ name: search-containers
     timeout: 5000
 - assertNotVisible:
     id: "home-search-field"
+# Agenda's own search draws the same project, kind named, and a tap opens the
+# same page (#1128, Q-1128-1).
+- launchApp
+- tapOn:
+    id: "home-tile-agenda"
+- tapOn:
+    id: "agenda-search-open"
+- inputText: "orchard"
+- extendedWaitUntil:
+    visible:
+      id: "search-container-schedule.project-.*"
+    timeout: 5000
+- assertVisible: "Project"
+- tapOn:
+    id: "search-container-schedule.project-.*"
+- extendedWaitUntil:
+    visible:
+      id: "tasks-project"
+    timeout: 5000

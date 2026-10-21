@@ -111,12 +111,12 @@ fn the_rung_is_a_climb_a_file_at_one_reaches_the_head_with_its_rows_intact() {
             )
             .expect("the rung is undone");
     }
-    assert_eq!(head_version(), 4);
+    assert_eq!(head_version(), 5);
 
     let vault = Vault::open(&path).expect("a file at rung one opens and climbs");
     assert_eq!(
         count(&vault, "PRAGMA user_version"),
-        4,
+        5,
         "the file reached the head"
     );
     assert_eq!(

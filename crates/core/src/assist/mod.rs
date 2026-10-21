@@ -213,15 +213,24 @@ fn invalid(detail: impl Into<String>) -> CoreError {
     }
 }
 
-/// The app a request names: empty is every app, and anything the assistant
-/// does not read — Locker included — is the request's fault.
+/// The app a request names: empty is every app, and anything that is not a
+/// chat scope is the request's fault — Locker, which the assistant does not
+/// read, and `tasks`, a domain read through Agenda's scope (R-1128-F2, #1128):
+/// accepting it as an alias would give a thread two names for one app, and the
+/// vault's `chat_thread` CHECK refuses it anyway.
 fn scope_of(app: &str) -> Result<Option<App>> {
     if app.is_empty() {
         return Ok(None);
     }
-    App::from_id(app)
-        .map(Some)
-        .ok_or_else(|| invalid(format!("`{app}` is not an app the assistant reads")))
+    App::scope_from_id(app).map(Some).ok_or_else(|| {
+        invalid(match App::from_id(app) {
+            Some(domain) => format!(
+                "`{app}` is not a chat scope: `{}` covers it",
+                domain.opens_in().id()
+            ),
+            None => format!("`{app}` is not an app the assistant reads"),
+        })
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -1047,7 +1056,14 @@ mod tests {
     #[test]
     fn locker_and_unknown_apps_are_the_requests_fault() {
         assert_eq!(scope_of("").unwrap(), None);
-        assert_eq!(scope_of("tasks").unwrap(), Some(App::Tasks));
+        assert_eq!(scope_of("agenda").unwrap(), Some(App::Agenda));
+        // TASKS IS A DOMAIN, NOT A SCOPE (R-1128-F2): the refusal names the scope that covers it.
+        match scope_of("tasks") {
+            Err(CoreError::InvalidRequest { detail }) => {
+                assert!(detail.contains("`agenda` covers it"), "{detail}");
+            }
+            other => panic!("`tasks` was accepted as a scope: {other:?}"),
+        }
         assert!(matches!(
             scope_of("locker"),
             Err(CoreError::InvalidRequest { .. })

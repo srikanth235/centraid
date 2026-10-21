@@ -60,7 +60,7 @@ class ChatHistorySpec : StringSpec({
     fun card(id: String) = ChatStoredCard(app = "tasks", entity = "task", id = id, title = "Pay rent", subtitle = "2026-10-01")
 
     fun stored(
-        scope: String = "tasks",
+        scope: String = "agenda",
         vararg messages: ChatStoredMessage,
     ) = ChatThread(
         found = true,
@@ -92,7 +92,7 @@ class ChatHistorySpec : StringSpec({
         notices = notices,
     )
 
-    fun started(session: Long = 9L, scope: String = "tasks") =
+    fun started(session: Long = 9L, scope: String = "agenda") =
         AssistStarted(session_id = session, thread_id = "t-new", scope_app = scope)
 
     // --- the header -------------------------------------------------------------
@@ -246,14 +246,14 @@ class ChatHistorySpec : StringSpec({
             view(ChatEvent(thread_opened = ChatEvent.ThreadOpened(thread_id = "t-new"))),
         ).chat
         val thread = stored(
-            "tasks",
+            "agenda",
             question("What is due today?"),
             answer("Rent.", cards = listOf(card("t-1")), notices = listOf(AssistNotice.ASSIST_NOTICE_DOC_TRUNCATED)),
         )
         val opened = reduce(loading, ChatInput.ThreadOpened("t-new", thread, started())).chat
         opened.session shouldBe 9L
-        opened.scope shouldBe "tasks"
-        opened.state.scope_app shouldBe "tasks"
+        opened.scope shouldBe "agenda"
+        opened.state.scope_app shouldBe "agenda"
         opened.state.thread_id shouldBe "t-new"
         opened.state.messages.map { it.text } shouldBe listOf("What is due today?", "Rent.")
         opened.state.messages[1].cards.single().title shouldBe "Pay rent"
@@ -309,7 +309,7 @@ class ChatHistorySpec : StringSpec({
             ChatInput.ThreadOpened(
                 "t-new",
                 stored(
-                    "tasks",
+                    "agenda",
                     question("complete the dry cleaning task"),
                     answer(
                         "Proposed: Complete task \"Dry cleaning\".",
@@ -353,7 +353,7 @@ class ChatHistorySpec : StringSpec({
                 loading,
                 ChatInput.ThreadOpened(
                     "t-new",
-                    stored("tasks", question("complete the dry cleaning task"), answer(line, outcome = outcome, cards = listOf(card("t-1")))),
+                    stored("agenda", question("complete the dry cleaning task"), answer(line, outcome = outcome, cards = listOf(card("t-1")))),
                     started(),
                 ),
             ).chat
@@ -376,7 +376,7 @@ class ChatHistorySpec : StringSpec({
             ChatInput.ThreadOpened(
                 "t-new",
                 stored(
-                    "tasks",
+                    "agenda",
                     question("what is due?"),
                     answer("Rent.", outcome = ChatStoredOutcome.CHAT_STORED_OUTCOME_UNSPECIFIED),
                 ),
@@ -543,12 +543,12 @@ class ChatHistorySpec : StringSpec({
     "the flow opens a past chat: reads it, asks the core for its session, and the follow-up goes to that session" {
         val rig = Rig()
         rig.door.storedRows = rows.toMutableList()
-        rig.door.storedThreads["t-new"] = stored("tasks", question("What is due today?"), answer("Rent.", cards = listOf(card("t-1"))))
+        rig.door.storedThreads["t-new"] = stored("agenda", question("What is due today?"), answer("Rent.", cards = listOf(card("t-1"))))
         rig.open()
         rig.flow.send(ChatEvent(thread_opened = ChatEvent.ThreadOpened(thread_id = "t-new")))
         rig.door.history.takeLast(2) shouldBe listOf("thread:t-new", "start-thread:t-new")
         rig.state.messages.map { it.text } shouldBe listOf("What is due today?", "Rent.")
-        rig.state.scope_app shouldBe "tasks"
+        rig.state.scope_app shouldBe "agenda"
         rig.say("and tomorrow?")
         rig.door.sends.single().session shouldBe 9L
     }
@@ -582,7 +582,7 @@ class ChatHistorySpec : StringSpec({
     "deleting the open chat through the flow clears the core's session and starts a new chat" {
         val rig = Rig()
         rig.door.storedRows = rows.toMutableList()
-        rig.door.storedThreads["t-new"] = stored("tasks", question("What is due today?"), answer("Rent."))
+        rig.door.storedThreads["t-new"] = stored("agenda", question("What is due today?"), answer("Rent."))
         rig.open()
         rig.flow.send(ChatEvent(thread_opened = ChatEvent.ThreadOpened(thread_id = "t-new")))
         rig.flow.send(ChatEvent(thread_deleted = ChatEvent.ThreadDeleted(thread_id = "t-new")))

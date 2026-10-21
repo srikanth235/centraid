@@ -772,10 +772,12 @@ final class ShellModel: ObservableObject {
         path.append(route)
     }
 
-    /// Remember the app a route belongs to, for the Chat tab's scope.
+    /// Remember the scope a route gives the Chat tab.
     private func noteVisit(_ route: Route) {
-        guard let app = ChatRouting.app(of: route), ChatRouting.scopes(app) else { return }
-        lastVisitedApp = app
+        guard let app = ChatRouting.app(of: route) else { return }
+        let scope = ChatRouting.scope(of: app)
+        guard !scope.isEmpty else { return }
+        lastVisitedApp = scope
     }
 
     // MARK: The 24 words (#1047 E2)

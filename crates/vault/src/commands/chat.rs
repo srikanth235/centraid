@@ -77,7 +77,7 @@ const SAVE_TURN_SCHEMA: &str = r#"{
     "thread_id": { "type": "string", "minLength": 1 },
     "replace_last": { "type": "boolean" },
     "scope_app": {
-      "enum": ["agenda", "docs", "money", "notes", "people", "photos", "tasks", null]
+      "enum": ["agenda", "docs", "money", "notes", "people", "photos", null]
     },
     "turn": {
       "type": "object",

@@ -207,7 +207,8 @@ fn a_turn_crosses_the_abi_and_its_events_come_back_encoded_and_in_order() {
     let Some(wire::assist_response::Kind::Started(started)) = assist(
         &opened,
         wire::assist_request::Kind::Start(wire::AssistStartRequest {
-            app: "tasks".to_owned(),
+            // Agenda's scope covers tasks (R-1128-F2); the cards still name the domain.
+            app: "agenda".to_owned(),
             ..wire::AssistStartRequest::default()
         }),
     )
@@ -673,9 +674,9 @@ fn the_real_model_answers_questions_over_the_scenario() {
         ask(session(""), 1, question);
     }
     // A scoped chat and a follow-up that depends on the turn before it.
-    let tasks = session("tasks");
-    ask(tasks, 1, "What's overdue?");
-    ask(tasks, 2, "And what is due today?");
+    let agenda = session("agenda");
+    ask(agenda, 1, "What's overdue?");
+    ask(agenda, 2, "And what is due today?");
 
     // Sessions of several turns, which is where a small model copies itself:
     // a refusal must not become the chat's habit, and a follow-up must read

@@ -715,9 +715,11 @@ public object AgendaHomeMachine : ScreenMachine<AgendaHome, AgendaInput> {
                 ""
             },
             // THE QUESTION THE NO-MATCH STATE OFFERS (#1097, R-1097-28): for a search's own answer to the
-            // term on screen, with no event or task in it. Agenda keeps flat fields, so this is the law by hand.
+            // term on screen, with no event, task or project container in it. Agenda keeps flat fields, so
+            // this is the law by hand.
             search_ask = if (searching && answer.search != null &&
-                answer.search.events.isEmpty() && incoming.search?.tasks.isNullOrEmpty()
+                answer.search.events.isEmpty() && incoming.search?.tasks.isNullOrEmpty() &&
+                AgendaFold.projectContainers(incoming.search).isEmpty()
             ) {
                 SearchLaw.question(state.screen.search_term)
             } else {

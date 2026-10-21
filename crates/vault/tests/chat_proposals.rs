@@ -699,7 +699,7 @@ fn rung_four_is_a_climb_a_file_at_three_reaches_four_with_every_message_kept() {
             .expect("the columns read");
         assert_eq!(columns, 0, "the file really is at rung three's shape");
     }
-    assert_eq!(centraid_vault::head_version(), 4);
+    assert_eq!(centraid_vault::head_version(), 5);
 
     let vault = Vault::open(&path).expect("a file at rung three opens and climbs");
     registry.install(&vault).expect("the record installs");
@@ -708,7 +708,7 @@ fn rung_four_is_a_climb_a_file_at_three_reaches_four_with_every_message_kept() {
             .read(|connection| Ok(connection.query_row(sql, [], |row| row.get(0))?))
             .unwrap_or_else(|error| panic!("{sql}: {error}"))
     };
-    assert_eq!(count("PRAGMA user_version"), 4);
+    assert_eq!(count("PRAGMA user_version"), 5);
     // EVERY MESSAGE IS KEPT, stamped as of its making, at its first version; the settled one came
     // back settled, because the rows return before the trigger that refuses a born-settled row.
     assert_eq!(count("SELECT COUNT(*) FROM chat_message"), 4);

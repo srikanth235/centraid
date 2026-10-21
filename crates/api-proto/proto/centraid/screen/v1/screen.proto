@@ -3999,7 +3999,8 @@ message AgendaHomeData {
   string now_local = 2;
   // In day order. Past days are not drawn except as search hits.
   repeated AgendaDaySection days = 3;
-  // `AGENDA_EMPTY_NONE` whenever `days` has a section.
+  // `AGENDA_EMPTY_NONE` whenever `days` has a section, and under a search
+  // whenever `task_hits` or `containers` has one.
   AgendaEmpty empty = 4;
   // The empty state's words; empty strings draw nothing. `empty_action` sends
   // `NewEventRequested`.
@@ -4034,6 +4035,14 @@ message AgendaHomeData {
   repeated TasksRowGroup task_hits = 16;
   // To-do's content; set on `DESTINATION_TODO` only.
   AgendaTodo todo = 17;
+  // SEARCH'S CONTAINERS (#1097 R-1097-19, #1128 Q-1128-1): the projects whose
+  // own name the term matched (`tasks.search`'s `containers`, finished by
+  // `SearchContainers`), drawn by the one container row each shell has, above
+  // `task_hits`. Empty without a term, and held as `task_hits` are: the answer
+  // to the term on screen sets them, closing search clears them. A tap sends
+  // `ProjectPicked` with the container's `id`, so it opens the project page as
+  // To-do's project row does (`AgendaRouting`).
+  repeated SearchContainer containers = 18;
 }
 
 // THE TO-DO PLACE (#1128, R-1128-1): the Inbox's tasks, then the projects by
@@ -4352,6 +4361,8 @@ message AgendaHomeEvent {
     string task_id = 1;
   }
 
+  // To-do's project row, and a search's project container
+  // (`AgendaHomeData.containers`, its `id`).
   message ProjectPicked {
     string project_id = 1;
   }

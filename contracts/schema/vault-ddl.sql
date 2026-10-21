@@ -920,7 +920,7 @@ CREATE TABLE chat_thread (
   thread_id   TEXT PRIMARY KEY,
   title       TEXT NOT NULL CHECK (length(trim(title)) > 0),
   scope_app   TEXT CHECK (scope_app IS NULL
-                          OR scope_app IN ('agenda','docs','money','notes','people','photos','tasks')),
+                          OR scope_app IN ('agenda','docs','money','notes','people','photos')),
   created_at  TEXT NOT NULL,
   updated_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),

@@ -139,23 +139,24 @@ public object ChatMachine {
     public const val SUGGESTIONS: Int = 3
 
     /**
-     * The apps a chat can be scoped to, in the order the composer's menu lists
-     * them: the ones the assistant reads, Locker never among them. The core
-     * accepts exactly these (`CARD_APPS` in `crates/vault/src/chat.rs` and
-     * `scope_app`'s enum in `commands/chat.rs`); `ChatScopeSpec` ties the three
+     * THE APPS A CHAT CAN BE SCOPED TO, in the order the composer's menu lists
+     * them: every app a member opens that the assistant reads, Locker never
+     * among them. `tasks` is a domain read through Agenda's scope, not a scope of
+     * its own (#1128, R-1128-F2): a chat scoped to Agenda covers its tasks, and a
+     * card still names `tasks`. The core accepts exactly these (`scope_app`'s enum
+     * in `crates/vault/src/commands/chat.rs`, the `chat_thread.scope_app` CHECK at
+     * the ladder head, `App::SCOPES` in `crates/assist`); `ChatScopeSpec` ties them
      * together, and the shells draw their menu from here.
      */
     public val SCOPABLE_APPS: List<String> =
-        listOf("agenda", "docs", "money", "notes", "people", "photos", "tasks")
+        listOf("agenda", "docs", "money", "notes", "people", "photos")
 
     /**
-     * THE SCOPE MENU: the scopable apps a member can open (#1128, R-1128-S1). A
-     * thread keeps the `tasks` scope it was saved under (the id is the core's and
-     * the DDL's), and Agenda's tasks are asked about under it, but the menu does
-     * not offer a second line for an app that is not launchable. The shells draw
-     * their menu from here.
+     * THE SCOPE A VISIT TO [appId] GIVES A CHAT: the app it opens in, when that
+     * is a scope, else every app (""). A pushed task page names the `tasks`
+     * domain and scopes the chat to Agenda (R-1128-F2); Locker scopes nothing.
      */
-    public val SCOPE_MENU: List<String> = SCOPABLE_APPS.filter(AppHomes::isLaunchable)
+    public fun scopeOf(appId: String): String = AppHomes.appOf(appId).takeIf { it in SCOPABLE_APPS }.orEmpty()
 
     public fun reduce(chat: Chat, input: ChatInput): ChatStep = when (input) {
         is ChatInput.View -> view(chat, input.event)
@@ -221,7 +222,8 @@ public object ChatMachine {
         val bytes = event.model_bytes
         val named = event.vault_name.ifEmpty { chat.vaultName }
         val untouched = chat.messages.isEmpty() && chat.threadId.isEmpty() && chat.opening.isEmpty()
-        val rescope = chat.opened && chat.scope != event.app && (event.scope_chosen || untouched)
+        val asked = scopeOf(event.app)
+        val rescope = chat.opened && chat.scope != asked && (event.scope_chosen || untouched)
         if (chat.opened && !rescope) {
             val waiting = chat.phase == ChatState.Phase.PHASE_NEEDS_MODEL ||
                 chat.phase == ChatState.Phase.PHASE_UNAVAILABLE
@@ -235,7 +237,7 @@ public object ChatMachine {
         val stopping = if (chat.running && chat.session != 0L) listOf(ChatEffect.Cancel(chat.session)) else emptyList()
         val fresh = Chat(
             opened = true,
-            scope = event.app,
+            scope = asked,
             modelBytes = bytes,
             vaultName = named,
             threads = chat.threads,

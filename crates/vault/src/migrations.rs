@@ -1,4 +1,4 @@
-//! The forward-only ladder, and the four rungs it holds.
+//! The forward-only ladder, and the five rungs it holds.
 //!
 //! ## Two axes, and v0's is not one of them (D-1020-D1-2)
 //!
@@ -44,6 +44,11 @@
 //! proposal settles in place. It is a rung of its own rather than an edit to rung three because
 //! the phones #1129 ran had already climbed rung three.
 //!
+//! Rung five, `005_chat_scope_agenda.sql`, folds the chat scope that named the task domain into
+//! Agenda's, and a thread saved under it is scoped to Agenda (#1128, R-1128-F3). It rebuilds the
+//! four chat tables because a CHECK cannot be altered, from rung four's `chat_message`, and its
+//! header says why all four.
+//!
 //! The file is cut by `bin/export-baseline` ([`render_baseline`]), which founds
 //! a vault from whatever ladder the build embeds and renders what it holds. With
 //! one rung it reproduces the file byte for byte; once a rung is appended it
@@ -79,7 +84,7 @@ pub struct Migration {
 }
 
 /// The baseline: the vault's schema as one statement per block, in dependency
-/// order, and the rows founding seeds. Rung one, and today the whole ladder.
+/// order, and the rows founding seeds. Rung one.
 pub const BASELINE_SQL: &str = include_str!("../../../contracts/migrations/001_baseline.sql");
 
 /// Rung two: the phone link, which records which phone record each synced person, event or
@@ -92,6 +97,11 @@ pub const HEALTH_SQL: &str = include_str!("../../../contracts/migrations/003_hea
 /// Rung four: `chat_message` carries `updated_at`, `row_version` and the touch trigger (#1129).
 pub const CHAT_MESSAGE_VERSION_SQL: &str =
     include_str!("../../../contracts/migrations/004_chat_message_version.sql");
+
+/// Rung five: the chat scope that named the task domain folds into Agenda's, and the threads
+/// saved under it move with it (#1128, R-1128-F3).
+pub const CHAT_SCOPE_AGENDA_SQL: &str =
+    include_str!("../../../contracts/migrations/005_chat_scope_agenda.sql");
 
 /// The ladder, in order. Rung one is the baseline.
 ///
@@ -119,6 +129,11 @@ pub const LADDER: &[Migration] = &[
         name: "chat_message_version",
         sql: CHAT_MESSAGE_VERSION_SQL,
     },
+    Migration {
+        version: 5,
+        name: "chat_scope_agenda",
+        sql: CHAT_SCOPE_AGENDA_SQL,
+    },
 ];
 
 /// The `user_version` a file this build wrote carries.
@@ -139,7 +154,7 @@ pub fn run_from(connection: &Connection, from: i64) -> Result<i64> {
 
 /// [`run_from`] over any ladder, so the climb itself — its order, its
 /// contiguity guard and its per-rung transaction — stays under test while the
-/// real ladder holds one rung.
+/// real ladder holds only the rungs it has.
 fn run_rungs(connection: &Connection, ladder: &[Migration], from: i64) -> Result<i64> {
     let mut at = from;
     for rung in ladder.iter().filter(|rung| rung.version > from) {

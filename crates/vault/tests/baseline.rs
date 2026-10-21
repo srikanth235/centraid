@@ -863,9 +863,9 @@ fn the_two_pragmas_are_written_and_the_file_is_in_wal() {
     // Spelled out rather than left as `head_version()` alone: a rung silently
     // vanishing would still satisfy the line above. The ladder is the baseline
     // (squashed on 2026-10-15, Q-1029-1), rung two, the phone link (#1127), rung three, the
-    // health pack (#1129), and rung four, `chat_message`'s version (#1129, F-R-1); the next
-    // schema change makes this 5.
-    assert_eq!(user_version, 4);
+    // health pack (#1129), rung four, `chat_message`'s version (#1129, F-R-1), and rung five,
+    // the chat scope's fold into Agenda (#1128); the next schema change makes this 6.
+    assert_eq!(user_version, 5);
     assert_eq!(journal, "wal");
 }
 

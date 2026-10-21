@@ -735,22 +735,6 @@ fn day_context_to_wire(
                 } as i32,
             })
             .collect(),
-        due: data
-            .due
-            .into_iter()
-            .map(|due| wire::AgendaDueDay {
-                day: due.day,
-                count: u32::try_from(due.count).unwrap_or(u32::MAX),
-                tasks: due
-                    .tasks
-                    .into_iter()
-                    .map(|task| wire::AgendaDueTask {
-                        task_id: task.task_id,
-                        title: task.title,
-                    })
-                    .collect(),
-            })
-            .collect(),
         holidays: data.holidays,
     }
 }
@@ -1102,16 +1086,13 @@ mod tests {
         );
     }
 
-    /// `parties` names the owner and flags them; `day-context` answers the due
-    /// shelf and — with nobody starred and nobody's birthday in range — no
-    /// birthdays, which is a fact and not a refusal.
+    /// `parties` names the owner and flags them; `day-context` — with nobody
+    /// starred and nobody's birthday in range — answers no birthdays, which is
+    /// a fact and not a refusal. It answers no due work: a dated task is a row
+    /// in its day, read from `tasks.board` (R-1128-F1, #1128).
     #[test]
     fn parties_and_day_context_answer_typed() {
         let scratch = Scratch::founded();
-        scratch.run(
-            "schedule.add_task",
-            serde_json::json!({ "title": "File the taxes", "due_at": "2099-06-10" }),
-        );
 
         let wire::app_query_response::Answer::AgendaParties(parties) = scratch
             .ask(wire::app_query_request::Query::AgendaParties(
@@ -1139,14 +1120,6 @@ mod tests {
         };
         assert!(context.birthdays.is_empty());
         assert!(context.holidays.is_empty(), "no holiday source exists");
-        assert_eq!(
-            context.due.len(),
-            1,
-            "one day with work due, and no zero-filled days"
-        );
-        assert_eq!(context.due[0].day, "2099-06-10");
-        assert_eq!(context.due[0].count, 1);
-        assert_eq!(context.due[0].tasks[0].title, "File the taxes");
         // TODAY IS THE DEVICE'S: the stopped clock's 02:00Z on the 2nd is the
         // 1st in New York.
         assert_eq!(context.today, "2099-06-01");

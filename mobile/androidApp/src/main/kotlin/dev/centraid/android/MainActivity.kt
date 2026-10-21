@@ -6,6 +6,8 @@ import dev.centraid.android.theme.centraidType
 import dev.centraid.android.kit.KitGeometry
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.runtime.setValue
 import androidx.compose.material3.Text
 import androidx.compose.foundation.layout.padding
@@ -500,6 +502,10 @@ public class MainActivity : FragmentActivity() {
                 Box(
                     Modifier
                         .fillMaxSize()
+                        // EVERY TEST TAG IS A RESOURCE ID (#1128, Q-1128-2): set once on the root
+                        // content, so Maestro's `id:` selectors see the Compose `testTag`s
+                        // (`mobile/maestro/flows/selectors.md`) as they see iOS identifiers.
+                        .semantics { testTagsAsResourceId = true }
                         .background(centraidColor(if (onStage) "stage" else "bg"))
                         .safeDrawingPadding(),
                 ) {

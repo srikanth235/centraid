@@ -4,7 +4,6 @@ import centraid.core.v1.AgendaAttendee
 import centraid.core.v1.AgendaBirthday
 import centraid.core.v1.AgendaCalendar
 import centraid.core.v1.AgendaDayContext
-import centraid.core.v1.AgendaDueDay
 import centraid.core.v1.AgendaEvent
 import centraid.core.v1.AgendaSearch
 import centraid.core.v1.AgendaUpcoming
@@ -775,9 +774,8 @@ class AgendaHomeSpec : StringSpec({
 
         fun context(
             birthdays: List<AgendaBirthday> = emptyList(),
-            due: List<AgendaDueDay> = emptyList(),
             today: String = TODAY,
-        ): AgendaDayContext = AgendaDayContext(birthdays = birthdays, due = due, today = today, now_local = NOW)
+        ): AgendaDayContext = AgendaDayContext(birthdays = birthdays, today = today, now_local = NOW)
 
         /** A timed occurrence as the core places it: its local days, end exclusive. */
         fun timed(

@@ -4,6 +4,7 @@ import centraid.core.v1.AgendaCalendar
 import centraid.core.v1.AgendaEvent
 import centraid.core.v1.AppQueryDenial
 import centraid.core.v1.TasksGroupKind
+import centraid.core.v1.TasksSearch
 import centraid.core.v1.TasksTask
 import centraid.screen.v1.AgendaCalendarChoice
 import centraid.screen.v1.AgendaDaySection
@@ -17,11 +18,13 @@ import centraid.screen.v1.AgendaNowLine
 import centraid.screen.v1.AgendaRowItem
 import centraid.screen.v1.AgendaRowStatus
 import centraid.screen.v1.Denied
+import centraid.screen.v1.SearchContainer
 import centraid.screen.v1.TasksNotice
 import centraid.screen.v1.TasksRowGroup
 import dev.centraid.design.copy.AgendaCopy
 import dev.centraid.design.copy.TasksCopy
 import dev.centraid.shared.design.PartyHueWheel
+import dev.centraid.shared.kit.SearchContainers
 import dev.centraid.shared.kit.SearchLaw
 import dev.centraid.shared.kit.time.dayOfMonthOf
 import dev.centraid.shared.kit.time.isoWeekdayOf
@@ -48,7 +51,9 @@ import dev.centraid.shared.kit.tasks.TasksRows
  * - **A search term**: the days the hits fall on, wherever they are — a search
  *   finds, and a hit last month is still the answer. Search is an overlay on
  *   whichever tab was open, and it covers every event: Waiting's filter does
- *   not narrow it (#1047). The tasks it found are one group above the days.
+ *   not narrow it (#1047). The tasks it found are one group above the days,
+ *   and the projects whose own name it matched are containers above that
+ *   (R-1097-19, Q-1128-1).
  *
  * ## Tasks are rows on their day (R-1128-2)
  *
@@ -154,6 +159,8 @@ internal object AgendaFold {
         val notice = if (onToday) noticeOf(tasks) else null
         // THE TASKS THE TERM FOUND (R-1128-4): one group above the event days.
         val taskHits = if (term != null) hitsGroup(tasks, taskCtx) else null
+        // THE PROJECTS THE TERM NAMED (R-1097-19, Q-1128-1): containers above the task hits.
+        val containers = if (term != null) projectContainers(tasks.search) else emptyList()
 
         val drawn = sections.flatMap { section -> section.items.mapNotNull { it.event?.instance_key } }
             .toSet()
@@ -178,7 +185,8 @@ internal object AgendaFold {
         // there the sentence is right.
         val empty = when {
             sections.isNotEmpty() || overdue != null || notice != null -> AgendaEmpty.AGENDA_EMPTY_NONE
-            term != null && taskHits != null -> AgendaEmpty.AGENDA_EMPTY_NONE
+            // A PROJECT FOUND BY NAME IS AN ANSWER too: no "nothing matches" over it.
+            term != null && (taskHits != null || containers.isNotEmpty()) -> AgendaEmpty.AGENDA_EMPTY_NONE
             term != null -> AgendaEmpty.AGENDA_EMPTY_NO_MATCH
             waitingOnly -> AgendaEmpty.AGENDA_EMPTY_NOTHING_WAITING
             screen.destination == AgendaHomeState.Destination.DESTINATION_SCHEDULE &&
@@ -242,6 +250,7 @@ internal object AgendaFold {
             overdue = overdue,
             notice = notice,
             task_hits = listOfNotNull(taskHits),
+            containers = containers,
             waiting_count = waitingCount,
             event_count = drawn.size,
             event_count_label = "${drawn.size} ${
@@ -395,6 +404,14 @@ internal object AgendaFold {
             verb_key = TasksRows.VERB_CATCH_UP,
         )
     }
+
+    /**
+     * THE PROJECTS A SEARCH NAMED, as the kit's containers. Projects only, because a
+     * tap sends `ProjectPicked` with the container's id; the machine's Ask counts
+     * these and no others.
+     */
+    internal fun projectContainers(search: TasksSearch?): List<SearchContainer> =
+        SearchContainers.fold(search?.containers.orEmpty().filter { it.entity == PROJECT_ENTITY })
 
     /** The tasks a search term found, as one group; null when it found none. */
     private fun hitsGroup(tasks: AgendaTasks, ctx: TasksRows.Context): TasksRowGroup? {
@@ -600,6 +617,9 @@ internal object AgendaFold {
 
     /** A party hue for an event on no calendar: neutral, and never a brand. */
     private const val NO_CALENDAR_HUE: String = "cSlate"
+
+    /** The index entity a project container carries (`SearchContainers`). */
+    private const val PROJECT_ENTITY: String = "schedule.project"
 
     private const val CANCELLED: String = "cancelled"
     private const val NEEDS_ACTION: String = "needs-action"
