@@ -12,7 +12,7 @@
 //! | `agenda.upcoming.window` | **the visible range, as a page**: `status <> 'cancelled'`, not in the trash, and `dtstart` inside `[from - 31 days, to)`, capped at [`EVENT_WINDOW_CAP`] |
 //! | `agenda.upcoming.recurringAnchors` | **the second window**: a series anchors years in the past, so the range predicate would drop it. `rrule IS NOT NULL` and not in the trash, newest first, capped at [`RECURRING_ANCHOR_CAP`] (D-1020-S4) |
 //! | `ctx.vault.search` | `search`'s own FTS read, which is `crates/search`'s and not a [`PageQuery`] — the hits arrive here in RANK ORDER and the fold keeps that order |
-//! | `agenda.dayContext.birthdays` / `.dueTasks` | the grid's two decorations, each its own stated window |
+//! | `agenda.dayContext.birthdays` | the grid's one decoration, its own stated window; the grid reads no task (R-1128-F1, #1128) |
 //! | `agenda.parties.people` | the invite directory: owner-curated, walked with a stated ceiling |
 //!
 //! Everything else — the calendar edges, the guests, the attachments, the
@@ -81,10 +81,7 @@ pub const MAX_RANGE_DAYS: i64 = 400;
 pub const DEFAULT_RANGE_DAYS: i64 = 45;
 /// A vault has no upper bound; reads are row-capped.
 pub const PARTY_CAP: usize = 2_000;
-pub const TASK_CAP: usize = 2_000;
 pub const TAG_CAP: usize = 5_000;
-/// A shelf LISTS; it never pages.
-pub const SHELF_CAP: usize = 8;
 /// FTS answers at most this many matches (`search.ts:38`).
 pub const SEARCH_LIMIT: usize = 100;
 
@@ -97,9 +94,6 @@ pub const BLOB_ROUTE: &str = "/centraid/_vault/blobs";
 /// The flags scheme, and the notation a starred party carries.
 pub const FLAGS_SCHEME_URI: &str = "https://centraid.dev/schemes/flags";
 pub const STARRED_NOTATION: &str = "starred";
-
-/// The statuses an open task carries (`day-context.ts:91`).
-pub const OPEN_STATUSES: [&str; 2] = ["needs-action", "in-process"];
 
 /// One `core.event` row, as both of `upcoming`'s windows project it
 /// (`upcoming.ts:11`-`:15`).
@@ -227,27 +221,14 @@ pub struct BirthdayFact {
     pub tier: &'static str,
 }
 
-/// One due task on a day's shelf.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DueTask {
-    pub task_id: String,
-    pub title: String,
-}
-
-/// One day with work due on it. **Days with none are ABSENT, not zero-filled.**
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DueFact {
-    pub day: String,
-    pub count: usize,
-    /// In due order. A shelf lists; it never pages.
-    pub tasks: Vec<DueTask>,
-}
-
 /// What `day-context` answers.
+///
+/// **NO DUE WORK.** v0 answered a per-day list of open tasks due; the shelf
+/// that drew it retired with R-1128-2, a dated task is a row in its day read
+/// from `tasks.board`, and the read went with it (R-1128-F1, #1128).
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct DayContextData {
     pub birthdays: Vec<BirthdayFact>,
-    pub due: Vec<DueFact>,
     /// **No holiday source exists in the vault**; the field holds the shape
     /// open (`day-context.ts:263`) and is empty by construction, not by
     /// accident.
@@ -479,32 +460,6 @@ pub fn birthdays_statement() -> PageQuery {
         "kind = ? AND birth_date IS NOT NULL",
         vec![PageBindValue::Text("person".to_owned())],
     )
-}
-
-/// `agenda.dayContext.dueTasks` — the open tasks due in the range.
-///
-/// **`due_at IS NOT NULL` is stated even though the range implies it**: the
-/// paged door proves a nullable sort column SYNTACTICALLY, and without the
-/// words a continuation over this window would be refused rather than served
-/// (#1020, R-1020-35, `day-context.ts:168`-`:172`).
-pub fn due_tasks_statement(from: &str, upper: &str) -> KitResult<PageQuery> {
-    let fragment = in_list("status", &OPEN_STATUSES.map(str::to_owned))?;
-    let mut bind = fragment.bind;
-    bind.push(PageBindValue::Text(from.to_owned()));
-    bind.push(PageBindValue::Text(upper.to_owned()));
-    Ok(PageQuery::new(
-        "agenda.dayContext.dueTasks",
-        "task_id, status, title, due_at, project_id",
-        "schedule_task",
-        PageOrder::asc("due_at", "task_id"),
-    )
-    .filter(
-        &format!(
-            "{} AND due_at IS NOT NULL AND due_at >= ? AND due_at < ?",
-            fragment.sql
-        ),
-        bind,
-    ))
 }
 
 /// `agenda.dayContext.flagsScheme` — the flags scheme, if this vault has one.
@@ -1270,10 +1225,10 @@ fn recurs_in_range(month: i64, day: i64, from: &str, to: &str) -> bool {
     false
 }
 
-/// `day-context` — birthdays and due work for the calendar grid.
+/// `day-context` — birthdays for the calendar grid.
 ///
 /// `zone` is the request's, and it decides only which day an empty `from` is:
-/// a birthday and a due date are civil days already.
+/// a birthday is a civil day already.
 ///
 /// # Errors
 ///
@@ -1286,8 +1241,6 @@ pub fn load_day_context(
     zone: &FireZone,
 ) -> KitResult<(DayContextData, Option<Denial>)> {
     let (from, to) = range_of(from, to, now, zone);
-    // Half-open, so a date-only and a timed `due_at` both land.
-    let due_upper = add_days(&to, 1);
     let parties = match read_window(door, &birthdays_statement(), PARTY_CAP) {
         Ok(window) => window.rows,
         Err(KitError::Door(message)) => {
@@ -1295,7 +1248,6 @@ pub fn load_day_context(
         }
         Err(other) => return Err(other),
     };
-    let tasks = read_window(door, &due_tasks_statement(&from, &due_upper)?, TASK_CAP)?.rows;
     let schemes = read_pages(door, &flags_scheme_statement(), EVENT_JOIN_BOUND)?;
     // NO MARKER MEANS NOBODY IS STARRED: an honest `outer`, never a refusal.
     let starred_concept = match schemes.first().and_then(|row| cell_text(row, "scheme_id")) {
@@ -1353,45 +1305,9 @@ pub fn load_day_context(
             .then_with(|| left.name.cmp(&right.name))
     });
 
-    // DAYS WITH NO DUE TASK ARE ABSENT, NOT ZERO-FILLED.
-    let mut counts: BTreeMap<String, usize> = BTreeMap::new();
-    let mut listed: BTreeMap<String, Vec<DueTask>> = BTreeMap::new();
-    for row in &tasks {
-        let status = cell_text(row, "status");
-        if status
-            .as_deref()
-            .is_some_and(|status| !OPEN_STATUSES.contains(&status))
-        {
-            continue;
-        }
-        let Some(day) = day_of(cell_text(row, "due_at").as_deref()) else {
-            continue;
-        };
-        if day < from || day > to {
-            continue;
-        }
-        *counts.entry(day.clone()).or_default() += 1;
-        let shelf = listed.entry(day).or_default();
-        if shelf.len() < SHELF_CAP {
-            shelf.push(DueTask {
-                task_id: cell_text(row, "task_id").unwrap_or_default(),
-                title: cell_text(row, "title").unwrap_or_default(),
-            });
-        }
-    }
-    let due: Vec<DueFact> = counts
-        .into_iter()
-        .map(|(day, count)| DueFact {
-            tasks: listed.get(&day).cloned().unwrap_or_default(),
-            day,
-            count,
-        })
-        .collect();
-
     Ok((
         DayContextData {
             birthdays,
-            due,
             holidays: Vec::new(),
         },
         None,

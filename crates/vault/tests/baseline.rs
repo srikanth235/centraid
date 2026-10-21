@@ -833,8 +833,9 @@ fn the_two_pragmas_are_written_and_the_file_is_in_wal() {
     assert_eq!(user_version, head_version());
     // Spelled out rather than left as `head_version()` alone: a rung silently
     // vanishing would still satisfy the line above. The ladder is the baseline
-    // (squashed on 2026-10-15, Q-1029-1); the next schema change makes this 2.
-    assert_eq!(user_version, 1);
+    // (squashed on 2026-10-15, Q-1029-1) and rung two, the chat scope's fold into
+    // Agenda (#1128); the next schema change makes this 3.
+    assert_eq!(user_version, 2);
     assert_eq!(journal, "wal");
 }
 

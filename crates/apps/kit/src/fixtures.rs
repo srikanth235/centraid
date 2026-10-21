@@ -3679,12 +3679,10 @@ pub struct Year3AgendaShape {
     pub parties: usize,
     /// How many of them are starred, which is what `inner` means.
     pub starred: usize,
-    /// Open tasks with a due date, for the grid's due-work shelf.
-    pub due_tasks: usize,
 }
 
-/// THE YEAR-3 AGENDA PROFILE: 12,000 events over six calendars, 800 recurring
-/// series, and 4,000 dated tasks under the grid.
+/// THE YEAR-3 AGENDA PROFILE: 12,000 events over six calendars and 800
+/// recurring series.
 ///
 /// The numbers each bound is stated at, and why each one is here:
 ///
@@ -3699,9 +3697,9 @@ pub struct Year3AgendaShape {
 ///   `MAX_TOTAL_INSTANCES` 1,500** — so the year-3 agenda TRIPS the expansion
 ///   cap, which is the only way to know the cap reports the size it reaches
 ///   rather than returning a short agenda that reads as a whole one.
-/// * **4,000 dated tasks against `TASK_CAP` 2,000**, and **400 parties against
-///   `PARTY_CAP` 2,000**: the grid's two decorations, one over its window and
-///   one under it.
+/// * **400 parties against `PARTY_CAP` 2,000**: the grid's one decoration,
+///   under its window. The grid reads no task, so the profile seeds none
+///   (R-1128-F1, #1128); year-3 task volume is [`Year3TasksShape`]'s.
 pub const YEAR3_AGENDA: Year3AgendaShape = Year3AgendaShape {
     events: 12_000,
     recurring: 800,
@@ -3710,7 +3708,6 @@ pub const YEAR3_AGENDA: Year3AgendaShape = Year3AgendaShape {
     calendars: 6,
     parties: 400,
     starred: 40,
-    due_tasks: 4_000,
 };
 
 /// What one year-3 Agenda seeding wrote.
@@ -3723,7 +3720,6 @@ pub struct Year3AgendaCounts {
     pub calendars: usize,
     pub parties: usize,
     pub starred: usize,
-    pub due_tasks: usize,
 }
 
 /// The zone every year-3 series is anchored in.
@@ -3954,27 +3950,6 @@ fn seed_year3_agenda(
             )
             .map_err(door)?;
         counts.exceptions += 1;
-    }
-    for index in 0..shape.due_tasks {
-        connection
-            .execute(
-                "INSERT INTO schedule_task
-                   (task_id, owner_party_id, title, description, status, priority, due_at,
-                    completed_at, effort_min, parent_task_id, rrule, remind_before_min,
-                    created_at, updated_at, sort_order, recurrence_anchor)
-                 VALUES (?1, ?2, ?3, NULL, 'needs-action', ?4, ?5, NULL, NULL, NULL, NULL,
-                         NULL, ?6, ?6, 0, 'scheduled')",
-                rusqlite::params![
-                    id("y3-agenda-task", index),
-                    YEAR3_OWNER_PARTY,
-                    format!("Due {index:06}"),
-                    (index % 10) as i64,
-                    format!("{}T09:00:00.000Z", day(start, index % 380)),
-                    created
-                ],
-            )
-            .map_err(door)?;
-        counts.due_tasks += 1;
     }
     Ok(counts)
 }

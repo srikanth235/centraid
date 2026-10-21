@@ -42,9 +42,8 @@ Agenda is **4 manifest queries plus the core's by-id `event` read, 7 actions, 14
 | `RECURRING_ANCHOR_CAP` | 1,000 | the second window: series anchors |
 | `MAX_TOTAL_INSTANCES` | 1,500 | occurrences across ALL series, per read — **enforced during the expansion, and it errors at the size it reaches** |
 | `MAX_RANGE_DAYS` | 400 | the calendar grid's widest range |
-| `PARTY_CAP` / `TASK_CAP` | 2,000 | the grid's birthday rail and due-work shelf |
+| `PARTY_CAP` | 2,000 | the grid's birthday rail |
 | `TAG_CAP` | 5,000 | the star tags behind `inner` |
-| `SHELF_CAP` | 8 | a day's due shelf LISTS; it never pages |
 
 ## What stops this crate doing more than it should
 
