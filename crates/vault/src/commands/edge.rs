@@ -76,24 +76,27 @@ fn pre_add(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     Ok(refusal)
 }
 
-fn add(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
-    let from = ctx.required_str("from")?;
-    let to = ctx.required_str("to")?;
-    let rel = rel_of(ctx)?;
-    let label_id = if rel == Rel::Related {
-        Some(ensure_concept(
-            ctx,
-            Kind::Relation,
-            ctx.required_str("label")?,
-        )?)
-    } else {
-        None
-    };
-    let explicit = ctx
-        .input
-        .get("position")
-        .and_then(serde_json::Value::as_f64);
-    // Appended when the caller gave no place: after whatever the holder has.
+/// What an edge may carry beyond its two ends and its label.
+#[derive(Default)]
+pub(crate) struct Extras<'a> {
+    pub position: Option<f64>,
+    pub state: Option<&'a str>,
+    pub anchor: Option<String>,
+}
+
+/// Join two entities, or say what is new about a join that is there: its place,
+/// its answer, its anchor. The one writer of an edge row: `edge.add` and every
+/// command that founds a row and joins it (a People interaction `with` someone,
+/// a journal entry `about` them) come through here, so the touch rule is kept
+/// once. A list holds what it is given after what it has, unless told a place.
+pub(crate) fn put(
+    ctx: &CommandCtx<'_, '_>,
+    from: &str,
+    rel: Rel,
+    to: &str,
+    label_id: Option<&str>,
+    extras: &Extras<'_>,
+) -> Result<()> {
     let next = if rel == Rel::Contains {
         Some(ctx.connection().query_row(
             "SELECT COALESCE(MAX(position), 0) + 1 FROM edge WHERE from_id = ?1 AND rel = 'contains'",
@@ -103,14 +106,6 @@ fn add(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     } else {
         None
     };
-    let state = ctx.optional_str("state");
-    let anchor = ctx
-        .input
-        .get("anchor")
-        .filter(|value| !value.is_null())
-        .map(serde_json::Value::to_string);
-    // Adding an edge that is there only says what is new about it: its place, its
-    // answer, its anchor.
     ctx.connection().execute(
         "INSERT INTO edge (from_id, rel, to_id, label_id, position, state, anchor, created_at)
          VALUES (?1, ?2, ?3, ?4, COALESCE(?5, ?6), ?7, ?8, ?9)
@@ -123,10 +118,10 @@ fn add(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
             rel.as_str(),
             to,
             label_id,
-            explicit,
+            extras.position,
             next,
-            state,
-            anchor,
+            extras.state,
+            extras.anchor,
             ctx.now
         ],
     )?;
@@ -134,6 +129,39 @@ fn add(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
         ctx.touch(from)?;
         ctx.mark_for_index(to);
     }
+    Ok(())
+}
+
+fn add(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
+    let rel = rel_of(ctx)?;
+    let label_id = if rel == Rel::Related {
+        Some(ensure_concept(
+            ctx,
+            Kind::Relation,
+            ctx.required_str("label")?,
+        )?)
+    } else {
+        None
+    };
+    put(
+        ctx,
+        ctx.required_str("from")?,
+        rel,
+        ctx.required_str("to")?,
+        label_id.as_deref(),
+        &Extras {
+            position: ctx
+                .input
+                .get("position")
+                .and_then(serde_json::Value::as_f64),
+            state: ctx.optional_str("state"),
+            anchor: ctx
+                .input
+                .get("anchor")
+                .filter(|value| !value.is_null())
+                .map(serde_json::Value::to_string),
+        },
+    )?;
     Ok(serde_json::json!({ "label": label_id }))
 }
 

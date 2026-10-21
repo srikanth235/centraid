@@ -30,6 +30,7 @@
 use rusqlite::{Connection, OptionalExtension};
 use serde_json::{Map, Value as Json};
 
+use crate::commands::contact_point;
 use crate::commands::entity::{self, trash_stamp};
 use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency};
 use crate::error::{Result, VaultError};
@@ -46,6 +47,22 @@ pub struct OriginRow {
 pub type Defaults =
     fn(&Connection, &OriginRow) -> Result<Vec<(&'static str, rusqlite::types::Value)>>;
 
+/// A field that is not a column but rows that hang off the one it fills (a
+/// contact's points), kept by the module that owns them. A record states it as
+/// one JSON value like any other field; the vault reads it back the same way,
+/// and merges it with the member's changes by whatever rule suits its rows.
+pub struct Child {
+    pub name: &'static str,
+    /// The value the vault holds now, in the form the source states it.
+    pub read: fn(&Connection, &str) -> Result<Json>,
+    /// A value in one form whatever its spelling, so two statements of the same
+    /// rows compare equal.
+    pub canon: fn(&Json) -> Json,
+    /// Apply what the source says now, given what it said last (`None`: it has
+    /// not spoken for this row before). Returns whether anything changed.
+    pub merge: fn(&CommandCtx<'_, '_>, &str, Option<&Json>, &Json) -> Result<bool>,
+}
+
 /// One system, as data.
 pub struct SystemMap {
     /// The `origin.system` CHECK's word, and the command's suffix.
@@ -58,12 +75,36 @@ pub struct SystemMap {
     /// The columns of the kind's own table the system owns. `title` is always
     /// owned, and is the entity's.
     pub fields: &'static [&'static str],
+    /// The fields that are rows of their own, after the columns.
+    pub children: &'static [Child],
     /// The fields that identify a row nothing follows yet (`title` compares
     /// without regard to case). A record missing one is not matched.
     pub match_on: &'static [&'static str],
     /// Whether a record gone from a complete read may take its row away.
     pub removes: bool,
     pub defaults: Defaults,
+}
+
+impl SystemMap {
+    /// Whether a record of this system may state `name`.
+    fn states(&self, name: &str) -> bool {
+        name == "title" || self.fields.contains(&name) || self.child(name).is_some()
+    }
+
+    fn child(&self, name: &str) -> Option<&Child> {
+        self.children.iter().find(|child| child.name == name)
+    }
+
+    /// Whether two values of the field say the same thing.
+    fn agree(&self, name: &str, left: Option<&Json>, right: Option<&Json>) -> bool {
+        match self.child(name) {
+            Some(child) => same(
+                left.map(child.canon).as_ref(),
+                right.map(child.canon).as_ref(),
+            ),
+            None => same(left, right),
+        }
+    }
 }
 
 fn no_defaults(
@@ -129,6 +170,12 @@ pub const SYSTEMS: &[SystemMap] = &[
         kind: Kind::Person,
         fills: None,
         fields: &["sort_name", "nickname", "role", "birthday"],
+        children: &[Child {
+            name: "points",
+            read: contact_point::read,
+            canon: contact_point::canon,
+            merge: contact_point::merge,
+        }],
         match_on: &["title"],
         removes: true,
         defaults: no_defaults,
@@ -151,6 +198,7 @@ pub const SYSTEMS: &[SystemMap] = &[
             "reminders",
             "description",
         ],
+        children: &[],
         match_on: &["title", "starts"],
         removes: true,
         defaults: calendar_defaults,
@@ -161,6 +209,7 @@ pub const SYSTEMS: &[SystemMap] = &[
         kind: Kind::Document,
         fills: Some(Kind::Folder),
         fields: &["blob", "media_type"],
+        children: &[],
         match_on: &["title"],
         removes: true,
         defaults: folder_defaults,
@@ -171,6 +220,7 @@ pub const SYSTEMS: &[SystemMap] = &[
         kind: Kind::Activity,
         fills: None,
         fields: &["type_id", "type_kind", "starts", "ends"],
+        children: &[],
         match_on: &["type_id", "starts"],
         removes: true,
         defaults: no_defaults,
@@ -181,6 +231,7 @@ pub const SYSTEMS: &[SystemMap] = &[
         kind: Kind::Txn,
         fills: Some(Kind::Account),
         fields: &["posted_on", "amount_minor", "status", "category_id"],
+        children: &[],
         match_on: &[],
         // A statement line is never removed: a month later's statement does not
         // contain this month's.
@@ -226,6 +277,9 @@ fn current(connection: &Connection, map: &SystemMap, id: &str) -> Result<Map<Str
             row.get(0)
         })?;
     out.insert("title".to_owned(), Json::String(title));
+    for child in map.children {
+        out.insert(child.name.to_owned(), (child.read)(connection, id)?);
+    }
     if map.fields.is_empty() {
         return Ok(out);
     }
@@ -366,10 +420,7 @@ fn records_of(ctx: &CommandCtx<'_, '_>, map: &SystemMap) -> Result<Vec<Record>> 
             .and_then(Json::as_object)
             .cloned()
             .unwrap_or_default();
-        if let Some(unowned) = fields
-            .keys()
-            .find(|name| *name != "title" && !map.fields.contains(&name.as_str()))
-        {
+        if let Some(unowned) = fields.keys().find(|name| !map.states(name)) {
             return Err(VaultError::InvalidInput {
                 name: format!("fields.{unowned}"),
                 detail: format!("`{}` does not state `{unowned}`", map.system),
@@ -465,7 +516,7 @@ fn add(
     let mut columns: Vec<(&str, rusqlite::types::Value)> = record
         .fields
         .iter()
-        .filter(|(name, _)| *name != "title")
+        .filter(|(name, _)| *name != "title" && map.child(name).is_none())
         .map(|(name, value)| (name.as_str(), to_sql(value)))
         .collect();
     for (column, value) in (map.defaults)(ctx.connection(), origin)? {
@@ -493,7 +544,32 @@ fn add(
         ),
         rusqlite::params_from_iter(values),
     )?;
+    merge_children(ctx, map, &id, None, &record.fields)?;
     Ok(id)
+}
+
+/// Apply the children a record states to a row. Returns whether anything changed.
+fn merge_children(
+    ctx: &CommandCtx<'_, '_>,
+    map: &SystemMap,
+    id: &str,
+    stated: Option<&Json>,
+    fields: &Map<String, Json>,
+) -> Result<bool> {
+    let mut changed = false;
+    for (name, new) in fields {
+        let Some(child) = map.child(name) else {
+            continue;
+        };
+        let before = stated.and_then(|stated| stated.get(name.as_str()));
+        if before.is_none_or(|before| !map.agree(name, Some(before), Some(new))) {
+            changed |= (child.merge)(ctx, id, before, new)?;
+        }
+    }
+    if changed {
+        ctx.touch(id)?;
+    }
+    Ok(changed)
 }
 
 fn link(
@@ -581,11 +657,14 @@ fn merge_record(
                 .fields
                 .iter()
                 .filter(|(name, value)| {
-                    !value.is_null() && held.get(name.as_str()).is_none_or(Json::is_null)
+                    map.child(name).is_none()
+                        && !value.is_null()
+                        && held.get(name.as_str()).is_none_or(Json::is_null)
                 })
                 .map(|(name, value)| (name.as_str(), value))
                 .collect();
             write_fields(ctx, map, &id, &blanks)?;
+            merge_children(ctx, map, &id, None, &record.fields)?;
             link(ctx, map, origin, record, &id)?;
             tally.matched += 1;
         } else {
@@ -617,7 +696,11 @@ fn merge_record(
     }
     let now = current(connection, map, &entity_id)?;
     let mut writes: Vec<(&str, &Json)> = Vec::new();
-    for (name, new) in &record.fields {
+    for (name, new) in record
+        .fields
+        .iter()
+        .filter(|(name, _)| map.child(name).is_none())
+    {
         let mine = now.get(name.as_str());
         let theirs = stated.get(name.as_str());
         // Never edited: the vault still holds what the source last said. A field
@@ -628,13 +711,14 @@ fn merge_record(
         }
     }
     write_fields(ctx, map, &entity_id, &writes)?;
+    let rows_changed = merge_children(ctx, map, &entity_id, Some(&stated), &record.fields)?;
     let mut statement = stated.as_object().cloned().unwrap_or_default();
     statement.extend(record.fields.clone());
     connection.execute(
         "UPDATE source SET stated = ?2, seen_at = ?3 WHERE id = ?1",
         rusqlite::params![source_id, Json::Object(statement).to_string(), ctx.now],
     )?;
-    if writes.is_empty() {
+    if writes.is_empty() && !rows_changed {
         tally.unchanged += 1;
     } else {
         tally.updated += 1;
@@ -681,7 +765,7 @@ fn settle_absent(
             .as_object()
             .into_iter()
             .flatten()
-            .any(|(name, said)| !same(now.get(name.as_str()), Some(said)));
+            .any(|(name, said)| !map.agree(name, now.get(name.as_str()), Some(said)));
         if edited {
             connection.execute("DELETE FROM source WHERE id = ?1", [&source_id])?;
             tally.forgotten += 1;

@@ -43,15 +43,18 @@
 //! before the first attempt.
 
 pub mod blob;
+pub mod contact_point;
 pub mod container;
 pub mod edge;
 pub mod entity;
+pub mod event;
 pub mod flag;
 pub mod follow;
 pub mod locker;
 pub mod note;
 pub mod person;
 pub mod tag;
+pub mod task;
 
 use std::collections::BTreeMap;
 
@@ -298,8 +301,9 @@ impl Registry {
     /// The registry the phone serves: every command this build carries.
     pub fn with_system_commands() -> Result<Self> {
         let mut registry = Self::new();
-        let modules: [fn() -> Vec<CommandDefinition>; 10] = [
+        let modules: [fn() -> Vec<CommandDefinition>; 11] = [
             blob::definitions,
+            contact_point::definitions,
             container::definitions,
             edge::definitions,
             entity::definitions,

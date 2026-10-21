@@ -21,6 +21,9 @@
 //!   the top level (`DETACH`): a note the member restored on its own is not lost
 //!   with its notebook's purge. What cannot live without the holder (a section
 //!   without its project, a transaction without its account) is purged.
+//! - **A person is a holder of what is written about them alone**: a note, a
+//!   touch or a yearly date about that person and no one else goes to the trash
+//!   with them and comes back with them. A task about them stays.
 //! - **A purge refuses with a sentence** when something would lose its meaning:
 //!   a calendar with events, an activity kind in use, the self person, a flag.
 
@@ -124,6 +127,17 @@ fn members(connection: &Connection, holder: &Found) -> Result<Vec<String>> {
              UNION ALL SELECT id FROM task WHERE project_id = ?1"
         }
         Kind::Account => "SELECT id FROM txn WHERE account_id = ?1",
+        // What was written or logged about one person and no one else: their
+        // notes and journal words, the touches that were with them alone, and
+        // their yearly dates. A task about them is the member's own and stays.
+        Kind::Person => {
+            "SELECT e.from_id FROM edge e JOIN entity f ON f.id = e.from_id
+              WHERE e.to_id = ?1 AND e.rel IN ('about', 'with') AND f.kind <> 'task'
+                AND NOT EXISTS (SELECT 1 FROM edge o WHERE o.from_id = e.from_id
+                                   AND o.rel IN ('about', 'with') AND o.to_id <> ?1)"
+        }
+        // The words kept of a touch or a workout belong to it.
+        Kind::Activity => "SELECT from_id FROM edge WHERE to_id = ?1 AND rel = 'about'",
         _ => return Ok(Vec::new()),
     };
     ids(connection, sql, &holder.id)

@@ -571,7 +571,12 @@ fn rebuilt(vault: &Vault) -> BTreeSet<(String, i64, String, i64)> {
     index_dump(vault)
 }
 
-fn run(vault: &Vault, registry: &Registry, name: &str, input: serde_json::Value) {
+fn run(
+    vault: &Vault,
+    registry: &Registry,
+    name: &str,
+    input: serde_json::Value,
+) -> serde_json::Value {
     let outcome = vault
         .execute(
             registry,
@@ -585,6 +590,7 @@ fn run(vault: &Vault, registry: &Registry, name: &str, input: serde_json::Value)
         "{name}: {:?}",
         outcome.reason
     );
+    outcome.output
 }
 
 fn script_every_search_relevant_command(scratch: &common::Scratch, registry: &Registry) {
@@ -685,6 +691,87 @@ fn script_every_search_relevant_command(scratch: &common::Scratch, registry: &Re
         ]}),
     );
     run(vault, registry, "entity.purge", json!({"id": "n1"}));
+    // People's verbs, each person's last word being the verb under test so
+    // nothing after it re-indexes them and hides a missing touch.
+    for (id, title) in [
+        ("cy", "Cy Twombly"),
+        ("di", "Di Arbus"),
+        ("ed", "Ed Ruscha"),
+    ] {
+        run(
+            vault,
+            registry,
+            "person.add",
+            json!({"id": id, "title": title, "role": "painter"}),
+        );
+    }
+    run(
+        vault,
+        registry,
+        "person.add_note",
+        json!({"id": "cy", "text": "likes large canvases"}),
+    );
+    run(
+        vault,
+        registry,
+        "person.log_interaction",
+        json!({"id": "cy", "kind": "call", "text": "talked about Rome"}),
+    );
+    run(
+        vault,
+        registry,
+        "person.add_relationship",
+        json!({"id": "cy", "name": "Mum", "kind": "mother"}),
+    );
+    run(
+        vault,
+        registry,
+        "person.add_date",
+        json!({"id": "cy", "label": "Anniversary", "month_day": "06-01"}),
+    );
+    run(
+        vault,
+        registry,
+        "person.edit",
+        json!({"id": "cy", "nickname": "Cy"}),
+    );
+    run(
+        vault,
+        registry,
+        "person.save_contact_point",
+        json!({"id": "di", "kind": "phone", "value": "+1 555 010 0199"}),
+    );
+    let point = run(
+        vault,
+        registry,
+        "person.save_contact_point",
+        json!({"id": "ed", "kind": "email", "value": "ed@ruscha.example"}),
+    );
+    run(
+        vault,
+        registry,
+        "person.remove_contact_point",
+        json!({"point_id": point["point_id"]}),
+    );
+    run(
+        vault,
+        registry,
+        "person.save_contact_point",
+        json!({"id": "di", "kind": "email", "value": "di@arbus.example", "label": "work"}),
+    );
+    for points in [
+        json!([{"kind": "phone", "value": "+44 20 7946 0958"}]),
+        json!([{"kind": "phone", "value": "+44 20 7946 0958"}, {"kind": "email", "value": "grace@navy.example"}]),
+    ] {
+        run(
+            vault,
+            registry,
+            "follow.contacts",
+            json!({"origin": {"ref": "i", "label": "i"}, "records": [
+                {"external_id": "c1", "fields": {"points": points}}
+            ]}),
+        );
+    }
     // Last, so no later command re-indexes it and hides a missing touch.
     run(
         vault,
