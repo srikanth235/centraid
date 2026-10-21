@@ -38,6 +38,7 @@ use crate::commands::task::{self, NewTask};
 use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency};
 use crate::error::{Result, VaultError};
 use crate::model::{Kind, Rel};
+use crate::time::Semantics;
 use crate::time::recurrence::parse_instant_ms;
 use crate::time::zone::{FireZone, WallTime, parse_wall_iso, wall_epoch};
 
@@ -524,10 +525,8 @@ fn add_task_about(ctx: &CommandCtx<'_, '_>, gift: bool) -> Result<Json> {
     let id = task::found(
         ctx,
         &NewTask {
-            id: None,
             title: ctx.required_str("text")?,
-            due: None,
-            description: None,
+            ..NewTask::default()
         },
     )?;
     edge::put(
@@ -600,16 +599,12 @@ fn add_date(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
     let date = event::found(
         ctx,
         &NewEvent {
-            id: None,
             title: label,
             starts: &starts,
-            ends: None,
-            timing: "all-day",
-            zone: None,
+            timing: Semantics::AllDay,
             rule: Some("FREQ=YEARLY"),
-            calendar_id: None,
             reminders: reminded.then_some("[0]"),
-            description: None,
+            ..NewEvent::default()
         },
     )?;
     edge::put(ctx, &date, Rel::About, person, None, &Extras::default())?;

@@ -136,6 +136,8 @@ fn members(connection: &Connection, holder: &Found) -> Result<Vec<String>> {
                 AND NOT EXISTS (SELECT 1 FROM edge o WHERE o.from_id = e.from_id
                                    AND o.rel IN ('about', 'with') AND o.to_id <> ?1)"
         }
+        // A subtask follows its parent.
+        Kind::Task => "SELECT id FROM task WHERE parent_id = ?1",
         // The words kept of a touch or a workout belong to it.
         Kind::Activity => "SELECT from_id FROM edge WHERE to_id = ?1 AND rel = 'about'",
         _ => return Ok(Vec::new()),

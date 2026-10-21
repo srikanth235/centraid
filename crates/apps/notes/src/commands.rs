@@ -10,7 +10,7 @@
 //! input is its command's input, verbatim.
 //!
 //! **`send-to-tasks` is the one action making TWO invocations**: `task.add`
-//! (Agenda's lane, [`ActionRow::pending_schema`]) and then `edge.add` joining the
+//! (Agenda's) and then `edge.add` joining the
 //! task to the note with an `about` edge, which is conditional on the task having
 //! landed.
 //!
@@ -118,9 +118,6 @@ pub struct ActionRow {
     pub action: &'static str,
     pub command: &'static str,
     pub confirm: Confirm,
-    /// The schema whose commands are not in this build yet, when there is one.
-    /// `send-to-tasks` is the only row that carries it (Agenda's lane).
-    pub pending_schema: Option<&'static str>,
 }
 
 const fn act(action: &'static str, command: &'static str) -> ActionRow {
@@ -128,7 +125,6 @@ const fn act(action: &'static str, command: &'static str) -> ActionRow {
         action,
         command,
         confirm: Confirm::None,
-        pending_schema: None,
     }
 }
 
@@ -137,7 +133,6 @@ const fn confirmed(action: &'static str, command: &'static str) -> ActionRow {
         action,
         command,
         confirm: Confirm::Required,
-        pending_schema: None,
     }
 }
 
@@ -157,12 +152,7 @@ pub const ACTIONS: [ActionRow; 17] = [
     act("unflag-note", "flag.clear"),
     act("link", "edge.add"),
     // The only action that makes TWO invocations: the task, then the backlink.
-    ActionRow {
-        action: "send-to-tasks",
-        command: "task.add",
-        confirm: Confirm::None,
-        pending_schema: Some("task"),
-    },
+    act("send-to-tasks", "task.add"),
     act("attach", "edge.add"),
     act("detach", "edge.remove"),
     act("add-tag", "tag.add"),
@@ -207,16 +197,6 @@ pub fn invocation_for(
     input: BTreeMap<String, Value>,
 ) -> Option<Invocation> {
     action_row(action).map(|row| Invocation::new(row.command, invoke_key, input))
-}
-
-/// The commands Notes owes another lane, by schema. Empty means nothing is
-/// pending.
-#[must_use]
-pub fn pending_commands() -> Vec<(&'static str, &'static str)> {
-    ACTIONS
-        .iter()
-        .filter_map(|row| row.pending_schema.map(|schema| (schema, row.command)))
-        .collect()
 }
 
 #[cfg(test)]
@@ -281,11 +261,20 @@ mod tests {
         assert_eq!(required, ["delete-notebook", "delete-note"]);
     }
 
-    /// Agenda's lane owes `task.add`; the list shrinks by being wrong, and this
-    /// is what says so.
+    /// Every command an action names is one the vault registers: `send-to-tasks`'
+    /// `task.add` is Agenda's.
     #[test]
-    fn the_one_command_owed_is_agendas_task_add() {
-        assert_eq!(pending_commands(), [("task", "task.add")]);
+    fn every_action_names_a_command_the_vault_registers() {
+        let registry =
+            centraid_vault::commands::Registry::with_system_commands().expect("a registry");
+        let names = registry.names();
+        for row in ACTIONS {
+            assert!(
+                names.contains(&row.command),
+                "{} is not registered",
+                row.command
+            );
+        }
     }
 
     #[test]

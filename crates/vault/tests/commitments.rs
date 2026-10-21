@@ -772,6 +772,69 @@ fn script_every_search_relevant_command(scratch: &common::Scratch, registry: &Re
             ]}),
         );
     }
+    // Agenda's verbs, each row's last word being the verb under test.
+    run(
+        vault,
+        registry,
+        "container.create",
+        json!({"id": "pr", "kind": "project", "title": "Garden"}),
+    );
+    for (id, title) in [("t1", "Prune"), ("t2", "Sow"), ("t3", "Water")] {
+        run(
+            vault,
+            registry,
+            "task.add",
+            json!({"id": id, "title": title, "project_id": "pr", "due": "2026-03-02"}),
+        );
+    }
+    run(
+        vault,
+        registry,
+        "task.edit",
+        json!({"id": "t1", "description": "the roses"}),
+    );
+    run(
+        vault,
+        registry,
+        "task.organize",
+        json!({"id": "t2", "project_id": null}),
+    );
+    run(vault, registry, "task.cancel", json!({"id": "t3"}));
+    run(vault, registry, "task.complete", json!({"id": "t3"}));
+    for (id, title) in [("e1", "Dentist"), ("e2", "Standup"), ("e3", "Picnic")] {
+        run(
+            vault,
+            registry,
+            "event.propose",
+            json!({"id": id, "title": title, "starts": "2026-03-0".to_owned() + &id[1..] + "T10:00", "busy": false}),
+        );
+    }
+    run(
+        vault,
+        registry,
+        "event.edit",
+        json!({"id": "e1", "description": "bring the x-rays"}),
+    );
+    run(vault, registry, "event.cancel", json!({"id": "e2"}));
+    run(
+        vault,
+        registry,
+        "event.edit",
+        json!({"id": "e3", "attendees": ["cy"]}),
+    );
+    run(
+        vault,
+        registry,
+        "event.respond",
+        json!({"id": "e3", "person_id": "cy", "state": "accepted"}),
+    );
+    // A project's rename reaches the tasks filed under it; last of its kind.
+    run(
+        vault,
+        registry,
+        "entity.retitle",
+        json!({"id": "pr", "title": "Allotment"}),
+    );
     // Last, so no later command re-indexes it and hides a missing touch.
     run(
         vault,

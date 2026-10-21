@@ -13,7 +13,7 @@
 //! `task.complete` and `task.reopen` (a follow-up or a gift idea is a task, and
 //! completing one is the operation Tasks and automations share, so a repeating
 //! task gets its next occurrence) and `event.edit` (a date's reminder is its
-//! event's). [`ActionRow::pending_schema`] names them until that lane lands.
+//! event's).
 //!
 //! **An action says the state it wants.** The v0 actions `toggle-gift` and
 //! `toggle-reminder` flipped a state the caller had not read; a gift is a task,
@@ -123,9 +123,6 @@ pub struct ActionRow {
     pub action: &'static str,
     pub command: &'static str,
     pub confirm: Confirm,
-    /// The schema whose commands are not in this build yet, when there is one
-    /// (Agenda's lane: `task`, `event`).
-    pub pending_schema: Option<&'static str>,
 }
 
 const fn act(action: &'static str, command: &'static str) -> ActionRow {
@@ -133,7 +130,6 @@ const fn act(action: &'static str, command: &'static str) -> ActionRow {
         action,
         command,
         confirm: Confirm::None,
-        pending_schema: None,
     }
 }
 
@@ -142,7 +138,6 @@ const fn confirmed(action: &'static str, command: &'static str) -> ActionRow {
         action,
         command,
         confirm: Confirm::Required,
-        pending_schema: None,
     }
 }
 
@@ -160,25 +155,10 @@ pub const ACTIONS: [ActionRow; 25] = [
     act("move-person", "person.move"),
     act("add-note", "person.add_note"),
     act("add-task", "person.add_task"),
-    ActionRow {
-        action: "complete-task",
-        command: "task.complete",
-        confirm: Confirm::None,
-        pending_schema: Some("task"),
-    },
-    ActionRow {
-        action: "reopen-task",
-        command: "task.reopen",
-        confirm: Confirm::None,
-        pending_schema: Some("task"),
-    },
+    act("complete-task", "task.complete"),
+    act("reopen-task", "task.reopen"),
     act("add-important-date", "person.add_date"),
-    ActionRow {
-        action: "set-reminder",
-        command: "event.edit",
-        confirm: Confirm::None,
-        pending_schema: Some("event"),
-    },
+    act("set-reminder", "event.edit"),
     act("add-relationship", "person.add_relationship"),
     act("add-gift", "person.add_gift"),
     act("create-list", "container.create"),
@@ -228,16 +208,6 @@ pub fn invocation_for(
     input: BTreeMap<String, Value>,
 ) -> Option<Invocation> {
     action_row(action).map(|row| Invocation::new(row.command, invoke_key, input))
-}
-
-/// The commands People owes another lane, by schema. Empty means nothing is
-/// pending.
-#[must_use]
-pub fn pending_commands() -> Vec<(&'static str, &'static str)> {
-    ACTIONS
-        .iter()
-        .filter_map(|row| row.pending_schema.map(|schema| (schema, row.command)))
-        .collect()
 }
 
 #[cfg(test)]
@@ -311,18 +281,20 @@ mod tests {
         );
     }
 
-    /// Agenda's lane owes these three; the list shrinks by being wrong, and this
-    /// is what says so.
+    /// Every command an action names is one the vault registers, Agenda's three
+    /// included.
     #[test]
-    fn the_commands_owed_are_agendas() {
-        assert_eq!(
-            pending_commands(),
-            [
-                ("task", "task.complete"),
-                ("task", "task.reopen"),
-                ("event", "event.edit")
-            ]
-        );
+    fn every_action_names_a_command_the_vault_registers() {
+        let registry =
+            centraid_vault::commands::Registry::with_system_commands().expect("a registry");
+        let names = registry.names();
+        for row in ACTIONS {
+            assert!(
+                names.contains(&row.command),
+                "{} is not registered",
+                row.command
+            );
+        }
     }
 
     #[test]

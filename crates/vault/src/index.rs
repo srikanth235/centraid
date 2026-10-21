@@ -36,7 +36,18 @@ pub fn reindex(connection: &Connection, touched: &BTreeSet<String>) -> Result<()
     )?;
     let mut with = connection
         .prepare_cached("SELECT w.to_id FROM edge w WHERE w.from_id = ?1 AND w.rel = 'with'")?;
+    // The words of a task's project and an event's place are part of its own
+    // text: renaming either brings what is filed under it.
+    let mut dependents = connection.prepare_cached(
+        "SELECT id FROM task WHERE project_id = ?1
+         UNION ALL SELECT id FROM event WHERE place_id = ?1",
+    )?;
     for id in touched {
+        work.extend(
+            dependents
+                .query_map([id], |row| row.get::<_, String>(0))?
+                .collect::<rusqlite::Result<Vec<_>>>()?,
+        );
         let targets = about
             .query_map([id], |row| row.get::<_, String>(0))?
             .collect::<rusqlite::Result<Vec<_>>>()?;

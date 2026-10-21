@@ -301,18 +301,20 @@ impl Registry {
     /// The registry the phone serves: every command this build carries.
     pub fn with_system_commands() -> Result<Self> {
         let mut registry = Self::new();
-        let modules: [fn() -> Vec<CommandDefinition>; 11] = [
+        let modules: [fn() -> Vec<CommandDefinition>; 13] = [
             blob::definitions,
             contact_point::definitions,
             container::definitions,
             edge::definitions,
             entity::definitions,
+            event::definitions,
             flag::definitions,
             follow::definitions,
             locker::definitions,
             note::definitions,
             person::definitions,
             tag::definitions,
+            task::definitions,
         ];
         for definitions in modules {
             for definition in definitions() {

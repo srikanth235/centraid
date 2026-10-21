@@ -504,12 +504,13 @@ CREATE TABLE note (
 CREATE TABLE occurrence (
   series_id      TEXT NOT NULL REFERENCES event(id) ON DELETE CASCADE,
   original_start TEXT NOT NULL,
+  scope          TEXT NOT NULL DEFAULT 'occurrence' CHECK (scope IN ('occurrence','future')),
   cancelled      INTEGER NOT NULL DEFAULT 0 CHECK (cancelled IN (0,1)),
   starts         TEXT,
   ends           TEXT,
   title          TEXT,
   description    TEXT,
-  PRIMARY KEY (series_id, original_start)
+  PRIMARY KEY (series_id, original_start, scope)
 ) STRICT, WITHOUT ROWID;
 
 -- table origin on origin

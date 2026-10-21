@@ -30,9 +30,9 @@
 use rusqlite::{Connection, OptionalExtension};
 use serde_json::{Map, Value as Json};
 
-use crate::commands::contact_point;
 use crate::commands::entity::{self, trash_stamp};
 use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency};
+use crate::commands::{contact_point, event};
 use crate::error::{Result, VaultError};
 use crate::model::{DEFAULT_CALENDAR_ID, Kind};
 
@@ -85,6 +85,27 @@ pub struct SystemMap {
     /// Whether a record gone from a complete read may take its row away.
     pub removes: bool,
     pub defaults: Defaults,
+    /// Read what a record states into the form the vault holds it (a wall clock
+    /// and its zone become the instant), so the statement and the row compare
+    /// equal. A record it refuses is counted and left out.
+    pub shape: Shape,
+    /// What a row derives from what the source stated (a rule's support), run
+    /// after the fields are written.
+    pub settle: Settle,
+}
+
+/// See [`SystemMap::shape`].
+pub type Shape = fn(&mut Map<String, Json>) -> std::result::Result<(), String>;
+
+/// See [`SystemMap::settle`].
+pub type Settle = fn(&CommandCtx<'_, '_>, &str) -> Result<()>;
+
+fn as_stated(_: &mut Map<String, Json>) -> std::result::Result<(), String> {
+    Ok(())
+}
+
+fn nothing_to_settle(_: &CommandCtx<'_, '_>, _: &str) -> Result<()> {
+    Ok(())
 }
 
 impl SystemMap {
@@ -181,6 +202,8 @@ pub const SYSTEMS: &[SystemMap] = &[
         match_on: &["title"],
         removes: true,
         defaults: no_defaults,
+        shape: as_stated,
+        settle: nothing_to_settle,
     },
     SystemMap {
         system: "calendar",
@@ -188,22 +211,25 @@ pub const SYSTEMS: &[SystemMap] = &[
         kind: Kind::Event,
         fills: Some(Kind::Calendar),
         fields: &[
+            "description",
             "starts",
             "ends",
             "timing",
             "zone",
             "rule",
-            "rule_supported",
-            "status",
             "busy",
-            "url",
-            "reminders",
-            "description",
         ],
-        children: &[],
+        children: &[Child {
+            name: "overrides",
+            read: event::overrides_read,
+            canon: event::overrides_canon,
+            merge: event::overrides_merge,
+        }],
         match_on: &["title", "starts"],
         removes: true,
         defaults: calendar_defaults,
+        shape: event::shape,
+        settle: event::settle,
     },
     SystemMap {
         system: "files",
@@ -215,6 +241,8 @@ pub const SYSTEMS: &[SystemMap] = &[
         match_on: &["title"],
         removes: true,
         defaults: folder_defaults,
+        shape: as_stated,
+        settle: nothing_to_settle,
     },
     SystemMap {
         system: "health",
@@ -226,6 +254,8 @@ pub const SYSTEMS: &[SystemMap] = &[
         match_on: &["type_id", "starts"],
         removes: true,
         defaults: no_defaults,
+        shape: as_stated,
+        settle: nothing_to_settle,
     },
     SystemMap {
         system: "statement",
@@ -239,6 +269,8 @@ pub const SYSTEMS: &[SystemMap] = &[
         // contain this month's.
         removes: false,
         defaults: statement_defaults,
+        shape: as_stated,
+        settle: nothing_to_settle,
     },
 ];
 
@@ -246,7 +278,7 @@ pub const SYSTEMS: &[SystemMap] = &[
 // Values
 // ---------------------------------------------------------------------------
 
-fn to_sql(value: &Json) -> rusqlite::types::Value {
+pub(crate) fn to_sql(value: &Json) -> rusqlite::types::Value {
     match value {
         Json::Null => rusqlite::types::Value::Null,
         Json::Bool(flag) => rusqlite::types::Value::Integer(i64::from(*flag)),
@@ -407,6 +439,8 @@ struct Tally {
     unchanged: usize,
     trashed: usize,
     forgotten: usize,
+    /// Records the system's shape could not read (a time the zone skips).
+    refused: usize,
 }
 
 struct Record {
@@ -415,8 +449,12 @@ struct Record {
     fields: Map<String, Json>,
 }
 
-fn records_of(ctx: &CommandCtx<'_, '_>, map: &SystemMap) -> Result<Vec<Record>> {
-    let mut records = Vec::new();
+/// A record's identity: its id at the source and the phone it is on.
+type RecordKey = (String, Option<String>);
+
+/// The records a command carries, and the ones its system could not read.
+fn records_of(ctx: &CommandCtx<'_, '_>, map: &SystemMap) -> Result<(Vec<Record>, Vec<RecordKey>)> {
+    let (mut records, mut refused) = (Vec::new(), Vec::new());
     for raw in ctx
         .input
         .get("records")
@@ -424,7 +462,7 @@ fn records_of(ctx: &CommandCtx<'_, '_>, map: &SystemMap) -> Result<Vec<Record>> 
         .into_iter()
         .flatten()
     {
-        let fields = raw
+        let mut fields = raw
             .get("fields")
             .and_then(Json::as_object)
             .cloned()
@@ -435,7 +473,7 @@ fn records_of(ctx: &CommandCtx<'_, '_>, map: &SystemMap) -> Result<Vec<Record>> 
                 detail: format!("`{}` does not state `{unowned}`", map.system),
             });
         }
-        records.push(Record {
+        let record = Record {
             external_id: raw
                 .get("external_id")
                 .and_then(Json::as_str)
@@ -445,10 +483,15 @@ fn records_of(ctx: &CommandCtx<'_, '_>, map: &SystemMap) -> Result<Vec<Record>> 
                 .get("device_id")
                 .and_then(Json::as_str)
                 .map(str::to_owned),
-            fields,
-        });
+            fields: Map::new(),
+        };
+        if (map.shape)(&mut fields).is_err() {
+            refused.push((record.external_id, record.device_id));
+        } else {
+            records.push(Record { fields, ..record });
+        }
     }
-    Ok(records)
+    Ok((records, refused))
 }
 
 type SourceRow = (String, Option<String>, Json);
@@ -504,6 +547,7 @@ fn write_fields(
             )?;
         }
     }
+    (map.settle)(ctx, id)?;
     ctx.touch(id)
 }
 
@@ -553,6 +597,7 @@ fn add(
         ),
         rusqlite::params_from_iter(values),
     )?;
+    (map.settle)(ctx, &id)?;
     merge_children(ctx, map, &id, None, &record.fields)?;
     Ok(id)
 }
@@ -806,9 +851,14 @@ fn settle_absent(
 /// Apply one batch of records from a system.
 pub fn apply(ctx: &CommandCtx<'_, '_>, map: &SystemMap) -> Result<serde_json::Value> {
     let origin = upsert_origin(ctx, map)?;
-    let records = records_of(ctx, map)?;
-    let mut tally = Tally::default();
-    let mut seen = Vec::with_capacity(records.len());
+    let (records, refused) = records_of(ctx, map)?;
+    let mut tally = Tally {
+        refused: refused.len(),
+        ..Tally::default()
+    };
+    // A record the system could not read is still there: its row is not absent.
+    let mut seen = refused;
+    seen.reserve(records.len());
     for record in &records {
         merge_record(ctx, map, &origin, record, &mut tally)?;
         seen.push((record.external_id.clone(), record.device_id.clone()));
@@ -829,6 +879,7 @@ pub fn apply(ctx: &CommandCtx<'_, '_>, map: &SystemMap) -> Result<serde_json::Va
         "unchanged": tally.unchanged,
         "trashed": tally.trashed,
         "forgotten": tally.forgotten,
+        "refused": tally.refused,
     }))
 }
 
