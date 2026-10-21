@@ -43,10 +43,11 @@ import dev.centraid.shared.sync.rfc3339FromEpochMillis
  *   Waiting asks no task. The boards do not depend on the anchor, but they are
  *   asked with every window read, so a day step never draws a stale one.
  * - **Search** with a term: `agenda.search` ([SEARCH_LIMIT] hits) replaces the
- *   upcoming list, `tasks.search` adds the tasks it found, and the day context
- *   still decorates. The upcoming answer (and the boards) are asked again only
- *   when the ones the machine holds are not for this window — so a keystroke is
- *   three queries, and closing search re-folds what is held.
+ *   upcoming list, `tasks.search` adds the tasks it found and the projects
+ *   whose name it matched (Q-1128-1), and the day context still decorates.
+ *   The upcoming answer (and the boards) are asked again only when the ones
+ *   the machine holds are not for this window — so a keystroke is three
+ *   queries, and closing search re-folds what is held.
  *
  * ## The window is padded, and the fold cuts it
  *

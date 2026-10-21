@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -51,6 +52,7 @@ import centraid.screen.v1.AgendaMoreRow
 import centraid.screen.v1.AgendaNowLine
 import centraid.screen.v1.AgendaRowStatus
 import centraid.screen.v1.AgendaToolbar
+import centraid.screen.v1.SearchContainer
 import centraid.screen.v1.SearchField
 import centraid.screen.v1.TasksChrome
 import dev.centraid.android.kit.AppBand
@@ -63,6 +65,7 @@ import dev.centraid.android.kit.hueColor
 import dev.centraid.android.kit.KitStepper
 import dev.centraid.android.kit.RoomAction
 import dev.centraid.android.kit.RoomSearch
+import dev.centraid.android.kit.SearchContainerRow
 import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.SheetRow
 import dev.centraid.android.kit.SkeletonBar
@@ -303,8 +306,8 @@ private fun AgendaList(
 ) {
     val hasEmpty = data.empty != AgendaEmpty.AGENDA_EMPTY_NONE && data.empty != AgendaEmpty.AGENDA_EMPTY_UNSPECIFIED
     // THE BLOCKS DRAWN ABOVE THE DAYS (#1128): the absence notice and the
-    // Overdue group (Day on today), then a search's task hits.
-    val leads = data.notice != null || data.overdue != null || data.task_hits.isNotEmpty()
+    // Overdue group (Day on today), then a search's project containers and task hits.
+    val leads = data.notice != null || data.overdue != null || data.task_hits.isNotEmpty() || data.containers.isNotEmpty()
     // A DAY THAT OWES (Overdue, the notice) is never empty: the fold sends no
     // sentence for it, so an empty state here has nothing above it.
     if (hasEmpty) {
@@ -326,6 +329,7 @@ private fun AgendaList(
             if (offersImport) add("import")
             if (data.notice != null) add("notice")
             data.overdue?.let { addAll(taskGroupKeys(listOf(it))) }
+            data.containers.forEach { add(containerKey(it)) }
             addAll(taskGroupKeys(data.task_hits))
             data.days.forEach { section ->
                 if (section.month_heading != null) add("month-${section.day}")
@@ -366,6 +370,14 @@ private fun AgendaList(
                 AgendaNoticeView(notice) { onEvent(AgendaHomeEvent(notice_acted = AgendaHomeEvent.NoticeActed())) }
             }
         }
+        // A SEARCH'S PROJECT CONTAINERS (Q-1128-1): the kit's one container row, a tap
+        // `ProjectPicked` with the container's id, which `AgendaRouting` opens as To-do's
+        // project row. Under a search there is no Overdue group, so they lead.
+        items(data.containers, key = ::containerKey) { container ->
+            SearchContainerRow(container) {
+                onEvent(AgendaHomeEvent(project_picked = AgendaHomeEvent.ProjectPicked(project_id = container.id)))
+            }
+        }
         // OVERDUE (Day on today) AND A SEARCH'S TASK HITS: task groups, the Pages' own shape.
         taskGroups(
             listOfNotNull(data.overdue) + data.task_hits,
@@ -380,6 +392,9 @@ private fun AgendaList(
         item(key = "foot") { Spacer(Modifier.height(16.dp)) }
     }
 }
+
+/** A search container's list key, as Notes and Docs key theirs. */
+private fun containerKey(container: SearchContainer): String = "c-${container.entity}-${container.id}"
 
 /**
  * THE EMPTY STATE'S WORDS AND ITS ONE ACTION, whole-screen: it is sent only
