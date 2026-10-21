@@ -194,7 +194,7 @@ pub fn text_of(connection: &Connection, id: &str, kind: Kind) -> Result<Option<S
         )?,
         Kind::Thread => joined(
             connection,
-            "SELECT text FROM message WHERE thread_id = ?1 ORDER BY ordinal",
+            "SELECT text FROM message WHERE thread_id = ?1 AND role = 'user' ORDER BY ordinal",
             id,
         )?,
         Kind::Activity | Kind::Notebook | Kind::Folder | Kind::Album | Kind::Project => String::new(),

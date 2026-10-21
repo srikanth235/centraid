@@ -128,11 +128,15 @@ fn the_registry_carries_the_shared_verbs_and_lockers_and_nothing_else() {
         "rule.delete",
         "rule.apply",
         "measurement.record",
+        "thread.save_turn",
+        "thread.settle_proposal",
+        "thread.rename",
+        "thread.clear",
     ] {
         assert!(names.contains(&expected), "`{expected}` is not registered");
     }
     // A per-kind verb belongs to its app's lane; a lane's schema joins this list
-    // when its commands land (`note` is lane 2's, `event` and `task` lane 4's, `document`, `photo`, `album` and `place` lane 5's, `account`, `txn`, `budget`, `checkpoint`, `category`, `rule` and `measurement` lane 6's).
+    // when its commands land (`note` is lane 2's, `event` and `task` lane 4's, `document`, `photo`, `album` and `place` lane 5's, `account`, `txn`, `budget`, `checkpoint`, `category`, `rule` and `measurement` lane 6's, `thread` lane 7's).
     for name in &names {
         let schema = name.split('.').next().unwrap_or_default();
         assert!(
@@ -160,7 +164,8 @@ fn the_registry_carries_the_shared_verbs_and_lockers_and_nothing_else() {
                 "checkpoint",
                 "category",
                 "rule",
-                "measurement"
+                "measurement",
+                "thread"
             ]
             .contains(&schema),
             "`{name}` is not a shared verb or Locker's"

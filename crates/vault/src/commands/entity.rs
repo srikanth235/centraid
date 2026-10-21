@@ -357,6 +357,12 @@ fn pre_retitle(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     if found.kind == Kind::Flag {
         return Ok(Some("a flag is built in and keeps its name".to_owned()));
     }
+    if found.kind == Kind::Thread {
+        return Ok(Some(
+            "a chat is renamed with `thread.rename`, which keeps its name out of the journal"
+                .to_owned(),
+        ));
+    }
     // A photograph may have no title at all; nothing else may.
     if found.kind != Kind::Photo && ctx.required_str("title")?.trim().is_empty() {
         return Ok(Some(format!("a {} needs a name", found.kind.noun())));

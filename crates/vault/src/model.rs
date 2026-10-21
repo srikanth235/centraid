@@ -151,7 +151,8 @@ impl Kind {
 
     /// Whether a member's delete of this kind goes through the trash. The rest
     /// are deleted outright: a tag, a category or a calendar is not something
-    /// a member wants back after thirty days.
+    /// a member wants back after thirty days, and a chat is deleted when the member says so
+    /// (R-CHAT-8).
     #[must_use]
     pub const fn has_trash(self) -> bool {
         !matches!(
@@ -163,6 +164,7 @@ impl Kind {
                 | Self::ActivityKind
                 | Self::Relation
                 | Self::Calendar
+                | Self::Thread
         )
     }
 

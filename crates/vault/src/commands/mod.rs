@@ -61,6 +61,7 @@ pub mod place;
 pub mod rule;
 pub mod tag;
 pub mod task;
+pub mod thread;
 pub mod workout;
 
 use std::collections::BTreeMap;
@@ -308,7 +309,7 @@ impl Registry {
     /// The registry the phone serves: every command this build carries.
     pub fn with_system_commands() -> Result<Self> {
         let mut registry = Self::new();
-        let modules: [fn() -> Vec<CommandDefinition>; 19] = [
+        let modules: [fn() -> Vec<CommandDefinition>; 20] = [
             blob::definitions,
             contact_point::definitions,
             container::definitions,
@@ -328,6 +329,7 @@ impl Registry {
             rule::definitions,
             tag::definitions,
             task::definitions,
+            thread::definitions,
         ];
         for definitions in modules {
             for definition in definitions() {
