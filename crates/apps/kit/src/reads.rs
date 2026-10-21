@@ -138,6 +138,67 @@ impl FanOutBound {
 /// which is why the arithmetic above is invisible until an app raises it.
 pub const JOIN_FAN_OUT: FanOutBound = FanOutBound::new(500, 8);
 
+/// One table read for a set of ids: where it lives, what it selects, which
+/// column the ids are in and the two columns its keyset walks.
+///
+/// The paged door's one shape is a keyset page of one table, so what a screen
+/// shows about a window of rows (their kind rows, their edges, their tags) is
+/// one of these per table, each bounded by the window's ids.
+#[derive(Debug, Clone, Copy)]
+pub struct Read {
+    pub name: &'static str,
+    pub table: &'static str,
+    pub select: &'static str,
+    pub order: (&'static str, &'static str),
+    pub column: &'static str,
+}
+
+impl Read {
+    /// `column IN (…)` plus the handler's own predicate, walked to the end of the
+    /// kit's default fan-out. No ids is no read.
+    pub fn of(
+        &self,
+        door: &dyn PageDoor,
+        ids: &[String],
+        extra: Option<(&str, Vec<PageBindValue>)>,
+    ) -> KitResult<Vec<Row>> {
+        self.within(JOIN_FAN_OUT, door, ids, extra)
+    }
+
+    /// [`Self::of`] over a fan-out the caller states, for a window wider than
+    /// the default reaches (People's roster is declared 10,000 wide).
+    pub fn within(
+        &self,
+        bound: FanOutBound,
+        door: &dyn PageDoor,
+        ids: &[String],
+        extra: Option<(&str, Vec<PageBindValue>)>,
+    ) -> KitResult<Vec<Row>> {
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let fragment = in_list(self.column, ids)?;
+        let (predicate, bind) = match extra {
+            Some((clause, mut bind)) => {
+                bind.extend(fragment.bind);
+                (format!("{clause} AND {}", fragment.sql), bind)
+            }
+            None => (fragment.sql, fragment.bind),
+        };
+        read_pages(
+            door,
+            &PageQuery::new(
+                self.name,
+                self.select,
+                self.table,
+                crate::statement::PageOrder::asc(self.order.0, self.order.1),
+            )
+            .filter(&predicate, bind),
+            bound,
+        )
+    }
+}
+
 /// THE ROW A SCREEN WAS OPENED ON.
 ///
 /// Half the reads in these apps are "the one row this id names", and written out

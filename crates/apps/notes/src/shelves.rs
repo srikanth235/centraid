@@ -31,9 +31,10 @@ use centraid_apps_kit::statement::PageBindValue;
 use crate::Denial;
 use crate::journal::read_memo_ids;
 use crate::queries::{
-    LibraryData, LibraryRow, Read, WINDOW_DEFAULT, WINDOW_MIN, load_library, note_rows, notebooks,
+    LibraryData, LibraryRow, WINDOW_DEFAULT, WINDOW_MIN, load_library, note_rows, notebooks,
     pinned_ids, recent_statement, texts,
 };
+use centraid_apps_kit::reads::Read;
 
 /// How the library's shelf is ordered. PINNED NOTES LEAD under every order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

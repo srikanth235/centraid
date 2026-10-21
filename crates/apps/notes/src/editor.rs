@@ -16,7 +16,8 @@ use centraid_apps_kit::reads::PageDoor;
 use centraid_apps_kit::statement::PageBindValue;
 
 use crate::Denial;
-use crate::queries::{PINNED, Read, read_note};
+use crate::queries::{PINNED, read_note};
+use centraid_apps_kit::reads::Read;
 
 /// The editor's note.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]

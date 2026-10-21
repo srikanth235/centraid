@@ -2,53 +2,177 @@
   "manifestVersion": 1,
   "id": "people",
   "name": "People",
-  "description": "Your circle, remembered — a personal CRM projected from the canonical vault. people_profile keeps only the genuine 1:1 CRM decoration; interactions are core activities, tasks are schedule tasks, relationships are typed core links, and journal entries are knowledge notes. Lists, favorites, notes, important dates, and gift ideas reuse the vault's shared mechanisms too. Every write runs through a typed command — consent-checked and receipted. No data of its own — revoke the grant and the app goes dark.",
-  "version": "0.1.2",
+  "description": "Your circle, remembered — a personal CRM projected from the vault's own rows. A person is an entity with its columns (role, nickname, how you met, birthday, cadence); a touch is an activity with the person; a note, a journal entry and a gift idea or follow-up are a note or a task with an about edge; an important date other than the birthday is a yearly event about them; a relationship is a related edge; a list holds people with contains edges; the star is the shared flag. Last-contacted is computed from the touches. Every write runs through a typed command — the person's own (person.*) and the shared ones (entity.*, flag.*, container.*) — contract-checked and journalled.",
+  "version": "0.2.0",
   "iconKey": "Users",
   "colorKey": "violet",
   "vault": {
     "why": "Keeps light records on the people you care about and nudges you to stay in touch.",
     "scopes": [
-      { "schema": "people", "verbs": "read+act" },
-      { "schema": "core", "table": "party", "verbs": "read" },
-      { "schema": "core", "table": "vault", "verbs": "read" },
-      { "schema": "core", "table": "party_identifier", "verbs": "read" },
-      { "schema": "core", "table": "activity", "verbs": "read" },
-      { "schema": "core", "table": "link", "verbs": "read" },
-      { "schema": "core", "table": "content_item", "verbs": "read" },
-      { "schema": "core", "table": "tag", "verbs": "read" },
-      { "schema": "core", "table": "concept", "verbs": "read" },
-      { "schema": "core", "table": "concept_scheme", "verbs": "read" },
-      { "schema": "knowledge", "table": "annotation", "verbs": "read" },
-      { "schema": "knowledge", "table": "note", "verbs": "read" },
-      { "schema": "schedule", "table": "task", "verbs": "read" },
-      { "schema": "social", "table": "contact_channel", "verbs": "read" },
       {
-        "schema": "core",
-        "table": "merge_party",
+        "schema": "vault",
+        "table": "entity",
+        "verbs": "read"
+      },
+      {
+        "schema": "vault",
+        "table": "person",
+        "verbs": "read"
+      },
+      {
+        "schema": "vault",
+        "table": "contact_point",
+        "verbs": "read"
+      },
+      {
+        "schema": "vault",
+        "table": "edge",
+        "verbs": "read"
+      },
+      {
+        "schema": "vault",
+        "table": "concept",
+        "verbs": "read"
+      },
+      {
+        "schema": "vault",
+        "table": "container",
+        "verbs": "read"
+      },
+      {
+        "schema": "vault",
+        "table": "activity",
+        "verbs": "read"
+      },
+      {
+        "schema": "vault",
+        "table": "note",
+        "verbs": "read"
+      },
+      {
+        "schema": "vault",
+        "table": "event",
+        "verbs": "read"
+      },
+      {
+        "schema": "vault",
+        "table": "vault",
+        "verbs": "read"
+      },
+      {
+        "schema": "person",
+        "table": "add",
         "verbs": "act"
       },
       {
-        "schema": "core",
-        "table": "entity_revision",
-        "verbs": "read",
-        "rowFilter": [
-          {
-            "column": "entity_type",
-            "op": "eq",
-            "value": "people.person"
-          }
-        ],
-        "fieldMask": [
-          "revision_id",
-          "entity_type",
-          "entity_id",
-          "operation",
-          "snapshot_json",
-          "recorded_at",
-          "undo_until",
-          "undone_at"
-        ]
+        "schema": "person",
+        "table": "edit",
+        "verbs": "act"
+      },
+      {
+        "schema": "entity",
+        "table": "trash",
+        "verbs": "act"
+      },
+      {
+        "schema": "entity",
+        "table": "restore",
+        "verbs": "act"
+      },
+      {
+        "schema": "entity",
+        "table": "purge",
+        "verbs": "act"
+      },
+      {
+        "schema": "person",
+        "table": "log_interaction",
+        "verbs": "act"
+      },
+      {
+        "schema": "flag",
+        "table": "set",
+        "verbs": "act"
+      },
+      {
+        "schema": "flag",
+        "table": "clear",
+        "verbs": "act"
+      },
+      {
+        "schema": "person",
+        "table": "move",
+        "verbs": "act"
+      },
+      {
+        "schema": "person",
+        "table": "add_note",
+        "verbs": "act"
+      },
+      {
+        "schema": "person",
+        "table": "add_task",
+        "verbs": "act"
+      },
+      {
+        "schema": "task",
+        "table": "complete",
+        "verbs": "act"
+      },
+      {
+        "schema": "task",
+        "table": "reopen",
+        "verbs": "act"
+      },
+      {
+        "schema": "person",
+        "table": "add_date",
+        "verbs": "act"
+      },
+      {
+        "schema": "event",
+        "table": "edit",
+        "verbs": "act"
+      },
+      {
+        "schema": "person",
+        "table": "add_relationship",
+        "verbs": "act"
+      },
+      {
+        "schema": "person",
+        "table": "add_gift",
+        "verbs": "act"
+      },
+      {
+        "schema": "container",
+        "table": "create",
+        "verbs": "act"
+      },
+      {
+        "schema": "entity",
+        "table": "retitle",
+        "verbs": "act"
+      },
+      {
+        "schema": "person",
+        "table": "add_journal_entry",
+        "verbs": "act"
+      },
+      {
+        "schema": "person",
+        "table": "save_contact_point",
+        "verbs": "act"
+      },
+      {
+        "schema": "person",
+        "table": "remove_contact_point",
+        "verbs": "act"
+      },
+      {
+        "schema": "person",
+        "table": "merge",
+        "verbs": "act"
       }
     ]
   },
@@ -56,515 +180,785 @@
   "actions": [
     {
       "name": "add-person",
-      "description": "Add a person to your circle through people.add_person — mints a canonical core.party plus its people_profile, optionally filed into a list. Risk low.",
+      "description": "Add a person to your circle through person.add, optionally filed into a list. A cadence of 0 is no cadence.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "party_id": {
+          "id": {
             "type": "string",
             "minLength": 1,
-            "description": "The row id the seat minted for this write (#922 G2); omitted, the vault mints one."
+            "description": "The id the shell minted for this write (#922 G2); omitted, the vault mints one."
           },
-          "display_name": { "type": "string", "minLength": 1 },
-          "role": { "type": "string" },
-          "avatar_color": { "type": "string" },
-          "cadence_days": { "type": "integer", "minimum": 0 },
-          "list_id": { "type": "string", "minLength": 1 }
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "role": {
+            "type": "string"
+          },
+          "nickname": {
+            "type": "string"
+          },
+          "met": {
+            "type": "string"
+          },
+          "birthday": {
+            "type": "string",
+            "description": "MM-DD, or YYYY-MM-DD"
+          },
+          "cadence_days": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "list_id": {
+            "type": "string",
+            "minLength": 1
+          }
         },
-        "required": ["display_name", "cadence_days"],
+        "required": ["title"],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
         }
       }
     },
     {
       "name": "edit-person",
-      "description": "Revise a person's name, role line, nickname, avatar hue or how-you-met note through people.edit_person.",
+      "description": "Revise a person's name, role line, nickname, birthday, sort name, how-you-met note or cadence through person.edit. A key that is present is set (null clears it); a key that is absent is left alone.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "party_id": { "type": "string", "minLength": 1 },
-          "display_name": { "type": "string", "minLength": 1 },
-          "role": { "type": "string" },
-          "nickname": { "type": "string" },
-          "avatar_color": { "type": "string" },
-          "met": { "type": "string" }
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "sort_name": {
+            "type": "string"
+          },
+          "nickname": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          },
+          "met": {
+            "type": "string"
+          },
+          "birthday": {
+            "type": "string"
+          },
+          "cadence_days": {
+            "type": "integer",
+            "minimum": 0
+          }
         },
-        "required": ["party_id"],
+        "required": ["id"],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
         }
       }
     },
     {
       "name": "set-cadence",
-      "description": "Set how often you want to reach out to a person through people.set_cadence.",
+      "description": "Set how often you want to reach out to a person through person.edit; 0 is no cadence.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "party_id": { "type": "string", "minLength": 1 },
-          "cadence_days": { "type": "integer", "minimum": 0 }
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "cadence_days": {
+            "type": "integer",
+            "minimum": 0
+          }
         },
-        "required": ["party_id", "cadence_days"],
+        "required": ["id", "cadence_days"],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
         }
       }
     },
     {
       "name": "trash-person",
-      "description": "Move a People profile to reversible 30-day trash while preserving its canonical party and linked facts.",
+      "description": "Move a person to the 30-day trash through entity.trash; the notes, touches and yearly dates written about them alone go with them and come back with them, and a task about them stays.",
       "confirmation": "required",
       "input": {
         "type": "object",
         "properties": {
-          "party_id": { "type": "string", "minLength": 1 }
+          "id": {
+            "type": "string",
+            "minLength": 1
+          }
         },
-        "required": ["party_id"],
+        "required": ["id"],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
         }
       }
     },
     {
       "name": "restore-person",
-      "description": "Restore a People profile from its grace-window trash.",
+      "description": "Restore a trashed person, and what went with them, through entity.restore.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "party_id": { "type": "string", "minLength": 1 }
+          "id": {
+            "type": "string",
+            "minLength": 1
+          }
         },
-        "required": ["party_id"],
+        "required": ["id"],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
         }
       }
     },
     {
       "name": "purge-person",
-      "description": "Delete a trashed person forever through people.purge_person: the party, the profile, their dates, handles, channels, notes, interactions and gift ideas. Refused while money, messages or other lasting records still name them; a task about them stays as the member's own.",
+      "description": "Delete a trashed person forever through entity.purge: what went to the trash with them goes too; a task about them stays as the member's.",
       "confirmation": "required",
       "input": {
         "type": "object",
         "properties": {
-          "party_id": { "type": "string", "minLength": 1 }
+          "id": {
+            "type": "string",
+            "minLength": 1
+          }
         },
-        "required": ["party_id"],
+        "required": ["id"],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
-        }
-      }
-    },
-    {
-      "name": "undo-person",
-      "description": "Apply one People pre-mutation snapshot exactly once, restoring edits, cadence, or trash state.",
-      "confirmation": "none",
-      "input": {
-        "type": "object",
-        "properties": {
-          "party_id": { "type": "string", "minLength": 1 },
-          "revision_id": { "type": "string", "minLength": 1 }
-        },
-        "required": ["party_id", "revision_id"],
-        "additionalProperties": false
-      },
-      "output": {
-        "type": "object",
-        "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
         }
       }
     },
     {
       "name": "log-interaction",
-      "description": "Log a touch (message, call, met up, note) through people.log_interaction; stamps last-contacted so they drop off Reconnect.",
+      "description": "Log a touch (message, call, met up, note) through person.log_interaction: an activity with the person, and a note about it when you wrote something. It stamps last-contacted, which is computed from these.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "party_id": { "type": "string", "minLength": 1 },
-          "kind": { "type": "string", "minLength": 1 },
-          "text": { "type": "string" }
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "kind": {
+            "type": "string",
+            "minLength": 1
+          },
+          "text": {
+            "type": "string"
+          }
         },
-        "required": ["party_id", "kind"],
+        "required": ["id", "kind"],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
         }
       }
     },
     {
       "name": "star-person",
-      "description": "Favorite a person through people.star_person — the one canonical flags-scheme star, shared across your vault.",
+      "description": "Favorite a person through flag.set: the one canonical star, shared across your vault.",
       "confirmation": "none",
       "input": {
         "type": "object",
-        "properties": { "party_id": { "type": "string", "minLength": 1 } },
-        "required": ["party_id"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "flag": {
+            "type": "string",
+            "enum": ["starred"]
+          }
+        },
+        "required": ["id", "flag"],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
         }
       }
     },
     {
       "name": "unstar-person",
-      "description": "Remove a person's favorite star through people.unstar_person.",
+      "description": "Remove a person's favorite star through flag.clear.",
       "confirmation": "none",
       "input": {
         "type": "object",
-        "properties": { "party_id": { "type": "string", "minLength": 1 } },
-        "required": ["party_id"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "flag": {
+            "type": "string",
+            "enum": ["starred"]
+          }
+        },
+        "required": ["id", "flag"],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
         }
       }
     },
     {
       "name": "move-person",
-      "description": "Move a person into a list through people.move_person — omit list_id to un-list them.",
+      "description": "Move a person into a list through person.move; omit list_id to un-list them. A person is in one list at a time.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "party_id": { "type": "string", "minLength": 1 },
-          "list_id": { "type": "string", "minLength": 1 }
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "list_id": {
+            "type": "string",
+            "minLength": 1
+          }
         },
-        "required": ["party_id"],
+        "required": ["id"],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
         }
       }
     },
     {
       "name": "add-note",
-      "description": "Add a note about a person through people.add_note — kept as a searchable annotation on their party.",
+      "description": "Add a note about a person through person.add_note: a note with an about edge, found with them in search.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "party_id": { "type": "string", "minLength": 1 },
-          "text": { "type": "string", "minLength": 1 }
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1
+          }
         },
-        "required": ["party_id", "text"],
+        "required": ["id", "text"],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
         }
       }
     },
     {
       "name": "add-task",
-      "description": "Add a follow-up task tied to a person through people.add_task.",
+      "description": "Add a follow-up task about a person through person.add_task.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "party_id": { "type": "string", "minLength": 1 },
-          "text": { "type": "string", "minLength": 1 }
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1
+          }
         },
-        "required": ["party_id", "text"],
+        "required": ["id", "text"],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
         }
       }
     },
     {
       "name": "complete-task",
-      "description": "Complete a person task through people.complete_task — the one completion operation Tasks and automations also call, so a repeating task gets its next occurrence and the successor keeps the person it is about.",
+      "description": "Complete a task about a person through task.complete, the one completion operation Tasks and automations also call; a gift idea is such a task.",
       "confirmation": "none",
       "input": {
         "type": "object",
-        "properties": { "task_id": { "type": "string", "minLength": 1 } },
-        "required": ["task_id"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["id"],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
         }
       }
     },
     {
       "name": "reopen-task",
-      "description": "Reopen a completed person task through people.reopen_task. Not a toggle: the outcome does not depend on a state the caller did not read.",
+      "description": "Reopen a completed task about a person through task.reopen; a gift idea given is such a task.",
       "confirmation": "none",
       "input": {
         "type": "object",
-        "properties": { "task_id": { "type": "string", "minLength": 1 } },
-        "required": ["task_id"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["id"],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
         }
       }
     },
     {
       "name": "add-important-date",
-      "description": "Add an important date (birthday, anniversary…) through people.add_important_date; birthdays auto-create their reminder. month_day is MM-DD.",
+      "description": "Add an important date through person.add_date. A birthday is the person's own column; any other date is a yearly all-day event about them. month_day is MM-DD.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "party_id": { "type": "string", "minLength": 1 },
-          "label": { "type": "string", "minLength": 1 },
-          "month_day": { "type": "string", "pattern": "^\\d{2}-\\d{2}$" },
-          "reminder_on": { "type": "boolean" }
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1
+          },
+          "month_day": {
+            "type": "string",
+            "pattern": "^(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\\d|3[01])$"
+          },
+          "reminder_on": {
+            "type": "boolean"
+          }
         },
-        "required": ["party_id", "label", "month_day"],
+        "required": ["id", "label", "month_day"],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
         }
       }
     },
     {
-      "name": "toggle-reminder",
-      "description": "Turn a date's reminder on or off through people.toggle_reminder.",
+      "name": "set-reminder",
+      "description": "Turn a date's reminder on or off through event.edit: the reminders are the event's, in minutes before it starts.",
       "confirmation": "none",
       "input": {
         "type": "object",
-        "properties": { "date_id": { "type": "string", "minLength": 1 } },
-        "required": ["date_id"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "reminders": {
+            "type": ["array", "null"],
+            "items": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "required": ["id", "reminders"],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
         }
       }
     },
     {
       "name": "add-relationship",
-      "description": "Record a typed core.link to a related canonical party through people.add_relationship; related_party_id reuses an existing party.",
+      "description": "Record a related edge to another person through person.add_relationship, labelled by how they are related; related_id reuses a person, else one of that name is reused or founded (a pet is a person of form pet whose role is its species).",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "party_id": { "type": "string", "minLength": 1 },
-          "name": { "type": "string", "minLength": 1 },
-          "kind": { "type": "string", "minLength": 1 },
-          "pet": { "type": "string" },
-          "related_party_id": { "type": "string", "minLength": 1 }
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "kind": {
+            "type": "string",
+            "minLength": 1
+          },
+          "pet": {
+            "type": "string"
+          },
+          "related_id": {
+            "type": "string",
+            "minLength": 1
+          }
         },
-        "required": ["party_id", "name", "kind"],
+        "required": ["id", "name", "kind"],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
         }
       }
     },
     {
       "name": "add-gift",
-      "description": "Add a gift idea for a person through people.add_gift.",
+      "description": "Add a gift idea for a person through person.add_gift: a task about them tagged gift.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "party_id": { "type": "string", "minLength": 1 },
-          "text": { "type": "string", "minLength": 1 }
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1
+          }
         },
-        "required": ["party_id", "text"],
+        "required": ["id", "text"],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
-        }
-      }
-    },
-    {
-      "name": "toggle-gift",
-      "description": "Flip a gift between idea and given through people.toggle_gift.",
-      "confirmation": "none",
-      "input": {
-        "type": "object",
-        "properties": { "gift_id": { "type": "string", "minLength": 1 } },
-        "required": ["gift_id"],
-        "additionalProperties": false
-      },
-      "output": {
-        "type": "object",
-        "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
         }
       }
     },
     {
       "name": "create-list",
-      "description": "Create a list (a SKOS concept in your lists scheme) through people.create_list, like a Docs folder.",
+      "description": "Create a list through container.create (kind list), like a Docs folder.",
       "confirmation": "none",
       "input": {
         "type": "object",
-        "properties": { "name": { "type": "string", "minLength": 1 } },
-        "required": ["name"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The id the shell minted for this write (#922 G2); omitted, the vault mints one."
+          },
+          "kind": {
+            "type": "string",
+            "enum": ["list"]
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["kind", "title"],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
         }
       }
     },
     {
       "name": "rename-list",
-      "description": "Rename a list through people.rename_list.",
+      "description": "Rename a list through entity.retitle.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "list_id": { "type": "string", "minLength": 1 },
-          "name": { "type": "string", "minLength": 1 }
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          }
         },
-        "required": ["list_id", "name"],
+        "required": ["id", "title"],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
         }
       }
     },
     {
       "name": "delete-list",
-      "description": "Delete an empty list through people.delete_list (move its people out first).",
+      "description": "Move a list to the trash through entity.trash; the people in it are not touched and are in it again if it is restored.",
       "confirmation": "none",
       "input": {
         "type": "object",
-        "properties": { "list_id": { "type": "string", "minLength": 1 } },
-        "required": ["list_id"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["id"],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
         }
       }
     },
     {
       "name": "add-journal-entry",
-      "description": "Add an owner-level journal entry with a mood and a line about your day through people.add_journal_entry.",
+      "description": "Add an owner-level journal entry with a mood and a line about your day through person.add_journal_entry: a note about you, titled by the mood, filed on its own day.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "mood": { "type": "string", "minLength": 1 },
-          "text": { "type": "string", "minLength": 1 },
-          "entry_date": { "type": "string" },
+          "mood": {
+            "type": "string",
+            "minLength": 1
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "entry_date": {
+            "type": "string"
+          },
           "tz": {
             "type": "string",
-            "minLength": 1,
-            "description": "IANA zone the member is in: the entry is filed on entry_date (or on today) in this zone, so east of UTC+11:59 today's entry is not filed under tomorrow. Absent, the entry is dated by UTC."
+            "minLength": 1
           }
         },
         "required": ["mood", "text"],
@@ -573,104 +967,127 @@
       "output": {
         "type": "object",
         "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
         }
       }
     },
     {
       "name": "save-contact-channel",
-      "description": "Create or edit a normalized phone, email, address, or handle, including label, preferred status, provenance, and duplicate warnings.",
+      "description": "Create or edit a phone, email, address, link or handle through person.save_contact_point, with label and preferred status (one preferred per kind). The same value in another spelling is the same point.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "channel_id": { "type": "string", "minLength": 1 },
-          "party_id": { "type": "string", "minLength": 1 },
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "point_id": {
+            "type": "string",
+            "minLength": 1
+          },
           "kind": {
             "type": "string",
-            "enum": ["phone", "email", "address", "handle"]
+            "enum": ["phone", "email", "address", "url", "handle"]
           },
-          "label": { "type": "string" },
-          "value": { "type": "string", "minLength": 1 },
-          "preferred": { "type": "boolean" },
-          "provenance": { "type": "object" }
+          "label": {
+            "type": ["string", "null"]
+          },
+          "value": {
+            "type": "string",
+            "minLength": 1
+          },
+          "preferred": {
+            "type": "boolean"
+          }
         },
-        "required": ["party_id", "kind", "value"],
+        "required": ["id", "kind", "value"],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
         }
       }
     },
     {
       "name": "delete-contact-channel",
-      "description": "Delete one contact channel with a durable one-shot undo revision.",
+      "description": "Delete one contact point through person.remove_contact_point.",
       "confirmation": "required",
       "input": {
         "type": "object",
         "properties": {
-          "channel_id": { "type": "string", "minLength": 1 }
+          "point_id": {
+            "type": "string",
+            "minLength": 1
+          }
         },
-        "required": ["channel_id"],
+        "required": ["point_id"],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
-        }
-      }
-    },
-    {
-      "name": "undo-contact-channel",
-      "description": "Restore a contact channel edit or deletion from its one-shot revision.",
-      "confirmation": "none",
-      "input": {
-        "type": "object",
-        "properties": {
-          "channel_id": { "type": "string", "minLength": 1 },
-          "revision_id": { "type": "string", "minLength": 1 }
-        },
-        "required": ["channel_id", "revision_id"],
-        "additionalProperties": false
-      },
-      "output": {
-        "type": "object",
-        "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
         }
       }
     },
     {
       "name": "merge-people",
-      "description": "Fold a duplicate person into a survivor via core.merge_party — every FK re-points and the merged party is deleted. Irreversible; confirm-gated.",
+      "description": "Fold a duplicate person into a survivor through person.merge: every reference re-points and the merged person is purged. Irreversible.",
       "confirmation": "required",
       "input": {
         "type": "object",
         "properties": {
-          "source_party_id": { "type": "string", "minLength": 1 },
-          "target_party_id": { "type": "string", "minLength": 1 }
+          "from": {
+            "type": "string",
+            "minLength": 1
+          },
+          "into": {
+            "type": "string",
+            "minLength": 1
+          }
         },
-        "required": ["source_party_id", "target_party_id"],
+        "required": ["from", "into"],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
         }
       }
     }
@@ -678,40 +1095,62 @@
   "queries": [
     {
       "name": "people",
-      "description": "The people window as a bounded recent view: people.profile rows (each a 1:1 enrichment of a core.party), newest first, decorated with name, list, favorite star, active reminder dates and whether they are linked to a vault of their own (`linked`, `vault_count`), plus the lists. `links_available` is false when the sharing reads are denied — `linked` is then null and no Linked/Unlinked chip is honest to draw. `truncated` means older people exist beyond the window.",
+      "description": "The people window as a bounded recent view, newest first, decorated with the star, the list, the reminders that are on and when they were last touched (computed from the touches); the owner and pets are not in it.",
       "input": {
         "type": "object",
         "properties": {
-          "limit": { "type": "integer", "minimum": 20, "maximum": 10000 }
+          "limit": {
+            "type": "integer",
+            "minimum": 20,
+            "maximum": 10000
+          }
         },
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "people": { "type": "array" },
-          "lists": { "type": "array" },
-          "truncated": { "type": "boolean" },
-          "window": { "type": "integer" },
-          "links_available": { "type": "boolean" },
-          "vaultDenied": { "type": "object" }
+          "people": {
+            "type": "array"
+          },
+          "lists": {
+            "type": "array"
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "window": {
+            "type": "integer"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
         }
       }
     },
     {
       "name": "person",
-      "description": "One person's full profile: name, role, cadence, last-contacted, how-you-met, list, favorite, contact identifiers, relationships, important dates, notes, tasks, gift ideas and interaction history.",
+      "description": "One person's sheet: the roster row, nickname, how you met, contact points with who else holds the same value, dates, notes and the touch log.",
       "input": {
         "type": "object",
-        "properties": { "party_id": { "type": "string", "minLength": 1 } },
+        "properties": {
+          "party_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
         "required": ["party_id"],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "person": { "type": ["object", "null"] },
-          "vaultDenied": { "type": "object" }
+          "person": {
+            "type": ["object", "null"]
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
         }
       }
     },
@@ -726,44 +1165,46 @@
       "output": {
         "type": "object",
         "properties": {
-          "reconnect": { "type": "array" },
-          "upcoming": { "type": "array" },
-          "recent": { "type": "array" },
-          "counts": { "type": "object" },
-          "vaultDenied": { "type": "object" }
-        }
-      }
-    },
-    {
-      "name": "journal",
-      "description": "The journal newest first: owner entries (mood + a line) folded together with logged interactions as automatic entries.",
-      "input": {
-        "type": "object",
-        "properties": {},
-        "additionalProperties": false
-      },
-      "output": {
-        "type": "object",
-        "properties": {
-          "entries": { "type": "array" },
-          "vaultDenied": { "type": "object" }
+          "reconnect": {
+            "type": "array"
+          },
+          "upcoming": {
+            "type": "array"
+          },
+          "recent": {
+            "type": "array"
+          },
+          "counts": {
+            "type": "object"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
         }
       }
     },
     {
       "name": "search",
-      "description": "Full-text people search across three vault FTS5 indexes — the party's name, the role line, and the owner's notes — returning ranked matches in the people row shape plus a hit snippet.",
+      "description": "Full-text people search over the one vault index — name, nickname, role, how you met, contact points and the notes about them — ranked, with a snippet.",
       "input": {
         "type": "object",
-        "properties": { "term": { "type": "string" } },
+        "properties": {
+          "term": {
+            "type": "string"
+          }
+        },
         "required": ["term"],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "people": { "type": "array" },
-          "vaultDenied": { "type": "object" }
+          "people": {
+            "type": "array"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
         }
       }
     },
@@ -778,27 +1219,12 @@
       "output": {
         "type": "object",
         "properties": {
-          "people": { "type": "array" },
-          "vaultDenied": { "type": "object" }
-        }
-      }
-    },
-    {
-      "name": "history",
-      "description": "Durable pre-mutation history for one People profile, including one-shot undo state.",
-      "input": {
-        "type": "object",
-        "properties": {
-          "party_id": { "type": "string", "minLength": 1 }
-        },
-        "required": ["party_id"],
-        "additionalProperties": false
-      },
-      "output": {
-        "type": "object",
-        "properties": {
-          "revisions": { "type": "array" },
-          "vaultDenied": { "type": "object" }
+          "people": {
+            "type": "array"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
         }
       }
     }
@@ -810,8 +1236,14 @@
       "type": "segmented",
       "default": "wide",
       "options": [
-        { "value": "narrow", "label": "Narrow" },
-        { "value": "wide", "label": "Wide" }
+        {
+          "value": "narrow",
+          "label": "Narrow"
+        },
+        {
+          "value": "wide",
+          "label": "Wide"
+        }
       ]
     },
     {
@@ -820,12 +1252,30 @@
       "type": "swatch",
       "default": "#DD4F6B",
       "options": [
-        { "value": "#DD4F6B", "label": "Rose" },
-        { "value": "#7C5BD9", "label": "Violet" },
-        { "value": "#4E68DD", "label": "Indigo" },
-        { "value": "#2EA098", "label": "Teal" },
-        { "value": "#C9803A", "label": "Amber" },
-        { "value": "#5C677D", "label": "Slate" }
+        {
+          "value": "#DD4F6B",
+          "label": "Rose"
+        },
+        {
+          "value": "#7C5BD9",
+          "label": "Violet"
+        },
+        {
+          "value": "#4E68DD",
+          "label": "Indigo"
+        },
+        {
+          "value": "#2EA098",
+          "label": "Teal"
+        },
+        {
+          "value": "#C9803A",
+          "label": "Amber"
+        },
+        {
+          "value": "#5C677D",
+          "label": "Slate"
+        }
       ]
     },
     {
@@ -834,8 +1284,14 @@
       "type": "segmented",
       "default": "grid",
       "options": [
-        { "value": "grid", "label": "Grid" },
-        { "value": "list", "label": "List" }
+        {
+          "value": "grid",
+          "label": "Grid"
+        },
+        {
+          "value": "list",
+          "label": "List"
+        }
       ]
     }
   ],

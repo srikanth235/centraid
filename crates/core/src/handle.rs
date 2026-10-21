@@ -2245,14 +2245,14 @@ mod tests {
         let request = wire::Request {
             kind: Some(wire::request::Kind::Page(wire::PageRequest {
                 query: Some(wire::PageQuery {
-                    name: "parties".to_owned(),
-                    select: vec!["party_id".to_owned(), "created_at".to_owned()],
-                    from: "core_party".to_owned(),
+                    name: "people".to_owned(),
+                    select: vec!["id".to_owned(), "created_at".to_owned()],
+                    from: "entity".to_owned(),
                     r#where: None,
                     bind: Vec::new(),
                     order: Some(wire::PageOrder {
                         sort_column: "created_at".to_owned(),
-                        pk_column: "party_id".to_owned(),
+                        pk_column: "id".to_owned(),
                         descending: false,
                     }),
                     with_held_thumbnail: false,
@@ -2270,7 +2270,7 @@ mod tests {
         else {
             panic!("a page comes back");
         };
-        // The founded vault has its owner party and nothing else, so the rows
+        // The founded vault has its owner and nothing else, so the rows
         // ended and `next` is ABSENT — never a cursor past the end.
         assert!(!page.rows.is_empty());
         assert!(page.next.is_none());
@@ -2297,8 +2297,8 @@ mod tests {
             .handle
             .call(&wire::Request {
                 kind: Some(wire::request::Kind::Command(wire::Command {
-                    name: "core.add_party".to_owned(),
-                    input: br#"{"display_name":"Ada Lovelace"}"#.to_vec(),
+                    name: "person.add".to_owned(),
+                    input: br#"{"title":"Ada Lovelace"}"#.to_vec(),
                     invoke_key: "w2-change-event".to_owned(),
                     ..Default::default()
                 })),
@@ -2316,7 +2316,7 @@ mod tests {
             }
         }
         assert!(
-            tables.iter().any(|table| table == "core_party"),
+            tables.iter().any(|table| table == "person"),
             "the write produced no change event for the table it wrote: {tables:?}"
         );
     }
@@ -2328,8 +2328,8 @@ mod tests {
             .handle
             .call(&wire::Request {
                 kind: Some(wire::request::Kind::Command(wire::Command {
-                    name: "people.add_person".to_owned(),
-                    input: br#"{"display_name":"Ada","cadence_days":0}"#.to_vec(),
+                    name: "person.add".to_owned(),
+                    input: br#"{"title":"Ada","cadence_days":0}"#.to_vec(),
                     invoke_key: "w1-principal-from-the-handle".to_owned(),
                     // ABSENT, and that is the assertion.
                     principal: None,
@@ -2361,8 +2361,8 @@ mod tests {
                 .handle
                 .call(&wire::Request {
                     kind: Some(wire::request::Kind::Command(wire::Command {
-                        name: "people.add_person".to_owned(),
-                        input: br#"{"display_name":"Grace","cadence_days":0}"#.to_vec(),
+                        name: "person.add".to_owned(),
+                        input: br#"{"title":"Grace","cadence_days":0}"#.to_vec(),
                         invoke_key: key.to_owned(),
                         principal,
                         ..Default::default()

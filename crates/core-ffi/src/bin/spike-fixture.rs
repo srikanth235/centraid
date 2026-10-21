@@ -32,8 +32,8 @@ fn main() {
             vault.found("Spike", "Owner")?;
             // THROUGH THE REAL COMMAND PLANE. `sql-confinement` refuses SQL in
             // this crate, and the refusal improved the fixture: the rows the
-            // spike pages over now have the `core_entity` siblings and the
-            // `row_version` a real write produces.
+            // spike pages over now have the kind-row siblings and the
+            // `version` a real write produces.
             let registry = centraid_vault::commands::Registry::with_system_commands()?;
             let principal = centraid_vault::Principal::owner("spike-device");
             for index in 0..200 {
@@ -41,11 +41,8 @@ fn main() {
                     &registry,
                     &principal,
                     &centraid_vault::commands::Command::new(
-                        "core.add_party",
-                        serde_json::json!({
-                            "display_name": format!("Party {index}"),
-                            "kind": "person"
-                        }),
+                        "person.add",
+                        serde_json::json!({ "title": format!("Person {index}") }),
                     ),
                 )?;
             }
@@ -60,13 +57,13 @@ fn main() {
             kind: Some(wire::request::Kind::Page(wire::PageRequest {
                 query: Some(wire::PageQuery {
                     name: "spike".to_owned(),
-                    select: vec!["party_id".to_owned(), "created_at".to_owned()],
-                    from: "core_party".to_owned(),
+                    select: vec!["id".to_owned(), "created_at".to_owned()],
+                    from: "entity".to_owned(),
                     r#where: None,
                     bind: Vec::new(),
                     order: Some(wire::PageOrder {
                         sort_column: "created_at".to_owned(),
-                        pk_column: "party_id".to_owned(),
+                        pk_column: "id".to_owned(),
                         descending: false,
                     }),
                     with_held_thumbnail: false,

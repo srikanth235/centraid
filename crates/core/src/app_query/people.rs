@@ -7,16 +7,13 @@
 //! in the request's zone ([`super::zone_of`]'s rule) and `now_ms` is the vault
 //! clock's instant — never the host's.
 //!
-//! # THE ROSTER IS THE PROFILES, NOT EVERY PARTY
+//! # THE ROSTER IS THE CIRCLE
 //!
-//! A party with no `people_profile` row — the owner, a face-review party made
-//! by `core.add_party`, an organisation — is not in the roster, the dashboard
-//! or the sheet. That is kept rather than widened: a profile-less party has no
-//! cadence, no trash state and no row `people.edit_person` or
-//! `people.trash_person` would accept, so a roster that drew it would draw a
-//! row every action on the sheet refuses. A person made anywhere else becomes
-//! a People row by being made with `people.add_person` (which takes the
-//! `display_name` and mints the party with its profile).
+//! Every live person of the vault but the owner and a pet is a People row, and
+//! the sheet, the dashboard and the search answer for the same people
+//! (`people::queries::read_circle`). A person made anywhere (a followed contact,
+//! a relationship, the assistant) is a row the sheet's actions accept, because
+//! those are `person.*` and the shared verbs.
 
 use centraid_api_proto::core_v1 as wire;
 use centraid_apps_agenda::local;
@@ -125,7 +122,6 @@ pub(super) fn touch(
                 party_id: card.party_id,
                 name: card.name,
                 role: card.role,
-                avatar_color: card.avatar_color,
             };
             Answer::PeopleTouch(wire::PeopleTouch {
                 reconnect: data.reconnect.iter().cloned().map(card).collect(),
@@ -160,7 +156,6 @@ pub(super) fn touch(
                         occurred_local_day: clock.local_day(&row.occurred_at),
                         occurred_at: row.occurred_at,
                         name: row.card.name,
-                        avatar_color: row.card.avatar_color,
                     })
                     .collect(),
                 count_all: count(data.counts.all),
@@ -221,13 +216,12 @@ pub(super) fn trash(
     })
 }
 
-/// `people.search`: the `core.party` name index, ranked, folded to the live
-/// People profiles among the hits.
+/// `people.search`: the vault's one index over `person`, ranked, folded to the
+/// live circle among the hits.
 ///
-/// v0 asked three indexes (name, role, notes). The one `core.party` index now
-/// folds the nickname, role, where the person was met, their channels and their
-/// memos (rung 013, #1097), so it is the whole search here and
-/// [`people::roster::rank_hits`] ranks one list.
+/// The index holds a person's nickname, role, where they were met, their contact
+/// points and the notes about them beside their name, so it is the whole search
+/// and [`people::roster::rank_hits`] ranks one list.
 pub(super) fn search(
     vault: &Vault,
     door: &VaultDoor<'_>,
@@ -253,8 +247,8 @@ pub(super) fn search(
         .unwrap_or(usize::MAX)
         .min(people::queries::SEARCH_LIMIT);
     // THE CORRECTION RUNS ON THE ANSWER THE MEMBER SEES (#1097, R4, R8): the
-    // live People profiles among the hits, not the raw hits — a party that is
-    // only a bare party is a hit of the index and no person here.
+    // live circle among the hits, not the raw hits — the owner and a pet are
+    // hits of the index and no one here.
     let loaded = vault.read(|connection| {
         let index = match centraid_search::SqliteDoor::open(connection) {
             Ok(index) => index,
@@ -270,15 +264,11 @@ pub(super) fn search(
         };
         Ok(Ok(corrected_search(
             &search,
-            &[people::queries::PARTY_TARGET_TYPE],
+            &["person"],
             term,
             |data: &people::roster::SearchData| data.people.is_empty(),
             |term| {
-                let request = centraid_search::SearchRequest::new(
-                    people::queries::PARTY_TARGET_TYPE,
-                    term,
-                    limit,
-                );
+                let request = centraid_search::SearchRequest::new("person", term, limit);
                 let hits = match centraid_search::Search::query(
                     &search,
                     &centraid_search::Principal::Owner,
@@ -307,7 +297,7 @@ pub(super) fn search(
                     // reports it.
                     Err(_) => Vec::new(),
                 };
-                let ranked = people::roster::rank_hits(&hits, &[], &[]);
+                let ranked = people::roster::rank_hits(&hits);
                 people::roster::load_search(door, &ranked)
             },
         )))
@@ -401,7 +391,6 @@ fn row_to_wire_with(
         party_id: row.party_id,
         name: row.name,
         role: row.role,
-        avatar_color: row.avatar_color,
         cadence_days: row.cadence_days,
         last_contacted_at: row.last_contacted_at,
         created_at: row.created_at,
@@ -415,8 +404,7 @@ fn row_to_wire_with(
 }
 
 fn sheet_to_wire(person: people::person::Person, clock: &Clock) -> wire::PeopleSheet {
-    let profile = person.profile;
-    let dates: Vec<wire::PeopleDate> = profile
+    let dates: Vec<wire::PeopleDate> = person
         .dates
         .into_iter()
         .map(|date| {
@@ -434,78 +422,39 @@ fn sheet_to_wire(person: people::person::Person, clock: &Clock) -> wire::PeopleS
         .filter(|date| date.reminder_on)
         .cloned()
         .collect();
+    let header = person.profile;
     let cadence = phone::cadence(
-        profile.cadence_days,
-        profile.last_contacted_at.as_deref(),
-        &profile.created_at,
+        header.cadence_days,
+        header.last_contacted_at.as_deref(),
+        &header.created_at,
         clock.now_ms,
     );
-    let party_id = profile.party_id.clone();
-    let (touches_known, touches) = match person.links {
-        people::ReadState::Ready(links) => (
-            true,
-            links
-                .interactions
-                .into_iter()
-                .map(|touch| wire::PeopleTouchEntry {
-                    interaction_id: touch.interaction_id,
-                    party_id: party_id.clone(),
-                    kind: touch.kind,
-                    text: touch.text,
-                    occurred_local_day: clock.local_day(&touch.occurred_at),
-                    occurred_at: touch.occurred_at,
-                    name: String::new(),
-                    avatar_color: None,
-                })
-                .collect(),
-        ),
-        people::ReadState::Loading | people::ReadState::Denied(_) => (false, Vec::new()),
-    };
-    // THE CONTACT READING (P1): a refused `social.contact_channel` is UNKNOWN,
-    // never an empty rail — `channels_known` says which, and the rest of the
-    // sheet stands.
-    let (channels_known, channels) = match person.contact {
-        people::ReadState::Ready(contact) => (
-            true,
-            contact
-                .into_iter()
-                .map(|channel| wire::PeopleChannel {
-                    channel_id: channel.channel_id,
-                    kind: channel.kind,
-                    label: channel.label,
-                    value: channel.value,
-                    preferred: channel.preferred,
-                    duplicate_names: channel.duplicate_names,
-                })
-                .collect(),
-        ),
-        people::ReadState::Loading | people::ReadState::Denied(_) => (false, Vec::new()),
-    };
     wire::PeopleSheet {
         person: Some(row_to_wire_with(
-            RosterRow {
-                party_id: profile.party_id,
-                name: profile.name,
-                role: profile.role,
-                avatar_color: profile.avatar_color,
-                cadence_days: profile.cadence_days,
-                last_contacted_at: profile.last_contacted_at,
-                created_at: profile.created_at,
-                list_id: profile.list_id,
-                starred: profile.starred,
-                reminders: Vec::new(),
-                snippet: None,
-            },
+            header,
             cadence,
             &reminders,
             Some(&clock.zone),
         )),
-        nickname: profile.nickname,
-        met: profile.met,
-        channels_known,
-        channels,
+        nickname: person.nickname,
+        met: person.met,
+        // Both readings are the sheet's own tables now (#1135): they are
+        // always known, and the fields stay for the shells that read them.
+        channels_known: true,
+        channels: person
+            .contact
+            .into_iter()
+            .map(|channel| wire::PeopleChannel {
+                channel_id: channel.channel_id,
+                kind: channel.kind,
+                label: channel.label,
+                value: channel.value,
+                preferred: channel.preferred,
+                duplicate_names: channel.duplicate_names,
+            })
+            .collect(),
         dates,
-        notes: profile
+        notes: person
             .notes
             .into_iter()
             .map(|note| wire::PeopleNote {
@@ -515,8 +464,20 @@ fn sheet_to_wire(person: people::person::Person, clock: &Clock) -> wire::PeopleS
                 created_at: note.created_at,
             })
             .collect(),
-        touches_known,
-        touches,
+        touches_known: true,
+        touches: person
+            .touches
+            .into_iter()
+            .map(|touch| wire::PeopleTouchEntry {
+                interaction_id: touch.id,
+                party_id: touch.person_id,
+                kind: touch.kind,
+                text: touch.text,
+                occurred_local_day: clock.local_day(&touch.at),
+                occurred_at: touch.at,
+                name: String::new(),
+            })
+            .collect(),
     }
 }
 
@@ -618,9 +579,9 @@ mod tests {
 
         fn add(&self, name: &str, cadence_days: i64) -> String {
             self.run(
-                "people.add_person",
-                serde_json::json!({ "display_name": name, "cadence_days": cadence_days }),
-            )["party_id"]
+                "person.add",
+                serde_json::json!({ "title": name, "cadence_days": cadence_days }),
+            )["id"]
                 .as_str()
                 .expect("a party id")
                 .to_owned()
@@ -701,17 +662,20 @@ mod tests {
     }
 
     /// AN EMPTY VAULT IS AN EMPTY ANSWER, NOT A REFUSAL — and the owner and a
-    /// profile-less party (what Photos' face review makes with
-    /// `core.add_party`) are not People rows.
+    /// pet are not People rows.
     #[test]
     fn an_empty_vault_answers_empty_everywhere() {
         let scratch = Scratch::founded();
-        let face = scratch.run(
-            "core.add_party",
-            serde_json::json!({ "display_name": "Ada from the photos", "kind": "person" }),
-        )["party_id"]
+        let owner = scratch
+            .handle()
+            .with_vault(|vault| Ok(vault.self_id()?.expect("an owner")))
+            .expect("the vault is open");
+        let pet = scratch.run(
+            "person.add",
+            serde_json::json!({ "title": "Rex", "form": "pet", "role": "dog" }),
+        )["id"]
             .as_str()
-            .expect("a party id")
+            .expect("an id")
             .to_owned();
 
         let roster = scratch.roster(wire::PeopleRosterFilter::All);
@@ -729,12 +693,10 @@ mod tests {
         assert_eq!(touch.count_all, 0);
 
         assert!(scratch.trash().people.is_empty());
-        assert!(
-            scratch.person(&face).sheet.is_none(),
-            "no profile, no sheet"
-        );
-        assert!(scratch.person("no-such-party").sheet.is_none());
-        assert!(scratch.search("Ada").people.is_empty());
+        for id in [&owner, &pet, "no-such-person"] {
+            assert!(scratch.person(id).sheet.is_none(), "{id} has no sheet");
+        }
+        assert!(scratch.search("Rex").people.is_empty());
     }
 
     /// TRASH IS EXCLUDED from the roster, the dashboard, the sheet and search,
@@ -744,10 +706,7 @@ mod tests {
         let scratch = Scratch::founded();
         let kept = scratch.add("Maya Lin", 30);
         let gone = scratch.add("Maya Gone", 30);
-        scratch.run(
-            "people.trash_person",
-            serde_json::json!({ "party_id": gone }),
-        );
+        scratch.run("entity.trash", serde_json::json!({ "id": gone }));
 
         let roster = scratch.roster(wire::PeopleRosterFilter::All);
         assert_eq!(
@@ -778,17 +737,17 @@ mod tests {
     }
 
     /// A TYPO FINDS THE PERSON AND SAYS WHAT WAS SEARCHED (#1097, R4, R8), and
-    /// a party with no live profile is no person to find, corrected or not.
+    /// a pet is no person to find, corrected or not.
     #[test]
     fn a_typo_finds_the_person_and_says_what_it_searched() {
         let scratch = Scratch::founded();
         let ada = scratch.add("Ada Lovelace", 30);
         let face = scratch.run(
-            "core.add_party",
-            serde_json::json!({ "display_name": "Lovelace from the photos", "kind": "person" }),
-        )["party_id"]
+            "person.add",
+            serde_json::json!({ "title": "Lovelace the cat", "form": "pet" }),
+        )["id"]
             .as_str()
-            .expect("a party id")
+            .expect("an id")
             .to_owned();
         let ids = |found: &wire::PeopleSearch| -> Vec<String> {
             found
@@ -816,8 +775,8 @@ mod tests {
         let ravi = scratch.add("Ravi Menon", 30);
         let jake = scratch.add("Jake Bennett", 30);
         scratch.run(
-            "people.log_interaction",
-            serde_json::json!({ "party_id": ravi, "kind": "lunch", "text": "lunch at Rao's" }),
+            "person.log_interaction",
+            serde_json::json!({ "id": ravi, "kind": "lunch", "text": "lunch at Rao's" }),
         );
         let ids = |found: &wire::PeopleSearch| -> Vec<String> {
             found
@@ -846,8 +805,8 @@ mod tests {
         scratch.add("Quarterly", 90);
         let starred = scratch.add("Starred", 0);
         scratch.run(
-            "people.star_person",
-            serde_json::json!({ "party_id": starred }),
+            "flag.set",
+            serde_json::json!({ "id": starred, "flag": "starred" }),
         );
         scratch.at("2099-11-30T12:00:00.000Z");
 
@@ -883,8 +842,8 @@ mod tests {
 
         // A touch resets the clock and lands on the sheet's log and Recent.
         scratch.run(
-            "people.log_interaction",
-            serde_json::json!({ "party_id": weekly, "kind": "call", "text": "Caught up" }),
+            "person.log_interaction",
+            serde_json::json!({ "id": weekly, "kind": "call", "text": "Caught up" }),
         );
         let touch = scratch.touch(TZ);
         assert_eq!(touch.reconnect.len(), 1);
@@ -908,12 +867,12 @@ mod tests {
         let ada = scratch.add("Ada", 7);
         scratch.at("2099-10-02T02:00:00.000Z");
         scratch.run(
-            "people.log_interaction",
-            serde_json::json!({ "party_id": ada, "kind": "Call", "text": "Late call" }),
+            "person.log_interaction",
+            serde_json::json!({ "id": ada, "kind": "Call", "text": "Late call" }),
         );
         scratch.run(
-            "people.add_note",
-            serde_json::json!({ "party_id": ada, "text": "Night owl" }),
+            "person.add_note",
+            serde_json::json!({ "id": ada, "text": "Night owl" }),
         );
         let touch = scratch.touch(TZ);
         assert_eq!(touch.recent[0].occurred_local_day, "2099-10-01");
@@ -936,10 +895,7 @@ mod tests {
             "2099-10-01"
         );
         // AND THE TRASH SHELF'S DAYS, the same way.
-        scratch.run(
-            "people.trash_person",
-            serde_json::json!({ "party_id": ada }),
-        );
+        scratch.run("entity.trash", serde_json::json!({ "id": ada }));
         let row = &scratch.trash().people[0];
         assert!(!row.deleted_at.is_empty());
         assert_eq!(row.deleted_local_day, "2099-10-01");
@@ -956,9 +912,9 @@ mod tests {
         let ada = scratch.add("Ada", 0);
         for (label, month_day) in [("Birthday", "01-02"), ("Anniversary", "12-31")] {
             scratch.run(
-                "people.add_important_date",
+                "person.add_date",
                 serde_json::json!({
-                    "party_id": ada, "label": label, "month_day": month_day, "reminder_on": true
+                    "id": ada, "label": label, "month_day": month_day, "reminder_on": true
                 }),
             );
         }
@@ -1046,71 +1002,5 @@ mod tests {
             }))
             .expect_err("an unknown zone is refused");
         assert_eq!(refused.code(), wire::ErrorCode::InvalidRequest);
-    }
-
-    /// A refused contact plane is UNKNOWN on the wire, never an empty rail
-    /// (P1): `channels_known` is false, `channels` is empty, and the rest of
-    /// the sheet — the touch log included — stands.
-    #[test]
-    fn a_denied_contact_reading_is_unknown_on_the_wire_and_the_sheet_stands() {
-        use people::person::{ContactEntry, Links, Person, Profile};
-        use people::{Denial, ReadState};
-
-        let zone = FireZone::named(TZ).expect("a zone");
-        let clock = clock(&zone, ADDED).expect("a clock");
-        let profile = Profile {
-            party_id: "p1".to_owned(),
-            name: "Grandpa Ray".to_owned(),
-            role: "Grandfather".to_owned(),
-            nickname: String::new(),
-            avatar_color: None,
-            cadence_days: 7,
-            last_contacted_at: None,
-            created_at: ADDED.to_owned(),
-            met: String::new(),
-            list_id: None,
-            starred: false,
-            dates: Vec::new(),
-            notes: Vec::new(),
-        };
-        let sheet = |contact: ReadState<Vec<ContactEntry>>| {
-            sheet_to_wire(
-                Person {
-                    profile: profile.clone(),
-                    contact,
-                    links: ReadState::Ready(Links::default()),
-                },
-                &clock,
-            )
-        };
-
-        let denied = sheet(ReadState::Denied(Denial::default()));
-        assert!(!denied.channels_known);
-        assert!(denied.channels.is_empty());
-        assert_eq!(
-            denied.person.as_ref().map(|row| row.name.as_str()),
-            Some("Grandpa Ray")
-        );
-        assert!(denied.touches_known, "the linked reading is its own");
-
-        // AND KNOWN-EMPTY IS NOT THE SAME VALUE: "no channels" is a fact.
-        let empty = sheet(ReadState::Ready(Vec::new()));
-        assert!(empty.channels_known);
-        assert!(empty.channels.is_empty());
-
-        let held = sheet(ReadState::Ready(vec![ContactEntry {
-            channel_id: "c1".to_owned(),
-            kind: "phone".to_owned(),
-            label: None,
-            value: "+1 555 0100".to_owned(),
-            normalized_value: "+15550100".to_owned(),
-            preferred: true,
-            provenance: None,
-            duplicate_party_ids: Vec::new(),
-            duplicate_names: vec!["Ray's other number".to_owned()],
-        }]));
-        assert!(held.channels_known);
-        assert_eq!(held.channels.len(), 1);
-        assert_eq!(held.channels[0].duplicate_names, ["Ray's other number"]);
     }
 }

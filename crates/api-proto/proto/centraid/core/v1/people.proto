@@ -1,9 +1,11 @@
 // PEOPLE'S FIVE PHONE QUERIES, AS THE CORE ANSWERS THEM (#1046).
 //
 // `crates/apps/people` folds the roster, the Touch dashboard, one person's
-// sheet, the search and the trash shelf over the vault — a profile window
-// joined to parties, tags, the vocabulary, important dates, contact channels,
-// annotations and the activity links — and these are its answers, typed. A
+// sheet, the search and the trash shelf over the vault — a window of `person`
+// entities and what hangs off them one table at a time: the star, the list, the
+// touches (`activity` rows `with` them, from which last-contacted is computed),
+// the notes about them, their yearly dates and their contact points — and these
+// are its answers, typed. `party_id` is the person's entity id (#1135). A
 // shell reaches them through `app_query.proto`'s `AppQueryRequest` and draws
 // them; it joins nothing and does no date arithmetic.
 //
@@ -123,7 +125,10 @@ message PeopleRosterRow {
   // The party's display name, or "—" when the party read did not reach it.
   string name = 2;
   string role = 3;
-  optional string avatar_color = 4;
+  // The member's own avatar hue is not stored (#1135): a shell draws the hue
+  // from the person's id.
+  reserved 4;
+  reserved "avatar_color";
   // 0 is no cadence.
   int64 cadence_days = 5;
   optional string last_contacted_at = 6;
@@ -171,7 +176,8 @@ message PeopleCard {
   string party_id = 1;
   string name = 2;
   string role = 3;
-  optional string avatar_color = 4;
+  reserved 4;
+  reserved "avatar_color";
   // On the Reconnect rail: whole days PAST the cadence (always > 0).
   optional int64 days_over = 5;
 }
@@ -193,7 +199,8 @@ message PeopleTouchEntry {
   string occurred_at = 5;
   // The person's card, on the dashboard's Recent rail.
   string name = 6;
-  optional string avatar_color = 7;
+  reserved 7;
+  reserved "avatar_color";
   // `occurred_at`'s civil day (`YYYY-MM-DD`) in the request's zone.
   string occurred_local_day = 8;
 }

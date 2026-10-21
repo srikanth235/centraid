@@ -493,10 +493,10 @@ fn seed_people(seeder: &mut Seeder) {
         ("Chris Okafor", "Design lead, ex-colleague", 60),
     ] {
         let output = seeder.run(
-            "people.add_person",
-            json!({ "display_name": name, "role": role, "cadence_days": cadence }),
+            "person.add",
+            json!({ "title": name, "role": role, "cadence_days": cadence }),
         );
-        if let Some(party) = Seeder::id(output.as_ref(), "party_id") {
+        if let Some(party) = Seeder::id(output.as_ref(), "id") {
             ids.push(party);
         }
     }
@@ -523,8 +523,8 @@ fn seed_people(seeder: &mut Seeder) {
         ),
     ] {
         seeder.run(
-            "people.log_interaction",
-            json!({ "party_id": party, "kind": kind, "text": text }),
+            "person.log_interaction",
+            json!({ "id": party, "kind": kind, "text": text }),
         );
     }
 
@@ -533,9 +533,9 @@ fn seed_people(seeder: &mut Seeder) {
         (&maya, "Birthday", "11-02", false),
     ] {
         seeder.run(
-            "people.add_important_date",
+            "person.add_date",
             json!({
-                "party_id": party,
+                "id": party,
                 "label": label,
                 "month_day": month_day,
                 "reminder_on": reminder,
@@ -547,10 +547,7 @@ fn seed_people(seeder: &mut Seeder) {
         (&grandpa, "Large-print edition of Lonesome Dove"),
         (&chris, "Fountain pen ink sampler"),
     ] {
-        seeder.run(
-            "people.add_gift",
-            json!({ "party_id": party, "text": text }),
-        );
+        seeder.run("person.add_gift", json!({ "id": party, "text": text }));
     }
 }
 

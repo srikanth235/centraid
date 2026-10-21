@@ -8,9 +8,9 @@
 //! door, runs that loader and converts — plus the one thing a hit needs to be
 //! OPENED rather than linked: a photo is a content item in the index and a
 //! media asset in Photos, so its asset is read here, by content id, and a
-//! photo whose asset is gone or trashed is dropped; a person is a `core.party`
-//! in the index and a live `people_profile` in People, so a party with no live
-//! profile (a bare party, a trashed person) is dropped too.
+//! photo whose asset is gone or trashed is dropped; a person is in People's
+//! circle only when live and neither the owner nor a pet, so those are dropped
+//! too.
 //!
 //! **THE NAMED ARE HITS TOO** (#1097, R-1097-19..24): one more probe per named
 //! index ([`centraid_search::NAMED`]) — a notebook or an album, a project, a
@@ -43,8 +43,8 @@ type Answer = wire::app_query_response::Answer;
 /// The entity a photo is in the index (`centraid_search::DOMAINS`).
 const PHOTO_ENTITY: &str = "core.content_item";
 
-/// The party entity a person is in the index (`centraid_search::DOMAINS`).
-const PARTY_ENTITY: &str = "core.party";
+/// The kind a person is in the index.
+const PERSON_ENTITY: &str = "person";
 
 /// The rows one answer can open: the loader's eight per domain, with room.
 const OPENABLE: FanOutBound = FanOutBound::new(64, 1);
@@ -93,7 +93,7 @@ pub(super) fn search(
                         .into_iter()
                         .filter(|target| match target.entity.as_str() {
                             PHOTO_ENTITY => assets.contains_key(&target.id),
-                            PARTY_ENTITY => people.contains(&target.id),
+                            PERSON_ENTITY => people.contains(&target.id),
                             _ => true,
                         })
                         .collect();
@@ -174,40 +174,19 @@ fn photo_assets(door: &dyn PageDoor, targets: &[Target]) -> KitResult<BTreeMap<S
         .collect())
 }
 
-/// The party hits that have a LIVE People profile: the ones People can show.
-///
-/// `core.party` is every party in the vault — a bare party, a trashed person
-/// — and only a live `people_profile` makes one a person in People, whose own
-/// search drops the rest (`people_profile.deleted_at IS NULL`). A Home row opens
-/// People at that person, so one that cannot be shown is not a hit.
+/// The person hits People can show: the live circle. The index holds the owner
+/// and a pet too, and a Home row opens People at that person, so one that cannot
+/// be shown is not a hit.
 fn live_people(door: &dyn PageDoor, targets: &[Target]) -> KitResult<BTreeSet<String>> {
-    let party_ids: Vec<String> = targets
+    let person_ids: Vec<String> = targets
         .iter()
-        .filter(|target| target.entity == PARTY_ENTITY)
+        .filter(|target| target.entity == PERSON_ENTITY)
         .map(|target| target.id.clone())
         .collect();
-    if party_ids.is_empty() {
+    if person_ids.is_empty() {
         return Ok(BTreeSet::new());
     }
-    let fragment = in_list("party_id", &party_ids)?;
-    let rows = read_pages(
-        door,
-        &PageQuery::new(
-            "vault.search.live_people",
-            "party_id",
-            "people_profile",
-            PageOrder::asc("party_id", "party_id"),
-        )
-        .filter(
-            &format!("{} AND deleted_at IS NULL", fragment.sql),
-            fragment.bind,
-        ),
-        OPENABLE,
-    )?;
-    Ok(rows
-        .iter()
-        .filter_map(|row| text_of(row, "party_id"))
-        .collect())
+    centraid_apps_people::queries::circle_among(door, &person_ids)
 }
 
 #[cfg(test)]
@@ -375,58 +354,45 @@ mod tests {
         assert!(nothing.hits.is_empty() && nothing.corrected.is_empty());
     }
 
-    /// A HOME ROW OPENS A PERSON PEOPLE CAN SHOW (#1097): a `core.party` with no
-    /// live People profile — a bare party, a trashed person — is in the index
-    /// and is not a hit.
+    /// A HOME ROW OPENS A PERSON PEOPLE CAN SHOW (#1097): a pet is in the index
+    /// and is not a hit, and a trashed person leaves the index.
     #[test]
-    fn a_party_with_no_live_profile_is_no_home_hit() {
+    fn a_pet_and_a_trashed_person_are_no_home_hit() {
         let scratch = Scratch::founded();
-        let person = scratch.run(
-            "people.add_person",
-            serde_json::json!({ "display_name": "Zelda Person", "cadence_days": 30 }),
-        )["party_id"]
-            .as_str()
-            .expect("a party id")
-            .to_owned();
-        let gone = scratch.run(
-            "people.add_person",
-            serde_json::json!({ "display_name": "Zelda Trashed", "cadence_days": 30 }),
-        )["party_id"]
-            .as_str()
-            .expect("a party id")
-            .to_owned();
-        scratch.run(
-            "people.trash_person",
-            serde_json::json!({ "party_id": gone }),
-        );
-        let friend = scratch.run(
-            "core.add_party",
-            serde_json::json!({ "display_name": "Zelda Friend" }),
-        )["party_id"]
-            .as_str()
-            .expect("a party id")
-            .to_owned();
-        let parties = |term: &str| -> Vec<String> {
+        let add = |title: &str, form: &str| -> String {
+            scratch.run(
+                "person.add",
+                serde_json::json!({ "title": title, "form": form }),
+            )["id"]
+                .as_str()
+                .expect("an id")
+                .to_owned()
+        };
+        let person = add("Zelda Person", "person");
+        let gone = add("Zelda Trashed", "person");
+        scratch.run("entity.trash", serde_json::json!({ "id": gone }));
+        let pet = add("Zelda Pet", "pet");
+        let people = |term: &str| -> Vec<String> {
             scratch
                 .search(term)
                 .hits
                 .into_iter()
-                .filter(|hit| hit.entity == "core.party")
+                .filter(|hit| hit.entity == "person")
                 .map(|hit| hit.id)
                 .collect()
         };
-        assert_eq!(parties("zelda"), std::slice::from_ref(&person));
-        assert!(!parties("zelda").contains(&gone) && !parties("zelda").contains(&friend));
-        // The answer is judged after the drop: a term only a bare party holds
-        // is an empty answer, and it is corrected like any other.
-        assert!(parties("zelda friend").is_empty());
+        assert_eq!(people("zelda"), std::slice::from_ref(&person));
+        assert!(!people("zelda").contains(&gone) && !people("zelda").contains(&pet));
+        // The answer is judged after the drop: a term only a pet holds is an
+        // empty answer, and it is corrected like any other.
+        assert!(people("zelda pet").is_empty());
         let slipped = scratch.search("zleda");
         assert_eq!(slipped.corrected, "zelda");
         assert_eq!(
             slipped
                 .hits
                 .iter()
-                .filter(|hit| hit.entity == "core.party")
+                .filter(|hit| hit.entity == "person")
                 .map(|hit| hit.id.clone())
                 .collect::<Vec<_>>(),
             [person]
@@ -440,29 +406,26 @@ mod tests {
     #[test]
     fn an_interaction_note_finds_its_person_on_home() {
         let scratch = Scratch::founded();
-        let ravi = scratch.run(
-            "people.add_person",
-            serde_json::json!({ "display_name": "Ravi Menon", "cadence_days": 30 }),
-        )["party_id"]
-            .as_str()
-            .expect("a party id")
-            .to_owned();
-        let other = scratch.run(
-            "people.add_person",
-            serde_json::json!({ "display_name": "Jake Bennett", "cadence_days": 30 }),
-        )["party_id"]
-            .as_str()
-            .expect("a party id")
-            .to_owned();
+        let add = |title: &str| -> String {
+            scratch.run(
+                "person.add",
+                serde_json::json!({ "title": title, "cadence_days": 30 }),
+            )["id"]
+                .as_str()
+                .expect("an id")
+                .to_owned()
+        };
+        let ravi = add("Ravi Menon");
+        let other = add("Jake Bennett");
         scratch.run(
-            "people.log_interaction",
-            serde_json::json!({ "party_id": ravi, "kind": "lunch", "text": "lunch at Rao's" }),
+            "person.log_interaction",
+            serde_json::json!({ "id": ravi, "kind": "lunch", "text": "lunch at Rao's" }),
         );
         let parties = |found: wire::VaultSearch| -> Vec<(String, String)> {
             found
                 .hits
                 .into_iter()
-                .filter(|hit| hit.entity == "core.party")
+                .filter(|hit| hit.entity == "person")
                 .map(|hit| (hit.app_id, hit.id))
                 .collect()
         };

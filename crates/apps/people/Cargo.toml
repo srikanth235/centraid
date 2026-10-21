@@ -17,5 +17,7 @@ serde_json.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
+centraid-ontology = { path = "../../ontology" }
+centraid-vault = { path = "../../vault" }
 centraid-design = { path = "../../design" }
 rusqlite.workspace = true

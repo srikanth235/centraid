@@ -94,11 +94,12 @@ pub const MAX_CONTENT_URLS: usize = 100;
 /// | Screens | Tables |
 /// |---|---|
 /// | The vault roster | `core_vault` |
-/// | Home's tiles | `media_asset`, `core_document`, `schedule_task`, `core_party`, `locker_item` |
-/// | Trash (Docs, Tasks, People, Locker) | `core_document`, `schedule_task`, `people_profile`, `locker_item` |
+/// | People (Home's tile counts the circle; its trash shelf pages the trashed) | `entity`, `person`, `vault` |
+/// | Home's tiles | `media_asset`, `core_document`, `schedule_task`, `entity`, `person`, `vault`, `locker_item` |
+/// | Trash (Docs, Tasks, People, Locker) | `core_document`, `schedule_task`, `entity`, `locker_item` |
 /// | Photos (grid, shelves, lightbox, collections, search, picker, places, memories, duplicates, album choice, editor) | `media_asset`, `media_asset_phash`, `media_memory`, `media_memory_member`, `core_collection`, `core_collection_entry`, `core_concept`, `core_concept_scheme`, `core_tag`, `core_place`, `core_content_item` |
 /// | Calendar import | `schedule_calendar` |
-/// | Phone sync (People, Agenda and Docs follow the phone, #1127) | `phone_link`, `phone_origin`, `core_event`, `social_contact_channel`, `people_important_date` (a followed contact's birthday), `schedule_recurrence_exception` (a followed series' skipped and moved occurrences) (and `core_party`, `people_profile`, which People already pages) |
+/// | Phone sync (Agenda and Docs follow the phone, #1127; People follows through `follow.contacts` and reads nothing back) | `phone_link`, `phone_origin`, `core_event`, `schedule_recurrence_exception` (a followed series' skipped and moved occurrences) |
 /// | `with_minor_units` | `core_account` |
 ///
 /// `core_account` has no shell caller: it is the one table whose `currency`
@@ -117,11 +118,11 @@ pub const MAX_CONTENT_URLS: usize = 100;
 ///
 /// The `where` is held to the same list: it is predicate text and could name
 /// a subquery on any table, so the vault prepares it under an authorizer that
-/// refuses a read outside these twenty-five
+/// refuses a read outside these twenty-four
 /// ([`Vault::keyset_page_reading_only`]). The vault's test
 /// `a_predicate_that_reads_a_table_outside_the_list_is_refused` is where that
 /// is read: the predicates it tries are SQL, which lives in that crate.
-pub const PAGE_TABLES: [&str; 25] = [
+pub const PAGE_TABLES: [&str; 24] = [
     "core_account",
     "core_collection",
     "core_collection_entry",
@@ -130,23 +131,22 @@ pub const PAGE_TABLES: [&str; 25] = [
     "core_content_item",
     "core_document",
     "core_event",
-    "core_party",
+    "entity",
+    "person",
     "core_place",
     "core_tag",
     "core_vault",
+    "vault",
     "locker_item",
     "media_asset",
     "media_asset_phash",
     "media_memory",
     "media_memory_member",
-    "people_important_date",
-    "people_profile",
     "phone_link",
     "phone_origin",
     "schedule_calendar",
     "schedule_recurrence_exception",
     "schedule_task",
-    "social_contact_channel",
 ];
 
 /// One page of rows, as the wire spells it.
@@ -584,7 +584,7 @@ mod tests {
         wire::PageQuery {
             name: "test".to_owned(),
             select: select.iter().map(|c| (*c).to_owned()).collect(),
-            from: "core_party".to_owned(),
+            from: "entity".to_owned(),
             r#where: None,
             bind: Vec::new(),
             order: Some(wire::PageOrder {
@@ -610,7 +610,7 @@ mod tests {
         std::fs::create_dir_all(&scratch).expect("made");
         let vault = Vault::create(scratch.join("v.db")).expect("a vault");
         vault.found("T", "O").expect("founded");
-        let mut asked = query(&["party_id", "created_at"], "party_id", "party_id");
+        let mut asked = query(&["id", "created_at"], "id", "id");
         asked.local_day_columns = vec!["created_at".to_owned()];
         asked.tz = "Pacific/Kiritimati".to_owned();
         let answer = page(
@@ -690,7 +690,7 @@ mod tests {
         let zero = page(
             &vault,
             &wire::PageRequest {
-                query: Some(query(&["party_id", "created_at"], "created_at", "party_id")),
+                query: Some(query(&["id", "created_at"], "created_at", "id")),
                 limit: 0,
                 after: None,
             },
@@ -702,7 +702,7 @@ mod tests {
         let unprojected = page(
             &vault,
             &wire::PageRequest {
-                query: Some(query(&["party_id"], "created_at", "party_id")),
+                query: Some(query(&["id"], "created_at", "id")),
                 limit: 10,
                 after: None,
             },
@@ -801,7 +801,7 @@ mod tests {
     /// Every table a screen pages, with a column that can key its cursor. Spelled
     /// here, not derived from the allowlist, so the allowlist cannot grow without
     /// this list (and the paragraph above it) being read.
-    const PAGED_BY_A_SCREEN: [(&str, &str); 25] = [
+    const PAGED_BY_A_SCREEN: [(&str, &str); 24] = [
         ("core_account", "account_id"),
         ("core_collection", "collection_id"),
         ("core_collection_entry", "entry_id"),
@@ -810,23 +810,22 @@ mod tests {
         ("core_content_item", "content_id"),
         ("core_document", "document_id"),
         ("core_event", "event_id"),
-        ("core_party", "party_id"),
+        ("entity", "id"),
+        ("person", "id"),
         ("core_place", "place_id"),
         ("core_tag", "tag_id"),
         ("core_vault", "vault_id"),
+        ("vault", "self_id"),
         ("locker_item", "item_id"),
         ("media_asset", "asset_id"),
         ("media_asset_phash", "asset_id"),
         ("media_memory", "memory_id"),
         ("media_memory_member", "memory_id"),
-        ("people_important_date", "date_id"),
-        ("people_profile", "profile_id"),
         ("phone_link", "link_id"),
         ("phone_origin", "origin_id"),
         ("schedule_calendar", "calendar_id"),
         ("schedule_recurrence_exception", "exception_id"),
         ("schedule_task", "task_id"),
-        ("social_contact_channel", "channel_id"),
     ];
 
     #[test]
@@ -888,125 +887,10 @@ mod tests {
         let _ = std::fs::remove_dir_all(&scratch);
     }
 
-    /// THE PHONE LINK PAGES THROUGH THE DOOR (#1127, lane A): the sync engine reads every link of
-    /// a source, in the phone's own id order, with a keyset cursor, and the predicate it writes
-    /// (`source = ?`) reads only `phone_link`.
+    /// THE READ A FOLLOWED SERIES ADDS (#1127, lane C): a series' occurrence exceptions page through
+    /// the door with the exact predicate the store writes, including the event-scoped bind.
     #[test]
-    fn the_phone_link_pages_by_source_through_the_door() {
-        let scratch = centraid_ontology::scratch::scratch_dir();
-        std::fs::create_dir_all(&scratch).expect("made");
-        let vault = Vault::create(scratch.join("v.db")).expect("a vault");
-        vault.found("T", "O").expect("founded");
-        let registry = Registry::with_system_commands().expect("the registry");
-        let owner = centraid_vault::Principal::owner("test-device");
-        let run = |name: &str, input: serde_json::Value| {
-            let outcome = vault
-                .execute(&registry, &owner, &Command::new(name, input))
-                .expect("the command answers");
-            assert_eq!(
-                outcome.status,
-                CommandStatus::Executed,
-                "{name}: {:?}",
-                outcome.reason
-            );
-            outcome.output
-        };
-        let origin = run(
-            "phone.origin",
-            serde_json::json!({ "source": "contacts", "device_id": "device-a", "phone_origin": "acct:1", "label": "Main" }),
-        )["origin_id"]
-            .clone();
-        for (phone_id, name) in [("c3", "Cy"), ("c1", "Ada"), ("c2", "Bo")] {
-            let person = run(
-                "people.add_person",
-                serde_json::json!({ "display_name": name, "cadence_days": 30 }),
-            );
-            run(
-                "phone.link",
-                serde_json::json!({
-                    "source": "contacts", "phone_id": phone_id, "device_id": "device-a", "origin_id": origin,
-                    "entity_id": person["party_id"], "fingerprint": format!("fp-{phone_id}"),
-                }),
-            );
-        }
-
-        let text = |value: &str| wire::Value {
-            kind: Some(wire::value::Kind::Text(value.to_owned())),
-        };
-        let mut asked = query(
-            &[
-                "link_id",
-                "phone_id",
-                "entity_id",
-                "fingerprint",
-                "detached_at",
-            ],
-            "phone_id",
-            "link_id",
-        );
-        asked.from = "phone_link".to_owned();
-        asked.r#where = Some("source = ?".to_owned());
-        asked.bind = vec![text("contacts")];
-        let phone_ids = |page: &wire::Page| -> Vec<String> {
-            page.rows
-                .iter()
-                .map(|row| match &row.values[1].kind {
-                    Some(wire::value::Kind::Text(id)) => id.clone(),
-                    other => panic!("a phone id is text, got {other:?}"),
-                })
-                .collect()
-        };
-
-        let first = page(
-            &vault,
-            &wire::PageRequest {
-                query: Some(asked.clone()),
-                limit: 2,
-                after: None,
-            },
-        )
-        .expect("the links page");
-        assert_eq!(phone_ids(&first), ["c1", "c2"], "ordered by the phone's id");
-        assert!(
-            matches!(
-                first.rows[0].values[4].kind,
-                Some(wire::value::Kind::Null(_))
-            ),
-            "a followed link has no detached_at"
-        );
-        let second = page(
-            &vault,
-            &wire::PageRequest {
-                query: Some(asked.clone()),
-                limit: 2,
-                after: first.next.clone(),
-            },
-        )
-        .expect("the next page");
-        assert_eq!(phone_ids(&second), ["c3"]);
-        assert!(second.next.is_none(), "the rows ended");
-
-        // Another source's links are not in this page. (A predicate that reaches a table off the
-        // list is refused by the vault's authorizer; its test is in `crates/vault/src/page.rs`.)
-        asked.bind = vec![text("calendar")];
-        let none = page(
-            &vault,
-            &wire::PageRequest {
-                query: Some(asked.clone()),
-                limit: 10,
-                after: None,
-            },
-        )
-        .expect("a source with no links pages empty");
-        assert!(none.rows.is_empty());
-        let _ = std::fs::remove_dir_all(&scratch);
-    }
-
-    /// THE TWO READS A FOLLOWED CONTACT AND A FOLLOWED SERIES ADD (#1127, lane C): a person's
-    /// birthday dates and a series' occurrence exceptions page through the door with the exact
-    /// predicates the stores write, including the `lower(...) LIKE` and the event-scoped bind.
-    #[test]
-    fn a_followed_birthday_and_a_followed_exception_page_through_the_door() {
+    fn a_followed_exception_pages_through_the_door() {
         let scratch = centraid_ontology::scratch::scratch_dir();
         std::fs::create_dir_all(&scratch).expect("made");
         let vault = Vault::create(scratch.join("v.db")).expect("a vault");
@@ -1032,40 +916,6 @@ mod tests {
             Some(wire::value::Kind::Text(text)) => text.clone(),
             other => panic!("a text cell, got {other:?}"),
         };
-
-        // A BIRTHDAY, AND A DATE THAT IS NOT ONE.
-        let person = run(
-            "people.add_person",
-            serde_json::json!({ "display_name": "Ada", "cadence_days": 30 }),
-        )["party_id"]
-            .as_str()
-            .expect("a party id")
-            .to_owned();
-        run(
-            "people.add_important_date",
-            serde_json::json!({ "party_id": person, "label": "Birthday", "month_day": "12-10" }),
-        );
-        run(
-            "people.add_important_date",
-            serde_json::json!({ "party_id": person, "label": "Anniversary", "month_day": "03-02" }),
-        );
-        let mut dates = query(&["date_id", "party_id", "month_day"], "date_id", "date_id");
-        dates.from = "people_important_date".to_owned();
-        dates.r#where = Some(
-            "party_id = ? AND lower(label) LIKE '%birthday%' AND deleted_at IS NULL".to_owned(),
-        );
-        dates.bind = vec![text(&person)];
-        let birthdays = page(
-            &vault,
-            &wire::PageRequest {
-                query: Some(dates),
-                limit: 10,
-                after: None,
-            },
-        )
-        .expect("the birthdays page");
-        assert_eq!(birthdays.rows.len(), 1, "only the birthday");
-        assert_eq!(cell(&birthdays.rows[0].values[2]), "12-10");
 
         // A SERIES' EXCEPTION, scoped to the event.
         let mut calendars = query(&["calendar_id"], "calendar_id", "calendar_id");
@@ -1255,7 +1105,7 @@ mod tests {
         std::fs::create_dir_all(&scratch).expect("made");
         let vault = Vault::create(scratch.join("v.db")).expect("a vault");
         vault.found("T", "O").expect("founded");
-        let mut unordered = query(&["party_id"], "created_at", "party_id");
+        let mut unordered = query(&["id"], "created_at", "id");
         unordered.order = None;
         // Refused HERE rather than by the vault: a `KeysetPage` has no way to
         // express "no order", so the absence has to be caught at the wire

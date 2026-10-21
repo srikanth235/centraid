@@ -33,7 +33,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use centraid_apps_kit::error::{KitError, KitResult};
 use centraid_apps_kit::page::PageRequest;
-use centraid_apps_kit::reads::{JOIN_FAN_OUT, PageDoor, in_list, read_pages, read_window};
+use centraid_apps_kit::reads::{JOIN_FAN_OUT, PageDoor, Read, in_list, read_pages, read_window};
 use centraid_apps_kit::row::{Row, integer_or_zero, text_of};
 use centraid_apps_kit::statement::{PageBindValue, PageOrder, PageQuery};
 use centraid_search::{Answer, Principal, Search, SearchError, SearchRequest, Target};
@@ -341,50 +341,6 @@ pub fn revisions_statement(note_id: &str) -> PageQuery {
         "entity_id = ?",
         vec![PageBindValue::Text(note_id.to_owned())],
     )
-}
-
-/// One table read for a set of ids: where it lives, what it selects, which
-/// column the ids are in and the two columns its keyset walks.
-pub(crate) struct Read {
-    pub name: &'static str,
-    pub table: &'static str,
-    pub select: &'static str,
-    pub order: (&'static str, &'static str),
-    pub column: &'static str,
-}
-
-impl Read {
-    /// `column IN (…)` plus the handler's own predicate, walked to the end of a
-    /// bound the ids already set. No ids is no read.
-    pub(crate) fn of(
-        &self,
-        door: &dyn PageDoor,
-        ids: &[String],
-        extra: Option<(&str, Vec<PageBindValue>)>,
-    ) -> KitResult<Vec<Row>> {
-        if ids.is_empty() {
-            return Ok(Vec::new());
-        }
-        let fragment = in_list(self.column, ids)?;
-        let (predicate, bind) = match extra {
-            Some((clause, mut bind)) => {
-                bind.extend(fragment.bind);
-                (format!("{clause} AND {}", fragment.sql), bind)
-            }
-            None => (fragment.sql, fragment.bind),
-        };
-        read_pages(
-            door,
-            &PageQuery::new(
-                self.name,
-                self.select,
-                self.table,
-                PageOrder::asc(self.order.0, self.order.1),
-            )
-            .filter(&predicate, bind),
-            JOIN_FAN_OUT,
-        )
-    }
 }
 
 pub(crate) fn texts(rows: &[Row], column: &str) -> Vec<String> {

@@ -121,7 +121,6 @@ mod tests {
             party_id: party_id.to_owned(),
             name: name.to_owned(),
             role: String::new(),
-            avatar_color: None,
             cadence_days,
             last_contacted_at: None,
             created_at: "2099-01-01T00:00:00.000Z".to_owned(),

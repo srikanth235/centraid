@@ -117,13 +117,13 @@ fn the_c_harness_crosses_the_abi_ten_thousand_times() {
             kind: Some(wire::request::Kind::Page(wire::PageRequest {
                 query: Some(wire::PageQuery {
                     name: "spike".to_owned(),
-                    select: vec!["party_id".to_owned(), "created_at".to_owned()],
-                    from: "core_party".to_owned(),
+                    select: vec!["id".to_owned(), "created_at".to_owned()],
+                    from: "entity".to_owned(),
                     r#where: None,
                     bind: Vec::new(),
                     order: Some(wire::PageOrder {
                         sort_column: "created_at".to_owned(),
-                        pk_column: "party_id".to_owned(),
+                        pk_column: "id".to_owned(),
                         descending: false,
                     }),
                     with_held_thumbnail: false,
@@ -160,11 +160,8 @@ fn the_c_harness_crosses_the_abi_ten_thousand_times() {
                         &registry,
                         &principal,
                         &centraid_vault::commands::Command::new(
-                            "core.add_party",
-                            serde_json::json!({
-                                "display_name": format!("Party {index}"),
-                                "kind": "person"
-                            }),
+                            "person.add",
+                            serde_json::json!({ "title": format!("Person {index}") }),
                         ),
                     )?;
                 }

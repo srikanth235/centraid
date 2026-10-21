@@ -260,6 +260,18 @@ fn a_touch_is_an_activity_with_the_person_and_its_words_a_note_about_it() {
         ),
         1
     );
+    // What was written about the touch finds the person it was with, and a slip
+    // of the note afterwards moves the index with it.
+    assert!(w.found_by("engine", &id));
+    let note = w.query::<String>(
+        "SELECT from_id FROM edge WHERE rel = 'about' AND to_id = ?1",
+        &[&touch],
+    );
+    w.ok(
+        "note.edit",
+        json!({ "id": note, "body": "about the lathe" }),
+    );
+    assert!(w.found_by("lathe", &id) && !w.found_by("engine", &id));
     // A kind the vault has not met is minted, folded; one it has is reused.
     w.ok(
         "person.log_interaction",

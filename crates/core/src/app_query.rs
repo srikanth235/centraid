@@ -1357,9 +1357,9 @@ mod tests {
                 // refuses the shape, as it would for a shell's own page.
                 let broken = PageQuery::new(
                     "test.broken",
-                    "party_id",
-                    "core_party",
-                    centraid_apps_kit::statement::PageOrder::asc("created_at", "party_id"),
+                    "id",
+                    "entity",
+                    centraid_apps_kit::statement::PageOrder::asc("created_at", "id"),
                 );
                 let loaded = door
                     .page(&broken, &PageRequest::first(1))

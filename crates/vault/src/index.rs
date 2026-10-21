@@ -8,7 +8,8 @@
 //! else (trashed, a kind nobody searches, nothing to say) has its row deleted.
 //! The search text is [`text_of`], one function over the entity's own row and
 //! children, plus the bodies of the live notes `about` it, so a person is found
-//! by what you wrote about them. A read joins `entity` on `n` for the kind and
+//! by what you wrote about them, and by what you wrote about a touch that was
+//! `with` them (an interaction's note). A read joins `entity` on `n` for the kind and
 //! the trash filter; Locker is not in the index at all.
 //!
 //! `tests/commitments.rs` rebuilds the index from scratch after a scripted run
@@ -25,17 +26,26 @@ use crate::model::Kind;
 /// Re-index the touched ids, and whatever their text feeds.
 ///
 /// A note's body is part of the text of everything it is `about`, so a touched
-/// note brings its targets with it.
+/// note brings its targets with it; and of the people a touch it is about was
+/// `with`, so it brings those too.
 pub fn reindex(connection: &Connection, touched: &BTreeSet<String>) -> Result<()> {
     let mut work = touched.clone();
+    let mut about = connection.prepare_cached(
+        "SELECT e.to_id FROM edge e JOIN entity n ON n.id = e.from_id
+          WHERE e.from_id = ?1 AND e.rel = 'about' AND n.kind = 'note'",
+    )?;
+    let mut with = connection
+        .prepare_cached("SELECT w.to_id FROM edge w WHERE w.from_id = ?1 AND w.rel = 'with'")?;
     for id in touched {
-        let mut statement = connection.prepare_cached(
-            "SELECT e.to_id FROM edge e JOIN entity n ON n.id = e.from_id
-              WHERE e.from_id = ?1 AND e.rel = 'about' AND n.kind = 'note'",
-        )?;
-        let targets = statement
+        let targets = about
             .query_map([id], |row| row.get::<_, String>(0))?
             .collect::<rusqlite::Result<Vec<_>>>()?;
+        for target in &targets {
+            work.extend(
+                with.query_map([target], |row| row.get::<_, String>(0))?
+                    .collect::<rusqlite::Result<Vec<_>>>()?,
+            );
+        }
         work.extend(targets);
     }
     for id in &work {
@@ -188,8 +198,23 @@ pub fn text_of(connection: &Connection, id: &str, kind: Kind) -> Result<Option<S
             id,
         )?
     };
+    // A person is also found by what was written about a touch that was with them.
+    let touches = if kind == Kind::Person {
+        joined(
+            connection,
+            "SELECT n.body FROM edge w
+               JOIN edge e ON e.to_id = w.from_id AND e.rel = 'about'
+               JOIN entity ne ON ne.id = e.from_id AND ne.deleted_at IS NULL
+               JOIN note n ON n.id = e.from_id
+              WHERE w.rel = 'with' AND w.to_id = ?1
+              ORDER BY ne.created_at, ne.id",
+            id,
+        )?
+    } else {
+        String::new()
+    };
     Ok(Some(
-        [own, notes]
+        [own, notes, touches]
             .into_iter()
             .filter(|part| !part.is_empty())
             .collect::<Vec<_>>()
