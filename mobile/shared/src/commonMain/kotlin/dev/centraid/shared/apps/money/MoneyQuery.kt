@@ -315,20 +315,23 @@ public open class MoneyQueries<S, E>(
 }
 
 /**
- * EVERY TABLE A MONEY SCREEN'S QUERIES READ. The queries fold accounts, lines,
- * targets, rules, checkpoints, the category scheme and its archived flags, and
- * the transfer links (`crates/apps/money/src/queries.rs`), so a change to any
- * of them can move any figure on any Money screen.
+ * EVERY TABLE A MONEY SCREEN'S QUERIES READ (`crates/apps/money/src/queries.rs`):
+ * the lines (`txn`), their names and trash (`entity`), what the bank said
+ * (`source`), the accounts (`account`) with their bank numbers and layouts
+ * (`origin`), the archived flag (`edge`), the categories (`concept`), the plans
+ * (`budget`), the rules (`rule`) and the balances the bank stated
+ * (`checkpoint`), so a change to any of them can move any figure on any Money
+ * screen. It is the manifest's read scopes, no more.
  */
 public val MONEY_TABLES: Set<String> = setOf(
-    "core_account",
-    "core_transaction",
-    "core_concept",
-    "core_tag",
-    "core_link",
-    "money_account",
-    "money_transaction",
-    "money_target",
-    "money_rule",
-    "money_balance_checkpoint",
+    "account",
+    "budget",
+    "checkpoint",
+    "concept",
+    "edge",
+    "entity",
+    "origin",
+    "rule",
+    "source",
+    "txn",
 )

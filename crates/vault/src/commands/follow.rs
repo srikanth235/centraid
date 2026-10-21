@@ -126,6 +126,11 @@ pub struct SystemMap {
     pub match_on: &'static [Match],
     /// What a record gone from a complete read does to its row.
     pub gone: Gone,
+    /// The column of the kind's own row that dates a record. A read that began at
+    /// `since` speaks only for the rows dated at or after it, so an older row is
+    /// not judged absent: a store read over a window knows nothing of what came
+    /// before it.
+    pub window: Option<&'static str>,
     pub defaults: Defaults,
     /// Read what a record states into the form the vault holds it (a wall clock
     /// and its zone become the instant, a store's word for a workout becomes a
@@ -310,6 +315,7 @@ pub const SYSTEMS: &[SystemMap] = &[
         }],
         match_on: &[Match::Title],
         gone: Gone::Trash,
+        window: None,
         defaults: no_defaults,
         shape: as_stated,
         settle: nothing_to_settle,
@@ -338,6 +344,7 @@ pub const SYSTEMS: &[SystemMap] = &[
         }],
         match_on: &[Match::Title, Match::Column("starts")],
         gone: Gone::Trash,
+        window: None,
         defaults: calendar_defaults,
         shape: event_shape,
         settle: event::settle,
@@ -353,6 +360,7 @@ pub const SYSTEMS: &[SystemMap] = &[
         children: &[STAT],
         match_on: &[Match::Title],
         gone: Gone::Trash,
+        window: None,
         defaults: folder_defaults,
         shape: as_stated,
         settle: nothing_to_settle,
@@ -372,6 +380,7 @@ pub const SYSTEMS: &[SystemMap] = &[
         children: &[workout::MEASURES],
         match_on: &[Match::Column("type_id"), Match::Minute("starts")],
         gone: Gone::Forget,
+        window: Some("starts"),
         defaults: no_defaults,
         shape: workout::shape,
         settle: workout::settle,
@@ -390,6 +399,7 @@ pub const SYSTEMS: &[SystemMap] = &[
         children: &[LINE],
         match_on: &[],
         gone: Gone::Keep,
+        window: None,
         defaults: statement_defaults,
         shape: as_stated,
         settle: nothing_to_settle,
@@ -925,6 +935,7 @@ fn settle_absent(
     map: &SystemMap,
     origin: &OriginRow,
     seen: &[(String, Option<String>)],
+    since: Option<&str>,
     tally: &mut Tally,
 ) -> Result<()> {
     let connection = ctx.connection();
@@ -950,6 +961,23 @@ fn settle_absent(
                 && seen_device.as_deref().unwrap_or("") == device_id.as_deref().unwrap_or("")
         }) {
             continue;
+        }
+        // A row dated before the read began is not one the read could have held.
+        if let (Some(column), Some(since)) = (map.window, since) {
+            let dated: Option<String> = connection
+                .query_row(
+                    &format!(
+                        "SELECT {} FROM {} WHERE id = ?1",
+                        crate::log::quoted(column),
+                        crate::log::quoted(map.kind.host())
+                    ),
+                    [&entity_id],
+                    |row| row.get(0),
+                )
+                .optional()?;
+            if dated.as_deref().is_some_and(|dated| dated < since) {
+                continue;
+            }
         }
         // Another phone's record is not judged lost by this phone's read: it is
         // forgotten and the row kept, for the new phone to re-find.
@@ -1004,7 +1032,14 @@ pub fn apply(ctx: &CommandCtx<'_, '_>, map: &SystemMap) -> Result<serde_json::Va
         .and_then(Json::as_bool)
         .unwrap_or(false);
     if complete && map.gone != Gone::Keep {
-        settle_absent(ctx, map, &origin, &seen, &mut tally)?;
+        settle_absent(
+            ctx,
+            map,
+            &origin,
+            &seen,
+            ctx.optional_str("since"),
+            &mut tally,
+        )?;
     }
     Ok(serde_json::json!({
         "origin": origin.id,
@@ -1089,7 +1124,8 @@ const SCHEMA: &str = r#"{
         }
       }
     },
-    "complete": { "type": "boolean" }
+    "complete": { "type": "boolean" },
+    "since": { "type": "string" }
   }
 }"#;
 

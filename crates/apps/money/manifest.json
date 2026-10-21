@@ -472,6 +472,9 @@
               "type": "object"
             },
             "type": "array"
+          },
+          "since": {
+            "type": "string"
           }
         },
         "required": [

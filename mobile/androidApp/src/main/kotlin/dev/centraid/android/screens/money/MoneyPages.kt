@@ -434,13 +434,6 @@ internal fun MoneyRulesScreen(state: MoneyRulesState, onEvent: (MoneyRulesEvent)
                     testTag = "money-rule-category",
                     onTap = { onEvent(MoneyRulesEvent(category_sheet = MoneyRulesEvent.CategorySheetOpened())) },
                 )
-                EditableFieldRow(
-                    key = editor.name_label,
-                    value = editor.display_name,
-                    reload = reload,
-                    testTag = "money-rule-name",
-                    onEdit = { onEvent(MoneyRulesEvent(name = MoneyRulesEvent.NameEdited(text = it))) },
-                )
                 ChoiceFieldRow(
                     key = editor.account_row_label,
                     value = editor.account_label.ifEmpty { editor.clear_account_label },

@@ -12255,7 +12255,9 @@ message MoneyRuleEditor {
   string pattern = 4;
   string category_id = 5;
   string category_label = 6;
-  string display_name = 7;
+  // A rule files a line and no longer names it (#1135).
+  reserved 7, 17;
+  reserved "display_name", "name_label";
   bool can_save = 8;
   string issue = 9;
   string title = 10;
@@ -12265,7 +12267,6 @@ message MoneyRuleEditor {
   string pattern_label = 14;
   string pattern_note = 15;
   string category_row_label = 16;
-  string name_label = 17;
   string delete_label = 18;
   string apply_label = 19;
   string cancel_label = 20;
@@ -12308,7 +12309,6 @@ message MoneyRulesEvent {
     RulePicked rule = 4;
     KindPicked kind_picked = 5;
     PatternEdited pattern = 6;
-    NameEdited name = 7;
     CategorySheetOpened category_sheet = 8;
     CategoryPicked category = 9;
     Save save = 10;
@@ -12322,6 +12322,10 @@ message MoneyRulesEvent {
     AccountSheetOpened account_sheet = 18;
     AccountPicked account = 19;
   }
+
+  // A rule files a line and no longer names it (#1135).
+  reserved 7;
+  reserved "name";
 
   message Opened {
     string parent = 1;
@@ -12341,10 +12345,6 @@ message MoneyRulesEvent {
   }
 
   message PatternEdited {
-    string text = 1;
-  }
-
-  message NameEdited {
     string text = 1;
   }
 

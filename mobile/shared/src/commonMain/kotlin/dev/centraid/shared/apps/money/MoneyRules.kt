@@ -49,10 +49,10 @@ import dev.centraid.shared.nav.ScreenIds
 public object MoneyRulesMachine :
     MoneyQueryMachine<MoneyRulesState, MoneyRulesEvent, MoneyRulesData>("money.rules", MONEY_TABLES) {
     public const val SCREEN_ID: String = ScreenIds.MONEY_RULES
-    public const val CMD_ADD: String = "money.add_rule"
-    public const val CMD_EDIT: String = "money.edit_rule"
-    public const val CMD_DELETE: String = "money.delete_rule"
-    public const val CMD_APPLY: String = "money.apply_rule_to_history"
+    public const val CMD_ADD: String = "rule.add"
+    public const val CMD_EDIT: String = "rule.edit"
+    public const val CMD_DELETE: String = "rule.delete"
+    public const val CMD_APPLY: String = "rule.apply"
 
     private const val PENDING_DELETE: String = "delete"
     private const val PENDING_APPLY: String = "apply"
@@ -122,7 +122,6 @@ public object MoneyRulesMachine :
                                 pattern = rule.pattern,
                                 category_id = id,
                                 category_label = label,
-                                display_name = rule.display_name.orEmpty(),
                                 account_id = accountId,
                                 account_label = accountLabel,
                                 amount_min = stored(rule.amount_min, currency, exponent),
@@ -148,7 +147,6 @@ public object MoneyRulesMachine :
 
             event.kind_picked != null -> Step(held.copy(screen = screen.copy(editor = editor.copy(kind = event.kind_picked.kind))))
             event.pattern != null -> Step(held.copy(screen = screen.copy(editor = editor.copy(pattern = event.pattern.text))))
-            event.name != null -> Step(held.copy(screen = screen.copy(editor = editor.copy(display_name = event.name.text))))
             event.category_sheet != null -> Step(held.copy(screen = screen.copy(sheet = MoneyRulesState.Sheet.SHEET_CATEGORY)))
             event.category != null -> {
                 val id = event.category.category_id
@@ -295,11 +293,11 @@ public object MoneyRulesMachine :
                 Writes,
                 cleared,
                 CMD_DELETE,
-                MoneyFold.json("rule_id" to MoneyFold.str(ruleId)),
+                MoneyFold.json("id" to MoneyFold.str(ruleId)),
                 InvokeKeys.of(CMD_DELETE, ruleId),
             )
             PENDING_APPLY -> {
-                val input = MoneyFold.json("rule_id" to ruleId.takeIf { editor != null && it.isNotEmpty() }?.let(MoneyFold::str))
+                val input = MoneyFold.json("id" to ruleId.takeIf { editor != null && it.isNotEmpty() }?.let(MoneyFold::str))
                 WriteLaw.submit(Writes, cleared, CMD_APPLY, input, InvokeKeys.of(CMD_APPLY, ruleId.ifEmpty { "all" }, (held.tokens + 1).toString()))
                     .let { step -> Step(step.state.copy(tokens = held.tokens + 1), step.effects) }
             }
@@ -313,7 +311,7 @@ public object MoneyRulesMachine :
 
     private fun check(held: MoneyHeld<MoneyRulesState>, editor: MoneyRuleEditor): MoneyRuleEditor {
         val add = editor.mode == MoneyRuleEditor.Mode.MODE_ADD
-        val hasEffect = editor.category_label.isNotEmpty() || editor.category_id.isNotEmpty() || editor.display_name.isNotBlank()
+        val hasEffect = editor.category_label.isNotEmpty() || editor.category_id.isNotEmpty()
         val exponent = limitsExponent(held, editor.account_id, editor.account_label)
         val currency = limitsCurrency(held, editor.account_id, editor.account_label)
         val min = typedLimit(editor.amount_min_text, exponent)
@@ -337,7 +335,6 @@ public object MoneyRulesMachine :
             pattern_label = MoneyCopy.RULE_PATTERN,
             pattern_note = if (editor.kind == "matches") MoneyCopy.RULE_PATTERN_WILDCARD else MoneyCopy.RULE_PATTERN_NOTE,
             category_row_label = MoneyCopy.RULE_SET_CATEGORY,
-            name_label = MoneyCopy.RULE_SET_NAME,
             delete_label = if (add) "" else MoneyCopy.RULE_DELETE,
             apply_label = if (add) "" else MoneyCopy.RULE_APPLY,
             cancel_label = MoneyCopy.CANCEL,
@@ -370,31 +367,25 @@ public object MoneyRulesMachine :
     private fun save(held: MoneyHeld<MoneyRulesState>, editor: MoneyRuleEditor): Step<MoneyHeld<MoneyRulesState>> {
         val checked = check(held, editor)
         if (!checked.can_save) return Step(held.copy(screen = held.screen.copy(editor = checked)))
-        val name = checked.display_name.trim().ifEmpty { null }
         val exponent = limitsExponent(held, checked.account_id, checked.account_label)
         val min = limitField(exponent, checked.amount_min_text, checked.amount_min)
         val max = limitField(exponent, checked.amount_max_text, checked.amount_max)
         if (checked.mode == MoneyRuleEditor.Mode.MODE_ADD) {
             val id = "rule-${held.screen.draft_token}-${held.tokens + 1}"
             val input = MoneyFold.json(
-                "rule_id" to MoneyFold.str(id),
-                "match_kind" to MoneyFold.str(checked.kind),
-                "pattern" to MoneyFold.str(checked.pattern.trim()),
-                "set_category_concept_id" to checked.category_id.ifEmpty { null }?.let(MoneyFold::str),
-                "set_display_name" to name?.let(MoneyFold::str),
+                "id" to MoneyFold.str(id),
+                "match" to MoneyFold.str(checked.kind),
+                "text" to MoneyFold.str(checked.pattern.trim()),
+                "category_id" to checked.category_id.ifEmpty { null }?.let(MoneyFold::str),
                 // A NEW RULE'S NO-LIMIT IS AN ABSENT KEY.
-                "amount_min_minor" to min.takeIf { it != "null" },
-                "amount_max_minor" to max.takeIf { it != "null" },
+                "min" to min.takeIf { it != "null" },
+                "max" to max.takeIf { it != "null" },
                 "account_id" to checked.account_id.ifEmpty { null }?.let(MoneyFold::str),
             )
             return WriteLaw.submit(Writes, held.copy(tokens = held.tokens + 1), CMD_ADD, input, InvokeKeys.of(CMD_ADD, id))
         }
-        // A CATEGORY THE PAGE COULD NOT NAME STAYS: only a known or a cleared one is sent.
-        val categoryField = when {
-            checked.category_id.isNotEmpty() -> MoneyFold.str(checked.category_id)
-            checked.category_label.isEmpty() -> "null"
-            else -> null
-        }
+        // A CATEGORY THE PAGE COULD NOT NAME STAYS: only a known one is sent (a rule always files).
+        val categoryField = checked.category_id.ifEmpty { null }?.let(MoneyFold::str)
         // THE SAME FOR THE ACCOUNT: a known one is sent, a cleared one is null, one the page could not name stays.
         val accountField = when {
             checked.account_id.isNotEmpty() -> MoneyFold.str(checked.account_id)
@@ -402,13 +393,12 @@ public object MoneyRulesMachine :
             else -> null
         }
         val input = MoneyFold.json(
-            "rule_id" to MoneyFold.str(checked.rule_id),
-            "match_kind" to MoneyFold.str(checked.kind),
-            "pattern" to MoneyFold.str(checked.pattern.trim()),
-            "set_category_concept_id" to categoryField,
-            "set_display_name" to MoneyFold.strOrNull(name),
-            "amount_min_minor" to min,
-            "amount_max_minor" to max,
+            "id" to MoneyFold.str(checked.rule_id),
+            "match" to MoneyFold.str(checked.kind),
+            "text" to MoneyFold.str(checked.pattern.trim()),
+            "category_id" to categoryField,
+            "min" to min,
+            "max" to max,
             "account_id" to accountField,
         )
         val key = InvokeKeys.of(CMD_EDIT, checked.rule_id, (held.tokens + 1).toString())
@@ -482,7 +472,6 @@ public object MoneyRulesMachine :
         val meta = listOfNotNull(
             MoneyFold.matchKindWord(rule.kind),
             rule.category_label?.let { MoneyFold.fill(MoneyCopy.RULE_FILES_UNDER, "category" to it) },
-            rule.display_name?.takeIf { it.isNotEmpty() }?.let { MoneyFold.fill(MoneyCopy.RULE_NAMES_IT, "name" to it) },
             if (rule.amount_min != null || rule.amount_max != null) MoneyCopy.RULE_AMOUNT_LIMITS else null,
             rule.account_label?.let { MoneyFold.fill(MoneyCopy.RULE_ONLY_IN, "account" to it) },
         ).joinToString(" · ")

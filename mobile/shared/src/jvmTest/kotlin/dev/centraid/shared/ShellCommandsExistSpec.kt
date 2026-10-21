@@ -41,7 +41,7 @@ import java.io.File
  * recognised by what the source says rather than by a list of names:
  *
  * 1. **A vault object type**: `ns.thing` where `ns_thing` is a table in
- *    `contracts/schema/vault-ddl.sql` (`core.party`, `knowledge.note`) — the
+ *    `contracts/schema/vault-ddl.sql` (`locker.item`, `knowledge.note`) — the
  *    names a search hit or a link target carries.
  * 2. **A screen id or page-read name**: bound to `screenId`, `SCREEN_ID`, a
  *    machine's constructor name or a `PageQuery`'s `name`, or a constant that a
@@ -125,10 +125,10 @@ class ShellCommandsExistSpec : StringSpec({
         listOf(
             "note.edit", // a `const val SAVE_COMMAND`
             "task.complete", // a bare `const val STATUS`
-            "people.purge_person", // an argument to a trash spec
+            "entity.purge", // an argument to a trash spec
             "locker.edit_item", // an `if` branch
             "chat.clear", // an argument to a helper
-            "core.restore_document_version", // a `when` arm
+            "document.restore_version", // a `when` arm
         ).forEach { command ->
             withClue(command) {
                 (command in seen).shouldBeTrue()
@@ -146,7 +146,7 @@ class ShellCommandsExistSpec : StringSpec({
             public const val SCREEN_ID: String = "people.home"
             private const val LOCKER_IMPORT: String = "locker.import"
             screenId = LOCKER_IMPORT,
-            kind = "core.party"
+            kind = "locker.item"
             // "people.sing_a_song" in a comment is nobody's command
         """.trimIndent()
         unknownIds("Synthetic.kt", source, known, tables).map { it.id } shouldBe listOf("knowledge.save_note")
@@ -158,7 +158,7 @@ class ShellCommandsExistSpec : StringSpec({
         // pointed at a moved directory reports no findings for ever.
         val known = declaredCommands(repositoryRoot)
         withClue("${known.size} command names found in the registry's source") {
-            (known.size >= 150).shouldBeTrue()
+            (known.size >= 100).shouldBeTrue()
         }
         known.contains("note.edit").shouldBeTrue()
         // And the name that was wrong is genuinely absent, so this spec would

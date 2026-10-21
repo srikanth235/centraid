@@ -58,10 +58,9 @@ class HealthScreensSpec : StringSpec({
     )
     val run = HealthWorkoutRow(
         activity_id = "a1",
-        kind_concept_id = "health:kind:run",
+        kind_concept_id = "workout_kind:run",
         kind_key = "run",
         kind_label = "run",
-        phone_kind = "running",
         started_at = "2026-10-20T06:10:00.000Z",
         ended_at = "2026-10-20T06:41:00.000Z",
         moving_sec = 1_864,
@@ -246,8 +245,8 @@ class HealthScreensSpec : StringSpec({
                 health_workouts = HealthWorkouts(
                     workouts = listOf(run, older),
                     kinds = listOf(
-                        HealthKindCount(kind_concept_id = "health:kind:run", kind_key = "run", kind_label = "run", count = 3),
-                        HealthKindCount(kind_concept_id = "health:kind:cycle", kind_key = "cycle", kind_label = "cycle", count = 1),
+                        HealthKindCount(kind_concept_id = "workout_kind:run", kind_key = "run", kind_label = "run", count = 3),
+                        HealthKindCount(kind_concept_id = "workout_kind:cycle", kind_key = "cycle", kind_label = "cycle", count = 1),
                     ),
                     next = HealthWorkoutsCursor(started_at = older.started_at, activity_id = "a2"),
                 ),
@@ -262,8 +261,8 @@ class HealthScreensSpec : StringSpec({
         }
         data.more shouldBe true
         held.screen.chips.map { it.label } shouldContainExactly listOf("All", "Runs", "Rides")
-        val picked = held.on(HealthHomeEvent(kind_picked = HealthHomeEvent.KindPicked(kind_concept_id = "health:kind:run")))
-        picked.state.screen.kind_concept_id shouldBe "health:kind:run"
+        val picked = held.on(HealthHomeEvent(kind_picked = HealthHomeEvent.KindPicked(kind_concept_id = "workout_kind:run")))
+        picked.state.screen.kind_concept_id shouldBe "workout_kind:run"
         picked.effects.single() shouldBe ScreenEffect.ReadPage(HealthHomeMachine.SCREEN_ID, afterCursor = null)
         HealthRouting.home(HealthHomeEvent(workout = HealthHomeEvent.WorkoutPicked(activity_id = "a2")), held.screen) shouldBe
             Destination.HealthWorkout("a2", "Health")
@@ -400,11 +399,11 @@ class HealthScreensSpec : StringSpec({
     }
 
     "a change to the days, the workouts, their kinds or the store's origin re-reads home, and nothing else does" {
-        listOf("health_daily", "health_workout", "core_activity", "core_concept", "phone_origin").forEach {
+        listOf("measurement", "workout", "activity", "concept", "origin").forEach {
             HealthHomeMachine.rowsChanged(it, emptyList()).shouldNotBeNull()
         }
-        HealthHomeMachine.rowsChanged("core_party", emptyList()).shouldBeNull()
-        HealthMetricMachine.rowsChanged("health_workout", emptyList()).shouldBeNull()
+        HealthHomeMachine.rowsChanged("person", emptyList()).shouldBeNull()
+        HealthMetricMachine.rowsChanged("workout", emptyList()).shouldBeNull()
     }
 
     "Home's tile: today's steps and last night's sleep, connect when nothing is, and never a zero it was not told" {

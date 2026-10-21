@@ -3,9 +3,6 @@ package dev.centraid.shared
 import centraid.core.v1.AppQueryResponse
 import centraid.core.v1.HealthDayValue
 import centraid.core.v1.HealthFollowView
-import centraid.core.v1.HealthWorkout
-import centraid.core.v1.HealthWorkoutRow
-import centraid.core.v1.HealthWorkouts
 import dev.centraid.shared.apps.health.HealthDayTotal
 import dev.centraid.shared.apps.health.HealthImport
 import dev.centraid.shared.apps.health.HealthMetrics
@@ -15,181 +12,22 @@ import dev.centraid.shared.apps.health.HealthWindow
 import dev.centraid.shared.apps.health.PhoneWorkout
 import dev.centraid.shared.shell.PhoneFollowWords
 import dev.centraid.shared.sync.epochMillisFromRfc3339
-import dev.centraid.shared.sync.phone.GoneChoice
 import dev.centraid.shared.sync.phone.GoneReason
 import dev.centraid.shared.sync.phone.OriginGone
 import dev.centraid.shared.sync.phone.PhoneSource
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContainExactly
-import io.kotest.matchers.collections.shouldHaveSize
-import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldNotContain
 
 /**
- * A VAULT THAT KEEPS THE `health.*` AND `phone.*` COMMANDS' OWN RULES (#1129), answering the read
- * contract the store reads: `health.workouts`, `health.workout`, `health.follow_view`. The real
- * [HealthImport] and its `HealthStore` run over it.
+ * THE HEALTH STORE'S PASS (#1129, #1135): what the shell tells the vault, and nothing else. The
+ * merge is the vault's (`follow.health`, `measurement.record`; `crates/vault/tests/money_health.rs`
+ * holds what they do with it), so this holds the SHAPE of what is sent: the store's one origin,
+ * a workout's identity and kind, the window it speaks for, and when a read may judge a workout gone.
  */
-private class HealthBench {
-    class Link(val id: String, var phoneId: String, var origin: String, var entity: String?, var fingerprint: String, var detachedAt: String?) {
-        /** The device a `local:` link was made on (F-K-1); null for a portable id. */
-        var device: String? = null
-    }
-
-    /** The device each origin was last read on. */
-    val originDevice = mutableMapOf<String, String>()
-
-    val script = ScriptedCore()
-    val workouts = linkedMapOf<String, HealthWorkoutRow>()
-    val days = linkedMapOf<Pair<String, String>, Double>()
-    val origins = linkedMapOf<String, Pair<String, String>>()
-    val links = linkedMapOf<String, Link>()
-    val zones = mutableListOf<String>()
-    private var next = 0
-
-    /** The phone the passes run on; a spec moves it to restore the vault onto a new phone. */
-    var device: String = kotlinx.coroutines.runBlocking { dev.centraid.shared.sync.phone.PhoneDevice.id() }
-
-    /** What the vault holds in the totals' window, as `health.follow_view` hands it to a pass. */
-    val held: List<HealthDayTotal> get() = days.filter { it.key.first >= TOTALS_FROM }.map { HealthDayTotal(it.key.first, it.key.second, it.value) }
-
-    /** Every write, in order, the touches left out. */
-    val writes: List<String> get() = script.commands.map { it.first }.filter { it != "phone.touch" }
-
-    init {
-        script.pages = { name, _ ->
-            when (name) {
-                "phone.links" -> links.values.map {
-                    listOf(it.id, it.phoneId, it.origin, it.entity.orEmpty(), it.fingerprint, it.detachedAt.orEmpty(), SIGHTED, it.device.orEmpty())
-                }
-                "phone.origins" -> origins.map { (id, o) -> listOf(id, o.first, o.second, originDevice[id].orEmpty()) }
-                "phone.follow.imported" -> origins.keys.take(1).map { listOf(it) }
-                else -> emptyList()
-            }
-        }
-        script.queries = { query ->
-            when {
-                query.health_workouts != null -> AppQueryResponse(
-                    health_workouts = HealthWorkouts(workouts = workouts.values.sortedByDescending { it.started_at }.map(::drifted)),
-                )
-                query.health_workout != null -> AppQueryResponse(
-                    health_workout = HealthWorkout(workout = workouts[query.health_workout!!.activity_id]?.let(::drifted)),
-                )
-                // THE WINDOW IS THE CORE'S (crates/core's health tests hold its placement); the
-                // bench answers a fixed one, and every day it holds from its first day on.
-                query.health_follow_view != null -> {
-                    zones += query.health_follow_view!!.tz
-                    AppQueryResponse(
-                        health_follow_view = HealthFollowView(
-                            latest_day = days.keys.maxOfOrNull { it.first },
-                            latest_workout_started_at = workouts.values.maxOfOrNull { it.started_at },
-                            days = days.filter { it.key.first >= TOTALS_FROM }.map { (key, value) ->
-                                HealthDayValue(day = key.first, metric = HealthMetrics.ofKey(key.second)!!.wire, value_ = value)
-                            },
-                            today = "2026-10-20",
-                            totals_from = TOTALS_FROM,
-                            workouts_from = "2026-10-13",
-                            workouts_since = "2026-10-12T22:00:00.000Z",
-                        ),
-                    )
-                }
-                else -> null
-            }
-        }
-        script.answers = { name, input -> execute(name, input) }
-    }
-
-    private fun text(input: String, key: String): String? = Regex("\"$key\":\"([^\"]*)\"").find(input)?.groupValues?.get(1)
-
-    private fun number(input: String, key: String): String? = Regex("\"$key\":([-0-9.eE+]+)").find(input)?.groupValues?.get(1)
-
-    private fun execute(name: String, input: String): String? {
-        when (name) {
-            "phone.origin" -> {
-                val phone = text(input, "phone_origin")!!
-                val id = origins.entries.firstOrNull { it.value.first == phone }?.key ?: "o${++next}"
-                origins[id] = phone to text(input, "label")!!
-                originDevice[id] = text(input, "device_id")!!
-                return "{\"origin_id\":\"$id\"}"
-            }
-            "phone.relink" -> {
-                val phone = text(input, "phone_id")!!
-                val on = text(input, "device_id")
-                val link = links[text(input, "link_id")] ?: return null
-                if (links.values.any { it !== link && it.phoneId == phone && it.device == on }) return null
-                link.phoneId = phone
-                link.device = on
-                link.origin = text(input, "origin_id")!!
-                return "{\"link_id\":\"${link.id}\"}"
-            }
-            "phone.link" -> {
-                val phone = text(input, "phone_id")!!
-                val on = text(input, "device_id")
-                val link = links.values.firstOrNull { it.phoneId == phone && it.device == on }
-                    ?: Link("l${++next}", phone, "", null, "", null).also { it.device = on; links[it.id] = it }
-                link.origin = text(input, "origin_id")!!
-                link.entity = text(input, "entity_id")
-                link.fingerprint = text(input, "fingerprint")!!
-                return "{\"link_id\":\"${link.id}\"}"
-            }
-            "phone.touch", "phone.detach" -> return "{}"
-            "phone.forget" -> {
-                links.remove(text(input, "link_id"))
-                return "{}"
-            }
-            "phone.retire_origin" -> {
-                origins.remove(text(input, "origin_id"))
-                return "{}"
-            }
-            "health.follow_workout" -> {
-                val id = text(input, "activity_id")!!
-                val kind = text(input, "kind")!!
-                workouts[id] = HealthWorkoutRow(
-                    activity_id = id,
-                    kind_concept_id = "health:kind:$kind",
-                    kind_key = kind,
-                    kind_label = kind,
-                    phone_kind = text(input, "phone_kind")!!,
-                    // The vault's own spelling, whatever the engine sent.
-                    started_at = HealthImport.canonicalInstant(text(input, "started_at")!!)!!,
-                    ended_at = HealthImport.canonicalInstant(text(input, "ended_at")!!)!!,
-                    moving_sec = number(input, "moving_sec")?.toLong(),
-                    distance_m = number(input, "distance_m")?.toDouble(),
-                    energy_kcal = number(input, "energy_kcal")?.toDouble(),
-                    avg_hr_bpm = number(input, "avg_hr_bpm")?.toLong(),
-                    elevation_gain_m = number(input, "elevation_gain_m")?.toDouble(),
-                    recorded_by = text(input, "recorded_by"),
-                )
-                return "{\"activity_id\":\"$id\"}"
-            }
-            "health.purge_workout" -> {
-                val id = text(input, "activity_id")!!
-                workouts.remove(id)
-                links.values.filter { it.entity == id }.forEach { it.entity = null }
-                return "{\"activity_id\":\"$id\"}"
-            }
-            "health.record_days" -> {
-                Regex("\\{\"day\":\"([^\"]+)\",\"metric\":\"([^\"]+)\",\"value\":([^}]+)\\}").findAll(input).forEach {
-                    days[it.groupValues[1] to it.groupValues[2]] = it.groupValues[3].toDouble()
-                }
-                return "{\"written\":1,\"unchanged\":0}"
-            }
-        }
-        return null
-    }
-
-    /** What a read adds to a stored distance: a float's breadth, as a REAL round trip may. */
-    var drift: Double = 0.0
-
-    private fun drifted(row: HealthWorkoutRow) = row.copy(distance_m = row.distance_m?.let { it + drift })
-
-    companion object {
-        const val SIGHTED = "2026-10-20T00:00:00.000Z"
-        const val TOTALS_FROM = "2026-10-13"
-    }
-}
-
 class HealthFollowSpec : StringSpec({
     val window = HealthWindow(
         today = "2026-10-20",
@@ -197,252 +35,155 @@ class HealthFollowSpec : StringSpec({
         workoutsFrom = "2026-10-13",
         workoutsSince = epochMillisFromRfc3339("2026-10-13T00:00:00Z")!!,
     )
-    val readAt = "2026-10-20T10:00:00.000Z"
+    val device = "device-a"
 
-    fun run(minute: Int, kind: String = "running", distance: Double? = 5_200.0, id: String = "run-$minute") = PhoneWorkout(
+    fun run(minute: Int, kind: String = "running", id: String = "run-$minute") = PhoneWorkout(
         id = id,
         kind = kind,
-        startedAt = "2026-10-${(15 + minute % 5).toString().padStart(2, '0')}T07:${(10 + minute).toString().padStart(2, '0')}:00Z",
-        endedAt = "2026-10-${(15 + minute % 5).toString().padStart(2, '0')}T07:${(40 + minute).toString().padStart(2, '0')}:00Z",
-        distanceM = distance,
+        startedAt = "2026-10-15T07:${(10 + minute).toString().padStart(2, '0')}:00Z",
+        endedAt = "2026-10-15T07:${(40 + minute).toString().padStart(2, '0')}:00.5Z",
+        movingSec = 1_800,
+        distanceM = 5_234.5671,
         energyKcal = 338.0,
         avgHrBpm = 148,
-        recordedBy = "Apple Watch",
+        elevationGainM = 0.0,
+        recordedBy = "  Apple   Watch ",
     )
 
-    fun read(vararg workouts: PhoneWorkout, days: List<HealthDayTotal> = emptyList(), complete: Boolean = true) = HealthRead(
+    fun read(
+        vararg workouts: PhoneWorkout,
+        days: List<HealthDayTotal> = emptyList(),
+        chosen: List<String> = listOf("steps", "workouts"),
+        refused: List<String> = emptyList(),
+        complete: Boolean = true,
+        present: Boolean = true,
+    ) = HealthRead(
         store = HealthStoreKind.APPLE_HEALTH,
         days = days,
         workouts = workouts.toList(),
-        chosen = listOf("steps", "workouts"),
+        chosen = chosen,
+        refused = refused,
         workoutsComplete = complete,
+        storePresent = present,
     )
 
-    suspend fun HealthBench.pass(read: HealthRead) = HealthImport.run(script.core(), read, window.copy(held = held), readAt, device)
+    fun input(read: HealthRead) = HealthImport.followInput(read, window, device)
 
-    "a new workout is added as an activity, linked under the store's one origin" {
-        val bench = HealthBench()
-        val outcome = bench.pass(read(run(0)))
-        outcome.added shouldBe 1
-        bench.workouts.values.single().kind_key shouldBe "run"
-        bench.workouts.values.single().phone_kind shouldBe "running"
-        bench.origins.values.single() shouldBe ("store:apple-health" to "Apple Health")
-        bench.links.values.single().phoneId shouldBe "local:run-0"
-        bench.writes shouldContainExactly listOf("phone.origin", "health.follow_workout", "phone.link")
+    "a workout is one record: the store's id on this device, the vault's kind key, instants the way the vault spells them, the figures as stated" {
+        val sent = input(read(run(0)))
+        sent shouldContain "\"origin\":{\"ref\":\"store:apple-health\",\"label\":\"Apple Health\",\"device_id\":\"device-a\"}"
+        sent shouldContain "\"external_id\":\"local:run-0\",\"device_id\":\"device-a\""
+        sent shouldContain "\"kind\":\"run\""
+        sent shouldContain "\"starts\":\"2026-10-15T07:10:00.000Z\",\"ends\":\"2026-10-15T07:40:00.500Z\""
+        sent shouldContain "\"workout\":{\"recorded_by\":\"Apple Watch\",\"moving_s\":1800,\"distance_m\":5234.567,\"energy_kcal\":338,\"heart_bpm\":148,\"climb_m\":0}"
+        sent shouldContain "\"since\":\"2026-10-13T00:00:00.000Z\""
     }
 
-    "the engine sends instants the way the vault spells them" {
-        val bench = HealthBench()
-        bench.pass(read(run(0)))
-        val sent = bench.script.commands.first { it.first == "health.follow_workout" }.second
-        sent.contains("\"started_at\":\"2026-10-15T07:10:00.000Z\"") shouldBe true
+    "a word the table does not name rides as itself, for the vault to mint a kind from" {
+        input(read(run(0, kind = "pilates"))) shouldContain "\"kind\":\"pilates\""
     }
 
-    "a second pass over the same store writes nothing" {
-        val bench = HealthBench()
-        bench.pass(read(run(0), run(1)))
-        bench.script.commands.clear()
-        bench.pass(read(run(0), run(1)))
-        bench.writes.shouldBeEmpty()
+    "a workout the vault should not be told of is left out: no id, no kind, an end before its start, a start before the window" {
+        val sent = input(
+            read(
+                run(0),
+                run(1, id = " "),
+                run(2, kind = " "),
+                run(3).copy(endedAt = "2026-10-15T07:00:00Z"),
+                run(4).copy(startedAt = "2026-10-10T07:00:00Z", endedAt = "2026-10-10T08:00:00Z"),
+                run(5, id = "run-0"),
+            ),
+        )
+        Regex("\"external_id\"").findAll(sent).count() shouldBe 1
     }
 
-    "numbers round-trip without a detach: a distance the vault holds a float's breadth away is the same fact" {
-        val bench = HealthBench()
-        bench.pass(read(run(0, distance = 5_234.567)))
-        // The link holds the row as it read back right after the write; now it reads back a breadth off.
-        bench.drift = 1e-9
-        bench.script.commands.clear()
-        val outcome = bench.pass(read(run(0, distance = 5_234.567)))
-        bench.writes.shouldBeEmpty()
-        outcome.updated shouldBe 0
-        bench.links.values.single().detachedAt shouldBe null
+    "a read is complete only when it says so, found a workout, and the member chose workouts and the OS allowed them" {
+        input(read(run(0))) shouldContain "\"complete\":true"
+        input(read(run(0), complete = false)) shouldContain "\"complete\":false"
+        input(read()) shouldContain "\"complete\":false"
+        input(read(run(0), chosen = listOf("steps"))) shouldContain "\"complete\":false"
+        input(read(run(0), refused = listOf("workouts"))) shouldContain "\"complete\":false"
     }
 
-    "a corrected distance on the phone updates the same activity" {
-        val bench = HealthBench()
-        bench.pass(read(run(0)))
-        val id = bench.workouts.keys.single()
-        bench.script.commands.clear()
-        val outcome = bench.pass(read(run(0, distance = 5_310.0)))
-        outcome.updated shouldBe 1
-        bench.workouts.keys.single() shouldBe id
-        bench.workouts.getValue(id).distance_m shouldBe 5_310.0
-        bench.writes shouldContainExactly listOf("health.follow_workout", "phone.link")
+    "a store no longer on the phone sends no workouts and judges none gone" {
+        val sent = input(read(run(0), present = false))
+        sent shouldContain "\"records\":[]"
+        sent shouldContain "\"complete\":false"
     }
 
-    "a workout deleted on the phone, inside the window, is kept and its link forgotten (R-1129-14)" {
-        val bench = HealthBench()
-        bench.pass(read(run(0), run(1)))
-        val kept = bench.links.values.first { it.phoneId == "local:run-0" }.entity
-        bench.script.commands.clear()
-        val outcome = bench.pass(read(run(1)))
-        outcome.trashed shouldBe 1
-        bench.workouts.keys shouldContain kept!!
-        bench.workouts.size shouldBe 2
-        bench.links.values.map { it.phoneId } shouldContainExactly listOf("local:run-1")
-        bench.writes shouldContainExactly listOf("phone.forget")
-        // An ordinary workout now: the next pass leaves it be.
-        bench.script.commands.clear()
-        bench.pass(read(run(1)))
-        bench.writes.shouldBeEmpty()
+    "a pass sends the days that changed in one record, then the workouts; a second pass sends no days" {
+        val core = ScriptedCore()
+        val days = listOf(HealthDayTotal("2026-10-19", "steps", 6_350.0), HealthDayTotal("2026-10-20", "steps", 1_200.0))
+        core.answers = { name, _ -> if (name == "follow.health") "{\"added\":1,\"matched\":1,\"updated\":2,\"forgotten\":3,\"refused\":0}" else "{}" }
+        val first = HealthImport.run(core.core(), read(run(0), days = days), window, device)
+        core.commands.map { it.first } shouldContainExactly listOf("measurement.record", "follow.health")
+        core.commands[0].second shouldBe "{\"days\":[{\"day\":\"2026-10-19\",\"metric\":\"steps\",\"value\":6350.0},{\"day\":\"2026-10-20\",\"metric\":\"steps\",\"value\":1200.0}]}"
+        first shouldBe HealthImport.Outcome(days = 2, added = 2, updated = 2, forgotten = 3)
+        core.commands.clear()
+        HealthImport.run(core.core(), read(run(0), days = days), window.copy(held = days), device).days shouldBe 0
+        core.commands.map { it.first } shouldContainExactly listOf("follow.health")
     }
 
-    "a store that re-issues every id on this phone: the same workouts under new ids are re-linked, nothing added, held or purged" {
-        val bench = HealthBench()
-        val old = (0 until 6).map { run(it, id = "old-$it") }
-        bench.pass(read(*old.toTypedArray()))
-        val rows = bench.workouts.keys.toSet()
-        bench.script.commands.clear()
-        // The same phone names the same workouts a new way (R-1129-15), and one of them came back
-        // with a corrected distance. (A new phone's ids are another device's: NewPhoneSpec.)
-        val fresh = (0 until 6).map { run(it, id = "new-$it", distance = if (it == 2) 5_310.0 else 5_200.0) }
-        val outcome = bench.pass(read(*fresh.toTypedArray()))
-        outcome.gone.shouldBeEmpty()
-        outcome.added shouldBe 6
-        outcome.updated shouldBe 1
-        outcome.trashed shouldBe 0
-        bench.workouts.keys shouldBe rows
-        bench.links.values.map { it.phoneId }.sorted() shouldContainExactly (0 until 6).map { "local:new-$it" }
-        bench.writes.count { it == "health.follow_workout" } shouldBe 1
-        bench.writes.count { it == "phone.relink" } shouldBe 6
-        bench.writes.count { it == "phone.forget" } shouldBe 0
-        bench.writes.count { it == "phone.link" } shouldBe 1
-        bench.writes.none { it == "health.purge_workout" } shouldBe true
-        // And the next pass is quiet.
-        bench.script.commands.clear()
-        bench.pass(read(*fresh.toTypedArray()))
-        bench.writes.shouldBeEmpty()
+    "a refused follow is a pass that read nothing, and the days it carried are still counted" {
+        val core = ScriptedCore()
+        core.refuses = { it == "follow.health" }
+        val outcome = HealthImport.run(core.core(), read(run(0)), window, device)
+        outcome.read shouldBe false
+        outcome.added shouldBe 0
     }
 
-    "re-finding is Health's alone: a contacts store with the same shape adds and holds as #1127 does" {
-        fun shape(refind: Boolean): dev.centraid.shared.sync.phone.PhonePlan {
-            val names = (0 until 6).map { "Person $it" }
-            val origin = dev.centraid.shared.sync.phone.StoredOrigin("o1", "container:a", "A")
-            val rows = names.mapIndexed { i, n ->
-                "r$i" to dev.centraid.shared.sync.phone.VaultRow("r$i", dev.centraid.shared.sync.phone.PhoneFields.of { text("name", n) }, matchKey = n.lowercase())
-            }.toMap()
-            val links = names.indices.map { i ->
-                dev.centraid.shared.sync.phone.StoredLink(
-                    "l$i", "local:old-$i", "o1", "r$i",
-                    dev.centraid.shared.sync.phone.PhoneFingerprint.pack("p", dev.centraid.shared.sync.phone.PhoneFields.EMPTY.digest(), rows.getValue("r$i").fields.digest()),
-                    detached = false, lastSeenAt = "2026-10-19T00:00:00.000Z",
+    "connect writes the store's origin at once, with no workouts, then passes; stop forgets both stores' origins and nothing else" {
+        val core = ScriptedCore()
+        core.queries = { query ->
+            query.health_follow_view?.let {
+                AppQueryResponse(
+                    health_follow_view = HealthFollowView(
+                        today = "2026-10-20",
+                        totals_from = "2026-10-13",
+                        workouts_from = "2026-10-13",
+                        workouts_since = "2026-10-12T22:00:00.000Z",
+                    ),
                 )
             }
-            val snapshot = dev.centraid.shared.sync.phone.PhoneSnapshot(
-                PhoneSource.CONTACTS, complete = true, readAt = readAt,
-                origins = listOf(dev.centraid.shared.sync.phone.PhoneOriginRef("container:a", "A")),
-                records = names.mapIndexed { i, n ->
-                    dev.centraid.shared.sync.phone.PhoneRecord("local:new-$i", "container:a", dev.centraid.shared.sync.phone.PhoneFields.of { text("name", n) }, matchKey = n.lowercase())
-                },
-            )
-            return dev.centraid.shared.sync.phone.PhoneSyncPlanner.plan(snapshot, listOf(origin), links, rows, refindLost = refind)
         }
-        val contacts = shape(refind = false)
-        contacts.actions.count { it is dev.centraid.shared.sync.phone.PhoneAction.Add } shouldBe 6
-        contacts.actions.none { it is dev.centraid.shared.sync.phone.PhoneAction.Refind } shouldBe true
-        contacts.gone.single().reason shouldBe GoneReason.VANISHED
-        val opted = shape(refind = true)
-        opted.actions.count { it is dev.centraid.shared.sync.phone.PhoneAction.Refind } shouldBe 6
-        opted.actions.none { it is dev.centraid.shared.sync.phone.PhoneAction.Add } shouldBe true
-        opted.gone.shouldBeEmpty()
-    }
-
-    "a workout that started before the window read is not one the phone deleted" {
-        val bench = HealthBench()
-        val old = run(0).copy(id = "old", startedAt = "2026-09-01T07:00:00Z", endedAt = "2026-09-01T07:30:00Z")
-        // A first pass, whose window reached back further, brought the old one in.
-        val wide = window.copy(workoutsFrom = "2026-08-01", workoutsSince = epochMillisFromRfc3339("2026-08-01T00:00:00Z")!!)
-        HealthImport.run(bench.script.core(), read(old, run(1)), wide, readAt, bench.device)
-        bench.workouts.size shouldBe 2
-        bench.script.commands.clear()
-        bench.pass(read(run(1)))
-        bench.workouts.size shouldBe 2
-        bench.writes.shouldBeEmpty()
-    }
-
-    "an empty workout read removes nothing (R-1129-5)" {
-        val bench = HealthBench()
-        bench.pass(read(run(0), run(1)))
-        bench.script.commands.clear()
-        bench.pass(read())
-        bench.workouts.size shouldBe 2
-        bench.writes.shouldBeEmpty()
-    }
-
-    "a read the shell says may have missed some removes nothing" {
-        val bench = HealthBench()
-        bench.pass(read(run(0), run(1)))
-        bench.script.commands.clear()
-        bench.pass(read(run(1), complete = false))
-        bench.workouts.size shouldBe 2
-    }
-
-    "workouts the member did not choose, or the OS refused, are never removed" {
-        val bench = HealthBench()
-        bench.pass(read(run(0), run(1)))
-        bench.script.commands.clear()
-        bench.pass(read(run(1)).copy(chosen = listOf("steps")))
-        bench.pass(read(run(1)).copy(refused = listOf("workouts")))
-        bench.workouts.size shouldBe 2
-    }
-
-    "a vanish of five or more holds them for the member's question" {
-        val bench = HealthBench()
-        val all = (0 until 6).map { run(it, id = "w$it") }
-        bench.pass(read(*all.toTypedArray()))
-        bench.script.commands.clear()
-        val outcome = bench.pass(read(all.last()))
-        outcome.gone.single().reason shouldBe GoneReason.VANISHED
-        outcome.gone.single().count shouldBe 5
-        bench.workouts.size shouldBe 6
-        bench.writes.shouldBeEmpty()
-    }
-
-    "a store no longer on the phone is an origin gone; deleting them purges" {
-        val bench = HealthBench()
-        bench.pass(read(run(0), run(1)))
-        val outcome = bench.pass(read().copy(storePresent = false))
-        val gone = outcome.gone.single()
-        gone.reason shouldBe GoneReason.LEFT
-        gone.count shouldBe 2
-        gone.label shouldBe "Apple Health"
-        bench.workouts.size shouldBe 2
-        HealthImport.resolveGone(bench.script.core(), gone.originId, GoneChoice.TRASH, device = bench.device)
-        bench.workouts.size shouldBe 0
-        bench.origins.isEmpty() shouldBe true
-    }
-
-    "a new phone re-adopts a workout by its kind and start minute instead of adding a second" {
-        val bench = HealthBench()
-        bench.pass(read(run(0)))
-        val id = bench.workouts.keys.single()
-        // The old phone's link went with the old phone.
-        bench.links.clear()
-        bench.script.commands.clear()
-        val outcome = bench.pass(read(run(0, id = "a-new-uuid")))
-        outcome.added shouldBe 1
-        bench.workouts.keys.single() shouldBe id
-        bench.links.values.single().phoneId shouldBe "local:a-new-uuid"
-        bench.writes shouldContainExactly listOf("phone.link")
-    }
-
-    "the days that changed go in one record_days, and a second pass sends none" {
-        val bench = HealthBench()
-        val days = listOf(HealthDayTotal("2026-10-19", "steps", 6_350.0), HealthDayTotal("2026-10-20", "steps", 1_200.0))
-        bench.pass(read(days = days)).days shouldBe 2
-        bench.days[("2026-10-19" to "steps")] shouldBe 6_350.0
-        bench.script.commands.clear()
-        bench.pass(read(days = days)).days shouldBe 0
-        bench.writes.shouldBeEmpty()
+        val clock = dev.centraid.shared.platform.FakeDeviceClock(epochMillis = epochMillisFromRfc3339("2026-10-20T10:00:00Z")!!)
+        val reader = object : dev.centraid.shared.apps.health.HealthReader {
+            override fun read(window: HealthWindow, deliver: (HealthRead?) -> Unit) = deliver(read())
+        }
+        HealthImport.connect(core.core(), HealthStoreKind.APPLE_HEALTH, reader, clock)
+        core.commands.first().first shouldBe "follow.health"
+        core.commands.first().second shouldContain "\"records\":[]"
+        core.commands.first().second shouldNotContain "complete"
+        core.commands.clear()
+        HealthImport.stop(core.core()) shouldBe true
+        core.commands.map { it.first } shouldContainExactly listOf("follow.stop", "follow.stop")
+        core.commands.map { it.second } shouldContainExactly listOf(
+            "{\"system\":\"health\",\"ref\":\"store:apple-health\"}",
+            "{\"system\":\"health\",\"ref\":\"store:health-connect\"}",
+        )
     }
 
     "the window is the core's, asked in the device's zone, with the days it holds" {
-        val bench = HealthBench()
-        bench.days[("2026-10-10" to "steps")] = 9.0
-        bench.days[("2026-10-18" to "steps")] = 10.0
+        val core = ScriptedCore()
+        val zones = mutableListOf<String>()
+        core.queries = { query ->
+            query.health_follow_view?.let {
+                zones += it.tz
+                AppQueryResponse(
+                    health_follow_view = HealthFollowView(
+                        latest_day = "2026-10-18",
+                        days = listOf(HealthDayValue(day = "2026-10-18", metric = HealthMetrics.ofKey("steps")!!.wire, value_ = 10.0)),
+                        today = "2026-10-20",
+                        totals_from = "2026-10-13",
+                        workouts_from = "2026-10-13",
+                        workouts_since = "2026-10-12T22:00:00.000Z",
+                    ),
+                )
+            }
+        }
         val clock = dev.centraid.shared.platform.FakeDeviceClock(epochMillis = epochMillisFromRfc3339("2026-10-20T10:00:00Z")!!)
-        val placed = HealthImport.window(bench.script.core(), clock)!!
-        bench.zones shouldContainExactly listOf(clock.read().zone)
+        val placed = HealthImport.window(core.core(), clock)!!
+        zones shouldContainExactly listOf(clock.read().zone)
         placed shouldBe HealthWindow(
             "2026-10-20",
             "2026-10-13",
@@ -450,24 +191,6 @@ class HealthFollowSpec : StringSpec({
             epochMillisFromRfc3339("2026-10-12T22:00:00Z")!!,
             listOf(HealthDayTotal("2026-10-18", "steps", 10.0)),
         )
-    }
-
-    "the follow-gone question for the health store counts workouts and deletes, since a workout has no trash" {
-        val asked = PhoneFollowWords.question(OriginGone(PhoneSource.HEALTH, "o1", "store:apple-health", "Apple Health", 31, GoneReason.LEFT))
-        asked.title shouldBe "Apple Health is no longer on this phone"
-        asked.body shouldBe "Keep its 31 workouts in Health?"
-        asked.trashLabel shouldBe "Delete them"
-        PhoneFollowWords.question(OriginGone(PhoneSource.HEALTH, "o1", "p", "Apple Health", 1, GoneReason.VANISHED)).body shouldBe
-            "Keep the 1 workout missing from it in Health?"
-    }
-
-    "every source has its question's words: HEALTH is in every exhaustive mapping" {
-        PhoneSource.entries.forEach { source ->
-            val asked = PhoneFollowWords.question(OriginGone(source, "o", "p", "L", 2, GoneReason.LEFT))
-            asked.body.isNotEmpty() shouldBe true
-            asked.keepLabel shouldBe "Keep"
-        }
-        PhoneSource.valueOf("HEALTH").wire shouldBe "health"
     }
 
     "canonical numbers: integers as integers, reals to three places, trailing zeros dropped" {
@@ -478,60 +201,13 @@ class HealthFollowSpec : StringSpec({
         HealthImport.number(0.0004) shouldBe "0"
     }
 
-    "a vault restored onto a new phone: the same workouts under the new phone's ids are re-found, none added, purged or asked about (F-K-1)" {
-        val bench = HealthBench()
-        bench.pass(read(*(0 until 6).map { run(it, id = "a-$it") }.toTypedArray()))
-        val rows = bench.workouts.keys.toSet()
-        bench.device = "device-b"
-        bench.script.commands.clear()
-        val fresh = (0 until 6).map { run(it, id = "b-$it", distance = if (it == 2) 5_310.0 else 5_200.0) }
-        val outcome = bench.pass(read(*fresh.toTypedArray()))
-        outcome.gone.shouldBeEmpty()
-        outcome.trashed shouldBe 0
-        outcome.updated shouldBe 1
-        bench.workouts.keys shouldBe rows
-        bench.links.values.map { it.phoneId }.sorted() shouldContainExactly (0 until 6).map { "local:b-$it" }
-        bench.links.values.map { it.device }.toSet() shouldBe setOf("device-b")
-        bench.writes.count { it == "phone.relink" } shouldBe 6
-        bench.writes.count { it == "health.follow_workout" } shouldBe 1
-        bench.writes.none { it == "phone.forget" || it == "health.purge_workout" } shouldBe true
-        bench.script.commands.clear()
-        bench.pass(read(*fresh.toTypedArray()))
-        bench.writes.shouldBeEmpty()
-    }
-
-    "on the new phone a workout the old one linked and this one does not hold is forgotten and kept" {
-        val bench = HealthBench()
-        bench.pass(read(run(0, id = "a-0"), run(1, id = "a-1")))
-        val kept = bench.links.values.single { it.phoneId == "local:a-1" }.entity!!
-        bench.device = "device-b"
-        bench.script.commands.clear()
-        val outcome = bench.pass(read(run(0, id = "b-0")))
-        outcome.gone.shouldBeEmpty()
-        bench.workouts.keys shouldContain kept
-        bench.links.values.map { it.phoneId } shouldContainExactly listOf("local:b-0")
-        bench.writes shouldContainExactly listOf("phone.origin", "phone.relink", "phone.forget")
-    }
-
-    "on the new phone two workouts of one kind and minute are not guessed at" {
-        val bench = HealthBench()
-        bench.pass(read(run(0, id = "a-x"), run(0, id = "a-y")))
-        bench.workouts.size shouldBe 2
-        bench.device = "device-b"
-        bench.script.commands.clear()
-        bench.pass(read(run(0, id = "b-x"), run(0, id = "b-y")))
-        bench.writes.none { it == "phone.relink" } shouldBe true
-        bench.workouts.size shouldBe 4
-        bench.links.values.map { it.entity }.toSet().size shouldBe 2
-    }
-
-    "a new phone not yet connected to the store is not asked about the old phone's store" {
-        val bench = HealthBench()
-        bench.pass(read(run(0, id = "a-0"), run(1, id = "a-1")))
-        bench.device = "device-b"
-        val outcome = bench.pass(read().copy(storePresent = false))
-        outcome.gone.shouldBeEmpty()
-        bench.workouts.size shouldBe 2
-        bench.links.size shouldBe 0
+    "every source has its question's words: HEALTH is in every exhaustive mapping" {
+        PhoneSource.entries.forEach { source ->
+            val asked = PhoneFollowWords.question(OriginGone(source, "o", "p", "L", 2, GoneReason.LEFT))
+            asked.body.isNotEmpty() shouldBe true
+            asked.keepLabel shouldBe "Keep"
+        }
+        PhoneSource.valueOf("HEALTH").wire shouldBe "health"
+        listOf<String>().shouldBeEmpty()
     }
 })

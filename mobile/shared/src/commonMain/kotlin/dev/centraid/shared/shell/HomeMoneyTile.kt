@@ -31,7 +31,9 @@ public object HomeMoneyTile {
      * the accounts (whether one counts toward spending) and the transfer links
      * (a transfer is not spending).
      */
-    public val TABLES: Set<String> = setOf("core_transaction", "money_account", "core_link")
+    public val TABLES: Set<String> = setOf(
+        "account", "budget", "checkpoint", "concept", "edge", "entity", "origin", "rule", "source", "txn",
+    )
 
     /** The one request, in the device's zone. */
     public fun request(now: DeviceClock.Reading): MoneyRequest =

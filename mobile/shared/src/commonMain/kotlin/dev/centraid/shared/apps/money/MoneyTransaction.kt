@@ -249,7 +249,6 @@ public object MoneyTransactionMachine :
                 MoneyFact(
                     MoneyCopy.FACT_NAME,
                     when (answer.display_name_source) {
-                        "rule" -> "${answer.display_name} · ${MoneyCopy.FROM_RULE}"
                         "member" -> "${answer.display_name} · ${MoneyCopy.FROM_YOU}"
                         else -> answer.display_name
                     },
@@ -285,7 +284,7 @@ public object MoneyTransactionMachine :
                     MoneyCopy.RULE_OFFER_BODY,
                     "support" to offer.support.toString(),
                     "of" to offer.of.toString(),
-                    "name" to offer.display_name.ifEmpty { answer.display_name },
+                    "name" to answer.display_name,
                     "category" to offer.category_label,
                 ),
                 detail = "${MoneyFold.matchKindWord(offer.kind)} ${offer.pattern}",

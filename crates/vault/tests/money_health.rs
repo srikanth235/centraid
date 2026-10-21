@@ -923,6 +923,33 @@ fn a_workout_gone_from_the_phone_is_kept_and_forgotten_and_a_new_phone_refinds_i
 }
 
 #[test]
+fn a_complete_read_judges_only_the_workouts_inside_the_window_it_began_at() {
+    let world = World::new();
+    let run = workout("local:1", "run", "2026-03-04T07:00:00Z", 5_000.0);
+    let swim = workout("local:2", "swim", "2026-03-20T07:00:00Z", 1_000.0);
+    follow_health(&world, "phone-a", &[run, swim.clone()], false);
+    // The store was read from the 10th: the run before it is none of the read's business.
+    let read = world.ok(
+        "follow.health",
+        json!({
+            "origin": { "ref": "store:apple-health", "label": "Apple Health", "device_id": "phone-a" },
+            "records": [swim],
+            "complete": true,
+            "since": "2026-03-10T00:00:00.000Z",
+        }),
+    );
+    assert_eq!(read["forgotten"], 0);
+    let run_id = world.line("local:1");
+    assert_eq!(
+        world.count(
+            "SELECT COUNT(*) FROM source WHERE entity_id = ?1",
+            &[&run_id]
+        ),
+        1
+    );
+}
+
+#[test]
 fn the_words_the_code_reads_are_the_checks_the_file_holds() {
     let world = World::new();
     let ddl = |table: &str| -> String {

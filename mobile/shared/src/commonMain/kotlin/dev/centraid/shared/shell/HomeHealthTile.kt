@@ -25,7 +25,7 @@ public object HomeHealthTile {
     public const val APP_ID: String = "health"
 
     /** The tables whose changes move this tile: the days, and the store's origin (connected or not). */
-    public val TABLES: Set<String> = setOf("health_daily", "phone_origin")
+    public val TABLES: Set<String> = setOf("vault", "measurement", "workout", "activity", "concept", "entity", "origin")
 
     /** The one request, in the device's zone. */
     public fun request(clock: DeviceClock): AppQueryRequest =

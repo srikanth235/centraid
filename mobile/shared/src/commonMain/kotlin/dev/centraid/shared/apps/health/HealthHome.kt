@@ -39,7 +39,7 @@ import dev.centraid.shared.screen.Step
  * EVERY TABLE A HEALTH HOME READ TOUCHES (#1129): the days, the workouts and their activities, the
  * kinds scheme they are named by, and the store's origin (whether a store is connected).
  */
-public val HEALTH_HOME_TABLES: Set<String> = setOf("health_daily", "health_workout", "core_activity", "core_concept", "phone_origin")
+public val HEALTH_HOME_TABLES: Set<String> = setOf("vault", "measurement", "workout", "activity", "concept", "entity", "origin")
 
 /**
  * HEALTH'S HOME (#1129): Today · Trends · Workouts, and More as a sheet. One screen, the tab a
