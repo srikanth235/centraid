@@ -27,7 +27,6 @@
 use centraid_api_proto::core_v1 as wire;
 use centraid_assist::Refusal;
 use centraid_assist::attach::{Attachments, IMAGE_MAX_EDGE, ImageData, TextDoc, label};
-use centraid_vault::content::{DocumentSource, PhotoSource};
 use image::imageops::FilterType;
 
 use crate::error::{CoreError, Result};
@@ -90,33 +89,22 @@ pub fn decode_image(bytes: &[u8], caption: &str) -> std::result::Result<ImageDat
 }
 
 /// One photograph from the vault.
-fn vault_photo(handle: &Handle, asset_id: &str) -> Result<std::result::Result<ImageData, Refusal>> {
-    let source = handle.with_vault(|vault| Ok(vault.attachment_photo(asset_id)?))?;
-    Ok(match source {
-        PhotoSource::Held { path, title, .. } => {
-            let size = std::fs::metadata(&path).map(|meta| meta.len());
-            match size {
-                Err(_) => Err(Refusal::AttachmentUnreadable),
-                Ok(size) if size > IMAGE_BYTES_MAX as u64 => Err(Refusal::AttachmentTooLarge),
-                Ok(_) => std::fs::read(&path)
-                    .map_err(|_| Refusal::AttachmentUnreadable)
-                    .and_then(|bytes| decode_image(&bytes, title.as_deref().unwrap_or_default())),
-            }
-        }
-        PhotoSource::NotAnImage => Err(Refusal::AttachmentUnsupported),
-        PhotoSource::NotHeld | PhotoSource::Missing => Err(Refusal::AttachmentUnreadable),
-    })
+///
+/// **Not served until the chat lane lands** ([#1135](https://github.com/srikanth235/centraid/issues/1135),
+/// lane 7): a photograph is a `photo` entity with a `blob` now, and what the chat
+/// may read of one (its held path and its title) is that lane's question. Until
+/// then a vault photo reads as unreadable, which the chat says as a refusal.
+fn vault_photo(
+    _handle: &Handle,
+    _asset_id: &str,
+) -> Result<std::result::Result<ImageData, Refusal>> {
+    Ok(Err(Refusal::AttachmentUnreadable))
 }
 
-/// One document from the vault.
-fn vault_doc(handle: &Handle, doc_id: &str) -> Result<std::result::Result<TextDoc, Refusal>> {
-    let source = handle.with_vault(|vault| Ok(vault.attachment_document(doc_id)?))?;
-    Ok(match source {
-        DocumentSource::Text { title, text } => Ok(TextDoc { name: title, text }),
-        DocumentSource::Unsupported { .. } => Err(Refusal::AttachmentUnsupported),
-        DocumentSource::TooLarge => Err(Refusal::AttachmentTooLarge),
-        DocumentSource::Missing => Err(Refusal::AttachmentUnreadable),
-    })
+/// One document from the vault. Not served until the chat lane lands, for the
+/// reason [`vault_photo`] states.
+fn vault_doc(_handle: &Handle, _doc_id: &str) -> Result<std::result::Result<TextDoc, Refusal>> {
+    Ok(Err(Refusal::AttachmentUnreadable))
 }
 
 /// What a request's attachments name, validated: at most one image and one

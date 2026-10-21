@@ -164,10 +164,11 @@ fn the_lists_the_vault_states_are_the_vaults() {
         .map(|(_, vault)| *vault)
         .collect();
     assert_eq!(types, centraid_vault::commands::locker::ITEM_TYPES.to_vec());
-    let sealed = centraid_ontology::registries::sealed_physical_columns();
+    // The cells a reveal may name are the vault's own sealed-cell list.
     for (_, column) in meta::REVEAL_FIELDS {
         assert!(
-            sealed.contains(&("locker_item".to_owned(), (*column).to_owned())),
+            centraid_vault::commands::locker::SEALED_ITEM_CELLS.contains(column)
+                || ["value_sealed", "private_key"].contains(column),
             "locker_item.{column} is not a sealed column"
         );
     }

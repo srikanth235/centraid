@@ -21,12 +21,12 @@ use centraid_apps_kit::spelling::WalkedWords;
 use centraid_apps_kit::statement::{PageBindValue, PageOrder, PageQuery};
 
 use crate::queries::{
-    AccessAnswer, FLAGS_SCHEME_URI, ITEM_COLUMNS, ITEMS_MAX, ItemRow, LOCKER_TAGS_SCHEME_URI,
-    SEALED_ITEM_COLUMNS, SEARCH_ROWS, STARRED_NOTATION, TRASH_ROWS, access_answer,
+    AccessAnswer, ITEM_COLUMNS, ITEMS_MAX, ItemRow, SEALED_ITEM_COLUMNS, SEARCH_ROWS, TRASH_ROWS,
+    access_answer,
     access_statement, access_window, items_window, subtitle_of,
 };
 use crate::transfer::{Entry, EntryField, EntryPasskey, Existing, type_columns};
-use crate::types::{ITEM_ENTITY_TYPE, ITEM_TYPES, degrade_type, degraded_from};
+use crate::types::{ITEM_TYPES, degrade_type, degraded_from};
 
 /// How many tag, concept and alias rows a list walks before it stops. A tag
 /// set this large is a vault the phone reads the first part of, and says so
@@ -86,56 +86,15 @@ pub fn trashed_statement() -> PageQuery {
     .filter("deleted_at IS NOT NULL", Vec::new())
 }
 
-/// Every tag row on a Locker item. The star rides the same table (a
-/// flags-scheme concept) and is told apart by its concept.
+/// Every label on a Locker item: Locker's own `locker_tag` rows, in no other
+/// app's vocabulary. The star is a column of the item, not a row here.
 #[must_use]
 pub fn tag_rows_statement() -> PageQuery {
     PageQuery::new(
         "locker.phone.tags",
-        "tag_id, target_id, concept_id",
-        "core_tag",
-        PageOrder::asc("tag_id", "tag_id"),
-    )
-    .filter(
-        "target_type = ?",
-        vec![PageBindValue::Text(ITEM_ENTITY_TYPE.to_owned())],
-    )
-}
-
-/// The two schemes Locker reads: its own tags and the flags.
-#[must_use]
-pub fn schemes_statement() -> PageQuery {
-    PageQuery::new(
-        "locker.phone.schemes",
-        "scheme_id, uri",
-        "core_concept_scheme",
-        PageOrder::asc("scheme_id", "scheme_id"),
-    )
-    .filter(
-        "uri IN (?, ?)",
-        vec![
-            PageBindValue::Text(LOCKER_TAGS_SCHEME_URI.to_owned()),
-            PageBindValue::Text(FLAGS_SCHEME_URI.to_owned()),
-        ],
-    )
-}
-
-/// The concepts of the schemes [`schemes_statement`] found.
-#[must_use]
-pub fn concepts_statement(scheme_ids: &[String]) -> PageQuery {
-    let placeholders = vec!["?"; scheme_ids.len()].join(", ");
-    PageQuery::new(
-        "locker.phone.concepts",
-        "concept_id, scheme_id, pref_label, notation",
-        "core_concept",
-        PageOrder::asc("concept_id", "concept_id"),
-    )
-    .filter(
-        &format!("scheme_id IN ({placeholders})"),
-        scheme_ids
-            .iter()
-            .map(|id| PageBindValue::Text(id.clone()))
-            .collect(),
+        "item_id, label",
+        "locker_tag",
+        PageOrder::asc("item_id", "label"),
     )
 }
 
@@ -211,41 +170,6 @@ pub fn presence_all_statement() -> PageQuery {
         PageOrder::asc("item_id", "item_id"),
     )
     .filter("deleted_at IS NULL", Vec::new())
-}
-
-/// One item's memo (`knowledge.annotation`, `locker.set_memo`'s row).
-#[must_use]
-pub fn memo_statement(item_id: &str) -> PageQuery {
-    PageQuery::new(
-        "locker.phone.memo",
-        "annotation_id, body_text, updated_at",
-        "knowledge_annotation",
-        PageOrder::desc("updated_at", "annotation_id"),
-    )
-    .filter(
-        "target_type = ? AND target_id = ?",
-        vec![
-            PageBindValue::Text(ITEM_ENTITY_TYPE.to_owned()),
-            PageBindValue::Text(item_id.to_owned()),
-        ],
-    )
-}
-
-/// Every item's memo, newest first: what a search reads beside the item's own
-/// columns (#1097, R6). Walked under [`DECORATION_ROWS`], like the tags and
-/// aliases, so a vault with more memos than that is searched over the newest.
-#[must_use]
-pub fn memos_statement() -> PageQuery {
-    PageQuery::new(
-        "locker.phone.memos",
-        "annotation_id, target_id, body_text, updated_at",
-        "knowledge_annotation",
-        PageOrder::desc("updated_at", "annotation_id"),
-    )
-    .filter(
-        "target_type = ?",
-        vec![PageBindValue::Text(ITEM_ENTITY_TYPE.to_owned())],
-    )
 }
 
 fn by_item(name: &str, select: &str, from: &str, pk: &str, item_id: &str) -> PageQuery {
@@ -482,11 +406,7 @@ pub fn load_item(door: &dyn PageDoor, item_id: &str) -> KitResult<Option<ItemDat
             created_at: text_of(row, "created_at"),
             has_private_key: truthy(row, "has_private_key"),
         });
-    let memo = door
-        .page(&memo_statement(item_id), &first(1))?
-        .rows
-        .first()
-        .and_then(|row| text_of(row, "body_text"));
+    let memo = row.memo.clone();
     let alias = decorations.alias.get(item_id).cloned();
     Ok(Some(ItemData {
         degraded_from: degraded_from(&row.item_type).map(str::to_owned),
@@ -528,7 +448,6 @@ pub fn load_search(door: &dyn PageDoor, term: &str, limit: usize) -> KitResult<S
     let walked = read_window(door, &shelves_statement(), SEARCH_ROWS)?;
     let rows: Vec<ItemRow> = walked.rows.iter().map(ItemRow::of).collect();
     let decorations = decorations(door)?;
-    let memos = memos(door)?;
     let texts = |row: &ItemRow| -> Vec<String> {
         let mut texts: Vec<String> = row.searchable().map(str::to_lowercase).collect();
         texts.extend(
@@ -539,7 +458,7 @@ pub fn load_search(door: &dyn PageDoor, term: &str, limit: usize) -> KitResult<S
                 .flatten()
                 .map(|alias| alias.to_lowercase()),
         );
-        texts.extend(memos.get(&row.item_id).map(|memo| memo.to_lowercase()));
+        texts.extend(row.memo.as_ref().map(|memo| memo.to_lowercase()));
         texts
     };
     let haystacks: Vec<Vec<String>> = rows.iter().map(texts).collect();
@@ -575,19 +494,6 @@ pub fn load_search(door: &dyn PageDoor, term: &str, limit: usize) -> KitResult<S
             .collect(),
         corrected,
     })
-}
-
-/// Each item's newest memo, by item id ([`memos_statement`]).
-fn memos(door: &dyn PageDoor) -> KitResult<BTreeMap<String, String>> {
-    let mut memos = BTreeMap::new();
-    for row in read_window(door, &memos_statement(), DECORATION_ROWS)?.rows {
-        if let (Some(item), Some(body)) = (text_of(&row, "target_id"), text_of(&row, "body_text"))
-            && !body.is_empty()
-        {
-            memos.entry(item).or_insert(body);
-        }
-    }
-    Ok(memos)
 }
 
 /// The metadata review, against `today` (`YYYY-MM-DD` in the member's zone).
@@ -865,12 +771,7 @@ pub fn load_export(door: &dyn PageDoor) -> KitResult<Vec<ExportSource>> {
                 credential_id: text_of(row, "credential_id").unwrap_or_default(),
                 algorithm: text_of(row, "algorithm").unwrap_or_default(),
             });
-        let memo = door
-            .page(&memo_statement(&item_id), &first(1))?
-            .rows
-            .first()
-            .and_then(|row| text_of(row, "body_text"))
-            .unwrap_or_default();
+        let memo = row.memo.clone().unwrap_or_default();
         let listed = decorations.listed(row);
         let entry = Entry {
             columns: plain_columns(&listed.row)
@@ -935,11 +836,10 @@ fn plain_columns(row: &ItemRow) -> BTreeMap<String, String> {
 // The decorations every shelf folds over.
 // ---------------------------------------------------------------------------
 
-/// Tags, stars and aliases, keyed by item id.
+/// Tags and aliases, keyed by item id.
 #[derive(Debug, Clone, Default)]
 pub struct PhoneDecorations {
     pub tags: BTreeMap<String, Vec<String>>,
-    pub starred: BTreeSet<String>,
     pub alias: BTreeMap<String, String>,
     /// Every alias of an item, for a search (`alias` keeps the one the item
     /// page draws).
@@ -949,68 +849,19 @@ pub struct PhoneDecorations {
 impl PhoneDecorations {
     fn listed(&self, row: ItemRow) -> Listed {
         Listed {
-            starred: self.starred.contains(&row.item_id),
+            starred: row.starred,
             tags: self.tags.get(&row.item_id).cloned().unwrap_or_default(),
             row,
         }
     }
 }
 
-/// Read the vocabulary once, then the tag rows and aliases.
+/// Read the tag rows and the aliases.
 pub fn decorations(door: &dyn PageDoor) -> KitResult<PhoneDecorations> {
-    let schemes = read_window(door, &schemes_statement(), 2)?.rows;
-    let mut tag_scheme = None;
-    let mut flag_scheme = None;
-    for row in &schemes {
-        let (Some(id), Some(uri)) = (text_of(row, "scheme_id"), text_of(row, "uri")) else {
-            continue;
-        };
-        if uri == LOCKER_TAGS_SCHEME_URI {
-            tag_scheme = Some(id);
-        } else if uri == FLAGS_SCHEME_URI {
-            flag_scheme = Some(id);
-        }
-    }
-    let scheme_ids: Vec<String> = tag_scheme
-        .iter()
-        .chain(flag_scheme.iter())
-        .cloned()
-        .collect();
-    let mut labels: BTreeMap<String, String> = BTreeMap::new();
-    let mut star: Option<String> = None;
-    if !scheme_ids.is_empty() {
-        for row in read_window(door, &concepts_statement(&scheme_ids), DECORATION_ROWS)?.rows {
-            let (Some(concept), Some(scheme)) =
-                (text_of(&row, "concept_id"), text_of(&row, "scheme_id"))
-            else {
-                continue;
-            };
-            if Some(&scheme) == tag_scheme.as_ref() {
-                if let Some(label) = text_of(&row, "pref_label") {
-                    labels.insert(concept, label);
-                }
-            } else if Some(&scheme) == flag_scheme.as_ref()
-                && text_of(&row, "notation").as_deref() == Some(STARRED_NOTATION)
-            {
-                star = Some(concept);
-            }
-        }
-    }
     let mut decorations = PhoneDecorations::default();
     for row in read_window(door, &tag_rows_statement(), DECORATION_ROWS)?.rows {
-        let (Some(target), Some(concept)) =
-            (text_of(&row, "target_id"), text_of(&row, "concept_id"))
-        else {
-            continue;
-        };
-        if star.as_ref() == Some(&concept) {
-            decorations.starred.insert(target);
-        } else if let Some(label) = labels.get(&concept) {
-            decorations
-                .tags
-                .entry(target)
-                .or_default()
-                .push(label.clone());
+        if let (Some(item), Some(label)) = (text_of(&row, "item_id"), text_of(&row, "label")) {
+            decorations.tags.entry(item).or_default().push(label);
         }
     }
     for labels in decorations.tags.values_mut() {

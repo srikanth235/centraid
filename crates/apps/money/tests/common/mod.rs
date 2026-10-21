@@ -36,7 +36,6 @@ impl Scratch {
         .expect("a vault is created");
         vault.found("Test", "Priya").expect("it is founded");
         let registry = Registry::with_system_commands().expect("the registry builds");
-        registry.install(&vault).expect("the record installs");
         Self {
             dir,
             vault,

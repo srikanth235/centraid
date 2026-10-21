@@ -1263,9 +1263,9 @@ mod tests {
                 );
                 // A failure of the vocabulary is kept the way `query`'s is, so
                 // `settle` reports it rather than the member seeing "no match".
-                let broken = Inner(Err(SearchError::NotADomain {
-                    entity: "locker.item".to_owned(),
-                    count: 7,
+                let broken = Inner(Err(SearchError::NotSearchable {
+                    kind: "locker.item".to_owned(),
+                    count: 13,
                 }));
                 let recording = RecordingSearch {
                     inner: &broken,

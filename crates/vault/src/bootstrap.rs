@@ -70,6 +70,13 @@ impl Vault {
         })
     }
 
+    /// The vault's identity on the wire: its self person's id, `None` before the
+    /// vault is founded. A vault has no id of its own; the person it is for is the
+    /// one thing that distinguishes it.
+    pub fn vault_id(&self) -> Result<Option<String>> {
+        self.self_id()
+    }
+
     /// The self person's id; `None` before the vault is founded.
     pub fn self_id(&self) -> Result<Option<String>> {
         self.read(|connection| {

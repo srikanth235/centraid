@@ -38,11 +38,14 @@ pub fn content_urls(vault: &Vault, request: &wire::ContentUrlRequest) -> Result<
         .iter()
         .take(MAX_CONTENT_URLS)
         .map(|reference| {
-            let found = vault.content_location(
-                &reference.content_id,
-                &reference.owner_type,
-                &reference.owner_id,
-            )?;
+            // BY WHAT THE GRID HAS: the owner's id (a photograph's, a
+            // document's) when it names one, and the blob's hash otherwise.
+            let asked = if reference.owner_id.is_empty() {
+                &reference.content_id
+            } else {
+                &reference.owner_id
+            };
+            let found = vault.content_location(asked)?;
             // THE STORE, THE LIBRARY, OR NOWHERE (#1080 ruling 6). A path is
             // answered for the store only; an original the operating system's
             // library holds is named by the library's identifier, for the
@@ -53,8 +56,8 @@ pub fn content_urls(vault: &Vault, request: &wire::ContentUrlRequest) -> Result<
                 (None, None) => (wire::ContentSource::None, String::new()),
             };
             Ok(wire::ContentUrl {
-                content_id: found.content_id,
-                // A PATH AND NOT BYTES. See `centraid_vault::content`: the
+                content_id: reference.content_id.clone(),
+                // A PATH AND NOT BYTES. See `centraid_vault::blob`: the
                 // platform opens the file, so caching and range requests stay
                 // where they belong and the core never buffers a photograph.
                 path: found.path.map(|path| path.to_string_lossy().into_owned()),
@@ -230,7 +233,6 @@ pub fn page(vault: &Vault, request: &wire::PageRequest) -> Result<wire::Page> {
                 .as_ref()
                 .map(|cursor| (cursor.sort_key.clone(), cursor.pk.clone())),
             held_thumbnail: query.with_held_thumbnail,
-            note_body: query.with_note_body,
             document_size: query.with_document_size,
         },
         &PAGE_TABLES,
@@ -268,14 +270,6 @@ pub fn page(vault: &Vault, request: &wire::PageRequest) -> Result<wire::Page> {
                             .into_iter()
                             .flatten()
                             .map(ToOwned::to_owned),
-                    )
-                    // NOTE BODY RIDES AFTER THE THUMBNAIL COLUMNS when both
-                    // are asked, and alone after `select` when only it is
-                    // (#1025 live-notes, R-NOTES-1). Same positional contract.
-                    .chain(
-                        query
-                            .with_note_body
-                            .then(|| centraid_vault::page::NOTE_BODY_COLUMN.to_owned()),
                     )
                     // AND THE DOCUMENT'S SIZE LAST, when it is asked for at
                     // all (#1029, Home's Docs tile). Same positional contract
@@ -425,7 +419,8 @@ pub fn invoke(
         // the audit trail and never a member.
         reason: outcome.reason.unwrap_or_default(),
         invocation_id: outcome.invocation_id,
-        receipt_id: outcome.receipt_id,
+        // The journal row is the evidence; nothing else is a receipt.
+        receipt_id: String::new(),
         revoked_at: None,
     })
 }
@@ -553,7 +548,7 @@ pub fn found(
                 request.content
             ),
         })?;
-    if let Some(vault_id) = vault.vault_id()? {
+    if let Some(vault_id) = vault.self_id()? {
         return Err(CoreError::VaultAlreadyHeld { vault_id });
     }
     let founded = vault.found(&request.display_name, &request.owner_name)?;
@@ -564,8 +559,8 @@ pub fn found(
         }
     }
     Ok(wire::FoundResponse {
-        vault_id: founded.vault_id,
-        owner_party_id: founded.owner_party_id,
+        vault_id: founded.self_id.clone(),
+        owner_party_id: founded.self_id,
     })
 }
 

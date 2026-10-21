@@ -252,12 +252,12 @@ pub(super) fn link_targets(
                 .targets
                 .into_iter()
                 .map(|target| wire::NotesLinkTarget {
+                    app_id: named::app_of(&target.entity).to_owned(),
                     subtitle_local_day: subtitle_day(zone.as_ref(), &target.subtitle),
                     entity: target.entity,
                     id: target.id,
                     title: target.title,
                     subtitle: target.subtitle,
-                    app_id: target.app_id,
                     snippet: target.snippet,
                 })
                 .collect(),

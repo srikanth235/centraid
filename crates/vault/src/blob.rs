@@ -376,6 +376,49 @@ impl Vault {
             .value)
     }
 
+    /// Locate the bytes a grid cell or a row stands for, by what the grid has:
+    /// the id of a photograph or a document, or a blob's own hash.
+    ///
+    /// The media type is the row's, or (for a bare hash) the one of whatever
+    /// rents the bytes, so a reader that only holds an id still learns whether it
+    /// may embed them. An id that is neither is a state, not a fault: "this item
+    /// is not here".
+    pub fn content_location(&self, id: &str) -> Result<BlobLocation> {
+        let found: Option<(String, String)> = self.read(|connection| {
+            Ok(connection
+                .query_row(
+                    "SELECT blob, media_type FROM photo WHERE id = ?1
+                     UNION ALL SELECT blob, media_type FROM document WHERE id = ?1
+                     UNION ALL SELECT b.hash,
+                          COALESCE((SELECT media_type FROM derivative WHERE out = b.hash LIMIT 1),
+                                   (SELECT media_type FROM photo WHERE blob = b.hash),
+                                   (SELECT media_type FROM document WHERE blob = b.hash LIMIT 1),
+                                   '')
+                       FROM blob b WHERE b.hash = ?1
+                     LIMIT 1",
+                    [id],
+                    |row| Ok((row.get(0)?, row.get(1)?)),
+                )
+                .ok())
+        })?;
+        match found {
+            Some((hash, media_type)) => {
+                let mut location = self.blob_location(&hash, &media_type)?;
+                location.hash = id.to_owned();
+                Ok(location)
+            }
+            None => Ok(BlobLocation {
+                hash: id.to_owned(),
+                path: None,
+                os_ref: None,
+                media_type: String::new(),
+                byte_size: 0,
+                embeddable: false,
+                absent_reason: "Centraid does not have this item.".to_owned(),
+            }),
+        }
+    }
+
     /// Locate one blob's bytes for the reader that knows what they are.
     ///
     /// Never an `Err` for "the bytes are not here": that is a state a grid

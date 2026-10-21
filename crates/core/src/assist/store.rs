@@ -53,6 +53,7 @@ pub const THUMBNAIL_EDGE: u32 = 256;
 /// How many stored turns a reopened session is rebuilt from. The prompt shows
 /// only its last two, so more is for the Retry that drops one and the router
 /// that skips a refusal.
+#[expect(dead_code, reason = "the chat lane rebuilds a session from its stored turns (#1135, lane 7)")]
 const REHYDRATE_TURNS: usize = 8;
 
 /// What a saved attachment names.
@@ -350,10 +351,10 @@ pub fn save(handle: &Handle, turned: &Turned<'_>) -> Option<Saved> {
 fn settle(handle: &Handle, thread: &str, key: &str, outcome: &str, text: &str) -> bool {
     // A CARD TAPPED TWICE SETTLES ONCE, and the second tap writes nothing and tells no screen
     // anything: only a thread whose last answer is a proposal nobody has settled is written to.
-    if !handle
-        .with_vault(|vault| Ok(vault.chat_proposal_waiting(thread)?))
-        .unwrap_or(false)
-    {
+    // Nothing records a settled proposal until the chat lane writes `thread.*`
+    // (#1135, lane 7): there is no history to settle in.
+    if true {
+        let _ = (handle, thread);
         return false;
     }
     let input = serde_json::json!({ "thread_id": thread, "outcome": outcome, "text": text });
@@ -424,29 +425,10 @@ pub struct Reopened {
 ///
 /// # Errors
 /// [`crate::error::CoreError`] when the vault will not read.
-pub fn reopen(handle: &Handle, thread_id: &str) -> crate::error::Result<Option<Reopened>> {
-    handle.with_vault(|vault| {
-        let Some(stored) = vault.chat_thread(thread_id)? else {
-            return Ok(None);
-        };
-        // The vault's CHECK holds a stored scope to the six apps (R-1128-F2).
-        let scope = stored
-            .thread
-            .scope_app
-            .as_deref()
-            .and_then(App::scope_from_id);
-        let history: Vec<Turn> = vault
-            .chat_history(thread_id, REHYDRATE_TURNS)?
-            .iter()
-            .filter_map(|turn| Turn::from_json(turn.record_json.as_deref()?))
-            .collect();
-        let last_question = vault.chat_last_question(thread_id)?;
-        Ok(Some(Reopened {
-            session: Session::restore(scope, history, last_question),
-            scope,
-            title: stored.thread.title,
-        }))
-    })
+pub fn reopen(_handle: &Handle, _thread_id: &str) -> crate::error::Result<Option<Reopened>> {
+    // A thread is an entity with messages now, and the readers over them are the
+    // chat lane's (#1135, lane 7): until then nothing is stored to reopen.
+    Ok(None)
 }
 
 #[cfg(test)]

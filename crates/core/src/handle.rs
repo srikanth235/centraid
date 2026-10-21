@@ -1213,7 +1213,7 @@ impl Handle {
                 self.with_vault(|vault| {
                     match derivative {
                         Some((variant_of, variant)) => {
-                            vault.stage_derivative(&centraid_vault::content::StagedDerivative {
+                            vault.stage_derivative(&centraid_vault::blob::StagedDerivative {
                                 hash: hash.clone(),
                                 byte_size,
                                 media_type,
@@ -1222,10 +1222,9 @@ impl Handle {
                             })?;
                         }
                         None => {
-                            vault.stage_bytes(&[centraid_vault::content::NeededBytes {
+                            vault.stage_bytes(&[centraid_vault::blob::NeededBytes {
                                 hash: hash.clone(),
                                 byte_size,
-                                media_type,
                             }])?;
                         }
                     }
@@ -1277,10 +1276,9 @@ impl Handle {
                 }
                 let hash = h.to_hex();
                 let derivatives = self.with_vault(|vault| {
-                    vault.stage_bytes(&[centraid_vault::content::NeededBytes {
+                    vault.stage_bytes(&[centraid_vault::blob::NeededBytes {
                         hash: hash.clone(),
                         byte_size: i64::try_from(len).unwrap_or(i64::MAX),
-                        media_type,
                     }])?;
                     Ok(vault.derivatives_of(&hash)?)
                 })?;

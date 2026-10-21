@@ -20,21 +20,6 @@
         "verbs": "reveal"
       },
       {
-        "schema": "core",
-        "table": "tag",
-        "verbs": "read"
-      },
-      {
-        "schema": "core",
-        "table": "concept",
-        "verbs": "read"
-      },
-      {
-        "schema": "core",
-        "table": "concept_scheme",
-        "verbs": "read"
-      },
-      {
         "schema": "locker",
         "table": "add_item",
         "verbs": "act"
@@ -76,6 +61,11 @@
       },
       {
         "schema": "locker",
+        "table": "tag",
+        "verbs": "read"
+      },
+      {
+        "schema": "locker",
         "table": "item_field",
         "verbs": "read"
       },
@@ -100,53 +90,9 @@
         "verbs": "reveal"
       },
       {
-        "schema": "core",
-        "table": "entity_revision",
-        "verbs": "read",
-        "rowFilter": [
-          {
-            "column": "entity_type",
-            "op": "eq",
-            "value": "locker.item"
-          }
-        ],
-        "fieldMask": [
-          "revision_id",
-          "entity_type",
-          "entity_id",
-          "operation",
-          "snapshot_json",
-          "recorded_at",
-          "undo_until",
-          "undone_at"
-        ]
-      },
-      {
-        "schema": "core",
-        "table": "attachment",
-        "verbs": "read"
-      },
-      {
-        "schema": "core",
-        "table": "content_item",
-        "verbs": "read"
-      },
-      {
-        "schema": "core",
-        "table": "content_representation",
-        "verbs": "read"
-      },
-      {
-        "schema": "access",
+        "schema": "locker",
         "table": "receipt",
-        "verbs": "read",
-        "rowFilter": [
-          {
-            "column": "object_type",
-            "op": "in",
-            "value": ["locker.item", "locker.auth"]
-          }
-        ]
+        "verbs": "read"
       },
       {
         "schema": "locker",
@@ -295,7 +241,10 @@
             "type": "string"
           }
         },
-        "required": ["type", "title"],
+        "required": [
+          "type",
+          "title"
+        ],
         "additionalProperties": false
       },
       "output": {
@@ -391,7 +340,9 @@
             "type": "string"
           }
         },
-        "required": ["item_id"],
+        "required": [
+          "item_id"
+        ],
         "additionalProperties": false
       },
       "output": {
@@ -421,7 +372,9 @@
             "minLength": 1
           }
         },
-        "required": ["item_id"],
+        "required": [
+          "item_id"
+        ],
         "additionalProperties": false
       },
       "output": {
@@ -451,7 +404,9 @@
             "minLength": 1
           }
         },
-        "required": ["item_id"],
+        "required": [
+          "item_id"
+        ],
         "additionalProperties": false
       },
       "output": {
@@ -481,7 +436,9 @@
             "minLength": 1
           }
         },
-        "required": ["item_id"],
+        "required": [
+          "item_id"
+        ],
         "additionalProperties": false
       },
       "output": {
@@ -511,7 +468,9 @@
             "minLength": 1
           }
         },
-        "required": ["item_id"],
+        "required": [
+          "item_id"
+        ],
         "additionalProperties": false
       },
       "output": {
@@ -541,7 +500,9 @@
             "minLength": 1
           }
         },
-        "required": ["item_id"],
+        "required": [
+          "item_id"
+        ],
         "additionalProperties": false
       },
       "output": {
@@ -571,7 +532,9 @@
             "minLength": 1
           }
         },
-        "required": ["item_id"],
+        "required": [
+          "item_id"
+        ],
         "additionalProperties": false
       },
       "output": {
@@ -601,7 +564,9 @@
             "minLength": 1
           }
         },
-        "required": ["item_id"],
+        "required": [
+          "item_id"
+        ],
         "additionalProperties": false
       },
       "output": {
@@ -631,7 +596,9 @@
             "minLength": 1
           }
         },
-        "required": ["item_id"],
+        "required": [
+          "item_id"
+        ],
         "additionalProperties": false
       },
       "output": {
@@ -673,7 +640,13 @@
           },
           "kind": {
             "type": "string",
-            "enum": ["text", "sealed", "url", "date", "otp"]
+            "enum": [
+              "text",
+              "sealed",
+              "url",
+              "date",
+              "otp"
+            ]
           },
           "value": {
             "type": "string"
@@ -683,7 +656,11 @@
             "minimum": 0
           }
         },
-        "required": ["item_id", "label", "kind"],
+        "required": [
+          "item_id",
+          "label",
+          "kind"
+        ],
         "additionalProperties": false
       },
       "output": {
@@ -717,7 +694,10 @@
             "minLength": 1
           }
         },
-        "required": ["item_id", "field_id"],
+        "required": [
+          "item_id",
+          "field_id"
+        ],
         "additionalProperties": false
       },
       "output": {
@@ -756,12 +736,17 @@
                   "minLength": 1
                 }
               },
-              "required": ["url"],
+              "required": [
+                "url"
+              ],
               "additionalProperties": false
             }
           }
         },
-        "required": ["item_id", "addresses"],
+        "required": [
+          "item_id",
+          "addresses"
+        ],
         "additionalProperties": false
       },
       "output": {
@@ -810,7 +795,10 @@
             "type": "string"
           }
         },
-        "required": ["item_id", "rp_id"],
+        "required": [
+          "item_id",
+          "rp_id"
+        ],
         "additionalProperties": false
       },
       "output": {
@@ -840,7 +828,9 @@
             "minLength": 1
           }
         },
-        "required": ["item_id"],
+        "required": [
+          "item_id"
+        ],
         "additionalProperties": false
       },
       "output": {
@@ -873,7 +863,10 @@
             "type": "string"
           }
         },
-        "required": ["item_id", "note"],
+        "required": [
+          "item_id",
+          "note"
+        ],
         "additionalProperties": false
       },
       "output": {
@@ -908,7 +901,9 @@
             "type": "boolean"
           }
         },
-        "required": ["confirm"],
+        "required": [
+          "confirm"
+        ],
         "additionalProperties": false
       },
       "output": {
@@ -995,14 +990,19 @@
             "minLength": 1
           }
         },
-        "required": ["item_id"],
+        "required": [
+          "item_id"
+        ],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
           "item": {
-            "type": ["object", "null"]
+            "type": [
+              "object",
+              "null"
+            ]
           },
           "authRequired": {
             "type": "boolean"
@@ -1026,7 +1026,9 @@
             "type": "string"
           }
         },
-        "required": ["term"],
+        "required": [
+          "term"
+        ],
         "additionalProperties": false
       },
       "output": {

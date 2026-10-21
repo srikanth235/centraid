@@ -168,7 +168,7 @@ fn unlock(
     now_ms: i64,
     changes: &crate::events::ChangeFeed,
 ) -> Result<wire::LockerSessionResponse> {
-    let vault_id = vault.vault_id()?.ok_or_else(|| CoreError::InvalidRequest {
+    let vault_id = vault.self_id()?.ok_or_else(|| CoreError::InvalidRequest {
         detail: "this file is not a founded vault, so it has no Locker".to_owned(),
     })?;
     // `K` IS THE SEED'S (Q-1047-11). A core opened without it has nothing to

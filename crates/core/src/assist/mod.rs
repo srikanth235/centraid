@@ -539,19 +539,12 @@ pub fn answer(handle: &Handle, request: &wire::AssistRequest) -> Result<wire::As
             } else {
                 asked.limit.min(200)
             };
-            let listed =
-                handle.with_vault(|vault| Ok(vault.attachable_documents(limit as usize)?))?;
+            // The documents a chat may attach are the chat lane's to list over
+            // the new model (#1135, lane 7); until then there are none.
+            let _ = (handle, limit);
             Ok(response(wire::assist_response::Kind::Documents(
                 wire::AssistDocuments {
-                    documents: listed
-                        .into_iter()
-                        .map(|document| wire::AssistDocument {
-                            doc_id: document.document_id,
-                            title: document.title,
-                            media_type: document.media_type,
-                            updated_at: document.updated_at,
-                        })
-                        .collect(),
+                    documents: Vec::new(),
                 },
             )))
         }

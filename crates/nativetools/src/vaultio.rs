@@ -146,9 +146,6 @@ impl Handle {
             .found_in("Nativetools", me, currency)
             .map_err(|error| error.to_string())?;
         let registry = Registry::with_system_commands().map_err(|error| error.to_string())?;
-        registry
-            .install(&vault)
-            .map_err(|error| error.to_string())?;
         Ok(Self {
             vault,
             registry,

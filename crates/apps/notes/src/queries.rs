@@ -1090,9 +1090,9 @@ fn search_body(
         // answers the empty shape with no denial, because a member who typed
         // `---` was not refused anything.
         Err(SearchError::NoSearchableWords { .. }) => return Ok(SearchData::default()),
-        Err(SearchError::NotADomain { entity, count }) => {
+        Err(SearchError::NotSearchable { kind, count }) => {
             return Err(KitError::Door(format!(
-                "`{entity}` is not one of the {count} search domains"
+                "`{kind}` is not one of the {count} kinds the vault searches"
             )));
         }
         Err(other) => return Err(KitError::Door(other.to_string())),
@@ -1527,12 +1527,14 @@ pub fn load_link_targets(
         Err(other) => return Err(other),
     };
     let mut targets: Vec<Target> = Vec::new();
-    for domain in centraid_search::DOMAINS {
-        let mut request = SearchRequest::new(domain.entity, term, LINK_TARGET_ROWS);
-        if domain.entity == NOTE_TARGET_TYPE {
+    // ONE QUERY PER KIND, so each kind keeps its own column of the sheet: the
+    // index is one, the powerbox's columns are the kinds a member links to.
+    for kind in centraid_vault::index::SEARCHABLE {
+        let mut request = SearchRequest::new(kind.as_str(), term, LINK_TARGET_ROWS);
+        if kind == centraid_vault::model::Kind::Note {
             request = request.excluding(journal_ids.clone());
         }
-        // ISOLATED: a refusal drops THIS domain's column, never the sheet.
+        // ISOLATED: a refusal drops THIS kind's column, never the sheet.
         if let Ok(Answer::Data { page, .. }) = search.query(principal, &request) {
             targets.extend(page.rows);
         }

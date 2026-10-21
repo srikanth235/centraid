@@ -70,14 +70,9 @@ pub(super) fn search(
             centraid_search::SqliteDoor::open(connection).map_err(|error| CoreError::Invariant {
                 context: format!("the search index will not open: {error}"),
             });
-        let entities: Vec<&str> = centraid_search::DOMAINS
+        let entities: Vec<&str> = centraid_vault::index::SEARCHABLE
             .iter()
-            .map(|domain| domain.entity)
-            .chain(
-                centraid_search::NAMED
-                    .iter()
-                    .map(|container| container.entity),
-            )
+            .map(|kind| kind.as_str())
             .collect();
         Ok(index.map(|index| {
             corrected_search(
@@ -122,23 +117,23 @@ pub(super) fn search(
                         String::new()
                     };
                     wire::VaultSearchHit {
+                        app_id: named::app_of(&target.entity).to_owned(),
                         subtitle_local_day: subtitle_day(zone.as_ref(), &target.subtitle),
                         entity: target.entity,
                         id: target.id,
                         title: target.title,
                         subtitle: target.subtitle,
-                        app_id: target.app_id,
                         snippet: target.snippet,
                         open_id,
                     }
                 })
                 .chain(found.into_iter().map(|container| wire::VaultSearchHit {
+                    app_id: named::app_of(&container.entity).to_owned(),
                     subtitle_local_day: subtitle_day(zone.as_ref(), &container.subtitle),
                     entity: container.entity,
                     id: container.id,
                     title: container.title,
                     subtitle: container.subtitle,
-                    app_id: container.app_id,
                     snippet: container.snippet,
                     open_id: String::new(),
                 }))
@@ -342,10 +337,7 @@ mod tests {
             "{hits:?}"
         );
         assert!(
-            centraid_search::DOMAINS
-                .iter()
-                .all(|domain| domain.app_id != "locker")
-                && found.hits.iter().all(|hit| hit.app_id != "locker"),
+            found.hits.iter().all(|hit| hit.app_id != "locker"),
             "Locker is never searched: {hits:?}"
         );
         assert!(

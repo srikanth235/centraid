@@ -20,7 +20,7 @@ use centraid_apps_docs as docs;
 use centraid_apps_docs::kind::{self, Kind, Surface, TypeFilter};
 use centraid_apps_docs::phone::{self, Modified, Shelf, Sort, View};
 use centraid_apps_docs::queries::{
-    ArmCount, DOCUMENT_TARGET_TYPE, DocumentRow, DriveInput, FolderRow, ShelfArm, VersionRow,
+    ArmCount, DocumentRow, DriveInput, FolderRow, ShelfArm, VersionRow,
 };
 use centraid_apps_kit::Denial;
 use centraid_apps_kit::error::KitResult;
@@ -299,11 +299,7 @@ pub(super) fn document(
     // exists; a vault failure here is an error, as any other read's is.
     let held = match &loaded {
         Ok(((data, _), None)) => match &data.row {
-            Some(row) => Some(vault.content_location(
-                &row.content_id,
-                DOCUMENT_TARGET_TYPE,
-                &row.document_id,
-            )?),
+            Some(row) => Some(vault.content_location(&row.document_id)?),
             None => None,
         },
         _ => None,
