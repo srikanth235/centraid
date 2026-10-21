@@ -21,8 +21,8 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use centraid_apps_kit::fixtures::{
-    YEAR3_PHOTOS, Year3PhotosCounts, Year3PhotosShape, live_photo_count, photo_fingerprints,
-    year3_photos,
+    YEAR3_50K_ASSETS, YEAR3_PHOTOS, Year3PhotosCounts, Year3PhotosShape, live_photo_count,
+    photo_fingerprints, year3_photos,
 };
 use centraid_apps_kit::testdoor::TestDoor;
 use centraid_apps_photos::duplicates::{CLUSTER_ROWS, Fingerprint, duplicate_clusters};
@@ -274,29 +274,23 @@ fn the_duplicates_are_the_seeded_families_and_no_photograph_crosses_one() {
     );
 }
 
-/// The measured numbers, at the FULL axis. Ignored by default; see the header.
-///
-/// ```text
-/// cargo test -p centraid-apps-photos --test year3 -- --ignored --nocapture
-/// ```
-#[test]
-#[ignore = "seeds 90,000 photographs; longer than the whole `local` gate budget"]
-fn the_year3_photos_axis_measures_the_librarys_own_ceilings() {
+/// The measured numbers at one declared volume.
+fn measure(label: &str, shape: Year3PhotosShape) {
     let started = Instant::now();
-    let world = seeded(YEAR3_PHOTOS);
+    let world = seeded(shape);
     eprintln!(
-        "year3 photos: seeded {:?} in {:?}",
+        "{label}: seeded {:?} in {:?}",
         world.counts,
         started.elapsed()
     );
-    assert_eq!(world.counts.assets, YEAR3_PHOTOS.assets);
+    assert_eq!(world.counts.assets, shape.assets);
 
     let started = Instant::now();
     let data = read(&world, |door| {
         load_library(door, &LibraryInput::default(), NOW_MS).expect("the library reads")
     });
     eprintln!(
-        "year3 photos: the library (500 window) folded {} rows + {} trashed in {:?}",
+        "{label}: the library (500 window) folded {} rows + {} trashed in {:?}",
         data.photos.len(),
         data.trash.len(),
         started.elapsed()
@@ -318,7 +312,7 @@ fn the_year3_photos_axis_measures_the_librarys_own_ceilings() {
         .expect("the library reads")
     });
     eprintln!(
-        "year3 photos: the library (2,000 asked, one page served) folded {} rows in {:?}",
+        "{label}: the library (2,000 asked, one page served) folded {} rows in {:?}",
         wide.photos.len(),
         started.elapsed()
     );
@@ -336,12 +330,31 @@ fn the_year3_photos_axis_measures_the_librarys_own_ceilings() {
         duplicate_clusters(door, media_cluster).expect("the duplicates read")
     });
     eprintln!(
-        "year3 photos: duplicates clustered {} families from the first {CLUSTER_ROWS} fingerprints in {:?}",
+        "{label}: duplicates clustered {} families from the first {CLUSTER_ROWS} fingerprints in {:?}",
         clusters.len(),
         started.elapsed()
     );
-    // 9,000 fingerprints stand behind 3,000 families and the read takes 4,000, so
+    // More fingerprints stand behind the families than the read takes (4,000), so
     // the review surface is cut at its cap rather than reporting every family.
-    assert_eq!(clusters.len(), CLUSTER_ROWS / YEAR3_PHOTOS.family_size);
-    assert!(clusters.len() < YEAR3_PHOTOS.near_duplicate_families);
+    assert_eq!(clusters.len(), CLUSTER_ROWS / shape.family_size);
+    assert!(clusters.len() < shape.near_duplicate_families);
+}
+
+/// THE `year3-photos` VOLUME: 90,000 photographs, 3,000 families. Ignored by
+/// default; see the header.
+///
+/// ```text
+/// cargo test -p centraid-apps-photos --test year3 -- --ignored --nocapture
+/// ```
+#[test]
+#[ignore = "seeds 90,000 photographs; longer than the whole `local` gate budget"]
+fn the_year3_photos_axis_measures_the_librarys_own_ceilings() {
+    measure("year3 photos", YEAR3_PHOTOS);
+}
+
+/// THE `year3-50k-assets` VOLUME: the 50,000 a reference phone browses.
+#[test]
+#[ignore = "seeds 50,000 photographs; longer than the whole `local` gate budget"]
+fn the_year3_50k_axis_measures_the_librarys_own_ceilings() {
+    measure("year3 50k", YEAR3_50K_ASSETS);
 }

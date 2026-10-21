@@ -1389,6 +1389,16 @@ pub const YEAR3_PHOTOS: Year3PhotosShape = Year3PhotosShape {
     burst_every: 100,
 };
 
+/// The `year3-50k-assets` volume: the 50,000 photographs a reference phone is asked
+/// to browse (the figure `tests/journeys.json` states its device targets at), with
+/// 1,500 families of three. The library, the trash and the duplicates read meet the
+/// same bounds here as at 90,000; only the sweep's volume differs.
+pub const YEAR3_50K_ASSETS: Year3PhotosShape = Year3PhotosShape {
+    assets: 50_000,
+    near_duplicate_families: 1_500,
+    ..YEAR3_PHOTOS
+};
+
 /// What a year-3 Photos seeding wrote.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Year3PhotosCounts {
