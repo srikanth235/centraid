@@ -221,6 +221,12 @@ private val declaredByHelper = Regex("\\bdefinition\\(\\s*\"([a-z_]+\\.[a-z_]+)\
 /** `CommandDefinition::plain("app.verb", …)`, the constructor every shared verb and every per-kind verb (#1135) declares through. */
 private val declaredByPlain = Regex("\\bCommandDefinition::plain\\(\\s*\"([a-z_]+\\.[a-z_]+)\"")
 
+/**
+ * A followed system's command: `follow.rs` declares the five `follow.<system>` commands from one table
+ * (`SystemMap`), each carrying its own name as `command: "follow.<system>"`, and registers them in a loop.
+ */
+private val declaredBySystem = Regex("\\bcommand: \"(follow\\.[a-z_]+)\"")
+
 /** A definition's own `owner_schema:` field, which is not a doc comment's mention of one. */
 private val ownerSchemaField = Regex("(?m)^\\s*owner_schema:")
 
@@ -238,7 +244,8 @@ private fun declaredCommands(repositoryRoot: File): Set<String> {
         val text = file.readText()
         val byName = declaredByName.findAll(text).map { it.groupValues[1] }.toList()
         val byHelper = declaredByHelper.findAll(text).map { it.groupValues[1] }.toList()
-        val byPlain = declaredByPlain.findAll(text).map { it.groupValues[1] }.toList()
+        val byPlain = declaredByPlain.findAll(text).map { it.groupValues[1] }.toList() +
+            declaredBySystem.findAll(text).map { it.groupValues[1] }.toList()
         val fields = ownerSchemaField.findAll(text).count()
         // A file with the helper has one `owner_schema:` (the helper's own body)
         // and many calls; every other file has one field per `name:`.

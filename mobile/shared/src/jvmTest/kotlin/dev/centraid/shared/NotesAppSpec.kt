@@ -650,7 +650,7 @@ class NotesAppSpec : StringSpec({
         typed.compose!!.can_save shouldBe true
         val saving = NotesJournalMachine.reduce(typed, NotesJournalEvent(compose_saved = NotesJournalEvent.ComposeSaved()))
         saving.effects.filterIsInstance<ScreenEffect.SubmitWrite>().single().let {
-            it.command shouldBe "people.add_journal_entry"
+            it.command shouldBe "person.add_journal_entry"
             it.inputJson shouldBe """{"mood":"Good","text":"Lunch with \"Ana\"","entry_date":"2026-03-11"}"""
         }
         saving.state.compose!!.saving shouldBe true

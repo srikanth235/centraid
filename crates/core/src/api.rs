@@ -99,7 +99,7 @@ pub const MAX_CONTENT_URLS: usize = 100;
 /// | Trash (Docs, Tasks, People, Locker) | `core_document`, `schedule_task`, `entity`, `locker_item` |
 /// | Photos (grid, shelves, lightbox, collections, search, picker, places, memories, duplicates, album choice, editor) | `media_asset`, `media_asset_phash`, `media_memory`, `media_memory_member`, `core_collection`, `core_collection_entry`, `core_concept`, `core_concept_scheme`, `core_tag`, `core_place`, `core_content_item` |
 /// | Calendar import | `schedule_calendar` |
-/// | Phone sync (Agenda and Docs follow the phone, #1127; People follows through `follow.contacts` and reads nothing back) | `phone_link`, `phone_origin`, `core_event`, `schedule_recurrence_exception` (a followed series' skipped and moved occurrences) |
+/// | Phone sync (Agenda and Docs follow the phone, #1127; whether a source was imported is its `origin`; People follows through `follow.contacts` and reads nothing else back) | `origin`, `phone_link`, `phone_origin`, `core_event`, `schedule_recurrence_exception` (a followed series' skipped and moved occurrences) |
 /// | `with_minor_units` | `core_account` |
 ///
 /// `core_account` has no shell caller: it is the one table whose `currency`
@@ -118,11 +118,11 @@ pub const MAX_CONTENT_URLS: usize = 100;
 ///
 /// The `where` is held to the same list: it is predicate text and could name
 /// a subquery on any table, so the vault prepares it under an authorizer that
-/// refuses a read outside these twenty-four
+/// refuses a read outside these twenty-five
 /// ([`Vault::keyset_page_reading_only`]). The vault's test
 /// `a_predicate_that_reads_a_table_outside_the_list_is_refused` is where that
 /// is read: the predicates it tries are SQL, which lives in that crate.
-pub const PAGE_TABLES: [&str; 24] = [
+pub const PAGE_TABLES: [&str; 25] = [
     "core_account",
     "core_collection",
     "core_collection_entry",
@@ -142,6 +142,7 @@ pub const PAGE_TABLES: [&str; 24] = [
     "media_asset_phash",
     "media_memory",
     "media_memory_member",
+    "origin",
     "phone_link",
     "phone_origin",
     "schedule_calendar",
@@ -801,7 +802,7 @@ mod tests {
     /// Every table a screen pages, with a column that can key its cursor. Spelled
     /// here, not derived from the allowlist, so the allowlist cannot grow without
     /// this list (and the paragraph above it) being read.
-    const PAGED_BY_A_SCREEN: [(&str, &str); 24] = [
+    const PAGED_BY_A_SCREEN: [(&str, &str); 25] = [
         ("core_account", "account_id"),
         ("core_collection", "collection_id"),
         ("core_collection_entry", "entry_id"),
@@ -821,6 +822,7 @@ mod tests {
         ("media_asset_phash", "asset_id"),
         ("media_memory", "memory_id"),
         ("media_memory_member", "memory_id"),
+        ("origin", "id"),
         ("phone_link", "link_id"),
         ("phone_origin", "origin_id"),
         ("schedule_calendar", "calendar_id"),

@@ -43,9 +43,9 @@ import dev.centraid.shared.nav.ScreenIds
  * each was written on, newest first — the core's grouping, in the device's
  * zone, so "Today" is the core's today and never a UTC guess.
  *
- * An entry is a note People's command marks (D-1020-N3), so "New entry for
+ * An entry is a note About the owner that People's command writes (D-1020-N3, #1135), so "New entry for
  * today" opens the journal's own sheet (`compose`) and Save writes
- * `people.add_journal_entry{mood, text, entry_date, tz}` — the one command that
+ * `person.add_journal_entry{mood, text, entry_date, tz}` — the one command that
  * makes an entry a journal entry. A plain new note would land in the library.
  * `tz` is the zone the core read `today` in (`NotesJournal.tz`): the command
  * files the entry on that day IN that zone, so east of UTC+11:59 today's entry
@@ -144,7 +144,7 @@ public object NotesJournalMachine : ScreenMachine<NotesJournalState, NotesJourna
     }
 
     /** People's command, the one that marks a note a journal entry (D-1020-N3). */
-    public const val ADD_ENTRY: String = "people.add_journal_entry"
+    public const val ADD_ENTRY: String = "person.add_journal_entry"
 
     private object Writes : WriteLens<NotesJournalState> {
         override fun write(state: NotesJournalState): WriteState = state.write ?: WriteState(phase = WriteState.Phase.PHASE_IDLE)

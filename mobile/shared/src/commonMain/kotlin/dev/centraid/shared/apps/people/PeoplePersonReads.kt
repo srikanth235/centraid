@@ -95,7 +95,7 @@ public object PeopleSheetFold {
         return PeoplePersonData(
             party_id = person.party_id,
             name = person.name,
-            avatar = PeopleWords.avatar(person.party_id, person.name, person.avatar_color),
+            avatar = PeopleWords.avatar(person.party_id, person.name),
             role = person.role,
             cadence_line = "${PeopleWords.cadence(person.cadence_days)} · ${lastTouch.replaceFirstChar { it.lowercase() }}",
             due_chip = if (person.due) StatusChip(label = PeopleCopy.CHIP_OVERDUE, tone = StatusChip.Tone.TONE_NET) else null,
@@ -211,7 +211,7 @@ public object PeopleSheetFold {
             PeopleMergeChoice(
                 party_id = row.party_id,
                 name = row.name,
-                avatar = PeopleWords.avatar(row.party_id, row.name, row.avatar_color),
+                avatar = PeopleWords.avatar(row.party_id, row.name),
                 role = row.role,
             )
         },

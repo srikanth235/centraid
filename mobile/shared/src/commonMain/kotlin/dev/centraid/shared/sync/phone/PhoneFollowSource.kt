@@ -27,7 +27,7 @@ public interface PhoneFollowSource {
 
 /** A source over one vault: the three things a following pass does. Never throws; a failure is a null. */
 public interface PhoneFollowPass {
-    /** Whether the member imported the source: the vault holds a `phone_origin` for it. Null when unreadable. */
+    /** Whether the member imported the source: the vault holds an `origin` for it. Null when unreadable. */
     public suspend fun imported(): Boolean?
 
     /**
@@ -56,15 +56,15 @@ public object PhoneFollowReads {
             suspendCancellableCoroutine { next -> ask { next.resume(it) } }
         }
 
-    /** Whether [core] holds a `phone_origin` for [source]: the member imported it. Null when the read fails. */
+    /** Whether [core] holds an `origin` for [source]'s system: the member imported it. Null when the read fails. */
     public suspend fun imported(core: CentraidCore, source: PhoneSource): Boolean? {
         val query = PageQuery(
             name = "phone.follow.imported",
-            select = listOf("origin_id"),
-            from = "phone_origin",
-            where_ = "source = ?",
+            select = listOf("id"),
+            from = "origin",
+            where_ = "system = ?",
             bind = listOf(Value(text = source.wire)),
-            order = PageOrder(sort_column = "origin_id", pk_column = "origin_id"),
+            order = PageOrder(sort_column = "id", pk_column = "id"),
         )
         val answer = core.call(Envelope(request_id = 0, request = Request(page = PageRequest(query = query, limit = 1))))
         val page = (answer as? CoreOutcome.Answered)?.value?.response?.page ?: return null

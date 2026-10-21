@@ -2,11 +2,15 @@ package dev.centraid.shared
 
 import dev.centraid.shared.apps.agenda.CalendarImport
 import dev.centraid.shared.apps.agenda.PhoneEvent
-import dev.centraid.shared.apps.people.ContactsImport
-import dev.centraid.shared.apps.people.PhoneContact
 import dev.centraid.shared.platform.FakePlatformServices
 import dev.centraid.shared.sync.phone.PhoneDevice
+import dev.centraid.shared.sync.phone.PhoneFields
 import dev.centraid.shared.sync.phone.PhoneFingerprint
+import dev.centraid.shared.sync.phone.PhoneOriginRef
+import dev.centraid.shared.sync.phone.PhoneRecord
+import dev.centraid.shared.sync.phone.PhoneReport
+import dev.centraid.shared.sync.phone.PhoneSnapshot
+import dev.centraid.shared.sync.phone.PhoneSync
 import dev.centraid.shared.sync.phone.PhoneSource
 import dev.centraid.shared.sync.phone.PhoneSyncPlanner
 import dev.centraid.shared.sync.phone.StoredLink
@@ -17,8 +21,9 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 
 /**
- * A VAULT RESTORED ONTO A NEW PHONE (#1129, F-K-1), for People and Agenda; Docs' and Health's are
- * in `FilesFollowSpec` and `HealthFollowSpec`. Device A makes the links; device B, holding the
+ * A VAULT RESTORED ONTO A NEW PHONE (#1129, F-K-1), for the engine's sources (Agenda's, and the
+ * person-shaped records the engine's own tests use); Docs' and Health's are in `FilesFollowSpec` and
+ * `HealthFollowSpec`. People's is the vault's merge: `crates/vault/tests/people.rs`. Device A makes the links; device B, holding the
  * same records under its own `local:` ids, re-finds every one by its match key, one to one:
  * nothing is added twice, nothing is trashed, and no question is asked. A record of A that B does
  * not hold is forgotten and its row kept; a match key two records share is not guessed at.
@@ -27,17 +32,28 @@ class NewPhoneSpec : StringSpec({
     val readAt = "2026-10-20T10:00:00.000Z"
     val later = "2026-10-21T10:00:00.000Z"
 
-    fun contact(name: String, id: String, vararg phones: String, origin: String = "") =
-        PhoneContact(name, phones.toList(), phoneId = id, origin = origin)
+    // A person-shaped record, as the engine is handed one: a name, its numbers, an origin. (People itself
+    // no longer goes through the engine: the vault merges a followed contact, #1135.)
+    fun contact(name: String, id: String, vararg phones: String, origin: String = "") = PhoneRecord(
+        phoneId = id,
+        origin = origin.ifEmpty { "local:this-phone" },
+        fields = PhoneFields.of {
+            text("name", name)
+            phones("phones", phones.toList())
+        },
+        matchKey = name.lowercase(),
+        tiebreak = phones.map(PhoneFields::phoneNumber).toSet(),
+    )
 
-    suspend fun FakeStore.contacts(at: String, vararg contacts: PhoneContact, complete: Boolean = true): ContactsImport.Outcome {
+    suspend fun FakeStore.contacts(at: String, vararg records: PhoneRecord, complete: Boolean = true): PhoneReport {
         now = at.replace("10:00:00.000Z", "23:59:59.000Z")
-        return ContactsImport.sync(this, ContactsImport.snapshot(contacts.toList(), complete = complete, readAt = at))
+        val origins = records.map { PhoneOriginRef(it.origin, it.origin) }.distinctBy { it.id }
+        return PhoneSync.run(this, PhoneSnapshot(PhoneSource.CONTACTS, complete, at, origins, records.toList()))
     }
 
     val names = listOf("Ada Lovelace", "Bo Diddley", "Cy Twombly", "Di Fossey", "Ed Hopper", "Flo Jo")
 
-    "contacts: device B re-finds all six of device A's people under its own ids, and adds, trashes and asks nothing" {
+    "people-shaped records: device B re-finds all six of device A's people under its own ids, and adds, trashes and asks nothing" {
         val store = FakeStore(PhoneSource.CONTACTS).apply { device = "device-a" }
         store.contacts(readAt, *names.mapIndexed { i, n -> contact(n, "local:a$i", "555010$i") }.toTypedArray())
         val rows = store.rows.keys.toSet()
@@ -63,7 +79,7 @@ class NewPhoneSpec : StringSpec({
         store.writes.filter { it != "touch" }.shouldBeEmpty()
     }
 
-    "contacts: before, a restore with the same ids under another device read as six deletes" {
+    "people-shaped records: before, a restore with the same ids under another device read as six deletes" {
         // The same shape with no device on either side is #1127's: the old links are lost here and the new records added.
         val store = FakeStore(PhoneSource.CONTACTS)
         store.contacts(readAt, *names.mapIndexed { i, n -> contact(n, "local:a$i") }.toTypedArray())
@@ -72,7 +88,7 @@ class NewPhoneSpec : StringSpec({
         outcome.gone.single().count shouldBe 6
     }
 
-    "contacts: a person of device A that device B does not hold is forgotten, kept and never trashed or asked about" {
+    "people-shaped records: a person of device A that device B does not hold is forgotten, kept and never trashed or asked about" {
         val store = FakeStore(PhoneSource.CONTACTS).apply { device = "device-a" }
         store.contacts(readAt, contact("Ada Lovelace", "local:a1"), contact("Bo Diddley", "local:a2"))
         val bo = store.links.values.single { it.phoneId == "local:a2" }.entityId!!
@@ -88,7 +104,7 @@ class NewPhoneSpec : StringSpec({
         store.writes.none { it == "trash" } shouldBe true
     }
 
-    "contacts: an incomplete read on device B re-finds what it sees and forgets nothing" {
+    "people-shaped records: an incomplete read on device B re-finds what it sees and forgets nothing" {
         val store = FakeStore(PhoneSource.CONTACTS).apply { device = "device-a" }
         store.contacts(readAt, contact("Ada Lovelace", "local:a1"), contact("Bo Diddley", "local:a2"))
         store.device = "device-b"
@@ -98,7 +114,7 @@ class NewPhoneSpec : StringSpec({
         store.writes.none { it == "forget" || it == "trash" || it == "add" } shouldBe true
     }
 
-    "contacts: two people of one name are never merged on device B, whichever side has two" {
+    "people-shaped records: two people of one name are never merged on device B, whichever side has two" {
         val store = FakeStore(PhoneSource.CONTACTS).apply { device = "device-a" }
         store.contacts(readAt, contact("Sam Lee", "local:a1", "5550101"), contact("Sam Lee", "local:a2", "5550202"), contact("Ada", "local:a3"))
         store.device = "device-b"
@@ -121,7 +137,7 @@ class NewPhoneSpec : StringSpec({
         one.rows.size shouldBe 3
     }
 
-    "contacts: a portable id is the same record on every device and is neither re-found nor forgotten" {
+    "people-shaped records: a portable id is the same record on every device and is neither re-found nor forgotten" {
         val store = FakeStore(PhoneSource.CONTACTS).apply { device = "device-a" }
         store.contacts(readAt, contact("Ada", "lookup:0r1"))
         store.links.values.single().deviceId shouldBe null
@@ -132,12 +148,12 @@ class NewPhoneSpec : StringSpec({
         store.links.values.single().phoneId shouldBe "lookup:0r1"
     }
 
-    "contacts: what device A held for a row — trashed, edited, deleted forever — device B holds too" {
+    "people-shaped records: what device A held for a row — trashed, edited, deleted forever — device B holds too" {
         val store = FakeStore(PhoneSource.CONTACTS).apply { device = "device-a" }
         store.contacts(readAt, contact("Ada", "local:a1"), contact("Bo", "local:a2"), contact("Cy", "local:a3"))
         val (ada, bo, cy) = listOf("local:a1", "local:a2", "local:a3").map { id -> store.links.values.single { it.phoneId == id }.entityId!! }
         store.trash(ada)
-        store.edit(bo, dev.centraid.shared.sync.phone.PhoneFields.of { text("name", "Robert") })
+        store.edit(bo, PhoneFields.of { text("name", "Robert") })
         store.purge(cy)
         store.device = "device-b"
         store.writes.clear()
@@ -225,7 +241,7 @@ class NewPhoneSpec : StringSpec({
     }
 
     "a link of another device is forgotten where this device's own would be trashed, and no device makes it this one's" {
-        val fields = dev.centraid.shared.sync.phone.PhoneFields.of { text("name", "Ada") }
+        val fields = PhoneFields.of { text("name", "Ada") }
         val row = dev.centraid.shared.sync.phone.VaultRow("r1", fields, matchKey = "ada")
         val origin = dev.centraid.shared.sync.phone.StoredOrigin("o1", "container:a", "A", deviceId = "device-a")
         val link = StoredLink("l1", "local:x", "o1", "r1", PhoneFingerprint.pack("p", "s", fields.digest()), false, readAt, deviceId = "device-a")

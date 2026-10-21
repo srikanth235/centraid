@@ -35,9 +35,7 @@ use crate::commands::event::{self, NewEvent};
 use crate::commands::note;
 use crate::commands::tag::{ensure_concept, set_tagged};
 use crate::commands::task::{self, NewTask};
-use crate::commands::{
-    CommandCondition, CommandCtx, CommandDefinition, CommandHandler, Idempotency,
-};
+use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency};
 use crate::error::{Result, VaultError};
 use crate::model::{Kind, Rel};
 use crate::time::recurrence::parse_instant_ms;
@@ -808,108 +806,129 @@ const MERGE: &str = r#"{
   }
 }"#;
 
-/// Every verb of a person: its name, input, how safe it is to repeat, the
-/// condition it must meet and what it does.
-static VERBS: [(&str, &str, Idempotency, CommandCondition, CommandHandler); 11] = [
-    (
-        "person.add",
-        ADD,
-        Idempotency::Once,
-        when("person_can_be_added", pre_add),
-        add,
-    ),
-    (
-        "person.edit",
-        EDIT,
-        Idempotency::Idempotent,
-        when("person_can_be_edited", pre_edit),
-        edit,
-    ),
-    (
-        "person.move",
-        MOVE,
-        Idempotency::Idempotent,
-        when("person_can_be_filed", pre_move),
-        move_person,
-    ),
-    (
-        "person.log_interaction",
-        LOG,
-        Idempotency::Once,
-        when("touch_is_about_a_person", pre_log),
-        log_interaction,
-    ),
-    (
-        "person.add_note",
-        TEXT,
-        Idempotency::Once,
-        when("note_is_about_a_person", pre_text_about_a_person),
-        add_note,
-    ),
-    (
-        "person.add_journal_entry",
-        JOURNAL,
-        Idempotency::Once,
-        when("entry_is_dated", pre_journal),
-        add_journal_entry,
-    ),
-    (
-        "person.add_task",
-        TEXT,
-        Idempotency::Once,
-        when("task_is_about_a_person", pre_text_about_a_person),
-        add_task,
-    ),
-    (
-        "person.add_gift",
-        TEXT,
-        Idempotency::Once,
-        when("gift_is_for_a_person", pre_text_about_a_person),
-        add_gift,
-    ),
-    (
-        "person.add_date",
-        DATE,
-        Idempotency::Once,
-        when("date_is_a_day", pre_date),
-        add_date,
-    ),
-    (
-        "person.add_relationship",
-        RELATIONSHIP,
-        Idempotency::Once,
-        when("relative_is_another_person", pre_relationship),
-        add_relationship,
-    ),
-    (
-        "person.merge",
-        MERGE,
-        Idempotency::Once,
-        when("both_are_people", pre_merge),
-        merge,
-    ),
-];
-
-const fn when(
-    predicate: &'static str,
-    check: fn(&CommandCtx<'_, '_>) -> Result<Option<String>>,
-) -> CommandCondition {
-    CommandCondition { predicate, check }
-}
-
 #[must_use]
 pub fn definitions() -> Vec<CommandDefinition> {
-    VERBS
-        .iter()
-        .map(|(name, schema, idempotency, condition, handler)| {
-            CommandDefinition::plain(
-                name,
-                "person",
-                schema,
-                *idempotency,
-                std::slice::from_ref(condition),
-                *handler,
-            )
-        })
-        .collect()
+    vec![
+        CommandDefinition::plain(
+            "person.add",
+            "person",
+            ADD,
+            Idempotency::Once,
+            &[CommandCondition {
+                predicate: "person_can_be_added",
+                check: pre_add,
+            }],
+            add,
+        ),
+        CommandDefinition::plain(
+            "person.edit",
+            "person",
+            EDIT,
+            Idempotency::Idempotent,
+            &[CommandCondition {
+                predicate: "person_can_be_edited",
+                check: pre_edit,
+            }],
+            edit,
+        ),
+        CommandDefinition::plain(
+            "person.move",
+            "person",
+            MOVE,
+            Idempotency::Idempotent,
+            &[CommandCondition {
+                predicate: "person_can_be_filed",
+                check: pre_move,
+            }],
+            move_person,
+        ),
+        CommandDefinition::plain(
+            "person.log_interaction",
+            "person",
+            LOG,
+            Idempotency::Once,
+            &[CommandCondition {
+                predicate: "touch_is_about_a_person",
+                check: pre_log,
+            }],
+            log_interaction,
+        ),
+        CommandDefinition::plain(
+            "person.add_note",
+            "person",
+            TEXT,
+            Idempotency::Once,
+            &[CommandCondition {
+                predicate: "note_is_about_a_person",
+                check: pre_text_about_a_person,
+            }],
+            add_note,
+        ),
+        CommandDefinition::plain(
+            "person.add_journal_entry",
+            "person",
+            JOURNAL,
+            Idempotency::Once,
+            &[CommandCondition {
+                predicate: "entry_is_dated",
+                check: pre_journal,
+            }],
+            add_journal_entry,
+        ),
+        CommandDefinition::plain(
+            "person.add_task",
+            "person",
+            TEXT,
+            Idempotency::Once,
+            &[CommandCondition {
+                predicate: "task_is_about_a_person",
+                check: pre_text_about_a_person,
+            }],
+            add_task,
+        ),
+        CommandDefinition::plain(
+            "person.add_gift",
+            "person",
+            TEXT,
+            Idempotency::Once,
+            &[CommandCondition {
+                predicate: "gift_is_for_a_person",
+                check: pre_text_about_a_person,
+            }],
+            add_gift,
+        ),
+        CommandDefinition::plain(
+            "person.add_date",
+            "person",
+            DATE,
+            Idempotency::Once,
+            &[CommandCondition {
+                predicate: "date_is_a_day",
+                check: pre_date,
+            }],
+            add_date,
+        ),
+        CommandDefinition::plain(
+            "person.add_relationship",
+            "person",
+            RELATIONSHIP,
+            Idempotency::Once,
+            &[CommandCondition {
+                predicate: "relative_is_another_person",
+                check: pre_relationship,
+            }],
+            add_relationship,
+        ),
+        CommandDefinition::plain(
+            "person.merge",
+            "person",
+            MERGE,
+            Idempotency::Once,
+            &[CommandCondition {
+                predicate: "both_are_people",
+                check: pre_merge,
+            }],
+            merge,
+        ),
+    ]
 }

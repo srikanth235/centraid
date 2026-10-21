@@ -166,7 +166,7 @@ class ChangeStreamSpec : StringSpec({
             HomeMachine.rowsChanged(table, listOf("x")).shouldNotBeNull()
         }
         // A FILTER'S SUBQUERY TABLE REDRAWS TOO: trashing a person moves
-        // `people_profile`, never `core_party` (#1047).
+        // `person` and `entity`, never the owner (#1047, #1135).
         HomeReads.READS.flatMap { it.alsoReads }.forEach { table ->
             HomeMachine.rowsChanged(table, listOf("x")).shouldNotBeNull()
         }

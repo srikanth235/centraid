@@ -187,19 +187,19 @@ public object HomeReads {
             appId = "people",
             query = PageQuery(
                 name = "home.people",
-                select = listOf("party_id", "display_name", "updated_at"),
-                from = "core_party",
-                // THE PEOPLE THE ROSTER LISTS, NOT EVERY PARTY (#1047): a
-                // party is anyone the vault names — the owner, a merchant, a
-                // face — and the People app's roster is the parties with a
-                // live profile. Counted off `core_party`, the tile said 8 over
-                // a roster of 4.
-                where_ = "party_id IN (SELECT party_id FROM people_profile WHERE deleted_at IS NULL)",
-                order = order("updated_at", "party_id"),
+                select = listOf("id", "title", "updated_at"),
+                from = "entity",
+                // THE PEOPLE THE ROSTER LISTS, NOT EVERY PERSON (#1047): the
+                // vault's persons include its owner and a pet, and the People
+                // app's circle is the live ones that are neither. Counted off
+                // `entity` alone, the tile said 6 over a roster of 4.
+                where_ = "kind = 'person' AND deleted_at IS NULL AND id <> (SELECT self_id FROM vault) " +
+                    "AND id NOT IN (SELECT id FROM person WHERE form = 'pet')",
+                order = order("updated_at", "id"),
             ),
             countOne = PeopleCopy.TILE_COUNT_ONE,
             countMany = PeopleCopy.TILE_COUNT_MANY,
-            alsoReads = setOf("people_profile"),
+            alsoReads = setOf("person"),
         ),
         // LOCKER COUNTS ITS ITEMS AND SHOWS NONE OF THEM (#1047, D-5): the
         // read selects the id and the order column and nothing a member

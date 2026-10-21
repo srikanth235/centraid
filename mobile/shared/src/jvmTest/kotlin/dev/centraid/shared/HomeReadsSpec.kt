@@ -341,12 +341,14 @@ class HomeReadsSpec : StringSpec({
         HomeReads.TABLES shouldContain "schedule_task"
     }
 
-    "the people tile counts the roster's people — a live profile — not every party (#1047)" {
+    "the people tile counts the roster's people — the live circle, not the owner or a pet (#1047, #1135)" {
         val people = HomeReads.READS.single { it.appId == "people" }
-        people.query.where_.shouldNotBeNull() shouldContain
-            "party_id IN (SELECT party_id FROM people_profile WHERE deleted_at IS NULL)"
-        people.alsoReads shouldBe setOf("people_profile")
-        HomeReads.TABLES shouldContain "people_profile"
+        val where = people.query.where_.shouldNotBeNull()
+        where shouldContain "kind = 'person' AND deleted_at IS NULL"
+        where shouldContain "id <> (SELECT self_id FROM vault)"
+        where shouldContain "id NOT IN (SELECT id FROM person WHERE form = 'pet')"
+        people.alsoReads shouldBe setOf("person")
+        HomeReads.TABLES shouldContain "person"
     }
 
     // --- the photos mosaic draws what can be drawn --------------------------

@@ -46,12 +46,12 @@ import dev.centraid.shared.nav.ScreenIds
 public object PeopleEditorMachine : ScreenMachine<PeopleEditorState, PeopleEditorEvent> {
     public const val SCREEN_ID: String = ScreenIds.PEOPLE_EDITOR
 
-    public const val ADD_COMMAND: String = "people.add_person"
-    public const val EDIT_COMMAND: String = "people.edit_person"
-    public const val CADENCE_COMMAND: String = "people.set_cadence"
+    public const val ADD_COMMAND: String = "person.add"
+    public const val EDIT_COMMAND: String = "person.edit"
+    public const val CADENCE_COMMAND: String = "person.edit"
 
-    /** The profile and its party: what the draft is read from. */
-    public val TABLES: Set<String> = setOf("people_profile", "core_party")
+    /** The person and its entity: what the draft is read from. */
+    public val TABLES: Set<String> = setOf("entity", "person")
 
     override fun initial(): PeopleEditorState = decorate(
         PeopleEditorState(
@@ -66,15 +66,8 @@ public object PeopleEditorMachine : ScreenMachine<PeopleEditorState, PeopleEdito
         return Step(decorate(step.state), step.effects)
     }
 
-    /**
-     * `people_profile`'s key is its `profile_id`, not the party this editor
-     * holds, so a profile change is taken as "re-read the table" (empty keys).
-     */
-    override fun rowsChanged(table: String, keys: List<String>): PeopleEditorEvent? = when (table) {
-        "people_profile" -> PeopleEditorEvent(rows_changed = PeopleEditorEvent.RowsChanged(table = table))
-        "core_party" -> PeopleEditorEvent(rows_changed = PeopleEditorEvent.RowsChanged(table = table, keys = keys))
-        else -> null
-    }
+    override fun rowsChanged(table: String, keys: List<String>): PeopleEditorEvent? =
+        if (table in TABLES) PeopleEditorEvent(rows_changed = PeopleEditorEvent.RowsChanged(table = table, keys = keys)) else null
 
     override fun seatChanged(seat: SeatState): PeopleEditorEvent =
         PeopleEditorEvent(seat_changed = PeopleEditorEvent.SeatChanged(seat = seat))
@@ -116,14 +109,8 @@ public object PeopleEditorMachine : ScreenMachine<PeopleEditorState, PeopleEdito
         event.role != null -> edited(state) { it.copy(role = event.role.text) }
         event.nickname != null -> edited(state) { it.copy(nickname = event.nickname.text) }
         event.met != null -> edited(state) { it.copy(met = event.met.text) }
-        // ONLY A ROLE THE WHEEL NAMES: anything else would store nothing.
-        event.hue != null && PeopleWords.wheelKey(event.hue.hue_key).isEmpty() -> Step(state)
-        event.hue != null -> {
-            // A COLOUR IS A CHOICE, NOT TYPING: it saves now.
-            val step = edited(state) { it.copy(hue_key = event.hue.hue_key) }
-            val flushed = AutosaveLaw.flush(lens(step.state), step.state)
-            Step(flushed.state, step.effects.filterNot { it is ScreenEffect.Schedule } + flushed.effects)
-        }
+        // A person's hue is drawn from their id (#1135): there is nothing to store, and no picker offers one.
+        event.hue != null -> Step(state)
         event.cadence != null -> cadence(state, event.cadence.days)
         event.tick != null -> AutosaveLaw.tick(lens(state), state, event.tick.token)
         event.left != null -> AutosaveLaw.flush(lens(state), state)
@@ -163,7 +150,7 @@ public object PeopleEditorMachine : ScreenMachine<PeopleEditorState, PeopleEdito
             return edited(state) { it.copy(cadence_days = days) }
         }
         val key = InvokeKeys.of(CADENCE_COMMAND, state.party_id, "days=$days")
-        val input = "{\"party_id\":${jsonString(state.party_id)},\"cadence_days\":$days}"
+        val input = "{\"id\":${jsonString(state.party_id)},\"cadence_days\":$days}"
         val step = WriteLaw.submit(Writes, state, CADENCE_COMMAND, input, key)
         // Drawn at once; the vault's answer settles it. Kept out of the
         // autosaved fields: the baseline moves with the draft.
@@ -237,17 +224,7 @@ public object PeopleEditorMachine : ScreenMachine<PeopleEditorState, PeopleEdito
                 retry = PeopleCopy.RETRY,
                 loading = PeopleCopy.LOADING,
             ),
-            hues = if (draft == null) {
-                emptyList()
-            } else {
-                PartyHueWheel.HUE_KEYS.map { key ->
-                    PeopleHueChoice(
-                        hue_key = PeopleWords.role(key),
-                        selected = PeopleWords.role(key) == draft.hue_key,
-                        accessibility_label = fill(PeopleCopy.HUE_A11Y, "hue" to key),
-                    )
-                }
-            },
+            hues = emptyList(),
             cadences = if (draft == null) {
                 emptyList()
             } else {
@@ -317,29 +294,26 @@ public object PeopleEditorMachine : ScreenMachine<PeopleEditorState, PeopleEdito
             if (draft.display_name.isBlank()) Reads.refused(PeopleCopy.NAME_NEEDED) else null
     }
 
-    /** `people.edit_person`: only the fields that moved. The cadence is not one of them. */
+    /** `person.edit`: only the fields that moved. The cadence is not one of them. */
     private object EditLens : Lens() {
         override val command: String = EDIT_COMMAND
 
         override fun input(state: PeopleEditorState, draft: PeopleProfileDraft, baseline: PeopleProfileDraft?): String? {
             val base = baseline ?: PeopleProfileDraft()
             val fields = buildList {
-                if (draft.display_name.trim() != base.display_name.trim()) add("display_name" to draft.display_name.trim())
+                if (draft.display_name.trim() != base.display_name.trim()) add("title" to draft.display_name.trim())
                 if (draft.role != base.role) add("role" to draft.role)
                 if (draft.nickname != base.nickname) add("nickname" to draft.nickname)
                 if (draft.met != base.met) add("met" to draft.met)
-                if (draft.hue_key != base.hue_key && draft.hue_key.isNotEmpty()) {
-                    add("avatar_color" to PeopleWords.storedHue(draft.hue_key))
-                }
             }
             if (fields.isEmpty()) return null
-            return fields.joinToString(",", prefix = "{\"party_id\":${jsonString(state.party_id)},", postfix = "}") { (k, v) ->
+            return fields.joinToString(",", prefix = "{\"id\":${jsonString(state.party_id)},", postfix = "}") { (k, v) ->
                 "${jsonString(k)}:${jsonString(v)}"
             }
         }
     }
 
-    /** `people.add_person` under the minted id, with the cadence it requires. */
+    /** `person.add` under the minted id, with the cadence. */
     private object AddLens : Lens() {
         override val command: String = ADD_COMMAND
 
@@ -347,12 +321,11 @@ public object PeopleEditorMachine : ScreenMachine<PeopleEditorState, PeopleEdito
 
         override fun input(state: PeopleEditorState, draft: PeopleProfileDraft, baseline: PeopleProfileDraft?): String =
             buildString {
-                append("{\"party_id\":").append(jsonString(state.party_id))
-                append(",\"display_name\":").append(jsonString(draft.display_name.trim()))
+                append("{\"id\":").append(jsonString(state.party_id))
+                append(",\"title\":").append(jsonString(draft.display_name.trim()))
                 append(",\"cadence_days\":").append(draft.cadence_days)
                 if (draft.role.isNotEmpty()) append(",\"role\":").append(jsonString(draft.role))
                 if (draft.nickname.isNotEmpty()) append(",\"nickname\":").append(jsonString(draft.nickname))
-                if (draft.hue_key.isNotEmpty()) append(",\"avatar_color\":").append(jsonString(PeopleWords.storedHue(draft.hue_key)))
                 append('}')
             }
 

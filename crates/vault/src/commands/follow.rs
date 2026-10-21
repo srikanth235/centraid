@@ -41,6 +41,8 @@ pub struct OriginRow {
     pub id: String,
     /// The calendar, folder or account this origin feeds.
     pub fills: Option<String>,
+    /// The phone that last read it.
+    pub device: Option<String>,
 }
 
 /// What a new row needs that no record states, given its origin.
@@ -383,10 +385,17 @@ fn upsert_origin(ctx: &CommandCtx<'_, '_>, map: &SystemMap) -> Result<OriginRow>
         )?;
         id
     };
-    let fills = connection.query_row("SELECT fills FROM origin WHERE id = ?1", [&id], |row| {
-        row.get::<_, Option<String>>(0)
-    })?;
-    Ok(OriginRow { id, fills })
+    let (fills, device) = connection.query_row(
+        "SELECT fills, device_id FROM origin WHERE id = ?1",
+        [&id],
+        |row| {
+            Ok((
+                row.get::<_, Option<String>>(0)?,
+                row.get::<_, Option<String>>(1)?,
+            ))
+        },
+    )?;
+    Ok(OriginRow { id, fills, device })
 }
 
 /// What one batch did.
@@ -599,7 +608,9 @@ fn link(
 }
 
 /// The first row of this kind that nothing follows and the record's match key
-/// names.
+/// names. A row followed only by another phone's id (a vault restored onto a new
+/// phone) is not followed: its source is that phone's, and the row is the new
+/// phone's to re-find.
 fn match_existing(
     connection: &Connection,
     map: &SystemMap,
@@ -614,7 +625,10 @@ fn match_existing(
         return Ok(None);
     }
     let mut clauses = Vec::new();
-    let mut values: Vec<rusqlite::types::Value> = vec![map.kind.as_str().to_owned().into()];
+    let mut values: Vec<rusqlite::types::Value> = vec![
+        map.kind.as_str().to_owned().into(),
+        record.device_id.clone().into(),
+    ];
     for name in map.match_on {
         let value = to_sql(&record.fields[*name]);
         values.push(value);
@@ -627,7 +641,8 @@ fn match_existing(
     let sql = format!(
         "SELECT e.id FROM entity e JOIN {} k ON k.id = e.id
           WHERE e.kind = ?1 AND e.deleted_at IS NULL
-            AND NOT EXISTS (SELECT 1 FROM source s WHERE s.entity_id = e.id)
+            AND NOT EXISTS (SELECT 1 FROM source s WHERE s.entity_id = e.id
+                              AND (?2 IS NULL OR s.device_id IS NULL OR s.device_id = ?2))
             AND {}
           ORDER BY e.created_at, e.id LIMIT 1",
         crate::log::quoted(map.kind.host()),
@@ -665,6 +680,8 @@ fn merge_record(
                 .collect();
             write_fields(ctx, map, &id, &blanks)?;
             merge_children(ctx, map, &id, None, &record.fields)?;
+            // Another phone's source for the row is replaced by this one's.
+            connection.execute("DELETE FROM source WHERE entity_id = ?1", [&id])?;
             link(ctx, map, origin, record, &id)?;
             tally.matched += 1;
         } else {
@@ -757,6 +774,13 @@ fn settle_absent(
             *seen_id == external_id
                 && seen_device.as_deref().unwrap_or("") == device_id.as_deref().unwrap_or("")
         }) {
+            continue;
+        }
+        // Another phone's record is not judged lost by this phone's read: it is
+        // forgotten and the row kept, for the new phone to re-find.
+        if device_id.is_some() && device_id != origin.device {
+            connection.execute("DELETE FROM source WHERE id = ?1", [&source_id])?;
+            tally.forgotten += 1;
             continue;
         }
         let held = entity::require(connection, &entity_id)?;

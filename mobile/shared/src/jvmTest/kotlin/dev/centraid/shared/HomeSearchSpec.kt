@@ -202,7 +202,7 @@ class HomeSearchSpec : StringSpec({
         val data = HomeSearchMachine.fold(
             listOf(
                 hit("notes", "note", "n1", "Cabin packing"),
-                hit("people", "core.party", "p1", "Kate Bell"),
+                hit("people", "person", "p1", "Kate Bell"),
                 hit("agenda", "core.event", "e1", "Cabin weekend"),
                 hit("tasks", "schedule.task", "t1", "Book the cabin"),
                 hit("docs", "core.document", "d1", "Cabin lease"),

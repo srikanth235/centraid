@@ -32,21 +32,16 @@ public object PeopleWords {
     }
 
     /**
-     * THE AVATAR'S HUE IS A KEY, NEVER THE STORED TEXT. v0 printed a stored
-     * `var(--c-rose)` into the merge screen as words (audit defect); a stored
-     * value the wheel cannot name falls back to the id's own hue.
-     *
-     * EVERY HUE PEOPLE EMITS IS THE THEME'S COLOUR ROLE (`cRose`), the name a
-     * view looks a colour up by — so no view keeps a table from the wheel's
-     * word (`rose`) to the role, and an unknown key cannot reach one.
+     * THE AVATAR'S HUE IS A KEY drawn from the person's id: the theme's colour role (`cRose`)
+     * a view looks a colour up by, so no view keeps a table from the wheel's word to the role.
      */
-    public fun avatar(partyId: String, name: String, avatarColor: String?): PeopleAvatar = PeopleAvatar(
+    public fun avatar(partyId: String, name: String): PeopleAvatar = PeopleAvatar(
         initials = initials(name),
-        hue_key = hueKey(partyId, avatarColor),
+        hue_key = hueKey(partyId),
     )
 
-    public fun hueKey(partyId: String, avatarColor: String?): String =
-        role(PartyHueWheel.partyHueKey(partyId, avatarColor) ?: PartyHueWheel.identityHueKey(partyId))
+    /** A person's hue is drawn from their id: nothing stores a colour of their own (#1135). */
+    public fun hueKey(partyId: String): String = role(PartyHueWheel.identityHueKey(partyId))
 
     /** A wheel key as the theme's colour role: `rose` → `cRose`. */
     public fun role(wheelKey: String): String = PartyHueWheel.role(wheelKey)
@@ -55,17 +50,6 @@ public object PeopleWords {
     public fun wheelKey(role: String): String {
         val key = role.removePrefix("c").replaceFirstChar { it.lowercaseChar() }
         return if (role.startsWith("c") && key in PartyHueWheel.HUE_KEYS) key else ""
-    }
-
-    /** The stored form of a colour role: `var(--c-<wheel key>)`. */
-    public fun storedHue(hueRole: String): String = "var(--c-${wheelKey(hueRole)})"
-
-    /** The colour role of a stored `var(--c-<key>)`, or empty for anything else. */
-    public fun hueKeyOf(stored: String?): String {
-        val value = (stored ?: "").trim()
-        if (!value.startsWith("var(--c-") || !value.endsWith(")")) return ""
-        val key = value.substring("var(--c-".length, value.length - 1)
-        return if (key in PartyHueWheel.HUE_KEYS) role(key) else ""
     }
 
     /**

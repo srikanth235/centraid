@@ -6,9 +6,6 @@ import dev.centraid.shared.apps.agenda.CalendarImport.HeldException
 import dev.centraid.shared.apps.agenda.CalendarStore
 import dev.centraid.shared.apps.agenda.PhoneEvent
 import dev.centraid.shared.apps.agenda.PhoneSeries
-import dev.centraid.shared.apps.people.ContactsImport
-import dev.centraid.shared.apps.people.ContactsStore
-import dev.centraid.shared.apps.people.PhoneContact
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContainExactly
@@ -18,90 +15,11 @@ import io.kotest.matchers.string.shouldNotContain
 import kotlin.time.Instant
 
 /**
- * THE TWO STORES' HALVES OF GAPS 1 AND 2 (#1127, lane C), run for real over a scripted vault: a
- * followed contact's BIRTHDAY is added, moved and removed, and a followed series' SKIPPED and
- * MOVED occurrences are followed, restored included.
+ * THE CALENDAR STORE'S HALF OF GAP 2 (#1127, lane C), run for real over a scripted vault: a
+ * followed series' SKIPPED and MOVED occurrences are followed, restored included. (A followed
+ * contact's birthday is the vault's own merge now, #1135.)
  */
 class PhoneStoresSpec : StringSpec({
-    val readAt = "2026-10-20T10:00:00.000Z"
-
-    // -----------------------------------------------------------------------------------------
-    // Gap 1: the birthday
-    // -----------------------------------------------------------------------------------------
-
-    fun record(birthday: String) = ContactsImport.snapshot(
-        listOf(PhoneContact("Ada", birthday = birthday, phoneId = "local:1")),
-        readAt = readAt,
-    ).records.single()
-
-    fun birthdayScript(vararg dates: Pair<String, String>) = ScriptedCore().also { script ->
-        script.pages = { name, _ ->
-            when (name) {
-                "phone.people.birthday" -> dates.map { listOf(it.first, it.second) }
-                else -> emptyList()
-            }
-        }
-    }
-
-    fun birthdayCommands(script: ScriptedCore) = script.commands.filter { it.first.endsWith("important_date") }
-
-    "the birthday is a phone-owned field: the same name with another birthday is another fingerprint" {
-        record("08-14").fields.digest() shouldBe record("08-14").fields.digest()
-        (record("08-14").fields.digest() == record("09-01").fields.digest()) shouldBe false
-        (record("08-14").fields.digest() == record("").fields.digest()) shouldBe false
-        record("08-14").fields.canonical() shouldContain "birthday=08-14"
-        // Not a day of the year: no birthday at all.
-        record("2000-08-14").fields.canonical() shouldNotContain "birthday"
-    }
-
-    "a person's birthday is read into the vault row, so a member's own birthday edit reads as an edit" {
-        val script = ScriptedCore()
-        script.pages = { name, _ ->
-            when (name) {
-                "phone.people.profiles" -> listOf(listOf("pr1", "p1", ""))
-                "phone.people.names" -> listOf(listOf("p1", "Ada"))
-                "phone.people.birthdays" -> listOf(listOf("d1", "p1", "08-14"))
-                else -> emptyList()
-            }
-        }
-        val rows = ContactsStore(script.core(), "device-a").rows()!!
-        rows.getValue("p1").fields shouldBe record("08-14").fields
-    }
-
-    "a birthday that arrived on the phone is added" {
-        val script = birthdayScript()
-        ContactsStore(script.core(), "device-a").update("p1", record("08-14")) shouldBe true
-        birthdayCommands(script).map { it.first } shouldContainExactly listOf("people.add_important_date")
-        birthdayCommands(script).single().second shouldContain "\"month_day\":\"08-14\""
-        birthdayCommands(script).single().second shouldContain "\"party_id\":\"p1\""
-    }
-
-    "a birthday that moved on the phone is edited in place" {
-        val script = birthdayScript("d1" to "08-14")
-        ContactsStore(script.core(), "device-a").update("p1", record("09-01")) shouldBe true
-        birthdayCommands(script) shouldContainExactly listOf("people.edit_important_date" to "{\"date_id\":\"d1\",\"month_day\":\"09-01\"}")
-    }
-
-    "a birthday that went from the phone is deleted, every row of it" {
-        val script = birthdayScript("d1" to "08-14", "d2" to "08-14")
-        ContactsStore(script.core(), "device-a").update("p1", record("")) shouldBe true
-        birthdayCommands(script).map { it.second } shouldContainExactly listOf("{\"date_id\":\"d1\"}", "{\"date_id\":\"d2\"}")
-    }
-
-    "a birthday the vault already has changes nothing" {
-        val script = birthdayScript("d1" to "08-14")
-        ContactsStore(script.core(), "device-a").update("p1", record("08-14")) shouldBe true
-        birthdayCommands(script).shouldBeEmpty()
-        val none = birthdayScript()
-        ContactsStore(none.core(), "device-a").update("p1", record("")) shouldBe true
-        birthdayCommands(none).shouldBeEmpty()
-    }
-
-    "a refused birthday write is a refused update, so the pass tries again" {
-        val script = birthdayScript("d1" to "08-14")
-        script.refuses = { it == "people.edit_important_date" }
-        ContactsStore(script.core(), "device-a").update("p1", record("09-01")) shouldBe false
-    }
 
     // -----------------------------------------------------------------------------------------
     // Gap 2: the series' exceptions

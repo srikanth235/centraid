@@ -71,8 +71,8 @@ class AbiRoundTripSpec : StringSpec({
                     request_id = 7,
                     request = Request(
                         command = Command(
-                            name = "core.add_party",
-                            input = """{"display_name":"Kotlin $runTag","kind":"person"}"""
+                            name = "person.add",
+                            input = """{"title":"Kotlin $runTag"}"""
                                 .encodeToByteArray()
                                 .toByteString(),
                             invoke_key = "mobile-abi-round-trip-$runTag",
@@ -131,7 +131,7 @@ class AbiRoundTripSpec : StringSpec({
             // for, and on a phone that is battery". It is the wrong reading, and
             // the two lines below are what tell the two apart.
             //
-            // **The events are the WRITE's, five lines up.** `core.add_party`
+            // **The events are the WRITE's, five lines up.** `person.add`
             // runs inside a commit guard, and a deny is receipted — the audit
             // rows are a commit whether the command lands or is refused — so the
             // hook reports the tables that commit touched and the core offers
@@ -362,7 +362,7 @@ class AbiRoundTripSpec : StringSpec({
          * if a fixture vault outlives one. The fixture task rebuilds the vault
          * unconditionally, and this is the belt to that brace: a gateway core
          * with an injected clock mints deterministic ids, so a second identical
-         * `core.add_party` collides (see the receipt's findings).
+         * `person.add` collides (see the receipt's findings).
          */
         private val runTag: String = java.lang.Long.toHexString(System.nanoTime())
 
@@ -389,7 +389,7 @@ class AbiRoundTripSpec : StringSpec({
          * THE DRAIN'S CEILING, and what makes it an assertion rather than a
          * loop (#1029 W5).
          *
-         * One `core.add_party` — landed or receipted as a deny — touches a
+         * One `person.add` — landed or receipted as a deny — touches a
          * handful of tables and the core offers one `ChangeEvent` per table.
          * Eight was the measured count on this fixture. The ceiling is well
          * above it and well below "something is emitting on its own": a core
@@ -402,13 +402,13 @@ class AbiRoundTripSpec : StringSpec({
         /** Enough empty `next_event`s that one lucky timeout proves nothing. */
         private const val IDLE_DRAINS = 4
 
-        /** The 200 parties `spike-fixture` seeds. */
+        /** The 200 people `spike-fixture` seeds (and the owner). */
         private val SEEDED_QUERY = ScreenRead(
             name = "abi.round-trip",
-            select = listOf("party_id", "created_at"),
-            from = "core_party",
+            select = listOf("id", "created_at"),
+            from = "entity",
             sortColumn = "created_at",
-            pkColumn = "party_id",
+            pkColumn = "id",
             limit = 100,
         )
 
@@ -416,7 +416,7 @@ class AbiRoundTripSpec : StringSpec({
          * THE SCREEN READS, over the real tables
          * (`contracts/schema/vault-ddl.sql`): `media_asset`. (Notes' editor is the
          * `notes.note` app query now, #1135.) The fixture vault has rows in
-         * `core_party` and none in this one, so these numbers are a **bounded read's floor** — the
+         * `entity` and none in this one, so these numbers are a **bounded read's floor** — the
          * SQL plan, the protobuf round trip and the JNA marshalling are real and
          * the row copy is not. The device measurement at 50k assets is the
          * owner's, and `docs/mobile-offline.md` says which number decides what.

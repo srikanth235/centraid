@@ -25,23 +25,22 @@ import dev.centraid.shared.sync.ScreenWrites
  * PEOPLE'S TRASH (#1029 app port): the kit's one trash screen, with People as
  * its parameter.
  *
- * `people.trash_person` and `people.restore_person` move a profile in and
- * out, and `people.purge_person` deletes a trashed person forever — the
- * party, the profile and everything that is only theirs (#1015 D1: "Delete
- * forever" wherever an app can destroy). The vault refuses it while money,
- * messages or other lasting records still name them, and that refusal is the
- * core's sentence on the status line. There is no command that empties the
- * whole trash, so no "Empty trash": the purge sweep erases the rest on each
- * row's day.
+ * `entity.trash` and `entity.restore` move a person in and out, and
+ * `entity.purge` deletes a trashed person forever, with everything written
+ * about them alone that went to the trash with them (#1015 D1: "Delete
+ * forever" wherever an app can destroy). The vault refuses it while the owner
+ * is the person, and that refusal is the core's sentence on the status line.
+ * There is no People command that empties the whole trash, so no "Empty
+ * trash": the purge sweep erases the rest on each row's day.
  */
 public val PeopleTrashSpec: TrashSpec = TrashSpec(
     appId = "people",
-    table = "people_profile",
-    restoreCommand = "people.restore_person",
-    purgeCommand = "people.purge_person",
+    table = "entity",
+    restoreCommand = "entity.restore",
+    purgeCommand = "entity.purge",
     emptyCommand = null,
-    idColumn = "party_id",
-    titleColumn = "display_name",
+    idColumn = "id",
+    titleColumn = "title",
     purgeWindowDays = 30,
     copy = TrashCopy(purgesOn = PeopleCopy.TRASH_ERASES, purgeBody = PeopleCopy.TRASH_PURGE_BODY),
     reReadOnAnyChange = true,
@@ -49,9 +48,9 @@ public val PeopleTrashSpec: TrashSpec = TrashSpec(
 )
 
 /**
- * The kit's machine. A `people_profile` change is keyed by `profile_id` and a
- * row here by party, so the spec's [TrashSpec.reReadOnAnyChange] re-reads the
- * whole shelf — otherwise it would not move when someone was trashed or restored.
+ * The kit's machine. An `entity` change covers every kind and the shelf lists
+ * people only, so the spec's [TrashSpec.reReadOnAnyChange] re-reads the whole
+ * shelf — otherwise it would not move when someone was trashed or restored.
  */
 public val PeopleTrashMachine: TrashMachine = TrashMachine(PeopleTrashSpec)
 

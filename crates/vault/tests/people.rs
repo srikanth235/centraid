@@ -645,3 +645,69 @@ fn a_record_gone_from_a_complete_read_takes_an_untouched_person_and_spares_an_ed
         "Ben is no longer followed"
     );
 }
+
+#[test]
+fn a_vault_restored_onto_a_new_phone_is_re_found_by_name_and_loses_nothing() {
+    let w = World::new();
+    let read = |device: &str, ids: &[(&str, &str)]| {
+        let records: Vec<_> = ids
+            .iter()
+            .map(|(id, name)| json!({ "external_id": id, "device_id": device, "fields": { "title": name } }))
+            .collect();
+        w.ok(
+            "follow.contacts",
+            json!({ "origin": { "ref": "phone", "label": "Phone", "device_id": device }, "complete": true, "records": records }),
+        )
+    };
+    read(
+        "device-a",
+        &[("local:a1", "Ada"), ("local:a2", "Bo"), ("local:a3", "Cy")],
+    );
+    let people = || {
+        w.count(
+            "SELECT COUNT(*) FROM entity WHERE kind = 'person' AND deleted_at IS NULL",
+            &[],
+        )
+    };
+    assert_eq!(people(), 4, "three contacts and the owner");
+    // The new phone names Ada and Bo its own way and does not hold Cy.
+    let tally = read("device-b", &[("local:b1", "ada"), ("local:b2", "Bo")]);
+    assert_eq!(
+        (
+            tally["matched"].as_i64(),
+            tally["added"].as_i64(),
+            tally["trashed"].as_i64()
+        ),
+        (Some(2), Some(0), Some(0))
+    );
+    assert_eq!(
+        tally["forgotten"].as_i64(),
+        Some(1),
+        "Cy's source is another phone's: forgotten, the row kept"
+    );
+    assert_eq!(people(), 4);
+    assert_eq!(
+        w.count(
+            "SELECT COUNT(*) FROM source WHERE device_id = 'device-a'",
+            &[]
+        ),
+        0
+    );
+    assert_eq!(
+        w.count(
+            "SELECT COUNT(*) FROM source WHERE device_id = 'device-b'",
+            &[]
+        ),
+        2
+    );
+    // A second read of the same phone is quiet.
+    let again = read("device-b", &[("local:b1", "ada"), ("local:b2", "Bo")]);
+    assert_eq!(
+        (
+            again["added"].as_i64(),
+            again["updated"].as_i64(),
+            again["trashed"].as_i64()
+        ),
+        (Some(0), Some(0), Some(0))
+    );
+}

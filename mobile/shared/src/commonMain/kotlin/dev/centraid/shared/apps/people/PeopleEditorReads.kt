@@ -51,7 +51,7 @@ public object PeopleEditorReads :
     override fun settled(status: CommandStatus, sentence: String, invokeKey: String): PeopleEditorEvent =
         PeopleEditorEvent(write_settled = WriteLaw.settledOf(status, sentence, invokeKey))
 
-    /** The profile's fields as the editor holds them; the hue as a wheel key. */
+    /** The profile's fields as the editor holds them. */
     public fun draftOf(sheet: PeopleSheet): PeopleProfileDraft {
         val person = sheet.person ?: centraid.core.v1.PeopleRosterRow()
         return PeopleProfileDraft(
@@ -59,7 +59,6 @@ public object PeopleEditorReads :
             role = person.role,
             nickname = sheet.nickname,
             met = sheet.met,
-            hue_key = PeopleWords.hueKeyOf(person.avatar_color),
             cadence_days = person.cadence_days,
         )
     }
