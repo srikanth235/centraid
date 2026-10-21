@@ -1697,6 +1697,94 @@
           }
         }
       }
+    },
+    "gateway/app-read/year3-docs/ci-linux-x64-4c": {
+      "surface": "gateway",
+      "journey": "app-read",
+      "volume": "year3-docs",
+      "hardware": "ci-linux-x64-4c",
+      "spans": [],
+      "consumers": ["crates/apps/docs/tests/year3.rs"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "driveWindowWalked": {
+          "status": "projected",
+          "probe": "cargo test -p centraid-apps-docs --test year3 -- --ignored --nocapture",
+          "_observedMs": 126,
+          "_basis": "One run on ci-linux-x64-4c under concurrent lanes, through the app crate's real query path over a vault seeded by `crates/apps/kit::fixtures::year3_docs`. PROJECTED in this ledger's sense and in D-1020-D3-7's: the number is observed, but one run on one contended container is not a distribution, and the target this journey exists to protect is stated on a reference DEVICE, which this host is not. Every number here is parked under a leading underscore so the ratchet cannot read it as a ceiling; the device lane of R-1020-20 is what promotes one.",
+          "_provenance": {
+            "at": "2026-10-21",
+            "host": "ci-linux-x64-4c, 4 vCPU / 15 GB, shared with concurrent lanes",
+            "note": "A 2,000-row drive answers 2,000 of 8,000 documents and 400 folders, `truncated` true from the walk's own cursor. Rebuilt on the new model (#1135): one table at a time over the ids the window returned. The trash shelf (400 documents, read from its own set because the trash is older than any window) is 16 ms."
+          }
+        }
+      }
+    },
+    "gateway/app-read/year3-photos/ci-linux-x64-4c": {
+      "surface": "gateway",
+      "journey": "app-read",
+      "volume": "year3-photos",
+      "hardware": "ci-linux-x64-4c",
+      "spans": [],
+      "consumers": ["crates/apps/photos/tests/year3.rs"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "libraryPage": {
+          "status": "projected",
+          "probe": "cargo test -p centraid-apps-photos --test year3 -- --ignored --nocapture",
+          "_observedMs": 54,
+          "_basis": "One run on ci-linux-x64-4c under concurrent lanes, through the app crate's real query path over a vault seeded by `crates/apps/kit::fixtures::year3_photos`. PROJECTED in this ledger's sense and in D-1020-D3-7's: the number is observed, but one run on one contended container is not a distribution, and the target this journey exists to protect is stated on a reference DEVICE, which this host is not. Every number here is parked under a leading underscore so the ratchet cannot read it as a ceiling; the device lane of R-1020-20 is what promotes one.",
+          "_provenance": {
+            "at": "2026-10-21",
+            "host": "ci-linux-x64-4c, 4 vCPU / 15 GB, shared with concurrent lanes",
+            "note": "The library at its 500 default window folds 495 rows and 200 trashed, in the newest-500 order with the archive and a burst's older still taken out. Asked for 2,000 it serves ONE page in 47 ms, deliberately: its sort column is nullable, so a keyset walk would silently drop every undated photograph (D-1020-P11). Seeding the 90,000 photographs is 5.5 s."
+          }
+        },
+        "duplicates": {
+          "status": "projected",
+          "probe": "cargo test -p centraid-apps-photos --test year3 -- --ignored --nocapture",
+          "_observedMs": 10032,
+          "_basis": "One run on ci-linux-x64-4c under concurrent lanes, through the app crate's real query path over a vault seeded by `crates/apps/kit::fixtures::year3_photos`. PROJECTED in this ledger's sense and in D-1020-D3-7's: the number is observed, but one run on one contended container is not a distribution, and the target this journey exists to protect is stated on a reference DEVICE, which this host is not. Every number here is parked under a leading underscore so the ratchet cannot read it as a ceiling; the device lane of R-1020-20 is what promotes one.",
+          "_provenance": {
+            "at": "2026-10-21",
+            "host": "ci-linux-x64-4c, 4 vCPU / 15 GB, shared with concurrent lanes",
+            "note": "The duplicates read over the first 4,000 of 9,000 fingerprints (3,000 families of three) clusters 1,333 families and stops at its cap. The time is the pairwise clustering in `centraid_media::duplicates`, in a debug build, and not the read: the banding v0 used to avoid it is still named as unported."
+          }
+        }
+      }
+    },
+    "gateway/app-read/year3-50k-assets/ci-linux-x64-4c": {
+      "surface": "gateway",
+      "journey": "app-read",
+      "volume": "year3-50k-assets",
+      "hardware": "ci-linux-x64-4c",
+      "spans": [],
+      "consumers": ["crates/apps/photos/tests/year3.rs"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "libraryPage": {
+          "status": "projected",
+          "probe": "cargo test -p centraid-apps-photos --test year3 -- --ignored --nocapture",
+          "_observedMs": 57,
+          "_basis": "One run on ci-linux-x64-4c under concurrent lanes, through the app crate's real query path over a vault seeded by `crates/apps/kit::fixtures::year3_photos`. PROJECTED in this ledger's sense and in D-1020-D3-7's: the number is observed, but one run on one contended container is not a distribution, and the target this journey exists to protect is stated on a reference DEVICE, which this host is not. Every number here is parked under a leading underscore so the ratchet cannot read it as a ceiling; the device lane of R-1020-20 is what promotes one.",
+          "_provenance": {
+            "at": "2026-10-21",
+            "host": "ci-linux-x64-4c, 4 vCPU / 15 GB, shared with concurrent lanes",
+            "note": "The library at its 500 default window over 50,000 photographs folds 495 rows and 200 trashed. Asked for 2,000 it serves ONE page in 54 ms, deliberately: its sort column is nullable, so a keyset walk would silently drop every undated photograph (D-1020-P11). Rebuilt on the new model (#1135): one table at a time over the ids the window returned."
+          }
+        },
+        "duplicates": {
+          "status": "projected",
+          "probe": "cargo test -p centraid-apps-photos --test year3 -- --ignored --nocapture",
+          "_observedMs": 10310,
+          "_basis": "One run on ci-linux-x64-4c under concurrent lanes, through the app crate's real query path over a vault seeded by `crates/apps/kit::fixtures::year3_photos`. PROJECTED in this ledger's sense and in D-1020-D3-7's: the number is observed, but one run on one contended container is not a distribution, and the target this journey exists to protect is stated on a reference DEVICE, which this host is not. Every number here is parked under a leading underscore so the ratchet cannot read it as a ceiling; the device lane of R-1020-20 is what promotes one.",
+          "_provenance": {
+            "at": "2026-10-21",
+            "host": "ci-linux-x64-4c, 4 vCPU / 15 GB, shared with concurrent lanes",
+            "note": "Over the first 4,000 of 4,500 fingerprints (1,500 families of three): 1,333 families clustered, the read stopped at its cap. The time is the pairwise clustering in `centraid_media::duplicates`, in a debug build, and not the read: the banding v0 used to avoid it is still named as unported."
+          }
+        }
+      }
     }
   },
   "rigs": {
