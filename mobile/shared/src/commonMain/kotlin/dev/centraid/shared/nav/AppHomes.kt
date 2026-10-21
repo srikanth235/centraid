@@ -13,9 +13,11 @@ import dev.centraid.design.CentraidCatalog
  * a place that ROUTES a row keeps the row's own id — a task row still opens
  * `TasksDetail` through [RowRoutes], whatever app header it sits under.
  *
- * A persisted id never goes through this map: a chat's scope and a card's app
- * stay `tasks` (the DDL CHECK and `CARD_APPS` in the core name it), and only
- * the words and marks drawn from them follow the app.
+ * A persisted id never goes through this map: a card's app stays `tasks` (the
+ * card CHECK and `CARD_APPS` in the core name it), and only the words and marks
+ * drawn from it follow the app. A chat's scope is an app, never a folded domain
+ * (R-1128-F2): a visit to a task page scopes the chat to Agenda through
+ * `ChatMachine.scopeOf`, which asks here.
  */
 public object AppHomes {
     /** The domain ids that are not an app of their own, with the app each opens in. */
