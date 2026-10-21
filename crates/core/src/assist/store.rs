@@ -430,7 +430,11 @@ pub fn reopen(handle: &Handle, thread_id: &str) -> crate::error::Result<Option<R
             return Ok(None);
         };
         // The vault's CHECK holds a stored scope to the six apps (R-1128-F2).
-        let scope = stored.thread.scope_app.as_deref().and_then(App::scope_from_id);
+        let scope = stored
+            .thread
+            .scope_app
+            .as_deref()
+            .and_then(App::scope_from_id);
         let history: Vec<Turn> = vault
             .chat_history(thread_id, REHYDRATE_TURNS)?
             .iter()
