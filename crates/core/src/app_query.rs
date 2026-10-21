@@ -929,6 +929,38 @@ mod tests {
     /// three-day all-day run is dates, end inclusive, and on all three; the
     /// answer's today and now are New York's reading of the vault clock; and
     /// nothing answered ended before `from`.
+    /// A WINDOW TOO FULL TO EXPAND IS A BOUND THE SHELL IS TOLD, NOT A SHORT AGENDA.
+    ///
+    /// Forty daily series over six months are about 7,000 occurrences against
+    /// `MAX_TOTAL_INSTANCES` (1,500): the read errors at the size it reaches, the
+    /// core answers `ReadBoundReached` naming it, and a day of the same vault
+    /// answers whole.
+    #[test]
+    fn a_window_too_full_to_expand_is_a_bound_reached_and_a_day_of_it_is_whole() {
+        let scratch = Scratch::founded();
+        for k in 0..40 {
+            // Twenty minutes apart, so no two of them are the same busy time.
+            let (hour, minute) = (k / 3, (k % 3) * 20);
+            scratch.propose(
+                &format!("Daily {k}"),
+                &format!("2099-05-01T{hour:02}:{minute:02}:00.000Z"),
+                &format!("2099-05-01T{hour:02}:{:02}:00.000Z", minute + 15),
+                Some("FREQ=DAILY"),
+            );
+        }
+        match scratch.upcoming("2099-06-01T00:00:00.000Z", "2099-12-01T00:00:00.000Z") {
+            Err(CoreError::ReadBoundReached { query, cap }) => {
+                assert_eq!(query, "agenda.upcoming.expansion");
+                assert_eq!(cap, centraid_apps_agenda::MAX_TOTAL_INSTANCES);
+            }
+            other => panic!("a window past the bound answers a bound, not {other:?}"),
+        }
+        let day = scratch
+            .upcoming("2099-06-03T04:00:00.000Z", "2099-06-04T04:00:00.000Z")
+            .expect("a day reads");
+        assert_eq!(day.events.len(), 40);
+    }
+
     #[test]
     fn upcoming_answers_each_occurrence_in_the_request_zone() {
         let scratch = Scratch::founded();

@@ -664,9 +664,11 @@ pub struct Year3EventsShape {
     /// Zoned one-off events across three years, and all-day ones.
     pub timed: usize,
     pub all_day: usize,
-    /// Series: mostly weekly, some monthly, a tenth every third day; the first
+    /// Series: the first `daily` every day, the rest mostly weekly and some monthly; the first
     /// `overridden` of them carry occurrence rows (one moved, one cancelled).
     pub series: usize,
+    /// How many of the series (the first) repeat every day.
+    pub daily: usize,
     pub overridden: usize,
     /// Events carrying the cancelled status, and events in the trash.
     pub cancelled: usize,
@@ -676,24 +678,29 @@ pub struct Year3EventsShape {
     pub guested: usize,
 }
 
-/// THE YEAR-3 AGENDA PROFILE: 8,000 one-off events, 2,000 all-day, 60 series
-/// (20 with overrides), 300 cancelled, 200 trashed and 3,000 with guests.
+/// THE YEAR-3 AGENDA PROFILE: 12,000 events (2,000 all-day) and 800 daily
+/// series, 600 of them with overrides, 300 cancelled, 200 trashed and 3,000 with
+/// guests.
 ///
-/// * **60 series, a tenth of them every third day**: the product's default
-///   45-day window (read from 31 days back) expands to about 600 instances and
-///   its one-offs add about 450, under the 1,500-instance bound; a member with
-///   twice the series reaches the bound and is told so rather than shown a
-///   short agenda.
-/// * **10,000 one-offs over three years**: a 45-day window sees about 450 and
-///   the 2,000-row window cap is never the answer.
+/// * **12,000 events against `EVENT_WINDOW_CAP` 2,000**: a year-3 calendar is six
+///   windows deep, so the window is a stated ceiling rather than "everything".
+/// * **800 series against `RECURRING_ANCHOR_CAP` 1,000**: under the cap on
+///   purpose, close enough that a port which merged the two reads would show it.
+/// * **800 DAILY series over the default window is tens of thousands of
+///   occurrences against `MAX_TOTAL_INSTANCES` 1,500**: the year-3 agenda TRIPS
+///   the expansion bound, which is the only way to know the bound reports the
+///   size it reaches rather than returning a short agenda that reads as a whole
+///   one (D-1020-D3-12). A realistic calendar (a few dozen series, a handful
+///   daily) is the agenda test's own shape and answers whole.
 pub const YEAR3_EVENTS: Year3EventsShape = Year3EventsShape {
-    timed: 8_000,
+    timed: 10_000,
     all_day: 2_000,
-    series: 60,
-    overridden: 20,
+    series: 800,
+    daily: 800,
+    overridden: 600,
     cancelled: 300,
     trashed: 200,
-    guests: 300,
+    guests: 400,
     guested: 3_000,
 };
 
@@ -758,10 +765,10 @@ pub fn year3_events(
             .execute("INSERT INTO person (id) VALUES (?1)", params![guest])
             .map_err(door)?;
     }
-    // A member's series are mostly weekly, some monthly and a few daily.
-    let rule_of = |ordinal: usize| match ordinal % 10 {
-        0 => "FREQ=DAILY;INTERVAL=3",
-        1..=3 => "FREQ=MONTHLY",
+    // The first `daily` series repeat every day; the rest are mostly weekly.
+    let rule_of = |ordinal: usize| match ordinal {
+        _ if ordinal < shape.daily => "FREQ=DAILY",
+        _ if ordinal.is_multiple_of(4) => "FREQ=MONTHLY",
         _ => "FREQ=WEEKLY",
     };
     let zones = ["Europe/London", "America/New_York", "Asia/Kolkata"];
