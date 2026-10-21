@@ -8,8 +8,6 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.CalendarContract
 import android.provider.ContactsContract
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -18,8 +16,6 @@ import androidx.core.content.ContextCompat
 import dev.centraid.android.screens.agenda.readPhoneEvents
 import dev.centraid.android.screens.docs.AndroidFolderReader
 import dev.centraid.android.screens.people.readPhoneContacts
-import dev.centraid.android.theme.centraidColor
-import dev.centraid.android.theme.centraidType
 import dev.centraid.shared.apps.agenda.CalendarFollow
 import dev.centraid.shared.apps.agenda.CalendarRead
 import dev.centraid.shared.apps.agenda.CalendarReader
@@ -54,7 +50,7 @@ import java.util.TimeZone
  *   Health Connect is read by [health] (`HealthConnectReader`), over the types the member chose
  *   on Health's Connect page; its triggers are the app coming forward and Connect itself, with no
  *   watcher (#1129).
- * - **The question.** [question] holds the one the bridge is waiting on; [PhoneFollowDialog]
+ * - **The question.** [question] holds the one the bridge is waiting on; [PhoneFollowSheet]
  *   draws it and [answer] sends the member's choice back.
  *
  * Held by the activity and built on the application context, so it keeps no activity alive.
@@ -69,7 +65,7 @@ internal class AndroidPhoneFollow(context: Context, private val health: HealthRe
     private var started = false
     private var attached = false
 
-    /** The question the member is being asked, or null. Read by [PhoneFollowDialog]. */
+    /** The question the member is being asked, or null. Read by [PhoneFollowSheet]. */
     var question: PhoneFollowQuestion? by mutableStateOf(null)
         private set
 
@@ -161,18 +157,17 @@ internal class AndroidPhoneFollow(context: Context, private val health: HealthRe
 }
 
 /**
- * THE QUESTION AN ACCOUNT OR CALENDAR THAT LEFT THE PHONE LEAVES (R-1127-9). **Keep is the
- * default**: the confirm button, and what dismissing the dialog means. Every word is the
- * question's own, from the shared copy.
+ * THE QUESTION AN ACCOUNT OR CALENDAR THAT LEFT THE PHONE LEAVES (R-1127-9), in the kit's
+ * [ConfirmSheet] (DESIGN.md: a destructive confirm is never a dialog). The shared question chose
+ * every word and built the confirm: Move to trash is its destructive verb, and **Keep, the
+ * default**, is the sheet's cancel and what the grabber, the scrim and back mean.
  */
 @Composable
-internal fun PhoneFollowDialog(question: PhoneFollowQuestion, onAnswer: (keep: Boolean) -> Unit) {
-    AlertDialog(
-        onDismissRequest = { onAnswer(true) },
-        containerColor = centraidColor("bg"),
-        title = { Text(question.title, style = centraidType("smallStrong"), color = centraidColor("text")) },
-        text = { Text(question.body, style = centraidType("body"), color = centraidColor("textSoft")) },
-        confirmButton = { KitLink(label = question.keepLabel, onClick = { onAnswer(true) }) },
-        dismissButton = { KitLink(label = question.trashLabel, onClick = { onAnswer(false) }) },
+internal fun PhoneFollowSheet(question: PhoneFollowQuestion, onAnswer: (keep: Boolean) -> Unit) {
+    ConfirmSheet(
+        confirm = question.confirm,
+        cancelLabel = question.keepLabel,
+        onConfirm = { onAnswer(false) },
+        onDismiss = { onAnswer(true) },
     )
 }

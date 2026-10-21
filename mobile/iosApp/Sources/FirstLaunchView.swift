@@ -12,7 +12,7 @@ import CentraidShared
 ///
 /// ## Three paper slips, because the model is the unfamiliar part
 ///
-/// Seven apps on the phone, an assistant that runs there too, and encrypted
+/// The apps on the phone, an assistant that runs there too, and encrypted
 /// backups to systems the member owns: three claims, none of which needs the
 /// 24 words to be understood (the words screen explains itself when it comes).
 /// So the gate is a small deck of three slips — the apps, the assistant, the
@@ -201,14 +201,17 @@ private struct FirstLaunchSlip<Scene: View>: View {
     }
 }
 
-/// THE SEVEN APP MARKS AS ONE HOUSE: rooms in one place, not seven products.
+/// EVERY APP'S MARK AS ONE HOUSE: rooms in one place, not separate products.
+/// The marks are Home's own roster (`FirstLaunch.APPS`, #1129), so an app that
+/// gets a tile is in the house too; five to a row at 40pt is the same width the
+/// grid always took, and fits the narrowest phone's slip.
 private struct HouseScene: View {
-    private static let apps = ["photos", "docs", "notes", "agenda", "tasks", "people", "locker"]
+    private static let apps = FirstLaunch.shared.APPS
 
     var body: some View {
-        LazyVGrid(columns: Array(repeating: GridItem(.fixed(52), spacing: 8), count: 4),
+        LazyVGrid(columns: Array(repeating: GridItem(.fixed(40), spacing: 8), count: 5),
                   spacing: 12) {
-            ForEach(Self.apps, id: \.self) { AppMark(appID: $0, size: 52) }
+            ForEach(Self.apps, id: \.self) { AppMark(appID: $0, size: 40) }
         }
         .padding(.top, 18)
         .frame(height: 150, alignment: .top)
