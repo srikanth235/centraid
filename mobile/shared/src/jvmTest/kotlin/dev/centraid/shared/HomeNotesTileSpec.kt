@@ -98,6 +98,10 @@ class HomeNotesTileSpec : StringSpec({
         requests[1].notes_notebooks.shouldNotBeNull()
     }
 
+    "the tile's tables are the Notes shelf's own, spelled out because the shell imports nothing of apps.notes" {
+        HomeNotesTile.TABLES shouldBe dev.centraid.shared.apps.notes.NotesTables.SHELF
+    }
+
     "Home re-reads on the notes, the notebooks and the filing, and Notes is no page read" {
         HomeNotesTile.TABLES.forEach { table ->
             withClue(table) {

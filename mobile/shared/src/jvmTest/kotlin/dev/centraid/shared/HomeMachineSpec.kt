@@ -682,7 +682,7 @@ class HomeMachineSpec : StringSpec({
     }
 
     "a write stranded by its screen's closing is Home's status line, in the attention tone" {
-        val quiet = strandedStatus(StrandedWrite(appId = "notes", command = "knowledge.edit_note", sentence = ""))
+        val quiet = strandedStatus(StrandedWrite(appId = "notes", command = "note.edit", sentence = ""))
         quiet.tone shouldBe HomeStatus.Tone.TONE_ATTENTION
         quiet.copy shouldBe "Your last change in Notes was not saved."
         quiet.action shouldBe ""

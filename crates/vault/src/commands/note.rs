@@ -46,8 +46,17 @@ pub const BODY_BUDGET_BYTES: usize = 64 * 1024;
 /// ceiling. One pathological body cannot write thousands of rows.
 pub const MAX_LINKS: usize = 100;
 
-/// The kinds a title can resolve to: the powerbox's own columns.
-const LINKABLE: &str = "'note', 'person', 'event', 'task', 'document', 'photo'";
+/// The kinds a title can resolve to, and so the powerbox's six columns: what a
+/// member can link a note to. One list, because a pick the compile could not
+/// resolve would be a `[[title]]` that links nothing.
+pub const LINKABLE: [Kind; 6] = [
+    Kind::Note,
+    Kind::Person,
+    Kind::Event,
+    Kind::Task,
+    Kind::Document,
+    Kind::Photo,
+];
 
 fn body_refusal(ctx: &CommandCtx<'_, '_>) -> Option<String> {
     let body = ctx.optional_str("body")?;
@@ -285,9 +294,14 @@ fn compile_wikilinks(ctx: &CommandCtx<'_, '_>, note: &str, body: &str) -> Result
             AND json_extract(anchor, '$.wikilink') IS NOT NULL",
         [note],
     )?;
+    let linkable = LINKABLE
+        .iter()
+        .map(|kind| format!("'{}'", kind.as_str()))
+        .collect::<Vec<_>>()
+        .join(", ");
     let mut resolve = connection.prepare_cached(&format!(
         "SELECT e.id FROM entity e
-          WHERE e.kind IN ({LINKABLE}) AND e.deleted_at IS NULL AND e.id <> ?1
+          WHERE e.kind IN ({linkable}) AND e.deleted_at IS NULL AND e.id <> ?1
             AND lower(e.title) = lower(?2)
             AND NOT (e.kind = 'note'
                      AND EXISTS (SELECT 1 FROM edge m WHERE m.from_id = e.id AND m.rel = 'about'))

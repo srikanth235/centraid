@@ -1,128 +1,72 @@
 package dev.centraid.shared.apps.notes
 
+import centraid.core.v1.AppQueryRequest
+import centraid.core.v1.AppQueryResponse
 import centraid.core.v1.CommandStatus
-import centraid.core.v1.PageOrder
-import centraid.core.v1.PageQuery
-import centraid.core.v1.Row
-import centraid.core.v1.Value
+import centraid.core.v1.NotesNote
+import centraid.core.v1.NotesNoteRequest
 import centraid.screen.v1.NoteDraft
 import centraid.screen.v1.NotesEditorEvent
 import centraid.screen.v1.NotesEditorState
 import centraid.screen.v1.ReadFailure
 import dev.centraid.shared.kit.WriteLaw
+import dev.centraid.shared.platform.DeviceClock
 import dev.centraid.shared.screen.Reads
-import dev.centraid.shared.sync.ScreenReads
+import dev.centraid.shared.sync.ScreenQueries
 import dev.centraid.shared.sync.ScreenWrites
 
 /**
- * WHAT THE NOTES EDITOR READS, AND WHAT IT MAKES OF THE ROW (#1025 S5, lane L5).
+ * WHAT THE NOTES EDITOR READS, AND WHAT IT MAKES OF THE ANSWER (#1135).
  *
- * The editor is the one screen of the three that reads ONE row rather than a
- * page, and the door has one shape: a page. So the statement is
- * `crates/apps/notes`' `notes.library.recent` — `knowledge_note`, live rows,
- * `updated_at DESC, note_id DESC` — with the note's own id bound into the
- * predicate and a limit of one.
- *
- * **The order columns are still selected and the order is still stated**, on a
- * read that can return at most one row. Not ceremony: the door reads the cursor
- * off the row by the two columns the ORDER BY names, there is no `key_of`
- * callback, and a statement that dropped them because "it is only one row"
- * would be a statement that breaks the moment its predicate widens.
+ * The editor reads ONE note whole, so it rides the core's `notes.note` app query
+ * — the same arm that opens a People-journal entry by id — rather than a page of
+ * `note` rows: a note is an `entity` and a `note` row, and the page door's one
+ * shape is one table. The answer carries the title, the format, the pin, the
+ * notebook and `row_version`, which is the editor's base.
  */
 public object NotesReads :
-    ScreenReads<NotesEditorState, NotesEditorEvent>,
+    ScreenQueries<NotesEditorState, NotesEditorEvent>,
     ScreenWrites<NotesEditorState, NotesEditorEvent> {
     override val screenId: String = NotesEditorMachine.SCREEN_ID
 
-    /** `knowledge_note`, the same table the machine's `rowsChanged` declares. */
-    override val table: String = "knowledge_note"
-
-    /** One note. The editor is open on exactly one. */
-    override val limit: Int = 1
+    /** The tables a note's draft is made of; `rowsChanged` names exactly these. */
+    override val tables: Set<String> = NotesTables.SHELF
 
     /**
-     * The note the editor is open on, or null before it knows.
-     *
-     * The id comes off the STATE, where `Opened` put it — `ScreenHost`
-     * publishes the state before it emits the same reduce's effects, so by the
-     * time this is asked the id is there. Null when it is not, which
-     * `ScreenRuntime` turns into a sentence rather than into silence: an editor
-     * that asked for a read and got nothing back would sit loading for ever.
-     *
-     * `deleted_at IS NULL` is the app's own filter: a deleted note stays on the
-     * table until the purge sweep takes it, and an editor that opened one would
-     * let a member type into something already thrown away.
-     *
-     * [afterCursor] is ignored, and it is the one screen where that is right —
-     * there is no second page of one note. A cursor arriving here would mean a
-     * caller walked a single-row read, and re-reading the same row is the
-     * honest answer to that.
+     * The note the editor is open on, or null before it knows. The id comes off
+     * the STATE, where `Opened` put it: null when it is not there, which the
+     * runtime turns into a sentence rather than silence.
      */
-    override fun query(state: NotesEditorState, afterCursor: String?): PageQuery? {
-        val noteId = state.note_id.takeIf { it.isNotEmpty() } ?: return null
-        return PageQuery(
-            name = "notes.editor.note",
-            select = listOf(
-                "note_id",
-                "title",
-                "format",
-                "pinned",
-                "current_revision_id",
-                "updated_at",
-            ),
-            from = table,
-            where_ = "note_id = ? AND deleted_at IS NULL",
-            bind = listOf(Value(text = noteId)),
-            order = PageOrder(
-                sort_column = "updated_at",
-                pk_column = "note_id",
-                descending = true,
-            ),
-            // R-NOTES-1: the body is `core_content_text`, appended as
-            // `body_text` after the named columns — not `seat_blob_held`.
-            with_note_body = true,
-        )
-    }
+    override fun requests(state: NotesEditorState, now: DeviceClock.Reading): List<AppQueryRequest>? =
+        state.note_id.takeIf { it.isNotEmpty() }?.let {
+            listOf(AppQueryRequest(notes_note = NotesNoteRequest(note_id = it, tz = now.zone)))
+        }
 
     /**
      * The draft, or the refusal that a note which is not there deserves.
      *
-     * **AN EMPTY PAGE IS NOT AN EMPTY NOTE.** A list with no rows is a real
-     * answer — the member has no expenses — but an EDITOR with no row is an
-     * editor over a note that was deleted, purged, or never reached this seat,
-     * and drawing an empty title and an empty body would invite a member to
-     * type into a document that does not exist and then be told on save that it
-     * does not. So the absence is a sentence, produced here because this is the
-     * only place that knows a page of one is a page of one.
+     * **AN ABSENT NOTE IS NOT AN EMPTY NOTE.** An editor with no note is an
+     * editor over one that was purged or never made, and drawing an empty title
+     * and an empty body would invite a member to type into a document that does
+     * not exist. So `found = false` is a sentence, and so is a note in the
+     * trash: `note.edit` refuses a trashed note, so the editor must not open one.
      */
-    override fun arrived(rows: List<Row>, nextCursor: String?): NotesEditorEvent {
-        val row = rows.firstOrNull()
-            ?: return refused(
-                Reads.refused("This note isn't on this phone."),
-            )
-        val (body, bodyUnavailable) = row.noteBody()
+    override fun arrived(answers: List<AppQueryResponse>): NotesEditorEvent {
+        val note = answers.firstNotNullOfOrNull { it.notes_note } ?: NotesNote()
+        if (!note.found) return refused(Reads.refused("This note isn't on this phone."))
+        if (note.deleted_at != null) return refused(Reads.refused("This note is in the trash."))
         return NotesEditorEvent(
             data_ = NotesEditorEvent.DataArrived(
                 draft = NoteDraft(
-                    title = row.text(1),
-                    // R-NOTES-1: `body_text` is the door's appended column from
-                    // `core_content_text`, after the six named select columns.
-                    // NULL means the text is not on this device; a present
-                    // string (including empty) is the replica's own words.
-                    body = body,
-                    body_unavailable = bodyUnavailable,
-                    format = formatOf(row.text(2)),
-                    // SQLite HAS NO BOOLEAN. `pinned` is `INTEGER CHECK
-                    // (pinned IN (0,1))`, so it arrives on the integer arm of
-                    // the value oneof and reading it as text would come back
-                    // empty and unpin every note in the vault.
-                    pinned = row.integer(3) != 0L,
-                    // THE BASE REVISION IS A MARKER AND NOT A CHECK. The kit's
-                    // autosave keeps it (`AutosaveLaw.loaded`), but it is not an
-                    // input to the save and not part of the save's `invoke_key`:
-                    // there is no vault-side revision check, and the last save
-                    // on this phone wins (R-1047-K3).
-                    base_revision_id = row.text(4),
+                    title = note.title,
+                    body = note.body,
+                    format = formatOf(note.format),
+                    pinned = note.pinned,
+                    // THE BASE IS A MARKER AND NOT A CHECK. The kit's autosave keeps
+                    // it (`AutosaveLaw.loaded`), but it is not an input to the save:
+                    // there is no vault-side version check, and the last save on
+                    // this phone wins (R-1047-K3).
+                    base_revision_id = note.row_version.toString(),
                 ),
             ),
         )
@@ -132,47 +76,27 @@ public object NotesReads :
         NotesEditorEvent(refused = NotesEditorEvent.ReadRefused(failure = failure))
 
     /**
-     * The DDL's three `format` values, as the proto's three.
+     * The note's two formats, as the proto's.
      *
-     * Unrecognised is `FORMAT_UNSPECIFIED` and not `FORMAT_PLAIN`: rendering
-     * an unknown format as plain text would show a member markup they wrote as
+     * Unrecognised is `FORMAT_UNSPECIFIED` and not `FORMAT_PLAIN`: rendering an
+     * unknown format as plain text would show a member markup they wrote as
      * literal characters, or hide markup they did not.
      */
     private fun formatOf(format: String): NoteDraft.Format = when (format) {
         "markdown" -> NoteDraft.Format.FORMAT_MARKDOWN
-        "html" -> NoteDraft.Format.FORMAT_HTML
         "plain" -> NoteDraft.Format.FORMAT_PLAIN
         else -> NoteDraft.Format.FORMAT_UNSPECIFIED
     }
 
-    /** Positional, as the door states. See `HomeReads.text` for why only TEXT. */
-    private fun Row.text(index: Int): String = values.getOrNull(index)?.text ?: ""
-
-    private fun Row.integer(index: Int): Long = values.getOrNull(index)?.integer ?: 0L
-
-    /**
-     * The appended `body_text` column ([BODY]), or unavailable when it is SQL
-     * NULL / absent. An empty string on the text arm is a real body.
-     */
-    private fun Row.noteBody(): Pair<String, Boolean> {
-        val value = values.getOrNull(BODY) ?: return "" to true
-        if (value.null_ != null) return "" to true
-        return (value.text ?: "") to false
-    }
-
-    /** After the six named select columns; see `query`'s `with_note_body`. */
-    private const val BODY: Int = 6
-
     override val appId: String = "notes"
 
     /**
-     * The save's outcome, as the editor's own settle event, keyed by the
-     * invoke key it was submitted under — so a settle for a save the editor
-     * has since moved past is recognisably not the one in flight.
+     * The save's outcome, as the editor's own settle event, keyed by the invoke
+     * key it was submitted under — so a settle for a save the editor has since
+     * moved past is recognisably not the one in flight.
      *
-     * Only `EXECUTED` commits: the phone is the vault, and a save commits here
-     * or it does not (QUEUED left with the outbox). The sentence is the core's;
-     * silence carries none.
+     * Only `EXECUTED` commits: the phone is the vault, and a save commits here or
+     * it does not. The sentence is the core's; silence carries none.
      */
     override fun settled(status: CommandStatus, sentence: String, invokeKey: String): NotesEditorEvent =
         NotesEditorEvent(write_settled = WriteLaw.settledOf(status, sentence, invokeKey))

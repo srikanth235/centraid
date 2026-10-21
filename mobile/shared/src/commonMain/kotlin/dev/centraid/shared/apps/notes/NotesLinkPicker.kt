@@ -145,25 +145,25 @@ public object NotesLinkPickerMachine : ScreenMachine<NotesLinkPickerState, Notes
     private val INLINE_MARK = Regex("""\*\*|__|~~|`|(?<![\w])[*_]|[*_](?![\w])""")
     private val WHITESPACE = Regex("""\s+""")
 
-    /** The index's domains (`crates/search/src/domains.rs`), by entity. A photograph is a content item there. */
+    /** The powerbox's six columns, by the kind the index names (`note::LINKABLE` in `crates/vault`). */
     private fun domainOf(entity: String): String = when (entity) {
-        "knowledge.note" -> NotesCopy.DOMAIN_NOTES
-        "core.party" -> NotesCopy.DOMAIN_PEOPLE
-        "core.event" -> NotesCopy.DOMAIN_EVENTS
-        "schedule.task" -> NotesCopy.DOMAIN_TASKS
-        "core.document" -> NotesCopy.DOMAIN_DOCS
-        "core.content_item", "media.asset" -> NotesCopy.DOMAIN_PHOTOS
+        "note" -> NotesCopy.DOMAIN_NOTES
+        "person" -> NotesCopy.DOMAIN_PEOPLE
+        "event" -> NotesCopy.DOMAIN_EVENTS
+        "task" -> NotesCopy.DOMAIN_TASKS
+        "document" -> NotesCopy.DOMAIN_DOCS
+        "photo" -> NotesCopy.DOMAIN_PHOTOS
         else -> NotesCopy.DOMAIN_OTHER
     }
 
     /** What one target IS, in a word — the subtitle when its row has none. Unknown: no subtitle. */
     private fun kindOf(entity: String): String = when (entity) {
-        "knowledge.note" -> NotesCopy.LINK_KIND_NOTE
-        "core.party" -> NotesCopy.LINK_KIND_PERSON
-        "core.event" -> NotesCopy.LINK_KIND_EVENT
-        "schedule.task" -> NotesCopy.LINK_KIND_TASK
-        "core.document" -> NotesCopy.LINK_KIND_DOCUMENT
-        "core.content_item", "media.asset" -> NotesCopy.LINK_KIND_PHOTOGRAPH
+        "note" -> NotesCopy.LINK_KIND_NOTE
+        "person" -> NotesCopy.LINK_KIND_PERSON
+        "event" -> NotesCopy.LINK_KIND_EVENT
+        "task" -> NotesCopy.LINK_KIND_TASK
+        "document" -> NotesCopy.LINK_KIND_DOCUMENT
+        "photo" -> NotesCopy.LINK_KIND_PHOTOGRAPH
         else -> ""
     }
 

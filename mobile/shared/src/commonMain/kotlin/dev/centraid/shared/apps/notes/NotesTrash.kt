@@ -23,17 +23,17 @@ import dev.centraid.shared.sync.ScreenWrites
 /**
  * NOTES' TRASH: the kit's one trash screen with Notes' spec (#1015 D1).
  *
- * RESTORE ONLY. The vault has no Notes purge or empty command
- * (`knowledge.*` is nine verbs, none destroys), so the screen offers neither
- * "Delete forever" nor "Empty trash" and the purge sweep erases at 30 days.
+ * RESTORE ONLY. Notes offers neither "Delete forever" nor "Empty trash" (the
+ * shared `entity.purge` and `entity.empty_trash` exist, and this screen does not
+ * ask for them), and the purge sweep erases at 30 days.
  */
 public val NotesTrashSpec: TrashSpec = TrashSpec(
     appId = "notes",
-    table = "knowledge_note",
-    restoreCommand = "knowledge.restore_note",
+    table = "entity",
+    restoreCommand = "entity.restore",
     purgeCommand = null,
     emptyCommand = null,
-    idColumn = "note_id",
+    idColumn = "id",
     titleColumn = "title",
     purgeWindowDays = 30,
     backLabel = NotesCopy.TITLE,
@@ -43,8 +43,8 @@ public val NotesTrashMachine: TrashMachine = TrashMachine(NotesTrashSpec)
 
 /**
  * THE TRASH IS READ THROUGH THE CORE'S `notes.trash`, NOT THE PAGE DOOR the
- * kit's `TrashReads` uses: a People-journal entry must never reach the trash
- * (D-1020-N3), and only the core's arm knows the journal marker set.
+ * kit's `TrashReads` uses: a memo (a People-journal entry) must never reach the trash
+ * (D-1020-N3), and only the core's arm knows the memo set.
  */
 public object NotesTrashReads :
     ScreenQueries<TrashListState, TrashListEvent>,

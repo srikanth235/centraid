@@ -57,8 +57,8 @@ class SearchContainersSpec : StringSpec({
     "Home puts an app's containers before its rows, counts both, and a container-only app still has its group" {
         val data = HomeSearchMachine.fold(
             listOf(
-                hit("notes", "knowledge.note", "n1", "Cabin packing"),
-                hit("notes", "knowledge.note", "n2", "Cabin key"),
+                hit("notes", "note", "n1", "Cabin packing"),
+                hit("notes", "note", "n2", "Cabin key"),
                 hit("notes", "core.collection", "nb", "Cabin"),
                 hit("docs", "core.concept", "fo", "Cabin papers"),
             ),

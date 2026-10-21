@@ -79,7 +79,7 @@ class HomeSearchSpec : StringSpec({
         // The shell carries the action out; the machine remembers the term.
         step(nothing, HomeSearchEvent(asked = HomeSearchEvent.Asked())).state.recent shouldBe listOf("zzqx")
         // Rows found: no empty state, no question.
-        val found = step(typed(opened, "cab").state, answer("cab", hit("notes", "knowledge.note", "n1", "Cabin"))).state
+        val found = step(typed(opened, "cab").state, answer("cab", hit("notes", "note", "n1", "Cabin"))).state
         found.data_!!.empty.shouldBeNull()
         found.data_.ask_question shouldBe ""
     }
@@ -87,9 +87,9 @@ class HomeSearchSpec : StringSpec({
     "the hits are grouped by app in Home's tile order, each counted, each row named by its kind" {
         val data = HomeSearchMachine.fold(
             listOf(
-                hit("notes", "knowledge.note", "n1", "Cabin packing"),
+                hit("notes", "note", "n1", "Cabin packing"),
                 hit("agenda", "core.event", "e1", "Cabin weekend"),
-                hit("notes", "knowledge.note", "n2", "Cabin key"),
+                hit("notes", "note", "n2", "Cabin key"),
                 hit("photos", "core.content_item", "c1", "Cabin at dusk", openId = "a1"),
                 hit("tasks", "schedule.task", "t1", "Book the cabin"),
             ),
@@ -114,7 +114,7 @@ class HomeSearchSpec : StringSpec({
         val data = HomeSearchMachine.fold(
             listOf(
                 hit("locker", "locker.item", "l1", "Cabin door code"),
-                hit("notes", "knowledge.note", "n1", "Cabin packing"),
+                hit("notes", "note", "n1", "Cabin packing"),
             ),
         )
         data.groups.map { it.app_id } shouldContainExactly listOf("notes")
@@ -129,7 +129,7 @@ class HomeSearchSpec : StringSpec({
         typedThenCleared.effects.shouldBeEmpty()
         typedThenCleared.state.resting.shouldNotBeNull()
         // An answer that lands after the clear is not drawn over the rest.
-        step(typedThenCleared.state, answer("cab", hit("notes", "knowledge.note", "n1", "Cabin"))).state
+        step(typedThenCleared.state, answer("cab", hit("notes", "note", "n1", "Cabin"))).state
             .data_.shouldBeNull()
     }
 
@@ -140,9 +140,9 @@ class HomeSearchSpec : StringSpec({
             VaultSearchRequest(term = "ca", tz = now.zone)
         val second = typed(first.state, "cabin").state
         // The answer for "ca" lands after the member typed "cabin": dropped.
-        val stale = step(second, answer("ca", hit("notes", "knowledge.note", "n9", "Calendar")))
+        val stale = step(second, answer("ca", hit("notes", "note", "n9", "Calendar")))
         stale.state.data_.shouldBeNull()
-        val current = step(second, answer("cabin", hit("notes", "knowledge.note", "n1", "Cabin packing"))).state
+        val current = step(second, answer("cabin", hit("notes", "note", "n1", "Cabin packing"))).state
         current.data_!!.groups.single().rows.single().title shouldBe "Cabin packing"
         current.field_!!.answered_term shouldBe "cabin"
         // And the rows on screen stay while the next term reads.
@@ -159,7 +159,7 @@ class HomeSearchSpec : StringSpec({
         var state = opened
         listOf("alpha", "beta", "gamma", "delta", "epsilon", "Beta").forEach { term ->
             state = typed(state, term).state
-            state = step(state, answer(term, hit("notes", "knowledge.note", "n-$term", term))).state
+            state = step(state, answer(term, hit("notes", "note", "n-$term", term))).state
             val row = state.data_!!.groups.single().rows.single()
             state = step(state, HomeSearchEvent(row = HomeSearchEvent.RowPicked(row = row))).state
         }
@@ -186,7 +186,7 @@ class HomeSearchSpec : StringSpec({
 
     "another vault in front takes the term, the rows and the recent searches with it" {
         var state = typed(opened, "cabin").state
-        state = step(state, answer("cabin", hit("notes", "knowledge.note", "n-1", "Cabin trip"))).state
+        state = step(state, answer("cabin", hit("notes", "note", "n-1", "Cabin trip"))).state
         state = step(state, HomeSearchEvent(submitted = HomeSearchEvent.Submitted())).state
         state.recent shouldContainExactly listOf("cabin")
         val switched = step(state, HomeSearchEvent(vault_changed = HomeSearchEvent.VaultChanged())).state
@@ -195,13 +195,13 @@ class HomeSearchSpec : StringSpec({
         switched.recent.shouldBeEmpty()
         switched.resting!!.suggestions.shouldBeEmpty()
         // A late answer for the last vault's term is not this vault's.
-        step(switched, answer("cabin", hit("notes", "knowledge.note", "n-1", "Cabin trip"))).state.data_.shouldBeNull()
+        step(switched, answer("cabin", hit("notes", "note", "n-1", "Cabin trip"))).state.data_.shouldBeNull()
     }
 
     "a row's target opens the item in its own app" {
         val data = HomeSearchMachine.fold(
             listOf(
-                hit("notes", "knowledge.note", "n1", "Cabin packing"),
+                hit("notes", "note", "n1", "Cabin packing"),
                 hit("people", "core.party", "p1", "Kate Bell"),
                 hit("agenda", "core.event", "e1", "Cabin weekend"),
                 hit("tasks", "schedule.task", "t1", "Book the cabin"),
@@ -223,7 +223,7 @@ class HomeSearchSpec : StringSpec({
         opens["docs"] shouldBe Destination.DocsDocument("d1", "Cabin lease", parent = "Search")
         opens["photos"] shouldBe Destination.PhotoLightbox("a1", listOf("a1"))
         // Picking a row is an intent: the machine records, the shell opens.
-        val shown = step(typed(opened, "cabin").state, answer("cabin", hit("notes", "knowledge.note", "n1", "Cabin packing"))).state
+        val shown = step(typed(opened, "cabin").state, answer("cabin", hit("notes", "note", "n1", "Cabin packing"))).state
         val row = shown.data_!!.groups.single().rows.single()
         val picked = step(shown, HomeSearchEvent(row = HomeSearchEvent.RowPicked(row = row)))
         picked.effects.shouldBeEmpty()
@@ -234,7 +234,7 @@ class HomeSearchSpec : StringSpec({
     // ---- THE CHAT GROUP (#1097, R-1097-24) ---------------------------------------------------------
 
     val chatThread = hit("chat", "chat.thread", "th-1", "Where is the marmalade recipe?")
-    val noteHit = hit("notes", "knowledge.note", "n1", "Cabin packing")
+    val noteHit = hit("notes", "note", "n1", "Cabin packing")
     val withChatTab = step(HomeSearchMachine.initial(), HomeSearchEvent(opened = HomeSearchEvent.Opened(chat_tab = true))).state
 
     "a conversation is a chat row in a Chats group, last, whose target is the thread (R-1097-24)" {

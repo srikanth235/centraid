@@ -233,7 +233,6 @@ fn every_seeded_document_carries_a_size_the_docs_tile_can_draw() {
                     descending: true,
                 }),
                 with_held_thumbnail: false,
-                with_note_body: false,
                 with_document_size: true,
                 with_minor_units: false,
                 local_day_columns: Vec::new(),

@@ -55,7 +55,7 @@ public object NotesJournalMachine : ScreenMachine<NotesJournalState, NotesJourna
     public const val SCREEN_ID: String = ScreenIds.NOTES_JOURNAL
 
     /** The note, and the tag/concept pair that marks one a journal entry. */
-    public val TABLES: Set<String> = setOf("knowledge_note", "core_tag", "core_concept")
+    public val TABLES: Set<String> = NotesTables.SHELF
 
     override fun initial(): NotesJournalState = decorate(NotesJournalState(loading = Loading(first_load = true)))
 

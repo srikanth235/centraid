@@ -413,10 +413,10 @@ class AbiRoundTripSpec : StringSpec({
         )
 
         /**
-         * THE TWO SCREENS' READS, over the real tables
-         * (`contracts/schema/vault-ddl.sql`): `media_asset` and
-         * `knowledge_note`. The fixture vault has rows in `core_party` and none
-         * in these two, so these numbers are a **bounded read's floor** — the
+         * THE SCREEN READS, over the real tables
+         * (`contracts/schema/vault-ddl.sql`): `media_asset`. (Notes' editor is the
+         * `notes.note` app query now, #1135.) The fixture vault has rows in
+         * `core_party` and none in this one, so these numbers are a **bounded read's floor** — the
          * SQL plan, the protobuf round trip and the JNA marshalling are real and
          * the row copy is not. The device measurement at 50k assets is the
          * owner's, and `docs/mobile-offline.md` says which number decides what.
@@ -429,14 +429,6 @@ class AbiRoundTripSpec : StringSpec({
                 sortColumn = "captured_at",
                 pkColumn = "asset_id",
                 limit = 120,
-            ),
-            "notes.editor" to ScreenRead(
-                name = "notes.editor",
-                select = listOf("note_id", "title", "format", "pinned"),
-                from = "knowledge_note",
-                sortColumn = "created_at",
-                pkColumn = "note_id",
-                limit = 30,
             ),
         )
 

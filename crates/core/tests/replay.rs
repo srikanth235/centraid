@@ -81,7 +81,6 @@ fn tasks_titled(sample: &Sample, title: &str) -> Vec<String> {
                         descending: false,
                     }),
                     with_held_thumbnail: false,
-                    with_note_body: false,
                     with_document_size: false,
                     with_minor_units: false,
                     local_day_columns: Vec::new(),

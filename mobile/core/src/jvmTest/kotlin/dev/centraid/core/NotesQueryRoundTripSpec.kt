@@ -48,38 +48,36 @@ import okio.ByteString.Companion.encodeUtf8
  */
 class NotesQueryRoundTripSpec : StringSpec({
 
-    "notes.note answers the whole body and a base revision that moves only with the body" {
+    "notes.note answers the whole body and a row version that moves with every write" {
         val core = openRealCore()
         try {
             val noteId = core.write(
-                "knowledge.create_note",
-                """{"title":"Round trip","body_text":"kotlin to rust and back"}""",
+                "note.create",
+                """{"title":"Round trip","body":"kotlin to rust and back"}""",
                 key = "notes-round-trip-create",
             )
             val opened = core.note(noteId)
             opened.found shouldBe true
             opened.title shouldBe "Round trip"
             opened.body shouldBe "kotlin to rust and back"
-            opened.current_revision_id shouldNotBe null
 
-            // A TITLE EDIT RECORDS NO BODY OCCURRENCE: the base an autosave
-            // compares against stays put, and `row_version` moves.
+            // A TITLE EDIT ADDS NO VERSION and moves `row_version`: the editor's
+            // base is the version of the note, not of its words.
             core.write(
-                "knowledge.edit_note",
-                """{"note_id":"$noteId","title":"Round trip, renamed"}""",
+                "note.edit",
+                """{"id":"$noteId","title":"Round trip, renamed"}""",
                 key = "notes-round-trip-rename",
             )
             val renamed = core.note(noteId)
             renamed.title shouldBe "Round trip, renamed"
-            renamed.current_revision_id shouldBe opened.current_revision_id
             renamed.row_version shouldBeGreaterThan opened.row_version
 
             core.write(
-                "knowledge.edit_note",
-                """{"note_id":"$noteId","body_text":"second draft"}""",
+                "note.edit",
+                """{"id":"$noteId","body":"second draft"}""",
                 key = "notes-round-trip-body",
             )
-            core.note(noteId).current_revision_id shouldNotBe opened.current_revision_id
+            core.note(noteId).row_version shouldBeGreaterThan renamed.row_version
             var bodies = emptyList<String>()
             core.appQuery(AppQueryRequest(notes_history = NotesHistoryRequest(note_id = noteId, tz = TZ)))
                 .shouldBeAnsweredWith { envelope ->
@@ -99,13 +97,13 @@ class NotesQueryRoundTripSpec : StringSpec({
         val core = openRealCore()
         try {
             val kept = core.write(
-                "knowledge.create_note",
-                """{"title":"Quince paste","body_text":"quince, sugar, lemon"}""",
+                "note.create",
+                """{"title":"Quince paste","body":"quince, sugar, lemon"}""",
                 key = "notes-round-trip-kept",
             )
             val gone = core.write(
-                "knowledge.create_note",
-                """{"title":"Quince jelly","body_text":"quince that did not set"}""",
+                "note.create",
+                """{"title":"Quince jelly","body":"quince that did not set"}""",
                 key = "notes-round-trip-gone",
             )
             core.library().notes.map { it.note_id }.let { ids ->
@@ -113,8 +111,8 @@ class NotesQueryRoundTripSpec : StringSpec({
                 ids shouldContain gone
             }
             core.write(
-                "knowledge.delete_note",
-                """{"note_id":"$gone"}""",
+                "entity.trash",
+                """{"id":"$gone"}""",
                 key = "notes-round-trip-delete",
             )
             val shelf = core.library().notes.map { it.note_id }
@@ -221,7 +219,7 @@ class NotesQueryRoundTripSpec : StringSpec({
             ).shouldBeAnsweredWith { envelope ->
                 val outcome = envelope.response?.command ?: error("a CommandOutcome")
                 outcome.status shouldBe CommandStatus.COMMAND_STATUS_EXECUTED
-                noteId = Regex("\"note_id\":\"([^\"]+)\"")
+                noteId = Regex("\"id\":\"([^\"]+)\"")
                     .find(outcome.output.utf8())
                     ?.groupValues
                     ?.get(1)

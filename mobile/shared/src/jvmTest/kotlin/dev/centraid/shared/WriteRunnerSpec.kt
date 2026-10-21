@@ -73,109 +73,9 @@ class WriteRunnerSpec : StringSpec({
             .write_settled?.failure shouldBe null
     }
 
-    "a body this device has not copied is never sent, so nothing can blank the note" {
-        // THE DATA-LOSS GUARD (#1025 S5, R-NOTES-2), as autosave keeps it: only
-        // CHANGED fields are sent, and a body marked unavailable is never one of
-        // them. A pristine save therefore has nothing to send and sends nothing.
-        val opened = NotesEditorMachine.reduce(
-            NotesEditorMachine.initial(),
-            NotesEditorEvent(opened = NotesEditorEvent.Opened(note_id = "note-1")),
-        ).state
-        val loaded = NotesEditorMachine.reduce(
-            opened,
-            NotesEditorEvent(
-                data_ = NotesEditorEvent.DataArrived(
-                    draft = NoteDraft(
-                        title = "Groceries",
-                        body = "",
-                        body_unavailable = true,
-                        base_revision_id = "rev-7",
-                    ),
-                ),
-            ),
-        ).state
-        val saved = NotesEditorMachine.reduce(
-            loaded,
-            NotesEditorEvent(save = NotesEditorEvent.SaveRequested()),
-        )
-
-        // NO WRITE LEAVES. That is the whole assertion.
-        saved.effects.shouldBeEmpty()
-        saved.state.save shouldBe NotesEditorState.SaveState.SAVE_STATE_CLEAN
-    }
-
-    "a title-only save while the body is unavailable still queues" {
-        // End state (#1025 live-notes): omit `body_text` (already) and still
-        // queue — must not blank the note and must not drop the edit. R-NOTES-3:
-        // the edit must reach the vault, not be thrown away.
-        val opened = NotesEditorMachine.reduce(
-            NotesEditorMachine.initial(),
-            NotesEditorEvent(opened = NotesEditorEvent.Opened(note_id = "note-1")),
-        ).state
-        val loaded = NotesEditorMachine.reduce(
-            opened,
-            NotesEditorEvent(
-                data_ = NotesEditorEvent.DataArrived(
-                    draft = NoteDraft(
-                        title = "Groceries",
-                        body = "",
-                        body_unavailable = true,
-                        base_revision_id = "rev-7",
-                    ),
-                ),
-            ),
-        ).state
-        val edited = NotesEditorMachine.reduce(
-            loaded,
-            NotesEditorEvent(title = NotesEditorEvent.TitleEdited(title = "Groceries and wine")),
-        ).state
-        val saved = NotesEditorMachine.reduce(
-            edited,
-            NotesEditorEvent(save = NotesEditorEvent.SaveRequested()),
-        )
-        val write = saved.effects.single() as ScreenEffect.SubmitWrite
-        write.command shouldBe NotesEditorMachine.SAVE_COMMAND
-        write.inputJson.contains("body_text").shouldBe(false)
-        write.inputJson.contains("\"title\":\"Groceries and wine\"").shouldBe(true)
-        saved.state.save shouldBe NotesEditorState.SaveState.SAVE_STATE_SAVING
-        saved.state.draft?.save_failure shouldBe null
-    }
-
-    "a body marked unavailable is read-only: typing into it changes nothing" {
-        // THE OWNER'S RULING (Notes plan Q4 (a)), superseding R-NOTES-2: a
-        // body not on this device is read-only, because typing over words the
-        // member cannot see would replace them unseen. The title and the pin
-        // still save (the case above).
-        val opened = NotesEditorMachine.reduce(
-            NotesEditorMachine.initial(),
-            NotesEditorEvent(opened = NotesEditorEvent.Opened(note_id = "note-1")),
-        ).state
-        val loaded = NotesEditorMachine.reduce(
-            opened,
-            NotesEditorEvent(
-                data_ = NotesEditorEvent.DataArrived(
-                    draft = NoteDraft(
-                        title = "Groceries",
-                        body = "",
-                        body_unavailable = true,
-                        base_revision_id = "rev-7",
-                    ),
-                ),
-            ),
-        ).state
-        loaded.body_editable shouldBe false
-        val typed = NotesEditorMachine.reduce(
-            loaded,
-            NotesEditorEvent(body = NotesEditorEvent.BodyEdited(body = "milk")),
-        )
-        typed.state shouldBe loaded
-        typed.effects shouldBe emptyList()
-        typed.state.draft?.body_unavailable shouldBe true
-    }
-
-    "a draft whose body DID arrive saves normally" {
-        // The inverse, so the guard is a guard and not a wall: the refusal is
-        // about an absent body, not about saving.
+    "a draft saves through the note's own edit, keyed by its sequence" {
+        // A NOTE'S BODY IS ITS OWN COLUMN (#1135): it is always here, so there is
+        // no "body not on this device" to guard and a save is a save.
         val loaded = NotesEditorMachine.reduce(
             NotesEditorMachine.reduce(
                 NotesEditorMachine.initial(),
@@ -186,7 +86,6 @@ class WriteRunnerSpec : StringSpec({
                     draft = NoteDraft(
                         title = "Groceries",
                         body = "milk",
-                        body_unavailable = false,
                         base_revision_id = "rev-7",
                     ),
                 ),
@@ -202,7 +101,7 @@ class WriteRunnerSpec : StringSpec({
         )
         val write = saved.effects.single() as ScreenEffect.SubmitWrite
         write.command shouldBe NotesEditorMachine.SAVE_COMMAND
-        write.invokeKey shouldBe "knowledge.edit_note:note-1:seq=1"
+        write.invokeKey shouldBe "note.edit:note-1:seq=1"
         saved.state.save shouldBe NotesEditorState.SaveState.SAVE_STATE_SAVING
     }
 

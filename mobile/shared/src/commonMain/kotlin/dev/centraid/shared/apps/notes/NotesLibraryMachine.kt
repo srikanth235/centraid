@@ -58,23 +58,14 @@ public object NotesLibraryMachine : ScreenMachine<NotesLibraryState, NotesLibrar
     public const val SCREEN_ID: String = ScreenIds.NOTES_LIBRARY
 
     /** Every table `notes.library`, `notes.notebooks` and `notes.search` read. */
-    public val TABLES: Set<String> = setOf(
-        "knowledge_note",
-        "core_collection",
-        "core_collection_entry",
-        "core_tag",
-        "core_concept",
-        "core_attachment",
-        "core_link",
-    )
+    public val TABLES: Set<String> = NotesTables.SHELF
 
     /** The core's default window, and its ceiling. */
     internal const val DEFAULT_WINDOW: Int = 200
     internal const val MAX_WINDOW: Int = 2000
 
-    internal const val PIN_COMMAND: String = "knowledge.edit_note"
-    internal const val MOVE_COMMAND: String = "knowledge.move_note"
-    internal const val TRASH_COMMAND: String = "knowledge.delete_note"
+    internal const val MOVE_COMMAND: String = "note.move"
+    internal const val TRASH_COMMAND: String = "entity.trash"
 
     override fun initial(): NotesLibraryState = decorate(
         NotesLibraryState(
@@ -196,20 +187,20 @@ public object NotesLibraryMachine : ScreenMachine<NotesLibraryState, NotesLibrar
             }
         }
 
-        // A PIN IS A DECISION, and it saves at once: `edit_note` with the
-        // one field that changed.
+        // A PIN IS A DECISION, and it saves at once: the shared verb that sets
+        // or clears the `pinned` flag.
         event.pin != null -> {
             val row = rowOf(state, event.pin.note_id)
             if (row == null) {
                 Step(closeSheet(state))
             } else {
-                val pinned = if (row.pinned) 0 else 1
+                val command = NotesFlags.command(pinned = !row.pinned)
                 WriteLaw.submit(
                     Writes,
                     closeSheet(state),
-                    PIN_COMMAND,
-                    "{\"note_id\":${jsonString(row.note_id)},\"pinned\":$pinned}",
-                    InvokeKeys.of(PIN_COMMAND, row.note_id, "pinned=$pinned"),
+                    command,
+                    NotesFlags.input(row.note_id),
+                    InvokeKeys.of(command, row.note_id),
                 )
             }
         }
@@ -237,9 +228,9 @@ public object NotesLibraryMachine : ScreenMachine<NotesLibraryState, NotesLibrar
                 Step(closeSheet(state))
             } else {
                 val input = if (chosen.isEmpty()) {
-                    "{\"note_id\":${jsonString(row.note_id)}}"
+                    "{\"id\":${jsonString(row.note_id)}}"
                 } else {
-                    "{\"note_id\":${jsonString(row.note_id)},\"notebook_id\":${jsonString(chosen)}}"
+                    "{\"id\":${jsonString(row.note_id)},\"notebook_id\":${jsonString(chosen)}}"
                 }
                 WriteLaw.submit(
                     Writes,
@@ -281,7 +272,7 @@ public object NotesLibraryMachine : ScreenMachine<NotesLibraryState, NotesLibrar
                     Writes,
                     dismissed,
                     TRASH_COMMAND,
-                    "{\"note_id\":${jsonString(id)}}",
+                    "{\"id\":${jsonString(id)}}",
                     InvokeKeys.of(TRASH_COMMAND, id),
                 )
             }

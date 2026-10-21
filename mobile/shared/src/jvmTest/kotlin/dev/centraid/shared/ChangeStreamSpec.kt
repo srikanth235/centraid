@@ -191,7 +191,7 @@ class ChangeStreamSpec : StringSpec({
         val watcher = watch(host, effects)
         val stream = ChangeStream()
         stream.route(host)
-        stream.deliver(change("knowledge_note", "note-1"))
+        stream.deliver(change("note", "note-1"))
 
         // NO RE-READ, and the typing is still there. This is the one outcome no
         // member forgives, and the decision is in the REDUCER because only it
@@ -213,7 +213,7 @@ class ChangeStreamSpec : StringSpec({
 
         // And a change on a CLEAN editor re-reads.
         effects.clear()
-        stream.deliver(change("knowledge_note", "note-1"))
+        stream.deliver(change("note", "note-1"))
         effects shouldBe listOf(ScreenEffect.ReadPage(NotesEditorMachine.SCREEN_ID, null))
         watcher.cancel()
     }

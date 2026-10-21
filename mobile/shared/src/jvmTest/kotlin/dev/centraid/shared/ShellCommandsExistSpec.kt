@@ -123,7 +123,7 @@ class ShellCommandsExistSpec : StringSpec({
             .map { it.second }
             .toSet()
         listOf(
-            "knowledge.edit_note", // a `const val SAVE_COMMAND`
+            "note.edit", // a `const val SAVE_COMMAND`
             "schedule.set_task_status", // a bare `const val STATUS`
             "people.purge_person", // an argument to a trash spec
             "locker.edit_item", // an `if` branch
@@ -160,7 +160,7 @@ class ShellCommandsExistSpec : StringSpec({
         withClue("${known.size} command names found in the registry's source") {
             (known.size >= 150).shouldBeTrue()
         }
-        known.contains("knowledge.edit_note").shouldBeTrue()
+        known.contains("note.edit").shouldBeTrue()
         // And the name that was wrong is genuinely absent, so this spec would
         // have been red on the tree that shipped it.
         known.contains("knowledge.save_note") shouldBe false
@@ -218,6 +218,9 @@ private val declaredByName =
 /** `definition("app.verb", …)`, the helper `locker`, `money` and `schedule` declare through. */
 private val declaredByHelper = Regex("\\bdefinition\\(\\s*\"([a-z_]+\\.[a-z_]+)\"")
 
+/** `CommandDefinition::plain("app.verb", …)`, the constructor every shared verb and every per-kind verb (#1135) declares through. */
+private val declaredByPlain = Regex("\\bCommandDefinition::plain\\(\\s*\"([a-z_]+\\.[a-z_]+)\"")
+
 /** A definition's own `owner_schema:` field, which is not a doc comment's mention of one. */
 private val ownerSchemaField = Regex("(?m)^\\s*owner_schema:")
 
@@ -235,6 +238,7 @@ private fun declaredCommands(repositoryRoot: File): Set<String> {
         val text = file.readText()
         val byName = declaredByName.findAll(text).map { it.groupValues[1] }.toList()
         val byHelper = declaredByHelper.findAll(text).map { it.groupValues[1] }.toList()
+        val byPlain = declaredByPlain.findAll(text).map { it.groupValues[1] }.toList()
         val fields = ownerSchemaField.findAll(text).count()
         // A file with the helper has one `owner_schema:` (the helper's own body)
         // and many calls; every other file has one field per `name:`.
@@ -243,7 +247,7 @@ private fun declaredCommands(repositoryRoot: File): Set<String> {
             fields shouldBe if (helper) 1 else byName.size
             if (helper) byHelper.isNotEmpty().shouldBeTrue() else byHelper shouldBe emptyList()
         }
-        byName + byHelper
+        byName + byHelper + byPlain
     }.toSet()
 }
 

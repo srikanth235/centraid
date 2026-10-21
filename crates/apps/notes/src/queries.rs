@@ -1141,8 +1141,8 @@ fn journal_body(door: &dyn PageDoor, window: usize) -> KitResult<JournalData> {
 // `link-targets` — the powerbox
 // ---------------------------------------------------------------------------
 
-/// THE POWERBOX: one bounded probe per searchable kind, secret-free (Locker is
-/// not indexed).
+/// THE POWERBOX: one bounded probe per linkable kind, secret-free (Locker is not
+/// indexed).
 ///
 /// Each probe is **isolated**, so a kind the index refuses leaves its column
 /// absent rather than emptying the sheet. The memo read rides inside the NOTE
@@ -1171,7 +1171,7 @@ pub fn load_link_targets(
     };
     let mut targets: Vec<Target> = Vec::new();
     // ONE QUERY PER KIND, so each kind keeps its own column of the sheet.
-    for kind in centraid_vault::index::SEARCHABLE {
+    for kind in centraid_vault::commands::note::LINKABLE {
         let mut request = SearchRequest::new(kind.as_str(), term, LINK_TARGET_ROWS);
         if kind == centraid_vault::model::Kind::Note {
             request = request.excluding(memos.clone());

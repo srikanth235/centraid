@@ -38,17 +38,17 @@ import dev.centraid.shared.nav.ScreenIds
 /**
  * ONE NOTE'S VERSIONS (#1029 port), newest first, the current one marked.
  *
- * RESTORING IS A WRITE AND ASKS NOTHING: `knowledge.restore_note_version`
- * records the old body as a NEW version, so a restore is itself undoable from
- * this list. One restore in flight at a time; the vault's change event
+ * RESTORING IS A WRITE AND ASKS NOTHING: `note.restore_version` writes the words
+ * it replaces as a NEW version, so a restore is itself undoable from this list.
+ * A version's key is its revision's `seq`, as text. One restore in flight at a time; the vault's change event
  * re-reads the list.
  */
 public object NotesHistoryMachine : ScreenMachine<NotesHistoryState, NotesHistoryEvent> {
     public const val SCREEN_ID: String = ScreenIds.NOTES_HISTORY
 
-    public val TABLES: Set<String> = setOf("knowledge_note", "core_entity_revision")
+    public val TABLES: Set<String> = NotesTables.HISTORY
 
-    internal const val RESTORE_COMMAND: String = "knowledge.restore_note_version"
+    internal const val RESTORE_COMMAND: String = "note.restore_version"
 
     private const val PREVIEW: Int = 200
     private const val DAY: Int = 10
@@ -81,7 +81,7 @@ public object NotesHistoryMachine : ScreenMachine<NotesHistoryState, NotesHistor
                     Writes,
                     state.copy(restoring_content_id = id),
                     RESTORE_COMMAND,
-                    "{\"note_id\":${jsonString(state.note_id)},\"content_id\":${jsonString(id)}}",
+                    "{\"id\":${jsonString(state.note_id)},\"seq\":$id}",
                     InvokeKeys.of(RESTORE_COMMAND, state.note_id, id),
                 )
             }
@@ -124,7 +124,7 @@ public object NotesHistoryMachine : ScreenMachine<NotesHistoryState, NotesHistor
             val label = if (version.current) NotesCopy.CURRENT_VERSION else dated
             val preview = NotesEditorMachine.firstLine(version.body).ifEmpty { version.body.take(PREVIEW) }
             NotesVersionRow(
-                content_id = version.content_id,
+                content_id = version.seq.toString(),
                 label = label,
                 preview = preview,
                 current = version.current,
@@ -195,7 +195,7 @@ public object NotesHistoryReads :
     override fun refused(failure: ReadFailure): NotesHistoryEvent =
         NotesHistoryEvent(refused = NotesHistoryEvent.ReadRefused(failure = failure))
 
-    /** A cycle or an over-long chain is the core's denial (D-1020-N2): the gate, with its words. */
+    /** A refused read is the core's denial: the gate, with its words. */
     override fun denied(denial: AppQueryDenial): NotesHistoryEvent = NotesHistoryEvent(
         denied = Denied(
             title = NotesCopy.HISTORY_TITLE,

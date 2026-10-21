@@ -64,6 +64,7 @@ import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.nulls.shouldNotBeNull
+import io.kotest.matchers.booleans.shouldBeFalse
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.string.shouldContain
@@ -273,8 +274,8 @@ class NotesAppSpec : StringSpec({
 
         val pin = NotesLibraryMachine.reduce(menu, NotesLibraryEvent(pin = NotesLibraryEvent.PinToggled(note_id = "n-1")))
         val pinWrite = pin.effects.single() as ScreenEffect.SubmitWrite
-        pinWrite.command shouldBe "knowledge.edit_note"
-        pinWrite.inputJson shouldBe "{\"note_id\":\"n-1\",\"pinned\":1}"
+        pinWrite.command shouldBe "flag.set"
+        pinWrite.inputJson shouldBe "{\"id\":\"n-1\",\"flag\":\"pinned\"}"
         pin.state.sheet shouldBe NotesLibraryState.Sheet.SHEET_NONE
         pin.state.write!!.phase shouldBe WriteState.Phase.PHASE_IN_FLIGHT
 
@@ -284,15 +285,15 @@ class NotesAppSpec : StringSpec({
             NotesLibraryEvent(notebook_chosen = NotesLibraryEvent.NotebookChosen(notebook_id = "nb-1")),
         )
         (filed.effects.single() as ScreenEffect.SubmitWrite).let {
-            it.command shouldBe "knowledge.move_note"
-            it.inputJson shouldBe "{\"note_id\":\"n-1\",\"notebook_id\":\"nb-1\"}"
+            it.command shouldBe "note.move"
+            it.inputJson shouldBe "{\"id\":\"n-1\",\"notebook_id\":\"nb-1\"}"
         }
 
         val asked = NotesLibraryMachine.reduce(state, NotesLibraryEvent(trash = NotesLibraryEvent.TrashRequested(note_id = "n-1")))
         asked.effects.shouldBeEmpty()
         asked.state.confirm!!.destructive shouldBe true
         val trashed = NotesLibraryMachine.reduce(asked.state, NotesLibraryEvent(confirmed = NotesLibraryEvent.Confirmed()))
-        (trashed.effects.single() as ScreenEffect.SubmitWrite).command shouldBe "knowledge.delete_note"
+        (trashed.effects.single() as ScreenEffect.SubmitWrite).command shouldBe "entity.trash"
         trashed.state.confirm.shouldBeNull()
         // A REFUSED WRITE KEEPS THE ROWS, with the sentence on the write.
         val key = trashed.state.write!!.invoke_key
@@ -406,7 +407,7 @@ class NotesAppSpec : StringSpec({
             NotesLibraryEvent(search_opened = NotesLibraryEvent.SearchOpened()),
             NotesLibraryEvent(search_term = NotesLibraryEvent.SearchTermChanged(term = "x")),
         ).state
-        val changed = NotesLibraryMachine.reduce(searching, NotesLibraryMachine.rowsChanged("knowledge_note", emptyList())!!)
+        val changed = NotesLibraryMachine.reduce(searching, NotesLibraryMachine.rowsChanged("note", emptyList())!!)
         changed.effects.single().shouldBeInstanceOf<ScreenEffect.ReadPage>()
         changed.state.library_stale shouldBe true
         val closed = NotesLibraryMachine.reduce(changed.state, NotesLibraryEvent(search_closed = NotesLibraryEvent.SearchClosed()))
@@ -417,7 +418,7 @@ class NotesAppSpec : StringSpec({
     "library: rows_changed re-reads on its tables only, keeping the rows drawn" {
         val state = loadedLibrary(row("n-1", "A"))
         NotesLibraryMachine.rowsChanged("locker_item", emptyList()).shouldBeNull()
-        val step = NotesLibraryMachine.reduce(state, NotesLibraryMachine.rowsChanged("core_collection_entry", listOf("k"))!!)
+        val step = NotesLibraryMachine.reduce(state, NotesLibraryMachine.rowsChanged("edge", listOf("k"))!!)
         step.effects.single().shouldBeInstanceOf<ScreenEffect.ReadPage>()
         step.state.data_.shouldNotBeNull()
     }
@@ -478,8 +479,8 @@ class NotesAppSpec : StringSpec({
         named.create_enabled shouldBe true
         val created = NotesNotebooksMachine.reduce(named, NotesNotebooksEvent(create_confirmed = NotesNotebooksEvent.CreateConfirmed()))
         val write = created.effects.single() as ScreenEffect.SubmitWrite
-        write.command shouldBe "knowledge.create_notebook"
-        write.inputJson shouldBe "{\"name\":\"Trips\"}"
+        write.command shouldBe "container.create"
+        write.inputJson shouldBe "{\"kind\":\"notebook\",\"title\":\"Trips\"}"
         created.state.create_enabled shouldBe false
         val done = NotesNotebooksMachine.reduce(
             created.state,
@@ -541,9 +542,9 @@ class NotesAppSpec : StringSpec({
         sub("2026-03-11 09:00:00", day = "2026-03-11") shouldBe "Wed 11 March"
         // A when the core could not place (no zone): what it is, not a sliced date.
         sub("2026-03-11T09:00:00Z") shouldBe NotesCopy.LINK_KIND_EVENT
-        sub("\n## **Plans** for [[Ana]]\n- more", entity = "knowledge.note") shouldBe "Plans for Ana"
+        sub("\n## **Plans** for [[Ana]]\n- more", entity = "note") shouldBe "Plans for Ana"
         sub("- [ ] call the [bank](https://x.example) `today`", entity = "schedule.task") shouldBe "call the bank today"
-        sub("2026-03-11 standup notes", entity = "knowledge.note") shouldBe "2026-03-11 standup notes"
+        sub("2026-03-11 standup notes", entity = "note") shouldBe "2026-03-11 standup notes"
         sub("snake_case stays") shouldBe "snake_case stays"
         sub("People") shouldBe "People"
         sub("x".repeat(100)) shouldBe "x".repeat(80) + "…"
@@ -578,7 +579,7 @@ class NotesAppSpec : StringSpec({
         )
         // A REAL subtitle that is not the app key still reads as itself.
         NotesLinkPickerMachine.fold(
-            listOf(NotesLinkTarget(entity = "knowledge.note", id = "n-2", title = "Plans", subtitle = "Call Ana", app_id = "notes")),
+            listOf(NotesLinkTarget(entity = "note", id = "n-2", title = "Plans", subtitle = "Call Ana", app_id = "notes")),
         ).domains.single().rows.single().subtitle shouldBe "Call Ana"
     }
 
@@ -710,7 +711,7 @@ class NotesAppSpec : StringSpec({
         val history = NotesHistory(
             versions = listOf(
                 NotesVersion(
-                    content_id = "c-2",
+                    seq = 0,
                     body = "new words",
                     current = true,
                     asserted_at = "2026-03-11T10:05:00.000Z",
@@ -718,7 +719,7 @@ class NotesAppSpec : StringSpec({
                     asserted_local = "2026-03-11T10:05",
                 ),
                 NotesVersion(
-                    content_id = "c-1",
+                    seq = 1,
                     body = "old words",
                     asserted_at = "2026-03-02T08:00:00.000Z",
                     asserted_local_day = "2026-03-02",
@@ -736,7 +737,7 @@ class NotesAppSpec : StringSpec({
             NotesHistory(
                 versions = listOf(
                     NotesVersion(
-                        content_id = "c-1",
+                        seq = 1,
                         body = "b",
                         asserted_at = "2026-03-02T23:30:00.000Z",
                         asserted_local_day = "2026-03-03",
@@ -747,15 +748,15 @@ class NotesAppSpec : StringSpec({
         ).rows.single().label shouldBe "Tue 3 March · 00:30"
         // NO ZONE RESOLVED, NO DAY: `asserted_at`'s UTC reading is never drawn.
         NotesHistoryMachine.fold(
-            NotesHistory(versions = listOf(NotesVersion(content_id = "c-1", body = "b", asserted_at = "2026-03-02T23:30:00.000Z"))),
+            NotesHistory(versions = listOf(NotesVersion(seq = 1, body = "b", asserted_at = "2026-03-02T23:30:00.000Z"))),
         ).rows.single().label shouldBe ""
         rows[1].restore_label shouldBe NotesCopy.RESTORE
-        NotesHistoryMachine.reduce(loaded, NotesHistoryEvent(restore = NotesHistoryEvent.RestoreTapped(content_id = "c-2"))).effects.shouldBeEmpty()
-        val restore = NotesHistoryMachine.reduce(loaded, NotesHistoryEvent(restore = NotesHistoryEvent.RestoreTapped(content_id = "c-1")))
+        NotesHistoryMachine.reduce(loaded, NotesHistoryEvent(restore = NotesHistoryEvent.RestoreTapped(content_id = "0"))).effects.shouldBeEmpty()
+        val restore = NotesHistoryMachine.reduce(loaded, NotesHistoryEvent(restore = NotesHistoryEvent.RestoreTapped(content_id = "1")))
         val write = restore.effects.single() as ScreenEffect.SubmitWrite
-        write.command shouldBe "knowledge.restore_note_version"
-        write.inputJson shouldBe "{\"note_id\":\"n-1\",\"content_id\":\"c-1\"}"
-        restore.state.restoring_content_id shouldBe "c-1"
+        write.command shouldBe "note.restore_version"
+        write.inputJson shouldBe "{\"id\":\"n-1\",\"seq\":1}"
+        restore.state.restoring_content_id shouldBe "1"
     }
 
     "history: a cycle is the core's denial, drawn as the gate" {
@@ -763,12 +764,12 @@ class NotesAppSpec : StringSpec({
         state.denied!!.body shouldBe "This note's history is broken."
     }
 
-    // --- The editor's powerbox, new notes, the read-only body ---------------
+    // --- The editor's powerbox, new notes, the pin --------------------------
 
-    fun loadedEditor(body: String = "hello", unavailable: Boolean = false): NotesEditorState = NotesEditorMachine.run(
+    fun loadedEditor(body: String = "hello"): NotesEditorState = NotesEditorMachine.run(
         NotesEditorMachine.initial(),
         NotesEditorEvent(opened = NotesEditorEvent.Opened(note_id = "n-1")),
-        NotesEditorEvent(data_ = NotesEditorEvent.DataArrived(draft = NoteDraft(title = "T", body = body, body_unavailable = unavailable))),
+        NotesEditorEvent(data_ = NotesEditorEvent.DataArrived(draft = NoteDraft(title = "T", body = body))),
     ).state
 
     "editor: typing [[ opens the powerbox, a pick lands [[title]] there and autosaves" {
@@ -820,7 +821,7 @@ class NotesAppSpec : StringSpec({
         NotesLinkPickerReads.requests(typed.state, now).single().notes_link_targets!!.term shouldBe "an"
         val answer = NotesLinkTargets(
             targets = listOf(
-                NotesLinkTarget(entity = "knowledge.note", id = "n-2", title = "Plans", app_id = "notes"),
+                NotesLinkTarget(entity = "note", id = "n-2", title = "Plans", app_id = "notes"),
                 NotesLinkTarget(entity = "core.party", id = "p-1", title = "Ana", app_id = "people"),
             ),
         )
@@ -831,17 +832,16 @@ class NotesAppSpec : StringSpec({
         loaded.chrome!!.foot shouldBe NotesCopy.POWERBOX_FOOT
     }
 
-    "editor: a body not on this device is read-only; the title still saves" {
-        val state = loadedEditor(body = "", unavailable = true)
-        state.body_editable shouldBe false
-        state.body_notice shouldBe NotesCopy.BODY_NOT_HERE
-        NotesEditorMachine.reduce(state, NotesEditorEvent(body = NotesEditorEvent.BodyEdited(body = "x"))).state shouldBe state
+    "editor: the body is always here, so it is editable once the draft is, and the title still saves alone" {
+        val state = loadedEditor(body = "")
+        state.body_editable shouldBe true
+        state.body_notice shouldBe ""
         val titled = NotesEditorMachine.run(
             state,
             NotesEditorEvent(title = NotesEditorEvent.TitleEdited(title = "New")),
             NotesEditorEvent(save = NotesEditorEvent.SaveRequested()),
         )
-        (titled.effects.single() as ScreenEffect.SubmitWrite).inputJson shouldBe "{\"note_id\":\"n-1\",\"title\":\"New\"}"
+        (titled.effects.single() as ScreenEffect.SubmitWrite).inputJson shouldBe "{\"id\":\"n-1\",\"title\":\"New\"}"
     }
 
     "editor: close stays Done after an autosave and the re-read that follows; a fresh open is Cancel (#1015 D3)" {
@@ -881,7 +881,7 @@ class NotesAppSpec : StringSpec({
         // NOTHING IS SAVED YET, so the status line does not say "Saved" (#1047 walk).
         opened.state.autosave!!.label shouldBe ""
         // Not in the vault: a change event reads nothing.
-        NotesEditorMachine.reduce(opened.state, NotesEditorMachine.rowsChanged("knowledge_note", emptyList())!!).effects.shouldBeEmpty()
+        NotesEditorMachine.reduce(opened.state, NotesEditorMachine.rowsChanged("note", emptyList())!!).effects.shouldBeEmpty()
         opened.state.chrome.title shouldBe NotesCopy.NEW_NOTE
         opened.state.chrome.menu_label shouldBe NotesCopy.ROW_MENU
         // Nothing to name it by: a line first.
@@ -891,7 +891,7 @@ class NotesAppSpec : StringSpec({
             NotesEditorEvent(save = NotesEditorEvent.SaveRequested()),
         ).state
         blank.chrome!!.status shouldBe NotesCopy.WRITE_A_LINE
-        // A title alone IS a note now (`body_text` may be empty).
+        // A title alone IS a note now (`body` may be empty).
         val titleOnly = NotesEditorMachine.run(
             opened.state,
             NotesEditorEvent(title = NotesEditorEvent.TitleEdited(title = "T")),
@@ -902,7 +902,7 @@ class NotesAppSpec : StringSpec({
         val create = NotesEditorMachine.reduce(typed.state, NotesEditorEvent(tick = NotesEditorEvent.Ticked(token = tick)))
         val write = create.effects.single() as ScreenEffect.SubmitWrite
         write.command shouldBe NotesEditorMachine.CREATE_COMMAND
-        write.inputJson shouldBe "{\"note_id\":\"$id\",\"title\":\"T\",\"body_text\":\"Buy milk\",\"format\":\"markdown\"}"
+        write.inputJson shouldBe "{\"id\":\"$id\",\"title\":\"T\",\"body\":\"Buy milk\",\"format\":\"markdown\"}"
         create.state.autosave!!.invoke_key shouldBe write.invokeKey
         write.invokeKey shouldContain NotesEditorMachine.CREATE_COMMAND
         val committed = NotesEditorMachine.reduce(
@@ -918,7 +918,7 @@ class NotesAppSpec : StringSpec({
         )
         val edit = edited.effects.last() as ScreenEffect.SubmitWrite
         edit.command shouldBe NotesEditorMachine.SAVE_COMMAND
-        edit.inputJson shouldBe "{\"note_id\":\"$id\",\"body_text\":\"Buy milk and eggs\"}"
+        edit.inputJson shouldBe "{\"id\":\"$id\",\"body\":\"Buy milk and eggs\"}"
     }
 
     "editor: words typed while the create is in flight are an edit of the note it made, never a second create (#1089)" {
@@ -945,7 +945,7 @@ class NotesAppSpec : StringSpec({
         committed.state.is_new shouldBe false
         val next = committed.effects.filterIsInstance<ScreenEffect.SubmitWrite>().single()
         next.command shouldBe NotesEditorMachine.SAVE_COMMAND
-        next.inputJson shouldBe "{\"note_id\":\"$id\",\"title\":\"Buy milk and eggs\",\"body_text\":\"Buy milk and eggs\"}"
+        next.inputJson shouldBe "{\"id\":\"$id\",\"title\":\"Buy milk and eggs\",\"body\":\"Buy milk and eggs\"}"
         // A save asked for with nothing changed since the commit sends nothing.
         val settledAgain = NotesEditorMachine.reduce(
             committed.state,
@@ -953,6 +953,32 @@ class NotesAppSpec : StringSpec({
         ).state
         NotesEditorMachine.reduce(settledAgain, NotesEditorEvent(save = NotesEditorEvent.SaveRequested()))
             .effects.filterIsInstance<ScreenEffect.SubmitWrite>().shouldBeEmpty()
+    }
+
+    "editor: a pin chosen before the note exists is sent as the flag verb once its create lands" {
+        val id = "0b7e3a52-1c7d-4d5e-9f00-1234567890ab"
+        val opened = NotesEditorMachine.reduce(
+            NotesEditorMachine.initial(),
+            NotesEditorEvent(opened = NotesEditorEvent.Opened(note_id = id, is_new = true)),
+        ).state
+        // Nothing to flag yet: the choice is held on the draft and sends nothing.
+        val pinned = NotesEditorMachine.reduce(opened, NotesEditorEvent(pin = NotesEditorEvent.PinToggled()))
+        pinned.effects.shouldBeEmpty()
+        pinned.state.draft!!.pinned shouldBe true
+        val typed = NotesEditorMachine.reduce(pinned.state, NotesEditorEvent(body = NotesEditorEvent.BodyEdited(body = "Buy milk")))
+        val tick = (typed.effects.single() as ScreenEffect.Schedule).token
+        val create = NotesEditorMachine.reduce(typed.state, NotesEditorEvent(tick = NotesEditorEvent.Ticked(token = tick)))
+        val write = create.effects.single() as ScreenEffect.SubmitWrite
+        write.command shouldBe NotesEditorMachine.CREATE_COMMAND
+        write.inputJson.contains("pinned").shouldBeFalse()
+        val committed = NotesEditorMachine.reduce(
+            create.state,
+            NotesEditorEvent(write_settled = WriteSettled(invoke_key = write.invokeKey, committed = true)),
+        )
+        (committed.effects.filterIsInstance<ScreenEffect.SubmitWrite>().single()).let {
+            it.command shouldBe "flag.set"
+            it.inputJson shouldBe "{\"id\":\"$id\",\"flag\":\"pinned\"}"
+        }
     }
 
     "editor: a title derived from the body stays derived after the re-read — the field stays empty (#1047 F5)" {
@@ -982,10 +1008,16 @@ class NotesAppSpec : StringSpec({
             NotesEditorEvent(left = NotesEditorEvent.Left()),
         )
         (renamed.effects.last() as ScreenEffect.SubmitWrite).inputJson shouldBe
-            "{\"note_id\":\"$id\",\"title\":\"Groceries\",\"body_text\":\"Groceries\\nBuy milk\"}"
-        // A pin alone sends no title: nothing about the name changed.
+            "{\"id\":\"$id\",\"title\":\"Groceries\",\"body\":\"Groceries\\nBuy milk\"}"
+        // A pin is the shared flag verb, not a save: it sends no title and no body.
         val pinned = NotesEditorMachine.reduce(reread, NotesEditorEvent(pin = NotesEditorEvent.PinToggled()))
-        (pinned.effects.last() as ScreenEffect.SubmitWrite).inputJson shouldBe "{\"note_id\":\"$id\",\"pinned\":1}"
+        (pinned.effects.single() as ScreenEffect.SubmitWrite).let {
+            it.command shouldBe "flag.set"
+            it.inputJson shouldBe "{\"id\":\"$id\",\"flag\":\"pinned\"}"
+        }
+        pinned.state.draft!!.pinned shouldBe true
+        NotesEditorMachine.reduce(pinned.state, NotesEditorEvent(pin = NotesEditorEvent.PinToggled()))
+            .effects.single().let { (it as ScreenEffect.SubmitWrite).command shouldBe "flag.clear" }
         // A NAME FROM ELSEWHERE is not derived, and is adopted.
         NotesEditorMachine.reduce(
             committed,
@@ -1014,11 +1046,11 @@ class NotesAppSpec : StringSpec({
             ).effects.last() as ScreenEffect.SubmitWrite
             ).inputJson
         // A FIRST LINE NAMES IT, as ever.
-        cleared("Name", "Buy milk") shouldBe "{\"note_id\":\"$id\",\"title\":\"Buy milk\"}"
+        cleared("Name", "Buy milk") shouldBe "{\"id\":\"$id\",\"title\":\"Buy milk\"}"
         // NO FIRST LINE: the name the member removed is removed, not kept in
-        // the vault to come back on the next read (`edit_note`'s `title` takes
+        // the vault to come back on the next read (`note.edit`'s `title` takes
         // `""`).
-        cleared("Name", "") shouldBe "{\"note_id\":\"$id\",\"title\":\"\"}"
+        cleared("Name", "") shouldBe "{\"id\":\"$id\",\"title\":\"\"}"
     }
 
     // --- Routing -----------------------------------------------------------
@@ -1052,8 +1084,8 @@ class NotesAppSpec : StringSpec({
         loaded.data_.empty_label shouldBe ""
         val restore = NotesTrashMachine.reduce(loaded, TrashListEvent(restore = TrashListEvent.RestoreTapped(id = "n-1")))
         (restore.effects.single() as ScreenEffect.SubmitWrite).let {
-            it.command shouldBe "knowledge.restore_note"
-            it.inputJson shouldBe "{\"note_id\":\"n-1\"}"
+            it.command shouldBe "entity.restore"
+            it.inputJson shouldBe "{\"id\":\"n-1\"}"
         }
         NotesTrashMachine.reduce(loaded, TrashListEvent(purge = TrashListEvent.PurgeTapped(id = "n-1"))).state.confirm.shouldBeNull()
         NotesTrashMachine.reduce(loaded, TrashListEvent(empty = TrashListEvent.EmptyTapped())).state.confirm.shouldBeNull()

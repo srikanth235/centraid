@@ -71,20 +71,10 @@ message PageQuery {
   // in which to report nothing. Checked by
   // `a_thumbnail_column_asked_of_a_table_that_has_no_content_is_refused`.
   bool with_held_thumbnail = 7;
-  // RESOLVE EACH ROW'S NOTE BODY FROM `core_content_text` (#1025, R-NOTES-1).
-  //
-  // A shape, not a statement: the reader appends one computed column,
-  // `body_text`, after `select`'s columns, via a correlated subquery on
-  // `core_content_text` keyed by the row's `body_content_id`. Text is a ROW
-  // on the device, never a blob — checking the byte store for a note body is
-  // the wrong door. NULL means the text is not on this
-  // device; an empty string is a real body of zero characters.
-  //
-  // The `from` table must carry a `body_content_id` column, AND ONE THAT DOES
-  // NOT IS REFUSED AT PREPARE — the same correlation, the same mechanism, and
-  // the same correction as `with_held_thumbnail` above. Checked by
-  // `a_note_body_column_asked_of_a_table_that_has_no_body_is_refused`.
-  bool with_note_body = 8;
+  // `with_note_body` (8): a note's body is its own column and the editor reads
+  // it through the `notes.note` app query (#1135); nothing can set it.
+  reserved 8;
+  reserved "with_note_body";
   // SAY EACH ROW'S SIZE IN WORDS, from the bytes of the content item its
   // `current_content_id` names (#1029, Home's Docs tile).
   //
