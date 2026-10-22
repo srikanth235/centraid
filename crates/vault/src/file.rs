@@ -413,9 +413,7 @@ impl Vault {
 
     /// Close the file, surfacing a failure to close rather than swallowing it.
     pub fn close(self) -> Result<()> {
-        self.connection
-            .close()
-            .map_err(|(_, error)| VaultError::Sqlite(error))
+        self.connection.close().map_err(VaultError::Sqlite)
     }
 
     /// CHECKPOINT AND CLOSE, so the `.db` **alone** is the whole vault, and a
@@ -465,10 +463,10 @@ impl Held {
         }
     }
 
-    fn close(mut self) -> std::result::Result<(), (Connection, rusqlite::Error)> {
+    fn close(mut self) -> std::result::Result<(), rusqlite::Error> {
         self.optimize();
         match self.0.take() {
-            Some(connection) => connection.close(),
+            Some(connection) => connection.close().map_err(|(_, error)| error),
             None => Ok(()),
         }
     }

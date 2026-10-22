@@ -492,6 +492,14 @@ fn what_the_gateway_lost_is_sent_again_by_the_next_launch() {
     note(&phone, "Kept", "a note in the records the head holds");
     drain(&phone, at_home());
 
+    // A VAULT LEARNS ITS STATISTICS WHEN IT CLOSES (`PRAGMA optimize`), which
+    // writes the file once. The head the files go from has to be of the file the
+    // next launch will find, so the first close is settled before it: close,
+    // open, and take the head again. A second close writes nothing.
+    drop(phone);
+    let phone = reopen(&path);
+    drain(&phone, at_home());
+
     // THE FILES GO: the photograph's, the thumbnail's, and one range of the
     // head. The gateway's index still lists all three.
     let book = ledger(&path);

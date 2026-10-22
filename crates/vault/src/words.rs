@@ -502,12 +502,10 @@ mod tests {
         let full = started.elapsed();
 
         let started = Instant::now();
-        let mut checks = 0_u32;
         for _ in 0..200 {
-            checks += u32::try_from(words.current(connection).expect("checks").len() > 0)
-                .expect("a bool");
+            assert!(!words.current(connection).expect("checks").is_empty());
         }
-        let validate = started.elapsed() / checks;
+        let validate = started.elapsed() / 200;
 
         for n in 0..1_000 {
             add(connection, &[&format!("tail{n}")]);
