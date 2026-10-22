@@ -72,7 +72,7 @@ centraid-assist = { path = "../assist" }
 # The safety number's own renderer, for the clause-4c companion case: the test
 # asserts the SHIPPED function rather than a second rendering of its own.
 centraid-identity = { path = "../identity" }
-libloading = "0.8"
+libloading = "0.9"
 cbindgen = "0.29"
 centraid-protocol = { path = "../protocol" }
 # Only to READ what this crate logs. `tests/contract.rs` asserts that a refusal
