@@ -882,7 +882,7 @@ mod tests {
         assert_eq!(rank_order(("budget", 1), ("budgit", 4)), Greater);
         assert_eq!(rank_order(("budgets", 2), ("budget", 2)), Greater);
         assert_eq!(rank_order(("budget", 2), ("budgit", 2)), Less);
-        let mut ranked = vec![("budgets", 2), ("budgit", 2), ("budget", 2), ("budgat", 9)];
+        let mut ranked = [("budgets", 2), ("budgit", 2), ("budget", 2), ("budgat", 9)];
         ranked.sort_by(|left, right| rank_order(*left, *right));
         assert_eq!(
             ranked.iter().map(|(word, _)| *word).collect::<Vec<_>>(),
