@@ -99,20 +99,35 @@ fn a_locker_secret_on_create_is_sealed_when_the_type_keeps_it() {
         !reply.to_string().contains("hunter2"),
         "the secret is in no effect: {reply}"
     );
+    // the door sealed what the member typed, and a reveal is the member's to complete
+    let id = reply["effect"]["diff"]["rows"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert_eq!(common::opened(&world, &id, "password"), "hunter2");
+    assert_eq!(common::opened(&world, &id, "otp_seed"), "424242");
     session.user("what is the gym password");
     let revealed = call(
         &mut session,
         "act",
         json!({"verb": "reveal", "kind": "locker item", "name": "Gym", "args": "field: password"}),
     );
-    assert!(said(&revealed).contains("hunter2"), "{revealed}");
+    assert!(
+        said(&revealed).contains("offered to the member: reveal password of")
+            && !said(&revealed).contains("hunter2"),
+        "{revealed}"
+    );
     session.user("and the code");
     let code = call(
         &mut session,
         "act",
         json!({"verb": "reveal", "kind": "locker item", "name": "Gym", "args": "field: code"}),
     );
-    assert!(said(&code).contains("424242"), "{code}");
+    assert!(
+        said(&code).contains("offered to the member: show the code of")
+            && !said(&code).contains("424242"),
+        "{code}"
+    );
 }
 
 #[test]

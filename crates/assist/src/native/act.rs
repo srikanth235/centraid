@@ -31,6 +31,7 @@ use serde_json::{Map, Value, json};
 
 use crate::native::dates::{self, Stamp};
 use crate::native::door::Ran;
+use crate::native::member::{ActionKind, MemberAction};
 use crate::native::meta::{self, FieldType, Kind, ROW_CAP, Verb, Via};
 use crate::native::park::{FieldChange, LinkChange, RowChange};
 use crate::native::render;
@@ -225,6 +226,11 @@ enum Plan {
         inverse: Vec<Step>,
         not_undoable: Option<String>,
         note: Option<String>,
+    },
+    /// A secret action only the member completes (#1135): nothing runs, the turn ends in a card.
+    Offer {
+        actions: Vec<MemberAction>,
+        note: String,
     },
     /// A write the runtime itself will not make, with the id and the sentence of the check that
     /// says so, exactly as a refusal of the vault is read (`Session::refusal`): the rule is the
@@ -1371,7 +1377,9 @@ impl Session {
                     let planned = self.plan(verb, &row, extra);
                     self.acted = acted;
                     match planned {
-                        Ok(Plan::Run { .. } | Plan::Refused { .. }) => Fit::Yes,
+                        Ok(Plan::Run { .. } | Plan::Offer { .. } | Plan::Refused { .. }) => {
+                            Fit::Yes
+                        }
                         // A reschedule to where the row already is stays a
                         // candidate: the person may be re-confirming it.
                         Ok(Plan::Already(_)) if verb == Verb::Reschedule => Fit::Yes,
@@ -1571,7 +1579,8 @@ impl Session {
         let mut notes = Vec::new();
         let mut failure = None;
         let mut touched: Vec<Key> = Vec::new();
-        let mut revealed = None;
+        let mut offered: Vec<MemberAction> = Vec::new();
+        let mut offered_rows: Vec<Key> = Vec::new();
         // A RESTORE OVER SEVERAL ROWS does not depend on their order: a row past the vault's
         // window is set aside and the others still come back; the set-aside rows are reported
         // (nt9, rule 6), or, when none came back, the first of them ends the turn as before.
@@ -1603,6 +1612,12 @@ impl Session {
                         verb.spec().name
                     ));
                     break;
+                }
+                Plan::Offer { actions, note } => {
+                    touched.push(key.clone());
+                    offered_rows.push(key.clone());
+                    offered.extend(actions);
+                    notes.push(note);
                 }
                 Plan::Already(state) => {
                     let name = self.named(&key);
@@ -1696,13 +1711,6 @@ impl Session {
                         not_undoable.push(format!("{name}: {reason}"));
                     }
                     if let Some(note) = note {
-                        if verb == Verb::Reveal {
-                            // every row a multi-row reveal showed, not just the last
-                            revealed = Some(match revealed {
-                                Some(prev) => format!("{prev}\n{note}"),
-                                None => note.clone(),
-                            });
-                        }
                         notes.push(note);
                     }
                 }
@@ -1724,7 +1732,7 @@ impl Session {
             touched.push(created.clone());
         }
         self.settle()?;
-        let diff = diff(&before, &self.world);
+        let diff = self.diff_since(&before);
         let mut lines = Vec::new();
         let mut shown_lines: Vec<(Key, usize, String)> = Vec::new();
         let mut shown_changes: Vec<RowChange> = Vec::new();
@@ -1733,7 +1741,7 @@ impl Session {
         for (shown, key) in touched.iter().enumerate() {
             let n = self.number(key);
             self.acted.insert(n);
-            if verb != Verb::Reveal && shown < ROW_CAP {
+            if verb != Verb::Reveal && shown < ROW_CAP && !offered_rows.contains(key) {
                 let line = self.change_line(verb, &before, key, n);
                 shown_lines.push((key.clone(), n, line.clone()));
                 shown_changes.extend(self.row_change(verb, &before, key));
@@ -1772,10 +1780,18 @@ impl Session {
                 .effect
                 .insert("created".to_owned(), self.keys_json(&[created]));
         }
-        if verb == Verb::Reveal {
-            outcome
-                .effect
-                .insert("revealed".to_owned(), json!(revealed));
+        if !offered.is_empty() {
+            // THE TURN ENDS IN THE MEMBER'S CARD (#1135): what was offered, never a value.
+            outcome.effect.insert(
+                "member_actions".to_owned(),
+                Value::Array(
+                    offered
+                        .iter()
+                        .map(crate::native::member::MemberAction::to_json)
+                        .collect(),
+                ),
+            );
+            outcome.ends_turn = true;
         }
         let more = if verb == Verb::Reveal {
             0
@@ -1794,6 +1810,38 @@ impl Session {
             }
             _ => self.writes.push((self.turn, inverses, not_undoable)),
         }
+    }
+
+    /// What changed since `before`, a typed secret included: the world holds a sealed cell as a
+    /// presence bit, so the sealed fields a call set (`sealed_moves`) are added by name, never by
+    /// value (#1135).
+    pub(crate) fn diff_since(&self, before: &World) -> Diff {
+        let mut changed = diff(before, &self.world);
+        for (item, names) in &self.sealed_moves {
+            let key = (Kind::LockerItem, item.clone());
+            let was = before.row(&key).map(sealed_cells).unwrap_or_default();
+            let mut fields = Map::new();
+            for name in names {
+                let from = if was.contains_key(name) {
+                    json!(SEALED)
+                } else {
+                    Value::Null
+                };
+                fields.insert((*name).to_owned(), json!([from, SEALED]));
+            }
+            match changed.rows.iter_mut().find(|(row, ..)| *row == key) {
+                Some((_, _, existing)) => {
+                    if let Some(existing) = existing.as_object_mut() {
+                        existing.extend(fields);
+                    }
+                }
+                None if self.world.row(&key).is_some() => {
+                    changed.rows.push((key, "updated", Value::Object(fields)));
+                }
+                None => {}
+            }
+        }
+        changed
     }
 
     /// `created: #31 task "Call plumber" · …` / `completed: #12 … · status open → completed`.
@@ -1824,6 +1872,14 @@ impl Session {
                     } else {
                         format!("no longer in {name}")
                     });
+                }
+                if let Some(names) = self.sealed_moves.get(&key.1) {
+                    for name in names {
+                        let line = format!("{name} changed (sealed)");
+                        if !parts.contains(&line) {
+                            parts.push(line);
+                        }
+                    }
                 }
                 // a restore shows the text of the row it brings back (nt15 R2a)
                 if verb == Verb::Restore {
@@ -1858,7 +1914,7 @@ impl Session {
             (None, None) => return None,
         };
         let date_label = row.kind.spec().date.map_or("date", |date| date.label);
-        let fields = match (old, new) {
+        let mut fields: Vec<FieldChange> = match (old, new) {
             (Some(old), Some(new)) => row_changes(old, new, today)
                 .into_iter()
                 .filter(|moved| moved.from.is_some() || moved.to.is_some())
@@ -1896,6 +1952,34 @@ impl Session {
             }
             _ => Vec::new(),
         };
+        // A SECRET THE MEMBER TYPED shows on the card masked: the world holds only its presence.
+        if key.0 == Kind::LockerItem {
+            for step in &self.park.steps {
+                if !matches!(
+                    step.command.as_str(),
+                    "locker.add_item" | "locker.edit_item"
+                ) || step.input["item_id"].as_str() != Some(key.1.as_str())
+                {
+                    continue;
+                }
+                for (name, column) in meta::REVEAL_FIELDS {
+                    if crate::native::member::typed_secrets(
+                        &json!({ *column: step.input[*column].clone() }),
+                    )
+                    .is_empty()
+                    {
+                        continue;
+                    }
+                    let name = if *column == "content" { "notes" } else { *name };
+                    fields.retain(|change| change.field != name);
+                    fields.push(FieldChange {
+                        field: name.to_owned(),
+                        from: None,
+                        to: Some("••••".to_owned()),
+                    });
+                }
+            }
+        }
         let links = match (old, new) {
             (Some(_), Some(_)) => edge_changes(before, &self.world, key)
                 .into_iter()
@@ -2489,7 +2573,7 @@ impl Session {
             ));
         };
         let key = row.key();
-        let Some(sealed) = row.extra.get(column).cloned() else {
+        if !row.extra.contains_key(column) {
             let name = self.named(&key);
             let has = Self::held_secrets(row);
             return Err(format!(
@@ -2508,27 +2592,33 @@ impl Session {
                     _ => String::new(),
                 }
             ));
-        };
-        let key_id = row.extra.get("key_id").cloned().unwrap_or_default();
-        let secret = self
-            .door
-            .unseal(&key_id, &row.id, &sealed)
-            .map_err(|error| format!("error: this seat cannot open the secret: {error}"))?;
+        }
         let name = self.named(&key);
-        Ok(Plan::Run {
-            steps: vec![Step {
-                command: "locker.reveal_receipt",
-                input: json!({
-                    "object_type": "locker.item",
-                    "item_id": row.id,
-                    "columns": [column],
-                    "kind": "reveal",
-                    "allowed": true,
-                }),
+        let (kind, note) = if column == "otp_seed" {
+            (
+                ActionKind::Code,
+                format!("offered to the member: show the code of {name}"),
+            )
+        } else {
+            (
+                ActionKind::Reveal,
+                format!(
+                    "offered to the member: reveal {} of {name}",
+                    if column == "content" {
+                        "notes"
+                    } else {
+                        field.as_str()
+                    }
+                ),
+            )
+        };
+        Ok(Plan::Offer {
+            actions: vec![MemberAction {
+                kind,
+                item_id: row.id.clone(),
+                column: column.to_owned(),
             }],
-            inverse: Vec::new(),
-            not_undoable: None,
-            note: Some(format!("revealed: {name} · {field}: {secret}")),
+            note,
         })
     }
 
@@ -2790,7 +2880,9 @@ impl Session {
         let mut apart: Vec<Step> = Vec::new();
         let mut apart_back: Vec<Step> = Vec::new();
         let mut changed = false;
-        let not_undoable = None;
+        let mut not_undoable: Option<String> = None;
+        let mut offers: Vec<MemberAction> = Vec::new();
+        let mut typed_secrets: Vec<(&'static str, String)> = Vec::new();
         for (field, value) in args {
             let field = field.as_str();
             if field == "name" {
@@ -2815,6 +2907,36 @@ impl Session {
                     "error: a date changes with reschedule (to: <date expression>), not edit."
                         .to_owned(),
                 );
+            }
+            // A SECRET OF A LOCKER ITEM (#1135): typed in chat, it is an ordinary edit whose value
+            // the door seals when the card is confirmed; with no value it is the member's to type
+            // in Locker (`edit_secret`).
+            if kind == Kind::LockerItem
+                && meta::REVEAL_FIELDS
+                    .iter()
+                    .any(|(name, column)| *name == field && *column != "content")
+            {
+                let item_type = match row.field("type") {
+                    Some(Val::Enum(item_type)) => *item_type,
+                    _ => "login",
+                };
+                let Some(column) = meta::locker_secret_column(item_type, field) else {
+                    return Err(format!(
+                        "error: a {item_type} item has no place for {field}; nothing was stored."
+                    ));
+                };
+                let typed = text_of(value);
+                if typed.trim().is_empty() {
+                    offers.push(MemberAction {
+                        kind: ActionKind::EditSecret,
+                        item_id: row.id.clone(),
+                        column: column.to_owned(),
+                    });
+                } else {
+                    typed_secrets.push((column, typed));
+                    changed = true;
+                }
+                continue;
             }
             let Some(spec_field) = spec.field(field) else {
                 return Err(format!(
@@ -2971,8 +3093,38 @@ impl Session {
                 .or_default()
                 .insert(param.to_owned(), old_json);
         }
+        if !offers.is_empty() {
+            if changed || !forward.is_empty() || !apart.is_empty() {
+                return Err(
+                    "error: a secret the member types in Locker is its own call; send it alone."
+                        .to_owned(),
+                );
+            }
+            let name = self.named(&row.key());
+            let fields: Vec<&str> = offers.iter().map(|offer| offer.column.as_str()).collect();
+            return Ok(Plan::Offer {
+                note: format!(
+                    "offered to the member: set the {} of {name}",
+                    fields.join(", ")
+                ),
+                actions: offers,
+            });
+        }
+        if !typed_secrets.is_empty() {
+            let sent = forward.entry("locker.edit_item").or_default();
+            for (column, typed) in &typed_secrets {
+                sent.insert((*column).to_owned(), json!(typed));
+                backward.entry("locker.edit_item").or_default().insert(
+                    (*column).to_owned(),
+                    json!(centraid_vault::commands::locker::SEALED_PLACEHOLDER),
+                );
+            }
+            not_undoable.get_or_insert_with(|| {
+                "the earlier secret is sealed, so an undo cannot restore it".to_owned()
+            });
+        }
         if kind == Kind::LockerItem {
-            self.locker_draft(row, &mut forward, &mut backward)?;
+            self.locker_draft(row, &mut forward, &mut backward, &mut not_undoable)?;
         }
         if !changed {
             return Ok(Plan::Already("already has those values".to_owned()));
@@ -3050,20 +3202,6 @@ impl Session {
         )
     }
 
-    /// A SEALED VALUE IS NEVER SET BY THE ASSISTANT ON THE PHONE (`Flags::secrets` off, the owner's
-    /// ruling of 2026-10-22): the member sets a password, a code, a card number, a cvv or a note
-    /// item's notes in Locker. The dispatch declines a `create` that names one and a `reveal`
-    /// (`Session::secrets_off_decline`); this is the same refusal where a value would be sealed, for
-    /// an edit of a note item's notes, which only the plan knows is a sealed write.
-    fn sealed_refusal(&self, field: &str) -> Result<(), String> {
-        if self.flags.secrets {
-            return Ok(());
-        }
-        Err(format!(
-            "error: {field} is a sealed value, which the assistant cannot set; the member sets it in Locker."
-        ))
-    }
-
     /// A LOCKER EDIT SENDS THE WHOLE DRAFT. `locker.edit_item` rewrites every
     /// column of the item's type and nulls the ones the input leaves out, so
     /// an edit of one field sends every other one back as it is: plain
@@ -3077,6 +3215,7 @@ impl Session {
         row: &Row,
         forward: &mut BTreeMap<&'static str, Map<String, Value>>,
         backward: &mut BTreeMap<&'static str, Map<String, Value>>,
+        not_undoable: &mut Option<String>,
     ) -> Result<(), String> {
         const COMMAND: &str = "locker.edit_item";
         let Some(input) = forward.get_mut(COMMAND) else {
@@ -3098,20 +3237,18 @@ impl Session {
                 )
             })?;
             if column == "content" {
-                self.sealed_refusal(field)?;
+                // A NOTE ITEM'S NOTES ARE SEALED: the typed text goes to the door as it is and is
+                // sealed when the write runs (#1135); the old notes are a presence bit here, so
+                // the undo cannot put them back.
                 back.remove(field);
-                let (key_id, sealed) = self.door.seal(&row.id, &text_of(&value))?;
-                input.insert("content".to_owned(), json!(sealed));
-                input.insert("key_id".to_owned(), json!(key_id));
-                match (row.extra.get("content"), row.extra.get("key_id")) {
-                    (Some(old), Some(old_key)) => {
-                        back.insert("content".to_owned(), json!(old));
-                        back.insert("key_id".to_owned(), json!(old_key));
-                    }
-                    _ => {
-                        back.insert("content".to_owned(), json!(""));
-                    }
-                }
+                input.insert("content".to_owned(), json!(text_of(&value)));
+                back.insert(
+                    "content".to_owned(),
+                    json!(centraid_vault::commands::locker::SEALED_PLACEHOLDER),
+                );
+                not_undoable.get_or_insert_with(|| {
+                    "the earlier notes are sealed, so an undo cannot restore them".to_owned()
+                });
             } else {
                 input.insert(column.to_owned(), value);
             }
@@ -3412,16 +3549,14 @@ impl Session {
                         )
                     })?;
                     if column == "content" {
-                        self.sealed_refusal(field)?;
-                        let (key_id, sealed) = self.door.seal(&item_id, &value)?;
-                        input["content"] = json!(sealed);
-                        input["key_id"] = json!(key_id);
+                        // sealed by the door when the write runs (#1135)
+                        input["content"] = json!(value);
                     } else {
                         input[column] = json!(value);
                     }
                 }
-                // A SECRET IS SEALED ON THE WAY IN, like a note's content: the vault
-                // takes ciphertext only.
+                // A SECRET THE MEMBER TYPED goes to the door as typed and is sealed when the write
+                // runs (#1135, the door's rule): the vault takes ciphertext only.
                 for (field, _) in meta::REVEAL_FIELDS {
                     let Some(value) = text(field).filter(|_| *field != "content") else {
                         continue;
@@ -3430,13 +3565,7 @@ impl Session {
                     let Some(column) = meta::locker_secret_column(kind_value, field) else {
                         continue;
                     };
-                    self.sealed_refusal(field)?;
-                    let (key_id, sealed) = self.door.seal(&item_id, &value)?;
-                    input[column] = json!(sealed);
-                    input["key_id"] = json!(key_id);
-                    if column == "password" {
-                        input["password_rotated"] = json!(true);
-                    }
+                    input[column] = json!(value);
                 }
                 ("locker.add_item", input, "item_id")
             }
@@ -3548,7 +3677,7 @@ impl Session {
             }
         }
         self.settle()?;
-        let diff = diff(&before, &self.world);
+        let diff = self.diff_since(&before);
         self.mark_acted(&touched);
         let mut out = Vec::new();
         let mut shown_lines: Vec<(Key, usize, String)> = Vec::new();
@@ -4209,7 +4338,7 @@ fn row_changes(old: &Row, new: &Row, today: jiff::civil::Date) -> Vec<FieldMove>
                 field: (*name).to_owned(),
                 from: None,
                 to: None,
-                text: format!("{name} changed (sealed; reveal to show)"),
+                text: format!("{name} changed (sealed)"),
             });
         }
     }

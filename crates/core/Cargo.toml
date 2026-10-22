@@ -115,6 +115,8 @@ tracing.workspace = true
 
 [dev-dependencies]
 serde_json.workspace = true
+# THE CHANNEL TEST (`tests/assist_channel.rs`) dumps whole tables to search them for a planted secret.
+rusqlite.workspace = true
 # A REAL GATEWAY ON A REAL SOCKET for the phone's flows (#1080): the gateway
 # crate's own test harness, the whole server, spawned on 127.0.0.1:0.
 centraid-gateway = { path = "../gateway" }

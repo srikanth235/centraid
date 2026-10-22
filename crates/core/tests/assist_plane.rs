@@ -239,8 +239,8 @@ fn regenerate_asks_the_last_question_again_without_the_turn_it_replaces() {
 fn a_new_chat_forgets_the_transcript_and_keeps_the_scope() {
     let sample = common::chat::sample();
     let model = common::chat::script(&[
-        common::chat::decline("sealed_egress"),
-        common::chat::decline("sealed_egress"),
+        common::chat::decline("fabricated_secret"),
+        common::chat::decline("fabricated_secret"),
     ]);
     sample.install(Arc::clone(&model) as Arc<dyn Model>);
     let session = sample.start("notes");
@@ -290,8 +290,8 @@ fn no_sealed_value_is_in_any_prompt_a_session_ever_builds() {
     let sample = common::chat::sample();
     common::chat::with_a_locker_item(&sample);
     let model = common::chat::script(&[
-        common::chat::decline("sealed_egress"),
-        common::chat::decline("sealed_egress"),
+        common::chat::decline("fabricated_secret"),
+        common::chat::decline("fabricated_secret"),
     ]);
     sample.install(Arc::clone(&model) as Arc<dyn Model>);
     // Every scope a chat can have, asked a question a vault's secrets answer.
@@ -322,8 +322,8 @@ fn no_sealed_value_is_in_any_prompt_a_session_ever_builds() {
 fn a_zone_the_database_does_not_know_does_not_fail_the_turn() {
     let sample = common::chat::sample();
     let model = common::chat::script(&[
-        common::chat::decline("sealed_egress"),
-        common::chat::decline("sealed_egress"),
+        common::chat::decline("fabricated_secret"),
+        common::chat::decline("fabricated_secret"),
     ]);
     sample.install(Arc::clone(&model) as Arc<dyn Model>);
     let session = sample.start("");

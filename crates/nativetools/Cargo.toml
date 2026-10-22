@@ -20,6 +20,7 @@ path = "src/bin/nativetools.rs"
 centraid-assist = { path = "../assist" }
 centraid-apps-agenda = { path = "../apps/agenda" }
 centraid-apps-kit = { path = "../apps/kit" }
+centraid-apps-locker = { path = "../apps/locker" }
 centraid-ontology = { path = "../ontology" }
 centraid-search = { path = "../search" }
 centraid-vault = { path = "../vault" }

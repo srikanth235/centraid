@@ -345,7 +345,7 @@ fn ask_and_decline_end_the_turn() {
     session.user("");
     let bad = text(&mut session, "decline", json!({"reason": "bored"}));
     assert!(
-        bad.contains("out_of_scope, unbounded_destruction, sealed_egress"),
+        bad.contains("out_of_scope, unbounded_destruction, fabricated_secret"),
         "{bad}"
     );
 }

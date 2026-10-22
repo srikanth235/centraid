@@ -44,8 +44,16 @@
 //! the card's own lines) and sinks an [`Event::Pending`] with the card, which the core puts on the
 //! wire. The card is composed from the runtime's structured facts ([`pending`]). The member's tap is
 //! [`NativeChat::confirm`] (the session runs the steps through the door, one key per step) or
-//! [`NativeChat::dismiss`]; a new message dismisses it too. A call that reveals or sets a sealed value
-//! never parks: the session declines it `sealed_egress` before it plans anything.
+//! [`NativeChat::dismiss`]; a new message dismisses it too.
+//!
+//! # A SEALED VALUE IS A CHANNEL, NOT A REFUSAL (#1135)
+//!
+//! A call that would show or set a secret the member has not typed ends the turn in a card the
+//! member completes in Locker ([`crate::native::member`]): the observation names what was offered
+//! and never a value. A secret the member typed in chat is an ordinary parked write, shown masked on
+//! the card and sealed by the door when it is confirmed; the turn that parks it replaces the typed
+//! value with `«sealed»` in the conversation the model reads and in the question the core stores
+//! ([`NativeChat::redacted`]).
 //!
 //! # A CHAT'S SESSION
 //!
@@ -66,6 +74,7 @@ use crate::app::App;
 use crate::attach::Notice;
 use crate::model::{Cancel, Model, ModelError};
 use crate::native::door::Door;
+use crate::native::member::{ActionKind, MemberAction};
 use crate::native::meta::{Kind, STEP_CAP, TOOLS, Verb};
 use crate::native::park::{Confirmed, PendingWrite, Writes};
 use crate::native::parse::parse_call;
@@ -103,20 +112,17 @@ pub(crate) fn civil_at(now_ms: i64, tz: &str) -> jiff::civil::DateTime {
 }
 
 impl NativeChat {
-    /// A session over `door`, for a member whose zone is `tz`. Sealed values are out of reach
-    /// (`Flags::secrets`, R-1088-3): the session finds, reads and acts on a Locker item as on any
-    /// row, reads no sealed column, and declines a `reveal` or a sealed value to set. Money is off too
-    /// (`Flags::money`, #1099, R-1099-8) until the shipped model has been measured with the
-    /// `transaction` kind in its prompt: the session reads no Money table and its kind card is
-    /// the one that model was trained on. "Today" is the day it is in `tz` by the door's clock.
+    /// A session over `door`, for a member whose zone is `tz`. A Locker item is a row like any other
+    /// (found, read and acted on), and a sealed value is a channel the session keeps closed: it reads
+    /// no sealed column, and a `reveal` or a secret to set ends the turn in a card the member
+    /// completes in Locker (#1135, [`crate::native::member`]). "Today" is the day it is in `tz` by
+    /// the door's clock.
     ///
     /// # Errors
     /// The door's words, when the vault would not load into a world.
     pub fn open(door: Box<dyn Door>, tz: &str) -> Result<Self, String> {
         let now = civil_at(door.now_ms(), tz);
         let flags = Flags {
-            secrets: false,
-            money: false,
             writes: Writes::Park,
             ..Flags::default()
         };
@@ -147,6 +153,18 @@ impl NativeChat {
     /// The member dismissed the card. `false` when `id` is not the pending write.
     pub fn dismiss(&mut self, id: &str) -> bool {
         self.session.dismiss(id)
+    }
+
+    /// `text` with each secret the member typed into the pending write replaced by `«sealed»`:
+    /// what the core stores as the question of a turn that parked one (#1135).
+    #[must_use]
+    pub fn redacted(&self, text: &str) -> String {
+        let secrets = self
+            .session
+            .pending()
+            .map(PendingWrite::typed_secrets)
+            .unwrap_or_default();
+        crate::native::member::redact(text, &secrets)
     }
 
     /// The conversation as the model reads it, ready for the next message.
@@ -216,6 +234,7 @@ pub fn confirmed_line(outcome: &Confirmed) -> String {
         Confirmed::Done { .. } => say(Say::Applied),
         Confirmed::Stale { .. } => say(Say::Stale),
         Confirmed::Refused { reason, .. } => say_with(Say::NotDone, &[("reason", reason)]),
+        Confirmed::Locked => say(Say::LockerLocked),
         Confirmed::Unknown => say(Say::NothingWaiting),
     }
 }
@@ -346,7 +365,22 @@ impl<'a> NativePlane<'a> {
         {
             concluded.text = words;
         }
-        chat.remember(&message, &concluded.text);
+        // A SECRET THE MEMBER TYPED is held by the parked step alone from here: the conversation
+        // the model reads, the session's memory of the words and the free reply's history carry
+        // the placeholder (#1135).
+        let typed = chat
+            .session
+            .pending()
+            .map(PendingWrite::typed_secrets)
+            .unwrap_or_default();
+        if !typed.is_empty() {
+            chat.log.redact(&typed);
+            chat.session.redact_message(&typed);
+        }
+        chat.remember(
+            &crate::native::member::redact(&message, &typed),
+            &concluded.text,
+        );
         if !concluded.cards.is_empty() {
             sink(Event::Cards(concluded.cards.clone()));
         }
@@ -399,14 +433,12 @@ impl NativeChat {
 }
 
 /// Whether the turn ended in the MODEL's own `decline out_of_scope`. A decline the runtime
-/// composes (`composed`: a verb that does not apply, a write it refused, a sealed value asked for or set) keeps its
+/// composes (`composed`: a verb that does not apply, a write it refused) keeps its
 /// sentence whatever its reason word is: free words after a refused write could say it was made.
 fn declined_out_of_scope(reply: &Value) -> bool {
     let effect = &reply["effect"];
     effect["decline"]["reason"].as_str() == Some("out_of_scope")
-        && !["composed", "secrets_off"]
-            .iter()
-            .any(|key| effect[*key].as_bool().unwrap_or(false))
+        && !effect["composed"].as_bool().unwrap_or(false)
         && effect["refusal"].is_null()
 }
 
@@ -427,7 +459,7 @@ fn first_call(text: &str) -> &str {
 
 /// The activity a call announces: the app it looks in and the tool it uses. Only a call that
 /// reads or writes rows of a known app announces anything; `ask`, `decline` and an `answer` of a
-/// value do not, and neither does a `reveal`, which the phone only ever declines. The app is the one the member opens the rows in ([`App::opens_in`]): a task read
+/// value do not, and neither does a `reveal`, which only offers the member a card. The app is the one the member opens the rows in ([`App::opens_in`]): a task read
 /// is "Looking in Agenda" (R-1128-D1), while its cards keep the stored app id `tasks`.
 fn activity_of(chat: &NativeChat, call: &Value) -> Option<(App, &'static str)> {
     let name = call["tool"].as_str()?;
@@ -639,6 +671,48 @@ fn value_line(session: &Session, value: &Value, result: Option<usize>) -> String
     }
 }
 
+/// The cards of the secret actions a turn offered the member, and the line that says the first
+/// (#1135). A card is the Locker item's, its qualifier the action ([`MemberAction::qualifier`]); a
+/// value is never on it.
+fn member_actions(session: &Session, effect: &Value) -> (Vec<Card>, String) {
+    let mut cards = Vec::new();
+    let mut line = String::new();
+    for action in effect["member_actions"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(MemberAction::of_json)
+    {
+        let Some(row) = session
+            .world
+            .row(&(Kind::LockerItem, action.item_id.clone()))
+        else {
+            continue;
+        };
+        let Some(card) = cards::card_of(row, session.today()) else {
+            continue;
+        };
+        if line.is_empty() {
+            let field = match action.column.as_str() {
+                "content" => "notes".to_owned(),
+                "otp_seed" => "code".to_owned(),
+                other => other.replace('_', " "),
+            };
+            let fills = [("field", field.as_str()), ("title", row.name.as_str())];
+            line = match action.kind {
+                ActionKind::Code => say_with(Say::OfferCode, &fills),
+                ActionKind::EditSecret => say_with(Say::OfferEditSecret, &fills),
+                ActionKind::Reveal | ActionKind::Export => say_with(Say::OfferReveal, &fills),
+            };
+        }
+        cards.push(card.qualifier(action.qualifier()));
+    }
+    if line.is_empty() {
+        line = say(Say::Nothing);
+    }
+    (cards, line)
+}
+
 /// The turn's end, as the member reads it: the cards of its rows and a line composed from its
 /// effect.
 fn conclude(session: &Session, reply: &Value) -> Result<Answered, Refusal> {
@@ -673,7 +747,17 @@ fn conclude(session: &Session, reply: &Value) -> Result<Answered, Refusal> {
         } else {
             lines.join("; ")
         };
-        return Ok(said(say_with(Say::Proposed, &[("what", &what)])));
+        let mut proposed = said(say_with(Say::Proposed, &[("what", &what)]));
+        proposed.cards = member_actions(session, effect).0;
+        return Ok(proposed);
+    }
+    if effect["member_actions"].is_array() {
+        let (cards, text) = member_actions(session, effect);
+        return Ok(Answered {
+            text,
+            cards,
+            notices: Vec::new(),
+        });
     }
     if let Some(reason) = effect["decline"]["reason"].as_str() {
         return Ok(said(say(Say::of_decline(reason))));

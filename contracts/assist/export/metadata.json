@@ -63,7 +63,6 @@
   "decline_reasons": [
     "out_of_scope",
     "unbounded_destruction",
-    "sealed_egress",
     "fabricated_secret",
     "never_mind",
     "not_found"

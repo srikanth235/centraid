@@ -160,7 +160,7 @@ pub struct Handle {
     /// from the seed, Q-1047-11) while the member has unlocked Locker on this
     /// phone, zeroed on relock, and nothing otherwise. See
     /// [`crate::locker::phone`].
-    locker: crate::locker::phone::Cell,
+    locker: Arc<crate::locker::phone::Cell>,
     /// THE ON-DEVICE CHAT'S SESSIONS AND ITS VIEW OF THE MODEL SLOT. In memory
     /// only; see [`crate::assist`]. `pub(crate)` because that module is where
     /// `Request::Assist` is answered.
@@ -280,7 +280,7 @@ impl Core {
             draining: AtomicBool::new(false),
             reconciled: AtomicBool::new(false),
             owned_bytes: Mutex::new(None),
-            locker: Mutex::new(None),
+            locker: Arc::new(Mutex::new(None)),
             assist: crate::assist::Hub::new(),
         })
     }
@@ -738,15 +738,6 @@ impl Handle {
         centraid_vault::Principal::owner(OWNER_DEVICE)
     }
 
-    /// The chat's assistant, riding this device: the owner's own, with a
-    /// sealed value closed to it. The vault refuses any command run under this
-    /// principal that reveals or sets a sealed value, through whatever verb
-    /// (R-1088-3, the owner's ruling of 2026-10-22, #1135).
-    #[must_use]
-    pub fn assistant(&self) -> centraid_vault::Principal {
-        centraid_vault::Principal::assistant(OWNER_DEVICE)
-    }
-
     /// THE DOOR A CHAT'S NATIVE SESSION READS AND WRITES THROUGH (#1088).
     ///
     /// It holds clones of this handle's own lock, registry and event queue, so
@@ -758,7 +749,8 @@ impl Handle {
             Arc::clone(&self.vault),
             Arc::clone(&self.registry),
             self.events(),
-            self.assistant(),
+            self.owner(),
+            Arc::clone(&self.locker),
         )
     }
 

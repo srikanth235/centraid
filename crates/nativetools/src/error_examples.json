@@ -473,11 +473,6 @@
       }
     ]
   },
-  "act.this_seat_cannot_open_the_secret": {
-    "tool": "act",
-    "argument": "verb",
-    "why_none": "the seat's own failure to open a sealed secret; the fixture seat opens every secret"
-  },
   "act.reschedule_takes_to_date_expression_not": {
     "tool": "act",
     "argument": "args",
@@ -1802,9 +1797,34 @@
     "argument": "rows",
     "why_none": "needs an event the vault repeats (a series read as its occurrences, World::read_event_window); the fixture world has none and no call makes one, so tests/events_local.rs drives it"
   },
-  "act.field_is_a_sealed_value_which": {
+  "act.a_item_type_item_has_no_place": {
     "tool": "act",
     "argument": "args",
-    "why_none": "needs a session with the secrets off (Flags::secrets, the phone); every example runs the harness session, which holds the key, so tests/locker_parity.rs drives it"
+    "calls": [
+      {
+        "tool": "act",
+        "args": {
+          "verb": "edit",
+          "kind": "locker item",
+          "name": "Home wifi",
+          "args": "code: 123456"
+        }
+      }
+    ]
+  },
+  "act.a_secret_the_member_types_in": {
+    "tool": "act",
+    "argument": "args",
+    "calls": [
+      {
+        "tool": "act",
+        "args": {
+          "verb": "edit",
+          "kind": "locker item",
+          "name": "Bank login",
+          "args": "password: \nusername: sam2"
+        }
+      }
+    ]
   }
 }

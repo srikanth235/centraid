@@ -12,7 +12,17 @@
 //! | `search` | the FTS door over the vault's read connection, as a screen's search does |
 //! | `run` | [`api::invoke_raw`](crate::api), the gate order and change feed a screen's write goes through, with an `invoke_key` |
 //! | `mint_id`, `now_ms` | the vault's own id source and clock |
-//! | `seal`, `unseal` | nothing: the chat holds no Locker key (R-1088-3), so a sealed value is never revealed or set, and a door that is asked refuses |
+//! | a typed Locker secret in `run_keyed` | `locker::phone::seal_command`, the seal the member's own `Command` plane takes, under the open Locker session (#1135) |
+//!
+//! # A SEALED VALUE IS A CHANNEL THIS DOOR KEEPS CLOSED (#1135)
+//!
+//! The chat is the member's principal: the door runs every command as the owner device and the
+//! vault withholds nothing from it. What it never does is let a sealed plaintext reach the
+//! runtime. A sealed column is read as a presence bit (the runtime's world asks for `IS NOT NULL`),
+//! no door method returns a sealed cell, and a secret the member typed in chat arrives in the input
+//! of `locker.add_item` / `locker.edit_item` and is sealed here, in [`Door::run_keyed`], before the
+//! vault sees it. A shut Locker answers [`Door::locked_for`] first, so a confirm stops before it
+//! runs a step and the card waits for the unlock.
 //!
 //! # THE DOOR OUTLIVES A CALL, THE LOCK DOES NOT
 //!
@@ -73,6 +83,8 @@ pub struct CoreDoor {
     registry: Arc<Registry>,
     events: Arc<EventQueue>,
     owner: Principal,
+    /// The Locker session the handle holds: a typed secret is sealed under its key.
+    locker: Arc<crate::locker::phone::Cell>,
     /// What each key has already run, so a step confirmed twice runs once.
     done: Mutex<BTreeMap<String, Ran>>,
     calls: AtomicU64,
@@ -84,12 +96,14 @@ impl CoreDoor {
         registry: Arc<Registry>,
         events: Arc<EventQueue>,
         owner: Principal,
+        locker: Arc<crate::locker::phone::Cell>,
     ) -> Self {
         Self {
             vault,
             registry,
             events,
             owner,
+            locker,
             done: Mutex::new(BTreeMap::new()),
             calls: AtomicU64::new(0),
         }
@@ -193,7 +207,7 @@ impl Door for CoreDoor {
         if let Some(earlier) = done.get(key) {
             return Ok(earlier.clone());
         }
-        let request = wire::Command {
+        let mut request = wire::Command {
             name: command.to_owned(),
             input: serde_json::to_vec(&input)
                 .map_err(|error| format!("{command}: the input is not JSON: {error}"))?,
@@ -202,6 +216,12 @@ impl Door for CoreDoor {
         };
         let changes = ChangeFeed::new(Arc::clone(&self.events));
         let outcome = self.with(|vault| {
+            // A SECRET THE MEMBER TYPED IS SEALED HERE, before the vault sees it (#1135).
+            if let Some(sealed) = crate::locker::phone::seal_command(vault, &self.locker, &request)
+                .map_err(|error| format!("{command}: {error}"))?
+            {
+                request.input = sealed;
+            }
             crate::api::invoke_raw(vault, &self.registry, &self.owner, &request, &changes)
                 .map_err(|error| format!("{command}: {error}"))
         })?;
@@ -250,14 +270,15 @@ impl Door for CoreDoor {
             .unwrap_or_else(|_| format!("closed-{}", self.calls.fetch_add(1, Ordering::SeqCst)))
     }
 
-    fn seal(&self, _item_id: &str, _value: &str) -> Result<(String, String), String> {
-        Err(LOCKER_OFF.to_owned())
-    }
-
-    fn unseal(&self, _key_id: &str, _item_id: &str, _sealed: &str) -> Result<String, String> {
-        Err(LOCKER_OFF.to_owned())
+    fn locked_for(&self, command: &str, input: &Value) -> bool {
+        self.with(|vault| {
+            Ok(crate::locker::phone::locked_for(
+                vault,
+                &self.locker,
+                command,
+                input,
+            ))
+        })
+        .unwrap_or(false)
     }
 }
-
-/// What a door asked for a Locker cell answers: the chat holds no key to a sealed value (R-1088-3).
-const LOCKER_OFF: &str = "the chat holds no Locker key";

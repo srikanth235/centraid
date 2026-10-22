@@ -11,7 +11,7 @@ You have access to the following functions:
 {"function": {"description": "act(verb: create|edit|reschedule|complete|reopen|cancel|delete|restore|star|unstar|add_to|remove_from|log|reveal|undo, rows? | selector, args?, more?) — change the vault; ends the turn unless more; edit body+: or description+: adds text", "name": "act", "parameters": {"properties": {}, "type": "object"}}, "type": "function"}
 {"function": {"description": "answer(rows? | selector, op?: count|sum|min|max, field?, value?) — rows, a value or value=@n; ends the turn", "name": "answer", "parameters": {"properties": {}, "type": "object"}}, "type": "function"}
 {"function": {"description": "ask(question, options?) — ends the turn", "name": "ask", "parameters": {"properties": {}, "type": "object"}}, "type": "function"}
-{"function": {"description": "decline(reason: out_of_scope|unbounded_destruction|sealed_egress|fabricated_secret|never_mind|not_found) — ends the turn", "name": "decline", "parameters": {"properties": {}, "type": "object"}}, "type": "function"}
+{"function": {"description": "decline(reason: out_of_scope|unbounded_destruction|fabricated_secret|never_mind|not_found) — ends the turn", "name": "decline", "parameters": {"properties": {}, "type": "object"}}, "type": "function"}
 </tools>
 
 If you choose to call a function ONLY reply in the following format with NO suffix:

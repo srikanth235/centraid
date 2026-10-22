@@ -298,6 +298,7 @@ fn settle_outcome_of(outcome: &Confirmed) -> wire::AssistSettleOutcome {
         Confirmed::Done { .. } => wire::AssistSettleOutcome::Applied,
         Confirmed::Stale { .. } => wire::AssistSettleOutcome::Stale,
         Confirmed::Refused { .. } => wire::AssistSettleOutcome::Refused,
+        Confirmed::Locked => wire::AssistSettleOutcome::LockerLocked,
         Confirmed::Unknown => wire::AssistSettleOutcome::NothingWaiting,
     }
 }
@@ -695,6 +696,11 @@ fn send(handle: &Handle, asked: &wire::AssistSendRequest) -> Result<wire::Assist
     // any refusal but "busy" — is saved as what the member was shown, in one
     // commit, through `thread.save_turn`. A save that fails loses the history of
     // this turn and nothing else: the answer is still on screen.
+    //
+    // THE QUESTION IS SAVED WITHOUT A SECRET THE MEMBER TYPED (#1135): a turn that parks a write
+    // carrying one saves the question with `«sealed»` in its place, so the thread on disk never
+    // holds it; the parked step holds it alone until the confirm seals it.
+    let stored_question: std::cell::RefCell<Option<String>> = std::cell::RefCell::new(None);
     let persist = |said: &store::Said,
                    record: Option<&centraid_assist::prompt::Turn>,
                    resolved: Option<&centraid_assist::Attachments>|
@@ -715,7 +721,10 @@ fn send(handle: &Handle, asked: &wire::AssistSendRequest) -> Result<wire::Assist
                 thread: thread.as_deref(),
                 replace_last: replace,
                 scope,
-                question: text.trim(),
+                question: stored_question
+                    .borrow()
+                    .as_deref()
+                    .unwrap_or_else(|| text.trim()),
                 attachments: &refs,
                 said,
                 record,
@@ -812,6 +821,11 @@ fn send(handle: &Handle, asked: &wire::AssistSendRequest) -> Result<wire::Assist
             asked.regenerate,
             &mut sink,
         );
+        if pending_seen.is_some() {
+            *stored_question.borrow_mut() = locked(&slot.native)
+                .as_ref()
+                .map(|chat| chat.redacted(text.trim()));
+        }
         (outcome, None)
     };
     let response = match outcome {
@@ -1043,6 +1057,7 @@ mod tests {
             (done, S::Applied),
             (stale, S::Stale),
             (refused, S::Refused),
+            (Confirmed::Locked, S::LockerLocked),
             (Confirmed::Unknown, S::NothingWaiting),
         ];
         let mut seen = std::collections::BTreeSet::new();

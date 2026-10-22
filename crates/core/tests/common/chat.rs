@@ -69,10 +69,19 @@ pub fn decline(reason: &str) -> [String; 2] {
 /// A founded vault seeded with the scenario, with its byte store, and no
 /// model loaded.
 pub fn sample() -> Sample {
+    sample_with(|config| config)
+}
+
+/// [`sample`] over a core opened with the member's seed, so Locker can be unlocked.
+pub fn sample_with_seed(seed: centraid_identity::Seed) -> Sample {
+    sample_with(|config| config.with_seed(seed, 0))
+}
+
+fn sample_with(configure: impl FnOnce(CoreConfig) -> CoreConfig) -> Sample {
     let dir = centraid_ontology::scratch::scratch_dir();
     std::fs::create_dir_all(&dir).expect("the directory is made");
     let path = dir.join("vault.db");
-    let handle = Core::open(CoreConfig::new(&path)).expect("a core opens with create");
+    let handle = Core::open(configure(CoreConfig::new(&path))).expect("a core opens with create");
     handle
         .open_own_bytes(path.with_extension("bytes"))
         .expect("the byte store opens");

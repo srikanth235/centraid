@@ -4,21 +4,27 @@
 //! through [`Door::table`] (every row of one table, in the kit's paged shape) and
 //! [`Door::search`]; it writes through [`Door::run`], one typed command at a time; and it
 //! asks the door for the three things only a vault can say: the next id ([`Door::mint_id`]),
-//! the clock ([`Door::now_ms`], [`Door::advance`]) and a sealed Locker cell ([`Door::seal`],
-//! [`Door::unseal`]).
+//! and the clock ([`Door::now_ms`], [`Door::advance`]).
 //!
 //! # What an implementation must do
 //!
 //! * **The harness** (`centraid_nativetools::vaultio::Handle`) opens a vault file as the owner
 //!   principal `nativetools`, over a settable clock and a seeded id sequence, executes commands
-//!   with `Vault::execute` and seals Locker cells under the fixed harness key. It fires no change
-//!   feed, because nothing there listens.
+//!   with `Vault::execute` and seals a typed Locker secret under the fixed harness key inside
+//!   `run`. It fires no change feed, because nothing there listens.
 //! * **The core** (`crates/core`, the phone) must write through `api::invoke` with an
 //!   `invoke_key`, so a write the runtime makes fires the same `ChangeFeed` events as a write a
 //!   screen makes; and it must read through `VaultDoor` (`app_query.rs`), the query path a screen
 //!   uses, so the runtime sees what the person sees. It must not hand the runtime a connection.
-//!   On the phone the secrets policy is off (`Flags::secrets`), so `seal` and `unseal` are never
-//!   called and an implementation may refuse them.
+//!   It seals a typed Locker secret inside `run_keyed` (`crate::locker::phone::seal_command`),
+//!   and answers [`Door::locked_for`] when that needs a Locker that is shut.
+//!
+//! # A SEALED VALUE IS A CHANNEL THE DOOR KEEPS CLOSED (#1135)
+//!
+//! The runtime never reads a sealed column and never receives a sealed value from a door: a Locker
+//! row reaches it as a presence bit. A secret the member typed in chat reaches the door as typed,
+//! inside the input of `locker.add_item` / `locker.edit_item`, and the door seals it before the
+//! vault sees it, under the same rule on both sides of the door.
 //!
 //! # What the core owes park and confirm (R-1088-2, R-1088-6)
 //!
@@ -133,13 +139,14 @@ pub trait Door: Send {
     /// The next id the vault mints, for a row the runtime names before the command that makes it.
     fn mint_id(&self) -> String;
 
-    /// Seal one Locker cell for `item_id`: `(key_id, ciphertext)`. Never called when the Locker
-    /// policy is off.
-    fn seal(&self, item_id: &str, value: &str) -> Result<(String, String), String>;
-
-    /// Open one sealed Locker cell of `item_id` that was sealed under `key_id`. Never called when
-    /// the Locker policy is off.
-    fn unseal(&self, key_id: &str, item_id: &str, sealed: &str) -> Result<String, String>;
+    /// Whether `command` with `input` seals a typed secret and the Locker is shut: the confirm
+    /// then answers [`Confirmed::Locked`](crate::native::park::Confirmed) before it runs a step,
+    /// and the card stays waiting for the member to unlock and tap again. A door that holds no
+    /// Locker session (the harness, which seals under a fixed key) is never locked.
+    fn locked_for(&self, command: &str, input: &Value) -> bool {
+        let _ = (command, input);
+        false
+    }
 
     /// Run one command of a confirmed pending write: [`run`](Self::run) under a key that names
     /// the step (`<pending id>:<step index>`), so a confirm sent twice cannot write twice. The
