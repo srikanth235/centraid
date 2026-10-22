@@ -2,7 +2,7 @@
 
 The protocol that says whether the backup does the job the product exists to do, on real phones ([#1080](https://github.com/srikanth235/centraid/issues/1080), Validation: device hand-offs). It replaces the iOS background-transfer experiment of [#1020](https://github.com/srikanth235/centraid/issues/1020): that experiment compared two transports, and #1080 ruling 2 settled the transport — HTTPS to the member's own gateway, carried on iOS by the system's background `URLSession` while the app is suspended. What is left to measure is whether the pipeline built on it delivers.
 
-**None of this has been run.** There is no phone, no Xcode and no Android SDK on the machines that built it. Every number below is the owner's to take, on a **named reference device**, never a simulator or an emulator ([R-1020-20](../../docs/decisions.md#v1-platform--rust-core-kmp-shell-electron-seat-gateway-anywhere-1020)): a simulator's background scheduler and its `nsurlsessiond` are not a phone's, and a number from one would be worse than no number.
+**None of this has been run.** There is no phone, no Xcode and no Android SDK on the machines that built it. Every number below is the owner's to take, on a **named reference device**, never a simulator or an emulator ([R-1020-20](../../docs/decisions.md#governance-and-the-pr-gate)): a simulator's background scheduler and its `nsurlsessiond` are not a phone's, and a number from one would be worse than no number.
 
 ---
 
@@ -16,7 +16,7 @@ The protocol that says whether the backup does the job the product exists to do,
 
 ## The corpus
 
-**2,000 assets, made on the device**, so `PHAsset` local identifiers, `MediaStore` rows and capture dates are the device's own: at least 20 Live Photos, 20 videos over 100 MB, **one video over 64 MiB** (so at least one file is uploaded as several parts), **one video over 2 GiB** (larger than any spool's budget, so it backs up a window at a time, [R-1080-C39](../../docs/decisions.md#the-phone-core-and-the-cut-over-1080-lane-c)), 20 edited photographs (the walker backs up each one's current rendition, the edit as Photos draws it; whether the camera original and its adjustment data go beside it is the owner question #1080 A20 recorded, and an edited photograph is never offered to free up space), and the rest ordinary photographs. On iOS, turn **Optimise iPhone Storage off** for claims 1 and 3, and run claim 2 once with it on: an iCloud-only original is counted as waiting (`WAIT_REASON_ICLOUD`) rather than backed up, and the run records how many.
+**2,000 assets, made on the device**, so `PHAsset` local identifiers, `MediaStore` rows and capture dates are the device's own: at least 20 Live Photos, 20 videos over 100 MB, **one video over 64 MiB** (so at least one file is uploaded as several parts), **one video over 2 GiB** (larger than any spool's budget, so it backs up a window at a time, [R-1080-C39](../../docs/decisions.md#backup-and-the-gateway)), 20 edited photographs (the walker backs up each one's current rendition, the edit as Photos draws it; whether the camera original and its adjustment data go beside it is the owner question #1080 A20 recorded, and an edited photograph is never offered to free up space), and the rest ordinary photographs. On iOS, turn **Optimise iPhone Storage off** for claims 1 and 3, and run claim 2 once with it on: an iCloud-only original is counted as waiting (`WAIT_REASON_ICLOUD`) rather than backed up, and the run records how many.
 
 ## The gateway
 

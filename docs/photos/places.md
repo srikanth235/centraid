@@ -1,12 +1,12 @@
 # Places: where the photographs were taken
 
-How Photos answers "where was this", and why a location is a phrase before it is a point. Places is a facet of the Photos library, not an app: there is no separate crate for it ([D-1020-P5](../decisions.md#wave-4-lane-rulings-1020)).
+How Photos answers "where was this", and why a location is a phrase before it is a point. Places is a facet of the Photos library, not an app: there is no separate crate for it ([D-1020-P5](../decisions.md#photos)).
 
 ## The layers
 
 | Layer | What | Where |
 | --- | --- | --- |
-| **Names** | A coordinate adopts a nearby place the member already named; a place's name is its entity's title, and its pin, locality and zone are `place.locate` | [`crates/vault/src/commands/place.rs`](../../crates/vault/src/commands/place.rs) ([R-1135-5-4](../decisions.md#lane-5--docs-and-photos-1135)) |
+| **Names** | A coordinate adopts a nearby place the member already named; a place's name is its entity's title, and its pin, locality and zone are `place.locate` | [`crates/vault/src/commands/place.rs`](../../crates/vault/src/commands/place.rs) ([R-1135-5-4](../decisions.md#docs)) |
 | **Phrases** | A place becomes something a person would say out loud | [`crates/apps/photos/src/places.rs`](../../crates/apps/photos/src/places.rs) |
 | **Disclosure** | What a place does, and does not, do when a copy leaves | the share half of the same module |
 

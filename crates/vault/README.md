@@ -42,7 +42,7 @@ cargo run -p centraid-vault --bin export-ontology-page   # the published page's 
 | `restore` | The file rebuilt from a destination and every check that it is the snapshot's (`db_hash`, `integrity_check`, the census); and `restore_check`, the structural check `centraid doctor` reports. |
 | `drill` | Back up, lose the vault, its ledger and its spool, restore, and prove it is the vault that was lost, row for row (`dump`). |
 
-There is **no backup index in the vault**: the tables the #1029 plane founded for one were dropped before the first release, because a part's name is a keyed hash of its plaintext and the gateway is asked what it holds ([R-1080-4](../../docs/decisions.md#backups-from-first-principles-1080)). The plane speaks to a destination through `Store` and never to a socket; the phone's core wires it to `crates/gateway`'s client.
+There is **no backup index in the vault**: the tables the #1029 plane founded for one were dropped before the first release, because a part's name is a keyed hash of its plaintext and the gateway is asked what it holds ([R-1080-4](../../docs/decisions.md#backup-and-the-gateway)). The plane speaks to a destination through `Store` and never to a socket; the phone's core wires it to `crates/gateway`'s client.
 
 ## Decisions specific to this file format
 
@@ -50,7 +50,7 @@ Each with its reason in the module, and each recorded as a decision.
 
 - **`application_id = CEN1` and a `user_version` counting this ladder's own migrations** (D-1020-D1-2).
 - **The commit pair is the only writable connection** (D-1020-D1-5). `Vault::read` sets `PRAGMA query_only`, so a write through a read is refused by SQLite rather than by a reviewer.
-- **The pragmas are stated, not inherited**: `journal_mode = WAL`, `synchronous = FULL`, `journal_size_limit`, no `secure_delete`, a 4 KiB page and no auto-vacuum; checkpoints are SQLite's own since #1080 ([R-1080-C33](../../docs/decisions.md#the-phone-core-and-the-cut-over-1080-lane-c)), so a last close folds the WAL into the file.
+- **The pragmas are stated, not inherited**: `journal_mode = WAL`, `synchronous = FULL`, `journal_size_limit`, no `secure_delete`, a 4 KiB page and no auto-vacuum; checkpoints are SQLite's own since #1080 ([R-1080-C33](../../docs/decisions.md#backup-and-the-gateway)), so a last close folds the WAL into the file.
 - **`VaultError::DiskFull` is a typed answer** (D-1020-D1-8), classified on SQLite's primary code and on `ErrorKind::StorageFull`, so a handler's own `?` carries it.
 - **The vault keeps one full-text index**, `search`, contentless and keyed by `entity.n`, written by the commit guard from the entities a command touched (`index.rs`); `crates/search` only reads it.
 - **The baseline migration and its `contracts/` fixture are ONE file** (D-1020-D1-13): `contracts/migrations/001_baseline.sql`, with `contracts/schema/vault-ddl.sql` rendered from it by `export-ladder-ddl` and held equal by `tests/ladder_ddl.rs`. The model was rebuilt whole in [#1135](https://github.com/srikanth235/centraid/issues/1135).

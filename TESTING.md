@@ -44,7 +44,7 @@ Each profile is stated in code as a **concatenation of the one before it** (`loc
 
 `local` is scored **warm or cold**. The runner calls a tree warm only when every workspace member has a linked artifact under the target directory (`CARGO_TARGET_DIR` when set); a cold run is charged to `coldLocalProfileSeconds` in [`compile-time.json`](contracts/ledgers/compile-time.json) and fails where that key states no ceiling. `--cold` forces the cold branch. **The restore drill is in `local`, and so in every profile**: the product's promise is proved on every loop rather than only before a tag.
 
-`gate.yml` also runs an `engine` job on every pull request — clippy and `cargo test` over `centraid-assist-llama` and `centraid-core-ffi` with llama.cpp compiled in, which the gate's `--workspace` steps leave out because the cold build would overrun the `pr` profile's budget ([R-CHAT-10](docs/decisions.md#the-on-device-chat-keeps-its-history-in-the-vault)) — and a `dependency-review` job on pull requests (a GitHub Action over the dependency diff, so it cannot be a gate step). Governance is **not** a step: `.governance/run.sh` runs in [`governance.yml`](.github/workflows/governance.yml) as its own check.
+`gate.yml` also runs an `engine` job on every pull request — clippy and `cargo test` over `centraid-assist-llama` and `centraid-core-ffi` with llama.cpp compiled in, which the gate's `--workspace` steps leave out because the cold build would overrun the `pr` profile's budget ([R-CHAT-10](docs/decisions.md#the-assistant)) — and a `dependency-review` job on pull requests (a GitHub Action over the dependency diff, so it cannot be a gate step). Governance is **not** a step: `.governance/run.sh` runs in [`governance.yml`](.github/workflows/governance.yml) as its own check.
 
 ### What the steps prove
 
@@ -129,7 +129,7 @@ What only a device can measure — the absolute mobile targets, the backup measu
 
 ## The ledgers (#915 Wave 4, #927)
 
-**The gate's ledgers** are the five files under [`contracts/ledgers/`](contracts/ledgers): `gate-budgets`, `compile-time`, `library-size`, `call-budget` and `advisory` (the advisory register). The `ledgers` step compares every JSON file in that directory against the merge base and refuses any number that rose or vanished. `cargo xtask measure --write` is the only writer and only ever lowers a number; a gate run measures and reports but never writes, because a ratchet that records whatever the last run cost is a log. A raise needs an owner ruling ([D-1020-B2](docs/decisions.md#decisions--lane-b2-1020)).
+**The gate's ledgers** are the five files under [`contracts/ledgers/`](contracts/ledgers): `gate-budgets`, `compile-time`, `library-size`, `call-budget` and `advisory` (the advisory register). The `ledgers` step compares every JSON file in that directory against the merge base and refuses any number that rose or vanished. `cargo xtask measure --write` is the only writer and only ever lowers a number; a gate run measures and reports but never writes, because a ratchet that records whatever the last run cost is a log. A raise needs an owner ruling ([D-1020-B2](docs/decisions.md#governance-and-the-pr-gate)).
 
 **The repo-wide ledgers under `tests/`** are still read:
 

@@ -1,6 +1,6 @@
 # `crates/apps/money` — accounts and transactions the member imports
 
-Money is a personal-finance app: accounts, transactions that enter by **importing a bank statement**, categories by rule, spending by month ([#1099](https://github.com/srikanth235/centraid/issues/1099), [decisions](../../../docs/decisions.md#money-1099)). Its doctrine:
+Money is a personal-finance app: accounts, transactions that enter by **importing a bank statement**, categories by rule, spending by month ([#1099](https://github.com/srikanth235/centraid/issues/1099), [decisions](../../../docs/decisions.md#money)). Its doctrine:
 
 - one account is one currency; nothing sums across currencies;
 - an imported transaction is never edited (a category and a void are the member's decisions);

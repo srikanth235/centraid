@@ -13,7 +13,7 @@ No policy: `crates/vault` decides, this crate moves bytes.
 
 ## The format is normative
 
-Every context string, header field and framing rule in `sealed` is a **format** decision: editing one re-keys every backup a member holds. The contexts are `centraid backup v2 root`, `… name` and `… object`; the framing is canonical (every chunk but the last exactly 4 MiB, only an empty part ends in an empty chunk), so one payload has one sealed shape ([R-1080-B1–B3](../../docs/decisions.md#the-sealed-format-and-the-snapshot-plane-1080-wave-1-lane-b)). The formats before it — the v0 frame format and `centraid-object/1` — left with the planes that wrote them (#1080); no member holds an artefact in either.
+Every context string, header field and framing rule in `sealed` is a **format** decision: editing one re-keys every backup a member holds. The contexts are `centraid backup v2 root`, `… name` and `… object`; the framing is canonical (every chunk but the last exactly 4 MiB, only an empty part ends in an empty chunk), so one payload has one sealed shape ([R-1080-B1–B3](../../docs/decisions.md#backup-and-the-gateway)). The formats before it — the v0 frame format and `centraid-object/1` — left with the planes that wrote them (#1080); no member holds an artefact in either.
 
 `canonical_json` spells numbers the way `JSON.stringify` does (hence `ryu-js`), not the way `serde_json` spells integers: `1e21` is `1e+21` and `9007199254740993` is `9007199254740992`.
 

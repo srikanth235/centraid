@@ -9,7 +9,7 @@
 | Mobile iOS + Android (decided) | `dev.centraid.mobile` |
 | Mobile debug variant (decided) | `dev.centraid.mobile.debug` |
 | iOS share extension (decided) | `dev.centraid.mobile.share` |
-| Desktop | **Reserved, unused.** `dev.centraid.desktop` is held for the deferred desktop shell ([R-1029-1](decisions.md#the-phone-is-the-vault--v0-1029-ruled-2026-09-21)) and nothing ships under it. |
+| Desktop | **Reserved, unused.** `dev.centraid.desktop` is held for the deferred desktop shell ([R-1029-1](decisions.md#deliberate-non-goals)) and nothing ships under it. |
 | Gateway service label (H5) | `dev.centraid.gateway` — the launchd agent and the systemd user unit `centraid-gateway install` writes ([`crates/gateway/src/server/service.rs`](../crates/gateway/src/server/service.rs)) |
 | Automation scheduler labels | `dev.centraid.<appId>.<name>` |
 | Deep-link scheme | `centraid://` (debug: `centraid-debug://`) |

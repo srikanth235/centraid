@@ -1,6 +1,6 @@
 # Design machinery
 
-Inventory and ownership map for the visual system across the native mobile shells, the Rust core and the public web surfaces. The binding visual rules live in [DESIGN.md](../DESIGN.md), whose base is the phone; this document describes how those rules reach each renderer without becoming several design systems. The CSS lowering and the pointer values exist for the public site alone ([decisions.md](decisions.md#designmds-web-era-rulings-superseded-2026-10-15)).
+Inventory and ownership map for the visual system across the native mobile shells, the Rust core and the public web surfaces. The binding visual rules live in [DESIGN.md](../DESIGN.md), whose base is the phone; this document describes how those rules reach each renderer without becoming several design systems. The CSS lowering and the pointer values exist for the public site alone ([decisions.md](decisions.md#design-system)).
 
 ## One pipeline
 
@@ -79,7 +79,7 @@ The drift line is the gate: `emitters` in `cargo xtask gate --profile pr` and th
 
 ## The public web surfaces
 
-`centraid.dev` and `centraid.dev/docs/` render in the product's design ([decisions.md](decisions.md#product-grammar-and-block-composition), 2026-08-21): `scripts/site-tokens.mjs` lowers `packages/design`'s `toCss()` and its vendored Instrument Sans into a committed `centraid-tokens.css` per surface, and `bun run lint:site-tokens` fails on drift. The rows below are what a long-form public page does that a product screen does not. Each is a current decision, not a to-do.
+`centraid.dev` and `centraid.dev/docs/` render in the product's design ([decisions.md](decisions.md#design-system), 2026-08-21): `scripts/site-tokens.mjs` lowers `packages/design`'s `toCss()` and its vendored Instrument Sans into a committed `centraid-tokens.css` per surface, and `bun run lint:site-tokens` fails on drift. The rows below are what a long-form public page does that a product screen does not. Each is a current decision, not a to-do.
 
 | Divergence | Decision | Enforcement / reason |
 | --- | --- | --- |

@@ -20,11 +20,11 @@ Tasks' manifest declares **2 queries, 15 actions, 21 scopes** — the smallest s
 2. **`truncated` is the open page's own cursor** — it exists or it does not (#996 R8). `rows.length >= window` cannot tell a window that filled exactly from one that ran out, and the manifest states the rule as a contract: this is the one place in the workspace where it does.
 3. **An unfinished child of a closed parent is promoted** onto the open board. Completing the parent must not hide remaining work, and the logbook parent then keeps only its closed children so no row is drawn twice.
 4. **There is no module-level ceiling.** The caller's `limit` (20…500) is the only bound. **Adding one would add a refusal the contract does not have**, so this crate declares none and a test says so.
-5. **Completion is one operation, and it is the vault's** (`centraid_vault::commands::task::complete`, [R-1135-4-2](../../../docs/decisions.md#lane-4--agenda-1135)). People, automations and an import complete the same row through the same code, and the recurrence rollover is part of it (#996 R21, ONT-27).
+5. **Completion is one operation, and it is the vault's** (`centraid_vault::commands::task::complete`, [R-1135-4-2](../../../docs/decisions.md#agenda)). People, automations and an import complete the same row through the same code, and the recurrence rollover is part of it (#996 R21, ONT-27).
 
 ## The trash is not the board
 
-`entity.trash` trashes a task and the subtasks under it (`deleted_at`, `purge_at`; the holder rule of R-1135-1-5), and `entity.restore` and `entity.purge` bring them back or destroy them. A trashed task is on no place, in no search and opens no detail; the shelf is the `tasks.trash` app query ([R-1135-4-9](../../../docs/decisions.md#lane-4--agenda-1135)), read in the request's zone. A subtask restored on its own is promoted to the top level rather than lost.
+`entity.trash` trashes a task and the subtasks under it (`deleted_at`, `purge_at`; the holder rule of R-1135-1-5), and `entity.restore` and `entity.purge` bring them back or destroy them. A trashed task is on no place, in no search and opens no detail; the shelf is the `tasks.trash` app query ([R-1135-4-9](../../../docs/decisions.md#agenda)), read in the request's zone. A subtask restored on its own is promoted to the top level rather than lost.
 
 ## Civil time is the device's
 

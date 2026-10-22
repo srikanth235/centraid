@@ -37,7 +37,7 @@ SQL, in any form, is refused by `cargo xtask rules` (`sql-confinement`): a read 
 
 ## The rulings this crate is shaped by
 
-R-1135-3-1 to R-1135-3-14 are in [docs/decisions.md](../../../docs/decisions.md#lane-3--people-1135). The ones a reader of this crate meets first:
+R-1135-3-1 to R-1135-3-14 are in [docs/decisions.md](../../../docs/decisions.md#people). The ones a reader of this crate meets first:
 
 - **A toggle is two actions.** `toggle-gift` is `complete-task` and `reopen-task`, `toggle-reminder` is `set-reminder`; three commands (`task.complete`, `task.reopen`, `event.edit`) are Agenda's and `ActionRow::pending_schema` names them until that lane lands.
 - **Four actions are confirm-gated** by the manifest, which is the surface's gate: `trash-person`, `purge-person`, `delete-contact-channel` and `merge-people`. No command sets the command-level `confirm`.

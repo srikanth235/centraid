@@ -14,7 +14,7 @@ Run this motion:
 
 1. **Put a real library on the phone.** Use your own camera roll, not a test fixture: 528+ photos, spanning several years, mixed origins (camera, screenshot, screen recording, panorama, duplicate captures), and at least one year before 2020 (your test set for the grain control's year). This tree has no Takeout importer ([switcher walkthrough](switcher-walkthrough.md), step 1), so the camera roll is how a real library arrives.
 
-2. **Let the camera roll back up.** Grant photo access; the backup runs on its own and there is no import offer to accept ([R-1029-PH-4](../decisions.md#photos-what-the-port-builds-and-what-it-does-not-1029)). Verify:
+2. **Let the camera roll back up.** Grant photo access; the backup runs on its own and there is no import offer to accept ([R-1029-PH-4](../decisions.md#photos)). Verify:
    - [ ] The library fills as the pass runs: skeleton tiles give way to photographs with no "waiting" stall.
    - [ ] A partial grant says so and offers its remedy (the limited-library picker on iOS, "Select more photos" on Android); a denied one offers Open Settings.
    - [ ] Killing the app mid-pass and reopening resumes where it stopped, and no photograph appears twice.
@@ -34,19 +34,19 @@ Run this motion:
    - [ ] A caption word finds the photograph, offline too — the vault is on the phone.
    - [ ] A person, place or album a query names stands above the grid as a top hit and opens its shelf; before a query, the resting page lists the vault's own people, places, albums and labels.
 
-6. **Send a copy.** Photos has no sharing with another person ([R-1029-PH-3](../decisions.md#photos-what-the-port-builds-and-what-it-does-not-1029)); what leaves is a copy. Verify:
+6. **Send a copy.** Photos has no sharing with another person ([R-1029-PH-3](../decisions.md#photos)); what leaves is a copy. Verify:
    - [ ] Send a copy from the viewer, from a shelf's selection and from the library's opens the system share sheet.
    - [ ] With the location left out, the file that arrives carries no GPS — check its EXIF on the receiving end, not the sentence on the phone.
    - [ ] Download puts the original in this device's own photo library.
 
 7. **Keep originals, and the free-up-space census.** Verify:
    - [ ] An album's "Keep originals on this phone" switch shows the flip at once, settles, and is still set after a relaunch.
-   - [ ] The More sheet counts the originals on this phone, their size and the kept share, and says why none can be freed — there is no release button ([R-1029-PH-1](../decisions.md#photos-kept-originals-and-freeing-space-1029)).
+   - [ ] The More sheet counts the originals on this phone, their size and the kept share, and says why none can be freed — there is no release button ([R-1029-PH-1](../decisions.md#photos)).
    - [ ] The Backup row reports this device's own pass.
 
 8. **Set an album's key photo.** Verify:
    - [ ] In an album, selecting one photograph offers Make key photo; the viewer's `···` offers it only when the photograph was opened from an album.
-   - [ ] The chosen cover appears on the album in the Add to album sheet. Collections' album tiles draw it too: the chosen photograph, else the album's first ([R-1135-5-2](../decisions.md#lane-5--docs-and-photos-1135)).
+   - [ ] The chosen cover appears on the album in the Add to album sheet. Collections' album tiles draw it too: the chosen photograph, else the album's first ([R-1135-5-2](../decisions.md#photos)).
 
 9. **Check four known stuck-state classes**:
 

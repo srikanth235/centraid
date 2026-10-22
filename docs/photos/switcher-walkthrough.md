@@ -9,8 +9,8 @@ Photos' north star is **iOS Photos** ([blueprint seats](../blueprint-seats.md)):
    - **Status: GAP** — this tree has no Takeout importer. v0's staged import (draft → review → publish, sidecar beats EXIF, album reconstruction, Live Photo pairing) went with the v0 TypeScript tree in [#1020](https://github.com/srikanth235/centraid/issues/1020), and the phone that is the vault ([#1029](https://github.com/srikanth235/centraid/issues/1029)) has no import surface yet.
 
 2. **Bring the phone's own library in.**
-   - The camera roll backs up on its own once photo access is granted: a keyset walk with a durable cursor per vault, idempotent on the content hash, under the member's one transfer rule ([D-1025-S7-70](../decisions.md#slice-s6--the-camera-roll-goes-up-1025) – S7-75). A denied grant draws the sentence and Open Settings; a partial one draws the limited-library picker on iOS and "Select more photos" on Android.
-   - **Status: SHIPPED**. There is deliberately no first-run "bring in my camera roll" offer — the backup already does it ([R-1029-PH-4](../decisions.md#photos-what-the-port-builds-and-what-it-does-not-1029)).
+   - The camera roll backs up on its own once photo access is granted: a keyset walk with a durable cursor per vault, idempotent on the content hash, under the member's one transfer rule ([D-1025-S7-70](../decisions.md#photos) – S7-75). A denied grant draws the sentence and Open Settings; a partial one draws the limited-library picker on iOS and "Select more photos" on Android.
+   - **Status: SHIPPED**. There is deliberately no first-run "bring in my camera roll" offer — the backup already does it ([R-1029-PH-4](../decisions.md#photos)).
 
 3. **Open the timeline and browse.**
    - Day sections under pinned months, justified rows packed from each photograph's own aspect, a scrub rail, a skeleton while the first page reads, and paging through the whole library as the member scrolls. Photographs with no capture date live in an explicit Undated section after every dated one, never interleaved as lies ([README](README.md#the-apps-shape)). Tile size is a choice in More (offered at All), and a pinch steps it; the filter (All photos · Favorites) is a chip row under the search bar.
@@ -29,11 +29,11 @@ Photos' north star is **iOS Photos** ([blueprint seats](../blueprint-seats.md)):
    - **Status: GAP** — nothing in this tree computes embeddings or runs OCR. The `enrich.*` commands and the worker behind them were deleted in [#1029](https://github.com/srikanth235/centraid/issues/1029); the derived tables remain ([derived ledger](derived-ledger.md)).
 
 7. **Share one photograph, or a whole album.**
-   - **Status: NOT IN v0** — Photos offers no sharing with another person and no "Save to my vault" ([R-1029-PH-3](../decisions.md#photos-what-the-port-builds-and-what-it-does-not-1029)). What ships is **Send a copy**: from the viewer, a shelf's selection or the library's, a copy goes to the system share sheet with its location taken out of the bytes unless the member keeps it; **Download** saves the original to the device's own photo library.
+   - **Status: NOT IN v0** — Photos offers no sharing with another person and no "Save to my vault" ([R-1029-PH-3](../decisions.md#photos)). What ships is **Send a copy**: from the viewer, a shelf's selection or the library's, a copy goes to the system share sheet with its location taken out of the bytes unless the member keeps it; **Download** saves the original to the device's own photo library.
 
 8. **Back up, then free up space.**
    - The vault drains to the member's laptop; an album can be marked "Keep originals on this phone"; the More sheet counts the originals on the phone, their size and the kept share.
-   - **Status: PARTIAL** — originals are backed up from where they live ([R-1080-4](../decisions.md#backups-from-first-principles-1080), [R-1080-6](../decisions.md#backups-from-first-principles-1080)), and Free up space deletes an original from the phone once a backup device confirms every one of its bytes and it is in no kept album (`FreeUpDoors`). An edited photo is never released, because its camera original is not backed up (A20).
+   - **Status: PARTIAL** — originals are backed up from where they live ([R-1080-4](../decisions.md#backup-and-the-gateway), [R-1080-6](../decisions.md#backup-and-the-gateway)), and Free up space deletes an original from the phone once a backup device confirms every one of its bytes and it is in no kept album (`FreeUpDoors`). An edited photo is never released, because its camera original is not backed up (A20).
 
 9. **Set a key photo.**
    - In an album: select one photograph → "Make key photo". From the viewer: `···` → "Make key photo" (offered when the photograph was opened from an album). The album choice sheet draws the chosen cover.
@@ -44,10 +44,10 @@ Photos' north star is **iOS Photos** ([blueprint seats](../blueprint-seats.md)):
     - **Status: PARTIAL** — Videos ship. **Screenshots, Panoramas and Selfies are deferred**: `media_asset.kind` is `photo | video | audio | scan` and no column carries a media subtype, so there is no honest signal to shelve on.
 
 11. **Review faces, name people.**
-    - **Status: REMOVED** — Photos has no face surface. People, face review, a person's shelf, "who is in it" in the viewer and search by person read a face table that nothing has written since `upsert_faces` went with the enrichment worker in [#1029](https://github.com/srikanth235/centraid/issues/1029); the owner ruled them out on 2026-10-15 ([Q-1047-2](../decisions.md#open-questions-for-the-owner-1046-1047)), and on-device detection is proposed separately. The model holds no face table ([R-1135-5-18](../decisions.md#lane-5--docs-and-photos-1135)).
+    - **Status: REMOVED** — Photos has no face surface. People, face review, a person's shelf, "who is in it" in the viewer and search by person read a face table that nothing has written since `upsert_faces` went with the enrichment worker in [#1029](https://github.com/srikanth235/centraid/issues/1029); the owner ruled them out on 2026-10-15 ([Q-1047-2](../decisions.md#photos)), and on-device detection is proposed separately. The model holds no face table ([R-1135-5-18](../decisions.md#photos)).
 
 12. **Edit a photograph.**
-    - Crop, rotate, straighten, flip and fixed ratios. The original is never touched: a save is a new photograph that keeps the original's date, place and caption and names it as its source ([R-1029-PH-5](../decisions.md#photos-what-the-port-builds-and-what-it-does-not-1029)).
+    - Crop, rotate, straighten, flip and fixed ratios. The original is never touched: a save is a new photograph that keeps the original's date, place and caption and names it as its source ([R-1029-PH-5](../decisions.md#photos)).
     - **Status: SHIPPED** for geometry. **Gap:** light/colour adjustment and auto-enhance.
 
 ## Summary

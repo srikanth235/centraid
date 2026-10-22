@@ -17,23 +17,23 @@ The phone is the vault ([#1029](https://github.com/srikanth235/centraid/issues/1
 
 A sealed cell reaches a loader only as its **presence** (`<cell> IS NOT NULL AS …`, the grammar's one sealed operand, which the page door now projects as an expression — `crates/vault/src/page.rs`). `no_phone_statement_projects_a_sealed_cell_except_as_its_presence` holds every phone statement to that.
 
-[`transfer`](src/transfer.rs) is import and export as pure folds (#1047 T2): 1Password-dialect CSV and Locker's `centraid-locker/1` JSON out; a password-manager CSV by its header (Chrome, 1Password, Bitwarden, LastPass, Firefox, Locker's own) or the JSON in; and the plan that gives each row the handoff's verdict — new, fills the empty fields only, or held because the vault wins. It never opens a cell; `crates/core/src/locker/transfer.rs` does, receipt first ([R-1047-T2-4, T2-5](../../../docs/decisions.md#lockers-follow-ups-on-the-phone-1047-t2)).
+[`transfer`](src/transfer.rs) is import and export as pure folds (#1047 T2): 1Password-dialect CSV and Locker's `centraid-locker/1` JSON out; a password-manager CSV by its header (Chrome, 1Password, Bitwarden, LastPass, Firefox, Locker's own) or the JSON in; and the plan that gives each row the handoff's verdict — new, fills the empty fields only, or held because the vault wins. It never opens a cell; `crates/core/src/locker/transfer.rs` does, receipt first ([R-1047-T2-4, T2-5](../../../docs/decisions.md#locker)).
 
-The secret is not this crate's. `K` is derived from the member's 24 words (`seed / vault'(i) / locker'`) and held in the core's memory, so a restore from the words reopens it, a secret the member typed is sealed by the core before the vault sees the command, and a reveal is receipted before its value exists — `crates/core/src/locker/phone.rs` ([R-1047-L3, L4, Q-1047-11](../../../docs/decisions.md#locker-on-the-phone-1047-d-5)). The lock itself — the biometric, the passcode fallback, the relock on leaving the foreground — is the shared machine's and the shell's ([R-1047-L1](../../../docs/decisions.md#locker-on-the-phone-1047-d-5)).
+The secret is not this crate's. `K` is derived from the member's 24 words (`seed / vault'(i) / locker'`) and held in the core's memory, so a restore from the words reopens it, a secret the member typed is sealed by the core before the vault sees the command, and a reveal is receipted before its value exists — `crates/core/src/locker/phone.rs` ([R-1047-L3, L4, Q-1047-11](../../../docs/decisions.md#locker)). The lock itself — the biometric, the passcode fallback, the relock on leaving the foreground — is the shared machine's and the shell's ([R-1047-L1](../../../docs/decisions.md#locker)).
 
 ## What this crate does not contain, and what stops it
 
 | Not here | What stops it |
 | --- | --- |
 | SQL, in any form | `cargo xtask rules`' `sql-confinement`. A statement here is a `PageQuery` — a projection, a `from`, a predicate and an order, as data |
-| A hash, a codec, or a crypto primitive | nothing in the dependency set is one. `totp` takes an HMAC. The RFC 6238 parts an implementation gets wrong — base32, the counter, the dynamic truncation, reading an `otpauth://` link (`seed_of`) — are here and under test against RFC 4226's own vectors; HMAC-SHA-1 is the core's, which proves the chain against RFC 6238 Appendix B ([R-1047-D6](../../../docs/decisions.md#the-owners-rulings-on-the-locker-leftovers-1047)) |
+| A hash, a codec, or a crypto primitive | nothing in the dependency set is one. `totp` takes an HMAC. The RFC 6238 parts an implementation gets wrong — base32, the counter, the dynamic truncation, reading an `otpauth://` link (`seed_of`) — are here and under test against RFC 4226's own vectors; HMAC-SHA-1 is the core's, which proves the chain against RFC 6238 Appendix B ([R-1047-D6](../../../docs/decisions.md#locker)) |
 | The member key `K` | `centraid-vault` is not a dependency |
-| A weak/reused score | nothing: the Watchtower fold is deleted, and Review is metadata only ([R-1047-D6](../../../docs/decisions.md#the-owners-rulings-on-the-locker-leftovers-1047)) |
+| A weak/reused score | nothing: the Watchtower fold is deleted, and Review is metadata only ([R-1047-D6](../../../docs/decisions.md#locker)) |
 
 ## The facts every query is written around
 
 1. **`ITEM_COLUMNS` is the browsable half, and no sealed cell is on it** (nor on `ENTITY_COLUMNS` or `KIND_COLUMNS`, the two statements it is folded from). `password`, `otp_seed`, `card_number`, `cvv`, `content`, `value_sealed` and `private_key` are absent **by construction rather than stripped afterwards**.
-2. **Listing is not unlocking — in the vault.** Title, url and username are plaintext at rest so the list and search work. On the phone the shared machine still reads nothing while Locker is locked ([R-1047-L2](../../../docs/decisions.md#locker-on-the-phone-1047-d-5)); the core refuses only what needs `K`.
+2. **Listing is not unlocking — in the vault.** Title, url and username are plaintext at rest so the list and search work. On the phone the shared machine still reads nothing while Locker is locked ([R-1047-L2](../../../docs/decisions.md#locker)); the core refuses only what needs `K`.
 3. **A stated window is walked, not clamped.** `MAX_PAGE_ROWS` clamps a page at 500, so every shelf walks with `read_window` and reports whether the window filled; a count that reached its ceiling is answered as unknown, never as the ceiling.
 4. **The audit band is Locker's own table.** Every Locker act writes a row of `receipt` (`seq`, `at`, `item_id` as a value, `act`, `journal_seq`; [R-1135-1-2](../../../docs/decisions.md)), and the statement `locker.access.receipts` reads that table and no other, so no predicate has to keep another surface's receipts out. The phone's page door has no entity catalog and evaluates no grant: the phone is the owner. `the_whole_lockers_access_history_names_every_receipt_and_carries_no_value` (`crates/core`) is the check that the whole-Locker read names every receipt a command wrote.
 
@@ -47,8 +47,8 @@ The secret is not this crate's. `K` is derived from the member's 24 words (`seed
 
 ## No match policy, and no matcher
 
-An address is a URL. The stored match policy (`url_match_policy`, and `match_policy` per extra address) is dropped by rung eight with its editor control ([R-1047-D5](../../../docs/decisions.md#the-owners-rulings-on-the-locker-leftovers-1047)); the origin matcher, its spec and `psl` went with the extension-fill plane ([R-1047-D3](../../../docs/decisions.md#the-extension-fill-plane-deleted-1047)).
+An address is a URL. The stored match policy (`url_match_policy`, and `match_policy` per extra address) is dropped by rung eight with its editor control ([R-1047-D5](../../../docs/decisions.md#locker)); the origin matcher, its spec and `psl` went with the extension-fill plane ([R-1047-D3](../../../docs/decisions.md#locker)).
 
 ## What was deleted, and why parity still holds
 
-v0's shelf statements and folds, its invocation door, `sidecars` and the unused half of `totp` had no production caller once the phone read through [`phone`](src/phone.rs), and are deleted ([R-1047-T2-7](../../../docs/decisions.md#lockers-follow-ups-on-the-phone-1047-t2)). `tests/parity.rs` compares v0's frozen answers with the phone's own loaders on the fields a phone row carries, and names what it does not compare.
+v0's shelf statements and folds, its invocation door, `sidecars` and the unused half of `totp` had no production caller once the phone read through [`phone`](src/phone.rs), and are deleted ([R-1047-T2-7](../../../docs/decisions.md#locker)). `tests/parity.rs` compares v0's frozen answers with the phone's own loaders on the fields a phone row carries, and names what it does not compare.

@@ -19,7 +19,7 @@ Centraid is **solo-maintained**. Coding agents do much of the implementation; re
 
 ## What it does
 
-- **First-party apps** — Docs, Photos, Notes, People, Locker, Agenda, Tasks, Money and Health, one crate each under [`crates/apps`](crates/apps). Tasks has no tile of its own: Agenda draws its screens, and `tasks` is the vault domain the member opens in Agenda ([R-1128-7](docs/decisions.md#tasks-folds-into-agenda-1128)). They ship in the release and update with it; an app holds no database of its own and reads and writes the vault through typed commands.
+- **First-party apps** — Docs, Photos, Notes, People, Locker, Agenda, Tasks, Money and Health, one crate each under [`crates/apps`](crates/apps). Tasks has no tile of its own: Agenda draws its screens, and `tasks` is the vault domain the member opens in Agenda ([R-1128-7](docs/decisions.md#agenda)). They ship in the release and update with it; an app holds no database of its own and reads and writes the vault through typed commands.
 - **The phone is the vault** — the Rust core on your phone holds `vault.db` and is its only writer. It works fully offline because there is nothing to be offline _from_.
 - **Backed up to hardware you own** — every gateway you pair holds a sealed copy of the vault and of every photograph, video and file in it, and can open none of it: no key, no plaintext, no schema. The phone reaches it over HTTPS straight to the machine, pinning the certificate the gateway's QR names; on an iPhone the system keeps uploading while Centraid is closed. Pair by scanning a QR the gateway prints.
 - **Recoverable from 24 words** — every key derives from one BIP39 phrase. A fresh install plus the phrase brings the vault back. There is no kit file, no password and no escrow.

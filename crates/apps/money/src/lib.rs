@@ -2,7 +2,7 @@
 //!
 //! Money is a personal-finance app: accounts, transactions that enter by
 //! **importing a bank statement**, categories by rule, spending by month. Its
-//! doctrine (#1099, `docs/decisions.md#money-1099`):
+//! doctrine (#1099, `docs/decisions.md#money`):
 //!
 //! - one account is one currency; nothing sums across currencies;
 //! - an imported transaction is never edited (a category and a void are the

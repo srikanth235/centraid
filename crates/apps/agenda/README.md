@@ -8,7 +8,7 @@ Agenda is **4 manifest queries plus the core's by-id `event` read, 7 actions, 17
 | --- | --- |
 | `manifest.json` | the app's manifest: queries, actions and scopes |
 | `src/manifest.rs` | the parse, and the claims the manifest makes about itself |
-| `src/queries.rs` | the four queries: statements as data, and the folds over them. `search` from a term asks `crates/search`'s FTS door (`load_search_term`) and folds its hits (`load_search`). Every row carries `location_name`, its place's name. The reads are one table at a time: the window's `event` rows, then the entity, guests (`attendee` edges), overrides (`occurrence`) and calendars of the ids it named, joined here ([R-1135-4-8](../../../docs/decisions.md#lane-4--agenda-1135)) |
+| `src/queries.rs` | the four queries: statements as data, and the folds over them. `search` from a term asks `crates/search`'s FTS door (`load_search_term`) and folds its hits (`load_search`). Every row carries `location_name`, its place's name. The reads are one table at a time: the window's `event` rows, then the entity, guests (`attendee` edges), overrides (`occurrence`) and calendars of the ids it named, joined here ([R-1135-4-8](../../../docs/decisions.md#agenda)) |
 | `src/detail.rs` | `load_event`: one event, or one occurrence named by `original_start_local` or `instance_key`, by id — the detail screen's read ([#1029](https://github.com/srikanth235/centraid/issues/1029)); absent for an unknown, trashed or skipped one. It also carries the event's calendar row (#1047). `next_occurrence` names the occurrence a repeating search hit opens: the first at or after the vault clock within a year, else the last before it. |
 | `src/expansion.rs` | the recurrence FOLD — one row per occurrence, and the cap |
 | `src/local.rs` | where an occurrence falls in a stated zone: its local wall clock, the civil days it occupies (a timed end exclusive, an all-day end inclusive), today and now — what the core answers a shell with no calendar |
@@ -25,7 +25,7 @@ Agenda is **4 manifest queries plus the core's by-id `event` read, 7 actions, 17
 
 ## How a command states an event's times
 
-`event.propose`, `event.edit` and `event.edit_occurrence` take `starts`/`ends` in one of four shapes (`crates/vault/src/commands/event.rs`, [R-1135-4-3](../../../docs/decisions.md#lane-4--agenda-1135)):
+`event.propose`, `event.edit` and `event.edit_occurrence` take `starts`/`ends` in one of four shapes (`crates/vault/src/commands/event.rs`, [R-1135-4-3](../../../docs/decisions.md#agenda)):
 
 | Input | `starts` / `ends` | Stored |
 | --- | --- | --- |
@@ -34,7 +34,7 @@ Agenda is **4 manifest queries plus the core's by-id `event` read, 7 actions, 17
 | `timing: "floating"` | a wall clock, no zone | verbatim: 09:00 wherever the member is |
 | `timing: "all-day"` | dates; `ends` is the LAST day | verbatim |
 
-An instant with no zone, an unknown zone and a wall clock the zone skips are refused; one it repeats takes the earlier instant. A timed end must not precede its start. A series' days are overridden by `event.edit_occurrence` (`override`, `skip`, `restore`; scope `occurrence` or `future`, [R-1135-4-1](../../../docs/decisions.md#lane-4--agenda-1135)), keyed by the series-local wall clock.
+An instant with no zone, an unknown zone and a wall clock the zone skips are refused; one it repeats takes the earlier instant. A timed end must not precede its start. A series' days are overridden by `event.edit_occurrence` (`override`, `skip`, `restore`; scope `occurrence` or `future`, [R-1135-4-1](../../../docs/decisions.md#agenda)), keyed by the series-local wall clock.
 
 ## The bounds, and where each one is stated
 

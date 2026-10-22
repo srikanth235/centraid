@@ -13,7 +13,7 @@ Docs is 4 queries and 18 actions. This crate is the read plane and the action ta
 
 ## The model Docs reads (#1135)
 
-A document is an `entity` of kind `document` over a `document` row (the blob's hash, its media type, the folder it is filed in); a folder is an `entity` of kind `folder` over a `container` (its `parent_id` is the tree); a star or a label is a `tagged` edge; a past version is a `revision`; the words extracted from the bytes are the blob's `text` derivative. The vault's decisions are [R-1135-5-1 to R-1135-5-19](../../../docs/decisions.md#lane-5--docs-and-photos-1135).
+A document is an `entity` of kind `document` over a `document` row (the blob's hash, its media type, the folder it is filed in); a folder is an `entity` of kind `folder` over a `container` (its `parent_id` is the tree); a star or a label is a `tagged` edge; a past version is a `revision`; the words extracted from the bytes are the blob's `text` derivative. The vault's decisions are [R-1135-5-1 to R-1135-5-19](../../../docs/decisions.md#performance-and-scale).
 
 ## The rulings this crate is shaped by
 
@@ -21,7 +21,7 @@ Every one is an answer to a way this crate could be wrong.
 
 **Identity is the document, never the bytes.** Two documents may legitimately share identical bytes (#352): a `document` row names a `blob`, and nothing in the drive is keyed by the blob. `document.blob` is not unique, where `photo.blob` is.
 
-**The drive's window is by `created_at`** ([R-1135-5-14](../../../docs/decisions.md#lane-5--docs-and-photos-1135)): the newest `limit` documents made, trashed ones included, so a star, a trash or a rename does not move a document in or out of it. A document attached to something and filed in no folder shows only where it is attached (a receipt on a transaction is not in the member's own cabinet); the exclusion runs after the window, so `truncated` is the vault's own cursor and `documents` may hold fewer rows than `window` while it is true. A document opens by id whatever it is attached to.
+**The drive's window is by `created_at`** ([R-1135-5-14](../../../docs/decisions.md#docs)): the newest `limit` documents made, trashed ones included, so a star, a trash or a rename does not move a document in or out of it. A document attached to something and filed in no folder shows only where it is attached (a receipt on a transaction is not in the member's own cabinet); the exclusion runs after the window, so `truncated` is the vault's own cursor and `documents` may hold fewer rows than `window` while it is true. A document opens by id whatever it is attached to.
 
 **The declared window is walked to its stated size (D-1020-DC10).** `MAX_PAGE_ROWS` clamps a page to 500, so asking for the 2,000-row window as one page would answer 500 and discard the cursor that says there are more. `entity.created_at` is `NOT NULL`, so the keyset walk is continuable and the window is walked to the size it names. `tests/year3.rs` states it at 8,000 documents.
 
@@ -29,15 +29,15 @@ Every one is an answer to a way this crate could be wrong.
 
 **Bytes ride the door, never the payload (D-1020-DC4).** `blobText`, `blobUrl` and `stageBlob` are requests; the door is the seat's `centraid://` handler over a content-addressed store. The three executable media types (`text/html`, `application/xhtml+xml`, `image/svg+xml`) are refused at the request, before a door is asked: an uploaded document's bytes were authored by someone else, and served inline they are a stored XSS against the shell (#865). No type is not permission.
 
-**A command claims its bytes** ([R-1135-5-9](../../../docs/decisions.md#lane-5--docs-and-photos-1135)): `upload` is `document.add` over a blob the shell staged (`blob.stage {hash, size}`), `create-text` writes words through the byte store, `replace` puts down new bytes and keeps the old as a `revision`, and `edit` rewrites a text document in place. A followed folder sends records (`follow.files`), and a changed file is a replace.
+**A command claims its bytes** ([R-1135-5-9](../../../docs/decisions.md#the-vault-model)): `upload` is `document.add` over a blob the shell staged (`blob.stage {hash, size}`), `create-text` writes words through the byte store, `replace` puts down new bytes and keeps the old as a `revision`, and `edit` rewrites a text document in place. A followed folder sends records (`follow.files`), and a changed file is a replace.
 
-**Activity is the journal** ([R-1135-5-11](../../../docs/decisions.md#lane-5--docs-and-photos-1135)): the executed commands that named the document, newest first. The journal records the command and not who acted, so the row says what was done and the day.
+**Activity is the journal** ([R-1135-5-11](../../../docs/decisions.md#docs)): the executed commands that named the document, newest first. The journal records the command and not who acted, so the row says what was done and the day.
 
 **Nothing is shared and nothing arrives.** The share fold, the origin plane and the Shared shelf left with the sharing plane ([#1029's scope amendment](https://github.com/srikanth235/centraid/issues/1029#issuecomment-5755559795)).
 
 ## Trash
 
-`entity.trash` stamps `purge_at` thirty days out and `entity.restore` brings a document back until then (it refuses once `purge_at` has passed, [R-1135-5-7](../../../docs/decisions.md#lane-5--docs-and-photos-1135)). **"Delete forever" is `purge` → `entity.purge`, and "Empty trash" is `empty-trash` → `entity.empty_trash`**, which does the same to every trashed document (ruling D-1 of 2026-09-25 in [`docs/decisions.md`](../../../docs/decisions.md)). A purge collects the blobs nothing names any more in its own commit. No sweep runs on the phone, so a document whose window ran out and that nobody purged stays in Trash, unrestorable, until one of the two is chosen. A folder is a holder: trashing one takes the folders and documents under it, and a restore brings back exactly those ([R-1135-5-1](../../../docs/decisions.md#lane-5--docs-and-photos-1135)).
+`entity.trash` stamps `purge_at` thirty days out and `entity.restore` brings a document back until then (it refuses once `purge_at` has passed, [R-1135-5-7](../../../docs/decisions.md#the-vault-model)). **"Delete forever" is `purge` → `entity.purge`, and "Empty trash" is `empty-trash` → `entity.empty_trash`**, which does the same to every trashed document (ruling D-1 of 2026-09-25 in [`docs/decisions.md`](../../../docs/decisions.md)). A purge collects the blobs nothing names any more in its own commit. No sweep runs on the phone, so a document whose window ran out and that nobody purged stays in Trash, unrestorable, until one of the two is chosen. A folder is a holder: trashing one takes the folders and documents under it, and a restore brings back exactly those ([R-1135-5-1](../../../docs/decisions.md#the-vault-model)).
 
 ## The phone's app query (#1046)
 
