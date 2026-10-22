@@ -787,3 +787,18 @@ fn a_filled_pass_needs_fewer_than_three_documents_and_a_neighbour_with_more() {
     // A word the vault does not hold is corrected as on any pass.
     assert_eq!(even.correct_thin("bidget").as_deref(), Some("budget"));
 }
+
+#[test]
+fn a_one_character_word_beside_longer_words_is_a_whole_word() {
+    let world = World::new();
+    world.note("whole", "Plan", "a big tree");
+    world.note("prefix", "Plan", "apple tree");
+    assert_eq!(ids(&world.ask(&["note"], "a tree")), ["whole"]);
+    assert_eq!(ids(&world.ask(&["note"], "tree a")), ["whole"]);
+    let mut both = ids(&world.ask(&["note"], "tree"))
+        .into_iter()
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
+    both.sort();
+    assert_eq!(both, ["prefix", "whole"]);
+}

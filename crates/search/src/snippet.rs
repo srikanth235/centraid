@@ -15,16 +15,22 @@ const AFTER: usize = 8;
 /// `None` when no word matches (the hit was on the title).
 ///
 /// The match is by prefix and without regard to case, because that is how the
-/// query was asked ([`crate::match_expression`]: every word a quoted prefix).
+/// query was asked ([`crate::match_expression`]: every word a quoted prefix, but a
+/// word of one character, which is a whole word).
 #[must_use]
 pub fn snippet_of(text: &str, tokens: &[String]) -> Option<String> {
     let words: Vec<&str> = text.split_whitespace().collect();
     let hit = |word: &str| {
         let folded = fold(word);
         !folded.is_empty()
-            && tokens
-                .iter()
-                .any(|token| folded.starts_with(token.as_str()))
+            && tokens.iter().any(|token| {
+                // A one-character token is a whole word, as the query asked for it.
+                if token.chars().count() < 2 {
+                    folded == *token
+                } else {
+                    folded.starts_with(token.as_str())
+                }
+            })
     };
     let first = words.iter().position(|word| hit(word))?;
     let start = first.saturating_sub(BEFORE);
@@ -91,5 +97,11 @@ mod tests {
             Some("We went to the ⟦(cabin),⟧ twice.")
         );
         assert_eq!(snippet_of("nothing here", &tokens(&["cabin"])), None);
+    }
+
+    #[test]
+    fn a_one_character_token_marks_only_the_whole_word() {
+        let found = snippet_of("an apple and a pear", &tokens(&["a", "pear"])).expect("a hit");
+        assert_eq!(found, "an apple and ⟦a⟧ ⟦pear⟧");
     }
 }

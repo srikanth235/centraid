@@ -36,6 +36,11 @@ pub const MIN_WORD_LETTERS: usize = 2;
 
 /// Owner-typed words → an FTS5 MATCH expression.
 ///
+/// A word of [`MIN_WORD_LETTERS`] or more is a quoted prefix phrase; a word of one
+/// character beside such words is a quoted whole word, so typing `a b` after
+/// `report` narrows to the documents with the word `a` and not to every word that
+/// starts with it.
+///
 /// The words are [`centraid_apps_kit::spelling::words`] — **one tokenization**,
 /// shared with the correction (`Search::correct`), so the word a member sees
 /// corrected is the word the index was asked for.
@@ -56,7 +61,15 @@ pub fn match_expression(query: &str) -> Result<String, SearchError> {
     }
     Ok(tokens
         .iter()
-        .map(|token| format!("\"{token}\"*"))
+        .map(|token| {
+            // A one-character word beside longer ones is a WHOLE word: `a*` has no
+            // index of its own and merges every term that begins with `a`.
+            if token.chars().count() < MIN_WORD_LETTERS {
+                format!("\"{token}\"")
+            } else {
+                format!("\"{token}\"*")
+            }
+        })
         .collect::<Vec<String>>()
         .join(" "))
 }
@@ -108,7 +121,8 @@ mod tests {
         }
         // One word of two letters is a search, and so is a long word beside a short.
         assert_eq!(match_expression("ca").unwrap(), "\"ca\"*");
-        assert_eq!(match_expression("a bc").unwrap(), "\"a\"* \"bc\"*");
+        assert_eq!(match_expression("a bc").unwrap(), "\"a\" \"bc\"*");
+        assert_eq!(match_expression("bc d").unwrap(), "\"bc\"* \"d\"");
     }
 
     #[test]
@@ -151,6 +165,6 @@ mod tests {
     /// same property v0's `\p{L}\p{N}` class has.
     #[test]
     fn a_non_ascii_word_survives() {
-        assert_eq!(match_expression("café Ω").unwrap(), "\"café\"* \"Ω\"*");
+        assert_eq!(match_expression("café Ω").unwrap(), "\"café\"* \"Ω\"");
     }
 }
