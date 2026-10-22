@@ -240,7 +240,7 @@ fn a_cursor_walk_over_tied_capture_times_repeats_no_row_and_loses_at_most_a_tie_
 fn the_duplicates_are_the_seeded_families_and_no_photograph_crosses_one() {
     let world = seeded(SMALL);
     let clusters = read(&world, |door| {
-        duplicate_clusters(door, media_cluster).expect("the duplicates read")
+        duplicate_clusters(door, 0, media_cluster).expect("the duplicates read")
     });
     assert_eq!(clusters.len(), SMALL.near_duplicate_families);
     for cluster in &clusters {
@@ -327,7 +327,7 @@ fn measure(label: &str, shape: Year3PhotosShape) {
 
     let started = Instant::now();
     let clusters = read(&world, |door| {
-        duplicate_clusters(door, media_cluster).expect("the duplicates read")
+        duplicate_clusters(door, 0, media_cluster).expect("the duplicates read")
     });
     eprintln!(
         "{label}: duplicates clustered {} families from the first {CLUSTER_ROWS} fingerprints in {:?}",

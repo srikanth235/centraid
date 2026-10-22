@@ -204,7 +204,7 @@ fn duplicates_are_clustered_at_read_over_live_photographs_only() {
     let d = w.photo("d", json!({ "phash": "ffff0000ffff0003" }));
     w.ok("entity.trash", json!({ "id": d }));
     let clusters = w.read(|door| {
-        duplicate_clusters(door, |prints: &[Fingerprint]| {
+        duplicate_clusters(door, 0, |prints: &[Fingerprint]| {
             let rows: Vec<centraid_media::duplicates::Fingerprint> = prints
                 .iter()
                 .map(|p| centraid_media::duplicates::Fingerprint {

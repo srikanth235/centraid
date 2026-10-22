@@ -25,10 +25,16 @@
 //! a coordinate-labelled place (the title a photograph's coordinates found it
 //! under, before anyone named it) cannot leak its digits through the phrase.
 
+use std::collections::BTreeMap;
+
 use centraid_apps_kit::error::KitResult;
 use centraid_apps_kit::reads::{FanOutBound, PageDoor, Read, read_pages};
 use centraid_apps_kit::row::{Cell, Row, text_of};
+use centraid_apps_kit::rules::Standing;
 use centraid_apps_kit::statement::{PageBindValue, PageOrder, PageQuery};
+
+use crate::cells::{PhotoCell, read_cells};
+use crate::overview::Census;
 
 /// Must stay byte-identical to `shared-copy.ts`'s `PLACE_UNNAMED`.
 pub const PLACE_NO_NAME: &str = "A place with no name yet";
@@ -339,6 +345,96 @@ pub fn place_phrase(input: &PhraseInput<'_>) -> PlacePhrase {
 pub fn exact_location(lat: Option<f64>, lng: Option<f64>) -> Option<String> {
     let (lat, lng) = (lat?, lng?);
     (lat.is_finite() && lng.is_finite()).then(|| format!("{lat:.5}, {lng:.5}"))
+}
+
+/// One place on the Places screen and in the place picker.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PlaceCard {
+    pub place: PlaceRow,
+    /// The member's own name for it; `None` for a title that is only coordinates.
+    pub name: Option<String>,
+    /// How to say where it is: the name, `near <city>`, a bearing from the nearest
+    /// named place, or "a place with no name yet". Never digits.
+    pub phrase: PlacePhrase,
+    /// Live photographs in it (zero for a place nothing live is in).
+    pub count: usize,
+    /// Its newest live photograph.
+    pub cover: Option<PhotoCell>,
+}
+
+/// What `places` answers.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct PlacesData {
+    /// Every place that is not in the trash, the ones with photographs first (most
+    /// photographs first), then by name.
+    pub places: Vec<PlaceCard>,
+    /// Live photographs in no place: the "no location yet" shelf.
+    pub unplaced: usize,
+}
+
+/// The phrase and the printable name of a place, given the named places around it.
+#[must_use]
+pub fn describe(place: &PlaceRow, anchors: &[NamedPlace]) -> (Option<String>, PlacePhrase) {
+    let phrase = place_phrase(&PhraseInput {
+        place_name: Some(&place.name),
+        gazetteer_name: place.gazetteer.as_deref(),
+        lat: place.lat,
+        lng: place.lng,
+        anchors,
+    });
+    (printable_name(Some(&place.name)).map(str::to_owned), phrase)
+}
+
+/// Read the places with their live counts and covers.
+///
+/// `now_ms` counts the trash's days on a cover; it is injected.
+///
+/// # Errors
+/// The door's refusal, or a walk past the library's bound.
+pub fn load_places(door: &dyn PageDoor, now_ms: i64) -> KitResult<PlacesData> {
+    let standing = Standing::read(door)?;
+    let census = Census::read(door, &standing)?;
+    let places = read_places(door)?;
+    let anchors = NamedPlace::anchors(&places);
+    let covers: Vec<String> = places
+        .iter()
+        .filter_map(|place| census.newest_in_place.get(&place.place_id))
+        .map(|(_, id)| id.clone())
+        .collect();
+    let mut cells: BTreeMap<String, PhotoCell> = read_cells(door, &standing, &covers, now_ms)?;
+    let mut cards: Vec<PlaceCard> = places
+        .into_iter()
+        .map(|place| {
+            let (name, phrase) = describe(&place, &anchors);
+            let cover = census
+                .newest_in_place
+                .get(&place.place_id)
+                .and_then(|(_, id)| cells.remove(id));
+            PlaceCard {
+                count: census.per_place.get(&place.place_id).copied().unwrap_or(0),
+                place,
+                name,
+                phrase,
+                cover,
+            }
+        })
+        .collect();
+    cards.sort_by(|left, right| {
+        right
+            .count
+            .cmp(&left.count)
+            .then_with(|| {
+                left.phrase
+                    .text
+                    .to_lowercase()
+                    .cmp(&right.phrase.text.to_lowercase())
+            })
+            .then_with(|| left.place.place_id.cmp(&right.place.place_id))
+    });
+    Ok(PlacesData {
+        places: cards,
+        unplaced: census.unplaced,
+    })
 }
 
 #[cfg(test)]

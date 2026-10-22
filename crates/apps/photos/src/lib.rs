@@ -42,11 +42,13 @@
 
 pub mod cells;
 pub mod commands;
+pub mod detail;
 pub mod duplicates;
 pub mod manifest;
 pub mod overview;
 pub mod places;
 pub mod queries;
+pub mod search;
 pub mod shelf;
 
 pub use commands::{ACTIONS, Commands, Invocation, Outcome};

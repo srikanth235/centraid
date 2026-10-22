@@ -7,7 +7,7 @@
 mod common;
 
 use centraid_apps_photos::shelf::{Shelf, ShelfCursor, ShelfData, ShelfInput, load_shelf};
-use common::World;
+use common::{World, library};
 use serde_json::json;
 
 const NOW: i64 = 1_767_312_000_000; // 2026-01-02
@@ -45,93 +45,6 @@ fn walk(w: &World, which: &Shelf, limit: usize) -> Vec<String> {
             Some(next) => after = Some(next),
             None => return out,
         }
-    }
-}
-
-struct Library {
-    w: World,
-    old: String,
-    new: String,
-    undated_a: String,
-    undated_b: String,
-    archived: String,
-    trashed: String,
-    both: String,
-    movie: String,
-    original: String,
-    edit: String,
-    album: String,
-    place_a: String,
-    place_b: String,
-}
-
-fn library() -> Library {
-    let w = World::new();
-    let old = w.photo(
-        "old",
-        json!({ "taken_at": "2025-01-01T00:00:00.000Z", "title": "Old", "lat": 37.7955, "lon": -122.3937 }),
-    );
-    let new = w.photo(
-        "new",
-        json!({ "taken_at": "2025-06-01T00:00:00.000Z", "lat": 37.7955, "lon": -122.3937 }),
-    );
-    let undated_a = w.photo("undated-a", json!({}));
-    let undated_b = w.photo("undated-b", json!({}));
-    let archived = w.photo(
-        "archived",
-        json!({ "taken_at": "2025-07-01T00:00:00.000Z" }),
-    );
-    let trashed = w.photo("trashed", json!({ "taken_at": "2025-08-01T00:00:00.000Z" }));
-    let both = w.photo("both", json!({ "taken_at": "2025-09-01T00:00:00.000Z" }));
-    let movie = w.photo(
-        "movie",
-        json!({ "taken_at": "2025-05-01T00:00:00.000Z", "form": "video", "media_type": "video/mp4", "duration_s": 3.5 }),
-    );
-    let original = w.photo(
-        "original",
-        json!({ "taken_at": "2025-04-01T00:00:00.000Z", "burst": "b1" }),
-    );
-    let edit = w.photo(
-        "edit",
-        json!({ "taken_at": "2025-04-01T00:00:00.000Z", "burst": "b1", "edited_from": original, "lat": 48.8584, "lon": 2.2945 }),
-    );
-    let album = w.album("Summer");
-    for member in [&old, &archived, &trashed, &undated_a] {
-        w.ok(
-            "edge.add",
-            json!({ "from": album, "rel": "contains", "to": member }),
-        );
-    }
-    w.ok("flag.set", json!({ "id": new, "flag": "starred" }));
-    w.ok("flag.set", json!({ "id": archived, "flag": "archived" }));
-    w.ok("flag.set", json!({ "id": both, "flag": "archived" }));
-    w.ok("entity.trash", json!({ "id": trashed }));
-    w.ok("entity.trash", json!({ "id": both }));
-    let places = w.read(|door| centraid_apps_photos::places::read_places(door).expect("places"));
-    let place_of = |lat: f64| {
-        places
-            .iter()
-            .find(|place| place.lat.is_some_and(|l| (l - lat).abs() < 0.01))
-            .expect("a place")
-            .place_id
-            .clone()
-    };
-    let (place_a, place_b) = (place_of(37.7955), place_of(48.8584));
-    Library {
-        w,
-        old,
-        new,
-        undated_a,
-        undated_b,
-        archived,
-        trashed,
-        both,
-        movie,
-        original,
-        edit,
-        album,
-        place_a,
-        place_b,
     }
 }
 

@@ -393,33 +393,46 @@ fn page_members(
 /// # Errors
 /// The door's refusal, or a walk past the library's bound.
 pub fn load_shelf(door: &dyn PageDoor, input: &ShelfInput, now_ms: i64) -> KitResult<ShelfData> {
-    let want = input.limit.clamp(1, SHELF_MAX);
     let standing = Standing::read(door)?;
+    shelf_page(door, &standing, input, now_ms, input.after.is_none())
+}
+
+/// [`load_shelf`] under a verdict the caller already holds, and with the total only
+/// when asked for (a cover wants the first cell and not the count).
+///
+/// # Errors
+/// The door's refusal, or a walk past the library's bound.
+pub fn shelf_page(
+    door: &dyn PageDoor,
+    standing: &Standing,
+    input: &ShelfInput,
+    now_ms: i64,
+    with_total: bool,
+) -> KitResult<ShelfData> {
+    let want = input.limit.clamp(1, SHELF_MAX);
     let shelf = &input.shelf;
     let by_edge = matches!(
         shelf,
         Shelf::Favorites | Shelf::Archive | Shelf::Trash | Shelf::Album(_)
     );
     let (page, more, total) = if by_edge {
-        let all = members(door, shelf, &standing)?;
+        let all = members(door, shelf, standing)?;
         let (page, more) = page_members(
             &all,
             input.after.as_ref(),
             want,
             matches!(shelf, Shelf::Trash),
         );
-        (page, more, input.after.is_none().then_some(all.len()))
+        (page, more, with_total.then_some(all.len()))
     } else {
-        let (page, more) = walk(door, shelf, &standing, input.after.as_ref(), want)?;
-        let total = input
-            .after
-            .is_none()
-            .then(|| count_walk(door, shelf, &standing))
+        let (page, more) = walk(door, shelf, standing, input.after.as_ref(), want)?;
+        let total = with_total
+            .then(|| count_walk(door, shelf, standing))
             .transpose()?;
         (page, more, total)
     };
     let ids: Vec<String> = page.iter().map(|(id, _)| id.clone()).collect();
-    let mut cells: BTreeMap<String, PhotoCell> = read_cells(door, &standing, &ids, now_ms)?;
+    let mut cells: BTreeMap<String, PhotoCell> = read_cells(door, standing, &ids, now_ms)?;
     let cells: Vec<PhotoCell> = ids.iter().filter_map(|id| cells.remove(id)).collect();
     let next = if more {
         page.last().map(|(id, key)| ShelfCursor {
