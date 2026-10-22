@@ -29,6 +29,7 @@ package centraid.core.v1;
 
 import "centraid/core/v1/agenda_screens.proto";
 import "centraid/core/v1/kit_screens.proto";
+import "centraid/core/v1/notes_screens.proto";
 import "centraid/core/v1/route.proto";
 
 // ---------------------------------------------------------------------------
@@ -172,6 +173,10 @@ message ScreenEvent {
     TodoProjectEvent todo_project = 104;
     TodoDetailEvent todo_detail = 105;
     TodoCatchUpEvent todo_catch_up = 106;
+    // ---- notes (600-699) ----
+    NotesHomeEvent notes_home = 600;
+    NotesEditorEvent notes_editor = 601;
+    NotesHistoryEvent notes_history = 602;
     // ---- the kit (900-999) ----
     TrashEvent trash = 900;
   }
@@ -209,6 +214,10 @@ message ViewState {
     TodoProjectState todo_project = 104;
     TodoDetailState todo_detail = 105;
     TodoCatchUpState todo_catch_up = 106;
+    // ---- notes (600-699) ----
+    NotesHomeState notes_home = 600;
+    NotesEditorState notes_editor = 601;
+    NotesHistoryState notes_history = 602;
     // ---- the kit (900-999) ----
     TrashView trash = 900;
   }

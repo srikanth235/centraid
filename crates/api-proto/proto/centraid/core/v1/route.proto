@@ -30,6 +30,10 @@ message Route {
     TodoProjectRoute todo_project = 104;
     TodoDetailRoute todo_detail = 105;
     TodoCatchUpRoute todo_catch_up = 106;
+    // ---- notes (600-699) ----
+    NotesHomeRoute notes_home = 600;
+    NotesEditorRoute notes_editor = 601;
+    NotesHistoryRoute notes_history = 602;
     // ---- the kit (900-999) ----
     TrashRoute trash = 900;
   }
@@ -114,6 +118,42 @@ message TodoDetailRoute {
 
 // `agenda.catch_up`: the Overdue work, piled.
 message TodoCatchUpRoute {}
+
+// ---------------------------------------------------------------------------
+// Notes
+// ---------------------------------------------------------------------------
+
+// Which of the band's places `notes.home` shows. Notes · Notebooks · Journal
+// are one screen, so a tap on the band changes this value and no stack entry.
+enum NotesPlace {
+  NOTES_PLACE_UNSPECIFIED = 0;
+  NOTES_PLACE_NOTES = 1;
+  NOTES_PLACE_NOTEBOOKS = 2;
+  NOTES_PLACE_JOURNAL = 3;
+}
+
+// `notes.home`: UNSPECIFIED is the Notes place. A notebook (or Unfiled) filters
+// the Notes place.
+message NotesHomeRoute {
+  NotesPlace place = 1;
+  string notebook_id = 2;
+  string notebook_name = 3;
+  bool unfiled_only = 4;
+}
+
+// `notes.editor`: an empty `note_id` with `is_new` opens an empty draft, whose
+// first save creates the note under the id the vault mints.
+message NotesEditorRoute {
+  string note_id = 1;
+  bool is_new = 2;
+}
+
+// `notes.history`: one note's versions. The title rides along so the back
+// control has words before the read lands.
+message NotesHistoryRoute {
+  string note_id = 1;
+  string note_title = 2;
+}
 
 // ---------------------------------------------------------------------------
 // The kit

@@ -52,6 +52,10 @@ pub trait Draft: Clone + PartialEq {
     /// The action naming ONLY what changed against `baseline`, or `None` when
     /// nothing did. App-owned: only the app knows its action's fields.
     fn request(&self, baseline: &Self) -> Option<wire::ActRequest>;
+
+    /// A save of this draft committed, with the action's output (JSON). A draft
+    /// whose save CREATED its row learns the id here and is an edit from now on.
+    fn committed(&mut self, _output: &[u8]) {}
 }
 
 /// One autosaving editor's phase, seqs, draft and baseline.
@@ -198,6 +202,9 @@ impl<D: Draft> Autosave<D> {
             self.failure = Some(settled.refusal);
             return false;
         }
+        let mut draft = draft;
+        draft.committed(&settled.output);
+        self.draft = Some(draft.clone());
         self.baseline = Some(draft);
         self.saved_seq = self.saving_seq;
         self.failure = None;

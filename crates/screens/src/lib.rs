@@ -8,6 +8,7 @@ pub mod agenda;
 pub mod catalog;
 pub mod field;
 pub mod kit;
+pub mod notes;
 pub mod proof;
 pub mod registry;
 pub mod runtime;
@@ -27,12 +28,17 @@ pub fn standard() -> Runtime {
     Runtime::new(
         Registry::default()
             .with(proof::NAME, proof::build)
-            .merge(agenda::registry()),
+            .merge(agenda::registry())
+            .merge(notes::registry()),
         vec![
             ("proof".to_owned(), proof::route()),
             (
                 agenda::TAB.to_owned(),
                 agenda::routes::home(centraid_api_proto::core_v1::AgendaDestination::Day, ""),
+            ),
+            (
+                notes::TAB.to_owned(),
+                notes::routes::home(centraid_api_proto::core_v1::NotesPlace::Notes, "", "", false),
             ),
         ],
     )
