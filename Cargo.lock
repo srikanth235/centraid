@@ -644,7 +644,6 @@ dependencies = [
  "hmac",
  "image",
  "prost",
- "rusqlite",
  "rustix",
  "serde",
  "serde_json",
