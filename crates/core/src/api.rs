@@ -388,13 +388,13 @@ fn output_name(entry: &str) -> &str {
 /// only producer of change events was the seat's applier — so on a phone with
 /// no seat nothing ever pushed one, and every screen was a poll or a lie.
 ///
-/// **`invoke_key` is the shell's correlation key, and nothing remembers it.**
+/// **On this path `invoke_key` is the shell's correlation key, and nothing remembers it.**
 /// The request must carry one — it is how a shell pairs this answer with the
 /// write that caused it (`ScreenWrites.settled`) — but it stops here: the vault
-/// is handed a name and an input, and there is no replay ledger (#1029 §1,
-/// R-1088-12). The same key sent twice runs the command twice
+/// is handed a name and an input. The same key sent twice runs the command twice
 /// (`tests/replay.rs` pins it), so a write a shell may re-offer is idempotent by
-/// its own content or by an id the phone minted.
+/// its own content or by an id the phone minted. The write that is remembered is
+/// `act` (`crate::act`), which hands the commit its key to record.
 pub fn invoke(
     vault: &Vault,
     registry: &Registry,
@@ -402,7 +402,9 @@ pub fn invoke(
     request: &wire::Command,
     changes: &crate::events::ChangeFeed,
 ) -> Result<wire::CommandOutcome> {
-    wire_outcome(invoke_raw(vault, registry, principal, request, changes)?)
+    wire_outcome(invoke_raw(
+        vault, registry, principal, request, changes, None,
+    )?)
 }
 
 /// THE ONE WRITE PATH OF A COMMAND THE MEMBER OR THE CHAT MAKES (#1135): a secret typed into the
@@ -418,6 +420,7 @@ pub(crate) fn command(
     principal: &centraid_vault::Principal,
     request: &wire::Command,
     changes: &crate::events::ChangeFeed,
+    keyed: Option<&centraid_vault::journal::KeyMark<'_>>,
 ) -> Result<centraid_vault::commands::CommandOutcome> {
     match crate::locker::phone::seal_command(vault, locker, request)? {
         Some(input) => invoke_raw(
@@ -429,8 +432,9 @@ pub(crate) fn command(
                 ..request.clone()
             },
             changes,
+            keyed,
         ),
-        None => invoke_raw(vault, registry, principal, request, changes),
+        None => invoke_raw(vault, registry, principal, request, changes, keyed),
     }
 }
 
@@ -467,6 +471,7 @@ pub(crate) fn invoke_raw(
     principal: &centraid_vault::Principal,
     request: &wire::Command,
     changes: &crate::events::ChangeFeed,
+    keyed: Option<&centraid_vault::journal::KeyMark<'_>>,
 ) -> Result<centraid_vault::commands::CommandOutcome> {
     if request.invoke_key.is_empty() {
         // REQUIRED, unlike v0, where the fallback was the call's ORDINAL and
@@ -488,7 +493,12 @@ pub(crate) fn invoke_raw(
         })?
     };
 
-    let outcome = vault.execute(registry, principal, &Command::new(&request.name, input))?;
+    let outcome = vault.execute_keyed(
+        registry,
+        principal,
+        &Command::new(&request.name, input),
+        keyed,
+    )?;
     // AFTER THE COMMIT, because that is when the guard reads its census, and a
     // screen redrawn from a transaction that could still roll back is the
     // failure this ordering exists to prevent.

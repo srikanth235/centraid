@@ -132,14 +132,49 @@ pub struct Entry<'a> {
     pub outcome: Outcome,
     /// The sentence a refusal said, or the error a failure ended in.
     pub detail: Option<&'a str>,
+    /// The `act` key this run answers, and a digest of what it asked; only an
+    /// executed run carries one.
+    pub keyed: Option<&'a KeyMark<'a>>,
+}
+
+/// An `act`'s `invoke_key` and a digest of the request it came with: what the
+/// commit records so the same delivery is recognised after a restart.
+#[derive(Debug, Clone, Copy)]
+pub struct KeyMark<'a> {
+    pub key: &'a str,
+    pub asked: &'a str,
+}
+
+/// What a key remembers: the run it named and the digest of what it asked.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Recalled {
+    pub seq: i64,
+    pub asked: String,
+}
+
+/// The run an `act` key already names, if the journal holds one.
+pub fn recall(connection: &Connection, key: &str) -> Result<Option<Recalled>> {
+    use rusqlite::OptionalExtension as _;
+    Ok(connection
+        .query_row(
+            "SELECT seq, asked FROM journal WHERE invoke_key = ?1",
+            [key],
+            |row| {
+                Ok(Recalled {
+                    seq: row.get(0)?,
+                    asked: row.get(1)?,
+                })
+            },
+        )
+        .optional()?)
 }
 
 /// Write one row.
 pub fn write(connection: &Connection, entry: &Entry<'_>) -> Result<()> {
     let redacted = redact_command_input(entry.input, entry.sealed_keys);
     connection.execute(
-        "INSERT INTO journal (seq, at, command, input, outcome, detail)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        "INSERT INTO journal (seq, at, command, input, outcome, detail, invoke_key, asked)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
         rusqlite::params![
             entry.seq,
             entry.at,
@@ -147,6 +182,8 @@ pub fn write(connection: &Connection, entry: &Entry<'_>) -> Result<()> {
             serde_json::to_string(&redacted).unwrap_or_else(|_| "{}".to_owned()),
             entry.outcome.as_str(),
             entry.detail,
+            entry.keyed.map(|mark| mark.key),
+            entry.keyed.map(|mark| mark.asked),
         ],
     )?;
     Ok(())

@@ -334,6 +334,45 @@ fn every_app_takes_an_act_and_refuses_a_bad_input_with_its_check() {
     ));
 }
 
+/// THE MANIFEST DECLARES WHICH IDS THE CORE MINTS (`"x-minted": true`): Locker's `item_id` is
+/// sealed into the row, so it must exist before the write. Left out, the core mints one; stated,
+/// the caller's stays.
+#[test]
+fn an_id_the_manifest_marks_minted_is_the_cores_when_the_caller_states_none() {
+    let sample = sample();
+    let minted = act_with(
+        &sample,
+        "locker",
+        "add-item",
+        "mint-1",
+        &[("type", text("note")), ("title", text("Minted"))],
+    )
+    .expect("an act");
+    assert_eq!(
+        minted.status,
+        wire::ActStatus::Executed as i32,
+        "{minted:?}"
+    );
+    let output: serde_json::Value = serde_json::from_slice(&minted.output).expect("JSON");
+    let id = output["item_id"].as_str().expect("an item id");
+    assert!(!id.is_empty());
+
+    let stated = act_with(
+        &sample,
+        "locker",
+        "add-item",
+        "mint-2",
+        &[
+            ("item_id", text("my-own-id")),
+            ("type", text("note")),
+            ("title", text("Stated")),
+        ],
+    )
+    .expect("an act");
+    let output: serde_json::Value = serde_json::from_slice(&stated.output).expect("JSON");
+    assert_eq!(output["item_id"], "my-own-id");
+}
+
 #[test]
 fn the_same_invoke_key_runs_once() {
     let sample = sample();
@@ -346,8 +385,10 @@ fn the_same_invoke_key_runs_once() {
 
     let second = ask("tap-1", "Dedupe me");
     assert!(second.replayed, "the second tap is the first's answer");
+    assert_eq!(second.status, wire::ActStatus::Executed as i32);
+    // the run it named; the journal keeps evidence and not answers, so no output rides it
     assert_eq!(second.invocation_id, first.invocation_id);
-    assert_eq!(second.output, first.output);
+    assert!(second.output.is_empty());
     assert_eq!(
         count(&sample, "title = ?", "Dedupe me"),
         1,
@@ -376,21 +417,31 @@ fn the_same_invoke_key_runs_once() {
 #[test]
 fn the_same_invoke_key_runs_once_across_a_restart() {
     let sample = sample();
-    let first = act_with(&sample, "tasks", "add", "tap-restart", &[("title", text("Once"))])
-        .expect("an act");
+    let first = act_with(
+        &sample,
+        "tasks",
+        "add",
+        "tap-restart",
+        &[("title", text("Once"))],
+    )
+    .expect("an act");
     assert_eq!(first.status, wire::ActStatus::Executed as i32);
     assert!(!first.replayed);
 
     sample.handle.close();
     let reopened = centraid_core::Core::open(centraid_core::CoreConfig::new(sample.vault_path()))
         .expect("the vault opens again");
-    let second = act_on(&reopened, "tasks", "add", "tap-restart", &[("title", text("Once"))])
-        .expect("an act");
+    let second = act_on(
+        &reopened,
+        "tasks",
+        "add",
+        "tap-restart",
+        &[("title", text("Once"))],
+    )
+    .expect("an act");
     assert!(second.replayed, "the restarted core remembers the key");
     assert_eq!(second.status, wire::ActStatus::Executed as i32);
     assert_eq!(second.invocation_id, first.invocation_id);
-    assert_eq!(second.output, first.output);
-    assert_eq!(second.inverse, first.inverse, "and what takes it back");
     assert!(matches!(
         act_on(&reopened, "tasks", "add", "tap-restart", &[("title", text("Another"))]),
         Err(CoreError::InvalidRequest { detail }) if detail.contains("different act")
@@ -460,12 +511,12 @@ fn a_frozen_vault_refuses_every_write_and_names_the_check() {
     assert_eq!(replay.status, wire::ActStatus::Executed as i32);
 
     // AND THE CHAT'S CONFIRMED CARD IS NO WAY AROUND IT.
-    use centraid_assist::native::Door as _;
+    use centraid_assist::native::{Call, Door as _};
     let door = sample.handle.assist_door();
     let ran = door
-        .run_keyed(
+        .act_keyed(
             "card:1",
-            "task.add",
+            &Call::bare("task.add"),
             serde_json::json!({"title": "Through the chat"}),
         )
         .expect("a refusal is an answer");
