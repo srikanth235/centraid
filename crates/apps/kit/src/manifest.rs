@@ -1237,7 +1237,7 @@ mod tests {
             ("notes", 17, 6),
             ("people", 25, 5),
             ("photos", 19, 3),
-            ("tasks", 15, 2),
+            ("tasks", 15, 6),
         ];
         let mut total = (0, 0);
         let mut orders = BTreeSet::new();

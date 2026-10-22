@@ -42,11 +42,11 @@ mod tests {
     }
 
     #[test]
-    fn it_declares_two_queries_and_fifteen_actions() {
+    fn it_declares_six_queries_and_fifteen_actions() {
         let manifest = manifest();
-        assert_eq!(manifest.queries.len(), 2);
+        assert_eq!(manifest.queries.len(), 6);
         assert_eq!(manifest.actions.len(), 15);
-        for name in ["board", "search"] {
+        for name in ["board", "search", "task", "projects", "catch-up", "trash"] {
             assert!(manifest.query(name).is_some(), "no query {name}");
         }
     }
