@@ -327,12 +327,13 @@ impl Handle {
             .read(|connection| {
                 use centraid_search::Search as _;
                 let answer =
-                    centraid_search::sqlite::SqliteDoor::open(connection).and_then(|door| {
-                        door.query(
-                            &centraid_search::Principal::Owner,
-                            &centraid_search::SearchRequest::new(entity, text, limit),
-                        )
-                    });
+                    centraid_search::sqlite::SqliteDoor::open(connection, self.vault.words())
+                        .and_then(|door| {
+                            door.query(
+                                &centraid_search::Principal::Owner,
+                                &centraid_search::SearchRequest::new(entity, text, limit),
+                            )
+                        });
                 Ok(answer)
             })
             .map_err(|error| error.to_string())?

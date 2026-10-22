@@ -218,7 +218,8 @@ fn search_answers_the_live_event_with_its_snippet_and_not_the_trashed_one() {
         .vault
         .read(|connection| {
             let door = TestDoor::new(connection);
-            let search = SqliteDoor::open(connection).expect("the FTS door opens");
+            let search =
+                SqliteDoor::open(connection, scratch.vault.words()).expect("the FTS door opens");
             Ok(
                 load_search_term(&door, &search, &SearchPrincipal::Owner, "cabin", 20)
                     .expect("search reads"),
@@ -250,7 +251,8 @@ fn search_answers_the_live_event_with_its_snippet_and_not_the_trashed_one() {
         .vault
         .read(|connection| {
             let door = TestDoor::new(connection);
-            let search = SqliteDoor::open(connection).expect("the FTS door opens");
+            let search =
+                SqliteDoor::open(connection, scratch.vault.words()).expect("the FTS door opens");
             Ok(
                 load_search_term(&door, &search, &SearchPrincipal::Owner, "---", 20)
                     .expect("search reads"),

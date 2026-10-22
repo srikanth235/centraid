@@ -24,6 +24,16 @@ use crate::SearchError;
 /// ([`MAX_WORDS`]), because the words a query is read as are the kit's too.
 pub const MAX_MATCH_TOKENS: usize = MAX_WORDS;
 
+/// The fewest characters a query's longest word must have to be a search.
+///
+/// A one-letter prefix has no index of its own (the index keeps two-letter
+/// prefixes, `prefix = '2'`), so `a*` merges every term that begins with `a`:
+/// seconds in a vault of years, to answer a question nobody has asked yet. A
+/// query whose words are ALL one character is therefore answered as the empty
+/// query is, [`SearchError::NoSearchableWords`], which every surface already
+/// draws as its empty-term answer.
+pub const MIN_WORD_LETTERS: usize = 2;
+
 /// Owner-typed words → an FTS5 MATCH expression.
 ///
 /// The words are [`centraid_apps_kit::spelling::words`] — **one tokenization**,
@@ -32,10 +42,14 @@ pub const MAX_MATCH_TOKENS: usize = MAX_WORDS;
 ///
 /// # Errors
 ///
-/// [`SearchError::NoSearchableWords`] when nothing searchable survives.
+/// [`SearchError::NoSearchableWords`] when nothing searchable survives: no word
+/// at all, or every word one character ([`MIN_WORD_LETTERS`]).
 pub fn match_expression(query: &str) -> Result<String, SearchError> {
     let tokens: Vec<String> = words(query);
-    if tokens.is_empty() {
+    if !tokens
+        .iter()
+        .any(|token| token.chars().count() >= MIN_WORD_LETTERS)
+    {
         return Err(SearchError::NoSearchableWords {
             query: query.to_owned(),
         });
@@ -45,6 +59,16 @@ pub fn match_expression(query: &str) -> Result<String, SearchError> {
         .map(|token| format!("\"{token}\"*"))
         .collect::<Vec<String>>()
         .join(" "))
+}
+
+/// The same words, required to be in the TITLE: FTS5's column filter over the
+/// whole group, `{title} : ("a"* "b"*)`.
+///
+/// # Errors
+///
+/// As [`match_expression`].
+pub fn title_expression(query: &str) -> Result<String, SearchError> {
+    Ok(format!("{{title}} : ({})", match_expression(query)?))
 }
 
 #[cfg(test)]
@@ -69,6 +93,31 @@ mod tests {
         assert_eq!(match_expression("-secret").unwrap(), "\"-secret\"*");
         // An embedded quote cannot close the phrase, because it is removed.
         assert_eq!(match_expression("a\"b").unwrap(), "\"ab\"*");
+    }
+
+    #[test]
+    fn a_query_of_one_character_words_is_the_empty_query() {
+        for query in ["a", "a b", "  x ", "a ---", "é", "7"] {
+            assert!(
+                matches!(
+                    match_expression(query),
+                    Err(SearchError::NoSearchableWords { .. })
+                ),
+                "{query:?}"
+            );
+        }
+        // One word of two letters is a search, and so is a long word beside a short.
+        assert_eq!(match_expression("ca").unwrap(), "\"ca\"*");
+        assert_eq!(match_expression("a bc").unwrap(), "\"a\"* \"bc\"*");
+    }
+
+    #[test]
+    fn the_title_expression_filters_the_group_to_the_title_column() {
+        assert_eq!(
+            title_expression("budget cabin").unwrap(),
+            "{title} : (\"budget\"* \"cabin\"*)"
+        );
+        assert!(title_expression("a").is_err());
     }
 
     #[test]

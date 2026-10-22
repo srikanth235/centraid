@@ -65,7 +65,7 @@ pub(super) fn search(
     }
     let limit = usize::try_from(asked.limit).unwrap_or(usize::MAX);
     let loaded = vault.read(|connection| {
-        let index = match centraid_search::SqliteDoor::open(connection) {
+        let index = match centraid_search::SqliteDoor::open(connection, vault.words()) {
             Ok(index) => index,
             Err(error) => {
                 return Ok(Err(CoreError::Invariant {

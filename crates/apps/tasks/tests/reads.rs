@@ -267,7 +267,8 @@ fn one_task_whole_and_the_search_in_rank_order() {
     let (found, denial) = world
         .vault
         .read(|connection| {
-            let search = centraid_search::SqliteDoor::open(connection).expect("the index opens");
+            let search = centraid_search::SqliteDoor::open(connection, world.vault.words())
+                .expect("the index opens");
             Ok(load_search_term(
                 &TestDoor::new(connection),
                 &search,

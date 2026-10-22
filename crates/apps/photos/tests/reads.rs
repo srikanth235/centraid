@@ -264,7 +264,8 @@ fn search_finds_a_caption_or_a_place_and_leaves_out_the_archive() {
     let search = |term: &str| {
         w.vault
             .read(|connection| {
-                let index = centraid_search::SqliteDoor::open(connection).expect("the index opens");
+                let index = centraid_search::SqliteDoor::open(connection, w.vault.words())
+                    .expect("the index opens");
                 Ok(load_search_term(
                     &TestDoor::new(connection),
                     &index,

@@ -244,7 +244,7 @@ pub(super) fn search(
     let zone = zone_of(vault, &asked.tz)?;
     let today = today_in(&zone, now)?;
     let loaded = vault.read(|connection| {
-        let index = match centraid_search::SqliteDoor::open(connection) {
+        let index = match centraid_search::SqliteDoor::open(connection, vault.words()) {
             Ok(index) => index,
             Err(error) => {
                 return Ok(Err(CoreError::Invariant {

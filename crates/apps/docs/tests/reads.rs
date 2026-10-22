@@ -289,7 +289,8 @@ fn search_is_the_indexs_rank_order_over_documents_and_the_activity_is_the_journa
     let (found, denial) = w
         .vault
         .read(|connection| {
-            let index = centraid_search::SqliteDoor::open(connection).expect("the index opens");
+            let index = centraid_search::SqliteDoor::open(connection, w.vault.words())
+                .expect("the index opens");
             Ok(load_search_term(
                 &TestDoor::new(connection),
                 &index,

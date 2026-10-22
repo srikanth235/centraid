@@ -250,7 +250,7 @@ pub(super) fn search(
     // live circle among the hits, not the raw hits — the owner and a pet are
     // hits of the index and no one here.
     let loaded = vault.read(|connection| {
-        let index = match centraid_search::SqliteDoor::open(connection) {
+        let index = match centraid_search::SqliteDoor::open(connection, vault.words()) {
             Ok(index) => index,
             Err(error) => {
                 return Ok(Err(CoreError::Invariant {

@@ -159,12 +159,14 @@ impl Door for CoreDoor {
                 .read(|connection| {
                     use centraid_search::Search as _;
                     Ok(
-                        centraid_search::SqliteDoor::open(connection).and_then(|door| {
-                            door.query(
-                                &centraid_search::Principal::Owner,
-                                &centraid_search::SearchRequest::new(entity, text, limit),
-                            )
-                        }),
+                        centraid_search::SqliteDoor::open(connection, vault.words()).and_then(
+                            |door| {
+                                door.query(
+                                    &centraid_search::Principal::Owner,
+                                    &centraid_search::SearchRequest::new(entity, text, limit),
+                                )
+                            },
+                        ),
                     )
                 })
                 .map_err(|error| error.to_string())?;

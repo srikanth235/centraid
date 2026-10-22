@@ -20,7 +20,9 @@
 //! |---|---|
 //! | SQL lives here, not in an app | `cargo xtask rules`' `sql-confinement` |
 //! | Every read is a window | [`Search::query`] takes a [`centraid_apps_kit::page::PageRequest`], whose `limit` is required and has no default |
-//! | A window continues by keyset | [`Page::next`] is the last row's `(rank, id)`; there is no offset to reconstruct |
+//! | A window continues by keyset | [`Page::next`] is the last row's `(tier, rank, id)`; there is no offset to reconstruct |
+//! | A prefix search is affordable | Title matches first and uncapped, then the newest [`TAIL_ROWS`] other matches, ranked; the plan streams the index and never sorts every match ([`sqlite`]) |
+//! | One letter is not a search | A query whose words are all one character is [`SearchError::NoSearchableWords`], the empty term's answer on every surface ([`matching`]) |
 //! | A denial is a VALUE | [`Answer`] is `Denied` or `Data`, never an `Err` |
 //! | A bound reports the size it reaches | [`SearchRequest::page`] is clamped by [`MAX_MATCH_ROWS`] and [`Answer::window`] says what it actually was |
 //! | A correction is a bounded lookup | [`Search::correct`] replaces a word by a whole term of the one vocabulary, reading at most [`MAX_VOCAB_SCAN`] rows per word |
@@ -36,8 +38,8 @@ pub mod matching;
 pub mod snippet;
 pub mod sqlite;
 
-pub use matching::{MAX_MATCH_TOKENS, match_expression};
-pub use sqlite::{MAX_VOCAB_SCAN, SqliteDoor};
+pub use matching::{MAX_MATCH_TOKENS, MIN_WORD_LETTERS, match_expression, title_expression};
+pub use sqlite::{MAX_VOCAB_SCAN, SqliteDoor, TAIL_ROWS};
 
 use centraid_apps_kit::page::{Page, PageRequest};
 
@@ -110,6 +112,45 @@ impl SearchRequest {
             kinds: kinds.into_iter().collect(),
             query: query.into(),
             page: PageRequest::first(limit),
+            excluded_ids: Vec::new(),
+        }
+    }
+
+    /// The same request with ids the caller wants excluded.
+    #[must_use]
+    pub fn excluding(mut self, ids: Vec<String>) -> Self {
+        self.excluded_ids = ids;
+        self
+    }
+}
+
+/// One search over several kinds that answers a few rows of EACH kind in a single
+/// statement: Home's, where one keystroke asks about every kind a member can
+/// open.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EachRequest {
+    /// The kinds to look in; empty answers every searchable kind.
+    pub kinds: Vec<String>,
+    /// Owner-typed words, compiled as [`SearchRequest::query`] is.
+    pub query: String,
+    /// At most this many rows of each kind, best first.
+    pub per_kind: usize,
+    /// Ids the caller wants left out, as [`SearchRequest::excluded_ids`].
+    pub excluded_ids: Vec<String>,
+}
+
+impl EachRequest {
+    /// `per_kind` rows of each of `kinds`.
+    #[must_use]
+    pub fn new(
+        kinds: impl IntoIterator<Item = String>,
+        query: impl Into<String>,
+        per_kind: usize,
+    ) -> Self {
+        Self {
+            kinds: kinds.into_iter().collect(),
+            query: query.into(),
+            per_kind,
             excluded_ids: Vec::new(),
         }
     }
@@ -204,6 +245,40 @@ pub trait Search {
     /// domain, a query with no searchable word, a broken index. A **denial** is
     /// not one of those: it is [`Answer::Denied`], because a surface renders it.
     fn query(&self, principal: &Principal, request: &SearchRequest) -> Result<Answer, SearchError>;
+
+    /// A few rows of each of several kinds, the kinds in the order the request
+    /// named them and each kind's rows best first.
+    ///
+    /// The default asks [`Search::query`] once per kind, so a door that wraps
+    /// another or a test double answers; [`SqliteDoor`] answers all of them with
+    /// one statement.
+    ///
+    /// # Errors
+    ///
+    /// The refusals `query` has.
+    fn query_each(
+        &self,
+        principal: &Principal,
+        request: &EachRequest,
+    ) -> Result<Vec<Target>, SearchError> {
+        let kinds: Vec<String> = if request.kinds.is_empty() {
+            centraid_vault::index::SEARCHABLE
+                .iter()
+                .map(|kind| kind.as_str().to_owned())
+                .collect()
+        } else {
+            request.kinds.clone()
+        };
+        let mut targets = Vec::new();
+        for kind in kinds {
+            let one = SearchRequest::new(kind, request.query.clone(), request.per_kind)
+                .excluding(request.excluded_ids.clone());
+            if let Answer::Data { page, .. } = self.query(principal, &one)? {
+                targets.extend(page.rows);
+            }
+        }
+        Ok(targets)
+    }
 
     /// The query with its mistyped words replaced by the words the vault holds,
     /// or `None` when no word changed (#1097, R4, R4a).

@@ -237,10 +237,11 @@ pub(super) fn link_targets(
     // right one here — a refusal the recording door kept would fail the whole
     // sheet over one domain.
     let loaded = vault.read(|connection| {
-        let index =
-            centraid_search::SqliteDoor::open(connection).map_err(|error| CoreError::Invariant {
+        let index = centraid_search::SqliteDoor::open(connection, vault.words()).map_err(|error| {
+            CoreError::Invariant {
                 context: format!("the search index will not open: {error}"),
-            });
+            }
+        });
         Ok(index
             .map(|index| queries::load_link_targets(door, &index, &Principal::Owner, &asked.term)))
     })??;
@@ -394,7 +395,7 @@ fn with_search<T>(
     run: impl FnOnce(&dyn centraid_search::Search) -> T,
 ) -> Result<T> {
     vault.read(|connection| {
-        let index = match centraid_search::SqliteDoor::open(connection) {
+        let index = match centraid_search::SqliteDoor::open(connection, vault.words()) {
             Ok(index) => index,
             Err(error) => {
                 return Ok(Err(CoreError::Invariant {

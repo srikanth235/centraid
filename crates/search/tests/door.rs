@@ -41,6 +41,25 @@ impl World {
             .expect("the note lands");
     }
 
+    /// Many notes in one commit, oldest first: `count` notes titled `title`
+    /// with `body`, ids `{prefix}{index}`.
+    fn notes(&self, prefix: &str, count: usize, title: &str, body: &str) {
+        let now = self.vault.clock().now_text();
+        self.vault
+            .commit(|tx| {
+                for index in 0..count {
+                    let id = format!("{prefix}{index:04}");
+                    tx.insert_entity(&id, Kind::Note, title, &now)?;
+                    tx.connection().execute(
+                        "INSERT INTO note (id, body) VALUES (?1, ?2)",
+                        [id.as_str(), body],
+                    )?;
+                }
+                Ok(())
+            })
+            .expect("the notes land");
+    }
+
     fn person(&self, id: &str, name: &str, nickname: Option<&str>) {
         let now = self.vault.clock().now_text();
         self.vault
@@ -81,10 +100,25 @@ impl World {
             .collect()
     }
 
+    /// Every row of a search, window after window.
+    fn walk(&self, mut asked: SearchRequest) -> Vec<(String, String)> {
+        let mut rows = Vec::new();
+        loop {
+            let Answer::Data { page, .. } = self.answer(&asked) else {
+                panic!("data");
+            };
+            rows.extend(page.rows.iter().map(|t| (t.entity.clone(), t.id.clone())));
+            match page.next {
+                Some(next) => asked.page.after = Some(next),
+                None => return rows,
+            }
+        }
+    }
+
     fn answer(&self, request: &SearchRequest) -> Answer {
         self.vault
             .read(|connection| {
-                Ok(SqliteDoor::open(connection)
+                Ok(SqliteDoor::open(connection, self.vault.words())
                     .and_then(|door| door.query(&Principal::Owner, request))
                     .expect("the door answers"))
             })
@@ -270,7 +304,7 @@ fn locker_and_every_kind_nobody_searches_is_refused_by_name() {
         let refused = world
             .vault
             .read(|connection| {
-                Ok(SqliteDoor::open(connection)
+                Ok(SqliteDoor::open(connection, world.vault.words())
                     .and_then(|door| door.query(&Principal::Owner, &request(&[kind], "x", 5))))
             })
             .expect("reads");
@@ -298,7 +332,7 @@ fn a_query_with_no_searchable_word_is_a_typed_refusal() {
     let refused = world
         .vault
         .read(|connection| {
-            Ok(SqliteDoor::open(connection)
+            Ok(SqliteDoor::open(connection, world.vault.words())
                 .and_then(|door| door.query(&Principal::Owner, &request(&["note"], "?! ..", 5))))
         })
         .expect("reads");
@@ -316,7 +350,7 @@ fn a_typo_is_corrected_to_a_word_the_vault_holds_and_a_held_word_is_left_alone()
         world
             .vault
             .read(|connection| {
-                Ok(SqliteDoor::open(connection)
+                Ok(SqliteDoor::open(connection, world.vault.words())
                     .and_then(|door| door.correct(&Principal::Owner, &["note"], query))
                     .expect("corrects"))
             })
@@ -333,7 +367,7 @@ fn a_typo_is_corrected_to_a_word_the_vault_holds_and_a_held_word_is_left_alone()
     let refused = world
         .vault
         .read(|connection| {
-            Ok(SqliteDoor::open(connection)
+            Ok(SqliteDoor::open(connection, world.vault.words())
                 .and_then(|door| door.correct(&Principal::Owner, &["locker.item"], "budegt")))
         })
         .expect("reads");
@@ -344,7 +378,153 @@ fn a_typo_is_corrected_to_a_word_the_vault_holds_and_a_held_word_is_left_alone()
 fn a_file_without_the_index_does_not_open() {
     let connection = rusqlite::Connection::open_in_memory().expect("a connection");
     assert!(matches!(
-        SqliteDoor::open(&connection),
+        SqliteDoor::open(&connection, &centraid_vault::words::Words::default()),
         Err(SearchError::IndexUnusable { .. })
     ));
+}
+
+// -- the two tiers --------------------------------------------------------------
+
+#[test]
+fn a_title_match_is_answered_before_a_body_match_whatever_the_score_and_the_age() {
+    let world = World::new();
+    // The title match is the OLDEST row and the body match repeats the word, which
+    // is what a bm25 score alone would put first.
+    world.note("title", "Orchard", "");
+    world.note(
+        "body",
+        "Planting",
+        "orchard orchard orchard orchard orchard orchard",
+    );
+    assert_eq!(ids(&world.ask(&["note"], "orchard")), ["title", "body"]);
+    // A title match and a body match of ANOTHER word are not both title matches.
+    world.note("split", "Orchard", "keys");
+    let found = world.ask(&["note"], "orchard keys");
+    assert_eq!(
+        ids(&found),
+        ["split"],
+        "all the words are in the title or not at all"
+    );
+}
+
+#[test]
+fn the_tail_is_the_newest_five_hundred_and_a_title_match_is_never_cut() {
+    let world = World::new();
+    world.note("old-title", "Garden", "");
+    world.notes(
+        "n",
+        centraid_search::TAIL_ROWS + 20,
+        "Plain",
+        "garden garden",
+    );
+    let found = world.walk(request(&["note"], "garden", 200));
+    // The title match first, then exactly the cap: the 20 oldest body matches
+    // are the ones left out.
+    assert_eq!(found.len(), 1 + centraid_search::TAIL_ROWS);
+    assert_eq!(found[0].1, "old-title");
+    assert!(!found.iter().any(|(_, id)| id == "n0000" || id == "n0019"));
+    assert!(found.iter().any(|(_, id)| id == "n0020"));
+}
+
+#[test]
+fn a_one_kind_search_is_not_starved_by_newer_matches_of_other_kinds() {
+    let world = World::new();
+    // The only person that matches only in a body is OLDER than more than the cap
+    // of newer notes that match too.
+    world.person("p1", "Margaret", Some("Orchardkeeper"));
+    world.notes(
+        "n",
+        centraid_search::TAIL_ROWS + 20,
+        "Plain",
+        "orchardkeeper",
+    );
+    assert_eq!(ids(&world.ask(&["person"], "orchardkeeper")), ["p1"]);
+    // The kind, trash and excluded-id filters sit inside the cap, so excluding
+    // the newest notes lets older ones fill it.
+    let excluded: Vec<String> = (centraid_search::TAIL_ROWS..centraid_search::TAIL_ROWS + 20)
+        .map(|index| format!("n{index:04}"))
+        .collect();
+    let found = world.walk(request(&["note"], "orchardkeeper", 200).excluding(excluded));
+    assert_eq!(found.len(), centraid_search::TAIL_ROWS);
+}
+
+#[test]
+fn a_window_continues_across_the_tiers_without_repeating_or_dropping_a_row() {
+    let world = World::new();
+    for index in 0..3 {
+        world.note(&format!("t{index}"), "Garden", "");
+    }
+    for index in 0..4 {
+        world.note(&format!("b{index}"), "Plain", "garden");
+    }
+    let mut seen = Vec::new();
+    let mut after = None;
+    let mut pages = 0;
+    loop {
+        let mut asked = request(&["note"], "garden", 2);
+        asked.page.after = after.take();
+        let Answer::Data { page, .. } = world.answer(&asked) else {
+            panic!("data");
+        };
+        pages += 1;
+        seen.extend(page.rows.iter().map(|target| target.id.clone()));
+        match page.next {
+            Some(next) => {
+                assert!(next.sort_key.contains(':'), "a tier and a rank: {next:?}");
+                after = Some(next);
+            }
+            None => break,
+        }
+    }
+    assert_eq!(pages, 4);
+    assert_eq!(seen.len(), 7);
+    // Tier 0 first (the three titles), then the bodies.
+    assert!(seen[..3].iter().all(|id| id.starts_with('t')), "{seen:?}");
+    assert!(seen[3..].iter().all(|id| id.starts_with('b')), "{seen:?}");
+    let mut unique = seen.clone();
+    unique.sort();
+    unique.dedup();
+    assert_eq!(unique.len(), 7);
+}
+
+#[test]
+fn a_cursor_that_is_not_a_tier_and_a_rank_is_refused() {
+    let world = World::new();
+    world.note("n1", "Garden", "");
+    let mut asked = request(&["note"], "garden", 2);
+    asked.page.after = Some(centraid_apps_kit::page::PageCursor {
+        sort_key: "-1.5".to_owned(),
+        pk: "n1".to_owned(),
+    });
+    let refused = world
+        .vault
+        .read(|connection| {
+            Ok(SqliteDoor::open(connection, world.vault.words())
+                .and_then(|door| door.query(&Principal::Owner, &asked)))
+        })
+        .expect("reads");
+    assert!(
+        matches!(refused, Err(SearchError::Sqlite(_))),
+        "{refused:?}"
+    );
+}
+
+#[test]
+fn a_query_of_one_character_words_is_the_empty_query() {
+    let world = World::new();
+    world.note("n1", "Apple", "a b c");
+    for query in ["a", "a b", " x "] {
+        let refused = world
+            .vault
+            .read(|connection| {
+                Ok(SqliteDoor::open(connection, world.vault.words())
+                    .and_then(|door| door.query(&Principal::Owner, &request(&["note"], query, 5))))
+            })
+            .expect("reads");
+        assert!(
+            matches!(refused, Err(SearchError::NoSearchableWords { .. })),
+            "{query:?}: {refused:?}"
+        );
+    }
+    assert_eq!(ids(&world.ask(&["note"], "ap")), ["n1"]);
 }

@@ -330,7 +330,7 @@ fn search_events(
     limit: u32,
 ) -> Result<KitResult<Corrected<agenda::SearchData>>> {
     vault.read(|connection| {
-        let index = match centraid_search::SqliteDoor::open(connection) {
+        let index = match centraid_search::SqliteDoor::open(connection, vault.words()) {
             Ok(index) => index,
             Err(error) => {
                 return Ok(Err(CoreError::Invariant {

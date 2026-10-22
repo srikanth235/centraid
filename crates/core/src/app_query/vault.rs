@@ -59,10 +59,11 @@ pub(super) fn search(
     // cannot be opened are dropped, is empty; the vocabulary it reads is every
     // domain's and every container index's.
     let loaded = vault.read(|connection| {
-        let index =
-            centraid_search::SqliteDoor::open(connection).map_err(|error| CoreError::Invariant {
+        let index = centraid_search::SqliteDoor::open(connection, vault.words()).map_err(|error| {
+            CoreError::Invariant {
                 context: format!("the search index will not open: {error}"),
-            });
+            }
+        });
         let entities: Vec<&str> = centraid_vault::index::SEARCHABLE
             .iter()
             .map(|kind| kind.as_str())
