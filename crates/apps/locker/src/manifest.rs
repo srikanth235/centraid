@@ -93,13 +93,13 @@ mod tests {
     }
 
     #[test]
-    fn it_declares_five_queries_and_nineteen_actions() {
+    fn it_declares_five_queries_and_twenty_actions() {
         let manifest = manifest();
         // v0's eight less the two autofill queries, deleted with the fill
         // plane (R-1047-D3), and the Watchtower review, deleted with the
         // weak/reused scoring (Q-1047-16).
         assert_eq!(manifest.queries.len(), 5);
-        assert_eq!(manifest.actions.len(), 19);
+        assert_eq!(manifest.actions.len(), 20);
         for name in ["items", "item", "search", "trash", "access"] {
             assert!(manifest.query(name).is_some(), "no query {name}");
         }
@@ -167,13 +167,13 @@ mod tests {
     /// scopes are the manifest's declaration of what the app may ask the core
     /// to open, and they are still exactly three.
     #[test]
-    fn it_declares_twenty_eight_scopes_and_the_three_reveals_are_lockers_own() {
+    fn it_declares_twenty_nine_scopes_and_the_three_reveals_are_lockers_own() {
         let manifest = manifest();
         let vault = manifest
             .vault
             .as_ref()
             .expect("Locker declares its vault reach");
-        assert_eq!(vault.scopes.len(), 28);
+        assert_eq!(vault.scopes.len(), 29);
 
         let reveals: Vec<String> = vault
             .scopes

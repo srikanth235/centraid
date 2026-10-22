@@ -63,6 +63,7 @@ locker,set-passkey,edit,locker_passkey,card,yes: apps/locker/LockerItem.kt,no
 locker,clear-passkey,delete,locker_passkey,card,yes: apps/locker/LockerItem.kt,no
 locker,set-memo,edit,locker_item,card,yes: apps/locker/LockerItem.kt,no
 locker,export,reveal,locker_item,card,no,no
+locker,reveal,reveal,locker_item,direct,no,no
 money,add-account,create,account,card,yes: apps/money/MoneyAccounts.kt,no
 money,edit-account,edit,account,direct,yes: apps/money/MoneyAccounts.kt,no
 money,close-account,archive,account,direct,yes: apps/money/MoneyAccounts.kt; apps/money/MoneyCategories.kt,no

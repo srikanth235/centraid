@@ -1,6 +1,6 @@
 # `crates/apps/locker` — Locker, and the app that holds no key
 
-Locker is 5 queries, 19 actions and 28 scopes over five schemas (its own, and the shared `entity`, `flag` and `tag` verbs it wraps, and the `vault` reads), holds **the only three `reveal` verbs in the product**, and answers the phone's five app queries and its import and export ([#1047](https://github.com/srikanth235/centraid/issues/1047)). This crate is its read side and its action table. Almost everything here follows from one sentence: **the list is metadata; the secret is not.**
+Locker is 5 queries, 20 actions and 29 scopes over five schemas (its own, and the shared `entity`, `flag` and `tag` verbs it wraps, and the `vault` reads), holds **the only three `reveal` verbs in the product**, and answers the phone's five app queries and its import and export ([#1047](https://github.com/srikanth235/centraid/issues/1047)). This crate is its read side and its action table. Almost everything here follows from one sentence: **the list is metadata; the secret is not.**
 
 ## On the phone (#1047, D-5)
 
