@@ -347,7 +347,12 @@ fn search_events(
             &search,
             &[agenda::EVENT_KIND],
             term,
-            |data: &agenda::SearchData| data.events.is_empty(),
+            |data: &agenda::SearchData| data.events.len(),
+            |exact, again| agenda::SearchData {
+                events: filled(exact.events, again.events, limit, |row| {
+                    row.event_id.clone()
+                }),
+            },
             |term| {
                 agenda::load_search_term(
                     door,
@@ -423,18 +428,33 @@ impl RecordingSearch<'_, '_> {
 /// corrected to (empty when none), then the denial, if any.
 type Corrected<T> = ((T, String), Option<centraid_apps_kit::Denial>);
 
-/// THE CORRECTION PASS, once for every surface the full-text door answers
-/// (#1097, R4, R8).
+/// An exact answer with fewer rows than this is thin, and is filled from the
+/// corrected words.
 ///
-/// `run` is the surface's whole search at one term; `is_empty` says whether its
-/// answer holds nothing. The exact term runs first. **Only when that answer is
-/// empty and carries no denial** does the door correct the term against the
-/// vocabulary of `entities` (the domains the surface is about to search again);
-/// with a correction the surface runs again, and the corrected words are kept
-/// **only if that run found something**. A denial is never corrected around, and
-/// a correction that found nothing is not reported. The second element of the
-/// answer is the corrected words, empty when none answered — the wire's
-/// `corrected`.
+/// A member who types `budegt` and has one note called "Budget" is served by
+/// that note and by the others the slip would have found; a member who has none
+/// is served by the others alone. Three is the least that reads as a list rather
+/// than as the one thing that happened to match.
+const FILL_BELOW: usize = 3;
+
+/// THE CORRECTION PASS, once for every surface the full-text door answers.
+///
+/// `run` is the surface's whole search at one term; `rows` counts the rows its
+/// answer holds; `fill` joins the exact answer and the corrected one. The exact
+/// term runs first. **Only when that answer is thin (fewer than [`FILL_BELOW`]
+/// rows) and carries no denial** does the door correct the term against the
+/// vocabulary of `entities` (the domains the surface is about to search again).
+/// With a correction the surface runs again, and `fill(exact, corrected)` answers
+/// the exact rows FIRST and then the corrected rows that are not among them, up
+/// to the surface's window. The corrected words are reported **only if they added
+/// a row**: a correction that found nothing new is not reported, and an exact
+/// answer that was empty is replaced by the corrected rows, as it always was. A
+/// denial is never corrected around. The second element of the answer is the
+/// words, empty when none answered — the wire's `corrected`.
+///
+/// A filled answer carries no continuation: no search answer pages past its
+/// window, and a window of exact rows followed by another term's rows is not a
+/// sequence a cursor could resume.
 ///
 /// A failure of the door's `correct` is the recorder's to keep (it is kept the
 /// way `query`'s is); here it only means there is no correction.
@@ -442,22 +462,59 @@ fn corrected_search<T>(
     search: &dyn centraid_search::Search,
     entities: &[&str],
     term: &str,
-    is_empty: impl Fn(&T) -> bool,
+    rows: impl Fn(&T) -> usize,
+    fill: impl Fn(T, T) -> T,
     mut run: impl FnMut(&str) -> KitResult<(T, Option<centraid_apps_kit::Denial>)>,
 ) -> KitResult<Corrected<T>> {
     let (exact, denial) = run(term)?;
-    if denial.is_some() || !is_empty(&exact) || term.trim().is_empty() {
+    if denial.is_some() || rows(&exact) >= FILL_BELOW || term.trim().is_empty() {
         return Ok(((exact, String::new()), denial));
     }
     let Ok(Some(words)) = search.correct(&centraid_search::Principal::Owner, entities, term) else {
         return Ok(((exact, String::new()), None));
     };
     let (again, denial) = run(&words)?;
-    if denial.is_none() && !is_empty(&again) {
-        Ok(((again, words), None))
-    } else {
-        Ok(((exact, String::new()), None))
+    if denial.is_some() || rows(&again) == 0 {
+        return Ok(((exact, String::new()), None));
     }
+    let had = rows(&exact);
+    let filled = fill(exact, again);
+    if rows(&filled) > had {
+        Ok(((filled, words), None))
+    } else {
+        Ok(((filled, String::new()), None))
+    }
+}
+
+/// The rows of `exact`, then those of `extra` whose key is not among them, up to
+/// `window` in all. The exact rows are never dropped or reordered.
+fn filled<R, K: Ord>(
+    mut exact: Vec<R>,
+    extra: Vec<R>,
+    window: usize,
+    key: impl Fn(&R) -> K,
+) -> Vec<R> {
+    let mut seen: std::collections::BTreeSet<K> = exact.iter().map(&key).collect();
+    for row in extra {
+        if exact.len() >= window {
+            break;
+        }
+        if seen.insert(key(&row)) {
+            exact.push(row);
+        }
+    }
+    exact
+}
+
+/// [`filled`] over the door's own hits, which are keyed by kind and id.
+fn filled_targets(
+    exact: Vec<centraid_search::Target>,
+    extra: Vec<centraid_search::Target>,
+    window: usize,
+) -> Vec<centraid_search::Target> {
+    filled(exact, extra, window, |target| {
+        (target.entity.clone(), target.id.clone())
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -1460,7 +1517,8 @@ mod tests {
             &door,
             &["core.content_item"],
             "cabn",
-            |found: &Vec<&str>| found.is_empty(),
+            |found: &Vec<&str>| found.len(),
+            |exact, again| filled(exact, again, 8, |row| (*row).to_owned()),
             |words| {
                 runs.borrow_mut().push(words.to_owned());
                 Ok((Vec::new(), Some(denial.clone())))
@@ -1481,7 +1539,8 @@ mod tests {
             &door,
             &["core.content_item"],
             "cabn",
-            |found: &Vec<&str>| found.is_empty(),
+            |found: &Vec<&str>| found.len(),
+            |exact, again| filled(exact, again, 8, |row| (*row).to_owned()),
             |words| {
                 runs.borrow_mut().push(words.to_owned());
                 Ok((
@@ -1501,5 +1560,73 @@ mod tests {
             (found, corrected, refused),
             (vec!["row"], "cabin".to_owned(), None)
         );
+    }
+
+    /// THE FILL RULE: a thin exact answer (fewer than three rows) is followed by
+    /// the corrected words' rows, the exact rows first and none twice; a full
+    /// answer is not corrected; and the words are reported only when they added
+    /// a row.
+    #[test]
+    fn a_thin_answer_is_filled_from_the_corrected_words_and_a_full_one_is_not() {
+        let door = EagerDoor {
+            asked: std::cell::Cell::new(0),
+        };
+        let fill = |exact: Vec<&'static str>, again: Vec<&'static str>| {
+            filled(exact, again, 4, |row| (*row).to_owned())
+        };
+        let run = |answers: &'static [(&'static str, &'static [&'static str])]| {
+            move |words: &str| -> KitResult<(Vec<&'static str>, Option<centraid_apps_kit::Denial>)> {
+                let rows = answers
+                    .iter()
+                    .find(|(term, _)| *term == words)
+                    .map_or(Vec::new(), |(_, rows)| rows.to_vec());
+                Ok((rows, None))
+            }
+        };
+        let ask = |answers: &'static [(&'static str, &'static [&'static str])]| {
+            corrected_search(
+                &door,
+                &["note"],
+                "cabn",
+                |found: &Vec<&str>| found.len(),
+                fill,
+                run(answers),
+            )
+            .expect("it answers")
+        };
+
+        // One exact row and three more at the corrected words: the exact row
+        // first, then the new ones up to the window of four; the words are said.
+        let ((rows, corrected), _) = ask(&[("cabn", &["own"]), ("cabin", &["own", "a", "b", "c"])]);
+        assert_eq!(
+            (rows, corrected.as_str()),
+            (vec!["own", "a", "b", "c"], "cabin")
+        );
+        assert_eq!(door.asked.get(), 1);
+
+        // Two exact rows is thin too; empty is the old case, and the corrected
+        // rows alone are the answer.
+        let ((rows, corrected), _) = ask(&[("cabn", &["x", "y"]), ("cabin", &["z"])]);
+        assert_eq!((rows, corrected.as_str()), (vec!["x", "y", "z"], "cabin"));
+        let ((rows, corrected), _) = ask(&[("cabin", &["z"])]);
+        assert_eq!((rows, corrected.as_str()), (vec!["z"], "cabin"));
+
+        // The corrected words that add nothing are not reported.
+        let ((rows, corrected), _) = ask(&[("cabn", &["x"]), ("cabin", &["x"])]);
+        assert_eq!((rows, corrected.as_str()), (vec!["x"], ""));
+        let ((rows, corrected), _) = ask(&[("cabn", &["x"])]);
+        assert_eq!((rows, corrected.as_str()), (vec!["x"], ""));
+
+        // Three exact rows is a list: the door is not even asked.
+        let before = door.asked.get();
+        let ((rows, corrected), _) = ask(&[("cabn", &["x", "y", "z"]), ("cabin", &["w"])]);
+        assert_eq!((rows, corrected.as_str()), (vec!["x", "y", "z"], ""));
+        assert_eq!(door.asked.get(), before);
+    }
+
+    #[test]
+    fn the_exact_rows_are_never_dropped_to_make_room() {
+        assert_eq!(filled(vec![1, 2], vec![2, 3, 4, 5], 3, |n| *n), [1, 2, 3]);
+        assert_eq!(filled(vec![1, 2, 3], vec![4], 2, |n| *n), [1, 2, 3]);
     }
 }

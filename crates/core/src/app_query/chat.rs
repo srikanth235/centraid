@@ -19,7 +19,7 @@ use centraid_search::{Answer as Found, Principal, Search, SearchError, SearchReq
 use centraid_vault::Vault;
 use centraid_vault::chat::{StoredAttachment, StoredMessage, ThreadRow};
 
-use super::{RecordingSearch, VaultDoor, corrected_search, settle};
+use super::{RecordingSearch, VaultDoor, corrected_search, filled, settle};
 use crate::error::{CoreError, Result};
 
 type Answer = wire::app_query_response::Answer;
@@ -189,7 +189,8 @@ pub(super) fn threads(
             &search,
             &[THREAD_ENTITY],
             &asked.term,
-            |rows: &Vec<ThreadRow>| rows.is_empty(),
+            |rows: &Vec<ThreadRow>| rows.len(),
+            |exact, again| filled(exact, again, limit, |row| row.thread_id.clone()),
             |term| {
                 let request = SearchRequest::new(THREAD_ENTITY, term, limit);
                 let ids: Vec<String> = match search.query(&Principal::Owner, &request) {

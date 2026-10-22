@@ -342,7 +342,7 @@ public class PhotosRoutes(private val cacheDir: java.io.File) : AppRoutes {
                         } else {
                             RoomSearch(
                                 // THE MACHINE'S FIELD (#1097, R-1097-27): its term and the words its answer
-                                // corrected, so the shared field draws "Showing results for". Whether it is
+                                // corrected, so the shared field draws "Including results for". Whether it is
                                 // open is the grid's destination, stated here; nothing is decided.
                                 field = if (searching) {
                                     (searchState.search ?: SearchField()).copy(open_ = true, term = searchState.query)

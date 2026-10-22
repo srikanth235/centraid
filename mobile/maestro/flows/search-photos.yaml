@@ -1,6 +1,6 @@
 # Photos' own search is the door's (#1097, R-1097-25..27): a slip in a word of
 # a photograph's caption finds the photograph, and the shared field says what
-# was searched ("Showing results for “emerald”"); a term nothing matches draws
+# was searched ("Including results for “emerald”"); a term nothing matches draws
 # the no-match block from the copy twins.
 #
 # THE DEMO VAULT, and no other: the onboarding starters hold no photograph.
@@ -28,7 +28,7 @@ name: search-photos
     visible:
       id: "search-corrected"
     timeout: 8000
-- assertVisible: "Showing results for “emerald”"
+- assertVisible: "Including results for “emerald”"
 - assertVisible:
     id: "photos\\.cell\\..*|.*vault\\.bytes.*"
 - assertNotVisible:

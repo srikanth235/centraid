@@ -107,7 +107,7 @@
     "HOME_SEARCH_SCOPE_LABEL": "All apps",
     "SEARCH_ASK_ABOUT": "Ask about “{term}”",
     "SEARCH_ASK_QUESTION": "Find {term}",
-    "SEARCH_CORRECTED": "Showing results for “{corrected}”",
+    "SEARCH_CORRECTED": "Including results for “{corrected}”",
     "SEARCH_KIND_ALBUM": "Album",
     "SEARCH_KIND_CHAT": "Chat",
     "SEARCH_KIND_DOCUMENT": "Document",

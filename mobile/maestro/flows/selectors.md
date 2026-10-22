@@ -18,7 +18,7 @@ One string per control, set with `Modifier.testTag` in Compose and `.accessibili
 | `home-search-recent-<term>` | Home search | one of this session's recent searches, while the field is empty |
 | `home-search-group-<appId>` | Home search | one app's group head: hue dot, the app's name, its count; a task hit is grouped under `agenda` (the app it opens in, #1128, R-1128-7), so there is no `home-search-group-tasks` |
 | `home-search-row-<entity>-<id>` | Home search | one hit (`entity` is the index's, e.g. `schedule.task`); a tap opens it in its app |
-| `search-corrected` | any open search field (every app's search slot, Photos' included, Home search) | the line under the field, "Showing results for “…”", drawn only when the core corrected a typo in the term ([#1097](https://github.com/srikanth235/centraid/issues/1097)); absent for an exact answer |
+| `search-corrected` | any open search field (every app's search slot, Photos' included, Home search) | the line under the field, "Including results for “…”", drawn only when the core corrected a typo in the term ([#1097](https://github.com/srikanth235/centraid/issues/1097)); absent for an exact answer |
 | `photos-search-no-match` | Photos search | the no-match block (the kit empty state: "No results", then one body line, "Nothing matches “…”." and the line saying everywhere search looked), drawn when a query reached no photograph and no door; it carries `search-ask-about` on iOS; the words are `PHOTOS_SEARCH_NO_RESULTS`, `PHOTOS_SEARCH_NO_MATCH_QUERY` and `PHOTOS_SEARCH_NO_MATCH_SCOPE`, finished by the machine in `SearchHits.empty` ([#1097](https://github.com/srikanth235/centraid/issues/1097), R-1097-27) |
 | `search-ask-about` | Home search, and the search of Notes, People, Docs, Agenda (tasks included) and Photos | the no-match state's one action, "Ask about “…”": switches to the Chat tab and sends the question — **iOS only**; Android has no Chat tab, so its no-match state draws without it. **Never in Locker's search** ([#1097](https://github.com/srikanth235/centraid/issues/1097), R-1097-29) |
 | `search-container-<entity>-<id>` | Home search (inside the app's group, before its rows) and Notes', Agenda's and Docs' own search results | one container whose NAME matched — a notebook or album (`core.collection`), a project (`schedule.project`), or a Docs folder (`core.concept`) ([#1097](https://github.com/srikanth235/centraid/issues/1097)); a tap opens it in its app (the notebook's notes, the project's list, the group's ledger, the folder's page, the album's shelf) |
@@ -44,7 +44,7 @@ One string per control, set with `Modifier.testTag` in Compose and `.accessibili
 | `chat-drawer-panel` | Chat | the drawer itself |
 | `chat-drawer-new` | Chat | the drawer's New chat |
 | `chat-drawer-search-open` | Chat drawer | the search opener, field-shaped, while the drawer's search is closed |
-| `chat-drawer-search-field` | Chat drawer | the shared search field once open (it takes focus); the "Showing results for “…”" line under it is `search-corrected` |
+| `chat-drawer-search-field` | Chat drawer | the shared search field once open (it takes focus); the "Including results for “…”" line under it is `search-corrected` |
 | `chat-drawer-search-close` | Chat drawer | the field's close key: the term and its answer go, the plain list is back |
 | `chat-drawer-list` | Chat drawer | the list of chats (the plain list, or the chats a search found) |
 | `chat-thread-row` | Chat drawer | one chat in the list |

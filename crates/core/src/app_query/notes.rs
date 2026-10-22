@@ -23,7 +23,8 @@ use centraid_vault::Vault;
 use centraid_vault::time::zone::FireZone;
 
 use super::{
-    RecordingSearch, VaultDoor, corrected_search, named, non_empty, settle, zone_if_any, zone_of,
+    RecordingSearch, VaultDoor, corrected_search, filled, filled_targets, named, non_empty, settle,
+    zone_if_any, zone_of,
 };
 use crate::error::{CoreError, Result};
 
@@ -192,9 +193,9 @@ pub(super) fn search(
     asked: &wire::NotesSearchRequest,
 ) -> Result<Answer> {
     let zone = zone_if_any(vault, &asked.tz)?;
-    // THE NOTEBOOKS THE TERM NAMES RIDE BESIDE THE NOTES (#1097, R-1097-19..21),
-    // and the correction treats the two as one answer: it runs only when both
-    // are empty, over the notes' vocabulary and the notebooks'.
+    // THE NOTEBOOKS THE TERM NAMES RIDE BESIDE THE NOTES, and the correction
+    // treats the two as one answer: it counts both, over the notes' words and
+    // the notebooks'.
     let entities = named::entities_of("note", "notes");
     let loaded = with_search(vault, door, |search| {
         corrected_search(
@@ -202,7 +203,17 @@ pub(super) fn search(
             &entities,
             &asked.term,
             |(data, found): &(queries::SearchData, Vec<centraid_search::Target>)| {
-                data.notes.is_empty() && found.is_empty()
+                data.notes.len() + found.len()
+            },
+            |(exact, exact_found), (again, again_found)| {
+                (
+                    queries::SearchData {
+                        notes: filled(exact.notes, again.notes, queries::SEARCH_ROWS, |row| {
+                            row.note_id.clone()
+                        }),
+                    },
+                    filled_targets(exact_found, again_found, named::CONTAINER_ROWS),
+                )
             },
             |term| {
                 let (data, denial) = queries::load_search(door, search, &Principal::Owner, term)?;

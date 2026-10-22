@@ -18,7 +18,10 @@ use centraid_apps_tasks::views::{self, GroupKind, Placed, View};
 use centraid_vault::Vault;
 use centraid_vault::time::zone::FireZone;
 
-use super::{RecordingSearch, VaultDoor, corrected_search, named, settle, zone_if_any, zone_of};
+use super::{
+    RecordingSearch, VaultDoor, corrected_search, filled, filled_targets, named, settle,
+    zone_if_any, zone_of,
+};
 use crate::error::{CoreError, Result};
 
 type Answer = wire::app_query_response::Answer;
@@ -257,15 +260,23 @@ pub(super) fn search(
             door,
         };
         let limit = usize::try_from(asked.limit).unwrap_or(usize::MAX);
-        // THE PROJECTS THE TERM NAMES RIDE BESIDE THE TASKS (#1097, R-1097-19..21),
-        // and the correction treats the two as one answer.
+        // THE PROJECTS THE TERM NAMES RIDE BESIDE THE TASKS, and the correction
+        // treats the two as one answer.
         let entities = named::entities_of(centraid_apps_tasks::queries::TASK_KIND, "tasks");
         Ok(Ok(corrected_search(
             &search,
             &entities,
             &asked.term,
             |(data, found): &(tasks::SearchData, Vec<centraid_search::Target>)| {
-                data.tasks.is_empty() && found.is_empty()
+                data.tasks.len() + found.len()
+            },
+            |(exact, exact_found), (again, again_found)| {
+                (
+                    tasks::SearchData {
+                        tasks: filled(exact.tasks, again.tasks, limit, |row| row.task_id.clone()),
+                    },
+                    filled_targets(exact_found, again_found, limit.min(named::CONTAINER_ROWS)),
+                )
             },
             |term| {
                 let (data, denial) = tasks::load_search_term(

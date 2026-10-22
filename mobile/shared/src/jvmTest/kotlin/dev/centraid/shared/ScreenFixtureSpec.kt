@@ -325,7 +325,7 @@ class ScreenFixtureSpec : StringSpec({
 
     "photos-search: a corrected answer is the field's words, and the hits answer what was typed" {
         // #1097, R-1097-27. The correction rides the shared field, which the
-        // kit draws as "Showing results for"; the hits still answer the TYPED
+        // kit draws as "Including results for"; the hits still answer the TYPED
         // words, so a reducer can tell a late page from a current one.
         val corrected = search("corrected")
         corrected.query shouldBe "sunscren"

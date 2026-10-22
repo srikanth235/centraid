@@ -408,7 +408,7 @@ class PhotosSearchSpec : StringSpec({
     }
 
     "the field is the machine's: a corrected answer sets it, a new term or a clear takes it away" {
-        // #1097, R-1097-27: the shared field draws "Showing results for" from
+        // #1097, R-1097-27: the shared field draws "Including results for" from
         // `search.corrected`, so the machine has to own it through `SearchLaw`.
         val typing = machine.reduce(machine.initial(), typed("sunscren")).state
         typing.search.shouldNotBeNull().term shouldBe "sunscren"

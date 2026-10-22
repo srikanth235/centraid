@@ -39,7 +39,7 @@ use centraid_apps_photos::queries::PHOTO_KIND;
 use centraid_search::{Principal, Search};
 use centraid_vault::Vault;
 
-use super::{RecordingSearch, VaultDoor, named, settle};
+use super::{RecordingSearch, VaultDoor, corrected_search, filled, filled_targets, named, settle};
 use crate::error::{CoreError, Result};
 
 type Answer = wire::app_query_response::Answer;
@@ -88,8 +88,8 @@ pub(super) fn search(
     })
 }
 
-/// The exact term; and, when the shell allows it and the core's legs found
-/// nothing and nothing was denied, the corrected words.
+/// The exact term; and, when the shell allows it and the core's legs found a
+/// thin answer and nothing was denied, the corrected words' rows after it.
 fn answer(
     door: &VaultDoor<'_>,
     search: &dyn Search,
@@ -97,25 +97,25 @@ fn answer(
     limit: usize,
     may_correct: bool,
 ) -> KitResult<((Found, String), Option<Denial>)> {
-    let (exact, denial) = run(door, search, term, limit)?;
-    if denial.is_some() || !may_correct || !is_empty(&exact) || term.trim().is_empty() {
+    if !may_correct {
+        let (exact, denial) = run(door, search, term, limit)?;
         return Ok(((exact, String::new()), denial));
     }
-    let entities = [PHOTO_KIND, "album"];
-    // A failure of the door's `correct` is the recorder's to keep; here it only
-    // means there is no correction.
-    let Ok(Some(words)) = search.correct(&Principal::Owner, &entities, term) else {
-        return Ok(((exact, String::new()), None));
-    };
-    let (again, denial) = run(door, search, &words, limit)?;
-    if denial.is_some() {
-        return Ok(((exact, String::new()), denial));
-    }
-    Ok(((again, words), None))
-}
-
-fn is_empty((data, albums): &Found) -> bool {
-    data.photo_ids.is_empty() && albums.is_empty()
+    corrected_search(
+        search,
+        &[PHOTO_KIND, "album"],
+        term,
+        |(data, albums): &Found| data.photo_ids.len() + albums.len(),
+        |(exact, exact_albums), (again, again_albums)| {
+            (
+                photos::queries::SearchData {
+                    photo_ids: filled(exact.photo_ids, again.photo_ids, limit, Clone::clone),
+                },
+                filled_targets(exact_albums, again_albums, limit.min(named::CONTAINER_ROWS)),
+            )
+        },
+        |term| run(door, search, term, limit),
+    )
 }
 
 /// Both legs at one term: the photographs, then the albums. A denial answers for

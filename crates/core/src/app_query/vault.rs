@@ -68,7 +68,13 @@ pub(super) fn search(
                 &index,
                 &entities,
                 &asked.term,
-                |(targets, found): &Opened| targets.is_empty() && found.is_empty(),
+                |(targets, found): &Opened| targets.len() + found.len(),
+                |(exact, exact_found), (again, again_found)| {
+                    (
+                        filled_each_kind(exact, again, &linkable_kinds()),
+                        filled_each_kind(exact_found, again_found, named::all()),
+                    )
+                },
                 |term| {
                     // ONE STATEMENT for the six domains and the named kinds.
                     let (all, denial) = queries::load_targets_each(
@@ -133,6 +139,40 @@ pub(super) fn search(
                 .collect(),
         })
     })
+}
+
+/// The hits of `exact`, then those of `extra` that are not among them, at most
+/// [`queries::LINK_TARGET_ROWS`] of each kind: Home's window is per kind.
+/// The kinds' order is kept: a kind that gained a row is still where its kind was.
+fn filled_each_kind(exact: Vec<Target>, extra: Vec<Target>, kinds: &[&str]) -> Vec<Target> {
+    let mut per_kind: std::collections::BTreeMap<String, usize> = std::collections::BTreeMap::new();
+    for target in &exact {
+        *per_kind.entry(target.entity.clone()).or_default() += 1;
+    }
+    let mut seen: BTreeSet<(String, String)> = exact
+        .iter()
+        .map(|target| (target.entity.clone(), target.id.clone()))
+        .collect();
+    let mut hits = exact;
+    for target in extra {
+        let held = per_kind.entry(target.entity.clone()).or_default();
+        if *held < queries::LINK_TARGET_ROWS
+            && seen.insert((target.entity.clone(), target.id.clone()))
+        {
+            *held += 1;
+            hits.push(target);
+        }
+    }
+    hits.sort_by_key(|target| kinds.iter().position(|kind| *kind == target.entity));
+    hits
+}
+
+/// The kinds Home lists as rows, in the order it lists them.
+fn linkable_kinds() -> Vec<&'static str> {
+    centraid_vault::commands::note::LINKABLE
+        .iter()
+        .map(|kind| kind.as_str())
+        .collect()
 }
 
 /// The person hits People can show: the live circle. The index holds the owner

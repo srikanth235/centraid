@@ -249,7 +249,7 @@ struct PhotosSearchStateView {
 
     /// THE SHARED SEARCH FIELD, as the machine holds it (#1097, R-1097-27): the
     /// term and the words the answer corrected, which the kit's field draws as
-    /// "Showing results for". [open] is the grid's destination and the caller's
+    /// "Including results for". [open] is the grid's destination and the caller's
     /// to state; a field that is not open carries no term and no correction.
     func field(open: Bool) -> Centraid_Screen_V1_SearchField {
         guard open else { return Centraid_Screen_V1_SearchField() }

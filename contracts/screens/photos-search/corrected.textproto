@@ -2,7 +2,7 @@
 #
 # `query` is what the member typed and stays the screen's own; `search` is the
 # shared field's state, and `search.corrected` is the words the answer searched
-# instead. The kit's field draws "Showing results for “sunscreen”" from it, so
+# instead. The kit's field draws "Including results for “sunscreen”" from it, so
 # neither shell composes the line. The hits are the ones the corrected words
 # found, and `hits.query` is still the TYPED words: a reducer answers the field
 # it was asked for, and drops a page for a term the field has left.

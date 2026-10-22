@@ -168,12 +168,12 @@ message NotesJournal {
 
 message NotesSearch {
   repeated NotesSearchHit hits = 1;
-  // THE WORDS THE ROWS ANSWER (#1097, R4, R8). Set only when the term as typed
-  // found nothing and a correction of its words did: the typed words with each
-  // mistyped one replaced by a word the vault's own index holds, and the rows
-  // above are the ones that corrected run found. EMPTY for an exact answer and
-  // when no correction found anything. A shell says "Showing results for
-  // <corrected>".
+  // THE WORDS THE ROWS ANSWER. Set only when the term as typed found fewer than
+  // three rows and a correction of its words added some: the typed words with each
+  // mistyped one replaced by a word the vault's own index holds. The rows
+  // above are the exact rows first and then the ones the corrected words
+  // found, none twice. EMPTY when nothing was added. A shell says
+  // "Including results for <corrected>".
   string corrected = 2;
   // THE CONTAINERS THE TERM NAMES (#1097, R-1097-19..21): the notebooks whose own name
   // matched, in the index's rank order, at most eight. Empty when none did. A

@@ -24,7 +24,7 @@ use centraid_apps_people::roster::{PeopleInput, RosterRow, SearchHit};
 use centraid_vault::Vault;
 use centraid_vault::time::zone::FireZone;
 
-use super::{RecordingSearch, VaultDoor, corrected_search, settle, zone_if_any, zone_of};
+use super::{RecordingSearch, VaultDoor, corrected_search, filled, settle, zone_if_any, zone_of};
 use crate::error::{CoreError, Result};
 
 type Answer = wire::app_query_response::Answer;
@@ -266,7 +266,12 @@ pub(super) fn search(
             &search,
             &["person"],
             term,
-            |data: &people::roster::SearchData| data.people.is_empty(),
+            |data: &people::roster::SearchData| data.people.len(),
+            |exact, again| people::roster::SearchData {
+                people: filled(exact.people, again.people, limit, |row| {
+                    row.party_id.clone()
+                }),
+            },
             |term| {
                 let request = centraid_search::SearchRequest::new("person", term, limit);
                 let hits = match centraid_search::Search::query(

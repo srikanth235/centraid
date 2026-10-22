@@ -28,7 +28,9 @@ use centraid_vault::Vault;
 use centraid_vault::page::format_byte_size;
 use centraid_vault::time::zone::FireZone;
 
-use super::{RecordingSearch, VaultDoor, corrected_search, named, settle, zone_of};
+use super::{
+    RecordingSearch, VaultDoor, corrected_search, filled, filled_targets, named, settle, zone_of,
+};
 use crate::error::{CoreError, Result};
 
 type Answer = wire::app_query_response::Answer;
@@ -233,15 +235,25 @@ pub(super) fn search(
             door,
         };
         let limit = usize::try_from(asked.limit).unwrap_or(usize::MAX);
-        // THE FOLDERS THE TERM NAMES RIDE BESIDE THE DOCUMENTS (#1097,
-        // R-1097-19..21), and the correction treats the two as one answer.
+        // THE FOLDERS THE TERM NAMES RIDE BESIDE THE DOCUMENTS, and the
+        // correction treats the two as one answer.
         let entities = named::entities_of(centraid_apps_docs::queries::DOCUMENT_KIND, "docs");
         Ok(Ok(corrected_search(
             &search,
             &entities,
             &asked.term,
             |(data, found): &(docs::SearchData, Vec<centraid_search::Target>)| {
-                data.documents.is_empty() && found.is_empty()
+                data.documents.len() + found.len()
+            },
+            |(exact, exact_found), (again, again_found)| {
+                (
+                    docs::SearchData {
+                        documents: filled(exact.documents, again.documents, limit, |row| {
+                            row.document_id.clone()
+                        }),
+                    },
+                    filled_targets(exact_found, again_found, limit.min(named::CONTAINER_ROWS)),
+                )
             },
             |term| {
                 let (data, denial) = docs::load_search_term(

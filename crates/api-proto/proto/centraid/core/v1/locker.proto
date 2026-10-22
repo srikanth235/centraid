@@ -218,12 +218,12 @@ message LockerSearch {
   repeated LockerItemRow items = 2;
   // More matched than `limit`.
   bool truncated = 3;
-  // THE WORDS THE ROWS ANSWER (#1097, R4, R8). Set only when the term as typed
-  // found nothing and a correction of its words did: the typed words with each
-  // mistyped one replaced by a word the walked items hold (never a sealed
-  // value), and the rows above are the ones that corrected run found. EMPTY for
-  // an exact answer and when no correction found anything. A shell says
-  // "Showing results for <corrected>".
+  // THE WORDS THE ROWS ANSWER. Set only when the term as typed found nothing
+  // and a correction of its words did: the typed words with each mistyped one
+  // replaced by a word the walked items hold (never a sealed value), and the
+  // rows above are the ones that corrected run found. EMPTY for an exact
+  // answer and when no correction found anything. A shell says
+  // "Including results for <corrected>".
   string corrected = 4;
 }
 

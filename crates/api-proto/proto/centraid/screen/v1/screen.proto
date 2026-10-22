@@ -2821,7 +2821,7 @@ message PhotosSearchState {
     SearchHits hits = 6;
   }
   // THE SHARED SEARCH FIELD (#1097, R-1097-27): the machine owns it through
-  // `SearchLaw`, so the kit's field draws "Showing results for" under it when
+  // `SearchLaw`, so the kit's field draws "Including results for" under it when
   // the term was corrected, as it does for every app. `term` mirrors `query`
   // (the typed words stay the screen's own, in `query`); `corrected` is the
   // words the answer searched instead, set only for a current answer and cleared
@@ -10811,7 +10811,7 @@ message ChatState {
   // every app's search carries. `open` shows the field in place of the opener;
   // `term` is what the member typed; `answered_term` is the term `threads`
   // answers; `corrected` is the words the core searched instead when it
-  // corrected a typo (the field draws "Showing results for ..."). While a term
+  // corrected a typo (the field draws "Including results for ..."). While a term
   // is answered, `threads` are the chats it FOUND, best match first, and
   // `threads_empty_line` says nothing matched.
   SearchField drawer_search = 48;
