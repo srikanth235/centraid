@@ -869,3 +869,12 @@ Files: `contracts/migrations/001_baseline.sql`, `contracts/schema/vault-ddl.sql`
 **What the check cannot see**, in the module's doc: it reads three numbers and a word, so a table that agrees on all four but differs below the top is kept. The writer only appends; a purge or a rebuild that agrees on all four would have to remove the top words and append as many that end in the word that was at the top.
 
 Files: `crates/vault/src/words.rs` (new), `crates/vault/src/file.rs`, `crates/vault/src/lib.rs`, `docs/vault-ontology.md`, `receipts/issue-1135-vault-model.md`.
+
+### A4 — tuning
+
+- **`prefix = '2'`** on `search` (`contracts/migrations/001_baseline.sql`; `contracts/schema/vault-ddl.sql` regenerated with `export-ladder-ddl`): the first keystrokes of a query read one short list. `the_prefix_index_is_not_in_the_vocabulary` (`crates/vault/tests/commitments.rs`) shows `search_vocab` lists the words and none of the two-letter entries, that the word list equals the vocabulary, and that a two-letter start is served.
+- **`txn_by_day ON txn(posted_on, id)`**: Money's `month_statement` reads `posted_on` across accounts, newest first. `a_month_across_accounts_reads_the_day_index` asks `EXPLAIN QUERY PLAN` for that statement and requires the index and no temporary B-tree (measured before the index: scan and sort, 1.55 ms, against 0.16 ms with it).
+- **`PRAGMA optimize`** (with `analysis_limit = 1000`, so its cost is bounded however large the vault is) runs when a `Vault` closes (`close`, `finish` or a drop; `Held` in `crates/vault/src/file.rs` wraps the one connection so that every way out goes through it) and at the end of `index::rebuild` (`crates/vault/src/index.rs`). A failure is ignored, with the reason in the comment on `index::optimize`: the statistics are advisory and neither a close nor a rebuild may fail for them. `a_closed_vault_has_learned_its_statistics` and `a_dropped_vault_has_learned_its_statistics_too` reopen the file and read `sqlite_stat1`; with `optimize` made a no-op the dropped-vault test is red.
+- Regenerated, never hand-edited: `contracts/schema/vault-ddl.sql`.
+
+Files: `contracts/migrations/001_baseline.sql`, `contracts/schema/vault-ddl.sql`, `crates/vault/src/file.rs`, `crates/vault/src/index.rs`, `crates/vault/tests/commitments.rs`, `receipts/issue-1135-vault-model.md`.

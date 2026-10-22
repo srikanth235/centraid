@@ -215,8 +215,11 @@ CREATE TRIGGER journal_is_evidence BEFORE UPDATE ON journal
 -- Search: one index, kept by the writer. The FTS rowid is entity.n.
 -- ---------------------------------------------------------------------------------------------
 
+-- `prefix = '2'` keeps an index of every two-letter start of a word, so the first keystrokes of a
+-- query (`ca*`) read one short list instead of every term that begins that way. `search_vocab`
+-- lists the words only, never these entries (`the_prefix_index_is_not_in_the_vocabulary`).
 CREATE VIRTUAL TABLE search USING fts5(
-  title, body, content = '', contentless_delete = 1,
+  title, body, content = '', contentless_delete = 1, prefix = '2',
   tokenize = "unicode61 remove_diacritics 2");
 CREATE VIRTUAL TABLE search_vocab USING fts5vocab(search, row);
 
@@ -471,6 +474,9 @@ CREATE TABLE txn (
   FOREIGN KEY (category_id, category_kind) REFERENCES entity(id, kind)
 ) STRICT;
 CREATE INDEX txn_by_account_day ON txn(account_id, posted_on, id);
+-- A month's statement reads `posted_on` across accounts, newest first: without this it scans the
+-- table and sorts (`a_month_across_accounts_reads_the_day_index`).
+CREATE INDEX txn_by_day         ON txn(posted_on, id);
 CREATE INDEX txn_by_category    ON txn(category_id) WHERE category_id IS NOT NULL;
 CREATE INDEX txn_by_transfer    ON txn(transfer_id) WHERE transfer_id IS NOT NULL;
 CREATE TRIGGER txn_line_is_fixed BEFORE UPDATE OF account_id, currency, posted_on, amount_minor ON txn

@@ -112,7 +112,20 @@ pub fn rebuild(connection: &Connection) -> Result<()> {
     for id in &ids {
         reindex_one(connection, id)?;
     }
+    // A rebuilt index is a new one, and the planner has statistics of the old.
+    optimize(connection);
     Ok(())
+}
+
+/// Let SQLite re-analyse the tables whose shape changed enough since they were
+/// last analysed (`PRAGMA optimize`), reading at most 1,000 index entries of
+/// each so that the cost is bounded however large the vault is.
+///
+/// Called when a vault closes and when the index is rebuilt. **A failure is
+/// ignored**: the statistics are advisory (without them a plan is slower, never
+/// wrong), and neither a close nor a rebuild may fail for the sake of them.
+pub(crate) fn optimize(connection: &Connection) {
+    let _ = connection.execute_batch("PRAGMA analysis_limit = 1000; PRAGMA optimize;");
 }
 
 /// Drop one entity's row from the index by its `n`.

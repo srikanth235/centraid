@@ -1811,3 +1811,152 @@ fn a_title_that_labels_is_part_of_the_text_of_what_it_labels() {
     });
     is_found(vault, &call, "call", "an activity's kind");
 }
+
+// ---------------------------------------------------------------------------
+// 11. The index is tuned for the reads it serves
+// ---------------------------------------------------------------------------
+
+#[test]
+fn the_prefix_index_is_not_in_the_vocabulary() {
+    let scratch = founded("c11-prefix");
+    let vault = &scratch.vault;
+    let registry = Registry::with_system_commands().expect("a registry");
+    run(
+        vault,
+        &registry,
+        "note.create",
+        json!({"id": "n", "title": "Zeppelin", "body": "alphabet soup"}),
+    );
+    let terms = vocabulary(vault);
+    // `prefix = '2'` stores `al`, `so` and `ze` as index entries; the vocabulary
+    // is the words, and a correction that scanned a prefix of it would otherwise
+    // be offered `al`.
+    for word in ["alphabet", "soup", "zeppelin"] {
+        assert!(terms.contains(word), "{word}");
+    }
+    for prefix in ["al", "so", "ze", "a", "z"] {
+        assert!(
+            !terms.contains(prefix),
+            "the vocabulary lists the prefix `{prefix}`"
+        );
+    }
+    assert_eq!(terms, word_list(vault));
+    // And the prefix is served: a two-letter start finds the note.
+    assert!(finds_prefix(vault, "n", "al"));
+    assert!(finds_prefix(vault, "n", "zep"));
+    assert!(!finds_prefix(vault, "n", "qu"));
+}
+
+fn finds_prefix(vault: &Vault, id: &str, start: &str) -> bool {
+    read(vault, |connection| {
+        Ok(connection.query_row(
+            "SELECT EXISTS (SELECT 1 FROM search
+                             WHERE search MATCH ?2
+                               AND rowid = (SELECT n FROM entity WHERE id = ?1))",
+            [id, &format!("\"{start}\" *")],
+            |row| row.get(0),
+        )?)
+    })
+}
+
+#[test]
+fn a_month_across_accounts_reads_the_day_index() {
+    let scratch = founded("c11-day");
+    read(&scratch.vault, |connection| {
+        // The statement `money.transactions.month` writes, without an account.
+        let plan: Vec<String> = connection
+            .prepare(
+                "EXPLAIN QUERY PLAN
+                 SELECT id, account_id, posted_on, amount_minor, currency, status, category_id, transfer_id
+                   FROM txn WHERE posted_on >= ?1 AND posted_on < ?2
+                  ORDER BY posted_on DESC, id DESC LIMIT 51",
+            )?
+            .query_map(["2026-03-01", "2026-04-01"], |row| row.get::<_, String>(3))?
+            .collect::<rusqlite::Result<_>>()?;
+        let plan = plan.join("; ");
+        assert!(plan.contains("txn_by_day"), "{plan}");
+        assert!(!plan.contains("TEMP B-TREE"), "{plan}");
+        Ok(())
+    });
+}
+
+#[test]
+fn a_closed_vault_has_learned_its_statistics() {
+    let dir = centraid_ontology::scratch::scratch_dir();
+    std::fs::create_dir_all(&dir).expect("a directory");
+    let path = dir.join("vault.db");
+    {
+        let vault = Vault::create(&path).expect("a vault");
+        vault.found("Test", "Test Owner").expect("founded");
+        let registry = Registry::with_system_commands().expect("a registry");
+        for n in 0..200 {
+            run(
+                &vault,
+                &registry,
+                "note.create",
+                json!({"id": format!("n{n}"), "title": format!("Note {n}"), "body": "words"}),
+            );
+        }
+        // A read that the planner can plan better: it is queries that `PRAGMA
+        // optimize` learns from.
+        read(&vault, |connection| {
+            let _: i64 = connection.query_row(
+                "SELECT count(*) FROM entity WHERE kind = 'note' AND deleted_at IS NULL AND title = 'Note 7'",
+                [],
+                |row| row.get(0),
+            )?;
+            Ok(())
+        });
+        vault.close().expect("closes");
+    }
+    let vault = Vault::open(&path).expect("reopens");
+    let analysed: i64 = read(&vault, |connection| {
+        Ok(connection.query_row(
+            "SELECT count(*) FROM sqlite_stat1 WHERE tbl = 'entity'",
+            [],
+            |row| row.get(0),
+        )?)
+    });
+    assert!(analysed > 0, "closing a vault runs PRAGMA optimize");
+    drop(vault);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_dropped_vault_has_learned_its_statistics_too() {
+    let dir = centraid_ontology::scratch::scratch_dir();
+    std::fs::create_dir_all(&dir).expect("a directory");
+    let path = dir.join("vault.db");
+    {
+        let vault = Vault::create(&path).expect("a vault");
+        vault.found("Test", "Test Owner").expect("founded");
+        let registry = Registry::with_system_commands().expect("a registry");
+        for n in 0..200 {
+            run(
+                &vault,
+                &registry,
+                "note.create",
+                json!({"id": format!("n{n}"), "title": format!("Note {n}"), "body": "words"}),
+            );
+        }
+        read(&vault, |connection| {
+            let _: i64 = connection.query_row(
+                "SELECT count(*) FROM entity WHERE kind = 'note' AND deleted_at IS NULL AND title = 'Note 7'",
+                [],
+                |row| row.get(0),
+            )?;
+            Ok(())
+        });
+    }
+    let vault = Vault::open(&path).expect("reopens");
+    let analysed: i64 = read(&vault, |connection| {
+        Ok(connection.query_row(
+            "SELECT count(*) FROM sqlite_stat1 WHERE tbl = 'entity'",
+            [],
+            |row| row.get(0),
+        )?)
+    });
+    assert!(analysed > 0, "dropping a vault runs PRAGMA optimize");
+    drop(vault);
+    let _ = std::fs::remove_dir_all(&dir);
+}

@@ -151,6 +151,9 @@ CREATE INDEX txn_by_account_day ON txn(account_id, posted_on, id);
 -- index txn_by_category on txn
 CREATE INDEX txn_by_category    ON txn(category_id) WHERE category_id IS NOT NULL;
 
+-- index txn_by_day on txn
+CREATE INDEX txn_by_day         ON txn(posted_on, id);
+
 -- index txn_by_transfer on txn
 CREATE INDEX txn_by_transfer    ON txn(transfer_id) WHERE transfer_id IS NOT NULL;
 
@@ -611,7 +614,7 @@ CREATE TABLE rule (
 
 -- table search on search
 CREATE VIRTUAL TABLE search USING fts5(
-  title, body, content = '', contentless_delete = 1,
+  title, body, content = '', contentless_delete = 1, prefix = '2',
   tokenize = "unicode61 remove_diacritics 2");
 
 -- table search_config on search_config

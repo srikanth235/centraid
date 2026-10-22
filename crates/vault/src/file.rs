@@ -55,7 +55,7 @@ pub const JOURNAL_SIZE_LIMIT: i64 = 64 * 1024 * 1024;
 
 /// How a vault file was opened.
 pub struct Vault {
-    connection: Connection,
+    connection: Held,
     path: PathBuf,
     schema_version: i64,
     clock: Box<dyn Clock>,
@@ -268,7 +268,7 @@ impl Vault {
         // opens the file for writing.
         Self::apply_pragmas(&connection)?;
         Ok(Self {
-            connection,
+            connection: Held(Some(connection)),
             path,
             schema_version,
             clock,
@@ -407,7 +407,7 @@ impl Vault {
     /// which `query_only` forbids and which is not a write to the live file,
     /// and the log store needs to insert its rows inside the guard's
     /// transaction. Neither is a caller-facing write path.
-    pub(crate) const fn connection(&self) -> &Connection {
+    pub(crate) fn connection(&self) -> &Connection {
         &self.connection
     }
 
@@ -431,12 +431,63 @@ impl Vault {
     /// `TRUNCATE` here, which folds every frame into the database, and the
     /// connection is closed after it.
     pub fn finish(self) -> Result<()> {
+        // The statistics first: the checkpoint folds what `PRAGMA optimize` wrote
+        // into the file, so the `.db` alone carries them.
+        self.connection.optimize();
         self.connection
             .query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |row| {
                 row.get::<_, i64>(0)
             })
             .map_err(|error| VaultError::from_sqlite("checkpointing the log to finish", error))?;
         self.close()
+    }
+}
+
+/// The vault's one connection, which learns the file's statistics before it goes.
+///
+/// `PRAGMA optimize` re-analyses only the tables whose shape changed enough
+/// since they were last analysed, so a connection that runs it when it closes
+/// leaves the planner what it needs to prefer an index over a scan without any
+/// caller having to remember. It is the vault that closes a file, whether by
+/// [`Vault::close`], [`Vault::finish`] or by being dropped, and every way goes
+/// through here.
+struct Held(Option<Connection>);
+
+impl Held {
+    /// Learn the statistics. **Its failure is ignored, on purpose.** It is
+    /// advisory (a plan without statistics is a slower plan, never a wrong
+    /// answer), it runs on the way out of a file that may already be failing (a
+    /// full disk, a connection dropped by a panic mid-commit), and the one thing
+    /// a close must not do is fail for the sake of an optimisation.
+    fn optimize(&self) {
+        if let Some(connection) = &self.0 {
+            crate::index::optimize(connection);
+        }
+    }
+
+    fn close(mut self) -> std::result::Result<(), (Connection, rusqlite::Error)> {
+        self.optimize();
+        match self.0.take() {
+            Some(connection) => connection.close(),
+            None => Ok(()),
+        }
+    }
+}
+
+impl std::ops::Deref for Held {
+    type Target = Connection;
+
+    fn deref(&self) -> &Connection {
+        // `None` only after `close` took it, and `close` consumed the holder.
+        self.0
+            .as_ref()
+            .expect("the connection is held until the vault closes")
+    }
+}
+
+impl Drop for Held {
+    fn drop(&mut self) {
+        self.optimize();
     }
 }
 
