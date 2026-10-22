@@ -73,6 +73,7 @@ pub mod originals;
 /// the status the shell draws, and the doors beside the pass. See
 /// `phone.proto`.
 pub mod phone;
+pub mod screens;
 pub mod stage;
 /// THE STARTER ROWS a member's first vault is founded with: ordinary rows of
 /// theirs, best-effort, declared as data. See `vault.proto`'s `FoundContent`.

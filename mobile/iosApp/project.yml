@@ -63,6 +63,15 @@ targets:
         # `CentraidApp.swiftmodule` — "Multiple commands produce", four
         # times over.
         PRODUCT_MODULE_NAME: CentraidApp
+        # THE C ABI AS A SWIFT MODULE (#1135, lane C2): `import CentraidCoreC`
+        # in `Sources/Core.swift`. The five symbols resolve from the archive
+        # `CentraidShared` links today. WHEN `mobile/shared` IS DELETED, this
+        # target links `libcentraid_core_ffi.a` itself with the same flags
+        # `shared/build.gradle.kts` passes (`-Wl,-u,_centraid_{open,call,
+        # next_event,free,close}`, the archive, and the system frameworks
+        # listed there); linking it now would put two copies of the core in a
+        # static (release) link. `mobile/scripts/ios-core.sh` builds the slices.
+        SWIFT_INCLUDE_PATHS: $(SRCROOT)/CoreBridge
     sources:
       - path: Sources
       - path: Design

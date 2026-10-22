@@ -9,6 +9,7 @@ import dev.centraid.design.copy.LockerCopy
 import dev.centraid.shared.custody.OwnKeyFiling
 import dev.centraid.shared.custody.VaultSecrets
 import dev.centraid.shared.platform.platformServices
+import dev.centraid.shared.chat.ChatSlots
 import dev.centraid.shared.shell.HomeReads
 import dev.centraid.shared.shell.HomeSession
 import kotlinx.coroutines.CoroutineScope
@@ -446,6 +447,8 @@ public class LockerGate(
                 // of it: the shell asks through a slot it owns, and a change
                 // redraws Home.
                 HomeReads.lockerOpen = { gate.open.value }
+                // A chat card that needs the key asks through chat's own slot.
+                ChatSlots.unlockLocker = { gate.unlockAndWait() }
                 gate.changed = { open ->
                     bound?.send(HomeEvent(refreshed = HomeEvent.Refreshed()))
                     // AN UNLOCK IS WHEN A VAULT'S OWN KEY CAN BE FILED

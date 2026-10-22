@@ -1584,7 +1584,7 @@ mod tests {
             ("notes", 17, 6),
             ("people", 25, 5),
             ("photos", 19, 3),
-            ("tasks", 16, 2),
+            ("tasks", 16, 6),
         ];
         let mut total = (0, 0);
         let mut orders = BTreeSet::new();
@@ -1622,7 +1622,7 @@ mod tests {
                 assert!(!query.figures.is_empty(), "{app}/{}", query.name);
             }
         }
-        assert_eq!(total, (146, 46));
+        assert_eq!(total, (146, 50));
         // the orders are 0..N with no hole, so the generated enum is dense
         let expected: BTreeSet<u32> = (0..u32::try_from(orders.len()).unwrap()).collect();
         assert_eq!(orders, expected);

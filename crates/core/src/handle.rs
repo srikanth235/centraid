@@ -165,6 +165,9 @@ pub struct Handle {
     /// only; see [`crate::assist`]. `pub(crate)` because that module is where
     /// `Request::Assist` is answered.
     pub(crate) assist: crate::assist::Hub,
+    /// THE SCREEN RUNTIME, once a shell-facing library has attached one
+    /// (#1135, lane C2): see [`crate::screens`].
+    screens: std::sync::OnceLock<Arc<dyn crate::screens::ScreenHost>>,
 }
 
 /// THE CLOCK AND ID SOURCE A CORE WAS OPENED WITH, kept for the life of the
@@ -282,6 +285,7 @@ impl Core {
             owned_bytes: Mutex::new(None),
             locker: Arc::new(Mutex::new(None)),
             assist: crate::assist::Hub::new(),
+            screens: std::sync::OnceLock::new(),
         })
     }
 
@@ -540,6 +544,43 @@ impl Handle {
         answer
     }
 
+    /// THE ONE READ (#1135): [`crate::load::load`] over this core's vault.
+    ///
+    /// # Errors
+    /// Whatever `load` refuses with; [`CoreError::Unpaired`] with no file.
+    pub fn load(&self, request: &wire::LoadRequest) -> Result<wire::LoadResponse> {
+        self.with_vault(|vault| crate::load::load(vault, request))
+    }
+
+    /// THE ONE WRITE (#1135): [`crate::act::act`] over this core's vault, with
+    /// the change feed, the owner and the duplicate-tap record it needs.
+    ///
+    /// # Errors
+    /// Whatever `act` refuses with; [`CoreError::Unpaired`] with no file.
+    pub fn act(&self, request: &wire::ActRequest) -> Result<wire::ActResponse> {
+        let changes = crate::events::ChangeFeed::new(self.events());
+        let owner = self.owner();
+        self.with_vault(|vault| {
+            crate::act::act(
+                &crate::act::Ctx {
+                    vault,
+                    locker: &self.locker,
+                    registry: &self.registry,
+                    owner: &owner,
+                    changes: &changes,
+                    plane: &self.plane,
+                },
+                request,
+            )
+        })
+    }
+
+    /// Attach the screen runtime. Once per core: a second attach is ignored,
+    /// because two runtimes would each own a route stack.
+    pub fn attach_screens(&self, host: Arc<dyn crate::screens::ScreenHost>) {
+        let _ = self.screens.set(host);
+    }
+
     /// Cancel an in-flight **unbounded** operation.
     ///
     /// A bounded read is refused rather than cancelled, and the refusal is
@@ -586,10 +627,35 @@ impl Handle {
     /// `debug-fault` door injects found it on its first run.
     pub fn next_event(&self, timeout: Duration) -> Result<Option<wire::Event>> {
         self.check_open()?;
-        match self.events.next(timeout) {
-            Next::Event(event) => Ok(Some(event)),
-            Next::Timeout => Ok(None),
-            Next::Closed => Err(CoreError::Closed),
+        // THE SCREEN RUNTIME IS DRIVEN FROM HERE (#1135, lane C2). A change
+        // event is a reason to re-render and a wake is a timer that elapsed;
+        // both are handled with `&self` as the screens' door to the core, on
+        // the shell's own event thread (never the UI thread), so a runtime
+        // needs no reference to this handle that outlives a call.
+        let deadline = std::time::Instant::now() + timeout;
+        loop {
+            let left = deadline.saturating_duration_since(std::time::Instant::now());
+            match self.events.next(left) {
+                Next::Event(event) => {
+                    let host = self.screens.get();
+                    match (&event.kind, host) {
+                        // A wake is the runtime's own marker: it is handled
+                        // here and never reaches the shell.
+                        (Some(wire::event::Kind::Wake(_)), host) => {
+                            if let Some(host) = host {
+                                host.wake(self);
+                            }
+                        }
+                        (Some(wire::event::Kind::Change(change)), Some(host)) => {
+                            host.changed(self, std::slice::from_ref(&change.table));
+                            return Ok(Some(event));
+                        }
+                        _ => return Ok(Some(event)),
+                    }
+                }
+                Next::Timeout => return Ok(None),
+                Next::Closed => return Err(CoreError::Closed),
+            }
         }
     }
 
@@ -946,29 +1012,23 @@ impl Handle {
             // THE ONE READ (#1135): the app's manifest names the query, the core
             // reads its arguments by name and runs the app's own query.
             K::Load(request) => Ok(response(wire::response::Kind::Load(Box::new(
-                self.with_vault(|vault| crate::load::load(vault, request))?,
+                self.load(request)?,
             )))),
-            // THE ONE WRITE (#1135): the app's manifest names the action; the
-            // core runs the duplicate-tap, frozen-vault and schema rules.
-            K::Act(request) => {
-                let changes = crate::events::ChangeFeed::new(self.events());
-                let owner = self.owner();
-                Ok(response(wire::response::Kind::Act(Box::new(
-                    self.with_vault(|vault| {
-                        crate::act::act(
-                            &crate::act::Ctx {
-                                vault,
-                                locker: &self.locker,
-                                registry: &self.registry,
-                                owner: &owner,
-                                changes: &changes,
-                                plane: &self.plane,
-                            },
-                            request,
-                        )
-                    })?,
+            // THE SCREEN RUNTIME (#1135, lane C2): navigation and a screen's
+            // events. A core with no runtime attached refuses by name.
+            K::Screen(request) => {
+                let host = self.screens.get().ok_or_else(|| CoreError::Unsupported {
+                    type_url: "centraid.core.v1.ScreenRequest".to_owned(),
+                })?;
+                Ok(response(wire::response::Kind::Screen(Box::new(
+                    host.call(self, request)?,
                 ))))
             }
+            // THE ONE WRITE (#1135): the app's manifest names the action; the
+            // core runs the duplicate-tap, frozen-vault and schema rules.
+            K::Act(request) => Ok(response(wire::response::Kind::Act(Box::new(
+                self.act(request)?,
+            )))),
             // MONEY'S IMPORT PLAN AND HOME'S TILE (#1099). See `money.proto`;
             // `with_vault` like an app query, because they ARE page reads. The
             // statement's bytes are read once and dropped with the request.
@@ -1372,6 +1432,8 @@ fn request_kind(request: &wire::Request) -> RequestKind {
             // ceilings; `act` IS ONE COMMAND, as `Command` is.
             | K::Load(_)
             | K::Act(_)
+            // A SCREEN EVENT IS A HANDFUL OF `load`s and `act`s, each bounded.
+            | K::Screen(_)
             // MONEY'S PLAN IS BOUNDED: one file of at most 8 MiB and 20,000
             // rows read once, and the same declared fan-outs an app query has.
             | K::Money(_)
