@@ -36,6 +36,7 @@ mod year3_corpus;
 
 use std::time::{Duration, Instant};
 
+use centraid_apps_kit::search_corpus::{a_then_word, adjacent_pair};
 use centraid_core::api_proto as wire;
 use wire::app_query_request::Query as Q;
 use wire::app_query_response::Answer;
@@ -203,26 +204,15 @@ fn queries(corpus: &year3_corpus::Year3, surface: Surface) -> Vec<(&'static str,
     let mid = counts.word_held_by(kind, held(10).max(5), 5).to_owned();
     let rare = counts.word_held_by(kind, 2, 5).to_owned();
     let single = counts.word_held_by(kind, 1, 6).to_owned();
-    // Two words one entity of the kind holds together (its title's first two
-    // content words), so the answer has a row by construction.
+    // Two words one entity of the kind holds side by side (a pair of its
+    // title's), so the answer has a row by construction.
     let sample = kind.unwrap_or("note");
-    let content_words = |title: &str| -> Vec<String> {
-        title
-            .split_whitespace()
-            .filter(|word| word.len() > 2)
-            .map(str::to_owned)
-            .collect()
-    };
-    let pair = content_words(&counts.sample_titles[sample])
-        .into_iter()
-        .take(2)
-        .collect::<Vec<_>>()
-        .join(" ");
+    let pair = adjacent_pair(&counts.sample_titles[sample]).expect("the sample has a pair");
     // A one-letter word beside a word that one entity holds together.
     let with_a = counts
         .sample_titles_with_a
         .get(sample)
-        .and_then(|title| content_words(title).into_iter().next())
+        .and_then(|title| a_then_word(title))
         .map_or_else(|| format!("a {mid}"), |word| format!("a {word}"));
     vec![
         ("2 letters", common.chars().take(2).collect()),

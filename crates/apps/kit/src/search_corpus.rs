@@ -41,7 +41,7 @@ use rusqlite::{Connection, params};
 use crate::error::{KitError, KitResult};
 
 /// The function words that take the commonest ranks, in rank order.
-const FUNCTION_WORDS: [&str; 12] = [
+pub const FUNCTION_WORDS: [&str; 12] = [
     "the", "a", "and", "of", "to", "in", "is", "for", "on", "it", "with", "as",
 ];
 
@@ -363,7 +363,7 @@ pub const YEAR3_SEARCH: SearchCorpusShape = SearchCorpusShape {
     events: 3_000,
     tasks: 6_000,
     transactions: 12_000,
-    locker_items: 1_500,
+    locker_items: 500,
     activities: 2_500,
     workout_kinds: 8,
     threads: 150,
@@ -468,6 +468,29 @@ impl SearchCorpusCounts {
     pub fn holds(&self, word: &str) -> bool {
         self.frequency.iter().any(|(held, _)| held == word)
     }
+}
+
+/// Two neighbouring words of a title that are not function words: a query of
+/// two words that one entity holds side by side, which even a search that
+/// matches the whole phrase (Locker's) answers.
+#[must_use]
+pub fn adjacent_pair(title: &str) -> Option<String> {
+    let words: Vec<&str> = title.split_whitespace().collect();
+    words
+        .windows(2)
+        .find(|pair| !pair.iter().any(|word| FUNCTION_WORDS.contains(word)))
+        .map(|pair| pair.join(" "))
+}
+
+/// The word right after a one-letter `a` in a title, when it is not itself a
+/// function word: the other half of a query of `a` beside a word.
+#[must_use]
+pub fn a_then_word(title: &str) -> Option<&str> {
+    let words: Vec<&str> = title.split_whitespace().collect();
+    words
+        .windows(2)
+        .find(|pair| pair[0] == "a" && !FUNCTION_WORDS.contains(&pair[1]))
+        .map(|pair| pair[1])
 }
 
 #[derive(Clone, Copy)]
@@ -935,7 +958,7 @@ pub fn year3_search_corpus(
             Item::Txn => {
                 let index = take("txn");
                 let key = id("txn", index);
-                let title = writer.text_of(2, 2, true);
+                let title = writer.text_of(2, 3, false);
                 put("txn", &key, &title, &at, trashed, &until)?;
                 let account = id("account", writer.random.upto(shape.accounts.max(1)));
                 let category = (shape.categories > 0 && writer.random.upto(5) != 0)
@@ -958,8 +981,13 @@ pub fn year3_search_corpus(
                 // archive and trash rules are not what this corpus measures.
                 put("locker_item", &key, &title, &at, false, &until)?;
                 let kind = ["login", "login", "login", "card", "note", "wifi"][index % 6];
-                let username = writer.text(1, true);
-                let host = writer.text(1, true);
+                // Only a login has an account name and an address, and only the
+                // words that are stored are counted as held.
+                let (username, host) = if kind == "login" {
+                    (Some(writer.text(1, true)), Some(writer.text(1, true)))
+                } else {
+                    (None, None)
+                };
                 let notes = (writer.random.upto(3) == 0).then(|| {
                     let words = 6 + writer.random.upto(20);
                     writer.text(words, false)
@@ -971,8 +999,8 @@ pub fn year3_search_corpus(
                         params![
                             key,
                             kind,
-                            (kind == "login").then_some(username),
-                            (kind == "login").then(|| format!("https://{host}.example.com")),
+                            username,
+                            host.map(|host| format!("https://{host}.example.com")),
                             notes
                         ],
                     )
@@ -1041,7 +1069,13 @@ pub fn year3_search_corpus(
                 counts.threads += 1;
             }
         }
-        writer.finish(kind);
+        if trashed && kind != "locker_item" {
+            // A trashed entity is not in the index, so what only it says is said
+            // by nothing a search can find.
+            writer.scratch.clear();
+        } else {
+            writer.finish(kind);
+        }
     }
 
     // The tables nothing searches: health's days, a note's older bodies, and
@@ -1134,26 +1168,38 @@ pub fn year3_search_corpus(
         "txn",
         "locker_item",
     ] {
-        let title: Option<String> = connection
-            .query_row(
+        let pairs: Vec<String> = connection
+            .prepare(
                 "SELECT title FROM entity WHERE kind = ?1 AND deleted_at IS NULL
-                  ORDER BY n LIMIT 1 OFFSET 40",
-                [kind],
-                |row| row.get(0),
+                  ORDER BY n LIMIT 60 OFFSET 40",
             )
-            .ok();
+            .and_then(|mut statement| {
+                statement
+                    .query_map([kind], |row| row.get::<_, String>(0))?
+                    .collect::<rusqlite::Result<Vec<_>>>()
+            })
+            .unwrap_or_default();
+        let title = pairs
+            .into_iter()
+            .find(|title| adjacent_pair(title).is_some());
         if let Some(title) = title {
             counts.sample_titles.insert(kind.to_owned(), title);
         }
-        let with_a: Option<String> = connection
-            .query_row(
+        let candidates: Vec<String> = connection
+            .prepare(
                 "SELECT title FROM entity WHERE kind = ?1 AND deleted_at IS NULL
-                    AND ' ' || title || ' ' LIKE '% a %'
-                  ORDER BY n LIMIT 1 OFFSET 10",
-                [kind],
-                |row| row.get(0),
+                    AND title LIKE '% a %'
+                  ORDER BY n LIMIT 60 OFFSET 10",
             )
-            .ok();
+            .and_then(|mut statement| {
+                statement
+                    .query_map([kind], |row| row.get::<_, String>(0))?
+                    .collect::<rusqlite::Result<Vec<_>>>()
+            })
+            .unwrap_or_default();
+        let with_a = candidates
+            .into_iter()
+            .find(|title| a_then_word(title).is_some());
         if let Some(title) = with_a {
             counts.sample_titles_with_a.insert(kind.to_owned(), title);
         }
