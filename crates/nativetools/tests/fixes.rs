@@ -42,7 +42,10 @@ fn issue_1_a_locker_edit_keeps_the_fields_it_was_not_given() {
         "act",
         json!({"verb": "reveal", "rows": bank, "args": "field: password"}),
     );
-    assert!(revealed.contains("password: s3cret"), "{revealed}");
+    assert!(
+        revealed.contains("offered to the member: reveal password of"),
+        "{revealed}"
+    );
     // A type that keeps no notes says so instead of doing nothing.
     let wifi = number(&mut session, "locker item", "wifi");
     let refused = text(
@@ -57,7 +60,7 @@ fn issue_1_a_locker_edit_keeps_the_fields_it_was_not_given() {
 }
 
 #[test]
-fn issue_6_a_note_item_keeps_its_notes_sealed_and_reveals_them() {
+fn issue_6_a_note_item_keeps_its_notes_sealed_and_offers_them() {
     let world = seeded();
     let mut session = world.session();
     session.user("");
@@ -74,14 +77,20 @@ fn issue_6_a_note_item_keeps_its_notes_sealed_and_reveals_them() {
         "{created}"
     );
     let n = format!("#{}", rows[0]["n"]);
+    let id = rows[0]["id"].as_str().unwrap().to_owned();
+    // the typed notes are sealed by the door, and a reveal is the member's to complete
+    assert_eq!(common::opened(&world, &id, "content"), "12-34-56");
     session.user("");
-    let revealed = text(
+    let offered = text(
         &mut session,
         "act",
         json!({"verb": "reveal", "rows": n, "args": "field: notes"}),
     );
-    assert!(revealed.contains("notes: 12-34-56"), "{revealed}");
-    // An edit re-seals the new text and the diff says the notes changed.
+    assert!(
+        offered.contains("offered to the member: reveal notes of"),
+        "{offered}"
+    );
+    // An edit re-seals the new text and the diff says the notes changed, never to what.
     session.user("");
     let edited = call(
         &mut session,
@@ -93,13 +102,8 @@ fn issue_6_a_note_item_keeps_its_notes_sealed_and_reveals_them() {
         json!(["sealed", "sealed"]),
         "{edited}"
     );
-    session.user("");
-    let revealed = text(
-        &mut session,
-        "act",
-        json!({"verb": "reveal", "rows": n, "args": "field: notes"}),
-    );
-    assert!(revealed.contains("notes: 65-43-21"), "{revealed}");
+    assert!(!edited.to_string().contains("65-43-21"), "{edited}");
+    assert_eq!(common::opened(&world, &id, "content"), "65-43-21");
 }
 
 #[test]
@@ -756,7 +760,7 @@ fn issue_26_a_photo_delete_keeps_its_albums_and_undoing_it_brings_the_photo_back
 }
 
 #[test]
-fn issue_27_a_multi_row_reveal_records_every_secret() {
+fn issue_27_a_multi_row_reveal_offers_every_secret() {
     let world = seeded();
     let mut session = world.session();
     let wifi = number(&mut session, "locker item", "Home wifi");
@@ -766,9 +770,13 @@ fn issue_27_a_multi_row_reveal_records_every_secret() {
         "act",
         json!({"verb": "reveal", "rows": format!("{wifi}, {bank}"), "args": "field: password"}),
     );
-    let revealed = both["effect"]["revealed"].as_str().unwrap();
-    assert!(revealed.contains("hunter2"), "{both}");
-    assert!(revealed.contains("s3cret"), "{both}");
+    let offered = both["effect"]["member_actions"].as_array().unwrap();
+    assert_eq!(offered.len(), 2, "one card for each item: {both}");
+    let text = both["text"].as_str().unwrap();
+    assert!(
+        !text.contains("hunter2") && !text.contains("s3cret"),
+        "{both}"
+    );
 }
 
 #[test]

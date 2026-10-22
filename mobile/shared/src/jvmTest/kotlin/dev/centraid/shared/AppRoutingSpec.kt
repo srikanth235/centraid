@@ -89,7 +89,11 @@ import dev.centraid.shared.apps.people.PeopleHomeMachine
 import dev.centraid.shared.apps.people.PeoplePersonMachine
 import dev.centraid.shared.apps.people.PeopleRouting
 import dev.centraid.shared.apps.people.PeopleTrashMachine
+import dev.centraid.shared.nav.AppIds
 import dev.centraid.shared.nav.Destination
+import dev.centraid.shared.nav.MemberAction
+import dev.centraid.shared.nav.RowRef
+import dev.centraid.shared.nav.RowRoutes
 import dev.centraid.shared.nav.NavMove
 import dev.centraid.shared.nav.NavStack
 import dev.centraid.shared.nav.ScreenMoves
@@ -420,6 +424,33 @@ class AppRoutingSpec : StringSpec({
         ).forEach { (key, page) -> LockerRouting.home(LockerHomeEvent(more = LockerHomeEvent.MorePicked(key = key)), state) shouldBe page }
         LockerRouting.home(LockerHomeEvent(more = LockerHomeEvent.MorePicked(key = LockerHomeMachine.MORE_LOCK)), state).shouldBeNull()
         LockerRouting.home(LockerHomeEvent(more = LockerHomeEvent.MorePicked(key = LockerHomeMachine.MORE_FACTS)), state).shouldBeNull()
+    }
+
+    "a Locker card offered by the assistant runs its action: reveal and code on the page, a secret to type in the editor, export in the export" {
+        fun card(qualifier: String, id: String = "i1") = RowRef(AppIds.LOCKER, "locker_item", id, "Home Wi-Fi", qualifier)
+        RowRoutes.destination(card("reveal:password"), parent = "Chat") shouldBe
+            Destination.LockerItem("i1", parent = "Chat", follow = "reveal:password")
+        RowRoutes.destination(card("code:otp_seed")) shouldBe Destination.LockerItem("i1", follow = "code:otp_seed")
+        RowRoutes.destination(card("edit_secret:cvv")) shouldBe Destination.LockerEditor(itemId = "i1")
+        RowRoutes.destination(card("export:", id = "")) shouldBe Destination.LockerExport
+        // no action, an unknown one, or one with no field: the plain card, never a crash
+        for (plain in listOf("", "wipe:password", "reveal:", "reveal", ":password", "2026-10-08")) {
+            RowRoutes.destination(card(plain), parent = "Chat") shouldBe Destination.LockerItem("i1", parent = "Chat")
+        }
+        // spelled for a shell that sends bytes: the page's Opened event carries the action
+        val opening = RowRoutes.route(card("reveal:password"))!!
+        LockerItemEvent.ADAPTER.decode(opening.event).opened!!.follow shouldBe "reveal:password"
+    }
+
+    "MemberAction parses each action once and spells the qualifier back" {
+        MemberAction.parse(AppIds.LOCKER, "locker_item", "i1", "reveal:card_number") shouldBe
+            MemberAction(MemberAction.Kind.Reveal, "i1", "card_number")
+        MemberAction.parse(AppIds.LOCKER, "locker_item", "i1", "code:otp_seed")!!.qualifier shouldBe "code:otp_seed"
+        MemberAction.parse(AppIds.LOCKER, "locker_item", "i1", "edit_secret:password")!!.kind shouldBe MemberAction.Kind.EditSecret
+        MemberAction.parse(AppIds.LOCKER, "locker_item", "", "export:")!!.kind shouldBe MemberAction.Kind.Export
+        MemberAction.parse(AppIds.LOCKER, "locker_item", "", "reveal:password").shouldBeNull()
+        MemberAction.parse(AppIds.TASKS, "task", "t1", "reveal:password").shouldBeNull()
+        MemberAction.parse(AppIds.LOCKER, "locker_item", "i1", "").shouldBeNull()
     }
 
     "Locker: Edit opens the item the page holds; the generator's Use is Android's hand-over, never a spelled route" {

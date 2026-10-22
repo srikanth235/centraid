@@ -214,6 +214,16 @@ impl PendingWrite {
         !self.not_undoable.is_empty() || self.verbs.iter().any(|verb| destructive_verb(verb))
     }
 
+    /// The secrets the member typed into this write's steps (#1135), which the runtime holds only
+    /// here: the log, the stored question and the card carry the placeholder.
+    #[must_use]
+    pub fn typed_secrets(&self) -> Vec<String> {
+        self.steps
+            .iter()
+            .flat_map(|step| crate::native::member::typed_secrets(&step.input))
+            .collect()
+    }
+
     /// The pending write as the core hands it to the shell.
     #[must_use]
     pub fn to_json(&self) -> Value {
@@ -222,7 +232,7 @@ impl PendingWrite {
             "turn": self.turn,
             "verbs": self.verbs,
             "preview": self.preview,
-            "steps": self.steps.iter().map(|step| json!({"command": step.command, "input": step.input})).collect::<Vec<_>>(),
+            "steps": self.steps.iter().map(|step| json!({"command": step.command, "input": crate::native::member::masked(&step.input)})).collect::<Vec<_>>(),
             "destructive": self.destructive(),
             "not_undoable": self.not_undoable,
         })
@@ -249,6 +259,9 @@ pub enum Confirmed {
         reason: String,
         landed: usize,
     },
+    /// A step seals a secret the member typed and the Locker is shut: nothing ran, and the card
+    /// is still waiting. The member unlocks and taps again.
+    Locked,
     /// No pending write by that id: dismissed, replaced, or never made.
     Unknown,
 }
@@ -271,6 +284,7 @@ impl Confirmed {
                 "status": "refused", "step": step, "command": command,
                 "predicate": predicate, "reason": reason, "landed": landed,
             }),
+            Self::Locked => json!({"status": "locked"}),
             Self::Unknown => json!({"status": "unknown"}),
         }
     }
@@ -1444,10 +1458,36 @@ fn container_move(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, Stri
 use crate::native::session::Session;
 
 impl Session {
+    /// Remember the sealed fields a Locker write sets (#1135): the world reads a sealed cell as a
+    /// presence bit, so a secret the member typed is a change the diff and the change line can only
+    /// learn here.
+    pub(crate) fn note_sealed_moves(&mut self, command: &str, input: &Value) {
+        if !matches!(command, "locker.add_item" | "locker.edit_item") {
+            return;
+        }
+        let Some(item) = input["item_id"].as_str() else {
+            return;
+        };
+        for (name, column) in crate::native::meta::REVEAL_FIELDS {
+            if !crate::native::member::typed_secrets(
+                &serde_json::json!({ *column: input[*column].clone() }),
+            )
+            .is_empty()
+            {
+                let name = if *column == "content" { "notes" } else { *name };
+                self.sealed_moves
+                    .entry(item.to_owned())
+                    .or_default()
+                    .insert(name);
+            }
+        }
+    }
+
     /// Run one write step: the vault runs it ([`Writes::Run`]), or the patched world takes it
     /// and the step is parked ([`Writes::Park`]), or both ([`Writes::Shadow`]). The clock moves
     /// on first in every mode, so a session's writes land in the order they were made.
     pub(crate) fn write_step(&mut self, command: &str, input: &Value) -> Result<Ran, String> {
+        self.note_sealed_moves(command, input);
         match self.flags.writes {
             Writes::Run => self.door.step(command, input.clone()),
             Writes::Park => {
@@ -1686,7 +1726,14 @@ fn locker_store(row: &mut Row, item_type: &str, columns: &BTreeMap<&'static str,
             .any(|(_, column)| column == name);
         let plain = crate::native::world::LOCKER_PLAIN.contains(name);
         if (sealed || plain) && !value.is_empty() {
-            row.extra.insert(name, value.clone());
+            // A sealed cell is a presence bit in the world, as `World::load` reads it: what the
+            // member typed is held by the parked step and nowhere else.
+            let held = if sealed {
+                centraid_vault::commands::locker::SEALED_PLACEHOLDER.to_owned()
+            } else {
+                value.clone()
+            };
+            row.extra.insert(name, held);
         }
     }
 }
@@ -1999,6 +2046,14 @@ impl Session {
         let Some(pending) = self.park.pending.clone().filter(|pending| pending.id == id) else {
             return Confirmed::Unknown;
         };
+        // A SECRET THE MEMBER TYPED NEEDS LOCKER OPEN: nothing has run, so the card stays.
+        if pending
+            .steps
+            .iter()
+            .any(|step| self.door.locked_for(&step.command, &step.input))
+        {
+            return Confirmed::Locked;
+        }
         let outcome = self.run_pending(&pending);
         // the pending write is answered either way: a stale or refused one is not offered again
         self.park.steps.clear();
@@ -2024,6 +2079,10 @@ impl Session {
     }
 
     fn run_pending(&mut self, pending: &PendingWrite) -> Confirmed {
+        self.sealed_moves.clear();
+        for step in &pending.steps {
+            self.note_sealed_moves(&step.command, &step.input);
+        }
         let Ok(fresh) = self.load_world() else {
             return Confirmed::Refused {
                 step: 0,
@@ -2128,7 +2187,7 @@ impl Session {
             }
             before = after;
         }
-        let diff = crate::native::act::diff(&pending.before, &self.world);
+        let diff = self.diff_since(&pending.before);
         Confirmed::Done {
             text: texts.join("\n"),
             diff: self.diff_json(&diff),

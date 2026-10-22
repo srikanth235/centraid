@@ -71,10 +71,7 @@ fn pair() -> Pair {
 
 /// The world each door loads, rendered whole: rows, edges, ledger, everything.
 fn world_of(door: &dyn Door) -> String {
-    format!(
-        "{:?}",
-        World::load_with(door, false).expect("a world loads")
-    )
+    format!("{:?}", World::load(door).expect("a world loads"))
 }
 
 #[test]
@@ -86,7 +83,7 @@ fn a_read_through_the_core_door_returns_the_rows_the_harness_door_returns() {
     let harness = Harness::open(&pair.copy, SetClock::at(core.now_ms()), "door-test")
         .expect("the harness opens");
 
-    // THE WHOLE WORLD, secrets off as on the phone: the table reads the runtime makes at open.
+    // THE WHOLE WORLD: the table reads the runtime makes at open.
     let from_core = world_of(&core);
     let from_harness = world_of(&harness);
     assert!(
@@ -110,7 +107,7 @@ fn a_read_through_the_core_door_returns_the_rows_the_harness_door_returns() {
     }
 
     // A search: a person's own name, over the entities the runtime searches.
-    let world = World::load_with(&core, false).unwrap();
+    let world = World::load(&core).unwrap();
     let person = world
         .rows
         .values()
@@ -258,14 +255,12 @@ fn events_on_the_core_door_are_the_ones_the_harness_door_reads_in_every_zone() {
 }
 
 #[test]
-fn ids_and_the_clock_are_the_vaults_and_the_chat_holds_no_locker_key() {
+fn ids_and_the_clock_are_the_vaults() {
     let pair = pair();
     let door = pair.core.assist_door();
     let (a, b) = (door.mint_id(), door.mint_id());
     assert!(!a.is_empty() && a != b);
     assert!(door.now_ms() > 1_700_000_000_000);
-    assert!(door.seal("item", "secret").is_err());
-    assert!(door.unseal("key", "item", "sealed").is_err());
 }
 
 #[test]
@@ -334,7 +329,7 @@ fn money_reaches_the_world_through_the_core_door_as_signed_rows_inside_the_windo
         followed(&externals[2]),
     );
 
-    let world = World::load_in(&door, false, true, None).expect("a world loads");
+    let world = World::load_in(&door, None).expect("a world loads");
     let held: Vec<(&str, String)> = world
         .of_kind(Kind::Transaction)
         .filter(|row| {
@@ -386,15 +381,10 @@ fn money_reaches_the_world_through_the_core_door_as_signed_rows_inside_the_windo
             "Groceries".to_owned()
         ))
     );
-
-    // Money off reads none of it
-    let without = World::load_in(&door, false, false, None).expect("a world loads");
-    assert_eq!(without.of_kind(Kind::Transaction).count(), 0);
 }
 
 // ---------------------------------------------------------------------------
-// THE ASSISTANT HAS THE OWNER'S ACCESS TO LOCKER, EXCEPT TO A SEALED VALUE
-// (the owner's ruling of 2026-10-22, R-1088-3, #1135).
+// THE ASSISTANT IS THE MEMBER IN LOCKER; A SEALED VALUE IS A CHANNEL THE DOOR KEEPS CLOSED (#1135).
 //
 // A Locker item is an entity, so the rows the door reads and the verbs it runs are the ones that
 // serve every other kind: its title, its edges and its tags are the assistant's to read, and the
@@ -655,7 +645,7 @@ fn the_core_door_serves_a_locker_items_plain_rows_edges_and_tags_and_no_sealed_c
 }
 
 #[test]
-fn a_shared_verb_on_a_locker_item_runs_under_the_assistants_principal() {
+fn a_shared_verb_on_a_locker_item_runs_through_the_core_door() {
     let pair = pair();
     let (item, note, _key) = with_a_locker_item(&pair);
     let door = pair.core.assist_door();
@@ -784,136 +774,4 @@ fn a_purge_asks_the_assistant_the_confirmation_it_asks_the_member() {
     let (on_item, on_note) = (ask("p1:0", &item), ask("p2:0", &note));
     assert_eq!(on_item.ok, on_note.ok, "{on_item:?} / {on_note:?}");
     assert_eq!(on_item.predicate, on_note.predicate);
-}
-
-#[test]
-fn every_secret_touching_command_is_refused_through_the_core_door() {
-    let pair = pair();
-    let (item, _note, key) = with_a_locker_item(&pair);
-    let door = pair.core.assist_door();
-    let new_cipher = sealed(&key, "lk-bank", "a new password");
-    for (key, command, input) in [
-        (
-            "s1:0",
-            "locker.export",
-            serde_json::json!({"confirm": true}),
-        ),
-        (
-            "s2:0",
-            "locker.totp_code",
-            serde_json::json!({"item_id": item}),
-        ),
-        (
-            "s3:0",
-            "locker.reveal_receipt",
-            serde_json::json!({
-                "object_type": "locker.item", "item_id": item, "columns": ["password"]
-            }),
-        ),
-        (
-            "s4:0",
-            "locker.edit_item",
-            serde_json::json!({"item_id": item, "password": new_cipher, "key_id": key}),
-        ),
-        // An edit that leaves a held secret out clears it.
-        (
-            "s5:0",
-            "locker.edit_item",
-            serde_json::json!({"item_id": item, "title": "x", "username": "u"}),
-        ),
-        (
-            "s6:0",
-            "locker.add_item",
-            serde_json::json!({
-                "item_id": "lk-new", "type": "login", "title": "New", "password": new_cipher,
-                "key_id": key
-            }),
-        ),
-        (
-            "s7:0",
-            "locker.set_field",
-            serde_json::json!({
-                "item_id": item, "field_id": "field-1", "label": "Recovery", "kind": "sealed",
-                "value": new_cipher, "key_id": key
-            }),
-        ),
-        (
-            "s8:0",
-            "locker.set_passkey",
-            serde_json::json!({
-                "item_id": item, "rp_id": "vaultbank.example", "user_handle": "ada",
-                "display_name": "Ada", "credential_id": "cred-1", "algorithm": "ES256",
-                "private_key": new_cipher, "key_id": key
-            }),
-        ),
-        (
-            "s9:0",
-            "locker.duplicate_item",
-            serde_json::json!({"item_id": item, "new_item_id": "lk-copy"}),
-        ),
-        (
-            "s10:0",
-            "locker.remove_field",
-            serde_json::json!({"item_id": item, "field_id": "field-1"}),
-        ),
-        (
-            "s11:0",
-            "locker.clear_passkey",
-            serde_json::json!({"item_id": item}),
-        ),
-    ] {
-        let ran = door
-            .run_keyed(key, command, input)
-            .expect("the door answers");
-        assert!(!ran.ok, "{command} reached a secret: {:?}", ran.output);
-        assert_eq!(
-            ran.predicate.as_deref(),
-            Some(centraid_vault::commands::ASSISTANT_CLOSED_OUT),
-            "{command}: {:?}",
-            ran.reason
-        );
-        let said = ran.reason.unwrap_or_default();
-        assert!(
-            said.contains("secret") && said.contains("Locker"),
-            "the sentence says it is a secret and where the member opens it: {said}"
-        );
-        assert_no_secret(command, &said);
-        assert!(
-            !said.contains("Hidden Vaultbank") && !said.contains("lk-bank"),
-            "{said}"
-        );
-    }
-    // Nothing moved: the item's four sealed values, the new item and the copy.
-    let rows = pair
-        .core
-        .with_vault(|vault| {
-            vault
-                .keyset_page(&centraid_vault::page::KeysetPage {
-                    name: "locker.check".to_owned(),
-                    select: vec![
-                        "id".to_owned(),
-                        "password".to_owned(),
-                        "otp_seed".to_owned(),
-                    ],
-                    from: "locker_item".to_owned(),
-                    predicate: None,
-                    binds: Vec::new(),
-                    sort_column: "id".to_owned(),
-                    pk_column: "id".to_owned(),
-                    descending: false,
-                    limit: 50,
-                    after: None,
-                    held_thumbnail: false,
-                    document_size: false,
-                })
-                .map_err(centraid_core::CoreError::from)
-        })
-        .expect("the owner reads")
-        .rows;
-    assert_eq!(rows.len(), 1, "no item was added or copied: {rows:?}");
-    assert_eq!(
-        format!("{rows:?}").matches("lk1:").count(),
-        2,
-        "the sealed cells are as they were"
-    );
 }

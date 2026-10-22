@@ -522,12 +522,6 @@ impl Vault {
                 return refused(invalid.join("; "), "schema");
             }
 
-            if principal.is_assistant()
-                && let Some(sentence) = assistant_refusal(connection, definition, &command.input)?
-            {
-                return refused(sentence, ASSISTANT_CLOSED_OUT);
-            }
-
             let ctx = CommandCtx {
                 tx,
                 command: definition.name,
@@ -634,116 +628,6 @@ impl Vault {
             predicate,
         })
     }
-}
-
-/// The predicate a refusal of the assistant at a secret is journalled under.
-pub const ASSISTANT_CLOSED_OUT: &str = "assistant_cannot_touch_a_secret";
-
-/// The `locker.*` commands that reveal a sealed value, write one, or destroy
-/// one, whatever their input says.
-///
-/// A duplicate copies every sealed cell and its `fields[].value` overrides set
-/// them; removing a custom field or a passkey destroys a sealed value the
-/// member can only get back by typing it again. `locker.add_item`,
-/// `locker.edit_item`, `locker.set_field` and `locker.set_passkey` are not here:
-/// they are refused by what their input carries (see [`assistant_refusal`]),
-/// so the assistant can still file or amend an item's plain fields.
-const SECRET_COMMANDS: [&str; 6] = [
-    "locker.totp_code",
-    "locker.export",
-    "locker.reveal_receipt",
-    "locker.duplicate_item",
-    "locker.remove_field",
-    "locker.clear_passkey",
-];
-
-/// THE ASSISTANT HAS THE OWNER'S ACCESS, EXCEPT TO A SEALED VALUE.
-///
-/// A Locker item is an entity, and the assistant runs the shared verbs on it
-/// like any other kind (retitle, trash, restore, purge, flags, edges, tags),
-/// under the confirmations the owner gets. What it cannot run is a command that
-/// reveals or writes a sealed value (`password`, `otp_seed`, `card_number`,
-/// `cvv`, `content`, `locker_item_field.value_sealed`,
-/// `locker_item_passkey.private_key`):
-///
-/// - [`SECRET_COMMANDS`];
-/// - any command whose input carries a key its definition declares sealed
-///   (`sealed_input`) with anything but the placeholder, which means "leave
-///   this secret alone";
-/// - `locker.edit_item` that leaves out a sealed cell the item holds, because
-///   an edit replaces and an omitted cell is cleared.
-///
-/// The refusal is the gate's and not each verb's, so a command added later that
-/// declares `sealed_input` is closed too. It is a sentence and not a lookup
-/// failure on purpose: the member asked, and it carries no secret.
-fn assistant_refusal(
-    connection: &Connection,
-    definition: &CommandDefinition,
-    input: &serde_json::Value,
-) -> Result<Option<String>> {
-    use crate::commands::locker::{SEALED_ITEM_CELLS, SEALED_PLACEHOLDER};
-    const SENTENCE: &str = "that is a secret, which the assistant cannot read or set; \
-        you can reveal or set it in Locker";
-    let refuse = || Ok(Some(SENTENCE.to_owned()));
-    if SECRET_COMMANDS.contains(&definition.name) {
-        return refuse();
-    }
-    let kept = |value: &serde_json::Value| value.as_str() == Some(SEALED_PLACEHOLDER);
-    if let Some(map) = input.as_object() {
-        // A custom field's `value` is sealed only when the field is: a text, url or date field is
-        // plain, so the assistant may write one, but never a sealed one or a plain one over a
-        // sealed one (the write would erase the secret).
-        if definition.name == "locker.set_field" {
-            let sealed_kind = map.get("kind").and_then(serde_json::Value::as_str) == Some("sealed");
-            let over_a_secret = match map.get("field_id").and_then(serde_json::Value::as_str) {
-                Some(field) => connection
-                    .query_row(
-                        "SELECT value_sealed IS NOT NULL FROM locker_item_field WHERE field_id = ?1",
-                        [field],
-                        |row| row.get::<_, bool>(0),
-                    )
-                    .unwrap_or(false),
-                None => false,
-            };
-            return if sealed_kind || over_a_secret {
-                refuse()
-            } else {
-                Ok(None)
-            };
-        }
-        for key in definition.sealed_input {
-            let carried = match key.split_once("[].") {
-                Some((array, inner)) => map
-                    .get(array)
-                    .and_then(serde_json::Value::as_array)
-                    .into_iter()
-                    .flatten()
-                    .filter_map(|item| item.as_object()?.get(inner))
-                    .any(|value| !kept(value)),
-                None => map.get(*key).is_some_and(|value| !kept(value)),
-            };
-            if carried {
-                return refuse();
-            }
-        }
-        if definition.name == "locker.edit_item"
-            && let Some(item) = map.get("item_id").and_then(serde_json::Value::as_str)
-        {
-            for column in SEALED_ITEM_CELLS {
-                let held: bool = connection
-                    .query_row(
-                        &format!("SELECT {column} IS NOT NULL FROM locker_item WHERE id = ?1"),
-                        [item],
-                        |row| row.get(0),
-                    )
-                    .unwrap_or(false);
-                if held && !map.contains_key(column) {
-                    return refuse();
-                }
-            }
-        }
-    }
-    Ok(None)
 }
 
 /// What the gate's transaction produced.

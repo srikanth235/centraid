@@ -206,6 +206,7 @@ impl Handle {
     /// Run one typed command as the owner at the clock's current instant. A
     /// refusal is a value, not an error.
     pub fn run(&self, name: &str, input: serde_json::Value) -> Result<Ran, String> {
+        let input = self.sealed(name, input)?;
         let outcome = self
             .vault
             .execute(
@@ -220,6 +221,71 @@ impl Handle {
             reason: outcome.reason,
             predicate: outcome.predicate,
         })
+    }
+
+    /// A TYPED LOCKER SECRET, SEALED under the harness key before the vault sees it (#1135): the
+    /// runtime hands the door a secret as the member typed it, as the phone's core does inside
+    /// `run_keyed` (`crates/core/src/locker/phone.rs`, `seal_command`). A cell that is empty, the
+    /// vault's placeholder or already ciphertext (a seeded world writes its own) passes untouched.
+    fn sealed(
+        &self,
+        name: &str,
+        mut input: serde_json::Value,
+    ) -> Result<serde_json::Value, String> {
+        use centraid_vault::commands::locker::{SEALED_ITEM_CELLS, SEALED_PLACEHOLDER};
+        use centraid_vault::custody::locker_key::{
+            decrypt_under_locker_key, encrypt_under_locker_key, is_locker_ciphertext,
+        };
+        if !matches!(name, "locker.add_item" | "locker.edit_item") {
+            return Ok(input);
+        }
+        let typed = |value: &serde_json::Value| {
+            value
+                .as_str()
+                .filter(|text| {
+                    !text.is_empty() && *text != SEALED_PLACEHOLDER && !is_locker_ciphertext(text)
+                })
+                .map(str::to_owned)
+        };
+        let mut carried: Vec<(&str, String)> = SEALED_ITEM_CELLS
+            .iter()
+            .filter_map(|column| typed(&input[*column]).map(|value| (*column, value)))
+            .collect();
+        if carried.is_empty() {
+            return Ok(input);
+        }
+        let item_id = input["item_id"]
+            .as_str()
+            .filter(|id| !id.is_empty())
+            .ok_or("a Locker secret is sealed against its item's id, and none was named")?
+            .to_owned();
+        let (key_id, key) = self.locker_key()?;
+        for (column, value) in &mut carried {
+            if *column == "otp_seed" {
+                *value = centraid_apps_locker::totp::seed_of(value)
+                    .map_err(|refusal| refusal.sentence().to_owned())?;
+            }
+        }
+        if let Some((_, password)) = carried.iter().find(|(column, _)| *column == "password") {
+            let rotated = name == "locker.add_item" || {
+                let stored = self
+                    .vault
+                    .locker_sealed_item_cell(&item_id, "password")
+                    .map_err(|error| error.to_string())?
+                    .and_then(|cell| {
+                        decrypt_under_locker_key(&key, &key_id, &item_id, &cell.ciphertext?).ok()
+                    });
+                stored.as_deref() != Some(password.as_str())
+            };
+            input["password_rotated"] = serde_json::Value::Bool(rotated);
+        }
+        for (column, value) in carried {
+            let sealed = encrypt_under_locker_key(&key, &key_id, &item_id, &value)
+                .map_err(|error| error.to_string())?;
+            input[column] = serde_json::Value::String(sealed);
+        }
+        input["key_id"] = serde_json::Value::String(key_id);
+        Ok(input)
     }
 
     /// Run a command that must succeed.
@@ -366,17 +432,6 @@ impl Handle {
             .read(|connection| Ok(connection.pragma_update(None, "wal_checkpoint", "TRUNCATE")?))
             .map_err(|error| error.to_string())
     }
-
-    /// Seal one locker cell for `item_id` under the Locker key (founding the
-    /// key plane on first use): `(key_id, ciphertext)`.
-    pub fn seal(&self, item_id: &str, value: &str) -> Result<(String, String), String> {
-        let (key_id, key) = self.locker_key()?;
-        let sealed = centraid_vault::custody::locker_key::encrypt_under_locker_key(
-            &key, &key_id, item_id, value,
-        )
-        .map_err(|error| error.to_string())?;
-        Ok((key_id, sealed))
-    }
 }
 
 fn with_store(vault: Vault, path: &Path) -> Result<Vault, String> {
@@ -433,20 +488,6 @@ impl Door for Handle {
 
     fn mint_id(&self) -> String {
         centraid_vault::Ids::next(self.vault.ids())
-    }
-
-    fn seal(&self, item_id: &str, value: &str) -> Result<(String, String), String> {
-        Self::seal(self, item_id, value)
-    }
-
-    fn unseal(&self, key_id: &str, item_id: &str, sealed: &str) -> Result<String, String> {
-        centraid_vault::custody::locker_key::decrypt_under_locker_key(
-            HARNESS_LOCKER_KEY,
-            key_id,
-            item_id,
-            sealed,
-        )
-        .map_err(|error| error.to_string())
     }
 }
 

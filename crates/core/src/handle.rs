@@ -160,7 +160,7 @@ pub struct Handle {
     /// from the seed, Q-1047-11) while the member has unlocked Locker on this
     /// phone, zeroed on relock, and nothing otherwise. See
     /// [`crate::locker::phone`].
-    locker: crate::locker::phone::Cell,
+    locker: Arc<crate::locker::phone::Cell>,
     /// THE ON-DEVICE CHAT'S SESSIONS AND ITS VIEW OF THE MODEL SLOT. In memory
     /// only; see [`crate::assist`]. `pub(crate)` because that module is where
     /// `Request::Assist` is answered.
@@ -280,7 +280,7 @@ impl Core {
             draining: AtomicBool::new(false),
             reconciled: AtomicBool::new(false),
             owned_bytes: Mutex::new(None),
-            locker: Mutex::new(None),
+            locker: Arc::new(Mutex::new(None)),
             assist: crate::assist::Hub::new(),
         })
     }
@@ -738,15 +738,6 @@ impl Handle {
         centraid_vault::Principal::owner(OWNER_DEVICE)
     }
 
-    /// The chat's assistant, riding this device: the owner's own, with a
-    /// sealed value closed to it. The vault refuses any command run under this
-    /// principal that reveals or sets a sealed value, through whatever verb
-    /// (R-1088-3, the owner's ruling of 2026-10-22, #1135).
-    #[must_use]
-    pub fn assistant(&self) -> centraid_vault::Principal {
-        centraid_vault::Principal::assistant(OWNER_DEVICE)
-    }
-
     /// THE DOOR A CHAT'S NATIVE SESSION READS AND WRITES THROUGH (#1088).
     ///
     /// It holds clones of this handle's own lock, registry and event queue, so
@@ -758,7 +749,8 @@ impl Handle {
             Arc::clone(&self.vault),
             Arc::clone(&self.registry),
             self.events(),
-            self.assistant(),
+            self.owner(),
+            Arc::clone(&self.locker),
         )
     }
 
@@ -848,19 +840,17 @@ impl Handle {
                 let changes = crate::events::ChangeFeed::new(self.events());
                 Ok(response(wire::response::Kind::Command(self.with_vault(
                     |vault| {
-                        // A LOCKER SECRET IS SEALED HERE, before the vault
-                        // sees it (#1047, D-5): the command plane refuses
-                        // plaintext, and the core is the one holder of `K`.
-                        let sealed =
-                            crate::locker::phone::seal_command(vault, &self.locker, command)?;
-                        let command = match sealed {
-                            Some(input) => &wire::Command {
-                                input,
-                                ..command.clone()
-                            },
-                            None => command,
-                        };
-                        crate::api::invoke(vault, &self.registry, &self.owner(), command, &changes)
+                        // A LOCKER SECRET IS SEALED in the one write path the chat's
+                        // confirmed card shares (#1047, D-5, #1135): `api::command`.
+                        crate::api::command(
+                            vault,
+                            &self.locker,
+                            &self.registry,
+                            &self.owner(),
+                            command,
+                            &changes,
+                        )
+                        .and_then(crate::api::wire_outcome)
                     },
                 )?)))
             }

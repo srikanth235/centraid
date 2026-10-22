@@ -576,16 +576,6 @@
       "why_no_example": ""
     },
     {
-      "argument": "verb",
-      "example": null,
-      "family": "vault",
-      "id": "act.this_seat_cannot_open_the_secret",
-      "source": "act.rs",
-      "template": "error: this seat cannot open the secret: {error}",
-      "tool": "act",
-      "why_no_example": "the seat's own failure to open a sealed secret; the fixture seat opens every secret"
-    },
-    {
       "argument": "args",
       "example": [
         {
@@ -818,6 +808,28 @@
       "example": [
         {
           "args": {
+            "args": "code: 123456",
+            "kind": "locker item",
+            "name": "Home wifi",
+            "verb": "edit"
+          },
+          "think": null,
+          "tool": "act",
+          "user": null
+        }
+      ],
+      "family": "value",
+      "id": "act.a_item_type_item_has_no_place",
+      "source": "act.rs",
+      "template": "error: a {item_type} item has no place for {field}; nothing was stored.",
+      "tool": "act",
+      "why_no_example": ""
+    },
+    {
+      "argument": "args",
+      "example": [
+        {
+          "args": {
             "args": "colour: red",
             "kind": "task",
             "name": "Pay rent",
@@ -891,13 +903,25 @@
     },
     {
       "argument": "args",
-      "example": null,
+      "example": [
+        {
+          "args": {
+            "args": "password: \nusername: sam2",
+            "kind": "locker item",
+            "name": "Bank login",
+            "verb": "edit"
+          },
+          "think": null,
+          "tool": "act",
+          "user": null
+        }
+      ],
       "family": "value",
-      "id": "act.field_is_a_sealed_value_which",
+      "id": "act.a_secret_the_member_types_in",
       "source": "act.rs",
-      "template": "error: {field} is a sealed value, which the assistant cannot set; the member sets it in Locker.",
+      "template": "error: a secret the member types in Locker is its own call; send it alone.",
       "tool": "act",
-      "why_no_example": "needs a session with the secrets off (Flags::secrets, the phone); every example runs the harness session, which holds the key, so tests/locker_parity.rs drives it"
+      "why_no_example": ""
     },
     {
       "argument": "args",

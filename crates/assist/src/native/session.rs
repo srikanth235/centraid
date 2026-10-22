@@ -37,24 +37,6 @@ pub struct Flags {
     /// the model used to answer (`ambiguous:`, `0 … called …`, `error: … was refused`), for
     /// comparison runs (`--no-compose`). `undo` is not behind it.
     pub compose: bool,
-    /// Whether a Locker item's sealed values are reachable (#1088, R-1088-3; the owner's ruling of
-    /// 2026-10-22). The assistant has the owner's access to Locker items, to find, read and act on
-    /// them, with or without this: it is a policy about SEALED values only. On (the default, and
-    /// what the model was trained on and every harness run uses), the runtime reads the sealed
-    /// cells, seals what a `create` or an edit puts in one and opens what a `reveal` asks for. Off
-    /// (the phone), it reads no sealed column (a Locker item's sealed cells are a presence bit and
-    /// nothing else), and a `reveal`, or a `create` that sets a sealed value, ends the turn in
-    /// `decline sealed_egress` (`Session::secrets_off_decline`). The kind card and the prompt are
-    /// the same either way (R-1088-10).
-    pub secrets: bool,
-    /// Whether Money is reachable (#1099, R-1099-8). On (the default, what a harness run and a
-    /// retrain use), the runtime loads the transactions of the last
-    /// [`TRANSACTION_MONTHS`](crate::native::world::TRANSACTION_MONTHS) months, the kind card
-    /// names the `transaction` kind and a call may find, open and sum them; they are read-only.
-    /// Off (the phone, until the model has been measured with Money in its prompt), it reads no
-    /// Money table, holds no transaction and the kind card is the one the shipped model was
-    /// trained on: a call that names the kind finds no row.
-    pub money: bool,
     /// What a write does (#1088, R-1088-2, R-1088-6): [`Writes::Run`](crate::native::park::Writes)
     /// (the default: the vault runs it, as in every harness run), or `Park` (a patched copy of
     /// the world takes it and it waits for the member's tap).
@@ -70,8 +52,6 @@ impl Default for Flags {
             defaults: crate::native::ground::Defaults::default(),
             normalize: true,
             compose: true,
-            secrets: true,
-            money: true,
             writes: crate::native::park::Writes::Run,
         }
     }
@@ -456,6 +436,11 @@ pub struct Session {
     /// does not keep or the runtime does not know: a later reveal of ANOTHER secret of that item
     /// in the same turn is not made silently (`Session::reveal_guard`, nt15 R1s).
     pub(crate) reveal_refused: Vec<(usize, Key, String)>,
+    /// The sealed fields (by the model's name) the call's writes set, per Locker item: the world
+    /// holds a sealed cell as a presence bit, so a typed secret is a change only the session saw
+    /// (#1135). Cleared with each call.
+    pub(crate) sealed_moves:
+        std::collections::BTreeMap<String, std::collections::BTreeSet<&'static str>>,
 }
 
 impl Selector {
@@ -609,7 +594,7 @@ impl Session {
             today: now.date(),
             tz: tz.to_owned(),
         };
-        let world = World::load_in(&*door, flags.secrets, flags.money, Some(&standing))?;
+        let world = World::load_in(&*door, Some(&standing))?;
         let me_name = if me.is_empty() {
             world
                 .row(&world.me_key())
@@ -669,6 +654,7 @@ impl Session {
             pending_bulk: None,
             plan_offer: None,
             reveal_refused: Vec::new(),
+            sealed_moves: std::collections::BTreeMap::new(),
         };
         if flags.directory {
             session.number_directory();
@@ -687,12 +673,7 @@ impl Session {
             today: self.now.date(),
             tz: self.tz.clone(),
         };
-        World::load_in(
-            &*self.door,
-            self.flags.secrets,
-            self.flags.money,
-            Some(&standing),
-        )
+        World::load_in(&*self.door, Some(&standing))
     }
 
     /// The session clock follows the request: the person's civil `now` and their zone. The world
@@ -1838,6 +1819,12 @@ impl Session {
     // The turn loop.
     // -----------------------------------------------------------------
 
+    /// Hold a typed secret's placeholder where the session remembers the member's words (#1135).
+    pub fn redact_message(&mut self, secrets: &[String]) {
+        self.message = crate::native::member::redact(&self.message, secrets);
+        self.prev_message = crate::native::member::redact(&self.prev_message, secrets);
+    }
+
     /// A new user message: compaction first, then the turn's block (SPEC
     /// §6.1): the pre-grounded `vault:` line (`preground`), the `focus:` line,
     /// the `answer:` line (`crate::native::block::answer_line`), the `dates:` line and the `picks:` line
@@ -2553,6 +2540,7 @@ impl Session {
 
     /// The tool a call names, run once.
     fn run_tool(&mut self, tool: &str, args: &Map<String, Value>) -> Result<Outcome, String> {
+        self.sealed_moves.clear();
         match tool {
             "search" => crate::native::search::search(self, args),
             "find" => self.find(args),
@@ -2587,11 +2575,6 @@ impl Session {
                     allowed.join(", ")
                 ));
             }
-        }
-        if !self.flags.secrets
-            && let Some(outcome) = self.secrets_off_decline(tool, args)
-        {
-            return outcome;
         }
         // A CALL THE RUNTIME CAN FIX WITHOUT A GUESS RUNS FIXED (nt12 R1, R2): the corrected call
         // is run in the same step and the reply carries one `note:` line for what was used. A
@@ -2740,14 +2723,10 @@ impl Session {
             if !sealed.is_empty() {
                 lines.push((
                     Vec::new(),
-                    if self.flags.secrets {
-                        format!("sealed: {} (reveal to show)", sealed.join(", "))
-                    } else {
-                        format!(
-                            "sealed: {} (the member reveals it in Locker)",
-                            sealed.join(", ")
-                        )
-                    },
+                    format!(
+                        "sealed: {} (reveal offers it to the member)",
+                        sealed.join(", ")
+                    ),
                 ));
             }
         }
@@ -2876,41 +2855,6 @@ impl Session {
         }
         *options = candidates;
         true
-    }
-
-    /// WITH SECRETS OFF (`Flags::secrets`), A CALL THAT WOULD REVEAL OR SET A SEALED VALUE ENDS THE
-    /// TURN in the model's own decline, `declined: sealed_egress`, before anything is read or run:
-    /// the `reveal` verb, and a `create` of a Locker item that carries a password, a code, a card
-    /// number or a cvv. A Locker item is otherwise a row like any other (the owner's ruling of
-    /// 2026-10-22): it is found, read and acted on, and only its sealed values are out of reach.
-    /// The effect is the decline's plus `secrets_off: true`, so a run can be audited for it.
-    fn secrets_off_decline(&mut self, tool: &str, args: &Map<String, Value>) -> Option<Outcome> {
-        if tool != "act" {
-            return None;
-        }
-        let verb = args
-            .get("verb")
-            .and_then(Value::as_str)
-            .and_then(meta::Verb::parse)?;
-        let sets_sealed = || {
-            let kind = args.get("kind").and_then(Value::as_str);
-            let extra = crate::native::act::act_args(args.get("args")).unwrap_or_default();
-            kind.is_some_and(|kind| meta::Kind::parse(kind) == Some(Kind::LockerItem))
-                && extra.keys().any(|key| {
-                    meta::REVEAL_FIELDS
-                        .iter()
-                        .any(|(name, column)| key == name || key == column)
-                        && key != "notes"
-                })
-        };
-        if verb != meta::Verb::Reveal && !(verb == meta::Verb::Create && sets_sealed()) {
-            return None;
-        }
-        let mut reason = Map::new();
-        reason.insert("reason".to_owned(), json!("sealed_egress"));
-        let mut outcome = self.decline(&reason).ok()?;
-        outcome.effect.insert("secrets_off".to_owned(), json!(true));
-        Some(outcome)
     }
 
     fn decline(&mut self, args: &Map<String, Value>) -> Result<Outcome, String> {

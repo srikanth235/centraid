@@ -1125,7 +1125,6 @@ pub const OPS: &[&str] = &["count", "sum", "min", "max"];
 pub const DECLINE_REASONS: &[&str] = &[
     "out_of_scope",
     "unbounded_destruction",
-    "sealed_egress",
     "fabricated_secret",
     "never_mind",
     "not_found",

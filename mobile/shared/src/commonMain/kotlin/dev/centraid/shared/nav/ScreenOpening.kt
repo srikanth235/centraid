@@ -273,7 +273,7 @@ public object ScreenOpenings {
         )
         is Destination.LockerItem -> screen(
             ScreenIds.LOCKER_ITEM,
-            LockerItemEvent(opened = LockerItemEvent.Opened(item_id = destination.itemId, parent = destination.parent)).encode(),
+            LockerItemEvent(opened = LockerItemEvent.Opened(item_id = destination.itemId, parent = destination.parent, follow = destination.follow)).encode(),
         )
         is Destination.LockerEditor -> if (destination.fromGenerator) {
             null

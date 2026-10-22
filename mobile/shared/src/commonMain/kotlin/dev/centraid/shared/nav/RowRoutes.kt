@@ -27,7 +27,7 @@ import centraid.screen.v1.PhotoShelf
  * | photos | `album` | the album's shelf |
  * | docs | `folder` | the folder's page; `parent` is the pushing page's title |
  * | money | `transaction` | the transaction page; `parent` is the pushing page's title |
- * | locker | `locker_item` | the item's page, behind the Locker's lock wall: a note may link an item (#1135), and opening the link asks the gate like any Locker destination |
+ * | locker | `locker_item` | the item's page, behind the Locker's lock wall: a note may link an item (#1135), and opening the link asks the gate like any Locker destination. A card with a [MemberAction] qualifier runs that action instead: reveal and code on the page, edit_secret in the editor, export in the export |
  * | chat | `thread` | none: Chat is a tab and not a screen ([isThread]). The iOS shell opens it (`ShellModel.openChatThread`), and Android has no Chat tab, so Home's search never offers the row there (R-1097-24) |
  *
  * A notebook, album or folder arrives with its id and its name (the
@@ -83,8 +83,23 @@ public object RowRoutes {
         )
         AppIds.PHOTOS to PHOTO -> Destination.PhotoLightbox(row.id, neighbours.ifEmpty { listOf(row.id) })
         AppIds.MONEY to TRANSACTION -> Destination.MoneyTransaction(row.id, parent = parent)
-        AppIds.LOCKER to LOCKER_ITEM -> Destination.LockerItem(row.id, parent = parent)
+        AppIds.LOCKER to LOCKER_ITEM -> lockerItem(row, parent)
         else -> appHome(row.app)
+    }
+
+    /**
+     * A Locker item card is the item's page, unless it is a member action the assistant offered
+     * (#1135): reveal and code open the page and run Locker's flow, a secret to type opens the
+     * editor, an export opens the export.
+     */
+    private fun lockerItem(row: RowRef, parent: String): Destination {
+        val action = MemberAction.parse(row.app, row.entity, row.id, row.qualifier)
+            ?: return Destination.LockerItem(row.id, parent = parent)
+        return when (action.kind) {
+            MemberAction.Kind.Reveal, MemberAction.Kind.Code -> Destination.LockerItem(row.id, parent = parent, follow = action.qualifier)
+            MemberAction.Kind.EditSecret -> Destination.LockerEditor(itemId = row.id)
+            MemberAction.Kind.Export -> Destination.LockerExport
+        }
     }
 
     /**

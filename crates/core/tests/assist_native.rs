@@ -299,7 +299,6 @@ fn a_decline_other_than_out_of_scope_is_a_composed_line_with_no_cards_no_activit
     use centraid_assist::native_turn::words::{Say, say};
     for (reason, which) in [
         ("unbounded_destruction", Say::DeclineUnboundedDestruction),
-        ("sealed_egress", Say::DeclineSealedEgress),
         ("fabricated_secret", Say::DeclineFabricatedSecret),
         ("not_found", Say::Nothing),
     ] {
@@ -335,58 +334,111 @@ fn a_question_for_the_vault_that_finds_nothing_says_so() {
 }
 
 #[test]
-fn an_ask_to_reveal_or_set_a_secret_is_declined_sealed_egress() {
-    // Two ways the model can reach for a secret: reveal a field, or create an item with one.
-    for (tool, args) in [
+fn an_ask_to_reveal_a_secret_ends_the_turn_in_a_card_the_member_completes() {
+    // The assistant and the member have the same functionality; only the value stays out of the
+    // model's reach (#1135). A reveal is a member action: no decline, no value, a card.
+    for (field, qualifier, line) in [
         (
-            "act",
-            vec![
-                ("verb", "reveal"),
-                ("kind", "locker_item"),
-                ("args", "field: password"),
-            ],
+            "password",
+            "reveal:password",
+            "Tap to show the password of \"Vaultbank login\".",
         ),
         (
-            "act",
-            vec![
-                ("verb", "create"),
-                ("kind", "locker_item"),
-                (
-                    "args",
-                    "name: Gym\ntype: login\npassword: PLANTED-NEW-PASSWORD",
-                ),
-            ],
+            "code",
+            "code:otp_seed",
+            "Tap to show the code for \"Vaultbank login\".",
         ),
     ] {
-        let model = script(&[step("plan: secret", tool, &args)]);
+        let model = script(&[step(
+            "plan: secret",
+            "act",
+            &[
+                ("verb", "reveal"),
+                ("kind", "locker_item"),
+                ("name", "vaultbank"),
+                ("args", &format!("field: {field}")),
+            ],
+        )]);
         let sample = native_sample(model.clone());
-        common::chat::with_a_locker_item(&sample);
+        let item = common::chat::with_a_locker_item(&sample);
         let session = sample.start("");
-        let sent = sample.send(session, 1, "what is my wifi password?");
+        let sent = sample.send(session, 1, "what is my vaultbank password?");
         let answer = answered(&sent);
+        assert_eq!(answer.text, line, "{field}");
+        let [card] = answer.cards.as_slice() else {
+            panic!("one card: {answer:?}");
+        };
         assert_eq!(
-            answer.text, "Secrets stay in Locker. Chat does not read or send them.",
-            "{tool}"
+            (
+                card.app.as_str(),
+                card.entity.as_str(),
+                card.id.as_str(),
+                card.qualifier.as_str()
+            ),
+            ("locker", "locker_item", item.as_str(), qualifier),
+            "{field}"
         );
-        assert!(answer.cards.is_empty());
-        // the secret is the true reason, not "writes are off": the turn parks nothing
+        // nothing pends, nothing ran, and the card is stored as a snapshot with no value
         let story = story(&sample.drain_assist_events());
-        assert_eq!(story.last().map(String::as_str), Some("answer"), "{tool}");
         assert!(
             story.iter().all(|word| !word.starts_with("pending")),
-            "{tool}"
+            "{field}"
         );
-        if tool == "act" && args.iter().any(|(_, value)| *value == "reveal") {
-            assert_eq!(story, ["answer"], "a reveal announces no look: {tool}");
-        }
-        // and no sealed value, plaintext or ciphertext, was in front of the model
+        let stored = thread(&sample, &sent.thread_id);
+        let kept = &stored.messages.last().unwrap().cards;
+        assert_eq!(kept.len(), 1);
+        assert_eq!(kept[0].qualifier, qualifier);
         for prompt in model.prompts() {
             for planted in common::chat::PLANTED_SECRETS {
-                assert!(!prompt.contains(planted), "{tool}: {planted}");
+                assert!(!prompt.contains(planted), "{field}: {planted}");
             }
-            assert!(!prompt.contains("lk1:"), "{tool}");
+            assert!(!prompt.contains("lk1:"), "{field}");
         }
     }
+}
+
+#[test]
+fn a_secret_typed_in_chat_parks_masked_and_the_thread_never_holds_it() {
+    let model = script(&[step(
+        "plan: save",
+        "act",
+        &[
+            ("verb", "create"),
+            ("kind", "locker_item"),
+            (
+                "args",
+                "name: Gym\ntype: login\npassword: PLANTED-NEW-PASSWORD",
+            ),
+        ],
+    )]);
+    let sample = native_sample(model.clone());
+    let session = sample.start("");
+    let sent = sample.send(
+        session,
+        1,
+        "save my gym login, password PLANTED-NEW-PASSWORD",
+    );
+    let story = story(&sample.drain_assist_events());
+    assert!(
+        story.iter().any(|word| word.starts_with("pending")),
+        "a typed secret is an ordinary parked write: {story:?}"
+    );
+    let answer = answered(&sent);
+    assert!(
+        answer.text.contains("password ••••") && !answer.text.contains("PLANTED-NEW-PASSWORD"),
+        "{}",
+        answer.text
+    );
+    let pending = answer.pending.as_ref().expect("the card");
+    assert!(
+        !format!("{pending:?}").contains("PLANTED-NEW-PASSWORD"),
+        "{pending:?}"
+    );
+    // the stored question never held the secret
+    let stored = thread(&sample, &sent.thread_id);
+    let first = &stored.messages[0];
+    assert!(first.from_member);
+    assert_eq!(first.text, "save my gym login, password «sealed»");
 }
 
 #[test]
@@ -1507,11 +1559,7 @@ fn a_decline_out_of_scope_is_answered_in_free_words_streamed_and_told_it_can_do_
 fn every_other_decline_keeps_its_canned_sentence_and_asks_for_no_free_words() {
     // `a_decline_other_than_out_of_scope…` holds the sentences; this holds the count: the free
     // generation is out_of_scope's alone.
-    for reason in [
-        "unbounded_destruction",
-        "sealed_egress",
-        "fabricated_secret",
-    ] {
+    for reason in ["unbounded_destruction", "fabricated_secret"] {
         let [think, call] = step("plan: no", "decline", &[("reason", reason)]);
         let model = model_of(vec![think, call, FREE_WORDS.to_owned()]);
         let sample = native_sample(model.clone());

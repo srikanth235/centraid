@@ -19,11 +19,10 @@
 //! `think` is the same compile step with no vault, reading a think's text (the decoder's and the
 //! data builders' compiler, and the v3.1 to v4 rewrite of a think).
 //!
-//! A Locker item's sealed values are a policy of the session (`Flags::secrets`): on for the harness,
-//! where every run and the model's training have them, off on the phone, where a Locker item is in the
-//! world by its plain rows (found, read and acted on like any kind, the owner's ruling of 2026-10-22),
-//! its sealed cells are a presence bit, and a call that reveals or sets a sealed value ends in
-//! `decline sealed_egress` (R-1088-3, R-1088-10).
+//! A Locker item is a row like any other (found, read and acted on), and a sealed value is a channel
+//! the runtime keeps closed, in the harness exactly as on the phone (#1135): its sealed cells are a
+//! presence bit, a call that would show or set one ends the turn in a card the member completes in
+//! Locker (`member`), and a secret the member typed is sealed by the door when its card is confirmed.
 //!
 //! The trainer drives this runtime through the `nativetools` binary (`crates/nativetools`, JSON
 //! lines), which also seeds worlds and writes the export; the phone links it from here.
@@ -39,6 +38,7 @@ mod failsoft;
 mod follow;
 pub mod ground;
 pub mod identity;
+pub mod member;
 pub mod meta;
 mod normalize;
 pub mod park;

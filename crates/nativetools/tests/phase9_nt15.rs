@@ -526,8 +526,8 @@ fn nt15_r1s_after_a_refusal_another_secret_is_not_revealed_and_the_turn_ends_in_
         world.id("mail"),
         "{second}"
     );
-    // nothing was revealed and nothing was written
-    assert!(second["effect"].get("revealed").is_none(), "{second}");
+    // nothing was offered and nothing was written
+    assert!(second["effect"].get("member_actions").is_none(), "{second}");
 }
 
 #[test]
@@ -539,18 +539,30 @@ fn nt15_r1s_the_secret_a_message_names_is_not_held_back() {
     let refused = reveal(&mut session, "Mail login", "pin");
     assert!(text(&refused).starts_with("error:"), "{refused}");
     let second = reveal(&mut session, "Mail login", "password");
-    assert!(text(&second).contains("password: pw-mail"), "{second}");
+    assert!(
+        text(&second).contains("offered to the member: reveal password of")
+            && !text(&second).contains("pw-mail"),
+        "{second}"
+    );
     // an N4 synonym of a secret the message names reaches it the same way
     let mut session = world.session();
     session.user("the pin and the 2fa of the mail login");
     reveal(&mut session, "Mail login", "pin");
     let second = reveal(&mut session, "Mail login", "code");
-    assert!(text(&second).contains("code: 123456"), "{second}");
+    assert!(
+        text(&second).contains("offered to the member: show the code of")
+            && !text(&second).contains("123456"),
+        "{second}"
+    );
     let mut session = world.session();
     session.user("the pin and the pw of the mail login");
     reveal(&mut session, "Mail login", "pin");
     let second = reveal(&mut session, "Mail login", "password");
-    assert!(text(&second).contains("password: pw-mail"), "{second}");
+    assert!(
+        text(&second).contains("offered to the member: reveal password of")
+            && !text(&second).contains("pw-mail"),
+        "{second}"
+    );
 }
 
 #[test]
@@ -563,10 +575,18 @@ fn nt15_r1s_a_reveal_by_a_name_or_a_synonym_with_no_refusal_works() {
         text(&reply).contains("note: read field 2fa as code"),
         "{reply}"
     );
-    assert!(text(&reply).contains("code: 123456"), "{reply}");
+    assert!(
+        text(&reply).contains("offered to the member: show the code of")
+            && !text(&reply).contains("123456"),
+        "{reply}"
+    );
     session.user("and the pw");
     let reply = reveal(&mut session, "Mail login", "pw");
-    assert!(text(&reply).contains("password: pw-mail"), "{reply}");
+    assert!(
+        text(&reply).contains("offered to the member: reveal password of")
+            && !text(&reply).contains("pw-mail"),
+        "{reply}"
+    );
 }
 
 #[test]
@@ -593,7 +613,11 @@ fn nt15_r1s_asked_for_the_code_of_a_wifi_the_password_is_not_revealed() {
     // the next turn, asked for by name: it is revealed
     session.user("the password then");
     let third = reveal(&mut session, "Home wifi", "password");
-    assert!(text(&third).contains("password: hunter2"), "{third}");
+    assert!(
+        text(&third).contains("offered to the member: reveal password of")
+            && !text(&third).contains("hunter2"),
+        "{third}"
+    );
 }
 
 #[test]
@@ -636,7 +660,11 @@ fn nt15_r1s_a_repeat_of_the_field_refused_and_another_item_are_not_held_back() {
     reveal(&mut session, "Mail login", "pin");
     // another item: the refusal was about the mail login
     let wifi = reveal(&mut session, "Home wifi", "password");
-    assert!(text(&wifi).contains("password: hunter2"), "{wifi}");
+    assert!(
+        text(&wifi).contains("offered to the member: reveal password of")
+            && !text(&wifi).contains("hunter2"),
+        "{wifi}"
+    );
 }
 
 #[test]
@@ -1609,12 +1637,20 @@ fn nt15_r1s_a_guess_the_message_never_named_is_repaired_to_what_the_item_holds()
     assert!(text(&guess).contains("It holds: content."), "{guess}");
     assert!(text(&guess).contains("Send act verb: reveal"), "{guess}");
     let repaired = reveal(&mut session, "Alarm code", "content");
-    assert!(text(&repaired).contains("4721"), "{repaired}");
+    assert!(
+        text(&repaired).contains("offered to the member: reveal notes of")
+            && !text(&repaired).contains("4721"),
+        "{repaired}"
+    );
     // notes is the same field
     session.user("and the alarm code again");
     reveal(&mut session, "Alarm code", "password");
     let repaired = reveal(&mut session, "Alarm code", "notes");
-    assert!(text(&repaired).contains("4721"), "{repaired}");
+    assert!(
+        text(&repaired).contains("offered to the member: reveal notes of")
+            && !text(&repaired).contains("4721"),
+        "{repaired}"
+    );
 }
 
 #[test]

@@ -430,16 +430,8 @@ pub fn py_json(value: &Value) -> String {
 /// The kind card, one line per kind.
 #[must_use]
 pub fn kind_card(currency: &str) -> Vec<String> {
-    kind_card_in(currency, true)
-}
-
-/// The kind card of a session: without Money (`Flags::money` off) the `transaction` line is
-/// left out, so the prompt is the one the shipped model was trained on.
-#[must_use]
-pub fn kind_card_in(currency: &str, money: bool) -> Vec<String> {
     Kind::ALL
         .iter()
-        .filter(|kind| money || **kind != Kind::Transaction)
         .map(|kind| render::card_line(*kind, currency))
         .collect()
 }
@@ -489,7 +481,7 @@ pub fn prompt(session: &mut Session) -> Value {
         "today: {} {today}\nme: {}\n\nkinds:\n{}",
         crate::native::dates::weekday_name(today),
         session.me_name,
-        kind_card_in(&session.world.currency, session.flags.money).join("\n")
+        kind_card(&session.world.currency).join("\n")
     );
     if session.flags.directory {
         let mut lines = Vec::new();
