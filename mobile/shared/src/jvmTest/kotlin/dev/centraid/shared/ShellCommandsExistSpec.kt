@@ -125,7 +125,7 @@ class ShellCommandsExistSpec : StringSpec({
         val registered = registeredCommands(repositoryRoot)
         listOf(
             "note.edit", // a `const val SAVE_COMMAND`
-            "task.complete", // a bare `const val STATUS`
+            "locker.add_item", // a bare `const val COMMAND`
             "entity.purge", // an argument to a trash spec
             "locker.edit_item", // an `if` branch
             "thread.clear", // an argument to a helper

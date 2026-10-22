@@ -62,10 +62,10 @@ class ChatScopeSpec : StringSpec({
         roster().none { ddl.contains("'$it'") } shouldBe true
     }
 
-    "and the scopes the assistant takes (App::SCOPES)" {
-        val scopes = Regex("""pub const SCOPES: \[Self; \d+\] = \[(.*?)\];""", RegexOption.DOT_MATCHES_ALL)
+    "and the scopes the assistant takes (App::ALL: every app is a scope)" {
+        val scopes = Regex("""pub const ALL: \[Self; \d+\] = \[(.*?)\];""", RegexOption.DOT_MATCHES_ALL)
             .find(source("crates/assist/src/app.rs"))
-            ?: error("App::SCOPES is gone from crates/assist/src/app.rs; point this spec at its replacement")
+            ?: error("App::ALL is gone from crates/assist/src/app.rs; point this spec at its replacement")
         Regex("""Self::([A-Za-z]+)""").findAll(scopes.groupValues[1]).map { it.groupValues[1].lowercase() }.toList() shouldBe
             ChatMachine.SCOPABLE_APPS
     }
