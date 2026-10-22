@@ -36,7 +36,10 @@ impl Registry {
     }
 
     pub(crate) fn build(&self, route: &wire::Route) -> Option<Box<dyn Screen>> {
-        let (_, factory) = self.screens.iter().find(|(name, _)| *name == route.screen)?;
+        let (_, factory) = self
+            .screens
+            .iter()
+            .find(|(name, _)| *name == route.screen)?;
         factory(route)
     }
 }

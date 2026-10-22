@@ -139,7 +139,11 @@ mod tests {
     #[test]
     fn every_entry_has_text_in_both_slots() {
         for entry in EN {
-            assert!(!entry.one.is_empty() && !entry.other.is_empty(), "{}", entry.key);
+            assert!(
+                !entry.one.is_empty() && !entry.other.is_empty(),
+                "{}",
+                entry.key
+            );
         }
     }
 }

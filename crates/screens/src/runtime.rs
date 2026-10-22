@@ -72,7 +72,10 @@ impl Runtime {
     /// The first tab is selected.
     #[must_use]
     pub fn new(registry: Registry, roots: Vec<(String, wire::Route)>) -> Self {
-        let selected = roots.first().map(|(tab, _)| tab.clone()).unwrap_or_default();
+        let selected = roots
+            .first()
+            .map(|(tab, _)| tab.clone())
+            .unwrap_or_default();
         Self {
             registry,
             roots,
@@ -226,7 +229,12 @@ impl Runtime {
     }
 
     /// Open every tab's root, once.
-    fn start(&self, state: &mut State, core: &dyn ScreenCtx, out: &mut wire::ScreenUpdate) -> Result<()> {
+    fn start(
+        &self,
+        state: &mut State,
+        core: &dyn ScreenCtx,
+        out: &mut wire::ScreenUpdate,
+    ) -> Result<()> {
         if state.started {
             return Ok(());
         }
@@ -257,7 +265,11 @@ impl Runtime {
                 .position(|candidate| candidate.id == tab)
                 .ok_or_else(|| Self::bad(format!("there is no tab `{tab}`")))
         };
-        match nav.kind.as_ref().ok_or_else(|| Self::bad("an empty navigation event"))? {
+        match nav
+            .kind
+            .as_ref()
+            .ok_or_else(|| Self::bad("an empty navigation event"))?
+        {
             N::Push(push) => {
                 let index = tab_index(state, &push.tab)?;
                 let route = push
@@ -272,7 +284,10 @@ impl Runtime {
                 let index = tab_index(state, &popped.tab)?;
                 let stack = &mut state.tabs[index].stack;
                 // Never the root: a tab's root is what a pop returns to.
-                let Some(at) = stack.iter().position(|id| *id == popped.instance).filter(|at| *at > 0)
+                let Some(at) = stack
+                    .iter()
+                    .position(|id| *id == popped.instance)
+                    .filter(|at| *at > 0)
                 else {
                     return Ok(());
                 };
@@ -324,7 +339,11 @@ impl Runtime {
 }
 
 impl ScreenHost for Runtime {
-    fn call(&self, core: &dyn ScreenCtx, request: &wire::ScreenRequest) -> Result<wire::ScreenResponse> {
+    fn call(
+        &self,
+        core: &dyn ScreenCtx,
+        request: &wire::ScreenRequest,
+    ) -> Result<wire::ScreenResponse> {
         use wire::screen_request::Kind as K;
         let mut state = self.lock();
         let mut out = wire::ScreenUpdate::default();
@@ -341,7 +360,10 @@ impl ScreenHost for Runtime {
                     .clone()
                     .ok_or_else(|| Self::bad("an instance event without an event"))?;
                 if !state.instances.contains_key(&send.instance) {
-                    return Err(Self::bad(format!("screen instance {} is not open", send.instance)));
+                    return Err(Self::bad(format!(
+                        "screen instance {} is not open",
+                        send.instance
+                    )));
                 }
                 Self::dispatch(&mut state, core, send.instance, event, &mut out);
             }
@@ -392,7 +414,7 @@ impl ScreenHost for Runtime {
                     .filter(|table| instance.tables.contains(*table))
                     .cloned()
                     .collect();
-                (!hit.is_empty()).then(|| wire::ScreenEvent {
+                (!hit.is_empty()).then_some(wire::ScreenEvent {
                     kind: Some(wire::screen_event::Kind::DataChanged(wire::DataChanged {
                         tables: hit,
                     })),

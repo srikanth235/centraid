@@ -46,8 +46,11 @@ pub trait ScreenHost: Send + Sync {
     ///
     /// # Errors
     /// A refusal the shell should see as a typed error.
-    fn call(&self, ctx: &dyn ScreenCtx, request: &wire::ScreenRequest)
-    -> Result<wire::ScreenResponse>;
+    fn call(
+        &self,
+        ctx: &dyn ScreenCtx,
+        request: &wire::ScreenRequest,
+    ) -> Result<wire::ScreenResponse>;
 
     /// These tables changed: re-render the screens that read them.
     fn changed(&self, ctx: &dyn ScreenCtx, tables: &[String]);

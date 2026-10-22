@@ -121,7 +121,9 @@ impl Driver {
 
     /// Ask for everything: the first call also opens each tab's root.
     pub fn start(&mut self) -> wire::ScreenUpdate {
-        self.call(wire::screen_request::Kind::Snapshot(wire::SnapshotRequest {}))
+        self.call(wire::screen_request::Kind::Snapshot(
+            wire::SnapshotRequest {},
+        ))
     }
 
     /// Send `event` to `instance`.
@@ -165,7 +167,11 @@ impl Driver {
         loop {
             let left = deadline.saturating_duration_since(std::time::Instant::now());
             let step = left.min(Duration::from_millis(20));
-            match self.handle.next_event(step).expect("the event door answers") {
+            match self
+                .handle
+                .next_event(step)
+                .expect("the event door answers")
+            {
                 Some(wire::Event {
                     kind: Some(wire::event::Kind::Screen(update)),
                 }) => {

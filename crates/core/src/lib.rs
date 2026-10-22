@@ -57,7 +57,6 @@ pub(crate) mod catalog;
 pub mod config;
 pub mod convert;
 pub mod error;
-pub mod screens;
 pub mod events;
 /// THE DEMO SCENARIO: one weekend at Tahoe across seven apps, seeded through
 /// the command plane into a dev fixture vault (`seed-demo-vault`) or a test's
@@ -74,6 +73,7 @@ pub mod originals;
 /// the status the shell draws, and the doors beside the pass. See
 /// `phone.proto`.
 pub mod phone;
+pub mod screens;
 pub mod stage;
 /// THE STARTER ROWS a member's first vault is founded with: ordinary rows of
 /// theirs, best-effort, declared as data. See `vault.proto`'s `FoundContent`.

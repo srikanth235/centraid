@@ -126,7 +126,10 @@ impl Screen for Counter {
             }
             // A failed copy leaves nothing to clear.
             Some(E::EffectResult(result)) => {
-                if matches!(result.outcome, Some(wire::effect_result::Outcome::Failed(_))) {
+                if matches!(
+                    result.outcome,
+                    Some(wire::effect_result::Outcome::Failed(_))
+                ) {
                     self.copied = None;
                     ctx.cancel_timer(CLEAR_TIMER);
                 }

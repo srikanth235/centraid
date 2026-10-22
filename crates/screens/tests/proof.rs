@@ -65,7 +65,12 @@ fn copying_asks_the_shell_for_the_clipboard_and_a_haptic_then_clears_on_its_time
     let count = data(&driver, id).count_label;
     let number = count.split(' ').next().unwrap().to_owned();
 
-    let update = driver.send(id, counter_event(wire::counter_event::Kind::CopyTapped(wire::CounterCopyTapped {})));
+    let update = driver.send(
+        id,
+        counter_event(wire::counter_event::Kind::CopyTapped(
+            wire::CounterCopyTapped {},
+        )),
+    );
     let asked: Vec<_> = update
         .effects
         .iter()
@@ -93,7 +98,12 @@ fn a_failed_copy_cancels_the_clear() {
     let mut driver = driver_with(Duration::from_millis(100));
     driver.start();
     let id = root(&driver);
-    driver.send(id, counter_event(wire::counter_event::Kind::CopyTapped(wire::CounterCopyTapped {})));
+    driver.send(
+        id,
+        counter_event(wire::counter_event::Kind::CopyTapped(
+            wire::CounterCopyTapped {},
+        )),
+    );
     driver.effects.drain(1..);
     driver.answer_effect(wire::effect_result::Outcome::Failed(wire::EffectFailed {
         reason: "denied".to_owned(),
@@ -210,10 +220,13 @@ fn an_unknown_route_tab_or_instance_is_refused_by_name() {
 fn a_core_with_no_runtime_refuses_the_screen_door_by_name() {
     let dir = centraid_ontology::scratch::scratch_dir();
     std::fs::create_dir_all(&dir).unwrap();
-    let handle = centraid_core::Core::open(centraid_core::CoreConfig::new(dir.join("v.db"))).unwrap();
+    let handle =
+        centraid_core::Core::open(centraid_core::CoreConfig::new(dir.join("v.db"))).unwrap();
     let refused = handle.call(&wire::Request {
         kind: Some(wire::request::Kind::Screen(Box::new(wire::ScreenRequest {
-            kind: Some(wire::screen_request::Kind::Snapshot(wire::SnapshotRequest {})),
+            kind: Some(wire::screen_request::Kind::Snapshot(
+                wire::SnapshotRequest {},
+            )),
         }))),
     });
     assert!(refused.is_err());

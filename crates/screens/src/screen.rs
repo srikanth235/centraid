@@ -11,8 +11,8 @@ use std::collections::BTreeSet;
 use std::time::Duration;
 
 use centraid_api_proto::core_v1 as wire;
-use centraid_core::screens::ScreenCtx;
 use centraid_core::Result;
+use centraid_core::screens::ScreenCtx;
 
 use crate::strings::Locale;
 
