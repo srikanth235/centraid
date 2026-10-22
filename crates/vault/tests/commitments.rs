@@ -898,7 +898,7 @@ fn script_every_search_relevant_command(scratch: &common::Scratch, registry: &Re
         "locker.edit_item",
         json!({"item_id": "lk1", "username": "other", "notes": "ask for Wilhelmina"}),
     );
-    // A purged item takes its words with it, and only its own realm's.
+    // A purged item takes its words with it.
     run(
         vault,
         registry,
@@ -1045,72 +1045,6 @@ fn the_word_list_gains_a_word_on_index_and_loses_it_on_a_purge_or_a_rebuild() {
     rebuilt(vault);
     assert!(!has("lait") && !has("cafe"));
     assert_eq!(word_list(vault), vocabulary(vault));
-}
-
-/// The words filed under one realm.
-fn realm_words(vault: &Vault, realm: &str) -> BTreeSet<String> {
-    read(vault, |connection| {
-        Ok(connection
-            .prepare("SELECT word FROM search_word WHERE realm = ?1")?
-            .query_map([realm], |row| row.get(0))?
-            .collect::<rusqlite::Result<_>>()?)
-    })
-}
-
-#[test]
-fn a_word_is_filed_under_the_realm_of_the_kind_that_holds_it_and_a_purge_keeps_the_other() {
-    let scratch = founded("c6-realms");
-    let vault = &scratch.vault;
-    let registry = Registry::with_system_commands().expect("a registry");
-    let go = |name: &str, input: serde_json::Value| run(vault, &registry, name, input);
-    let vault_has = |word: &str| realm_words(vault, "vault").contains(word);
-    let locker_has = |word: &str| realm_words(vault, "locker").contains(word);
-
-    go(
-        "note.create",
-        json!({"id": "rn", "title": "Hangar", "body": "sharedword vaultonlyword"}),
-    );
-    go(
-        "locker.add_item",
-        json!({"item_id": "rl", "type": "login", "title": "Lockeronlyword",
-               "username": "sharedword"}),
-    );
-    assert!(vault_has("sharedword") && vault_has("vaultonlyword") && vault_has("hangar"));
-    assert!(locker_has("sharedword") && locker_has("lockeronlyword"));
-    assert!(
-        !vault_has("lockeronlyword"),
-        "a word only Locker holds is not a word of the vault realm"
-    );
-    assert!(
-        !locker_has("vaultonlyword"),
-        "a word only the vault holds is not a word of the locker realm"
-    );
-
-    // Purging the note takes the vault realm's words and leaves Locker's own.
-    go("entity.trash", json!({"id": "rn"}));
-    go("entity.purge", json!({"id": "rn"}));
-    assert!(!vault_has("sharedword"), "no vault row holds it any more");
-    assert!(!vault_has("vaultonlyword"));
-    assert!(locker_has("sharedword"), "the Locker item still holds it");
-
-    // And the other way: a vault note that holds a word keeps it in its realm
-    // when the Locker item that held it goes.
-    go(
-        "note.create",
-        json!({"id": "rn2", "title": "Again", "body": "sharedword"}),
-    );
-    assert!(vault_has("sharedword"));
-    go("entity.trash", json!({"id": "rl"}));
-    go("entity.purge", json!({"id": "rl"}));
-    assert!(!locker_has("sharedword") && !locker_has("lockeronlyword"));
-    assert!(vault_has("sharedword"), "the note still holds it");
-    assert_eq!(
-        word_list(vault),
-        vocabulary(vault)
-            .union(&word_list(vault))
-            .cloned()
-            .collect()
-    );
 }
 
 #[test]

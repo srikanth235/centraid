@@ -803,7 +803,7 @@ fn a_one_character_word_beside_longer_words_is_a_whole_word() {
     assert_eq!(both, ["prefix", "whole"]);
 }
 
-// -- Locker, and the realms of the word list ---------------------------------------
+// -- Locker ------------------------------------------------------------------------
 
 impl World {
     fn locker_item(&self, id: &str, title: &str, username: &str) {
@@ -812,99 +812,57 @@ impl World {
             serde_json::json!({"item_id": id, "type": "login", "title": title, "username": username}),
         );
     }
-
-    fn correct_for(&self, entities: &[&str], query: &str) -> Option<String> {
-        self.vault
-            .read(|connection| {
-                Ok(SqliteDoor::open(connection, self.vault.words())
-                    .and_then(|door| door.correct(&Principal::Owner, entities, query))
-                    .expect("corrects"))
-            })
-            .expect("reads")
-    }
-
-    fn correct_thin_for(&self, entities: &[&str], query: &str) -> Option<String> {
-        self.vault
-            .read(|connection| {
-                Ok(SqliteDoor::open(connection, self.vault.words())
-                    .and_then(|door| door.correct_thin(&Principal::Owner, entities, query))
-                    .expect("corrects"))
-            })
-            .expect("reads")
-    }
 }
 
 #[test]
-fn a_locker_item_is_found_by_its_plain_text_and_only_when_its_kind_is_named() {
+fn a_locker_item_is_found_by_its_plain_text_whether_or_not_its_kind_is_named() {
     let world = World::new();
     world.locker_item("lk", "Vaultbank", "quokkaname");
     world.note("n1", "Vaultbank plans", "a note that says vaultbank");
     assert_eq!(ids(&world.ask(&["locker_item"], "vaultbank")), ["lk"]);
     assert_eq!(ids(&world.ask(&["locker_item"], "quokkaname")), ["lk"]);
-    // Asking for no kind in particular is every kind but Locker's.
-    assert_eq!(ids(&world.ask(&[], "vaultbank")), ["n1"]);
-    assert!(world.ask(&[], "quokkaname").is_empty());
+    assert_eq!(ids(&world.ask(&["note"], "vaultbank")), ["n1"]);
     assert!(world.ask(&["note"], "quokkaname").is_empty());
-    // Home's per-kind statement names the kinds it asks, Locker's among them
-    // only when the core says the lock is open.
-    let each_locker = world
+    // One list for everyone: no kind named finds the item too.
+    let found = world.ask(&[], "vaultbank");
+    let mut both = ids(&found);
+    both.sort();
+    assert_eq!(both, ["lk", "n1"]);
+    // Home's per-kind statement answers for both kinds.
+    let each = world
         .each(&each(&["note", "locker_item"], "vaultbank", 8))
         .expect("answers");
-    assert_eq!(each_locker.len(), 2);
-    let each_vault = world.each(&each(&[], "quokkaname", 8)).expect("answers");
-    assert!(each_vault.is_empty());
+    assert_eq!(each.len(), 2);
 }
 
 #[test]
-fn a_word_only_locker_holds_is_not_offered_to_nor_known_by_a_reader_of_the_vault() {
+fn a_locker_word_is_a_word_of_the_one_list_and_leaves_it_with_its_item() {
     let world = World::new();
     world.locker_item("lk", "Bank", "quokkaname");
-    world.note("n1", "Plans", "the spring budget and a quokkanamf");
-
-    // NOT OFFERED: a vault reader mistyping the Locker-only word gets nothing,
-    // where a reader that may open Locker is offered it.
-    assert_eq!(world.correct_for(&["note"], "quokkanme"), None);
-    assert_eq!(world.correct_for(&[], "quokkanme"), None);
+    world.note("n1", "Plans", "the spring budget");
     assert_eq!(
         world
-            .correct_for(&["note", "locker_item"], "quokkanme")
+            .vault
+            .read(|connection| {
+                Ok(SqliteDoor::open(connection, world.vault.words())
+                    .and_then(|door| door.correct(&Principal::Owner, &["note"], "quokkanme"))
+                    .expect("corrects"))
+            })
+            .expect("reads")
             .as_deref(),
         Some("quokkaname")
     );
-    assert_eq!(
-        world.correct_for(&["locker_item"], "quokkanme").as_deref(),
-        Some("quokkaname")
-    );
-
-    // NOT KNOWN: typed exactly, the Locker-only word is a word of the vault
-    // for a reader of both realms (kept as typed) and an unknown for a reader of
-    // the vault alone, which is offered its near neighbour instead.
-    assert_eq!(
-        world.correct_for(&["note", "locker_item"], "quokkaname"),
-        None
-    );
-    assert_eq!(
-        world.correct_for(&["note"], "quokkaname").as_deref(),
-        Some("quokkanamf")
-    );
-    // The thin pass reads the same realms.
-    assert_eq!(
-        world.correct_thin_for(&["note"], "quokkaname").as_deref(),
-        Some("quokkanamf")
-    );
-    assert_eq!(
-        world.correct_thin_for(&["note", "locker_item"], "quokkaname"),
-        None
-    );
-
-    // And the realm follows the lock: once the item is purged its word is gone
-    // from the Locker realm, whoever asks.
     world.run("entity.trash", serde_json::json!({"id": "lk"}));
     world.run("entity.purge", serde_json::json!({"id": "lk"}));
     assert_eq!(
         world
-            .correct_for(&["note", "locker_item"], "quokkaname")
-            .as_deref(),
-        Some("quokkanamf")
+            .vault
+            .read(|connection| {
+                Ok(SqliteDoor::open(connection, world.vault.words())
+                    .and_then(|door| door.correct(&Principal::Owner, &["note"], "quokkanme"))
+                    .expect("corrects"))
+            })
+            .expect("reads"),
+        None
     );
 }

@@ -75,7 +75,7 @@ use centraid_apps_kit::spelling::{is_known, near_words, rank_order, try_correct_
 use centraid_ontology::jsvalue::js_number_to_string;
 use centraid_vault::index::SEARCHABLE;
 use centraid_vault::model::Kind;
-use centraid_vault::words::{Realm, Word, Words};
+use centraid_vault::words::Words;
 use rusqlite::types::Value;
 use rusqlite::{Connection, OptionalExtension};
 
@@ -152,29 +152,9 @@ fn kinds_of(request_kinds: &[String]) -> Result<Vec<Kind>, SearchError> {
         }
     }
     if kinds.is_empty() {
-        // **No kinds is every kind but Locker's.** A secret store is searched by
-        // naming it, never by asking for everything, so a caller that forgot to
-        // list its kinds cannot find a Locker item by accident.
-        kinds.extend(
-            SEARCHABLE
-                .into_iter()
-                .filter(|kind| *kind != Kind::LockerItem),
-        );
+        kinds.extend(SEARCHABLE);
     }
     Ok(kinds)
-}
-
-/// The word realms a caller who is about to search `entities` may read: both if
-/// it names Locker's kind, the vault's alone otherwise. **The realm follows the
-/// kinds, so asking to see Locker's words and asking to search Locker are one
-/// act**; a caller that cannot name the kind (the assistant, Home while Locker
-/// is locked) cannot read the words.
-fn realms_of(entities: &[&str]) -> &'static [Realm] {
-    if entities.contains(&Kind::LockerItem.as_str()) {
-        &Realm::ALL
-    } else {
-        &Realm::VAULT_ONLY
-    }
 }
 
 /// The positional parameters of one statement, in the order they were asked for.
@@ -334,28 +314,18 @@ fn unusable(error: &rusqlite::Error) -> SearchError {
 }
 
 impl SqliteDoor<'_> {
-    /// The query with its mistyped words replaced by the words the vault holds,
-    /// reading only the words of `realms`.
-    ///
-    /// **A realm is whose words they are** ([`Realm`]): the list is filed by the
-    /// kind that holds each word, and a caller reads the realms it may see
-    /// ([`realms_of`]). A word only Locker holds is therefore neither offered as
-    /// a correction to, nor known by, a reader of the vault realm alone.
+    /// The query with its mistyped words replaced by the words the vault holds.
+    /// The list is one list for every reader.
     ///
     /// `filling` is the pass over a thin, non-empty exact answer ([`Search::correct_thin`]):
     /// there a word the vault holds as a whole word in fewer than [`THIN_ANSWER`]
     /// documents is corrected too, when a candidate holds more documents than it.
     /// A word held only as the start of longer words (still being typed) is never
     /// corrected on that pass.
-    fn corrected(
-        &self,
-        query: &str,
-        realms: &[Realm],
-        filling: bool,
-    ) -> Result<Option<String>, SearchError> {
+    fn corrected(&self, query: &str, filling: bool) -> Result<Option<String>, SearchError> {
         // Read on the first word that needs it: a query of words that cannot be
         // corrected never asks for the list.
-        let mut list: Option<std::cell::Ref<'_, [Word]>> = None;
+        let mut list: Option<std::cell::Ref<'_, [String]>> = None;
         try_correct_words(query, |folded| {
             if list.is_none() {
                 list = Some(self.words.current(self.connection).map_err(|error| {
@@ -368,8 +338,7 @@ impl SqliteDoor<'_> {
                 list.as_deref()
                     .unwrap_or_default()
                     .iter()
-                    .filter(|held| held.in_realms(realms))
-                    .map(|held| held.word.as_str())
+                    .map(String::as_str)
             };
             if is_known(folded, held()) {
                 if !filling {
@@ -548,7 +517,9 @@ impl Search for SqliteDoor<'_> {
     /// The correction: the words of `query` the index does not hold, replaced
     /// by the words it does. `None` when no word changed.
     ///
-    /// The words read are those of the realms the kinds name ([`realms_of`]).
+    /// The word list is the one index's, so the kinds named only have to be
+    /// searchable. A sealed secret is never indexed, so the list holds no word of
+    /// one.
     fn correct(
         &self,
         principal: &Principal,
@@ -562,7 +533,7 @@ impl Search for SqliteDoor<'_> {
                 .collect::<Vec<_>>(),
         )?;
         let _ = principal;
-        self.corrected(query, realms_of(entities), false)
+        self.corrected(query, false)
     }
 
     fn correct_thin(
@@ -578,7 +549,7 @@ impl Search for SqliteDoor<'_> {
                 .collect::<Vec<_>>(),
         )?;
         let _ = principal;
-        self.corrected(query, realms_of(entities), true)
+        self.corrected(query, true)
     }
 }
 
@@ -597,14 +568,7 @@ mod tests {
                 "{word}"
             );
         }
-        // None means every kind but Locker's; Locker is searched by naming it.
-        let all = kinds_of(&[]).expect("all");
-        assert_eq!(all.len(), SEARCHABLE.len() - 1);
-        assert!(!all.contains(&Kind::LockerItem));
-        assert_eq!(
-            kinds_of(&["locker_item".to_owned()]).expect("named"),
-            vec![Kind::LockerItem]
-        );
+        assert_eq!(kinds_of(&[]).expect("all").len(), SEARCHABLE.len());
         assert_eq!(
             kinds_of(&["note".to_owned(), "note".to_owned()]).expect("one"),
             vec![Kind::Note]

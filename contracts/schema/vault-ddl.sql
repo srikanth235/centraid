@@ -607,10 +607,8 @@ CREATE VIRTUAL TABLE search_vocab USING fts5vocab(search, row);
 
 -- table search_word on search_word
 CREATE TABLE search_word (
-  n     INTEGER PRIMARY KEY,
-  word  TEXT NOT NULL,
-  realm TEXT NOT NULL CHECK (realm IN ('vault','locker')),
-  UNIQUE (word, realm)
+  n    INTEGER PRIMARY KEY,
+  word TEXT NOT NULL UNIQUE
 ) STRICT;
 
 -- table source on source

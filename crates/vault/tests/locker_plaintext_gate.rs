@@ -420,8 +420,8 @@ fn nothing_the_vault_serves_or_backs_up_carries_locker_plaintext() {
             assert!(refused.is_err(), "a generic read of {table} was served");
         }
         // THE SEARCH INDEX holds a Locker item by its PLAIN text and by nothing
-        // sealed. The scan is of the index's vocabulary, its word list (every
-        // realm), `text_of`, and the raw bytes of the FTS5 shadow tables.
+        // sealed. The scan is of the index's vocabulary, its word list,
+        // `text_of`, and the raw bytes of the FTS5 shadow tables.
         vault
             .read(|connection| {
                 let words: Vec<String> = connection
@@ -486,15 +486,6 @@ fn nothing_the_vault_serves_or_backs_up_carries_locker_plaintext() {
                         .unwrap_or_default();
                     assert!(text.contains(plain), "text_of lost `{plain}`: {text}");
                 }
-                // Every Locker word is filed under the locker realm, and a word
-                // only Locker holds is not in the vault's.
-                let in_vault: i64 = connection.query_row(
-                    "SELECT COUNT(*) FROM search_word WHERE realm = 'vault'
-                       AND word IN ('quokka7', 'zeppelin3', 'narwhal5')",
-                    [],
-                    |row| row.get(0),
-                )?;
-                assert_eq!(in_vault, 0, "a Locker word was filed under the vault realm");
                 // The journal carried no cell (every command above ran), and a
                 // Locker item has no revision to carry one.
                 let journal: String = connection
