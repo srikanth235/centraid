@@ -1,4 +1,4 @@
-//! TASKS' ARM OF THE APP QUERY (#1046): `crates/apps/tasks`' loaders, asked
+//! THE TASK HALF OF AGENDA'S ARM OF THE APP QUERY (#1046): `crates/apps/agenda`' `task` loaders, asked
 //! through [`super::VaultDoor`] and spelled as `tasks.proto` spells them.
 //!
 //! The board, the families, the recurrence facts, every civil reading and
@@ -11,10 +11,10 @@
 //! member's day ends.
 
 use centraid_api_proto::core_v1 as wire;
-use centraid_apps_tasks as tasks;
-use centraid_apps_tasks::local::{self, Civil};
-use centraid_apps_tasks::queries::{ProjectRow, SectionRow, TaskRow};
-use centraid_apps_tasks::views::{self, GroupKind, Placed, View};
+use centraid_apps_agenda::task;
+use centraid_apps_agenda::task::local::{self, Civil};
+use centraid_apps_agenda::task::queries::{ProjectRow, SectionRow, TaskRow};
+use centraid_apps_agenda::task::views::{self, GroupKind, Placed, View};
 use centraid_vault::Vault;
 use centraid_vault::time::zone::FireZone;
 
@@ -74,7 +74,7 @@ pub(crate) fn board(
     let view = view_of(asked)?;
     settle(
         door,
-        tasks::load_board(door, limit_of(asked.limit), now, &zone),
+        task::load_board(door, limit_of(asked.limit), now, &zone),
         |data| {
             let open = placed(&data.open, &zone, &today);
             let logbook = placed(&data.logbook, &zone, &today);
@@ -131,10 +131,10 @@ pub(crate) fn task(
 ) -> Result<Answer> {
     let zone = zone_of(vault, &asked.tz)?;
     let today = today_in(&zone, now)?;
-    let loaded = tasks::load_task(door, &asked.task_id, now, &zone).and_then(|(detail, denial)| {
+    let loaded = task::load_task(door, &asked.task_id, now, &zone).and_then(|(detail, denial)| {
         // The chrome only for a task that is there to be filed somewhere.
         let chrome = if denial.is_none() && detail.task.is_some() {
-            tasks::queries::load_chrome(door)?
+            task::queries::load_chrome(door)?
         } else {
             (Vec::new(), Vec::new())
         };
@@ -178,7 +178,7 @@ pub(crate) fn projects(
 ) -> Result<Answer> {
     let zone = zone_of(vault, &asked.tz)?;
     let today = today_in(&zone, now)?;
-    settle(door, tasks::load_board(door, None, now, &zone), |data| {
+    settle(door, task::load_board(door, None, now, &zone), |data| {
         let open = placed(&data.open, &zone, &today);
         Answer::TasksProjects(wire::TasksProjects {
             projects: data
@@ -211,7 +211,7 @@ pub(crate) fn trash(
             .map(|civil| civil.day_text())
             .unwrap_or_default()
     };
-    settle(door, tasks::load_trash(door), |data| {
+    settle(door, task::load_trash(door), |data| {
         Answer::TasksTrash(wire::TasksTrash {
             tasks: data
                 .tasks
@@ -262,24 +262,24 @@ pub(crate) fn search(
         let limit = usize::try_from(asked.limit).unwrap_or(usize::MAX);
         // THE PROJECTS THE TERM NAMES RIDE BESIDE THE TASKS, and the correction
         // treats the two as one answer.
-        let entities = named::entities_of(centraid_apps_tasks::queries::TASK_KIND, "tasks");
+        let entities = named::entities_of(centraid_apps_agenda::task::queries::TASK_KIND, "agenda");
         Ok(Ok(corrected_search(
             &search,
             &entities,
             &asked.term,
-            |(data, found): &(tasks::SearchData, Vec<centraid_search::Target>)| {
+            |(data, found): &(task::SearchData, Vec<centraid_search::Target>)| {
                 data.tasks.len() + found.len()
             },
             |(exact, exact_found), (again, again_found)| {
                 (
-                    tasks::SearchData {
+                    task::SearchData {
                         tasks: filled(exact.tasks, again.tasks, limit, |row| row.task_id.clone()),
                     },
                     filled_targets(exact_found, again_found, limit.min(named::CONTAINER_ROWS)),
                 )
             },
             |term| {
-                let (data, denial) = tasks::load_search_term(
+                let (data, denial) = task::load_search_term(
                     door,
                     &search,
                     &centraid_search::Principal::Owner,
@@ -292,7 +292,7 @@ pub(crate) fn search(
                     return Ok(((data, Vec::new()), denial));
                 }
                 let (found, denial) =
-                    named::of_app(&search, "tasks", term, limit.min(named::CONTAINER_ROWS));
+                    named::of_app(&search, "agenda", term, limit.min(named::CONTAINER_ROWS));
                 Ok(((data, found), denial))
             },
         )))
@@ -320,7 +320,7 @@ pub(crate) fn catch_up(
 ) -> Result<Answer> {
     let zone = zone_of(vault, &asked.tz)?;
     let today = today_in(&zone, now)?;
-    settle(door, tasks::load_board(door, None, now, &zone), |data| {
+    settle(door, task::load_board(door, None, now, &zone), |data| {
         let piles = views::catch_up(&placed(&data.open, &zone, &today));
         let rows = |pile: &[Placed]| pile.iter().map(task_to_wire).collect();
         Answer::TasksCatchUp(wire::TasksCatchUp {
@@ -360,7 +360,7 @@ fn project_to_wire(project: &ProjectRow, open: &[Placed]) -> wire::TasksProject 
         open_count: count(
             open.iter()
                 .filter(|task| {
-                    tasks::is_open_status(&task.task.status)
+                    task::is_open_status(&task.task.status)
                         && task.task.project_id.as_deref() == Some(project.project_id.as_str())
                 })
                 .count(),
@@ -377,7 +377,7 @@ fn section_to_wire(section: &SectionRow, open: &[Placed]) -> wire::TasksSection 
         open_count: count(
             open.iter()
                 .filter(|task| {
-                    tasks::is_open_status(&task.task.status)
+                    task::is_open_status(&task.task.status)
                         && task.task.section_id.as_deref() == Some(section.section_id.as_str())
                 })
                 .count(),
@@ -483,5 +483,5 @@ fn task_to_wire(placed: &Placed) -> wire::TasksTask {
 }
 
 #[cfg(test)]
-#[path = "tasks_tests.rs"]
+#[path = "agenda_task_tests.rs"]
 mod tests;

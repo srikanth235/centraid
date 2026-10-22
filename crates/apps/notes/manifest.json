@@ -1162,6 +1162,36 @@
           }
         }
       }
+    },
+    {
+      "name": "notebooks",
+      "kind": "notebook",
+      "figures": ["notebooks", "unfiled_count"],
+      "description": "Every notebook with how many notes it holds and how many notes sit in none: what a notebook picker and the sidebar draw, whatever window the library holds.",
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "trash",
+      "kind": "note",
+      "figures": ["notes", "purge_dates"],
+      "description": "Notes in reversible trash with their purge dates and safe display metadata.",
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {}
+      }
     }
   ],
   "kinds": [
@@ -1222,7 +1252,13 @@
       "pk": "id",
       "nameSource": ["entity", "title"],
       "fields": [],
-      "links": [{"kind": "note", "label": "notes", "via": "entry"}],
+      "links": [
+        {
+          "kind": "note",
+          "label": "notes",
+          "via": "entry"
+        }
+      ],
       "trash": false,
       "container": true
     }

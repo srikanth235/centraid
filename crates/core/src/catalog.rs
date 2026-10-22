@@ -42,7 +42,7 @@ macro_rules! app {
 }
 
 /// Every app, in the order the product lists them.
-pub(crate) const APPS: [App; 9] = [
+pub(crate) const APPS: [App; 8] = [
     app!(
         "agenda",
         centraid_apps_agenda,
@@ -75,7 +75,6 @@ pub(crate) const APPS: [App; 9] = [
         centraid_apps_photos,
         centraid_apps_photos::ACTIONS
     ),
-    app!("tasks", centraid_apps_tasks, centraid_apps_tasks::ACTIONS),
 ];
 
 /// The app of that id, or `None`.
@@ -103,6 +102,46 @@ mod tests {
                 actions += 1;
             }
         }
-        assert_eq!(actions, 146, "the nine manifests declare 146 actions");
+        assert_eq!(actions, 146, "the eight manifests declare 146 actions");
+    }
+
+    /// THERE IS NO `tasks` APP (#1128, the owner's ruling): Tasks were folded into Agenda, so no
+    /// app id, manifest id, crate or query namespace is `tasks`. `task` stays what it is: a vault
+    /// entity kind and a chat kind.
+    #[test]
+    fn no_app_manifest_crate_or_query_namespace_is_called_tasks() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        assert!(
+            !root.join("crates/apps/tasks").exists(),
+            "crates/apps/tasks came back: the tasks are Agenda's"
+        );
+        for manifest in ["Cargo.toml", "crates/core/Cargo.toml"] {
+            let text = std::fs::read_to_string(root.join(manifest)).expect("a manifest");
+            assert!(
+                !text.contains("apps-tasks") && !text.contains("apps/tasks"),
+                "{manifest} names a tasks crate"
+            );
+        }
+        assert!(
+            app("tasks").is_none(),
+            "the catalogue carries a `tasks` app"
+        );
+        for app in APPS {
+            assert_ne!(app.id, "tasks");
+            assert_ne!(app.manifest().id, "tasks");
+            for query in &app.manifest().queries {
+                assert!(
+                    !query.name.starts_with("tasks"),
+                    "{}.{} is a `tasks` query",
+                    app.id,
+                    query.name
+                );
+            }
+        }
+        assert!(!centraid_vault::roster::is_app("tasks"));
+        assert!(
+            centraid_assist::App::from_id("tasks").is_none(),
+            "the assistant reads a `tasks` app"
+        );
     }
 }

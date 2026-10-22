@@ -87,7 +87,7 @@ pub(crate) mod people;
 // and the correction.
 pub(crate) mod photos;
 // Tasks' arm (#1046): its conversions and tests, beside this one.
-pub(crate) mod tasks;
+pub(crate) mod agenda_task;
 // Home's arm (R-CHROME-6): every app's search domain, Locker's included.
 mod vault;
 
@@ -138,12 +138,12 @@ pub(crate) fn answer_recording(
         Q::NotesHistory(asked) => notes::history(vault, &door, asked)?,
         Q::NotesLinkTargets(asked) => notes::link_targets(vault, &door, asked)?,
         Q::NotesNote(asked) => notes::note(vault, &door, asked)?,
-        Q::TasksBoard(asked) => tasks::board(vault, &door, &now, asked)?,
-        Q::TasksTask(asked) => tasks::task(vault, &door, &now, asked)?,
-        Q::TasksProjects(asked) => tasks::projects(vault, &door, &now, asked)?,
-        Q::TasksSearch(asked) => tasks::search(vault, &door, &now, asked)?,
-        Q::TasksCatchUp(asked) => tasks::catch_up(vault, &door, &now, asked)?,
-        Q::TasksTrash(asked) => tasks::trash(vault, &door, asked)?,
+        Q::TasksBoard(asked) => agenda_task::board(vault, &door, &now, asked)?,
+        Q::TasksTask(asked) => agenda_task::task(vault, &door, &now, asked)?,
+        Q::TasksProjects(asked) => agenda_task::projects(vault, &door, &now, asked)?,
+        Q::TasksSearch(asked) => agenda_task::search(vault, &door, &now, asked)?,
+        Q::TasksCatchUp(asked) => agenda_task::catch_up(vault, &door, &now, asked)?,
+        Q::TasksTrash(asked) => agenda_task::trash(vault, &door, asked)?,
         Q::LockerItems(asked) => locker::items(vault, &door, &now, asked)?,
         Q::LockerItem(asked) => locker::item(vault, &door, &now, asked)?,
         Q::LockerSearch(asked) => locker::search(vault, &door, asked)?,
@@ -294,9 +294,30 @@ pub(crate) fn agenda_search(
             Ok(((data, next, corrected), denial))
         },
     );
-    settle(door, loaded, |(data, next, corrected)| {
+    let answer = settle(door, loaded, |(data, next, corrected)| {
         A::AgendaSearch(search_to_wire(data, next, corrected, &zone))
-    })
+    })?;
+    // THE TASKS THE TERM FINDS ride the same answer (#1128): Agenda searches events and tasks
+    // through the one index, and a screen draws one list.
+    let A::AgendaSearch(mut found) = answer else {
+        return Ok(answer);
+    };
+    let tasks = agenda_task::search(
+        vault,
+        door,
+        now,
+        &wire::TasksSearchRequest {
+            term: asked.term.clone(),
+            limit: asked.limit,
+            tz: asked.tz.clone(),
+        },
+    )?;
+    if let A::TasksSearch(tasks) = tasks
+        && (!tasks.tasks.is_empty() || !tasks.containers.is_empty())
+    {
+        found.tasks = Some(tasks);
+    }
+    Ok(A::AgendaSearch(found))
 }
 
 /// An empty string on the wire is the loader's `None`: proto3 has no absent
@@ -774,6 +795,7 @@ fn search_to_wire(
     let mut next = next.into_iter();
     wire::AgendaSearch {
         corrected,
+        tasks: None,
         events: data
             .events
             .into_iter()

@@ -13,9 +13,9 @@
 use std::sync::Arc;
 use std::time::Instant;
 
+use centraid_apps_agenda::task::queries::{load_board, load_chrome, load_trash};
 use centraid_apps_kit::fixtures::{YEAR3_TASKS, Year3TasksCounts, Year3TasksShape, year3_tasks};
 use centraid_apps_kit::testdoor::TestDoor;
-use centraid_apps_tasks::queries::{load_board, load_chrome, load_trash};
 use centraid_vault::Vault;
 use centraid_vault::clock::{FixedClock, SeededIds};
 use centraid_vault::time::zone::FireZone;
@@ -123,7 +123,7 @@ fn the_board_walks_every_open_task_and_the_trash_is_on_no_list() {
 }
 
 /// The declared profile, run on demand:
-/// `cargo test -p centraid-apps-tasks --test year3 -- --ignored --nocapture`.
+/// `cargo test -p centraid-apps-agenda --test task_year3 -- --ignored --nocapture`.
 #[test]
 #[ignore = "the declared 15,000-task profile; run for the receipt's numbers"]
 fn the_declared_profile() {

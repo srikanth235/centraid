@@ -71,7 +71,7 @@ mod tests {
 
     #[test]
     fn a_card_is_a_reference_with_words_to_name_it() {
-        let card = Card::new(App::Tasks, "task", "t1", "Pick up the dry cleaning")
+        let card = Card::new(App::Agenda, "task", "t1", "Pick up the dry cleaning")
             .subtitle("2026-10-01")
             .meta("overdue")
             .qualifier("2026-10-08");
@@ -86,7 +86,7 @@ mod tests {
                 card.qualifier.as_str()
             ),
             (
-                App::Tasks,
+                App::Agenda,
                 "task",
                 "t1",
                 "Pick up the dry cleaning",

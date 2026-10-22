@@ -65,8 +65,8 @@ public object RowRoutes {
         parent: String = "",
         neighbours: List<String> = emptyList(),
     ): Destination? = when (row.app to row.entity) {
-        AppIds.TASKS to TASK -> Destination.TasksDetail(row.id)
-        AppIds.TASKS to PROJECT -> Destination.TasksProject(row.id, row.title)
+        AppIds.AGENDA to TASK -> Destination.TasksDetail(row.id)
+        AppIds.AGENDA to PROJECT -> Destination.TasksProject(row.id, row.title)
         AppIds.NOTES to NOTE -> Destination.NotesEditor(row.id, title = row.title)
         AppIds.NOTES to NOTEBOOK -> Destination.NotesLibrary(notebookId = row.id, notebookName = row.title, unfiledOnly = false)
         AppIds.PHOTOS to ALBUM -> Destination.PhotoShelfRoute(

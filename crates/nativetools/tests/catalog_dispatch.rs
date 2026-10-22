@@ -112,7 +112,7 @@ fn each_verb_runs_the_action_the_catalog_names() {
     let (mut session, writes) = recorded(&world);
     for (kind, name, verb, args, want) in [
         // a task's cancel is direct (it has an inverse, `reopen`)
-        ("task", "cabin", "cancel", Value::Null, "tasks/cancel"),
+        ("task", "cabin", "cancel", Value::Null, "agenda/cancel-task"),
         // a note's flag is direct (its inverse is `unflag-note`)
         ("note", "Dal", "star", Value::Null, "notes/flag-note"),
         // a project is renamed by its own action
@@ -121,7 +121,7 @@ fn each_verb_runs_the_action_the_catalog_names() {
             "Home",
             "edit",
             json!("name: House"),
-            "tasks/rename-list",
+            "agenda/rename-list",
         ),
         // a tag is the catalog's own verb: no bespoke planner owns it
         (
@@ -129,7 +129,7 @@ fn each_verb_runs_the_action_the_catalog_names() {
             "Pay rent",
             "tag",
             json!("label: urgent"),
-            "tasks/add-tag",
+            "agenda/add-task-tag",
         ),
         (
             "locker item",

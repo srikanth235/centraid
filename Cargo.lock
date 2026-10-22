@@ -565,19 +565,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "centraid-apps-tasks"
-version = "1.0.0-alpha.0"
-dependencies = [
- "centraid-apps-kit",
- "centraid-ontology",
- "centraid-search",
- "centraid-vault",
- "rusqlite",
- "serde_json",
- "thiserror",
-]
-
-[[package]]
 name = "centraid-assist"
 version = "1.0.0-alpha.0"
 dependencies = [
@@ -630,7 +617,6 @@ dependencies = [
  "centraid-apps-notes",
  "centraid-apps-people",
  "centraid-apps-photos",
- "centraid-apps-tasks",
  "centraid-assist",
  "centraid-blobs",
  "centraid-gateway",

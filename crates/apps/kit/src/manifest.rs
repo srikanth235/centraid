@@ -1570,32 +1570,32 @@ mod tests {
         assert!(shaped(r#"{"id": {"type": "string", "x-minted": "yes"}}"#).is_err());
     }
 
-    /// THE CATALOG, as committed: the nine bundled manifests, read from their
-    /// files. The counts are the census of #1135; the rest are the rules a
-    /// catalog entry must keep for chat's generated tables to be sound.
+    /// THE CATALOG, as committed: the eight bundled manifests, read from their files. The action
+    /// counts are the census of #1135; the rest are the rules a catalog entry must keep for chat's
+    /// generated tables to be sound. The QUERIES are not counted here: a query is declared by its
+    /// manifest and read by the core's `load`, and `crates/core`'s test holds the two lists to
+    /// each other both ways.
     #[test]
-    fn the_nine_bundled_manifests_are_fully_classified() {
+    fn the_eight_bundled_manifests_are_fully_classified() {
         let apps = [
-            ("agenda", 7, 4),
-            ("docs", 18, 4),
-            ("health", 3, 6),
-            ("locker", 19, 5),
-            ("money", 22, 11),
-            ("notes", 17, 6),
-            ("people", 25, 5),
-            ("photos", 19, 3),
-            ("tasks", 16, 6),
+            ("agenda", 23),
+            ("docs", 18),
+            ("health", 3),
+            ("locker", 19),
+            ("money", 22),
+            ("notes", 17),
+            ("people", 25),
+            ("photos", 19),
         ];
-        let mut total = (0, 0);
+        let mut total = 0;
         let mut orders = BTreeSet::new();
         let mut kind_ids = BTreeSet::new();
-        for (app, actions, queries) in apps {
+        for (app, actions) in apps {
             let path = format!("{}/../{app}/manifest.json", env!("CARGO_MANIFEST_DIR"));
             let text = std::fs::read_to_string(&path).unwrap();
             let manifest = parse_manifest(&text).unwrap_or_else(|error| panic!("{app}: {error}"));
             assert_eq!(manifest.actions.len(), actions, "{app} actions");
-            assert_eq!(manifest.queries.len(), queries, "{app} queries");
-            total = (total.0 + actions, total.1 + queries);
+            total += actions;
             for kind in &manifest.kinds {
                 assert!(
                     orders.insert(kind.order),
@@ -1622,7 +1622,7 @@ mod tests {
                 assert!(!query.figures.is_empty(), "{app}/{}", query.name);
             }
         }
-        assert_eq!(total, (146, 50));
+        assert_eq!(total, 146);
         // the orders are 0..N with no hole, so the generated enum is dense
         let expected: BTreeSet<u32> = (0..u32::try_from(orders.len()).unwrap()).collect();
         assert_eq!(orders, expected);

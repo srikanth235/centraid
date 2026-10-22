@@ -45,7 +45,6 @@ sha1.workspace = true
 centraid-apps-agenda = { path = "../apps/agenda" }
 # Tasks' board, one task, projects, search and catch-up (#1046): the families,
 # the recurrence collapse and every civil reading run here, over the page door.
-centraid-apps-tasks = { path = "../apps/tasks" }
 # Docs' drive, search, document and activity (#1046), the same way.
 centraid-apps-docs = { path = "../apps/docs" }
 # People's five phone queries (#1046) — the roster, Touch, the sheet, search and

@@ -65,14 +65,14 @@ const fn row(kind: Kind, app: App, entity: &'static str) -> CardKind {
 pub const TABLE: [CardKind; 12] = [
     row(Kind::Person, App::People, "person"),
     row(Kind::Event, App::Agenda, "event"),
-    row(Kind::Task, App::Tasks, "task"),
+    row(Kind::Task, App::Agenda, "task"),
     row(Kind::Note, App::Notes, "note"),
     row(Kind::Document, App::Docs, "document"),
     row(Kind::Photo, App::Photos, "photo"),
     row(Kind::Album, App::Photos, "album"),
     row(Kind::Notebook, App::Notes, "notebook"),
     row(Kind::Folder, App::Docs, "folder"),
-    row(Kind::List, App::Tasks, "project"),
+    row(Kind::List, App::Agenda, "project"),
     row(Kind::Transaction, App::Money, "transaction"),
     row(Kind::LockerItem, App::Locker, "locker_item"),
 ];
@@ -143,10 +143,7 @@ mod tests {
     #[test]
     fn a_card_never_carries_a_sealed_value_and_every_app_is_one_the_chat_stores() {
         for entry in TABLE {
-            assert!(
-                centraid_vault::roster::is_card_app(entry.app.id()),
-                "{entry:?}"
-            );
+            assert!(centraid_vault::roster::is_app(entry.app.id()), "{entry:?}");
             assert!(App::from_id(entry.app.id()).is_some(), "{entry:?}");
         }
         // A Locker item's card holds its title and its type, the plain half of the row.

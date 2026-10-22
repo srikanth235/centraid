@@ -45,9 +45,9 @@ mod tests {
     }
 
     #[test]
-    fn it_declares_six_queries_and_seventeen_actions() {
+    fn it_declares_eight_queries_and_seventeen_actions() {
         let manifest = manifest();
-        assert_eq!(manifest.queries.len(), 6);
+        assert_eq!(manifest.queries.len(), 8);
         assert_eq!(manifest.actions.len(), 17);
         for name in [
             "link-targets",
@@ -56,6 +56,8 @@ mod tests {
             "search",
             "history",
             "journal",
+            "notebooks",
+            "trash",
         ] {
             assert!(manifest.query(name).is_some(), "no query {name}");
         }

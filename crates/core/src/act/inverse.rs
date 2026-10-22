@@ -28,24 +28,22 @@ pub(crate) enum Input {
 type Row = (&'static str, &'static str, Input);
 
 /// `(action, its inverse, where the inverse's input comes from)`.
-const TASKS: &[Row] = &[
-    ("add", "delete", Input::Created),
-    ("complete", "reopen", Input::Id),
-    ("reopen", "complete", Input::Id),
-    ("cancel", "reopen", Input::Id),
-    ("delete", "restore", Input::Id),
-    ("restore", "delete", Input::Id),
-    ("create-project", "delete", Input::Created),
-    ("create-section", "delete", Input::Created),
-    ("attach", "detach", Input::Same),
-    ("detach", "attach", Input::Same),
-    ("add-tag", "remove-tag", Input::Same),
-    ("remove-tag", "add-tag", Input::Same),
-];
 const AGENDA: &[Row] = &[
     ("propose", "cancel-event", Input::Created),
+    ("trash-event", "restore-event", Input::Id),
+    ("restore-event", "trash-event", Input::Id),
     ("attach", "detach", Input::Same),
     ("detach", "attach", Input::Same),
+    ("add-task", "delete-task", Input::Created),
+    ("complete-task", "reopen-task", Input::Id),
+    ("reopen-task", "complete-task", Input::Id),
+    ("cancel-task", "reopen-task", Input::Id),
+    ("delete-task", "restore-task", Input::Id),
+    ("restore-task", "delete-task", Input::Id),
+    ("create-project", "delete-task", Input::Created),
+    ("create-section", "delete-task", Input::Created),
+    ("add-task-tag", "remove-task-tag", Input::Same),
+    ("remove-task-tag", "add-task-tag", Input::Same),
 ];
 const DOCS: &[Row] = &[
     ("upload", "trash", Input::Created),
@@ -118,7 +116,6 @@ const PHOTOS: &[Row] = &[
 
 fn rows(app: &str) -> &'static [Row] {
     match app {
-        "tasks" => TASKS,
         "agenda" => AGENDA,
         "docs" => DOCS,
         "locker" => LOCKER,
@@ -246,17 +243,17 @@ mod tests {
     fn the_input_comes_from_the_shell_or_the_commands_output() {
         let minted: Map<String, Value> =
             serde_json::from_str(r#"{"id":"t1","title":"x"}"#).unwrap();
-        let (action, input) = of("tasks", "add", &minted, &Value::Null).expect("undoable");
+        let (action, input) = of("agenda", "add-task", &minted, &Value::Null).expect("undoable");
         assert_eq!(
             (action, Value::Object(input)),
-            ("delete", serde_json::json!({"id":"t1"}))
+            ("delete-task", serde_json::json!({"id":"t1"}))
         );
 
         let unminted: Map<String, Value> = serde_json::from_str(r#"{"title":"x"}"#).unwrap();
         let output = serde_json::json!({"id":"made"});
-        let (_, input) = of("tasks", "add", &unminted, &output).expect("undoable");
+        let (_, input) = of("agenda", "add-task", &unminted, &output).expect("undoable");
         assert_eq!(Value::Object(input), serde_json::json!({"id":"made"}));
-        assert!(of("tasks", "add", &unminted, &Value::Null).is_none());
+        assert!(of("agenda", "add-task", &unminted, &Value::Null).is_none());
 
         let flag: Map<String, Value> =
             serde_json::from_str(r#"{"id":"i","flag":"starred"}"#).unwrap();
@@ -264,7 +261,7 @@ mod tests {
         assert_eq!(action, "unstar-item");
         assert_eq!(Value::Object(input), Value::Object(flag));
 
-        assert!(of("tasks", "purge", &minted, &Value::Null).is_none());
+        assert!(of("agenda", "purge-task", &minted, &Value::Null).is_none());
         assert!(of("health", "delete-workout", &minted, &Value::Null).is_none());
     }
 }

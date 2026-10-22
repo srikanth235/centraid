@@ -1,4 +1,4 @@
-//! THE ACTION TABLE'S ROW, one type for all nine apps (#1135).
+//! THE ACTION TABLE'S ROW, one type for every app (#1135).
 //!
 //! Each app carries a Rust table that says which vault command each manifest
 //! action invokes and whether the dispatching surface asks first. The row was

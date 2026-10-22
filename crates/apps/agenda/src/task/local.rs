@@ -18,7 +18,7 @@
 //! | `YYYY-MM-DDTHH:MM…` | an INSTANT, or the member's WALL CLOCK when it names no zone (`parse_civil_ms`) | the instant's day in the request zone | the instant's wall clock there |
 //!
 //! **The task's own `tz` is not the display zone.** It is the zone the
-//! recurrence expands in ([`crate::queries`]' `recurrence_of`); a due instant
+//! recurrence expands in ([`crate::task::queries`]' `recurrence_of`); a due instant
 //! is the same instant everywhere, and a member reads it in the zone the
 //! device is in now.
 //!

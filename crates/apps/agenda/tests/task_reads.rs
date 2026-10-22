@@ -3,8 +3,8 @@
 //! what it is about, attachments), the project chrome, one task, and the search,
 //! each asked through the paged door a phone's core asks through.
 
+use centraid_apps_agenda::task::queries::{load_board, load_search_term, load_task};
 use centraid_apps_kit::testdoor::TestDoor;
-use centraid_apps_tasks::queries::{load_board, load_search_term, load_task};
 use centraid_vault::commands::Registry;
 use centraid_vault::time::zone::FireZone;
 use centraid_vault::{Command, CommandStatus, Principal, Vault};
@@ -62,7 +62,7 @@ impl World {
             .to_owned()
     }
 
-    fn board(&self, limit: Option<i64>) -> centraid_apps_tasks::BoardData {
+    fn board(&self, limit: Option<i64>) -> centraid_apps_agenda::task::BoardData {
         let zone = FireZone::named("Etc/UTC").expect("a zone");
         self.vault
             .read(|connection| {
@@ -75,7 +75,7 @@ impl World {
     }
 }
 
-fn titles(rows: &[centraid_apps_tasks::TaskRow]) -> Vec<&str> {
+fn titles(rows: &[centraid_apps_agenda::task::TaskRow]) -> Vec<&str> {
     rows.iter().map(|row| row.title.as_str()).collect()
 }
 

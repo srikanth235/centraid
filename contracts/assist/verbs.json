@@ -171,22 +171,6 @@
       "app": "locker",
       "command": "locker.reveal_receipt",
       "why": "Locker declares no action that opens one sealed field: its `export` receipts a mass reveal, and the single reveal is a phone-side command the app table does not carry"
-    },
-    {
-      "verb": "delete",
-      "kind": "event",
-      "app": "agenda",
-      "command": "entity.trash",
-      "inverse": "entity.restore",
-      "why": "Agenda declares `cancel-event` and no action that moves an event to the trash"
-    },
-    {
-      "verb": "restore",
-      "kind": "event",
-      "app": "agenda",
-      "command": "entity.restore",
-      "inverse": "entity.trash",
-      "why": "Agenda declares no action that brings a trashed event back"
     }
   ]
 }

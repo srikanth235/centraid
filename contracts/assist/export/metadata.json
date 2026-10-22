@@ -54,6 +54,199 @@
       "verb": "cancel"
     },
     {
+      "action": "trash-event",
+      "app": "agenda",
+      "command": "entity.trash",
+      "id_param": "id",
+      "kind": "event",
+      "names": [],
+      "qualifier": null,
+      "verb": "delete"
+    },
+    {
+      "action": "restore-event",
+      "app": "agenda",
+      "command": "entity.restore",
+      "id_param": "id",
+      "kind": "event",
+      "names": [],
+      "qualifier": null,
+      "verb": "restore"
+    },
+    {
+      "action": "add-task",
+      "app": "agenda",
+      "command": "task.add",
+      "id_param": "id",
+      "kind": "task",
+      "names": [
+        "description",
+        "date",
+        "effort",
+        "parent",
+        "priority",
+        "list",
+        "name"
+      ],
+      "qualifier": null,
+      "verb": "create"
+    },
+    {
+      "action": "edit-task",
+      "app": "agenda",
+      "command": "task.edit",
+      "id_param": "id",
+      "kind": "task",
+      "names": [
+        "description",
+        "date",
+        "effort",
+        "priority",
+        "name"
+      ],
+      "qualifier": null,
+      "verb": "edit"
+    },
+    {
+      "action": "edit-task",
+      "app": "agenda",
+      "command": "task.edit",
+      "id_param": "id",
+      "kind": "task",
+      "names": [
+        "description",
+        "date",
+        "effort",
+        "priority",
+        "name"
+      ],
+      "qualifier": null,
+      "verb": "reschedule"
+    },
+    {
+      "action": "complete-task",
+      "app": "agenda",
+      "command": "task.complete",
+      "id_param": "id",
+      "kind": "task",
+      "names": [],
+      "qualifier": null,
+      "verb": "complete"
+    },
+    {
+      "action": "reopen-task",
+      "app": "agenda",
+      "command": "task.reopen",
+      "id_param": "id",
+      "kind": "task",
+      "names": [],
+      "qualifier": null,
+      "verb": "reopen"
+    },
+    {
+      "action": "cancel-task",
+      "app": "agenda",
+      "command": "task.cancel",
+      "id_param": "id",
+      "kind": "task",
+      "names": [],
+      "qualifier": null,
+      "verb": "cancel"
+    },
+    {
+      "action": "organize-task",
+      "app": "agenda",
+      "command": "task.organize",
+      "id_param": "id",
+      "kind": "task",
+      "names": [
+        "to"
+      ],
+      "qualifier": null,
+      "verb": "add_to"
+    },
+    {
+      "action": "organize-task",
+      "app": "agenda",
+      "command": "task.organize",
+      "id_param": "id",
+      "kind": "task",
+      "names": [
+        "to"
+      ],
+      "qualifier": null,
+      "verb": "remove_from"
+    },
+    {
+      "action": "delete-task",
+      "app": "agenda",
+      "command": "entity.trash",
+      "id_param": "id",
+      "kind": "task",
+      "names": [],
+      "qualifier": null,
+      "verb": "delete"
+    },
+    {
+      "action": "restore-task",
+      "app": "agenda",
+      "command": "entity.restore",
+      "id_param": "id",
+      "kind": "task",
+      "names": [],
+      "qualifier": null,
+      "verb": "restore"
+    },
+    {
+      "action": "create-project",
+      "app": "agenda",
+      "command": "container.create",
+      "id_param": "id",
+      "kind": "list",
+      "names": [
+        "area",
+        "name"
+      ],
+      "qualifier": null,
+      "verb": "create"
+    },
+    {
+      "action": "rename-list",
+      "app": "agenda",
+      "command": "entity.retitle",
+      "id_param": "id",
+      "kind": "list",
+      "names": [
+        "name"
+      ],
+      "qualifier": null,
+      "verb": "edit"
+    },
+    {
+      "action": "add-task-tag",
+      "app": "agenda",
+      "command": "tag.add",
+      "id_param": "id",
+      "kind": "task",
+      "names": [
+        "label"
+      ],
+      "qualifier": null,
+      "verb": "tag"
+    },
+    {
+      "action": "remove-task-tag",
+      "app": "agenda",
+      "command": "tag.remove",
+      "id_param": "id",
+      "kind": "task",
+      "names": [
+        "label"
+      ],
+      "qualifier": null,
+      "verb": "untag"
+    },
+    {
       "action": "create-text",
       "app": "docs",
       "command": "document.create_text",
@@ -714,179 +907,6 @@
       "verb": "untag"
     },
     {
-      "action": "add",
-      "app": "tasks",
-      "command": "task.add",
-      "id_param": "id",
-      "kind": "task",
-      "names": [
-        "description",
-        "date",
-        "effort",
-        "parent",
-        "priority",
-        "list",
-        "name"
-      ],
-      "qualifier": null,
-      "verb": "create"
-    },
-    {
-      "action": "edit",
-      "app": "tasks",
-      "command": "task.edit",
-      "id_param": "id",
-      "kind": "task",
-      "names": [
-        "description",
-        "date",
-        "effort",
-        "priority",
-        "name"
-      ],
-      "qualifier": null,
-      "verb": "edit"
-    },
-    {
-      "action": "edit",
-      "app": "tasks",
-      "command": "task.edit",
-      "id_param": "id",
-      "kind": "task",
-      "names": [
-        "description",
-        "date",
-        "effort",
-        "priority",
-        "name"
-      ],
-      "qualifier": null,
-      "verb": "reschedule"
-    },
-    {
-      "action": "complete",
-      "app": "tasks",
-      "command": "task.complete",
-      "id_param": "id",
-      "kind": "task",
-      "names": [],
-      "qualifier": null,
-      "verb": "complete"
-    },
-    {
-      "action": "reopen",
-      "app": "tasks",
-      "command": "task.reopen",
-      "id_param": "id",
-      "kind": "task",
-      "names": [],
-      "qualifier": null,
-      "verb": "reopen"
-    },
-    {
-      "action": "cancel",
-      "app": "tasks",
-      "command": "task.cancel",
-      "id_param": "id",
-      "kind": "task",
-      "names": [],
-      "qualifier": null,
-      "verb": "cancel"
-    },
-    {
-      "action": "organize-task",
-      "app": "tasks",
-      "command": "task.organize",
-      "id_param": "id",
-      "kind": "task",
-      "names": [
-        "to"
-      ],
-      "qualifier": null,
-      "verb": "add_to"
-    },
-    {
-      "action": "organize-task",
-      "app": "tasks",
-      "command": "task.organize",
-      "id_param": "id",
-      "kind": "task",
-      "names": [
-        "to"
-      ],
-      "qualifier": null,
-      "verb": "remove_from"
-    },
-    {
-      "action": "delete",
-      "app": "tasks",
-      "command": "entity.trash",
-      "id_param": "id",
-      "kind": "task",
-      "names": [],
-      "qualifier": null,
-      "verb": "delete"
-    },
-    {
-      "action": "restore",
-      "app": "tasks",
-      "command": "entity.restore",
-      "id_param": "id",
-      "kind": "task",
-      "names": [],
-      "qualifier": null,
-      "verb": "restore"
-    },
-    {
-      "action": "create-project",
-      "app": "tasks",
-      "command": "container.create",
-      "id_param": "id",
-      "kind": "list",
-      "names": [
-        "area",
-        "name"
-      ],
-      "qualifier": null,
-      "verb": "create"
-    },
-    {
-      "action": "rename-list",
-      "app": "tasks",
-      "command": "entity.retitle",
-      "id_param": "id",
-      "kind": "list",
-      "names": [
-        "name"
-      ],
-      "qualifier": null,
-      "verb": "edit"
-    },
-    {
-      "action": "add-tag",
-      "app": "tasks",
-      "command": "tag.add",
-      "id_param": "id",
-      "kind": "task",
-      "names": [
-        "label"
-      ],
-      "qualifier": null,
-      "verb": "tag"
-    },
-    {
-      "action": "remove-tag",
-      "app": "tasks",
-      "command": "tag.remove",
-      "id_param": "id",
-      "kind": "task",
-      "names": [
-        "label"
-      ],
-      "qualifier": null,
-      "verb": "untag"
-    },
-    {
       "action": "",
       "app": "locker",
       "command": "locker.reveal_receipt",
@@ -895,26 +915,6 @@
       "names": [],
       "qualifier": null,
       "verb": "reveal"
-    },
-    {
-      "action": "",
-      "app": "agenda",
-      "command": "entity.trash",
-      "id_param": "id",
-      "kind": "event",
-      "names": [],
-      "qualifier": null,
-      "verb": "delete"
-    },
-    {
-      "action": "",
-      "app": "agenda",
-      "command": "entity.restore",
-      "id_param": "id",
-      "kind": "event",
-      "names": [],
-      "qualifier": null,
-      "verb": "restore"
     }
   ],
   "catalog": {
@@ -1012,6 +1012,42 @@
         "verb": "cancel"
       },
       {
+        "action": "trash-event",
+        "also": [],
+        "app": "agenda",
+        "bulk": false,
+        "chat": "direct",
+        "command": "entity.trash",
+        "inverse": "restore-event",
+        "kind": "event",
+        "phrasings": [
+          "delete the dentist event",
+          "remove the team offsite from my calendar",
+          "trash the Friday lunch"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "delete"
+      },
+      {
+        "action": "restore-event",
+        "also": [],
+        "app": "agenda",
+        "bulk": false,
+        "chat": "direct",
+        "command": "entity.restore",
+        "inverse": "trash-event",
+        "kind": "event",
+        "phrasings": [
+          "restore the dentist event",
+          "bring back the team offsite",
+          "undo deleting the Friday lunch"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "restore"
+      },
+      {
         "action": "attach",
         "also": [],
         "app": "agenda",
@@ -1046,6 +1082,262 @@
         "qualifier": null,
         "sealed": [],
         "verb": "detach"
+      },
+      {
+        "action": "add-task",
+        "also": [],
+        "app": "agenda",
+        "bulk": false,
+        "chat": "direct",
+        "command": "task.add",
+        "inverse": "delete-task",
+        "kind": "task",
+        "phrasings": [
+          "remind me to call the plumber tomorrow",
+          "add a task to buy milk",
+          "put 'file taxes' on my list for April 15"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "create"
+      },
+      {
+        "action": "edit-task",
+        "also": [
+          "reschedule"
+        ],
+        "app": "agenda",
+        "bulk": false,
+        "chat": "direct",
+        "command": "task.edit",
+        "inverse": "edit-task",
+        "kind": "task",
+        "phrasings": [
+          "rename the plumber task",
+          "make buying milk high priority",
+          "add a note to the taxes task"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "edit"
+      },
+      {
+        "action": "complete-task",
+        "also": [],
+        "app": "agenda",
+        "bulk": false,
+        "chat": "direct",
+        "command": "task.complete",
+        "inverse": "reopen-task",
+        "kind": "task",
+        "phrasings": [
+          "mark call the plumber done",
+          "I finished the taxes",
+          "check off buy milk"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "complete"
+      },
+      {
+        "action": "reopen-task",
+        "also": [],
+        "app": "agenda",
+        "bulk": false,
+        "chat": "direct",
+        "command": "task.reopen",
+        "inverse": "complete-task",
+        "kind": "task",
+        "phrasings": [
+          "reopen call the plumber",
+          "the taxes aren't done after all",
+          "uncheck buy milk"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "reopen"
+      },
+      {
+        "action": "cancel-task",
+        "also": [],
+        "app": "agenda",
+        "bulk": false,
+        "chat": "direct",
+        "command": "task.cancel",
+        "inverse": "reopen-task",
+        "kind": "task",
+        "phrasings": [
+          "cancel the plumber task",
+          "I'm not buying milk anymore, drop it",
+          "cancel this week's repeat of the laundry task"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "cancel"
+      },
+      {
+        "action": "organize-task",
+        "also": [
+          "remove_from"
+        ],
+        "app": "agenda",
+        "bulk": false,
+        "chat": "direct",
+        "command": "task.organize",
+        "inverse": "organize-task",
+        "kind": "task",
+        "phrasings": [
+          "put the plumber task in the Home project",
+          "file buy milk under Errands",
+          "move the taxes task to the Finance project"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "add_to"
+      },
+      {
+        "action": "delete-task",
+        "also": [],
+        "app": "agenda",
+        "bulk": false,
+        "chat": "direct",
+        "command": "entity.trash",
+        "inverse": "restore-task",
+        "kind": "task",
+        "phrasings": [
+          "delete the plumber task",
+          "trash buy milk",
+          "remove the old taxes task"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "delete"
+      },
+      {
+        "action": "purge-task",
+        "also": [],
+        "app": "agenda",
+        "bulk": false,
+        "chat": "card",
+        "command": "entity.purge",
+        "inverse": null,
+        "kind": "task",
+        "phrasings": [
+          "erase the plumber task forever",
+          "permanently delete the trashed milk task",
+          "purge the old taxes task"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "purge"
+      },
+      {
+        "action": "restore-task",
+        "also": [],
+        "app": "agenda",
+        "bulk": false,
+        "chat": "direct",
+        "command": "entity.restore",
+        "inverse": "delete-task",
+        "kind": "task",
+        "phrasings": [
+          "bring back the plumber task",
+          "restore the task I deleted",
+          "undelete buy milk"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "restore"
+      },
+      {
+        "action": "create-project",
+        "also": [],
+        "app": "agenda",
+        "bulk": false,
+        "chat": "direct",
+        "command": "container.create",
+        "inverse": "delete-task",
+        "kind": "list",
+        "phrasings": [
+          "make a project called Home renovation",
+          "create a list named Errands",
+          "start a Finance project in the Personal area"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "create"
+      },
+      {
+        "action": "rename-list",
+        "also": [],
+        "app": "agenda",
+        "bulk": false,
+        "chat": "direct",
+        "command": "entity.retitle",
+        "inverse": "rename-list",
+        "kind": "list",
+        "phrasings": [
+          "rename the Home renovation project to House projects",
+          "call the Errands list Chores",
+          "retitle the Finance project"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "edit"
+      },
+      {
+        "action": "create-section",
+        "also": [],
+        "app": "agenda",
+        "bulk": false,
+        "chat": "card",
+        "command": "container.create",
+        "inverse": null,
+        "kind": "section",
+        "phrasings": [
+          "add a section called Kitchen to Home renovation",
+          "create a Waiting section in Errands",
+          "add a Q4 section to Finance"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "create"
+      },
+      {
+        "action": "add-task-tag",
+        "also": [],
+        "app": "agenda",
+        "bulk": false,
+        "chat": "direct",
+        "command": "tag.add",
+        "inverse": "remove-task-tag",
+        "kind": "task",
+        "phrasings": [
+          "tag the plumber task as home",
+          "label buy milk errands",
+          "add the tag urgent to the taxes task"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "tag"
+      },
+      {
+        "action": "remove-task-tag",
+        "also": [],
+        "app": "agenda",
+        "bulk": false,
+        "chat": "direct",
+        "command": "tag.remove",
+        "inverse": "add-task-tag",
+        "kind": "task",
+        "phrasings": [
+          "remove the home tag from the plumber task",
+          "untag buy milk",
+          "take the urgent label off the taxes task"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "untag"
       },
       {
         "action": "upload",
@@ -3282,298 +3574,6 @@
         "qualifier": null,
         "sealed": [],
         "verb": "untag"
-      },
-      {
-        "action": "add",
-        "also": [],
-        "app": "tasks",
-        "bulk": false,
-        "chat": "direct",
-        "command": "task.add",
-        "inverse": "delete",
-        "kind": "task",
-        "phrasings": [
-          "remind me to call the plumber tomorrow",
-          "add a task to buy milk",
-          "put 'file taxes' on my list for April 15"
-        ],
-        "qualifier": null,
-        "sealed": [],
-        "verb": "create"
-      },
-      {
-        "action": "edit",
-        "also": [
-          "reschedule"
-        ],
-        "app": "tasks",
-        "bulk": false,
-        "chat": "direct",
-        "command": "task.edit",
-        "inverse": "edit",
-        "kind": "task",
-        "phrasings": [
-          "rename the plumber task",
-          "make buying milk high priority",
-          "add a note to the taxes task"
-        ],
-        "qualifier": null,
-        "sealed": [],
-        "verb": "edit"
-      },
-      {
-        "action": "complete",
-        "also": [],
-        "app": "tasks",
-        "bulk": false,
-        "chat": "direct",
-        "command": "task.complete",
-        "inverse": "reopen",
-        "kind": "task",
-        "phrasings": [
-          "mark call the plumber done",
-          "I finished the taxes",
-          "check off buy milk"
-        ],
-        "qualifier": null,
-        "sealed": [],
-        "verb": "complete"
-      },
-      {
-        "action": "reopen",
-        "also": [],
-        "app": "tasks",
-        "bulk": false,
-        "chat": "direct",
-        "command": "task.reopen",
-        "inverse": "complete",
-        "kind": "task",
-        "phrasings": [
-          "reopen call the plumber",
-          "the taxes aren't done after all",
-          "uncheck buy milk"
-        ],
-        "qualifier": null,
-        "sealed": [],
-        "verb": "reopen"
-      },
-      {
-        "action": "cancel",
-        "also": [],
-        "app": "tasks",
-        "bulk": false,
-        "chat": "direct",
-        "command": "task.cancel",
-        "inverse": "reopen",
-        "kind": "task",
-        "phrasings": [
-          "cancel the plumber task",
-          "I'm not buying milk anymore, drop it",
-          "cancel this week's repeat of the laundry task"
-        ],
-        "qualifier": null,
-        "sealed": [],
-        "verb": "cancel"
-      },
-      {
-        "action": "organize-task",
-        "also": [
-          "remove_from"
-        ],
-        "app": "tasks",
-        "bulk": false,
-        "chat": "direct",
-        "command": "task.organize",
-        "inverse": "organize-task",
-        "kind": "task",
-        "phrasings": [
-          "put the plumber task in the Home project",
-          "file buy milk under Errands",
-          "move the taxes task to the Finance project"
-        ],
-        "qualifier": null,
-        "sealed": [],
-        "verb": "add_to"
-      },
-      {
-        "action": "delete",
-        "also": [],
-        "app": "tasks",
-        "bulk": false,
-        "chat": "direct",
-        "command": "entity.trash",
-        "inverse": "restore",
-        "kind": "task",
-        "phrasings": [
-          "delete the plumber task",
-          "trash buy milk",
-          "remove the old taxes task"
-        ],
-        "qualifier": null,
-        "sealed": [],
-        "verb": "delete"
-      },
-      {
-        "action": "purge",
-        "also": [],
-        "app": "tasks",
-        "bulk": false,
-        "chat": "card",
-        "command": "entity.purge",
-        "inverse": null,
-        "kind": "task",
-        "phrasings": [
-          "erase the plumber task forever",
-          "permanently delete the trashed milk task",
-          "purge the old taxes task"
-        ],
-        "qualifier": null,
-        "sealed": [],
-        "verb": "purge"
-      },
-      {
-        "action": "restore",
-        "also": [],
-        "app": "tasks",
-        "bulk": false,
-        "chat": "direct",
-        "command": "entity.restore",
-        "inverse": "delete",
-        "kind": "task",
-        "phrasings": [
-          "bring back the plumber task",
-          "restore the task I deleted",
-          "undelete buy milk"
-        ],
-        "qualifier": null,
-        "sealed": [],
-        "verb": "restore"
-      },
-      {
-        "action": "create-project",
-        "also": [],
-        "app": "tasks",
-        "bulk": false,
-        "chat": "direct",
-        "command": "container.create",
-        "inverse": "delete",
-        "kind": "list",
-        "phrasings": [
-          "make a project called Home renovation",
-          "create a list named Errands",
-          "start a Finance project in the Personal area"
-        ],
-        "qualifier": null,
-        "sealed": [],
-        "verb": "create"
-      },
-      {
-        "action": "rename-list",
-        "also": [],
-        "app": "tasks",
-        "bulk": false,
-        "chat": "direct",
-        "command": "entity.retitle",
-        "inverse": "rename-list",
-        "kind": "list",
-        "phrasings": [
-          "rename the Home renovation project to House projects",
-          "call the Errands list Chores",
-          "retitle the Finance project"
-        ],
-        "qualifier": null,
-        "sealed": [],
-        "verb": "edit"
-      },
-      {
-        "action": "create-section",
-        "also": [],
-        "app": "tasks",
-        "bulk": false,
-        "chat": "card",
-        "command": "container.create",
-        "inverse": null,
-        "kind": "section",
-        "phrasings": [
-          "add a section called Kitchen to Home renovation",
-          "create a Waiting section in Errands",
-          "add a Q4 section to Finance"
-        ],
-        "qualifier": null,
-        "sealed": [],
-        "verb": "create"
-      },
-      {
-        "action": "attach",
-        "also": [],
-        "app": "tasks",
-        "bulk": false,
-        "chat": "card",
-        "command": "edge.add",
-        "inverse": "detach",
-        "kind": "task",
-        "phrasings": [
-          "attach the quote PDF to the plumber task",
-          "add the receipt to buy milk",
-          "attach the form to the taxes task"
-        ],
-        "qualifier": null,
-        "sealed": [],
-        "verb": "attach"
-      },
-      {
-        "action": "detach",
-        "also": [],
-        "app": "tasks",
-        "bulk": false,
-        "chat": "card",
-        "command": "edge.remove",
-        "inverse": "attach",
-        "kind": "task",
-        "phrasings": [
-          "detach the quote PDF from the plumber task",
-          "remove the receipt from buy milk",
-          "take the form off the taxes task"
-        ],
-        "qualifier": null,
-        "sealed": [],
-        "verb": "detach"
-      },
-      {
-        "action": "add-tag",
-        "also": [],
-        "app": "tasks",
-        "bulk": false,
-        "chat": "direct",
-        "command": "tag.add",
-        "inverse": "remove-tag",
-        "kind": "task",
-        "phrasings": [
-          "tag the plumber task as home",
-          "label buy milk errands",
-          "add the tag urgent to the taxes task"
-        ],
-        "qualifier": null,
-        "sealed": [],
-        "verb": "tag"
-      },
-      {
-        "action": "remove-tag",
-        "also": [],
-        "app": "tasks",
-        "bulk": false,
-        "chat": "direct",
-        "command": "tag.remove",
-        "inverse": "add-tag",
-        "kind": "task",
-        "phrasings": [
-          "remove the home tag from the plumber task",
-          "untag buy milk",
-          "take the urgent label off the taxes task"
-        ],
-        "qualifier": null,
-        "sealed": [],
-        "verb": "untag"
       }
     ],
     "queries": [
@@ -3592,7 +3592,8 @@
       {
         "app": "agenda",
         "figures": [
-          "matches"
+          "matches",
+          "tasks"
         ],
         "kind": "event",
         "query": "search"
@@ -3613,6 +3614,61 @@
         ],
         "kind": "person",
         "query": "parties"
+      },
+      {
+        "app": "agenda",
+        "figures": [
+          "event",
+          "calendar"
+        ],
+        "kind": "event",
+        "query": "event"
+      },
+      {
+        "app": "agenda",
+        "figures": [
+          "open",
+          "logbook",
+          "tags",
+          "counts"
+        ],
+        "kind": "task",
+        "query": "board"
+      },
+      {
+        "app": "agenda",
+        "figures": [
+          "task"
+        ],
+        "kind": "task",
+        "query": "task"
+      },
+      {
+        "app": "agenda",
+        "figures": [
+          "projects",
+          "sections"
+        ],
+        "kind": "list",
+        "query": "projects"
+      },
+      {
+        "app": "agenda",
+        "figures": [
+          "dated",
+          "repeating",
+          "sitting"
+        ],
+        "kind": "task",
+        "query": "catch-up"
+      },
+      {
+        "app": "agenda",
+        "figures": [
+          "tasks"
+        ],
+        "kind": "task",
+        "query": "trash"
       },
       {
         "app": "docs",
@@ -3928,6 +3984,24 @@
         "query": "journal"
       },
       {
+        "app": "notes",
+        "figures": [
+          "notebooks",
+          "unfiled_count"
+        ],
+        "kind": "notebook",
+        "query": "notebooks"
+      },
+      {
+        "app": "notes",
+        "figures": [
+          "notes",
+          "purge_dates"
+        ],
+        "kind": "note",
+        "query": "trash"
+      },
+      {
         "app": "people",
         "figures": [
           "people",
@@ -4001,25 +4075,6 @@
         ],
         "kind": "photo",
         "query": "duplicates"
-      },
-      {
-        "app": "tasks",
-        "figures": [
-          "open",
-          "logbook",
-          "tags",
-          "counts"
-        ],
-        "kind": "task",
-        "query": "board"
-      },
-      {
-        "app": "tasks",
-        "figures": [
-          "matches"
-        ],
-        "kind": "task",
-        "query": "search"
       }
     ]
   },
@@ -5544,22 +5599,6 @@
       "kind": "locker_item",
       "verb": "reveal",
       "why": "Locker declares no action that opens one sealed field: its `export` receipts a mass reveal, and the single reveal is a phone-side command the app table does not carry"
-    },
-    {
-      "app": "agenda",
-      "command": "entity.trash",
-      "inverse": "entity.restore",
-      "kind": "event",
-      "verb": "delete",
-      "why": "Agenda declares `cancel-event` and no action that moves an event to the trash"
-    },
-    {
-      "app": "agenda",
-      "command": "entity.restore",
-      "inverse": "entity.trash",
-      "kind": "event",
-      "verb": "restore",
-      "why": "Agenda declares no action that brings a trashed event back"
     }
   ],
   "verbs": [

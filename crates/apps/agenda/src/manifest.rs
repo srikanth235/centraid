@@ -40,15 +40,26 @@ mod tests {
         let manifest = manifest();
         assert_eq!(manifest.id, APP_ID);
         assert_eq!(manifest.manifest_version, 1);
-        assert_eq!(manifest.version, "0.6.0");
+        assert_eq!(manifest.version, "0.7.0");
     }
 
     #[test]
-    fn it_declares_four_queries_and_seven_actions() {
+    fn it_declares_ten_queries_and_twenty_three_actions() {
         let manifest = manifest();
-        assert_eq!(manifest.queries.len(), 4);
-        assert_eq!(manifest.actions.len(), 7);
-        for name in ["upcoming", "search", "day-context", "parties"] {
+        assert_eq!(manifest.queries.len(), 10);
+        assert_eq!(manifest.actions.len(), 23);
+        for name in [
+            "upcoming",
+            "search",
+            "day-context",
+            "parties",
+            "event",
+            "board",
+            "task",
+            "projects",
+            "catch-up",
+            "trash",
+        ] {
             assert!(manifest.query(name).is_some(), "no query {name}");
         }
     }
@@ -84,26 +95,34 @@ mod tests {
     /// NON-OWNER invocation regardless of risk; what is absent here is the
     /// owner-facing prompt on the member's own gesture.
     #[test]
-    fn agenda_confirms_nothing_and_the_command_gate_is_the_other_one() {
+    ///
+    /// The one exception is `purge-task` (#1015 D1), which is not v0's and is the one
+    /// irreversible act: it confirms, as every other app's destroy does. `delete-task` trashes a
+    /// task AND every subtask under it, which is as destructive as `delete-note`.
+    #[test]
+    fn agenda_confirms_only_the_purge_and_the_command_gate_is_the_other_one() {
         for row in ACTIONS {
             let declared = manifest()
                 .action(row.action)
                 .expect("checked above")
                 .confirmation;
-            assert_eq!(declared, Confirmation::None, "{}", row.action);
-            assert_eq!(row.confirm, Confirm::None, "{}", row.action);
+            let expected = if row.action == "purge-task" {
+                (Confirmation::Required, Confirm::Required)
+            } else {
+                (Confirmation::None, Confirm::None)
+            };
+            assert_eq!((declared, row.confirm), expected, "{}", row.action);
         }
     }
 
-    /// SEVENTEEN SCOPES: ten reads of the vault's own tables and one `act` per
-    /// command the actions invoke. The `act` half is compared against the action
-    /// table rather than transcribed: an action with no scope is an action the
-    /// grant does not cover, and a scope with no action is reach nothing uses.
+    /// THE SCOPES: reads of the vault's own tables and one `act` per command the actions invoke.
+    /// The `act` half is compared against the action table rather than transcribed: an action with
+    /// no scope is an action the grant does not cover, and a scope with no action is reach nothing
+    /// uses.
     #[test]
-    fn it_declares_ten_reads_and_one_act_scope_per_command() {
+    fn it_declares_its_reads_and_one_act_scope_per_command() {
         let manifest = manifest();
         let vault = manifest.vault.as_ref().expect("Agenda declares its reach");
-        assert_eq!(vault.scopes.len(), 17);
         let mut declared: Vec<(&str, &str)> = vault
             .scopes
             .iter()
@@ -129,7 +148,7 @@ mod tests {
                 scope.table.as_deref().expect("a read names a table")
             })
             .collect();
-        assert_eq!(reads.len(), 10);
+        assert_eq!(reads.len(), 11);
         assert!(
             vault
                 .scopes
@@ -197,5 +216,25 @@ mod tests {
             let declared = manifest().action(row.action).expect("a declared action");
             assert_eq!(declared.command, row.command, "{}", row.action);
         }
+    }
+
+    /// **THE BOARD'S WINDOW IS THE MANIFEST'S, AND IT IS THE ONLY BOUND** (census §A7). Read off
+    /// the manifest rather than restated, because the clamp and the schema disagreeing is a
+    /// refusal a member cannot act on.
+    #[test]
+    fn the_boards_window_is_the_one_the_manifest_declares() {
+        use crate::task::{BOARD_MAX, BOARD_MIN};
+        let board = manifest().query("board").expect("the board query");
+        let limit = &board.input["properties"]["limit"];
+        assert_eq!(limit["minimum"], serde_json::json!(20));
+        assert_eq!(limit["maximum"], serde_json::json!(500));
+        assert_eq!(
+            u64::try_from(BOARD_MIN).unwrap_or_default(),
+            limit["minimum"].as_u64().unwrap_or_default()
+        );
+        assert_eq!(
+            u64::try_from(BOARD_MAX).unwrap_or_default(),
+            limit["maximum"].as_u64().unwrap_or_default()
+        );
     }
 }

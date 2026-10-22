@@ -234,5 +234,8 @@ fn the_census_lists_every_action_as_its_manifest_classifies_it() {
 fn the_exported_catalog_is_the_manifests() {
     let exported = catalog();
     assert_eq!(exported["actions"].as_array().unwrap().len(), 146);
-    assert_eq!(exported["queries"].as_array().unwrap().len(), 46);
+    // every query a manifest declares, however many that is: the core's `load` is held to the
+    // same list both ways (`crates/core/src/load.rs`)
+    let declared: usize = manifests().iter().map(|(_, m)| m.queries.len()).sum();
+    assert_eq!(exported["queries"].as_array().unwrap().len(), declared);
 }

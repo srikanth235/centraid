@@ -79,8 +79,8 @@ pub fn phrases() -> Value {
     )
 }
 
-/// The nine app manifests, embedded: the catalog the chat tables are generated from.
-const MANIFESTS: [(&str, &str); 9] = [
+/// The eight app manifests, embedded: the catalog the chat tables are generated from.
+const MANIFESTS: [(&str, &str); 8] = [
     ("agenda", include_str!("../../apps/agenda/manifest.json")),
     ("docs", include_str!("../../apps/docs/manifest.json")),
     ("health", include_str!("../../apps/health/manifest.json")),
@@ -89,7 +89,6 @@ const MANIFESTS: [(&str, &str); 9] = [
     ("notes", include_str!("../../apps/notes/manifest.json")),
     ("people", include_str!("../../apps/people/manifest.json")),
     ("photos", include_str!("../../apps/photos/manifest.json")),
-    ("tasks", include_str!("../../apps/tasks/manifest.json")),
 ];
 
 /// Every bundled manifest, parsed, in `MANIFESTS` order.

@@ -175,10 +175,10 @@ fn a_read_turn_finds_then_answers_with_its_events_in_order_its_cards_mapped_and_
     let first = &answer.cards[0];
     assert_eq!(
         (first.app.as_str(), first.entity.as_str()),
-        ("tasks", "task")
+        ("agenda", "task")
     );
     assert_eq!(first.title, "Rotate the tires before the drive");
-    assert!(answer.cards.iter().all(|card| card.app == "tasks"));
+    assert!(answer.cards.iter().all(|card| card.app == "agenda"));
 
     // THE EVENTS, in order: one Activity per looking step, the cards, then the answer. The same
     // queue and the same wire every turn uses.
@@ -256,7 +256,7 @@ fn every_kind_is_drawn_as_a_card_of_one_of_the_six_apps_and_the_homeless_ones_op
         ("album", "photos", "album"),
         ("notebook", "notes", "notebook"),
         ("folder", "docs", "folder"),
-        ("list", "tasks", "project"),
+        ("list", "agenda", "project"),
         ("note", "notes", "note"),
         ("document", "docs", "document"),
         ("photo", "photos", "photo"),

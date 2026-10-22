@@ -433,7 +433,7 @@ impl Vault {
     /// # Errors
     /// [`crate::error::VaultError`] when the vault itself is unreadable.
     pub fn chat_card_row_exists(&self, app: &str, entity: &str, row_id: &str) -> Result<bool> {
-        if !crate::roster::is_card_app(app) {
+        if !crate::roster::is_app(app) {
             return Ok(false);
         }
         let Some(kind) = card_kind(entity) else {

@@ -4,7 +4,7 @@
 //! Reminder lens, one project, Catch up) on the phone from the board's rows
 //! and the HOST clock (`logic.ts`). The v1 phone's shared layer has no
 //! calendar, so the derivation runs here, over rows already placed by
-//! [`crate::local`], and a screen draws the groups it is handed.
+//! [`crate::task::local`], and a screen draws the groups it is handed.
 //!
 //! The ARITHMETIC IS v0's, group for group, with two deliberate corrections:
 //!
@@ -17,16 +17,16 @@
 //! Group ORDER inside a group is v0's `byDue`: the effective due's local
 //! reading (a date-only due before a timed one on the same day), undated last,
 //! then title — and then the primary key, so a full tie is the data's order
-//! and not the read's (the board's own rule, [`crate::board::by_urgency`]).
+//! and not the read's (the board's own rule, [`crate::task::board::by_urgency`]).
 
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
 
 use centraid_vault::time::zone::FireZone;
 
-use crate::board::is_open_status;
-use crate::local::{self, Civil, DuePlacement};
-use crate::queries::{ProjectRow, SectionRow, TaskRow};
+use crate::task::board::is_open_status;
+use crate::task::local::{self, Civil, DuePlacement};
+use crate::task::queries::{ProjectRow, SectionRow, TaskRow};
 
 /// An undated task that has sat this many days is "sitting" (v0's 90).
 pub const SITTING_DAYS: i64 = 90;
@@ -462,7 +462,7 @@ pub fn catch_up(open: &[Placed]) -> CatchUp {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::queries::RecurrenceFacts;
+    use crate::task::queries::RecurrenceFacts;
 
     const NOW: &str = "2099-06-02T02:00:00.000Z";
 

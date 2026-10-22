@@ -4,8 +4,24 @@ agenda,rsvp,respond,event,card,yes: apps/agenda/AgendaWrites.kt,no
 agenda,edit-event,edit,event,direct,yes: apps/agenda/AgendaWrites.kt,yes
 agenda,edit-occurrence,reschedule,event,card,yes: apps/agenda/AgendaWrites.kt,no
 agenda,cancel-event,cancel,event,direct,yes: apps/agenda/AgendaWrites.kt,yes
+agenda,trash-event,delete,event,direct,no,no
+agenda,restore-event,restore,event,direct,no,no
 agenda,attach,attach,event,card,no,no
 agenda,detach,detach,event,card,no,no
+agenda,add-task,create,task,direct,yes: apps/tasks/RemindersImport.kt; kit/tasks/TasksOps.kt,yes
+agenda,edit-task,edit,task,direct,yes: apps/tasks/TasksDetail.kt,yes
+agenda,complete-task,complete,task,direct,yes: kit/tasks/TasksOps.kt,yes
+agenda,reopen-task,reopen,task,direct,yes: kit/tasks/TasksOps.kt,yes
+agenda,cancel-task,cancel,task,direct,yes: kit/tasks/TasksOps.kt,yes
+agenda,organize-task,add_to,task,direct,yes: kit/tasks/TasksOps.kt,yes
+agenda,delete-task,delete,task,direct,yes: apps/tasks/TasksDetail.kt,yes
+agenda,purge-task,purge,task,card,yes: apps/tasks/TasksTrash.kt,no
+agenda,restore-task,restore,task,direct,yes: apps/tasks/TasksTrash.kt,yes
+agenda,create-project,create,list,direct,yes: kit/tasks/TasksOps.kt,yes
+agenda,rename-list,edit,list,direct,no,no
+agenda,create-section,create,section,card,yes: kit/tasks/TasksOps.kt,no
+agenda,add-task-tag,tag,task,direct,yes: apps/tasks/TasksDetail.kt,no
+agenda,remove-task-tag,untag,task,direct,yes: apps/tasks/TasksDetail.kt,no
 docs,upload,import,document,card,yes: apps/docs/DocsFold.kt; apps/docs/DocsWrites.kt,no
 docs,create-text,create,document,direct,yes: apps/docs/DocsFold.kt; apps/docs/DocsWrites.kt,yes
 docs,rename,edit,document,direct,yes: apps/docs/DocsFold.kt; apps/docs/DocsWrites.kt,yes
@@ -129,19 +145,3 @@ photos,set-place,edit,place,card,yes: apps/photos/PhotoWrites.kt,no
 photos,name-place,edit,place,card,yes: apps/photos/PhotoWrites.kt,no
 photos,tag-photo,tag,photo,direct,yes: apps/photos/PhotoWrites.kt,no
 photos,untag-photo,untag,photo,direct,yes: apps/photos/PhotoWrites.kt,no
-tasks,add,create,task,direct,yes: apps/tasks/RemindersImport.kt; kit/tasks/TasksOps.kt,yes
-tasks,edit,edit,task,direct,yes: apps/tasks/TasksDetail.kt,yes
-tasks,complete,complete,task,direct,yes: kit/tasks/TasksOps.kt,yes
-tasks,reopen,reopen,task,direct,yes: kit/tasks/TasksOps.kt,yes
-tasks,cancel,cancel,task,direct,yes: kit/tasks/TasksOps.kt,yes
-tasks,organize-task,add_to,task,direct,yes: kit/tasks/TasksOps.kt,yes
-tasks,delete,delete,task,direct,yes: apps/tasks/TasksDetail.kt,yes
-tasks,purge,purge,task,card,yes: apps/tasks/TasksTrash.kt,no
-tasks,restore,restore,task,direct,yes: apps/tasks/TasksTrash.kt,yes
-tasks,create-project,create,list,direct,yes: kit/tasks/TasksOps.kt,yes
-tasks,rename-list,edit,list,direct,no,no
-tasks,create-section,create,section,card,yes: kit/tasks/TasksOps.kt,no
-tasks,attach,attach,task,card,no,no
-tasks,detach,detach,task,card,no,no
-tasks,add-tag,tag,task,direct,yes: apps/tasks/TasksDetail.kt,no
-tasks,remove-tag,untag,task,direct,yes: apps/tasks/TasksDetail.kt,no

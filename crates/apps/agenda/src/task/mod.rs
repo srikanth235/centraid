@@ -1,8 +1,9 @@
-//! # Tasks — two queries, thirteen actions, and one promotion rule
+//! # The task half of Agenda — one promotion rule, no ceiling
 //!
-//! 8,005 lines of v0 TypeScript, **2 queries**, 15 actions, 21 scopes — the
-//! smallest surface of any app (#1020, wave 4 census §A7). Its doctrine, from
-//! the board's own header:
+//! Tasks were folded into Agenda (#1128): one mini app, one crate, one manifest. `task` is a vault
+//! entity kind and a chat kind; this module is Agenda's reads of it.
+//!
+//! Its doctrine, from the board's own header (#1020, wave 4 census §A7):
 //!
 //! - **THE BOARD IS A BOUNDED WINDOW, NEVER A WHOLE-TABLE PULL** (#262):
 //!   newest open tasks by `created_at`, caller-sized, plus the 50 most recently
@@ -45,9 +46,7 @@
 //! | A denial turned into an error | [`Denial`] is a value every query answers beside its payload |
 
 pub mod board;
-pub mod commands;
 pub mod local;
-pub mod manifest;
 pub mod queries;
 pub mod views;
 
@@ -55,23 +54,7 @@ pub use board::{
     BOARD_DEFAULT, BOARD_MAX, BOARD_MIN, Families, FamilyRow, LOGBOOK_ROWS, by_urgency,
     is_open_board_root, is_open_status, nest_task_families,
 };
-pub use commands::{ACTIONS, Commands, Invocation, Outcome};
-pub use manifest::{APP_ID, manifest};
 pub use queries::{
     BoardData, SearchData, TaskDetailData, TaskRow, TrashData, TrashRow, load_board, load_search,
     load_search_term, load_task, load_trash,
 };
-
-/// A CONSENT DENIAL, as the payload carries it: the kit's one type, shared by
-/// every app so the core settles all of them through one door.
-pub use centraid_apps_kit::Denial;
-
-/// A door error, as the payload's denial.
-#[must_use]
-pub fn denial_of(message: String) -> Denial {
-    Denial {
-        code: None,
-        message: Some(message),
-        revoked_at: None,
-    }
-}

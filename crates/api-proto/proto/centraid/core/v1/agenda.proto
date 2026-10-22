@@ -37,6 +37,8 @@ syntax = "proto3";
 
 package centraid.core.v1;
 
+import "centraid/core/v1/tasks.proto";
+
 // ---------------------------------------------------------------------------
 // The requests.
 // ---------------------------------------------------------------------------
@@ -365,4 +367,7 @@ message AgendaSearch {
   // found, none twice. EMPTY when nothing was added. A shell says
   // "Including results for <corrected>".
   string corrected = 2;
+  // THE TASKS THE TERM FINDS, in the index's rank order (#1128: Tasks are Agenda's). `agenda.search`
+  // answers events and tasks in one message; unset when the term found no task.
+  optional TasksSearch tasks = 3;
 }

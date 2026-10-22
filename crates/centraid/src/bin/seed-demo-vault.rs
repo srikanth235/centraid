@@ -13,12 +13,12 @@
 //! against two, and two vaults holding the same rows under the same name would
 //! prove nothing: a switch that quietly did not happen would look exactly like
 //! one that did. `--only` is what makes the difference VISIBLE on the
-//! springboard — a vault seeded `--only docs,tasks,agenda` draws People, Notes
+//! springboard — a vault seeded `--only docs,agenda` draws People, Notes
 //! and Photos as genuinely empty, which is a state the grid already knows
 //! how to say and does not have to invent.
 //!
 //! **One scenario across eight apps** — agenda, docs, locker, money, notes,
-//! people, photos and tasks: one weekend at Tahoe with Maya, Jake, Grandpa Ray and
+//! people, photos and agenda: one weekend at Tahoe with Maya, Jake, Grandpa Ray and
 //! Chris, with notes and a packing list. A demo
 //! corpus is for reading like somebody's life rather than like
 //! `Item 1, Item 2`.
@@ -337,7 +337,7 @@ fn main() {
 /// self id is the predicate's one bind). Locker
 /// counts live, unarchived items, as its tile does; the trashed demo item is
 /// not one.
-const SEEDED_TABLES: [(&str, &str, &str, Option<&str>); 8] = [
+const SEEDED_TABLES: [(&str, &str, &str, Option<&str>); 7] = [
     ("photos", "photo", "id", None),
     ("docs", "document", "id", None),
     (
@@ -346,17 +346,12 @@ const SEEDED_TABLES: [(&str, &str, &str, Option<&str>); 8] = [
         "id",
         Some("kind = 'note' AND deleted_at IS NULL"),
     ),
+    // THE TASKS ARE AGENDA'S (#1128): its events and its tasks are one app's rows.
     (
         "agenda",
         "entity",
         "id",
-        Some("kind = 'event' AND deleted_at IS NULL"),
-    ),
-    (
-        "tasks",
-        "entity",
-        "id",
-        Some("kind = 'task' AND deleted_at IS NULL"),
+        Some("kind IN ('event', 'task') AND deleted_at IS NULL"),
     ),
     (
         "people",

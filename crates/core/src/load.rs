@@ -345,7 +345,18 @@ fn read(
             },
         )?,
 
-        ("tasks", "board") => app_query::tasks::board(
+        ("agenda", "event") => app_query::agenda_event(
+            vault,
+            door,
+            now,
+            &wire::AgendaEventRequest {
+                event_id: p.text("event_id")?,
+                instance_key: p.text("instance_key")?,
+                original_start_local: p.text("original_start_local")?,
+                tz,
+            },
+        )?,
+        ("agenda", "board") => app_query::agenda_task::board(
             vault,
             door,
             now,
@@ -356,16 +367,24 @@ fn read(
                 project_id: p.text("project_id")?,
             },
         )?,
-        ("tasks", "search") => app_query::tasks::search(
+        ("agenda", "task") => app_query::agenda_task::task(
             vault,
             door,
             now,
-            &wire::TasksSearchRequest {
-                term: p.text("term")?,
-                limit: p.limit(SEARCH_ROWS),
+            &wire::TasksTaskRequest {
+                task_id: p.text("task_id")?,
                 tz,
             },
         )?,
+        ("agenda", "projects") => {
+            app_query::agenda_task::projects(vault, door, now, &wire::TasksProjectsRequest { tz })?
+        }
+        ("agenda", "catch-up") => {
+            app_query::agenda_task::catch_up(vault, door, now, &wire::TasksCatchUpRequest { tz })?
+        }
+        ("agenda", "trash") => {
+            app_query::agenda_task::trash(vault, door, &wire::TasksTrashRequest { tz })?
+        }
 
         ("docs", "drive") => app_query::docs::drive(
             vault,
@@ -430,6 +449,10 @@ fn read(
                 tz,
             },
         )?,
+        ("notes", "notebooks") => app_query::notes::notebooks(door)?,
+        ("notes", "trash") => {
+            app_query::notes::trash(vault, door, &wire::NotesTrashRequest { tz })?
+        }
         ("notes", "journal") => app_query::notes::journal(
             vault,
             door,
@@ -788,9 +811,9 @@ mod tests {
             );
         }
         // The names no manifest declares answer nothing.
-        let mut params_request = ask("tasks", "task");
+        let mut params_request = ask("agenda", "no-such");
         assert!(!asked_of(&vault, &params_request).3);
-        params_request.query = "projects".to_owned();
+        params_request.query = "typo".to_owned();
         assert!(!asked_of(&vault, &params_request).3);
         let _ = std::fs::remove_dir_all(dir);
     }
@@ -843,7 +866,7 @@ mod tests {
     #[test]
     fn arguments_are_read_by_name_and_a_stranger_is_refused() {
         let (dir, vault) = founded();
-        let mut request = ask("tasks", "board");
+        let mut request = ask("agenda", "board");
         request.limit = 50;
         request.params.insert(
             "view".to_owned(),

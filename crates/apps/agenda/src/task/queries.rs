@@ -21,7 +21,7 @@
 //! | Read | What it is |
 //! |---|---|
 //! | the open window | the newest tasks **by `created_at`** (the entity's, not an id's order: nothing makes an id time-ordered), walked a page at a time until the window holds as many OPEN tasks as the caller sized it for |
-//! | the logbook | the [`crate::board::LOGBOOK_ROWS`] most recently closed, newest-completed first (`done_at`; a cancelled task has none and sorts last) |
+//! | the logbook | the [`crate::task::board::LOGBOOK_ROWS`] most recently closed, newest-completed first (`done_at`; a cancelled task has none and sorts last) |
 //! | the index | `search`'s own read, `crates/search`'s: the hits arrive in RANK ORDER |
 //!
 //! ## Two reads that keep a FAMILY whole across the window edge
@@ -29,7 +29,7 @@
 //! A parent the two windows missed is fetched, and every subtask of a fetched
 //! top-level task, open so a windowed parent's remaining work is not silently
 //! gone and closed so `done_children` counts true. **Without the first,
-//! [`crate::board::nest_task_families`] would promote a subtask whose parent
+//! [`crate::task::board::nest_task_families`] would promote a subtask whose parent
 //! fell outside the window and the member would see the same work twice.**
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -47,7 +47,7 @@ use centraid_vault::time::zone::FireZone;
 
 pub use centraid_apps_kit::attached::Attachment;
 
-use crate::board::{
+use crate::task::board::{
     BOARD_DEFAULT, BOARD_MAX, BOARD_MIN, FamilyRow, LOGBOOK_ROWS, by_urgency, is_open_status,
     nest_task_families,
 };

@@ -140,7 +140,7 @@ fn every_app_answers_a_load_by_the_name_its_manifest_declares() {
         ("notes", "library", vec![("sort", text("updated"))]),
         ("people", "search", vec![("term", text("a"))]),
         ("photos", "search", vec![("term", text("a"))]),
-        ("tasks", "board", vec![("view", text("today"))]),
+        ("agenda", "board", vec![("view", text("today"))]),
     ];
     for (app, query, pairs) in cases {
         let loaded = load(&sample, app, query, &pairs)
@@ -159,7 +159,7 @@ fn every_app_answers_a_load_by_the_name_its_manifest_declares() {
                 | ("notes", A::NotesLibrary(_))
                 | ("people", A::PeopleSearch(_))
                 | ("photos", A::PhotosSearch(_))
-                | ("tasks", A::TasksBoard(_))
+                | ("agenda", A::TasksBoard(_))
         );
         assert!(arm_matches, "{app}.{query} answered {answer:?}");
         assert!(!matches!(answer, A::Denied(_)), "{app}.{query} was denied");
@@ -168,7 +168,7 @@ fn every_app_answers_a_load_by_the_name_its_manifest_declares() {
         assert_eq!(loaded.tables, sorted, "tables arrive sorted");
     }
     // THE TABLES AN ANSWER WAS DRAWN FROM are the ones the door read.
-    let board = load(&sample, "tasks", "board", &[]).expect("a board");
+    let board = load(&sample, "agenda", "board", &[]).expect("a board");
     assert!(
         board.tables.iter().any(|table| table == "task"),
         "{:?}",
@@ -187,19 +187,19 @@ fn a_load_the_manifest_does_not_declare_or_the_query_does_not_take_is_refused() 
     };
     invalid(load(&sample, "nothing", "board", &[]), "not an app");
     invalid(
-        load(&sample, "tasks", "no-such-query", &[]),
+        load(&sample, "agenda", "no-such-query", &[]),
         "declares no query",
     );
     invalid(
-        load(&sample, "tasks", "board", &[("typo", int(1))]),
+        load(&sample, "agenda", "board", &[("typo", int(1))]),
         "takes no `typo`",
     );
     invalid(
-        load(&sample, "tasks", "board", &[("view", text("sideways"))]),
+        load(&sample, "agenda", "board", &[("view", text("sideways"))]),
         "`view`",
     );
     invalid(
-        load(&sample, "tasks", "board", &[("project_id", int(3))]),
+        load(&sample, "agenda", "board", &[("project_id", int(3))]),
         "`project_id` as text",
     );
 }
@@ -277,14 +277,14 @@ fn every_app_takes_an_act_and_refuses_a_bad_input_with_its_check() {
             vec![("kind", text("folder")), ("title", text("Trip"))],
         ),
         (
-            "tasks",
-            "add",
+            "agenda",
+            "add-task",
             vec![("title", text("Buy milk"))],
             vec![("title", text(""))],
         ),
     ];
     for (app, action, good, bad) in cases {
-        let done = act_with(&sample, app, action, &format!("{app}-good"), &good)
+        let done = act_with(&sample, app, action, &format!("{app}-{action}-good"), &good)
             .unwrap_or_else(|error| panic!("{app}.{action}: {error}"));
         assert_eq!(
             done.status,
@@ -322,14 +322,14 @@ fn every_app_takes_an_act_and_refuses_a_bad_input_with_its_check() {
         assert!(refused.output.is_empty() && refused.tables.is_empty());
     }
     // A name the manifest does not declare is a caller's mistake, not a refusal.
-    for (app, action) in [("tasks", "teleport"), ("nothing", "add")] {
+    for (app, action) in [("agenda", "teleport"), ("nothing", "add")] {
         assert!(matches!(
             act_with(&sample, app, action, "k", &[]),
             Err(CoreError::InvalidRequest { .. })
         ));
     }
     assert!(matches!(
-        act_with(&sample, "tasks", "add", "", &[("title", text("x"))]),
+        act_with(&sample, "agenda", "add-task", "", &[("title", text("x"))]),
         Err(CoreError::InvalidRequest { detail }) if detail.contains("invoke_key")
     ));
 }
@@ -377,7 +377,7 @@ fn an_id_the_manifest_marks_minted_is_the_cores_when_the_caller_states_none() {
 fn the_same_invoke_key_runs_once() {
     let sample = sample();
     let ask = |key: &str, title: &str| {
-        act_with(&sample, "tasks", "add", key, &[("title", text(title))]).expect("an act")
+        act_with(&sample, "agenda", "add-task", key, &[("title", text(title))]).expect("an act")
     };
     let first = ask("tap-1", "Dedupe me");
     assert_eq!(first.status, wire::ActStatus::Executed as i32);
@@ -399,7 +399,7 @@ fn the_same_invoke_key_runs_once() {
     ask("tap-2", "Dedupe me");
     assert_eq!(count(&sample, "title = ?", "Dedupe me"), 2);
     assert!(matches!(
-        act_with(&sample, "tasks", "add", "tap-1", &[("title", text("Something else"))]),
+        act_with(&sample, "agenda", "add-task", "tap-1", &[("title", text("Something else"))]),
         Err(CoreError::InvalidRequest { detail }) if detail.contains("different act")
     ));
 
@@ -419,8 +419,8 @@ fn the_same_invoke_key_runs_once_across_a_restart() {
     let sample = sample();
     let first = act_with(
         &sample,
-        "tasks",
-        "add",
+        "agenda",
+        "add-task",
         "tap-restart",
         &[("title", text("Once"))],
     )
@@ -433,8 +433,8 @@ fn the_same_invoke_key_runs_once_across_a_restart() {
         .expect("the vault opens again");
     let second = act_on(
         &reopened,
-        "tasks",
-        "add",
+        "agenda",
+        "add-task",
         "tap-restart",
         &[("title", text("Once"))],
     )
@@ -443,7 +443,7 @@ fn the_same_invoke_key_runs_once_across_a_restart() {
     assert_eq!(second.status, wire::ActStatus::Executed as i32);
     assert_eq!(second.invocation_id, first.invocation_id);
     assert!(matches!(
-        act_on(&reopened, "tasks", "add", "tap-restart", &[("title", text("Another"))]),
+        act_on(&reopened, "agenda", "add-task", "tap-restart", &[("title", text("Another"))]),
         Err(CoreError::InvalidRequest { detail }) if detail.contains("different act")
     ));
     reopened.close();
@@ -454,8 +454,8 @@ fn a_frozen_vault_refuses_every_write_and_names_the_check() {
     let sample = sample();
     let landed = act_with(
         &sample,
-        "tasks",
-        "add",
+        "agenda",
+        "add-task",
         "before",
         &[("title", text("Before"))],
     )
@@ -481,8 +481,8 @@ fn a_frozen_vault_refuses_every_write_and_names_the_check() {
 
     let refused = act_with(
         &sample,
-        "tasks",
-        "add",
+        "agenda",
+        "add-task",
         "after",
         &[("title", text("After"))],
     )
@@ -501,8 +501,8 @@ fn a_frozen_vault_refuses_every_write_and_names_the_check() {
     // A write that landed before the freeze is still its own answer.
     let replay = act_with(
         &sample,
-        "tasks",
-        "add",
+        "agenda",
+        "add-task",
         "before",
         &[("title", text("Before"))],
     )
@@ -529,9 +529,9 @@ fn a_frozen_vault_refuses_every_write_and_names_the_check() {
 fn an_executed_act_carries_the_action_that_takes_it_back() {
     let sample = sample();
     let added =
-        act_with(&sample, "tasks", "add", "u1", &[("title", text("Undo me"))]).expect("an act");
+        act_with(&sample, "agenda", "add-task", "u1", &[("title", text("Undo me"))]).expect("an act");
     let inverse = added.inverse.expect("an add can be taken back");
-    assert_eq!(inverse.action, "delete");
+    assert_eq!(inverse.action, "delete-task");
     let Some(wire::value::Kind::Text(id)) = inverse.input.get("id").and_then(|id| id.kind.clone())
     else {
         panic!("the inverse names what was created: {inverse:?}");
@@ -539,7 +539,7 @@ fn an_executed_act_carries_the_action_that_takes_it_back() {
     assert_eq!(count(&sample, "id = ? AND deleted_at IS NULL", &id), 1);
     let undone = act_with(
         &sample,
-        "tasks",
+        "agenda",
         &inverse.action,
         "u1-undo",
         &inverse
@@ -560,13 +560,13 @@ fn an_executed_act_carries_the_action_that_takes_it_back() {
         "the task is in the trash"
     );
     // AND THE UNDO HAS ITS OWN: restoring is deleting's inverse.
-    assert_eq!(undone.inverse.expect("restorable").action, "restore");
+    assert_eq!(undone.inverse.expect("restorable").action, "restore-task");
 
     // A purge, an edit with no prior state, and a read have none.
     let edited = act_with(
         &sample,
-        "tasks",
-        "edit",
+        "agenda",
+        "edit-task",
         "u2",
         &[("id", text(&id)), ("title", text("Renamed"))],
     )
@@ -580,8 +580,8 @@ fn a_vault_refusal_carries_its_predicate() {
     // Completing a task that is not there is the vault's refusal, not the schema's.
     let refused = act_with(
         &sample,
-        "tasks",
-        "complete",
+        "agenda",
+        "complete-task",
         "c1",
         &[("id", text("no-such-task"))],
     )

@@ -459,8 +459,7 @@ fn first_call(text: &str) -> &str {
 
 /// The activity a call announces: the app it looks in and the tool it uses. Only a call that
 /// reads or writes rows of a known app announces anything; `ask`, `decline` and an `answer` of a
-/// value do not, and neither does a `reveal`, which only offers the member a card. The app is the one the member opens the rows in ([`App::opens_in`]): a task read
-/// is "Looking in Agenda" (R-1128-D1), while its cards keep the stored app id `tasks`.
+/// value do not, and neither does a `reveal`, which only offers the member a card. The app is the one the member opens the rows in: a task read is "Looking in Agenda" (#1128).
 fn activity_of(chat: &NativeChat, call: &Value) -> Option<(App, &'static str)> {
     let name = call["tool"].as_str()?;
     let tool = TOOLS.iter().copied().find(|known| *known == name)?;
@@ -490,7 +489,7 @@ fn activity_of(chat: &NativeChat, call: &Value) -> Option<(App, &'static str)> {
             .find_map(|handle| kind_of_handle(&chat.session, &handle))
             .and_then(cards::app_of)
     };
-    by_kind.or_else(by_handle).map(|app| (app.opens_in(), tool))
+    by_kind.or_else(by_handle).map(|app| (app, tool))
 }
 
 /// The `#n` and `@n` a call argument names.
