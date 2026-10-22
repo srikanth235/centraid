@@ -291,7 +291,7 @@ public object HomeSearchMachine : ScreenMachine<HomeSearchState, HomeSearchEvent
 
     /** The member's conversations (R-1097-22): the app id the core answers them under, the index's entity, and the router's noun. */
     public const val CHAT: String = "chat"
-    private const val CHAT_THREAD: String = "chat.thread"
+    private const val CHAT_THREAD: String = "thread"
 
     /** `ChatCard.entity` for a thread: the shell's router opens it in the Chat tab, not as a route. */
     public const val CHAT_THREAD_NOUN: String = "thread"

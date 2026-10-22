@@ -127,7 +127,7 @@ class ShellCommandsExistSpec : StringSpec({
             "task.complete", // a bare `const val STATUS`
             "entity.purge", // an argument to a trash spec
             "locker.edit_item", // an `if` branch
-            "chat.clear", // an argument to a helper
+            "thread.clear", // an argument to a helper
             "document.restore_version", // a `when` arm
         ).forEach { command ->
             withClue(command) {

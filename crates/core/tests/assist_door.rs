@@ -98,18 +98,8 @@ fn a_read_through_the_core_door_returns_the_rows_the_harness_door_returns() {
 
     // A table straight, in the kit's paged shape.
     for (table, columns, sort, pk) in [
-        (
-            "core_party",
-            "party_id, display_name, kind",
-            "party_id",
-            "party_id",
-        ),
-        (
-            "schedule_project",
-            "project_id, name, area",
-            "project_id",
-            "project_id",
-        ),
+        ("entity", "id, title, kind, created_at", "created_at", "id"),
+        ("container", "id, kind, parent_id", "id", "id"),
     ] {
         let a = core.table(table, columns, sort, pk).expect("core reads");
         let b = harness
@@ -132,7 +122,7 @@ fn a_read_through_the_core_door_returns_the_rows_the_harness_door_returns() {
         .next()
         .expect("a name has a word")
         .to_owned();
-    for entity in ["core.party", "knowledge.note", "schedule.task"] {
+    for entity in ["person", "note", "task"] {
         assert_eq!(
             core.search(entity, &word, 50).expect("core searches"),
             harness.search(entity, &word, 50).expect("harness searches"),
@@ -140,7 +130,7 @@ fn a_read_through_the_core_door_returns_the_rows_the_harness_door_returns() {
         );
     }
     // A text with no searchable word is an answer, not an error, on both.
-    assert!(core.search("core.party", "!!", 5).unwrap().is_empty());
+    assert!(core.search("person", "!!", 5).unwrap().is_empty());
 }
 
 /// `YYYY-MM-DD` of a day count since 1970-01-01 (Hinnant's civil-from-days).
@@ -158,15 +148,17 @@ fn ymd(days: i64) -> String {
 }
 
 fn project_names(door: &dyn Door) -> Vec<String> {
-    door.table(
-        "schedule_project",
-        "project_id, name",
-        "project_id",
-        "project_id",
+    door.table_where(
+        "entity",
+        "id, title, created_at",
+        "created_at",
+        "id",
+        "kind = ?",
+        &["project".to_owned()],
     )
     .unwrap()
     .iter()
-    .filter_map(|row| centraid_assist::native::door::text(row, "name"))
+    .filter_map(|row| centraid_assist::native::door::text(row, "title"))
     .collect()
 }
 
@@ -185,12 +177,12 @@ fn a_bare_run_is_refused_and_a_keyed_run_writes_once_through_the_change_feed() {
     let pair = pair();
     let door = pair.core.assist_door();
     let before = project_names(&door).len();
-    let input = serde_json::json!({"name": "Door test"});
+    let input = serde_json::json!({"kind": "project", "title": "Door test"});
     let _ = change_tables(&pair);
 
     // A BARE RUN IS REFUSED, as a value, and the vault is untouched: a card's confirm is the only
     // way the phone's chat writes.
-    let ran = door.run("schedule.save_project", input.clone()).unwrap();
+    let ran = door.run("container.create", input.clone()).unwrap();
     assert!(!ran.ok);
     assert_eq!(ran.predicate.as_deref(), Some(WRITES_OFF_PREDICATE));
     assert_eq!(project_names(&door).len(), before);
@@ -198,19 +190,19 @@ fn a_bare_run_is_refused_and_a_keyed_run_writes_once_through_the_change_feed() {
 
     // A KEYED RUN goes through `api::invoke`: the row lands and the feed names its table.
     let ran = door
-        .run_keyed("pending-1:0", "schedule.save_project", input.clone())
+        .run_keyed("pending-1:0", "container.create", input.clone())
         .unwrap();
     assert!(ran.ok, "{:?}", ran.reason);
     assert_eq!(project_names(&door).len(), before + 1);
     assert!(
         change_tables(&pair)
             .iter()
-            .any(|table| table == "schedule_project")
+            .any(|table| table == "container")
     );
 
     // THE SAME KEY AGAIN writes nothing and answers what it answered; a new key writes.
     let again = door
-        .run_keyed("pending-1:0", "schedule.save_project", input.clone())
+        .run_keyed("pending-1:0", "container.create", input.clone())
         .unwrap();
     assert!(again.ok);
     assert_eq!(again.output, ran.output);
@@ -219,7 +211,7 @@ fn a_bare_run_is_refused_and_a_keyed_run_writes_once_through_the_change_feed() {
         change_tables(&pair).is_empty(),
         "a replay announces nothing"
     );
-    door.run_keyed("pending-1:1", "schedule.save_project", input)
+    door.run_keyed("pending-1:1", "container.create", input)
         .unwrap();
     assert_eq!(project_names(&door).len(), before + 2);
 
@@ -227,13 +219,13 @@ fn a_bare_run_is_refused_and_a_keyed_run_writes_once_through_the_change_feed() {
     // remembered: the same key may be asked again.
     let bad = serde_json::json!({"nope": 1});
     let ran = door
-        .run_keyed("pending-2:0", "schedule.save_project", bad.clone())
+        .run_keyed("pending-2:0", "container.create", bad.clone())
         .unwrap();
     assert!(!ran.ok);
     assert_eq!(ran.predicate.as_deref(), Some("schema"));
     assert!(
         !door
-            .run_keyed("pending-2:0", "schedule.save_project", bad)
+            .run_keyed("pending-2:0", "container.create", bad)
             .unwrap()
             .ok
     );
@@ -291,32 +283,55 @@ fn money_reaches_the_world_through_the_core_door_as_signed_rows_inside_the_windo
     };
     run(
         "money-1:0",
-        "money.add_account",
+        "account.add",
         // The demo ledger (`example::seed_money`) already holds an "Everyday"; this account's
         // lines are told apart from its by the account's own name.
-        serde_json::json!({"account_id": account, "name": "Door test", "kind": "checking"}),
+        serde_json::json!({"id": account, "title": "Door test", "type": "checking"}),
     );
-    let line = |id: String, external: &str, back: i64, minor: i64, direction: &str, name: &str| {
+    // a followed line, signed (money out is negative); `follow.statement` names each by the id
+    // its source gave it
+    let line = |external: &str, back: i64, minor: i64, name: &str| {
         serde_json::json!({
-            "txn_id": id, "external_id": external, "posted_on": day(back),
-            "amount_minor": minor, "direction": direction, "description": name.to_uppercase(),
-            "display_name": name,
-            "category_concept_id": "money:cat:food.groceries",
+            "external_id": external,
+            "fields": {
+                "title": name, "posted_on": day(back), "amount_minor": minor,
+                "category_id": "category:food.groceries",
+                "line": {"description": name.to_uppercase()},
+            },
         })
     };
-    let (recent, income, old) = (door.mint_id(), door.mint_id(), door.mint_id());
+    let externals: Vec<String> = (1..=3).map(|n| format!("csv:{n:064x}")).collect();
     run(
         "money-1:1",
-        "money.import_transactions",
+        "follow.statement",
         serde_json::json!({
-            "account_id": account, "source": "csv",
-            "rows": [
-                line(recent.clone(), &format!("csv:{:064x}", 1), 2, 4_250, "debit", "Corner Market"),
-                line(income.clone(), &format!("csv:{:064x}", 2), 3, 100_000, "credit", "Payroll"),
+            "origin": {"ref": account, "label": "Door test", "fills": account},
+            "records": [
+                line(&externals[0], 2, -4_250, "Corner Market"),
+                line(&externals[1], 3, 100_000, "Payroll"),
                 // two years back: outside the three months the world holds
-                line(old.clone(), &format!("csv:{:064x}", 3), 730, 999, "debit", "Ancient"),
+                line(&externals[2], 730, -999, "Ancient"),
             ],
         }),
+    );
+    let followed = |external: &String| -> String {
+        door.table_where(
+            "source",
+            "external_id, entity_id",
+            "external_id",
+            "external_id",
+            "external_id = ?",
+            std::slice::from_ref(external),
+        )
+        .unwrap()
+        .first()
+        .and_then(|row| centraid_assist::native::door::text(row, "entity_id"))
+        .expect("a followed line")
+    };
+    let (recent, income, old) = (
+        followed(&externals[0]),
+        followed(&externals[1]),
+        followed(&externals[2]),
     );
 
     let world = World::load_in(&door, false, true, None).expect("a world loads");

@@ -85,26 +85,33 @@ fn thread(sample: &common::chat::Sample, id: &str) -> wire::ChatThread {
     }
 }
 
-/// `(title, status)` of every task row, through the same door the runtime reads.
+/// `(title, status)` of every task row, through the same door the runtime reads: the task's own
+/// row beside its entity's title. The status is the vault's (`open`, `done`, `cancelled`).
 fn tasks(sample: &common::chat::Sample) -> Vec<(String, String)> {
     use centraid_assist::native::Door as _;
     use centraid_assist::native::door::text;
-    sample
-        .handle
-        .assist_door()
-        .table(
-            "schedule_task",
-            "task_id, title, status",
-            "task_id",
-            "task_id",
+    let door = sample.handle.assist_door();
+    let titles: std::collections::BTreeMap<String, String> = door
+        .table_where(
+            "entity",
+            "id, title, created_at",
+            "created_at",
+            "id",
+            "kind = ?",
+            &["task".to_owned()],
         )
+        .expect("the titles read")
+        .iter()
+        .filter_map(|row| Some((text(row, "id")?, text(row, "title")?)))
+        .collect();
+    door.table("task", "id, status", "id", "id")
         .expect("the tasks read")
         .iter()
-        .map(|row| {
-            (
-                text(row, "title").unwrap_or_default(),
+        .filter_map(|row| {
+            Some((
+                titles.get(&text(row, "id")?)?.clone(),
                 text(row, "status").unwrap_or_default(),
-            )
+            ))
         })
         .collect()
 }
@@ -415,17 +422,17 @@ fn a_write_parks_behind_a_card_and_nothing_is_written_until_the_member_taps() {
     );
     let card = pending_of(&sample, session);
     assert_eq!(card.verbs, ["complete"]);
-    assert_eq!(card.commands, ["schedule.set_task_status"]);
+    assert_eq!(card.commands, ["task.complete"]);
     assert!(!card.destructive);
 
     // NOTHING HAS TOUCHED THE VAULT: no row moved and no screen was told
     assert_eq!(tasks(&sample), before);
-    assert_eq!(status_of(&sample, DRY_CLEANING), "needs-action");
+    assert_eq!(status_of(&sample, DRY_CLEANING), "open");
     assert!(
         changes_on_the_queue(&sample)
             .iter()
-            .all(|table| table.starts_with("chat_") || table.starts_with("core_")),
-        "no app table was touched by planning"
+            .all(|table| matches!(table.as_str(), "entity" | "thread" | "message")),
+        "no app table was touched by planning (a chat saves only its own rows)"
     );
 
     // THE TAP WRITES, through the door, and the change feed names the table
@@ -438,12 +445,9 @@ fn a_write_parks_behind_a_card_and_nothing_is_written_until_the_member_taps() {
         "{tapped:?}"
     );
     assert_eq!(tapped.line, "Done.");
-    assert_eq!(status_of(&sample, DRY_CLEANING), "completed");
+    assert_eq!(status_of(&sample, DRY_CLEANING), "done");
     let tables = changes_on_the_queue(&sample);
-    assert!(
-        tables.iter().any(|table| table == "schedule_task"),
-        "{tables:?}"
-    );
+    assert!(tables.iter().any(|table| table == "task"), "{tables:?}");
 
     // THE SAME CARD TAPPED AGAIN writes nothing: it answers what it answered, and no screen is told
     let again = sample
@@ -455,13 +459,9 @@ fn a_write_parks_behind_a_card_and_nothing_is_written_until_the_member_taps() {
     assert_eq!(
         tasks(&sample)
             .iter()
-            .filter(|(_, status)| status == "completed")
+            .filter(|(_, status)| status == "done")
             .count(),
-        before
-            .iter()
-            .filter(|(_, status)| status == "completed")
-            .count()
-            + 1
+        before.iter().filter(|(_, status)| status == "done").count() + 1
     );
 }
 
@@ -484,7 +484,7 @@ fn a_dismissed_card_writes_nothing_and_cannot_be_confirmed_afterwards() {
     assert!(
         changes_on_the_queue(&sample)
             .iter()
-            .all(|table| !table.starts_with("schedule_")),
+            .all(|table| table != "task"),
         "a dismissal tells no screen anything"
     );
     // and a card that was never made is nobody's
@@ -514,7 +514,7 @@ fn a_new_message_dismisses_the_card_that_was_waiting() {
             .outcome,
         Confirmed::Unknown
     );
-    assert_eq!(status_of(&sample, DRY_CLEANING), "needs-action");
+    assert_eq!(status_of(&sample, DRY_CLEANING), "open");
 }
 
 #[test]
@@ -531,20 +531,26 @@ fn a_card_whose_row_changed_since_it_was_planned_is_stale_and_writes_nothing() {
         sample
             .handle
             .assist_door()
-            .table("schedule_task", "task_id, title", "task_id", "task_id")
+            .table_where(
+                "entity",
+                "id, title, created_at",
+                "created_at",
+                "id",
+                "kind = ?",
+                &["task".to_owned()],
+            )
             .unwrap()
             .iter()
             .find(|row| text(row, "title").as_deref() == Some(DRY_CLEANING))
-            .and_then(|row| text(row, "task_id"))
+            .and_then(|row| text(row, "id"))
             .unwrap()
     };
     let edit = sample
         .handle
         .call(&wire::Request {
             kind: Some(wire::request::Kind::Command(wire::Command {
-                name: "schedule.edit_task".to_owned(),
-                input: serde_json::to_vec(&serde_json::json!({"task_id": id, "priority": 1}))
-                    .unwrap(),
+                name: "task.edit".to_owned(),
+                input: serde_json::to_vec(&serde_json::json!({"id": id, "priority": 1})).unwrap(),
                 invoke_key: "test:edit-task".to_owned(),
                 ..wire::Command::default()
             })),
@@ -559,11 +565,11 @@ fn a_card_whose_row_changed_since_it_was_planned_is_stale_and_writes_nothing() {
         "{tapped:?}"
     );
     assert_eq!(tapped.line, "That changed since. Ask again.");
-    assert_eq!(status_of(&sample, DRY_CLEANING), "needs-action");
+    assert_eq!(status_of(&sample, DRY_CLEANING), "open");
     assert!(
         changes_on_the_queue(&sample)
             .iter()
-            .all(|table| !table.starts_with("schedule_")),
+            .all(|table| table != "task"),
         "a stale card wrote nothing"
     );
 }
@@ -604,10 +610,10 @@ fn a_chain_of_two_writes_parks_as_one_card_and_a_tap_makes_both() {
         matches!(tapped.outcome, Confirmed::Done { steps: 2, .. }),
         "{tapped:?}"
     );
-    assert_eq!(status_of(&sample, DRY_CLEANING), "completed");
+    assert_eq!(status_of(&sample, DRY_CLEANING), "done");
     assert_eq!(
         status_of(&sample, "Rotate the tires before the drive"),
-        "completed"
+        "done"
     );
 }
 
@@ -771,11 +777,11 @@ fn a_confirm_request_writes_once_and_answers_how_it_ended_and_the_line() {
     assert_eq!(tapped.pending_id, card.id);
     assert_eq!(tapped.outcome, wire::AssistSettleOutcome::Applied as i32);
     assert_eq!(tapped.line, "Done.");
-    assert_eq!(status_of(&sample, DRY_CLEANING), "completed");
+    assert_eq!(status_of(&sample, DRY_CLEANING), "done");
     assert!(
         changes_on_the_queue(&sample)
             .iter()
-            .any(|table| table == "schedule_task"),
+            .any(|table| table == "task"),
         "the change feed names the table a screen reads"
     );
 
@@ -785,11 +791,11 @@ fn a_confirm_request_writes_once_and_answers_how_it_ended_and_the_line() {
     assert_eq!(
         tasks(&sample)
             .iter()
-            .filter(|(_, status)| status == "completed")
+            .filter(|(_, status)| status == "done")
             .count(),
         1 + tasks(&sample)
             .iter()
-            .filter(|(title, status)| status == "completed" && title != DRY_CLEANING)
+            .filter(|(title, status)| status == "done" && title != DRY_CLEANING)
             .count()
     );
 }
@@ -814,7 +820,7 @@ fn a_dismiss_request_writes_nothing_and_what_it_dismissed_cannot_be_tapped_after
     assert!(
         changes_on_the_queue(&sample)
             .iter()
-            .all(|table| !table.starts_with("schedule_")),
+            .all(|table| table != "task"),
         "a dismissal tells no screen anything"
     );
 
@@ -897,20 +903,26 @@ fn a_card_whose_row_moved_answers_stale_over_the_wire_and_writes_nothing() {
         sample
             .handle
             .assist_door()
-            .table("schedule_task", "task_id, title", "task_id", "task_id")
+            .table_where(
+                "entity",
+                "id, title, created_at",
+                "created_at",
+                "id",
+                "kind = ?",
+                &["task".to_owned()],
+            )
             .unwrap()
             .iter()
             .find(|row| text(row, "title").as_deref() == Some(DRY_CLEANING))
-            .and_then(|row| text(row, "task_id"))
+            .and_then(|row| text(row, "id"))
             .unwrap()
     };
     sample
         .handle
         .call(&wire::Request {
             kind: Some(wire::request::Kind::Command(wire::Command {
-                name: "schedule.edit_task".to_owned(),
-                input: serde_json::to_vec(&serde_json::json!({"task_id": id, "priority": 1}))
-                    .unwrap(),
+                name: "task.edit".to_owned(),
+                input: serde_json::to_vec(&serde_json::json!({"id": id, "priority": 1})).unwrap(),
                 invoke_key: "test:edit-task-wire".to_owned(),
                 ..wire::Command::default()
             })),
@@ -921,11 +933,11 @@ fn a_card_whose_row_moved_answers_stale_over_the_wire_and_writes_nothing() {
     let tapped = tap(&sample, session, &card.id);
     assert_eq!(tapped.outcome, wire::AssistSettleOutcome::Stale as i32);
     assert_eq!(tapped.line, "That changed since. Ask again.");
-    assert_eq!(status_of(&sample, DRY_CLEANING), "needs-action");
+    assert_eq!(status_of(&sample, DRY_CLEANING), "open");
     assert!(
         changes_on_the_queue(&sample)
             .iter()
-            .all(|table| !table.starts_with("schedule_")),
+            .all(|table| table != "task"),
         "a stale card wrote nothing"
     );
 }
@@ -1089,7 +1101,6 @@ fn ymd(days: i64) -> String {
 /// a zone. (The sample's own events are floating, which no zone moves.)
 fn night_call_in(tz: &str) -> (String, String) {
     use centraid_assist::native::Door as _;
-    use centraid_assist::native::door::text;
     let sample = native_sample(script(&[
         step(
             "plan: look",
@@ -1099,31 +1110,18 @@ fn night_call_in(tz: &str) -> (String, String) {
         step("plan: answer", "answer", &[("rows", "@1")]),
     ]));
     let door = sample.handle.assist_door();
-    let calendar = text(
-        &door
-            .table(
-                "schedule_calendar",
-                "calendar_id, created_at",
-                "created_at",
-                "calendar_id",
-            )
-            .unwrap()[0],
-        "calendar_id",
-    )
-    .unwrap();
     let day = ymd(door.now_ms().div_euclid(86_400_000) + 2);
     let proposed = sample
         .handle
         .call(&wire::Request {
             kind: Some(wire::request::Kind::Command(wire::Command {
-                name: "schedule.propose_event".to_owned(),
+                name: "event.propose".to_owned(),
                 input: serde_json::to_vec(&serde_json::json!({
-                    "summary": "Night call",
-                    "dtstart": format!("{day}T22:30:00.000Z"),
-                    "dtend": format!("{day}T23:30:00.000Z"),
-                    "start_tz": "Etc/UTC",
-                    "recurrence_semantics": "zoned",
-                    "calendar_id": calendar,
+                    "title": "Night call",
+                    "starts": format!("{day}T22:30:00.000Z"),
+                    "ends": format!("{day}T23:30:00.000Z"),
+                    "zone": "Etc/UTC",
+                    "timing": "zoned",
                 }))
                 .unwrap(),
                 invoke_key: "test:night-call".to_owned(),
@@ -1225,8 +1223,8 @@ fn a_session_keeps_the_conversation_across_a_screens_write_and_reads_what_the_sc
         .handle
         .call(&wire::Request {
             kind: Some(wire::request::Kind::Command(wire::Command {
-                name: "schedule.save_project".to_owned(),
-                input: br#"{"name":"New list"}"#.to_vec(),
+                name: "container.create".to_owned(),
+                input: br#"{"kind":"project","title":"New list"}"#.to_vec(),
                 invoke_key: "test:edit".to_owned(),
                 ..wire::Command::default()
             })),

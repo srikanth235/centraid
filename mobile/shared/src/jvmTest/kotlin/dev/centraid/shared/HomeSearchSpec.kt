@@ -233,7 +233,7 @@ class HomeSearchSpec : StringSpec({
 
     // ---- THE CHAT GROUP (#1097, R-1097-24) ---------------------------------------------------------
 
-    val chatThread = hit("chat", "chat.thread", "th-1", "Where is the marmalade recipe?")
+    val chatThread = hit("chat", "thread", "th-1", "Where is the marmalade recipe?")
     val noteHit = hit("notes", "note", "n1", "Cabin packing")
     val withChatTab = step(HomeSearchMachine.initial(), HomeSearchEvent(opened = HomeSearchEvent.Opened(chat_tab = true))).state
 

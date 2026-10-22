@@ -143,10 +143,10 @@ public object ChatMachine {
      * them: every app a member opens that the assistant reads, Locker never
      * among them. `tasks` is a domain read through Agenda's scope, not a scope of
      * its own (#1128, R-1128-F2): a chat scoped to Agenda covers its tasks, and a
-     * card still names `tasks`. The core accepts exactly these (`scope_app`'s enum
-     * in `crates/vault/src/commands/chat.rs`, the `chat_thread.scope_app` CHECK at
-     * the ladder head, `App::SCOPES` in `crates/assist`); `ChatScopeSpec` ties them
-     * together, and the shells draw their menu from here.
+     * card still names `tasks`. The core accepts exactly these: they are the apps of
+     * `centraid_vault::roster::APPS` that open in themselves (R-1135-7-1), the one
+     * constant `thread.save_turn`'s schema and `App::SCOPES` in `crates/assist` read;
+     * `ChatScopeSpec` holds this list equal to it, and the shells draw their menu from here.
      */
     public val SCOPABLE_APPS: List<String> =
         listOf("agenda", "docs", "money", "notes", "people", "photos")
