@@ -1,13 +1,21 @@
 package dev.centraid.shared.apps.tasks
 
+import centraid.core.v1.ActRequest
 import dev.centraid.core.CentraidCore
 import dev.centraid.design.copy.TasksCopy
+import dev.centraid.shared.catalog.Act
+import dev.centraid.shared.catalog.Field
+import dev.centraid.shared.catalog.keyed
 import dev.centraid.shared.kit.PhoneImport
 import dev.centraid.shared.shell.HomeSession
+import dev.centraid.shared.sync.ActOutcome
+import dev.centraid.shared.sync.ActionPlane
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlin.uuid.ExperimentalUuidApi
+import kotlin.uuid.Uuid
 
 /**
  * ONE OPEN REMINDER AS THE PHONE HOLDS IT, read by the shell (iOS EventKit)
@@ -29,17 +37,20 @@ public data class PhoneReminder(
  * data", R-ONBOARD-4).
  *
  * Tasks' day one offers the import (`EmptyState.import_source`); each open
- * reminder becomes `task.add` with its notes and due day — an ordinary
+ * reminder becomes an added task with its notes and due day — an ordinary
  * task of the member's, no mark. Android has no system reminders, so its shell
  * offers nothing and draws Tasks' own action. Duplicates within the read (one
  * title, one due day) are folded.
  */
 public object RemindersImport {
+    @OptIn(ExperimentalUuidApi::class)
     public suspend fun run(core: CentraidCore, reminders: List<PhoneReminder>): PhoneImport.Outcome {
         var added = 0
         var refused = 0
         for (reminder in reminders(reminders)) {
-            if (PhoneImport.write(core, "task.add", input(reminder))) added += 1 else refused += 1
+            // A KEY PER WRITE: the core runs one key once, and two reminders may share a title.
+            val request = request(reminder).keyed("import", Uuid.random().toString())
+            if (ActionPlane.act(core, request) is ActOutcome.Executed) added += 1 else refused += 1
         }
         return PhoneImport.Outcome(added = added, refused = refused)
     }
@@ -58,13 +69,12 @@ public object RemindersImport {
         }
     }
 
-    /** `task.add`'s input for one reminder. */
-    public fun input(reminder: PhoneReminder): String {
-        val fields = mutableListOf("\"title\":${PhoneImport.quote(reminder.title)}")
-        if (reminder.notes.isNotEmpty()) fields += "\"description\":${PhoneImport.quote(reminder.notes)}"
-        if (reminder.due.isNotEmpty()) fields += "\"due\":${PhoneImport.quote(reminder.due)}"
-        return fields.joinToString(",", prefix = "{", postfix = "}")
-    }
+    /** The `add` for one reminder: its notes and due day when it has them. */
+    public fun request(reminder: PhoneReminder): ActRequest = Act.Tasks.Add(
+        title = reminder.title,
+        description = if (reminder.notes.isEmpty()) Field.Keep else Field.Is(reminder.notes),
+        due = if (reminder.due.isEmpty()) Field.Keep else Field.Is(reminder.due),
+    )
 
     /** The one sentence the shell shows when an import ends. */
     public fun sentence(outcome: PhoneImport.Outcome): String = when {

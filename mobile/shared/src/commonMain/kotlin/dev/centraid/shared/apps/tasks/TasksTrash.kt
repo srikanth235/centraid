@@ -1,11 +1,10 @@
 package dev.centraid.shared.apps.tasks
 
 import centraid.core.v1.AppQueryDenial
-import centraid.core.v1.AppQueryRequest
+import centraid.core.v1.LoadRequest
 import centraid.core.v1.AppQueryResponse
 import centraid.core.v1.CommandStatus
 import centraid.core.v1.TasksTrash
-import centraid.core.v1.TasksTrashRequest
 import centraid.core.v1.TasksTrashRow
 import centraid.screen.v1.ReadFailure
 import centraid.screen.v1.TrashListData
@@ -14,20 +13,24 @@ import centraid.screen.v1.TrashListState
 import centraid.screen.v1.TrashRow
 import dev.centraid.design.copy.TasksCopy
 import dev.centraid.shared.kit.ScreenBridge
+import dev.centraid.shared.catalog.Act
+import dev.centraid.shared.catalog.Load
+import dev.centraid.shared.kit.TrashActs
 import dev.centraid.shared.kit.TrashCopy
 import dev.centraid.shared.kit.TrashMachine
 import dev.centraid.shared.kit.TrashSpec
 import dev.centraid.shared.kit.WriteLaw
 import dev.centraid.shared.kit.tasks.TasksRows
 import dev.centraid.shared.platform.DeviceClock
+import dev.centraid.shared.sync.ActOutcome
 import dev.centraid.shared.sync.ScreenQueries
 import dev.centraid.shared.sync.ScreenWrites
 
 /**
  * TASKS' TRASH: the kit's one trash screen, Tasks as its parameter (law 2).
  *
- * `entity.trash` puts a task and its subtasks in the trash for 30 days,
- * `entity.restore` brings back what that gesture trashed, and `entity.purge`
+ * A delete puts a task and its subtasks in the trash for 30 days,
+ * a restore brings back what that gesture trashed, and a purge
  * destroys a trashed task and the subtasks trashed with it now (#1015 D1: "Delete
  * forever" wherever an app can destroy). There is no Tasks command that empties the
  * whole trash, so no "Empty trash": the purge sweep erases the rest at 30 days, and
@@ -36,9 +39,7 @@ import dev.centraid.shared.sync.ScreenWrites
 public val TasksTrashSpec: TrashSpec = TrashSpec(
     appId = APP_ID,
     table = "entity",
-    restoreCommand = "entity.restore",
-    purgeCommand = "entity.purge",
-    emptyCommand = null,
+    acts = TrashActs(restore = { Act.Tasks.Restore(it) }, purge = { Act.Tasks.Purge(it) }),
     idColumn = "id",
     titleColumn = "title",
     purgeWindowDays = 30,
@@ -66,8 +67,7 @@ public object TasksTrashReads :
 
     override val appId: String = APP_ID
 
-    override fun requests(state: TrashListState, now: DeviceClock.Reading): List<AppQueryRequest> =
-        listOf(AppQueryRequest(tasks_trash = TasksTrashRequest(tz = now.zone)))
+    override fun loads(state: TrashListState, now: DeviceClock.Reading): List<LoadRequest> = listOf(Load.Tasks.Trash())
 
     /** One window of 500, most recently trashed first; there is no next page. */
     override fun arrived(answers: List<AppQueryResponse>): TrashListEvent {
@@ -85,6 +85,9 @@ public object TasksTrashReads :
 
     override fun settled(status: CommandStatus, sentence: String, invokeKey: String): TrashListEvent =
         TrashListEvent(write_settled = WriteLaw.settledOf(status, sentence, invokeKey))
+
+    override fun actSettled(outcome: ActOutcome, invokeKey: String): TrashListEvent =
+        TrashListEvent(write_settled = WriteLaw.settledOf(outcome, invokeKey))
 
     /** `Pay the deposit`, `Deleted Wed 11 March · Erased Mon 12 October`. */
     private fun rowOf(row: TasksTrashRow): TrashRow = TrashRow(

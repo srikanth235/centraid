@@ -4,6 +4,7 @@ import centraid.core.v1.AppQueryDenial
 import centraid.core.v1.AppQueryRequest
 import centraid.core.v1.AppQueryResponse
 import centraid.core.v1.Envelope
+import centraid.core.v1.LoadRequest
 import centraid.core.v1.Request
 import centraid.screen.v1.ReadFailure
 import dev.centraid.core.CentraidCore
@@ -65,7 +66,16 @@ public interface ScreenQueries<S, E> {
      * [now] is one reading for the whole list, so two queries of one read
      * never straddle a zone change or a midnight between them.
      */
-    public fun requests(state: S, now: DeviceClock.Reading): List<AppQueryRequest>?
+    public fun requests(state: S, now: DeviceClock.Reading): List<AppQueryRequest>? = null
+
+    /**
+     * THE ONE READ (#1135): the same list as [requests], spelled with the
+     * generated catalogue (`Load.<App>.<Query>(…)`). A screen implements this
+     * or [requests], and this wins when both answer; the runtime fills each
+     * request's zone from [now] and the answers arrive in [arrived] as before.
+     * An app is moved onto the plane by deleting its [requests].
+     */
+    public fun loads(state: S, now: DeviceClock.Reading): List<LoadRequest>? = null
 
     /**
      * Every answer, in request order, as this screen's `DataArrived`.
@@ -140,6 +150,12 @@ public class ScreenQueryRuntime<S, E>(
                 val pinned = PinnedVault(core(), readOnly())
                 scope.launch { serveWrite(effect, writes, host, pinned, left, stranded) }
             }
+            if (effect is ScreenEffect.Act && writes != null) {
+                // PINNED AT EMIT, like a write; but a frozen vault is the
+                // core's to refuse (`vault_moved`), so no `readOnly` rides here.
+                val pinned = core()
+                scope.launch { serveAct(effect, writes, host, pinned, left, stranded) }
+            }
             if (effect is ScreenEffect.Schedule && effect.screenId == queries.screenId) {
                 scope.launch { serveSchedule(effect, host) }
             }
@@ -148,6 +164,11 @@ public class ScreenQueryRuntime<S, E>(
 
     private suspend fun serve() {
         val now = clock.read()
+        val loads = queries.loads(host.state.value, now)
+        if (loads != null) {
+            serveLoads(loads.map { if (it.zone.isEmpty()) it.copy(zone = now.zone) else it })
+            return
+        }
         val requests = queries.requests(host.state.value, now)
         val event = if (requests.isNullOrEmpty()) {
             // NOT SILENCE — [ScreenRuntime.serve]'s rule: a screen that asked
@@ -162,6 +183,36 @@ public class ScreenQueryRuntime<S, E>(
         }
         host.send(event)
     }
+
+    /** [serve], for a screen on the plane: every load answers or the first that does not ends the read. */
+    private suspend fun serveLoads(loads: List<LoadRequest>) {
+        val event = if (loads.isEmpty()) {
+            queries.refused(Reads.refused(NOTHING_TO_READ))
+        } else {
+            when (val outcome = loadAll(core(), loads)) {
+                is AppQueryOutcome.Answered -> queries.arrived(outcome.answers, emptyList())
+                is AppQueryOutcome.Denied -> queries.denied(outcome.denial)
+                is AppQueryOutcome.Refused -> queries.refused(outcome.failure)
+            }
+        }
+        host.send(event)
+    }
+}
+
+/**
+ * [askCore] for THE ONE READ: [loads] in order through [ActionPlane.load],
+ * the first that is not answered ends the run (one failure fails the read).
+ */
+internal suspend fun loadAll(handle: CentraidCore?, loads: List<LoadRequest>): AppQueryOutcome {
+    val answers = ArrayList<AppQueryResponse>(loads.size)
+    for (load in loads) {
+        when (val outcome = ActionPlane.load(handle, load)) {
+            is LoadOutcome.Loaded -> answers += outcome.answer
+            is LoadOutcome.Denied -> return AppQueryOutcome.Denied(outcome.denial)
+            is LoadOutcome.Refused -> return AppQueryOutcome.Refused(outcome.failure)
+        }
+    }
+    return AppQueryOutcome.Answered(answers)
 }
 
 /** What a run of app queries came back as. Never a nullable list. */

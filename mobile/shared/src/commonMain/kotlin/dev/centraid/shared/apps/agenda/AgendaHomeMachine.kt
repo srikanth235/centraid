@@ -3,6 +3,7 @@ package dev.centraid.shared.apps.agenda
 import centraid.core.v1.AgendaDayContext
 import centraid.core.v1.AgendaSearch
 import centraid.core.v1.AgendaUpcoming
+import centraid.core.v1.ActInverse
 import centraid.core.v1.AppQueryDenial
 import centraid.screen.v1.AgendaBandTab
 import centraid.screen.v1.AgendaChrome
@@ -15,10 +16,11 @@ import centraid.screen.v1.AgendaToolbar
 import centraid.screen.v1.Loading
 import centraid.screen.v1.SeatState
 import centraid.screen.v1.TasksQuickAdd
+import centraid.screen.v1.WriteSettled
 import dev.centraid.design.copy.AgendaCopy
 import dev.centraid.design.copy.TasksCopy
 import dev.centraid.shared.kit.SearchLaw
-import dev.centraid.shared.kit.jsonString
+import dev.centraid.shared.catalog.Act
 import dev.centraid.shared.nav.ScreenIds
 import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.screen.ScreenEffect
@@ -74,6 +76,9 @@ public data class AgendaAnswers(
  */
 public sealed interface AgendaInput {
     public data class View(public val event: AgendaHomeEvent) : AgendaInput
+
+    /** A To-do write's answer, with the inverse the core gave for Undo (#1135). */
+    public data class TaskActed(public val settled: WriteSettled, public val inverse: ActInverse?) : AgendaInput
 
     /**
      * The answers to one read, BY ARM. [upcoming] is null when it was not
@@ -161,6 +166,7 @@ public object AgendaHomeMachine : ScreenMachine<AgendaHome, AgendaInput> {
             is AgendaInput.View -> view(state, event.event)
             is AgendaInput.Answered -> answered(state, event)
             is AgendaInput.Denied -> denied(state, event.denial)
+            is AgendaInput.TaskActed -> ops(state, TaskOpsLaw.settled(state.tasks.ops, event.settled, event.inverse))
             is AgendaInput.Add -> add(state, event.taskId)
             is AgendaInput.Marks -> refold(
                 state.copy(
@@ -423,8 +429,7 @@ public object AgendaHomeMachine : ScreenMachine<AgendaHome, AgendaInput> {
                 } else {
                     val out = TaskOpsLaw.created(
                         state.tasks.ops,
-                        TaskOpsLaw.CREATE_CONTAINER,
-                        "{\"kind\":\"project\",\"title\":${jsonString(name)}}",
+                        Act.Tasks.CreateProject(kind = Act.Tasks.CreateProjectKind.Project, title = name),
                         name,
                         TasksCopy.PROJECT_CREATED,
                     )

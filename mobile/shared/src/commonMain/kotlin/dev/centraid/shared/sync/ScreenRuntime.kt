@@ -145,6 +145,17 @@ public interface ScreenWrites<S, E> {
      * which is the same defect wearing a different hat.
      */
     public fun settled(status: CommandStatus, sentence: String, invokeKey: String): E?
+
+    /**
+     * An action's answer (THE ONE WRITE, #1135): [ActOutcome.Executed] carries
+     * the core's inverse for Undo; [ActOutcome.Refused] names the check and the
+     * member's sentence. The default is [settled] without the inverse, which is
+     * all a screen that does not undo needs.
+     */
+    public fun actSettled(outcome: ActOutcome, invokeKey: String): E? = when (outcome) {
+        is ActOutcome.Executed -> settled(CommandStatus.COMMAND_STATUS_EXECUTED, "", invokeKey)
+        is ActOutcome.Refused -> settled(CommandStatus.COMMAND_STATUS_DENIED, outcome.sentence, invokeKey)
+    }
 }
 
 /**
@@ -499,4 +510,27 @@ internal suspend fun <S, E> serveWrite(
             }
         }
     }
+}
+
+/**
+ * Serve one [ScreenEffect.Act] through THE ONE WRITE (#1135).
+ *
+ * No frozen-vault check rides here: the core refuses a write to a vault
+ * another phone has taken over, with the check [ActionPlane.VAULT_MOVED] and
+ * the member's sentence, and that is the only place the rule lives. As for a
+ * save, a refusal after the screen was left is [StrandedWrites]'s.
+ */
+internal suspend fun <S, E> serveAct(
+    act: ScreenEffect.Act,
+    writes: ScreenWrites<S, E>,
+    host: ScreenHost<S, E>,
+    pinned: CentraidCore?,
+    left: () -> Boolean = { false },
+    stranded: StrandedWrites? = null,
+) {
+    val outcome = ActionPlane.act(pinned, act.request)
+    if (outcome is ActOutcome.Refused && left()) {
+        stranded?.stranded(writes.appId, "${act.request.app}.${act.request.action}", outcome.sentence)
+    }
+    writes.actSettled(outcome, act.invokeKey)?.let { host.send(it) }
 }

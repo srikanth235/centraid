@@ -1,5 +1,6 @@
 package dev.centraid.shared.screen
 
+import centraid.core.v1.ActRequest
 import centraid.screen.v1.ReadFailure
 import centraid.screen.v1.ReadFailureKind
 import centraid.screen.v1.SeatState
@@ -153,6 +154,17 @@ public sealed interface ScreenEffect {
         public val inputJson: String,
         public val invokeKey: String,
     ) : ScreenEffect
+
+    /**
+     * Take one action through THE ONE WRITE (#1135): a generated `Act.<App>.<Action>(…)`
+     * request under its key (`ActRequest.keyed`). The runtime sends it with
+     * `ActionPlane.act` and tells the screen with `ScreenWrites.actSettled`.
+     * [SubmitWrite] is the same door for an app that has not moved onto the
+     * plane yet, and goes when the last one has.
+     */
+    public data class Act(public val request: ActRequest) : ScreenEffect {
+        public val invokeKey: String get() = request.invoke_key
+    }
 
     /**
      * Tell the member a verb is WITHHELD rather than queued.

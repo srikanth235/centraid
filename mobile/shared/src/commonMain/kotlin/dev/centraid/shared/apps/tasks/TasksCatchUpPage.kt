@@ -1,13 +1,12 @@
 package dev.centraid.shared.apps.tasks
 
 import centraid.core.v1.AppQueryDenial
-import centraid.core.v1.AppQueryRequest
+import centraid.core.v1.ActInverse
 import centraid.core.v1.AppQueryResponse
 import centraid.core.v1.CommandStatus
+import centraid.core.v1.LoadRequest
 import centraid.core.v1.TasksCatchUp
-import centraid.core.v1.TasksCatchUpRequest
 import centraid.core.v1.TasksProjects
-import centraid.core.v1.TasksProjectsRequest
 import centraid.core.v1.TasksTask
 import centraid.screen.v1.Confirm
 import centraid.screen.v1.EmptyState
@@ -19,6 +18,8 @@ import centraid.screen.v1.TasksCatchUpData
 import centraid.screen.v1.TasksCatchUpEvent
 import centraid.screen.v1.TasksCatchUpState
 import centraid.screen.v1.TasksPile
+import centraid.screen.v1.WriteSettled
+import dev.centraid.shared.catalog.Load
 import dev.centraid.design.copy.TasksCopy
 import dev.centraid.shared.kit.WriteLaw
 import dev.centraid.shared.nav.ScreenIds
@@ -27,6 +28,7 @@ import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.ScreenMachine
 import dev.centraid.shared.screen.Step
+import dev.centraid.shared.sync.ActOutcome
 import dev.centraid.shared.sync.ScreenQueries
 import dev.centraid.shared.sync.ScreenWrites
 import dev.centraid.shared.kit.tasks.TaskOps
@@ -47,6 +49,9 @@ public sealed interface TasksCatchUpInput {
     public data class View(val event: TasksCatchUpEvent) : TasksCatchUpInput
 
     public data class Answered(val catchUp: TasksCatchUp?, val projects: TasksProjects?) : TasksCatchUpInput
+
+    /** A write's answer, with the inverse the core gave for Undo. */
+    public data class Acted(val settled: WriteSettled, val inverse: ActInverse?) : TasksCatchUpInput
 
     public data class Denied(val denial: AppQueryDenial) : TasksCatchUpInput
 }
@@ -77,6 +82,7 @@ public object TasksCatchUpMachine : ScreenMachine<TasksCatchUpPage, TasksCatchUp
         val step = when (event) {
             is TasksCatchUpInput.View -> view(state, event.event)
             is TasksCatchUpInput.Answered -> answered(state, event)
+            is TasksCatchUpInput.Acted -> ops(state, TaskOpsLaw.settled(state.ops, event.settled, event.inverse))
             is TasksCatchUpInput.Denied -> if (state.readQueued) {
                 reissue(state)
             } else {
@@ -144,6 +150,7 @@ public object TasksCatchUpMachine : ScreenMachine<TasksCatchUpPage, TasksCatchUp
                 // A BULK VERB SAYS ITS COUNT, and offers no Undo of twelve.
                 ops = ops.copy(
                     status = StatusLine(sentence = "${tasks.size} ${if (tasks.size == 1) TasksCopy.TASK_DONE.lowercase() else TasksCopy.TASKS_DONE}"),
+                    statusKey = null,
                     undo = null,
                     nextOf = null,
                 )
@@ -266,12 +273,10 @@ public object TasksCatchUpMachine : ScreenMachine<TasksCatchUpPage, TasksCatchUp
 public object TasksCatchUpReads : ScreenQueries<TasksCatchUpPage, TasksCatchUpInput>, ScreenWrites<TasksCatchUpPage, TasksCatchUpInput> {
     override val screenId: String = TasksCatchUpMachine.SCREEN_ID
     override val tables: Set<String> = TasksCatchUpMachine.TABLES
-    override val appId: String = APP_ID
+    override val appId: String = Load.Tasks.APP
 
-    override fun requests(state: TasksCatchUpPage, now: DeviceClock.Reading): List<AppQueryRequest> = listOf(
-        AppQueryRequest(tasks_catch_up = TasksCatchUpRequest(tz = now.zone)),
-        AppQueryRequest(tasks_projects = TasksProjectsRequest(tz = now.zone)),
-    )
+    override fun loads(state: TasksCatchUpPage, now: DeviceClock.Reading): List<LoadRequest> =
+        listOf(Load.Tasks.CatchUp(), Load.Tasks.Projects())
 
     override fun arrived(answers: List<AppQueryResponse>): TasksCatchUpInput = TasksCatchUpInput.Answered(
         catchUp = answers.firstNotNullOfOrNull { it.tasks_catch_up },
@@ -285,4 +290,7 @@ public object TasksCatchUpReads : ScreenQueries<TasksCatchUpPage, TasksCatchUpIn
 
     override fun settled(status: CommandStatus, sentence: String, invokeKey: String): TasksCatchUpInput =
         TasksCatchUpInput.View(TasksCatchUpEvent(write_settled = WriteLaw.settledOf(status, sentence, invokeKey)))
+
+    override fun actSettled(outcome: ActOutcome, invokeKey: String): TasksCatchUpInput =
+        TasksCatchUpInput.Acted(WriteLaw.settledOf(outcome, invokeKey), (outcome as? ActOutcome.Executed)?.inverse)
 }

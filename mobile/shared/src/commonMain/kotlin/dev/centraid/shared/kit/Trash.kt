@@ -1,5 +1,6 @@
 package dev.centraid.shared.kit
 
+import centraid.core.v1.ActRequest
 import centraid.core.v1.CommandStatus
 import centraid.core.v1.PageOrder
 import centraid.core.v1.PageQuery
@@ -16,11 +17,22 @@ import centraid.screen.v1.TrashRow
 import centraid.screen.v1.WriteState
 import dev.centraid.design.copy.SharedCopy
 import dev.centraid.shared.kit.time.CivilWords
+import dev.centraid.shared.catalog.keyed
 import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.screen.ScreenMachine
 import dev.centraid.shared.screen.Step
 import dev.centraid.shared.sync.ScreenReads
 import dev.centraid.shared.sync.ScreenWrites
+
+/** Whether this trash can destroy a row: an app with no destroy path offers restore only. */
+public val TrashSpec.canPurge: Boolean get() = purgeCommand != null || acts?.purge != null
+
+/** An app's trash verbs, as generated action requests for the row [id] (see [TrashSpec.acts]). */
+public data class TrashActs(
+    val restore: (id: String) -> ActRequest,
+    /** Null: the app has no destroy path. */
+    val purge: ((id: String) -> ActRequest)? = null,
+)
 
 /**
  * ONE APP'S TRASH, as the parameter the one trash screen takes (law 2).
@@ -35,9 +47,14 @@ public data class TrashSpec(
     val appId: String,
     /** The table the deleted rows live on, `deleted_at` set. */
     val table: String,
-    val restoreCommand: String,
-    val purgeCommand: String?,
-    val emptyCommand: String?,
+    val restoreCommand: String = "",
+    val purgeCommand: String? = null,
+    val emptyCommand: String? = null,
+    /**
+     * THE ONE WRITE (#1135): an app on the action plane states its restore and
+     * purge as generated `Act` requests and leaves the command strings above empty.
+     */
+    val acts: TrashActs? = null,
     /** The row's key column, and the command input's key for it. */
     val idColumn: String,
     val titleColumn: String,
@@ -150,7 +167,9 @@ public class TrashMachine(public val spec: TrashSpec) : ScreenMachine<TrashListS
         event.seat_changed != null -> Step(state.copy(seat = event.seat_changed.seat))
 
         // RESTORE ASKS NOTHING: it undoes, and undoing is not a decision.
-        event.restore != null -> WriteLaw.submit(
+        event.restore != null -> spec.acts?.let { acts ->
+            WriteLaw.act(Writes, state, acts.restore(event.restore.id).keyed(event.restore.id))
+        } ?: WriteLaw.submit(
             Writes,
             state,
             spec.restoreCommand,
@@ -161,7 +180,7 @@ public class TrashMachine(public val spec: TrashSpec) : ScreenMachine<TrashListS
         // DESTROYING IS ASKED FIRST, in full sentences, and only where the app
         // can destroy at all.
         event.purge != null ->
-            if (spec.purgeCommand == null) {
+            if (!spec.canPurge) {
                 Step(state)
             } else {
                 Step(
@@ -209,7 +228,10 @@ public class TrashMachine(public val spec: TrashSpec) : ScreenMachine<TrashListS
         val purgeId = state.purge_id
         val purge = spec.purgeCommand
         val empty = spec.emptyCommand
+        val purgeAct = spec.acts?.purge
         return when {
+            purgeId != null && purgeAct != null ->
+                WriteLaw.act(Writes, dismissed(state), purgeAct(purgeId).keyed(purgeId))
             purgeId != null && purge != null ->
                 WriteLaw.submit(Writes, dismissed(state), purge, idInput(purgeId), InvokeKeys.of(purge, purgeId))
             state.empty_all == true && empty != null -> {
@@ -230,7 +252,7 @@ public class TrashMachine(public val spec: TrashSpec) : ScreenMachine<TrashListS
     private fun decorate(data: TrashListData): TrashListData = data.copy(
         rows = data.rows.map {
             it.copy(
-                purge_label = if (spec.purgeCommand == null) "" else spec.copy.purgeAction,
+                purge_label = if (!spec.canPurge) "" else spec.copy.purgeAction,
                 restore_label = spec.copy.restoreAction,
             )
         },

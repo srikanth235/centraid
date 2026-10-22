@@ -1,14 +1,13 @@
 package dev.centraid.shared.apps.tasks
 
 import centraid.core.v1.AppQueryDenial
-import centraid.core.v1.AppQueryRequest
+import centraid.core.v1.ActInverse
 import centraid.core.v1.AppQueryResponse
 import centraid.core.v1.CommandStatus
+import centraid.core.v1.LoadRequest
 import centraid.core.v1.TasksBoard
-import centraid.core.v1.TasksBoardRequest
 import centraid.core.v1.TasksGroupKind
 import centraid.core.v1.TasksTask
-import centraid.core.v1.TasksView
 import centraid.screen.v1.EmptyState
 import centraid.screen.v1.Loading
 import centraid.screen.v1.ReadFailure
@@ -18,15 +17,18 @@ import centraid.screen.v1.TasksProjectEvent
 import centraid.screen.v1.TasksProjectState
 import centraid.screen.v1.TasksQuickAdd
 import centraid.screen.v1.TasksRowGroup
+import centraid.screen.v1.WriteSettled
+import dev.centraid.shared.catalog.Act
+import dev.centraid.shared.catalog.Load
 import dev.centraid.design.copy.TasksCopy
 import dev.centraid.shared.kit.WriteLaw
-import dev.centraid.shared.kit.jsonString
 import dev.centraid.shared.nav.ScreenIds
 import dev.centraid.shared.platform.DeviceClock
 import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.ScreenMachine
 import dev.centraid.shared.screen.Step
+import dev.centraid.shared.sync.ActOutcome
 import dev.centraid.shared.sync.ScreenQueries
 import dev.centraid.shared.sync.ScreenWrites
 import dev.centraid.shared.kit.tasks.TaskOps
@@ -49,6 +51,9 @@ public sealed interface TasksProjectInput {
     public data class Add(val taskId: String) : TasksProjectInput
 
     public data class Answered(val board: TasksBoard?) : TasksProjectInput
+
+    /** A write's answer, with the inverse the core gave for Undo. */
+    public data class Acted(val settled: WriteSettled, val inverse: ActInverse?) : TasksProjectInput
 
     public data class Denied(val denial: AppQueryDenial) : TasksProjectInput
 }
@@ -76,6 +81,7 @@ public object TasksProjectMachine : ScreenMachine<TasksProjectPage, TasksProject
             is TasksProjectInput.View -> view(state, event.event)
             is TasksProjectInput.Add -> add(state, event.taskId)
             is TasksProjectInput.Answered -> answered(state, event.board)
+            is TasksProjectInput.Acted -> ops(state, TaskOpsLaw.settled(state.ops, event.settled, event.inverse))
             is TasksProjectInput.Denied -> if (state.readQueued) {
                 reissue(state)
             } else {
@@ -142,8 +148,8 @@ public object TasksProjectMachine : ScreenMachine<TasksProjectPage, TasksProject
                 if (name.isEmpty() || screen.project_id.isEmpty()) {
                     Step(state)
                 } else {
-                    val input = "{\"kind\":\"section\",\"title\":${jsonString(name)},\"parent\":${jsonString(screen.project_id)}}"
-                    val out = TaskOpsLaw.created(state.ops, TaskOpsLaw.CREATE_CONTAINER, input, "${screen.project_id}/$name", TasksCopy.SECTION_ADDED)
+                    val create = Act.Tasks.CreateSection(parent = screen.project_id, title = name)
+                    val out = TaskOpsLaw.created(state.ops, create, "${screen.project_id}/$name", TasksCopy.SECTION_ADDED)
                     Step(state.copy(ops = out.ops, screen = screen.copy(sheet = NONE, new_section_name = "")), out.effects)
                 }
             }
@@ -312,24 +318,15 @@ public object TasksProjectMachine : ScreenMachine<TasksProjectPage, TasksProject
         if (screen.data_ != null) screen else screen.copy(loading = Loading(first_load = true), failure = null, denied = null)
 }
 
-/** `tasks.board` for one project, in the device's zone. */
+/** The board for one project; the runtime states the device's zone. */
 public object TasksProjectReads : ScreenQueries<TasksProjectPage, TasksProjectInput>, ScreenWrites<TasksProjectPage, TasksProjectInput> {
     override val screenId: String = TasksProjectMachine.SCREEN_ID
     override val tables: Set<String> = TasksProjectMachine.TABLES
-    override val appId: String = APP_ID
+    override val appId: String = Load.Tasks.APP
 
-    override fun requests(state: TasksProjectPage, now: DeviceClock.Reading): List<AppQueryRequest>? {
+    override fun loads(state: TasksProjectPage, now: DeviceClock.Reading): List<LoadRequest>? {
         val project = state.screen.project_id.ifEmpty { return null }
-        return listOf(
-            AppQueryRequest(
-                tasks_board = TasksBoardRequest(
-                    tz = now.zone,
-                    limit = TasksRows.MAX_WINDOW,
-                    view = TasksView.TASKS_VIEW_PROJECT,
-                    project_id = project,
-                ),
-            ),
-        )
+        return listOf(Load.Tasks.Board(view = Load.Tasks.BoardView.Project, projectId = project, limit = TasksRows.MAX_WINDOW))
     }
 
     override fun arrived(answers: List<AppQueryResponse>): TasksProjectInput =
@@ -342,4 +339,7 @@ public object TasksProjectReads : ScreenQueries<TasksProjectPage, TasksProjectIn
 
     override fun settled(status: CommandStatus, sentence: String, invokeKey: String): TasksProjectInput =
         TasksProjectInput.View(TasksProjectEvent(write_settled = WriteLaw.settledOf(status, sentence, invokeKey)))
+
+    override fun actSettled(outcome: ActOutcome, invokeKey: String): TasksProjectInput =
+        TasksProjectInput.Acted(WriteLaw.settledOf(outcome, invokeKey), (outcome as? ActOutcome.Executed)?.inverse)
 }

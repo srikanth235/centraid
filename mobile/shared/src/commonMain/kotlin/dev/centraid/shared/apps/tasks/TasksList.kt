@@ -1,11 +1,11 @@
 package dev.centraid.shared.apps.tasks
 
 import centraid.core.v1.AppQueryDenial
-import centraid.core.v1.AppQueryRequest
+import centraid.core.v1.ActInverse
 import centraid.core.v1.AppQueryResponse
 import centraid.core.v1.CommandStatus
+import centraid.core.v1.LoadRequest
 import centraid.core.v1.TasksBoard
-import centraid.core.v1.TasksBoardRequest
 import centraid.core.v1.TasksTask
 import centraid.core.v1.TasksView
 import centraid.screen.v1.EmptyState
@@ -15,7 +15,9 @@ import centraid.screen.v1.SeatState
 import centraid.screen.v1.TasksListData
 import centraid.screen.v1.TasksListEvent
 import centraid.screen.v1.TasksListState
+import centraid.screen.v1.WriteSettled
 import dev.centraid.design.copy.TasksCopy
+import dev.centraid.shared.catalog.Load
 import dev.centraid.shared.kit.WriteLaw
 import dev.centraid.shared.nav.ScreenIds
 import dev.centraid.shared.platform.DeviceClock
@@ -23,6 +25,7 @@ import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.ScreenMachine
 import dev.centraid.shared.screen.Step
+import dev.centraid.shared.sync.ActOutcome
 import dev.centraid.shared.sync.ScreenQueries
 import dev.centraid.shared.sync.ScreenWrites
 import dev.centraid.shared.kit.tasks.TaskOps
@@ -43,6 +46,9 @@ public sealed interface TasksListInput {
     public data class View(val event: TasksListEvent) : TasksListInput
 
     public data class Answered(val board: TasksBoard?) : TasksListInput
+
+    /** A write's answer, with the inverse the core gave for Undo. */
+    public data class Acted(val settled: WriteSettled, val inverse: ActInverse?) : TasksListInput
 
     public data class Denied(val denial: AppQueryDenial) : TasksListInput
 }
@@ -72,6 +78,7 @@ public object TasksListMachine : ScreenMachine<TasksList, TasksListInput> {
         val step = when (event) {
             is TasksListInput.View -> view(state, event.event)
             is TasksListInput.Answered -> answered(state, event.board)
+            is TasksListInput.Acted -> ops(state, TaskOpsLaw.settled(state.ops, event.settled, event.inverse))
             is TasksListInput.Denied -> if (state.readQueued) {
                 reissue(state)
             } else {
@@ -97,6 +104,15 @@ public object TasksListMachine : ScreenMachine<TasksList, TasksListInput> {
         ALL -> TasksView.TASKS_VIEW_ALL
         LOGBOOK -> TasksView.TASKS_VIEW_LOGBOOK
         REMINDERS -> TasksView.TASKS_VIEW_REMINDERS
+        else -> null
+    }
+
+    /** The catalogue's name for the view, or null for one the board does not group by. */
+    public fun boardView(view: TasksListState.View): Load.Tasks.BoardView? = when (view) {
+        ANYTIME -> Load.Tasks.BoardView.Anytime
+        ALL -> Load.Tasks.BoardView.All
+        LOGBOOK -> Load.Tasks.BoardView.Logbook
+        REMINDERS -> Load.Tasks.BoardView.Reminders
         else -> null
     }
 
@@ -235,15 +251,15 @@ public object TasksListMachine : ScreenMachine<TasksList, TasksListInput> {
         if (screen.data_ != null) screen else screen.copy(loading = Loading(first_load = true), failure = null, denied = null)
 }
 
-/** `tasks.board` for the list's view, in the device's zone. */
+/** The board for the list's view; the runtime states the device's zone. */
 public object TasksListReads : ScreenQueries<TasksList, TasksListInput>, ScreenWrites<TasksList, TasksListInput> {
     override val screenId: String = TasksListMachine.SCREEN_ID
     override val tables: Set<String> = TasksListMachine.TABLES
-    override val appId: String = APP_ID
+    override val appId: String = Load.Tasks.APP
 
-    override fun requests(state: TasksList, now: DeviceClock.Reading): List<AppQueryRequest>? {
-        val view = TasksListMachine.viewOf(state.screen.view) ?: return null
-        return listOf(AppQueryRequest(tasks_board = TasksBoardRequest(tz = now.zone, limit = state.limit, view = view)))
+    override fun loads(state: TasksList, now: DeviceClock.Reading): List<LoadRequest>? {
+        val view = TasksListMachine.boardView(state.screen.view) ?: return null
+        return listOf(Load.Tasks.Board(view = view, limit = state.limit))
     }
 
     override fun arrived(answers: List<AppQueryResponse>): TasksListInput =
@@ -256,4 +272,7 @@ public object TasksListReads : ScreenQueries<TasksList, TasksListInput>, ScreenW
 
     override fun settled(status: CommandStatus, sentence: String, invokeKey: String): TasksListInput =
         TasksListInput.View(TasksListEvent(write_settled = WriteLaw.settledOf(status, sentence, invokeKey)))
+
+    override fun actSettled(outcome: ActOutcome, invokeKey: String): TasksListInput =
+        TasksListInput.Acted(WriteLaw.settledOf(outcome, invokeKey), (outcome as? ActOutcome.Executed)?.inverse)
 }

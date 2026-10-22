@@ -45,6 +45,11 @@ import dev.centraid.shared.apps.tasks.TasksProjectMachine
 import dev.centraid.shared.apps.tasks.TasksProjectPage
 import dev.centraid.shared.apps.tasks.TasksProjectReads
 import dev.centraid.shared.apps.tasks.TasksTrashMachine
+import centraid.core.v1.ActInverse
+import centraid.core.v1.ActRequest
+import dev.centraid.shared.catalog.Act
+import dev.centraid.shared.catalog.Field
+import dev.centraid.shared.catalog.Load
 import dev.centraid.shared.kit.AutosaveLaw
 import dev.centraid.shared.kit.WriteLaw
 import dev.centraid.shared.platform.DeviceClock
@@ -93,8 +98,8 @@ class TasksSpec : StringSpec({
     // -----------------------------------------------------------------
 
     "the list reads its view; the Logbook's box REOPENS, and a done row is drawn there only" {
-        TasksListReads.requests(openList(TasksListState.View.VIEW_LOGBOOK).state, clock)!!.single().tasks_board!!.view shouldBe TasksView.TASKS_VIEW_LOGBOOK
-        TasksListReads.requests(openList(TasksListState.View.VIEW_ANYTIME).state, clock)!!.single().tasks_board!!.view shouldBe TasksView.TASKS_VIEW_ANYTIME
+        TasksListReads.loads(openList(TasksListState.View.VIEW_LOGBOOK).state, clock)!!.single() shouldBe Load.Tasks.Board(view = Load.Tasks.BoardView.Logbook, limit = TasksRows.PAGE)
+        TasksListReads.loads(openList(TasksListState.View.VIEW_ANYTIME).state, clock)!!.single() shouldBe Load.Tasks.Board(view = Load.Tasks.BoardView.Anytime, limit = TasksRows.PAGE)
         val done = task("d", "Filed taxes").copy(status = "done", completed_day = "2026-06-14")
         val released = task("w", "Old idea").copy(status = "cancelled", completed_day = "2026-06-10")
         val logbook = listOn(
@@ -116,7 +121,7 @@ class TasksSpec : StringSpec({
         }
         data.groups[1].rows.single().check shouldBe TasksCheck.TASKS_CHECK_WONT_DO
         val reopened = TasksListMachine.reduce(logbook, TasksListInput.View(TasksListEvent(row_checked = TasksListEvent.RowChecked(task_id = "d"))))
-        (reopened.effects.single() as ScreenEffect.SubmitWrite).inputJson shouldBe """{"id":"d"}"""
+        reopened.effects.single().act() shouldBe Act.Tasks.Reopen("d")
         reopened.state.screen.status!!.sentence shouldBe "Task reopened"
         reopened.state.screen.data_!!.groups.map { it.title } shouldBe listOf("Won't do")
     }
@@ -142,7 +147,7 @@ class TasksSpec : StringSpec({
             it.can_show_more shouldBe true
         }
         val wider = TasksListMachine.reduce(windowed, TasksListInput.View(TasksListEvent(next_page = TasksListEvent.NextPageRequested())))
-        TasksListReads.requests(wider.state, clock)!!.single().tasks_board!!.limit shouldBe 200
+        TasksListReads.loads(wider.state, clock)!!.single().limit shouldBe 200
     }
 
     "a row's meta line: project, repeats, missed, effort, tags, family, age" {
@@ -175,10 +180,9 @@ class TasksSpec : StringSpec({
     // -----------------------------------------------------------------
 
     "a project: its unsectioned work, then every section — an empty one too — each with Add task" {
-        val reads = TasksProjectReads.requests(openProject().state, clock)!!.single().tasks_board.shouldNotBeNull()
-        reads.view shouldBe TasksView.TASKS_VIEW_PROJECT
-        reads.project_id shouldBe "p1"
-        TasksProjectReads.requests(TasksProjectMachine.initial(), clock).shouldBeNull()
+        TasksProjectReads.loads(openProject().state, clock)!!.single() shouldBe
+            Load.Tasks.Board(view = Load.Tasks.BoardView.Project, projectId = "p1", limit = TasksRows.MAX_WINDOW)
+        TasksProjectReads.loads(TasksProjectMachine.initial(), clock).shouldBeNull()
 
         val page = projectOn(
             board(
@@ -200,29 +204,24 @@ class TasksSpec : StringSpec({
         data.groups[0].rows.single().meta shouldBe ""
         data.add_section_label shouldBe "Add section"
 
-        // POINT THE QUICK ADD AT BEDS: add_task, then organize into it.
+        // POINT THE QUICK ADD AT BEDS: one add that lands there.
         val pointed = TasksProjectMachine.reduce(page, TasksProjectInput.View(TasksProjectEvent(group_verb = TasksProjectEvent.GroupVerb(key = "add:s1")))).state
         pointed.screen.quick_add!!.lands_label shouldBe "Add to Garden · Beds"
         // A PUSHED PAGE HAS NO PLUS: its bar is always drawn.
         pointed.screen.quick_add!!.drawn shouldBe true
         val typed = TasksProjectMachine.reduce(pointed, TasksProjectInput.View(TasksProjectEvent(quick_add_changed = TasksProjectEvent.QuickAddChanged(title = "Tulips")))).state
         val added = TasksProjectMachine.reduce(typed, TasksProjectInput.Add(ID))
-        val add = added.effects.single() as ScreenEffect.SubmitWrite
-        add.inputJson shouldBe """{"id":"$ID","title":"Tulips"}"""
+        val add = added.effects.single()
+        add.act() shouldBe Act.Tasks.Add(title = "Tulips", id = ID, projectId = Field.Is("p1"), sectionId = Field.Is("s1"))
         added.state.screen.data_!!.groups[1].rows.single().pending shouldBe true
-        val filed = TasksProjectMachine.reduce(added.state, TasksProjectInput.View(TasksProjectEvent(write_settled = WriteLaw.settledOf(CommandStatus.COMMAND_STATUS_EXECUTED, "", add.invokeKey))))
-        (filed.effects.single() as ScreenEffect.SubmitWrite).let {
-            it.command shouldBe "task.organize"
-            it.inputJson shouldBe """{"id":"$ID","project_id":"p1","section_id":"s1","position":0}"""
-        }
+        val filed = TasksProjectMachine.reduce(added.state, TasksProjectInput.Acted(WriteLaw.settledOf(CommandStatus.COMMAND_STATUS_EXECUTED, "", add.key()), null))
+        filed.effects.shouldBeEmpty()
+        filed.state.screen.status!!.sentence shouldBe "Added to Garden · Beds"
 
         val sheet = TasksProjectMachine.reduce(page, TasksProjectInput.View(TasksProjectEvent(add_section = TasksProjectEvent.AddSectionRequested()))).state
         val named = TasksProjectMachine.reduce(sheet, TasksProjectInput.View(TasksProjectEvent(section_name = TasksProjectEvent.SectionNameChanged(name = "Pots")))).state
         val made = TasksProjectMachine.reduce(named, TasksProjectInput.View(TasksProjectEvent(section_submitted = TasksProjectEvent.SectionSubmitted())))
-        (made.effects.single() as ScreenEffect.SubmitWrite).let {
-            it.command shouldBe "container.create"
-            it.inputJson shouldBe """{"kind":"section","title":"Pots","parent":"p1"}"""
-        }
+        made.effects.single().act() shouldBe Act.Tasks.CreateSection(parent = "p1", title = "Pots")
     }
 
     "a project the answer does not name is gone" {
@@ -237,9 +236,7 @@ class TasksSpec : StringSpec({
     // -----------------------------------------------------------------
 
     "the detail reads the task and the projects; fields are computed, Repeats is the core's sentence" {
-        val reads = TasksDetailReads.requests(openDetail().state, clock)!!
-        reads[0].tasks_task!!.task_id shouldBe "a"
-        reads[1].tasks_projects.shouldNotBeNull()
+        TasksDetailReads.loads(openDetail().state, clock)!! shouldBe listOf(Load.Tasks.Task("a"), Load.Tasks.Projects())
 
         val detail = detailOn(task("a", "Rent", due = "2026-06-19", time = "09:00", days = 4).copy(repeats = true, recurrence_summary = "Every month on the 19th", recurrence_anchor = "completion", remind_before_min = 30, remind_at_local = "2026-06-19T08:30", rrule = "FREQ=MONTHLY"))
         val data = detail.screen.data_.shouldNotBeNull()
@@ -290,15 +287,14 @@ class TasksSpec : StringSpec({
         typed.effects shouldBe listOf(ScreenEffect.Schedule(TasksDetailMachine.SCREEN_ID, AutosaveLaw.tokenOf(1), AutosaveLaw.DEBOUNCE_MS))
         typed.state.screen.autosave!!.phase shouldBe Autosave.Phase.PHASE_DIRTY
         val saved = TasksDetailMachine.reduce(typed.state, TasksDetailInput.View(TasksDetailEvent(tick = TasksDetailEvent.Tick(token = AutosaveLaw.tokenOf(1)))))
-        val write = saved.effects.single() as ScreenEffect.SubmitWrite
-        write.command shouldBe "task.edit"
-        write.inputJson shouldBe """{"id":"a","title":"Rent, June"}"""
-        write.invokeKey shouldBe "task.edit:a:seq=1"
+        val write = saved.effects.single()
+        write.act() shouldBe Act.Tasks.Edit("a", title = "Rent, June")
+        write.key() shouldBe "tasks.edit:a:seq=1"
 
         // CLOSE = DONE: the notes typed and not yet ticked are saved on leave.
         val notes = TasksDetailMachine.reduce(detail, TasksDetailInput.View(TasksDetailEvent(notes = TasksDetailEvent.NotesChanged(notes = "")))).state
         val left = TasksDetailMachine.reduce(notes, TasksDetailMachine.left())
-        (left.effects.single() as ScreenEffect.SubmitWrite).inputJson shouldBe """{"id":"a","description":null}"""
+        left.effects.single().act() shouldBe Act.Tasks.Edit("a", description = Field.Clear)
         TasksDetailMachine.ticked("save:9") shouldBe TasksDetailInput.View(TasksDetailEvent(tick = TasksDetailEvent.Tick(token = "save:9")))
 
         // An emptied title is kept on screen and not sent.
@@ -323,45 +319,44 @@ class TasksSpec : StringSpec({
     "every other field is one write when it is chosen — the day keeps its time; a choice made again is a new command" {
         val detail = detailOn(task("a", "Call", due = "2026-06-19", time = "09:00", days = 4))
         val tomorrow = TasksDetailMachine.reduce(detail, choice("when", "tomorrow"))
-        val w = tomorrow.effects.single() as ScreenEffect.SubmitWrite
-        w.command shouldBe "task.edit"
-        w.inputJson shouldBe """{"id":"a","due":"2026-06-16T09:00"}"""
+        tomorrow.effects.single().act() shouldBe Act.Tasks.Edit("a", due = Field.Is("2026-06-16T09:00"))
         tomorrow.state.screen.write!!.phase shouldBe centraid.screen.v1.WriteState.Phase.PHASE_IN_FLIGHT
         // This weekend from a Monday is Saturday; next week is the Monday after.
         TasksDetailMachine.dayFor("weekend", TODAY) shouldBe "2026-06-20"
         TasksDetailMachine.dayFor("next_week", TODAY) shouldBe "2026-06-22"
         TasksDetailMachine.dayFor("weekend", "2026-06-21") shouldBe "2026-06-21"
 
-        (TasksDetailMachine.reduce(detail, choice("when", "none")).effects.single() as ScreenEffect.SubmitWrite).inputJson shouldBe """{"id":"a","due":null}"""
-        (TasksDetailMachine.reduce(detail, choice("time", "none")).effects.single() as ScreenEffect.SubmitWrite).inputJson shouldBe """{"id":"a","due":"2026-06-19"}"""
-        (TasksDetailMachine.reduce(detail, TasksDetailInput.View(TasksDetailEvent(time_picked = TasksDetailEvent.TimePicked(time = "18:30")))).effects.single() as ScreenEffect.SubmitWrite).inputJson shouldBe """{"id":"a","due":"2026-06-19T18:30"}"""
-        (TasksDetailMachine.reduce(detail, choice("reminder", "30")).effects.single() as ScreenEffect.SubmitWrite).inputJson shouldBe """{"id":"a","remind_before_min":30}"""
-        (TasksDetailMachine.reduce(detail, choice("repeats", "weekly")).effects.single() as ScreenEffect.SubmitWrite).inputJson shouldBe """{"id":"a","rule":"FREQ=WEEKLY"}"""
+        TasksDetailMachine.reduce(detail, choice("when", "none")).effects.single().act() shouldBe Act.Tasks.Edit("a", due = Field.Clear)
+        TasksDetailMachine.reduce(detail, choice("time", "none")).effects.single().act() shouldBe Act.Tasks.Edit("a", due = Field.Is("2026-06-19"))
+        // A DUE WRITTEN AS A WALL TIME STAYS ZONE-LESS: the core reads it in the member's zone.
+        TasksDetailMachine.reduce(detail, TasksDetailInput.View(TasksDetailEvent(time_picked = TasksDetailEvent.TimePicked(time = "18:30")))).effects.single().act() shouldBe
+            Act.Tasks.Edit("a", due = Field.Is("2026-06-19T18:30"))
+        TasksDetailMachine.reduce(detail, choice("reminder", "30")).effects.single().act() shouldBe Act.Tasks.Edit("a", remindBeforeMin = Field.Is(30))
+        TasksDetailMachine.reduce(detail, choice("repeats", "weekly")).effects.single().act() shouldBe Act.Tasks.Edit("a", rule = Field.Is("FREQ=WEEKLY"))
         val now = TasksDetailMachine.reduce(detail, choice("priority", "3"))
-        (now.effects.single() as ScreenEffect.SubmitWrite).inputJson shouldBe """{"id":"a","priority":3}"""
-        (TasksDetailMachine.reduce(detail, choice("effort", "25")).effects.single() as ScreenEffect.SubmitWrite).inputJson shouldBe """{"id":"a","effort_min":25}"""
+        now.effects.single().act() shouldBe Act.Tasks.Edit("a", priority = 3)
+        TasksDetailMachine.reduce(detail, choice("effort", "25")).effects.single().act() shouldBe Act.Tasks.Edit("a", effortMin = Field.Is(25))
         // "None" clears an effort; on a task with none it is nothing.
-        (TasksDetailMachine.reduce(detailOn(task("e", "Walk", due = "2026-06-19", days = 4).copy(effort_min = 25)), choice("effort", "none")).effects.single() as ScreenEffect.SubmitWrite).inputJson shouldBe """{"id":"e","effort_min":null}"""
+        TasksDetailMachine.reduce(detailOn(task("e", "Walk", due = "2026-06-19", days = 4).copy(effort_min = 25)), choice("effort", "none")).effects.single().act() shouldBe
+            Act.Tasks.Edit("e", effortMin = Field.Clear)
         TasksDetailMachine.reduce(detail, choice("effort", "none")).effects.shouldBeEmpty()
         // A PICK CLOSES THE FIELD it was made from.
         val open = TasksDetailMachine.reduce(detail, TasksDetailInput.View(TasksDetailEvent(field_opened = TasksDetailEvent.FieldOpened(field_ = "when")))).state
         open.screen.open_field shouldBe "when"
         val picked = TasksDetailMachine.reduce(open, TasksDetailInput.View(TasksDetailEvent(date_picked = TasksDetailEvent.DatePicked(day = "2026-06-24"))))
         picked.state.screen.open_field shouldBe ""
-        (picked.effects.single() as ScreenEffect.SubmitWrite).inputJson shouldBe """{"id":"a","due":"2026-06-24T09:00"}"""
-        (TasksDetailMachine.reduce(detail, TasksDetailInput.View(TasksDetailEvent(tag_added = TasksDetailEvent.TagAdded(label = "home")))).effects.single() as ScreenEffect.SubmitWrite).let {
-            it.command shouldBe "tag.add"
-            it.inputJson shouldBe """{"id":"a","label":"home"}"""
-        }
+        picked.effects.single().act() shouldBe Act.Tasks.Edit("a", due = Field.Is("2026-06-24T09:00"))
+        TasksDetailMachine.reduce(detail, TasksDetailInput.View(TasksDetailEvent(tag_added = TasksDetailEvent.TagAdded(label = "home")))).effects.single().act() shouldBe
+            Act.Tasks.AddTag("a", "home")
         // Already so: nothing.
         TasksDetailMachine.reduce(detail, choice("priority", "none")).effects.shouldBeEmpty()
 
-        val settled = TasksDetailMachine.reduce(now.state, TasksDetailInput.View(TasksDetailEvent(write_settled = WriteLaw.settledOf(CommandStatus.COMMAND_STATUS_EXECUTED, "", (now.effects.single() as ScreenEffect.SubmitWrite).invokeKey)))).state
+        val settled = TasksDetailMachine.reduce(now.state, TasksDetailInput.View(TasksDetailEvent(write_settled = WriteLaw.settledOf(CommandStatus.COMMAND_STATUS_EXECUTED, "", now.effects.single().key())))).state
         val again = TasksDetailMachine.reduce(settled, choice("priority", "3"))
-        (again.effects.single() as ScreenEffect.SubmitWrite).invokeKey shouldNotBe (now.effects.single() as ScreenEffect.SubmitWrite).invokeKey
+        again.effects.single().key() shouldNotBe now.effects.single().key()
 
         // A REFUSED FIELD WRITE: the core's sentence on the status line.
-        val refused = TasksDetailMachine.reduce(now.state, TasksDetailInput.View(TasksDetailEvent(write_settled = WriteLaw.settledOf(CommandStatus.COMMAND_STATUS_FAILED, "A repeating task needs a due date to repeat from.", (now.effects.single() as ScreenEffect.SubmitWrite).invokeKey)))).state
+        val refused = TasksDetailMachine.reduce(now.state, TasksDetailInput.View(TasksDetailEvent(write_settled = WriteLaw.settledOf(CommandStatus.COMMAND_STATUS_FAILED, "A repeating task needs a due date to repeat from.", now.effects.single().key())))).state
         refused.screen.status!!.sentence shouldBe "A repeating task needs a due date to repeat from."
     }
 
@@ -387,10 +382,8 @@ class TasksSpec : StringSpec({
             it.subtasks.size shouldBe 2
             it.can_add_subtask shouldBe true
         }
-        (TasksDetailMachine.reduce(detail, TasksDetailInput.View(TasksDetailEvent(subtask_added = TasksDetailEvent.SubtaskAdded(title = "Keys")))).effects.single() as ScreenEffect.SubmitWrite).let {
-            it.command shouldBe "task.add"
-            it.inputJson shouldBe """{"title":"Keys","parent_id":"a"}"""
-        }
+        TasksDetailMachine.reduce(detail, TasksDetailInput.View(TasksDetailEvent(subtask_added = TasksDetailEvent.SubtaskAdded(title = "Keys")))).effects.single().act() shouldBe
+            Act.Tasks.Add(title = "Keys", parentId = Field.Is("a"))
         val child = detailOn(task("c1", "Boxes").copy(parent_task_id = "a"))
         child.screen.data_!!.let {
             it.can_add_subtask shouldBe false
@@ -408,16 +401,15 @@ class TasksSpec : StringSpec({
         }
         asked.screen.asking shouldBe TasksDetailState.Asking.ASKING_DELETE
         val confirmed = TasksDetailMachine.reduce(asked, TasksDetailInput.View(TasksDetailEvent(confirmed = TasksDetailEvent.Confirmed())))
-        val write = confirmed.effects.single() as ScreenEffect.SubmitWrite
-        write.command shouldBe "entity.trash"
-        write.inputJson shouldBe """{"id":"a"}"""
-        val done = TasksDetailMachine.reduce(confirmed.state, TasksDetailInput.View(TasksDetailEvent(write_settled = WriteLaw.settledOf(CommandStatus.COMMAND_STATUS_EXECUTED, "", write.invokeKey)))).state
+        val write = confirmed.effects.single()
+        write.act() shouldBe Act.Tasks.Delete("a")
+        val done = TasksDetailMachine.reduce(confirmed.state, TasksDetailInput.View(TasksDetailEvent(write_settled = WriteLaw.settledOf(CommandStatus.COMMAND_STATUS_EXECUTED, "", write.key())))).state
         done.screen.finished shouldBe true
 
         val release = TasksDetailMachine.reduce(detail, TasksDetailInput.View(TasksDetailEvent(release = TasksDetailEvent.ReleaseRequested()))).state
         release.screen.confirm!!.destructive shouldBe false
-        (TasksDetailMachine.reduce(release, TasksDetailInput.View(TasksDetailEvent(confirmed = TasksDetailEvent.Confirmed()))).effects.single() as ScreenEffect.SubmitWrite).inputJson shouldBe
-            """{"id":"a"}"""
+        TasksDetailMachine.reduce(release, TasksDetailInput.View(TasksDetailEvent(confirmed = TasksDetailEvent.Confirmed()))).effects.single().act() shouldBe
+            Act.Tasks.Cancel("a")
     }
 
     "a task no live row has is drawn as gone, not as a failed read" {
@@ -426,15 +418,42 @@ class TasksSpec : StringSpec({
         gone.screen.failure.shouldBeNull()
     }
 
+    "UNDO IS THE CORE'S: the box sends complete, Undo appears when the answer carries an inverse, and sends exactly that" {
+        val list = listOn(TasksListState.View.VIEW_ANYTIME, board(TasksView.TASKS_VIEW_ANYTIME, TasksGroup(kind = TasksGroupKind.TASKS_GROUP_KIND_UNDATED, key = "u", tasks = listOf(task("a", "Idea")))))
+        val checked = TasksListMachine.reduce(list, TasksListInput.View(TasksListEvent(row_checked = TasksListEvent.RowChecked(task_id = "a"))))
+        checked.effects.single().act() shouldBe Act.Tasks.Complete("a")
+        // Not yet: nothing is offered until the core has answered.
+        checked.state.screen.status!!.action_label shouldBe ""
+        TasksListMachine.reduce(checked.state, TasksListInput.View(TasksListEvent(status_acted = TasksListEvent.StatusActed()))).effects.shouldBeEmpty()
+
+        val inverse = ActInverse(action = "reopen", input = mapOf("id" to centraid.core.v1.Value(text = "a")))
+        val key = checked.effects.single().key()
+        val answered = TasksListMachine.reduce(checked.state, TasksListInput.Acted(WriteLaw.settledOf(CommandStatus.COMMAND_STATUS_EXECUTED, "", key), inverse))
+        answered.state.screen.status!!.action_label shouldBe TasksCopy.UNDO
+        val undone = TasksListMachine.reduce(answered.state, TasksListInput.View(TasksListEvent(status_acted = TasksListEvent.StatusActed())))
+        undone.effects.single().act() shouldBe Act.Tasks.Reopen("a")
+        undone.state.screen.status shouldBe null
+
+        // An answer with no inverse offers none.
+        val bare = TasksListMachine.reduce(checked.state, TasksListInput.Acted(WriteLaw.settledOf(CommandStatus.COMMAND_STATUS_EXECUTED, "", key), null))
+        bare.state.screen.status!!.action_label shouldBe ""
+    }
+
+    "a repeating task's completion is never offered Undo: the engine has already opened its next one" {
+        val repeating = task("r", "Water", due = "2026-06-15", days = 0).copy(repeats = true)
+        val list = listOn(TasksListState.View.VIEW_ANYTIME, board(TasksView.TASKS_VIEW_ANYTIME, TasksGroup(kind = TasksGroupKind.TASKS_GROUP_KIND_UNDATED, key = "u", tasks = listOf(repeating))))
+        val checked = TasksListMachine.reduce(list, TasksListInput.View(TasksListEvent(row_checked = TasksListEvent.RowChecked(task_id = "r"))))
+        val inverse = ActInverse(action = "reopen", input = mapOf("id" to centraid.core.v1.Value(text = "r")))
+        val answered = TasksListMachine.reduce(checked.state, TasksListInput.Acted(WriteLaw.settledOf(CommandStatus.COMMAND_STATUS_EXECUTED, "", checked.effects.single().key()), inverse))
+        answered.state.screen.status!!.action_label shouldBe ""
+    }
+
     // -----------------------------------------------------------------
     // tasks.catch_up
     // -----------------------------------------------------------------
 
     "catch up: three piles, the repeating one only what is behind, Complete all behind a confirm" {
-        TasksCatchUpReads.requests(TasksCatchUpMachine.initial(), clock).let {
-            it[0].tasks_catch_up.shouldNotBeNull()
-            it[1].tasks_projects.shouldNotBeNull()
-        }
+        TasksCatchUpReads.loads(TasksCatchUpMachine.initial(), clock) shouldBe listOf(Load.Tasks.CatchUp(), Load.Tasks.Projects())
         val opened = TasksCatchUpMachine.reduce(TasksCatchUpMachine.initial(), TasksCatchUpInput.View(TasksCatchUpEvent(opened = TasksCatchUpEvent.Opened())))
         val behind = task("r1", "Water", due = "2026-06-12", days = -3, overdue = true).copy(repeats = true, missed = 3)
         val onTime = task("r2", "Rent", due = "2026-06-19", days = 4).copy(repeats = true)
@@ -463,11 +482,8 @@ class TasksSpec : StringSpec({
         asked.screen.confirm!!.confirm_label shouldBe "Complete all"
         asked.screen.asking_pile shouldBe "dated"
         val all = TasksCatchUpMachine.reduce(asked, TasksCatchUpInput.View(TasksCatchUpEvent(confirmed = TasksCatchUpEvent.Confirmed())))
-        all.effects.map { (it as ScreenEffect.SubmitWrite).inputJson } shouldBe listOf(
-            """{"id":"d1"}""",
-            """{"id":"d2"}""",
-        )
-        all.effects.map { (it as ScreenEffect.SubmitWrite).invokeKey }.toSet().size shouldBe 2
+        all.effects.map { it.act() } shouldBe listOf(Act.Tasks.Complete("d1"), Act.Tasks.Complete("d2"))
+        all.effects.map { it.key() }.toSet().size shouldBe 2
         all.state.screen.status!!.let {
             it.sentence shouldBe "2 tasks done"
             it.action_label shouldBe ""
@@ -494,18 +510,18 @@ class TasksSpec : StringSpec({
         listed.back_label shouldBe TasksCopy.APP_TITLE
         val asked = machine.reduce(listed, TrashListEvent(purge = TrashListEvent.PurgeTapped(id = "a"))).state
         asked.confirm.shouldNotBeNull().body shouldBe TasksCopy.TRASH_PURGE_BODY
-        (machine.reduce(asked, TrashListEvent(confirmed = TrashListEvent.Confirmed())).effects.single() as ScreenEffect.SubmitWrite).let {
-            it.command shouldBe "entity.purge"
-            it.inputJson shouldBe """{"id":"a"}"""
-        }
+        machine.reduce(asked, TrashListEvent(confirmed = TrashListEvent.Confirmed())).effects.single().act() shouldBe Act.Tasks.Purge("a")
         machine.reduce(listed, TrashListEvent(empty = TrashListEvent.EmptyTapped())).state.confirm.shouldBeNull()
-        (machine.reduce(listed, TrashListEvent(restore = TrashListEvent.RestoreTapped(id = "a"))).effects.single() as ScreenEffect.SubmitWrite).let {
-            it.command shouldBe "entity.restore"
-            it.inputJson shouldBe """{"id":"a"}"""
-        }
+        machine.reduce(listed, TrashListEvent(restore = TrashListEvent.RestoreTapped(id = "a"))).effects.single().act() shouldBe Act.Tasks.Restore("a")
     }
 }) {
     companion object {
+        /** The request an effect carries, without its key: what a catalogue builder makes. */
+        fun ScreenEffect.act(): ActRequest = (this as ScreenEffect.Act).request.copy(invoke_key = "")
+
+        /** The key the effect's answer will come back under. */
+        fun ScreenEffect.key(): String = (this as ScreenEffect.Act).invokeKey
+
         const val TODAY: String = "2026-06-15"
         const val ID: String = "1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed"
 

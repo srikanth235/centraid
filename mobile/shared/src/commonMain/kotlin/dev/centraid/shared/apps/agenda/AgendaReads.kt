@@ -18,6 +18,7 @@ import centraid.screen.v1.ReadFailure
 import dev.centraid.shared.kit.WriteLaw
 import dev.centraid.shared.platform.DeviceClock
 import dev.centraid.shared.sync.ScreenQueries
+import dev.centraid.shared.sync.ActOutcome
 import dev.centraid.shared.sync.ScreenWrites
 import dev.centraid.shared.kit.time.civilDayOf
 import dev.centraid.shared.kit.time.epochDayOf
@@ -196,6 +197,10 @@ public object AgendaReads : ScreenQueries<AgendaHome, AgendaInput>, ScreenWrites
     /** A task write's outcome, as the machine's own settle event. */
     override fun settled(status: CommandStatus, sentence: String, invokeKey: String): AgendaInput =
         AgendaInput.View(AgendaHomeEvent(write_settled = WriteLaw.settledOf(status, sentence, invokeKey)))
+
+    /** A To-do write's answer through THE ONE WRITE, with the inverse Undo sends. */
+    override fun actSettled(outcome: ActOutcome, invokeKey: String): AgendaInput =
+        AgendaInput.TaskActed(WriteLaw.settledOf(outcome, invokeKey), (outcome as? ActOutcome.Executed)?.inverse)
 
     /** UTC midnight opening [day], in the vault's instant spelling. */
     private fun instantOf(day: String?): String? =

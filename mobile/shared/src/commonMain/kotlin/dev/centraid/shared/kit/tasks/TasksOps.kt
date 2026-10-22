@@ -1,13 +1,17 @@
 package dev.centraid.shared.kit.tasks
 
+import centraid.core.v1.ActInverse
+import centraid.core.v1.ActRequest
 import centraid.core.v1.TasksTask
 import centraid.screen.v1.StatusLine
 import centraid.screen.v1.WriteSettled
 import dev.centraid.design.copy.TasksCopy
-import dev.centraid.shared.kit.InvokeKeys
-import dev.centraid.shared.kit.jsonString
+import dev.centraid.shared.catalog.Act
+import dev.centraid.shared.catalog.Field
+import dev.centraid.shared.catalog.keyed
 import dev.centraid.shared.kit.time.CivilWords
 import dev.centraid.shared.screen.ScreenEffect
+import dev.centraid.shared.sync.request
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 
@@ -21,14 +25,14 @@ public data class TaskOp(
     val from: String = "",
     val repeats: Boolean = false,
     val seriesId: String? = null,
-    /** An add: where it lands, filed after it commits. */
-    val projectId: String? = null,
-    val sectionId: String? = null,
     /** What the status line says when it commits. */
     val done: String = "",
 ) {
-    public enum class Kind { STATUS, UNDO, ADD, FILE, PLACE_ADDED, CREATE }
+    public enum class Kind { STATUS, UNDO, ADD, FILE, CREATE }
 }
+
+/** What the status line's Undo sends: the core's inverse of [op], the write it takes back. */
+public data class TaskUndo(val request: ActRequest, val op: TaskOp)
 
 /** A task added on this phone, drawn until the vault's answer carries it. */
 public data class PendingAdd(
@@ -62,8 +66,10 @@ public data class TaskOps(
     val filed: Map<String, Pair<String?, Boolean>> = emptyMap(),
     val adds: List<PendingAdd> = emptyList(),
     val status: StatusLine? = null,
-    /** What Undo reverses. */
-    val undo: TaskOp? = null,
+    /** The key of the write the status line speaks for, so only ITS answer can arm Undo. */
+    val statusKey: String? = null,
+    /** What Undo sends: the core's inverse, set when the answer to [statusKey] carries one. */
+    val undo: TaskUndo? = null,
     /** A repeating task completed here: name where its next one landed. */
     val nextOf: TaskOp? = null,
     /** Completions this session, for Today's earned quiet. */
@@ -78,31 +84,30 @@ public data class TaskOps(
  * Home, a list, a project and Catch up alike.
  *
  * A DONE ROW IS DRAWN IN THE LOGBOOK ONLY (owner ruling): checking a row off
- * hides it at once and says "Task done" with Undo on the status line; the
- * Logbook's box reopens, and hides the row there the same way.
+ * hides it at once and says "Task done"; the Logbook's box reopens, and hides
+ * the row there the same way.
+ *
+ * **UNDO IS THE CORE'S, NOT A TABLE HERE (#1135).** A status write's answer
+ * carries `ActResponse.inverse` — the action and input that take it back — and
+ * the status line offers Undo only once that answer is in. What the core says
+ * has no inverse offers none. The one local rule is a repeating task's
+ * completion, which is never offered Undo: the engine has already opened its
+ * next occurrence, and reopening this one would leave two open copies of one
+ * series.
  */
 public object TaskOpsLaw {
-    public const val COMPLETE: String = "task.complete"
-    public const val REOPEN: String = "task.reopen"
-    public const val CANCEL: String = "task.cancel"
-    public const val ADD: String = "task.add"
-    public const val ORGANIZE: String = "task.organize"
-
-    /** A project, an area and a section are containers: one shared verb makes them. */
-    public const val CREATE_CONTAINER: String = "container.create"
-
-    /** The command that puts a task in [status]: an action says the state it wants (R-1135-3-10). */
-    public fun commandFor(status: String): String = when (status) {
-        TasksRows.STATUS_DONE -> COMPLETE
-        TasksRows.STATUS_CANCELLED -> CANCEL
-        else -> REOPEN
-    }
-
     public data class Out(val ops: TaskOps, val effects: List<ScreenEffect> = emptyList())
 
-    /** A fresh task id: a v4 UUID, the shape `add_task` honours. A reducer is pure, so a bridge mints it. */
+    /** A fresh task id: a v4 UUID, the shape `add` honours. A reducer is pure, so a bridge mints it. */
     @OptIn(ExperimentalUuidApi::class)
     public fun mintId(): String = Uuid.random().toString()
+
+    /** The action that puts a task in [status]: an action says the state it wants (R-1135-3-10). */
+    public fun statusAct(taskId: String, status: String): ActRequest = when (status) {
+        TasksRows.STATUS_DONE -> Act.Tasks.Complete(taskId)
+        TasksRows.STATUS_CANCELLED -> Act.Tasks.Cancel(taskId)
+        else -> Act.Tasks.Reopen(taskId)
+    }
 
     /** The box. Open work completes; closed work (the Logbook) reopens. */
     public fun checked(ops: TaskOps, task: TasksTask): Out {
@@ -119,50 +124,46 @@ public object TaskOpsLaw {
             repeats = task.repeats,
             seriesId = task.series_id,
         )
-        val (seq, key, effect) = status(ops, task.task_id, to)
-        // A REPEATING TASK'S COMPLETION IS NOT UNDONE HERE: the engine has
-        // already opened its next occurrence, and reopening this one would
-        // leave two open copies of one series.
-        val undoable = !task.repeats
+        val (seq, request) = status(ops, task.task_id, to)
         return Out(
             ops.copy(
                 seq = seq,
-                inFlight = ops.inFlight + (key to op),
+                inFlight = ops.inFlight + (request.invoke_key to op),
                 hidden = ops.hidden + (task.task_id to false),
-                status = StatusLine(
-                    sentence = if (open) TasksCopy.TASK_DONE else TasksCopy.TASK_REOPENED,
-                    action_label = if (undoable) TasksCopy.UNDO else "",
-                ),
-                undo = op.takeIf { undoable },
+                status = StatusLine(sentence = if (open) TasksCopy.TASK_DONE else TasksCopy.TASK_REOPENED),
+                statusKey = request.invoke_key,
+                undo = null,
                 nextOf = op.takeIf { open && task.repeats },
                 completed = if (open) ops.completed + 1 else ops.completed,
             ),
-            listOf(effect),
+            listOf(ScreenEffect.Act(request)),
         )
     }
 
-    /** The status line's Undo: the status back, the row back. */
+    /** The status line's Undo: the core's inverse sent, the row back. */
     public fun undo(ops: TaskOps): Out {
         val undo = ops.undo ?: return Out(ops)
-        val (seq, key, effect) = status(ops, undo.taskId, undo.from)
+        val seq = ops.seq + 1
+        val request = undo.request.keyed(undo.op.taskId, "undo", "n=$seq")
         return Out(
             ops.copy(
                 seq = seq,
-                inFlight = ops.inFlight + (key to undo.copy(kind = TaskOp.Kind.UNDO, to = undo.from, from = undo.to)),
-                hidden = ops.hidden - undo.taskId,
+                inFlight = ops.inFlight + (request.invoke_key to undo.op.copy(kind = TaskOp.Kind.UNDO, to = undo.op.from, from = undo.op.to)),
+                hidden = ops.hidden - undo.op.taskId,
                 status = null,
+                statusKey = null,
                 undo = null,
                 nextOf = null,
-                completed = if (undo.to == TasksRows.STATUS_DONE) (ops.completed - 1).coerceAtLeast(0) else ops.completed,
+                completed = if (undo.op.to == TasksRows.STATUS_DONE) (ops.completed - 1).coerceAtLeast(0) else ops.completed,
             ),
-            listOf(effect),
+            listOf(ScreenEffect.Act(request)),
         )
     }
 
     /**
      * A QUICK ADD: a bare title, the id minted by the bridge (a UUID, which
-     * `add_task` honours), drawn at once. Filing into a project is a second
-     * write after the first commits — `add_task` takes no project.
+     * `add` honours), drawn at once. A project and a section ride the same
+     * write, so the task lands where the member pointed.
      */
     public fun added(
         ops: TaskOps,
@@ -173,90 +174,91 @@ public object TaskOpsLaw {
         projectId: String? = null,
         sectionId: String? = null,
     ): Out {
-        val input = buildString {
-            append("{\"id\":").append(jsonString(taskId))
-            append(",\"title\":").append(jsonString(title))
-            if (dueDay.isNotEmpty()) append(",\"due\":").append(jsonString(dueDay))
-            append('}')
-        }
-        val key = InvokeKeys.of(ADD, taskId)
+        val request = Act.Tasks.Add(
+            title = title,
+            id = taskId,
+            due = if (dueDay.isEmpty()) Field.Keep else Field.Is(dueDay),
+            projectId = projectId?.let { Field.Is(it) } ?: Field.Keep,
+            sectionId = sectionId?.let { Field.Is(it) } ?: Field.Keep,
+        ).keyed(taskId)
         return Out(
             ops.copy(
                 inFlight = ops.inFlight + (
-                    key to TaskOp(
+                    request.invoke_key to TaskOp(
                         kind = TaskOp.Kind.ADD,
                         taskId = taskId,
                         title = title,
-                        projectId = projectId,
-                        sectionId = sectionId,
                         done = "${TasksCopy.ADDED_TO} $landsIn",
                     )
                     ),
                 adds = ops.adds + PendingAdd(taskId, title, dueDay, projectId, sectionId),
                 status = null,
+                statusKey = null,
                 undo = null,
             ),
-            listOf(ScreenEffect.SubmitWrite(ADD, input, key)),
+            listOf(ScreenEffect.Act(request)),
         )
     }
 
     /** File a task: a project (and section), or the Inbox (`projectId` null). */
     public fun filed(ops: TaskOps, task: TasksTask, projectId: String?, sectionId: String?, label: String): Out {
         val seq = ops.seq + 1
-        val key = InvokeKeys.of(ORGANIZE, task.task_id, "project=${projectId ?: ""}", "section=${sectionId ?: ""}", "n=$seq")
+        val request = organize(task.task_id, projectId, sectionId, task.sort_order)
+            .keyed(task.task_id, "project=${projectId ?: ""}", "section=${sectionId ?: ""}", "n=$seq")
         return Out(
             ops.copy(
                 seq = seq,
                 inFlight = ops.inFlight + (
-                    key to TaskOp(
+                    request.invoke_key to TaskOp(
                         kind = TaskOp.Kind.FILE,
                         taskId = task.task_id,
                         title = task.title,
-                        projectId = projectId,
                         done = "${TasksCopy.FILED_IN} $label",
                     )
                     ),
                 filed = ops.filed + (task.task_id to (projectId to false)),
                 status = null,
+                statusKey = null,
                 undo = null,
             ),
-            listOf(ScreenEffect.SubmitWrite(ORGANIZE, organizeInput(task.task_id, projectId, sectionId, task.sort_order), key)),
+            listOf(ScreenEffect.Act(request)),
         )
     }
 
     /** A create with no row to draw (a project, a section): the status line says it. */
-    public fun created(ops: TaskOps, command: String, input: String, subject: String, done: String): Out {
+    public fun created(ops: TaskOps, create: ActRequest, subject: String, done: String): Out {
         val seq = ops.seq + 1
-        val key = InvokeKeys.of(command, subject, "n=$seq")
+        val request = create.keyed(subject, "n=$seq")
         return Out(
             ops.copy(
                 seq = seq,
-                inFlight = ops.inFlight + (key to TaskOp(kind = TaskOp.Kind.CREATE, taskId = "", done = done)),
+                inFlight = ops.inFlight + (request.invoke_key to TaskOp(kind = TaskOp.Kind.CREATE, taskId = "", done = done)),
                 status = null,
+                statusKey = null,
                 undo = null,
             ),
-            listOf(ScreenEffect.SubmitWrite(command, input, key)),
+            listOf(ScreenEffect.Act(request)),
         )
     }
 
     /**
-     * `task.organize`'s input. A project without a section CLEARS the section, because a section
-     * of another project would be refused; the Inbox clears both (`null` clears what it names).
+     * `organize`'s request. A project without a section CLEARS the section, because a section
+     * of another project would be refused; the Inbox clears both (`Clear` names what it empties).
      */
-    public fun organizeInput(taskId: String, projectId: String?, sectionId: String?, position: Long): String = buildString {
-        append("{\"id\":").append(jsonString(taskId))
-        append(",\"project_id\":").append(projectId?.let { jsonString(it) } ?: "null")
-        append(",\"section_id\":").append(if (projectId == null) "null" else sectionId?.let { jsonString(it) } ?: "null")
-        append(",\"position\":").append(position)
-        append('}')
-    }
+    public fun organize(taskId: String, projectId: String?, sectionId: String?, position: Long): ActRequest =
+        Act.Tasks.OrganizeTask(
+            taskId = taskId,
+            projectId = projectId?.let { Field.Is(it) } ?: Field.Clear,
+            sectionId = if (projectId == null) Field.Clear else sectionId?.let { Field.Is(it) } ?: Field.Clear,
+            position = position.toDouble(),
+        )
 
     /**
      * A write's answer. Refused: whatever it drew is taken back and the
      * core's sentence is the status line. Committed: it stays drawn until
-     * the next answer, and an add that lands in a project is filed now.
+     * the next answer, and a status write that carries an [inverse] arms Undo.
      */
-    public fun settled(ops: TaskOps, settled: WriteSettled): Out {
+    public fun settled(ops: TaskOps, settled: WriteSettled, inverse: ActInverse? = null): Out {
         val op = ops.inFlight[settled.invoke_key] ?: return Out(ops)
         val left = ops.copy(inFlight = ops.inFlight - settled.invoke_key)
         if (!settled.committed) {
@@ -267,13 +269,25 @@ public object TaskOpsLaw {
                     filed = if (op.kind == TaskOp.Kind.FILE) left.filed - op.taskId else left.filed,
                     adds = if (op.kind == TaskOp.Kind.ADD) left.adds.filter { it.taskId != op.taskId } else left.adds,
                     status = StatusLine(sentence = sentence, refused = true),
+                    statusKey = null,
                     undo = null,
                     nextOf = if (left.nextOf?.taskId == op.taskId) null else left.nextOf,
                 ),
             )
         }
         return when (op.kind) {
-            TaskOp.Kind.STATUS, TaskOp.Kind.UNDO -> Out(
+            TaskOp.Kind.STATUS -> {
+                val hidden = if (op.taskId in left.hidden) left.hidden + (op.taskId to true) else left.hidden
+                val armed = inverse?.takeIf { !op.repeats && left.statusKey == settled.invoke_key }
+                Out(
+                    left.copy(
+                        hidden = hidden,
+                        status = if (armed != null) left.status?.copy(action_label = TasksCopy.UNDO) else left.status,
+                        undo = armed?.let { TaskUndo(it.request(Act.Tasks.APP), op) } ?: left.undo,
+                    ),
+                )
+            }
+            TaskOp.Kind.UNDO -> Out(
                 left.copy(hidden = if (op.taskId in left.hidden) left.hidden + (op.taskId to true) else left.hidden),
             )
             TaskOp.Kind.FILE -> Out(
@@ -282,23 +296,12 @@ public object TaskOpsLaw {
                     status = StatusLine(sentence = op.done),
                 ),
             )
-            TaskOp.Kind.ADD -> {
-                val committed = left.copy(
+            TaskOp.Kind.ADD -> Out(
+                left.copy(
                     adds = left.adds.map { if (it.taskId == op.taskId) it.copy(committed = true) else it },
                     status = StatusLine(sentence = op.done),
-                )
-                val project = op.projectId ?: return Out(committed)
-                val seq = committed.seq + 1
-                val key = InvokeKeys.of(ORGANIZE, op.taskId, "project=$project", "section=${op.sectionId ?: ""}", "n=$seq")
-                Out(
-                    committed.copy(
-                        seq = seq,
-                        inFlight = committed.inFlight + (key to op.copy(kind = TaskOp.Kind.PLACE_ADDED)),
-                    ),
-                    listOf(ScreenEffect.SubmitWrite(ORGANIZE, organizeInput(op.taskId, project, op.sectionId, 0), key)),
-                )
-            }
-            TaskOp.Kind.PLACE_ADDED -> Out(left)
+                ),
+            )
             TaskOp.Kind.CREATE -> Out(left.copy(status = StatusLine(sentence = op.done)))
         }
     }
@@ -335,11 +338,8 @@ public object TaskOpsLaw {
     }
 
     /** One status write, under a key no earlier gesture used. */
-    private fun status(ops: TaskOps, taskId: String, to: String): Triple<Long, String, ScreenEffect> {
+    private fun status(ops: TaskOps, taskId: String, to: String): Pair<Long, ActRequest> {
         val seq = ops.seq + 1
-        val command = commandFor(to)
-        val key = InvokeKeys.of(command, taskId, "to=$to", "n=$seq")
-        val input = "{\"id\":${jsonString(taskId)}}"
-        return Triple(seq, key, ScreenEffect.SubmitWrite(command, input, key))
+        return seq to statusAct(taskId, to).keyed(taskId, "to=$to", "n=$seq")
     }
 }

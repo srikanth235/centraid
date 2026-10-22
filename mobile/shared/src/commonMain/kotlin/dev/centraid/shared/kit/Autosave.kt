@@ -1,8 +1,10 @@
 package dev.centraid.shared.kit
 
+import centraid.core.v1.ActRequest
 import centraid.screen.v1.Autosave
 import centraid.screen.v1.ReadFailure
 import centraid.screen.v1.WriteSettled
+import dev.centraid.shared.catalog.keyed
 import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.Step
 
@@ -19,8 +21,8 @@ import dev.centraid.shared.screen.Step
 public interface AutosaveLens<S, D> : ContentLens<S, D> {
     public val screenId: String
 
-    /** The command a save submits. */
-    public val command: String
+    /** The command a save submits (unused on the plane: see [act]). */
+    public val command: String get() = ""
 
     public fun subjectId(state: S): String
 
@@ -44,7 +46,18 @@ public interface AutosaveLens<S, D> : ContentLens<S, D> {
      * fields that changed — or null when none did. App-owned: every command
      * schema is `additionalProperties: false`, so only the app knows its keys.
      */
-    public fun input(state: S, draft: D, baseline: D?): String?
+    public fun input(state: S, draft: D, baseline: D?): String? = null
+
+    /**
+     * THE ONE WRITE (#1135): the save as a generated `Act` request (not yet
+     * keyed — the law keys it), or null when nothing changed. A lens on the
+     * action plane sets [onPlane] and implements this; [command] and [input]
+     * are then unused, and go when the last app is on the plane.
+     */
+    public fun act(state: S, draft: D, baseline: D?): ActRequest? = null
+
+    /** Whether this lens saves through [act] instead of [command] and [input]. */
+    public val onPlane: Boolean get() = false
 
     /** Why [draft] cannot be saved as it stands, or null. */
     public fun refusal(state: S, draft: D, baseline: D?): ReadFailure?
@@ -226,12 +239,29 @@ public object AutosaveLaw {
         l.refusal(s, draft, baseline)?.let { failure ->
             return Step(put(l, s, a.copy(phase = Autosave.Phase.PHASE_REFUSED, failure = failure)))
         }
-        val input = l.input(s, draft, baseline)
-            // NOTHING CHANGED against the baseline (an edit typed and undone):
-            // saved, with no command.
-            ?: return Step(
-                put(l, s, a.copy(phase = Autosave.Phase.PHASE_SAVED, saved_seq = a.edit_seq, failure = null)),
+        // NOTHING CHANGED against the baseline (an edit typed and undone):
+        // saved, with no command.
+        val unchanged = Step(
+            put(l, s, a.copy(phase = Autosave.Phase.PHASE_SAVED, saved_seq = a.edit_seq, failure = null)),
+        )
+        if (l.onPlane) {
+            val request = l.act(s, draft, baseline) ?: return unchanged
+            val keyed = request.keyed(l.subjectId(s), "seq=${a.edit_seq}")
+            return Step(
+                put(
+                    l,
+                    l.withSending(s, draft),
+                    a.copy(
+                        phase = Autosave.Phase.PHASE_SAVING,
+                        saving_seq = a.edit_seq,
+                        invoke_key = keyed.invoke_key,
+                        failure = null,
+                    ),
+                ),
+                listOf(ScreenEffect.Act(keyed)),
             )
+        }
+        val input = l.input(s, draft, baseline) ?: return unchanged
         val key = InvokeKeys.of(l.command, l.subjectId(s), "seq=${a.edit_seq}")
         return Step(
             put(l,

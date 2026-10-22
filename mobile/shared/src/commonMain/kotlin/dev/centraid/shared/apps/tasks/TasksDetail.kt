@@ -1,14 +1,14 @@
 package dev.centraid.shared.apps.tasks
 
+import centraid.core.v1.ActInverse
+import centraid.core.v1.ActRequest
 import centraid.core.v1.AppQueryDenial
-import centraid.core.v1.AppQueryRequest
 import centraid.core.v1.AppQueryResponse
 import centraid.core.v1.CommandStatus
+import centraid.core.v1.LoadRequest
 import centraid.core.v1.TasksProjects
-import centraid.core.v1.TasksProjectsRequest
 import centraid.core.v1.TasksTask
 import centraid.core.v1.TasksTaskDetail
-import centraid.core.v1.TasksTaskRequest
 import centraid.screen.v1.Autosave
 import centraid.screen.v1.Confirm
 import centraid.screen.v1.EmptyState
@@ -26,14 +26,16 @@ import centraid.screen.v1.TasksField
 import centraid.screen.v1.WriteSettled
 import centraid.screen.v1.WriteState
 import dev.centraid.design.copy.TasksCopy
+import dev.centraid.shared.catalog.Act
+import dev.centraid.shared.catalog.Field
+import dev.centraid.shared.catalog.Load
+import dev.centraid.shared.catalog.keyed
 import dev.centraid.shared.kit.AutosaveLaw
 import dev.centraid.shared.kit.AutosaveLens
-import dev.centraid.shared.kit.InvokeKeys
 import dev.centraid.shared.kit.ReadContent
 import dev.centraid.shared.kit.WriteLaw
 import dev.centraid.shared.kit.WriteLens
 import dev.centraid.shared.kit.dataOf
-import dev.centraid.shared.kit.jsonString
 import dev.centraid.shared.kit.time.CivilWords
 import dev.centraid.shared.kit.time.isoWeekdayOf
 import dev.centraid.shared.kit.time.plusDays
@@ -43,6 +45,7 @@ import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.ScreenMachine
 import dev.centraid.shared.screen.Step
+import dev.centraid.shared.sync.ActOutcome
 import dev.centraid.shared.sync.ScreenQueries
 import dev.centraid.shared.sync.ScreenWrites
 import dev.centraid.shared.kit.tasks.TaskOps
@@ -68,6 +71,9 @@ public sealed interface TasksDetailInput {
     public data class Answered(val detail: TasksTaskDetail?, val projects: TasksProjects?) : TasksDetailInput
 
     public data class Denied(val denial: AppQueryDenial) : TasksDetailInput
+
+    /** A write's answer, with the inverse the core gave for Undo. */
+    public data class Acted(val settled: WriteSettled, val inverse: ActInverse?) : TasksDetailInput
 }
 
 /**
@@ -90,11 +96,6 @@ public object TasksDetailMachine : ScreenMachine<TasksDetail, TasksDetailInput> 
 
     public val TABLES: Set<String> = TasksRows.TABLES
 
-    public const val EDIT: String = "task.edit"
-    public const val DELETE: String = "entity.trash"
-    public const val TAG: String = "tag.add"
-    public const val UNTAG: String = "tag.remove"
-
     /** `TasksField.key`s. */
     public const val WHEN: String = "when"
     public const val TIME: String = "time"
@@ -112,6 +113,10 @@ public object TasksDetailMachine : ScreenMachine<TasksDetail, TasksDetailInput> 
     public const val TOMORROW: String = "tomorrow"
     public const val WEEKEND: String = "weekend"
     public const val NEXT_WEEK: String = "next_week"
+
+    /** `ANCHOR` choice keys: what a repeat counts from. */
+    private const val ANCHOR_SCHEDULED: String = "scheduled"
+    private const val ANCHOR_COMPLETION: String = "completion"
 
     private val REMINDER_LEADS: List<Pair<Long, String>> = listOf(
         0L to TasksCopy.REMIND_AT_TIME,
@@ -147,6 +152,7 @@ public object TasksDetailMachine : ScreenMachine<TasksDetail, TasksDetailInput> 
         val step = when (event) {
             is TasksDetailInput.View -> view(state, event.event)
             is TasksDetailInput.Answered -> answered(state, event)
+            is TasksDetailInput.Acted -> settled(state, event.settled, event.inverse)
             is TasksDetailInput.Denied -> Step(
                 Lens.with(state, ReadContent.Denied(TasksRows.deniedOf(event.denial))),
             )
@@ -221,7 +227,7 @@ public object TasksDetailMachine : ScreenMachine<TasksDetail, TasksDetailInput> 
                 when {
                     isoWeekdayOf(day) == null -> Step(closed)
                     day == task.due_day -> Step(closed)
-                    else -> edit(closed, WHEN, "{${id(task)},\"due\":${jsonString(withTime(task, day))}}", day)
+                    else -> edit(closed, WHEN, task, day, due = Field.Is(withTime(task, day)))
                 }
             }
 
@@ -233,7 +239,7 @@ public object TasksDetailMachine : ScreenMachine<TasksDetail, TasksDetailInput> 
                     Step(closed)
                 } else {
                     val day = task.due_day.ifEmpty { todayOf(state) }
-                    if (day.isEmpty()) Step(closed) else edit(closed, TIME, "{${id(task)},\"due\":${jsonString("${day}T$time")}}", time)
+                    if (day.isEmpty()) Step(closed) else edit(closed, TIME, task, time, due = Field.Is("${day}T$time"))
                 }
             }
 
@@ -246,8 +252,7 @@ public object TasksDetailMachine : ScreenMachine<TasksDetail, TasksDetailInput> 
                 if (label.isEmpty()) {
                     Step(state)
                 } else {
-                    val input = "{${id(task)},\"label\":${jsonString(label)}}"
-                    submit(state, TAG, input, InvokeKeys.of(TAG, task.task_id, label, "n=${state.seq + 1}"), TAGS)
+                    submit(state, Act.Tasks.AddTag(task.task_id, label).keyed(task.task_id, label, "n=${state.seq + 1}"), TAGS)
                 }
             }
 
@@ -275,8 +280,8 @@ public object TasksDetailMachine : ScreenMachine<TasksDetail, TasksDetailInput> 
                 if (title.isEmpty() || task.parent_task_id != null) {
                     Step(state)
                 } else {
-                    val input = "{\"title\":${jsonString(title)},\"parent_id\":${jsonString(task.task_id)}}"
-                    submit(state, TaskOpsLaw.ADD, input, InvokeKeys.of(TaskOpsLaw.ADD, task.task_id, "sub=$title", "n=${state.seq + 1}"), "subtask")
+                    val add = Act.Tasks.Add(title = title, parentId = Field.Is(task.task_id))
+                    submit(state, add.keyed(task.task_id, "sub=$title", "n=${state.seq + 1}"), "subtask")
                 }
             }
 
@@ -333,57 +338,62 @@ public object TasksDetailMachine : ScreenMachine<TasksDetail, TasksDetailInput> 
     private fun choice(state: TasksDetail, field: String, key: String): Step<TasksDetail> {
         val task = task(state) ?: return Step(state)
         val today = todayOf(state)
-        val id = id(task)
         val closed = state.copy(screen = state.screen.copy(open_field = ""))
         return when (field) {
             WHEN -> {
                 if (key == NONE) {
-                    if (task.due_day.isEmpty()) Step(closed) else edit(closed, WHEN, "{$id,\"due\":null}", key)
+                    if (task.due_day.isEmpty()) Step(closed) else edit(closed, WHEN, task, key, due = Field.Clear)
                 } else {
                     val day = dayFor(key, today) ?: return Step(closed)
-                    edit(closed, WHEN, "{$id,\"due\":${jsonString(withTime(task, day))}}", day)
+                    edit(closed, WHEN, task, day, due = Field.Is(withTime(task, day)))
                 }
             }
             TIME -> if (key == NONE && task.due_time.isNotEmpty()) {
-                edit(closed, TIME, "{$id,\"due\":${jsonString(task.due_day)}}", key)
+                edit(closed, TIME, task, key, due = Field.Is(task.due_day))
             } else {
                 Step(closed)
             }
             REMINDER -> when {
                 task.due_day.isEmpty() -> Step(closed)
-                key == NONE -> if (task.remind_before_min == null) Step(closed) else edit(closed, REMINDER, "{$id,\"remind_before_min\":null}", key)
+                key == NONE -> if (task.remind_before_min == null) Step(closed) else edit(closed, REMINDER, task, key, remindBeforeMin = Field.Clear)
                 else -> {
                     val lead = key.toLongOrNull()?.takeIf { l -> REMINDER_LEADS.any { it.first == l } } ?: return Step(closed)
-                    edit(closed, REMINDER, "{$id,\"remind_before_min\":$lead}", key)
+                    edit(closed, REMINDER, task, key, remindBeforeMin = Field.Is(lead))
                 }
             }
             REPEATS -> when {
-                key == NONE -> if (!task.repeats) Step(closed) else edit(closed, REPEATS, "{$id,\"rule\":null}", key)
+                key == NONE -> if (!task.repeats) Step(closed) else edit(closed, REPEATS, task, key, rule = Field.Clear)
                 task.due_day.isEmpty() -> Step(closed)
                 else -> {
                     val rule = REPEAT_RULES.firstOrNull { it.first == key }?.third ?: return Step(closed)
-                    if (rule == task.rrule) Step(closed) else edit(closed, REPEATS, "{$id,\"rule\":${jsonString(rule)}}", key)
+                    if (rule == task.rrule) Step(closed) else edit(closed, REPEATS, task, key, rule = Field.Is(rule))
                 }
             }
-            ANCHOR -> if ((key == "scheduled" || key == "completion") && task.repeats) {
-                val input = "{$id,\"anchor\":${jsonString(key)}}"
-                submit(closed, TaskOpsLaw.ORGANIZE, input, key(TaskOpsLaw.ORGANIZE, task, ANCHOR, key, closed), ANCHOR)
-            } else {
-                Step(closed)
+            ANCHOR -> {
+                val anchor = when (key) {
+                    ANCHOR_SCHEDULED -> Act.Tasks.OrganizeTaskAnchor.Scheduled
+                    ANCHOR_COMPLETION -> Act.Tasks.OrganizeTaskAnchor.Completion
+                    else -> null
+                }
+                if (anchor != null && task.repeats) {
+                    submit(closed, Act.Tasks.OrganizeTask(task.task_id, anchor = anchor).keyed(task.task_id, "$ANCHOR=$key", "n=${closed.seq + 1}"), ANCHOR)
+                } else {
+                    Step(closed)
+                }
             }
             PRIORITY -> {
                 val level = when (key) {
                     NONE -> 0L
                     else -> key.toLongOrNull()?.takeIf { it in 1L..3L } ?: return Step(closed)
                 }
-                if (level == task.priority) Step(closed) else edit(closed, PRIORITY, "{$id,\"priority\":$level}", key)
+                if (level == task.priority) Step(closed) else edit(closed, PRIORITY, task, key, priority = level)
             }
             // "None" is `task.edit`'s `effort_min: null`.
             EFFORT -> if (key == NONE) {
-                if (task.effort_min == null) Step(closed) else edit(closed, EFFORT, "{$id,\"effort_min\":null}", key)
+                if (task.effort_min == null) Step(closed) else edit(closed, EFFORT, task, key, effortMin = Field.Clear)
             } else {
                 val minutes = key.toLongOrNull()?.takeIf { it in EFFORTS } ?: return Step(closed)
-                if (minutes == task.effort_min) Step(closed) else edit(closed, EFFORT, "{$id,\"effort_min\":$minutes}", key)
+                if (minutes == task.effort_min) Step(closed) else edit(closed, EFFORT, task, key, effortMin = Field.Is(minutes))
             }
             PROJECT -> {
                 if (task.parent_task_id != null) return Step(closed)
@@ -400,13 +410,13 @@ public object TasksDetailMachine : ScreenMachine<TasksDetail, TasksDetailInput> 
                     else -> return Step(closed)
                 }
                 if (key != TasksRows.FILE_INBOX && projectId == null) return Step(closed)
-                val input = TaskOpsLaw.organizeInput(task.task_id, projectId, sectionId, task.sort_order)
-                submit(closed, TaskOpsLaw.ORGANIZE, input, key(TaskOpsLaw.ORGANIZE, task, PROJECT, key, closed), PROJECT)
+                val organize = TaskOpsLaw.organize(task.task_id, projectId, sectionId, task.sort_order)
+                submit(closed, organize.keyed(task.task_id, "$PROJECT=$key", "n=${closed.seq + 1}"), PROJECT)
             }
             // A TAG CHIP IS ITS OWN REMOVAL: tapping it untags.
             TAGS -> {
                 val tag = task.tags.firstOrNull { it.concept_id == key } ?: return Step(closed)
-                submit(closed, UNTAG, "{${id(task)},\"label\":${jsonString(tag.label)}}", InvokeKeys.of(UNTAG, task.task_id, tag.concept_id), TAGS)
+                submit(closed, Act.Tasks.RemoveTag(task.task_id, tag.label).keyed(task.task_id, tag.concept_id), TAGS)
             }
             else -> Step(closed)
         }
@@ -417,43 +427,50 @@ public object TasksDetailMachine : ScreenMachine<TasksDetail, TasksDetailInput> 
         val cleared = state.copy(screen = state.screen.copy(confirm = null, asking = ASK_NONE))
         if (task == null) return Step(cleared)
         return when (state.screen.asking) {
-            TasksDetailState.Asking.ASKING_DELETE -> submit(
-                cleared,
-                DELETE,
-                "{${id(task)}}",
-                InvokeKeys.of(DELETE, task.task_id),
-                VERB_DELETE,
-            )
+            TasksDetailState.Asking.ASKING_DELETE -> submit(cleared, Act.Tasks.Delete(task.task_id).keyed(task.task_id), VERB_DELETE)
             TasksDetailState.Asking.ASKING_RELEASE -> submit(
                 cleared,
-                TaskOpsLaw.CANCEL,
-                "{${id(task)}}",
-                key(TaskOpsLaw.CANCEL, task, "release", TasksRows.STATUS_CANCELLED, cleared),
+                Act.Tasks.Cancel(task.task_id).keyed(task.task_id, "release", "n=${cleared.seq + 1}"),
                 VERB_RELEASE,
             )
             else -> Step(cleared)
         }
     }
 
-    private fun edit(state: TasksDetail, field: String, input: String, value: String): Step<TasksDetail> {
-        val task = task(state) ?: return Step(state)
-        return submit(state, EDIT, input, key(EDIT, task, field, value, state), field)
+    /** One field of `edit`: the keys not named are left alone (`Field.Keep`), `Clear` empties one. */
+    private fun edit(
+        state: TasksDetail,
+        field: String,
+        task: TasksTask,
+        value: String,
+        due: Field<String> = Field.Keep,
+        remindBeforeMin: Field<Long> = Field.Keep,
+        rule: Field<String> = Field.Keep,
+        effortMin: Field<Long> = Field.Keep,
+        priority: Long? = null,
+    ): Step<TasksDetail> {
+        val edit = Act.Tasks.Edit(
+            task.task_id,
+            due = due,
+            remindBeforeMin = remindBeforeMin,
+            rule = rule,
+            effortMin = effortMin,
+            priority = priority,
+        )
+        return submit(state, edit.keyed(task.task_id, "$field=$value", "n=${state.seq + 1}"), field)
     }
 
-    private fun key(command: String, task: TasksTask, field: String, value: String, state: TasksDetail): String =
-        InvokeKeys.of(command, task.task_id, "$field=$value", "n=${state.seq + 1}")
-
-    private fun submit(state: TasksDetail, command: String, input: String, key: String, verb: String): Step<TasksDetail> {
-        val step = WriteLaw.submit(Writes, state.copy(seq = state.seq + 1, verb = verb), command, input, key)
-        return Step(step.state.copy(ops = step.state.ops.copy(status = null)), step.effects)
+    private fun submit(state: TasksDetail, request: ActRequest, verb: String): Step<TasksDetail> {
+        val step = WriteLaw.act(Writes, state.copy(seq = state.seq + 1, verb = verb), request)
+        return Step(step.state.copy(ops = step.state.ops.copy(status = null, statusKey = null)), step.effects)
     }
 
     /** A save's, a field write's or a box's answer: each law takes only its own key. */
-    private fun settled(state: TasksDetail, settled: WriteSettled): Step<TasksDetail> {
+    private fun settled(state: TasksDetail, settled: WriteSettled, inverse: ActInverse? = null): Step<TasksDetail> {
         val saved = AutosaveLaw.settled(Lens, state, settled)
         val mine = settled.invoke_key == state.screen.write?.invoke_key
         val written = WriteLaw.settled(Writes, saved.state, settled)
-        val boxed = TaskOpsLaw.settled(written.state.ops, settled)
+        val boxed = TaskOpsLaw.settled(written.state.ops, settled, inverse)
         var next = written.state.copy(ops = boxed.ops)
         if (mine) {
             next = when {
@@ -638,15 +655,15 @@ public object TasksDetailMachine : ScreenMachine<TasksDetail, TasksDetailInput> 
             ),
         )
         if (task.repeats) {
-            val anchor = task.recurrence_anchor ?: "scheduled"
+            val anchor = task.recurrence_anchor ?: ANCHOR_SCHEDULED
             out += TasksField(
                 key = ANCHOR,
                 label = TasksCopy.FIELD_ANCHOR,
-                value_ = if (anchor == "completion") TasksCopy.ANCHOR_COMPLETION else TasksCopy.ANCHOR_SCHEDULED,
+                value_ = if (anchor == ANCHOR_COMPLETION) TasksCopy.ANCHOR_COMPLETION else TasksCopy.ANCHOR_SCHEDULED,
                 note = TasksCopy.ANCHOR_NOTE,
                 choices = listOf(
-                    chip("scheduled", TasksCopy.ANCHOR_SCHEDULED, anchor == "scheduled", meta = TasksCopy.ANCHOR_SCHEDULED_BODY),
-                    chip("completion", TasksCopy.ANCHOR_COMPLETION, anchor == "completion", meta = TasksCopy.ANCHOR_COMPLETION_BODY),
+                    chip(ANCHOR_SCHEDULED, TasksCopy.ANCHOR_SCHEDULED, anchor == ANCHOR_SCHEDULED, meta = TasksCopy.ANCHOR_SCHEDULED_BODY),
+                    chip(ANCHOR_COMPLETION, TasksCopy.ANCHOR_COMPLETION, anchor == ANCHOR_COMPLETION, meta = TasksCopy.ANCHOR_COMPLETION_BODY),
                 ),
                 enabled = true,
             )
@@ -784,8 +801,6 @@ public object TasksDetailMachine : ScreenMachine<TasksDetail, TasksDetailInput> 
 
     private fun todayOf(state: TasksDetail): String = state.answer?.today ?: ""
 
-    private fun id(task: TasksTask): String = "\"id\":${jsonString(task.task_id)}"
-
     private fun projectsOf(state: TasksDetail): Pair<List<centraid.core.v1.TasksProject>, List<centraid.core.v1.TasksSection>> {
         val answer = state.projects
         if (answer != null) return answer.projects to answer.sections
@@ -807,7 +822,7 @@ public object TasksDetailMachine : ScreenMachine<TasksDetail, TasksDetailInput> 
     /** The detail's content and its autosave, for the kit's law. */
     internal object Lens : AutosaveLens<TasksDetail, TasksDetailData> {
         override val screenId: String = SCREEN_ID
-        override val command: String = EDIT
+        override val onPlane: Boolean = true
 
         override fun subjectId(state: TasksDetail): String = state.screen.task_id
 
@@ -826,17 +841,22 @@ public object TasksDetailMachine : ScreenMachine<TasksDetail, TasksDetailInput> 
         override fun withSending(state: TasksDetail, sending: TasksDetailData?): TasksDetail =
             state.copy(screen = state.screen.copy(sending = sending?.draft))
 
-        /** `task.edit`'s input: the task, and ONLY the words that changed. */
-        override fun input(state: TasksDetail, draft: TasksDetailData, baseline: TasksDetailData?): String? {
+        /** `edit` of the task, naming ONLY the words that changed; null when none did. */
+        override fun act(state: TasksDetail, draft: TasksDetailData, baseline: TasksDetailData?): ActRequest? {
             val now = draft.draft ?: TasksDraft()
             val was = baseline?.draft ?: TasksDraft()
-            val parts = mutableListOf<String>()
-            if (now.title.trim() != was.title.trim()) parts += "\"title\":${jsonString(now.title.trim())}"
-            if (now.notes != was.notes) {
-                parts += if (now.notes.isBlank()) "\"description\":null" else "\"description\":${jsonString(now.notes)}"
-            }
-            if (parts.isEmpty()) return null
-            return "{\"id\":${jsonString(state.screen.task_id)},${parts.joinToString(",")}}"
+            val titleChanged = now.title.trim() != was.title.trim()
+            val notesChanged = now.notes != was.notes
+            if (!titleChanged && !notesChanged) return null
+            return Act.Tasks.Edit(
+                taskId = state.screen.task_id,
+                title = now.title.trim().takeIf { titleChanged },
+                description = when {
+                    !notesChanged -> Field.Keep
+                    now.notes.isBlank() -> Field.Clear
+                    else -> Field.Is(now.notes)
+                },
+            )
         }
 
         /** A task needs a name: an emptied title is kept on screen and not sent. */
@@ -872,18 +892,15 @@ public object TasksDetailMachine : ScreenMachine<TasksDetail, TasksDetailInput> 
     }
 }
 
-/** `tasks.task` and `tasks.projects` (the Project field's choices), in the device's zone. */
+/** The task and the projects its Project field offers; the runtime states the device's zone. */
 public object TasksDetailReads : ScreenQueries<TasksDetail, TasksDetailInput>, ScreenWrites<TasksDetail, TasksDetailInput> {
     override val screenId: String = TasksDetailMachine.SCREEN_ID
     override val tables: Set<String> = TasksDetailMachine.TABLES
-    override val appId: String = APP_ID
+    override val appId: String = Load.Tasks.APP
 
-    override fun requests(state: TasksDetail, now: DeviceClock.Reading): List<AppQueryRequest>? {
+    override fun loads(state: TasksDetail, now: DeviceClock.Reading): List<LoadRequest>? {
         val id = state.screen.task_id.ifEmpty { return null }
-        return listOf(
-            AppQueryRequest(tasks_task = TasksTaskRequest(task_id = id, tz = now.zone)),
-            AppQueryRequest(tasks_projects = TasksProjectsRequest(tz = now.zone)),
-        )
+        return listOf(Load.Tasks.Task(id), Load.Tasks.Projects())
     }
 
     override fun arrived(answers: List<AppQueryResponse>): TasksDetailInput = TasksDetailInput.Answered(
@@ -898,4 +915,7 @@ public object TasksDetailReads : ScreenQueries<TasksDetail, TasksDetailInput>, S
 
     override fun settled(status: CommandStatus, sentence: String, invokeKey: String): TasksDetailInput =
         TasksDetailInput.View(TasksDetailEvent(write_settled = WriteLaw.settledOf(status, sentence, invokeKey)))
+
+    override fun actSettled(outcome: ActOutcome, invokeKey: String): TasksDetailInput =
+        TasksDetailInput.Acted(WriteLaw.settledOf(outcome, invokeKey), (outcome as? ActOutcome.Executed)?.inverse)
 }

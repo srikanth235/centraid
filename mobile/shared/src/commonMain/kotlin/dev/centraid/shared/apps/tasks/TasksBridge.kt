@@ -10,6 +10,7 @@ import centraid.screen.v1.TasksProjectEvent
 import centraid.screen.v1.TasksProjectState
 import com.squareup.wire.Message
 import com.squareup.wire.ProtoAdapter
+import dev.centraid.shared.catalog.Act
 import dev.centraid.shared.kit.tasks.TaskOpsLaw
 import dev.centraid.shared.screen.ScreenHost
 import dev.centraid.shared.screen.ScreenMachine
@@ -182,4 +183,4 @@ public class TasksCatchUpBridge :
 }
 
 /** Every Tasks page's write app: the vault's domain (`tasks`), not an app a member launches (R-1128-5). */
-public const val APP_ID: String = "tasks"
+public const val APP_ID: String = Act.Tasks.APP

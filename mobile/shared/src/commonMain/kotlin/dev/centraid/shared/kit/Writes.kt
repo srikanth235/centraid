@@ -1,10 +1,12 @@
 package dev.centraid.shared.kit
 
+import centraid.core.v1.ActRequest
 import centraid.core.v1.CommandStatus
 import centraid.screen.v1.ReadFailure
 import centraid.screen.v1.WriteSettled
 import centraid.screen.v1.WriteState
 import dev.centraid.shared.screen.Reads
+import dev.centraid.shared.sync.ActOutcome
 import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.Step
 
@@ -55,6 +57,20 @@ public object WriteLaw {
         )
     }
 
+    /**
+     * Submit THE ONE WRITE (#1135): [request] is a generated `Act` builder's,
+     * already under its key (`ActRequest.keyed`). The same rule as [submit].
+     */
+    public fun <S> act(l: WriteLens<S>, s: S, request: ActRequest): Step<S> {
+        val write = l.write(s)
+        val key = request.invoke_key
+        if (write.phase == WriteState.Phase.PHASE_IN_FLIGHT && write.invoke_key == key) return Step(s)
+        return Step(
+            l.with(s, WriteState(phase = WriteState.Phase.PHASE_IN_FLIGHT, invoke_key = key)),
+            listOf(ScreenEffect.Act(request)),
+        )
+    }
+
     /** An answer. One for another key is someone else's, and ignored. */
     public fun <S> settled(l: WriteLens<S>, s: S, settled: WriteSettled): Step<S> {
         val write = l.write(s)
@@ -90,6 +106,12 @@ public object WriteLaw {
             committed = committed,
             failure = if (committed) null else failureOf(sentence),
         )
+    }
+
+    /** THE ONE WRITE's answer (#1135) as the kit's settle: executed commits, a refusal carries the core's sentence. */
+    public fun settledOf(outcome: ActOutcome, invokeKey: String): WriteSettled = when (outcome) {
+        is ActOutcome.Executed -> WriteSettled(invoke_key = invokeKey, committed = true)
+        is ActOutcome.Refused -> WriteSettled(invoke_key = invokeKey, committed = false, failure = failureOf(outcome.sentence))
     }
 
     private fun failureOf(sentence: String): ReadFailure? =
