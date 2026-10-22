@@ -40,6 +40,7 @@ use centraid_apps_kit::page::{MAX_PAGE_ROWS, PageRequest};
 use centraid_apps_kit::reads::{FanOutBound, PageDoor, Read, read_pages};
 use centraid_apps_kit::reads::{JOIN_FAN_OUT, Window};
 use centraid_apps_kit::row::{Cell, Row, integer_or_zero, text_of};
+use centraid_apps_kit::rules::Standing;
 use centraid_apps_kit::statement::{PageBindValue, PageOrder, PageQuery};
 
 use crate::Denial;
@@ -450,35 +451,6 @@ fn photos_of(door: &dyn PageDoor, photo_rows: &[Row]) -> KitResult<Vec<PhotoRow>
         .collect())
 }
 
-/// The ids an edit folds: a live photograph of a burst folds the photograph it was
-/// made from, and any older photograph of the same burst that it did not come from.
-///
-/// An ungrouped photograph (no burst) folds nothing, so a crop saved from the
-/// member's own editor stays drawn beside its original. A Live Photo's movie shares
-/// its still's burst and is a `video`, which this never touches.
-fn folded(live: &[&PhotoRow]) -> BTreeSet<String> {
-    let mut out = BTreeSet::new();
-    let stills: Vec<&&PhotoRow> = live
-        .iter()
-        .filter(|photo| photo.form.as_deref() == Some("photo"))
-        .collect();
-    for newer in stills.iter().filter(|photo| photo.burst.is_some()) {
-        for older in &stills {
-            if older.photo_id == newer.photo_id {
-                continue;
-            }
-            let made_from = newer.edited_from.as_deref() == Some(older.photo_id.as_str());
-            let same_burst = newer.burst == older.burst
-                && older.edited_from.as_deref() != Some(newer.photo_id.as_str())
-                && (&newer.created_at, &newer.photo_id) > (&older.created_at, &older.photo_id);
-            if made_from || same_burst {
-                out.insert(older.photo_id.clone());
-            }
-        }
-    }
-    out
-}
-
 // ---------------------------------------------------------------------------
 // `library`
 // ---------------------------------------------------------------------------
@@ -641,14 +613,12 @@ pub fn load_library(
             photo: photo.clone(),
         }
     };
-    let live: Vec<&PhotoRow> = windowed
+    // THE ONE VERDICT (`rules::Standing`): live is not trashed, not archived and not
+    // folded under an edit, wherever the photograph sits in the library.
+    let standing = Standing::read(door)?;
+    let mut photos: Vec<GridPhoto> = windowed
         .iter()
-        .filter(|photo| photo.deleted_at.is_none() && !joins.archived.contains(&photo.photo_id))
-        .collect();
-    let folds = folded(&live);
-    let mut photos: Vec<GridPhoto> = live
-        .iter()
-        .filter(|photo| !folds.contains(&photo.photo_id))
+        .filter(|photo| standing.is_live(&photo.photo_id))
         .map(|photo| join_one(photo, false))
         .collect();
     // Newest first by `taken_at`, an absent one last.
@@ -751,30 +721,10 @@ pub fn load_search_term(
     if ids.is_empty() {
         return Ok((SearchData::default(), None));
     }
-    let archived: BTreeSet<String> = ids_of(
-        &read_of(
-            door,
-            "photos.search.archived",
-            "edge",
-            "from_id, to_id",
-            "from_id",
-            &ids,
-            Some(("rel = ? AND to_id = ?", {
-                let mut bind = text("tagged");
-                bind.extend(text(ARCHIVED));
-                bind
-            })),
-        )?,
-        "from_id",
-    )
-    .into_iter()
-    .collect();
+    let standing = Standing::read(door)?;
     Ok((
         SearchData {
-            photo_ids: ids
-                .into_iter()
-                .filter(|id| !archived.contains(id))
-                .collect(),
+            photo_ids: ids.into_iter().filter(|id| standing.is_live(id)).collect(),
         },
         None,
     ))
@@ -831,53 +781,5 @@ mod tests {
             Some(0)
         );
         assert_eq!(purge_in_days(None, now), None);
-    }
-
-    fn photo(
-        id: &str,
-        form: &str,
-        burst: Option<&str>,
-        from: Option<&str>,
-        made: &str,
-    ) -> PhotoRow {
-        PhotoRow {
-            photo_id: id.to_owned(),
-            content_id: format!("h-{id}"),
-            media_type: None,
-            form: Some(form.to_owned()),
-            title: String::new(),
-            taken_at: None,
-            offset_min: None,
-            burst: burst.map(str::to_owned),
-            place_id: None,
-            width: None,
-            height: None,
-            duration_s: None,
-            edited_from: from.map(str::to_owned),
-            created_at: Some(made.to_owned()),
-            updated_at: None,
-            deleted_at: None,
-            purge_at: None,
-        }
-    }
-
-    /// AN EDIT DRAWS AND THE ORIGINAL STAYS UNDERNEATH: the render folds the camera's
-    /// bytes, a second edit folds the first, a crop with no burst folds nothing, and
-    /// a movie of a burst is never folded.
-    #[test]
-    fn an_edit_folds_what_it_was_made_from_and_a_crop_folds_nothing() {
-        let original = photo("o", "photo", Some("b"), None, "2026-01-01");
-        let edit = photo("e", "photo", Some("b"), Some("o"), "2026-01-02");
-        let second = photo("e2", "photo", Some("b"), Some("e"), "2026-01-03");
-        let movie = photo("m", "video", Some("b"), None, "2026-01-01");
-        let crop = photo("c", "photo", None, Some("o"), "2026-01-04");
-        let live = [&original, &edit, &second, &movie, &crop];
-        let folds = folded(&live);
-        assert_eq!(folds, ["e", "o"].map(str::to_owned).into_iter().collect());
-        let without_the_edits = [&original, &movie, &crop];
-        assert!(
-            folded(&without_the_edits).is_empty(),
-            "trashing the edit brings the original back"
-        );
     }
 }

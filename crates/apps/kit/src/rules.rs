@@ -154,8 +154,39 @@ impl Grouped {
 /// them are live and unarchived.
 #[must_use]
 pub fn folded_by_edits(all: &[Grouped], superseding: impl Fn(&str) -> bool) -> BTreeSet<String> {
-    let _ = (all, superseding);
-    BTreeSet::new()
+    let mut out = BTreeSet::new();
+    let mut bursts: BTreeMap<&str, Vec<&Grouped>> = BTreeMap::new();
+    for photo in all.iter().filter(|photo| photo.is_still()) {
+        let Some(burst) = photo.burst.as_deref() else {
+            continue;
+        };
+        bursts.entry(burst).or_default().push(photo);
+        if superseding(&photo.id) {
+            if let Some(origin) = photo.edited_from.as_deref() {
+                out.insert(origin.to_owned());
+            }
+        }
+    }
+    for group in bursts.values() {
+        // The newest superseding stills first, so the first one that is not the
+        // photograph's own source settles it.
+        let mut newer: Vec<&Grouped> = group
+            .iter()
+            .copied()
+            .filter(|photo| superseding(&photo.id))
+            .collect();
+        newer.sort_by(|left, right| right.id.cmp(&left.id));
+        for older in group {
+            let folds = newer
+                .iter()
+                .take_while(|photo| photo.id > older.id)
+                .any(|photo| older.edited_from.as_deref() != Some(photo.id.as_str()));
+            if folds {
+                out.insert(older.id.clone());
+            }
+        }
+    }
+    out
 }
 
 /// WHERE EVERY PHOTOGRAPH STANDS: trashed, archived, or folded under an edit.
@@ -370,5 +401,59 @@ mod tests {
         let archived = archived_ids(&door, &ids).expect("a read");
         assert_eq!(archived, BTreeSet::from(["a".to_owned()]));
         assert!(archived_ids(&door, &[]).expect("no ids").is_empty());
+    }
+
+    fn grouped(id: &str, form: &str, burst: Option<&str>, from: Option<&str>) -> Grouped {
+        Grouped {
+            id: id.to_owned(),
+            form: Some(form.to_owned()),
+            burst: burst.map(str::to_owned),
+            edited_from: from.map(str::to_owned),
+        }
+    }
+
+    /// AN EDIT DRAWS AND THE ORIGINAL STAYS UNDERNEATH: the render folds the camera's
+    /// bytes, a second edit folds the first, and a movie of a burst is never folded.
+    /// Ids are minted in time order, so the larger is the newer.
+    #[test]
+    fn an_edit_folds_what_it_was_made_from_and_a_crop_folds_nothing() {
+        let set =
+            |ids: &[&str]| -> BTreeSet<String> { ids.iter().map(|id| (*id).to_owned()).collect() };
+        let all = [
+            grouped("a", "photo", Some("b"), None),
+            grouped("b", "photo", Some("b"), Some("a")),
+            grouped("c", "photo", Some("b"), Some("b")),
+            grouped("d", "video", Some("b"), None),
+        ];
+        assert_eq!(folded_by_edits(&all, |_| true), set(&["a", "b"]));
+        // Trashing the newest edit brings the one under it back.
+        assert_eq!(folded_by_edits(&all, |id| id != "c"), set(&["a"]));
+        // Trashing every edit brings the original back.
+        assert!(folded_by_edits(&all, |id| id == "a" || id == "d").is_empty());
+        // A crop carries no burst, so it is not in the grouped set at all.
+    }
+
+    /// Two edits of one original: the newer folds the older sibling and the
+    /// original; an original that is itself newer than its edit is not folded by
+    /// the arm that is about "shares a burst and is newer".
+    #[test]
+    fn the_newer_of_a_burst_folds_the_older_unless_the_older_was_made_from_it() {
+        let all = [
+            grouped("a", "photo", Some("b"), None),
+            grouped("b", "photo", Some("b"), None),
+        ];
+        assert_eq!(
+            folded_by_edits(&all, |_| true),
+            ["a"].map(str::to_owned).into_iter().collect()
+        );
+        // `a` was made from `b`, the larger id: `b` does not fold its own source's
+        // lineage backwards, so `a` (the edit) is not folded by it.
+        let lineage = [
+            grouped("a", "photo", Some("b"), Some("b")),
+            grouped("b", "photo", Some("b"), None),
+        ];
+        let folds = folded_by_edits(&lineage, |_| true);
+        assert!(!folds.contains("a"), "{folds:?}");
+        assert!(folds.contains("b"), "the edit folds its source: {folds:?}");
     }
 }
