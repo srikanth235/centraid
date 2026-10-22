@@ -1007,3 +1007,181 @@ fn the_founded_file_holds_the_spec_s_tables_and_nothing_else() {
         Ok(())
     });
 }
+
+// ---------------------------------------------------------------------------
+// 5 (second half). Following is a per-field three-way merge
+// ---------------------------------------------------------------------------
+
+fn follow_contact(
+    vault: &Vault,
+    registry: &Registry,
+    role: &str,
+    nickname: &str,
+) -> serde_json::Value {
+    run(
+        vault,
+        registry,
+        "follow.contacts",
+        json!({
+            "origin": {"ref": "icloud", "label": "iCloud"},
+            "complete": true,
+            "records": [{
+                "external_id": "c1",
+                "fields": {"title": "Ada", "role": role, "nickname": nickname}
+            }]
+        }),
+    )
+}
+
+fn person_field(vault: &Vault, id: &str, column: &str) -> String {
+    read(vault, |connection| {
+        Ok(connection.query_row(
+            &format!("SELECT {column} FROM person WHERE id = ?1"),
+            [id],
+            |row| row.get(0),
+        )?)
+    })
+}
+
+fn member_sets_nickname(vault: &Vault, id: &str, nickname: &str) {
+    vault
+        .commit(|tx| {
+            tx.connection().execute(
+                "UPDATE person SET nickname = ?2 WHERE id = ?1",
+                [id, nickname],
+            )?;
+            tx.touch(id, AT)?;
+            Ok(())
+        })
+        .expect("the member edits");
+}
+
+#[test]
+fn a_followed_row_merges_per_field_the_source_s_new_word_against_the_member_s_edit() {
+    let scratch = founded("c5b");
+    let vault = &scratch.vault;
+    let registry = Registry::with_system_commands().expect("a registry");
+    follow_contact(vault, &registry, "Engineer", "Ada");
+    let id: String = read(vault, |connection| {
+        Ok(connection.query_row(
+            "SELECT entity_id FROM source WHERE external_id = 'c1'",
+            [],
+            |row| row.get(0),
+        )?)
+    });
+    let stated = |vault: &Vault| -> serde_json::Value {
+        let text: String = read(vault, |connection| {
+            Ok(connection.query_row(
+                "SELECT stated FROM source WHERE external_id = 'c1'",
+                [],
+                |row| row.get(0),
+            )?)
+        });
+        serde_json::from_str(&text).expect("json")
+    };
+
+    // The member edits one field; the source then restates both.
+    member_sets_nickname(vault, &id, "Countess");
+    follow_contact(vault, &registry, "Mathematician", "Ada L.");
+    assert_eq!(
+        person_field(vault, &id, "role"),
+        "Mathematician",
+        "a field the member never edited takes the source's new value"
+    );
+    assert_eq!(
+        person_field(vault, &id, "nickname"),
+        "Countess",
+        "a field the member edited keeps the member's value"
+    );
+    assert_eq!(
+        stated(vault),
+        json!({"title": "Ada", "role": "Mathematician", "nickname": "Ada L."}),
+        "`source.stated` becomes the new statement, whatever the member did"
+    );
+
+    // Reverting to the stated value hands the field back to the source.
+    member_sets_nickname(vault, &id, "Ada L.");
+    follow_contact(vault, &registry, "Mathematician", "Ada Byron");
+    assert_eq!(
+        person_field(vault, &id, "nickname"),
+        "Ada Byron",
+        "a field equal to the stated value follows the source again"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// 7 (second half). Nothing computable is stored
+// ---------------------------------------------------------------------------
+
+/// A column whose name says it holds a rollup or a derived figure: a balance, a
+/// total, a count, a sum, an average, a typical value, a streak, a
+/// `last_*_at` (matched on whole `_`-separated words, so `account_id` is not a
+/// count), a lookup computed from another column, or a bare `value` that is
+/// a real number (a figure, not a word).
+fn names_a_computable(column: &str, declared: &str) -> bool {
+    const WORDS: [&str; 10] = [
+        "balance", "total", "count", "sum", "average", "avg", "typical", "streak", "mean",
+        "locality",
+    ];
+    let last_at = column.starts_with("last_") && column.ends_with("_at");
+    last_at
+        || column.split('_').any(|token| WORDS.contains(&token))
+        || (column == "value" && declared.eq_ignore_ascii_case("REAL"))
+}
+
+/// The columns the spec allows to hold what looks computable, each with its
+/// reason. A new computable column fails the test until it is argued for here.
+/// (`derivative` is the spec's other exception: it holds caches of a blob's
+/// content, and no column of it is named like a rollup, so it needs no line.)
+const STATED_NOT_COMPUTED: [(&str, &str, &str); 3] = [
+    (
+        "checkpoint",
+        "balance_minor",
+        "the bank's stated balance on a date: a statement, never recomputed from txn",
+    ),
+    (
+        "measurement",
+        "value",
+        "the store's stated total (steps in a day): the store counted, the vault did not",
+    ),
+    (
+        "place",
+        "locality",
+        "a derived lookup from the coordinates that the spec names, kept so a place reads offline",
+    ),
+];
+
+#[test]
+fn no_column_stores_a_rollup_except_the_stated_figures_the_spec_names() {
+    let scratch = founded("c7b");
+    read(&scratch.vault, |connection| {
+        let mut flagged = BTreeSet::new();
+        for table in tables(connection) {
+            let mut columns = connection.prepare(&format!("PRAGMA table_info({table})"))?;
+            let rows = columns.query_map([], |row| {
+                Ok((row.get::<_, String>(1)?, row.get::<_, String>(2)?))
+            })?;
+            for row in rows {
+                let (column, declared) = row?;
+                if names_a_computable(&column, &declared) {
+                    flagged.insert((table.clone(), column));
+                }
+            }
+        }
+        let allowed: BTreeSet<(String, String)> = STATED_NOT_COMPUTED
+            .iter()
+            .map(|(table, column, _)| ((*table).to_owned(), (*column).to_owned()))
+            .collect();
+        assert_eq!(
+            flagged.difference(&allowed).collect::<Vec<_>>(),
+            Vec::<&(String, String)>::new(),
+            "a column that looks computed is stored; compute it on read, or argue for it in STATED_NOT_COMPUTED"
+        );
+        assert_eq!(
+            allowed.difference(&flagged).collect::<Vec<_>>(),
+            Vec::<&(String, String)>::new(),
+            "an exception no longer matches a column; remove it"
+        );
+        Ok(())
+    });
+}
