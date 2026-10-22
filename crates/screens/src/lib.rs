@@ -4,6 +4,8 @@
 //! `Effect`s (`screens.proto`). `docs/screens.md` is
 //! the contract and the porting recipe.
 
+pub mod catalog;
+pub mod field;
 pub mod proof;
 pub mod registry;
 pub mod runtime;

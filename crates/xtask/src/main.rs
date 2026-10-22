@@ -23,6 +23,7 @@ mod gate;
 mod ledger;
 mod measure;
 mod rules;
+mod screens_catalog;
 mod select;
 #[cfg(test)]
 mod testing;
@@ -73,6 +74,14 @@ enum Command {
         /// entry in it can be seen rather than inferred.
         #[arg(long)]
         reads: bool,
+    },
+    /// Write the Rust catalogue of every app's actions and queries from the
+    /// manifests (`crates/screens/src/catalog.rs`), or with `--check` fail
+    /// when the committed file is stale (#1135).
+    ScreensCatalog {
+        /// Compare instead of write.
+        #[arg(long)]
+        check: bool,
     },
     /// Print the repository root every path-based rule will scan.
     ///
@@ -288,6 +297,13 @@ fn main() -> ExitCode {
             }
         },
         Command::Rules => rules::print_report(&root),
+        Command::ScreensCatalog { check } => match screens_catalog::run(&root, check) {
+            Ok(()) => true,
+            Err(error) => {
+                eprintln!("xtask: {error:#}");
+                false
+            }
+        },
         Command::DocLinks => match doc_links::check(&root) {
             Ok(report) => {
                 print!("{}", report.block());
