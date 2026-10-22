@@ -1148,7 +1148,9 @@
           "source": ["edge", "to_id"]
         }
       ],
-      "links": [{"kind": "folder", "label": "folder", "via": "folder_column"}],
+      "links": [
+        { "kind": "folder", "label": "folder", "via": "folder_column" }
+      ],
       "trash": true,
       "container": false
     },

@@ -1635,7 +1635,10 @@
           "name": "status",
           "type": "enum",
           "source": ["txn", "status"],
-          "values": [["posted", "posted"], ["void", "void"]]
+          "values": [
+            ["posted", "posted"],
+            ["void", "void"]
+          ]
         }
       ],
       "links": [],

@@ -1161,7 +1161,7 @@
           "source": ["edge", "to_id"]
         }
       ],
-      "links": [{"kind": "album", "label": "albums", "via": "entry"}],
+      "links": [{ "kind": "album", "label": "albums", "via": "entry" }],
       "trash": true,
       "container": false
     },
@@ -1176,7 +1176,7 @@
       "pk": "id",
       "nameSource": ["entity", "title"],
       "fields": [],
-      "links": [{"kind": "photo", "label": "photos", "via": "entry"}],
+      "links": [{ "kind": "photo", "label": "photos", "via": "entry" }],
       "trash": false,
       "container": true
     }
