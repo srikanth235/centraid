@@ -99,6 +99,8 @@ fn run(accounts: usize) {
         .vault
         .read(|connection| {
             let door = TestDoor::new(connection);
+            let index = centraid_search::SqliteDoor::open(connection, world.vault.words())
+                .expect("the index opens");
             let started = Instant::now();
             let answers = (
                 phone::spending(&door, "2024-06", TODAY).expect("spending"),
@@ -113,7 +115,7 @@ fn run(accounts: usize) {
                     TODAY,
                 )
                 .expect("activity"),
-                phone::search(&door, "2024-12", "netflix", 20, TODAY).expect("search"),
+                phone::search(&door, &index, "netflix", 20, TODAY).expect("search"),
             );
             println!("six screens in {:?}", started.elapsed());
             // THE CEILINGS HOLD.

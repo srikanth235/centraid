@@ -522,7 +522,11 @@ fn cashflow_accounts_rules_categories_targets_recurring_and_search() {
     };
     assert_eq!(search.total_matches, 3);
     assert_eq!(search.rows.len(), 3);
-    assert!(search.months_walked > 0);
+    assert_eq!(
+        search.months_walked, 0,
+        "no walk: the index holds every line"
+    );
+    assert!(!search.truncated);
 
     // The tile is this month's spending, per currency.
     let tile = scratch.tile();
@@ -530,6 +534,99 @@ fn cashflow_accounts_rules_categories_targets_recurring_and_search() {
     assert!(!tile.empty);
     assert_eq!(tile.spent.len(), 1);
     assert_eq!(tile.spent[0].currency, "USD");
+}
+
+// ---------------------------------------------------------------------------
+// 1b. Search is the full-text door over the whole ledger.
+// ---------------------------------------------------------------------------
+
+impl Scratch {
+    fn find(&self, term: &str) -> wire::MoneySearch {
+        match self.ask(Q::MoneySearch(wire::MoneySearchRequest {
+            tz: TZ.to_owned(),
+            month: String::new(),
+            term: term.to_owned(),
+            limit: 20,
+        })) {
+            Answer::MoneySearch(found) => found,
+            other => panic!("search answered as {other:?}"),
+        }
+    }
+}
+
+const OLD: &str = "Date,Description,Amount\n\
+2021-03-08,LIGHTHOUSE ELECTRIC,-88.00\n\
+2019-11-02,LIGHTHOUSE ELECTRIC,-71.50\n";
+
+#[test]
+fn a_line_from_years_ago_is_found_and_the_answer_names_no_reach() {
+    let scratch = ledger();
+    scratch.import_csv("chq", OLD);
+    let found = scratch.find("lighthouse");
+    assert_eq!(found.rows.len(), 2, "{found:?}");
+    assert_eq!(found.total_matches, 2);
+    assert!(
+        found
+            .rows
+            .iter()
+            .any(|row| row.posted_on == "2019-11-02" && row.raw == "LIGHTHOUSE ELECTRIC")
+    );
+    assert!(!found.truncated && found.months_walked == 0 && found.corrected.is_none());
+    // Nothing else in the ledger is a lighthouse.
+    assert!(scratch.find("zeppelin").rows.is_empty());
+}
+
+#[test]
+fn a_category_word_finds_the_lines_filed_under_it() {
+    let scratch = ledger();
+    let february = scratch.activity(wire::MoneyActivityRequest {
+        tz: TZ.to_owned(),
+        month: "2024-02".to_owned(),
+        limit: 50,
+        ..wire::MoneyActivityRequest::default()
+    });
+    let grocery = february
+        .rows
+        .iter()
+        .find(|row| row.raw == "WHOLE FOODS")
+        .expect("the grocery row")
+        .txn_id
+        .clone();
+    assert!(
+        scratch.find("groceries").rows.is_empty(),
+        "nothing is filed yet"
+    );
+    scratch.run(
+        "txn.categorize",
+        json!({ "ids": [grocery.clone()], "category_id": GROCERIES }),
+    );
+    let found = scratch.find("groceries");
+    assert_eq!(
+        found
+            .rows
+            .iter()
+            .map(|row| row.txn_id.as_str())
+            .collect::<Vec<_>>(),
+        [grocery.as_str()],
+        "{found:?}"
+    );
+}
+
+#[test]
+fn a_slipped_word_is_corrected_and_the_answer_says_what_it_searched() {
+    let scratch = ledger();
+    let found = scratch.find("starbuks");
+    assert_eq!(found.corrected.as_deref(), Some("starbucks"), "{found:?}");
+    assert_eq!(found.rows.len(), 2);
+    assert!(
+        found
+            .rows
+            .iter()
+            .all(|row| row.raw.starts_with("STARBUCKS"))
+    );
+    let exact = scratch.find("starbucks");
+    assert_eq!(exact.rows.len(), 2);
+    assert!(exact.corrected.is_none());
 }
 
 // ---------------------------------------------------------------------------
@@ -808,7 +905,12 @@ fn every_statement_the_crate_declares_is_served_by_the_cores_door() {
             phone::target_sheet(&watching, month, GROCERIES, "USD", None, today).expect("sheet");
             phone::recurring_screen(&watching, today).expect("recurring");
             phone::home_tile(&watching, month, today).expect("tile");
-            phone::search(&watching, month, "netflix", 10, today).expect("search");
+            vault.read(|connection| {
+                let index = centraid_search::SqliteDoor::open(connection, vault.words())
+                    .expect("the index opens");
+                phone::search(&watching, &index, "netflix", 10, today).expect("search");
+                Ok(())
+            })?;
             let accounts = queries::load_accounts(&watching).expect("accounts");
             assert_eq!(accounts.len(), 2);
             queries::load_existing(&watching, "chq", "2024-01-01", "2024-02-29").expect("existing");

@@ -116,10 +116,10 @@ public object MoneyRecurringReads : MoneyQueries<MoneyRecurringState, MoneyRecur
 )
 
 /**
- * MONEY'S SEARCH (#1099, R-1099-44), a page of its own the search bar pushes
- * (R-CHROME-2). The core walks month windows back from the current month over a
- * line's words, its name, its category and its memo; this page draws rows and a
- * count, and an empty term reads nothing.
+ * MONEY'S SEARCH, a page of its own the search bar pushes. The core asks the
+ * vault's full-text index over every line ever imported (its name, the bank's
+ * words, its category, its account and the notes about it), best match first;
+ * this page draws rows and a count, and an empty term reads nothing.
  */
 public object MoneySearchMachine :
     MoneyQueryMachine<MoneySearchState, MoneySearchEvent, MoneySearchData>("money.search", MONEY_TABLES) {

@@ -424,6 +424,30 @@ impl RecordingSearch<'_, '_> {
     }
 }
 
+/// The FTS door over the read connection the page door uses, with its
+/// failures kept as [`VaultDoor`] keeps the page door's.
+pub(super) fn with_search<T>(
+    vault: &Vault,
+    door: &VaultDoor<'_>,
+    run: impl FnOnce(&dyn centraid_search::Search) -> T,
+) -> Result<T> {
+    vault.read(|connection| {
+        let index = match centraid_search::SqliteDoor::open(connection, vault.words()) {
+            Ok(index) => index,
+            Err(error) => {
+                return Ok(Err(CoreError::Invariant {
+                    context: format!("the search index will not open: {error}"),
+                }));
+            }
+        };
+        let search = RecordingSearch {
+            inner: &index,
+            door,
+        };
+        Ok(Ok(run(&search)))
+    })?
+}
+
 /// A loader's answer through [`corrected_search`]: the data and the words it was
 /// corrected to (empty when none), then the denial, if any.
 type Corrected<T> = ((T, String), Option<centraid_apps_kit::Denial>);

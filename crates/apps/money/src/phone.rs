@@ -1217,39 +1217,45 @@ pub fn home_tile(door: &dyn PageDoor, month: &str, today: &str) -> KitResult<Mon
 // Search.
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// The lines a search found, best match first, as Activity draws them.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct MoneySearch {
-    pub term: String,
     pub rows: Vec<ActivityRow>,
-    pub total_matches: usize,
-    pub corrected: Option<String>,
-    pub truncated: bool,
-    /// How many months back the walk went.
-    pub months_walked: usize,
 }
 
-/// Search from `month` back (R-1099-44).
+/// Search the whole ledger for `term` ([`queries::load_search_term`]), and
+/// report a denial the way every search does.
+///
+/// There is no month to start from and no reach to state: the index holds every
+/// line, so a line from years ago is found as readily as last week's.
 pub fn search(
     door: &dyn PageDoor,
-    month: &str,
+    search: &dyn centraid_search::Search,
     term: &str,
     limit: usize,
     today: &str,
-) -> KitResult<MoneySearch> {
+) -> KitResult<(MoneySearch, Option<centraid_apps_kit::Denial>)> {
+    let (found, denial) = queries::load_search_term(
+        door,
+        search,
+        &centraid_search::Principal::Owner,
+        term,
+        limit,
+    )?;
+    if denial.is_some() || found.rows.is_empty() {
+        return Ok((MoneySearch::default(), denial));
+    }
     let data = MoneyData::load(door)?;
-    let hits = queries::search(door, month, term, limit)?;
-    Ok(MoneySearch {
-        term: term.to_owned(),
-        rows: hits
-            .rows
-            .iter()
-            .map(|r| activity_row(r, &data, today))
-            .collect(),
-        total_matches: hits.total_matches,
-        corrected: hits.corrected,
-        truncated: hits.truncated,
-        months_walked: queries::SEARCH_MONTHS,
-    })
+    Ok((
+        MoneySearch {
+            rows: found
+                .rows
+                .iter()
+                .map(|r| activity_row(r, &data, today))
+                .collect(),
+        },
+        None,
+    ))
 }
 
 // ---------------------------------------------------------------------------

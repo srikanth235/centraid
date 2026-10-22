@@ -513,6 +513,7 @@ dependencies = [
  "blake3",
  "centraid-apps-kit",
  "centraid-ontology",
+ "centraid-search",
  "centraid-vault",
  "hex",
  "rusqlite",

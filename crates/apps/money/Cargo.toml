@@ -16,6 +16,9 @@ path = "src/lib.rs"
 # hash this repo defines itself. See `import::keys`.
 blake3.workspace = true
 centraid-apps-kit = { path = "../kit" }
+# The full-text door, asked for a term and never matched by hand: a search is
+# the vault's own question, and Money has no text index of its own.
+centraid-search = { path = "../../search" }
 # The vault is a plain dependency: recurring detection projects through
 # `centraid_vault::time`, the one recurrence engine, and a second expander in an
 # app crate is the drift ONT-25 already is.

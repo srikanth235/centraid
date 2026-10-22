@@ -31,7 +31,7 @@ use centraid_apps_money::rules::MatchKind;
 use centraid_apps_money::{civil, phone};
 use centraid_vault::Vault;
 
-use super::{VaultDoor, settle, zone_of};
+use super::{VaultDoor, corrected_search, filled, settle, with_search, zone_of};
 use crate::error::{CoreError, Result};
 
 type Answer = wire::app_query_response::Answer;
@@ -596,7 +596,6 @@ pub(super) fn search(
 ) -> Result<Answer> {
     let limit = limit_required(asked.limit, "a money search")?;
     let today = today_of(vault, &asked.tz, now)?;
-    let month = month_of(&asked.month, &today)?;
     // An empty term answers no results without reading.
     if asked.term.trim().is_empty() {
         return Ok(Answer::MoneySearch(wire::MoneySearch {
@@ -604,20 +603,35 @@ pub(super) fn search(
             ..wire::MoneySearch::default()
         }));
     }
-    settle(
-        door,
-        done(phone::search(door, &month, &asked.term, limit, &today)),
-        |data| {
-            Answer::MoneySearch(wire::MoneySearch {
-                term: data.term,
-                rows: data.rows.into_iter().map(activity_row).collect(),
-                total_matches: count(data.total_matches),
-                corrected: data.corrected,
-                truncated: data.truncated,
-                months_walked: count(data.months_walked),
-            })
-        },
-    )
+    // The whole ledger, ranked, through the full-text door (`asked.month` is not
+    // read: there is no month to start from).
+    let loaded = with_search(vault, door, |search| {
+        corrected_search(
+            search,
+            &[queries::TXN_KIND],
+            &asked.term,
+            |found: &phone::MoneySearch| found.rows.len(),
+            |exact, again| phone::MoneySearch {
+                rows: filled(
+                    exact.rows,
+                    again.rows,
+                    limit.min(queries::SEARCH_ROWS),
+                    |row| row.txn_id.clone(),
+                ),
+            },
+            |term| phone::search(door, search, term, limit, &today),
+        )
+    })?;
+    settle(door, loaded, |(found, corrected)| {
+        Answer::MoneySearch(wire::MoneySearch {
+            term: asked.term.clone(),
+            total_matches: count(found.rows.len()),
+            rows: found.rows.into_iter().map(activity_row).collect(),
+            corrected: (!corrected.is_empty()).then_some(corrected),
+            truncated: false,
+            months_walked: 0,
+        })
+    })
 }
 
 // ---------------------------------------------------------------------------

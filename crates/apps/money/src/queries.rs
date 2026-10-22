@@ -21,13 +21,13 @@
 //! its `config`) and the `archived` flag edge that closes it. A category is a
 //! `concept` of kind `category` under its group, a plan a `budget` row.
 //!
-//! The ceilings (R-1099-44 and the plan):
+//! The ceilings:
 //!
 //! | Name | Value | What it bounds |
 //! | --- | --- | --- |
 //! | [`MONTH_ROWS`] | 2,000 | one month window of one vault |
 //! | [`CASHFLOW_MONTHS`] | 12 | the windows the cash-flow screen folds |
-//! | [`SEARCH_MONTHS`] | 12 | the windows a search walks, newest first |
+//! | [`SEARCH_ROWS`] | 200 | the lines one search answers, best match first |
 //! | [`ACCOUNT_ROWS`] | 40,000 | one account's whole history, for its balance |
 //! | [`MATCH_SCAN_ROWS`] | 500 | the newest rows of each account a transfer is looked for among |
 //! | [`EXISTING_ROWS`] | 40,000 | the rows an import plan compares against |
@@ -35,12 +35,13 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use centraid_apps_kit::Denial;
 use centraid_apps_kit::error::{KitError, KitResult};
 use centraid_apps_kit::page::{Page, PageRequest};
 use centraid_apps_kit::reads::{FanOutBound, PageDoor, Read, Window, read_page, read_pages};
 use centraid_apps_kit::row::{Cell, Row, integer_or_zero, text_of};
-use centraid_apps_kit::spelling::WalkedWords;
 use centraid_apps_kit::statement::{PageBindValue, PageOrder, PageQuery};
+use centraid_search::{Answer, Principal, Search, SearchError, SearchRequest};
 
 use crate::civil;
 use crate::import::{Direction, ExistingTxn};
@@ -50,8 +51,6 @@ use crate::rules::{MatchKind, RULES, Rule};
 pub const MONTH_ROWS: usize = 2_000;
 /// The month windows the cash-flow fold reads.
 pub const CASHFLOW_MONTHS: usize = 12;
-/// The month windows a search walks, newest first (R-1099-44).
-pub const SEARCH_MONTHS: usize = 12;
 /// One account's whole history, for a derived balance.
 pub const ACCOUNT_ROWS: usize = 40_000;
 /// Newest rows per account a transfer is looked for among.
@@ -1084,106 +1083,108 @@ pub fn load_transfer_candidates(
 }
 
 // ---------------------------------------------------------------------------
-// Search (R-1099-44).
+// Search.
 // ---------------------------------------------------------------------------
 
-/// What a search found.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SearchHits {
+/// The most transactions one search answers.
+pub const SEARCH_ROWS: usize = 200;
+
+/// The kind a transaction is in the full-text index.
+pub const TXN_KIND: &str = "txn";
+
+/// What a search found: the lines, best match first.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SearchData {
     pub rows: Vec<TxnRow>,
-    /// Matches found in the months walked, before `limit`.
-    pub total_matches: usize,
-    /// The typed words, corrected, if the exact walk found nothing and the
-    /// corrected one did.
-    pub corrected: Option<String>,
-    /// A month hit [`MONTH_ROWS`], so some of its rows were not read. (A walk
-    /// always stops at [`SEARCH_MONTHS`]; the screen says how far back it looked.)
-    pub truncated: bool,
 }
 
-fn searchable(row: &TxnRow, categories: &BTreeMap<String, String>) -> Vec<String> {
-    let mut texts = vec![row.description.to_lowercase()];
-    texts.extend(row.display_name.as_ref().map(|n| n.to_lowercase()));
-    texts.extend(row.memo.as_ref().map(|n| n.to_lowercase()));
-    texts.extend(
-        row.category_concept_id
-            .as_ref()
-            .and_then(|id| categories.get(id))
-            .map(|label| label.to_lowercase()),
-    );
-    texts
+/// The lines among a set of ids.
+const TXNS: Read = Read {
+    name: "money.search.transactions",
+    table: "txn",
+    select: TXN_COLUMNS,
+    order: ("id", "id"),
+    column: "id",
+};
+
+/// The lines the full-text index ranked, as rows, in the index's order.
+///
+/// A line in the trash is dropped ([`decorate`]). A hit the table no longer
+/// holds is dropped too.
+///
+/// # Errors
+///
+/// A door refusal or a reached bound, as every read here.
+pub fn load_search(door: &dyn PageDoor, ids: &[String]) -> KitResult<SearchData> {
+    let mut found: BTreeMap<String, TxnRow> = BTreeMap::new();
+    for chunk in ids.chunks(PAGE_ROWS) {
+        for row in TXNS.within(CHUNK, door, chunk, None)? {
+            let line = txn_of(&row);
+            found.insert(line.txn_id.clone(), line);
+        }
+    }
+    let mut rows: Vec<TxnRow> = ids.iter().filter_map(|id| found.remove(id)).collect();
+    decorate(door, &mut rows)?;
+    Ok(SearchData { rows })
 }
 
-/// Searches the newest [`SEARCH_MONTHS`] months from `month` (inclusive) back:
-/// description, the member's name, the category label and the memo, by
-/// lowercase `contains`, with the kit's walked-word typo correction. There is
-/// no index (Q-1097-1 retired the full-text one); the walk is the search.
-pub fn search(
+/// Search the ledger from a term: the full-text index over every transaction
+/// ever imported, ranked, its title (what the member calls the line) first and
+/// the bank's words, the category, the account and the notes about it after.
+/// A blank term, a term with no searchable word and a zero `limit` answer the
+/// empty shape and no denial; a door the index cannot use at all is the answer's
+/// denial, because a surface renders it.
+///
+/// # Errors
+///
+/// A reached bound, as [`load_search`].
+pub fn load_search_term(
     door: &dyn PageDoor,
-    from_month: &str,
+    search: &dyn Search,
+    principal: &Principal,
     term: &str,
     limit: usize,
-) -> KitResult<SearchHits> {
-    let needle = term.trim().to_lowercase();
-    let empty = SearchHits {
-        rows: Vec::new(),
-        total_matches: 0,
-        corrected: None,
-        truncated: false,
+) -> KitResult<(SearchData, Option<Denial>)> {
+    let term = term.trim();
+    if term.is_empty() || limit == 0 {
+        return Ok((SearchData::default(), None));
+    }
+    let request = SearchRequest::new(TXN_KIND, term, limit.min(SEARCH_ROWS));
+    let page = match search.query(principal, &request) {
+        Ok(Answer::Data { page, .. }) => page,
+        Ok(Answer::Denied(denial)) => {
+            return Ok((
+                SearchData::default(),
+                Some(Denial {
+                    code: denial.code,
+                    message: denial.message,
+                    revoked_at: denial.revoked_at,
+                }),
+            ));
+        }
+        Err(SearchError::NoSearchableWords { .. }) => return Ok((SearchData::default(), None)),
+        Err(other) => {
+            return Ok((
+                SearchData::default(),
+                Some(Denial {
+                    code: None,
+                    message: Some(other.to_string()),
+                    revoked_at: None,
+                }),
+            ));
+        }
     };
-    if needle.is_empty() {
-        return Ok(empty);
+    let ids: Vec<String> = page.rows.into_iter().map(|target| target.id).collect();
+    match load_search(door, &ids) {
+        Ok(data) => Ok((data, None)),
+        Err(KitError::Door(message)) => Ok((
+            SearchData::default(),
+            Some(Denial {
+                code: None,
+                message: Some(message),
+                revoked_at: None,
+            }),
+        )),
+        Err(other) => Err(other),
     }
-    let categories: BTreeMap<String, String> = load_categories(door)?
-        .into_iter()
-        .map(|c| (c.concept_id, c.label))
-        .collect();
-    let mut truncated = false;
-    let mut walked: Vec<TxnRow> = Vec::new();
-    let mut month = from_month.to_owned();
-    for step in 0..SEARCH_MONTHS {
-        let window = load_month(door, &month, &ActivityFilter::default())?;
-        truncated |= window.truncated;
-        walked.extend(window.value);
-        if step + 1 < SEARCH_MONTHS {
-            match civil::add_months(&month, -1) {
-                Some(previous) => month = previous,
-                None => break,
-            }
-        }
-    }
-    let haystacks: Vec<Vec<String>> = walked.iter().map(|r| searchable(r, &categories)).collect();
-    let find = |needle: &str| -> Vec<usize> {
-        haystacks
-            .iter()
-            .enumerate()
-            .filter(|(_, texts)| texts.iter().any(|text| text.contains(needle)))
-            .map(|(at, _)| at)
-            .collect()
-    };
-    let mut matched = find(&needle);
-    let mut corrected = None;
-    if matched.is_empty() {
-        let mut words = WalkedWords::new();
-        for texts in &haystacks {
-            words.add_row(texts.iter().map(String::as_str));
-        }
-        if let Some(words) = words.correct(term) {
-            let again = find(&words.to_lowercase());
-            if !again.is_empty() {
-                matched = again;
-                corrected = Some(words);
-            }
-        }
-    }
-    Ok(SearchHits {
-        total_matches: matched.len(),
-        rows: matched
-            .into_iter()
-            .take(limit)
-            .map(|at| walked[at].clone())
-            .collect(),
-        corrected,
-        truncated,
-    })
 }
