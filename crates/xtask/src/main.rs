@@ -20,6 +20,7 @@ mod artifact;
 mod ci;
 mod doc_links;
 mod gate;
+mod kotlin_catalog;
 mod ledger;
 mod measure;
 mod rules;
@@ -73,6 +74,14 @@ enum Command {
         /// entry in it can be seen rather than inferred.
         #[arg(long)]
         reads: bool,
+    },
+    /// Write the Kotlin catalogue of every app's actions and queries from the
+    /// manifests (`mobile/.../catalog/ActionCatalog.kt`), or with `--check`
+    /// fail when the committed file is stale (#1135).
+    KotlinCatalog {
+        /// Compare instead of write.
+        #[arg(long)]
+        check: bool,
     },
     /// Print the repository root every path-based rule will scan.
     ///
@@ -288,6 +297,13 @@ fn main() -> ExitCode {
             }
         },
         Command::Rules => rules::print_report(&root),
+        Command::KotlinCatalog { check } => match kotlin_catalog::run(&root, check) {
+            Ok(()) => true,
+            Err(error) => {
+                eprintln!("xtask: {error:#}");
+                false
+            }
+        },
         Command::DocLinks => match doc_links::check(&root) {
             Ok(report) => {
                 print!("{}", report.block());
