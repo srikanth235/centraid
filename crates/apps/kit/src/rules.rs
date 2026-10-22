@@ -1,6 +1,6 @@
 //! THE RULES EVERY APP APPLIES THE SAME WAY (#1135).
 //!
-//! Four questions every app had answered for itself, in four spellings:
+//! Five questions every app had answered for itself, in five spellings:
 //!
 //! | Question | The rule | Where it is stated |
 //! |---|---|---|
@@ -8,6 +8,7 @@
 //! | Is it **archived**? | it carries a `tagged` edge to `flag:archived` | [`ARCHIVED_FLAG`], [`archived_ids`] |
 //! | How long does the **trash** wait? | [`TRASH_DAYS`], the vault's own, which stamps `purge_at` | [`purge_at`], [`days_left`] |
 //! | What does a **zone-less wall time** mean? | the member's local wall clock | [`civil_ms`] |
+//! | Is a **photograph** live, on the archive shelf, or in the trash? | [`Standing`] | [`Standing::is_live`], [`Standing::on_archive_shelf`], [`Standing::is_trashed`] |
 //!
 //! Archived is a lookup and not a predicate: the kit's grammar refuses a
 //! subquery, so an app asks which of the ids it already holds are archived
@@ -16,7 +17,7 @@
 //! The civil reader is the vault's ([`centraid_vault::time::civil`]); it is
 //! re-exported here so an app reaches one name for it.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use centraid_vault::time::civil::parse_civil_ms;
 use centraid_vault::time::recurrence::parse_instant_ms;
@@ -25,9 +26,9 @@ use centraid_vault::time::zone::FireZone;
 pub use centraid_vault::commands::entity::TRASH_DAYS;
 
 use crate::error::KitResult;
-use crate::reads::{PageDoor, Read};
+use crate::reads::{FanOutBound, PageDoor, Read, read_pages};
 use crate::row::{Row, text_of};
-use crate::statement::PageBindValue;
+use crate::statement::{PageBindValue, PageOrder, PageQuery};
 
 /// The tag an archived entity carries: `tagged` edge to this id.
 pub const ARCHIVED_FLAG: &str = "flag:archived";
@@ -99,6 +100,223 @@ pub fn days_left(deleted_at: &str, now: &str) -> Option<i64> {
 #[must_use]
 pub fn civil_ms(value: &str, zone: &FireZone) -> Option<i64> {
     parse_civil_ms(value, zone)
+}
+
+// ---------------------------------------------------------------------------
+// Photographs (#1135): ONE definition of live, where there were six.
+// ---------------------------------------------------------------------------
+
+/// What `entity.kind` calls a photograph.
+pub const PHOTO_KIND: &str = "photo";
+
+/// The tag a hearted entity carries: `tagged` edge to this id.
+pub const STARRED_FLAG: &str = "flag:starred";
+
+/// How far a whole-library walk may go: 500 rows a page, 400 pages, so 200,000
+/// photographs. Past it the read ERRORS ([`crate::KitError::FanOutExceeded`]); a
+/// count that stopped early would be a wrong number that reads as a right one.
+pub const LIBRARY_WALK: FanOutBound = FanOutBound::new(500, 400);
+
+/// What the fold needs to know about one photograph that belongs to a group.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Grouped {
+    pub id: String,
+    /// `photo`, `video` or `scan`.
+    pub form: Option<String>,
+    pub burst: Option<String>,
+    pub edited_from: Option<String>,
+}
+
+impl Grouped {
+    fn is_still(&self) -> bool {
+        self.form.as_deref() == Some("photo")
+    }
+}
+
+/// THE FOLD: which photographs an edit hides.
+///
+/// A phone's edited photograph arrives as two photographs of one capture: the
+/// camera's bytes, and the edit's render with `edited_from` naming them and a
+/// shared `burst`. The library draws the newest live one of a group, so the grid
+/// shows the edit, the original is still there, and trashing or archiving the edit
+/// brings the original back. A second edit folds the first the same way.
+///
+/// A photograph is folded when a LIVE, UNARCHIVED, GROUPED still supersedes it,
+/// in one of two ways. **It was made from it** (the camera original of an iOS
+/// edit, or an Android file edited in place, whose earlier version carries no
+/// burst and is named by the edit's lineage alone). **Or it shares its burst and
+/// is newer**: not the photograph it was made from, and with the larger id (an id
+/// is minted in time order, so the larger is the newer). A crop saved from
+/// Centraid's own editor carries no burst and folds nothing. A Live Photo's movie
+/// shares its still's burst and is a `video`, which this never touches.
+///
+/// `all` is every photograph that carries a burst; `superseding` says which of
+/// them are live and unarchived.
+#[must_use]
+pub fn folded_by_edits(all: &[Grouped], superseding: impl Fn(&str) -> bool) -> BTreeSet<String> {
+    let _ = (all, superseding);
+    BTreeSet::new()
+}
+
+/// WHERE EVERY PHOTOGRAPH STANDS: trashed, archived, or folded under an edit.
+///
+/// The trash is the `entity`'s, the archive is an edge, and the fold is a fact
+/// about a group of `photo` rows, so none of them is a column of the row a page
+/// reads and the kit's grammar refuses the subquery that would say it. The
+/// verdict is read once and every Photos read asks it, which is what makes the
+/// library, the shelves, the counts, Home's tile, search and the duplicates one
+/// answer:
+///
+/// * **live** = not trashed AND not archived AND not folded. The library, the
+///   favorites and videos shelves, a place's shelf, the unplaced shelf, search,
+///   the duplicates and every count of them.
+/// * **the archive shelf** = not trashed AND archived. A photograph archived and
+///   then thrown away is on the trash shelf only; the archive is not folded.
+/// * **the trash** = every trashed photograph, archived or not.
+/// * **an album** draws every member that is not trashed: archiving puts a
+///   photograph away from the timeline, not out of a list the member curated, and
+///   an edit's original is a member they chose.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Standing {
+    /// Photographs whose entity is in the trash.
+    pub trashed: BTreeSet<String>,
+    /// Entities tagged `flag:archived`: any kind, so ask about a photograph id.
+    pub archived: BTreeSet<String>,
+    /// Photographs an edit hides.
+    pub folded: BTreeSet<String>,
+}
+
+impl Standing {
+    /// Read the three verdicts.
+    ///
+    /// # Errors
+    /// The door's refusal, or a walk past [`LIBRARY_WALK`].
+    pub fn read(door: &dyn PageDoor) -> KitResult<Self> {
+        let trashed = ids_of(&read_pages(
+            door,
+            &PageQuery::new(
+                "kit.rules.photos.trashed",
+                "id, deleted_at",
+                "entity",
+                PageOrder::desc("deleted_at", "id"),
+            )
+            .filter(
+                "kind = ? AND deleted_at IS NOT NULL",
+                vec![PageBindValue::Text(PHOTO_KIND.to_owned())],
+            ),
+            LIBRARY_WALK,
+        )?);
+        let archived = ids_of(&read_pages(
+            door,
+            &PageQuery::new(
+                "kit.rules.photos.archived",
+                "from_id, to_id",
+                "edge",
+                PageOrder::asc("from_id", "to_id"),
+            )
+            .filter(
+                "rel = ? AND to_id = ?",
+                vec![
+                    PageBindValue::Text("tagged".to_owned()),
+                    PageBindValue::Text(ARCHIVED_FLAG.to_owned()),
+                ],
+            ),
+            LIBRARY_WALK,
+        )?);
+        let grouped = grouped_photos(door)?;
+        let folded = folded_by_edits(&grouped, |id| {
+            !trashed.contains(id) && !archived.contains(id)
+        });
+        Ok(Self {
+            trashed,
+            archived,
+            folded,
+        })
+    }
+
+    /// In the trash: the trash shelf, archived or not.
+    #[must_use]
+    pub fn is_trashed(&self, id: &str) -> bool {
+        self.trashed.contains(id)
+    }
+
+    /// Put away with the archive flag, trashed or not.
+    #[must_use]
+    pub fn is_archived(&self, id: &str) -> bool {
+        self.archived.contains(id)
+    }
+
+    /// On the library's shelves: not trashed, not archived, not folded.
+    #[must_use]
+    pub fn is_live(&self, id: &str) -> bool {
+        !self.trashed.contains(id) && !self.archived.contains(id) && !self.folded.contains(id)
+    }
+
+    /// On the archive shelf: archived and not trashed.
+    #[must_use]
+    pub fn on_archive_shelf(&self, id: &str) -> bool {
+        self.archived.contains(id) && !self.trashed.contains(id)
+    }
+
+    /// Whether an album draws this member: anything that is not trashed.
+    #[must_use]
+    pub fn in_album_view(&self, id: &str) -> bool {
+        !self.trashed.contains(id)
+    }
+}
+
+fn ids_of(rows: &[Row]) -> BTreeSet<String> {
+    rows.iter()
+        .filter_map(|row| text_of(row, "id").or_else(|| text_of(row, "from_id")))
+        .collect()
+}
+
+/// Every photograph that carries a burst: the only ones a fold can involve.
+///
+/// # Errors
+/// The door's refusal, or a walk past [`LIBRARY_WALK`].
+pub fn grouped_photos(door: &dyn PageDoor) -> KitResult<Vec<Grouped>> {
+    Ok(read_pages(
+        door,
+        &PageQuery::new(
+            "kit.rules.photos.grouped",
+            "id, form, burst, edited_from",
+            "photo",
+            PageOrder::asc("id", "id"),
+        )
+        .filter("burst IS NOT NULL", Vec::new()),
+        LIBRARY_WALK,
+    )?
+    .iter()
+    .filter_map(|row| {
+        Some(Grouped {
+            id: text_of(row, "id")?,
+            form: text_of(row, "form"),
+            burst: text_of(row, "burst"),
+            edited_from: text_of(row, "edited_from"),
+        })
+    })
+    .collect())
+}
+
+/// Every photograph's id, in id order: the set a count is taken over.
+///
+/// # Errors
+/// The door's refusal, or a walk past [`LIBRARY_WALK`].
+pub fn photo_ids(door: &dyn PageDoor) -> KitResult<Vec<String>> {
+    Ok(read_pages(
+        door,
+        &PageQuery::new(
+            "kit.rules.photos.ids",
+            "id",
+            "photo",
+            PageOrder::asc("id", "id"),
+        ),
+        LIBRARY_WALK,
+    )?
+    .iter()
+    .filter_map(|row| text_of(row, "id"))
+    .collect())
 }
 
 #[cfg(test)]

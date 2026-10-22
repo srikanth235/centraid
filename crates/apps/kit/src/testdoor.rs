@@ -350,8 +350,13 @@ mod tests {
             )
             .expect("seeded");
         let door = TestDoor::new(&connection);
-        let query = PageQuery::new("kit.testdoor.held", "id", "photo", PageOrder::asc("id", "id"))
-            .with_held_thumbnail();
+        let query = PageQuery::new(
+            "kit.testdoor.held",
+            "id",
+            "photo",
+            PageOrder::asc("id", "id"),
+        )
+        .with_held_thumbnail();
         let page = door.page(&query, &PageRequest::first(5)).expect("a page");
         let row = &page.rows[0];
         assert_eq!(row.get("thumbnail_path"), Some(&Cell::Null));

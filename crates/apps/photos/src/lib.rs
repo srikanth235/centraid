@@ -43,6 +43,7 @@
 pub mod commands;
 pub mod duplicates;
 pub mod manifest;
+pub mod overview;
 pub mod places;
 pub mod queries;
 

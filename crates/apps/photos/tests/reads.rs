@@ -7,6 +7,7 @@ use std::sync::Arc;
 
 use centraid_apps_kit::testdoor::TestDoor;
 use centraid_apps_photos::duplicates::{Fingerprint, duplicate_clusters};
+use centraid_apps_photos::overview::live_photo_count;
 use centraid_apps_photos::queries::{LibraryInput, load_library, load_search_term};
 use centraid_vault::clock::{FixedClock, SeededIds};
 use centraid_vault::commands::Registry;
@@ -323,4 +324,36 @@ fn duplicates_are_clustered_at_read_over_live_photographs_only() {
     );
     assert!(!members.contains(&c.as_str()));
     assert_eq!(clusters[0].tier, "phash");
+}
+
+/// THE PHOTO COUNT IS THE LIBRARY'S, NOT THE ROWS' (#1135): an edit and the photograph
+/// it was made from are two rows and one drawn photograph, so the count Home's tile
+/// shows is 1 for the pair; the archive and the trash are not in it; a crop saved
+/// from the member's own editor (no burst) is a photograph of its own.
+#[test]
+fn the_photo_count_counts_an_edit_pair_once_and_leaves_out_the_archive_and_the_trash() {
+    let w = World::new();
+    let original = w.photo(
+        "camera",
+        json!({ "taken_at": "2025-03-01T10:00:00.000Z", "burst": "capture-1" }),
+    );
+    let _edit = w.photo(
+        "camera-edited",
+        json!({
+            "taken_at": "2025-03-01T10:00:00.000Z",
+            "burst": "capture-1",
+            "edited_from": original,
+        }),
+    );
+    let alone = w.photo("alone", json!({ "taken_at": "2025-03-02T10:00:00.000Z" }));
+    let _crop = w.photo(
+        "alone-cropped",
+        json!({ "taken_at": "2025-03-02T10:00:00.000Z", "edited_from": alone }),
+    );
+    let archived = w.photo("archived", json!({}));
+    let trashed = w.photo("trashed", json!({}));
+    w.ok("flag.set", json!({ "id": archived, "flag": "archived" }));
+    w.ok("entity.trash", json!({ "id": trashed }));
+    // The pair counts once, the photograph and its crop count twice.
+    assert_eq!(w.read(|door| live_photo_count(door).expect("counts")), 3);
 }
