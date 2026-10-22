@@ -2,9 +2,9 @@
 //! included, for Home's search bar.
 //!
 //! **ONE QUESTION PER KEYSTROKE.** The rows are the kinds Notes' powerbox can
-//! link ([`queries::load_link_targets`] asks them one probe each, a sheet of six
-//! columns) and the NAMED kinds beside them, a notebook or an album, a project, a
-//! Docs folder, and a chat thread (entity `thread`, app `chat`, found by its
+//! link ([`queries::load_link_targets`] asks them one probe each, a sheet of seven
+//! columns, Locker items among them) and the NAMED kinds beside them, a notebook
+//! or an album, a project, a Docs folder, and a chat thread (entity `thread`, app `chat`, found by its
 //! title and by what the member said). Home asks the door ONCE
 //! ([`queries::load_targets_each`], `Search::query_each`) for at most eight
 //! rows of each kind: eleven statements per keystroke were seconds on a vault of
@@ -79,12 +79,15 @@ pub(super) fn search(
                     )
                 },
                 |term| {
-                    // ONE STATEMENT for the linkable kinds, Locker's and the named kinds.
-                    let also: Vec<&str> = std::iter::once(LOCKER_ITEM)
-                        .chain(named::all().iter().copied())
-                        .collect();
-                    let (all, denial) =
-                        queries::load_targets_each(door, &index, &Principal::Owner, term, &also)?;
+                    // ONE STATEMENT for the linkable kinds (Locker's among them) and the
+                    // named kinds.
+                    let (all, denial) = queries::load_targets_each(
+                        door,
+                        &index,
+                        &Principal::Owner,
+                        term,
+                        named::all(),
+                    )?;
                     if denial.is_some() {
                         return Ok(((Vec::new(), Vec::new()), denial));
                     }
@@ -168,16 +171,12 @@ fn filled_each_kind(exact: Vec<Target>, extra: Vec<Target>, kinds: &[&str]) -> V
     hits
 }
 
-/// A Locker item: an entity of the index by its plain text, opened in Locker.
-const LOCKER_ITEM: &str = "locker_item";
-
-/// The kinds Home lists as rows, in the order it lists them: the linkable kinds,
-/// then Locker's.
+/// The kinds Home lists as rows, in the order it lists them: the kinds a note
+/// can link, Locker's item last.
 fn row_kinds() -> Vec<&'static str> {
     centraid_vault::commands::note::LINKABLE
         .iter()
         .map(|kind| kind.as_str())
-        .chain(std::iter::once(LOCKER_ITEM))
         .collect()
 }
 

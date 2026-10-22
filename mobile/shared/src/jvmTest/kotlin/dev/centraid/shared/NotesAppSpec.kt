@@ -569,12 +569,14 @@ class NotesAppSpec : StringSpec({
             listOf(
                 NotesLinkTarget(entity = "document", id = "d-1", title = "Lease", subtitle = "docs", app_id = "docs"),
                 NotesLinkTarget(entity = "photo", id = "p-1", title = "Beach", subtitle = "photos", app_id = "photos"),
+                NotesLinkTarget(entity = "locker_item", id = "l-1", title = "Bank", subtitle = "locker item", app_id = "locker"),
                 NotesLinkTarget(entity = "some.thing", id = "o-1", title = "Odd", subtitle = "elsewhere", app_id = "elsewhere"),
             ),
         )
         folded.domains.map { it.head!!.title to it.rows.single().subtitle } shouldBe listOf(
             NotesCopy.DOMAIN_DOCS to NotesCopy.LINK_KIND_DOCUMENT,
             NotesCopy.DOMAIN_PHOTOS to NotesCopy.LINK_KIND_PHOTOGRAPH,
+            NotesCopy.DOMAIN_LOCKER to "locker item",
             NotesCopy.DOMAIN_OTHER to "",
         )
         // A REAL subtitle that is not the app key still reads as itself.

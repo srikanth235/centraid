@@ -145,7 +145,7 @@ public object NotesLinkPickerMachine : ScreenMachine<NotesLinkPickerState, Notes
     private val INLINE_MARK = Regex("""\*\*|__|~~|`|(?<![\w])[*_]|[*_](?![\w])""")
     private val WHITESPACE = Regex("""\s+""")
 
-    /** The powerbox's six columns, by the kind the index names (`note::LINKABLE` in `crates/vault`). */
+    /** The powerbox's seven columns, by the kind the index names (`note::LINKABLE` in `crates/vault`). */
     private fun domainOf(entity: String): String = when (entity) {
         "note" -> NotesCopy.DOMAIN_NOTES
         "person" -> NotesCopy.DOMAIN_PEOPLE
@@ -153,6 +153,7 @@ public object NotesLinkPickerMachine : ScreenMachine<NotesLinkPickerState, Notes
         "task" -> NotesCopy.DOMAIN_TASKS
         "document" -> NotesCopy.DOMAIN_DOCS
         "photo" -> NotesCopy.DOMAIN_PHOTOS
+        "locker_item" -> NotesCopy.DOMAIN_LOCKER
         else -> NotesCopy.DOMAIN_OTHER
     }
 
@@ -164,6 +165,7 @@ public object NotesLinkPickerMachine : ScreenMachine<NotesLinkPickerState, Notes
         "task" -> NotesCopy.LINK_KIND_TASK
         "document" -> NotesCopy.LINK_KIND_DOCUMENT
         "photo" -> NotesCopy.LINK_KIND_PHOTOGRAPH
+        "locker_item" -> NotesCopy.LINK_KIND_LOCKER_ITEM
         else -> ""
     }
 

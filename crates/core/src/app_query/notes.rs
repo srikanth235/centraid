@@ -1007,6 +1007,12 @@ mod tests {
         };
         assert!(filtered.notes.is_empty(), "the one live note is filed");
 
+        // A LOCKER ITEM IS A LINK TARGET (#1135), found by its plain title.
+        scratch.run(
+            "locker.add_item",
+            serde_json::json!({"item_id": "tomato-login", "type": "login",
+                               "title": "Tomato shop", "username": "gardener"}),
+        );
         let Ok(Answer::NotesLinkTargets(targets)) =
             scratch.ask(Q::NotesLinkTargets(wire::NotesLinkTargetsRequest {
                 term: "tomato".to_owned(),
@@ -1020,6 +1026,16 @@ mod tests {
                 .targets
                 .iter()
                 .any(|target| target.entity == "note" && target.id == kept)
+        );
+        assert!(
+            targets
+                .targets
+                .iter()
+                .any(|target| target.entity == "locker_item"
+                    && target.id == "tomato-login"
+                    && target.app_id == "locker"),
+            "{:?}",
+            targets.targets
         );
     }
 

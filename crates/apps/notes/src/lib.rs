@@ -1,5 +1,5 @@
 #![forbid(unsafe_code)]
-//! # Notes — six queries, seventeen actions, and the one app that reads six kinds
+//! # Notes — six queries, seventeen actions, and the one app that reads seven kinds
 //!
 //! Its doctrine, from the manifest's own description (`manifest.json`):
 //!

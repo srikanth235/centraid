@@ -5928,7 +5928,7 @@ message NotesLinkPickerChrome {
   string close = 3;
   string retry = 4;
   string loading = 5;
-  // "Locker is not searched · a secret is never a link target".
+  // "Locker items link by name; their secrets stay sealed".
   string foot = 6;
 }
 

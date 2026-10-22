@@ -46,16 +46,21 @@ pub const BODY_BUDGET_BYTES: usize = 64 * 1024;
 /// ceiling. One pathological body cannot write thousands of rows.
 pub const MAX_LINKS: usize = 100;
 
-/// The kinds a title can resolve to, and so the powerbox's six columns: what a
+/// The kinds a title can resolve to, and so the powerbox's seven columns: what a
 /// member can link a note to. One list, because a pick the compile could not
 /// resolve would be a `[[title]]` that links nothing.
-pub const LINKABLE: [Kind; 6] = [
+///
+/// A Locker item is one (#1135): its title is plain and searchable, a link holds
+/// no secret, and opening it asks Locker's gate like any Locker destination. The
+/// compile skips it under the assistant's principal, to whom Locker is closed.
+pub const LINKABLE: [Kind; 7] = [
     Kind::Note,
     Kind::Person,
     Kind::Event,
     Kind::Task,
     Kind::Document,
     Kind::Photo,
+    Kind::LockerItem,
 ];
 
 fn body_refusal(ctx: &CommandCtx<'_, '_>) -> Option<String> {
@@ -296,6 +301,7 @@ fn compile_wikilinks(ctx: &CommandCtx<'_, '_>, note: &str, body: &str) -> Result
     )?;
     let linkable = LINKABLE
         .iter()
+        .filter(|kind| !(**kind == Kind::LockerItem && ctx.principal.is_assistant()))
         .map(|kind| format!("'{}'", kind.as_str()))
         .collect::<Vec<_>>()
         .join(", ");

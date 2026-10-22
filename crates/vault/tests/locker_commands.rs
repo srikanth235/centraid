@@ -1720,6 +1720,41 @@ fn any_command_under_the_assistants_principal_refuses_a_locker_item() {
     );
 }
 
+/// A NOTE'S `[[title]]` CAN NAME A LOCKER ITEM (#1135) — for the member. The
+/// compile is a way to learn that a title exists, so under the assistant's
+/// principal it resolves everything but Locker.
+#[test]
+fn a_wikilink_resolves_a_locker_item_for_the_member_and_never_for_the_assistant() {
+    let world = World::new("locker-wikilink", "key-1");
+    world.login("item-1", "key-1");
+    let linked = |note: &str| -> i64 {
+        world.one(
+            "SELECT COUNT(*) FROM edge WHERE from_id = ?1 AND rel = 'links' AND to_id = 'item-1'",
+            &[note],
+        )
+    };
+    let owner = world.ok(
+        "note.create",
+        serde_json::json!({ "title": "Mine", "body": "see [[The bank]]" }),
+    )["id"]
+        .as_str()
+        .expect("a note id")
+        .to_owned();
+    assert_eq!(linked(&owner), 1);
+    let outcome = world.run_as_assistant(
+        "note.create",
+        serde_json::json!({ "title": "Its", "body": "see [[The bank]]" }),
+    );
+    assert_eq!(
+        outcome.status,
+        CommandStatus::Executed,
+        "{:?}",
+        outcome.reason
+    );
+    let its = outcome.output["id"].as_str().expect("a note id").to_owned();
+    assert_eq!(linked(&its), 0, "the assistant's compile reached Locker");
+}
+
 /// THE ASSISTANT'S EMPTY-TRASH NEVER REACHES LOCKER'S, even when it names no
 /// kind at all: every other kind's trash is emptied and the Locker item stays.
 #[test]

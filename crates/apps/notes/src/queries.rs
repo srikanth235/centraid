@@ -1043,11 +1043,11 @@ pub fn load_link_targets(
     Ok((LinkTargetsData { targets }, None))
 }
 
-/// THE SAME SIX KINDS, AND `also`, IN ONE STATEMENT: Home's search, where one
+/// THE SAME SEVEN KINDS, AND `also`, IN ONE STATEMENT: Home's search, where one
 /// keystroke asks about every kind a member can open.
 ///
 /// [`load_link_targets`] is the powerbox's and keeps one probe per kind, because
-/// a sheet is six columns. Home draws one list, so it asks the door once
+/// a sheet is seven columns. Home draws one list, so it asks the door once
 /// ([`Search::query_each`]) for at most [`LINK_TARGET_ROWS`] rows of each of the
 /// linkable kinds and of the `also` kinds after them. The memo read narrows the
 /// notes exactly as in the powerbox, and fails closed as it does.

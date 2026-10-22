@@ -196,7 +196,7 @@ message NotesHistory {
 
 message NotesLinkTargets {
   // Grouped by domain in the search crate's domain order, at most eight each.
-  // Locker is never a domain.
+  // A Locker item is a target too (#1135), found by its plain title.
   repeated NotesLinkTarget targets = 1;
 }
 
