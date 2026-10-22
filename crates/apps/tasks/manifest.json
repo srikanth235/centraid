@@ -897,6 +897,15 @@
             "type": "integer",
             "minimum": 20,
             "maximum": 500
+          },
+          "view": {
+            "type": "string",
+            "enum": ["today", "upcoming", "inbox", "anytime", "all", "logbook", "reminders", "project"],
+            "description": "How the rows are grouped; the rows are the same board read whichever is asked."
+          },
+          "project_id": {
+            "type": "string",
+            "description": "With view `project`: the project."
           }
         },
         "additionalProperties": false
@@ -954,6 +963,38 @@
           }
         }
       }
+    },
+    {
+      "name": "task",
+      "kind": "task",
+      "figures": ["task"],
+      "description": "One task by id, whether or not any board window holds it: the task with its subtasks, tags, project and section, and its parent when it is a subtask.",
+      "input": {"type": "object", "properties": {"task_id": {"type": "string", "minLength": 1}}, "additionalProperties": false, "required": ["task_id"]},
+      "output": {"type": "object", "properties": {"task": {"type": "object"}, "vaultDenied": {"type": "object"}}}
+    },
+    {
+      "name": "projects",
+      "kind": "list",
+      "figures": ["projects", "sections"],
+      "description": "The live projects and their sections, with open counts, in their order.",
+      "input": {"type": "object", "properties": {}, "additionalProperties": false},
+      "output": {"type": "object", "properties": {"projects": {"type": "array"}, "sections": {"type": "array"}, "vaultDenied": {"type": "object"}}}
+    },
+    {
+      "name": "catch-up",
+      "kind": "task",
+      "figures": ["dated", "repeating", "sitting"],
+      "description": "What fell behind while the member was away: dated work past due, repeating work that missed occurrences, and undated work sitting too long, each as a pile.",
+      "input": {"type": "object", "properties": {}, "additionalProperties": false},
+      "output": {"type": "object", "properties": {"dated": {"type": "array"}, "repeating": {"type": "array"}, "sitting": {"type": "array"}, "vaultDenied": {"type": "object"}}}
+    },
+    {
+      "name": "trash",
+      "kind": "task",
+      "figures": ["tasks"],
+      "description": "The tasks in the 30-day trash, most recently trashed first, each with when it was deleted and when it is erased.",
+      "input": {"type": "object", "properties": {}, "additionalProperties": false},
+      "output": {"type": "object", "properties": {"tasks": {"type": "array"}, "vaultDenied": {"type": "object"}}}
     }
   ],
   "kinds": [
