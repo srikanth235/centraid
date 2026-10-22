@@ -630,24 +630,55 @@ fn a_command_that_names_a_locker_item_is_refused_under_the_assistants_principal_
         );
     }
     // Nothing moved: the owner still sees the item whole, live, titled, tagged and linked.
-    let owner = pair.core.owner();
-    let still = pair
-        .core
-        .with_vault(|vault| {
-            vault
-                .read(|connection| {
-                    Ok(connection.query_row(
-                        "SELECT (SELECT COUNT(*) FROM entity WHERE id = ?1 AND deleted_at IS NULL
-                                   AND title = 'Hidden Vaultbank login'),
-                                (SELECT COUNT(*) FROM edge WHERE from_id = ?1 OR to_id = ?1)",
-                        [&item],
-                        |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?)),
-                    )?)
-                })
-                .map_err(centraid_core::CoreError::from)
-        })
-        .expect("the owner reads");
-    assert_eq!(still, (1, 3), "the item was touched: {owner:?}");
+    let page = |from: &str, select: &[&str], sort: &str, predicate: &str, binds: usize| {
+        pair.core
+            .with_vault(|vault| {
+                vault
+                    .keyset_page(&centraid_vault::page::KeysetPage {
+                        // Locker's own read, so the vault serves an item's row and edges to it.
+                        name: "locker.check".to_owned(),
+                        select: select.iter().map(|column| (*column).to_owned()).collect(),
+                        from: from.to_owned(),
+                        predicate: Some(predicate.to_owned()),
+                        binds: vec![centraid_vault::value::Value::Text(item.clone()); binds],
+                        sort_column: sort.to_owned(),
+                        pk_column: sort.to_owned(),
+                        descending: false,
+                        limit: 50,
+                        after: None,
+                        held_thumbnail: false,
+                        document_size: false,
+                    })
+                    .map_err(centraid_core::CoreError::from)
+            })
+            .expect("the owner reads")
+            .rows
+    };
+    let rows = page("entity", &["id", "title", "deleted_at"], "id", "id = ?", 1);
+    let [row] = rows.as_slice() else {
+        panic!("the item is gone: {rows:?}");
+    };
+    assert_eq!(
+        format!("{:?}", row.get("title")),
+        format!(
+            "{:?}",
+            Some(centraid_vault::value::Value::Text(
+                "Hidden Vaultbank login".to_owned()
+            ))
+        )
+    );
+    assert_eq!(
+        row.get("deleted_at"),
+        Some(&centraid_vault::value::Value::Null)
+    );
+    let edges = page(
+        "edge",
+        &["from_id", "to_id"],
+        "from_id",
+        "from_id = ? OR to_id = ?",
+        2,
+    );
+    assert_eq!(edges.len(), 3, "the item's star, tag and link: {edges:?}");
 
     // The assistant keeps every other kind: the same verb on the note runs.
     let ran = door

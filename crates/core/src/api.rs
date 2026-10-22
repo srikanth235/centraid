@@ -1016,26 +1016,32 @@ mod tests {
         std::fs::create_dir_all(&scratch).expect("made");
         let vault = Vault::create(scratch.join("v.db")).expect("a vault");
         vault.found("T", "O").expect("founded");
-        vault
-            .commit(|tx| {
-                tx.insert_entity(
-                    "lk1",
-                    centraid_vault::model::Kind::LockerItem,
-                    "Bank login",
-                    "2026-01-01T00:00:00.000Z",
-                )?;
-                tx.connection().execute(
-                    "INSERT INTO locker_item (id, type) VALUES ('lk1', 'login')",
-                    [],
-                )?;
-                tx.connection().execute(
-                    "INSERT INTO edge (from_id, rel, to_id, created_at)
-                     VALUES ('lk1', 'tagged', 'flag:starred', '2026-01-01T00:00:00.000Z')",
-                    [],
-                )?;
-                Ok(())
-            })
-            .expect("an item lands");
+        let registry = Registry::with_system_commands().expect("the registry builds");
+        let owner = Principal::owner("test-device");
+        for (name, input) in [
+            (
+                "locker.add_item",
+                serde_json::json!({"item_id": "lk1", "type": "login", "title": "Bank login"}),
+            ),
+            (
+                "flag.set",
+                serde_json::json!({"id": "lk1", "flag": "starred"}),
+            ),
+        ] {
+            let ran = vault
+                .execute(
+                    &registry,
+                    &owner,
+                    &centraid_vault::commands::Command::new(name, input),
+                )
+                .expect("the command is answered");
+            assert_eq!(
+                ran.status,
+                centraid_vault::CommandStatus::Executed,
+                "{name}: {:?}",
+                ran.reason
+            );
+        }
         let ask = |name: &str, from: &str, select: &[&str], sort: &str, pk: &str| {
             let mut asked = query(select, sort, pk);
             asked.name = name.to_owned();
