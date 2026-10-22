@@ -15,7 +15,6 @@ cargo xtask test-plan                # which crates `local`'s `test` step would 
 cargo xtask repo-root                # which tree the path-based rules will scan
 cargo xtask measure --write          # the edit-run loop, into the compile-time ledger
 cargo xtask artifact-key --triple <t>  # the prebuilt core's cache key
-cargo xtask photos-sample            # regenerate contracts/apps/photos/sample/manifest.json
 ```
 
 ## The tree a run scans is **the current directory's**
