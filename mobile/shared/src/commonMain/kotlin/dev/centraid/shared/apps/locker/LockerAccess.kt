@@ -163,9 +163,9 @@ internal const val LOCKER_ACCESS: String = ScreenIds.LOCKER_ACCESS
 /**
  * EVERY TABLE THE WHOLE-LOCKER HISTORY READS, which is every table its machine
  * re-reads on (`AppReadsSpec`): the receipts, and the two tables a receipt's
- * item and custom field are named from. A rename or a removal re-reads it.
+ * item (its title is its `entity`'s) and custom field are named from. A rename or a removal re-reads it.
  */
-public val LOCKER_ACCESS_TABLES: Set<String> = setOf("receipt", "locker_item", "locker_item_field")
+public val LOCKER_ACCESS_TABLES: Set<String> = setOf("receipt", "entity", "locker_item_field")
 
 /** The most receipts the whole-Locker page draws. */
 public const val ACCESS_ALL_WINDOW: Int = 200

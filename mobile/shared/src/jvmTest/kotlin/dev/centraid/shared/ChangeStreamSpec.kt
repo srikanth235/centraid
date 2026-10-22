@@ -143,8 +143,8 @@ class ChangeStreamSpec : StringSpec({
         PhotosGridMachine.rowsChanged("media_asset", listOf("ast-1")).shouldBeNull()
         PhotosGridMachine.rowsChanged("entity", listOf("t-1")).shouldNotBeNull()
         NotesEditorMachine.rowsChanged("media_asset", listOf("ast-1")).shouldBeNull()
-        // Home COUNTS Locker's items since #1047 (ids only), so `locker_item`
-        // is Home's table now; a Locker sidecar is not.
+        // Home COUNTS Locker's items since #1047 (ids only), off `entity` and the
+        // `edge` that archives one (#1135); a Locker sidecar is not Home's table.
         HomeMachine.rowsChanged("locker_item_field", listOf("fld-1")).shouldBeNull()
     }
 

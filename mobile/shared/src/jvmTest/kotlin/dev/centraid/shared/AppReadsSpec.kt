@@ -169,7 +169,7 @@ class AppReadsSpec : StringSpec({
         // clustering), and is in `queryScreens`.
         Triple("photos.duplicate", DuplicateReviewReads, DuplicateReviewMachine),
         Triple("docs.trash", DocsTrashReads, DocsTrashMachine),
-        // LOCKER (#1047): the kit's trash over `locker_item`. The statement is
+        // LOCKER (#1047): the kit's trash over `entity`, kind `locker_item` (#1135). The statement is
         // the kit's own; `LockerTrashReads` adds only the gate in front of it
         // (`LockerSpec`).
         Triple("locker.trash", TrashReads(LOCKER_TRASH), LockerTrashMachine),

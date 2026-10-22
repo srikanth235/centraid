@@ -83,7 +83,7 @@
     "NO_NOTEBOOK": "No notebook",
     "ORIGIN_SEAT_ONLY": "Only this phone can do that.",
     "PIN": "Pin",
-    "POWERBOX_FOOT": "Locker items can't be linked.",
+    "POWERBOX_FOOT": "Locker items aren't offered here.",
     "RAIL_NOTEBOOKS": "Notebooks",
     "RAIL_TAGS": "Tags",
     "RENAME_REFUSAL": "Another notebook already has that name.",
