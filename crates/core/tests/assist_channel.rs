@@ -151,36 +151,9 @@ fn stored_text(sample: &common::chat::Sample, tables: &dyn Fn(&str) -> bool) -> 
         .with_vault(|vault| {
             vault
                 .read(|connection| {
-                    let mut names = connection.prepare(
-                        "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name",
-                    )?;
-                    let names: Vec<String> = names
-                        .query_map([], |row| row.get(0))?
-                        .collect::<Result<_, _>>()?;
-                    let mut out = String::new();
-                    for name in names.iter().filter(|name| tables(name)) {
-                        let mut statement =
-                            connection.prepare(&format!("SELECT * FROM \"{name}\""))?;
-                        let columns = statement.column_count();
-                        let mut rows = statement.query([])?;
-                        while let Some(row) = rows.next()? {
-                            out.push_str(name);
-                            for index in 0..columns {
-                                out.push('|');
-                                match row.get_ref(index)? {
-                                    rusqlite::types::ValueRef::Text(text) => {
-                                        out.push_str(&String::from_utf8_lossy(text));
-                                    }
-                                    rusqlite::types::ValueRef::Blob(bytes) => {
-                                        out.push_str(&String::from_utf8_lossy(bytes));
-                                    }
-                                    other => out.push_str(&format!("{other:?}")),
-                                }
-                            }
-                            out.push('\n');
-                        }
-                    }
-                    Ok(out)
+                    Ok(centraid_vault::testdoor::text_of_tables(
+                        connection, tables,
+                    )?)
                 })
                 .map_err(centraid_core::CoreError::from)
         })
@@ -397,21 +370,22 @@ fn no_sealed_value_reaches_the_model_an_event_the_thread_the_journal_or_the_inde
     let stored = stored_text(&sample, &|name| name == "locker_item");
     assert!(stored.contains("lk1:"));
     assert!(!stored.contains(TYPED_CREATE), "stored as typed");
-    let gym = sample
-        .handle
-        .with_vault(|vault| {
-            vault
-                .read(|connection| {
-                    Ok(connection.query_row(
-                        "SELECT l.id FROM locker_item l JOIN entity e ON e.id = l.id \
-                         WHERE e.title = 'Gym locker'",
-                        [],
-                        |row| row.get::<_, String>(0),
-                    )?)
-                })
-                .map_err(centraid_core::CoreError::from)
-        })
-        .expect("the new item");
+    let gym = {
+        use centraid_assist::native::Door as _;
+        let door = sample.handle.assist_door();
+        let rows = door
+            .table_where(
+                "entity",
+                "id, title",
+                "id",
+                "id",
+                "title = ?",
+                &["Gym locker".to_owned()],
+            )
+            .expect("the door reads");
+        centraid_assist::native::door::text(rows.first().expect("the new item"), "id")
+            .expect("an id")
+    };
     assert_eq!(
         reveal(&sample, &gym, "password").as_deref(),
         Some(TYPED_CREATE)

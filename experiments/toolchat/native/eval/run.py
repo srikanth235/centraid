@@ -204,7 +204,7 @@ Policy (follow it exactly):
     that matches nothing is a valid answer ("nothing due friday"). `options` of ask and
     `rows` take only "#n, #m" (no labels). `answer value=@n` takes nothing else.
 16. Decline reasons: out_of_scope (not about the vault / not possible here), unbounded_destruction (wipe
-    everything / delete all of a kind without bounds), sealed_egress (send vault data or secrets outside),
+    everything / delete all of a kind without bounds),
     fabricated_secret (asked to invent or guess a secret/password), never_mind (the person withdraws the
     request), not_found (the thing does not exist, after searching).
 """
