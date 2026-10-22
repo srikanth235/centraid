@@ -11,18 +11,14 @@
 //! and "usually fast" is the property a mean measures. p95 over 200 calls is
 //! the cheapest statistic that says something about the slow ones.
 //!
-//! ## Why the golden corpus and not a generated one
+//! ## Why a founded vault with two hundred and some rows
 //!
-//! The corpus is a real vault, frozen: sixteen tables, a hundred and
-//! thirty-nine rows, real column widths and real index shapes. A generated
-//! fixture measures whatever the generator happened to make, and the first time
-//! it disagrees with a real file the budget is measuring the generator.
-//!
-//! The corpus is small, so this is a **floor measurement**, and the receipt
-//! says so: it catches a regression in the call path (a lock held too long, a
-//! statement re-prepared per call, a page probe gone quadratic), not the cost
-//! of a year-three table. When lane D3's year-3 generator lands, this test
-//! reads that instead and the ledger's number falls or does not.
+//! The fixture is a vault this build founds and fills through the real command
+//! plane, so its tables, indexes and row widths are the product's own, and a
+//! page of it is a real page with a `next`. It is small, so this is a **floor
+//! measurement**: it catches a regression in the call path (a lock held too
+//! long, a statement re-prepared per call, a page probe gone quadratic), not the
+//! cost of a year-three table. The year-3 profiles are the scale lane's.
 
 use std::time::{Duration, Instant};
 

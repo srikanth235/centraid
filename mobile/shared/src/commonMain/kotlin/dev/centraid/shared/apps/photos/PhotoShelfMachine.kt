@@ -480,10 +480,7 @@ public object PhotoShelfMachine : ScreenMachine<PhotoShelfState, PhotoShelfEvent
      *
      * Thirty days, from `crates/vault/src/commands/entity.rs`'s
      * `TRASH_DAYS` — the constant `entity.trash` stamps `purge_at`
-     * with. Restated here rather than read from a registry because
-     * `contracts/schema/v0-registries.json`'s `retentionWindows` holds the
-     * AUDIT and LEDGER windows only; there is no media entry in it, so a read
-     * of that file would be a read of the wrong number.
+     * with. Restated here because `commonMain` cannot read a Rust constant.
      *
      * It is a WINDOW and not a countdown, and `PhotoShelfState`'s field says so
      * in its name: a per-row countdown would need `purge_at` on the state — and

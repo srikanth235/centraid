@@ -15,9 +15,8 @@
 # not subtract one from today even if it did. The window needs neither, and it
 # is what v0's trash meta line actually said.
 #
-# 30 is `PURGE_AFTER_DAYS` in `crates/vault/src/commands/media.rs`, NOT
-# `retentionWindows` in `contracts/schema/v0-registries.json` — that object
-# holds only `audit` and `ledger`.
+# 30 is `TRASH_DAYS` in `crates/vault/src/commands/entity.rs`, which
+# `entity.trash` stamps `purge_at` with.
 seat {
   availability: AVAILABILITY_READY
   durability: DURABILITY_AUTHORITATIVE

@@ -1896,10 +1896,9 @@ message PhotoShelfState {
   // field on `DataArrived` plus a clock on the read path.
   //
   // The window needs neither and is what v0's trash meta line actually said:
-  // "purged 30 days after deletion". The constant is `PURGE_AFTER_DAYS` in
-  // `crates/vault/src/commands/media.rs` — NOT `retentionWindows` in
-  // `contracts/schema/v0-registries.json`, which holds only `audit` and
-  // `ledger`.
+  // "purged 30 days after deletion". The constant is `TRASH_DAYS` in
+  // `crates/vault/src/commands/entity.rs`, which `entity.trash` stamps
+  // `purge_at` with.
   //
   // 0 on every other shelf.
   uint32 purge_window_days = 8;

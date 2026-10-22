@@ -688,9 +688,7 @@ class PhotoShelfSpec : StringSpec({
     "the window is a fact about the shelf, known the moment the shelf is" {
         // NO READ AND NO CLOCK. `purge_window_days` is what v0's trash meta
         // line said — "purged 30 days after deletion" — and the constant is
-        // `TRASH_DAYS` in `crates/vault/src/commands/entity.rs`, not
-        // `retentionWindows` in `v0-registries.json`, which holds only `audit`
-        // and `ledger`.
+        // `TRASH_DAYS` in `crates/vault/src/commands/entity.rs`.
         opened(trash).state.purge_window_days shouldBe PhotoShelfMachine.PURGE_WINDOW_DAYS
         // 0 ON EVERY OTHER SHELF, and the sentence is empty there: a line about
         // a purge over the favourites would be about something that is not
