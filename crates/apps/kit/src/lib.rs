@@ -46,6 +46,7 @@ pub mod money;
 pub mod page;
 pub mod reads;
 pub mod row;
+pub mod rules;
 pub mod search_corpus;
 pub mod spelling;
 pub mod statement;
