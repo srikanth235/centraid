@@ -159,7 +159,6 @@
       "kind": "locker_item",
       "inverse": "trash-item",
       "sealed": ["password", "otp_seed", "card_number", "cvv", "content"],
-      "chat": "direct",
       "command": "locker.add_item",
       "phrasings": [
         "save my Netflix login",
@@ -171,6 +170,12 @@
       "input": {
         "type": "object",
         "properties": {
+          "item_id": {
+            "type": "string",
+            "minLength": 1,
+            "x-minted": true,
+            "description": "The id the item is sealed against (a secret's AAD is the row's id). Leave it out and the core mints one before it seals."
+          },
           "type": {
             "type": "string",
             "enum": [
@@ -189,42 +194,51 @@
               "crypto_wallet",
               "membership",
               "document"
-            ]
+            ],
+            "aliases": ["type"]
           },
           "title": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["name"]
           },
           "compromised": {
             "type": "boolean",
             "description": "The member's compromised flag: Review lists the item for changing. Nothing produces it automatically; a changed password clears it unless the same write sets it (R-1047-F7)."
           },
           "username": {
-            "type": "string"
+            "type": "string",
+            "aliases": ["username"]
           },
           "password": {
-            "type": "string"
+            "type": "string",
+            "aliases": ["password"]
           },
           "url": {
-            "type": "string"
+            "type": "string",
+            "aliases": ["url"]
           },
           "otp_seed": {
-            "type": "string"
+            "type": "string",
+            "aliases": ["code"]
           },
           "notes": {
-            "type": "string"
+            "type": "string",
+            "aliases": ["notes"]
           },
           "cardholder": {
             "type": "string"
           },
           "card_number": {
-            "type": "string"
+            "type": "string",
+            "aliases": ["card_number"]
           },
           "expiry": {
             "type": "string"
           },
           "cvv": {
-            "type": "string"
+            "type": "string",
+            "aliases": ["cvv"]
           },
           "brand": {
             "type": "string"
@@ -273,9 +287,8 @@
       "name": "edit-item",
       "verb": "edit",
       "kind": "locker_item",
-      "inverse": null,
+      "inverse": "edit-item",
       "sealed": ["password", "otp_seed", "card_number", "cvv", "content"],
-      "chat": "direct",
       "command": "locker.edit_item",
       "phrasings": [
         "change my Netflix username",
@@ -294,38 +307,46 @@
           },
           "title": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["name"]
           },
           "compromised": {
             "type": "boolean",
             "description": "The member's compromised flag: Review lists the item for changing. Nothing produces it automatically; a changed password clears it unless the same write sets it (R-1047-F7)."
           },
           "username": {
-            "type": "string"
+            "type": "string",
+            "aliases": ["username"]
           },
           "password": {
-            "type": "string"
+            "type": "string",
+            "aliases": ["password"]
           },
           "url": {
-            "type": "string"
+            "type": "string",
+            "aliases": ["url"]
           },
           "otp_seed": {
-            "type": "string"
+            "type": "string",
+            "aliases": ["code"]
           },
           "notes": {
-            "type": "string"
+            "type": "string",
+            "aliases": ["notes"]
           },
           "cardholder": {
             "type": "string"
           },
           "card_number": {
-            "type": "string"
+            "type": "string",
+            "aliases": ["card_number"]
           },
           "expiry": {
             "type": "string"
           },
           "cvv": {
-            "type": "string"
+            "type": "string",
+            "aliases": ["cvv"]
           },
           "brand": {
             "type": "string"
@@ -376,7 +397,6 @@
       "kind": "locker_item",
       "inverse": "restore-item",
       "sealed": [],
-      "chat": "direct",
       "command": "entity.trash",
       "phrasings": [
         "delete my old Netflix login",
@@ -417,7 +437,6 @@
       "kind": "locker_item",
       "inverse": "trash-item",
       "sealed": [],
-      "chat": "direct",
       "command": "entity.restore",
       "phrasings": [
         "bring back my Netflix login",
@@ -458,7 +477,6 @@
       "kind": "locker_item",
       "inverse": null,
       "sealed": [],
-      "chat": "card",
       "command": "entity.purge",
       "phrasings": [
         "erase the old Netflix login forever",
@@ -499,7 +517,6 @@
       "kind": "locker_item",
       "inverse": "unstar-item",
       "sealed": [],
-      "chat": "direct",
       "command": "flag.set",
       "phrasings": [
         "star my bank login",
@@ -544,7 +561,6 @@
       "kind": "locker_item",
       "inverse": "star-item",
       "sealed": [],
-      "chat": "direct",
       "command": "flag.clear",
       "phrasings": [
         "unstar my bank login",
@@ -589,7 +605,6 @@
       "kind": "locker_item",
       "inverse": "unarchive-item",
       "sealed": [],
-      "chat": "direct",
       "command": "flag.set",
       "phrasings": [
         "archive my old Netflix login",
@@ -634,7 +649,6 @@
       "kind": "locker_item",
       "inverse": "archive-item",
       "sealed": [],
-      "chat": "direct",
       "command": "flag.clear",
       "phrasings": [
         "unarchive my old Netflix login",
@@ -679,7 +693,6 @@
       "kind": "locker_item",
       "inverse": "remove-tag",
       "sealed": [],
-      "chat": "direct",
       "command": "tag.add",
       "phrasings": [
         "tag my bank login as finance",
@@ -698,7 +711,8 @@
           "label": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 200
+            "maxLength": 200,
+            "aliases": ["label"]
           }
         },
         "required": ["id", "label"],
@@ -725,7 +739,6 @@
       "kind": "locker_item",
       "inverse": "add-tag",
       "sealed": [],
-      "chat": "direct",
       "command": "tag.remove",
       "phrasings": [
         "remove the finance tag from my bank login",
@@ -744,7 +757,8 @@
           "label": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 200
+            "maxLength": 200,
+            "aliases": ["label"]
           }
         },
         "required": ["id", "label"],
@@ -771,7 +785,6 @@
       "kind": "locker_item",
       "inverse": null,
       "sealed": [],
-      "chat": "card",
       "command": "locker.duplicate_item",
       "phrasings": [
         "clone my Netflix login for my sister's account",
@@ -812,7 +825,6 @@
       "kind": "locker_field",
       "inverse": null,
       "sealed": ["value"],
-      "chat": "card",
       "command": "locker.set_field",
       "phrasings": [
         "add a security question field to my bank login",
@@ -875,7 +887,6 @@
       "kind": "locker_field",
       "inverse": null,
       "sealed": [],
-      "chat": "card",
       "command": "locker.remove_field",
       "phrasings": [
         "remove the security question from my bank login",
@@ -920,7 +931,6 @@
       "kind": "locker_item",
       "inverse": null,
       "sealed": [],
-      "chat": "card",
       "command": "locker.set_addresses",
       "phrasings": [
         "add a second website to my Google login",
@@ -975,7 +985,6 @@
       "kind": "locker_passkey",
       "inverse": null,
       "sealed": ["private_key"],
-      "chat": "card",
       "command": "locker.set_passkey",
       "phrasings": [
         "save a passkey on my GitHub login",
@@ -1035,7 +1044,6 @@
       "kind": "locker_passkey",
       "inverse": null,
       "sealed": [],
-      "chat": "card",
       "command": "locker.clear_passkey",
       "phrasings": [
         "remove the passkey from my GitHub login",
@@ -1076,7 +1084,6 @@
       "kind": "locker_item",
       "inverse": null,
       "sealed": [],
-      "chat": "card",
       "command": "locker.set_memo",
       "phrasings": [
         "write a memo on my bank login",
@@ -1120,7 +1127,7 @@
       "kind": "locker_item",
       "inverse": null,
       "sealed": [],
-      "chat": "card",
+      "bulk": true,
       "command": "locker.export",
       "phrasings": [
         "export my whole locker",
@@ -1370,29 +1377,22 @@
           "name": "type",
           "type": "enum",
           "source": ["locker_item", "type"],
-          "values": "$locker_item_types",
-          "create": true
+          "values": "$locker_item_types"
         },
         {
           "name": "username",
           "type": "text",
-          "source": ["locker_item", "username"],
-          "edit": "locker.edit_item",
-          "create": true
+          "source": ["locker_item", "username"]
         },
         {
           "name": "url",
           "type": "text",
-          "source": ["locker_item", "url"],
-          "edit": "locker.edit_item",
-          "create": true
+          "source": ["locker_item", "url"]
         },
         {
           "name": "notes",
           "type": "text",
-          "source": ["locker_item", "notes"],
-          "edit": "locker.edit_item",
-          "create": true
+          "source": ["locker_item", "notes"]
         },
         {
           "name": "starred",

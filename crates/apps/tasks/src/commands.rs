@@ -95,7 +95,7 @@ pub struct CommandsUnavailable {
 pub use centraid_apps_kit::actions::{ActionRow, Confirm};
 use centraid_apps_kit::actions::{act, confirmed};
 
-/// The thirteen, in the manifest's own order.
+/// The sixteen, in the manifest's own order.
 pub const ACTIONS: &[ActionRow] = &[
     act("add", "task.add"),
     act("edit", "task.edit"),
@@ -115,6 +115,8 @@ pub const ACTIONS: &[ActionRow] = &[
     act("restore", "entity.restore"),
     // A project, an area and a section are containers: the shared verb.
     act("create-project", "container.create"),
+    // A project or an area is renamed through the shared retitle verb.
+    act("rename-list", "entity.retitle"),
     act("create-section", "container.create"),
     // An attachment is an `attached` edge, a tag a `tagged` one: the shared verbs.
     act("attach", "edge.add"),
@@ -152,7 +154,7 @@ mod tests {
 
     #[test]
     fn every_action_names_one_command_and_the_task_verbs_are_the_tasks_own() {
-        assert_eq!(ACTIONS.len(), 15);
+        assert_eq!(ACTIONS.len(), 16);
         let own: Vec<&str> = ACTIONS
             .iter()
             .map(|row| row.command)

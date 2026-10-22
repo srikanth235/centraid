@@ -215,7 +215,7 @@ impl PendingCard {
             commands: pending
                 .steps
                 .iter()
-                .map(|step| step.command.clone())
+                .map(|step| step.act.command.to_owned())
                 .collect(),
             preview: pending.preview.clone(),
             steps: pending.changes.iter().map(pending::step_of).collect(),

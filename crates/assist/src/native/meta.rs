@@ -136,10 +136,6 @@ pub struct Field {
     /// `(model value, vault value)` for an enum.
     pub values: &'static [(&'static str, &'static str)],
     pub source: Source,
-    /// The command an `edit` of this field runs, `None` when it is read-only.
-    pub edit: Option<&'static str>,
-    /// Whether `create` accepts it.
-    pub create: bool,
 }
 
 const fn field(name: &'static str, ty: FieldType, source: Source) -> Field {
@@ -149,8 +145,6 @@ const fn field(name: &'static str, ty: FieldType, source: Source) -> Field {
         unit: None,
         values: &[],
         source,
-        edit: None,
-        create: false,
     }
 }
 
@@ -161,14 +155,6 @@ impl Field {
     }
     const fn values(mut self, values: &'static [(&'static str, &'static str)]) -> Self {
         self.values = values;
-        self
-    }
-    const fn edit(mut self, command: &'static str) -> Self {
-        self.edit = Some(command);
-        self
-    }
-    const fn create(mut self) -> Self {
-        self.create = true;
         self
     }
 
@@ -251,8 +237,172 @@ pub struct VerbSpec {
     pub args: &'static str,
     /// Past tense for the write echo.
     pub done: &'static str,
-    /// `(kind, typed command)`; a verb applies to exactly these kinds.
+    /// The flag word the verb sets or clears (`starred`, `archived`), for the verbs that are a flag.
+    pub flag: Option<&'static str>,
+    /// `(kind, typed command)` of the unqualified action; a verb applies to exactly these kinds.
     pub commands: &'static [(Kind, &'static str)],
+}
+
+/// THE ONE LOOKUP's row: the manifest action chat runs for `(verb, kind, qualifier)`, generated
+/// from the manifests (`crates/assist/build.rs`). `action` is empty for an `unbacked` row of
+/// `contracts/assist/verbs.json`, which no app declares yet and which runs as its bare command.
+#[derive(Debug, Clone, Copy)]
+pub struct ActionSpec {
+    pub app: &'static str,
+    pub action: &'static str,
+    pub command: &'static str,
+    pub verb: Verb,
+    /// The field an `edit` targets (`edit:cadence`).
+    pub qualifier: Option<&'static str>,
+    pub kind: Kind,
+    /// The input property that names the row.
+    pub id_param: &'static str,
+    /// Every property of the action's input, in the manifest's order.
+    pub properties: &'static [&'static str],
+    pub required: &'static [&'static str],
+    /// `(property, the names chat says it under)`; the first name is the canonical one.
+    pub aliases: &'static [(&'static str, &'static [&'static str])],
+    /// `(property, JSON)` for a property that can only take one value.
+    pub consts: &'static [(&'static str, &'static str)],
+    /// `(property, JSON)` for a property the input leaves out and the action fills.
+    pub defaults: &'static [(&'static str, &'static str)],
+    /// The id properties the core mints when the input leaves them out.
+    pub minted: &'static [&'static str],
+    /// The action that takes it back, as the manifest names it.
+    pub inverse: Option<InverseSpec>,
+}
+
+/// The action that undoes another, with the property that names the row for it.
+#[derive(Debug, Clone, Copy)]
+pub struct InverseSpec {
+    pub app: &'static str,
+    pub action: &'static str,
+    pub command: &'static str,
+    pub id_param: &'static str,
+}
+
+impl InverseSpec {
+    /// What a door runs.
+    #[must_use]
+    pub const fn call(&self) -> crate::native::door::Call {
+        crate::native::door::Call {
+            app: self.app,
+            action: self.action,
+            command: self.command,
+        }
+    }
+}
+
+impl ActionSpec {
+    /// Whether a manifest action backs the row (an `unbacked` row has none).
+    #[must_use]
+    pub const fn backed(&self) -> bool {
+        !self.action.is_empty()
+    }
+
+    /// The property chat's `name` means: an alias of it, or its own name.
+    #[must_use]
+    pub fn property_named(&self, name: &str) -> Option<&'static str> {
+        self.aliases
+            .iter()
+            .find(|(_, names)| names.contains(&name))
+            .map(|(property, _)| *property)
+            .or_else(|| {
+                self.properties
+                    .iter()
+                    .copied()
+                    .find(|property| *property == name)
+            })
+    }
+
+    /// The names chat says this action's properties under, canonical ones, in the manifest's
+    /// order: what a `create` or an `edit` takes.
+    #[must_use]
+    pub fn chat_names(&self) -> Vec<&'static str> {
+        self.properties
+            .iter()
+            .filter_map(|property| {
+                self.aliases
+                    .iter()
+                    .find(|(aliased, _)| aliased == property)
+                    .and_then(|(_, names)| names.first().copied())
+            })
+            .collect()
+    }
+
+    /// The canonical chat name of a spelling (`due` is `date`), when it is a spelling and not
+    /// already the canonical name.
+    #[must_use]
+    pub fn canonical_name(&self, spelling: &str) -> Option<&'static str> {
+        self.aliases
+            .iter()
+            .find(|(_, names)| names.contains(&spelling))
+            .and_then(|(_, names)| names.first().copied())
+            .filter(|canonical| *canonical != spelling)
+    }
+
+    /// Whether the action's input has this property.
+    #[must_use]
+    pub fn takes(&self, property: &str) -> bool {
+        self.properties.contains(&property)
+    }
+
+    /// What a door runs.
+    #[must_use]
+    pub const fn call(&self) -> crate::native::door::Call {
+        crate::native::door::Call {
+            app: self.app,
+            action: self.action,
+            command: self.command,
+        }
+    }
+}
+
+/// The action chat runs for `verb` on `kind`, and the `qualifier` of the field an edit targets;
+/// `None` when no direct action serves the triple.
+#[must_use]
+pub fn lookup(verb: Verb, kind: Kind, qualifier: Option<&str>) -> Option<&'static ActionSpec> {
+    ACTIONS
+        .iter()
+        .find(|row| row.verb == verb && row.kind == kind && row.qualifier == qualifier)
+}
+
+/// The actions that edit a kind, the qualified ones (one field each) after the one that edits
+/// the kind's fields in general.
+#[must_use]
+pub fn edit_actions(kind: Kind) -> Vec<&'static ActionSpec> {
+    let mut found: Vec<&'static ActionSpec> = ACTIONS
+        .iter()
+        .filter(|row| row.verb == Verb::Edit && row.kind == kind)
+        .collect();
+    found.sort_by_key(|row| row.qualifier.is_some());
+    found
+}
+
+/// The action that edits `field` of `kind`: the one that names it (`edit:cadence`), else the one
+/// whose input takes it (its name, or an alias of one of its properties).
+#[must_use]
+pub fn edit_action(kind: Kind, field: &str) -> Option<&'static ActionSpec> {
+    lookup(Verb::Edit, kind, Some(field)).or_else(|| {
+        edit_actions(kind)
+            .into_iter()
+            .find(|row| row.qualifier.is_none() && row.property_named(field).is_some())
+    })
+}
+
+/// The args a `create` of `kind` takes, by the names chat says them under: what its create
+/// action's input says them as, canonical names, in the manifest's order.
+#[must_use]
+pub fn create_args(kind: Kind) -> Vec<&'static str> {
+    lookup(Verb::Create, kind, None)
+        .map(ActionSpec::chat_names)
+        .unwrap_or_default()
+}
+
+/// The canonical name of a `create` arg spelled another way (`due` for a task's `date`).
+#[must_use]
+pub fn create_arg_canonical(kind: Kind, spelling: &str) -> Option<&'static str> {
+    lookup(Verb::Create, kind, None).and_then(|row| row.canonical_name(spelling))
 }
 
 /// One kind's row.
@@ -372,8 +522,8 @@ pub struct DeclaredVerb {
 }
 
 // THE TABLES ARE THE MANIFESTS' (`crates/assist/build.rs`): `Kind`, `Kind::ALL`, `KINDS`, `Verb`,
-// `VERBS`, `DECLARED_KINDS` and `DECLARED_VERBS` are generated from each app's `kinds` and its
-// actions' `verb`/`kind`/`chat`/`command`, and from `contracts/assist/verbs.json`. Nothing about a
+// `VERBS`, `ACTIONS`, `DECLARED_KINDS` and `DECLARED_VERBS` are generated from each app's `kinds` and its
+// actions' `verb`/`kind`/`inverse`/`command`/`aliases`, and from `contracts/assist/verbs.json`. Nothing about a
 // kind or a verb row is written here; what stays here is the behaviour that reads them.
 include!(concat!(env!("OUT_DIR"), "/catalog.rs"));
 
@@ -395,14 +545,16 @@ impl Verb {
             .map(|spec| spec.verb)
     }
 
+    /// The action this verb runs on this kind, if it applies: the one that does not name a field.
+    #[must_use]
+    pub fn action(self, kind: Kind) -> Option<&'static ActionSpec> {
+        lookup(self, kind, None)
+    }
+
     /// The typed command this verb runs on this kind, if it applies.
     #[must_use]
     pub fn command(self, kind: Kind) -> Option<&'static str> {
-        self.spec()
-            .commands
-            .iter()
-            .find(|(applies, _)| *applies == kind)
-            .map(|(_, command)| *command)
+        self.action(kind).map(|row| row.command)
     }
 
     #[must_use]
@@ -411,14 +563,14 @@ impl Verb {
     }
 }
 
-/// The command that puts a task in a status, by the VAULT's word for it: closing, reopening and
-/// cancelling are three commands, not one command with a status argument.
+/// The verb that puts a task in a status, by the VAULT's word for it: closing, reopening and
+/// cancelling are three actions, not one action with a status argument.
 #[must_use]
-pub fn task_status_command(vault_status: &str) -> Option<&'static str> {
+pub fn task_status_verb(vault_status: &str) -> Option<Verb> {
     match vault_status {
-        "done" => Some("task.complete"),
-        "open" => Some("task.reopen"),
-        "cancelled" => Some("task.cancel"),
+        "done" => Some(Verb::Complete),
+        "open" => Some(Verb::Reopen),
+        "cancelled" => Some(Verb::Cancel),
         _ => None,
     }
 }
@@ -660,16 +812,7 @@ pub fn mapped_commands() -> Vec<&'static str> {
         .iter()
         .flat_map(|spec| spec.commands.iter().map(|(_, command)| *command))
         .collect();
-    for spec in KINDS {
-        for field in spec.fields {
-            if let Some(command) = field.edit {
-                out.push(command);
-            }
-        }
-    }
-    for spec in DECLARED_KINDS {
-        out.extend(spec.fields.iter().filter_map(|field| field.edit));
-    }
+    out.extend(ACTIONS.iter().map(|row| row.command));
     out.extend(DECLARED_VERBS.iter().map(|row| row.command));
     out.extend([
         "edge.add",

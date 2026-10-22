@@ -103,6 +103,6 @@ mod tests {
                 actions += 1;
             }
         }
-        assert_eq!(actions, 145, "the nine manifests declare 145 actions");
+        assert_eq!(actions, 146, "the nine manifests declare 146 actions");
     }
 }

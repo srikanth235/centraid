@@ -154,7 +154,6 @@
       "kind": "note",
       "inverse": "delete-note",
       "sealed": [],
-      "chat": "direct",
       "command": "note.create",
       "phrasings": [
         "jot down that I need to call the plumber",
@@ -173,11 +172,13 @@
           },
           "title": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["name"]
           },
           "body": {
             "type": "string",
-            "minLength": 0
+            "minLength": 0,
+            "aliases": ["body"]
           },
           "format": {
             "type": "string",
@@ -185,7 +186,8 @@
           },
           "notebook_id": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["notebook"]
           }
         },
         "required": ["title", "body"],
@@ -210,9 +212,8 @@
       "name": "edit-note",
       "verb": "edit",
       "kind": "note",
-      "inverse": null,
+      "inverse": "edit-note",
       "sealed": [],
-      "chat": "direct",
       "command": "note.edit",
       "phrasings": [
         "add oat milk to my shopping note",
@@ -230,11 +231,13 @@
           },
           "title": {
             "type": "string",
-            "minLength": 0
+            "minLength": 0,
+            "aliases": ["name"]
           },
           "body": {
             "type": "string",
-            "minLength": 0
+            "minLength": 0,
+            "aliases": ["body"]
           },
           "format": {
             "type": "string",
@@ -264,9 +267,8 @@
       "verb": "add_to",
       "kind": "note",
       "also": ["remove_from"],
-      "inverse": null,
+      "inverse": "move-note",
       "sealed": [],
-      "chat": "direct",
       "command": "note.move",
       "phrasings": [
         "put the trip itinerary in the Travel notebook",
@@ -284,7 +286,8 @@
           },
           "notebook_id": {
             "type": ["string", "null"],
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["to", "from"]
           }
         },
         "required": ["id"],
@@ -311,7 +314,6 @@
       "kind": "notebook",
       "inverse": "delete-notebook",
       "sealed": [],
-      "chat": "direct",
       "command": "container.create",
       "phrasings": [
         "make a notebook called Travel",
@@ -334,7 +336,8 @@
           },
           "title": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["name"]
           },
           "parent": {
             "type": "string",
@@ -363,9 +366,8 @@
       "name": "rename-notebook",
       "verb": "edit",
       "kind": "notebook",
-      "inverse": null,
+      "inverse": "rename-notebook",
       "sealed": [],
-      "chat": "direct",
       "command": "entity.retitle",
       "phrasings": [
         "rename the Travel notebook to Trips",
@@ -383,7 +385,8 @@
           },
           "title": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["name"]
           }
         },
         "required": ["id", "title"],
@@ -408,9 +411,8 @@
       "name": "delete-notebook",
       "verb": "delete",
       "kind": "notebook",
-      "inverse": null,
+      "inverse": "restore-note",
       "sealed": [],
-      "chat": "direct",
       "command": "entity.trash",
       "phrasings": [
         "delete the Travel notebook",
@@ -451,7 +453,6 @@
       "kind": "note",
       "inverse": "restore-note",
       "sealed": [],
-      "chat": "direct",
       "command": "entity.trash",
       "phrasings": [
         "delete the plumber note",
@@ -492,7 +493,6 @@
       "kind": "note",
       "inverse": "delete-note",
       "sealed": [],
-      "chat": "direct",
       "command": "entity.restore",
       "phrasings": [
         "bring back the plumber note",
@@ -533,7 +533,6 @@
       "kind": "note",
       "inverse": null,
       "sealed": [],
-      "chat": "card",
       "command": "note.restore_version",
       "phrasings": [
         "go back to the earlier version of my trip note",
@@ -578,7 +577,6 @@
       "kind": "note",
       "inverse": "unflag-note",
       "sealed": [],
-      "chat": "card",
       "command": "flag.set",
       "phrasings": [
         "pin the trip itinerary",
@@ -623,7 +621,6 @@
       "kind": "note",
       "inverse": "flag-note",
       "sealed": [],
-      "chat": "card",
       "command": "flag.clear",
       "phrasings": [
         "unpin the trip itinerary",
@@ -668,7 +665,6 @@
       "kind": "note",
       "inverse": null,
       "sealed": [],
-      "chat": "card",
       "command": "edge.add",
       "phrasings": [
         "link my trip note to Sam",
@@ -720,7 +716,6 @@
       "kind": "task",
       "inverse": null,
       "sealed": [],
-      "chat": "card",
       "command": "task.add",
       "phrasings": [
         "turn this checklist line into a task",
@@ -772,7 +767,6 @@
       "kind": "note",
       "inverse": "detach",
       "sealed": [],
-      "chat": "card",
       "command": "edge.add",
       "phrasings": [
         "attach the itinerary PDF to my trip note",
@@ -821,7 +815,6 @@
       "kind": "note",
       "inverse": "attach",
       "sealed": [],
-      "chat": "card",
       "command": "edge.remove",
       "phrasings": [
         "detach the itinerary PDF from my trip note",
@@ -870,7 +863,6 @@
       "kind": "note",
       "inverse": "remove-tag",
       "sealed": [],
-      "chat": "direct",
       "command": "tag.add",
       "phrasings": [
         "tag the trip note as travel",
@@ -888,7 +880,8 @@
           },
           "label": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["label"]
           }
         },
         "required": ["id", "label"],
@@ -915,7 +908,6 @@
       "kind": "note",
       "inverse": "add-tag",
       "sealed": [],
-      "chat": "direct",
       "command": "tag.remove",
       "phrasings": [
         "remove the travel tag from the trip note",
@@ -933,7 +925,8 @@
           },
           "label": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["label"]
           }
         },
         "required": ["id", "label"],
@@ -1190,15 +1183,17 @@
         {
           "name": "body",
           "type": "text",
-          "source": ["note", "body"],
-          "edit": "note.edit",
-          "create": true
+          "source": ["note", "body"]
         },
         {
           "name": "pinned",
           "type": "bool",
-          "source": ["edge", "to_id"],
-          "edit": "flag.set"
+          "source": ["edge", "to_id"]
+        },
+        {
+          "name": "starred",
+          "type": "bool",
+          "source": ["edge", "to_id"]
         }
       ],
       "links": [

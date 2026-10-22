@@ -139,7 +139,6 @@
       "kind": "document",
       "inverse": "trash",
       "sealed": [],
-      "chat": "card",
       "command": "document.add",
       "phrasings": [
         "upload this PDF to my drive",
@@ -203,7 +202,6 @@
       "kind": "document",
       "inverse": "trash",
       "sealed": [],
-      "chat": "direct",
       "command": "document.create_text",
       "phrasings": [
         "write a doc called meeting notes",
@@ -222,10 +220,12 @@
           },
           "title": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["name"]
           },
           "body_text": {
-            "type": "string"
+            "type": "string",
+            "aliases": ["text"]
           },
           "media_type": {
             "type": "string",
@@ -233,7 +233,8 @@
           },
           "folder_id": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["folder"]
           }
         },
         "required": ["title"],
@@ -258,9 +259,8 @@
       "name": "rename",
       "verb": "edit",
       "kind": "document",
-      "inverse": null,
+      "inverse": "rename",
       "sealed": [],
-      "chat": "direct",
       "command": "entity.retitle",
       "phrasings": [
         "rename the lease doc to apartment lease",
@@ -278,7 +278,8 @@
           },
           "title": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["name"]
           }
         },
         "required": ["id", "title"],
@@ -304,9 +305,8 @@
       "verb": "add_to",
       "kind": "document",
       "also": ["remove_from"],
-      "inverse": null,
+      "inverse": "move",
       "sealed": [],
-      "chat": "direct",
       "command": "document.move",
       "phrasings": [
         "put the lease in the Home folder",
@@ -324,7 +324,8 @@
           },
           "folder_id": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["to", "from"]
           }
         },
         "required": ["id"],
@@ -351,7 +352,6 @@
       "kind": "document",
       "inverse": "restore",
       "sealed": [],
-      "chat": "direct",
       "command": "entity.trash",
       "phrasings": [
         "delete the old lease doc",
@@ -392,7 +392,6 @@
       "kind": "document",
       "inverse": "trash",
       "sealed": [],
-      "chat": "direct",
       "command": "entity.restore",
       "phrasings": [
         "bring back the lease doc",
@@ -433,7 +432,6 @@
       "kind": "document",
       "inverse": null,
       "sealed": [],
-      "chat": "card",
       "command": "entity.purge",
       "phrasings": [
         "delete the old lease forever",
@@ -474,7 +472,7 @@
       "kind": "document",
       "inverse": null,
       "sealed": [],
-      "chat": "card",
+      "bulk": true,
       "command": "entity.empty_trash",
       "phrasings": [
         "empty the document trash",
@@ -518,7 +516,6 @@
       "kind": "document",
       "inverse": "unstar",
       "sealed": [],
-      "chat": "direct",
       "command": "flag.set",
       "phrasings": [
         "star the lease",
@@ -563,7 +560,6 @@
       "kind": "document",
       "inverse": "star",
       "sealed": [],
-      "chat": "direct",
       "command": "flag.clear",
       "phrasings": [
         "unstar the lease",
@@ -608,7 +604,6 @@
       "kind": "document",
       "inverse": "untag",
       "sealed": [],
-      "chat": "direct",
       "command": "tag.add",
       "phrasings": [
         "tag the lease as home",
@@ -626,7 +621,8 @@
           },
           "label": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["label"]
           }
         },
         "required": ["id", "label"],
@@ -653,7 +649,6 @@
       "kind": "document",
       "inverse": "tag",
       "sealed": [],
-      "chat": "direct",
       "command": "tag.remove",
       "phrasings": [
         "remove the home tag from the lease",
@@ -671,7 +666,8 @@
           },
           "label": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["label"]
           }
         },
         "required": ["id", "label"],
@@ -698,7 +694,6 @@
       "kind": "document",
       "inverse": null,
       "sealed": [],
-      "chat": "card",
       "command": "document.edit",
       "phrasings": [
         "change the second line of my packing list",
@@ -742,11 +737,10 @@
     },
     {
       "name": "replace",
-      "verb": "edit",
+      "verb": "edit:content",
       "kind": "document",
       "inverse": null,
       "sealed": [],
-      "chat": "card",
       "command": "document.replace",
       "phrasings": [
         "replace the lease with the new scan",
@@ -765,7 +759,8 @@
           "blob": {
             "type": "string",
             "minLength": 64,
-            "maxLength": 64
+            "maxLength": 64,
+            "aliases": ["content"]
           },
           "media_type": {
             "type": "string",
@@ -805,7 +800,6 @@
       "kind": "document",
       "inverse": null,
       "sealed": [],
-      "chat": "card",
       "command": "document.restore_version",
       "phrasings": [
         "go back to yesterday's version of the lease",
@@ -850,7 +844,6 @@
       "kind": "folder",
       "inverse": "delete-folder",
       "sealed": [],
-      "chat": "direct",
       "command": "container.create",
       "phrasings": [
         "make a folder called Taxes",
@@ -873,7 +866,8 @@
           },
           "title": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["name"]
           },
           "parent": {
             "type": "string",
@@ -902,9 +896,8 @@
       "name": "rename-folder",
       "verb": "edit",
       "kind": "folder",
-      "inverse": null,
+      "inverse": "rename-folder",
       "sealed": [],
-      "chat": "direct",
       "command": "entity.retitle",
       "phrasings": [
         "rename the Taxes folder to Finance",
@@ -922,7 +915,8 @@
           },
           "title": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["name"]
           }
         },
         "required": ["id", "title"],
@@ -947,9 +941,8 @@
       "name": "delete-folder",
       "verb": "delete",
       "kind": "folder",
-      "inverse": null,
+      "inverse": "restore",
       "sealed": [],
-      "chat": "direct",
       "command": "entity.trash",
       "phrasings": [
         "delete the Taxes folder",

@@ -256,7 +256,11 @@
               "remove_from",
               "log",
               "reveal",
-              "undo"
+              "undo",
+              "tag",
+              "untag",
+              "archive",
+              "unarchive"
             ],
             "type": "string"
           },

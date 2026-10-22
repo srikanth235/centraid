@@ -69,7 +69,7 @@
       "kind": "daily_figure",
       "inverse": null,
       "sealed": [],
-      "chat": "card",
+      "bulk": true,
       "command": "measurement.record",
       "phrasings": [
         "log 8000 steps for today",
@@ -139,7 +139,7 @@
       "kind": "workout",
       "inverse": null,
       "sealed": [],
-      "chat": "card",
+      "bulk": true,
       "command": "follow.health",
       "phrasings": [
         "pull in my latest workouts",
@@ -223,7 +223,6 @@
       "kind": "workout",
       "inverse": null,
       "sealed": [],
-      "chat": "direct",
       "command": "entity.trash",
       "phrasings": [
         "delete this morning's run",

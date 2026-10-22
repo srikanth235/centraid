@@ -184,7 +184,6 @@
       "kind": "person",
       "inverse": "trash-person",
       "sealed": [],
-      "chat": "direct",
       "command": "person.add",
       "phrasings": [
         "add Sam Lee to my people",
@@ -203,13 +202,16 @@
           },
           "title": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["name"]
           },
           "role": {
-            "type": "string"
+            "type": "string",
+            "aliases": ["role"]
           },
           "nickname": {
-            "type": "string"
+            "type": "string",
+            "aliases": ["nickname"]
           },
           "met": {
             "type": "string"
@@ -220,7 +222,8 @@
           },
           "cadence_days": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "aliases": ["cadence"]
           },
           "list_id": {
             "type": "string",
@@ -249,9 +252,8 @@
       "name": "edit-person",
       "verb": "edit",
       "kind": "person",
-      "inverse": null,
+      "inverse": "edit-person",
       "sealed": [],
-      "chat": "direct",
       "command": "person.edit",
       "phrasings": [
         "change Sam's role to manager",
@@ -269,26 +271,31 @@
           },
           "title": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["name"]
           },
           "sort_name": {
             "type": "string"
           },
           "nickname": {
-            "type": "string"
+            "type": "string",
+            "aliases": ["nickname"]
           },
           "role": {
-            "type": "string"
+            "type": "string",
+            "aliases": ["role"]
           },
           "met": {
-            "type": "string"
+            "type": "string",
+            "aliases": ["met"]
           },
           "birthday": {
             "type": "string"
           },
           "cadence_days": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "aliases": ["cadence"]
           }
         },
         "required": ["id"],
@@ -311,11 +318,10 @@
     },
     {
       "name": "set-cadence",
-      "verb": "edit",
+      "verb": "edit:cadence",
       "kind": "person",
-      "inverse": null,
+      "inverse": "set-cadence",
       "sealed": [],
-      "chat": "card",
       "command": "person.edit",
       "phrasings": [
         "remind me to reach out to Sam every month",
@@ -333,7 +339,8 @@
           },
           "cadence_days": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "aliases": ["cadence"]
           }
         },
         "required": ["id", "cadence_days"],
@@ -360,7 +367,6 @@
       "kind": "person",
       "inverse": "restore-person",
       "sealed": [],
-      "chat": "direct",
       "command": "entity.trash",
       "phrasings": [
         "delete Sam Lee",
@@ -401,7 +407,6 @@
       "kind": "person",
       "inverse": "trash-person",
       "sealed": [],
-      "chat": "direct",
       "command": "entity.restore",
       "phrasings": ["bring Sam Lee back", "restore Maria", "undelete Priya"],
       "description": "Restore a trashed person, and what went with them, through entity.restore.",
@@ -438,7 +443,6 @@
       "kind": "person",
       "inverse": null,
       "sealed": [],
-      "chat": "card",
       "command": "entity.purge",
       "phrasings": [
         "erase Sam Lee forever",
@@ -479,7 +483,6 @@
       "kind": "person",
       "inverse": null,
       "sealed": [],
-      "chat": "direct",
       "command": "person.log_interaction",
       "phrasings": [
         "I called Sam today",
@@ -497,10 +500,12 @@
           },
           "kind": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["kind"]
           },
           "text": {
-            "type": "string"
+            "type": "string",
+            "aliases": ["text"]
           }
         },
         "required": ["id", "kind"],
@@ -527,7 +532,6 @@
       "kind": "person",
       "inverse": "unstar-person",
       "sealed": [],
-      "chat": "direct",
       "command": "flag.set",
       "phrasings": ["favorite Sam", "star Maria", "mark Priya as a favorite"],
       "description": "Favorite a person through flag.set: the one canonical star, shared across your vault.",
@@ -568,7 +572,6 @@
       "kind": "person",
       "inverse": "star-person",
       "sealed": [],
-      "chat": "direct",
       "command": "flag.clear",
       "phrasings": ["unfavorite Sam", "remove Maria's star", "unstar Priya"],
       "description": "Remove a person's favorite star through flag.clear.",
@@ -610,7 +613,6 @@
       "also": ["remove_from"],
       "inverse": null,
       "sealed": [],
-      "chat": "card",
       "command": "person.move",
       "phrasings": [
         "put Sam in my Family list",
@@ -655,7 +657,6 @@
       "kind": "note",
       "inverse": null,
       "sealed": [],
-      "chat": "card",
       "command": "person.add_note",
       "phrasings": [
         "add a note about Sam: loves hiking",
@@ -700,7 +701,6 @@
       "kind": "task",
       "inverse": null,
       "sealed": [],
-      "chat": "card",
       "command": "person.add_task",
       "phrasings": [
         "remind me to send Sam the photos",
@@ -745,7 +745,6 @@
       "kind": "task",
       "inverse": null,
       "sealed": [],
-      "chat": "card",
       "command": "task.complete",
       "phrasings": [
         "mark the follow-up with Sam done",
@@ -786,7 +785,6 @@
       "kind": "task",
       "inverse": null,
       "sealed": [],
-      "chat": "card",
       "command": "task.reopen",
       "phrasings": [
         "reopen the follow-up with Sam",
@@ -827,7 +825,6 @@
       "kind": "important_date",
       "inverse": null,
       "sealed": [],
-      "chat": "card",
       "command": "person.add_date",
       "phrasings": [
         "add Sam's anniversary on June 5",
@@ -879,7 +876,6 @@
       "kind": "important_date",
       "inverse": null,
       "sealed": [],
-      "chat": "card",
       "command": "event.edit",
       "phrasings": [
         "remind me a week before Sam's anniversary",
@@ -927,7 +923,6 @@
       "kind": "person",
       "inverse": null,
       "sealed": [],
-      "chat": "card",
       "command": "person.add_relationship",
       "phrasings": [
         "Sam is Maria's brother",
@@ -983,7 +978,6 @@
       "kind": "gift",
       "inverse": null,
       "sealed": [],
-      "chat": "card",
       "command": "person.add_gift",
       "phrasings": [
         "gift idea for Sam: a hiking book",
@@ -1028,7 +1022,6 @@
       "kind": "people_list",
       "inverse": null,
       "sealed": [],
-      "chat": "card",
       "command": "container.create",
       "phrasings": [
         "make a list called Family",
@@ -1078,7 +1071,6 @@
       "kind": "people_list",
       "inverse": null,
       "sealed": [],
-      "chat": "card",
       "command": "entity.retitle",
       "phrasings": [
         "rename Family to Relatives",
@@ -1123,7 +1115,6 @@
       "kind": "people_list",
       "inverse": null,
       "sealed": [],
-      "chat": "card",
       "command": "entity.trash",
       "phrasings": [
         "delete the Family list",
@@ -1164,7 +1155,6 @@
       "kind": "journal_entry",
       "inverse": null,
       "sealed": [],
-      "chat": "card",
       "command": "person.add_journal_entry",
       "phrasings": [
         "journal: today was a good day",
@@ -1216,7 +1206,6 @@
       "kind": "contact_point",
       "inverse": null,
       "sealed": [],
-      "chat": "card",
       "command": "person.save_contact_point",
       "phrasings": [
         "add Sam's phone number",
@@ -1275,7 +1264,6 @@
       "kind": "contact_point",
       "inverse": null,
       "sealed": [],
-      "chat": "card",
       "command": "person.remove_contact_point",
       "phrasings": [
         "remove Sam's old phone number",
@@ -1316,7 +1304,7 @@
       "kind": "person",
       "inverse": null,
       "sealed": [],
-      "chat": "card",
+      "bulk": true,
       "command": "person.merge",
       "phrasings": [
         "Sam Lee and S. Lee are the same person",
@@ -1528,30 +1516,23 @@
         {
           "name": "role",
           "type": "text",
-          "source": ["person", "role"],
-          "edit": "person.edit",
-          "create": true
+          "source": ["person", "role"]
         },
         {
           "name": "nickname",
           "type": "text",
-          "source": ["person", "nickname"],
-          "edit": "person.edit",
-          "create": true
+          "source": ["person", "nickname"]
         },
         {
           "name": "met",
           "type": "text",
-          "source": ["person", "met"],
-          "edit": "person.edit"
+          "source": ["person", "met"]
         },
         {
           "name": "cadence",
           "type": "number",
           "source": ["person", "cadence_days"],
-          "unit": "days",
-          "edit": "person.edit",
-          "create": true
+          "unit": "days"
         },
         {
           "name": "starred",

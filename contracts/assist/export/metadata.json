@@ -1,10 +1,929 @@
 {
+  "actions": [
+    {
+      "action": "propose",
+      "app": "agenda",
+      "command": "event.propose",
+      "id_param": "id",
+      "kind": "event",
+      "names": [
+        "description",
+        "duration",
+        "date",
+        "name"
+      ],
+      "qualifier": null,
+      "verb": "create"
+    },
+    {
+      "action": "edit-event",
+      "app": "agenda",
+      "command": "event.edit",
+      "id_param": "id",
+      "kind": "event",
+      "names": [
+        "description",
+        "duration",
+        "name"
+      ],
+      "qualifier": null,
+      "verb": "edit"
+    },
+    {
+      "action": "edit-event",
+      "app": "agenda",
+      "command": "event.edit",
+      "id_param": "id",
+      "kind": "event",
+      "names": [
+        "description",
+        "duration",
+        "name"
+      ],
+      "qualifier": null,
+      "verb": "reschedule"
+    },
+    {
+      "action": "cancel-event",
+      "app": "agenda",
+      "command": "event.cancel",
+      "id_param": "id",
+      "kind": "event",
+      "names": [],
+      "qualifier": null,
+      "verb": "cancel"
+    },
+    {
+      "action": "create-text",
+      "app": "docs",
+      "command": "document.create_text",
+      "id_param": "id",
+      "kind": "document",
+      "names": [
+        "text",
+        "folder",
+        "name"
+      ],
+      "qualifier": null,
+      "verb": "create"
+    },
+    {
+      "action": "rename",
+      "app": "docs",
+      "command": "entity.retitle",
+      "id_param": "id",
+      "kind": "document",
+      "names": [
+        "name"
+      ],
+      "qualifier": null,
+      "verb": "edit"
+    },
+    {
+      "action": "move",
+      "app": "docs",
+      "command": "document.move",
+      "id_param": "id",
+      "kind": "document",
+      "names": [
+        "to"
+      ],
+      "qualifier": null,
+      "verb": "add_to"
+    },
+    {
+      "action": "move",
+      "app": "docs",
+      "command": "document.move",
+      "id_param": "id",
+      "kind": "document",
+      "names": [
+        "to"
+      ],
+      "qualifier": null,
+      "verb": "remove_from"
+    },
+    {
+      "action": "trash",
+      "app": "docs",
+      "command": "entity.trash",
+      "id_param": "id",
+      "kind": "document",
+      "names": [],
+      "qualifier": null,
+      "verb": "delete"
+    },
+    {
+      "action": "restore",
+      "app": "docs",
+      "command": "entity.restore",
+      "id_param": "id",
+      "kind": "document",
+      "names": [],
+      "qualifier": null,
+      "verb": "restore"
+    },
+    {
+      "action": "star",
+      "app": "docs",
+      "command": "flag.set",
+      "id_param": "id",
+      "kind": "document",
+      "names": [],
+      "qualifier": null,
+      "verb": "star"
+    },
+    {
+      "action": "unstar",
+      "app": "docs",
+      "command": "flag.clear",
+      "id_param": "id",
+      "kind": "document",
+      "names": [],
+      "qualifier": null,
+      "verb": "unstar"
+    },
+    {
+      "action": "tag",
+      "app": "docs",
+      "command": "tag.add",
+      "id_param": "id",
+      "kind": "document",
+      "names": [
+        "label"
+      ],
+      "qualifier": null,
+      "verb": "tag"
+    },
+    {
+      "action": "untag",
+      "app": "docs",
+      "command": "tag.remove",
+      "id_param": "id",
+      "kind": "document",
+      "names": [
+        "label"
+      ],
+      "qualifier": null,
+      "verb": "untag"
+    },
+    {
+      "action": "create-folder",
+      "app": "docs",
+      "command": "container.create",
+      "id_param": "id",
+      "kind": "folder",
+      "names": [
+        "name"
+      ],
+      "qualifier": null,
+      "verb": "create"
+    },
+    {
+      "action": "rename-folder",
+      "app": "docs",
+      "command": "entity.retitle",
+      "id_param": "id",
+      "kind": "folder",
+      "names": [
+        "name"
+      ],
+      "qualifier": null,
+      "verb": "edit"
+    },
+    {
+      "action": "delete-folder",
+      "app": "docs",
+      "command": "entity.trash",
+      "id_param": "id",
+      "kind": "folder",
+      "names": [],
+      "qualifier": null,
+      "verb": "delete"
+    },
+    {
+      "action": "add-item",
+      "app": "locker",
+      "command": "locker.add_item",
+      "id_param": "item_id",
+      "kind": "locker item",
+      "names": [
+        "card_number",
+        "cvv",
+        "notes",
+        "code",
+        "password",
+        "name",
+        "type",
+        "url",
+        "username"
+      ],
+      "qualifier": null,
+      "verb": "create"
+    },
+    {
+      "action": "edit-item",
+      "app": "locker",
+      "command": "locker.edit_item",
+      "id_param": "item_id",
+      "kind": "locker item",
+      "names": [
+        "card_number",
+        "cvv",
+        "notes",
+        "code",
+        "password",
+        "name",
+        "url",
+        "username"
+      ],
+      "qualifier": null,
+      "verb": "edit"
+    },
+    {
+      "action": "trash-item",
+      "app": "locker",
+      "command": "entity.trash",
+      "id_param": "id",
+      "kind": "locker item",
+      "names": [],
+      "qualifier": null,
+      "verb": "delete"
+    },
+    {
+      "action": "restore-item",
+      "app": "locker",
+      "command": "entity.restore",
+      "id_param": "id",
+      "kind": "locker item",
+      "names": [],
+      "qualifier": null,
+      "verb": "restore"
+    },
+    {
+      "action": "star-item",
+      "app": "locker",
+      "command": "flag.set",
+      "id_param": "id",
+      "kind": "locker item",
+      "names": [],
+      "qualifier": null,
+      "verb": "star"
+    },
+    {
+      "action": "unstar-item",
+      "app": "locker",
+      "command": "flag.clear",
+      "id_param": "id",
+      "kind": "locker item",
+      "names": [],
+      "qualifier": null,
+      "verb": "unstar"
+    },
+    {
+      "action": "archive-item",
+      "app": "locker",
+      "command": "flag.set",
+      "id_param": "id",
+      "kind": "locker item",
+      "names": [],
+      "qualifier": null,
+      "verb": "archive"
+    },
+    {
+      "action": "unarchive-item",
+      "app": "locker",
+      "command": "flag.clear",
+      "id_param": "id",
+      "kind": "locker item",
+      "names": [],
+      "qualifier": null,
+      "verb": "unarchive"
+    },
+    {
+      "action": "add-tag",
+      "app": "locker",
+      "command": "tag.add",
+      "id_param": "id",
+      "kind": "locker item",
+      "names": [
+        "label"
+      ],
+      "qualifier": null,
+      "verb": "tag"
+    },
+    {
+      "action": "remove-tag",
+      "app": "locker",
+      "command": "tag.remove",
+      "id_param": "id",
+      "kind": "locker item",
+      "names": [
+        "label"
+      ],
+      "qualifier": null,
+      "verb": "untag"
+    },
+    {
+      "action": "create-note",
+      "app": "notes",
+      "command": "note.create",
+      "id_param": "id",
+      "kind": "note",
+      "names": [
+        "body",
+        "notebook",
+        "name"
+      ],
+      "qualifier": null,
+      "verb": "create"
+    },
+    {
+      "action": "edit-note",
+      "app": "notes",
+      "command": "note.edit",
+      "id_param": "id",
+      "kind": "note",
+      "names": [
+        "body",
+        "name"
+      ],
+      "qualifier": null,
+      "verb": "edit"
+    },
+    {
+      "action": "move-note",
+      "app": "notes",
+      "command": "note.move",
+      "id_param": "id",
+      "kind": "note",
+      "names": [
+        "to"
+      ],
+      "qualifier": null,
+      "verb": "add_to"
+    },
+    {
+      "action": "move-note",
+      "app": "notes",
+      "command": "note.move",
+      "id_param": "id",
+      "kind": "note",
+      "names": [
+        "to"
+      ],
+      "qualifier": null,
+      "verb": "remove_from"
+    },
+    {
+      "action": "create-notebook",
+      "app": "notes",
+      "command": "container.create",
+      "id_param": "id",
+      "kind": "notebook",
+      "names": [
+        "name"
+      ],
+      "qualifier": null,
+      "verb": "create"
+    },
+    {
+      "action": "rename-notebook",
+      "app": "notes",
+      "command": "entity.retitle",
+      "id_param": "id",
+      "kind": "notebook",
+      "names": [
+        "name"
+      ],
+      "qualifier": null,
+      "verb": "edit"
+    },
+    {
+      "action": "delete-notebook",
+      "app": "notes",
+      "command": "entity.trash",
+      "id_param": "id",
+      "kind": "notebook",
+      "names": [],
+      "qualifier": null,
+      "verb": "delete"
+    },
+    {
+      "action": "delete-note",
+      "app": "notes",
+      "command": "entity.trash",
+      "id_param": "id",
+      "kind": "note",
+      "names": [],
+      "qualifier": null,
+      "verb": "delete"
+    },
+    {
+      "action": "restore-note",
+      "app": "notes",
+      "command": "entity.restore",
+      "id_param": "id",
+      "kind": "note",
+      "names": [],
+      "qualifier": null,
+      "verb": "restore"
+    },
+    {
+      "action": "flag-note",
+      "app": "notes",
+      "command": "flag.set",
+      "id_param": "id",
+      "kind": "note",
+      "names": [],
+      "qualifier": null,
+      "verb": "star"
+    },
+    {
+      "action": "unflag-note",
+      "app": "notes",
+      "command": "flag.clear",
+      "id_param": "id",
+      "kind": "note",
+      "names": [],
+      "qualifier": null,
+      "verb": "unstar"
+    },
+    {
+      "action": "add-tag",
+      "app": "notes",
+      "command": "tag.add",
+      "id_param": "id",
+      "kind": "note",
+      "names": [
+        "label"
+      ],
+      "qualifier": null,
+      "verb": "tag"
+    },
+    {
+      "action": "remove-tag",
+      "app": "notes",
+      "command": "tag.remove",
+      "id_param": "id",
+      "kind": "note",
+      "names": [
+        "label"
+      ],
+      "qualifier": null,
+      "verb": "untag"
+    },
+    {
+      "action": "add-person",
+      "app": "people",
+      "command": "person.add",
+      "id_param": "id",
+      "kind": "person",
+      "names": [
+        "cadence",
+        "nickname",
+        "role",
+        "name"
+      ],
+      "qualifier": null,
+      "verb": "create"
+    },
+    {
+      "action": "edit-person",
+      "app": "people",
+      "command": "person.edit",
+      "id_param": "id",
+      "kind": "person",
+      "names": [
+        "cadence",
+        "met",
+        "nickname",
+        "role",
+        "name"
+      ],
+      "qualifier": null,
+      "verb": "edit"
+    },
+    {
+      "action": "set-cadence",
+      "app": "people",
+      "command": "person.edit",
+      "id_param": "id",
+      "kind": "person",
+      "names": [
+        "cadence"
+      ],
+      "qualifier": "cadence",
+      "verb": "edit"
+    },
+    {
+      "action": "trash-person",
+      "app": "people",
+      "command": "entity.trash",
+      "id_param": "id",
+      "kind": "person",
+      "names": [],
+      "qualifier": null,
+      "verb": "delete"
+    },
+    {
+      "action": "restore-person",
+      "app": "people",
+      "command": "entity.restore",
+      "id_param": "id",
+      "kind": "person",
+      "names": [],
+      "qualifier": null,
+      "verb": "restore"
+    },
+    {
+      "action": "log-interaction",
+      "app": "people",
+      "command": "person.log_interaction",
+      "id_param": "id",
+      "kind": "person",
+      "names": [
+        "kind",
+        "text"
+      ],
+      "qualifier": null,
+      "verb": "log"
+    },
+    {
+      "action": "star-person",
+      "app": "people",
+      "command": "flag.set",
+      "id_param": "id",
+      "kind": "person",
+      "names": [],
+      "qualifier": null,
+      "verb": "star"
+    },
+    {
+      "action": "unstar-person",
+      "app": "people",
+      "command": "flag.clear",
+      "id_param": "id",
+      "kind": "person",
+      "names": [],
+      "qualifier": null,
+      "verb": "unstar"
+    },
+    {
+      "action": "retitle-photo",
+      "app": "photos",
+      "command": "entity.retitle",
+      "id_param": "id",
+      "kind": "photo",
+      "names": [
+        "name"
+      ],
+      "qualifier": null,
+      "verb": "edit"
+    },
+    {
+      "action": "flag-photo",
+      "app": "photos",
+      "command": "flag.set",
+      "id_param": "id",
+      "kind": "photo",
+      "names": [],
+      "qualifier": null,
+      "verb": "star"
+    },
+    {
+      "action": "unflag-photo",
+      "app": "photos",
+      "command": "flag.clear",
+      "id_param": "id",
+      "kind": "photo",
+      "names": [],
+      "qualifier": null,
+      "verb": "unstar"
+    },
+    {
+      "action": "delete-photo",
+      "app": "photos",
+      "command": "entity.trash",
+      "id_param": "id",
+      "kind": "photo",
+      "names": [],
+      "qualifier": null,
+      "verb": "delete"
+    },
+    {
+      "action": "restore-photo",
+      "app": "photos",
+      "command": "entity.restore",
+      "id_param": "id",
+      "kind": "photo",
+      "names": [],
+      "qualifier": null,
+      "verb": "restore"
+    },
+    {
+      "action": "create-album",
+      "app": "photos",
+      "command": "container.create",
+      "id_param": "id",
+      "kind": "album",
+      "names": [
+        "name"
+      ],
+      "qualifier": null,
+      "verb": "create"
+    },
+    {
+      "action": "rename-album",
+      "app": "photos",
+      "command": "entity.retitle",
+      "id_param": "id",
+      "kind": "album",
+      "names": [
+        "name"
+      ],
+      "qualifier": null,
+      "verb": "edit"
+    },
+    {
+      "action": "delete-album",
+      "app": "photos",
+      "command": "entity.trash",
+      "id_param": "id",
+      "kind": "album",
+      "names": [],
+      "qualifier": null,
+      "verb": "delete"
+    },
+    {
+      "action": "restore-album",
+      "app": "photos",
+      "command": "entity.restore",
+      "id_param": "id",
+      "kind": "album",
+      "names": [],
+      "qualifier": null,
+      "verb": "restore"
+    },
+    {
+      "action": "add-to-album",
+      "app": "photos",
+      "command": "edge.add",
+      "id_param": "to",
+      "kind": "photo",
+      "names": [
+        "to"
+      ],
+      "qualifier": null,
+      "verb": "add_to"
+    },
+    {
+      "action": "remove-from-album",
+      "app": "photos",
+      "command": "edge.remove",
+      "id_param": "to",
+      "kind": "photo",
+      "names": [
+        "from"
+      ],
+      "qualifier": null,
+      "verb": "remove_from"
+    },
+    {
+      "action": "tag-photo",
+      "app": "photos",
+      "command": "tag.add",
+      "id_param": "id",
+      "kind": "photo",
+      "names": [
+        "label"
+      ],
+      "qualifier": null,
+      "verb": "tag"
+    },
+    {
+      "action": "untag-photo",
+      "app": "photos",
+      "command": "tag.remove",
+      "id_param": "id",
+      "kind": "photo",
+      "names": [
+        "label"
+      ],
+      "qualifier": null,
+      "verb": "untag"
+    },
+    {
+      "action": "add",
+      "app": "tasks",
+      "command": "task.add",
+      "id_param": "id",
+      "kind": "task",
+      "names": [
+        "description",
+        "date",
+        "effort",
+        "parent",
+        "priority",
+        "list",
+        "name"
+      ],
+      "qualifier": null,
+      "verb": "create"
+    },
+    {
+      "action": "edit",
+      "app": "tasks",
+      "command": "task.edit",
+      "id_param": "id",
+      "kind": "task",
+      "names": [
+        "description",
+        "date",
+        "effort",
+        "priority",
+        "name"
+      ],
+      "qualifier": null,
+      "verb": "edit"
+    },
+    {
+      "action": "edit",
+      "app": "tasks",
+      "command": "task.edit",
+      "id_param": "id",
+      "kind": "task",
+      "names": [
+        "description",
+        "date",
+        "effort",
+        "priority",
+        "name"
+      ],
+      "qualifier": null,
+      "verb": "reschedule"
+    },
+    {
+      "action": "complete",
+      "app": "tasks",
+      "command": "task.complete",
+      "id_param": "id",
+      "kind": "task",
+      "names": [],
+      "qualifier": null,
+      "verb": "complete"
+    },
+    {
+      "action": "reopen",
+      "app": "tasks",
+      "command": "task.reopen",
+      "id_param": "id",
+      "kind": "task",
+      "names": [],
+      "qualifier": null,
+      "verb": "reopen"
+    },
+    {
+      "action": "cancel",
+      "app": "tasks",
+      "command": "task.cancel",
+      "id_param": "id",
+      "kind": "task",
+      "names": [],
+      "qualifier": null,
+      "verb": "cancel"
+    },
+    {
+      "action": "organize-task",
+      "app": "tasks",
+      "command": "task.organize",
+      "id_param": "id",
+      "kind": "task",
+      "names": [
+        "to"
+      ],
+      "qualifier": null,
+      "verb": "add_to"
+    },
+    {
+      "action": "organize-task",
+      "app": "tasks",
+      "command": "task.organize",
+      "id_param": "id",
+      "kind": "task",
+      "names": [
+        "to"
+      ],
+      "qualifier": null,
+      "verb": "remove_from"
+    },
+    {
+      "action": "delete",
+      "app": "tasks",
+      "command": "entity.trash",
+      "id_param": "id",
+      "kind": "task",
+      "names": [],
+      "qualifier": null,
+      "verb": "delete"
+    },
+    {
+      "action": "restore",
+      "app": "tasks",
+      "command": "entity.restore",
+      "id_param": "id",
+      "kind": "task",
+      "names": [],
+      "qualifier": null,
+      "verb": "restore"
+    },
+    {
+      "action": "create-project",
+      "app": "tasks",
+      "command": "container.create",
+      "id_param": "id",
+      "kind": "list",
+      "names": [
+        "area",
+        "name"
+      ],
+      "qualifier": null,
+      "verb": "create"
+    },
+    {
+      "action": "rename-list",
+      "app": "tasks",
+      "command": "entity.retitle",
+      "id_param": "id",
+      "kind": "list",
+      "names": [
+        "name"
+      ],
+      "qualifier": null,
+      "verb": "edit"
+    },
+    {
+      "action": "add-tag",
+      "app": "tasks",
+      "command": "tag.add",
+      "id_param": "id",
+      "kind": "task",
+      "names": [
+        "label"
+      ],
+      "qualifier": null,
+      "verb": "tag"
+    },
+    {
+      "action": "remove-tag",
+      "app": "tasks",
+      "command": "tag.remove",
+      "id_param": "id",
+      "kind": "task",
+      "names": [
+        "label"
+      ],
+      "qualifier": null,
+      "verb": "untag"
+    },
+    {
+      "action": "",
+      "app": "locker",
+      "command": "locker.reveal_receipt",
+      "id_param": "item_id",
+      "kind": "locker item",
+      "names": [],
+      "qualifier": null,
+      "verb": "reveal"
+    },
+    {
+      "action": "",
+      "app": "agenda",
+      "command": "entity.trash",
+      "id_param": "id",
+      "kind": "event",
+      "names": [],
+      "qualifier": null,
+      "verb": "delete"
+    },
+    {
+      "action": "",
+      "app": "agenda",
+      "command": "entity.restore",
+      "id_param": "id",
+      "kind": "event",
+      "names": [],
+      "qualifier": null,
+      "verb": "restore"
+    }
+  ],
   "catalog": {
     "actions": [
       {
         "action": "propose",
         "also": [],
         "app": "agenda",
+        "bulk": false,
         "chat": "direct",
         "command": "event.propose",
         "inverse": "cancel-event",
@@ -14,6 +933,7 @@
           "add a dentist appointment next Tuesday at 3pm",
           "schedule a team sync every Monday morning"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "create"
       },
@@ -21,15 +941,17 @@
         "action": "rsvp",
         "also": [],
         "app": "agenda",
-        "chat": "direct",
+        "bulk": false,
+        "chat": "card",
         "command": "event.respond",
-        "inverse": null,
+        "inverse": "rsvp",
         "kind": "event",
         "phrasings": [
           "accept the Friday dinner invite",
           "decline Sam's party",
           "mark me tentative for the offsite"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "respond"
       },
@@ -39,15 +961,17 @@
           "reschedule"
         ],
         "app": "agenda",
+        "bulk": false,
         "chat": "direct",
         "command": "event.edit",
-        "inverse": null,
+        "inverse": "edit-event",
         "kind": "event",
         "phrasings": [
           "rename the dentist event to checkup",
           "move the team sync to 4pm",
           "add a note to Friday's dinner that it's at Luigi's"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "edit"
       },
@@ -55,6 +979,7 @@
         "action": "edit-occurrence",
         "also": [],
         "app": "agenda",
+        "bulk": false,
         "chat": "card",
         "command": "event.edit_occurrence",
         "inverse": null,
@@ -64,6 +989,7 @@
           "move Thursday's yoga to Friday",
           "rename tomorrow's call to planning"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "reschedule"
       },
@@ -71,15 +997,17 @@
         "action": "cancel-event",
         "also": [],
         "app": "agenda",
+        "bulk": false,
         "chat": "direct",
         "command": "event.cancel",
-        "inverse": null,
+        "inverse": "edit-event",
         "kind": "event",
         "phrasings": [
           "cancel the dentist appointment",
           "call off Friday's dinner",
           "cancel my 3pm meeting"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "cancel"
       },
@@ -87,6 +1015,7 @@
         "action": "attach",
         "also": [],
         "app": "agenda",
+        "bulk": false,
         "chat": "card",
         "command": "edge.add",
         "inverse": "detach",
@@ -96,6 +1025,7 @@
           "add the boarding pass to my flight event",
           "attach the agenda doc to the team sync"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "attach"
       },
@@ -103,6 +1033,7 @@
         "action": "detach",
         "also": [],
         "app": "agenda",
+        "bulk": false,
         "chat": "card",
         "command": "edge.remove",
         "inverse": "attach",
@@ -112,6 +1043,7 @@
           "remove the boarding pass from my flight event",
           "take the agenda doc off the team sync"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "detach"
       },
@@ -119,6 +1051,7 @@
         "action": "upload",
         "also": [],
         "app": "docs",
+        "bulk": false,
         "chat": "card",
         "command": "document.add",
         "inverse": "trash",
@@ -128,6 +1061,7 @@
           "add the scanned receipt to documents",
           "save this file in Docs"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "import"
       },
@@ -135,6 +1069,7 @@
         "action": "create-text",
         "also": [],
         "app": "docs",
+        "bulk": false,
         "chat": "direct",
         "command": "document.create_text",
         "inverse": "trash",
@@ -144,6 +1079,7 @@
           "start a new text document named packing list",
           "create a document titled budget ideas"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "create"
       },
@@ -151,15 +1087,17 @@
         "action": "rename",
         "also": [],
         "app": "docs",
+        "bulk": false,
         "chat": "direct",
         "command": "entity.retitle",
-        "inverse": null,
+        "inverse": "rename",
         "kind": "document",
         "phrasings": [
           "rename the lease doc to apartment lease",
           "call the scan tax return 2025",
           "retitle my notes doc to ideas"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "edit"
       },
@@ -169,15 +1107,17 @@
           "remove_from"
         ],
         "app": "docs",
+        "bulk": false,
         "chat": "direct",
         "command": "document.move",
-        "inverse": null,
+        "inverse": "move",
         "kind": "document",
         "phrasings": [
           "put the lease in the Home folder",
           "move the tax return to Finance",
           "file this doc under Travel"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "add_to"
       },
@@ -185,6 +1125,7 @@
         "action": "trash",
         "also": [],
         "app": "docs",
+        "bulk": false,
         "chat": "direct",
         "command": "entity.trash",
         "inverse": "restore",
@@ -194,6 +1135,7 @@
           "trash the scan from last week",
           "remove the draft document"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "delete"
       },
@@ -201,6 +1143,7 @@
         "action": "restore",
         "also": [],
         "app": "docs",
+        "bulk": false,
         "chat": "direct",
         "command": "entity.restore",
         "inverse": "trash",
@@ -210,6 +1153,7 @@
           "restore the document I just deleted",
           "undelete the tax return"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "restore"
       },
@@ -217,6 +1161,7 @@
         "action": "purge",
         "also": [],
         "app": "docs",
+        "bulk": false,
         "chat": "card",
         "command": "entity.purge",
         "inverse": null,
@@ -226,6 +1171,7 @@
           "permanently erase the scan in the trash",
           "purge that trashed document"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "purge"
       },
@@ -233,6 +1179,7 @@
         "action": "empty-trash",
         "also": [],
         "app": "docs",
+        "bulk": true,
         "chat": "card",
         "command": "entity.empty_trash",
         "inverse": null,
@@ -242,6 +1189,7 @@
           "clear out the Docs trash for good",
           "permanently delete everything in the trash"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "purge"
       },
@@ -249,6 +1197,7 @@
         "action": "star",
         "also": [],
         "app": "docs",
+        "bulk": false,
         "chat": "direct",
         "command": "flag.set",
         "inverse": "unstar",
@@ -258,6 +1207,7 @@
           "favorite the tax return",
           "mark the travel doc as a favorite"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "star"
       },
@@ -265,6 +1215,7 @@
         "action": "unstar",
         "also": [],
         "app": "docs",
+        "bulk": false,
         "chat": "direct",
         "command": "flag.clear",
         "inverse": "star",
@@ -274,6 +1225,7 @@
           "remove the star from the tax return",
           "unfavorite the travel doc"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "unstar"
       },
@@ -281,6 +1233,7 @@
         "action": "tag",
         "also": [],
         "app": "docs",
+        "bulk": false,
         "chat": "direct",
         "command": "tag.add",
         "inverse": "untag",
@@ -290,6 +1243,7 @@
           "label the tax return finance",
           "add the tag travel to my itinerary doc"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "tag"
       },
@@ -297,6 +1251,7 @@
         "action": "untag",
         "also": [],
         "app": "docs",
+        "bulk": false,
         "chat": "direct",
         "command": "tag.remove",
         "inverse": "tag",
@@ -306,6 +1261,7 @@
           "untag the tax return",
           "take the travel label off my itinerary"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "untag"
       },
@@ -313,6 +1269,7 @@
         "action": "edit",
         "also": [],
         "app": "docs",
+        "bulk": false,
         "chat": "card",
         "command": "document.edit",
         "inverse": null,
@@ -322,6 +1279,7 @@
           "add milk to the grocery doc",
           "fix the typo in the meeting notes"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "edit"
       },
@@ -329,6 +1287,7 @@
         "action": "replace",
         "also": [],
         "app": "docs",
+        "bulk": false,
         "chat": "card",
         "command": "document.replace",
         "inverse": null,
@@ -338,6 +1297,7 @@
           "swap in the corrected PDF",
           "update the tax return file with this version"
         ],
+        "qualifier": "content",
         "sealed": [],
         "verb": "edit"
       },
@@ -345,6 +1305,7 @@
         "action": "restore-version",
         "also": [],
         "app": "docs",
+        "bulk": false,
         "chat": "card",
         "command": "document.restore_version",
         "inverse": null,
@@ -354,6 +1315,7 @@
           "restore the previous version of my notes doc",
           "undo the last change to the budget doc"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "restore"
       },
@@ -361,6 +1323,7 @@
         "action": "create-folder",
         "also": [],
         "app": "docs",
+        "bulk": false,
         "chat": "direct",
         "command": "container.create",
         "inverse": "delete-folder",
@@ -370,6 +1333,7 @@
           "create a Travel folder inside Home",
           "add a new folder named Receipts"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "create"
       },
@@ -377,15 +1341,17 @@
         "action": "rename-folder",
         "also": [],
         "app": "docs",
+        "bulk": false,
         "chat": "direct",
         "command": "entity.retitle",
-        "inverse": null,
+        "inverse": "rename-folder",
         "kind": "folder",
         "phrasings": [
           "rename the Taxes folder to Finance",
           "call the Travel folder Trips",
           "retitle Receipts to Expenses"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "edit"
       },
@@ -393,15 +1359,17 @@
         "action": "delete-folder",
         "also": [],
         "app": "docs",
+        "bulk": false,
         "chat": "direct",
         "command": "entity.trash",
-        "inverse": null,
+        "inverse": "restore",
         "kind": "folder",
         "phrasings": [
           "delete the Taxes folder",
           "remove the Receipts folder",
           "trash the empty Travel folder"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "delete"
       },
@@ -409,6 +1377,7 @@
         "action": "record-days",
         "also": [],
         "app": "health",
+        "bulk": true,
         "chat": "card",
         "command": "measurement.record",
         "inverse": null,
@@ -418,6 +1387,7 @@
           "record last night's sleep as seven hours",
           "note my weight as 70 kilos this morning"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "log"
       },
@@ -425,6 +1395,7 @@
         "action": "follow-workouts",
         "also": [],
         "app": "health",
+        "bulk": true,
         "chat": "card",
         "command": "follow.health",
         "inverse": null,
@@ -434,6 +1405,7 @@
           "sync workouts from the health store",
           "import this week's runs"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "import"
       },
@@ -441,7 +1413,8 @@
         "action": "delete-workout",
         "also": [],
         "app": "health",
-        "chat": "direct",
+        "bulk": false,
+        "chat": "card",
         "command": "entity.trash",
         "inverse": null,
         "kind": "workout",
@@ -450,6 +1423,7 @@
           "remove the duplicate workout",
           "trash yesterday's swim"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "delete"
       },
@@ -457,6 +1431,7 @@
         "action": "add-item",
         "also": [],
         "app": "locker",
+        "bulk": false,
         "chat": "direct",
         "command": "locker.add_item",
         "inverse": "trash-item",
@@ -466,6 +1441,7 @@
           "add a new card item for my Visa",
           "store the wifi password for home"
         ],
+        "qualifier": null,
         "sealed": [
           "password",
           "otp_seed",
@@ -479,15 +1455,17 @@
         "action": "edit-item",
         "also": [],
         "app": "locker",
+        "bulk": false,
         "chat": "direct",
         "command": "locker.edit_item",
-        "inverse": null,
+        "inverse": "edit-item",
         "kind": "locker_item",
         "phrasings": [
           "change my Netflix username",
           "update the URL on my bank login",
           "fix the cardholder name on my Visa"
         ],
+        "qualifier": null,
         "sealed": [
           "password",
           "otp_seed",
@@ -501,6 +1479,7 @@
         "action": "trash-item",
         "also": [],
         "app": "locker",
+        "bulk": false,
         "chat": "direct",
         "command": "entity.trash",
         "inverse": "restore-item",
@@ -510,6 +1489,7 @@
           "trash the expired card",
           "remove the guest wifi item"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "delete"
       },
@@ -517,6 +1497,7 @@
         "action": "restore-item",
         "also": [],
         "app": "locker",
+        "bulk": false,
         "chat": "direct",
         "command": "entity.restore",
         "inverse": "trash-item",
@@ -526,6 +1507,7 @@
           "restore the card I just deleted",
           "undelete the guest wifi item"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "restore"
       },
@@ -533,6 +1515,7 @@
         "action": "purge-item",
         "also": [],
         "app": "locker",
+        "bulk": false,
         "chat": "card",
         "command": "entity.purge",
         "inverse": null,
@@ -542,6 +1525,7 @@
           "permanently delete the expired card",
           "purge that trashed item"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "purge"
       },
@@ -549,6 +1533,7 @@
         "action": "star-item",
         "also": [],
         "app": "locker",
+        "bulk": false,
         "chat": "direct",
         "command": "flag.set",
         "inverse": "unstar-item",
@@ -558,6 +1543,7 @@
           "favorite the home wifi",
           "mark my passport as a favorite"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "star"
       },
@@ -565,6 +1551,7 @@
         "action": "unstar-item",
         "also": [],
         "app": "locker",
+        "bulk": false,
         "chat": "direct",
         "command": "flag.clear",
         "inverse": "star-item",
@@ -574,6 +1561,7 @@
           "remove the star from the home wifi",
           "unfavorite my passport"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "unstar"
       },
@@ -581,6 +1569,7 @@
         "action": "archive-item",
         "also": [],
         "app": "locker",
+        "bulk": false,
         "chat": "direct",
         "command": "flag.set",
         "inverse": "unarchive-item",
@@ -590,6 +1579,7 @@
           "keep the expired card but hide it",
           "archive the guest wifi item"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "archive"
       },
@@ -597,6 +1587,7 @@
         "action": "unarchive-item",
         "also": [],
         "app": "locker",
+        "bulk": false,
         "chat": "direct",
         "command": "flag.clear",
         "inverse": "archive-item",
@@ -606,6 +1597,7 @@
           "bring the expired card back into the list",
           "unarchive the guest wifi item"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "unarchive"
       },
@@ -613,6 +1605,7 @@
         "action": "add-tag",
         "also": [],
         "app": "locker",
+        "bulk": false,
         "chat": "direct",
         "command": "tag.add",
         "inverse": "remove-tag",
@@ -622,6 +1615,7 @@
           "label the home wifi household",
           "add the tag travel to my passport"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "tag"
       },
@@ -629,6 +1623,7 @@
         "action": "remove-tag",
         "also": [],
         "app": "locker",
+        "bulk": false,
         "chat": "direct",
         "command": "tag.remove",
         "inverse": "add-tag",
@@ -638,6 +1633,7 @@
           "untag the home wifi",
           "take the travel label off my passport"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "untag"
       },
@@ -645,6 +1641,7 @@
         "action": "duplicate-item",
         "also": [],
         "app": "locker",
+        "bulk": false,
         "chat": "card",
         "command": "locker.duplicate_item",
         "inverse": null,
@@ -654,6 +1651,7 @@
           "duplicate my Visa item",
           "copy the bank login as a template"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "duplicate"
       },
@@ -661,6 +1659,7 @@
         "action": "set-field",
         "also": [],
         "app": "locker",
+        "bulk": false,
         "chat": "card",
         "command": "locker.set_field",
         "inverse": null,
@@ -670,6 +1669,7 @@
           "set the PIN field on my card",
           "add a recovery email field"
         ],
+        "qualifier": null,
         "sealed": [
           "value"
         ],
@@ -679,6 +1679,7 @@
         "action": "remove-field",
         "also": [],
         "app": "locker",
+        "bulk": false,
         "chat": "card",
         "command": "locker.remove_field",
         "inverse": null,
@@ -688,6 +1689,7 @@
           "delete the PIN field on my card",
           "drop the recovery email field"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "delete"
       },
@@ -695,6 +1697,7 @@
         "action": "set-addresses",
         "also": [],
         "app": "locker",
+        "bulk": false,
         "chat": "card",
         "command": "locker.set_addresses",
         "inverse": null,
@@ -704,6 +1707,7 @@
           "set the extra addresses on my bank login",
           "replace the other URLs on my Netflix login"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "edit"
       },
@@ -711,6 +1715,7 @@
         "action": "set-passkey",
         "also": [],
         "app": "locker",
+        "bulk": false,
         "chat": "card",
         "command": "locker.set_passkey",
         "inverse": null,
@@ -720,6 +1725,7 @@
           "replace the passkey on my bank login",
           "restate the passkey for my Google account"
         ],
+        "qualifier": null,
         "sealed": [
           "private_key"
         ],
@@ -729,6 +1735,7 @@
         "action": "clear-passkey",
         "also": [],
         "app": "locker",
+        "bulk": false,
         "chat": "card",
         "command": "locker.clear_passkey",
         "inverse": null,
@@ -738,6 +1745,7 @@
           "clear the passkey on my bank login",
           "delete the Google passkey"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "delete"
       },
@@ -745,6 +1753,7 @@
         "action": "set-memo",
         "also": [],
         "app": "locker",
+        "bulk": false,
         "chat": "card",
         "command": "locker.set_memo",
         "inverse": null,
@@ -754,6 +1763,7 @@
           "clear the memo on my Netflix item",
           "note that the wifi router is in the hall"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "edit"
       },
@@ -761,6 +1771,7 @@
         "action": "export",
         "also": [],
         "app": "locker",
+        "bulk": true,
         "chat": "card",
         "command": "locker.export",
         "inverse": null,
@@ -770,6 +1781,7 @@
           "download every item with its secrets",
           "export the locker including the trash"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "reveal"
       },
@@ -777,7 +1789,8 @@
         "action": "add-account",
         "also": [],
         "app": "money",
-        "chat": "direct",
+        "bulk": false,
+        "chat": "card",
         "command": "account.add",
         "inverse": "close-account",
         "kind": "account",
@@ -786,6 +1799,7 @@
           "create a checking account called Everyday",
           "open a cash account"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "create"
       },
@@ -793,15 +1807,17 @@
         "action": "edit-account",
         "also": [],
         "app": "money",
+        "bulk": false,
         "chat": "direct",
         "command": "account.edit",
-        "inverse": null,
+        "inverse": "edit-account",
         "kind": "account",
         "phrasings": [
           "rename my savings account to Rainy Day",
           "change Everyday to a savings account",
           "take my cash account off budget"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "edit"
       },
@@ -809,6 +1825,7 @@
         "action": "close-account",
         "also": [],
         "app": "money",
+        "bulk": false,
         "chat": "direct",
         "command": "flag.set",
         "inverse": "reopen-account",
@@ -818,6 +1835,7 @@
           "archive the Visa account",
           "close the cash account"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "archive"
       },
@@ -825,6 +1843,7 @@
         "action": "reopen-account",
         "also": [],
         "app": "money",
+        "bulk": false,
         "chat": "direct",
         "command": "flag.clear",
         "inverse": "close-account",
@@ -834,6 +1853,7 @@
           "bring the Visa account back",
           "reopen the cash account"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "unarchive"
       },
@@ -841,6 +1861,7 @@
         "action": "set-opening-balance",
         "also": [],
         "app": "money",
+        "bulk": false,
         "chat": "card",
         "command": "account.set_opening",
         "inverse": null,
@@ -850,6 +1871,7 @@
           "this account started with 1200 euros",
           "correct the starting balance on savings"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "edit"
       },
@@ -857,6 +1879,7 @@
         "action": "import-transactions",
         "also": [],
         "app": "money",
+        "bulk": true,
         "chat": "card",
         "command": "follow.statement",
         "inverse": null,
@@ -866,6 +1889,7 @@
           "load the CSV from my checking account",
           "add the lines from last month's statement"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "import"
       },
@@ -873,7 +1897,8 @@
         "action": "record-checkpoint",
         "also": [],
         "app": "money",
-        "chat": "direct",
+        "bulk": false,
+        "chat": "card",
         "command": "checkpoint.record",
         "inverse": null,
         "kind": "account",
@@ -882,6 +1907,7 @@
           "record a balance of 300 on savings today",
           "the bank says Everyday was 842 yesterday"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "log"
       },
@@ -889,6 +1915,7 @@
         "action": "save-import-profile",
         "also": [],
         "app": "money",
+        "bulk": false,
         "chat": "card",
         "command": "account.remember_layout",
         "inverse": null,
@@ -898,6 +1925,7 @@
           "save the column layout for Everyday",
           "use this layout for future statements"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "edit"
       },
@@ -905,7 +1933,8 @@
         "action": "categorize",
         "also": [],
         "app": "money",
-        "chat": "direct",
+        "bulk": true,
+        "chat": "card",
         "command": "txn.categorize",
         "inverse": null,
         "kind": "transaction",
@@ -914,6 +1943,7 @@
           "put yesterday's Uber in transport",
           "clear the category on the Amazon line"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "categorize"
       },
@@ -921,6 +1951,7 @@
         "action": "void-transaction",
         "also": [],
         "app": "money",
+        "bulk": false,
         "chat": "card",
         "command": "txn.void",
         "inverse": null,
@@ -930,6 +1961,7 @@
           "remove that charge from my figures",
           "void the Amazon line from Tuesday"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "void"
       },
@@ -937,15 +1969,17 @@
         "action": "set-display-name",
         "also": [],
         "app": "money",
-        "chat": "direct",
+        "bulk": false,
+        "chat": "card",
         "command": "entity.retitle",
-        "inverse": null,
+        "inverse": "set-display-name",
         "kind": "transaction",
         "phrasings": [
           "call the SQ *BLUE BOTTLE line Blue Bottle",
           "rename that charge to Rent",
           "set the name of the Amazon line to Books"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "edit"
       },
@@ -953,7 +1987,8 @@
         "action": "link-transfer",
         "also": [],
         "app": "money",
-        "chat": "direct",
+        "bulk": false,
+        "chat": "card",
         "command": "txn.link_transfer",
         "inverse": "unlink-transfer",
         "kind": "transaction",
@@ -962,6 +1997,7 @@
           "link the 500 out of checking with the 500 into savings",
           "treat these two transactions as one transfer"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "link"
       },
@@ -969,6 +2005,7 @@
         "action": "unlink-transfer",
         "also": [],
         "app": "money",
+        "bulk": false,
         "chat": "direct",
         "command": "txn.unlink_transfer",
         "inverse": "link-transfer",
@@ -978,6 +2015,7 @@
           "undo the transfer between checking and savings",
           "split those two lines apart"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "unlink"
       },
@@ -985,15 +2023,17 @@
         "action": "set-target",
         "also": [],
         "app": "money",
-        "chat": "direct",
+        "bulk": false,
+        "chat": "card",
         "command": "budget.set",
-        "inverse": null,
+        "inverse": "set-target",
         "kind": "budget",
         "phrasings": [
           "plan 400 for groceries in November",
           "budget 120 for coffee this month",
           "remove my dining out plan for October"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "edit"
       },
@@ -1001,15 +2041,17 @@
         "action": "set-carry",
         "also": [],
         "app": "money",
+        "bulk": false,
         "chat": "card",
         "command": "budget.set_carry",
-        "inverse": null,
+        "inverse": "set-carry",
         "kind": "budget",
         "phrasings": [
           "carry what's left of groceries into next month",
           "stop carrying over the coffee budget",
           "let the dining plan roll over"
         ],
+        "qualifier": "carry",
         "sealed": [],
         "verb": "edit"
       },
@@ -1017,7 +2059,8 @@
         "action": "add-rule",
         "also": [],
         "app": "money",
-        "chat": "direct",
+        "bulk": false,
+        "chat": "card",
         "command": "rule.add",
         "inverse": "delete-rule",
         "kind": "rule",
@@ -1026,6 +2069,7 @@
           "put anything with Uber in transport",
           "make a rule for Netflix as subscriptions"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "create"
       },
@@ -1033,15 +2077,17 @@
         "action": "edit-rule",
         "also": [],
         "app": "money",
+        "bulk": false,
         "chat": "direct",
         "command": "rule.edit",
-        "inverse": null,
+        "inverse": "edit-rule",
         "kind": "rule",
         "phrasings": [
           "change the Starbucks rule to dining",
           "make the Uber rule match Uber Eats too",
           "move the Netflix rule to entertainment"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "edit"
       },
@@ -1049,6 +2095,7 @@
         "action": "delete-rule",
         "also": [],
         "app": "money",
+        "bulk": false,
         "chat": "card",
         "command": "rule.delete",
         "inverse": null,
@@ -1058,6 +2105,7 @@
           "remove the Uber rule",
           "get rid of the Netflix rule"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "delete"
       },
@@ -1065,6 +2113,7 @@
         "action": "apply-rule-to-history",
         "also": [],
         "app": "money",
+        "bulk": true,
         "chat": "card",
         "command": "rule.apply",
         "inverse": null,
@@ -1074,6 +2123,7 @@
           "run the Starbucks rule on old transactions",
           "file past lines by my rules"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "apply"
       },
@@ -1081,7 +2131,8 @@
         "action": "add-category",
         "also": [],
         "app": "money",
-        "chat": "direct",
+        "bulk": false,
+        "chat": "card",
         "command": "category.add",
         "inverse": "archive-category",
         "kind": "category",
@@ -1090,6 +2141,7 @@
           "create a Gifts category",
           "make a new category for Subscriptions"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "create"
       },
@@ -1097,6 +2149,7 @@
         "action": "merge-category",
         "also": [],
         "app": "money",
+        "bulk": true,
         "chat": "card",
         "command": "category.merge",
         "inverse": null,
@@ -1106,6 +2159,7 @@
           "merge Coffee into Food",
           "combine Gas and Transport"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "merge"
       },
@@ -1113,7 +2167,8 @@
         "action": "archive-category",
         "also": [],
         "app": "money",
-        "chat": "direct",
+        "bulk": false,
+        "chat": "card",
         "command": "flag.set",
         "inverse": null,
         "kind": "category",
@@ -1122,6 +2177,7 @@
           "retire the Gifts category",
           "archive Subscriptions"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "archive"
       },
@@ -1129,6 +2185,7 @@
         "action": "create-note",
         "also": [],
         "app": "notes",
+        "bulk": false,
         "chat": "direct",
         "command": "note.create",
         "inverse": "delete-note",
@@ -1138,6 +2195,7 @@
           "start a note called book ideas",
           "write a note about the trip itinerary"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "create"
       },
@@ -1145,15 +2203,17 @@
         "action": "edit-note",
         "also": [],
         "app": "notes",
+        "bulk": false,
         "chat": "direct",
         "command": "note.edit",
-        "inverse": null,
+        "inverse": "edit-note",
         "kind": "note",
         "phrasings": [
           "add oat milk to my shopping note",
           "retitle the book ideas note",
           "fix the first line of the trip itinerary"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "edit"
       },
@@ -1163,15 +2223,17 @@
           "remove_from"
         ],
         "app": "notes",
+        "bulk": false,
         "chat": "direct",
         "command": "note.move",
-        "inverse": null,
+        "inverse": "move-note",
         "kind": "note",
         "phrasings": [
           "put the trip itinerary in the Travel notebook",
           "file my book ideas under Reading",
           "move the plumber note to Home"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "add_to"
       },
@@ -1179,6 +2241,7 @@
         "action": "create-notebook",
         "also": [],
         "app": "notes",
+        "bulk": false,
         "chat": "direct",
         "command": "container.create",
         "inverse": "delete-notebook",
@@ -1188,6 +2251,7 @@
           "create a Reading notebook",
           "start a notebook for work"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "create"
       },
@@ -1195,15 +2259,17 @@
         "action": "rename-notebook",
         "also": [],
         "app": "notes",
+        "bulk": false,
         "chat": "direct",
         "command": "entity.retitle",
-        "inverse": null,
+        "inverse": "rename-notebook",
         "kind": "notebook",
         "phrasings": [
           "rename the Travel notebook to Trips",
           "call my Reading notebook Books",
           "retitle Work to Office"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "edit"
       },
@@ -1211,15 +2277,17 @@
         "action": "delete-notebook",
         "also": [],
         "app": "notes",
+        "bulk": false,
         "chat": "direct",
         "command": "entity.trash",
-        "inverse": null,
+        "inverse": "restore-note",
         "kind": "notebook",
         "phrasings": [
           "delete the Travel notebook",
           "remove my Reading notebook",
           "trash the Work notebook"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "delete"
       },
@@ -1227,6 +2295,7 @@
         "action": "delete-note",
         "also": [],
         "app": "notes",
+        "bulk": false,
         "chat": "direct",
         "command": "entity.trash",
         "inverse": "restore-note",
@@ -1236,6 +2305,7 @@
           "trash my book ideas",
           "remove the old trip itinerary"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "delete"
       },
@@ -1243,6 +2313,7 @@
         "action": "restore-note",
         "also": [],
         "app": "notes",
+        "bulk": false,
         "chat": "direct",
         "command": "entity.restore",
         "inverse": "delete-note",
@@ -1252,6 +2323,7 @@
           "restore the note I deleted",
           "undelete my book ideas"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "restore"
       },
@@ -1259,6 +2331,7 @@
         "action": "restore-note-version",
         "also": [],
         "app": "notes",
+        "bulk": false,
         "chat": "card",
         "command": "note.restore_version",
         "inverse": null,
@@ -1268,6 +2341,7 @@
           "restore yesterday's text of book ideas",
           "undo my last edit to the plumber note"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "restore"
       },
@@ -1275,7 +2349,8 @@
         "action": "flag-note",
         "also": [],
         "app": "notes",
-        "chat": "card",
+        "bulk": false,
+        "chat": "direct",
         "command": "flag.set",
         "inverse": "unflag-note",
         "kind": "note",
@@ -1284,6 +2359,7 @@
           "star my book ideas",
           "pin the plumber note to the top"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "star"
       },
@@ -1291,7 +2367,8 @@
         "action": "unflag-note",
         "also": [],
         "app": "notes",
-        "chat": "card",
+        "bulk": false,
+        "chat": "direct",
         "command": "flag.clear",
         "inverse": "flag-note",
         "kind": "note",
@@ -1300,6 +2377,7 @@
           "unstar my book ideas",
           "take the plumber note off the top"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "unstar"
       },
@@ -1307,6 +2385,7 @@
         "action": "link",
         "also": [],
         "app": "notes",
+        "bulk": false,
         "chat": "card",
         "command": "edge.add",
         "inverse": null,
@@ -1316,6 +2395,7 @@
           "connect the book ideas note to the reading list task",
           "link the plumber note to Friday's event"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "link"
       },
@@ -1323,6 +2403,7 @@
         "action": "send-to-tasks",
         "also": [],
         "app": "notes",
+        "bulk": false,
         "chat": "card",
         "command": "task.add",
         "inverse": null,
@@ -1332,6 +2413,7 @@
           "send 'call the plumber' to Tasks",
           "make the first checklist item a task"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "create"
       },
@@ -1339,6 +2421,7 @@
         "action": "attach",
         "also": [],
         "app": "notes",
+        "bulk": false,
         "chat": "card",
         "command": "edge.add",
         "inverse": "detach",
@@ -1348,6 +2431,7 @@
           "add the photo to the plumber note",
           "attach the receipt to my book ideas"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "attach"
       },
@@ -1355,6 +2439,7 @@
         "action": "detach",
         "also": [],
         "app": "notes",
+        "bulk": false,
         "chat": "card",
         "command": "edge.remove",
         "inverse": "attach",
@@ -1364,6 +2449,7 @@
           "remove the photo from the plumber note",
           "take the receipt off my book ideas"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "detach"
       },
@@ -1371,6 +2457,7 @@
         "action": "add-tag",
         "also": [],
         "app": "notes",
+        "bulk": false,
         "chat": "direct",
         "command": "tag.add",
         "inverse": "remove-tag",
@@ -1380,6 +2467,7 @@
           "label my book ideas reading",
           "add the tag home to the plumber note"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "tag"
       },
@@ -1387,6 +2475,7 @@
         "action": "remove-tag",
         "also": [],
         "app": "notes",
+        "bulk": false,
         "chat": "direct",
         "command": "tag.remove",
         "inverse": "add-tag",
@@ -1396,6 +2485,7 @@
           "untag my book ideas",
           "take the home label off the plumber note"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "untag"
       },
@@ -1403,6 +2493,7 @@
         "action": "add-person",
         "also": [],
         "app": "people",
+        "bulk": false,
         "chat": "direct",
         "command": "person.add",
         "inverse": "trash-person",
@@ -1412,6 +2503,7 @@
           "save a contact called Maria, my dentist",
           "add my cousin Priya and remind me to call monthly"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "create"
       },
@@ -1419,15 +2511,17 @@
         "action": "edit-person",
         "also": [],
         "app": "people",
+        "bulk": false,
         "chat": "direct",
         "command": "person.edit",
-        "inverse": null,
+        "inverse": "edit-person",
         "kind": "person",
         "phrasings": [
           "change Sam's role to manager",
           "set Maria's birthday to March 3",
           "note that I met Priya at a wedding"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "edit"
       },
@@ -1435,15 +2529,17 @@
         "action": "set-cadence",
         "also": [],
         "app": "people",
-        "chat": "card",
+        "bulk": false,
+        "chat": "direct",
         "command": "person.edit",
-        "inverse": null,
+        "inverse": "set-cadence",
         "kind": "person",
         "phrasings": [
           "remind me to reach out to Sam every month",
           "call Priya every two weeks",
           "stop reminding me about Maria"
         ],
+        "qualifier": "cadence",
         "sealed": [],
         "verb": "edit"
       },
@@ -1451,6 +2547,7 @@
         "action": "trash-person",
         "also": [],
         "app": "people",
+        "bulk": false,
         "chat": "direct",
         "command": "entity.trash",
         "inverse": "restore-person",
@@ -1460,6 +2557,7 @@
           "remove Maria from my people",
           "trash the duplicate Priya"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "delete"
       },
@@ -1467,6 +2565,7 @@
         "action": "restore-person",
         "also": [],
         "app": "people",
+        "bulk": false,
         "chat": "direct",
         "command": "entity.restore",
         "inverse": "trash-person",
@@ -1476,6 +2575,7 @@
           "restore Maria",
           "undelete Priya"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "restore"
       },
@@ -1483,6 +2583,7 @@
         "action": "purge-person",
         "also": [],
         "app": "people",
+        "bulk": false,
         "chat": "card",
         "command": "entity.purge",
         "inverse": null,
@@ -1492,6 +2593,7 @@
           "permanently delete Maria",
           "purge the trashed Priya"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "purge"
       },
@@ -1499,6 +2601,7 @@
         "action": "log-interaction",
         "also": [],
         "app": "people",
+        "bulk": false,
         "chat": "direct",
         "command": "person.log_interaction",
         "inverse": null,
@@ -1508,6 +2611,7 @@
           "log a coffee with Maria yesterday",
           "I messaged Priya this morning"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "log"
       },
@@ -1515,6 +2619,7 @@
         "action": "star-person",
         "also": [],
         "app": "people",
+        "bulk": false,
         "chat": "direct",
         "command": "flag.set",
         "inverse": "unstar-person",
@@ -1524,6 +2629,7 @@
           "star Maria",
           "mark Priya as a favorite"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "star"
       },
@@ -1531,6 +2637,7 @@
         "action": "unstar-person",
         "also": [],
         "app": "people",
+        "bulk": false,
         "chat": "direct",
         "command": "flag.clear",
         "inverse": "star-person",
@@ -1540,6 +2647,7 @@
           "remove Maria's star",
           "unstar Priya"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "unstar"
       },
@@ -1549,6 +2657,7 @@
           "remove_from"
         ],
         "app": "people",
+        "bulk": false,
         "chat": "card",
         "command": "person.move",
         "inverse": null,
@@ -1558,6 +2667,7 @@
           "move Maria to Work",
           "take Priya out of her list"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "add_to"
       },
@@ -1565,6 +2675,7 @@
         "action": "add-note",
         "also": [],
         "app": "people",
+        "bulk": false,
         "chat": "card",
         "command": "person.add_note",
         "inverse": null,
@@ -1574,6 +2685,7 @@
           "note that Maria moved to Lisbon",
           "write down Priya's gift preferences"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "create"
       },
@@ -1581,6 +2693,7 @@
         "action": "add-task",
         "also": [],
         "app": "people",
+        "bulk": false,
         "chat": "card",
         "command": "person.add_task",
         "inverse": null,
@@ -1590,6 +2703,7 @@
           "add a follow-up for Maria",
           "task: ask Priya about the move"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "create"
       },
@@ -1597,6 +2711,7 @@
         "action": "complete-task",
         "also": [],
         "app": "people",
+        "bulk": false,
         "chat": "card",
         "command": "task.complete",
         "inverse": null,
@@ -1606,6 +2721,7 @@
           "I sent Maria the invoice, finish that task",
           "complete the Priya gift task"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "complete"
       },
@@ -1613,6 +2729,7 @@
         "action": "reopen-task",
         "also": [],
         "app": "people",
+        "bulk": false,
         "chat": "card",
         "command": "task.reopen",
         "inverse": null,
@@ -1622,6 +2739,7 @@
           "the invoice task for Maria isn't done",
           "reopen the gift for Priya"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "reopen"
       },
@@ -1629,6 +2747,7 @@
         "action": "add-important-date",
         "also": [],
         "app": "people",
+        "bulk": false,
         "chat": "card",
         "command": "person.add_date",
         "inverse": null,
@@ -1638,6 +2757,7 @@
           "Maria's graduation is May 20",
           "remember Priya's naming day"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "create"
       },
@@ -1645,6 +2765,7 @@
         "action": "set-reminder",
         "also": [],
         "app": "people",
+        "bulk": false,
         "chat": "card",
         "command": "event.edit",
         "inverse": null,
@@ -1654,6 +2775,7 @@
           "turn off the reminder for Maria's graduation",
           "remind me the day of Priya's birthday"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "edit"
       },
@@ -1661,6 +2783,7 @@
         "action": "add-relationship",
         "also": [],
         "app": "people",
+        "bulk": false,
         "chat": "card",
         "command": "person.add_relationship",
         "inverse": null,
@@ -1670,6 +2793,7 @@
           "Priya is my cousin",
           "link Sam as Maria's manager"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "link"
       },
@@ -1677,6 +2801,7 @@
         "action": "add-gift",
         "also": [],
         "app": "people",
+        "bulk": false,
         "chat": "card",
         "command": "person.add_gift",
         "inverse": null,
@@ -1686,6 +2811,7 @@
           "Maria would like a scarf",
           "add a gift for Priya: tea set"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "create"
       },
@@ -1693,6 +2819,7 @@
         "action": "create-list",
         "also": [],
         "app": "people",
+        "bulk": false,
         "chat": "card",
         "command": "container.create",
         "inverse": null,
@@ -1702,6 +2829,7 @@
           "create a Work list for people",
           "start a list for college friends"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "create"
       },
@@ -1709,6 +2837,7 @@
         "action": "rename-list",
         "also": [],
         "app": "people",
+        "bulk": false,
         "chat": "card",
         "command": "entity.retitle",
         "inverse": null,
@@ -1718,6 +2847,7 @@
           "call the Work list Colleagues",
           "retitle college friends to Alumni"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "edit"
       },
@@ -1725,6 +2855,7 @@
         "action": "delete-list",
         "also": [],
         "app": "people",
+        "bulk": false,
         "chat": "card",
         "command": "entity.trash",
         "inverse": null,
@@ -1734,6 +2865,7 @@
           "remove the Work list",
           "trash the college friends list"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "delete"
       },
@@ -1741,6 +2873,7 @@
         "action": "add-journal-entry",
         "also": [],
         "app": "people",
+        "bulk": false,
         "chat": "card",
         "command": "person.add_journal_entry",
         "inverse": null,
@@ -1750,6 +2883,7 @@
           "write a journal entry, feeling tired",
           "log my mood as happy with a note about the park"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "create"
       },
@@ -1757,6 +2891,7 @@
         "action": "save-contact-channel",
         "also": [],
         "app": "people",
+        "bulk": false,
         "chat": "card",
         "command": "person.save_contact_point",
         "inverse": null,
@@ -1766,6 +2901,7 @@
           "set Maria's email",
           "update Priya's address"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "edit"
       },
@@ -1773,6 +2909,7 @@
         "action": "delete-contact-channel",
         "also": [],
         "app": "people",
+        "bulk": false,
         "chat": "card",
         "command": "person.remove_contact_point",
         "inverse": null,
@@ -1782,6 +2919,7 @@
           "delete Maria's work email",
           "drop Priya's old address"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "delete"
       },
@@ -1789,6 +2927,7 @@
         "action": "merge-people",
         "also": [],
         "app": "people",
+        "bulk": true,
         "chat": "card",
         "command": "person.merge",
         "inverse": null,
@@ -1798,6 +2937,7 @@
           "merge the two Priyas",
           "fold the duplicate Maria into the real one"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "merge"
       },
@@ -1805,6 +2945,7 @@
         "action": "upload",
         "also": [],
         "app": "photos",
+        "bulk": false,
         "chat": "card",
         "command": "photo.add",
         "inverse": "delete-photo",
@@ -1814,6 +2955,7 @@
           "upload these pictures",
           "save this image"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "import"
       },
@@ -1821,6 +2963,7 @@
         "action": "edit-photo",
         "also": [],
         "app": "photos",
+        "bulk": false,
         "chat": "card",
         "command": "photo.edit",
         "inverse": null,
@@ -1830,6 +2973,7 @@
           "this was taken on the 5th, not the 6th",
           "correct the time offset on the beach photo"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "edit"
       },
@@ -1837,15 +2981,17 @@
         "action": "retitle-photo",
         "also": [],
         "app": "photos",
+        "bulk": false,
         "chat": "direct",
         "command": "entity.retitle",
-        "inverse": null,
+        "inverse": "retitle-photo",
         "kind": "photo",
         "phrasings": [
           "caption this photo sunset at the pier",
           "rename the beach photo to Day one",
           "call this picture Grandma's garden"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "edit"
       },
@@ -1853,6 +2999,7 @@
         "action": "flag-photo",
         "also": [],
         "app": "photos",
+        "bulk": false,
         "chat": "direct",
         "command": "flag.set",
         "inverse": "unflag-photo",
@@ -1862,6 +3009,7 @@
           "favorite this picture",
           "archive the blurry photo"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "star"
       },
@@ -1869,6 +3017,7 @@
         "action": "unflag-photo",
         "also": [],
         "app": "photos",
+        "bulk": false,
         "chat": "direct",
         "command": "flag.clear",
         "inverse": "flag-photo",
@@ -1878,6 +3027,7 @@
           "remove the favorite from this picture",
           "bring the blurry photo back from the archive"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "unstar"
       },
@@ -1885,6 +3035,7 @@
         "action": "delete-photo",
         "also": [],
         "app": "photos",
+        "bulk": false,
         "chat": "direct",
         "command": "entity.trash",
         "inverse": "restore-photo",
@@ -1894,6 +3045,7 @@
           "trash this picture",
           "remove the duplicate beach shot"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "delete"
       },
@@ -1901,6 +3053,7 @@
         "action": "restore-photo",
         "also": [],
         "app": "photos",
+        "bulk": false,
         "chat": "direct",
         "command": "entity.restore",
         "inverse": "delete-photo",
@@ -1910,6 +3063,7 @@
           "restore the picture I deleted",
           "undelete the beach shot"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "restore"
       },
@@ -1917,6 +3071,7 @@
         "action": "purge-photo",
         "also": [],
         "app": "photos",
+        "bulk": false,
         "chat": "card",
         "command": "entity.purge",
         "inverse": null,
@@ -1926,6 +3081,7 @@
           "permanently delete this picture",
           "purge the trashed beach shot"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "purge"
       },
@@ -1933,6 +3089,7 @@
         "action": "create-album",
         "also": [],
         "app": "photos",
+        "bulk": false,
         "chat": "direct",
         "command": "container.create",
         "inverse": "delete-album",
@@ -1942,6 +3099,7 @@
           "create a Family album",
           "start an album for the wedding"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "create"
       },
@@ -1949,15 +3107,17 @@
         "action": "rename-album",
         "also": [],
         "app": "photos",
+        "bulk": false,
         "chat": "direct",
         "command": "entity.retitle",
-        "inverse": null,
+        "inverse": "rename-album",
         "kind": "album",
         "phrasings": [
           "rename Italy 2026 to Summer in Italy",
           "call the Family album Relatives",
           "retitle the wedding album"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "edit"
       },
@@ -1965,6 +3125,7 @@
         "action": "set-album-cover",
         "also": [],
         "app": "photos",
+        "bulk": false,
         "chat": "card",
         "command": "album.set_cover",
         "inverse": null,
@@ -1974,6 +3135,7 @@
           "make this picture the cover of Family",
           "clear the wedding album's cover"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "edit"
       },
@@ -1981,6 +3143,7 @@
         "action": "delete-album",
         "also": [],
         "app": "photos",
+        "bulk": false,
         "chat": "direct",
         "command": "entity.trash",
         "inverse": "restore-album",
@@ -1990,6 +3153,7 @@
           "remove the Family album",
           "trash the wedding album"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "delete"
       },
@@ -1997,7 +3161,8 @@
         "action": "restore-album",
         "also": [],
         "app": "photos",
-        "chat": "card",
+        "bulk": false,
+        "chat": "direct",
         "command": "entity.restore",
         "inverse": "delete-album",
         "kind": "album",
@@ -2006,6 +3171,7 @@
           "restore the Family album",
           "undelete the wedding album"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "restore"
       },
@@ -2013,6 +3179,7 @@
         "action": "add-to-album",
         "also": [],
         "app": "photos",
+        "bulk": false,
         "chat": "direct",
         "command": "edge.add",
         "inverse": "remove-from-album",
@@ -2022,6 +3189,7 @@
           "put this picture in the Family album",
           "file these in the wedding album"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "add_to"
       },
@@ -2029,6 +3197,7 @@
         "action": "remove-from-album",
         "also": [],
         "app": "photos",
+        "bulk": false,
         "chat": "direct",
         "command": "edge.remove",
         "inverse": "add-to-album",
@@ -2038,6 +3207,7 @@
           "remove this picture from the Family album",
           "pull it out of the wedding album"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "remove_from"
       },
@@ -2045,6 +3215,7 @@
         "action": "set-place",
         "also": [],
         "app": "photos",
+        "bulk": false,
         "chat": "card",
         "command": "photo.set_place",
         "inverse": null,
@@ -2054,6 +3225,7 @@
           "clear the place on the beach photo",
           "set the place of these pictures to home"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "edit"
       },
@@ -2061,6 +3233,7 @@
         "action": "name-place",
         "also": [],
         "app": "photos",
+        "bulk": false,
         "chat": "card",
         "command": "entity.retitle",
         "inverse": null,
@@ -2070,6 +3243,7 @@
           "name that spot The Lake",
           "rename the Lisbon place to Alfama"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "edit"
       },
@@ -2077,6 +3251,7 @@
         "action": "tag-photo",
         "also": [],
         "app": "photos",
+        "bulk": false,
         "chat": "direct",
         "command": "tag.add",
         "inverse": "untag-photo",
@@ -2086,6 +3261,7 @@
           "label this picture family",
           "add the tag wedding to these photos"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "tag"
       },
@@ -2093,6 +3269,7 @@
         "action": "untag-photo",
         "also": [],
         "app": "photos",
+        "bulk": false,
         "chat": "direct",
         "command": "tag.remove",
         "inverse": "tag-photo",
@@ -2102,6 +3279,7 @@
           "untag this picture",
           "take the wedding label off these photos"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "untag"
       },
@@ -2109,6 +3287,7 @@
         "action": "add",
         "also": [],
         "app": "tasks",
+        "bulk": false,
         "chat": "direct",
         "command": "task.add",
         "inverse": "delete",
@@ -2118,6 +3297,7 @@
           "add a task to buy milk",
           "put 'file taxes' on my list for April 15"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "create"
       },
@@ -2127,15 +3307,17 @@
           "reschedule"
         ],
         "app": "tasks",
+        "bulk": false,
         "chat": "direct",
         "command": "task.edit",
-        "inverse": null,
+        "inverse": "edit",
         "kind": "task",
         "phrasings": [
           "rename the plumber task",
           "make buying milk high priority",
           "add a note to the taxes task"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "edit"
       },
@@ -2143,6 +3325,7 @@
         "action": "complete",
         "also": [],
         "app": "tasks",
+        "bulk": false,
         "chat": "direct",
         "command": "task.complete",
         "inverse": "reopen",
@@ -2152,6 +3335,7 @@
           "I finished the taxes",
           "check off buy milk"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "complete"
       },
@@ -2159,6 +3343,7 @@
         "action": "reopen",
         "also": [],
         "app": "tasks",
+        "bulk": false,
         "chat": "direct",
         "command": "task.reopen",
         "inverse": "complete",
@@ -2168,6 +3353,7 @@
           "the taxes aren't done after all",
           "uncheck buy milk"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "reopen"
       },
@@ -2175,15 +3361,17 @@
         "action": "cancel",
         "also": [],
         "app": "tasks",
-        "chat": "card",
+        "bulk": false,
+        "chat": "direct",
         "command": "task.cancel",
-        "inverse": null,
+        "inverse": "reopen",
         "kind": "task",
         "phrasings": [
           "cancel the plumber task",
           "I'm not buying milk anymore, drop it",
           "cancel this week's repeat of the laundry task"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "cancel"
       },
@@ -2193,15 +3381,17 @@
           "remove_from"
         ],
         "app": "tasks",
+        "bulk": false,
         "chat": "direct",
         "command": "task.organize",
-        "inverse": null,
+        "inverse": "organize-task",
         "kind": "task",
         "phrasings": [
           "put the plumber task in the Home project",
           "file buy milk under Errands",
           "move the taxes task to the Finance project"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "add_to"
       },
@@ -2209,6 +3399,7 @@
         "action": "delete",
         "also": [],
         "app": "tasks",
+        "bulk": false,
         "chat": "direct",
         "command": "entity.trash",
         "inverse": "restore",
@@ -2218,6 +3409,7 @@
           "trash buy milk",
           "remove the old taxes task"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "delete"
       },
@@ -2225,6 +3417,7 @@
         "action": "purge",
         "also": [],
         "app": "tasks",
+        "bulk": false,
         "chat": "card",
         "command": "entity.purge",
         "inverse": null,
@@ -2234,6 +3427,7 @@
           "permanently delete the trashed milk task",
           "purge the old taxes task"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "purge"
       },
@@ -2241,6 +3435,7 @@
         "action": "restore",
         "also": [],
         "app": "tasks",
+        "bulk": false,
         "chat": "direct",
         "command": "entity.restore",
         "inverse": "delete",
@@ -2250,6 +3445,7 @@
           "restore the task I deleted",
           "undelete buy milk"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "restore"
       },
@@ -2257,22 +3453,43 @@
         "action": "create-project",
         "also": [],
         "app": "tasks",
+        "bulk": false,
         "chat": "direct",
         "command": "container.create",
-        "inverse": null,
+        "inverse": "delete",
         "kind": "list",
         "phrasings": [
           "make a project called Home renovation",
           "create a list named Errands",
           "start a Finance project in the Personal area"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "create"
+      },
+      {
+        "action": "rename-list",
+        "also": [],
+        "app": "tasks",
+        "bulk": false,
+        "chat": "direct",
+        "command": "entity.retitle",
+        "inverse": "rename-list",
+        "kind": "list",
+        "phrasings": [
+          "rename the Home renovation project to House projects",
+          "call the Errands list Chores",
+          "retitle the Finance project"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "edit"
       },
       {
         "action": "create-section",
         "also": [],
         "app": "tasks",
+        "bulk": false,
         "chat": "card",
         "command": "container.create",
         "inverse": null,
@@ -2282,6 +3499,7 @@
           "create a Waiting section in Errands",
           "add a Q4 section to Finance"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "create"
       },
@@ -2289,6 +3507,7 @@
         "action": "attach",
         "also": [],
         "app": "tasks",
+        "bulk": false,
         "chat": "card",
         "command": "edge.add",
         "inverse": "detach",
@@ -2298,6 +3517,7 @@
           "add the receipt to buy milk",
           "attach the form to the taxes task"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "attach"
       },
@@ -2305,6 +3525,7 @@
         "action": "detach",
         "also": [],
         "app": "tasks",
+        "bulk": false,
         "chat": "card",
         "command": "edge.remove",
         "inverse": "attach",
@@ -2314,6 +3535,7 @@
           "remove the receipt from buy milk",
           "take the form off the taxes task"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "detach"
       },
@@ -2321,6 +3543,7 @@
         "action": "add-tag",
         "also": [],
         "app": "tasks",
+        "bulk": false,
         "chat": "direct",
         "command": "tag.add",
         "inverse": "remove-tag",
@@ -2330,6 +3553,7 @@
           "label buy milk errands",
           "add the tag urgent to the taxes task"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "tag"
       },
@@ -2337,6 +3561,7 @@
         "action": "remove-tag",
         "also": [],
         "app": "tasks",
+        "bulk": false,
         "chat": "direct",
         "command": "tag.remove",
         "inverse": "add-tag",
@@ -2346,6 +3571,7 @@
           "untag buy milk",
           "take the urgent label off the taxes task"
         ],
+        "qualifier": null,
         "sealed": [],
         "verb": "untag"
       }
@@ -2872,8 +4098,6 @@
       "entity": "measurement",
       "fields": [
         {
-          "create": false,
-          "edit": null,
           "name": "metric",
           "source": {
             "column": "metric",
@@ -2909,8 +4133,6 @@
           ]
         },
         {
-          "create": false,
-          "edit": null,
           "name": "value",
           "source": {
             "column": "value",
@@ -2945,8 +4167,6 @@
       "entity": "activity",
       "fields": [
         {
-          "create": false,
-          "edit": null,
           "name": "moving",
           "source": {
             "column": "moving_s",
@@ -2957,8 +4177,6 @@
           "values": []
         },
         {
-          "create": false,
-          "edit": null,
           "name": "distance",
           "source": {
             "column": "distance_m",
@@ -2969,8 +4187,6 @@
           "values": []
         },
         {
-          "create": false,
-          "edit": null,
           "name": "energy",
           "source": {
             "column": "energy_kcal",
@@ -2981,8 +4197,6 @@
           "values": []
         },
         {
-          "create": false,
-          "edit": null,
           "name": "heart_rate",
           "source": {
             "column": "heart_bpm",
@@ -2993,8 +4207,6 @@
           "values": []
         },
         {
-          "create": false,
-          "edit": null,
           "name": "climb",
           "source": {
             "column": "climb_m",
@@ -3023,8 +4235,6 @@
       "entity": "account",
       "fields": [
         {
-          "create": true,
-          "edit": "account.edit",
           "name": "type",
           "source": {
             "column": "type",
@@ -3052,8 +4262,6 @@
           ]
         },
         {
-          "create": true,
-          "edit": null,
           "name": "currency",
           "source": {
             "column": "currency",
@@ -3064,8 +4272,6 @@
           "values": []
         },
         {
-          "create": false,
-          "edit": "account.set_opening",
           "name": "opening",
           "source": {
             "column": "opening_minor",
@@ -3076,8 +4282,6 @@
           "values": []
         },
         {
-          "create": true,
-          "edit": "account.edit",
           "name": "on_budget",
           "source": {
             "column": "on_budget",
@@ -3106,8 +4310,6 @@
       "entity": "category",
       "fields": [
         {
-          "create": true,
-          "edit": null,
           "name": "key",
           "source": {
             "column": "key",
@@ -3118,8 +4320,6 @@
           "values": []
         },
         {
-          "create": true,
-          "edit": null,
           "name": "group",
           "source": {
             "column": "parent_id",
@@ -3154,8 +4354,6 @@
       "entity": "budget",
       "fields": [
         {
-          "create": true,
-          "edit": "budget.set",
           "name": "amount",
           "source": {
             "column": "amount_minor",
@@ -3166,8 +4364,6 @@
           "values": []
         },
         {
-          "create": false,
-          "edit": null,
           "name": "currency",
           "source": {
             "column": "currency",
@@ -3178,8 +4374,6 @@
           "values": []
         },
         {
-          "create": false,
-          "edit": "budget.set_carry",
           "name": "carry",
           "source": {
             "column": "carry",
@@ -3214,8 +4408,6 @@
       "entity": "rule",
       "fields": [
         {
-          "create": true,
-          "edit": "rule.edit",
           "name": "category",
           "source": {
             "column": "category_id",
@@ -3226,8 +4418,6 @@
           "values": []
         },
         {
-          "create": false,
-          "edit": null,
           "name": "position",
           "source": {
             "column": "position",
@@ -3252,78 +4442,6 @@
   ],
   "declared_verbs": [
     {
-      "action": "rsvp",
-      "app": "agenda",
-      "command": "event.respond",
-      "kind": "event",
-      "reason": "the assistant's runtime does not run this verb yet",
-      "verb": "respond"
-    },
-    {
-      "action": "tag",
-      "app": "docs",
-      "command": "tag.add",
-      "kind": "document",
-      "reason": "the assistant's runtime does not run this verb yet",
-      "verb": "tag"
-    },
-    {
-      "action": "untag",
-      "app": "docs",
-      "command": "tag.remove",
-      "kind": "document",
-      "reason": "the assistant's runtime does not run this verb yet",
-      "verb": "untag"
-    },
-    {
-      "action": "delete-workout",
-      "app": "health",
-      "command": "entity.trash",
-      "kind": "workout",
-      "reason": "the assistant's runtime does not write this kind yet",
-      "verb": "delete"
-    },
-    {
-      "action": "archive-item",
-      "app": "locker",
-      "command": "flag.set",
-      "kind": "locker_item",
-      "reason": "the assistant's runtime does not run this verb yet",
-      "verb": "archive"
-    },
-    {
-      "action": "unarchive-item",
-      "app": "locker",
-      "command": "flag.clear",
-      "kind": "locker_item",
-      "reason": "the assistant's runtime does not run this verb yet",
-      "verb": "unarchive"
-    },
-    {
-      "action": "add-tag",
-      "app": "locker",
-      "command": "tag.add",
-      "kind": "locker_item",
-      "reason": "the assistant's runtime does not run this verb yet",
-      "verb": "tag"
-    },
-    {
-      "action": "remove-tag",
-      "app": "locker",
-      "command": "tag.remove",
-      "kind": "locker_item",
-      "reason": "the assistant's runtime does not run this verb yet",
-      "verb": "untag"
-    },
-    {
-      "action": "add-account",
-      "app": "money",
-      "command": "account.add",
-      "kind": "account",
-      "reason": "the assistant's runtime does not write this kind yet",
-      "verb": "create"
-    },
-    {
       "action": "edit-account",
       "app": "money",
       "command": "account.edit",
@@ -3336,7 +4454,7 @@
       "app": "money",
       "command": "flag.set",
       "kind": "account",
-      "reason": "the assistant's runtime does not run this verb yet",
+      "reason": "the assistant's runtime does not write this kind yet",
       "verb": "archive"
     },
     {
@@ -3344,40 +4462,8 @@
       "app": "money",
       "command": "flag.clear",
       "kind": "account",
-      "reason": "the assistant's runtime does not run this verb yet",
+      "reason": "the assistant's runtime does not write this kind yet",
       "verb": "unarchive"
-    },
-    {
-      "action": "record-checkpoint",
-      "app": "money",
-      "command": "checkpoint.record",
-      "kind": "account",
-      "reason": "the assistant's runtime does not write this kind yet",
-      "verb": "log"
-    },
-    {
-      "action": "categorize",
-      "app": "money",
-      "command": "txn.categorize",
-      "kind": "transaction",
-      "reason": "the assistant's runtime does not run this verb yet",
-      "verb": "categorize"
-    },
-    {
-      "action": "set-display-name",
-      "app": "money",
-      "command": "entity.retitle",
-      "kind": "transaction",
-      "reason": "the assistant's runtime does not write this kind yet",
-      "verb": "edit"
-    },
-    {
-      "action": "link-transfer",
-      "app": "money",
-      "command": "txn.link_transfer",
-      "kind": "transaction",
-      "reason": "the assistant's runtime does not run this verb yet",
-      "verb": "link"
     },
     {
       "action": "unlink-transfer",
@@ -3388,92 +4474,12 @@
       "verb": "unlink"
     },
     {
-      "action": "set-target",
-      "app": "money",
-      "command": "budget.set",
-      "kind": "budget",
-      "reason": "the assistant's runtime does not write this kind yet",
-      "verb": "edit"
-    },
-    {
-      "action": "add-rule",
-      "app": "money",
-      "command": "rule.add",
-      "kind": "rule",
-      "reason": "the assistant's runtime does not write this kind yet",
-      "verb": "create"
-    },
-    {
       "action": "edit-rule",
       "app": "money",
       "command": "rule.edit",
       "kind": "rule",
       "reason": "the assistant's runtime does not write this kind yet",
       "verb": "edit"
-    },
-    {
-      "action": "add-category",
-      "app": "money",
-      "command": "category.add",
-      "kind": "category",
-      "reason": "the assistant's runtime does not write this kind yet",
-      "verb": "create"
-    },
-    {
-      "action": "archive-category",
-      "app": "money",
-      "command": "flag.set",
-      "kind": "category",
-      "reason": "the assistant's runtime does not run this verb yet",
-      "verb": "archive"
-    },
-    {
-      "action": "add-tag",
-      "app": "notes",
-      "command": "tag.add",
-      "kind": "note",
-      "reason": "the assistant's runtime does not run this verb yet",
-      "verb": "tag"
-    },
-    {
-      "action": "remove-tag",
-      "app": "notes",
-      "command": "tag.remove",
-      "kind": "note",
-      "reason": "the assistant's runtime does not run this verb yet",
-      "verb": "untag"
-    },
-    {
-      "action": "tag-photo",
-      "app": "photos",
-      "command": "tag.add",
-      "kind": "photo",
-      "reason": "the assistant's runtime does not run this verb yet",
-      "verb": "tag"
-    },
-    {
-      "action": "untag-photo",
-      "app": "photos",
-      "command": "tag.remove",
-      "kind": "photo",
-      "reason": "the assistant's runtime does not run this verb yet",
-      "verb": "untag"
-    },
-    {
-      "action": "add-tag",
-      "app": "tasks",
-      "command": "tag.add",
-      "kind": "task",
-      "reason": "the assistant's runtime does not run this verb yet",
-      "verb": "tag"
-    },
-    {
-      "action": "remove-tag",
-      "app": "tasks",
-      "command": "tag.remove",
-      "kind": "task",
-      "reason": "the assistant's runtime does not run this verb yet",
-      "verb": "untag"
     }
   ],
   "decline_reasons": [
@@ -3497,8 +4503,6 @@
       "entity": "person",
       "fields": [
         {
-          "create": true,
-          "edit": "person.edit",
           "name": "role",
           "source": {
             "column": "role",
@@ -3509,8 +4513,6 @@
           "values": []
         },
         {
-          "create": true,
-          "edit": "person.edit",
           "name": "nickname",
           "source": {
             "column": "nickname",
@@ -3521,8 +4523,6 @@
           "values": []
         },
         {
-          "create": false,
-          "edit": "person.edit",
           "name": "met",
           "source": {
             "column": "met",
@@ -3533,8 +4533,6 @@
           "values": []
         },
         {
-          "create": true,
-          "edit": "person.edit",
           "name": "cadence",
           "source": {
             "column": "cadence_days",
@@ -3545,8 +4543,6 @@
           "values": []
         },
         {
-          "create": false,
-          "edit": null,
           "name": "starred",
           "source": {
             "column": "to_id",
@@ -3614,8 +4610,6 @@
       "entity": "event",
       "fields": [
         {
-          "create": false,
-          "edit": null,
           "name": "status",
           "source": {
             "column": "status",
@@ -3639,8 +4633,6 @@
           ]
         },
         {
-          "create": true,
-          "edit": "event.edit",
           "name": "duration",
           "source": {
             "column": "ends",
@@ -3651,8 +4643,6 @@
           "values": []
         },
         {
-          "create": true,
-          "edit": "event.edit",
           "name": "description",
           "source": {
             "column": "description",
@@ -3695,7 +4685,7 @@
       ]
     },
     {
-      "card": "task: name, date (due), status (open|completed|cancelled), effort (min), priority (9 highest..1 lowest, 0 none), completed (date), description · links: subtasks, people, list · verbs: create edit reschedule complete reopen delete restore add_to remove_from",
+      "card": "task: name, date (due), status (open|completed|cancelled), effort (min), priority (9 highest..1 lowest, 0 none), completed (date), description · links: subtasks, people, list · verbs: create edit reschedule complete reopen cancel delete restore add_to remove_from tag untag",
       "container": false,
       "date": {
         "label": "due",
@@ -3707,8 +4697,6 @@
       "entity": "task",
       "fields": [
         {
-          "create": false,
-          "edit": "task.complete",
           "name": "status",
           "source": {
             "column": "status",
@@ -3732,8 +4720,6 @@
           ]
         },
         {
-          "create": true,
-          "edit": "task.edit",
           "name": "effort",
           "source": {
             "column": "effort_min",
@@ -3744,8 +4730,6 @@
           "values": []
         },
         {
-          "create": true,
-          "edit": "task.edit",
           "name": "priority",
           "source": {
             "column": "priority",
@@ -3756,8 +4740,6 @@
           "values": []
         },
         {
-          "create": false,
-          "edit": null,
           "name": "completed",
           "source": {
             "column": "done_at",
@@ -3768,8 +4750,6 @@
           "values": []
         },
         {
-          "create": true,
-          "edit": "task.edit",
           "name": "description",
           "source": {
             "column": "description",
@@ -3813,10 +4793,13 @@
         "reschedule",
         "complete",
         "reopen",
+        "cancel",
         "delete",
         "restore",
         "add_to",
-        "remove_from"
+        "remove_from",
+        "tag",
+        "untag"
       ],
       "where_fields": [
         "status",
@@ -3827,7 +4810,7 @@
       ]
     },
     {
-      "card": "note: name, date (created), body, pinned (yes|no) · links: notebook, people · verbs: create edit delete restore add_to remove_from",
+      "card": "note: name, date (created), body, pinned (yes|no), starred (yes|no) · links: notebook, people · verbs: create edit delete restore star unstar add_to remove_from tag untag",
       "container": false,
       "date": {
         "label": "created",
@@ -3839,8 +4822,6 @@
       "entity": "note",
       "fields": [
         {
-          "create": true,
-          "edit": "note.edit",
           "name": "body",
           "source": {
             "column": "body",
@@ -3851,9 +4832,17 @@
           "values": []
         },
         {
-          "create": false,
-          "edit": "flag.set",
           "name": "pinned",
+          "source": {
+            "column": "to_id",
+            "table": "edge"
+          },
+          "type": "bool",
+          "unit": null,
+          "values": []
+        },
+        {
+          "name": "starred",
           "source": {
             "column": "to_id",
             "table": "edge"
@@ -3890,16 +4879,21 @@
         "edit",
         "delete",
         "restore",
+        "star",
+        "unstar",
         "add_to",
-        "remove_from"
+        "remove_from",
+        "tag",
+        "untag"
       ],
       "where_fields": [
         "body",
-        "pinned"
+        "pinned",
+        "starred"
       ]
     },
     {
-      "card": "document: name, date (created), starred (yes|no) · links: folder · verbs: create edit delete restore star unstar add_to remove_from",
+      "card": "document: name, date (created), starred (yes|no) · links: folder · verbs: create edit delete restore star unstar add_to remove_from tag untag",
       "container": false,
       "date": {
         "label": "created",
@@ -3911,8 +4905,6 @@
       "entity": "document",
       "fields": [
         {
-          "create": false,
-          "edit": null,
           "name": "starred",
           "source": {
             "column": "to_id",
@@ -3948,14 +4940,16 @@
         "star",
         "unstar",
         "add_to",
-        "remove_from"
+        "remove_from",
+        "tag",
+        "untag"
       ],
       "where_fields": [
         "starred"
       ]
     },
     {
-      "card": "photo: name, date (taken), starred (yes|no) · links: albums · verbs: edit delete restore star unstar add_to remove_from",
+      "card": "photo: name, date (taken), starred (yes|no) · links: albums · verbs: edit delete restore star unstar add_to remove_from tag untag",
       "container": false,
       "date": {
         "label": "taken",
@@ -3967,8 +4961,6 @@
       "entity": "photo",
       "fields": [
         {
-          "create": false,
-          "edit": null,
           "name": "starred",
           "source": {
             "column": "to_id",
@@ -4003,14 +4995,16 @@
         "star",
         "unstar",
         "add_to",
-        "remove_from"
+        "remove_from",
+        "tag",
+        "untag"
       ],
       "where_fields": [
         "starred"
       ]
     },
     {
-      "card": "album: name · links: photos · verbs: create edit delete",
+      "card": "album: name · links: photos · verbs: create edit delete restore",
       "container": true,
       "date": null,
       "entity": "album",
@@ -4035,19 +5029,18 @@
       "verbs": [
         "create",
         "edit",
-        "delete"
+        "delete",
+        "restore"
       ],
       "where_fields": []
     },
     {
-      "card": "locker item: name, type (login|card|note|identity|wifi|password|ssh_key|api_credential|passport|bank_account|driving_licence|software_licence|crypto_wallet|membership|document), username, url, notes, starred (yes|no) · verbs: create edit delete restore star unstar reveal",
+      "card": "locker item: name, type (login|card|note|identity|wifi|password|ssh_key|api_credential|passport|bank_account|driving_licence|software_licence|crypto_wallet|membership|document), username, url, notes, starred (yes|no) · verbs: create edit delete restore star unstar reveal tag untag archive unarchive",
       "container": false,
       "date": null,
       "entity": "locker_item",
       "fields": [
         {
-          "create": true,
-          "edit": null,
           "name": "type",
           "source": {
             "column": "type",
@@ -4119,8 +5112,6 @@
           ]
         },
         {
-          "create": true,
-          "edit": "locker.edit_item",
           "name": "username",
           "source": {
             "column": "username",
@@ -4131,8 +5122,6 @@
           "values": []
         },
         {
-          "create": true,
-          "edit": "locker.edit_item",
           "name": "url",
           "source": {
             "column": "url",
@@ -4143,8 +5132,6 @@
           "values": []
         },
         {
-          "create": true,
-          "edit": "locker.edit_item",
           "name": "notes",
           "source": {
             "column": "notes",
@@ -4155,8 +5142,6 @@
           "values": []
         },
         {
-          "create": false,
-          "edit": null,
           "name": "starred",
           "source": {
             "column": "to_id",
@@ -4185,7 +5170,11 @@
         "restore",
         "star",
         "unstar",
-        "reveal"
+        "reveal",
+        "tag",
+        "untag",
+        "archive",
+        "unarchive"
       ],
       "where_fields": [
         "type",
@@ -4262,8 +5251,6 @@
       "entity": "project",
       "fields": [
         {
-          "create": true,
-          "edit": "container.move",
           "name": "area",
           "source": {
             "column": "parent_id",
@@ -4312,8 +5299,6 @@
       "entity": "txn",
       "fields": [
         {
-          "create": false,
-          "edit": null,
           "name": "amount",
           "source": {
             "column": "amount_minor",
@@ -4324,8 +5309,6 @@
           "values": []
         },
         {
-          "create": false,
-          "edit": null,
           "name": "account",
           "source": {
             "column": "account_id",
@@ -4336,8 +5319,6 @@
           "values": []
         },
         {
-          "create": false,
-          "edit": null,
           "name": "category",
           "source": {
             "column": "category_id",
@@ -4348,8 +5329,6 @@
           "values": []
         },
         {
-          "create": false,
-          "edit": null,
           "name": "status",
           "source": {
             "column": "status",
@@ -4464,15 +5443,8 @@
     "workout.moving_s"
   ],
   "mapped_commands": [
-    "account.add",
     "account.edit",
-    "account.set_opening",
-    "budget.set",
-    "budget.set_carry",
-    "category.add",
-    "checkpoint.record",
     "container.create",
-    "container.move",
     "document.create_text",
     "document.move",
     "edge.add",
@@ -4483,7 +5455,6 @@
     "event.cancel",
     "event.edit",
     "event.propose",
-    "event.respond",
     "flag.clear",
     "flag.set",
     "locker.add_item",
@@ -4495,7 +5466,6 @@
     "person.add",
     "person.edit",
     "person.log_interaction",
-    "rule.add",
     "rule.edit",
     "tag.add",
     "tag.remove",
@@ -4505,8 +5475,6 @@
     "task.edit",
     "task.organize",
     "task.reopen",
-    "txn.categorize",
-    "txn.link_transfer",
     "txn.unlink_transfer"
   ],
   "multi_kind_params": [
@@ -4571,28 +5539,27 @@
   ],
   "unbacked_verbs": [
     {
+      "app": "locker",
       "command": "locker.reveal_receipt",
       "kind": "locker_item",
       "verb": "reveal",
       "why": "Locker declares no action that opens one sealed field: its `export` receipts a mass reveal, and the single reveal is a phone-side command the app table does not carry"
     },
     {
+      "app": "agenda",
       "command": "entity.trash",
+      "inverse": "entity.restore",
       "kind": "event",
       "verb": "delete",
       "why": "Agenda declares `cancel-event` and no action that moves an event to the trash"
     },
     {
+      "app": "agenda",
       "command": "entity.restore",
+      "inverse": "entity.trash",
       "kind": "event",
       "verb": "restore",
       "why": "Agenda declares no action that brings a trashed event back"
-    },
-    {
-      "command": "entity.retitle",
-      "kind": "list",
-      "verb": "edit",
-      "why": "Tasks declares no action that renames a project"
     }
   ],
   "verbs": [
@@ -4641,6 +5608,7 @@
         ]
       ],
       "done": "created",
+      "flag": null,
       "name": "create",
       "verb": "create"
     },
@@ -4693,6 +5661,7 @@
         ]
       ],
       "done": "edited",
+      "flag": null,
       "name": "edit",
       "verb": "edit"
     },
@@ -4709,6 +5678,7 @@
         ]
       ],
       "done": "rescheduled",
+      "flag": null,
       "name": "reschedule",
       "verb": "reschedule"
     },
@@ -4721,6 +5691,7 @@
         ]
       ],
       "done": "completed",
+      "flag": null,
       "name": "complete",
       "verb": "complete"
     },
@@ -4733,6 +5704,7 @@
         ]
       ],
       "done": "reopened",
+      "flag": null,
       "name": "reopen",
       "verb": "reopen"
     },
@@ -4742,9 +5714,14 @@
         [
           "event",
           "event.cancel"
+        ],
+        [
+          "task",
+          "task.cancel"
         ]
       ],
       "done": "cancelled",
+      "flag": null,
       "name": "cancel",
       "verb": "cancel"
     },
@@ -4793,6 +5770,7 @@
         ]
       ],
       "done": "deleted",
+      "flag": null,
       "name": "delete",
       "verb": "delete"
     },
@@ -4824,11 +5802,16 @@
           "entity.restore"
         ],
         [
+          "album",
+          "entity.restore"
+        ],
+        [
           "locker_item",
           "entity.restore"
         ]
       ],
       "done": "restored",
+      "flag": null,
       "name": "restore",
       "verb": "restore"
     },
@@ -4837,6 +5820,10 @@
       "commands": [
         [
           "person",
+          "flag.set"
+        ],
+        [
+          "note",
           "flag.set"
         ],
         [
@@ -4853,6 +5840,7 @@
         ]
       ],
       "done": "starred",
+      "flag": "starred",
       "name": "star",
       "verb": "star"
     },
@@ -4861,6 +5849,10 @@
       "commands": [
         [
           "person",
+          "flag.clear"
+        ],
+        [
+          "note",
           "flag.clear"
         ],
         [
@@ -4877,6 +5869,7 @@
         ]
       ],
       "done": "unstarred",
+      "flag": "starred",
       "name": "unstar",
       "verb": "unstar"
     },
@@ -4901,6 +5894,7 @@
         ]
       ],
       "done": "added",
+      "flag": null,
       "name": "add_to",
       "verb": "add_to"
     },
@@ -4925,6 +5919,7 @@
         ]
       ],
       "done": "removed",
+      "flag": null,
       "name": "remove_from",
       "verb": "remove_from"
     },
@@ -4937,6 +5932,7 @@
         ]
       ],
       "done": "logged",
+      "flag": null,
       "name": "log",
       "verb": "log"
     },
@@ -4949,6 +5945,7 @@
         ]
       ],
       "done": "revealed",
+      "flag": null,
       "name": "reveal",
       "verb": "reveal"
     },
@@ -4956,8 +5953,93 @@
       "args": "",
       "commands": [],
       "done": "undone",
+      "flag": null,
       "name": "undo",
       "verb": "undo"
+    },
+    {
+      "args": "label: <text>",
+      "commands": [
+        [
+          "task",
+          "tag.add"
+        ],
+        [
+          "note",
+          "tag.add"
+        ],
+        [
+          "document",
+          "tag.add"
+        ],
+        [
+          "photo",
+          "tag.add"
+        ],
+        [
+          "locker_item",
+          "tag.add"
+        ]
+      ],
+      "done": "tagged",
+      "flag": null,
+      "name": "tag",
+      "verb": "tag"
+    },
+    {
+      "args": "label: <text>",
+      "commands": [
+        [
+          "task",
+          "tag.remove"
+        ],
+        [
+          "note",
+          "tag.remove"
+        ],
+        [
+          "document",
+          "tag.remove"
+        ],
+        [
+          "photo",
+          "tag.remove"
+        ],
+        [
+          "locker_item",
+          "tag.remove"
+        ]
+      ],
+      "done": "untagged",
+      "flag": null,
+      "name": "untag",
+      "verb": "untag"
+    },
+    {
+      "args": "",
+      "commands": [
+        [
+          "locker_item",
+          "flag.set"
+        ]
+      ],
+      "done": "archived",
+      "flag": "archived",
+      "name": "archive",
+      "verb": "archive"
+    },
+    {
+      "args": "",
+      "commands": [
+        [
+          "locker_item",
+          "flag.clear"
+        ]
+      ],
+      "done": "unarchived",
+      "flag": "archived",
+      "name": "unarchive",
+      "verb": "unarchive"
     }
   ]
 }

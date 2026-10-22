@@ -20,7 +20,7 @@ use centraid_vault::access::Principal;
 use centraid_vault::bytes::FsBlobStore;
 use centraid_vault::{Clock, Command, CommandStatus, Registry, SeededIds, Vault};
 
-pub use centraid_assist::native::door::{Door, Ran, int, text};
+pub use centraid_assist::native::door::{Call, Door, Ran, int, text};
 
 /// The device every command is invoked from.
 pub const DEVICE: &str = "nativetools";
@@ -474,8 +474,10 @@ impl Door for Handle {
         Self::search(self, entity, text, limit)
     }
 
-    fn run(&self, command: &str, input: serde_json::Value) -> Result<Ran, String> {
-        Self::run(self, command, input)
+    /// The harness runs the command the action names: it has no phone's frozen-vault check or
+    /// durable key to carry, and the vault's own command schema validates the input.
+    fn act(&self, call: &Call, input: serde_json::Value) -> Result<Ran, String> {
+        Self::run(self, call.command, input)
     }
 
     fn advance(&self) {

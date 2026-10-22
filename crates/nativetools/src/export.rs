@@ -8,7 +8,7 @@ use centraid_apps_kit::manifest::{CHAT_VERBS_JSON, ChatSurface, Manifest, parse_
 use serde_json::{Value, json};
 
 use crate::dates::{EXAMPLES, Unit};
-use crate::meta::{self, DECLARED_KINDS, DECLARED_VERBS, KINDS, VERBS};
+use crate::meta::{self, ACTIONS, DECLARED_KINDS, DECLARED_VERBS, KINDS, VERBS};
 use crate::phrases::PHRASES;
 use crate::prompt;
 use crate::render;
@@ -123,11 +123,14 @@ pub fn catalog() -> Value {
                 "app": app,
                 "action": action.name,
                 "verb": action.verb,
+                "qualifier": action.qualifier,
                 "also": action.also,
                 "kind": action.kind,
                 "inverse": action.inverse,
                 "sealed": action.sealed,
-                "chat": match action.chat {
+                "bulk": action.bulk,
+                // DERIVED, never declared: the kit reads it off the facts above
+                "chat": match action.surface() {
                     ChatSurface::Direct => "direct",
                     ChatSurface::Card => "card",
                 },
@@ -178,6 +181,23 @@ pub fn metadata() -> Value {
         "reveal_fields": meta::REVEAL_FIELDS.iter().map(|(name, column)| json!({"name": name, "column": column})).collect::<Vec<_>>(),
         "kinds": kinds,
         "verbs": VERBS,
+        // THE ONE LOOKUP, as chat runs it: (verb, kind, qualifier) to the action, one row per
+        // verb an action serves; an empty `action` is an unbacked row
+        "actions": ACTIONS
+            .iter()
+            .map(|row| {
+                json!({
+                    "app": row.app,
+                    "action": row.action,
+                    "command": row.command,
+                    "verb": row.verb.spec().name,
+                    "qualifier": row.qualifier,
+                    "kind": row.kind.name(),
+                    "id_param": row.id_param,
+                    "names": row.chat_names(),
+                })
+            })
+            .collect::<Vec<_>>(),
         "unbacked_verbs": serde_json::from_str::<Value>(CHAT_VERBS_JSON).map_or(Value::Null, |verbs| verbs["unbacked"].clone()),
         "declared_kinds": DECLARED_KINDS,
         "declared_verbs": DECLARED_VERBS,
