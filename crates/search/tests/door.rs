@@ -6,7 +6,7 @@
 //! index the writer keeps, not over a fixture of the door's own.
 
 use centraid_search::sqlite::SqliteDoor;
-use centraid_search::{Answer, Principal, Search, SearchError, SearchRequest};
+use centraid_search::{Answer, EachRequest, Principal, Search, SearchError, SearchRequest, Target};
 use centraid_vault::commands::Registry;
 use centraid_vault::model::Kind;
 use centraid_vault::{Command, CommandStatus, Principal as VaultPrincipal, Vault};
@@ -527,4 +527,105 @@ fn a_query_of_one_character_words_is_the_empty_query() {
         );
     }
     assert_eq!(ids(&world.ask(&["note"], "ap")), ["n1"]);
+}
+
+// -- several kinds, one statement ------------------------------------------------
+
+impl World {
+    fn each(&self, request: &EachRequest) -> Result<Vec<Target>, SearchError> {
+        self.vault
+            .read(|connection| {
+                Ok(SqliteDoor::open(connection, self.vault.words())
+                    .and_then(|door| door.query_each(&Principal::Owner, request)))
+            })
+            .expect("reads")
+    }
+}
+
+fn each(kinds: &[&str], query: &str, per_kind: usize) -> EachRequest {
+    EachRequest::new(kinds.iter().map(|kind| (*kind).to_owned()), query, per_kind)
+}
+
+#[test]
+fn one_statement_answers_a_few_rows_of_each_kind_in_the_order_the_kinds_were_named() {
+    let world = World::new();
+    for index in 0..4 {
+        world.note(&format!("n{index}"), "Garden", "");
+    }
+    world.note("body", "Plain", "garden");
+    world.person("p1", "Garden Gus", None);
+    world.person("p2", "Margaret", Some("Gardener"));
+    let found = world
+        .each(&each(&["person", "note"], "garden", 2))
+        .expect("answers");
+    let kinds: Vec<&str> = found.iter().map(|t| t.entity.as_str()).collect();
+    assert_eq!(kinds, ["person", "person", "note", "note"], "{found:?}");
+    // Best first inside a kind: a title match before a body match.
+    assert_eq!(found[0].id, "p1");
+    assert_eq!(found[1].id, "p2");
+    // Fewer than the cap is all there is.
+    let one = world
+        .each(&each(&["person"], "garden", 8))
+        .expect("answers");
+    assert_eq!(one.len(), 2);
+    // A kind with no match is no rows, and the other kinds still answer.
+    let none = world
+        .each(&each(&["event", "person"], "garden", 8))
+        .expect("answers");
+    assert_eq!(none.len(), 2);
+}
+
+#[test]
+fn the_per_kind_door_honours_the_filters_the_window_door_does() {
+    let world = World::new();
+    world.note("keep", "Garden", "");
+    world.note("skip", "Garden", "");
+    world.note("gone", "Garden", "");
+    world.run("entity.trash", serde_json::json!({"id": "gone"}));
+    world.note("blank", "", "garden garden");
+    let found = world
+        .each(&each(&["note"], "garden", 8).excluding(vec!["skip".to_owned()]))
+        .expect("answers");
+    assert_eq!(
+        found.iter().map(|t| t.id.as_str()).collect::<Vec<_>>(),
+        ["keep"]
+    );
+    assert!(matches!(
+        world.each(&each(&["locker.item"], "garden", 8)),
+        Err(SearchError::NotSearchable { .. })
+    ));
+    assert!(matches!(
+        world.each(&each(&["note"], "g", 8)),
+        Err(SearchError::NoSearchableWords { .. })
+    ));
+}
+
+/// A door that only knows `query` still answers `query_each`, by asking once
+/// per kind: a test double or a recorder that forgot to forward is slow, not wrong.
+#[test]
+fn the_default_asks_once_per_kind_and_agrees_with_the_one_statement() {
+    struct OnlyQuery<'a>(SqliteDoor<'a>);
+    impl Search for OnlyQuery<'_> {
+        fn query(
+            &self,
+            principal: &Principal,
+            request: &SearchRequest,
+        ) -> Result<Answer, SearchError> {
+            self.0.query(principal, request)
+        }
+    }
+    let world = World::new();
+    world.note("n1", "Garden", "");
+    world.person("p1", "Garden Gus", None);
+    let request = each(&["person", "note"], "garden", 4);
+    let direct = world.each(&request).expect("answers");
+    let by_default = world
+        .vault
+        .read(|connection| {
+            let door = OnlyQuery(SqliteDoor::open(connection, world.vault.words()).expect("opens"));
+            Ok(door.query_each(&Principal::Owner, &request))
+        })
+        .expect("reads")
+        .expect("answers");
+    assert_eq!(direct, by_default);
 }

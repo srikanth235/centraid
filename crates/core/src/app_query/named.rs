@@ -6,9 +6,9 @@
 //! containers that open in that app ([`of_app`]) and lays them beside its rows in
 //! one answer, so a correction treats the two as one: the term is corrected only
 //! when the rows and the containers are both empty. A chat thread opens in no
-//! app, so no app's search asks for it. **Home** takes every named index, one
-//! probe each ([`of_all`]), isolated as its domains are: a probe that refuses
-//! drops its own rows and never the answer. A chat thread is a Home hit like the
+//! app, so no app's search asks for it. **Home** asks for every named kind in the
+//! same statement as its other kinds ([`all`]) and tells the containers from the rest
+//! by [`is_named`]. A chat thread is a Home hit like the
 //! rest; whether it is drawn is the shell's, which knows whether it has a Chat
 //! tab (R-1097-24).
 //!
@@ -87,18 +87,15 @@ pub(super) fn of_app(
     (targets, None)
 }
 
-/// Everything named that matches `term`, one probe per kind, for Home: the
-/// containers and the chat threads.
-/// ISOLATED: a probe that refuses drops its own rows, never the answer.
-pub(super) fn of_all(search: &dyn Search, term: &str) -> Vec<Target> {
-    let mut targets = Vec::new();
-    for kind in NAMED {
-        let request = SearchRequest::new(*kind, term, CONTAINER_ROWS);
-        if let Ok(Answer::Data { page, .. }) = search.query(&Principal::Owner, &request) {
-            targets.extend(page.rows);
-        }
-    }
-    targets
+/// Whether a kind is one of the named: a container or a chat thread.
+pub(super) fn is_named(kind: &str) -> bool {
+    NAMED.contains(&kind)
+}
+
+/// Every named kind, for a search that asks about them beside other kinds in
+/// one statement (Home's).
+pub(super) const fn all() -> &'static [&'static str] {
+    NAMED
 }
 
 /// A container hit as the app answers carry it.

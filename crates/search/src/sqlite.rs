@@ -423,6 +423,26 @@ impl SqliteDoor<'_> {
     }
 }
 
+/// The statement behind [`Search::query_each`] and its parameters.
+fn each_statement(request: &EachRequest, kinds: &[Kind]) -> Result<(String, Binds), SearchError> {
+    let mut binds = Binds::default();
+    let cte = hits_cte(&request.query, kinds, &request.excluded_ids, &mut binds)?;
+    let per_kind = binds.push(Value::Integer(
+        i64::try_from(request.per_kind).unwrap_or(i64::MAX),
+    ));
+    let sql = format!(
+        "WITH {cte}
+         SELECT id, kind, title, tier, rank FROM (
+           SELECT e.id, e.kind, e.title, hits.tier AS tier, hits.rank AS rank,
+                  row_number() OVER (
+                    PARTITION BY e.kind ORDER BY hits.tier, hits.rank, e.id) AS place
+             FROM hits JOIN entity e ON e.n = hits.n)
+          WHERE place <= {per_kind}
+          ORDER BY kind, place"
+    );
+    Ok((sql, binds))
+}
+
 impl Search for SqliteDoor<'_> {
     fn query(&self, principal: &Principal, request: &SearchRequest) -> Result<Answer, SearchError> {
         let _ = principal;
@@ -504,21 +524,7 @@ impl Search for SqliteDoor<'_> {
         let _ = principal;
         let kinds = kinds_of(&request.kinds)?;
         match_expression(&request.query)?;
-        let mut binds = Binds::default();
-        let cte = hits_cte(&request.query, &kinds, &request.excluded_ids, &mut binds)?;
-        let per_kind = binds.push(Value::Integer(
-            i64::try_from(request.per_kind).unwrap_or(i64::MAX),
-        ));
-        let sql = format!(
-            "WITH {cte}
-             SELECT id, kind, title, tier, rank FROM (
-               SELECT e.id, e.kind, e.title, hits.tier AS tier, hits.rank AS rank,
-                      row_number() OVER (
-                        PARTITION BY e.kind ORDER BY hits.tier, hits.rank, e.id) AS place
-                 FROM hits JOIN entity e ON e.n = hits.n)
-              WHERE place <= {per_kind}
-              ORDER BY kind, place"
-        );
+        let (sql, binds) = each_statement(request, &kinds)?;
         let hits = self.hits(&sql, binds)?;
         let tokens = words(&request.query);
         // The kinds come back in the order the request named them.
@@ -655,5 +661,33 @@ mod tests {
                 .all(|(_, parent, text)| !(parent == tail && text.contains("TEMP B-TREE"))),
             "the tail leg sorts its matches: {plan:?}"
         );
+    }
+
+    /// The per-kind statement reads the index twice, once per tier, and probes
+    /// `entity` by its key; the window function orders the rows the tiers
+    /// produced and nothing else.
+    #[test]
+    fn the_per_kind_statement_reads_the_index_once_per_tier() {
+        let dir = tempfile::tempdir().expect("a directory");
+        let vault = centraid_vault::Vault::create(dir.path().join("vault.db")).expect("a vault");
+        vault.found("Search", "Ada").expect("founded");
+        let request = EachRequest::new(
+            [Kind::Note, Kind::Person].map(|kind| kind.as_str().to_owned()),
+            "ca",
+            8,
+        );
+        let (sql, binds) = each_statement(&request, &[Kind::Note, Kind::Person]).expect("compiles");
+        let plan: Vec<String> = vault
+            .read(|connection| {
+                let mut statement = connection.prepare(&format!("EXPLAIN QUERY PLAN {sql}"))?;
+                Ok(statement
+                    .query_map(rusqlite::params_from_iter(binds.0), |row| row.get(3))?
+                    .collect::<rusqlite::Result<Vec<String>>>()?)
+            })
+            .expect("explains");
+        let scans = |needle: &str| plan.iter().filter(|text| text.contains(needle)).count();
+        assert_eq!(scans("VIRTUAL TABLE INDEX 192:"), 1, "{plan:?}");
+        assert_eq!(scans("VIRTUAL TABLE INDEX 0:"), 1, "{plan:?}");
+        assert_eq!(scans("SCAN e"), 0, "{plan:?}");
     }
 }

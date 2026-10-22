@@ -36,7 +36,7 @@ use centraid_apps_kit::page::PageRequest;
 use centraid_apps_kit::reads::{JOIN_FAN_OUT, PageDoor, Read, in_list, read_pages, read_window};
 use centraid_apps_kit::row::{Row, integer_or_zero, text_of};
 use centraid_apps_kit::statement::{PageBindValue, PageOrder, PageQuery};
-use centraid_search::{Answer, Principal, Search, SearchError, SearchRequest, Target};
+use centraid_search::{Answer, EachRequest, Principal, Search, SearchError, SearchRequest, Target};
 
 use crate::Denial;
 use crate::cards::{self, RefCard};
@@ -1041,6 +1041,46 @@ pub fn load_link_targets(
         }
     }
     Ok((LinkTargetsData { targets }, None))
+}
+
+/// THE SAME SIX KINDS, AND `also`, IN ONE STATEMENT: Home's search, where one
+/// keystroke asks about every kind a member can open.
+///
+/// [`load_link_targets`] is the powerbox's and keeps one probe per kind, because
+/// a sheet is six columns. Home draws one list, so it asks the door once
+/// ([`Search::query_each`]) for at most [`LINK_TARGET_ROWS`] rows of each of the
+/// linkable kinds and of the `also` kinds after them. The memo read narrows the
+/// notes exactly as in the powerbox, and fails closed as it does.
+///
+/// # Errors
+///
+/// Only the memo read's own refusal. A door that cannot answer is no rows.
+pub fn load_targets_each(
+    door: &dyn PageDoor,
+    search: &dyn Search,
+    principal: &Principal,
+    term: &str,
+    also: &[&str],
+) -> KitResult<(Vec<Target>, Option<Denial>)> {
+    let term = term.trim();
+    if term.is_empty() {
+        return Ok((Vec::new(), None));
+    }
+    let memos = match read_memo_ids(door) {
+        Ok(ids) => ids,
+        Err(KitError::Door(message)) => return Ok((Vec::new(), Some(denial(message)))),
+        Err(other) => return Err(other),
+    };
+    let kinds = centraid_vault::commands::note::LINKABLE
+        .iter()
+        .map(|kind| kind.as_str())
+        .chain(also.iter().copied())
+        .map(str::to_owned);
+    let request = EachRequest::new(kinds, term, LINK_TARGET_ROWS).excluding(memos);
+    Ok((
+        search.query_each(principal, &request).unwrap_or_default(),
+        None,
+    ))
 }
 
 #[cfg(test)]

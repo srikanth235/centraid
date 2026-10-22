@@ -380,6 +380,17 @@ impl centraid_search::Search for RecordingSearch<'_, '_> {
             .inspect_err(|error| self.keep(error))
     }
 
+    /// **FORWARDED, because the trait's default asks `query` once per kind.**
+    fn query_each(
+        &self,
+        principal: &centraid_search::Principal,
+        request: &centraid_search::EachRequest,
+    ) -> std::result::Result<Vec<centraid_search::Target>, centraid_search::SearchError> {
+        self.inner
+            .query_each(principal, request)
+            .inspect_err(|error| self.keep(error))
+    }
+
     /// **FORWARDED, because the trait's default is `Ok(None)`.** A recorder that
     /// only wrapped `query` would silently correct nothing for every caller in
     /// this crate; the failure is kept the way `query`'s is.

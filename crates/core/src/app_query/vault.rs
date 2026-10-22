@@ -1,25 +1,24 @@
-//! HOME'S ARM OF THE APP QUERY (R-CHROME-6): `vault.search`, every app's
-//! search domain but Locker's, for Home's search bar.
+//! HOME'S ARM OF THE APP QUERY: `vault.search`, every app's kinds but Locker's,
+//! for Home's search bar.
 //!
-//! **NOT A SECOND SEARCH.** The rows are Notes' powerbox's
-//! ([`queries::load_link_targets`]): one isolated probe per
-//! `centraid_search::DOMAINS` domain, the owner as principal, People's journal
-//! notes left out, Locker never a domain (D-1020-N1). This module opens the FTS
-//! door, runs that loader and converts — plus the one thing a hit needs to be
-//! OPENED rather than linked: a photo opens by its own id (the index holds live
-//! photographs only, so none is trashed); a person is in People's circle only
-//! when live and neither the owner nor a pet, so those are dropped.
+//! **ONE QUESTION PER KEYSTROKE.** The rows are the kinds Notes' powerbox can
+//! link ([`queries::load_link_targets`] asks them one probe each, a sheet of six
+//! columns) and the NAMED kinds beside them, a notebook or an album, a project, a
+//! Docs folder, and a chat thread (entity `thread`, app `chat`, found by its
+//! title and by what the member said). Home asks the door ONCE
+//! ([`queries::load_targets_each`], `Search::query_each`) for at most eight
+//! rows of each kind: eleven statements per keystroke were seconds on a vault of
+//! years, and one is milliseconds. The owner is the principal, People's journal
+//! notes are left out, Locker is not a kind the index holds.
 //!
-//! **THE NAMED ARE HITS TOO** (#1097, R-1097-19..24): one more probe per named
-//! index ([`centraid_search::NAMED`]) — a notebook or an album, a project, a
-//! Docs folder, and a chat thread (entity `thread`, app
-//! `chat`, found by its title and by what the member said) — appended after the
-//! domains' rows, each with the app it opens in; every one opens by its `id`. They are not domains: the Notes powerbox above
-//! does not see them. A shell with no Chat tab draws no `chat` row.
+//! The linkable rows come first and the containers after them, each with the app
+//! it opens in; every one opens by its `id`. A shell with no Chat tab draws no
+//! `chat` row. A photo opens by its own id (the index holds live photographs
+//! only, so none is trashed); a person is in People's circle only when live and
+//! neither the owner nor a pet, so those are dropped.
 //!
-//! **A TYPO IS CORRECTED ACROSS THE SIX DOMAINS AND THE NAMED KINDS** (#1097,
-//! R4, R8), only when the whole answer, rows and containers, is empty, and the
-//! answer says so in `corrected`.
+//! **A typo is corrected across all of those kinds**, only when the whole answer,
+//! rows and containers, is empty, and the answer says so in `corrected`.
 
 use std::collections::BTreeSet;
 
@@ -51,13 +50,9 @@ pub(super) fn search(
     door: &VaultDoor<'_>,
     asked: &wire::VaultSearchRequest,
 ) -> Result<Answer> {
-    // ISOLATED PER DOMAIN, as the powerbox is (`notes::link_targets`): the
-    // plain FTS door, so one domain's refusal drops its rows and not the answer.
-    //
-    // THE CORRECTION SPANS THE SIX DOMAINS AND THE NAMED KINDS (#1097, R4, R8,
-    // R-1097-19..21) and runs only when the whole answer, after the rows that
-    // cannot be opened are dropped, is empty; the vocabulary it reads is every
-    // domain's and every container index's.
+    // THE CORRECTION SPANS THE LINKABLE AND THE NAMED KINDS and runs only when
+    // the whole answer, after the rows that cannot be opened are dropped, is
+    // empty; the vocabulary it reads is the one index's.
     let loaded = vault.read(|connection| {
         let index = centraid_search::SqliteDoor::open(connection, vault.words()).map_err(|error| {
             CoreError::Invariant {
@@ -75,21 +70,27 @@ pub(super) fn search(
                 &asked.term,
                 |(targets, found): &Opened| targets.is_empty() && found.is_empty(),
                 |term| {
-                    let (data, denial) =
-                        queries::load_link_targets(door, &index, &Principal::Owner, term)?;
+                    // ONE STATEMENT for the six domains and the named kinds.
+                    let (all, denial) = queries::load_targets_each(
+                        door,
+                        &index,
+                        &Principal::Owner,
+                        term,
+                        named::all(),
+                    )?;
                     if denial.is_some() {
                         return Ok(((Vec::new(), Vec::new()), denial));
                     }
-                    let people = live_people(door, &data.targets)?;
-                    let targets = data
-                        .targets
+                    let (found, rows): (Vec<Target>, Vec<Target>) = all
+                        .into_iter()
+                        .partition(|target| named::is_named(&target.entity));
+                    let people = live_people(door, &rows)?;
+                    let targets = rows
                         .into_iter()
                         .filter(|target| {
                             target.entity != PERSON_ENTITY || people.contains(&target.id)
                         })
                         .collect();
-                    // ISOLATED PER NAMED INDEX, like the domains above.
-                    let found = named::of_all(&index, term);
                     Ok(((targets, found), None))
                 },
             )
