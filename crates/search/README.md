@@ -19,7 +19,7 @@ match answer {
 - **A denial is a value.** `Answer::Denied` is a state a surface renders; an `Err` is for a question that cannot be answered at all.
 - **A result is an entity's id, kind and title and a snippet** read from `entity` joined on `n`, with the trash filter. It carries no `Value`, no map and no byte field, and the index holds no secret, so a result cannot carry one. Locker is not in the index.
 - **The snippet is cut in Rust.** The index is contentless and cannot say which words matched, so `snippet_of` runs the vault's own `text_of` over the row and excerpts around the first matching token.
-- **Correction is a bounded lookup** over the one `search_vocab` (`MAX_VOCAB_SCAN` rows per word): a misspelt word is replaced by a whole term the index holds.
+- **Correction is a lookup in the word list.** The vault keeps its words in memory (`Vault::words()`, checked against the table on every use); a misspelt word is replaced by ONE whole word of it: one edit anywhere, else a first-letter change, else the fragment inside a longer word, ranked by the documents that hold each (`SELECT doc FROM search_vocab WHERE term = ?`). A word some word starts with is kept. The door reads the list through a filter, so a later realm can hide words from a surface.
 
 It is not the consent pipeline: it answers the owner's view of the vault it is handed. A stub that looked like a consent check would be worse than an absence written down here.
 

@@ -629,3 +629,108 @@ fn the_default_asks_once_per_kind_and_agrees_with_the_one_statement() {
         .expect("answers");
     assert_eq!(direct, by_default);
 }
+
+// -- correction over the word list -------------------------------------------------
+
+impl World {
+    fn correct(&self, query: &str) -> Option<String> {
+        self.vault
+            .read(|connection| {
+                Ok(SqliteDoor::open(connection, self.vault.words())
+                    .and_then(|door| door.correct(&Principal::Owner, &[], query))
+                    .expect("corrects"))
+            })
+            .expect("reads")
+    }
+}
+
+#[test]
+fn a_slip_anywhere_in_a_word_is_corrected_to_a_whole_word_the_vault_holds() {
+    let world = World::new();
+    world.note("n1", "Plans", "the spring budget and a sunscreen list");
+    assert_eq!(world.correct("budegt").as_deref(), Some("budget")); // a swap
+    assert_eq!(world.correct("bidget").as_deref(), Some("budget")); // mid-word
+    assert_eq!(world.correct("budgt").as_deref(), Some("budget")); // a letter fewer
+    assert_eq!(world.correct("budeg").as_deref(), Some("budget")); // typed so far
+    assert_eq!(
+        world.correct("sunscren budegt").as_deref(),
+        Some("sunscreen budget")
+    );
+    // The corrected words find the note, which the typed ones did not.
+    assert!(world.ask(&["note"], "bidget").is_empty());
+    assert_eq!(ids(&world.ask(&["note"], "budget")), ["n1"]);
+}
+
+#[test]
+fn a_word_the_list_holds_or_starts_is_kept_as_typed() {
+    let world = World::new();
+    world.note("n1", "Plans", "the spring budget");
+    assert_eq!(world.correct("budget"), None);
+    assert_eq!(world.correct("budg"), None, "a prefix is a hit as typed");
+    assert_eq!(world.correct("BUDGET"), None);
+    assert_eq!(world.correct("abc"), None, "under four letters");
+    assert_eq!(world.correct("2026"), None, "no digit is a typo");
+    assert_eq!(
+        world.correct("zzzzzz"),
+        None,
+        "a word near nothing is not invented"
+    );
+}
+
+#[test]
+fn a_first_letter_slip_is_corrected_only_when_no_word_keeps_the_first_letter() {
+    let world = World::new();
+    world.note("n1", "Plans", "the spring budget");
+    // Nothing near `gudget` starts with g: the one that changes the first letter.
+    assert_eq!(world.correct("gudget").as_deref(), Some("budget"));
+    // With a word that keeps it, that word is the correction and `budget` is not.
+    world.note("n2", "More", "a gudgex arrives");
+    assert_eq!(world.correct("gudget").as_deref(), Some("gudgex"));
+}
+
+#[test]
+fn a_fragment_inside_a_longer_word_is_found_from_four_letters_and_not_from_three() {
+    let world = World::new();
+    world.note("n1", "Beach", "pack the sunscreen");
+    // `cree` starts no word and is a letters-only fragment of four.
+    assert_eq!(world.correct("cree").as_deref(), Some("sunscreen"));
+    assert_eq!(world.correct("screen").as_deref(), Some("sunscreen"));
+    // Three letters is below the typo floor, in-word or not.
+    assert_eq!(world.correct("cre"), None);
+    // A word one edit away beats a longer word that contains the fragment.
+    world.note("n2", "Cinema", "the big screen");
+    assert_eq!(world.correct("creen").as_deref(), Some("screen"));
+}
+
+#[test]
+fn the_word_the_most_documents_hold_wins_then_the_shorter_then_the_first() {
+    let world = World::new();
+    world.note("a1", "One", "budget");
+    world.note("a2", "Two", "budgit");
+    world.note("a3", "Three", "budgit");
+    world.note("a4", "Four", "budgit budgit budgit");
+    assert_eq!(
+        world.correct("budgat").as_deref(),
+        Some("budgit"),
+        "3 documents beat 1"
+    );
+    // Equal documents: the shorter word.
+    let tie = World::new();
+    tie.note("b1", "One", "budgets");
+    tie.note("b2", "Two", "budget");
+    assert_eq!(tie.correct("budgat").as_deref(), Some("budget"));
+    // Equal and equally long: the one that sorts first.
+    let sorted = World::new();
+    sorted.note("c1", "One", "budgit");
+    sorted.note("c2", "Two", "budget");
+    assert_eq!(sorted.correct("budgat").as_deref(), Some("budget"));
+}
+
+#[test]
+fn a_word_no_document_holds_any_more_is_not_a_correction() {
+    let world = World::new();
+    world.note("n1", "Plans", "the spring budget");
+    world.run("entity.trash", serde_json::json!({"id": "n1"}));
+    // The word list keeps `budget` after its only document left the index.
+    assert_eq!(world.correct("budegt"), None);
+}

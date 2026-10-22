@@ -1,52 +1,57 @@
-//! ONE SPELLING RULE, for every surface that forgives a typo (#1097, R4, R4a, R5).
+//! ONE SPELLING RULE, for every surface that forgives a typo.
 //!
-//! The assistant's name resolver already had a rule — **Damerau distance one**
-//! (a letter more, fewer or different, or two neighbours swapped), read in a word
-//! of four letters or more and never in a word with a digit
-//! (`crates/assist/src/native/resolve.rs`, nt11 R1). Search had none, and Locker
-//! and Locker's walker had less. This module is that rule lifted to the one place
-//! all of them can reach ([`within_one`], [`one_edit`]), plus what search needs
-//! on top of it: the tokenization of a query ([`words`]), the fold the full-text
-//! index applies ([`fold_like_index`]), and a correction that is **a lookup in the
-//! vault's own vocabulary, never a guess** ([`correct_words`]).
+//! The assistant's name resolver had a rule — **Damerau distance one** (a letter
+//! more, fewer or different, or two neighbours swapped), read in a word of four
+//! letters or more and never in a word with a digit
+//! (`crates/assist/src/native/resolve.rs`). Search had none, and Locker's walker
+//! had less. This module is that rule lifted to the one place all of them can
+//! reach ([`within_one`], [`one_edit`]), plus what search needs on top of it: the
+//! tokenization of a query ([`words`]), the fold the full-text index applies
+//! ([`fold_like_index`]), and a correction that is **a lookup in the vault's own
+//! words, never a guess** ([`near_words`], [`try_correct_words`]).
 //!
-//! ## Why correction, and not a fuzzy OR (R4)
+//! ## Why correction, and not a fuzzy OR
 //!
 //! A fuzzy match widens every query for every member, on every keystroke, and
-//! cannot say what it did. A correction runs **only when the exact answer was
-//! empty**, replaces a word by a word the vault holds, and is reported: the caller
-//! runs the exact search again with the corrected words and tells the member what
-//! it searched for ("Showing results for budget"). A query that found something is
-//! never touched, and a word the vault does not know is never invented — a
-//! correction is a whole term of the vocabulary.
+//! cannot say what it did. A correction replaces a word by a word the vault holds
+//! and is reported: the caller runs the search again with the corrected words and
+//! tells the member what it included ("Including results for budget"). A word the
+//! vault does not know is never invented — a correction is one whole word of the
+//! list the index keeps.
 //!
-//! ## What a word is corrected to (R4, R4a)
+//! ## What a word is corrected to ([`near_words`])
+//!
+//! The candidates are read from **the whole word list** in memory (the vault
+//! keeps it, `crates/vault/src/words.rs`), not from ranges of the index's
+//! vocabulary, so a slip anywhere in a word is found as readily as one at its end.
 //!
 //! * An **eligible** word has [`TYPO_MIN`] letters or more and nothing but
 //!   letters ([`eligible`]), so `2025` is never `2026`, `abc` is never `abd`, and
 //!   `a1b2` is left alone.
-//! * A word the vocabulary already holds — as a term or the start of one, because
-//!   search is a prefix search — is **known** and kept as typed.
-//! * Otherwise a candidate is a vocabulary term with a **prefix** of length
-//!   `|w| - 1 ..= |w| + 1` within one edit of the word ([`near_prefix`]), so a
-//!   slip made mid-word as you type (`budeg`) still lands on `budget`. Among the
-//!   candidates the prefix with the most documents wins, then the shorter, then
-//!   the one that sorts first; the answer is then **the whole term** of that
-//!   prefix the most documents hold (R4b), by the same order: `sunscren` is
-//!   `sunscreen`, not the prefix `sunscree`. Deterministic, so the same vault
-//!   answers the same.
-//! * **A slip in the first letter is not corrected** (R4a), except a swap of the
-//!   first two (`ubdget`). The caller reads only the terms that start like the
-//!   word, which is what keeps the scan bounded; the rule here is what the caller
-//!   promises to do with them.
+//! * A word some word of the list **starts with** is known ([`is_known`]) and is
+//!   kept as typed: search is a prefix search, so `budg` is already a hit.
+//! * Otherwise, the candidates in tiers, the first tier that has any:
+//!   1. **One edit anywhere**: a word of the list within [`within_one`] of the
+//!      typed word, or whose first `|w| - 1 ..= |w| + 1` letters are ([`near_prefix`]),
+//!      so a slip made mid-word as you type (`budeg`) still lands on `budget`.
+//!      Among these, those that keep the typed first letter; only when there is
+//!      none do the ones that change it count (`gudget` finds `budget` only if
+//!      the vault holds no `gudgex`). A typo in the first letter is rarer than one
+//!      after it, and a first-letter candidate is a much wider net.
+//!   2. **In-word**: the typed fragment appears inside a longer word
+//!      (`screen` in `sunscreen`), for fragments of [`IN_WORD_MIN`] letters or
+//!      more. It is the last resort because it is the widest.
+//! * The caller then ranks the candidates by the documents that hold each, then
+//!   the shorter word, then the one that sorts first, so the same vault answers
+//!   the same ([`rank_order`]), and the answer is that **one whole word**.
 //!
-//! ## One rule, two users
+//! ## One rule, several users
 //!
 //! The assistant keeps a **different** measure for ranking a whole search's words
 //! (`crates/assist/src/native/search.rs` `word_score`, Levenshtein with a limit of
 //! two for words of seven letters or more): the 0.8B evaluation depends on it and
-//! it is not touched (R5a). Everything that decides "is this one slip of the
-//! other word" — the name resolver, the `where` language's codes, search — is
+//! it is not touched. Everything that decides "is this one slip of the other
+//! word" — the name resolver, the `where` language's codes, search — is
 //! [`within_one`].
 
 use std::collections::BTreeMap;
@@ -57,6 +62,11 @@ pub const PREFIX_MIN: usize = 3;
 
 /// The shortest word a typo is read in.
 pub const TYPO_MIN: usize = 4;
+
+/// The shortest fragment read as the inside of a longer word. Under four letters
+/// a fragment is inside a great many words, and the guess would be the vault's
+/// most common.
+pub const IN_WORD_MIN: usize = 4;
 
 /// At most this many words of a query are read. v0's slice (`search.ts:34`): a
 /// hundred-word paste is a question about the tokenizer's cost, not about the
@@ -170,8 +180,8 @@ fn plausibly_one_edit_apart(word: &str, have: &str) -> bool {
 /// [`PREFIX_MIN`] is never one. `None` when `term` already starts with the word:
 /// that is an exact hit and not a typo, and `rent` is not corrected to `rents`.
 ///
-/// Both arguments are folded ([`fold_like_index`]); the first-letter rule (R4a)
-/// is the caller's, in which terms it offers.
+/// Both arguments are folded ([`fold_like_index`]); the first-letter rule is
+/// [`near_words`]'s.
 #[must_use]
 pub fn near_prefix(word: &str, term: &str) -> Option<String> {
     if term.starts_with(word) {
@@ -186,15 +196,16 @@ pub fn near_prefix(word: &str, term: &str) -> Option<String> {
         .map(str::to_owned)
 }
 
-/// The whole term a typed word is corrected to (ruling R4b).
+/// The whole term a typed word is corrected to, among the `(term, documents)`
+/// pairs a walker offers ([`WalkedWords`]).
 ///
 /// The prefixes the candidates offer ([`near_prefix`]) are groups; the group the
 /// most documents hold wins, then the shorter prefix, then the one that sorts
-/// first. The answer is **the whole vocabulary term** in that group that the most
-/// documents hold, then the shorter, then the one that sorts first, because that
-/// word is both what is searched again and what the member is told: `sunscren`
-/// reads "sunscreen", not the prefix `sunscree` the index would also match. A term
-/// offered more than once (one pair per domain) adds its documents.
+/// first. The answer is **the whole term** in that group that the most documents
+/// hold, then the shorter, then the one that sorts first, because that word is
+/// both what is searched again and what the member is told: `sunscren` reads
+/// "sunscreen", not the prefix `sunscree`. A term offered more than once adds its
+/// documents.
 fn best_term(word: &str, candidates: Vec<(String, u64)>) -> Option<String> {
     let mut groups: BTreeMap<String, (u64, BTreeMap<String, u64>)> = BTreeMap::new();
     for (term, docs) in candidates {
@@ -225,67 +236,199 @@ fn best_term(word: &str, candidates: Vec<(String, u64)>) -> Option<String> {
         .map(|(term, _)| term)
 }
 
-/// A query with its mistyped words replaced by the words the vault holds, or
-/// `None` when nothing was replaced.
+/// A query with its mistyped words replaced, or `None` when nothing was replaced.
 ///
-/// For each word of [`words`]: fold it ([`fold_like_index`]); a word that is not
-/// [`eligible`], or that `known` says the vocabulary already holds, stays as
-/// typed. Any other word asks `candidates` for the `(term, documents)` pairs
-/// that start like it (the caller's bounded read of its vocabulary) and is
-/// replaced by the best whole term among them ([`best_term`]); with none, it
-/// stays.
+/// For each word of [`words`]: punctuation stuck to its ends (`budegt?`,
+/// `(budegt`) is no part of the word, so it is read without it and, when the word
+/// is corrected, left out of the corrected words. The rest is folded
+/// ([`fold_like_index`]) and handed to `correct_one`, but only when it is
+/// [`eligible`]: any other word stays as typed. `correct_one` answers the word
+/// that replaces it, `Ok(None)` to leave it, or the failure that ends the pass.
+///
 /// The words are joined by single spaces, so a corrected query is not the typed
 /// one with a word patched but the words the index will be asked for.
 ///
-/// Leading and trailing characters that are neither letters nor digits are
-/// trimmed before the word is read, and are not part of the corrected word.
+/// # Errors
+///
+/// The first failure `correct_one` reports.
+pub fn try_correct_words<E>(
+    query: &str,
+    mut correct_one: impl FnMut(&str) -> Result<Option<String>, E>,
+) -> Result<Option<String>, E> {
+    let mut changed = false;
+    let mut corrected: Vec<String> = Vec::new();
+    for typed in words(query) {
+        let folded = fold_like_index(typed.trim_matches(|c: char| !c.is_alphanumeric()));
+        let replacement = if eligible(&folded) {
+            correct_one(&folded)?
+        } else {
+            None
+        };
+        match replacement {
+            Some(term) => {
+                changed = true;
+                corrected.push(term);
+            }
+            None => corrected.push(typed),
+        }
+    }
+    Ok(changed.then(|| corrected.join(" ")))
+}
+
+/// [`try_correct_words`] over a vocabulary a walker has: a word `known` says is
+/// held stays; any other asks `candidates` for the `(term, documents)` pairs that
+/// start like it and is replaced by the best whole term among them
+/// ([`best_term`]); with none, it stays.
 ///
 /// `known` and `candidates` receive the **folded** word. The same term may be
-/// offered more than once (one pair per domain); its documents add.
+/// offered more than once; its documents add.
 pub fn correct_words(
     query: &str,
     mut known: impl FnMut(&str) -> bool,
     mut candidates: impl FnMut(&str) -> Vec<(String, u64)>,
 ) -> Option<String> {
-    let mut changed = false;
-    let corrected: Vec<String> = words(query)
-        .into_iter()
-        .map(|typed| {
-            // Punctuation stuck to the ends of a word (`budegt?`, `(budegt`) is
-            // no part of the word: it is read without it and, when the word is
-            // corrected, left out of the corrected words.
-            let folded = fold_like_index(typed.trim_matches(|c: char| !c.is_alphanumeric()));
-            if !eligible(&folded) || known(&folded) {
-                return typed;
-            }
-            match best_term(&folded, candidates(&folded)) {
-                Some(term) => {
-                    changed = true;
-                    term
-                }
-                None => typed,
-            }
+    match try_correct_words(query, |folded| {
+        Ok::<_, std::convert::Infallible>(if known(folded) {
+            None
+        } else {
+            best_term(folded, candidates(folded))
         })
-        .collect();
-    changed.then(|| corrected.join(" "))
+    }) {
+        Ok(corrected) => corrected,
+        Err(never) => match never {},
+    }
 }
 
-/// THE WORDS A WALKER HAS READ, as the vocabulary its own correction asks
-/// (#1097, R6).
+/// Whether some word of the list starts with `word`: the word is a hit as typed,
+/// because search is a prefix search. Both are folded.
+pub fn is_known<'a>(word: &str, list: impl IntoIterator<Item = &'a str>) -> bool {
+    list.into_iter().any(|held| held.starts_with(word))
+}
+
+/// Whether `held` begins one edit away from the typed word (the same question
+/// [`near_prefix`] answers, asked of every word of a list of a hundred thousand,
+/// so it reads no more than it must): the two agree up to a first difference,
+/// and past it the rest is a substitution, a letter more in `held`, a letter
+/// more in `word`, or two neighbours swapped. `word` is the typed word's letters
+/// and `held` does not start with it. A test holds it equal to [`near_prefix`].
+fn begins_near(word: &[char], held: &str) -> bool {
+    let len = word.len();
+    let head = word
+        .iter()
+        .zip(held.chars())
+        .take_while(|(typed, kept)| *typed == kept)
+        .count();
+    if head >= len {
+        return false;
+    }
+    if head == 0 {
+        // The slip is in the first two letters, and then one of them is where
+        // the typed word has its own: this turns away most of a long list.
+        let mut start = held.chars();
+        let (first, second) = (start.next(), start.next());
+        if second != Some(word[1]) && second != Some(word[0]) && first != Some(word[1]) {
+            return false;
+        }
+    }
+    let rest = &word[head..];
+    let after = || held.chars().skip(head);
+    let same = |from: usize, count: usize, against: &[char]| {
+        after().skip(from).take(count).eq(against.iter().copied())
+    };
+    // A letter different, a letter more in `held`, a letter more in `word`.
+    if same(1, rest.len() - 1, &rest[1..]) && after().nth(rest.len() - 1).is_some() {
+        return true;
+    }
+    if same(1, rest.len(), rest) || same(0, rest.len() - 1, &rest[1..]) {
+        return true;
+    }
+    // Two neighbours swapped.
+    if rest.len() >= 2 {
+        let mut tail = after();
+        return tail.next() == Some(rest[1])
+            && tail.next() == Some(rest[0])
+            && tail.take(rest.len() - 2).eq(rest[2..].iter().copied());
+    }
+    false
+}
+
+/// The words of `list` a typed `word` may have meant, in the tiers
+/// [the module](self) describes: one edit anywhere with the typed first letter,
+/// else one edit anywhere that changes it, else the typed fragment inside a
+/// longer word. Empty when there is none, and for a word that is not
+/// [`eligible`]. A word `list` starts with is never offered ([`is_known`] is the
+/// caller's question to ask first).
 ///
-/// Locker and Money answer a search by walking a bounded window of rows and
-/// matching text, not by asking the full-text door, and Locker is never a search
-/// domain: it has no index and no vocabulary, and must not get one. So a walker
-/// that found nothing corrects a typo against **the words of the very rows it
-/// just walked** and nothing else — this list is built from them, row by row,
-/// and dropped with the request.
+/// `list` is the vault's whole word list, optionally filtered by the caller (a
+/// realm); every word in it is folded.
+#[must_use]
+pub fn near_words<'a>(
+    word: &str,
+    list: impl IntoIterator<Item = &'a str, IntoIter: Clone>,
+) -> Vec<&'a str> {
+    if !eligible(word) {
+        return Vec::new();
+    }
+    let first = word.chars().next();
+    let letters: Vec<char> = word.chars().collect();
+    let (mut kept, mut changed) = (Vec::new(), Vec::new());
+    let list = list.into_iter();
+    for held in list.clone() {
+        if held.starts_with(word) {
+            continue;
+        }
+        // One edit anywhere. `near_prefix` tries the held word itself when it is
+        // within a letter of the typed word's length, so it covers
+        // `within_one(word, held)` and also the held words that merely begin like
+        // a slip of the typed one (`budeg` in `budget`).
+        if begins_near(&letters, held) {
+            if held.chars().next() == first {
+                kept.push(held);
+            } else {
+                changed.push(held);
+            }
+        }
+    }
+    if !kept.is_empty() {
+        kept
+    } else if !changed.is_empty() {
+        changed
+    } else if word.chars().count() >= IN_WORD_MIN {
+        // The widest net, cast only when nothing narrower caught anything.
+        list.filter(|held| {
+            held.len() > word.len() && held.contains(word) && !held.starts_with(word)
+        })
+        .collect()
+    } else {
+        Vec::new()
+    }
+}
+
+/// The order candidates are chosen in: the most documents first, then the
+/// shorter word, then the one that sorts first. Total, so a vault answers the
+/// same every time.
+#[must_use]
+pub fn rank_order(left: (&str, u64), right: (&str, u64)) -> std::cmp::Ordering {
+    right
+        .1
+        .cmp(&left.1)
+        .then_with(|| left.0.chars().count().cmp(&right.0.chars().count()))
+        .then_with(|| left.0.cmp(right.0))
+}
+
+/// THE WORDS A WALKER HAS READ, as the vocabulary its own correction asks.
+///
+/// Locker answers a search by walking a bounded window of rows and matching text,
+/// not by asking the full-text door: it has no index and no vocabulary, and must
+/// not get one. So a walker that found nothing corrects a typo against **the
+/// words of the very rows it just walked** and nothing else — this list is built
+/// from them, row by row, and dropped with the request.
 ///
 /// Words are lowercased and not unaccented, because the walkers match by
 /// lowercase `contains`; a word it offers is a word the re-walk will find. Each
 /// word counts once per row, and that count is the `docs` [`correct_words`]
-/// weighs candidates by. The first-letter rule is the door's (R4a): a candidate
-/// starts with the typed word's first letter, or with its first two letters
-/// swapped.
+/// weighs candidates by. A walker offers a candidate that starts with the
+/// typed word's first letter, or with its first two letters swapped.
 #[derive(Debug, Clone, Default)]
 pub struct WalkedWords {
     rows: BTreeMap<String, u64>,
@@ -645,6 +788,127 @@ mod tests {
         assert_eq!(vocabulary.correct("(bdg)"), None);
     }
 
+    // -- candidates from the whole word list ------------------------------------
+
+    fn near<'a>(word: &str, list: &[&'a str]) -> Vec<&'a str> {
+        near_words(word, list.iter().copied())
+    }
+
+    /// THE FAST CHECK IS `near_prefix`: every word of four or five letters
+    /// against every held word of up to six, over a three-letter alphabet,
+    /// which holds every shape of insert, delete, substitute and swap at every
+    /// position, and a held word that stops short.
+    #[test]
+    fn the_fast_check_agrees_with_near_prefix() {
+        let mut every = vec![String::new()];
+        let mut frontier = vec![String::new()];
+        for _ in 0..6 {
+            frontier = frontier
+                .iter()
+                .flat_map(|word| ["a", "b", "c"].map(|letter| format!("{word}{letter}")))
+                .collect();
+            every.extend(frontier.iter().cloned());
+        }
+        let mut near = 0;
+        for word in every.iter().filter(|word| (4..=5).contains(&word.len())) {
+            let letters: Vec<char> = word.chars().collect();
+            for held in every.iter().filter(|held| !held.starts_with(word.as_str())) {
+                let expected = near_prefix(word, held).is_some();
+                near += usize::from(expected);
+                assert_eq!(
+                    begins_near(&letters, held),
+                    expected,
+                    "`{word}` and `{held}`"
+                );
+            }
+        }
+        assert!(near > 1_000, "only {near} pairs were near");
+    }
+
+    #[test]
+    fn a_slip_anywhere_in_the_word_finds_the_word() {
+        let list = ["budget", "cabin", "sunscreen"];
+        assert_eq!(near("budegt", &list), ["budget"]); // a swap near the end
+        assert_eq!(near("bidget", &list), ["budget"]); // a letter different mid-word
+        assert_eq!(near("budgt", &list), ["budget"]); // a letter fewer
+        assert_eq!(near("buddget", &list), ["budget"]); // a letter more
+        // Cut off as you type, the slip is in the letters you have.
+        assert_eq!(near("budeg", &list), ["budget"]);
+        // A word the list starts with is a hit, never offered.
+        assert!(near("budg", &list).is_empty());
+        assert!(near("budget", &list).is_empty());
+    }
+
+    #[test]
+    fn a_first_letter_change_counts_only_when_no_candidate_keeps_the_first_letter() {
+        // Only a candidate that changes it: found.
+        assert_eq!(near("gudget", &["budget", "cabin"]), ["budget"]);
+        // A candidate that keeps it hides the one that changes it.
+        assert_eq!(near("gudget", &["budget", "gudgex"]), ["gudgex"]);
+        // The swap of the first two is a first-letter change like the others.
+        assert_eq!(near("ubdget", &["budget"]), ["budget"]);
+    }
+
+    #[test]
+    fn a_fragment_inside_a_longer_word_is_the_last_resort_and_needs_four_letters() {
+        let list = ["sunscreen", "screenplay", "cabin"];
+        // `screen` is the start of `screenplay`, so a caller asks `is_known` first
+        // and never gets here; asked anyway, the words that START with it are not
+        // offered and the one that contains it is.
+        assert!(is_known("screen", list));
+        assert_eq!(near("screen", &list), ["sunscreen"]);
+        // Inside only: `sunscreen`.
+        assert_eq!(near("cree", &["sunscreen", "cabin"]), ["sunscreen"]);
+        assert_eq!(near("creen", &["sunscreen", "cabin"]), ["sunscreen"]);
+        // Three letters is not a fragment: the word is not even eligible.
+        assert!(near("cre", &["sunscreen"]).is_empty());
+        // One edit anywhere is a tier ahead of in-word: `creen` is a letter from
+        // `screen`, which beats `sunscreen` that merely contains it.
+        assert_eq!(near("creen", &["screen", "sunscreen"]), ["screen"]);
+    }
+
+    #[test]
+    fn a_word_that_is_not_eligible_has_no_candidates() {
+        let list = ["budget", "abd", "2026"];
+        assert!(near("bud", &list).is_empty());
+        assert!(near("2025", &list).is_empty());
+        assert!(near("bu1get", &list).is_empty());
+    }
+
+    #[test]
+    fn candidates_are_ranked_by_documents_then_shorter_then_sorted() {
+        use std::cmp::Ordering::{Greater, Less};
+        assert_eq!(rank_order(("budgit", 4), ("budget", 1)), Less);
+        assert_eq!(rank_order(("budget", 1), ("budgit", 4)), Greater);
+        assert_eq!(rank_order(("budgets", 2), ("budget", 2)), Greater);
+        assert_eq!(rank_order(("budget", 2), ("budgit", 2)), Less);
+        let mut ranked = vec![("budgets", 2), ("budgit", 2), ("budget", 2), ("budgat", 9)];
+        ranked.sort_by(|left, right| rank_order(*left, *right));
+        assert_eq!(
+            ranked.iter().map(|(word, _)| *word).collect::<Vec<_>>(),
+            ["budgat", "budget", "budgit", "budgets"]
+        );
+    }
+
+    #[test]
+    fn a_word_is_known_when_some_word_starts_with_it() {
+        assert!(is_known("budg", ["budget"]));
+        assert!(is_known("budget", ["budget"]));
+        assert!(!is_known("budgets", ["budget"]));
+        assert!(!is_known("udget", ["budget"]));
+    }
+
+    #[test]
+    fn a_failure_ends_the_pass_and_a_clean_pass_joins_the_words() {
+        let corrected = try_correct_words::<()>("Budegt? cabin abc", |word| {
+            Ok((word == "budegt").then(|| "budget".to_owned()))
+        });
+        assert_eq!(corrected, Ok(Some("budget cabin abc".to_owned())));
+        let failed = try_correct_words("budegt", |_| Err("broken"));
+        assert_eq!(failed, Err("broken"));
+        assert_eq!(try_correct_words::<()>("cabin", |_| Ok(None)), Ok(None));
+    }
+
     // -- the words a walker has read ----------------------------------------------
 
     #[test]
@@ -680,7 +944,7 @@ mod tests {
     fn a_walker_offers_a_word_by_its_first_letter_or_the_swap_of_its_first_two() {
         let mut walked = WalkedWords::new();
         walked.add_row(["budget", "ubdget"]);
-        // R4a: a slip in the first letter is not corrected...
+        // A slip in the first letter is not corrected...
         assert_eq!(walked.correct("cudget"), None);
         // ...but the first two swapped are.
         assert_eq!(walked.correct("ubdgat").as_deref(), Some("ubdget"));

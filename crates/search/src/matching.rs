@@ -38,7 +38,7 @@ pub const MIN_WORD_LETTERS: usize = 2;
 ///
 /// The words are [`centraid_apps_kit::spelling::words`] — **one tokenization**,
 /// shared with the correction (`Search::correct`), so the word a member sees
-/// corrected is the word the index was asked for (#1097, R5).
+/// corrected is the word the index was asked for.
 ///
 /// # Errors
 ///

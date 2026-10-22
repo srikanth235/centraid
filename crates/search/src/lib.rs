@@ -25,7 +25,7 @@
 //! | One letter is not a search | A query whose words are all one character is [`SearchError::NoSearchableWords`], the empty term's answer on every surface ([`matching`]) |
 //! | A denial is a VALUE | [`Answer`] is `Denied` or `Data`, never an `Err` |
 //! | A bound reports the size it reaches | [`SearchRequest::page`] is clamped by [`MAX_MATCH_ROWS`] and [`Answer::window`] says what it actually was |
-//! | A correction is a bounded lookup | [`Search::correct`] replaces a word by a whole term of the one vocabulary, reading at most [`MAX_VOCAB_SCAN`] rows per word |
+//! | A correction is a lookup, not a guess | [`Search::correct`] replaces a word by one whole word of the vault's word list, ranked by the documents that hold it |
 //!
 //! ## What this crate is NOT
 //!
@@ -39,7 +39,7 @@ pub mod snippet;
 pub mod sqlite;
 
 pub use matching::{MAX_MATCH_TOKENS, MIN_WORD_LETTERS, match_expression, title_expression};
-pub use sqlite::{MAX_VOCAB_SCAN, SqliteDoor, TAIL_ROWS};
+pub use sqlite::{SqliteDoor, TAIL_ROWS};
 
 use centraid_apps_kit::page::{Page, PageRequest};
 
@@ -281,21 +281,23 @@ pub trait Search {
     }
 
     /// The query with its mistyped words replaced by the words the vault holds,
-    /// or `None` when no word changed (#1097, R4, R4a).
+    /// or `None` when no word changed.
     ///
-    /// **A caller runs this only when its whole exact answer was empty**, then
-    /// runs [`Search::query`] again with the words it returned and says what it
-    /// searched for. It is a correction and never a wider match: a word the
-    /// vocabulary holds is kept, a word of fewer than four letters or with a digit
-    /// is kept, a slip in the first letter is not corrected (except a swap of the
-    /// first two), and the replacement is always a whole term the named
-    /// domains' vocabularies hold (R4b). The rule is
-    /// [`centraid_apps_kit::spelling`]'s, which the assistant's name resolver
-    /// reads too.
+    /// **A caller runs this only when its exact answer was thin** (fewer than
+    /// three rows, `corrected_search` in `crates/core`), then runs
+    /// [`Search::query`] again with the words it returned and says what it
+    /// included. It is a correction and never a wider match: a word some word of
+    /// the vault starts with is kept, a word of fewer than four letters or with a
+    /// digit is kept, and the replacement is always one whole word of the vault's
+    /// word list, chosen by [`centraid_apps_kit::spelling::near_words`] (one edit
+    /// anywhere, a first-letter change only when nothing keeps the first letter,
+    /// then a fragment inside a longer word) and ranked by the documents that
+    /// hold it. The rule is the kit's, whose `within_one` the assistant's name
+    /// resolver reads too.
     ///
-    /// `entities` are the kinds the caller is about to search
-    /// again, and the same refusal applies as in `query`: an entity that is
-    /// neither is [`SearchError::NotSearchable`], so Locker has no vocabulary to ask.
+    /// `entities` are the kinds the caller is about to search again, and the same
+    /// refusal applies as in `query`: an entity that is neither is
+    /// [`SearchError::NotSearchable`], so Locker has no words to ask.
     ///
     /// The default is `None`, so a door with no vocabulary (a test double, a
     /// recorder around another door) is a door that corrects nothing and not one

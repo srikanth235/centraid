@@ -70,16 +70,14 @@
 //! hides an indexed column, a receipt) are `crates/vault`'s paged-door work and
 //! are written down in `crates/search/README.md` rather than stubbed here.
 
-use std::cell::RefCell;
-
 use centraid_apps_kit::page::{Page, PageCursor, page_of, probe_limit};
-use centraid_apps_kit::spelling::{correct_words, words};
+use centraid_apps_kit::spelling::{is_known, near_words, rank_order, try_correct_words, words};
 use centraid_ontology::jsvalue::js_number_to_string;
 use centraid_vault::index::SEARCHABLE;
 use centraid_vault::model::Kind;
 use centraid_vault::words::Words;
-use rusqlite::Connection;
 use rusqlite::types::Value;
+use rusqlite::{Connection, OptionalExtension};
 
 use crate::matching::{match_expression, title_expression};
 use crate::snippet::snippet_of;
@@ -104,7 +102,6 @@ pub const TAIL_ROWS: usize = 500;
 pub struct SqliteDoor<'connection> {
     connection: &'connection Connection,
     /// The vault's cache of its words, which [`Search::correct`] reads.
-    #[expect(dead_code, reason = "read by `correct` once it reads the word list")]
     words: &'connection Words,
 }
 
@@ -309,39 +306,6 @@ impl SqliteDoor<'_> {
     }
 }
 
-/// How many rows of the vocabulary one correction reads for one word.
-///
-/// The number is a measurement and not a guess: the biggest first-letter bucket
-/// of English text is a ninth of a vocabulary, so the bound holds a whole bucket
-/// of a vault of about 70,000 terms. A word whose near term sorts past the bound
-/// is **not corrected**, which is the same answer as "no such word": a
-/// correction is an offer, never a promise.
-pub const MAX_VOCAB_SCAN: usize = 8_192;
-
-/// The smallest string greater than every string that starts with `prefix`: the
-/// exclusive end of a prefix range on `term`. `None` when there is none (a prefix
-/// of nothing but the last code point).
-///
-/// SQLite compares text byte by byte and UTF-8 keeps code point order, so the
-/// range `term >= prefix AND term < prefix_end(prefix)` is exactly the terms that
-/// start with it, and a range on `term` is a constraint the vocabulary table
-/// honours where a `LIKE` or a `substr` would walk every term.
-fn prefix_end(prefix: &str) -> Option<String> {
-    let mut chars: Vec<char> = prefix.chars().collect();
-    while let Some(last) = chars.pop() {
-        // The surrogate gap is not a char: step over it.
-        let next = match u32::from(last) + 1 {
-            0xD800 => 0xE000,
-            next => next,
-        };
-        if let Some(next) = char::from_u32(next) {
-            chars.push(next);
-            return Some(chars.into_iter().collect());
-        }
-    }
-    None
-}
-
 fn unusable(error: &rusqlite::Error) -> SearchError {
     SearchError::IndexUnusable {
         detail: format!("`search_vocab` is not usable: {error}"),
@@ -349,77 +313,70 @@ fn unusable(error: &rusqlite::Error) -> SearchError {
 }
 
 impl SqliteDoor<'_> {
-    /// Whether any term of the vocabulary starts with `word`: a prefix probe
-    /// that stops at the first.
-    fn holds(&self, word: &str) -> Result<bool, SearchError> {
-        let Some(end) = prefix_end(word) else {
-            return Ok(false);
-        };
-        let mut statement = self
-            .connection
-            .prepare_cached("SELECT 1 FROM search_vocab WHERE term >= ?1 AND term < ?2 LIMIT 1")
-            .map_err(|error| unusable(&error))?;
-        statement
-            .exists(rusqlite::params![word, end])
-            .map_err(|error| SearchError::Sqlite(error.to_string()))
+    /// The query with its mistyped words replaced by the words the vault holds,
+    /// reading only the words `in_realm` keeps.
+    ///
+    /// **The hook for a realm.** The list a correction reads is the vault's whole
+    /// word list; a caller that must not offer a word from somewhere (a secret
+    /// store whose words are not for every surface) passes the filter that
+    /// keeps the words it may. [`Search::correct`] keeps them all.
+    fn corrected(
+        &self,
+        query: &str,
+        in_realm: &dyn Fn(&str) -> bool,
+    ) -> Result<Option<String>, SearchError> {
+        // Read on the first word that needs it: a query of words that cannot be
+        // corrected never asks for the list.
+        let mut list: Option<std::cell::Ref<'_, [String]>> = None;
+        try_correct_words(query, |folded| {
+            if list.is_none() {
+                list = Some(self.words.current(self.connection).map_err(|error| {
+                    SearchError::IndexUnusable {
+                        detail: format!("the word list is not usable: {error}"),
+                    }
+                })?);
+            }
+            let held = || {
+                list.as_deref()
+                    .unwrap_or_default()
+                    .iter()
+                    .map(String::as_str)
+                    .filter(|word| in_realm(word))
+            };
+            if is_known(folded, held()) {
+                return Ok(None);
+            }
+            self.best_of(near_words(folded, held()))
+        })
     }
 
-    /// Up to `limit` terms that start with `prefix`, in term order, each with
-    /// the number of documents it is in. A term more than one letter shorter
-    /// than the word cannot have a prefix one edit from it, so it is not kept.
-    fn terms_under(
-        &self,
-        prefix: &str,
-        shortest: usize,
-        limit: usize,
-        into: &mut Vec<(String, u64)>,
-    ) -> Result<usize, SearchError> {
-        let Some(end) = prefix_end(prefix) else {
-            return Ok(0);
-        };
+    /// The candidate the most documents hold, then the shorter, then the one
+    /// that sorts first ([`rank_order`]). A word the index lists but no document
+    /// holds any more is not a correction: searching it finds nothing.
+    fn best_of(&self, candidates: Vec<&str>) -> Result<Option<String>, SearchError> {
+        if candidates.is_empty() {
+            return Ok(None);
+        }
         let mut statement = self
             .connection
-            .prepare_cached(
-                "SELECT term, doc FROM search_vocab
-                  WHERE term >= ?1 AND term < ?2 ORDER BY term LIMIT ?3",
-            )
+            .prepare_cached("SELECT doc FROM search_vocab WHERE term = ?1")
             .map_err(|error| unusable(&error))?;
-        let rows = statement
-            .query_map(
-                rusqlite::params![prefix, end, i64::try_from(limit).unwrap_or(i64::MAX)],
-                |row| Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?)),
-            )
-            .map_err(|error| SearchError::Sqlite(error.to_string()))?;
-        let mut read = 0;
-        for row in rows {
-            let (term, docs) = row.map_err(|error| SearchError::Sqlite(error.to_string()))?;
-            read += 1;
-            if term.chars().count() >= shortest {
-                into.push((term, u64::try_from(docs).unwrap_or(0)));
+        let mut best: Option<(&str, u64)> = None;
+        for candidate in candidates {
+            let docs: Option<i64> = statement
+                .query_row([candidate], |row| row.get(0))
+                .optional()
+                .map_err(|error| SearchError::Sqlite(error.to_string()))?;
+            let docs = u64::try_from(docs.unwrap_or(0)).unwrap_or(0);
+            if docs > 0
+                && best.is_none_or(|held| {
+                    rank_order((candidate, docs), held) == std::cmp::Ordering::Less
+                })
+            {
+                best = Some((candidate, docs));
             }
         }
-        Ok(read)
-    }
-
-    /// The terms a correction of `word` may land on: those that start with the
-    /// word's first letter, and those that start with its first two letters
-    /// swapped, **at most [`MAX_VOCAB_SCAN`] rows in all**.
-    fn neighbours(&self, word: &str, into: &mut Vec<(String, u64)>) -> Result<(), SearchError> {
-        let mut letters = word.chars();
-        let (Some(first), Some(second)) = (letters.next(), letters.next()) else {
-            return Ok(());
-        };
-        // `|w| - 1`: the shortest term a prefix of length `|w| - 1` can come from.
-        let shortest = word.chars().count().saturating_sub(1);
-        let mut allowance = MAX_VOCAB_SCAN;
-        if second != first {
-            let swapped: String = [second, first].iter().collect();
-            allowance -= self.terms_under(&swapped, shortest, allowance, into)?;
-        }
-        if allowance > 0 {
-            self.terms_under(&first.to_string(), shortest, allowance, into)?;
-        }
-        Ok(())
+        Ok(best.map(|(word, _)| word.to_owned()))
     }
 }
 
@@ -537,11 +494,11 @@ impl Search for SqliteDoor<'_> {
         Ok(targets)
     }
 
-    /// The correction: the words of `query` the vocabulary does not hold,
-    /// replaced by the words it does. `None` when no word changed.
+    /// The correction: the words of `query` the index does not hold, replaced
+    /// by the words it does. `None` when no word changed.
     ///
-    /// The vocabulary is the one index's, so the kinds named only have to be
-    /// searchable: Locker has none, and a secret has no term a correction could
+    /// The word list is the one index's, so the kinds named only have to be
+    /// searchable: Locker has none, and a secret has no word a correction could
     /// offer.
     fn correct(
         &self,
@@ -556,53 +513,13 @@ impl Search for SqliteDoor<'_> {
                 .collect::<Vec<_>>(),
         )?;
         let _ = principal;
-
-        // `correct_words` takes closures that cannot fail; the first failure is
-        // kept, the word it concerned is left as typed, and it is returned after.
-        let failure: RefCell<Option<SearchError>> = RefCell::new(None);
-        let keep = |error: SearchError| {
-            failure.borrow_mut().get_or_insert(error);
-        };
-        let corrected = correct_words(
-            query,
-            |word| {
-                if failure.borrow().is_some() {
-                    return true;
-                }
-                match self.holds(word) {
-                    Ok(held) => held,
-                    Err(error) => {
-                        keep(error);
-                        true
-                    }
-                }
-            },
-            |word| {
-                let mut terms = Vec::new();
-                if let Err(error) = self.neighbours(word, &mut terms) {
-                    keep(error);
-                    return Vec::new();
-                }
-                terms
-            },
-        );
-        match failure.into_inner() {
-            Some(error) => Err(error),
-            None => Ok(corrected),
-        }
+        self.corrected(query, &|_| true)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn a_prefix_ends_at_the_next_code_point() {
-        assert_eq!(prefix_end("abc").as_deref(), Some("abd"));
-        assert_eq!(prefix_end("a\u{10FFFF}").as_deref(), Some("b"));
-        assert_eq!(prefix_end("\u{10FFFF}"), None);
-    }
 
     #[test]
     fn a_kind_nobody_searches_is_refused_by_name_and_none_means_all() {
