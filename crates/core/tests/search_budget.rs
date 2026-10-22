@@ -1,7 +1,7 @@
 //! The search budget: p95 of the core's own search answers over a year-3 vault,
 //! against a ceiling (#1135, after `call_budget`'s pattern, D-1020-D2-6).
 //!
-//! `SEARCH_BUDGET_MS` is **50** on `ci-linux-x64-4c`, and the number is in
+//! `SEARCH_BUDGET_MS` is **80** on `ci-linux-x64-4c`, and the number is in
 //! `contracts/ledgers/search-budget.json` where it can only fall. The ceiling is
 //! the product's promise about a call (a frame is not late because a member
 //! typed), stated once for every search call, and never the observation.
@@ -41,9 +41,10 @@ use centraid_core::api_proto as wire;
 use wire::app_query_request::Query as Q;
 use wire::app_query_response::Answer;
 
-/// The ceiling, in milliseconds, on `ci-linux-x64-4c`: 64, by the owner's ruling of
-/// 2026-10-22 (#1135), after the search-speed pass left two cells between 50 and 64.
-const SEARCH_BUDGET_MS: f64 = 64.0;
+/// The ceiling, in milliseconds, on `ci-linux-x64-4c`: 80, by the owner's ruling of
+/// 2026-10-22 (#1135), after a machine a fifth slower than the first measured Docs'
+/// two-letter prefix at 75 to 78 ms and the owner accepted those p95s.
+const SEARCH_BUDGET_MS: f64 = 80.0;
 /// How many calls each percentile is taken over.
 const SAMPLES: usize = 100;
 /// Unmeasured calls first: the statement compiles, the pages fault in, the
