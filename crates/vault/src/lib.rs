@@ -47,6 +47,7 @@ pub mod snapshot;
 pub mod testdoor;
 pub mod time;
 pub mod value;
+pub mod words;
 
 /// SQLite, AS THIS CRATE LINKS IT.
 ///

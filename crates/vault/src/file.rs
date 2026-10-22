@@ -66,6 +66,9 @@ pub struct Vault {
     pub(crate) pending: RefCell<crate::log::guard::Pending>,
     /// Read depth, so a nested read does not clear `query_only` early.
     read_depth: Cell<u32>,
+    /// The index's words, read through a cache that checks itself against the
+    /// table ([`crate::words`]).
+    words: crate::words::Words,
     /// A fault to inject, for the snapshot builder's interrupted-build test.
     pub(crate) fault: Cell<Option<crate::snapshot::Fault>>,
     /// THE LOCAL CONTENT STORE, where bytes that are not text go.
@@ -273,6 +276,7 @@ impl Vault {
             depth: Cell::new(0),
             pending: RefCell::default(),
             read_depth: Cell::new(0),
+            words: crate::words::Words::default(),
             fault: Cell::new(None),
             blobs: None,
         })
@@ -387,6 +391,14 @@ impl Vault {
             });
         }
         body(&self.connection)
+    }
+
+    /// The words the index holds, as a list kept in memory and checked against
+    /// the table on every use. Read it inside [`Self::read`]:
+    /// `vault.read(|connection| Ok(vault.words().current(connection)?.to_vec()))`.
+    #[must_use]
+    pub const fn words(&self) -> &crate::words::Words {
+        &self.words
     }
 
     /// The connection, for this crate's own internals only.

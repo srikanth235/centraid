@@ -850,3 +850,22 @@ Files: `crates/vault/src/index.rs`, `crates/vault/src/index/text.rs` (new; `SEAR
 - **Commitments.** After the scripted run every `search_vocab` term is in `search_word`; after a rebuild the list equals the vocabulary and is a subset of the incremental one; `the_word_list_gains_a_word_on_index_and_loses_it_on_a_purge_or_a_rebuild` covers the purge, the kept shared word, the dropped-by-edit word and the rebuild (`crates/vault/tests/commitments.rs`).
 
 Files: `contracts/migrations/001_baseline.sql`, `contracts/schema/vault-ddl.sql`, `crates/ontology/src/lib.rs`, `crates/ontology/src/text.rs`, `crates/ontology/src/text/token_chars.rs`, `crates/apps/kit/src/spelling.rs`, `crates/vault/src/index.rs`, `crates/vault/src/commands/entity.rs`, `crates/vault/src/log/guard.rs`, `crates/vault/src/ontology_doc.rs`, `crates/vault/tests/commitments.rs`, `scripts/docs-site/src/content/ontology-body.html`, `docs/vault-ontology.md`, `docs/glossary.md`, `receipts/issue-1135-vault-model.md`.
+
+### A3 — the cache
+
+`Vault::words()` returns a `Words` (`crates/vault/src/words.rs`, wired in `crates/vault/src/file.rs` and `crates/vault/src/lib.rs`); `Words::current(&connection)` returns the words in arrival order as a `Ref<[String]>`. It asks the table one statement (the highest `n`, the count, and the word at the cached last `n`) and: **keeps** the cache when the three agree with it; **reads the tail** (`WHERE n > ?`) when the highest number and the count grew by the same amount and the word at the old last number is the cached one; **reads whole** otherwise (a purge, a rebuild, a restore, a rolled-back number given out again to another word). It refuses inside a commit (the rows may be rolled back) and, instead of panicking, when a slice from an earlier call is still held and the table has changed. `Words::loads()` counts each kind of read. Unit tests: first read whole and unchanged not read again; empty table; appended words as a tail; a word already there appends nothing; a rolled-back write never reaches the cache and its numbers are given out again; a number given out again to another word; a purge (below the top, at the top, with more arriving); a rebuilt or restored table as long as the old one; a read inside a commit; a held slice; and a real `Vault` following its commits.
+
+**The statement is three subqueries**, not `SELECT max(n), count(*)`: with two aggregates in one query SQLite reads every row for both (7.4 ms mean at 150,000 words, found by measuring the first version), where the highest number is a descent of the tree and the count walks its pages.
+
+**Timings** (150,000 words of 4 to 11 letters; an ignored test, `cargo test -p centraid-vault --lib words::tests::the_cost -- --ignored --nocapture`, nothing committed as a fixture; the test profile, SQLite optimised):
+
+| | in memory | on disk (hot page cache) |
+| --- | --- | --- |
+| full load | 65 to 97 ms | 67 ms |
+| validation, nothing changed | 32 µs | 0.86 ms |
+| of which `max(n)` / `count(*)` / word at `n` | 3 µs / 29 µs / 6 µs | 11 µs / 856 µs / 22 µs |
+| 1,000 appended words, read as a tail | 0.9 ms | 3.8 ms |
+
+**What the check cannot see**, in the module's doc: it reads three numbers and a word, so a table that agrees on all four but differs below the top is kept. The writer only appends; a purge or a rebuild that agrees on all four would have to remove the top words and append as many that end in the word that was at the top.
+
+Files: `crates/vault/src/words.rs` (new), `crates/vault/src/file.rs`, `crates/vault/src/lib.rs`, `docs/vault-ontology.md`, `receipts/issue-1135-vault-model.md`.
