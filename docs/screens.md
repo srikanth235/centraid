@@ -35,7 +35,6 @@ Agenda is the worked example: [`crates/screens/src/agenda/`](../crates/screens/s
 - **Device memory** (a per-phone habit) is a Keychain effect, not a vault row; platform reads that feed an import are generic Effects the shell answers (`CalendarRead`, `PhoneWatch`).
 - The kit's generic screens (`kit::trash`, parameterised by a spec; `kit::autosave`) are built once. A new app supplies a spec.
 
-
 ## Testing
 
 `centraid_screens::testing::Driver` goes through the door a shell uses: `start()`, `send(instance, event)`, `nav(..)`, `answer_effect(..)`, `pump(wait)` (the shell's event thread, for timers and change pushes), then assert on `driver.views`, `driver.effects`, `driver.navigation`. `crates/screens/tests/proof.rs` is the model. This replaces `jvmTest` as the place screen behaviour is tested.
