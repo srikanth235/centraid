@@ -596,7 +596,7 @@ CREATE TABLE rule (
 
 -- table search on search
 CREATE VIRTUAL TABLE search USING fts5(
-  title, body, content = '', contentless_delete = 1, prefix = '2',
+  title, body, content = '', contentless_delete = 1, prefix = '2 3',
   tokenize = "unicode61 remove_diacritics 2");
 
 -- table search_config on search_config

@@ -1020,3 +1020,46 @@ Corpus and tests: `crates/apps/kit/src/search_corpus.rs`, `crates/apps/kit/src/l
 Vault: `crates/vault/src/plans.rs`, `crates/vault/src/lib.rs`, `crates/vault/src/file.rs`, `crates/vault/src/page.rs`, `contracts/migrations/001_baseline.sql`, `contracts/schema/vault-ddl.sql`.
 Gate and ledgers: `crates/xtask/src/gate.rs`, `contracts/ledgers/search-budget.json`, `contracts/ledgers/query-plans.json`.
 Docs: `TESTING.md`, `ARCHITECTURE.md`, `CHANGELOG.md`, `crates/xtask/README.md`, `docs/toolchain.md`, `docs/dev-environment.md`, `docs/glossary.md`, `receipts/issue-1135-vault-model.md`.
+
+## Search speed
+
+Doctrine digest: law `965cf4419f70`.
+
+**Causes, measured on the year-3 corpus (release; phases timed one by one, and a callgrind profile of Docs `ba`).**
+
+- *A three-letter prefix merged about a thousand terms*: once for the matches, and again for each phrase's idf, which `bm25` reads by counting every row of the phrase. 25 of a 30 ms call for Money `bab`.
+- *The correction's walk of the word list* (200,000 words). The list was a `Vec<String>`, so the walk chased a pointer per word: `is_known` took 3 ms, and the in-word tier was a `contains` per word. Reading a document count for each candidate costs about 20 µs (`search_vocab` walks the term's posting list). An in-word fragment of four letters had 856 candidates: 17 ms.
+- *A short prefix over a rare kind walks every match of the prefix*, probing `entity` for each to filter by kind. Docs' folder probe beside its documents costs 18 ms for `ba`. Snippets were not a cause: 2.5 ms for 50 documents.
+
+**Kept.**
+
+- `prefix = '2 3'` on `search` (`contracts/migrations/001_baseline.sql`, `contracts/schema/vault-ddl.sql` regenerated). Money `bab` went from 30 to 8 ms in isolation. The index is a third larger (29 → 39 MB on this corpus).
+- The word list is packed into one buffer (`WordList`, `crates/vault/src/words.rs`), and the in-word tier searches it once (`WordList::containing`, held equal to the per-word filter by a test). The kit's `near_words` is split into `near_words_close` and `inside_words` so the door can use it.
+- The door prepares its statement through the connection's cache.
+- `Vault::tap_pages` is documented as a read-only measurement hook that is not reachable from `core-ffi`.
+
+**Tried and discarded as not worth their weight:**
+
+- an ASCII copy of the one-edit check, with a two-pass scan;
+- a cap of 128 on the candidates counted (a behaviour change);
+- leaving out a leg a small kind provably has no rows in, by probing entity by entity;
+- a narrow covering index `entity_live_kind`, used with `INDEXED BY`.
+
+Together they put Docs `ba` at about 50 ms p95.
+
+**p95, ms. Before is the measurement lane's table; after is this tree.**
+
+| query | home | notes | docs | money | locker |
+|---|---|---|---|---|---|
+| 2 letters | 13.5 → 12.9 | 15.1 → 24.4 | 63.3 → 60.7 | 29.1 → 30.1 | 10.8 → 19.9 |
+| 3 letters | 14.3 → 6.9 | 24.0 → 18.2 | 42.3 → 20.6 | 49.2 → 15.3 | 7.7 → 19.0 |
+| typo | 42.7 → 34.4 | 43.4 → 34.9 | 18.4 → 18.2 | 44.6 → 25.9 | 11.0 → 22.0 |
+| filled pass | 35.5 → 23.1 | 5.1 → 5.1 | 3.8 → 2.6 | 5.0 → 4.1 | 7.5 → 21.4 |
+| in-word fragment | 68.7 → 40.9 | 59.9 → 52.2 | 1.2 → 0.3 | 0.7 → 0.3 | 10.6 → 20.8 |
+| rare word (home) | 27.3 → 21.4 | | | | |
+
+Locker does not touch the index on this branch, so its rise is this VM's noise: the same tree moves by ±30% in bursts. Two cells stayed over the 50 ms ceiling (Docs `ba` 60.7, Notes `aigo` 52.2); the owner ruled a p95 up to 64 ms acceptable (2026-10-22), and the ceiling in `contracts/ledgers/search-budget.json` moves to 64 in the commit after this one.
+
+The worker's session could not commit (its commit hook judged the umbrella's 31 older subjects once its clone held full history), so it handed the diff to the root, which applied it unchanged and committed it.
+
+Files: `contracts/migrations/001_baseline.sql`, `contracts/schema/vault-ddl.sql`, `crates/apps/kit/src/spelling.rs`, `crates/search/src/sqlite.rs`, `crates/search/src/matching.rs`, `crates/vault/src/words.rs`, `crates/vault/src/plans.rs`, `crates/vault/tests/commitments.rs`, `docs/vault-ontology.md`, `receipts/issue-1135-vault-model.md`.

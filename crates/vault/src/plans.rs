@@ -52,6 +52,12 @@ pub struct TappedPage {
 impl Vault {
     /// Start keeping the statement of every page read, until
     /// [`Self::take_tapped_pages`]. A second call starts over.
+    ///
+    /// **A measurement hook, for the plan sweep and nothing else.** It is read-only (it
+    /// keeps the text and binds of statements that run anyway and changes no read's
+    /// answer), and it is not reachable from `crates/core-ffi`: the shell's
+    /// surface is `Handle::call`, and `with_vault`, the only way to a [`Vault`], is
+    /// used there by its tests and fixture binaries, never exported.
     pub fn tap_pages(&self) {
         *self.page_tap.borrow_mut() = Some(Vec::new());
     }

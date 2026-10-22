@@ -225,11 +225,14 @@ CREATE TRIGGER journal_is_evidence BEFORE UPDATE ON journal
 -- Search: one index, kept by the writer. The FTS rowid is entity.n.
 -- ---------------------------------------------------------------------------------------------
 
--- `prefix = '2'` keeps an index of every two-letter start of a word, so the first keystrokes of a
--- query (`ca*`) read one short list instead of every term that begins that way. `search_vocab`
--- lists the words only, never these entries (`the_prefix_index_is_not_in_the_vocabulary`).
+-- `prefix = '2 3'` keeps an index of every two- and three-letter start of a word, so the first
+-- keystrokes of a query (`ca*`, `cab*`) read one short list instead of every term that begins that
+-- way: a three-letter prefix merged a thousand terms, once for the matches and once more for the
+-- idf of the rank, and that was 25 of a 30 ms call over the year-3 vault. The index is a third
+-- larger for it. `search_vocab` lists the words only, never these entries
+-- (`the_prefix_index_is_not_in_the_vocabulary`).
 CREATE VIRTUAL TABLE search USING fts5(
-  title, body, content = '', contentless_delete = 1, prefix = '2',
+  title, body, content = '', contentless_delete = 1, prefix = '2 3',
   tokenize = "unicode61 remove_diacritics 2");
 CREATE VIRTUAL TABLE search_vocab USING fts5vocab(search, row);
 

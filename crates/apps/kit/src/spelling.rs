@@ -366,14 +366,27 @@ pub fn near_words<'a>(
     word: &str,
     list: impl IntoIterator<Item = &'a str, IntoIter: Clone>,
 ) -> Vec<&'a str> {
+    let list = list.into_iter();
+    let close = near_words_close(word, list.clone());
+    if close.is_empty() {
+        inside_words(word, list)
+    } else {
+        close
+    }
+}
+
+/// The first two tiers of [`near_words`]: one edit anywhere, the typed first letter
+/// kept, else changed. A caller that holds the list in a shape that finds a fragment
+/// faster than a walk asks for the third tier itself ([`fragment_is_read`]).
+#[must_use]
+pub fn near_words_close<'a>(word: &str, list: impl IntoIterator<Item = &'a str>) -> Vec<&'a str> {
     if !eligible(word) {
         return Vec::new();
     }
     let first = word.chars().next();
     let letters: Vec<char> = word.chars().collect();
     let (mut kept, mut changed) = (Vec::new(), Vec::new());
-    let list = list.into_iter();
-    for held in list.clone() {
+    for held in list {
         if held.starts_with(word) {
             continue;
         }
@@ -389,19 +402,26 @@ pub fn near_words<'a>(
             }
         }
     }
-    if !kept.is_empty() {
-        kept
-    } else if !changed.is_empty() {
-        changed
-    } else if word.chars().count() >= IN_WORD_MIN {
-        // The widest net, cast only when nothing narrower caught anything.
-        list.filter(|held| {
-            held.len() > word.len() && held.contains(word) && !held.starts_with(word)
-        })
-        .collect()
-    } else {
-        Vec::new()
+    if kept.is_empty() { changed } else { kept }
+}
+
+/// Whether a typed word is read as the inside of longer words at all
+/// ([`IN_WORD_MIN`] letters or more, nothing but letters).
+#[must_use]
+pub fn fragment_is_read(word: &str) -> bool {
+    eligible(word) && word.chars().count() >= IN_WORD_MIN
+}
+
+/// The third tier of [`near_words`], the widest net, cast only when nothing narrower
+/// caught anything: the held words longer than the typed fragment that contain it.
+#[must_use]
+pub fn inside_words<'a>(word: &str, list: impl IntoIterator<Item = &'a str>) -> Vec<&'a str> {
+    if !fragment_is_read(word) {
+        return Vec::new();
     }
+    list.into_iter()
+        .filter(|held| held.len() > word.len() && held.contains(word) && !held.starts_with(word))
+        .collect()
 }
 
 /// The order candidates are chosen in: the most documents first, then the

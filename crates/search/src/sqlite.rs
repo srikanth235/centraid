@@ -71,10 +71,13 @@
 //! are written down in `crates/search/README.md` rather than stubbed here.
 
 use centraid_apps_kit::page::{Page, PageCursor, page_of, probe_limit};
-use centraid_apps_kit::spelling::{is_known, near_words, rank_order, try_correct_words, words};
+use centraid_apps_kit::spelling::{
+    fragment_is_read, is_known, near_words_close, rank_order, try_correct_words, words,
+};
 use centraid_ontology::jsvalue::js_number_to_string;
 use centraid_vault::index::SEARCHABLE;
 use centraid_vault::model::Kind;
+use centraid_vault::words::WordList;
 use centraid_vault::words::Words;
 use rusqlite::types::Value;
 use rusqlite::{Connection, OptionalExtension};
@@ -267,7 +270,7 @@ impl SqliteDoor<'_> {
     fn hits(&self, sql: &str, binds: Binds) -> Result<Vec<Hit>, SearchError> {
         let mut statement =
             self.connection
-                .prepare(sql)
+                .prepare_cached(sql)
                 .map_err(|error| SearchError::IndexUnusable {
                     detail: error.to_string(),
                 })?;
@@ -335,7 +338,7 @@ impl SqliteDoor<'_> {
     ) -> Result<Option<String>, SearchError> {
         // Read on the first word that needs it: a query of words that cannot be
         // corrected never asks for the list.
-        let mut list: Option<std::cell::Ref<'_, [String]>> = None;
+        let mut list: Option<std::cell::Ref<'_, WordList>> = None;
         try_correct_words(query, |folded| {
             if list.is_none() {
                 list = Some(self.words.current(self.connection).map_err(|error| {
@@ -346,9 +349,8 @@ impl SqliteDoor<'_> {
             }
             let held = || {
                 list.as_deref()
-                    .unwrap_or_default()
-                    .iter()
-                    .map(String::as_str)
+                    .into_iter()
+                    .flat_map(WordList::iter)
                     .filter(|word| in_realm(word))
             };
             if is_known(folded, held()) {
@@ -362,9 +364,9 @@ impl SqliteDoor<'_> {
                 if own == 0 || own >= THIN_ANSWER as u64 {
                     return Ok(None);
                 }
-                return self.best_of(near_words(folded, held()), own);
+                return self.best_of(near(folded, held(), list.as_deref(), in_realm), own);
             }
-            self.best_of(near_words(folded, held()), 0)
+            self.best_of(near(folded, held(), list.as_deref(), in_realm), 0)
         })
     }
 
@@ -409,6 +411,25 @@ impl SqliteDoor<'_> {
         }
         Ok(best.map(|(word, _)| word.to_owned()))
     }
+}
+
+/// The words a typed word may have meant, in [`centraid_apps_kit::spelling::near_words`]'s
+/// tiers, among the words `in_realm` keeps. The third tier, the typed fragment inside a
+/// longer word, is asked of the packed list ([`WordList::containing`]), which finds it in
+/// one search of its text and not one `contains` per word.
+fn near<'a>(
+    folded: &str,
+    held: impl Iterator<Item = &'a str>,
+    list: Option<&'a WordList>,
+    in_realm: &dyn Fn(&str) -> bool,
+) -> Vec<&'a str> {
+    let close = near_words_close(folded, held);
+    if !close.is_empty() || !fragment_is_read(folded) {
+        return close;
+    }
+    let mut inside = list.map(|list| list.containing(folded)).unwrap_or_default();
+    inside.retain(|word| in_realm(word));
+    inside
 }
 
 /// The statement behind [`Search::query_each`] and its parameters.
