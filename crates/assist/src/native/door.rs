@@ -17,7 +17,7 @@
 //!   `invoke_key`, so a write the runtime makes fires the same `ChangeFeed` events as a write a
 //!   screen makes; and it must read through `VaultDoor` (`app_query.rs`), the query path a screen
 //!   uses, so the runtime sees what the person sees. It must not hand the runtime a connection.
-//!   On the phone the Locker policy is off (`Flags::locker`), so `seal` and `unseal` are never
+//!   On the phone the secrets policy is off (`Flags::secrets`), so `seal` and `unseal` are never
 //!   called and an implementation may refuse them.
 //!
 //! # What the core owes park and confirm (R-1088-2, R-1088-6)

@@ -37,13 +37,16 @@ pub struct Flags {
     /// the model used to answer (`ambiguous:`, `0 … called …`, `error: … was refused`), for
     /// comparison runs (`--no-compose`). `undo` is not behind it.
     pub compose: bool,
-    /// Whether the Locker is reachable (#1088, R-1088-3). On (the default, and what the model was
-    /// trained on and every harness run uses), the runtime loads Locker items, seals what a
-    /// `create` or an edit puts in one and opens what a `reveal` asks for. Off (the phone), it
-    /// reads no Locker table and no sealed column, and a call that names a Locker kind or the
-    /// `reveal` verb ends the turn in `decline sealed_egress` (`Session::locker_off_decline`). The
-    /// kind card and the prompt are the same either way (R-1088-10).
-    pub locker: bool,
+    /// Whether a Locker item's sealed values are reachable (#1088, R-1088-3; the owner's ruling of
+    /// 2026-10-22). The assistant has the owner's access to Locker items, to find, read and act on
+    /// them, with or without this: it is a policy about SEALED values only. On (the default, and
+    /// what the model was trained on and every harness run uses), the runtime reads the sealed
+    /// cells, seals what a `create` or an edit puts in one and opens what a `reveal` asks for. Off
+    /// (the phone), it reads no sealed column (a Locker item's sealed cells are a presence bit and
+    /// nothing else), and a `reveal`, or a `create` that sets a sealed value, ends the turn in
+    /// `decline sealed_egress` (`Session::secrets_off_decline`). The kind card and the prompt are
+    /// the same either way (R-1088-10).
+    pub secrets: bool,
     /// Whether Money is reachable (#1099, R-1099-8). On (the default, what a harness run and a
     /// retrain use), the runtime loads the transactions of the last
     /// [`TRANSACTION_MONTHS`](crate::native::world::TRANSACTION_MONTHS) months, the kind card
@@ -67,7 +70,7 @@ impl Default for Flags {
             defaults: crate::native::ground::Defaults::default(),
             normalize: true,
             compose: true,
-            locker: true,
+            secrets: true,
             money: true,
             writes: crate::native::park::Writes::Run,
         }
@@ -606,7 +609,7 @@ impl Session {
             today: now.date(),
             tz: tz.to_owned(),
         };
-        let world = World::load_in(&*door, flags.locker, flags.money, Some(&standing))?;
+        let world = World::load_in(&*door, flags.secrets, flags.money, Some(&standing))?;
         let me_name = if me.is_empty() {
             world
                 .row(&world.me_key())
@@ -686,7 +689,7 @@ impl Session {
         };
         World::load_in(
             &*self.door,
-            self.flags.locker,
+            self.flags.secrets,
             self.flags.money,
             Some(&standing),
         )
@@ -2585,8 +2588,8 @@ impl Session {
                 ));
             }
         }
-        if !self.flags.locker
-            && let Some(outcome) = self.locker_off_decline(tool, args)
+        if !self.flags.secrets
+            && let Some(outcome) = self.secrets_off_decline(tool, args)
         {
             return outcome;
         }
@@ -2737,7 +2740,14 @@ impl Session {
             if !sealed.is_empty() {
                 lines.push((
                     Vec::new(),
-                    format!("sealed: {} (reveal to show)", sealed.join(", ")),
+                    if self.flags.secrets {
+                        format!("sealed: {} (reveal to show)", sealed.join(", "))
+                    } else {
+                        format!(
+                            "sealed: {} (the member reveals it in Locker)",
+                            sealed.join(", ")
+                        )
+                    },
                 ));
             }
         }
@@ -2868,35 +2878,38 @@ impl Session {
         true
     }
 
-    /// WITH THE LOCKER OFF (`Flags::locker`), A CALL THAT NAMES A LOCKER KIND OR THE `reveal` VERB
-    /// ends the turn in the model's own decline, `declined: sealed_egress`, before anything is
-    /// read or run: the runtime holds no Locker row and no sealed cell to answer from. The effect
-    /// is the decline's plus `locker_off: true`, so a run can be audited for it.
-    fn locker_off_decline(&mut self, tool: &str, args: &Map<String, Value>) -> Option<Outcome> {
-        if tool == "decline" || tool == "ask" {
+    /// WITH SECRETS OFF (`Flags::secrets`), A CALL THAT WOULD REVEAL OR SET A SEALED VALUE ENDS THE
+    /// TURN in the model's own decline, `declined: sealed_egress`, before anything is read or run:
+    /// the `reveal` verb, and a `create` of a Locker item that carries a password, a code, a card
+    /// number or a cvv. A Locker item is otherwise a row like any other (the owner's ruling of
+    /// 2026-10-22): it is found, read and acted on, and only its sealed values are out of reach.
+    /// The effect is the decline's plus `secrets_off: true`, so a run can be audited for it.
+    fn secrets_off_decline(&mut self, tool: &str, args: &Map<String, Value>) -> Option<Outcome> {
+        if tool != "act" {
             return None;
         }
-        let kind_named = args
-            .get("kind")
+        let verb = args
+            .get("verb")
             .and_then(Value::as_str)
-            .is_some_and(|kinds| {
-                kinds.split(',').any(|part| {
-                    meta::Kind::parse(part) == Some(Kind::LockerItem)
-                        || part.to_lowercase().contains("locker")
+            .and_then(meta::Verb::parse)?;
+        let sets_sealed = || {
+            let kind = args.get("kind").and_then(Value::as_str);
+            let extra = crate::native::act::act_args(args.get("args")).unwrap_or_default();
+            kind.is_some_and(|kind| meta::Kind::parse(kind) == Some(Kind::LockerItem))
+                && extra.keys().any(|key| {
+                    meta::REVEAL_FIELDS
+                        .iter()
+                        .any(|(name, column)| key == name || key == column)
+                        && key != "notes"
                 })
-            });
-        let reveal = tool == "act"
-            && args
-                .get("verb")
-                .and_then(Value::as_str)
-                .is_some_and(|verb| meta::Verb::parse(verb) == Some(meta::Verb::Reveal));
-        if !kind_named && !reveal {
+        };
+        if verb != meta::Verb::Reveal && !(verb == meta::Verb::Create && sets_sealed()) {
             return None;
         }
         let mut reason = Map::new();
         reason.insert("reason".to_owned(), json!("sealed_egress"));
         let mut outcome = self.decline(&reason).ok()?;
-        outcome.effect.insert("locker_off".to_owned(), json!(true));
+        outcome.effect.insert("secrets_off".to_owned(), json!(true));
         Some(outcome)
     }
 

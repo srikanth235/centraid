@@ -330,7 +330,7 @@ impl Handle {
                     centraid_search::sqlite::SqliteDoor::open(connection, self.vault.words())
                         .and_then(|door| {
                             door.query(
-                                &centraid_search::Principal::Assistant,
+                                &centraid_search::Principal::Owner,
                                 &centraid_search::SearchRequest::new(entity, text, limit),
                             )
                         });

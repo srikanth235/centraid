@@ -3050,6 +3050,20 @@ impl Session {
         )
     }
 
+    /// A SEALED VALUE IS NEVER SET BY THE ASSISTANT ON THE PHONE (`Flags::secrets` off, the owner's
+    /// ruling of 2026-10-22): the member sets a password, a code, a card number, a cvv or a note
+    /// item's notes in Locker. The dispatch declines a `create` that names one and a `reveal`
+    /// (`Session::secrets_off_decline`); this is the same refusal where a value would be sealed, for
+    /// an edit of a note item's notes, which only the plan knows is a sealed write.
+    fn sealed_refusal(&self, field: &str) -> Result<(), String> {
+        if self.flags.secrets {
+            return Ok(());
+        }
+        Err(format!(
+            "error: {field} is a sealed value, which the assistant cannot set; the member sets it in Locker."
+        ))
+    }
+
     /// A LOCKER EDIT SENDS THE WHOLE DRAFT. `locker.edit_item` rewrites every
     /// column of the item's type and nulls the ones the input leaves out, so
     /// an edit of one field sends every other one back as it is: plain
@@ -3084,6 +3098,7 @@ impl Session {
                 )
             })?;
             if column == "content" {
+                self.sealed_refusal(field)?;
                 back.remove(field);
                 let (key_id, sealed) = self.door.seal(&row.id, &text_of(&value))?;
                 input.insert("content".to_owned(), json!(sealed));
@@ -3397,6 +3412,7 @@ impl Session {
                         )
                     })?;
                     if column == "content" {
+                        self.sealed_refusal(field)?;
                         let (key_id, sealed) = self.door.seal(&item_id, &value)?;
                         input["content"] = json!(sealed);
                         input["key_id"] = json!(key_id);
@@ -3414,6 +3430,7 @@ impl Session {
                     let Some(column) = meta::locker_secret_column(kind_value, field) else {
                         continue;
                     };
+                    self.sealed_refusal(field)?;
                     let (key_id, sealed) = self.door.seal(&item_id, &value)?;
                     input[column] = json!(sealed);
                     input["key_id"] = json!(key_id);

@@ -198,6 +198,8 @@ fn candidates(app: App, world: &World, today: Date) -> Candidates {
             dataless.push(say(app, "What was my biggest expense this month?"));
             dataless.push(say(app, "What came in this month?"));
         }
+        // A Locker item's title is a chip a member did not ask to see: Locker offers no opener.
+        App::Locker => {}
         App::Docs => {
             if let Some(doc) = first_by(live(world, Kind::Document), newest) {
                 backed.push(say(app, format!("Find the {}", lead_words(&doc.name, 3))));
@@ -291,8 +293,8 @@ pub fn suggest(door: &dyn Door, tz: &str, scope: Option<App>) -> Vec<Suggestion>
         today,
         tz: tz.to_owned(),
     };
-    // The Locker is off on the phone (R-1088-3): its rows are never read, so no
-    // suggestion can name one.
+    // Sealed values are out of reach on the phone (R-1088-3): the world holds Locker items by
+    // their plain rows, and no suggestion names one.
     let world = World::load_in(door, false, false, Some(&standing)).unwrap_or_default();
     suggest_in(&world, today, scope)
 }

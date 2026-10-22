@@ -318,8 +318,9 @@ fn the_roster_is_the_schemas_not_a_check() {
         w.run("thread.save_turn", input).status
     };
     assert_eq!(attempt(json!(null), "tasks"), CommandStatus::Executed);
-    // Locker and Health are never named; `tasks` is a domain that is no scope (R-1128-F2).
-    assert_ne!(attempt(json!(null), "locker"), CommandStatus::Executed);
+    // Health is never named; Locker is a card domain and no scope (the owner's ruling of
+    // 2026-10-22); `tasks` is a domain that is no scope (R-1128-F2).
+    assert_eq!(attempt(json!(null), "locker"), CommandStatus::Executed);
     assert_ne!(attempt(json!(null), "health"), CommandStatus::Executed);
     assert_ne!(attempt(json!("tasks"), "notes"), CommandStatus::Executed);
     assert_ne!(attempt(json!("locker"), "notes"), CommandStatus::Executed);
@@ -458,7 +459,13 @@ fn a_card_is_live_while_its_row_is_and_an_unknown_word_is_not_evidence_of_a_hole
         !vault.chat_card_row_exists("notes", "task", &note).unwrap(),
         "a note is no task"
     );
-    assert!(!vault.chat_card_row_exists("locker", "note", &note).unwrap());
+    assert!(!vault.chat_card_row_exists("health", "note", &note).unwrap());
+    assert!(
+        !vault
+            .chat_card_row_exists("locker", "locker_item", "no-such-item")
+            .unwrap(),
+        "a Locker card is live only while its item is"
+    );
     assert!(
         vault
             .chat_card_row_exists("notes", "somethingnew", "x")

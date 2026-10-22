@@ -738,10 +738,10 @@ impl Handle {
         centraid_vault::Principal::owner(OWNER_DEVICE)
     }
 
-    /// The chat's assistant, riding this device: the owner's own, with Locker
-    /// closed to it. The vault refuses any command run under this principal
-    /// that is a `locker.*` command or names a Locker item, through whatever
-    /// verb (R-1088-3, #1135).
+    /// The chat's assistant, riding this device: the owner's own, with a
+    /// sealed value closed to it. The vault refuses any command run under this
+    /// principal that reveals or sets a sealed value, through whatever verb
+    /// (R-1088-3, the owner's ruling of 2026-10-22, #1135).
     #[must_use]
     pub fn assistant(&self) -> centraid_vault::Principal {
         centraid_vault::Principal::assistant(OWNER_DEVICE)

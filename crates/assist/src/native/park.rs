@@ -1624,7 +1624,7 @@ pub(crate) fn drift(patched: &World, real: &World) -> Vec<String> {
 }
 
 // ---------------------------------------------------------------------
-// the Locker (the harness's: the phone's session has none, `Flags::locker`)
+// the Locker (a parked turn sees the plain half; the sealed cells are placeholders, `Flags::secrets`)
 // ---------------------------------------------------------------------
 
 /// The columns each Locker type owns; every other is nulled on a write

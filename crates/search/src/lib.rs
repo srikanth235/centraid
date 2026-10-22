@@ -14,10 +14,9 @@
 //! secret** because the index holds none: a Locker item is in it by its plain
 //! text only (never a sealed cell, a sealed field's value or a passkey's key),
 //! whether or not Locker is locked, and the word list is one list for every
-//! reader. The assistant's principal ([`Principal::Assistant`]) is refused the
-//! kind by name, so asking for it is a typed [`SearchError::NotSearchable`],
-//! never an empty page (an empty page reads as "no matches", which is a
-//! different claim about the vault).
+//! reader, the assistant included: it searches as the owner does and finds a
+//! Locker item by its title and its username. A sealed value is never a word it
+//! can find, because none is in the index.
 //!
 //! | Promise | What enforces it |
 //! |---|---|
@@ -28,7 +27,7 @@
 //! | One letter is not a search | A query whose words are all one character is [`SearchError::NoSearchableWords`], the empty term's answer on every surface ([`matching`]) |
 //! | A denial is a VALUE | [`Answer`] is `Denied` or `Data`, never an `Err` |
 //! | A bound reports the size it reaches | [`SearchRequest::page`] is clamped by [`MAX_MATCH_ROWS`] and [`Answer::window`] says what it actually was |
-//! | The assistant never reaches Locker | [`Principal::may_search_locker`]: `kinds_of` refuses `locker_item` by name to any caller but the owner and leaves it out of an unnamed kind list (`query` and `query_each`); `crates/nativetools/tests/locker_off.rs` |
+//! | A sealed value is never indexed | The index holds a Locker item's plain fields only (`crates/vault/tests/locker_plaintext_gate.rs`); the assistant searches it as the owner does, and `crates/nativetools/tests/locker_parity.rs` holds that no planted sealed word is findable or returned |
 //! | A correction is a lookup, not a guess | [`Search::correct`] replaces a word by one whole word of the vault's word list, ranked by the documents that hold it |
 //!
 //! ## What this crate is NOT
@@ -72,10 +71,6 @@ pub enum Principal {
     Owner,
     /// A blueprint app, under its grant.
     App { app_id: String },
-    /// The chat's assistant, riding the owner's device. It reads as the owner
-    /// does, minus Locker: a Locker item is not a kind it can name, and no
-    /// answer it gets, from `query` or `query_each`, holds one (#1135).
-    Assistant,
 }
 
 impl Principal {
@@ -83,16 +78,9 @@ impl Principal {
     #[must_use]
     pub fn app_id(&self) -> Option<&str> {
         match self {
-            Self::Owner | Self::Assistant => None,
+            Self::Owner => None,
             Self::App { app_id } => Some(app_id),
         }
-    }
-
-    /// Whether this caller may search Locker's items: only the owner. The
-    /// assistant never reaches Locker, and an app holds no grant to it.
-    #[must_use]
-    pub const fn may_search_locker(&self) -> bool {
-        matches!(self, Self::Owner)
     }
 }
 
@@ -284,10 +272,6 @@ pub trait Search {
         let kinds: Vec<String> = if request.kinds.is_empty() {
             centraid_vault::index::SEARCHABLE
                 .iter()
-                .filter(|kind| {
-                    **kind != centraid_vault::model::Kind::LockerItem
-                        || principal.may_search_locker()
-                })
                 .map(|kind| kind.as_str().to_owned())
                 .collect()
         } else {
@@ -412,9 +396,6 @@ mod tests {
     #[test]
     fn a_principal_never_reports_an_unknown_app() {
         assert_eq!(Principal::Owner.app_id(), None);
-        assert_eq!(Principal::Assistant.app_id(), None);
-        assert!(Principal::Owner.may_search_locker());
-        assert!(!Principal::Assistant.may_search_locker());
         assert_eq!(
             Principal::App {
                 app_id: "notes".to_owned()

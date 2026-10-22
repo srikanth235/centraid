@@ -1,13 +1,16 @@
-//! THE APPS THE ASSISTANT READS: seven, and Locker is not one of them. (Tally left with
-//! the app and Money joined, #1099.)
+//! THE APPS THE ASSISTANT READS: eight, Locker among them as a card domain and no chat scope.
+//! (Tally left with the app and Money joined, #1099; Locker joined by the owner's ruling of
+//! 2026-10-22, #1135.)
 //!
 //! The roster is the vault's one constant (`centraid_vault::roster::APPS`, R-1135-7-1): [`App`]
 //! is its typed face, and its id and its `opens_in` are *indexed out of that constant* by the
 //! variant's position, so a word is never spelled twice. A test holds the variants and the
 //! roster to the same order and the same names.
 //!
-//! [`App`] has no `Locker` variant, so no card can name it and no chat can be scoped to it. A
-//! secret that was never in a prompt cannot be in an answer (R-1088-3).
+//! A card may name [`App::Locker`] (a Locker item's title opens its page behind the lock wall) and a
+//! chat cannot be scoped to it: [`App::SCOPES`] leaves it out. What the assistant has of a Locker
+//! item is the owner's access to its plain rows; a sealed value was never in a prompt and cannot
+//! be in an answer (R-1088-3).
 //!
 //! A CARD NAMES A DOMAIN; A CHAT IS SCOPED TO AN APP (R-1128-F2, #1128). `Tasks` is a domain —
 //! a card, a search hit and a write say `tasks` — that opens in Agenda, so it is no chat scope:
@@ -16,12 +19,13 @@
 
 use centraid_vault::roster;
 
-/// An app the assistant can read. Locker is deliberately absent. The variants are in the order of
+/// An app the assistant can read. The variants are in the order of
 /// `roster::APPS`, which `id` and `opens_in` index.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum App {
     Agenda,
     Docs,
+    Locker,
     Money,
     Notes,
     People,
@@ -31,9 +35,10 @@ pub enum App {
 
 impl App {
     /// Every app, in registry order.
-    pub const ALL: [Self; 7] = [
+    pub const ALL: [Self; 8] = [
         Self::Agenda,
         Self::Docs,
+        Self::Locker,
         Self::Money,
         Self::Notes,
         Self::People,
@@ -70,10 +75,10 @@ impl App {
         Self::Photos,
     ];
 
-    /// Whether a chat can be scoped to this app: it opens in itself (R-1128-F2).
+    /// Whether a chat can be scoped to this app: it opens in itself, and is not Locker (R-1128-F2).
     #[must_use]
     pub fn is_scope(self) -> bool {
-        self.opens_in() == self
+        roster::APPS[self as usize].scope
     }
 
     /// THE DOMAINS A CHAT SCOPED TO THIS APP READS, in registry order: every domain that opens
@@ -93,6 +98,7 @@ impl App {
         match self {
             Self::Agenda => "Agenda",
             Self::Docs => "Docs",
+            Self::Locker => "Locker",
             Self::Money => "Money",
             Self::Notes => "Notes",
             Self::People => "People",
@@ -101,13 +107,13 @@ impl App {
         }
     }
 
-    /// The app a shell named, or `None` — which includes `locker`.
+    /// The app a shell named, or `None`.
     #[must_use]
     pub fn from_id(id: &str) -> Option<Self> {
         Self::ALL.into_iter().find(|app| app.id() == id)
     }
 
-    /// The chat scope a shell named, or `None` — which includes `locker` and `tasks`: a domain
+    /// The chat scope a shell named, or `None` — which includes `locker`, a card domain only, and `tasks`: a domain
     /// that opens in another app is read through that app's scope, never named as one of its
     /// own, so a thread has exactly one name for "Agenda" (R-1128-F2).
     #[must_use]
@@ -138,9 +144,11 @@ mod tests {
     }
 
     #[test]
-    fn locker_is_in_no_scope() {
-        assert!(App::from_id("locker").is_none());
-        assert!(App::ALL.iter().all(|app| app.id() != "locker"));
+    fn locker_is_a_card_domain_and_no_scope() {
+        assert_eq!(App::from_id("locker"), Some(App::Locker));
+        assert_eq!(App::Locker.display(), "Locker");
+        assert!(!App::Locker.is_scope());
+        assert!(!App::SCOPES.contains(&App::Locker));
     }
 
     #[test]
@@ -176,7 +184,7 @@ mod tests {
 
     #[test]
     fn a_scope_is_an_app_a_member_opens_and_agenda_covers_tasks() {
-        // SCOPES is exactly the apps that open in themselves, in registry order.
+        // SCOPES is exactly the apps a chat can be scoped to, in registry order.
         let opened: Vec<App> = App::ALL.into_iter().filter(|app| app.is_scope()).collect();
         assert_eq!(opened, App::SCOPES);
         // `tasks` is a domain and a card app, never a scope (R-1128-F2).
@@ -194,8 +202,8 @@ mod tests {
         for app in App::SCOPES.into_iter().filter(|app| *app != App::Agenda) {
             assert_eq!(app.covers().collect::<Vec<_>>(), [app], "{}", app.id());
         }
-        // Every domain is covered by exactly one scope.
-        for domain in App::ALL {
+        // Every domain but Locker, a card domain only, is covered by exactly one scope.
+        for domain in App::ALL.into_iter().filter(|app| *app != App::Locker) {
             let covering = App::SCOPES
                 .into_iter()
                 .filter(|scope| scope.covers().any(|covered| covered == domain))

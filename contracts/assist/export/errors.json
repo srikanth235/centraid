@@ -891,6 +891,16 @@
     },
     {
       "argument": "args",
+      "example": null,
+      "family": "value",
+      "id": "act.field_is_a_sealed_value_which",
+      "source": "act.rs",
+      "template": "error: {field} is a sealed value, which the assistant cannot set; the member sets it in Locker.",
+      "tool": "act",
+      "why_no_example": "needs a session with the secrets off (Flags::secrets, the phone); every example runs the harness session, which holds the key, so tests/locker_parity.rs drives it"
+    },
+    {
+      "argument": "args",
       "example": [
         {
           "args": {

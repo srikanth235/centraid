@@ -539,17 +539,10 @@ fn empty_trash(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
               WHERE deleted_at IS NOT NULL
                 AND (?1 IS NULL OR kind = ?1)
                 AND (?2 = 0 OR purge_at <= ?3)
-                AND (?4 = 0 OR kind <> 'locker_item')
               ORDER BY deleted_at, n",
         )?
         .query_map(
-            rusqlite::params![
-                kind,
-                i64::from(due_only),
-                ctx.now,
-                // The assistant's empty-trash never reaches Locker's.
-                i64::from(ctx.principal.is_assistant())
-            ],
+            rusqlite::params![kind, i64::from(due_only), ctx.now],
             |row| row.get::<_, String>(0),
         )?
         .collect::<rusqlite::Result<Vec<_>>>()?;

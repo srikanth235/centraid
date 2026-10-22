@@ -716,3 +716,145 @@ fn the_search_fires_when_the_key_is_present() {
          itself is vacuous"
     );
 }
+
+// ---------------------------------------------------------------------------
+// THE ASSISTANT'S READS (the owner's ruling of 2026-10-22, #1135)
+//
+// The assistant reads the vault through pages named `assist.native.*`. It has the owner's access
+// to a Locker item's plain rows, and no access to a sealed value: the page serves the rows and
+// refuses every way to name a sealed column but its presence bit.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn the_assistants_reads_serve_a_locker_items_plain_rows_and_never_a_sealed_column() {
+    let sealed_vault = Sealed::founded();
+    let vault = &sealed_vault.scratch.vault;
+    sealed_vault
+        .scratch
+        .vault
+        .commit(|tx| {
+            tx.set_producer("test.fixture");
+            tx.connection().execute(
+                "INSERT INTO edge (from_id, rel, to_id, created_at)
+                 VALUES ('item-1', 'tagged', 'flag:starred', '2026-01-01T00:00:00.000Z')",
+                [],
+            )?;
+            Ok(())
+        })
+        .expect("a star lands");
+    let page = |name: &str, from: &str, select: &[&str], sort: &str, predicate: Option<&str>| {
+        vault.keyset_page(&centraid_vault::page::KeysetPage {
+            name: name.to_owned(),
+            select: select.iter().map(|column| (*column).to_owned()).collect(),
+            from: from.to_owned(),
+            predicate: predicate.map(str::to_owned),
+            binds: Vec::new(),
+            sort_column: sort.to_owned(),
+            pk_column: sort.to_owned(),
+            descending: false,
+            limit: 100,
+            after: None,
+            held_thumbnail: false,
+            document_size: false,
+        })
+    };
+
+    // The rows a Locker item is made of, plain: its entity, its edges, its kind row.
+    let entities = page(
+        "assist.native.entity",
+        "entity",
+        &["id", "kind", "title"],
+        "id",
+        None,
+    )
+    .expect("the door answers");
+    let rendered = format!("{:?}", entities.rows);
+    assert!(
+        rendered.contains("locker_item") && rendered.contains("The bank"),
+        "{rendered}"
+    );
+    let edges = page(
+        "assist.native.edge",
+        "edge",
+        &["from_id", "to_id"],
+        "from_id",
+        None,
+    )
+    .expect("the door answers");
+    assert_eq!(
+        edges.rows.len(),
+        1,
+        "the item's star is an edge the assistant reads"
+    );
+    let items = page(
+        "assist.native.locker_item",
+        "locker_item",
+        &[
+            "id",
+            "type",
+            "username",
+            "brand",
+            "password IS NOT NULL AS has_password",
+            "otp_seed IS NOT NULL AS has_otp_seed",
+            "card_number IS NOT NULL AS has_card_number",
+        ],
+        "id",
+        None,
+    )
+    .expect("the door answers");
+    let rendered = format!("{:?}", items.rows);
+    assert!(rendered.contains("plainuser-xylophone9"), "{rendered}");
+    assert!(
+        rendered.contains("has_password") && rendered.contains("Integer(1)"),
+        "the presence bit is served: {rendered}"
+    );
+    carries_no_secret("the assistant's read of locker_item", rendered.as_bytes());
+    assert!(
+        !rendered.contains("lk1:"),
+        "no ciphertext either: {rendered}"
+    );
+
+    // …and every way to name a sealed column is refused: projected, ordered by, filtered on,
+    // or read out of a JSON path.
+    for (table, pk, column) in [
+        ("locker_item", "id", "password"),
+        ("locker_item", "id", "otp_seed"),
+        ("locker_item", "id", "card_number"),
+        ("locker_item", "id", "cvv"),
+        ("locker_item", "id", "content"),
+        ("locker_item_field", "item_id", "value_sealed"),
+        ("locker_item_passkey", "item_id", "private_key"),
+    ] {
+        let read = |select: &[&str], sort: &str, predicate: Option<&str>| {
+            page("assist.native.read", table, select, sort, predicate)
+        };
+        assert!(
+            read(&[pk, column], pk, None).is_err(),
+            "projected {table}.{column}"
+        );
+        assert!(
+            read(&[pk], column, None).is_err(),
+            "ordered by {table}.{column}"
+        );
+        assert!(
+            read(&[pk], pk, Some(&format!("{column} LIKE 'lk1:%'"))).is_err(),
+            "filtered on {table}.{column}"
+        );
+        assert!(
+            read(
+                &[&format!("json_extract({column}, '$.x') AS x"), pk],
+                pk,
+                None
+            )
+            .is_err(),
+            "extracted from {table}.{column}"
+        );
+        // The presence bit is the one way to name it.
+        assert!(
+            read(&[pk, &format!("{column} IS NOT NULL AS has_it")], pk, None).is_ok(),
+            "the presence of {table}.{column}"
+        );
+    }
+    // A read that is neither Locker's nor the assistant's is served no Locker table.
+    assert!(page("generic.peek", "locker_item", &["id"], "id", None).is_err());
+}

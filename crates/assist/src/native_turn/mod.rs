@@ -44,8 +44,8 @@
 //! the card's own lines) and sinks an [`Event::Pending`] with the card, which the core puts on the
 //! wire. The card is composed from the runtime's structured facts ([`pending`]). The member's tap is
 //! [`NativeChat::confirm`] (the session runs the steps through the door, one key per step) or
-//! [`NativeChat::dismiss`]; a new message dismisses it too. A Locker call never parks: the session
-//! declines it `sealed_egress` before it plans anything.
+//! [`NativeChat::dismiss`]; a new message dismisses it too. A call that reveals or sets a sealed value
+//! never parks: the session declines it `sealed_egress` before it plans anything.
 //!
 //! # A CHAT'S SESSION
 //!
@@ -66,7 +66,7 @@ use crate::app::App;
 use crate::attach::Notice;
 use crate::model::{Cancel, Model, ModelError};
 use crate::native::door::Door;
-use crate::native::meta::{Kind, STEP_CAP, TOOLS};
+use crate::native::meta::{Kind, STEP_CAP, TOOLS, Verb};
 use crate::native::park::{Confirmed, PendingWrite, Writes};
 use crate::native::parse::parse_call;
 use crate::native::step::{StepOptions, decode_step};
@@ -103,8 +103,9 @@ pub(crate) fn civil_at(now_ms: i64, tz: &str) -> jiff::civil::DateTime {
 }
 
 impl NativeChat {
-    /// A session over `door`, for a member whose zone is `tz`. The Locker is off (R-1088-3): the
-    /// session reads no Locker row and declines a call that names one. Money is off too
+    /// A session over `door`, for a member whose zone is `tz`. Sealed values are out of reach
+    /// (`Flags::secrets`, R-1088-3): the session finds, reads and acts on a Locker item as on any
+    /// row, reads no sealed column, and declines a `reveal` or a sealed value to set. Money is off too
     /// (`Flags::money`, #1099, R-1099-8) until the shipped model has been measured with the
     /// `transaction` kind in its prompt: the session reads no Money table and its kind card is
     /// the one that model was trained on. "Today" is the day it is in `tz` by the door's clock.
@@ -114,7 +115,7 @@ impl NativeChat {
     pub fn open(door: Box<dyn Door>, tz: &str) -> Result<Self, String> {
         let now = civil_at(door.now_ms(), tz);
         let flags = Flags {
-            locker: false,
+            secrets: false,
             money: false,
             writes: Writes::Park,
             ..Flags::default()
@@ -398,12 +399,12 @@ impl NativeChat {
 }
 
 /// Whether the turn ended in the MODEL's own `decline out_of_scope`. A decline the runtime
-/// composes (`composed`: a verb that does not apply, a write it refused, a Locker call) keeps its
+/// composes (`composed`: a verb that does not apply, a write it refused, a sealed value asked for or set) keeps its
 /// sentence whatever its reason word is: free words after a refused write could say it was made.
 fn declined_out_of_scope(reply: &Value) -> bool {
     let effect = &reply["effect"];
     effect["decline"]["reason"].as_str() == Some("out_of_scope")
-        && !["composed", "locker_off"]
+        && !["composed", "secrets_off"]
             .iter()
             .any(|key| effect[*key].as_bool().unwrap_or(false))
         && effect["refusal"].is_null()
@@ -426,7 +427,7 @@ fn first_call(text: &str) -> &str {
 
 /// The activity a call announces: the app it looks in and the tool it uses. Only a call that
 /// reads or writes rows of a known app announces anything; `ask`, `decline` and an `answer` of a
-/// value do not. The app is the one the member opens the rows in ([`App::opens_in`]): a task read
+/// value do not, and neither does a `reveal`, which the phone only ever declines. The app is the one the member opens the rows in ([`App::opens_in`]): a task read
 /// is "Looking in Agenda" (R-1128-D1), while its cards keep the stored app id `tasks`.
 fn activity_of(chat: &NativeChat, call: &Value) -> Option<(App, &'static str)> {
     let name = call["tool"].as_str()?;
@@ -435,6 +436,15 @@ fn activity_of(chat: &NativeChat, call: &Value) -> Option<(App, &'static str)> {
         return None;
     }
     let args = call["args"].as_object()?;
+    if tool == "act"
+        && args
+            .get("verb")
+            .and_then(Value::as_str)
+            .and_then(Verb::parse)
+            == Some(Verb::Reveal)
+    {
+        return None;
+    }
     let by_kind = args
         .get("kind")
         .and_then(Value::as_str)

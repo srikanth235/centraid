@@ -12,7 +12,7 @@
 //! | `search` | the FTS door over the vault's read connection, as a screen's search does |
 //! | `run` | [`api::invoke_raw`](crate::api), the gate order and change feed a screen's write goes through, with an `invoke_key` |
 //! | `mint_id`, `now_ms` | the vault's own id source and clock |
-//! | `seal`, `unseal` | nothing: the Locker is off on the phone (R-1088-3), and a door that is asked refuses |
+//! | `seal`, `unseal` | nothing: the chat holds no Locker key (R-1088-3), so a sealed value is never revealed or set, and a door that is asked refuses |
 //!
 //! # THE DOOR OUTLIVES A CALL, THE LOCK DOES NOT
 //!
@@ -162,7 +162,7 @@ impl Door for CoreDoor {
                         centraid_search::SqliteDoor::open(connection, vault.words()).and_then(
                             |door| {
                                 door.query(
-                                    &centraid_search::Principal::Assistant,
+                                    &centraid_search::Principal::Owner,
                                     &centraid_search::SearchRequest::new(entity, text, limit),
                                 )
                             },
@@ -259,5 +259,5 @@ impl Door for CoreDoor {
     }
 }
 
-/// What a door asked for a Locker cell answers: the chat has no Locker (R-1088-3).
+/// What a door asked for a Locker cell answers: the chat holds no key to a sealed value (R-1088-3).
 const LOCKER_OFF: &str = "the chat holds no Locker key";
