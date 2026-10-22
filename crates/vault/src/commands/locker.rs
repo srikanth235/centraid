@@ -100,10 +100,10 @@
 //!   kind (`Risk::Medium`, `confirm`).
 //! - **No entity-wide reader carries a sealed cell**: the journal tokenises the
 //!   five cells (and a duplicate's `fields[].value`), a Locker item has no
-//!   revision, `text_of` answers nothing for its kind, a page over `entity` or
-//!   `edge` does not serve it unless the read is Locker's own
-//!   ([`crate::page::reaches_locker`]), and under the assistant's principal any
-//!   command that names an item is refused ([`crate::commands::ASSISTANT_CLOSED_OUT`]).
+//!   revision, `text_of` indexes the plain fields only, a page over `entity`
+//!   or `edge` serves the item's plain rows and no sealed column, and under the
+//!   assistant's principal a command that reveals or sets a sealed value is
+//!   refused ([`crate::commands::ASSISTANT_CLOSED_OUT`]).
 
 use std::collections::BTreeSet;
 

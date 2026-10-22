@@ -518,14 +518,18 @@ fn tenths(count: i64, unit: i64) -> (i64, i64) {
 /// - `home.locker`: Home's count of Locker's items, which selects ids and
 ///   nothing a member wrote;
 /// - `notes.cards.entity`, `notes.library.links` and `notes.library.backlinks`:
-///   a note's link to an item and the card that renders its title (L8).
+///   a note's link to an item and the card that renders its title (L8);
+/// - `assist.native.*`: the assistant's reads. It has the owner's access to a
+///   Locker item's plain rows (the owner's ruling of 2026-10-22), and no
+///   access to a sealed value, which [`withholds_sealed_value`] holds for it.
 ///
-/// Every other read (a generic list, the Trash of another app, the assistant's
-/// `assist.native.*`) is given the page **without** them: the rows are not
-/// there, and no count of them is either.
+/// Every other read (a generic list, the Trash of another app) is given the
+/// page **without** them: the rows are not there, and no count of them is
+/// either.
 #[must_use]
 pub fn reaches_locker(name: &str) -> bool {
     name.starts_with("locker.")
+        || name.starts_with(ASSISTANT_READ)
         || matches!(
             name,
             "home.locker"
@@ -533,6 +537,50 @@ pub fn reaches_locker(name: &str) -> bool {
                 | "notes.library.links"
                 | "notes.library.backlinks"
         )
+}
+
+/// The prefix of the assistant's reads of the vault's tables.
+const ASSISTANT_READ: &str = "assist.native.";
+
+/// Every sealed column of Locker's tables: the five cells of `locker_item`,
+/// `locker_item_field.value_sealed` and `locker_item_passkey.private_key`.
+const SEALED_COLUMNS: [&str; 7] = [
+    "password",
+    "otp_seed",
+    "card_number",
+    "cvv",
+    "content",
+    "value_sealed",
+    "private_key",
+];
+
+/// THE SEALED-COLUMN GUARD, which holds for every read that is not Locker's own.
+///
+/// [`reaches_locker`] lets the assistant's reads page a Locker table, and a
+/// sealed value is the one thing it has no access to. A read that is not
+/// named `locker.*` therefore may not project a sealed column, order by one or
+/// name one in its predicate (a predicate is an oracle: `password = 'x'`). Only
+/// the kit's presence test, `<cell> IS NOT NULL AS <name>`, names one, and it
+/// is a bit and not a value.
+fn withholds_sealed_value(page: &KeysetPage) -> bool {
+    let names_sealed = |text: &str| {
+        text.split(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+            .any(|word| SEALED_COLUMNS.contains(&word.to_ascii_lowercase().as_str()))
+    };
+    let is_presence = |column: &str| {
+        let words: Vec<&str> = column.split_whitespace().collect();
+        matches!(words.as_slice(), [_, is, not, null, r#as, _]
+            if is.eq_ignore_ascii_case("IS")
+                && not.eq_ignore_ascii_case("NOT")
+                && null.eq_ignore_ascii_case("NULL")
+                && r#as.eq_ignore_ascii_case("AS"))
+    };
+    page.select
+        .iter()
+        .any(|column| names_sealed(column) && !is_presence(column))
+        || names_sealed(&page.sort_column)
+        || names_sealed(&page.pk_column)
+        || page.predicate.as_deref().is_some_and(names_sealed)
 }
 
 /// Locker's own tables: the kind row and its sidecars. `receipt` and
@@ -689,6 +737,19 @@ impl Vault {
             .as_ref()
             .map(|text| vec![format!("({text})")])
             .unwrap_or_default();
+        if is_locker_table(&page.from)
+            && !page.name.starts_with("locker.")
+            && withholds_sealed_value(page)
+        {
+            return Err(VaultError::InvalidInput {
+                name: page.name.clone(),
+                detail: format!(
+                    "`{}` holds a sealed value, and this read is not one of Locker's; \
+                     a sealed column is named only by its presence test",
+                    page.from
+                ),
+            });
+        }
         if !reaches_locker(&page.name) {
             if is_locker_table(&page.from) {
                 return Err(VaultError::InvalidInput {

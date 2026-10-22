@@ -425,7 +425,7 @@ impl Vault {
     /// Whether the row a card names is still in the vault and not in the trash.
     ///
     /// A card is a snapshot with no foreign key, so this is asked at the moment of a tap. An app a
-    /// card may not name ([`crate::roster`]: Locker, or one that does not exist) is answered
+    /// card may not name ([`crate::roster`]: one that does not exist, or Health) is answered
     /// `false`; an ENTITY word this does not interpret, of a real app, is answered `true`, because
     /// the shell opens whatever it has a route for and an unknown card is not evidence that a row
     /// is gone.

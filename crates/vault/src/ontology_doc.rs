@@ -51,7 +51,7 @@ pub const GROUPS: [(&str, &str, &str); 6] = [
     (
         "locker",
         "Locker",
-        "An entity kind whose secrets stay in sealed cells nothing entity-wide reads: items, their custom fields, passkeys, aliases and addresses, and Locker's own receipts. Its tags, star and archive are the vault's; the assistant and every generic page read pass it by.",
+        "An entity kind whose secrets stay in sealed cells nothing entity-wide reads: items, their custom fields, passkeys, aliases and addresses, and Locker's own receipts. Its tags, star and archive are the vault's; a generic page read passes it by, and the assistant reads its plain rows as the owner does, never a sealed value.",
     ),
 ];
 

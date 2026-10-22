@@ -52,7 +52,7 @@ pub const MAX_LINKS: usize = 100;
 ///
 /// A Locker item is one (#1135): its title is plain and searchable, a link holds
 /// no secret, and opening it asks Locker's gate like any Locker destination. The
-/// compile skips it under the assistant's principal, to whom Locker is closed.
+/// compile resolves it for every principal, the assistant's included.
 pub const LINKABLE: [Kind; 7] = [
     Kind::Note,
     Kind::Person,
@@ -301,7 +301,6 @@ fn compile_wikilinks(ctx: &CommandCtx<'_, '_>, note: &str, body: &str) -> Result
     )?;
     let linkable = LINKABLE
         .iter()
-        .filter(|kind| !(**kind == Kind::LockerItem && ctx.principal.is_assistant()))
         .map(|kind| format!("'{}'", kind.as_str()))
         .collect::<Vec<_>>()
         .join(", ");
