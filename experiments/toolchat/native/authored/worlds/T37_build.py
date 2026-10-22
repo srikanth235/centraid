@@ -197,7 +197,7 @@ while d <= dt.date(2027, 3, 23):
          None if d >= dt.date(2027, 3, 9) else f"{iso}T20:10")
     d += dt.timedelta(days=14)
 
-task("easter_proj", "Easter weekend with the family", "family_list", "2027-03-28", priority=2, status="in_progress")
+task("easter_proj", "Easter weekend with the family", "family_list", "2027-03-28", priority=2)
 for k, name, due, done, extra in [
     ("lamb", "Order the lamb from the butcher", "2027-03-22", None, {"effort": 15}),
     ("eggs", "Buy Easter eggs for the grandchildren", "2027-03-25", None, {"effort": 45}),
@@ -207,7 +207,7 @@ for k, name, due, done, extra in [
 ]:
     task(f"easter_{k}", name, "family_list", due, done, parent="easter_proj", **extra)
 
-task("camino_proj", "Camino 2027 preparation", "club_list", "2027-05-17", status="in_progress", priority=2)
+task("camino_proj", "Camino 2027 preparation", "club_list", "2027-05-17", priority=2)
 for k, name, due, done, extra in [
     ("boots", "Break in the new boots", "2027-04-15", None, {"effort": 240}),
     ("flights", "Book the flights to Porto", "2027-03-14", None, {"priority": 1}),
@@ -217,7 +217,7 @@ for k, name, due, done, extra in [
 ]:
     task(f"camino_{k}", name, "club_list", due, done, parent="camino_proj", **extra)
 
-task("garden_proj", "Spring garden clean-up", "house_list", "2027-04-30", status="in_progress")
+task("garden_proj", "Spring garden clean-up", "house_list", "2027-04-30")
 for k, name, due, done in [("prune", "Prune the roses", "2027-03-14", None), ("shed", "Tidy the shed", "2027-03-28", None),
                            ("seeds", "Buy vegetable seeds", "2027-03-12", None),
                            ("lawn", "First cut of the lawn", "2027-04-10", None),

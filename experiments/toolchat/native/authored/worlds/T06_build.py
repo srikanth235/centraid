@@ -201,8 +201,7 @@ def tasks():
         {"key": "setlists", "name": "Print setlists for Tonkeller", "due": "2026-02-13", "list": "bandlist", "effort": 15},
         {"key": "snake", "name": "Fix the stage snake", "due": "2026-02-10", "list": "bandlist", "effort": 30, "priority": 2},
         {"key": "reh_room", "name": "Book rehearsal room for April", "due": "2026-02-20", "list": "bandlist", "priority": 3},
-        {"key": "live_mix", "name": "Mix the Tonkeller live recording", "due": "2026-02-28", "list": "bandlist", "effort": 240,
-         "status": "in_progress", "description": "multitrack from the X32, 9 songs"},
+        {"key": "live_mix", "name": "Mix the Tonkeller live recording", "due": "2026-02-28", "list": "bandlist", "effort": 240, "description": "multitrack from the X32, 9 songs"},
         {"key": "live_mix_import", "name": "Import the multitrack", "parent": "live_mix", "due": "2026-02-15"},
         {"key": "live_mix_vox", "name": "Clean up vocal bleed", "parent": "live_mix", "due": "2026-02-22"},
         {"key": "epk", "name": "Update band EPK", "list": "bandlist", "effort": 60},
@@ -225,7 +224,7 @@ def tasks():
          "description": "Q4 2025"},
         {"key": "rates", "name": "Update rate card", "list": "adminlist", "effort": 30},
         {"key": "ksk", "name": "Send income estimate to KSK", "due": "2026-03-31", "list": "adminlist", "priority": 2},
-        {"key": "backup", "name": "Back up the studio drives", "status": "in_progress", "effort": 60, "list": "gearlist"},
+        {"key": "backup", "name": "Back up the studio drives", "effort": 60, "list": "gearlist"},
         {"key": "receipts", "name": "Sort 2025 receipts for Steffi", "due": "2026-02-20", "list": "adminlist", "effort": 90},
         # festival
         {"key": "stage_plot", "name": "Draft stage plot for the festival", "due": "2026-03-01", "list": "festlist", "effort": 90},

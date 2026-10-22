@@ -181,8 +181,7 @@ def events():
 def tasks():
     t = [
         # co-op dev
-        {"key": "slice", "name": "Finish vertical slice build", "due": "2026-03-04", "priority": 1, "effort": 480,
-         "status": "in_progress", "list": "dev_l", "description": "for the Hollow Pine pitch"},
+        {"key": "slice", "name": "Finish vertical slice build", "due": "2026-03-04", "priority": 1, "effort": 480, "list": "dev_l", "description": "for the Hollow Pine pitch"},
         {"key": "cart", "name": "Fix cart physics", "due": "2026-03-03", "priority": 2, "effort": 120,
          "list": "dev_l", "description": "floaty on slopes"},
         {"key": "trailer", "name": "Cut the pitch trailer", "due": "2026-03-04", "priority": 1, "effort": 240,
@@ -221,7 +220,7 @@ def tasks():
         {"key": "pet_ins_t", "name": "Renew pet insurance", "due": "2026-03-28", "effort": 15, "list": "dog_l"},
         {"key": "nails", "name": "Trim Biscuit's nails", "due": "2026-02-28", "effort": 15, "list": "dog_l"},
         # D&D
-        {"key": "minis", "name": "Paint the new minis", "status": "in_progress", "effort": 180, "list": "dnd_l"},
+        {"key": "minis", "name": "Paint the new minis", "effort": 180, "list": "dnd_l"},
         {"key": "backstory", "name": "Update Wren's backstory", "due": "2026-03-05", "effort": 30, "list": "dnd_l"},
         {"key": "snacks", "name": "Bring snacks for D&D", "due": "2026-03-05", "effort": 15, "list": "dnd_l"},
         {"key": "snacks_old", "name": "Bring snacks for D&D", "due": "2026-02-26", "completed": "2026-02-26T18:30",

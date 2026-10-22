@@ -526,7 +526,7 @@ PROJECTS = [
         ("Move the files to the back room", "2025-06-15", True), ("Demolition", "2025-07-01", True),
         ("Rough-in plumbing and wiring", "2025-07-20", True), ("Paint the waiting room", "2025-08-20", True),
         ("Install the new floor", "2025-09-05", True), ("Reopen the clinic", "2025-09-30", True)]),
-    ("licence27", "Renew the clinic licence 2027", "clinic_l", "2027-06-15", "in_progress", [
+    ("licence27", "Renew the clinic licence 2027", "clinic_l", "2027-06-15", "open", [
         ("Collect the staff certificates", "2027-04-20", True), ("Renew the fire safety certificate", "2027-05-05", True),
         ("Book the ministry inspection", "2027-05-18", False), ("Pay the renewal fee", "2027-06-01", False),
         ("File the paperwork", "2027-06-10", False)]),
@@ -534,7 +534,7 @@ PROJECTS = [
         ("Collect the staff certificates", "2026-04-20", True), ("Renew the fire safety certificate", "2026-05-05", True),
         ("Book the ministry inspection", "2026-05-18", True), ("Pay the renewal fee", "2026-06-01", True),
         ("File the paperwork", "2026-06-10", True)]),
-    ("grad27", "Yazan's graduation 2027", "yazan_l", "2027-06-20", "in_progress", [
+    ("grad27", "Yazan's graduation 2027", "yazan_l", "2027-06-20", "open", [
         ("Order the cap and gown", "2027-05-01", True), ("Book the photographer", "2027-05-25", False),
         ("Book the family lunch", "2027-06-05", False), ("Buy Yazan's gift", "2027-06-15", False),
         ("Print the invitations", "2027-05-20", False)]),
@@ -546,10 +546,10 @@ PROJECTS = [
         ("Book the flights", "2025-04-25", True), ("Book the Taksim apartment", "2025-05-20", True),
         ("Renew Dana's passport", "2025-05-30", True), ("Buy travel insurance", "2025-06-25", True),
         ("Change money to euros", "2025-07-01", True)]),
-    ("dana_reg", "Dana's school registration 2027", "dana_l", "2027-06-30", "in_progress", [
+    ("dana_reg", "Dana's school registration 2027", "dana_l", "2027-06-30", "open", [
         ("Collect the report card", "2027-06-20", False), ("Fill in the registration form", "2027-06-10", False),
         ("Pay the first instalment", "2027-06-25", False), ("Buy the new uniform", "2027-08-20", False)]),
-    ("umrah_p", "Plan the Umrah for 2028", "travel_l", "2027-12-31", "in_progress", [
+    ("umrah_p", "Plan the Umrah for 2028", "travel_l", "2027-12-31", "open", [
         ("Compare agencies", "2027-05-30", False), ("Check the passports", "2027-06-15", False),
         ("Open the family fund", "2027-04-01", True)]),
 ]
@@ -558,7 +558,7 @@ for pkey, pname, plist, pdue, pstatus, subs in PROJECTS:
     if pstatus == "completed":
         row["completed"] = f"{pdue}T20:00"
     else:
-        row["status"] = "in_progress"
+        pass  # no started state since #1135: the row stays open (the draw above is kept)
     for i, (sname, sdue, sdone) in enumerate(subs):
         sub = add_task(f"{pkey}_{i + 1}", sname, sdue, plist, parent=pkey)
         if sdone:
@@ -612,7 +612,7 @@ for n in range(150):
             row["status"] = "cancelled"
         # the rest stays open and overdue
     elif R.chance(10):
-        row["status"] = "in_progress"
+        pass  # no started state since #1135: the row stays open (the draw above is kept)
 
 # trashed tasks: several inside the window, several past it
 _t = [t for t in tasks if t["key"].startswith("t_")]

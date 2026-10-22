@@ -211,7 +211,7 @@ must("old_zocalo", "Concert in the zocalo", D("2026-07-26"), "19:00", "21:00", t
 
 tasks = [
     # Dia de Muertos orders, with subtasks
-    {"key": "muertos", "name": "Dia de Muertos orders", "list": "bakery_l", "priority": 2, "status": "in_progress",
+    {"key": "muertos", "name": "Dia de Muertos orders", "list": "bakery_l", "priority": 2,
      "due": "2026-11-02"},
     {"key": "mu_eggs", "name": "Order 40 dozen eggs from Dona Reyna", "parent": "muertos", "list": "bakery_l",
      "completed": "2026-10-20T10:00"},

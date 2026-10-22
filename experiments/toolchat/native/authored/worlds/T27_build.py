@@ -211,7 +211,7 @@ def tasks():
         {"key": "till_float", "name": "Get change for the till", "due": "2026-12-11", "effort": 30, "list": "open_l"},
         {"key": "flyers", "name": "Hand out flyers on rue d'Austerlitz", "due": "2026-12-08", "effort": 120,
          "list": "open_l"},
-        {"key": "prep", "name": "Opening day prep", "due": "2026-12-12", "priority": 1, "status": "in_progress",
+        {"key": "prep", "name": "Opening day prep", "due": "2026-12-12", "priority": 1,
          "list": "open_l", "description": "everything for Saturday"},
         {"key": "bake_night", "name": "Bake croissants the night before", "parent": "prep", "due": "2026-12-11",
          "effort": 480},
@@ -257,7 +257,7 @@ def tasks():
         # home
         {"key": "boiler", "name": "Fix the boiler", "due": "2026-12-05", "priority": 2, "effort": 60,
          "list": "home_l"},
-        {"key": "nursery", "name": "Paint the nursery", "status": "in_progress", "priority": 3, "effort": 300,
+        {"key": "nursery", "name": "Paint the nursery", "priority": 3, "effort": 300,
          "list": "home_l", "description": "sage green, two coats"},
         {"key": "glass", "name": "Take out the glass recycling", "due": "2026-12-03", "effort": 10, "list": "home_l"},
         # shopping

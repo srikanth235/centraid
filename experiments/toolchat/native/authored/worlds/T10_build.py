@@ -204,11 +204,11 @@ def tasks():
         {"key": "pills", "name": "Refill blood pressure pills", "due": "2026-06-21", "priority": 1, "effort": 15,
          "list": "health_l"},
         {"key": "eye_test", "name": "Book eye test", "list": "health_l"},
-        {"key": "walk", "name": "Walk 30 minutes after dinner", "status": "in_progress", "list": "health_l", "effort": 30},
-        {"key": "knee_ex", "name": "Knee exercises from physio", "status": "in_progress", "list": "health_l", "effort": 20},
+        {"key": "walk", "name": "Walk 30 minutes after dinner", "list": "health_l", "effort": 30},
+        {"key": "knee_ex", "name": "Knee exercises from physio", "list": "health_l", "effort": 20},
         {"key": "bp_log", "name": "Send BP readings to Dr. Rania", "due": "2026-07-10", "priority": 3, "list": "health_l"},
         # mosque
-        {"key": "ablution", "name": "Ablution area renovation", "due": "2026-08-31", "priority": 1, "status": "in_progress",
+        {"key": "ablution", "name": "Ablution area renovation", "due": "2026-08-31", "priority": 1,
          "list": "mosque_l", "description": "men's side first, then the women's section"},
         {"key": "tiles", "name": "Choose tiles", "parent": "ablution", "due": "2026-06-25", "effort": 90},
         {"key": "plumber", "name": "Hire plumber", "parent": "ablution", "due": "2026-06-30"},
@@ -230,7 +230,7 @@ def tasks():
         {"key": "clocks", "name": "Buy new chess clocks", "due": "2026-06-25", "effort": 30, "list": "chess_l"},
         {"key": "chess_fee", "name": "Pay club membership fee", "due": "2026-07-01", "list": "chess_l"},
         {"key": "yousef_chess", "name": "Teach Yousef the Italian game", "list": "chess_l", "effort": 45},
-        {"key": "endgames", "name": "Study rook endgames", "list": "chess_l", "effort": 60, "status": "in_progress"},
+        {"key": "endgames", "name": "Study rook endgames", "list": "chess_l", "effort": 60},
         # family
         {"key": "eid_money", "name": "Send Eid money to the grandchildren", "due": "2026-05-25",
          "completed": "2026-05-24T21:00"},
@@ -238,7 +238,7 @@ def tasks():
         {"key": "call_dana", "name": "Call Dana about the Berlin visit", "due": "2026-06-22", "effort": 20},
         {"key": "print_omar", "name": "Print photos for Omar", "due": "2026-06-29", "effort": 30},
         {"key": "bike", "name": "Fix Yousef's bicycle", "due": "2026-07-31", "effort": 60},
-        {"key": "recipes_book", "name": "Type up Umm Rami's recipes for Dana", "status": "in_progress", "effort": 240},
+        {"key": "recipes_book", "name": "Type up Umm Rami's recipes for Dana", "effort": 240},
         {"key": "wedding_gift", "name": "Wedding gift for Walid's son", "status": "cancelled", "due": "2026-05-15"},
         # travel
         {"key": "flight", "name": "Book flight to London", "due": "2026-07-15", "list": "travel_l", "priority": 3},
@@ -247,10 +247,10 @@ def tasks():
          "priority": 1},
         # garden
         {"key": "olives", "name": "Prune the olive trees", "list": "garden_l", "due": "2026-11-15", "effort": 180},
-        {"key": "jasmine", "name": "Water the jasmine", "list": "garden_l", "status": "in_progress", "effort": 10},
+        {"key": "jasmine", "name": "Water the jasmine", "list": "garden_l", "effort": 10},
         {"key": "fertilizer", "name": "Buy fertilizer", "list": "garden_l", "due": "2026-06-23"},
         # engineering
-        {"key": "memoir", "name": "Write chapter on the Baghdad bridge", "effort": 300, "status": "in_progress"},
+        {"key": "memoir", "name": "Write chapter on the Baghdad bridge", "effort": 300},
         {"key": "lecture_q", "name": "Prepare questions for the lecture", "due": "2026-06-22", "effort": 30},
     ]
     # electricity bill, monthly on the 10th: history plus July open

@@ -541,7 +541,7 @@ PROJECTS = [
         ("Clear the old yard", "2025-08-15", True), ("Lay the foundation", "2025-09-30", True),
         ("Raise the walls", "2025-11-14", True), ("Roof the warehouse", "2026-01-30", True),
         ("Install the roller doors", "2026-02-20", True), ("Wire the lights", "2026-03-10", True)]),
-    ("solar", "Install solar panels", "house", "2027-08-31", "in_progress", [
+    ("solar", "Install solar panels", "house", "2027-08-31", "open", [
         ("Get quotes from three installers", "2027-02-15", True), ("Choose the inverter size", "2027-03-10", True),
         ("Order the panels", "2027-04-20", True), ("Prepare the roof", "2027-06-05", True),
         ("Installation week", "2027-07-12", False), ("Test the system", "2027-07-19", False),
@@ -558,7 +558,7 @@ PROJECTS = [
         ("Apply for the visas", "2026-04-10", True), ("Book the flights", "2026-05-02", True),
         ("Buy pounds", "2026-07-20", True), ("Buy gifts for Aunty Uche", "2026-07-25", True),
         ("Pack the suitcases", "2026-07-30", True)]),
-    ("church_hall", "Church hall dedication", "church_l", "2027-09-26", "in_progress", [
+    ("church_hall", "Church hall dedication", "church_l", "2027-09-26", "open", [
         ("Order the commemorative plaque", "2027-07-05", False), ("Print the programme", "2027-08-30", False),
         ("Collect the pledges", "2027-06-30", False)]),
     ("house_paint", "Repaint the house", "house", "2026-12-15", "completed", [
@@ -571,7 +571,7 @@ for pkey, pname, plist, pdue, pstatus, subs in PROJECTS:
     if pstatus == "completed":
         row["completed"] = f"{pdue}T20:00"
     else:
-        row["status"] = "in_progress"
+        pass  # no started state since #1135: the row stays open (the draw above is kept)
     for i, (sname, sdue, sdone) in enumerate(subs):
         sub = add_task(f"{pkey}_{i + 1}", sname, sdue, plist, parent=pkey)
         if sdone:
@@ -624,7 +624,7 @@ for n in range(160):
             row["status"] = "cancelled"
         # the rest stays open and overdue
     elif R.chance(10):
-        row["status"] = "in_progress"
+        pass  # no started state since #1135: the row stays open (the draw above is kept)
 
 # trashed tasks: several inside the window, several past it
 _t = [t for t in tasks if t["key"].startswith("t_")]

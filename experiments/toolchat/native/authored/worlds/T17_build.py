@@ -216,8 +216,7 @@ def events():
 def tasks():
     t = [
         # teaching
-        {"key": "programme", "name": "Prepare recital programme", "due": "2026-02-10", "priority": 1,
-         "status": "in_progress", "effort": 120, "list": "teaching_l", "description": "recital prep"},
+        {"key": "programme", "name": "Prepare recital programme", "due": "2026-02-10", "priority": 1, "effort": 120, "list": "teaching_l", "description": "recital prep"},
         {"key": "certificates", "name": "Print certificates for recital", "due": "2026-02-19", "effort": 30,
          "list": "teaching_l", "description": "recital prep"},
         {"key": "hall", "name": "Book the music school hall", "due": "2026-01-15", "completed": "2026-01-12T11:00",
@@ -234,12 +233,11 @@ def tasks():
          "list": "teaching_l", "description": "exam prep"},
         {"key": "roster", "name": "Update the student roster", "effort": 60, "list": "teaching_l", "priority": 3},
         {"key": "theory", "name": "Mark theory tests", "due": "2026-01-28", "effort": 90, "list": "teaching_l"},
-        {"key": "brahms", "name": "Practise the Brahms sonata", "due": "2026-02-04", "effort": 300, "priority": 1,
-         "status": "in_progress", "description": "exam prep"},
+        {"key": "brahms", "name": "Practise the Brahms sonata", "due": "2026-02-04", "effort": 300, "priority": 1, "description": "exam prep"},
         {"key": "niki_letter", "name": "Write Niki's recommendation letter", "due": "2026-02-12", "effort": 60,
          "priority": 2, "list": "teaching_l"},
         # choir
-        {"key": "alto_line", "name": "Learn the alto line for Rachmaninov", "status": "in_progress", "effort": 240,
+        {"key": "alto_line", "name": "Learn the alto line for Rachmaninov", "effort": 240,
          "list": "choir_l"},
         {"key": "photocopy", "name": "Photocopy choir scores", "due": "2026-02-03", "effort": 20, "list": "choir_l"},
         {"key": "choir_fees", "name": "Collect choir fees", "due": "2026-01-31", "effort": 15, "list": "choir_l"},
@@ -248,7 +246,7 @@ def tasks():
         {"key": "vienna_passports", "name": "Collect passport copies for Vienna", "due": "2026-02-20", "effort": 30,
          "list": "choir_l", "priority": 2},
         # renovation
-        {"key": "bathroom", "name": "Bathroom renovation", "status": "in_progress", "priority": 1, "effort": 600,
+        {"key": "bathroom", "name": "Bathroom renovation", "priority": 1, "effort": 600,
          "list": "reno_l", "description": "Mitko's crew, about three weeks"},
         {"key": "tiles", "name": "Choose tiles", "parent": "bathroom", "due": "2026-01-20",
          "completed": "2026-01-19T17:00", "effort": 120},
@@ -283,7 +281,7 @@ def tasks():
          "list": "viktor_l"},
         {"key": "trainers", "name": "Buy Viktor new trainers", "due": "2026-02-14", "list": "viktor_l",
          "description": "size 44, the black ones"},
-        {"key": "v_passport", "name": "Renew Viktor's passport", "status": "in_progress", "list": "viktor_l",
+        {"key": "v_passport", "name": "Renew Viktor's passport", "list": "viktor_l",
          "description": "needs Stefan's consent at the notary", "effort": 90},
         {"key": "summer_email", "name": "Email Stefan about the summer schedule", "due": "2026-02-06", "effort": 20,
          "list": "viktor_l"},

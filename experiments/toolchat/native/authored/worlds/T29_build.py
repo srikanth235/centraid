@@ -164,7 +164,7 @@ ev("old_meet", "Meeting with Rose", "2026-08-27T14:00", "2026-08-27T15:00", atte
    trashed="2026-09-14T10:30")
 
 tasks = [
-    {"key": "karen", "name": "Karen courtyard house", "list": "karen_list", "priority": 2, "status": "in_progress",
+    {"key": "karen", "name": "Karen courtyard house", "list": "karen_list", "priority": 2,
      "due": "2026-11-30"},
     {"key": "karen_dwgs", "name": "Issue working drawings", "parent": "karen", "list": "karen_list",
      "due": "2026-10-09", "priority": 2, "effort": 240},
@@ -186,7 +186,7 @@ tasks = [
     {"key": "karen_mockup", "name": "Print 1:50 plans for site", "parent": "karen", "list": "karen_list",
      "due": "2026-09-24", "effort": 20},
 
-    {"key": "runda", "name": "Runda extension", "list": "runda_list", "priority": 2, "status": "in_progress",
+    {"key": "runda", "name": "Runda extension", "list": "runda_list", "priority": 2,
      "due": "2026-12-15"},
     {"key": "runda_concept", "name": "Concept sketches for Dennis", "parent": "runda", "list": "runda_list",
      "due": "2026-09-29", "effort": 180, "priority": 2},

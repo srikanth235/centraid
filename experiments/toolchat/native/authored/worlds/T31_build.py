@@ -205,8 +205,7 @@ must("old_dinner", "Dinner with Iga", dt.date(2026, 8, 7), "19:00", "21:00", tra
 
 tasks = [
     # London trip with subtasks
-    {"key": "london_trip", "name": "Plan the London Christmas trip", "list": "family_l", "priority": 2,
-     "status": "in_progress", "due": "2026-12-15"},
+    {"key": "london_trip", "name": "Plan the London Christmas trip", "list": "family_l", "priority": 2, "due": "2026-12-15"},
     {"key": "london_flights", "name": "Book flights to London", "parent": "london_trip", "list": "family_l",
      "completed": "2026-10-05T21:00"},
     {"key": "london_gifts", "name": "Buy presents for Kasia and James", "parent": "london_trip", "list": "family_l",

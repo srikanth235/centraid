@@ -599,6 +599,14 @@ pub fn seed_report(world: &Value, path: &Path) -> Result<(Value, Vec<String>), S
             .get(to)
             .cloned()
             .ok_or_else(|| format!("no key \"{to}\""))?;
+        // like a photograph's people: a document is not `about` anything in the model, so
+        // the link is reported and left out rather than refused
+        if matches!(from_kind, Kind::Document) {
+            seeder
+                .dropped
+                .push(format!("{from}.links (a document is not about anything)"));
+            continue;
+        }
         if !matches!(from_kind, Kind::Note | Kind::Task | Kind::Event) {
             return Err(format!(
                 "a {} is not about anything: only a note, a task or an event is ({link})",

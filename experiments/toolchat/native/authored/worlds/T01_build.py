@@ -139,7 +139,7 @@ ev("book_club", "Church book club", "2026-03-26T19:30", "2026-03-26T21:00", atte
 ev("old_bbq", "Dev's BBQ", "2025-08-30T15:00", "2025-08-30T19:00", attendees=["dev"], trashed="2026-01-02T10:00")
 
 tasks = [
-    {"key": "reno", "name": "Kitchen renovation", "list": "reno_list", "priority": 2, "status": "in_progress",
+    {"key": "reno", "name": "Kitchen renovation", "list": "reno_list", "priority": 2,
      "due": "2026-03-31"},
     {"key": "worktops", "name": "Choose worktops", "parent": "reno", "list": "reno_list",
      "completed": "2026-03-02T21:00"},
@@ -153,8 +153,7 @@ tasks = [
      "completed": "2026-02-20T18:00"},
     {"key": "instalment", "name": "Pay second instalment to Gaz", "parent": "reno", "list": "reno_list",
      "due": "2026-03-23", "priority": 1},
-    {"key": "paint", "name": "Pick paint colour", "parent": "reno", "list": "reno_list", "due": "2026-03-28",
-     "status": "in_progress"},
+    {"key": "paint", "name": "Pick paint colour", "parent": "reno", "list": "reno_list", "due": "2026-03-28"},
     {"key": "plumber_quote", "name": "Get plumber quote", "parent": "reno", "list": "reno_list", "due": "2026-03-13"},
     {"key": "electrician", "name": "Arrange electrician", "parent": "reno", "list": "reno_list",
      "completed": "2026-03-05T12:00"},

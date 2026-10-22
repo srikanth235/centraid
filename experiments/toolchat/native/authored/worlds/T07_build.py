@@ -187,7 +187,7 @@ def tasks():
         # coop
         {"key": "seed_pay", "name": "Pay Sonia for the seed potatoes", "due": "2026-03-13", "priority": 2, "list": "coop_l"},
         {"key": "agro_docs", "name": "Gather documents for the Agrobanco loan", "due": "2026-03-18", "priority": 1,
-         "effort": 120, "status": "in_progress", "list": "coop_l", "description": "Patricia's checklist from the 5th"},
+         "effort": 120, "list": "coop_l", "description": "Patricia's checklist from the 5th"},
         {"key": "agro_ruc", "name": "Print the RUC certificate", "parent": "agro_docs", "completed": "2026-03-06T10:00"},
         {"key": "agro_bank", "name": "Get bank statements", "parent": "agro_docs", "due": "2026-03-17"},
         {"key": "agro_title", "name": "Copy of the land title", "parent": "agro_docs", "due": "2026-03-17"},
@@ -204,12 +204,12 @@ def tasks():
         # choir
         {"key": "scores", "name": "Photocopy the Holy Week scores", "due": "2026-03-24", "list": "choir_l", "effort": 30},
         {"key": "robes", "name": "Wash the choir robes", "due": "2026-03-28", "list": "choir_l", "effort": 60},
-        {"key": "tickets", "name": "Sell raffle tickets", "due": "2026-03-31", "status": "in_progress", "list": "choir_l"},
+        {"key": "tickets", "name": "Sell raffle tickets", "due": "2026-03-31", "list": "choir_l"},
         {"key": "alto_line", "name": "Learn the alto line for Psalm 22", "due": "2026-03-31", "list": "choir_l", "effort": 30,
          "priority": 3},
         # home
         {"key": "gas", "name": "Refill the gas cylinder", "due": "2026-03-12", "list": "home_l", "effort": 15},
-        {"key": "roof", "name": "Fix the leaking roof", "status": "in_progress", "list": "home_l", "priority": 2,
+        {"key": "roof", "name": "Fix the leaking roof", "list": "home_l", "priority": 2,
          "description": "corner over the storeroom"},
         {"key": "water_bill", "name": "Pay the water bill", "due": "2026-03-20", "list": "home_l"},
         {"key": "elec_bill", "name": "Pay the electricity bill", "completed": "2026-03-02T09:00", "list": "home_l"},

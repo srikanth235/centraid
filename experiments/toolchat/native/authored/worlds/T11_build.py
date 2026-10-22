@@ -211,7 +211,7 @@ def tasks():
         {"key": "herd_reg", "name": "Send herd register to Fergal", "due": "2026-07-27", "effort": 15, "priority": 1,
          "list": "farm_l"},
         {"key": "minerals", "name": "Order mineral buckets", "due": "2026-07-29", "effort": 10, "list": "farm_l"},
-        {"key": "thistles", "name": "Spray the thistles", "status": "in_progress", "effort": 120, "list": "farm_l"},
+        {"key": "thistles", "name": "Spray the thistles", "effort": 120, "list": "farm_l"},
         {"key": "silage_book", "name": "Book the silage contractor", "due": "2026-07-10",
          "completed": "2026-07-09T20:00", "list": "farm_l"},
         {"key": "troughs", "name": "Check the water troughs", "due": "2026-07-26", "effort": 30, "list": "farm_l"},
@@ -233,7 +233,7 @@ def tasks():
         {"key": "sky", "name": "Cancel Sky Sports", "status": "cancelled", "list": "house_l"},
         {"key": "boiler", "name": "Get the boiler serviced", "due": "2026-09-01", "effort": 20, "list": "house_l"},
         # club
-        {"key": "lotto_sell", "name": "Sell lotto tickets at mass", "status": "in_progress", "list": "club_l",
+        {"key": "lotto_sell", "name": "Sell lotto tickets at mass", "list": "club_l",
          "effort": 45},
         {"key": "raffle", "name": "Print raffle tickets", "due": "2026-08-01", "effort": 30, "list": "club_l"},
         {"key": "jerseys", "name": "Sort jerseys for the U12s", "due": "2026-08-10", "priority": 2, "list": "club_l",
