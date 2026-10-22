@@ -129,7 +129,7 @@ pub const ACTIONS: &[ActionRow] = &[
 /// The row for an action, by name.
 #[must_use]
 pub fn action_row(action: &str) -> Option<&'static ActionRow> {
-    centraid_apps_kit::actions::find(&ACTIONS, action)
+    centraid_apps_kit::actions::find(ACTIONS, action)
 }
 
 /// The `act` scopes Agenda declares, derived from the action table: one per

@@ -90,6 +90,11 @@
         "verbs": "act"
       },
       {
+        "schema": "entity",
+        "table": "retitle",
+        "verbs": "act"
+      },
+      {
         "schema": "container",
         "table": "create",
         "verbs": "act"

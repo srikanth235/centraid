@@ -14,10 +14,13 @@ use centraid_nativetools::{Flags, Session, dates, vaultio};
 use common::{TODAY, World, call, number, seeded};
 use serde_json::{Value, json};
 
-/// A door that records every write it is asked, as the action and the input.
+/// The writes a door was asked, as the action and the input.
+type Writes = Arc<Mutex<Vec<(Call, Value)>>>;
+
+/// A door that records every write it is asked.
 struct Recording {
     inner: Handle,
-    writes: Arc<Mutex<Vec<(Call, Value)>>>,
+    writes: Writes,
 }
 
 impl Door for Recording {
@@ -70,7 +73,7 @@ impl Door for Recording {
     }
 }
 
-fn recorded(world: &World) -> (Session, Arc<Mutex<Vec<(Call, Value)>>>) {
+fn recorded(world: &World) -> (Session, Writes) {
     let now = dates::parse_now(TODAY).expect("a date");
     let clock = SetClock::at(vaultio::millis_of(now));
     let inner = Handle::open(world.path(), clock, "dispatch").expect("the vault opens");
@@ -84,7 +87,7 @@ fn recorded(world: &World) -> (Session, Arc<Mutex<Vec<(Call, Value)>>>) {
 }
 
 /// What the door was asked since the last call to this, as `app/action` and the command.
-fn taken(writes: &Arc<Mutex<Vec<(Call, Value)>>>) -> Vec<(String, &'static str, Value)> {
+fn taken(writes: &Writes) -> Vec<(String, &'static str, Value)> {
     writes
         .lock()
         .unwrap()

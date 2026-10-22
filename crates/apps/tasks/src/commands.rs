@@ -128,7 +128,7 @@ pub const ACTIONS: &[ActionRow] = &[
 /// The row for an action, by name.
 #[must_use]
 pub fn action_row(action: &str) -> Option<&'static ActionRow> {
-    centraid_apps_kit::actions::find(&ACTIONS, action)
+    centraid_apps_kit::actions::find(ACTIONS, action)
 }
 
 /// The `act` scopes Tasks declares, derived from the action table: one per
@@ -179,7 +179,7 @@ mod tests {
             .map(|row| row.action)
             .collect();
         assert_eq!(creates, ["create-project", "create-section"]);
-        assert_eq!(act_scope_tables().len(), 14);
+        assert_eq!(act_scope_tables().len(), 15);
     }
 
     /// EVERY command this app names is in the vault's own catalogue. A button

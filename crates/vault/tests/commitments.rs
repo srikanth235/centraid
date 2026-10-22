@@ -1486,6 +1486,16 @@ const CENSUS: &[(&str, &str, Reach)] = &[
     ("journal", "command", Reach::Not("a command name")),
     (
         "journal",
+        "invoke_key",
+        Reach::Not("an act's correlation key, a token and not prose"),
+    ),
+    (
+        "journal",
+        "asked",
+        Reach::Not("a digest of what an act asked, not prose"),
+    ),
+    (
+        "journal",
         "detail",
         Reach::Not("a refusal's sentence, evidence rather than content"),
     ),
