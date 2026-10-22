@@ -11,18 +11,14 @@
 //! and "usually fast" is the property a mean measures. p95 over 200 calls is
 //! the cheapest statistic that says something about the slow ones.
 //!
-//! ## Why the golden corpus and not a generated one
+//! ## Why a founded vault with two hundred and some rows
 //!
-//! The corpus is a real vault, frozen: sixteen tables, a hundred and
-//! thirty-nine rows, real column widths and real index shapes. A generated
-//! fixture measures whatever the generator happened to make, and the first time
-//! it disagrees with a real file the budget is measuring the generator.
-//!
-//! The corpus is small, so this is a **floor measurement**, and the receipt
-//! says so: it catches a regression in the call path (a lock held too long, a
-//! statement re-prepared per call, a page probe gone quadratic), not the cost
-//! of a year-three table. When lane D3's year-3 generator lands, this test
-//! reads that instead and the ledger's number falls or does not.
+//! The fixture is a vault this build founds and fills through the real command
+//! plane, so its tables, indexes and row widths are the product's own, and a
+//! page of it is a real page with a `next`. It is small, so this is a **floor
+//! measurement**: it catches a regression in the call path (a lock held too
+//! long, a statement re-prepared per call, a page probe gone quadratic), not the
+//! cost of a year-three table. The year-3 profiles are the scale lane's.
 
 use std::time::{Duration, Instant};
 
@@ -53,22 +49,17 @@ fn page_request() -> wire::Request {
     wire::Request {
         kind: Some(wire::request::Kind::Page(wire::PageRequest {
             query: Some(wire::PageQuery {
-                name: "parties".to_owned(),
-                select: vec![
-                    "party_id".to_owned(),
-                    "created_at".to_owned(),
-                    "display_name".to_owned(),
-                ],
-                from: "core_party".to_owned(),
+                name: "people".to_owned(),
+                select: vec!["id".to_owned(), "created_at".to_owned(), "title".to_owned()],
+                from: "entity".to_owned(),
                 r#where: None,
                 bind: Vec::new(),
                 order: Some(wire::PageOrder {
                     sort_column: "created_at".to_owned(),
-                    pk_column: "party_id".to_owned(),
+                    pk_column: "id".to_owned(),
                     descending: false,
                 }),
                 with_held_thumbnail: false,
-                with_note_body: false,
                 with_document_size: false,
                 with_minor_units: false,
                 local_day_columns: Vec::new(),
@@ -92,7 +83,7 @@ fn percentile(sorted: &[Duration], fraction: f64) -> Duration {
 
 #[test]
 fn the_p95_of_a_bounded_read_is_inside_the_budget() {
-    let dir = centraid_ontology::golden::scratch_dir();
+    let dir = centraid_ontology::scratch::scratch_dir();
     std::fs::create_dir_all(&dir).expect("the directory is made");
     let _scratch = Scratch { dir: dir.clone() };
 
@@ -105,10 +96,9 @@ fn the_p95_of_a_bounded_read_is_inside_the_budget() {
         .with_vault(|vault| {
             // THROUGH THE REAL COMMAND PLANE, not a raw INSERT. The
             // `sql-confinement` rule refuses SQL here — and the refusal
-            // improved the fixture: a page over rows the real `core.add_party`
-            // wrote is a page over rows with real `core_entity` siblings and a
-            // real `row_version`, which a hand-written INSERT was quietly
-            // missing.
+            // improved the fixture: a page over rows the real `person.add`
+            // wrote is a page over rows with real kind-row siblings and a real
+            // `version`, which a hand-written INSERT was quietly missing.
             let registry = centraid_vault::commands::Registry::with_system_commands()?;
             let principal = centraid_vault::Principal::owner("budget-device");
             for index in 0..SEED_ROWS {
@@ -116,11 +106,8 @@ fn the_p95_of_a_bounded_read_is_inside_the_budget() {
                     &registry,
                     &principal,
                     &centraid_vault::commands::Command::new(
-                        "core.add_party",
-                        serde_json::json!({
-                            "display_name": format!("Party {index}"),
-                            "kind": "person"
-                        }),
+                        "person.add",
+                        serde_json::json!({ "title": format!("Person {index}") }),
                     ),
                 )?;
             }
@@ -179,7 +166,7 @@ fn the_p95_of_a_bounded_read_is_inside_the_budget() {
 /// is what measures. They have to agree, so the test asserts it.
 #[test]
 fn the_ledger_and_this_test_state_the_same_ceiling() {
-    let path = centraid_ontology::golden::repo_root().join("contracts/ledgers/call-budget.json");
+    let path = centraid_ontology::scratch::repo_root().join("contracts/ledgers/call-budget.json");
     let text = std::fs::read_to_string(&path)
         .unwrap_or_else(|error| panic!("{} is committed: {error}", path.display()));
     let ledger: serde_json::Value = serde_json::from_str(&text).expect("the ledger is valid JSON");

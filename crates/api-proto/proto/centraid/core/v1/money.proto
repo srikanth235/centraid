@@ -292,7 +292,9 @@ message MoneyTransaction {
     string pattern = 2;
     string category_id = 3;
     string category_label = 4;
-    string display_name = 5;
+    // A rule files a line and no longer names it (#1135).
+    reserved 5;
+    reserved "display_name";
     uint32 support = 6;
     uint32 of = 7;
   }
@@ -398,7 +400,9 @@ message MoneyRules {
     optional int64 amount_max = 5;
     optional string account_label = 6;
     optional string category_label = 7;
-    optional string display_name = 8;
+    // A rule files a line and no longer names it (#1135).
+    reserved 8;
+    reserved "display_name";
     uint32 specificity = 9;
   }
 }
@@ -473,11 +477,16 @@ message MoneyRecurring {
   }
 }
 
-// `money.search`: transactions whose words contain the term, newest first,
-// walking month windows back from `month`.
+// `money.search`: the transactions the full-text index finds for the term, over
+// the whole ledger (every line ever imported, not a window of months), best
+// match first: the name the member gave a line and the bank's words, then its
+// category, its account and the notes about it. A slipped word is corrected
+// like every search (`MoneySearch.corrected`).
 message MoneySearchRequest {
   string tz = 1;
-  // `YYYY-MM` to start from. EMPTY is the month today falls in.
+  // NOT READ. A search once walked month windows back from this month; it now
+  // reads the whole ledger, so there is no month to start from. The field stays
+  // so an older shell's request still parses.
   string month = 2;
   string term = 3;
   // REQUIRED: 0 is `ERROR_CODE_INVALID_REQUEST`, never a default.
@@ -487,11 +496,16 @@ message MoneySearchRequest {
 message MoneySearch {
   string term = 1;
   repeated MoneyActivityRow rows = 2;
+  // How many rows are in `rows`: the index answers one ranked window of at most
+  // `limit` lines and does not count the rest.
   uint32 total_matches = 3;
-  // The term the search ran as, when it was corrected from the member's.
+  // The words the rows answer, when a correction of the term's words added
+  // lines to a thin exact answer or replaced an empty one.
   optional string corrected = 4;
+  // ALWAYS false. The month walk that could stop short of a month's rows is gone;
+  // the field stays so an older shell's reader still parses.
   bool truncated = 5;
-  // How many months back the walk went.
+  // ALWAYS 0: no walk, so no reach to state.
   uint32 months_walked = 6;
 }
 
@@ -646,8 +660,9 @@ message MoneyImportPlanRow {
   // Signed.
   optional MoneyAmount amount = 4;
   optional string description = 5;
-  // After the rules.
-  optional string display_name = 6;
+  // The rules file a line and no longer name it (#1135).
+  reserved 6;
+  reserved "display_name";
   optional string category_label = 7;
   bool future_dated = 8;
   // The existing transaction an ALREADY_IN or a proposal points at.

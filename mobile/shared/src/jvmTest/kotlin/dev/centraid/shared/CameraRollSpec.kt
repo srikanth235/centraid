@@ -145,16 +145,19 @@ class CameraRollSpec : StringSpec({
             capturedUtcOffsetMinutes = 0,
             kind = MediaLibrary.Kind.PHOTO,
         )
-        val input = roll.inputFor(asset, "ab".repeat(32))
-        input shouldContain "\"staged_sha\":\"${"ab".repeat(32)}\""
-        input shouldContain "\"kind\":\"photo\""
-        input shouldContain "\"captured_at\":\"2026-02-03T10:11:12Z\""
-        // `source_asset_id` IS EDIT LINEAGE (#711) — an FK to
-        // `media_asset(asset_id)` — and a `PHAsset` identifier there would be a
-        // dangling foreign key wearing a field's name. There is no column
-        // anywhere for a device's own id, which is exactly why the cursor and
-        // the content-hash intent id live on the phone.
-        input shouldNotContain "source_asset_id"
+        val input = roll.inputFor(asset, "ab".repeat(32), 12L, "image/jpeg")
+        input shouldContain "\"blob\":\"${"ab".repeat(32)}\""
+        // THE BYTES THE CORE COUNTED: the command claims what it names.
+        input shouldContain "\"size\":12"
+        input shouldContain "\"media_type\":\"image/jpeg\""
+        input shouldContain "\"form\":\"photo\""
+        input shouldContain "\"taken_at\":\"2026-02-03T10:11:12Z\""
+        // `edited_from` IS EDIT LINEAGE (#711) — an FK to `photo(id)` — and a
+        // `PHAsset` identifier there would be a dangling foreign key wearing a
+        // field's name. There is no column anywhere for a device's own id, which
+        // is exactly why the cursor and the content-hash intent id live on the
+        // phone.
+        input shouldNotContain "edited_from"
         input shouldNotContain asset.localId
         // NO `phash` EITHER: the gateway derives one at commit from bytes it
         // holds, and a phone computing one would decode every original to
@@ -175,10 +178,10 @@ class CameraRollSpec : StringSpec({
         // ONE THING TO A GRID, TWO THINGS TO THE CORE. Both writes name the
         // same group and different kinds: the movie is the asset's second
         // resource, committed as a `video`.
-        roll.inputFor(live, "aa".repeat(32)) shouldContain "\"capture_group_id\":\"L/L0/001\""
-        roll.inputFor(live, "aa".repeat(32)) shouldContain "\"kind\":\"photo\""
-        roll.inputFor(live, "bb".repeat(32), MediaLibrary.Kind.VIDEO) shouldContain "\"capture_group_id\":\"L/L0/001\""
-        roll.inputFor(live, "bb".repeat(32), MediaLibrary.Kind.VIDEO) shouldContain "\"kind\":\"video\""
+        roll.inputFor(live, "aa".repeat(32), 1L, "image/heic") shouldContain "\"burst\":\"L/L0/001\""
+        roll.inputFor(live, "aa".repeat(32), 1L, "image/heic") shouldContain "\"form\":\"photo\""
+        roll.inputFor(live, "bb".repeat(32), 1L, "video/quicktime", MediaLibrary.Kind.VIDEO) shouldContain "\"burst\":\"L/L0/001\""
+        roll.inputFor(live, "bb".repeat(32), 1L, "video/quicktime", MediaLibrary.Kind.VIDEO) shouldContain "\"form\":\"video\""
     }
 
     "a burst member gets no invented grouping" {
@@ -192,7 +195,7 @@ class CameraRollSpec : StringSpec({
         )
         // A guess here would invent a relationship the owner never made
         // (`NATIVE_V0.md:11-19`).
-        roll.inputFor(burst, "cc".repeat(32)) shouldNotContain "capture_group_id"
+        roll.inputFor(burst, "cc".repeat(32), 1L, "image/jpeg") shouldNotContain "burst"
     }
 
     "a denied grant leaves the backup idle and says why, and never touches the grid" {

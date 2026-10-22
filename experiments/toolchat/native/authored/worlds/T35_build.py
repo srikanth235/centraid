@@ -179,7 +179,7 @@ while d <= dt.date(2026, 11, 13):
          None if d >= dt.date(2026, 11, 13) else f"{iso}T11:30")
     d += dt.timedelta(days=14)
 
-task("cod", "Cod acoustic survey 2027", "lab_list", "2027-01-12", priority=2, status="in_progress")
+task("cod", "Cod acoustic survey 2027", "lab_list", "2027-01-12", priority=2)
 for k, name, due, done, extra in [
     ("vessel", "Book vessel time", "2026-09-15", "2026-09-10T14:00", {}),
     ("permits", "Get the sampling permits", "2026-10-15", "2026-10-12T10:00", {}),
@@ -201,7 +201,7 @@ task("ethics", "Renew animal ethics approval", "lab_list", "2026-12-18", priorit
 task("buy_ice", "Order dry ice for the cruise", "lab_list", "2027-01-05", effort=10)
 task("lab_safety", "Complete the lab safety refresher", "lab_list", "2026-09-30", "2026-09-28T12:00")
 
-task("winter_work", "Winter boat work", "klubb_list", "2027-03-15", status="in_progress")
+task("winter_work", "Winter boat work", "klubb_list", "2027-03-15")
 for k, name, due, done in [("antifoul", "Order antifouling paint", "2026-12-01", None),
                            ("winch", "Service the winch", "2027-01-20", None),
                            ("tiller", "Varnish the tiller", "2026-10-20", "2026-10-24T13:00"),

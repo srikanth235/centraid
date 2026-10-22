@@ -1,5 +1,5 @@
 # Search says what it searched for (#1097): a one-letter slip finds the row
-# and the line under the field names the word searched ("Showing results for
+# and the line under the field names the word searched ("Including results for
 # “circle”"); a term nothing matches offers the assistant.
 #
 # A VAULT-HOLDING INSTALL, as `home-search.yaml`: the onboarding starters are
@@ -27,7 +27,7 @@ name: search-correction
     visible:
       id: "search-corrected"
     timeout: 5000
-- assertVisible: "Showing results for “circle”"
+- assertVisible: "Including results for “circle”"
 - assertVisible:
     id: "home-search-group-agenda"
 - assertVisible: "Tap the circle to finish me"

@@ -40,7 +40,7 @@ import kotlinx.coroutines.test.runTest
 /**
  * `agenda.editor` (#1046 wave 5): defaults, validation, the day math, the
  * explicit save and which command each save is — every input pinned against
- * `schedule.rs`'s `additionalProperties: false` schemas — dirty leave, scope
+ * `the vault's `additionalProperties: false` schemas — dirty leave, scope
  * and skip. Monday 15 June 2026, 09:42.
  */
 class AgendaEditorSpec : StringSpec({
@@ -113,15 +113,15 @@ class AgendaEditorSpec : StringSpec({
         data.reminder_label shouldBe "30 minutes before"
         val saved = drive(typed, save())
         val write = saved.effects.single() as ScreenEffect.SubmitWrite
-        write.command shouldBe "schedule.propose_event"
+        write.command shouldBe "event.propose"
         // THE MEMBER'S WALL CLOCK AND THE DEVICE'S ZONE: the core resolves the instant.
-        write.inputJson shouldBe """{"summary":"Dentist","dtstart":"2026-06-15T10:00:00","dtend":"2026-06-15T11:00:00",""" +
-            """"tz":"Europe/London","calendar_id":"cal-1","attendee_party_ids":["p-2"],"rrule":"FREQ=WEEKLY",""" +
-            """"reminders":[{"minutes_before":30}]}"""
+        write.inputJson shouldBe """{"title":"Dentist","starts":"2026-06-15T10:00:00","ends":"2026-06-15T11:00:00",""" +
+            """"zone":"Europe/London","calendar_id":"cal-1","attendees":["p-2"],"rule":"FREQ=WEEKLY",""" +
+            """"reminders":[30]}"""
         // With no zone known yet, the wall clock alone: floating.
         val zoneless = drive(typed.copy(zone = ""), save()).effects.single() as ScreenEffect.SubmitWrite
-        zoneless.inputJson shouldContain """"recurrence_semantics":"floating""""
-        write.invokeKey shouldStartWith "schedule.propose_event:new:"
+        zoneless.inputJson shouldContain """"timing":"floating""""
+        write.invokeKey shouldStartWith "event.propose:new:"
         saved.state.screen.data_.shouldNotBeNull().can_save shouldBe false
         // A DOUBLE TAP IS ONE WRITE.
         drive(saved.state, save()).effects.shouldBeEmpty()
@@ -142,7 +142,7 @@ class AgendaEditorSpec : StringSpec({
         ).state
         val saved = drive(typed, save())
         val write = saved.effects.single() as ScreenEffect.SubmitWrite
-        write.command shouldBe "schedule.propose_event"
+        write.command shouldBe "event.propose"
         val committed = drive(
             saved.state,
             AgendaEditorReads().settled(CommandStatus.COMMAND_STATUS_EXECUTED, "", write.invokeKey),
@@ -159,7 +159,7 @@ class AgendaEditorSpec : StringSpec({
         ).state
         refused.screen.dismissed shouldBe false
         refused.screen.data_.shouldNotBeNull().can_save shouldBe true
-        (drive(refused, save()).effects.single() as ScreenEffect.SubmitWrite).command shouldBe "schedule.propose_event"
+        (drive(refused, save()).effects.single() as ScreenEffect.SubmitWrite).command shouldBe "event.propose"
     }
 
     "an edit that committed ends its sitting too: the same Save again sends nothing (#1089)" {
@@ -168,7 +168,7 @@ class AgendaEditorSpec : StringSpec({
         val changed = drive(loaded, edit(AgendaEditorEvent(title = AgendaEditorEvent.TitleChanged(text = "Design review")))).state
         val saved = drive(changed, save())
         val write = saved.effects.single() as ScreenEffect.SubmitWrite
-        write.command shouldBe "schedule.edit_event"
+        write.command shouldBe "event.edit"
         val committed = drive(
             saved.state,
             AgendaEditorReads().settled(CommandStatus.COMMAND_STATUS_EXECUTED, "", write.invokeKey),
@@ -203,8 +203,8 @@ class AgendaEditorSpec : StringSpec({
         allDay.screen.data_.shouldNotBeNull().start_label shouldBe "Monday 15 June"
         allDay.screen.data_.shouldNotBeNull().start_time_label shouldBe ""
         val write = drive(allDay, save()).effects.single() as ScreenEffect.SubmitWrite
-        write.inputJson shouldBe """{"summary":"Flight","dtstart":"2026-06-15","dtend":"2026-06-15",""" +
-            """"recurrence_semantics":"all-day","calendar_id":"cal-1"}"""
+        write.inputJson shouldBe """{"title":"Flight","starts":"2026-06-15","ends":"2026-06-15",""" +
+            """"timing":"all-day","calendar_id":"cal-1"}"""
         // An all-day start moves its end by the same days.
         drive(allDay, edit(AgendaEditorEvent(start = AgendaEditorEvent.StartChanged(day = "2026-06-18", time = ""))))
             .state.draft.shouldNotBeNull().end_day shouldBe "2026-06-18"
@@ -245,14 +245,14 @@ class AgendaEditorSpec : StringSpec({
         ).state
         changed.screen.data_.shouldNotBeNull().dirty shouldBe true
         val write = drive(changed, save()).effects.single() as ScreenEffect.SubmitWrite
-        write.command shouldBe "schedule.edit_event"
-        write.inputJson shouldBe """{"event_id":"e1","summary":"Design review","clear_description":true,""" +
-            """"clear_conferencing":true,"attendee_party_ids":["p-me","p-2","p-3"]}"""
+        write.command shouldBe "event.edit"
+        write.inputJson shouldBe """{"id":"e1","title":"Design review","description":null,""" +
+            """"url":null,"attendees":["p-me","p-2","p-3"]}"""
 
         // A new time is the wall clock with the zone it was picked in.
         val retimed = drive(loaded, edit(AgendaEditorEvent(start = AgendaEditorEvent.StartChanged(day = TODAY, time = "16:00")))).state
         (drive(retimed, save()).effects.single() as ScreenEffect.SubmitWrite).inputJson shouldBe
-            """{"event_id":"e1","dtstart":"2026-06-15T16:00:00","dtend":"2026-06-15T17:00:00","tz":"Europe/London"}"""
+            """{"id":"e1","starts":"2026-06-15T16:00:00","ends":"2026-06-15T17:00:00","zone":"Europe/London"}"""
     }
 
     "leaving with changes asks, and only Discard leaves" {
@@ -292,13 +292,13 @@ class AgendaEditorSpec : StringSpec({
         val one = drive(sheet.state, scope(AgendaScope.AGENDA_SCOPE_OCCURRENCE)).state
         one.screen.data_.shouldNotBeNull().scope_armed shouldBe true
         val write = drive(one, save()).effects.single() as ScreenEffect.SubmitWrite
-        write.command shouldBe "schedule.edit_event_occurrence"
-        write.inputJson shouldBe """{"event_id":"s1","original_start_local":"2026-06-16T10:00:00","scope":"occurrence",""" +
-            """"action":"override","summary":"Daily sync"}"""
+        write.command shouldBe "event.edit_occurrence"
+        write.inputJson shouldBe """{"id":"s1","original_start":"2026-06-16T10:00:00","scope":"occurrence",""" +
+            """"action":"override","title":"Daily sync"}"""
         (drive(drive(sheet.state, scope(AgendaScope.AGENDA_SCOPE_SERIES)).state, save()).effects.single() as ScreenEffect.SubmitWrite)
             .let {
-                it.command shouldBe "schedule.edit_event"
-                it.inputJson shouldBe """{"event_id":"s1","summary":"Daily sync"}"""
+                it.command shouldBe "event.edit"
+                it.inputJson shouldBe """{"id":"s1","title":"Daily sync"}"""
             }
 
         // A NEW RULE is the whole series' alone.
@@ -326,9 +326,9 @@ class AgendaEditorSpec : StringSpec({
         val sent = drive(asked, edit(AgendaEditorEvent(confirmed = AgendaEditorEvent.Confirmed())))
         sent.effects shouldBe listOf(
             ScreenEffect.SubmitWrite(
-                "schedule.edit_event_occurrence",
-                """{"event_id":"s1","original_start_local":"2026-06-16T10:00:00","scope":"occurrence","action":"skip"}""",
-                "schedule.edit_event_occurrence:s1:2026-06-16T10:00:00:occurrence:skip",
+                "event.edit_occurrence",
+                """{"id":"s1","original_start":"2026-06-16T10:00:00","scope":"occurrence","action":"skip"}""",
+                "event.edit_occurrence:s1:2026-06-16T10:00:00:occurrence:skip",
             ),
         )
         sent.state.screen.write.shouldNotBeNull().phase shouldBe WriteState.Phase.PHASE_IN_FLIGHT
@@ -344,10 +344,10 @@ class AgendaEditorSpec : StringSpec({
         loaded.draft.shouldNotBeNull().repeat_key shouldBe "custom"
         loaded.screen.data_.shouldNotBeNull().repeats.last().label shouldBe "Every weekday"
         val typed = drive(loaded, edit(AgendaEditorEvent(title = AgendaEditorEvent.TitleChanged(text = "Mine")))).state
-        val reread = drive(typed, edit(AgendaEditorEvent(rows_changed = AgendaEditorEvent.RowsChanged(table = "core_event"))))
+        val reread = drive(typed, edit(AgendaEditorEvent(rows_changed = AgendaEditorEvent.RowsChanged(table = "event"))))
         reread.effects shouldBe listOf(ScreenEffect.ReadPage(AgendaEditorMachine.SCREEN_ID, null))
         answered(reread.state, custom.copy(summary = "Theirs")).draft.shouldNotBeNull().title shouldBe "Mine"
-        AgendaEditorMachine.rowsChanged("schedule_task", listOf("k")).shouldBeNull()
+        AgendaEditorMachine.rowsChanged("task", listOf("k")).shouldBeNull()
         AgendaEditorMachine.repeatKeyOf("freq=weekly;interval=2") shouldBe "biweekly"
     }
 
@@ -459,7 +459,7 @@ class AgendaEditorSpec : StringSpec({
         answered(early).screen.data_.shouldNotBeNull().draft.shouldNotBeNull().all_day shouldBe true
     }
 
-    "a task saves as schedule.add_task with a bare day, or a floating time; a commit ends the sitting" {
+    "a task saves as task.add with a bare day, or a floating time; a commit ends the sitting" {
         val typed = drive(
             answered(drive(AgendaEditorMachine.initial(), openNew("2026-06-17", AgendaEditorState.Kind.KIND_TASK)).state),
             edit(AgendaEditorEvent(title = AgendaEditorEvent.TitleChanged(text = "  Renew passport "))),
@@ -467,10 +467,10 @@ class AgendaEditorSpec : StringSpec({
         typed.screen.data_.shouldNotBeNull().can_save shouldBe true
         val saved = drive(typed, saveTask("11111111-1111-4111-8111-111111111111"))
         val write = saved.effects.single() as ScreenEffect.SubmitWrite
-        write.command shouldBe "schedule.add_task"
+        write.command shouldBe "task.add"
         // THE BRIDGE'S ID, THE TRIMMED TITLE, THE BARE DAY: nothing else (`additionalProperties: false`).
-        write.inputJson shouldBe """{"task_id":"11111111-1111-4111-8111-111111111111","title":"Renew passport","due_at":"2026-06-17"}"""
-        write.invokeKey shouldBe "schedule.add_task:11111111-1111-4111-8111-111111111111:try=1"
+        write.inputJson shouldBe """{"id":"11111111-1111-4111-8111-111111111111","title":"Renew passport","due":"2026-06-17"}"""
+        write.invokeKey shouldBe "task.add:11111111-1111-4111-8111-111111111111:try=1"
         saved.state.screen.write.shouldNotBeNull().phase shouldBe WriteState.Phase.PHASE_IN_FLIGHT
         saved.state.screen.data_.shouldNotBeNull().can_save shouldBe false
         // A DOUBLE TAP IS ONE WRITE, and the kind cannot be switched under it.
@@ -488,7 +488,7 @@ class AgendaEditorSpec : StringSpec({
         val retried = drive(refused, saveTask("33333333-3333-4333-8333-333333333333"))
         val again = retried.effects.single() as ScreenEffect.SubmitWrite
         again.inputJson shouldBe write.inputJson
-        again.invokeKey shouldBe "schedule.add_task:11111111-1111-4111-8111-111111111111:try=2"
+        again.invokeKey shouldBe "task.add:11111111-1111-4111-8111-111111111111:try=2"
 
         // COMMITTED: the sitting ends, and a Save before the shell has gone files nothing more (#1089, R-1088-12).
         val committed = drive(saved.state, AgendaEditorReads().settled(CommandStatus.COMMAND_STATUS_EXECUTED, "", write.invokeKey)).state
@@ -504,7 +504,7 @@ class AgendaEditorSpec : StringSpec({
         ).state
         timed.screen.data_.shouldNotBeNull().start_time_label shouldBe "14:30"
         (drive(timed, saveTask("55555555-5555-4555-8555-555555555555")).effects.single() as ScreenEffect.SubmitWrite)
-            .inputJson shouldContain """"due_at":"2026-06-17T14:30""""
+            .inputJson shouldContain """"due":"2026-06-17T14:30""""
         // A task write is not an event write: the session's marks hold nothing for it.
         AgendaMarks.heldOf(write).shouldBeNull()
     }
@@ -588,7 +588,7 @@ class AgendaEditorSpec : StringSpec({
         // THE SERIES ROW: no occurrence to skip, and a save edits the series.
         data.show_skip shouldBe false
         val saved = drive(loaded, edit(AgendaEditorEvent(title = AgendaEditorEvent.TitleChanged(text = "Daily"))), save())
-        (saved.effects.single() as ScreenEffect.SubmitWrite).command shouldBe "schedule.edit_event"
+        (saved.effects.single() as ScreenEffect.SubmitWrite).command shouldBe "event.edit"
     }
 }) {
     companion object {

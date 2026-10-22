@@ -57,14 +57,17 @@ import dev.centraid.shared.screen.Step
 public object PeoplePersonMachine : ScreenMachine<PeoplePersonState, PeoplePersonEvent> {
     public const val SCREEN_ID: String = ScreenIds.PEOPLE_PERSON
 
-    public const val LOG_COMMAND: String = "people.log_interaction"
-    public const val NOTE_COMMAND: String = "people.add_note"
-    public const val DATE_COMMAND: String = "people.add_important_date"
-    public const val REMINDER_COMMAND: String = "people.toggle_reminder"
-    public const val CHANNEL_SAVE_COMMAND: String = "people.save_contact_channel"
-    public const val CHANNEL_REMOVE_COMMAND: String = "people.delete_contact_channel"
-    public const val TRASH_COMMAND: String = "people.trash_person"
-    public const val MERGE_COMMAND: String = "core.merge_party"
+    public const val LOG_COMMAND: String = "person.log_interaction"
+    public const val NOTE_COMMAND: String = "person.add_note"
+    public const val DATE_COMMAND: String = "person.add_date"
+    public const val REMINDER_COMMAND: String = "event.edit"
+    public const val CHANNEL_SAVE_COMMAND: String = "person.save_contact_point"
+    public const val CHANNEL_REMOVE_COMMAND: String = "person.remove_contact_point"
+    public const val TRASH_COMMAND: String = "entity.trash"
+    public const val MERGE_COMMAND: String = "person.merge"
+
+    /** The id a birthday carries in the sheet's dates: it is a column of the person, not a row of its own. */
+    private const val BIRTHDAY_PREFIX: String = "birthday:"
 
     /** Every command this screen submits, for the spec that checks they exist. */
     public val COMMANDS: List<String> = listOf(
@@ -81,7 +84,7 @@ public object PeoplePersonMachine : ScreenMachine<PeoplePersonState, PeoplePerso
     )
 
     /** Home's tables, and the sheet's own: channels and notes. */
-    public val TABLES: Set<String> = PeopleHomeMachine.TABLES + setOf("social_contact_channel", "knowledge_annotation")
+    public val TABLES: Set<String> = PeopleHomeMachine.TABLES + setOf("contact_point", "note")
 
     override fun initial(): PeoplePersonState = decorate(
         PeoplePersonState(
@@ -283,7 +286,7 @@ public object PeoplePersonMachine : ScreenMachine<PeoplePersonState, PeoplePerso
                 val kind = sheet.log_touch.kinds.firstOrNull { it.selected }?.key ?: return Step(state)
                 val note = sheet.log_touch.note.trim()
                 val input = buildString {
-                    append("{\"party_id\":").append(party).append(",\"kind\":").append(jsonString(kind))
+                    append("{\"id\":").append(party).append(",\"kind\":").append(jsonString(kind))
                     if (note.isNotEmpty()) append(",\"text\":").append(jsonString(note))
                     append('}')
                 }
@@ -295,13 +298,13 @@ public object PeoplePersonMachine : ScreenMachine<PeoplePersonState, PeoplePerso
             }
             sheet.note != null -> {
                 val text = sheet.note.text.trim()
-                val input = "{\"party_id\":$party,\"text\":${jsonString(text)}}"
+                val input = "{\"id\":$party,\"text\":${jsonString(text)}}"
                 val key = InvokeKeys.of(NOTE_COMMAND, state.party_id, text, "after=${data.notes.size}")
                 write(state, NOTE_COMMAND, input, key, PendingWrite.Kind.KIND_NOTE, data.name)
             }
             sheet.date != null -> {
                 val date = sheet.date
-                val input = "{\"party_id\":$party,\"label\":${jsonString(date.label.trim())}," +
+                val input = "{\"id\":$party,\"label\":${jsonString(date.label.trim())}," +
                     "\"month_day\":${jsonString(date.month_day)},\"reminder_on\":${date.reminder_on}}"
                 val key = InvokeKeys.of(DATE_COMMAND, state.party_id, date.label.trim(), date.month_day)
                 write(state, DATE_COMMAND, input, key, PendingWrite.Kind.KIND_DATE, data.name)
@@ -311,7 +314,7 @@ public object PeoplePersonMachine : ScreenMachine<PeoplePersonState, PeoplePerso
                 val kind = channel.kinds.firstOrNull { it.selected }?.key ?: return Step(state)
                 val label = channel.label.trim()
                 val input = buildString {
-                    append("{\"party_id\":").append(party)
+                    append("{\"id\":").append(party)
                     append(",\"kind\":").append(jsonString(kind))
                     append(",\"value\":").append(jsonString(channel.value_.trim()))
                     if (label.isNotEmpty()) append(",\"label\":").append(jsonString(label))
@@ -354,7 +357,7 @@ public object PeoplePersonMachine : ScreenMachine<PeoplePersonState, PeoplePerso
         val step = write(
             state,
             command,
-            "{\"party_id\":${jsonString(state.party_id)}}",
+            "{\"id\":${jsonString(state.party_id)},\"flag\":\"starred\"}",
             InvokeKeys.of(command, state.party_id),
             if (target) PendingWrite.Kind.KIND_STAR else PendingWrite.Kind.KIND_UNSTAR,
             data.name,
@@ -365,11 +368,14 @@ public object PeoplePersonMachine : ScreenMachine<PeoplePersonState, PeoplePerso
 
     private fun reminder(state: PeoplePersonState, dateId: String): Step<PeoplePersonState> {
         val date = state.data_?.dates?.firstOrNull { it.date_id == dateId } ?: return Step(state)
+        // A birthday is the person's own column and always has its reminder; any other date's is its event's.
+        if (dateId.startsWith(BIRTHDAY_PREFIX)) return Step(state)
         val to = if (date.reminder_on) "off" else "on"
+        val minutes = if (date.reminder_on) "null" else "[0]"
         return write(
             state,
             REMINDER_COMMAND,
-            "{\"date_id\":${jsonString(dateId)}}",
+            "{\"id\":${jsonString(dateId)},\"reminders\":$minutes}",
             InvokeKeys.of(REMINDER_COMMAND, dateId, to),
             PendingWrite.Kind.KIND_REMINDER,
             date.label,
@@ -438,7 +444,7 @@ public object PeoplePersonMachine : ScreenMachine<PeoplePersonState, PeoplePerso
             state.trash == true -> write(
                 cleared,
                 TRASH_COMMAND,
-                "{\"party_id\":${jsonString(state.party_id)}}",
+                "{\"id\":${jsonString(state.party_id)}}",
                 InvokeKeys.of(TRASH_COMMAND, state.party_id),
                 PendingWrite.Kind.KIND_TRASH,
                 data.name,
@@ -448,7 +454,7 @@ public object PeoplePersonMachine : ScreenMachine<PeoplePersonState, PeoplePerso
                 write(
                     cleared,
                     CHANNEL_REMOVE_COMMAND,
-                    "{\"channel_id\":${jsonString(state.remove_channel_id)}}",
+                    "{\"point_id\":${jsonString(state.remove_channel_id)}}",
                     InvokeKeys.of(CHANNEL_REMOVE_COMMAND, state.remove_channel_id),
                     PendingWrite.Kind.KIND_CHANNEL_REMOVE,
                     channel?.kind_label ?: "",
@@ -458,7 +464,7 @@ public object PeoplePersonMachine : ScreenMachine<PeoplePersonState, PeoplePerso
                 cleared,
                 MERGE_COMMAND,
                 // THIS PERSON IS KEPT; the one picked folds into them.
-                "{\"survivor_party_id\":${jsonString(state.party_id)},\"merged_party_id\":${jsonString(state.merge_party_id)}}",
+                "{\"into\":${jsonString(state.party_id)},\"from\":${jsonString(state.merge_party_id)}}",
                 InvokeKeys.of(MERGE_COMMAND, state.party_id, state.merge_party_id),
                 PendingWrite.Kind.KIND_MERGE,
                 state.merge_party_name,

@@ -20,7 +20,7 @@ use centraid_apps_docs as docs;
 use centraid_apps_docs::kind::{self, Kind, Surface, TypeFilter};
 use centraid_apps_docs::phone::{self, Modified, Shelf, Sort, View};
 use centraid_apps_docs::queries::{
-    ArmCount, DOCUMENT_TARGET_TYPE, DocumentRow, DriveInput, FolderRow, ShelfArm, VersionRow,
+    ArmCount, DocumentRow, DriveInput, FolderRow, ShelfArm, VersionRow,
 };
 use centraid_apps_kit::Denial;
 use centraid_apps_kit::error::KitResult;
@@ -28,7 +28,9 @@ use centraid_vault::Vault;
 use centraid_vault::page::format_byte_size;
 use centraid_vault::time::zone::FireZone;
 
-use super::{RecordingSearch, VaultDoor, corrected_search, named, settle, zone_of};
+use super::{
+    RecordingSearch, VaultDoor, corrected_search, filled, filled_targets, named, settle, zone_of,
+};
 use crate::error::{CoreError, Result};
 
 type Answer = wire::app_query_response::Answer;
@@ -220,7 +222,7 @@ pub(super) fn search(
     let zone = zone_of(vault, &asked.tz)?;
     let clock = clock(&zone, now)?;
     let loaded = vault.read(|connection| {
-        let index = match centraid_search::SqliteDoor::open(connection) {
+        let index = match centraid_search::SqliteDoor::open(connection, vault.words()) {
             Ok(index) => index,
             Err(error) => {
                 return Ok(Err(CoreError::Invariant {
@@ -233,16 +235,25 @@ pub(super) fn search(
             door,
         };
         let limit = usize::try_from(asked.limit).unwrap_or(usize::MAX);
-        // THE FOLDERS THE TERM NAMES RIDE BESIDE THE DOCUMENTS (#1097,
-        // R-1097-19..21), and the correction treats the two as one answer.
-        let entities =
-            named::entities_of(centraid_apps_docs::queries::DOCUMENT_TARGET_TYPE, "docs");
+        // THE FOLDERS THE TERM NAMES RIDE BESIDE THE DOCUMENTS, and the
+        // correction treats the two as one answer.
+        let entities = named::entities_of(centraid_apps_docs::queries::DOCUMENT_KIND, "docs");
         Ok(Ok(corrected_search(
             &search,
             &entities,
             &asked.term,
             |(data, found): &(docs::SearchData, Vec<centraid_search::Target>)| {
-                data.documents.is_empty() && found.is_empty()
+                data.documents.len() + found.len()
+            },
+            |(exact, exact_found), (again, again_found)| {
+                (
+                    docs::SearchData {
+                        documents: filled(exact.documents, again.documents, limit, |row| {
+                            row.document_id.clone()
+                        }),
+                    },
+                    filled_targets(exact_found, again_found, limit.min(named::CONTAINER_ROWS)),
+                )
             },
             |term| {
                 let (data, denial) = docs::load_search_term(
@@ -299,17 +310,12 @@ pub(super) fn document(
     // exists; a vault failure here is an error, as any other read's is.
     let held = match &loaded {
         Ok(((data, _), None)) => match &data.row {
-            Some(row) => Some(vault.content_location(
-                &row.content_id,
-                DOCUMENT_TARGET_TYPE,
-                &row.document_id,
-            )?),
+            Some(row) => Some(vault.content_location(&row.document_id)?),
             None => None,
         },
         _ => None,
     };
     settle(door, loaded, |(data, history)| {
-        let count = history.versions.len();
         Answer::DocsDocument(wire::DocsDocument {
             document: data.row.map(|row| row_to_wire(row, &zone, clock.now_ms)),
             path: data
@@ -320,8 +326,7 @@ pub(super) fn document(
             versions: history
                 .versions
                 .into_iter()
-                .enumerate()
-                .map(|(index, version)| version_to_wire(version, count - index, &zone))
+                .map(|version| version_to_wire(version, &zone))
                 .collect(),
             body: data.body,
             bytes_held: held
@@ -363,7 +368,6 @@ pub(super) fn activity(
                         let occurred_at = event.occurred_at.unwrap_or_default();
                         wire::DocsActivityEvent {
                             activity: event.activity.unwrap_or_default(),
-                            agent_kind: event.agent_kind.unwrap_or_default(),
                             occurred_local: phone::local_minute(&zone, &occurred_at),
                             occurred_at,
                         }
@@ -469,11 +473,11 @@ fn row_to_wire(row: DocumentRow, zone: &FireZone, now_ms: i64) -> wire::DocsDocu
     }
 }
 
-fn version_to_wire(version: VersionRow, number: usize, zone: &FireZone) -> wire::DocsVersion {
+fn version_to_wire(version: VersionRow, zone: &FireZone) -> wire::DocsVersion {
     let asserted_at = version.asserted_at.unwrap_or_default();
     wire::DocsVersion {
         size: size_of(version.byte_size),
-        number: count_of(number),
+        number: count_of(version.number),
         asserted_local: phone::local_minute(zone, &asserted_at),
         asserted_at,
         content_id: version.content_id,

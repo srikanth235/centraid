@@ -1,6 +1,6 @@
 # Assistant companion and system signals
 
-> **Partly superseded (#1029; recorded 2026-09-24).** The phone is the vault and the only client ([#1029](https://github.com/srikanth235/centraid/issues/1029)), so most of this page describes planes that were deleted: the three seats, the gateway's **System** destination, the **Automations**, **Connectors** and **Copies** destinations and the **Assistant companion**. The `enrichment` probe and the automations plane's five signals left this page with their plane: `crates/automations` is gone and no recognition runs ([ARCHITECTURE.md](../ARCHITECTURE.md#recognition)). The **Activity** and **Needs you** band places are ruled out of the band ([R-1047-P2](decisions.md#the-app-ports-and-the-shell-kit-1047)). What stands is the **signal ladder** and its three tones, `quiet`, `attention` and `urgent`, which Home's status line still speaks (`HomeStatus.Tone` in `screen.proto`).
+> **Partly superseded (#1029; recorded 2026-09-24).** The phone is the vault and the only client ([#1029](https://github.com/srikanth235/centraid/issues/1029)), so most of this page describes planes that were deleted: the three seats, the gateway's **System** destination, the **Automations**, **Connectors** and **Copies** destinations and the **Assistant companion**. The `enrichment` probe and the automations plane's five signals left this page with their plane: `crates/automations` is gone and no recognition runs ([ARCHITECTURE.md](../ARCHITECTURE.md#recognition)). The **Activity** and **Needs you** band places are ruled out of the band ([R-1047-P2](decisions.md#the-mobile-shell)). What stands is the **signal ladder** and its three tones, `quiet`, `attention` and `urgent`, which Home's status line still speaks (`HomeStatus.Tone` in `screen.proto`).
 
 Centraid presents the household as monitored-for, not monitoring. Healthy state is quiet; a problem becomes prominent only when it needs a member's attention or action. The same mental model holds across the three seats in [blueprint seats](blueprint-seats.md): origin (mobile), custodian (desktop), and viewer (web/PWA).
 
@@ -34,7 +34,7 @@ Persisted route ids do not change. Member-facing names and default pins are:
 | `home` | Home | pinned by law |
 | `notifs` / `approvals` | Notifications | dropped with its data plane ([#1029](https://github.com/srikanth235/centraid/issues/1029)) |
 | `stats` / `insights` | Activity | dropped with its data plane ([#1029](https://github.com/srikanth235/centraid/issues/1029)) |
-| `data` / `atlas` | Vault | not pinned until a shell can draw it ([R-1047-F7b](decisions.md#the-compromised-flag-and-the-default-band-1047-f7)) |
+| `data` / `atlas` | Vault | not pinned until a shell can draw it ([R-1047-F7b](decisions.md#the-mobile-shell)) |
 | `autos` / `automations` | Automations | More; absent when capability is off |
 | `conn` / `connectors` | Connectors | More; absent when capability is off |
 | `devices` / `household` | Copies | Vault section with a retained deep link |

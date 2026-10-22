@@ -39,7 +39,7 @@ struct VaultHeader: View {
     /// The status line's door: the Backup tab. Nil draws it as text.
     var onOpenBackup: (() -> Void)? = nil
     /// HOME'S SEARCH (R-CHROME-6): a framed key at the lockup's trailing edge,
-    /// the one way into search over every app but Locker. Nil draws none.
+    /// the one way into search over every app. Nil draws none.
     var onSearch: (() -> Void)? = nil
     var searchLabel: String = ""
     /// THE APPEARANCE KEY (R-CHROME-7), right of search: one tap flips light

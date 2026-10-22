@@ -1,8 +1,10 @@
 package dev.centraid.shared.apps.photos
 
+import centraid.core.v1.AppQueryRequest
 import centraid.core.v1.CommandStatus
 import centraid.core.v1.PageOrder
 import centraid.core.v1.PageQuery
+import centraid.core.v1.PhotosDuplicatesRequest
 import centraid.core.v1.Row
 import centraid.core.v1.Value
 import centraid.screen.v1.DuplicateMember
@@ -11,63 +13,57 @@ import centraid.screen.v1.DuplicateReviewEvent
 import centraid.screen.v1.DuplicateReviewState
 import centraid.screen.v1.PhotoCell
 import centraid.screen.v1.ReadFailure
+import dev.centraid.core.CentraidCore
+import dev.centraid.shared.sync.AppQueryOutcome
 import dev.centraid.shared.sync.LinkConditions
 import dev.centraid.shared.sync.ScreenReads
 import dev.centraid.shared.sync.ScreenWrites
+import dev.centraid.shared.sync.askCore
 
 /**
  * WHAT ONE CLUSTER'S REVIEW READS, AND WHAT IT MAKES OF THE ROWS
- * (#1029, photos port).
+ * (#1029, photos port; #1135).
  *
- * The desktop answers this with THREE statements and a fold —
- * `photos.duplicates.phashes`, then `.assets`, then `.contents`
- * (`crates/apps/photos/src/duplicates.rs`). A screen has ONE:
- * [dev.centraid.shared.sync.ScreenRuntime] calls [query] once per `ReadPage`
- * and hands the rows straight to [arrived], which is never told which statement
- * produced them. So the read is arranged the other way round — one page of
- * `media_asset`, with the cluster's membership as a PREDICATE rather than as a
- * first read:
+ * A cluster is the core's (`photos.duplicates`, [DuplicateClusterMembers]): the
+ * grouping is a projection of the photographs' perceptual hashes and no page read
+ * can say it. A screen has ONE statement —
+ * [dev.centraid.shared.sync.ScreenRuntime] calls [query] once per `ReadPage` and
+ * hands the rows straight to [arrived], which is never told which statement
+ * produced them — so the read is arranged around what the core said: one page of
+ * `photo`, with the cluster's members as the predicate:
  *
  * ```
- * asset_id IN (SELECT asset_id FROM media_asset_phash WHERE cluster_id = ?)
- *   AND deleted_at IS NULL
+ * id IN (the cluster's photographs) AND <not in the trash>
  * ```
  *
- * `deleted_at IS NULL` is the desktop's own rule and it matters here more than
- * anywhere: **only LIVE assets ride a cluster card.** A trashed member of an
- * old cluster is not something to offer trashing again — and after a resolve it
- * is exactly what the re-read must not bring back.
+ * The trash predicate is the desktop's own rule and it matters here more than
+ * anywhere: **only LIVE photographs ride a cluster card.** A trashed member of
+ * an old cluster is not something to offer trashing again — and after a resolve
+ * it is exactly what the re-read must not bring back.
  *
- * The sort column is `asset_id`, which is NOT NULLABLE, so unlike the shelf
- * this read could be walked. It is not: `DuplicateReviewEvent` has no
- * `NextPageRequested`, because a cluster is a handful of copies of one
- * photograph. [limit] says what happens if that is ever wrong.
+ * The sort column is `id`, which is NOT NULLABLE, so unlike the shelf this read
+ * could be walked. It is not: `DuplicateReviewEvent` has no `NextPageRequested`,
+ * because a cluster is a handful of copies of one photograph. [limit] says what
+ * happens if that is ever wrong.
  *
  * ## WHAT THIS STATEMENT REACHES, AND WHAT A SECOND ONE DOES
  *
- * * **`member_placed` IS A LEG**, [DuplicateReviewLeg], over
- *   `core_collection_entry` keyed on the asset ids this read puts on the wire.
- *   It arrives through its own event arm and sets `placements_checked`, because
- *   **false is not a safe default on a screen that deletes photographs**: it
- *   reads as "this is a stray copy" about a photograph that may be in three
- *   albums. Out of THIS read it is false and `placements_checked` is false with
- *   it, which is the views' cue to say the question is open rather than answer
- *   it. The leg covers ALBUMS; the favourite half is a `core_tag` on the flags
- *   scheme's `starred` concept (#916) and is two further reads, so the views
- *   say which half was checked.
+ * * **`member_placed` IS A LEG**, [DuplicateReviewLeg], over `edge` keyed on the
+ *   photograph ids this read puts on the wire. It arrives through its own event
+ *   arm and sets `placements_checked`, because **false is not a safe default on a
+ *   screen that deletes photographs**: it reads as "this is a stray copy" about a
+ *   photograph that may be in three albums. Out of THIS read it is false and
+ *   `placements_checked` is false with it, which is the views' cue to say the
+ *   question is open rather than answer it. The leg covers ALBUMS and the star:
+ *   both are `edge`s now, and one statement says which copies are placed.
  * * **`byte_size` and `byte_phrase` are still empty, and this is the gap that
- *   remains.** The size is `core_content_item.byte_size`: a second table, and
- *   `select` is a list of REAL columns — the vault quotes every entry as an
- *   identifier (`log::identifiers::quoted`) — so there is no expression, no
- *   subquery in a projection and no join. `with_document_size` is the nearest
- *   computed column and does not fit twice over: it keys on
- *   `current_content_id`, which `media_asset` does not have (so it would be
- *   REFUSED AT PREPARE, not answered with nulls), and it yields the vault's
- *   formatted PHRASE for one row. A leg could be keyed — but its rows come back
- *   as `(content_id, byte_size)` and `DuplicateMember` carries no content id or
- *   hash to match them against, so nothing on the wire says which copy each
- *   size belongs to. The phrase is left empty rather than composed here,
- *   because a size is the VAULT's to spell: `format_byte_size` is `pub` in
+ *   remains.** The size is `blob.size`: a second table, and `select` is a list of
+ *   REAL columns — the vault quotes every entry as an identifier — so there is no
+ *   expression, no subquery in a projection and no join. A leg could be keyed —
+ *   but its rows come back as `(hash, size)` and `DuplicateMember` carries no hash
+ *   to match them against, so nothing on the wire says which copy each size
+ *   belongs to. The phrase is left empty rather than composed here, because a
+ *   size is the VAULT's to spell: `format_byte_size` is `pub` in
  *   `crates/vault/src/page.rs` precisely so there is one of it, and a second
  *   spelling in a shell is what that rule refuses.
  * * **The suggestion is therefore not the one the contract describes.**
@@ -79,16 +75,15 @@ import dev.centraid.shared.sync.ScreenWrites
  *   suggestion: an arbitrary one with an invented reason is the product
  *   choosing, which is the thing this pair of screens is built to refuse.
  *
- * The remaining gap is named in this lane's report; the fix is a contract
- * decision and not a screen's.
+ * The remaining gap is a contract decision and not a screen's.
  */
 public object DuplicateReviewReads :
     ScreenReads<DuplicateReviewState, DuplicateReviewEvent>,
     ScreenWrites<DuplicateReviewState, DuplicateReviewEvent> {
     override val screenId: String = DuplicateReviewMachine.SCREEN_ID
 
-    /** `media_asset`, the same table the machine's `rowsChanged` declares. */
-    override val table: String = "media_asset"
+    /** `photo`, the same table the machine's `rowsChanged` declares. */
+    override val table: String = "photo"
 
     /**
      * Far more copies than a cluster has, on purpose.
@@ -112,11 +107,11 @@ public object DuplicateReviewReads :
      * unbound read would otherwise be a read of the WHOLE library offered to a
      * member as one cluster to delete from.
      *
-     * The select carries both order columns — `asset_id` is both, being the
-     * sort and the tiebreak — and `content_id` is deliberately ABSENT:
-     * `with_held_thumbnail` is a correlated subquery on `{from}.content_id`
-     * resolved by the vault, so the column is what the FLAG needs and not what
-     * the projection needs (`PhotosReads` says the same of its own statement).
+     * The select carries both order columns — `id` is both, being the sort and
+     * the tiebreak — and `blob` is deliberately ABSENT: `with_held_thumbnail` is
+     * a correlated subquery on `{from}.blob` resolved by the vault, so the column
+     * is what the FLAG needs and not what the projection needs (`PhotosReads` says
+     * the same of its own statement).
      *
      * [afterCursor] is ignored: there is no event that could produce one, and
      * re-reading the first page is the honest answer to a walk this screen does
@@ -124,16 +119,20 @@ public object DuplicateReviewReads :
      */
     override fun query(state: DuplicateReviewState, afterCursor: String?): PageQuery? {
         val clusterId = state.cluster_id.takeIf { it.isNotEmpty() } ?: return null
+        val members = DuplicateClusterMembers.of(clusterId)
+        // A CLUSTER THE CORE DOES NOT ANSWER HAS NO MEMBERS TO OFFER, and an unbound
+        // read here would be the WHOLE library offered to a member as one cluster to
+        // delete from.
+        if (members.isEmpty()) return null
         return PageQuery(
             name = "photos.duplicate.members",
-            select = listOf("asset_id", "captured_at", "width", "height", "kind"),
+            select = listOf("id", "taken_at", "width", "height", "form"),
             from = table,
-            where_ = "asset_id IN (SELECT asset_id FROM media_asset_phash " +
-                "WHERE cluster_id = ?) AND deleted_at IS NULL",
-            bind = listOf(Value(text = clusterId)),
+            where_ = "id IN (" + members.joinToString(", ") { "?" } + ") AND ${PhotoFold.NOT_TRASHED}",
+            bind = members.map { Value(text = it) },
             order = PageOrder(
-                sort_column = "asset_id",
-                pk_column = "asset_id",
+                sort_column = "id",
+                pk_column = "id",
                 descending = false,
             ),
             // THE SAME APPENDED COLUMNS THE GRID READS (D-1025-S7-20). A
@@ -208,7 +207,7 @@ public object DuplicateReviewReads :
             thumbnail = row.text(THUMBNAIL).isNotEmpty(),
             originalHeld = row.integer(ORIGINAL_HELD) > 0L,
             originalHash = row.text(ORIGINAL_HASH),
-            kind = kindOf(row.text(KIND)),
+            kind = PhotosReads.kindOf(row.text(KIND)),
             rule = LinkConditions.rule,
             metered = LinkConditions.metered,
         ),
@@ -242,7 +241,7 @@ public object DuplicateReviewReads :
     /**
      * WHY THIS ONE, IN A MEMBER'S WORDS — and it says PIXELS because pixels are
      * what this read can compare. The contract's own wording is "the largest by
-     * bytes"; `core_content_item.byte_size` is a second table this door cannot
+     * bytes"; `blob.size` is a second table this door cannot
      * reach, and a reason that named bytes over a comparison of pixels would be
      * a sentence that is simply false on a cluster where the smaller image is
      * the bigger file.
@@ -288,22 +287,6 @@ public object DuplicateReviewReads :
     private const val ORIGINAL_HASH: Int = 6
     private const val ORIGINAL_HELD: Int = 7
 
-    /**
-     * The DDL's four `kind` values, as the proto's four.
-     *
-     * A fifth from a newer gateway is `KIND_UNSPECIFIED` and never a
-     * photograph — the same rule `PhotosReads` states, restated because the
-     * held derivation it feeds treats a video differently from a still under a
-     * cellular rule.
-     */
-    private fun kindOf(kind: String): PhotoCell.Kind = when (kind) {
-        "photo" -> PhotoCell.Kind.KIND_PHOTO
-        "video" -> PhotoCell.Kind.KIND_VIDEO
-        "audio" -> PhotoCell.Kind.KIND_AUDIO
-        "scan" -> PhotoCell.Kind.KIND_SCAN
-        else -> PhotoCell.Kind.KIND_UNSPECIFIED
-    }
-
     /** Positional, as the door states. See `HomeReads.text` for why only TEXT. */
     private fun Row.text(index: Int): String = values.getOrNull(index)?.text ?: ""
 
@@ -311,35 +294,28 @@ public object DuplicateReviewReads :
 }
 
 /**
- * WHICH OF THESE COPIES THE MEMBER PUT SOMEWHERE (#1029, photos port).
+ * WHICH OF THESE COPIES THE MEMBER PUT SOMEWHERE (#1029, photos port; #1135).
  *
- * `DuplicateReviewReads` reads the members; this reads `core_collection_entry`
- * for the ones that are in an album. **It is the difference between deleting a
- * stray copy and deleting a copy somebody filed**, which is the fact the proto
- * says the screen must state — and the reason `member_placed` is not allowed to
- * default to false and stand in for "nobody checked".
+ * `DuplicateReviewReads` reads the members; this reads `edge` for the ones that
+ * are in an album or starred. **It is the difference between deleting a stray
+ * copy and deleting a copy somebody filed**, which is the fact the proto says the
+ * screen must state — and the reason `member_placed` is not allowed to default to
+ * false and stand in for "nobody checked".
  *
  * ## Its own event arm, and why the lightbox's trick would not work here
  *
  * The answer arrives as [DuplicateReviewEvent.PlacementArrived] and not a second
  * `DataArrived`. A reducer handed two `DataArrived`s cannot tell an AMENDMENT
  * from a REPLACE, and the discriminator the lightbox uses — "a detail with no
- * `asset_id` is an amendment" — inverts here: the asset ids are exactly what
- * this leg has to say, so absence cannot mark it. The shelf's own leg gets away
- * with the lightbox's shape because a cluster id is something a read of
- * `media_asset` genuinely cannot produce; a placement read has no such
- * unfillable field, so the contract grew an arm instead.
+ * `asset_id` is an amendment" — inverts here: the photograph ids are exactly what
+ * this leg has to say, so absence cannot mark it.
  *
  * ## What "placed" means here, exactly
  *
- * **An album entry, and not yet a favourite.** `target_type = 'media.asset'`
- * against `core_collection_entry` is the album half, and it is one statement.
- * The star is NOT a column — it is a `core_tag` row pointing at the `starred`
- * concept of the flags scheme (#916, ONT-03, and `queries.rs`'
- * `STARRED_NOTATION`), which is two further reads to resolve the scheme and the
- * concept before the tags can be asked for at all. Those legs are not built, so
- * the views say which half was checked rather than letting "placed: false" be
- * read as "this copy is a stray". Named in this lane's report.
+ * **An album's `contains` edge, or the `starred` flag's `tagged` edge** (#916): a
+ * copy is placed when somebody filed it or favourited it. One statement says both:
+ * an album edge names the photograph as its `to_id`, and a star as its `from_id`,
+ * so the row carries its `rel` and [arrived] reads the right end.
  */
 public class DuplicateReviewLeg internal constructor(
     public val leg: DuplicateReviewMachine.Leg,
@@ -347,13 +323,13 @@ public class DuplicateReviewLeg internal constructor(
     override val screenId: String = DuplicateReviewMachine.readId(leg)
 
     override val table: String = when (leg) {
-        DuplicateReviewMachine.Leg.PLACEMENTS -> "core_collection_entry"
+        DuplicateReviewMachine.Leg.PLACEMENTS -> "edge"
     }
 
     /**
      * A CEILING, AND A FULL PAGE COSTS A LABEL AND NEVER A NUMBER.
      *
-     * One entry per (album, asset) pair over a handful of copies. Nothing here
+     * One edge per (album, photograph) pair over a handful of copies. Nothing here
      * is counted, so the worst a full page can do is leave one copy's "in an
      * album" undrawn — and the ceiling is generous enough that a cluster would
      * have to be filed into two hundred albums to reach it.
@@ -365,10 +341,10 @@ public class DuplicateReviewLeg internal constructor(
      *
      * Keyed on [centraid.screen.v1.DuplicateMember.asset_id], which is already
      * on the state — the placement question is about the copies the member is
-     * looking at, and an unbound read would be every album entry in the vault.
+     * looking at, and an unbound read would be every album edge in the vault.
      *
-     * Sort and primary key are the same column, `crates/apps/photos`' idiom for
-     * a set read by id and what its own `album_entries_statement` uses.
+     * An edge has no id of its own, and `(from_id, to_id)` is unique under one
+     * `rel`, so the two ends are the keyset.
      */
     override fun query(state: DuplicateReviewState, afterCursor: String?): PageQuery? {
         val ids = state.data_?.members?.map { it.asset_id }?.filter { it.isNotEmpty() }
@@ -376,13 +352,14 @@ public class DuplicateReviewLeg internal constructor(
             ?: return null
         return PageQuery(
             name = "photos.duplicate.placements",
-            select = listOf("entry_id", "target_id"),
+            select = listOf("from_id", "to_id", "rel"),
             from = table,
-            where_ = "target_type = ? AND " + inList("target_id", ids.size),
-            bind = listOf(Value(text = ASSET_TARGET_TYPE)) + ids.map { Value(text = it) },
+            where_ = "(rel = 'contains' AND " + inList("to_id", ids.size) + ") OR " +
+                "(rel = 'tagged' AND to_id = 'flag:starred' AND " + inList("from_id", ids.size) + ")",
+            bind = ids.map { Value(text = it) } + ids.map { Value(text = it) },
             order = PageOrder(
-                sort_column = "entry_id",
-                pk_column = "entry_id",
+                sort_column = "from_id",
+                pk_column = "to_id",
                 descending = false,
             ),
         )
@@ -404,7 +381,7 @@ public class DuplicateReviewLeg internal constructor(
     override fun arrived(rows: List<Row>, nextCursor: String?): DuplicateReviewEvent =
         DuplicateReviewEvent(
             placements = DuplicateReviewEvent.PlacementArrived(
-                placed_asset_ids = rows.map { it.text(TARGET_ID) }
+                placed_asset_ids = rows.map { if (it.text(REL) == "contains") it.text(TO_ID) else it.text(FROM_ID) }
                     .filter { it.isNotEmpty() }
                     .distinct(),
             ),
@@ -422,15 +399,45 @@ public class DuplicateReviewLeg internal constructor(
     override fun refused(failure: ReadFailure): DuplicateReviewEvent = DuplicateReviewEvent()
 
     private companion object {
-        /** `crates/apps/photos`' `TAG_TARGET_TYPE`, spelled the same. */
-        const val ASSET_TARGET_TYPE: String = "media.asset"
-
-        const val TARGET_ID: Int = 1
+        const val FROM_ID: Int = 0
+        const val TO_ID: Int = 1
+        const val REL: Int = 2
 
         fun inList(column: String, count: Int): String =
             column + " IN (" + List(count) { "?" }.joinToString(", ") + ")"
 
         /** Positional, as the door states. See `HomeReads.text` for why only TEXT. */
         fun Row.text(index: Int): String = values.getOrNull(index)?.text ?: ""
+    }
+}
+
+/**
+ * A CLUSTER'S MEMBERS, AS THE CORE LAST SAID THEM (#1135).
+ *
+ * The grouping is `photos.duplicates`' (union-find over the photographs' perceptual
+ * hashes), and the review screen is opened with only the cluster's key, so the
+ * bridge asks the core once as the screen opens and the read ([DuplicateReviewReads])
+ * binds what was said. A key the core no longer answers remembers nothing.
+ */
+internal object DuplicateClusterMembers {
+    private var held: Map<String, List<String>> = emptyMap()
+
+    /** The photograph ids of cluster [key] as last asked, in id order; empty when unknown. */
+    fun of(key: String): List<String> = held[key].orEmpty()
+
+    /** Keep [ids] as cluster [key]'s members (what [ask] does with the core's answer). */
+    fun remember(key: String, ids: List<String>) {
+        held = mapOf(key to ids.filter { it.isNotEmpty() }.distinct().sorted())
+    }
+
+    /** Ask [core] for the clusters and keep [key]'s members (and drop the rest). */
+    suspend fun ask(core: CentraidCore?, key: String) {
+        val answer = askCore(core, listOf(AppQueryRequest(photos_duplicates = PhotosDuplicatesRequest())))
+        val clusters = (answer as? AppQueryOutcome.Answered)?.answers
+            ?.firstNotNullOfOrNull { it.photos_duplicates }?.clusters
+        if (clusters != null) {
+            held = emptyMap()
+            clusters.firstOrNull { it.key == key }?.let { remember(key, it.photo_ids) }
+        }
     }
 }

@@ -649,7 +649,7 @@ internal fun PhotosSheets(
                 }
                 // ONE CLAUSE ONLY. It said "Everything Photos can show."
                 // over one row, and Photos has a dozen other surfaces —
-                // Places, Memories, Duplicates, Trash, Archive,
+                // Places, Duplicates, Trash, Archive,
                 // Favorites, Albums — every one of them reached from
                 // Collections, so the claim was false as printed.
                 Text(

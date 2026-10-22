@@ -35,7 +35,7 @@
 //! `currency` is the vault's default (base) currency, set at founding; USD
 //! when absent. A transaction's `amount` is signed in currency units (money out is negative), its
 //! `category` is a Money category notation and `void` is a member's void (#1099); they go in through
-//! `money.import_transactions`. Every row may carry `created` (the clock at its create command),
+//! `follow.statement`, a line at a time. Every row may carry `created` (the clock at its create command),
 //! `modified` (a later same-value edit that stamps `updated_at`) and `trashed`
 //! (`true` or a time). Keys are unique across the world; `me` is the owner.
 //! Times are `YYYY-MM-DD` or `YYYY-MM-DDTHH:MM`, floating (no zone).
@@ -44,7 +44,6 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use base64::Engine as _;
 use serde_json::{Map, Value, json};
 
 use crate::dates::Stamp;
@@ -58,6 +57,8 @@ struct Seeder {
     locker: Option<(String, Vec<u8>)>,
     /// `key.field` of every world value the vault cannot hold.
     dropped: Vec<String>,
+    /// The areas lists sit in, by title: containers made the first time a list names one.
+    areas: BTreeMap<String, String>,
 }
 
 fn at(text: &str) -> Result<i64, String> {
@@ -79,6 +80,10 @@ fn rows<'a>(world: &'a Value, key: &str) -> &'a [Value] {
         .map_or(&[], Vec::as_slice)
 }
 
+fn vault_time_of(stamp: Stamp) -> String {
+    stamp.vault()
+}
+
 fn vault_time(text: &str) -> Result<String, String> {
     Stamp::parse(text)
         .map(Stamp::vault)
@@ -96,6 +101,20 @@ impl Seeder {
             }
         }
         Ok(())
+    }
+
+    /// The id of the area named `title`, made now if no list has named it yet.
+    fn area(&mut self, title: &str) -> Result<String, String> {
+        if let Some(id) = self.areas.get(title) {
+            return Ok(id.clone());
+        }
+        let id = self.mint();
+        self.run(
+            "container.create",
+            json!({"id": id, "kind": "area", "title": title}),
+        )?;
+        self.areas.insert(title.to_owned(), id.clone());
+        Ok(id)
     }
 
     fn mint(&self) -> String {
@@ -223,103 +242,108 @@ pub fn seed_report(world: &Value, path: &Path) -> Result<(Value, Vec<String>), S
         cursor: epoch,
         locker: None,
         dropped: Vec::new(),
+        areas: BTreeMap::new(),
     };
     seeder
         .keys
         .insert("me".to_owned(), (Kind::Person, founded.me.clone()));
-    let calendar = founded.calendar.clone();
 
     for row in rows(world, "people") {
         seeder.clock_for(row, "created")?;
-        let mut input = json!({
-            "display_name": str_of(row, "name").ok_or("a person needs a name")?,
-            "cadence_days": row.get("cadence").and_then(Value::as_i64).unwrap_or(0),
-        });
-        for field in ["role", "nickname"] {
+        let id = seeder.mint();
+        let mut input =
+            json!({"id": id, "title": str_of(row, "name").ok_or("a person needs a name")?});
+        if let Some(days) = row
+            .get("cadence")
+            .and_then(Value::as_i64)
+            .filter(|days| *days > 0)
+        {
+            input["cadence_days"] = json!(days);
+        }
+        for field in ["role", "nickname", "met"] {
             if let Some(value) = str_of(row, field) {
                 input[field] = json!(value);
             }
         }
-        let out = seeder.run("people.add_person", input)?;
-        let id = out["party_id"].as_str().unwrap_or_default().to_owned();
-        seeder.key(row, Kind::Person, id.clone())?;
-        if let Some(met) = str_of(row, "met") {
-            seeder.run("people.edit_person", json!({"party_id": id, "met": met}))?;
-        }
+        seeder.run("person.add", input)?;
+        seeder.key(row, Kind::Person, id)?;
     }
     for row in rows(world, "lists") {
         seeder.clock_for(row, "created")?;
         let id = seeder.mint();
-        let mut input =
-            json!({"project_id": id, "name": str_of(row, "name").ok_or("a list needs a name")?});
+        let mut input = json!({
+            "id": id, "kind": "project",
+            "title": str_of(row, "name").ok_or("a list needs a name")?,
+        });
+        // a list's area is the container of that name, made the first time a list names it
         if let Some(area) = str_of(row, "area") {
-            input["area"] = json!(area);
+            input["parent"] = json!(seeder.area(area)?);
         }
-        seeder.run("schedule.save_project", input)?;
+        seeder.run("container.create", input)?;
         seeder.key(row, Kind::List, id)?;
     }
-    for row in rows(world, "notebooks") {
-        seeder.clock_for(row, "created")?;
-        let id = seeder.mint();
-        seeder.run(
-            "knowledge.create_notebook",
-            json!({"notebook_id": id, "name": str_of(row, "name").ok_or("a notebook needs a name")?}),
-        )?;
-        seeder.key(row, Kind::Notebook, id)?;
-    }
-    for row in rows(world, "folders") {
-        seeder.clock_for(row, "created")?;
-        let id = seeder.mint();
-        seeder.run(
-            "core.create_folder",
-            json!({"folder_id": id, "name": str_of(row, "name").ok_or("a folder needs a name")?}),
-        )?;
-        seeder.key(row, Kind::Folder, id)?;
-    }
-    for row in rows(world, "albums") {
-        seeder.clock_for(row, "created")?;
-        let id = seeder.mint();
-        seeder.run(
-            "media.create_album",
-            json!({"album_id": id, "title": str_of(row, "name").ok_or("an album needs a name")?}),
-        )?;
-        seeder.key(row, Kind::Album, id)?;
+    for (section, noun, kind, vault_kind) in [
+        ("notebooks", "notebook", Kind::Notebook, "notebook"),
+        ("folders", "folder", Kind::Folder, "folder"),
+        ("albums", "album", Kind::Album, "album"),
+    ] {
+        for row in rows(world, section) {
+            seeder.clock_for(row, "created")?;
+            let id = seeder.mint();
+            let title = str_of(row, "name").ok_or_else(|| format!("a {noun} needs a name"))?;
+            seeder.run(
+                "container.create",
+                json!({"id": id, "kind": vault_kind, "title": title}),
+            )?;
+            seeder.key(row, kind, id)?;
+        }
     }
     for row in rows(world, "events") {
         seeder.clock_for(row, "created")?;
         let id = seeder.mint();
         let start = Stamp::parse(str_of(row, "start").ok_or("an event needs a start")?)
             .ok_or("an event start is YYYY-MM-DD[THH:MM]")?;
-        let (dtstart, dtend) = match (start.time, str_of(row, "end")) {
-            (_, Some(end)) => (start.vault(), vault_time(end)?),
-            (Some(_), None) => {
-                let end = start
-                    .at()
-                    .checked_add(jiff::Span::new().hours(1))
-                    .map_err(|e| e.to_string())?;
-                (
-                    start.vault(),
-                    format!("{}T{}:00", end.date(), crate::dates::clock(end.time())),
-                )
+        let end = str_of(row, "end")
+            .map(|end| Stamp::parse(end).ok_or("an event end is YYYY-MM-DD[THH:MM]"))
+            .transpose()?;
+        let mut input = json!({
+            "id": id,
+            "title": str_of(row, "name").ok_or("an event needs a name")?,
+            // the seed PROPOSES its events, as the assistant does
+            "status": "tentative",
+        });
+        match (start.time, end) {
+            // a date is an all-day event, whose end is its last day
+            (None, end) => {
+                let last = match end {
+                    Some(end) => end
+                        .date
+                        .yesterday()
+                        .ok()
+                        .filter(|day| *day >= start.date)
+                        .unwrap_or(start.date),
+                    None => start.date,
+                };
+                input["timing"] = json!("all-day");
+                input["starts"] = json!(start.date.to_string());
+                input["ends"] = json!(last.to_string());
             }
-            (None, None) => (
-                format!("{}T00:00:00", start.date),
-                format!(
-                    "{}T00:00:00",
-                    start.date.tomorrow().map_err(|e| e.to_string())?
-                ),
-            ),
-        };
-        let dtstart = if dtstart.len() == 10 {
-            format!("{dtstart}T00:00:00")
-        } else {
-            dtstart
-        };
-        let dtend = if dtend.len() == 10 {
-            format!("{dtend}T00:00:00")
-        } else {
-            dtend
-        };
+            (Some(_), end) => {
+                let end = match end {
+                    Some(end) => vault_time_of(end),
+                    None => {
+                        let end = start
+                            .at()
+                            .checked_add(jiff::Span::new().hours(1))
+                            .map_err(|e| e.to_string())?;
+                        format!("{}T{}:00", end.date(), crate::dates::clock(end.time()))
+                    }
+                };
+                input["timing"] = json!("floating");
+                input["starts"] = json!(start.vault());
+                input["ends"] = json!(end);
+            }
+        }
         let mut attendees = Vec::new();
         for person in row
             .get("attendees")
@@ -329,29 +353,22 @@ pub fn seed_report(world: &Value, path: &Path) -> Result<(Value, Vec<String>), S
         {
             attendees.push(seeder.id(person.as_str().unwrap_or_default(), Kind::Person)?);
         }
-        let mut input = json!({
-            "event_id": id,
-            "summary": str_of(row, "name").ok_or("an event needs a name")?,
-            "dtstart": dtstart,
-            "dtend": dtend,
-            "calendar_id": calendar,
-        });
         if !attendees.is_empty() {
-            input["attendee_party_ids"] = json!(attendees);
+            input["attendees"] = json!(attendees);
         }
         if let Some(description) = str_of(row, "description") {
             input["description"] = json!(description);
         }
-        seeder.run("schedule.propose_event", input)?;
+        seeder.run("event.propose", input)?;
         seeder.key(row, Kind::Event, id)?;
     }
     for row in rows(world, "tasks") {
         seeder.clock_for(row, "created")?;
         let id = seeder.mint();
         let mut input =
-            json!({"task_id": id, "title": str_of(row, "name").ok_or("a task needs a name")?});
+            json!({"id": id, "title": str_of(row, "name").ok_or("a task needs a name")?});
         if let Some(due) = str_of(row, "due") {
-            input["due_at"] = json!(vault_time(due)?);
+            input["due"] = json!(vault_time(due)?);
         }
         if let Some(effort) = row.get("effort").and_then(Value::as_i64) {
             input["effort_min"] = json!(effort);
@@ -363,31 +380,27 @@ pub fn seed_report(world: &Value, path: &Path) -> Result<(Value, Vec<String>), S
             input["description"] = json!(description);
         }
         if let Some(parent) = str_of(row, "parent") {
-            input["parent_task_id"] = json!(seeder.id(parent, Kind::Task)?);
+            input["parent_id"] = json!(seeder.id(parent, Kind::Task)?);
         }
-        seeder.run("schedule.add_task", input)?;
-        seeder.key(row, Kind::Task, id.clone())?;
         if let Some(list) = str_of(row, "list") {
-            let project = seeder.id(list, Kind::List)?;
-            seeder.run(
-                "schedule.organize_task",
-                json!({"task_id": id, "project_id": project, "sort_order": 0}),
-            )?;
+            input["project_id"] = json!(seeder.id(list, Kind::List)?);
         }
+        seeder.run("task.add", input)?;
+        seeder.key(row, Kind::Task, id)?;
     }
     for row in rows(world, "notes") {
         seeder.clock_for(row, "created")?;
         let id = seeder.mint();
         let name = str_of(row, "name").ok_or("a note needs a name")?;
         let mut input =
-            json!({"note_id": id, "title": name, "body_text": str_of(row, "body").unwrap_or(name)});
+            json!({"id": id, "title": name, "body": str_of(row, "body").unwrap_or(name)});
         if let Some(notebook) = str_of(row, "notebook") {
             input["notebook_id"] = json!(seeder.id(notebook, Kind::Notebook)?);
         }
-        seeder.run("knowledge.create_note", input)?;
+        seeder.run("note.create", input)?;
         seeder.key(row, Kind::Note, id.clone())?;
         if row.get("pinned").and_then(Value::as_bool) == Some(true) {
-            seeder.run("knowledge.edit_note", json!({"note_id": id, "pinned": 1}))?;
+            seeder.run("flag.set", json!({"id": id, "flag": "pinned"}))?;
         }
     }
     for row in rows(world, "documents") {
@@ -396,14 +409,15 @@ pub fn seed_report(world: &Value, path: &Path) -> Result<(Value, Vec<String>), S
         let name = str_of(row, "name").ok_or("a document needs a name")?;
         let body = str_of(row, "text").unwrap_or(name);
         let mut input = json!({
-            "document_id": id,
+            "id": id,
             "title": name,
-            "data_uri": format!("data:text/plain;base64,{}", base64::engine::general_purpose::STANDARD.encode(format!("{body}\n[{}]", str_of(row, "key").unwrap_or_default()))),
+            "body_text": format!("{body}\n[{}]", str_of(row, "key").unwrap_or_default()),
+            "media_type": "text/plain",
         });
         if let Some(folder) = str_of(row, "folder") {
             input["folder_id"] = json!(seeder.id(folder, Kind::Folder)?);
         }
-        seeder.run("core.add_document", input)?;
+        seeder.run("document.create_text", input)?;
         seeder.key(row, Kind::Document, id)?;
     }
     for row in rows(world, "photos") {
@@ -413,18 +427,18 @@ pub fn seed_report(world: &Value, path: &Path) -> Result<(Value, Vec<String>), S
             "nativetools-photo:{}:{key}",
             str_of(world, "seed").unwrap_or("0")
         );
+        let id = seeder.mint();
+        let (blob, size) = seeder.handle.keep(bytes.as_bytes())?;
         let mut input = json!({
-            "data_uri": format!("data:image/jpeg;base64,{}", base64::engine::general_purpose::STANDARD.encode(bytes)),
-            "kind": "photo",
+            "id": id, "blob": blob, "size": size, "media_type": "image/jpeg", "form": "photo",
         });
         if let Some(name) = str_of(row, "name") {
             input["title"] = json!(name);
         }
         if let Some(taken) = str_of(row, "taken") {
-            input["captured_at"] = json!(vault_time(taken)?);
+            input["taken_at"] = json!(vault_time(taken)?);
         }
-        let out = seeder.run("media.add_asset", input)?;
-        let id = out["asset_id"].as_str().unwrap_or_default().to_owned();
+        seeder.run("photo.add", input)?;
         seeder.key(row, Kind::Photo, id.clone())?;
         for album in row
             .get("albums")
@@ -434,9 +448,19 @@ pub fn seed_report(world: &Value, path: &Path) -> Result<(Value, Vec<String>), S
         {
             let album = seeder.id(album.as_str().unwrap_or_default(), Kind::Album)?;
             seeder.run(
-                "media.add_to_album",
-                json!({"album_id": album, "asset_id": id}),
+                "edge.add",
+                json!({"from": album, "rel": "contains", "to": id}),
             )?;
+        }
+        // a photograph is in an album and nowhere else the model can say: nothing is `about` it
+        if row
+            .get("people")
+            .and_then(Value::as_array)
+            .is_some_and(|p| !p.is_empty())
+        {
+            seeder
+                .dropped
+                .push(format!("{key}.people (a photograph is not about a person)"));
         }
     }
     for row in rows(world, "locker") {
@@ -488,9 +512,9 @@ pub fn seed_report(world: &Value, path: &Path) -> Result<(Value, Vec<String>), S
         seeder.run("locker.add_item", input)?;
         seeder.key(row, Kind::LockerItem, id)?;
     }
-    // MONEY (#1099): accounts, then each transaction through the import command, one row at a time
-    // so a row has the instant of its own.
-    let mut accounts: BTreeMap<String, (String, String)> = BTreeMap::new();
+    // MONEY (#1099): accounts, then each transaction as one followed statement line, so a row has
+    // the instant of its own.
+    let mut accounts: BTreeMap<String, (String, String, String)> = BTreeMap::new();
     for row in rows(world, "accounts") {
         seeder.clock_for(row, "created")?;
         let id = seeder.mint();
@@ -498,16 +522,16 @@ pub fn seed_report(world: &Value, path: &Path) -> Result<(Value, Vec<String>), S
         let account_currency =
             str_of(row, "currency").map_or_else(|| currency.clone(), str::to_uppercase);
         seeder.run(
-            "money.add_account",
+            "account.add",
             json!({
-                "account_id": id, "name": name,
-                "kind": str_of(row, "kind").unwrap_or("checking"),
+                "id": id, "title": name,
+                "type": str_of(row, "kind").unwrap_or("checking"),
                 "currency": account_currency,
             }),
         )?;
         let key = str_of(row, "key").ok_or("an account needs a key")?;
         if accounts
-            .insert(key.to_owned(), (id, account_currency))
+            .insert(key.to_owned(), (id, account_currency, name.to_owned()))
             .is_some()
         {
             return Err(format!("the account key \"{key}\" is used twice"));
@@ -516,7 +540,7 @@ pub fn seed_report(world: &Value, path: &Path) -> Result<(Value, Vec<String>), S
     for (index, row) in rows(world, "transactions").iter().enumerate() {
         seeder.clock_for(row, "created")?;
         let account = str_of(row, "account").ok_or("a transaction needs an account")?;
-        let (account_id, account_currency) = accounts
+        let (account_id, account_currency, account_name) = accounts
             .get(account)
             .cloned()
             .ok_or_else(|| format!("no account has the key \"{account}\""))?;
@@ -525,30 +549,39 @@ pub fn seed_report(world: &Value, path: &Path) -> Result<(Value, Vec<String>), S
             .get("amount")
             .and_then(Value::as_f64)
             .ok_or("a transaction needs a signed amount")?;
-        let id = seeder.mint();
         let description = str_of(row, "description")
             .or_else(|| str_of(row, "name"))
             .ok_or("a transaction needs a description or a name")?;
-        let mut line = json!({
-            "txn_id": id,
-            "external_id": format!("csv:{index:064x}"),
-            "posted_on": date,
-            "amount_minor": crate::world::minor_of(amount.abs(), &account_currency),
-            "direction": if amount < 0.0 { "debit" } else { "credit" },
-            "description": description,
-        });
-        if let Some(name) = str_of(row, "name") {
-            line["display_name"] = json!(name);
-        }
-        if let Some(category) = str_of(row, "category") {
-            line["category_concept_id"] = json!(format!("money:cat:{category}"));
-        }
+        let external = format!("csv:{index:064x}");
+        // the name the member sees is the transaction's own title; the bank's words stay in the
+        // line the statement stated
+        let title = str_of(row, "name").unwrap_or(description);
+        let signed = crate::world::minor_of(amount.abs(), &account_currency)
+            * if amount < 0.0 { -1 } else { 1 };
         seeder.run(
-            "money.import_transactions",
-            json!({"account_id": account_id, "source": "csv", "rows": [line]}),
+            "follow.statement",
+            json!({
+                "origin": {"ref": account_id, "label": account_name, "fills": account_id},
+                "records": [{
+                    "external_id": external,
+                    "fields": {
+                        "title": title,
+                        "posted_on": date,
+                        "amount_minor": signed,
+                        "line": {"description": description, "imported_from": "csv"},
+                    },
+                }],
+            }),
         )?;
+        let id = seeder.handle.followed(&external)?;
+        if let Some(category) = str_of(row, "category") {
+            seeder.run(
+                "txn.categorize",
+                json!({"ids": [id], "category_id": format!("category:{category}")}),
+            )?;
+        }
         if row.get("void").and_then(Value::as_bool) == Some(true) {
-            seeder.run("money.void_transaction", json!({"txn_id": id}))?;
+            seeder.run("txn.void", json!({"id": id}))?;
         }
         seeder.key(row, Kind::Transaction, id)?;
     }
@@ -561,38 +594,31 @@ pub fn seed_report(world: &Value, path: &Path) -> Result<(Value, Vec<String>), S
             .get(from)
             .cloned()
             .ok_or_else(|| format!("no key \"{from}\""))?;
-        let (to_kind, to_id) = seeder
+        let (_, to_id) = seeder
             .keys
             .get(to)
             .cloned()
             .ok_or_else(|| format!("no key \"{to}\""))?;
+        // like a photograph's people: a document is not `about` anything in the model, so
+        // the link is reported and left out rather than refused
+        if matches!(from_kind, Kind::Document) {
+            seeder
+                .dropped
+                .push(format!("{from}.links (a document is not about anything)"));
+            continue;
+        }
+        if !matches!(from_kind, Kind::Note | Kind::Task | Kind::Event) {
+            return Err(format!(
+                "a {} is not about anything: only a note, a task or an event is ({link})",
+                from_kind.name()
+            ));
+        }
         seeder.cursor += 60_000;
         seeder.handle.clock.set(seeder.cursor);
         seeder.run(
-            "core.link_entities",
-            json!({
-                "from_type": from_kind.spec().entity,
-                "from_id": from_id,
-                "to_type": to_kind.spec().entity,
-                "to_id": to_id,
-                "relation": "about",
-            }),
+            "edge.add",
+            json!({"from": from_id, "rel": "about", "to": to_id}),
         )?;
-    }
-    for row in rows(world, "photos") {
-        let id = seeder.id(str_of(row, "key").unwrap_or_default(), Kind::Photo)?;
-        for person in row
-            .get("people")
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-        {
-            let party = seeder.id(person.as_str().unwrap_or_default(), Kind::Person)?;
-            seeder.run(
-                "core.link_entities",
-                json!({"from_type": "media.asset", "from_id": id, "to_type": "core.party", "to_id": party, "relation": "about"}),
-            )?;
-        }
     }
     states(&mut seeder, world)?;
     let keys: Map<String, Value> = seeder
@@ -632,16 +658,12 @@ fn states(seeder: &mut Seeder, world: &Value) -> Result<(), String> {
     for (section, kind) in sections {
         for row in rows(world, section) {
             let id = seeder.id(str_of(row, "key").unwrap_or_default(), kind)?;
-            let target = json!({ crate::act::id_param(kind): id });
+            let target = json!({ "id": id });
             if row.get("starred").and_then(Value::as_bool) == Some(true) {
                 let command = crate::meta::Verb::Star
                     .command(kind)
                     .ok_or_else(|| format!("a {} cannot be starred", kind.name()))?;
-                let input = if kind == Kind::Photo {
-                    json!({"asset_id": id, "favorite": 1})
-                } else {
-                    target.clone()
-                };
+                let input = json!({"id": id, "flag": "starred"});
                 seeder.at_then(row, "starred_at", command, input)?;
             }
             if kind == Kind::Person
@@ -649,31 +671,23 @@ fn states(seeder: &mut Seeder, world: &Value) -> Result<(), String> {
             {
                 seeder.handle.clock.set(at(when)?);
                 seeder.run(
-                    "people.log_interaction",
-                    json!({"party_id": id, "kind": str_of(row, "last_contacted_kind").unwrap_or("call")}),
+                    "person.log_interaction",
+                    json!({"id": id, "kind": str_of(row, "last_contacted_kind").unwrap_or("call")}),
                 )?;
             }
             if kind == Kind::Task {
                 match (str_of(row, "status"), str_of(row, "completed")) {
                     (Some("completed"), _) | (_, Some(_)) => {
-                        seeder.at_then(
-                            row,
-                            "completed",
-                            "schedule.set_task_status",
-                            json!({"task_id": id, "status": "completed"}),
-                        )?;
-                    }
-                    (Some("in_progress"), _) => {
-                        seeder.run(
-                            "schedule.set_task_status",
-                            json!({"task_id": id, "status": "in-process"}),
-                        )?;
+                        seeder.at_then(row, "completed", "task.complete", target.clone())?;
                     }
                     (Some("cancelled"), _) => {
-                        seeder.run(
-                            "schedule.set_task_status",
-                            json!({"task_id": id, "status": "cancelled"}),
-                        )?;
+                        seeder.run("task.cancel", target.clone())?;
+                    }
+                    (Some("in_progress"), _) => {
+                        return Err(
+                            "a task is open, completed or cancelled: it has no in_progress status"
+                                .to_owned(),
+                        );
                     }
                     _ => {}
                 }
@@ -683,23 +697,21 @@ fn states(seeder: &mut Seeder, world: &Value) -> Result<(), String> {
                     .get("cancelled")
                     .is_some_and(|v| v.as_bool() == Some(true) || v.is_string())
             {
-                seeder.at_then(row, "cancelled", "schedule.cancel_event", target.clone())?;
+                seeder.at_then(row, "cancelled", "event.cancel", target.clone())?;
             }
             if let Some(modified) = str_of(row, "modified") {
                 seeder.handle.clock.set(at(modified)?);
                 let name = str_of(row, "name").unwrap_or_default();
-                let (command, param) = match kind {
-                    Kind::Person => ("people.edit_person", "display_name"),
-                    Kind::Event => ("schedule.edit_event", "summary"),
-                    Kind::Task => ("schedule.edit_task", "title"),
-                    Kind::Note => ("knowledge.edit_note", "title"),
-                    Kind::Document => ("core.rename_document", "title"),
-                    Kind::Photo => ("media.update_asset", "title"),
-                    Kind::LockerItem => ("locker.edit_item", "title"),
+                let command = match kind {
+                    Kind::Person => "person.edit",
+                    Kind::Event => "event.edit",
+                    Kind::Task => "task.edit",
+                    Kind::Note => "note.edit",
+                    Kind::Document | Kind::Photo | Kind::LockerItem => "entity.retitle",
                     _ => return Err(format!("modified is not supported on a {}", kind.name())),
                 };
                 let mut input = target.clone();
-                input[param] = json!(name);
+                input["title"] = json!(name);
                 seeder.run(command, input)?;
             }
             let trashed = row.get("trashed");

@@ -306,10 +306,6 @@ fn text<'v>(input: &'v Value, key: &str) -> Option<&'v str> {
     input.get(key).and_then(Value::as_str)
 }
 
-fn flag(input: &Value, key: &str) -> bool {
-    input.get(key).and_then(Value::as_bool).unwrap_or(false)
-}
-
 fn int(input: &Value, key: &str) -> Option<i64> {
     input.get(key).and_then(Value::as_i64)
 }
@@ -382,12 +378,7 @@ fn new_row(kind: Kind, id: &str, name: &str, cx: &Cx) -> Row {
 
 fn edge(world: &mut World, from: Key, to: Key, via: Via) {
     if world.rows.contains_key(&from) && world.rows.contains_key(&to) {
-        world.edges.push(Edge {
-            from,
-            to,
-            via,
-            link_id: None,
-        });
+        world.edges.push(Edge { from, to, via });
         world.edges.sort();
         world.edges.dedup();
     }
@@ -425,363 +416,52 @@ pub(crate) fn apply(
     command: &str,
     input: &Value,
 ) -> Result<Ran, String> {
-    // every command the vault answered leaves a journal row, a refusal too: the id seed of a
-    // session numbers from the count
-    let ran = patch(world, bin, cx, command, input)?;
-    world.entity_count += 1;
-    Ok(ran)
-}
-
-fn patch(
-    world: &mut World,
-    bin: &mut BTreeMap<String, (Row, Vec<Edge>)>,
-    cx: &Cx,
-    command: &str,
-    input: &Value,
-) -> Result<Ran, String> {
     match command {
-        "people.add_person" => people_add(world, cx, input),
-        "people.edit_person" | "people.set_cadence" => people_edit(world, cx, input),
-        "people.trash_person" => trash_row(
-            world,
-            cx,
-            input,
-            Kind::Person,
-            "party_id",
-            "person_live",
-            "That person is not here.",
-        ),
-        "people.restore_person" => restore_row(
-            world,
-            cx,
-            input,
-            Kind::Person,
-            "party_id",
-            "person_trashed",
-            "that person is not in the trash, or their restore window has passed",
-        ),
-        "people.star_person" | "people.unstar_person" => star(
-            world,
-            input,
-            Kind::Person,
-            "party_id",
-            command.contains(".star"),
-        ),
-        "people.log_interaction" => {
-            let id = text(input, "party_id").unwrap_or_default();
+        "person.add" => person_add(world, cx, input),
+        "person.edit" => person_edit(world, cx, input),
+        "person.log_interaction" => {
+            let id = text(input, "id").unwrap_or_default();
             match world.rows.get_mut(&(Kind::Person, id.to_owned())) {
                 Some(row) if !row.trashed => {
                     row.date = cx.stamp();
                     row.updated = cx.now.clone();
                     Ok(ok(json!({"interaction_id": cx.id("interaction_id")})))
                 }
-                _ => Ok(refused("person_live", "That person is not here.")),
+                _ => Ok(refused("touch_is_about_a_person", &gone(world, id))),
             }
         }
-        "schedule.save_project" => project_save(world, cx, input),
-        "schedule.add_task" => task_add(world, cx, input),
-        "schedule.edit_task" => task_edit(world, cx, input),
-        "schedule.set_task_status" => task_status(world, cx, input),
-        "schedule.delete_task" => task_delete(world, cx, input),
-        "schedule.restore_task" => task_restore(world, cx, input),
-        "schedule.organize_task" => task_organize(world, input),
-        "schedule.propose_event" => event_propose(world, cx, input),
-        "schedule.edit_event" => event_edit(world, cx, input),
-        "schedule.reschedule_event" => event_reschedule(world, cx, input),
-        "schedule.cancel_event" => {
-            let id = text(input, "event_id").unwrap_or_default();
+        "task.add" => task_add(world, cx, input),
+        "task.edit" => task_edit(world, cx, input),
+        "task.complete" | "task.reopen" | "task.cancel" => task_status(world, cx, input, command),
+        "task.organize" => task_organize(world, cx, input),
+        "event.propose" => event_propose(world, cx, input),
+        "event.edit" => event_edit(world, cx, input),
+        "event.cancel" => {
+            let id = text(input, "id").unwrap_or_default();
             match world.rows.get_mut(&(Kind::Event, id.to_owned())) {
-                Some(row)
-                    if !row.trashed && row.field("status") != Some(&Val::Enum("cancelled")) =>
-                {
+                Some(row) if !row.trashed => {
                     row.fields.insert("status", Val::Enum("cancelled"));
                     row.updated = cx.now.clone();
-                    Ok(ok(json!({"event_id": id, "sequence": 1})))
+                    Ok(ok(json!({"id": id})))
                 }
-                _ => Ok(refused(
-                    "event_exists_not_cancelled",
-                    "That event is not here to change.",
-                )),
+                _ => Ok(refused("event_is_live", &gone(world, id))),
             }
         }
-        "schedule.delete_event" => trash_row(
-            world,
-            cx,
-            input,
-            Kind::Event,
-            "event_id",
-            "event_live",
-            "That event is not here to delete.",
-        ),
-        "schedule.restore_event" => restore_row(
-            world,
-            cx,
-            input,
-            Kind::Event,
-            "event_id",
-            "event_trashed",
-            "That event is not in the trash any more.",
-        ),
-        "knowledge.create_note" => note_create(world, cx, input),
-        "knowledge.edit_note" => note_edit(world, cx, input),
-        "knowledge.delete_note" => trash_row(
-            world,
-            cx,
-            input,
-            Kind::Note,
-            "note_id",
-            "note_is_live",
-            "That note is not here.",
-        ),
-        "knowledge.restore_note" => restore_row(
-            world,
-            cx,
-            input,
-            Kind::Note,
-            "note_id",
-            "note_in_trash",
-            "That note is not in the trash, or its window has lapsed.",
-        ),
-        "knowledge.move_note" => note_move(world, input),
-        "knowledge.create_notebook" => notebook_create(world, cx, input),
-        "knowledge.rename_notebook" => notebook_rename(world, input),
-        "knowledge.delete_notebook" => notebook_delete(world, input),
-        "core.add_document" => document_add(world, cx, input),
-        "core.rename_document" => {
-            let id = text(input, "document_id").unwrap_or_default();
-            match world.rows.get_mut(&(Kind::Document, id.to_owned())) {
-                Some(row) if !row.trashed => {
-                    row.name = text(input, "title").unwrap_or_default().to_owned();
-                    row.updated = cx.now.clone();
-                    Ok(ok(json!({"document_id": id})))
-                }
-                _ => Ok(refused("document_live", "That document is not here.")),
-            }
-        }
-        "core.trash_document" => trash_row(
-            world,
-            cx,
-            input,
-            Kind::Document,
-            "document_id",
-            "document_live",
-            "That document is not here.",
-        ),
-        "core.restore_document" => restore_row(
-            world,
-            cx,
-            input,
-            Kind::Document,
-            "document_id",
-            "document_in_trash",
-            "that document is not in the trash, or its grace window has run out",
-        ),
-        "core.star_document" | "core.unstar_document" => star(
-            world,
-            input,
-            Kind::Document,
-            "document_id",
-            command.contains(".star_"),
-        ),
-        "core.move_document" => document_move(world, cx, input),
-        "core.create_folder" => folder_create(world, cx, input),
-        "core.rename_folder" => {
-            let id = text(input, "folder_id").unwrap_or_default();
-            match world.rows.get_mut(&(Kind::Folder, id.to_owned())) {
-                Some(row) => {
-                    row.name = text(input, "name").unwrap_or_default().to_owned();
-                    row.updated = cx.now.clone();
-                    Ok(ok(json!({"folder_id": id})))
-                }
-                None => Ok(refused(
-                    "folder_exists_and_not_root",
-                    "there is no folder with that id — the drive's own top level is not a folder",
-                )),
-            }
-        }
-        "core.delete_folder" => folder_delete(world, input),
-        "media.update_asset" => photo_update(world, cx, input),
-        "media.delete_asset" => {
-            let id = text(input, "asset_id").unwrap_or_default().to_owned();
-            let ran = trash_row(
-                world,
-                cx,
-                input,
-                Kind::Photo,
-                "asset_id",
-                "asset_exists_live",
-                "that photograph is already in the trash",
-            )?;
-            if ran.ok {
-                // the vault takes a trashed photo out of its albums
-                unlink(world, |edge| {
-                    !(edge.via == Via::Entry && edge.to == (Kind::Photo, id.clone()))
-                });
-            }
-            Ok(ran)
-        }
-        "media.restore_asset" => restore_row(
-            world,
-            cx,
-            input,
-            Kind::Photo,
-            "asset_id",
-            "asset_is_trashed_within_its_window",
-            "that photograph is not in the trash, or its thirty days have run out",
-        ),
-        "media.set_favorite" => star(
-            world,
-            input,
-            Kind::Photo,
-            "asset_id",
-            int(input, "favorite") == Some(1),
-        ),
-        "media.create_album" => {
-            let id = text(input, "album_id").map_or_else(|| cx.id("album_id"), str::to_owned);
-            if world.rows.keys().any(|(_, row)| *row == id) {
-                return Ok(refused(
-                    "minted_id_is_free",
-                    "an album with that id already exists",
-                ));
-            }
-            let row = new_row(
-                Kind::Album,
-                &id,
-                text(input, "title").unwrap_or_default(),
-                cx,
-            );
-            world.rows.insert(row.key(), row);
-            Ok(ok(json!({"album_id": id})))
-        }
-        "media.rename_album" => {
-            let id = text(input, "album_id").unwrap_or_default();
-            match world.rows.get_mut(&(Kind::Album, id.to_owned())) {
-                Some(row) => {
-                    row.name = text(input, "title").unwrap_or_default().to_owned();
-                    row.updated = cx.now.clone();
-                    Ok(ok(json!({"album_id": id})))
-                }
-                None => Ok(refused("album_exists", "there is no album with that id")),
-            }
-        }
-        "media.delete_album" => {
-            let id = text(input, "album_id").unwrap_or_default().to_owned();
-            let key = (Kind::Album, id.clone());
-            let Some(row) = world.rows.remove(&key) else {
-                return Ok(refused("album_exists", "there is no album with that id"));
-            };
-            let revision = cx.id("revision_id");
-            let held: Vec<Edge> = world
-                .edges
-                .iter()
-                .filter(|edge| edge.via == Via::Entry && edge.from == key)
-                .cloned()
-                .collect();
-            unlink(world, |edge| !(edge.from == key || edge.to == key));
-            bin.insert(revision.clone(), (row, held));
-            Ok(ok(json!({"album_id": id, "revision_id": revision})))
-        }
-        "media.restore_album" => {
-            let id = text(input, "album_id").unwrap_or_default();
-            let revision = text(input, "revision_id").unwrap_or_default();
-            if world.rows.contains_key(&(Kind::Album, id.to_owned())) {
-                return Ok(refused("album_is_absent", "that album is already there"));
-            }
-            let Some((mut row, held)) = bin.remove(revision) else {
-                return Ok(refused(
-                    "revision_is_this_albums_and_not_undone",
-                    "that undo record is not this album's, or it has already been used",
-                ));
-            };
-            row.updated = cx.now.clone();
-            world.rows.insert(row.key(), row);
-            for held in held {
-                edge(world, held.from, held.to, held.via);
-            }
-            Ok(ok(json!({"album_id": id, "revision_id": revision})))
-        }
-        "media.add_to_album" => {
-            let album = (
-                Kind::Album,
-                text(input, "album_id").unwrap_or_default().to_owned(),
-            );
-            let photo = (
-                Kind::Photo,
-                text(input, "asset_id").unwrap_or_default().to_owned(),
-            );
-            if !world.rows.contains_key(&album) {
-                return Ok(refused("album_exists", "there is no album with that id"));
-            }
-            if !world.rows.contains_key(&photo) {
-                return Ok(refused(
-                    "asset_exists",
-                    "there is no photograph with that id",
-                ));
-            }
-            if world
-                .edges
-                .iter()
-                .any(|e| e.via == Via::Entry && e.from == album && e.to == photo)
-            {
-                return Ok(refused(
-                    "not_already_in_album",
-                    "that photograph is already in this album",
-                ));
-            }
-            edge(world, album, photo, Via::Entry);
-            Ok(ok(json!({"entry_id": cx.id("entry_id"), "position": 0})))
-        }
-        "media.remove_from_album" => {
-            let album = (
-                Kind::Album,
-                text(input, "album_id").unwrap_or_default().to_owned(),
-            );
-            let photo = (
-                Kind::Photo,
-                text(input, "asset_id").unwrap_or_default().to_owned(),
-            );
-            if !world
-                .edges
-                .iter()
-                .any(|e| e.via == Via::Entry && e.from == album && e.to == photo)
-            {
-                return Ok(refused(
-                    "entry_exists",
-                    "that photograph is not in this album",
-                ));
-            }
-            unlink(world, |e| {
-                !(e.via == Via::Entry && e.from == album && e.to == photo)
-            });
-            Ok(ok(json!({"album_id": album.1, "asset_id": photo.1})))
-        }
+        "note.create" => note_create(world, cx, input),
+        "note.edit" => note_edit(world, cx, input),
+        "note.move" => note_move(world, cx, input),
+        "document.create_text" => document_create(world, cx, input),
+        "document.move" => document_move(world, cx, input),
+        "container.create" => container_create(world, cx, input),
+        "container.move" => container_move(world, cx, input),
+        "entity.retitle" => retitle(world, cx, input),
+        "entity.trash" => trash_entity(world, bin, cx, input),
+        "entity.restore" => restore_entity(world, bin, cx, input),
+        "entity.purge" => purge_entity(world, input),
+        "flag.set" | "flag.clear" => flag_entity(world, input, command == "flag.set"),
+        "edge.add" | "edge.remove" => edge_entity(world, input, command == "edge.add"),
         "locker.add_item" => locker_add(world, cx, input),
         "locker.edit_item" => locker_edit(world, cx, input),
-        "locker.trash_item" => trash_row(
-            world,
-            cx,
-            input,
-            Kind::LockerItem,
-            "item_id",
-            "item_live",
-            "that item is not in your locker",
-        ),
-        "locker.restore_item" => restore_row(
-            world,
-            cx,
-            input,
-            Kind::LockerItem,
-            "item_id",
-            "item_trashed_within_window",
-            "that item is not in the trash, or its 30 days have run out",
-        ),
-        "locker.star_item" | "locker.unstar_item" => star(
-            world,
-            input,
-            Kind::LockerItem,
-            "item_id",
-            command == "locker.star_item",
-        ),
         "locker.reveal_receipt" => Ok(ok(json!({"receipt_id": cx.id("receipt_id")}))),
         other => Err(format!(
             "error: park has no patch for {other}; the write cannot be shown before it is made."
@@ -793,93 +473,346 @@ fn patch(
 // the shared shapes
 // ---------------------------------------------------------------------
 
-fn trash_row(
-    world: &mut World,
-    cx: &Cx,
-    input: &Value,
-    kind: Kind,
-    param: &str,
-    predicate: &str,
-    sentence: &str,
-) -> Result<Ran, String> {
-    let id = text(input, param).unwrap_or_default();
-    match world.rows.get_mut(&(kind, id.to_owned())) {
-        Some(row) if !row.trashed => {
-            trash(row, cx);
-            let mut out = json!({ param: id });
-            if kind == Kind::Task {
-                out["removed"] = json!(1);
+/// The key of the row with this id, whatever its kind.
+fn key_of(world: &World, id: &str) -> Option<Key> {
+    world.rows.keys().find(|(_, row)| row == id).cloned()
+}
+
+/// The sentence the vault says for an id that cannot be acted on: not there, or in the trash.
+fn gone(world: &World, id: &str) -> String {
+    match key_of(world, id).and_then(|key| world.rows.get(&key)) {
+        Some(row) if row.trashed => format!("“{}” is in the trash; restore it first", row.name),
+        _ => format!("there is nothing with the id `{id}`"),
+    }
+}
+
+/// The containers the model takes out of the world when they go to the trash.
+fn is_container(kind: Kind) -> bool {
+    matches!(
+        kind,
+        Kind::Album | Kind::Notebook | Kind::Folder | Kind::List
+    )
+}
+
+/// What goes to the trash with a holder, and comes back with it (the vault's `members`): a
+/// notebook's notes and notebooks, a folder's documents and folders, a list's tasks, a task's
+/// subtasks, and what was written about one person alone (a note or an event; a task about them
+/// stays).
+fn members(world: &World, holder: &Key) -> Vec<Key> {
+    let mut out: Vec<Key> = match holder.0 {
+        Kind::Notebook | Kind::Folder => world
+            .rows
+            .iter()
+            .filter(|(key, row)| key.0 == holder.0 && row.extra.get("parent") == Some(&holder.1))
+            .map(|(key, _)| key.clone())
+            .collect(),
+        _ => Vec::new(),
+    };
+    let held: &[Via] = match holder.0 {
+        Kind::Notebook => &[Via::Entry],
+        Kind::Folder => &[Via::FolderColumn],
+        Kind::List => &[Via::ListColumn],
+        Kind::Task => &[Via::Subtask],
+        _ => &[],
+    };
+    out.extend(
+        world
+            .edges
+            .iter()
+            .filter(|edge| edge.from == *holder && held.contains(&edge.via))
+            .map(|edge| edge.to.clone()),
+    );
+    if holder.0 == Kind::Person {
+        for edge in world
+            .edges
+            .iter()
+            .filter(|edge| edge.via == Via::About && edge.to == *holder)
+        {
+            let alone = world.edges.iter().all(|other| {
+                other.via != Via::About || other.from != edge.from || other.to == *holder
+            });
+            if alone && matches!(edge.from.0, Kind::Note | Kind::Event) {
+                out.push(edge.from.clone());
             }
-            Ok(ok(out))
         }
-        _ => Ok(refused(predicate, sentence)),
+    }
+    out
+}
+
+fn trash_with(
+    world: &mut World,
+    bin: &mut BTreeMap<String, (Row, Vec<Edge>)>,
+    cx: &Cx,
+    key: &Key,
+    out: &mut Vec<String>,
+) {
+    let kids = members(world, key);
+    if is_container(key.0) {
+        // a container the model has no trash for leaves the world, with the edges it held
+        let held: Vec<Edge> = world
+            .edges
+            .iter()
+            .filter(|edge| edge.from == *key || edge.to == *key)
+            .cloned()
+            .collect();
+        unlink(world, |edge| !(edge.from == *key || edge.to == *key));
+        if let Some(mut row) = world.rows.remove(key) {
+            row.extra.insert("purge_at", purge_at(&cx.now));
+            bin.insert(key.1.clone(), (row, held));
+        }
+    } else if let Some(row) = world.rows.get_mut(key) {
+        trash(row, cx);
+    }
+    out.push(key.1.clone());
+    for kid in kids {
+        if world.rows.get(&kid).is_some_and(|row| !row.trashed) {
+            trash_with(world, bin, cx, &kid, out);
+        }
     }
 }
 
-fn restore_row(
+fn trash_entity(
     world: &mut World,
+    bin: &mut BTreeMap<String, (Row, Vec<Edge>)>,
     cx: &Cx,
     input: &Value,
-    kind: Kind,
-    param: &str,
-    predicate: &str,
-    sentence: &str,
 ) -> Result<Ran, String> {
-    let id = text(input, param).unwrap_or_default();
-    match world.rows.get_mut(&(kind, id.to_owned())) {
-        Some(row) if row.trashed && window_open(row, &cx.now) => {
-            untrash(row, cx);
-            Ok(ok(json!({ param: id })))
+    let id = text(input, "id").unwrap_or_default();
+    let Some(key) = key_of(world, id).filter(|key| world.rows[key].trashed.eq(&false)) else {
+        return Ok(refused("entity_can_be_trashed", &gone(world, id)));
+    };
+    let mut trashed = Vec::new();
+    trash_with(world, bin, cx, &key, &mut trashed);
+    Ok(ok(
+        json!({"trashed": trashed, "purge_at": purge_at(&cx.now)}),
+    ))
+}
+
+fn restore_with(
+    world: &mut World,
+    bin: &mut BTreeMap<String, (Row, Vec<Edge>)>,
+    cx: &Cx,
+    key: &Key,
+    stamp: &str,
+    out: &mut Vec<String>,
+) {
+    if let Some((mut row, held)) = bin.remove(&key.1) {
+        row.extra.remove("purge_at");
+        row.updated = cx.now.clone();
+        world.rows.insert(row.key(), row);
+        for edge in held {
+            world.edges.push(edge);
         }
-        _ => Ok(refused(predicate, sentence)),
+        world.edges.sort();
+        world.edges.dedup();
+    } else if let Some(row) = world.rows.get_mut(key) {
+        untrash(row, cx);
+    }
+    out.push(key.1.clone());
+    // what went to the trash WITH the holder comes back with it; what was already there stays
+    for kid in members(world, key) {
+        let with_it = world.rows.get(&kid).is_some_and(|row| {
+            row.trashed && row.extra.get("purge_at").map(String::as_str) == Some(stamp)
+        });
+        if with_it {
+            restore_with(world, bin, cx, &kid, stamp, out);
+        }
     }
 }
 
-fn star(
+fn restore_entity(
     world: &mut World,
+    bin: &mut BTreeMap<String, (Row, Vec<Edge>)>,
+    cx: &Cx,
     input: &Value,
-    kind: Kind,
-    param: &str,
-    on: bool,
 ) -> Result<Ran, String> {
-    let id = text(input, param).unwrap_or_default();
-    match world.rows.get_mut(&(kind, id.to_owned())) {
-        Some(row) if !row.trashed => {
-            row.fields.insert("starred", Val::Bool(on));
-            Ok(ok(json!({ param: id })))
-        }
-        _ => Ok(refused("live", "That row is not here.")),
+    let id = text(input, "id").unwrap_or_default();
+    let (key, row) = match bin.get(id) {
+        Some((row, _)) => (row.key(), row.clone()),
+        None => match key_of(world, id)
+            .and_then(|key| world.rows.get(&key).map(|row| (key, row.clone())))
+        {
+            Some(found) => found,
+            None => {
+                return Ok(refused(
+                    "entity_is_in_the_trash",
+                    &format!("there is nothing with the id `{id}`"),
+                ));
+            }
+        },
+    };
+    let trashed = row.trashed || bin.contains_key(id);
+    if !trashed {
+        return Ok(refused(
+            "entity_is_in_the_trash",
+            &format!("“{}” is not in the trash", row.name),
+        ));
     }
+    if !window_open(&row, &cx.now) {
+        return Ok(refused(
+            "entity_is_in_the_trash",
+            &format!(
+                "“{}” has been in the trash past its grace window and can no longer be restored; delete it forever",
+                row.name
+            ),
+        ));
+    }
+    let stamp = row.extra.get("purge_at").cloned().unwrap_or_default();
+    let mut restored = Vec::new();
+    restore_with(world, bin, cx, &key, &stamp, &mut restored);
+    Ok(ok(json!({"restored": restored})))
+}
+
+/// A purge, as far as the model reads one: an area made for a list goes, and the lists in it
+/// are out of any area; any other row that is in the trash goes.
+fn purge_entity(world: &mut World, input: &Value) -> Result<Ran, String> {
+    let id = text(input, "id").unwrap_or_default().to_owned();
+    if let Some(at) = world.areas.iter().position(|(area, _)| *area == id) {
+        world.areas.remove(at);
+        for row in world.rows.values_mut().filter(|row| row.kind == Kind::List) {
+            if row.extra.get("area_id") == Some(&id) {
+                row.extra.remove("area_id");
+                row.fields.remove("area");
+            }
+        }
+        return Ok(ok(json!({"purged": [id]})));
+    }
+    match key_of(world, &id) {
+        Some(key) if world.rows[&key].trashed => {
+            world.rows.remove(&key);
+            unlink(world, |edge| !(edge.from == key || edge.to == key));
+            Ok(ok(json!({"purged": [id]})))
+        }
+        Some(key) => Ok(refused(
+            "entity_can_be_purged",
+            &format!(
+                "“{}” is not in the trash; move it there first",
+                world.rows[&key].name
+            ),
+        )),
+        None => Ok(refused(
+            "entity_can_be_purged",
+            &format!("there is nothing with the id `{id}`"),
+        )),
+    }
+}
+
+fn retitle(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
+    let id = text(input, "id").unwrap_or_default();
+    let title = text(input, "title").unwrap_or_default().trim().to_owned();
+    let Some(key) = key_of(world, id).filter(|key| !world.rows[key].trashed) else {
+        return Ok(refused("title_is_changeable", &gone(world, id)));
+    };
+    if key.0 != Kind::Photo && title.is_empty() {
+        return Ok(refused(
+            "title_is_changeable",
+            &format!("a {} needs a name", key.0.name()),
+        ));
+    }
+    if let Some(row) = world.rows.get_mut(&key) {
+        row.name = if title.is_empty() {
+            "untitled".to_owned()
+        } else {
+            title
+        };
+        row.updated = cx.now.clone();
+    }
+    Ok(ok(json!({"id": id})))
+}
+
+fn flag_entity(world: &mut World, input: &Value, on: bool) -> Result<Ran, String> {
+    let id = text(input, "id").unwrap_or_default();
+    let flag = text(input, "flag").unwrap_or("starred");
+    let Some(key) = key_of(world, id).filter(|key| !world.rows[key].trashed) else {
+        return Ok(refused("entity_takes_a_flag", &gone(world, id)));
+    };
+    if let Some(row) = world.rows.get_mut(&key)
+        && matches!(flag, "starred" | "pinned")
+    {
+        row.fields.insert(
+            if flag == "starred" {
+                "starred"
+            } else {
+                "pinned"
+            },
+            Val::Bool(on),
+        );
+    }
+    Ok(ok(json!({"changed": true})))
+}
+
+/// An edge the model reads: a photograph in an album (`contains`), what a note, task or event is
+/// `about`, and who attends an event.
+fn edge_entity(world: &mut World, input: &Value, add: bool) -> Result<Ran, String> {
+    let (from, to) = (
+        text(input, "from").unwrap_or_default(),
+        text(input, "to").unwrap_or_default(),
+    );
+    let via = match text(input, "rel") {
+        Some("contains") => Via::Entry,
+        Some("about") => Via::About,
+        Some("attendee") => Via::Attendee,
+        other => return Err(format!("error: park has no patch for an edge of {other:?}")),
+    };
+    let (Some(from), Some(to)) = (key_of(world, from), key_of(world, to)) else {
+        let predicate = if add {
+            "edge_joins_what_it_may"
+        } else {
+            "edge_ends_exist"
+        };
+        return Ok(refused(predicate, "there is nothing with that id"));
+    };
+    let held = world
+        .edges
+        .iter()
+        .any(|edge| edge.via == via && edge.from == from && edge.to == to);
+    if add {
+        edge(world, from, to, via);
+    } else {
+        if !held {
+            return Ok(refused("edge_ends_exist", "that edge is not there"));
+        }
+        unlink(world, |edge| {
+            !(edge.via == via && edge.from == from && edge.to == to)
+        });
+    }
+    Ok(ok(json!({})))
 }
 
 // ---------------------------------------------------------------------
 // people
 // ---------------------------------------------------------------------
 
-fn people_add(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
-    let id = text(input, "party_id").map_or_else(|| cx.id("party_id"), str::to_owned);
-    if world.rows.contains_key(&(Kind::Person, id.clone())) {
+/// A text column that `null` empties.
+fn text_or_clear(row: &mut Row, input: &Value, key: &str, field: &'static str) {
+    match input.get(key) {
+        Some(Value::String(value)) => put(row, field, nonempty(value)),
+        Some(Value::Null) => put(row, field, None),
+        _ => {}
+    }
+}
+
+fn person_add(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
+    let id = text(input, "id").map_or_else(|| cx.id("id"), str::to_owned);
+    if key_of(world, &id).is_some() {
         return Ok(refused(
-            "minted_id_is_free",
+            "person_can_be_added",
             "a person already holds the id this write minted",
         ));
     }
     let mut row = new_row(
         Kind::Person,
         &id,
-        text(input, "display_name").unwrap_or_default(),
+        text(input, "title").unwrap_or_default(),
         cx,
     );
-    put(
-        &mut row,
-        "role",
-        nonempty(text(input, "role").unwrap_or_default()),
-    );
-    put(
-        &mut row,
-        "nickname",
-        nonempty(text(input, "nickname").unwrap_or_default()),
-    );
+    for (key, field) in [("role", "role"), ("nickname", "nickname"), ("met", "met")] {
+        put(
+            &mut row,
+            field,
+            nonempty(text(input, key).unwrap_or_default()),
+        );
+    }
     put(
         &mut row,
         "cadence",
@@ -888,78 +821,63 @@ fn people_add(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> 
             .map(Val::Num),
     );
     row.fields.insert("starred", Val::Bool(false));
-    row.extra.insert("profile", "yes".to_owned());
     world.rows.insert(row.key(), row);
-    Ok(ok(json!({"party_id": id})))
+    Ok(ok(json!({"id": id})))
 }
 
-fn people_edit(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
-    let id = text(input, "party_id").unwrap_or_default();
+fn person_edit(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
+    let id = text(input, "id").unwrap_or_default();
     let Some(row) = world
         .rows
         .get_mut(&(Kind::Person, id.to_owned()))
         .filter(|row| !row.trashed)
     else {
-        return Ok(refused("person_live", "That person is not here."));
+        return Ok(refused("person_can_be_edited", &gone(world, id)));
     };
-    if let Some(name) = text(input, "display_name") {
+    if let Some(name) = text(input, "title") {
         row.name = name.to_owned();
     }
-    for (key, field) in [("role", "role"), ("nickname", "nickname"), ("met", "met")] {
-        if let Some(value) = text(input, key) {
-            put(row, field, nonempty(value));
-        }
+    for field in ["role", "nickname", "met"] {
+        text_or_clear(row, input, field, field);
     }
-    if let Some(days) = int(input, "cadence_days") {
-        put(
+    match input.get("cadence_days") {
+        Some(Value::Null) => put(row, "cadence", None),
+        Some(value) => put(
             row,
             "cadence",
-            Some(days).filter(|days| *days > 0).map(Val::Num),
-        );
+            value.as_i64().filter(|days| *days > 0).map(Val::Num),
+        ),
+        None => {}
     }
     row.updated = cx.now.clone();
-    Ok(ok(
-        json!({"party_id": id, "revision_id": cx.id("revision_id")}),
-    ))
+    Ok(ok(json!({"id": id})))
 }
 
 // ---------------------------------------------------------------------
-// schedule
+// tasks
 // ---------------------------------------------------------------------
-
-fn project_save(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
-    let id = text(input, "project_id").map_or_else(|| cx.id("project_id"), str::to_owned);
-    let name = text(input, "name").unwrap_or_default();
-    let key = (Kind::List, id.clone());
-    let mut row = world
-        .rows
-        .remove(&key)
-        .unwrap_or_else(|| new_row(Kind::List, &id, name, cx));
-    row.name = name.to_owned();
-    // the upsert writes the area it is given and nulls the rest
-    put(
-        &mut row,
-        "area",
-        nonempty(text(input, "area").unwrap_or_default()),
-    );
-    row.updated = cx.now.clone();
-    world.rows.insert(key, row);
-    Ok(ok(json!({"project_id": id})))
-}
 
 fn task_add(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
-    let id = text(input, "task_id").map_or_else(|| cx.id("task_id"), str::to_owned);
-    if let Some(parent) = text(input, "parent_task_id") {
+    let id = text(input, "id").map_or_else(|| cx.id("id"), str::to_owned);
+    let predicate = "task_has_a_title_and_a_model_that_holds";
+    if key_of(world, &id).is_some() {
+        return Ok(refused(predicate, "a task with that id already exists"));
+    }
+    if let Some(parent) = text(input, "parent_id") {
         let top_level = world.parent_of(&(Kind::Task, parent.to_owned())).is_none();
-        let open = live(world, Kind::Task, parent).is_some_and(|row| {
-            matches!(row.field("status"), Some(Val::Enum("open" | "in_progress")))
-        });
+        let open = live(world, Kind::Task, parent)
+            .is_some_and(|row| matches!(row.field("status"), Some(Val::Enum("open"))));
         if !(top_level && open) {
             return Ok(refused(
-                "parent_open_and_top_level",
+                predicate,
                 "That parent is not an open, top-level task.",
             ));
         }
+    }
+    if let Some(project) = text(input, "project_id")
+        && live(world, Kind::List, project).is_none()
+    {
+        return Ok(refused(predicate, "There is no such list."));
     }
     let mut row = new_row(
         Kind::Task,
@@ -968,7 +886,7 @@ fn task_add(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
         cx,
     );
     row.fields.insert("status", Val::Enum("open"));
-    row.date = text(input, "due_at").and_then(Stamp::parse);
+    row.date = text(input, "due").and_then(Stamp::parse);
     put(&mut row, "effort", int(input, "effort_min").map(Val::Num));
     put(
         &mut row,
@@ -982,11 +900,11 @@ fn task_add(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
         "description",
         nonempty(text(input, "description").unwrap_or_default()),
     );
-    if let Some(rule) = text(input, "rrule") {
+    if let Some(rule) = text(input, "rule") {
         row.extra.insert("rrule", rule.to_owned());
     }
     world.rows.insert(row.key(), row);
-    if let Some(parent) = text(input, "parent_task_id") {
+    if let Some(parent) = text(input, "parent_id") {
         edge(
             world,
             (Kind::Task, parent.to_owned()),
@@ -994,32 +912,37 @@ fn task_add(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
             Via::Subtask,
         );
     }
-    Ok(ok(json!({"task_id": id})))
+    if let Some(project) = text(input, "project_id") {
+        edge(
+            world,
+            (Kind::List, project.to_owned()),
+            (Kind::Task, id.clone()),
+            Via::ListColumn,
+        );
+    }
+    Ok(ok(json!({"id": id})))
 }
 
 fn task_edit(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
-    let id = text(input, "task_id").unwrap_or_default();
+    let id = text(input, "id").unwrap_or_default();
     let Some(row) = world
         .rows
         .get_mut(&(Kind::Task, id.to_owned()))
         .filter(|row| !row.trashed)
     else {
-        return Ok(refused("task_exists", "That task is not here."));
+        return Ok(refused(
+            "task_is_live_and_a_model_that_holds",
+            &gone(world, id),
+        ));
     };
     if let Some(title) = text(input, "title") {
         row.name = title.to_owned();
     }
-    if let Some(description) = text(input, "description") {
-        put(row, "description", nonempty(description));
-    }
-    if flag(input, "clear_description") {
-        put(row, "description", None);
-    }
-    if let Some(due) = text(input, "due_at") {
-        row.date = Stamp::parse(due);
-    }
-    if flag(input, "clear_due") {
-        row.date = None;
+    text_or_clear(row, input, "description", "description");
+    match input.get("due") {
+        Some(Value::String(due)) => row.date = Stamp::parse(due),
+        Some(Value::Null) => row.date = None,
+        _ => {}
     }
     if let Some(priority) = int(input, "priority") {
         put(
@@ -1028,43 +951,42 @@ fn task_edit(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
             Some(priority).filter(|value| *value > 0).map(Val::Num),
         );
     }
-    if let Some(effort) = int(input, "effort_min") {
-        put(row, "effort", Some(Val::Num(effort)));
+    match input.get("effort_min") {
+        Some(Value::Null) => put(row, "effort", None),
+        Some(value) => put(row, "effort", value.as_i64().map(Val::Num)),
+        None => {}
     }
-    if flag(input, "clear_effort") {
-        put(row, "effort", None);
-    }
-    if let Some(rule) = text(input, "rrule") {
-        row.extra.insert("rrule", rule.to_owned());
-    }
-    if flag(input, "clear_rrule") {
-        row.extra.remove("rrule");
+    match input.get("rule") {
+        Some(Value::String(rule)) => {
+            row.extra.insert("rrule", rule.clone());
+        }
+        Some(Value::Null) => {
+            row.extra.remove("rrule");
+        }
+        _ => {}
     }
     row.updated = cx.now.clone();
-    Ok(ok(json!({"task_id": id})))
+    Ok(ok(json!({"id": id})))
 }
 
-fn task_status(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
-    let id = text(input, "task_id").unwrap_or_default();
-    let status = text(input, "status").unwrap_or_default();
+fn task_status(world: &mut World, cx: &Cx, input: &Value, command: &str) -> Result<Ran, String> {
+    let id = text(input, "id").unwrap_or_default();
+    let (model, vault) = match command {
+        "task.complete" => ("completed", "done"),
+        "task.cancel" => ("cancelled", "cancelled"),
+        _ => ("open", "open"),
+    };
     let stamp = cx.stamp();
     let Some(row) = world
         .rows
         .get_mut(&(Kind::Task, id.to_owned()))
         .filter(|row| !row.trashed)
     else {
-        return Ok(refused("task_exists", "That task is not here."));
+        return Ok(refused("task_is_live", &gone(world, id)));
     };
-    let model = match status {
-        "completed" => "completed",
-        "cancelled" => "cancelled",
-        "in-process" => "in_progress",
-        _ => "open",
-    };
-    let already = row.field("status") == Some(&Val::Enum(model));
-    if !already {
+    if row.field("status") != Some(&Val::Enum(model)) {
         row.fields.insert("status", Val::Enum(model));
-        // `completed_at` exists iff the status says completed
+        // `done_at` exists iff the status says done
         put(
             row,
             "completed",
@@ -1075,137 +997,129 @@ fn task_status(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String>
         );
         row.updated = cx.now.clone();
     }
-    Ok(ok(
-        json!({"task_id": id, "status": status, "series_id": Value::Null}),
-    ))
+    Ok(ok(json!({"id": id, "status": vault})))
 }
 
-fn task_delete(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
-    let id = text(input, "task_id").unwrap_or_default().to_owned();
-    if live(world, Kind::Task, &id).is_none() {
-        return Ok(refused("task_exists", "That task is not here."));
-    }
-    let parent = (Kind::Task, id.clone());
-    let mut keys = vec![parent.clone()];
-    keys.extend(
-        world
-            .edges
-            .iter()
-            .filter(|edge| edge.via == Via::Subtask && edge.from == parent)
-            .map(|edge| edge.to.clone()),
-    );
-    let mut removed = 0;
-    for key in keys {
-        if let Some(row) = world.rows.get_mut(&key).filter(|row| !row.trashed) {
-            trash(row, cx);
-            removed += 1;
-        }
-    }
-    Ok(ok(json!({"task_id": id, "removed": removed})))
-}
-
-fn task_restore(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
-    let id = text(input, "task_id").unwrap_or_default().to_owned();
-    let key = (Kind::Task, id.clone());
-    if !world
-        .rows
-        .get(&key)
-        .is_some_and(|row| row.trashed && window_open(row, &cx.now))
-    {
-        return Ok(refused(
-            "task_trashed",
-            "That task is not in the trash any more.",
-        ));
-    }
-    let mut keys = vec![key.clone()];
-    keys.extend(
-        world
-            .edges
-            .iter()
-            .filter(|edge| edge.via == Via::Subtask && edge.from == key)
-            .map(|edge| edge.to.clone()),
-    );
-    let mut restored = 0;
-    for key in keys {
-        if let Some(row) = world.rows.get_mut(&key).filter(|row| row.trashed) {
-            untrash(row, cx);
-            restored += 1;
-        }
-    }
-    Ok(ok(json!({"task_id": id, "restored": restored})))
-}
-
-fn task_organize(world: &mut World, input: &Value) -> Result<Ran, String> {
-    let id = text(input, "task_id").unwrap_or_default().to_owned();
+fn task_organize(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
+    let id = text(input, "id").unwrap_or_default().to_owned();
     let task = (Kind::Task, id.clone());
-    if !world.rows.contains_key(&task) {
-        return Ok(refused("task_exists", "That task is not here."));
+    let predicate = "task_is_live_and_a_model_that_holds";
+    if live(world, Kind::Task, &id).is_none() {
+        return Ok(refused(predicate, &gone(world, &id)));
     }
-    let project = text(input, "project_id").map(|project| (Kind::List, project.to_owned()));
-    if let Some(project) = &project
-        && !world.rows.contains_key(project)
+    if let Some(project) = text(input, "project_id")
+        && live(world, Kind::List, project).is_none()
     {
-        return Ok(refused("project_exists", "There is no such list."));
+        return Ok(refused(predicate, "There is no such list."));
     }
-    if flag(input, "clear_project") || project.is_some() {
+    if input.get("project_id").is_some() {
         unlink(world, |edge| {
             !(edge.via == Via::ListColumn && edge.to == task)
         });
+        if let Some(project) = text(input, "project_id") {
+            edge(
+                world,
+                (Kind::List, project.to_owned()),
+                task.clone(),
+                Via::ListColumn,
+            );
+        }
+        if let Some(row) = world.rows.get_mut(&task) {
+            row.updated = cx.now.clone();
+        }
     }
-    if let Some(project) = project {
-        edge(world, project, task, Via::ListColumn);
-    }
-    Ok(ok(json!({"task_id": id})))
+    Ok(ok(json!({"id": id})))
 }
 
+// ---------------------------------------------------------------------
+// events
+// ---------------------------------------------------------------------
+
+/// An event's `date` and `duration` from its stored span, as the loader reads them: an all-day
+/// event is a day and no clock time.
+fn shape_stored(row: &mut Row) {
+    let start = row.extra.get("dtstart").cloned().unwrap_or_default();
+    let end = row.extra.get("dtend").cloned();
+    if row.extra.get("timing").map(String::as_str) == Some("all-day") {
+        row.fields.remove("duration");
+        row.date = Stamp::parse(&start).map(|start| Stamp {
+            date: start.date,
+            time: None,
+        });
+    } else {
+        shape_event(row, &start, end.as_deref());
+    }
+}
+
+/// Whether a timed, busy event clashes with one already on the calendar: the vault's reading.
 fn span_clash(world: &World, start: &str, end: &str) -> bool {
     world.of_kind(Kind::Event).any(|event| {
-        event.field("status") != Some(&Val::Enum("cancelled"))
+        !event.trashed
+            && event.field("status") != Some(&Val::Enum("cancelled"))
+            && event.extra.get("timing").map(String::as_str) != Some("all-day")
             && event.extra.get("dtstart").is_some_and(|s| s.as_str() < end)
             && event.extra.get("dtend").is_none_or(|e| e.as_str() > start)
     })
 }
 
 fn event_propose(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
-    let id = text(input, "event_id").map_or_else(|| cx.id("event_id"), str::to_owned);
-    let start = text(input, "dtstart").unwrap_or_default();
-    let end = text(input, "dtend").unwrap_or_default();
-    if world.rows.contains_key(&(Kind::Event, id.clone())) {
-        return Ok(refused(
-            "event_id_free",
-            "an event with that id already exists",
-        ));
+    let id = text(input, "id").map_or_else(|| cx.id("id"), str::to_owned);
+    let start = text(input, "starts").unwrap_or_default();
+    let end = text(input, "ends");
+    let timing = text(input, "timing").unwrap_or("floating");
+    let predicate = "event_has_a_title_and_a_time";
+    if key_of(world, &id).is_some() {
+        return Ok(refused(predicate, "an event with that id already exists"));
     }
-    if span_clash(world, start, end) {
+    if let Some(end) = end
+        && end < start
+    {
+        return Ok(refused(predicate, "An event must end after it starts."));
+    }
+    if timing != "all-day"
+        && flag_or(input, "busy", true)
+        && let Some(end) = end
+        && span_clash(world, start, end)
+    {
         return Ok(refused(
             "no_busy_conflict",
             "This time conflicts with another event on your calendar.",
         ));
     }
-    if end <= start {
-        return Ok(refused(
-            "dtend_after_dtstart",
-            "An event must end after it starts.",
-        ));
-    }
     let mut row = new_row(
         Kind::Event,
         &id,
-        text(input, "summary").unwrap_or_default(),
+        text(input, "title").unwrap_or_default(),
         cx,
     );
-    row.fields.insert("status", Val::Enum("tentative"));
-    shape_event(&mut row, start, Some(end));
+    row.fields.insert(
+        "status",
+        Val::Enum(match text(input, "status") {
+            Some("tentative") => "tentative",
+            Some("cancelled") => "cancelled",
+            _ => "confirmed",
+        }),
+    );
     put(
         &mut row,
         "description",
         nonempty(text(input, "description").unwrap_or_default()),
     );
     row.extra.insert("dtstart", start.to_owned());
-    row.extra.insert("dtend", end.to_owned());
+    if let Some(end) = end {
+        row.extra.insert("dtend", end.to_owned());
+    }
+    row.extra.insert("timing", timing.to_owned());
+    if let Some(zone) = text(input, "zone") {
+        row.extra.insert("zone", zone.to_owned());
+    }
+    if let Some(rule) = text(input, "rule") {
+        row.extra.insert("rrule", rule.to_owned());
+    }
+    shape_stored(&mut row);
     world.rows.insert(row.key(), row);
     let attendees = input
-        .get("attendee_party_ids")
+        .get("attendees")
         .and_then(Value::as_array)
         .map(|list| list.iter().filter_map(Value::as_str).collect::<Vec<_>>())
         .unwrap_or_default();
@@ -1217,86 +1131,88 @@ fn event_propose(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, Strin
             Via::Attendee,
         );
     }
-    Ok(ok(json!({"event_id": id, "attendees": attendees.len()})))
+    Ok(ok(json!({"id": id, "attendees": attendees.len()})))
+}
+
+fn flag_or(input: &Value, key: &str, default: bool) -> bool {
+    input.get(key).and_then(Value::as_bool).unwrap_or(default)
 }
 
 fn event_edit(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
-    let id = text(input, "event_id").unwrap_or_default();
-    let Some(row) = world.rows.get_mut(&(Kind::Event, id.to_owned())) else {
-        return Ok(refused("event_exists", "That event is not here to edit."));
-    };
-    if let Some(summary) = text(input, "summary") {
-        row.name = summary.to_owned();
-    }
-    if let Some(description) = text(input, "description") {
-        put(row, "description", nonempty(description));
-    }
-    if flag(input, "clear_description") {
-        put(row, "description", None);
-    }
-    let start = text(input, "dtstart")
-        .map(str::to_owned)
-        .or_else(|| row.extra.get("dtstart").cloned());
-    let end = text(input, "dtend")
-        .map(str::to_owned)
-        .or_else(|| row.extra.get("dtend").cloned());
-    if text(input, "dtstart").is_some() || text(input, "dtend").is_some() {
-        if let (Some(start), Some(end)) = (&start, &end)
-            && end <= start
-        {
-            return Ok(refused(
-                "event_end_after_start",
-                "An event must end after it starts.",
-            ));
-        }
-        if let Some(start) = &start {
-            shape_event(row, start, end.as_deref());
-            row.extra.insert("dtstart", start.clone());
-        }
-        if let Some(end) = &end {
-            row.extra.insert("dtend", end.clone());
-        }
-    }
-    row.updated = cx.now.clone();
-    Ok(ok(json!({"event_id": id, "sequence": 1})))
-}
-
-fn event_reschedule(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
-    let id = text(input, "event_id").unwrap_or_default();
-    let start = text(input, "dtstart").unwrap_or_default();
-    let end = text(input, "dtend").unwrap_or_default();
+    let id = text(input, "id").unwrap_or_default();
+    let predicate = "event_is_live_and_its_change_resolves";
     let Some(row) = world
         .rows
         .get_mut(&(Kind::Event, id.to_owned()))
-        .filter(|row| !row.trashed && row.field("status") != Some(&Val::Enum("cancelled")))
+        .filter(|row| !row.trashed)
     else {
-        return Ok(refused(
-            "event_exists_not_cancelled",
-            "That event is not here to change.",
-        ));
+        return Ok(refused(predicate, &gone(world, id)));
     };
-    if end <= start {
-        return Ok(refused(
-            "dtend_after_dtstart",
-            "An event must end after it starts.",
-        ));
+    if let Some(title) = text(input, "title") {
+        row.name = title.to_owned();
     }
-    shape_event(row, start, Some(end));
-    row.extra.insert("dtstart", start.to_owned());
-    row.extra.insert("dtend", end.to_owned());
+    text_or_clear(row, input, "description", "description");
+    if let Some(status) = text(input, "status") {
+        let model = match status {
+            "tentative" => "tentative",
+            "cancelled" => "cancelled",
+            _ => "confirmed",
+        };
+        row.fields.insert("status", Val::Enum(model));
+    }
+    let mut moved = false;
+    if let Some(start) = text(input, "starts") {
+        row.extra.insert("dtstart", start.to_owned());
+        moved = true;
+    }
+    match input.get("ends") {
+        Some(Value::String(end)) => {
+            row.extra.insert("dtend", end.clone());
+            moved = true;
+        }
+        Some(Value::Null) => {
+            row.extra.remove("dtend");
+            moved = true;
+        }
+        _ => {}
+    }
+    if let Some(timing) = text(input, "timing") {
+        row.extra.insert("timing", timing.to_owned());
+        moved = true;
+    }
+    match input.get("zone") {
+        Some(Value::String(zone)) => {
+            row.extra.insert("zone", zone.clone());
+        }
+        Some(Value::Null) => {
+            row.extra.remove("zone");
+        }
+        _ => {}
+    }
+    if moved {
+        let (start, end) = (
+            row.extra.get("dtstart").cloned().unwrap_or_default(),
+            row.extra.get("dtend").cloned(),
+        );
+        if end.as_deref().is_some_and(|end| end < start.as_str()) {
+            return Ok(refused(predicate, "An event must end after it starts."));
+        }
+        shape_stored(row);
+    }
     row.updated = cx.now.clone();
-    Ok(ok(json!({"event_id": id, "sequence": 1})))
+    Ok(ok(json!({"id": id})))
 }
 
 // ---------------------------------------------------------------------
-// notes and notebooks
+// notes
 // ---------------------------------------------------------------------
 
 fn note_create(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
-    let id = text(input, "note_id").map_or_else(|| cx.id("note_id"), str::to_owned);
-    if world.rows.contains_key(&(Kind::Note, id.clone())) {
+    let id = text(input, "id").map_or_else(|| cx.id("id"), str::to_owned);
+    let predicate = "note_has_a_title_a_body_within_budget_and_a_notebook";
+    if key_of(world, &id).is_some() {
         return Ok(refused(
-            "note_id_is_free",
+            predicate,
             "a note already holds the id this write minted",
         ));
     }
@@ -1305,10 +1221,7 @@ fn note_create(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String>
             .rows
             .contains_key(&(Kind::Notebook, notebook.to_owned()))
     {
-        return Ok(refused(
-            "notebook_exists_if_given",
-            "there is no notebook with that id",
-        ));
+        return Ok(refused(predicate, "there is no notebook with that id"));
     }
     let mut row = new_row(
         Kind::Note,
@@ -1320,7 +1233,7 @@ fn note_create(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String>
     put(
         &mut row,
         "body",
-        nonempty(text(input, "body_text").unwrap_or_default()),
+        nonempty(text(input, "body").unwrap_or_default()),
     );
     row.fields.insert("pinned", Val::Bool(false));
     world.rows.insert(row.key(), row);
@@ -1332,150 +1245,71 @@ fn note_create(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String>
             Via::Entry,
         );
     }
-    Ok(ok(
-        json!({"note_id": id, "body_content_id": cx.id("body_content_id")}),
-    ))
+    Ok(ok(json!({"id": id})))
 }
 
 fn note_edit(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
-    let id = text(input, "note_id").unwrap_or_default();
+    let id = text(input, "id").unwrap_or_default();
     let Some(row) = world
         .rows
         .get_mut(&(Kind::Note, id.to_owned()))
         .filter(|row| !row.trashed)
     else {
-        return Ok(refused("note_is_live", "That note is not here."));
+        return Ok(refused(
+            "note_is_live_and_body_within_budget",
+            &gone(world, id),
+        ));
     };
-    if let Some(body) = text(input, "body_text") {
+    if let Some(body) = text(input, "body") {
         put(row, "body", nonempty(body));
     }
     if let Some(title) = text(input, "title") {
         row.name = title.to_owned();
     }
-    if let Some(pinned) = int(input, "pinned") {
-        row.fields.insert("pinned", Val::Bool(pinned == 1));
-    }
     row.updated = cx.now.clone();
-    Ok(ok(json!({"note_id": id})))
+    Ok(ok(json!({"id": id})))
 }
 
-fn note_move(world: &mut World, input: &Value) -> Result<Ran, String> {
-    let id = text(input, "note_id").unwrap_or_default().to_owned();
+fn note_move(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
+    let id = text(input, "id").unwrap_or_default().to_owned();
     let note = (Kind::Note, id.clone());
+    let predicate = "note_is_live_and_notebook_exists";
     if live(world, Kind::Note, &id).is_none() {
-        return Ok(refused("note_is_live", "That note is not here."));
+        return Ok(refused(predicate, &gone(world, &id)));
     }
     let notebook = text(input, "notebook_id").map(|notebook| (Kind::Notebook, notebook.to_owned()));
     if let Some(notebook) = &notebook
         && !world.rows.contains_key(notebook)
     {
-        return Ok(refused(
-            "notebook_exists_if_given",
-            "there is no notebook with that id",
-        ));
+        return Ok(refused(predicate, "there is no notebook with that id"));
     }
     unlink(world, |edge| !(edge.via == Via::Entry && edge.to == note));
     if let Some(notebook) = notebook {
-        edge(world, notebook, note, Via::Entry);
+        edge(world, notebook, note.clone(), Via::Entry);
     }
-    Ok(ok(json!({"note_id": id})))
-}
-
-fn notebook_create(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
-    let id = text(input, "notebook_id").map_or_else(|| cx.id("notebook_id"), str::to_owned);
-    let name = text(input, "name").unwrap_or_default();
-    if world.rows.keys().any(|(_, row)| *row == id) {
-        return Ok(refused(
-            "notebook_id_is_free",
-            "a notebook already holds the id this write minted",
-        ));
+    if let Some(row) = world.rows.get_mut(&note) {
+        row.updated = cx.now.clone();
     }
-    if world.of_kind(Kind::Notebook).any(|row| row.name == name) {
-        return Ok(refused(
-            "name_unused",
-            "You already have a notebook with that name.",
-        ));
-    }
-    let mut row = new_row(Kind::Notebook, &id, name, cx);
-    if let Some(parent) = text(input, "parent_notebook_id") {
-        row.extra.insert("parent", parent.to_owned());
-    }
-    world.rows.insert(row.key(), row);
-    Ok(ok(json!({"notebook_id": id})))
-}
-
-fn notebook_rename(world: &mut World, input: &Value) -> Result<Ran, String> {
-    let id = text(input, "notebook_id").unwrap_or_default();
-    let name = text(input, "name").unwrap_or_default().to_owned();
-    if !world.rows.contains_key(&(Kind::Notebook, id.to_owned())) {
-        return Ok(refused(
-            "notebook_exists",
-            "there is no notebook with that id",
-        ));
-    }
-    if world
-        .of_kind(Kind::Notebook)
-        .any(|row| row.name == name && row.id != id)
-    {
-        return Ok(refused(
-            "name_unused_by_owner",
-            "You already have a notebook with that name.",
-        ));
-    }
-    if let Some(row) = world.rows.get_mut(&(Kind::Notebook, id.to_owned())) {
-        row.name = name;
-    }
-    Ok(ok(json!({"notebook_id": id})))
-}
-
-fn notebook_delete(world: &mut World, input: &Value) -> Result<Ran, String> {
-    let id = text(input, "notebook_id").unwrap_or_default().to_owned();
-    let key = (Kind::Notebook, id.clone());
-    if !world.rows.contains_key(&key) {
-        return Ok(refused(
-            "notebook_exists",
-            "there is no notebook with that id",
-        ));
-    }
-    if world
-        .of_kind(Kind::Notebook)
-        .any(|row| row.extra.get("parent") == Some(&id))
-    {
-        return Ok(refused(
-            "notebook_has_no_children",
-            "That notebook still holds notebooks; delete or move them first.",
-        ));
-    }
-    let unfiled = world
-        .edges
-        .iter()
-        .filter(|e| e.via == Via::Entry && e.from == key)
-        .count();
-    unlink(world, |edge| !(edge.from == key || edge.to == key));
-    world.rows.remove(&key);
-    Ok(ok(json!({"notebook_id": id, "notes_unfiled": unfiled})))
+    Ok(ok(json!({"id": id})))
 }
 
 // ---------------------------------------------------------------------
-// documents and folders
+// documents and containers
 // ---------------------------------------------------------------------
 
-fn document_add(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
-    let id = text(input, "document_id").map_or_else(|| cx.id("document_id"), str::to_owned);
-    if world.rows.contains_key(&(Kind::Document, id.clone())) {
+fn document_create(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
+    let id = text(input, "id").map_or_else(|| cx.id("id"), str::to_owned);
+    let predicate = "document_has_a_name_words_within_budget_and_a_folder";
+    if key_of(world, &id).is_some() {
         return Ok(refused(
-            "document_id_is_free",
+            predicate,
             "a document already holds the id this write minted",
         ));
     }
     if let Some(folder) = text(input, "folder_id")
         && !world.rows.contains_key(&(Kind::Folder, folder.to_owned()))
-        && world.root_folder.as_deref() != Some(folder)
     {
-        return Ok(refused(
-            "folder_exists_if_given",
-            "there is no folder with that id",
-        ));
+        return Ok(refused(predicate, "there is no folder with that id"));
     }
     let mut row = new_row(
         Kind::Document,
@@ -1491,134 +1325,116 @@ fn document_add(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String
             world,
             (Kind::Folder, folder.to_owned()),
             (Kind::Document, id.clone()),
-            Via::FolderTag,
+            Via::FolderColumn,
         );
     }
-    Ok(ok(
-        json!({"document_id": id, "content_id": cx.id("content_id"), "deduped": false}),
-    ))
+    Ok(ok(json!({"id": id})))
 }
 
 fn document_move(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
-    let id = text(input, "document_id").unwrap_or_default().to_owned();
+    let id = text(input, "id").unwrap_or_default().to_owned();
     let document = (Kind::Document, id.clone());
+    let predicate = "document_is_live_and_folder_exists";
     if live(world, Kind::Document, &id).is_none() {
-        return Ok(refused("document_live", "That document is not here."));
+        return Ok(refused(predicate, &gone(world, &id)));
     }
     let folder = text(input, "folder_id").map(|folder| (Kind::Folder, folder.to_owned()));
     if let Some(folder) = &folder
         && !world.rows.contains_key(folder)
     {
-        return Ok(refused(
-            "folder_exists_if_given",
-            "there is no folder with that id",
-        ));
+        return Ok(refused(predicate, "there is no folder with that id"));
     }
     unlink(world, |edge| {
-        !(edge.via == Via::FolderTag && edge.to == document)
+        !(edge.via == Via::FolderColumn && edge.to == document)
     });
     if let Some(folder) = folder {
-        edge(world, folder, document.clone(), Via::FolderTag);
+        edge(world, folder, document.clone(), Via::FolderColumn);
     }
     if let Some(row) = world.rows.get_mut(&document) {
         row.updated = cx.now.clone();
     }
-    Ok(ok(json!({"document_id": id})))
+    Ok(ok(json!({"id": id})))
 }
 
-fn folder_create(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
-    let id = text(input, "folder_id").map_or_else(|| cx.id("folder_id"), str::to_owned);
-    let name = text(input, "name").unwrap_or_default();
-    let parent = text(input, "parent_folder_id").map(str::to_owned);
-    if let Some(parent) = &parent
-        && !world.rows.contains_key(&(Kind::Folder, parent.clone()))
-    {
+fn container_create(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
+    let id = text(input, "id").map_or_else(|| cx.id("id"), str::to_owned);
+    let title = text(input, "title").unwrap_or_default();
+    let predicate = "container_has_a_name_and_a_place";
+    if key_of(world, &id).is_some() || world.areas.iter().any(|(area, _)| *area == id) {
         return Ok(refused(
-            "parent_exists_if_given",
-            "there is no folder with that parent id",
+            predicate,
+            "something already holds the id this write minted",
         ));
     }
-    // siblings: the folders under the same parent, the top level when none is given
-    let root = world.root_folder.clone();
-    let top = |row: &Row| {
-        row.extra
-            .get("parent")
-            .is_none_or(|parent| Some(parent) == root.as_ref())
+    let kind = match text(input, "kind") {
+        Some("album") => Kind::Album,
+        Some("notebook") => Kind::Notebook,
+        Some("folder") => Kind::Folder,
+        Some("project") => Kind::List,
+        // an area is a container the model has no kind for: its lists carry its title
+        Some("area") => {
+            world.areas.push((id.clone(), title.to_owned()));
+            return Ok(ok(json!({"id": id})));
+        }
+        other => {
+            return Err(format!(
+                "error: park has no patch for a container of {other:?}"
+            ));
+        }
     };
-    let clash = world.of_kind(Kind::Folder).any(|row| {
-        row.name == name
-            && match &parent {
-                None => top(row),
-                Some(parent) => row.extra.get("parent") == Some(parent),
+    let parent = text(input, "parent").map(str::to_owned);
+    let mut row = new_row(kind, &id, title, cx);
+    if let Some(parent) = parent {
+        match kind {
+            Kind::List => set_area(world, &mut row, Some(&parent)),
+            _ => {
+                row.extra.insert("parent", parent);
             }
-    });
-    if clash {
-        return Ok(refused(
-            "name_unused_among_siblings",
-            &format!("there is already a folder called \"{name}\" there"),
-        ));
-    }
-    let mut row = new_row(Kind::Folder, &id, name, cx);
-    if let Some(parent) = parent.or(root) {
-        row.extra.insert("parent", parent);
+        }
     }
     world.rows.insert(row.key(), row);
-    Ok(ok(json!({"folder_id": id})))
+    Ok(ok(json!({"id": id})))
 }
 
-fn folder_delete(world: &mut World, input: &Value) -> Result<Ran, String> {
-    let id = text(input, "folder_id").unwrap_or_default().to_owned();
-    let key = (Kind::Folder, id.clone());
-    if !world.rows.contains_key(&key) {
-        return Ok(refused(
-            "folder_exists_and_not_root",
-            "there is no folder with that id — the drive's own top level is not a folder",
-        ));
+/// A list's area, by the id of the area container it sits in.
+fn set_area(world: &World, row: &mut Row, area: Option<&str>) {
+    row.extra.remove("area_id");
+    row.fields.remove("area");
+    if let Some((id, title)) = area.and_then(|area| world.areas.iter().find(|(id, _)| id == area)) {
+        row.extra.insert("area_id", id.clone());
+        put(row, "area", nonempty(title));
     }
-    let holds = world
-        .edges
-        .iter()
-        .any(|edge| edge.via == Via::FolderTag && edge.from == key)
-        || world
-            .of_kind(Kind::Folder)
-            .any(|row| row.extra.get("parent") == Some(&id));
-    if holds {
-        return Ok(refused(
-            "folder_is_empty",
-            "that folder still holds documents or subfolders — a trashed document counts, because it keeps its folder",
-        ));
-    }
-    world.rows.remove(&key);
-    Ok(ok(json!({"folder_id": id})))
 }
 
-// ---------------------------------------------------------------------
-// photos
-// ---------------------------------------------------------------------
-
-fn photo_update(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
-    let id = text(input, "asset_id").unwrap_or_default();
-    let Some(row) = world.rows.get_mut(&(Kind::Photo, id.to_owned())) else {
-        return Ok(refused(
-            "asset_exists",
-            "there is no photograph with that id",
-        ));
+fn container_move(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
+    let id = text(input, "id").unwrap_or_default().to_owned();
+    let predicate = "container_can_go_there";
+    let Some(key) = key_of(world, &id).filter(|key| is_container(key.0)) else {
+        return Ok(refused(predicate, &gone(world, &id)));
     };
-    if let Some(captured) = text(input, "captured_at") {
-        row.date = Stamp::parse(captured);
+    let parent = text(input, "parent").map(str::to_owned);
+    if key.0 == Kind::List {
+        if let Some(parent) = &parent
+            && !world.areas.iter().any(|(area, _)| area == parent)
+        {
+            return Ok(refused(predicate, "a project goes inside an area"));
+        }
+        let mut row = world.rows.remove(&key).ok_or("the row was just found")?;
+        set_area(world, &mut row, parent.as_deref());
+        row.updated = cx.now.clone();
+        world.rows.insert(key, row);
+    } else if let Some(row) = world.rows.get_mut(&key) {
+        match parent {
+            Some(parent) => {
+                row.extra.insert("parent", parent);
+            }
+            None => {
+                row.extra.remove("parent");
+            }
+        }
+        row.updated = cx.now.clone();
     }
-    if let Some(favorite) = int(input, "favorite") {
-        row.fields.insert("starred", Val::Bool(favorite == 1));
-    }
-    if let Some(title) = text(input, "title") {
-        row.name = if title.is_empty() {
-            "untitled".to_owned()
-        } else {
-            title.to_owned()
-        };
-    }
-    row.updated = cx.now.clone();
-    Ok(ok(json!({"asset_id": id})))
+    Ok(ok(json!({"id": id})))
 }
 
 // ---------------------------------------------------------------------
@@ -1801,17 +1617,14 @@ pub(crate) fn drift(patched: &World, real: &World) -> Vec<String> {
     for edge in b.difference(&a) {
         out.push(format!("edge {:?} only in the vault", edge));
     }
-    if patched.entity_count != real.entity_count {
-        out.push(format!(
-            "journal count {} / {}",
-            patched.entity_count, real.entity_count
-        ));
+    if patched.areas != real.areas {
+        out.push(format!("areas {:?} / {:?}", patched.areas, real.areas));
     }
     out
 }
 
 // ---------------------------------------------------------------------
-// the Locker (the harness's: the phone's session has none, `Flags::locker`)
+// the Locker (a parked turn sees the plain half; the sealed cells are placeholders, `Flags::secrets`)
 // ---------------------------------------------------------------------
 
 /// The columns each Locker type owns; every other is nulled on a write

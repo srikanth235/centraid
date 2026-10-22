@@ -15,6 +15,7 @@ import centraid.core.v1.Response
 import centraid.core.v1.TasksCatchUp
 import centraid.core.v1.TasksGroup
 import centraid.core.v1.TasksView
+import centraid.screen.v1.SearchAsk
 import centraid.screen.v1.AgendaEmpty
 import centraid.screen.v1.AgendaEventRow
 import centraid.screen.v1.AgendaHomeEvent
@@ -156,7 +157,7 @@ class AgendaHomeSpec : StringSpec({
             it.tz shouldBe "Europe/London"
         }
         // A ROW MOVED: the held list is stale, so it is read again too.
-        val stale = drive(typed.state, AgendaHomeMachine.rowsChanged("core_event", emptyList())!!)
+        val stale = drive(typed.state, AgendaHomeMachine.rowsChanged("event", emptyList())!!)
         AgendaReads.requests(stale.state, clock).shouldNotBeNull().map { it.kind() } shouldBe
             listOf("upcoming", "context", "tasks-today", "tasks-upcoming", "tasks-search", "search")
         reads[1].tasks_search.shouldNotBeNull().let {
@@ -503,24 +504,24 @@ class AgendaHomeSpec : StringSpec({
         drive(fixed, view(AgendaHomeEvent(search_closed = AgendaHomeEvent.SearchClosed()))).state.screen.search_corrected shouldBe ""
     }
 
-    "search: Ask is the no-match question: set by a wholly empty current answer, cleared by a new term, a close, a denial or a stale answer, and never set when anything was found (#1097, R-1097-28)" {
+    "search: Ask is the row at the foot of a current answer, matched or not, cleared by a new term, a close, a denial or a stale answer (#1097, R-1097-28, #1135)" {
         val home = landed(schedule, upcoming(timed("a", "Stand-up", "2026-06-16T09:00")))
         val typed = drive(home, searchOpened(), term("zzqx")).state
         val none = drive(typed, AgendaInput.Answered(null, context(), AgendaSearch())).state
-        none.screen.search_ask shouldBe "Find zzqx"
+        none.screen.search_ask_row shouldBe SearchAsk(label = "Ask about “zzqx”", question = "Find zzqx", scope = "agenda")
         none.screen.data_.shouldNotBeNull().let {
             it.empty shouldBe AgendaEmpty.AGENDA_EMPTY_NO_MATCH
-            it.empty_action shouldBe "Ask about “zzqx”"
+            it.empty_action shouldBe ""
         }
-        // An event found is no Ask, and its sentence has no action.
+        // An event found still has Ask at the foot.
         val hit = AgendaInput.Answered(null, context(), AgendaSearch(events = listOf(timed("d", "Dentist", "2026-05-02T14:00").copy(calendar_id = "cal-1"))))
-        drive(typed, hit).state.screen.search_ask shouldBe ""
+        drive(typed, hit).state.screen.search_ask_row shouldBe none.screen.search_ask_row
         // A new term, a close and a denial clear it; an answer for a closed search sets none.
-        drive(none, term("zzq")).state.screen.search_ask shouldBe ""
-        drive(none, view(AgendaHomeEvent(search_closed = AgendaHomeEvent.SearchClosed()))).state.screen.search_ask shouldBe ""
-        drive(none, AgendaInput.Denied(AppQueryDenial(code = "revoked"))).state.screen.search_ask shouldBe ""
+        drive(none, term("zzq")).state.screen.search_ask_row shouldBe null
+        drive(none, view(AgendaHomeEvent(search_closed = AgendaHomeEvent.SearchClosed()))).state.screen.search_ask_row shouldBe null
+        drive(none, AgendaInput.Denied(AppQueryDenial(code = "revoked"))).state.screen.search_ask_row shouldBe null
         val closed = drive(typed, view(AgendaHomeEvent(search_closed = AgendaHomeEvent.SearchClosed()))).state
-        drive(closed, AgendaInput.Answered(null, context(), AgendaSearch())).state.screen.search_ask shouldBe ""
+        drive(closed, AgendaInput.Answered(null, context(), AgendaSearch())).state.screen.search_ask_row shouldBe null
     }
 
     "search from Waiting covers every event, not only the ones waiting on you (#1047)" {
@@ -608,7 +609,7 @@ class AgendaHomeSpec : StringSpec({
 
     "a row moved re-reads over the rows on screen, and only for the tables the queries read" {
         val home = landed(schedule, upcoming(timed("a", "Stand-up", "2026-06-16T09:00")))
-        val moved = drive(home, AgendaHomeMachine.rowsChanged("schedule_attendee", listOf("att-1"))!!)
+        val moved = drive(home, AgendaHomeMachine.rowsChanged("edge", listOf("att-1"))!!)
         moved.effects shouldBe listOf(ScreenEffect.ReadPage(AgendaHomeMachine.SCREEN_ID, null))
         moved.state.screen.data_.shouldNotBeNull()
         AgendaHomeMachine.rowsChanged("locker_item", listOf("x")).shouldBeNull()

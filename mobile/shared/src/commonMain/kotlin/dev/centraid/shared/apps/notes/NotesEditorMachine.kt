@@ -14,6 +14,7 @@ import dev.centraid.shared.kit.AutosaveLens
 import dev.centraid.shared.kit.ReadContent
 import dev.centraid.shared.nav.ScreenIds
 import dev.centraid.shared.screen.Reads
+import dev.centraid.shared.kit.InvokeKeys
 import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.ScreenMachine
 import dev.centraid.shared.screen.Step
@@ -98,12 +99,9 @@ public object NotesEditorMachine : ScreenMachine<NotesEditorState, NotesEditorEv
 
             event.title != null -> AutosaveLaw.edited(Lens, state) { it.copy(title = event.title.title) }
 
-            // A BODY NOT ON THIS DEVICE IS READ-ONLY (the owner's ruling,
-            // superseding R-NOTES-2): typing over words the member cannot see
-            // would replace them unseen. The title and the pin still save.
             event.body != null -> {
                 val draft = state.draft
-                if (draft == null || draft.body_unavailable) {
+                if (draft == null) {
                     Step(state)
                 } else {
                     val edited = AutosaveLaw.edited(Lens, state) { it.copy(body = event.body.body) }
@@ -116,7 +114,7 @@ public object NotesEditorMachine : ScreenMachine<NotesEditorState, NotesEditorEv
             // any edit.
             event.link_requested != null -> {
                 val draft = state.draft
-                if (draft == null || draft.body_unavailable) {
+                if (draft == null) {
                     Step(state)
                 } else {
                     Step(
@@ -134,7 +132,7 @@ public object NotesEditorMachine : ScreenMachine<NotesEditorState, NotesEditorEv
             event.link_picked != null -> {
                 val target = event.link_picked.target
                 val draft = state.draft
-                if (!state.link_sheet_open || target == null || draft == null || draft.body_unavailable) {
+                if (!state.link_sheet_open || target == null || draft == null) {
                     Step(closeLink(state))
                 } else {
                     val body = spliceLink(draft.body, state.link_anchor, state.link_replaces, target.title)
@@ -144,12 +142,17 @@ public object NotesEditorMachine : ScreenMachine<NotesEditorState, NotesEditorEv
 
             event.link_dismissed != null -> Step(closeLink(state))
 
-            // A PIN IS A CHOICE, NOT TYPING: it saves at once.
+            // A PIN IS A CHOICE, NOT TYPING, AND NOT A SAVE: it is the shared flag
+            // verb, sent at once under the note's id. A note not yet in the vault
+            // takes it after its create lands (below).
             event.pin != null -> {
-                val edited = AutosaveLaw.edited(Lens, state) { it.copy(pinned = !it.pinned) }
-                val flushed = AutosaveLaw.flush(Lens, edited.state)
-                // The debounce the edit scheduled is dropped: the flush is it.
-                Step(flushed.state, flushed.effects)
+                val draft = state.draft
+                if (draft == null) {
+                    Step(state)
+                } else {
+                    val flipped = state.copy(draft = draft.copy(pinned = !draft.pinned))
+                    Step(flipped, if (state.is_new) emptyList() else listOf(pinWrite(state.note_id, !draft.pinned)))
+                }
             }
 
             // SAVE NOW. What the native Save button sends until K5 removes it,
@@ -164,7 +167,13 @@ public object NotesEditorMachine : ScreenMachine<NotesEditorState, NotesEditorEv
                 val creating = state.is_new && event.write_settled.committed &&
                     event.write_settled.invoke_key == state.autosave?.invoke_key
                 val settled = AutosaveLaw.settled(Lens, state, event.write_settled)
-                if (creating) Step(settled.state.copy(is_new = false), settled.effects) else settled
+                if (creating) {
+                    // A pin chosen before the note existed lands now.
+                    val pin = if (state.draft?.pinned == true) listOf(pinWrite(state.note_id, true)) else emptyList()
+                    Step(settled.state.copy(is_new = false), settled.effects + pin)
+                } else {
+                    settled
+                }
             }
 
             event.seat_changed != null -> Step(state.copy(seat = event.seat_changed.seat))
@@ -201,7 +210,7 @@ public object NotesEditorMachine : ScreenMachine<NotesEditorState, NotesEditorEv
     /**
      * A NEW NOTE'S FIRST SAVE IS A CREATE. The kit's law submits the lens'
      * one command; while the note is new, that submit is rewritten into
-     * `knowledge.create_note` under the phone-minted id, with the whole draft
+     * `note.create` under the phone-minted id, with the whole draft
      * (a create has no baseline to measure changes against), and its key is
      * the create's.
      */
@@ -236,8 +245,6 @@ public object NotesEditorMachine : ScreenMachine<NotesEditorState, NotesEditorEv
         // phase its saves have reached since.
         val untouched = (autosave?.edit_seq ?: 0L) <= state.opened_seq
         return state.copy(
-            body_editable = draft != null && !draft.body_unavailable,
-            body_notice = if (draft?.body_unavailable == true) NotesCopy.BODY_NOT_HERE else "",
             chrome = NotesEditorChrome(
                 // #1015 D3: "Cancel" only before the first keystroke; after
                 // it, close = done, and an autosave does not undo that.
@@ -269,7 +276,7 @@ public object NotesEditorMachine : ScreenMachine<NotesEditorState, NotesEditorEv
     internal fun keepDerived(state: NotesEditorState, incoming: NoteDraft): NoteDraft {
         val current = state.draft ?: return incoming
         val derived = current.title.isBlank() && incoming.title.isNotEmpty() &&
-            !incoming.body_unavailable && incoming.title == firstLine(incoming.body)
+            incoming.title == firstLine(incoming.body)
         return if (derived) incoming.copy(title = "") else incoming
     }
 
@@ -325,12 +332,12 @@ public object NotesEditorMachine : ScreenMachine<NotesEditorState, NotesEditorEv
     /** A new note, whole: its minted id, a title (derived when blank), the body. */
     internal fun createInput(noteId: String, draft: NoteDraft): String {
         val title = draft.title.trim().ifEmpty { firstLine(draft.body) }
-        return "{\"note_id\":${jsonString(noteId)},\"title\":${jsonString(title)}," +
-            "\"body_text\":${jsonString(draft.body)},\"format\":\"markdown\"}"
+        return "{\"id\":${jsonString(noteId)},\"title\":${jsonString(title)}," +
+            "\"body\":${jsonString(draft.body)},\"format\":\"markdown\"}"
     }
 
     /** The command a new note's first save is. */
-    public const val CREATE_COMMAND: String = "knowledge.create_note"
+    public const val CREATE_COMMAND: String = "note.create"
 
     /** The editor's parts, for the kit's autosave law. */
     internal object Lens : AutosaveLens<NotesEditorState, NoteDraft> {
@@ -382,10 +389,10 @@ public object NotesEditorMachine : ScreenMachine<NotesEditorState, NotesEditorEv
             saveInput(state.note_id, draft, baseline)
 
         /**
-         * A NEW NOTE NEEDS A NAME: `create_note` requires a `title`, and an
+         * A NEW NOTE NEEDS A NAME: `note.create` requires a `title`, and an
          * empty one is derived from the body's first line — so a note with
          * neither is not yet a note. A body cleared to nothing is SAVED:
-         * `body_text` takes an empty string (`minLength: 0`).
+         * `body` takes an empty string.
          */
         override fun refusal(state: NotesEditorState, draft: NoteDraft, baseline: NoteDraft?): ReadFailure? =
             if (state.is_new && draft.title.isBlank() && firstLine(draft.body).isEmpty()) {
@@ -396,59 +403,61 @@ public object NotesEditorMachine : ScreenMachine<NotesEditorState, NotesEditorEv
     }
 
     /**
-     * THE COMMAND THE VAULT ACTUALLY HAS (#1025 S5).
-     *
-     * This said `knowledge.save_note`, and there is no such command. The
-     * registry has `create_note`, `edit_note`, `move_note`, `delete_note`,
-     * `restore_note` and the notebook verbs. `Vault::execute` answered
-     * `UnknownCommand`, `crates/core` mapped it to `ERROR_CODE_INVALID_REQUEST`,
-     * and the member read "That request does not make sense to this build" —
-     * **on every window, for ever**, because the seat retried a write that could
-     * never succeed.
-     *
-     * Nothing caught it because nothing in the product had ever submitted a
-     * write: the machine's only exercise was a unit test asserting the effect it
-     * emitted, and an effect naming a command nobody runs looks exactly like one
-     * naming a command that exists. It took a device and a real gateway.
+     * THE COMMAND THE VAULT ACTUALLY HAS (#1025 S5): `note.edit`, the note's own
+     * edit. (A command that does not exist answers `UnknownCommand`, which the
+     * seat retries on every window for ever; `ShellCommandsExistSpec` is what
+     * reads every command name this shell sends against the registry.)
      */
-    public const val SAVE_COMMAND: String = "knowledge.edit_note"
+    public const val SAVE_COMMAND: String = "note.edit"
 
     /**
-     * The command's input, as JSON: `note_id` and ONLY THE FIELDS THAT CHANGED
+     * The command's input, as JSON: `id` and ONLY THE FIELDS THAT CHANGED
      * against [baseline] — or null when none did.
      *
-     * `knowledge.edit_note`'s schema is `additionalProperties: false`, and an
-     * ABSENT field is "leave it alone", which is load-bearing here:
+     * `note.edit`'s schema is `additionalProperties: false`, and an ABSENT field
+     * is "leave it alone", which is load-bearing here:
      *
-     * * **`body_text`, never `body`** — an empty one included: a body cleared
-     *   to nothing is the member's words (`minLength: 0`). A body this seat has
-     *   not copied (`body_unavailable`) is never sent, which is what lets a
-     *   title or pin save without blanking the note (R-NOTES-2/3).
+     * * **`body`** — an empty one included: a body cleared to nothing is the
+     *   member's words.
      * * **An empty title is DERIVED from the body's first line**, because a
      *   note with no title is still a note a member means to keep and the
      *   first line is what names it. The draft keeps its empty title; the
      *   vault gets the derived one, and a re-read does not put it back
      *   ([keepDerived]). No first line: a changed title is sent EMPTY —
-     *   `edit_note`'s `title` takes `""` (#1047 T1) — so a name the member
+     *   `note.edit`'s `title` takes `""` (#1047 T1) — so a name the member
      *   removed does not stay in the vault and come back on the next read.
+     * * **The pin is not an input.** A pin is the shared `flag.set` /
+     *   `flag.clear` ([pinWrite]), a command of its own.
      * * **`base_revision_id` is not an input.** There is no vault-side
-     *   revision check: the last save on this phone wins.
-     * * `pinned` is 0 or 1 — SQLite has no boolean.
+     *   version check: the last save on this phone wins.
      *
      * Hand-built: `commonMain` carries no JSON library, and the escaping is the
      * only hard part ([jsonString]).
      */
     internal fun saveInput(noteId: String, draft: NoteDraft, baseline: NoteDraft?): String? {
         val fields = mutableListOf<String>()
-        val bodyChanged = draft.body != (baseline?.body ?: "") && !draft.body_unavailable
+        val bodyChanged = draft.body != (baseline?.body ?: "")
         val title = draft.title.ifBlank { firstLine(draft.body) }
         val titleChanged = draft.title != baseline?.title || (draft.title.isBlank() && bodyChanged)
         if (titleChanged) fields += "\"title\":${jsonString(title)}"
-        if (bodyChanged) fields += "\"body_text\":${jsonString(draft.body)}"
-        if (draft.pinned != baseline?.pinned) fields += "\"pinned\":${if (draft.pinned) 1 else 0}"
+        if (bodyChanged) fields += "\"body\":${jsonString(draft.body)}"
         if (fields.isEmpty()) return null
-        return (listOf("\"note_id\":${jsonString(noteId)}") + fields)
+        return (listOf("\"id\":${jsonString(noteId)}") + fields)
             .joinToString(",", prefix = "{", postfix = "}")
+    }
+
+    /**
+     * A PIN IS ITS OWN WRITE: the shared `flag.set` or `flag.clear` of the
+     * `pinned` flag, under the note's id. Idempotent, so a replay lands the
+     * state it already holds.
+     */
+    private fun pinWrite(noteId: String, pinned: Boolean): ScreenEffect {
+        val command = NotesFlags.command(pinned)
+        return ScreenEffect.SubmitWrite(
+            command = command,
+            inputJson = NotesFlags.input(noteId),
+            invokeKey = InvokeKeys.of(command, noteId),
+        )
     }
 
     /** The first non-blank line of [body], trimmed, at most [TITLE_FROM_BODY] characters. */
@@ -460,19 +469,18 @@ public object NotesEditorMachine : ScreenMachine<NotesEditorState, NotesEditorEv
     internal fun jsonString(value: String): String = dev.centraid.shared.kit.jsonString(value)
 
     /**
-     * `knowledge_note`. Whether the editor acts on it is [reduce]'s decision:
-     * see the `rows_changed` case, which refuses to replace a dirty draft.
+     * The note's tables ([NotesTables.SHELF]). Whether the editor acts on one is
+     * [reduce]'s decision: see the `rows_changed` case, which refuses to replace
+     * a dirty draft.
      */
     override fun rowsChanged(
         table: String,
         keys: List<String>,
-    ): NotesEditorEvent? = if (table == TABLE) {
+    ): NotesEditorEvent? = if (table in NotesTables.SHELF) {
         NotesEditorEvent(rows_changed = NotesEditorEvent.RowsChanged(note_ids = keys))
     } else {
         null
     }
-
-    private const val TABLE: String = "knowledge_note"
 
     override fun seatChanged(seat: SeatState): NotesEditorEvent = NotesEditorEvent(seat_changed = NotesEditorEvent.SeatChanged(seat = seat))
 }

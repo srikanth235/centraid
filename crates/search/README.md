@@ -1,99 +1,26 @@
 # `centraid-search` — the FTS door
 
-Text search is a question the **vault** answers, not one an app answers by pulling a table. The FTS5 indexes are the vault's (one per domain and one per container index, kept in step by triggers that the baseline and rung thirteen install); this crate owns every `MATCH` statement in the workspace, and the app kit's read grammar has no `MATCH` production at all — which is what makes "an app cannot search by hand" a fact rather than a convention.
-
-Ruling **D-1020-N1** ([#1020](https://github.com/srikanth235/centraid/issues/1020)).
-
-## The shape
+Text search is a question the **vault** answers, not one an app answers by pulling a table. The vault keeps one index, `search`: a contentless FTS5 table whose rowid is `entity.n`, written at commit by the vault's gate for every entity a command touched ([#1135](https://github.com/srikanth235/centraid/issues/1135), [docs/vault-ontology.md](../../docs/vault-ontology.md)). This crate owns every `MATCH` statement in the workspace; the app kit's grammar has no `MATCH` production, so "an app cannot search by hand" is a fact rather than a convention. Ruling **D-1020-N1** ([#1020](https://github.com/srikanth235/centraid/issues/1020)).
 
 ```rust
-let door = SqliteDoor::open(&connection)?;                  // checks the model
-let answer = door.query(&Principal::Owner,
-                        &SearchRequest::new("knowledge.note", "cabin", 8))?;
+let door = SqliteDoor::open(&connection, vault.words())?;   // checks `search` and `search_vocab` exist; the vault keeps the word list
+let answer = door.query(&Principal::Owner, &SearchRequest::new("note", "cabin", 8))?;
 match answer {
     Answer::Denied(denial) => /* a surface renders the ask */,
     Answer::Data { page, window } => /* page.rows: Vec<Target>, page.next: keyset */,
 }
 ```
 
-- **Every read is a window.** `SearchRequest::page` is the kit's `PageRequest`: `limit` is required and there is no default. One assembler for the paging law, so a search page and a drive page continue the same way (D-1020-N1a).
-- **A window continues by keyset**, over `(rank, id)`. FTS5's `rank` is bm25 negated, so ascending is best-first — "vault order is rank order".
-- **A denial is a value.** `Answer::Denied` is a state a surface renders. An `Err` is for a question that cannot be answered at all.
-- **A bound reports the size it reaches.** `Answer::window` is the caller's limit after both clamps (`MAX_MATCH_ROWS` here, `MAX_PAGE_ROWS` in the kit), never the number that was asked for (D-1020-D3-12).
+- **A request names a kind** (`SearchRequest::new("note", ...)`) or several (`across`), and may exclude ids. A kind that is not searchable (a tag has no text; a flag, a calendar, an account are labels of what they label) is a typed `SearchError::NotSearchable`, never an empty page: an empty page would claim there were no matches. `locker_item` is searchable by its plain text and nothing sealed, by every caller including the assistant (the owner's ruling of 2026-10-22): there is no principal that is refused it.
+- **Every read is a window.** `limit` is required and has no default; it is clamped by `MAX_MATCH_ROWS` and `Answer::window` reports the size it actually reached.
+- **A window continues by keyset** over `(tier, rank, id)`. Tier 0 is the entities whose title holds every word (uncapped), tier 1 the newest `TAIL_ROWS` other matches by rowid, the kind, trash and excluded-id filters applied before the count. FTS5's `rank` is bm25 negated, so ascending is best-first; title weighs over body, carried by the query. A test holds the plan: the tail leg streams the index in rowid order and is never sorted whole.
+- **One letter is not a search.** A query whose words are all one character is `SearchError::NoSearchableWords`, the same answer as the empty query, which every surface already draws as its empty-term view.
+- **Several kinds, one statement.** `Search::query_each` answers at most N rows of each kind by `row_number() OVER (PARTITION BY kind ...)`; Home uses it.
+- **A denial is a value.** `Answer::Denied` is a state a surface renders; an `Err` is for a question that cannot be answered at all.
+- **A result is an entity's id, kind and title and a snippet** read from `entity` joined on `n`, with the trash filter. It carries no `Value`, no map and no byte field, and the index holds no secret, so a result cannot carry one: a Locker item is in it by its plain text (`password`, `otp_seed`, `card_number`, `cvv`, `content`, `locker_item_field.value_sealed` and `locker_item_passkey.private_key` are never text), whether or not Locker is locked.
+- **The snippet is cut in Rust.** The index is contentless and cannot say which words matched, so `snippet_of` runs the vault's own `text_of` over the row and excerpts around the first matching token.
+- **Correction is a lookup in the word list.** The vault keeps its words in memory (`Vault::words()`, checked against the table on every use); a misspelt word is replaced by ONE whole word of it: one edit anywhere, else a first-letter change, else the fragment inside a longer word, ranked by the documents that hold each (`SELECT doc FROM search_vocab WHERE term = ?`). A word some word starts with is kept.The list is one list for every reader.
 
-## Secret-free by construction
+It is not the consent pipeline: it answers the owner's view of the vault it is handed. A stub that looked like a consent check would be worse than an absence written down here.
 
-A result is a `Target`: five strings and a snippet, every one read from a column named in `domains::DOMAINS`. There is no `Value`, no map and no byte field, so there is no shape a sealed cell could arrive in. Four mechanisms, not a filter:
-
-1. `domains::assert_no_sealed_column` checks every projected column against `centraid_ontology::registries::sealed_physical_columns` **at door construction**, so a domain that grew a sealed projection fails to open.
-2. `SqliteDoor::open` re-checks each domain's **live index columns** against the same registry. FTS exclusion is one of the six sealed-column enforcement points (issue #293), and this keeps the DDL and the door from disagreeing about a file another build wrote.
-3. **A folded column must be listed** (see below): `open` refuses an index with a column that is neither the base table's nor in `domains::FOLDED`, and `assert_no_sealed_column` holds every listed source to the registry.
-4. **Locker is not a domain and not a container.** The powerbox reaches six domains, the containers are a second list, and Locker is in neither, so a secret cannot become a link target or a result by adding a probe. Asking is `SearchError::NotADomain`, never an empty page — an empty page reads as "no matches", which is a different claim about the vault. The containers pass checks 1 to 3 as well (`containers::assert_no_sealed_container_column`, and the open-time column and weight checks, with no folds).
-
-`tests/door.rs` plants a secret in every sealed column the registry names — sealed by `crates/vault::custody` itself as the member key's `lk1:` cell, never a hand-typed prefix — proves each cell is real ciphertext bound to its own row, and asserts that no target from any domain carries the plaintext OR the ciphertext. The planted set is compared against `sealed_physical_columns` filtered to the tables a new vault has (the frozen v0 registry still names the connector credential rung five dropped), so a sealed column added to the model and not planted fails rather than being skipped.
-
-## What an index holds: the entity's own text and what is folded into it
-
-One probe per domain answers, so Home stays at six. An index holds the base row's text columns and **columns folded in from other tables** (rung thirteen, [#1097](https://github.com/srikanth235/centraid/issues/1097)): a person's nickname, role, where they met, email and phone and memos; an event's place; a task's project. Triggers on the child tables re-index the parent, so a rename or an edit moves the hit, and a trashed parent stays out. A trashed profile's text is not folded, and a Locker memo reaches no index at all. Locker has no index of its own either: `fts_locker_item` is retired, and neither does the People messaging model (`fts_social_thread`, `fts_social_message` are retired; chat history is `chat_*`). The three container indexes are the next section's.
-
-| Domain | Index column | Folded from |
-| --- | --- | --- |
-| people | `nickname`, `role`, `met` | `people_profile`, while it is not trashed |
-| people | `channels` | `social_contact_channel` `value` and `normalized_value` |
-| people | `memo` | `knowledge_annotation` on the party, and on every `core.activity` with a live `core_link` to it (an interaction's note, [R-1097-13](../../docs/decisions.md#the-owners-rulings-on-the-open-questions-1097)) |
-| agenda | `location` | `core_place.name` |
-| tasks | `project` | `schedule_project.name` |
-| notes, photos, docs | `body`, `title` | the decoded text and the asset's title (older than #1097) |
-
-`domains::FOLDED` is the list of every such column with its source `(table, column)`. It is what the sealed check reads, because a fold is not a column of the base table and a check against the base table cannot see it. **A fold nobody listed does not open:** `SqliteDoor::open` fails with `IndexUnusable` naming the column.
-
-**Folded columns weigh half, and the door says so with every query.** Each `Domain` carries `weights`, one per index column in the index's own order, the id first: 1.0 for what an index always had, 0.5 for a column rung thirteen folded in. The door passes them as FTS5's rank override, `AND <fts>.rank MATCH 'bm25(…)'`, so `ORDER BY <fts>.rank` and the `(rank, id)` keyset read the weighted score and a word in a title or a name outranks the same word in a project, a nickname or a memo. They are not stored in the index (`INSERT INTO fts(fts, rank) VALUES('rank', …)` is a row of data and `contracts/schema/vault-ddl.sql` carries none): a vault built by replaying the DDL and one the product founded rank alike, and `tests/door.rs` proves the order on both. `SqliteDoor::open` refuses an index whose column count is not its weights' length, because `bm25` takes them by position.
-
-**Vocabulary.** Each of the six domain indexes and each of the three container indexes has a persistent `fts5vocab` table, `fts_<index>_vocab` (`term`, `doc`, `cnt`), created in rung thirteen because the read connection is `query_only`. Locker has none. The correction below is the one reader.
-
-## Correction: a typo is a lookup in the vault's own words
-
-```rust
-if exact_answer.is_empty() {
-    if let Some(words) = door.correct(&Principal::Owner, &["schedule.task"], "budegt")? {
-        // words == "budget": run `query` again with them, and say what was searched for
-    }
-}
-```
-
-`Search::correct(principal, entities, query) -> Result<Option<String>, SearchError>` ([#1097](https://github.com/srikanth235/centraid/issues/1097), R4) is **a correction and never a wider match**. The caller runs it only when its whole exact answer was empty, runs `query` again with the words it returns, and tells the member what it searched for. A query that found something is never touched, and the trait default is `None`, so a door with no vocabulary corrects nothing; a door that wraps another has to forward it.
-
-- **The rule is the kit's** (`centraid_apps_kit::spelling`, R5, shared with the assistant's name resolver). A word is read when it has four letters or more and nothing but letters; one the vocabulary already holds, as a term or the start of one (search is a prefix search), is kept as typed. Otherwise the candidates are vocabulary terms with a **prefix** of length `|w| - 1 ..= |w| + 1` within one edit (a letter more, fewer or different, or two neighbours swapped) of the word, so a slip made mid-word as you type (`budeg`) still lands on `budget`. The prefix with the most documents wins, then the shorter, then the one that sorts first, and the correction is then **the whole term** of that prefix the most documents hold, by the same order (R4b: `sunscren` is `sunscreen`, not the prefix `sunscree`). A correction is always a term the named domains' and containers' vocabularies hold — never a word the vault has not got.
-- **A slip in the first letter is not corrected** (R4a), except a swap of the first two (`ubdget`). That is what bounds the scan: the door reads the terms that start with the word's first letter and, first, those that start with its first two letters swapped.
-- **The scan is bounded.** `MAX_VOCAB_SCAN` (8,192) is the most vocabulary rows read for one word from one index, in term order, the swap's included. The vocabulary table honours a range on `term` and returns its rows in order, so `term >= 'q' AND term < 'r' ORDER BY term LIMIT n` walks `n` rows and sorts nothing (`tests/door.rs::the_vocabulary_scan_stops_at_its_bound` checks the plan and the virtual machine's step count). A word whose near term sorts past the bound is not corrected, the same answer as "no such word". The bound is a measurement: about 3 ms p50 and 11 ms at most for a word over four domains of a vault of 50,000 words, 7 ms for a bucket that fills the bound (receipt, `correction_latency_on_fifty_thousand_terms`).
-- **Locker has no vocabulary.** Every entity must be one of the six domains or one of the containers: `locker.item` is `NotADomain`, with or beside others, exactly as in `query`. A vault from before rung thirteen is `IndexUnusable`, naming the missing `fts_<index>_vocab`.
-- **The consent walls are the same hand-off as `query`'s** (below): the door corrects over the owner's vocabulary, so when the pipeline lands, `correct` walks the same walls for each entity it is given, or a correction would offer a word a grant cannot read.
-
-## The containers: four things a member names, three indexes
-
-A notebook, an album, a Tasks project and a Docs folder are found by their own name ([R-1097-19 to 21](../../docs/decisions.md#containers-are-search-results-of-their-own-1097)). They are **not domains**: `DOMAINS` stays six, because the Notes `[[` powerbox (`load_link_targets`) loops it and a container is no link target. `containers::CONTAINERS` is the second registry, passing the same open-time checks (no sealed column projected, indexed or read by a guard; every index column a column of the base table, since a container folds nothing in; one weight per column) and owned by the same door, Owner only.
-
-| Entity | Opens in | Index | A row is live while | Opens by |
-| --- | --- | --- | --- | --- |
-| `core.collection` | `notes` (kind `notebook`), `photos` (kind `album`) | `fts_core_collection` | the row exists (a delete is a DELETE) | its `collection_id` |
-| `schedule.project` | `tasks` | `fts_schedule_project` | `archived_at IS NULL` | its `project_id` |
-| `core.concept` | `docs` | `fts_core_concept` | it is in the folders scheme and its notation is not `root` | its `concept_id` |
-
-`SearchRequest::in_app` narrows a query to the rows that open in one app, which is how Notes asks the shared index for notebooks and not albums; an entity that opens in another app answers an empty page. The app of a row of a shared index is read off its immutable `kind` on the base row the door already joins, so no index carries a column its table lacks. `Container::deleted_column` and `Container::guards` repeat the triggers' rule at the door, so a dead row written into an index by hand is still not found (`tests/door.rs::the_door_does_not_find_a_dead_container_that_got_into_an_index`). **Out, with the reason:** calendars (one is seeded and the Agenda has no calendar destination) and People circles (no circles screen).
-
-## The six domains
-
-| App | Entity | Label | Subtitle |
-| --- | --- | --- | --- |
-| notes | `knowledge.note` | `title` | the decoded body, capped at 200 chars |
-| people | `core.party` | `display_name` | — (falls back to the app) |
-| agenda | `core.event` | `summary` | `dtstart` |
-| tasks | `schedule.task` | `title` | `due_at` |
-| photos | `core.content_item` | the index's `title` (#996 R20(b)) | — |
-| docs | `core.document` | `title` | — |
-
-A row with no label **is not a target**: an unlabelled link is one a member cannot recognise. That, and the caller's `excluded_ids` (Notes passes its journal set, #834 R-journal), are SQL predicates rather than post-filters, because the kit's page is the window plus one probe row and dropping rows after the probe was counted makes `next` lie in both directions.
-
-## Owner hand-off — the consent pipeline
-
-A consented search walks four walls before its statement, and **this door walks none of them yet**: the base entity's read decision; the read decision of every entity whose canonical text the index folds in (matching a note body _is_ reading `core.content_item`); a grant field mask that hides an indexed column failing the search **closed**; and an authority receipt for the decision either way. It is written down here rather than stubbed, because a stub that looks like a consent check is worse than an absence a reader can see. Wiring it is `crates/vault`'s paged-door work: the door takes a `Principal` already, so the change is an implementation of `Search`, not a change to its callers.
+`tests/door.rs` drives it against a founded vault: ranking, the trash filter, keyset continuation, correction, the snippet, and every refusal.

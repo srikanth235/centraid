@@ -4,6 +4,7 @@ import centraid.core.v1.AgendaSearch
 import centraid.core.v1.TasksCatchUp
 import centraid.core.v1.TasksSearch
 import centraid.core.v1.TasksView
+import centraid.screen.v1.SearchAsk
 import centraid.screen.v1.AgendaEmpty
 import centraid.screen.v1.AgendaHomeEvent
 import centraid.screen.v1.AgendaHomeState
@@ -191,8 +192,8 @@ class AgendaDatedTasksSpec : StringSpec({
         )
         val checked = drive(home, view(AgendaHomeEvent(task_checked = AgendaHomeEvent.TaskChecked(task_id = "a"))))
         val done = checked.effects.single() as ScreenEffect.SubmitWrite
-        done.command shouldBe "schedule.set_task_status"
-        done.inputJson shouldBe """{"task_id":"a","status":"completed"}"""
+        done.command shouldBe "task.complete"
+        done.inputJson shouldBe """{"id":"a"}"""
         // IN PLACE: re-folded without a read.
         checked.state.screen.data_.shouldNotBeNull().let {
             it.days.shouldBeEmpty()
@@ -204,7 +205,10 @@ class AgendaDatedTasksSpec : StringSpec({
             it.action_label shouldBe "Undo"
         }
         val undone = drive(checked.state, view(AgendaHomeEvent(status_acted = AgendaHomeEvent.StatusActed())))
-        (undone.effects.single() as ScreenEffect.SubmitWrite).inputJson shouldBe """{"task_id":"a","status":"needs-action"}"""
+        (undone.effects.single() as ScreenEffect.SubmitWrite).let {
+            it.command shouldBe "task.reopen"
+            it.inputJson shouldBe """{"id":"a"}"""
+        }
         undone.state.screen.data_.shouldNotBeNull().days.single().items.mapNotNull { it.task }.single().task_id shouldBe "a"
         undone.state.screen.status.shouldBeNull()
 
@@ -290,14 +294,14 @@ class AgendaDatedTasksSpec : StringSpec({
             it.days.shouldBeEmpty()
             it.task_hits.single().rows.size shouldBe 1
         }
-        tasksOnly.screen.search_ask shouldBe ""
-        // NEITHER: no-match, and Ask is offered.
+        tasksOnly.screen.search_ask_row shouldBe SearchAsk(label = "Ask about “dentist”", question = "Find dentist", scope = "agenda")
+        // NEITHER: no-match, and the same Ask.
         val none = drive(typed, AgendaInput.Answered(null, context(), AgendaSearch(), TasksAnswers(search = TasksSearch(today = TODAY)))).state
         none.screen.data_.shouldNotBeNull().let {
             it.empty shouldBe AgendaEmpty.AGENDA_EMPTY_NO_MATCH
             it.task_hits.shouldBeEmpty()
         }
-        none.screen.search_ask shouldBe "Find dentist"
+        none.screen.search_ask_row shouldBe SearchAsk(label = "Ask about “dentist”", question = "Find dentist", scope = "agenda")
         // Closing search CLEARS the hits and re-folds the held days and boards without a read.
         val closed = drive(both, view(AgendaHomeEvent(search_closed = AgendaHomeEvent.SearchClosed())))
         closed.effects.shouldBeEmpty()
@@ -337,7 +341,7 @@ class AgendaDatedTasksSpec : StringSpec({
     "a change clears the held boards: coming back to Schedule from Waiting reads again" {
         val home = landed(schedule)
         val onWaiting = drive(home, view(AgendaHomeEvent(band = AgendaHomeEvent.BandPicked(key = "waiting")))).state
-        val changed = drive(onWaiting, AgendaHomeMachine.rowsChanged("schedule_task", listOf("a"))!!).state
+        val changed = drive(onWaiting, AgendaHomeMachine.rowsChanged("task", listOf("a"))!!).state
         val answered = drive(changed, AgendaInput.Answered(upcoming(), context(), null)).state
         answered.screen.destination shouldBe waiting
         val back = drive(answered, view(AgendaHomeEvent(band = AgendaHomeEvent.BandPicked(key = "schedule"))))

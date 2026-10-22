@@ -27,6 +27,7 @@ import centraid.screen.v1.PhotoShelf
  * | photos | `album` | the album's shelf |
  * | docs | `folder` | the folder's page; `parent` is the pushing page's title |
  * | money | `transaction` | the transaction page; `parent` is the pushing page's title |
+ * | locker | `locker_item` | the item's page, behind the Locker's lock wall: a note may link an item (#1135), and opening the link asks the gate like any Locker destination |
  * | chat | `thread` | none: Chat is a tab and not a screen ([isThread]). The iOS shell opens it (`ShellModel.openChatThread`), and Android has no Chat tab, so Home's search never offers the row there (R-1097-24) |
  *
  * A notebook, album or folder arrives with its id and its name (the
@@ -49,6 +50,7 @@ public object RowRoutes {
     private const val EVENT: String = "event"
     private const val TRANSACTION: String = "transaction"
     private const val THREAD: String = "thread"
+    private const val LOCKER_ITEM: String = "locker_item"
 
     /** [parent] is the pushing page's title, which a pushed page's back says. */
     public fun destination(
@@ -81,6 +83,7 @@ public object RowRoutes {
         )
         AppIds.PHOTOS to PHOTO -> Destination.PhotoLightbox(row.id, neighbours.ifEmpty { listOf(row.id) })
         AppIds.MONEY to TRANSACTION -> Destination.MoneyTransaction(row.id, parent = parent)
+        AppIds.LOCKER to LOCKER_ITEM -> Destination.LockerItem(row.id, parent = parent)
         else -> appHome(row.app)
     }
 

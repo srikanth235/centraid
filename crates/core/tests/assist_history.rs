@@ -1,6 +1,6 @@
 //! THE CHAT'S HISTORY, THROUGH THE DOOR A SHELL USES (R-CHAT-1).
 //!
-//! A turn is saved when it ends, in one commit, through `chat.save_turn`; the
+//! A turn is saved when it ends, in one commit, through `thread.save_turn`; the
 //! `chat.*` app queries read it back; and a stored thread reopens into a
 //! fresh session whose follow-up joins it (R-1088-10). These are the claims a
 //! shell relies on and cannot check for itself:
@@ -464,7 +464,7 @@ fn a_thread_stored_by_the_routed_plane_still_reopens_and_joins() {
     let routed_tool = r#"{"user":"What is due today?","record":{"kind":"tool","call_json":"{\"tool\":\"tasks.list\",\"args\":{\"view\":\"today\"}}","headline":"2 tasks due today","answer":"Two things are due."}}"#;
     let saved = command(
         &sample,
-        "chat.save_turn",
+        "thread.save_turn",
         serde_json::json!({ "turn": {
             "question": { "text": "What is due today?" },
             "answer": {
@@ -613,7 +613,7 @@ fn a_deleted_chat_is_gone_and_cannot_be_reopened() {
 
     let renamed = command(
         &sample,
-        "chat.rename_thread",
+        "thread.rename",
         serde_json::json!({ "thread_id": sent.thread_id, "title": "Due today" }),
         "rename-1",
     );
@@ -622,8 +622,9 @@ fn a_deleted_chat_is_gone_and_cannot_be_reopened() {
 
     let deleted = command(
         &sample,
-        "chat.delete_thread",
-        serde_json::json!({ "thread_id": sent.thread_id }),
+        // a chat has no trash: deleting it is the shared purge
+        "entity.purge",
+        serde_json::json!({ "id": sent.thread_id }),
         "delete-1",
     );
     assert_eq!(deleted.status, wire::CommandStatus::Executed as i32);
@@ -647,7 +648,7 @@ fn clearing_every_chat_leaves_none_to_list() {
     let second = sample.start("");
     send(&sample, second, 1, "second chat", false, vec![]);
     assert_eq!(threads(&sample).len(), 2);
-    let cleared = command(&sample, "chat.clear", serde_json::json!({}), "clear-1");
+    let cleared = command(&sample, "thread.clear", serde_json::json!({}), "clear-1");
     assert_eq!(cleared.status, wire::CommandStatus::Executed as i32);
     assert!(threads(&sample).is_empty());
 }
@@ -674,9 +675,14 @@ fn a_card_whose_row_is_gone_says_so_at_the_tap() {
     };
     assert!(ask(&card.app, &card.entity, &card.id), "the row is there");
     assert!(!ask(&card.app, &card.entity, "a-row-that-was-deleted"));
+    // A Locker item's card is live while the item is, and a card cannot name Health.
     assert!(
-        !ask("locker", "item", &card.id),
-        "locker is never a card's app"
+        !ask("locker", "locker_item", "a-row-that-was-deleted"),
+        "a Locker card is live only while its item is"
+    );
+    assert!(
+        !ask("health", &card.entity, &card.id),
+        "health is never a card's app"
     );
 }
 

@@ -34,10 +34,10 @@ pub trait FamilyRow {
     fn status(&self) -> &str;
 }
 
-/// The VTODO open set — the statuses the live board may act on.
+/// The open status: the one the live board may act on.
 #[must_use]
 pub fn is_open_status(status: &str) -> bool {
-    status == "needs-action" || status == "in-process"
+    status == "open"
 }
 
 /// Is this row a root of the OPEN board?
@@ -190,8 +190,8 @@ mod tests {
     #[test]
     fn an_open_parent_keeps_its_children_nested() {
         let rows = [
-            row("parent", None, "needs-action"),
-            row("child", Some("parent"), "needs-action"),
+            row("parent", None, "open"),
+            row("child", Some("parent"), "open"),
         ];
         let (open, logbook, children) = fold(&rows);
         assert_eq!(open, ["parent"], "the child is not a second root");
@@ -202,9 +202,9 @@ mod tests {
     #[test]
     fn an_unfinished_child_of_a_completed_parent_is_promoted() {
         let rows = [
-            row("parent", None, "completed"),
-            row("open-child", Some("parent"), "needs-action"),
-            row("done-child", Some("parent"), "completed"),
+            row("parent", None, "done"),
+            row("open-child", Some("parent"), "open"),
+            row("done-child", Some("parent"), "done"),
         ];
         let (open, logbook, children) = fold(&rows);
         assert_eq!(
@@ -222,7 +222,7 @@ mod tests {
     fn a_cancelled_parent_releases_its_children_too() {
         let rows = [
             row("parent", None, "cancelled"),
-            row("child", Some("parent"), "in-process"),
+            row("child", Some("parent"), "open"),
         ];
         let (open, logbook, _) = fold(&rows);
         assert_eq!(open, ["child"]);
@@ -231,7 +231,7 @@ mod tests {
 
     #[test]
     fn a_parent_outside_the_window_promotes_its_child_rather_than_hiding_it() {
-        let rows = [row("orphan", Some("absent"), "needs-action")];
+        let rows = [row("orphan", Some("absent"), "open")];
         let (open, logbook, _) = fold(&rows);
         assert_eq!(open, ["orphan"], "a parent nobody fetched counts as closed");
         assert!(logbook.is_empty());
@@ -240,8 +240,8 @@ mod tests {
     #[test]
     fn a_closed_child_is_never_a_logbook_entry_of_its_own() {
         let rows = [
-            row("parent", None, "needs-action"),
-            row("done-child", Some("parent"), "completed"),
+            row("parent", None, "open"),
+            row("done-child", Some("parent"), "done"),
         ];
         let (open, logbook, children) = fold(&rows);
         assert_eq!(open, ["parent"]);

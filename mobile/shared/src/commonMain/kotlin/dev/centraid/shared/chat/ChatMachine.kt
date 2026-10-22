@@ -140,21 +140,21 @@ public object ChatMachine {
 
     /**
      * THE APPS A CHAT CAN BE SCOPED TO, in the order the composer's menu lists
-     * them: every app a member opens that the assistant reads, Locker never
-     * among them. `tasks` is a domain read through Agenda's scope, not a scope of
-     * its own (#1128, R-1128-F2): a chat scoped to Agenda covers its tasks, and a
-     * card still names `tasks`. The core accepts exactly these (`scope_app`'s enum
-     * in `crates/vault/src/commands/chat.rs`, the `chat_thread.scope_app` CHECK at
-     * the ladder head, `App::SCOPES` in `crates/assist`); `ChatScopeSpec` ties them
-     * together, and the shells draw their menu from here.
+     * them: every app a member opens, Locker included. `tasks` is a domain read
+     * through Agenda's scope, not a scope of its own (#1128, R-1128-F2): a chat
+     * scoped to Agenda covers its tasks, and a card still names `tasks`. The core
+     * accepts exactly these: they are the apps of
+     * `centraid_vault::roster::APPS` that open in themselves (R-1135-7-1), the one
+     * constant `thread.save_turn`'s schema and `App::SCOPES` in `crates/assist` read;
+     * `ChatScopeSpec` holds this list equal to it, and the shells draw their menu from here.
      */
     public val SCOPABLE_APPS: List<String> =
-        listOf("agenda", "docs", "money", "notes", "people", "photos")
+        listOf("agenda", "docs", "locker", "money", "notes", "people", "photos")
 
     /**
      * THE SCOPE A VISIT TO [appId] GIVES A CHAT: the app it opens in, when that
      * is a scope, else every app (""). A pushed task page names the `tasks`
-     * domain and scopes the chat to Agenda (R-1128-F2); Locker scopes nothing.
+     * domain and scopes the chat to Agenda (R-1128-F2); every other app scopes to itself.
      */
     public fun scopeOf(appId: String): String = AppHomes.appOf(appId).takeIf { it in SCOPABLE_APPS }.orEmpty()
 
@@ -662,7 +662,7 @@ public object ChatMachine {
     private object DrawerField : SearchLens<Chat> {
         override val screenId: String = "chat"
         // The drawer's search finds chats; asking the assistant about a chat search is not an Ask (#1097, R-1097-28).
-        override val asks: Boolean = false
+        override val askScope: String? = null
 
         override fun field(state: Chat): SearchField = state.search
 

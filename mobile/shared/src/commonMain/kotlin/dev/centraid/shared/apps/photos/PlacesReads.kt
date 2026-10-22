@@ -13,47 +13,46 @@ import dev.centraid.shared.sync.ScreenReads
 import dev.centraid.shared.sync.ScreenWrites
 
 /**
- * THE PLACES THEMSELVES (#1029, photos port).
+ * THE PLACES THEMSELVES (#1029, photos port; #1135).
  *
- * The statement is `crates/apps/photos`' own — `photos.shared.places` in
- * `places.rs`: `core_place`, every row, ordered by `place_id`. Followed rather
- * than re-derived, for `PhotosReads`' reason: a shelf in a different order from
- * the desktop's over the same rows is two libraries. `tz` is the one column
- * this read adds, because `PlaceRow.time_zone` is on the contract and the
- * desktop's own statement has no field for it.
+ * A place is two rows in the model: an `entity` (its name, its trash) and a
+ * `place` row (its pin, its zone, the gazetteer's nearest city). The door pages
+ * one table, so the card is joined from three passes that each answer what their
+ * own table can see — this one the `place` rows ([PlacesNameReads] the names,
+ * [PlacesAssetReads] the counts) — and `PlacesMachine.merge` takes the side that
+ * has an answer.
  *
- * **A WALK IS SAFE HERE AND IS NOT SAFE ON THE LIBRARY.** `place_id` is the
- * primary key and therefore NOT NULL, so a continued page keeps its meaning;
- * `media_asset.captured_at` is nullable, which is why [PlacesAssetReads] below
- * takes exactly one page and says so. `places.rs` calls this table
- * "owner-shaped and small" and reads it as a bounded walk, which is what
- * [limit] mirrors.
+ * **A WALK IS SAFE HERE AND IS NOT SAFE ON THE LIBRARY.** `id` is the primary key
+ * and therefore NOT NULL, so a continued page keeps its meaning;
+ * `photo.taken_at` is nullable, which is why [PlacesAssetReads] below takes
+ * exactly one page and says so. A place shelf is "owner-shaped and small" and
+ * [limit] mirrors that.
  *
  * ## The phrase ladder stops at rung one here, and that is a gap worth naming
  *
  * `place_phrase` (`docs/photos/places.md`, layer 2) resolves a place in four
  * falling rungs: the member's own name, a hedged gazetteer name, a phrase
  * relative to a named anchor, and finally [PlacesMachine.NO_NAME]. Only the
- * first and the last are reachable from a page read. Rung 2's name is buried
- * inside `core_place.address_json` and rung 3 needs the member's home and a
- * bearing — so this read resolves rung 1 or falls to rung 4 rather than
- * hand-rolling a JSON parser and a great-circle in a reducer. The ladder is the
- * vault's and a second implementation of it in a shell is a second answer to
- * "what is this place called". What is missing is a phrase ON THE DOOR; until
- * there is one, a gazetteer-named place reads as unnamed on the phone.
+ * first and the last are reachable from a page read. Rung 2's name is the
+ * `locality` column, written by `place.locate` alone, and rung 3 needs a bearing
+ * — so this read resolves rung 1 or falls to rung 4 rather than hand-rolling a
+ * great-circle in a reducer. The ladder is the vault's and a second
+ * implementation of it in a shell is a second answer to "what is this place
+ * called". What is missing is a phrase ON THE DOOR; until there is one, a
+ * gazetteer-named place reads as unnamed on the phone.
  *
- * **A COORDINATE IS NEVER A NAME.** `find_or_create_place`'s third rung mints a
- * row whose stored `name` is its own coordinates, and `printable_name` refuses
- * one at every rung — which is why [readableName] refuses it here too. Without
- * that check every unnamed place on the phone would print digits that look like
- * an answer.
+ * **A COORDINATE IS NEVER A NAME.** `find_or_found` titles a place minted from a
+ * photograph's GPS after its own coordinates, and `printable_name` refuses one at
+ * every rung — which is why [readableName] refuses it here too. Without that
+ * check every unnamed place on the phone would print digits that look like an
+ * answer.
  */
 public object PlacesReads :
     ScreenReads<PlacesState, PlacesEvent>,
     ScreenWrites<PlacesState, PlacesEvent> {
     override val screenId: String = PlacesMachine.SCREEN_ID
 
-    /** `core_place`, one of the two tables the machine's `rowsChanged` declares. */
+    /** `place`, one of the tables the machine's `rowsChanged` declares. */
     override val table: String = PlacesMachine.PLACES_TABLE
 
     /**
@@ -72,10 +71,12 @@ public object PlacesReads :
         // THE SELECT CARRIES BOTH ORDER COLUMNS — here the same column twice,
         // which is what `places_statement` does too: the door has no `key_of`
         // callback and reads the cursor off the row by the two columns the
-        // ORDER BY names.
-        select = listOf("place_id", "name", "geo_lat", "geo_lng", "tz"),
+        // ORDER BY names. A TRASHED PLACE IS NOT A PLACE: the stamp is the
+        // entity's.
+        select = listOf("id", "lat", "lon", "zone"),
         from = table,
-        order = PageOrder(sort_column = "place_id", pk_column = "place_id", descending = false),
+        where_ = "id IN (SELECT id FROM entity WHERE deleted_at IS NULL)",
+        order = PageOrder(sort_column = "id", pk_column = "id", descending = false),
     )
 
     override fun arrived(rows: List<Row>, nextCursor: String?): PlacesEvent = PlacesEvent(
@@ -115,18 +116,18 @@ public object PlacesReads :
         )
 
     /**
-     * One card's identity, out of one `core_place` row.
+     * One card's pin, out of one `place` row.
      *
-     * `asset_count` and `cover_thumbnail_path` are deliberately absent: they are
-     * [PlacesAssetReads]' half of the join, and a zero invented here would be a
-     * zero `PlacesMachine.merge` could not tell from a real one.
+     * The name is [PlacesNameReads]' and `asset_count` and `cover_thumbnail_path`
+     * are [PlacesAssetReads]': each is deliberately absent, and a zero or a name
+     * invented here would be one `PlacesMachine.merge` could not tell from a real
+     * answer.
      */
     private fun placeOf(row: Row): PlaceRow {
         val latitude = row.real(LATITUDE)
         val longitude = row.real(LONGITUDE)
         return PlaceRow(
             place_id = row.text(PLACE_ID),
-            name = readableName(row.text(NAME)) ?: PlacesMachine.NO_NAME,
             // BOTH OR NEITHER, AND `has_coordinate` IS WHAT SAYS WHICH. The
             // DDL allows one coordinate without the other, and a row with half
             // a pin is a row the plot cannot draw — drawing it at 0,0 would put
@@ -174,10 +175,9 @@ public object PlacesReads :
     }
 
     private const val PLACE_ID: Int = 0
-    private const val NAME: Int = 1
-    private const val LATITUDE: Int = 2
-    private const val LONGITUDE: Int = 3
-    private const val TIME_ZONE: Int = 4
+    private const val LATITUDE: Int = 1
+    private const val LONGITUDE: Int = 2
+    private const val TIME_ZONE: Int = 3
 
     /** Positional, as the door states. See `HomeReads.text` for why only TEXT. */
     private fun Row.text(index: Int): String = values.getOrNull(index)?.text ?: ""
@@ -185,7 +185,7 @@ public object PlacesReads :
     /**
      * A REAL COLUMN OR NOTHING — never a coerced zero.
      *
-     * `geo_lat`/`geo_lng` are `REAL` in the DDL and a NULL arrives on the
+     * `lat`/`lon` are `REAL` in the DDL and a NULL arrives on the
      * `null` arm, so `real` is absent rather than zero. `places-model.ts` has
      * the same guard and the same comment: "Number column or nothing — never
      * coerce". A coordinate coerced from a missing column is a pin on the
@@ -202,15 +202,15 @@ public object PlacesReads :
  * page and count the rows in `arrived`.
  *
  * **THE STATEMENT IS THE LIBRARY'S** — `photos.library.live` in `queries.rs`:
- * `deleted_at IS NULL AND archived_at IS NULL`, ordered `captured_at DESC,
- * asset_id DESC`. Two things follow from using it rather than inventing one:
+ * the live, unarchived, unfolded photographs ([PhotoFold.LIVE]), ordered
+ * `taken_at DESC, id DESC`. Two things follow from using it rather than inventing one:
  * the cover a place shows is the NEWEST photograph taken there, which is what
  * `placeCards` picked, and the trash and the archive are excluded, which is what
  * `assetsAtPlace` did.
  *
  * ## ONE PAGE, AND THE COUNT IS A FLOOR BEYOND IT
  *
- * `captured_at` is NULLABLE, and a keyset continuation over a nullable sort
+ * `taken_at` is NULLABLE, and a keyset continuation over a nullable sort
  * column silently drops rows — `KitError::NullableSortKey` is what refuses one
  * on the desktop. So this pass takes exactly one page of [limit] rows and never
  * continues: `arrived` reports no cursor, and `PlacesMachine.merge` keeps the
@@ -230,7 +230,7 @@ public object PlacesReads :
 public object PlacesAssetReads : ScreenReads<PlacesState, PlacesEvent> {
     override val screenId: String = PlacesMachine.ASSETS_SCREEN_ID
 
-    /** `media_asset`, the other table the machine's `rowsChanged` declares. */
+    /** `photo`, the other table the machine's `rowsChanged` declares. */
     override val table: String = PlacesMachine.ASSETS_TABLE
 
     /** The door's ceiling (`MAX_PAGE_ROWS`). See the class note on the floor. */
@@ -238,10 +238,10 @@ public object PlacesAssetReads : ScreenReads<PlacesState, PlacesEvent> {
 
     override fun query(state: PlacesState, afterCursor: String?): PageQuery = PageQuery(
         name = "photos.places.counts",
-        select = listOf("asset_id", "captured_at", "place_id"),
+        select = listOf("id", "taken_at", "place_id"),
         from = table,
-        where_ = "deleted_at IS NULL AND archived_at IS NULL",
-        order = PageOrder(sort_column = "captured_at", pk_column = "asset_id", descending = true),
+        where_ = PhotoFold.LIVE,
+        order = PageOrder(sort_column = "taken_at", pk_column = "id", descending = true),
         // THE COVER, RESOLVED IN THE SAME STATEMENT (`with_held_thumbnail`,
         // D-1025-S7-20). Without it a card would need a second trip through the
         // byte door per place, which is what left every cell of the grid drawing
@@ -285,7 +285,7 @@ public object PlacesAssetReads : ScreenReads<PlacesState, PlacesEvent> {
                         PlaceRow(
                             place_id = placeId,
                             // NO NAME, NO PIN, NO ZONE. This statement never
-                            // read `core_place`, and a row that guessed would
+                            // read `place`, and a row that guessed would
                             // be the guess `PlacesMachine.merge` then has to
                             // prefer over the real answer.
                             asset_count = count,
@@ -294,7 +294,7 @@ public object PlacesAssetReads : ScreenReads<PlacesState, PlacesEvent> {
                         )
                     },
                     // NO CURSOR, DELIBERATELY. See the class note: a
-                    // continuation over `captured_at` drops NULLs, and
+                    // continuation over `taken_at` drops NULLs, and
                     // `PlacesData.next_cursor` belongs to the place walk. The
                     // cursor is not dropped without trace, though — it is what
                     // [capped] was read from.
@@ -320,6 +320,54 @@ public object PlacesAssetReads : ScreenReads<PlacesState, PlacesEvent> {
      * and not a card's: a place card draws a cover, never a download arrow.
      */
     private const val THUMBNAIL: Int = 3
+
+    private fun Row.text(index: Int): String = values.getOrNull(index)?.text ?: ""
+}
+
+/**
+ * THE PLACES' NAMES: a place's name is its `entity`'s title, and the member's own
+ * word for it is the only name there is (`entity.retitle` writes it).
+ *
+ * One page and no walk: a name pass that walked would need a cursor of its own on
+ * a state that carries the place walk's, and a vault past the door's ceiling in
+ * places has outgrown what one screen of cards is for. A place whose entity is
+ * not among them draws as the unnamed place it is.
+ *
+ * A COORDINATE IS NEVER A NAME: an unnamed place is titled after its own
+ * coordinates, and [PlacesReads.readableName] answers null for one, so the card
+ * carries no name here and `PlacesMachine` fills [PlacesMachine.NO_NAME].
+ */
+public object PlacesNameReads : ScreenReads<PlacesState, PlacesEvent> {
+    override val screenId: String = PlacesMachine.NAMES_SCREEN_ID
+
+    /** `entity`, the table a place's name lives on. */
+    override val table: String = "entity"
+
+    override val limit: Int = 500
+
+    override fun query(state: PlacesState, afterCursor: String?): PageQuery = PageQuery(
+        name = "photos.places.names",
+        select = listOf("id", "title"),
+        from = table,
+        where_ = "kind = 'place' AND deleted_at IS NULL",
+        order = PageOrder(sort_column = "id", pk_column = "id"),
+    )
+
+    override fun arrived(rows: List<Row>, nextCursor: String?): PlacesEvent = PlacesEvent(
+        data_ = PlacesEvent.DataArrived(
+            data_ = PlacesData(
+                places = rows.map { row ->
+                    PlaceRow(
+                        place_id = row.text(0),
+                        name = PlacesReads.readableName(row.text(1)).orEmpty(),
+                    )
+                }.filter { it.place_id.isNotEmpty() },
+            ),
+        ),
+    )
+
+    override fun refused(failure: ReadFailure): PlacesEvent =
+        PlacesEvent(refused = PlacesEvent.ReadRefused(failure = failure))
 
     private fun Row.text(index: Int): String = values.getOrNull(index)?.text ?: ""
 }

@@ -46,7 +46,7 @@
 //!
 //! A session is a `Mutex<Session>` in a map, beside the native session: what an attachment
 //! turn reads, the last two turns. Dropping the handle drops every session. What the member said
-//! and was told is saved at the end of each turn through the `chat.save_turn`
+//! and was told is saved at the end of each turn through the `thread.save_turn`
 //! command ([`store`]) and read back by the `chat.*` app queries, so a chat is
 //! backed up with the vault, deletable, and per vault — and a stored thread
 //! reopens into a fresh session, whose first question starts the native one afresh.
@@ -214,8 +214,7 @@ fn invalid(detail: impl Into<String>) -> CoreError {
 }
 
 /// The app a request names: empty is every app, and anything that is not a
-/// chat scope is the request's fault — Locker, which the assistant does not
-/// read, and `tasks`, a domain read through Agenda's scope (R-1128-F2, #1128):
+/// chat scope is the request's fault — `tasks`, a domain read through Agenda's scope (R-1128-F2, #1128):
 /// accepting it as an alias would give a thread two names for one app, and the
 /// vault's `chat_thread` CHECK refuses it anyway.
 fn scope_of(app: &str) -> Result<Option<App>> {
@@ -224,6 +223,9 @@ fn scope_of(app: &str) -> Result<Option<App>> {
     }
     App::scope_from_id(app).map(Some).ok_or_else(|| {
         invalid(match App::from_id(app) {
+            Some(domain) if domain.opens_in() == domain => {
+                format!("`{app}` is a card domain and not a chat scope")
+            }
             Some(domain) => format!(
                 "`{app}` is not a chat scope: `{}` covers it",
                 domain.opens_in().id()
@@ -690,7 +692,7 @@ fn send(handle: &Handle, asked: &wire::AssistSendRequest) -> Result<wire::Assist
 
     // SAVING THE TURN (R-CHAT-1). Every way a turn ends — an answer, a stop,
     // any refusal but "busy" — is saved as what the member was shown, in one
-    // commit, through `chat.save_turn`. A save that fails loses the history of
+    // commit, through `thread.save_turn`. A save that fails loses the history of
     // this turn and nothing else: the answer is still on screen.
     let persist = |said: &store::Said,
                    record: Option<&centraid_assist::prompt::Turn>,
@@ -704,7 +706,7 @@ fn send(handle: &Handle, asked: &wire::AssistSendRequest) -> Result<wire::Assist
         let thread = locked(&slot.thread).clone();
         let replace =
             asked.regenerate && thread.is_some() && slot.last_saved.load(Ordering::SeqCst);
-        let key = format!("chat.save_turn:{session_id}:{turn_id}");
+        let key = format!("thread.save_turn:{session_id}:{turn_id}");
         let saved = store::save(
             handle,
             &store::Turned {
@@ -1054,7 +1056,7 @@ mod tests {
     }
 
     #[test]
-    fn locker_and_unknown_apps_are_the_requests_fault() {
+    fn a_domain_and_an_unknown_app_are_the_requests_fault() {
         assert_eq!(scope_of("").unwrap(), None);
         assert_eq!(scope_of("agenda").unwrap(), Some(App::Agenda));
         // TASKS IS A DOMAIN, NOT A SCOPE (R-1128-F2): the refusal names the scope that covers it.
@@ -1064,10 +1066,7 @@ mod tests {
             }
             other => panic!("`tasks` was accepted as a scope: {other:?}"),
         }
-        assert!(matches!(
-            scope_of("locker"),
-            Err(CoreError::InvalidRequest { .. })
-        ));
+        assert_eq!(scope_of("locker").unwrap(), Some(App::Locker));
         assert!(matches!(
             scope_of("nope"),
             Err(CoreError::InvalidRequest { .. })

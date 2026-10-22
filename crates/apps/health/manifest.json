@@ -2,47 +2,62 @@
   "manifestVersion": 1,
   "id": "health",
   "name": "Health",
-  "description": "Your body's daily record, followed from the phone's health store one way \u2014 Apple Health on iOS, Health Connect on Android \u2014 into the vault, so it is in your backup and nowhere else. Daily totals (steps, active energy, exercise minutes, sleep, resting heart rate and weight) and workouts, never raw samples. Today shows each number against your own 30-day typical, not a target; Trends shows weeks, months and a year; Workouts lists every workout the store holds. Every typical, average and trend is derived at read time and nothing derived is stored. Nothing is ever written back to the health store, and Chat does not read Health.",
-  "version": "0.1.0",
+  "description": "Your body's daily record, followed from the phone's health store one way — Apple Health on iOS, Health Connect on Android — into the vault, so it is in your backup and nowhere else. Daily totals (steps, active energy, exercise minutes, sleep, resting heart rate and weight) and workouts, never raw samples. Today shows each number against your own 30-day typical, not a target; Trends shows weeks, months and a year; Workouts lists every workout the store holds. Every typical, average and trend is derived at read time and nothing derived is stored. Nothing is ever written back to the health store, and Chat does not read Health.",
+  "version": "0.2.0",
   "iconKey": "Activity",
   "colorKey": "olive",
   "vault": {
     "why": "Reads the daily totals and workouts the phone's health store holds, which it follows into the vault one way, and nothing else.",
     "scopes": [
       {
-        "schema": "core",
-        "table": "party",
+        "schema": "vault",
+        "table": "vault",
         "verbs": "read"
       },
       {
-        "schema": "core",
-        "table": "activity",
+        "schema": "vault",
+        "table": "entity",
         "verbs": "read"
       },
       {
-        "schema": "core",
+        "schema": "vault",
         "table": "concept",
         "verbs": "read"
       },
       {
-        "schema": "health",
-        "table": "daily",
-        "verbs": "read+act"
+        "schema": "vault",
+        "table": "activity",
+        "verbs": "read"
       },
       {
-        "schema": "health",
+        "schema": "vault",
         "table": "workout",
-        "verbs": "read+act"
+        "verbs": "read"
       },
       {
-        "schema": "phone",
+        "schema": "vault",
+        "table": "measurement",
+        "verbs": "read"
+      },
+      {
+        "schema": "vault",
         "table": "origin",
         "verbs": "read"
       },
       {
-        "schema": "phone",
-        "table": "link",
-        "verbs": "read"
+        "schema": "measurement",
+        "table": "record",
+        "verbs": "act"
+      },
+      {
+        "schema": "follow",
+        "table": "health",
+        "verbs": "act"
+      },
+      {
+        "schema": "entity",
+        "table": "trash",
+        "verbs": "act"
       }
     ]
   },
@@ -50,28 +65,18 @@
   "actions": [
     {
       "name": "record-days",
-      "description": "Record a batch of the store's daily totals through health.record_days: a value the vault already holds is not touched, a changed one is replaced, a new one added. A day is never deleted.",
+      "description": "Record a batch of the store's daily totals through measurement.record: a value the vault already holds is not written, a changed one is replaced, a new one added. A day is never deleted.",
       "confirmation": "none",
       "input": {
-        "type": "object",
-        "required": ["days"],
         "additionalProperties": false,
         "properties": {
-          "subject_party_id": {
-            "type": "string",
-            "minLength": 1
-          },
           "days": {
-            "type": "array",
-            "maxItems": 4000,
             "items": {
-              "type": "object",
-              "required": ["day", "metric", "value"],
               "additionalProperties": false,
               "properties": {
                 "day": {
-                  "type": "string",
-                  "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+                  "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+                  "type": "string"
                 },
                 "metric": {
                   "enum": [
@@ -84,13 +89,96 @@
                   ]
                 },
                 "value": {
-                  "type": "number",
-                  "minimum": 0
+                  "minimum": 0,
+                  "type": "number"
                 }
+              },
+              "required": ["day", "metric", "value"],
+              "type": "object"
+            },
+            "maxItems": 4000,
+            "type": "array"
+          },
+          "person_id": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": ["days"],
+        "type": "object"
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "follow-workouts",
+      "description": "Follow the store's workouts through follow.health: each is an activity of a workout kind and what the store measured, written or corrected in place under the store's own id; one gone from a complete read keeps its row and forgets its source.",
+      "confirmation": "none",
+      "input": {
+        "additionalProperties": false,
+        "properties": {
+          "complete": {
+            "type": "boolean"
+          },
+          "origin": {
+            "additionalProperties": false,
+            "properties": {
+              "config": {
+                "type": ["object", "null"]
+              },
+              "device_id": {
+                "type": ["string", "null"]
+              },
+              "fills": {
+                "type": ["string", "null"]
+              },
+              "label": {
+                "type": "string"
+              },
+              "ref": {
+                "type": "string"
               }
-            }
+            },
+            "required": ["ref", "label"],
+            "type": "object"
+          },
+          "records": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "device_id": {
+                  "type": ["string", "null"]
+                },
+                "external_id": {
+                  "type": "string"
+                },
+                "fields": {
+                  "type": "object"
+                }
+              },
+              "required": ["external_id", "fields"],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "since": {
+            "type": "string"
           }
-        }
+        },
+        "required": ["origin", "records"],
+        "type": "object"
       },
       "output": {
         "type": "object",
@@ -108,101 +196,19 @@
       }
     },
     {
-      "name": "follow-workout",
-      "description": "Follow one workout from the store through health.follow_workout: its activity (kind and span) and what the store measured, written or corrected in place under the id the follower minted.",
+      "name": "delete-workout",
+      "description": "Move a workout to the trash through entity.trash, like any entity: the vault keeps it thirty days.",
       "confirmation": "none",
       "input": {
-        "type": "object",
-        "required": [
-          "activity_id",
-          "kind",
-          "phone_kind",
-          "started_at",
-          "ended_at"
-        ],
         "additionalProperties": false,
         "properties": {
-          "activity_id": {
-            "type": "string",
+          "id": {
             "minLength": 1,
-            "maxLength": 128,
-            "pattern": "\\S"
-          },
-          "kind": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 64,
-            "pattern": "\\S"
-          },
-          "phone_kind": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 200,
-            "pattern": "\\S"
-          },
-          "started_at": {
-            "type": "string",
-            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,9})?Z$"
-          },
-          "ended_at": {
-            "type": "string",
-            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,9})?Z$"
-          },
-          "recorded_by": {
-            "type": ["string", "null"],
-            "maxLength": 200
-          },
-          "moving_sec": {
-            "type": ["integer", "null"],
-            "minimum": 1
-          },
-          "distance_m": {
-            "type": ["number", "null"],
-            "minimum": 0
-          },
-          "energy_kcal": {
-            "type": ["number", "null"],
-            "minimum": 0
-          },
-          "avg_hr_bpm": {
-            "type": ["integer", "null"],
-            "minimum": 1
-          },
-          "elevation_gain_m": {
-            "type": ["number", "null"],
-            "minimum": 0
-          }
-        }
-      },
-      "output": {
-        "type": "object",
-        "properties": {
-          "status": {
-            "type": "string"
-          },
-          "output": {
-            "type": "object"
-          },
-          "reason": {
             "type": "string"
           }
-        }
-      }
-    },
-    {
-      "name": "purge-workout",
-      "description": "Delete a workout forever through health.purge_workout: an activity has no trash, and the phone link it followed stays as the tombstone that keeps it from arriving again.",
-      "confirmation": "none",
-      "input": {
-        "type": "object",
-        "required": ["activity_id"],
-        "additionalProperties": false,
-        "properties": {
-          "activity_id": {
-            "type": "string",
-            "minLength": 1
-          }
-        }
+        },
+        "required": ["id"],
+        "type": "object"
       },
       "output": {
         "type": "object",

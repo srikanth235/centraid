@@ -74,7 +74,7 @@ message Request {
     StageRequest stage = 13;
     // MAKE THIS FILE A VAULT (#1029 W5, hand-off 1). The door `Core::open` with
     // `create` left missing: the migrations were laid and nothing over this ABI
-    // could write `core_vault`. See `vault.proto`.
+    // could write the `vault` row. See `vault.proto`.
     FoundRequest found = 14;
     // THE PHONE'S TWO FLOWS, AND THE TWO SCREENS BESIDE THEM (#1029 W15). See
     // `phone.proto` for why none of the four is a registered command.

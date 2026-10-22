@@ -14,7 +14,7 @@ import dev.centraid.core.CoreOutcome
 /**
  * WHAT A VAULT IS CALLED, ASKED OF THE VAULT (#1020, wave A; #1025 S7-9).
  *
- * A vault's name lives INSIDE the vault — `core_vault.display_name` — and
+ * A vault's name lives INSIDE the vault — `vault.name` — and
  * nowhere else. There is no index beside the files and this deliberately does
  * not write one: a manifest listing names would be a second place a vault's
  * name lives, and the moment a member renamed one from another device the two
@@ -40,15 +40,15 @@ public object VaultRoster {
      * The one statement that names a vault, shared by the shelf's launch probe
      * and by the lockup read on whichever core is open.
      *
-     * `core_vault` holds exactly one row — a vault file is a vault — so the
+     * `vault` holds exactly one row — a vault file is a vault — so the
      * order is there to satisfy the door's keyset cursor, not to choose between
      * candidates.
      */
     public val QUERY: PageQuery = PageQuery(
         name = "home.vault",
-        select = listOf("vault_id", "display_name"),
-        from = "core_vault",
-        order = PageOrder(sort_column = "vault_id", pk_column = "vault_id"),
+        select = listOf("self_id", "name"),
+        from = "vault",
+        order = PageOrder(sort_column = "self_id", pk_column = "self_id"),
     )
 
     /**
@@ -74,7 +74,7 @@ public object VaultRoster {
         val id = row.values.getOrNull(0)?.text.orEmpty()
         val name = row.values.getOrNull(1)?.text.orEmpty()
         // AN UNNAMED, UNIDENTIFIED ROW IS NOT A VAULT. A file that answered the
-        // read with neither is one whose `core_vault` has not been founded, and
+        // read with neither is one whose `vault` has not been founded, and
         // a roster row for it would be a blank the member could tap.
         if (id.isEmpty() && name.isEmpty()) return null
         return VaultLockup(vault_id = id, vault_name = name)
@@ -89,7 +89,7 @@ public object VaultRoster {
      * two layers come to disagree about what a vault is called.
      *
      * `Core::open` with `create` lays the migrations down and stops. This is
-     * the door that writes `core_vault` and the owner's `core_party` — one
+     * the door that writes the `vault` row and the owner's person — one
      * commit, `crates/core`'s `api::found` — and until it existed a phone could
      * make a file that could never say which vault it was.
      *

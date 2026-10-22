@@ -961,7 +961,6 @@ fn read_row(
             .bank_type
             .and_then(|at| nonempty(record.cells.get(at))),
         category_concept_id: None,
-        display_name: None,
     })
 }
 

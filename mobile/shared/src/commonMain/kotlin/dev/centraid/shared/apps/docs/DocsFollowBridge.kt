@@ -17,7 +17,7 @@ import kotlinx.coroutines.launch
  *
  * - [follow]: the member picked a folder. The shell minted the origin ([FilesImport.origin]) and
  *   stored its access; the vault now holds the origin, and the shell asks the follower for a pass.
- * - [stop]: the member stopped following. The vault forgets the folder's links and keeps every
+ * - [stop]: the member stopped following. The vault forgets the folder's sources and keeps every
  *   document; the shell forgets its access and the follower is not asked for anything.
  * - [report]: tell a drive page which folders are followed, so its More sheet lists them.
  *
@@ -43,10 +43,7 @@ public class DocsFollowBridge {
     /** The folder [origin] is no longer followed; [done] is told whether the vault forgot it all. */
     public fun stop(origin: String, done: (Boolean) -> Unit) {
         val core = session?.shelf?.core() ?: return done(false)
-        scope.launch {
-            val row = FilesImport.followed(core)?.firstOrNull { it.phoneOrigin == origin }
-            done(row == null || FilesImport.stop(core, row.originId))
-        }
+        scope.launch { done(FilesImport.stop(core, origin)) }
     }
 
     /** The folder a Followed sheet row's key stops (`stop:<origin>`), or null for any other key. */

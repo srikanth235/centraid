@@ -198,8 +198,7 @@ must("old_expo", "Baby expo at Suntec", D("2026-09-13"), "11:00", "15:00", trash
 
 tasks = [
     # Penang trip, with subtasks
-    {"key": "penang_trip", "name": "Plan the Penang Christmas trip", "list": "penang_l", "priority": 2,
-     "status": "in_progress", "due": "2026-12-24"},
+    {"key": "penang_trip", "name": "Plan the Penang Christmas trip", "list": "penang_l", "priority": 2, "due": "2026-12-24"},
     {"key": "pg_flights", "name": "Book the Scoot flights", "parent": "penang_trip", "list": "penang_l",
      "completed": "2026-10-20T22:00"},
     {"key": "pg_ringgit", "name": "Change some ringgit", "parent": "penang_trip", "list": "penang_l",

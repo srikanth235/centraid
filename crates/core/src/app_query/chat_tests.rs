@@ -23,7 +23,7 @@ impl Drop for Scratch {
 
 impl Scratch {
     fn founded() -> Self {
-        let dir = centraid_ontology::golden::scratch_dir();
+        let dir = centraid_ontology::scratch::scratch_dir();
         std::fs::create_dir_all(&dir).expect("the directory is made");
         let now = centraid_vault::time::recurrence::parse_instant_ms(NOW).expect("an instant");
         let handle = Core::open(CoreConfig::new(dir.join("vault.db")).with_clock(
@@ -122,7 +122,7 @@ impl Scratch {
         if let Some(thread) = thread {
             input["thread_id"] = serde_json::json!(thread);
         }
-        self.run("chat.save_turn", input)["thread_id"]
+        self.run("thread.save_turn", input)["thread_id"]
             .as_str()
             .expect("a turn names its thread")
             .to_owned()
@@ -137,7 +137,7 @@ fn ids(found: &wire::ChatThreads) -> Vec<&str> {
         .collect()
 }
 
-/// HOME CARRIES A CHAT THREAD AS A HIT (R-1097-24): entity `chat.thread`, app
+/// HOME CARRIES A CHAT THREAD AS A HIT (R-1097-24): entity `thread`, app
 /// `chat`, the thread's id and title, found by the title and by what the member
 /// said and by nothing the assistant or a card said.
 #[test]
@@ -162,7 +162,7 @@ fn home_finds_a_thread_by_its_title_and_its_words_and_by_nothing_the_assistant_s
     };
     let expected = |id: &str, title: &str| {
         vec![(
-            "chat.thread".to_owned(),
+            "thread".to_owned(),
             id.to_owned(),
             title.to_owned(),
             String::new(),
@@ -215,10 +215,7 @@ fn a_typo_in_a_thread_word_is_corrected_on_home_and_a_deleted_thread_leaves() {
             .collect::<Vec<_>>(),
         [thread.as_str()]
     );
-    scratch.run(
-        "chat.delete_thread",
-        serde_json::json!({ "thread_id": thread }),
-    );
+    scratch.run("entity.purge", serde_json::json!({ "id": thread }));
     assert!(scratch.home("surveyor").hits.is_empty());
     assert!(scratch.home("surveyer").corrected.is_empty());
 }
@@ -278,14 +275,11 @@ fn the_drawer_searches_threads_and_says_what_it_corrected() {
 
     // A RENAME MOVES THE HIT, and a DELETE drops it.
     scratch.run(
-        "chat.rename_thread",
+        "thread.rename",
         serde_json::json!({ "thread_id": other, "title": "Teeth appointment" }),
     );
     assert_eq!(ids(&scratch.drawer("teeth", 0)), [other.as_str()]);
-    scratch.run(
-        "chat.delete_thread",
-        serde_json::json!({ "thread_id": other }),
-    );
+    scratch.run("entity.purge", serde_json::json!({ "id": other }));
     assert!(scratch.drawer("teeth", 0).threads.is_empty());
     assert!(scratch.drawer("dentist", 0).threads.is_empty());
 }

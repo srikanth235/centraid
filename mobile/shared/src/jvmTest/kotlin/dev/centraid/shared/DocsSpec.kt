@@ -1,5 +1,6 @@
 package dev.centraid.shared
 
+import centraid.screen.v1.SearchAsk
 import centraid.screen.v1.WriteSettled
 import centraid.core.v1.AppQueryDenial
 import centraid.core.v1.AppQueryResponse
@@ -296,7 +297,7 @@ class DocsSpec : StringSpec({
         var s = onScreen(driveAnswer(folders = listOf(DocsFolder(folder_id = "f", name = "Taxes"))))
         s = drive(DocsDriveEvent(search_opened = DocsDriveEvent.SearchOpened()), s).state
         val typed = drive(DocsDriveEvent(search_term = DocsDriveEvent.SearchTermChanged(term = "taxes")), s)
-        val folder = centraid.core.v1.ContainerHit(entity = "core.concept", id = "f", title = "Taxes", app_id = "docs")
+        val folder = centraid.core.v1.ContainerHit(entity = "folder", id = "f", title = "Taxes", app_id = "docs")
         val answer = AppQueryResponse(docs_search = DocsSearch(today = TODAY, containers = listOf(folder)))
         val found = drive(DocsDriveReads.arrived(listOf(answer)), typed.state).state
         val container = found.search!!.containers.single()
@@ -312,25 +313,24 @@ class DocsSpec : StringSpec({
         drive(DocsDriveReads.arrived(listOf(answer)), closed).state.search!!.containers.shouldBeEmpty()
     }
 
-    "search: Ask is the no-match question: set by a wholly empty current answer, cleared by a new term, a close, a denial or a stale answer, and never set when anything was found (#1097, R-1097-28)" {
+    "search: Ask is the row at the foot of a current answer, matched or not, cleared by a new term, a close, a denial or a stale answer (#1097, R-1097-28, #1135)" {
         var s = onScreen(driveAnswer(folders = listOf(DocsFolder(folder_id = "f", name = "Taxes"))))
         s = drive(DocsDriveEvent(search_opened = DocsDriveEvent.SearchOpened()), s).state
         val typed = drive(DocsDriveEvent(search_term = DocsDriveEvent.SearchTermChanged(term = "zzqx")), s)
         fun answer(search: DocsSearch) = DocsDriveReads.arrived(listOf(AppQueryResponse(docs_search = search)))
         val none = drive(answer(DocsSearch(today = TODAY)), typed.state).state
-        none.search!!.ask shouldBe "Find zzqx"
-        none.data_!!.empty!!.action_label shouldBe "Ask about “zzqx”"
-        // The data's own action stays none: the shell draws and sends Ask.
+        none.search!!.ask_row shouldBe SearchAsk(label = "Ask about “zzqx”", question = "Find zzqx", scope = "docs")
+        none.data_!!.empty!!.action_label shouldBe ""
         none.data_.empty_action shouldBe DocsDriveData.EmptyAction.EMPTY_ACTION_NONE
-        // Anything found is no Ask: a document, or a folder.
-        val folder = centraid.core.v1.ContainerHit(entity = "core.concept", id = "f", title = "Taxes", app_id = "docs")
-        drive(answer(DocsSearch(today = TODAY, containers = listOf(folder))), typed.state).state.search!!.ask shouldBe ""
+        // Anything found still has Ask at its foot: a document, or a folder.
+        val folder = centraid.core.v1.ContainerHit(entity = "folder", id = "f", title = "Taxes", app_id = "docs")
+        drive(answer(DocsSearch(today = TODAY, containers = listOf(folder))), typed.state).state.search!!.ask_row shouldBe none.search!!.ask_row
         // A new term, a close and a denial clear it; an answer for a closed search sets none.
-        drive(DocsDriveEvent(search_term = DocsDriveEvent.SearchTermChanged(term = "zzq")), none).state.search!!.ask shouldBe ""
-        drive(DocsDriveEvent(search_closed = DocsDriveEvent.SearchClosed()), none).state.search!!.ask shouldBe ""
-        drive(DocsDriveReads.denied(AppQueryDenial(message = "no")), none).state.search!!.ask shouldBe ""
+        drive(DocsDriveEvent(search_term = DocsDriveEvent.SearchTermChanged(term = "zzq")), none).state.search!!.ask_row shouldBe null
+        drive(DocsDriveEvent(search_closed = DocsDriveEvent.SearchClosed()), none).state.search!!.ask_row shouldBe null
+        drive(DocsDriveReads.denied(AppQueryDenial(message = "no")), none).state.search!!.ask_row shouldBe null
         val closed = drive(DocsDriveEvent(search_closed = DocsDriveEvent.SearchClosed()), typed.state).state
-        drive(answer(DocsSearch(today = TODAY)), closed).state.search!!.ask shouldBe ""
+        drive(answer(DocsSearch(today = TODAY)), closed).state.search!!.ask_row shouldBe null
     }
 
     // --- Empties, day one, denied -----------------------------------------
@@ -409,9 +409,9 @@ class DocsSpec : StringSpec({
         s.sheet.actions!!.actions.map { it.label } shouldBe listOf("Star", "Rename", "Move", "Labels", "Move to trash")
         val star = drive(DocsDriveEvent(action = DocsDriveEvent.ActionPicked(key = DocsWrites.KEY_STAR)), s)
         val write = writes(star).single()
-        write.command shouldBe "core.star_document"
-        write.inputJson shouldBe """{"document_id":"d-1"}"""
-        write.invokeKey shouldBe "core.star_document:d-1"
+        write.command shouldBe "flag.set"
+        write.inputJson shouldBe """{"id":"d-1","flag":"starred"}"""
+        write.invokeKey shouldBe "flag.set:d-1"
         star.state.sheet!!.kind shouldBe DocsSheet.Kind.KIND_NONE
         star.state.write!!.phase shouldBe WriteState.Phase.PHASE_IN_FLIGHT
 
@@ -434,10 +434,10 @@ class DocsSpec : StringSpec({
         choices.single { it.selected }.key shouldBe "f-home"
         drive(DocsDriveEvent(choice = DocsDriveEvent.ChoicePicked(key = "f-home")), s).effects.shouldBeEmpty()
         writes(drive(DocsDriveEvent(choice = DocsDriveEvent.ChoicePicked(key = "f-lease")), s)).single().inputJson shouldBe
-            """{"document_id":"d-1","folder_id":"f-lease"}"""
+            """{"id":"d-1","folder_id":"f-lease"}"""
         // The top level is no folder: the command files it back under the root.
         writes(drive(DocsDriveEvent(choice = DocsDriveEvent.ChoicePicked(key = DocsWrites.KEY_TOP_LEVEL)), s)).single().inputJson shouldBe
-            """{"document_id":"d-1"}"""
+            """{"id":"d-1"}"""
     }
 
     "labels: add tags the document, a label it has is nothing, remove untags by edge" {
@@ -456,13 +456,13 @@ class DocsSpec : StringSpec({
         s = drive(DocsDriveEvent(label_draft = DocsDriveEvent.LabelDraftEdited(text = "insurance")), s).state
         s.sheet!!.labels!!.can_add shouldBe true
         writes(drive(DocsDriveEvent(label_added = DocsDriveEvent.LabelAdded(label = " insurance ")), s)).single().let {
-            it.command shouldBe "core.tag_item"
-            it.inputJson shouldBe """{"subject_type":"core.document","subject_id":"d-1","label":"insurance"}"""
+            it.command shouldBe "tag.add"
+            it.inputJson shouldBe """{"id":"d-1","label":"insurance"}"""
         }
         drive(DocsDriveEvent(label_added = DocsDriveEvent.LabelAdded(label = "signed")), s).effects.shouldBeEmpty()
         writes(drive(DocsDriveEvent(label_removed = DocsDriveEvent.LabelRemoved(tag_id = "t-1")), s)).single().let {
-            it.command shouldBe "core.untag_item"
-            it.inputJson shouldBe """{"tag_id":"t-1"}"""
+            it.command shouldBe "tag.remove"
+            it.inputJson shouldBe """{"id":"d-1","label":"signed"}"""
         }
     }
 
@@ -477,8 +477,8 @@ class DocsSpec : StringSpec({
             it.state.confirm.shouldBeNull()
         }
         writes(drive(DocsDriveEvent(confirmed = DocsDriveEvent.Confirmed()), asked.state)).single().let {
-            it.command shouldBe "core.trash_document"
-            it.invokeKey shouldBe "core.trash_document:d-1"
+            it.command shouldBe "entity.trash"
+            it.invokeKey shouldBe "entity.trash:d-1"
         }
     }
 
@@ -494,12 +494,12 @@ class DocsSpec : StringSpec({
         typed.state.data_!!.rows.single().title shouldBe "Lease 2026"
         val saved = drive(DocsDriveEvent(tick = DocsDriveEvent.Ticked(token = AutosaveLaw.tokenOf(1))), typed.state)
         writes(saved).single().let {
-            it.command shouldBe "core.rename_document"
-            it.inputJson shouldBe """{"document_id":"d-1","title":"Lease 2026"}"""
-            it.invokeKey shouldBe "core.rename_document:d-1:seq=1"
+            it.command shouldBe "entity.retitle"
+            it.inputJson shouldBe """{"id":"d-1","title":"Lease 2026"}"""
+            it.invokeKey shouldBe "entity.retitle:d-1:seq=1"
         }
         saved.state.rename!!.status_label shouldBe "Saving"
-        val committed = drive(settled("core.rename_document:d-1:seq=1"), saved.state).state
+        val committed = drive(settled("entity.retitle:d-1:seq=1"), saved.state).state
         committed.rename!!.status_label shouldBe "Saved"
         // Close = done: nothing unsaved, so the field goes.
         drive(DocsDriveEvent(rename_closed = DocsDriveEvent.RenameClosed()), committed).state.rename.shouldBeNull()
@@ -516,7 +516,7 @@ class DocsSpec : StringSpec({
 
         // Leaving the screen with unsaved words saves them.
         val left = drive(DocsDriveMachine.left(), typed.state)
-        writes(left).single().command shouldBe "core.rename_document"
+        writes(left).single().command shouldBe "entity.retitle"
     }
 
     // --- Folders, capture ---------------------------------------------------
@@ -540,8 +540,8 @@ class DocsSpec : StringSpec({
         n.sheet!!.new_folder!!.can_create shouldBe true
         val filing = drive(DocsDriveEvent(folder_created = DocsDriveEvent.FolderCreated()), n)
         writes(filing).single().let {
-            it.command shouldBe "core.create_folder"
-            it.inputJson shouldBe """{"name":"Insurance","parent_folder_id":"f-home"}"""
+            it.command shouldBe "container.create"
+            it.inputJson shouldBe """{"kind":"folder","title":"Insurance","parent":"f-home"}"""
         }
         // THE SHEET CLOSES WITH THE SUBMIT (#1089): a second Create has no sheet and no name, so it files no second folder.
         drive(DocsDriveEvent(folder_created = DocsDriveEvent.FolderCreated()), filing.state).effects.shouldBeEmpty()
@@ -634,7 +634,7 @@ class DocsSpec : StringSpec({
                 versions = listOf(version("c-2", 2, current = true), version("c-1", 1)),
                 today = TODAY,
             ),
-            DocsActivity(events = listOf(DocsActivityEvent(activity = "core.edit_document", agent_kind = "owner", occurred_local = "2026-03-11T09:12"))),
+            DocsActivity(events = listOf(DocsActivityEvent(activity = "document.edit", occurred_local = "2026-03-11T09:12"))),
         ).data_!!
         text.reading!!.let {
             it.body shouldBe "# Rent"
@@ -647,7 +647,8 @@ class DocsSpec : StringSpec({
         text.versions.map { it.restore_label } shouldBe listOf("", "Restore")
         text.activity.single().let {
             it.label shouldBe "Edited"
-            it.meta shouldBe "You · Wed 11 March 09:12"
+            // THE JOURNAL DOES NOT SAY WHO ACTED (#1135): the line is the day alone.
+            it.meta shouldBe "Wed 11 March 09:12"
         }
         text.facts.map { it.label } shouldBe listOf("Kind", "Size", "Media type", "Folder", "Added", "Changed", "Versions")
 
@@ -717,7 +718,7 @@ class DocsSpec : StringSpec({
         }
         live.data_.trashed_note shouldBe "In trash · restorable until Sat 14 March"
         writes(doc(DocsDocumentEvent(action = DocsDocumentEvent.ActionPicked(key = "restore")), live)).single().command shouldBe
-            "core.restore_document"
+            "entity.restore"
         // Keys the head does not offer are nothing.
         doc(DocsDocumentEvent(action = DocsDocumentEvent.ActionPicked(key = "trash")), live).effects.shouldBeEmpty()
 
@@ -749,8 +750,8 @@ class DocsSpec : StringSpec({
         }
         val confirmed = doc(DocsDocumentEvent(confirmed = DocsDocumentEvent.Confirmed()), asked.state)
         writes(confirmed).single().let {
-            it.command shouldBe "core.purge_document"
-            it.inputJson shouldBe """{"document_id":"d-1"}"""
+            it.command shouldBe "entity.purge"
+            it.inputJson shouldBe """{"id":"d-1"}"""
         }
         confirmed.state.dismissed shouldBe false
         val key = confirmed.state.write!!.invoke_key
@@ -764,7 +765,7 @@ class DocsSpec : StringSpec({
         val trashing = doc(DocsDocumentEvent(action = DocsDocumentEvent.ActionPicked(key = "trash")), live)
         trashing.state.asking shouldBe DocsDocumentState.Asking.ASKING_TRASH
         val trashed2 = doc(DocsDocumentEvent(confirmed = DocsDocumentEvent.Confirmed()), trashing.state)
-        writes(trashed2).single().command shouldBe "core.trash_document"
+        writes(trashed2).single().command shouldBe "entity.trash"
         doc(DocsDocumentEvent(write_settled = WriteSettled(invoke_key = trashed2.state.write!!.invoke_key, committed = true)), trashed2.state)
             .state.dismissed shouldBe false
     }
@@ -778,14 +779,15 @@ class DocsSpec : StringSpec({
             ),
         )
         writes(doc(DocsDocumentEvent(action = DocsDocumentEvent.ActionPicked(key = "star")), s)).single().command shouldBe
-            "core.star_document"
+            "flag.set"
         val moving = doc(DocsDocumentEvent(action = DocsDocumentEvent.ActionPicked(key = "move")), s).state
         moving.sheet!!.choices!!.choices.map { it.label } shouldBe listOf("Top level", "Taxes")
-        writes(doc(DocsDocumentEvent(version_restore = DocsDocumentEvent.VersionRestoreTapped(content_id = "c-1")), s)).single().let {
-            it.command shouldBe "core.restore_document_version"
-            it.inputJson shouldBe """{"document_id":"d-1","content_id":"c-1"}"""
+        writes(doc(DocsDocumentEvent(version_restore = DocsDocumentEvent.VersionRestoreTapped(content_id = "1")), s)).single().let {
+            it.command shouldBe "document.restore_version"
+            // THE VERSION'S KEY IS ITS NUMBER (a revision's seq): two versions can hold the same bytes.
+            it.inputJson shouldBe """{"id":"d-1","seq":1}"""
         }
-        doc(DocsDocumentEvent(version_restore = DocsDocumentEvent.VersionRestoreTapped(content_id = "c-2")), s).effects.shouldBeEmpty()
+        doc(DocsDocumentEvent(version_restore = DocsDocumentEvent.VersionRestoreTapped(content_id = "2")), s).effects.shouldBeEmpty()
 
         // THE VERBS SHEET is the machine's: every head verb, and a pick closes it.
         val more = doc(DocsDocumentEvent(more_opened = DocsDocumentEvent.MoreOpened()), s).state
@@ -794,7 +796,7 @@ class DocsSpec : StringSpec({
         more.sheet.shouldNotBeNull().actions.shouldNotBeNull().actions.map { it.key } shouldBe s.data_.shouldNotBeNull().actions.map { it.key }
         val starred = doc(DocsDocumentEvent(action = DocsDocumentEvent.ActionPicked(key = "star")), more)
         starred.state.sheet.shouldNotBeNull().kind shouldBe DocsSheet.Kind.KIND_NONE
-        writes(starred).single().command shouldBe "core.star_document"
+        writes(starred).single().command shouldBe "flag.set"
     }
 
     // --- The editor -----------------------------------------------------------
@@ -815,14 +817,14 @@ class DocsSpec : StringSpec({
         writes(typed).shouldBeEmpty()
         val saving = edit(DocsEditorEvent(tick = DocsEditorEvent.Ticked(token = AutosaveLaw.tokenOf(1))), typed.state)
         writes(saving).single().let {
-            it.command shouldBe "core.edit_document"
-            it.inputJson shouldBe """{"document_id":"d-1","body_text":"rent is due"}"""
-            it.invokeKey shouldBe "core.edit_document:d-1:seq=1"
+            it.command shouldBe "document.edit"
+            it.inputJson shouldBe """{"id":"d-1","body_text":"rent is due"}"""
+            it.invokeKey shouldBe "document.edit:d-1:seq=1"
         }
         // Its own commit arrives as a change while saving: noted, not read.
-        val during = edit(DocsEditorMachine.rowsChanged("core_document", emptyList())!!, saving.state)
+        val during = edit(DocsEditorMachine.rowsChanged("document", emptyList())!!, saving.state)
         during.effects.shouldBeEmpty()
-        val committed = edit(DocsEditorReads.settled(CommandStatus.COMMAND_STATUS_EXECUTED, "", "core.edit_document:d-1:seq=1"), during.state)
+        val committed = edit(DocsEditorReads.settled(CommandStatus.COMMAND_STATUS_EXECUTED, "", "document.edit:d-1:seq=1"), during.state)
         committed.state.status_label shouldBe DocsCopy.SAVED
         reads(committed).size shouldBe 1
         val reread = edit(DocsEditorReads.arrived(listOf(AppQueryResponse(docs_document = textDoc("rent is due", 2)))), committed.state)
@@ -831,22 +833,22 @@ class DocsSpec : StringSpec({
         // A title change still sends the body the command requires.
         val titled = edit(DocsEditorEvent(title = DocsEditorEvent.TitleEdited(title = "Rent")), s)
         writes(edit(DocsEditorMachine.left(), titled.state)).single().inputJson shouldBe
-            """{"document_id":"d-1","body_text":"rent","title":"Rent"}"""
+            """{"id":"d-1","body_text":"rent","title":"Rent"}"""
         // Clearing the text is a save, not a refusal.
         val cleared = edit(DocsEditorEvent(body = DocsEditorEvent.BodyEdited(body = "")), s)
         writes(edit(DocsEditorMachine.left(), cleared.state)).single().inputJson shouldBe
-            """{"document_id":"d-1","body_text":""}"""
+            """{"id":"d-1","body_text":""}"""
     }
 
     "a vault change never replaces words being typed" {
         val typed = edit(DocsEditorEvent(body = DocsEditorEvent.BodyEdited(body = "mine")), editorWith("rent")).state
-        val changed = edit(DocsEditorMachine.rowsChanged("core_document", listOf("d-1"))!!, typed)
+        val changed = edit(DocsEditorMachine.rowsChanged("document", listOf("d-1"))!!, typed)
         changed.effects.shouldBeEmpty()
         changed.state.autosave!!.remote_changed shouldBe true
         changed.state.remote_note shouldBe DocsCopy.REMOTE_CHANGED
         changed.state.draft!!.body shouldBe "mine"
         // Another table's keys are not this document.
-        edit(DocsEditorMachine.rowsChanged("core_tag", listOf("t-1"))!!, typed).effects.shouldBeEmpty()
+        edit(DocsEditorMachine.rowsChanged("edge", listOf("t-1"))!!, typed).effects.shouldBeEmpty()
     }
 
     "only a live text document with text opens in the editor" {
@@ -862,8 +864,8 @@ class DocsSpec : StringSpec({
     // --- Trash ------------------------------------------------------------------
 
     "the trash destroys on Photos' path: Delete forever and Empty trash, each behind a confirm (D-1)" {
-        DocsTrashSpec.purgeCommand shouldBe "core.purge_document"
-        DocsTrashSpec.emptyCommand shouldBe "core.empty_document_trash"
+        DocsTrashSpec.purgeCommand shouldBe "entity.purge"
+        DocsTrashSpec.emptyCommand shouldBe "entity.empty_trash"
         val opened = DocsTrashMachine.reduce(DocsTrashMachine.initial(), TrashListEvent(opened = TrashListEvent.Opened()))
         opened.state.app_id shouldBe "docs"
         val landed = DocsTrashMachine.reduce(
@@ -886,17 +888,17 @@ class DocsSpec : StringSpec({
         }
         DocsTrashMachine.reduce(purging.state, TrashListEvent(confirmed = TrashListEvent.Confirmed())).effects
             .filterIsInstance<ScreenEffect.SubmitWrite>().single().let {
-                it.command shouldBe "core.purge_document"
-                it.inputJson shouldBe """{"document_id":"d-1"}"""
+                it.command shouldBe "entity.purge"
+                it.inputJson shouldBe """{"id":"d-1"}"""
             }
         // EMPTY TRASH SAYS WHAT IT DOES NOW: everything leaves for good.
         val asked = DocsTrashMachine.reduce(landed, TrashListEvent(empty = TrashListEvent.EmptyTapped())).state
         asked.confirm!!.body shouldBe SharedCopy.TRASH_EMPTY_BODY
         asked.confirm.body shouldContain "for good"
         DocsTrashMachine.reduce(asked, TrashListEvent(confirmed = TrashListEvent.Confirmed())).effects
-            .filterIsInstance<ScreenEffect.SubmitWrite>().single().command shouldBe "core.empty_document_trash"
+            .filterIsInstance<ScreenEffect.SubmitWrite>().single().command shouldBe "entity.empty_trash"
         writes(DocsTrashMachine.reduce(landed, TrashListEvent(restore = TrashListEvent.RestoreTapped(id = "d-1")))).single().inputJson shouldBe
-            """{"document_id":"d-1"}"""
+            """{"id":"d-1"}"""
         val empty = DocsTrashMachine.reduce(opened.state, TrashListEvent(data_ = TrashListEvent.DataArrived(data_ = TrashListData(), answered_cursor = ""))).state
         empty.data_!!.empty!!.body shouldBe DocsCopy.TRASH_EMPTY_STATE_BODY
         empty.data_.empty_label shouldBe ""

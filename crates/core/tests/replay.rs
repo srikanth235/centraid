@@ -33,9 +33,9 @@ use centraid_core::api_proto as wire;
 use centraid_vault::commands::{Idempotency, Registry};
 use common::chat::{Sample, sample};
 
-/// `schedule.add_task` with no `task_id`: it mints a fresh row every run, and
+/// `task.add` with no `id`: it mints a fresh row every run, and
 /// nothing in its gate order notices a title it has already filed.
-const COMMAND: &str = "schedule.add_task";
+const COMMAND: &str = "task.add";
 
 fn send(
     sample: &Sample,
@@ -56,8 +56,8 @@ fn send(
     }
 }
 
-/// Every `schedule_task` row with this title, through the page door a screen
-/// reads by: `(task_id)`.
+/// Every task with this title, through the page door a screen reads by: `(id)`
+/// over `entity`, which holds the title.
 fn tasks_titled(sample: &Sample, title: &str) -> Vec<String> {
     let answer = sample
         .handle
@@ -65,23 +65,18 @@ fn tasks_titled(sample: &Sample, title: &str) -> Vec<String> {
             kind: Some(wire::request::Kind::Page(wire::PageRequest {
                 query: Some(wire::PageQuery {
                     name: "replay-tasks".to_owned(),
-                    select: vec![
-                        "task_id".to_owned(),
-                        "created_at".to_owned(),
-                        "title".to_owned(),
-                    ],
-                    from: "schedule_task".to_owned(),
-                    r#where: Some("title = ?".to_owned()),
+                    select: vec!["id".to_owned(), "created_at".to_owned(), "title".to_owned()],
+                    from: "entity".to_owned(),
+                    r#where: Some("kind = 'task' AND title = ?".to_owned()),
                     bind: vec![wire::Value {
                         kind: Some(wire::value::Kind::Text(title.to_owned())),
                     }],
                     order: Some(wire::PageOrder {
                         sort_column: "created_at".to_owned(),
-                        pk_column: "task_id".to_owned(),
+                        pk_column: "id".to_owned(),
                         descending: false,
                     }),
                     with_held_thumbnail: false,
-                    with_note_body: false,
                     with_document_size: false,
                     with_minor_units: false,
                     local_day_columns: Vec::new(),
@@ -107,7 +102,7 @@ fn tasks_titled(sample: &Sample, title: &str) -> Vec<String> {
 /// THE PIN. The command is `Once` — "must not be run twice for one intent" — and
 /// the same `invoke_key` is sent twice down the core's real command path
 /// (`Handle::call` → `api::invoke` → `Vault::execute`). Both sends EXECUTE: two
-/// invocations, two receipts, two rows. Nothing answers the second from a
+/// invocations, two journal rows, two rows. Nothing answers the second from a
 /// ledger, because there is none.
 #[test]
 fn the_same_key_sent_twice_runs_the_command_twice() {
@@ -149,10 +144,9 @@ fn the_same_key_sent_twice_runs_the_command_twice() {
         first.invocation_id, second.invocation_id,
         "two sends are two invocations, so the handler ran twice"
     );
-    assert_ne!(
-        first.receipt_id, second.receipt_id,
-        "and each was receipted on its own"
-    );
+    // The journal row is the evidence and `invocation_id` is its position: each send
+    // was journalled on its own, and nothing else is a receipt (#1135).
+    assert!(first.receipt_id.is_empty() && second.receipt_id.is_empty());
     assert_ne!(
         first.output, second.output,
         "and each minted its own task id"

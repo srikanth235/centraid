@@ -206,8 +206,9 @@ struct AgendaHomeView: View {
             AgendaTodoList(home: home, state: state, send: send)
         } else if home.empty != .none, home.empty != .unspecified {
             if home.empty == .noMatch {
-                // A SEARCH THAT FOUND NOTHING: the kit's one no-match state, with Ask (#1097).
-                SearchEmptyView(emptyState(home), ask: state.searchAsk)
+                // A SEARCH THAT FOUND NOTHING: the kit's one no-match state, and the Ask row under it.
+                EmptyStateView(emptyState(home))
+                if state.hasSearchAskRow { SearchAskRow(ask: state.searchAskRow) }
             } else {
                 // WHERE THE PHONE HOLDS A CALENDAR, ITS IMPORT IS DAY ONE'S
                 // ACTION (the kit's empty state draws it); "Add" stays in
@@ -218,7 +219,7 @@ struct AgendaHomeView: View {
                 EmptyStateView(emptyState(home), onAction: { send(AgendaEvents.make { $0.newEvent = .init() }) })
             }
         } else {
-            AgendaList(home: home, chrome: state.chrome, send: send)
+            AgendaList(home: home, chrome: state.chrome, ask: state.hasSearchAskRow ? state.searchAskRow : nil, send: send)
         }
     }
 
@@ -295,6 +296,8 @@ private struct AgendaToolbarView: View {
 private struct AgendaList: View {
     let home: Centraid_Screen_V1_AgendaHomeData
     let chrome: Centraid_Screen_V1_AgendaChrome
+    /// The search's Ask row, closing the answer (#1135); nil off a search.
+    let ask: Centraid_Screen_V1_SearchAsk?
     let send: (Data) -> Void
     /// The shell's import door, nil where it offers none (and inside an example).
     @Environment(\.importFromPhone) private var importFromPhone
@@ -324,6 +327,7 @@ private struct AgendaList: View {
                                 .id(section.day)
                         }
                     }
+                    if let ask { SearchAskRow(ask: ask) }
                 }
                 .padding(.bottom, 16)
             }

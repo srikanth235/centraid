@@ -80,7 +80,7 @@ public sealed interface AgendaEventInput {
  *
  * ## Writes
  *
- * - **RSVP** (`schedule.respond_rsvp`) as the vault owner's own attendee row —
+ * - **RSVP** (`event.respond`) as the vault owner's own attendee row —
  *   `is_you`, never the first guest. The chip moves at once
  *   ([AgendaEventScreen.sentPartstat]); a refusal puts it back and says why.
  *   A reply is to the SERIES (`event_id`), and a series says so.
@@ -97,16 +97,8 @@ public sealed interface AgendaEventInput {
 public object AgendaEventMachine : ScreenMachine<AgendaEventScreen, AgendaEventInput> {
     public const val SCREEN_ID: String = ScreenIds.AGENDA_EVENT
 
-    /** The tables `agenda.event` reads for one event — its calendar's and its place's names too. */
-    public val TABLES: Set<String> = setOf(
-        "core_event",
-        "schedule_event_ext",
-        "schedule_attendee",
-        "schedule_recurrence_exception",
-        "schedule_calendar",
-        "core_party",
-        "core_place",
-    )
+    /** The tables `agenda.event` reads for one event — its guests, its skipped and moved days, its calendar's and its place's names too. */
+    public val TABLES: Set<String> = AgendaTables.EVENT
 
     public const val ACTION_EDIT: String = "edit"
     public const val ACTION_CANCEL: String = "cancel"

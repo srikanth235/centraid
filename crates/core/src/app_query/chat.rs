@@ -1,13 +1,13 @@
 //! THE CHAT'S ARM OF THE APP QUERY (R-CHAT-1): the thread list, one thread, and
 //! whether a card's row is still there.
 //!
-//! These read through `Vault::chat_*` — the `chat` schema's own readers, SQL and
-//! all, in `crates/vault` — and convert to `chat.proto`. Nothing is written
-//! here: a conversation's writers are the `chat.*` commands.
+//! These read through `Vault::chat_*` — the thread kind's own readers, SQL and all, in
+//! `crates/vault/src/chat.rs` — and convert to `chat.proto`. Nothing is written here: a
+//! conversation's writers are the `thread.*` commands (#1135).
 //!
 //! **THE LIST CAN BE SEARCHED** (#1097, R-1097-22, R-1097-24): `chat.threads`
 //! with a `term` is the drawer's search. The rows are the FTS door's
-//! (`chat.thread`, one entry in the named registry), ranked, with the owner as
+//! (kind `thread`, one entry in the named list), ranked, with the owner as
 //! principal; a typo is corrected only when the exact words found nothing, by
 //! the same helper every other surface uses ([`corrected_search`]), and the
 //! words it searched instead ride in `ChatThreads.corrected`. What a thread is
@@ -19,7 +19,7 @@ use centraid_search::{Answer as Found, Principal, Search, SearchError, SearchReq
 use centraid_vault::Vault;
 use centraid_vault::chat::{StoredAttachment, StoredMessage, ThreadRow};
 
-use super::{RecordingSearch, VaultDoor, corrected_search, settle};
+use super::{RecordingSearch, VaultDoor, corrected_search, filled, settle};
 use crate::error::{CoreError, Result};
 
 type Answer = wire::app_query_response::Answer;
@@ -30,8 +30,8 @@ const DEFAULT_LIMIT: usize = 100;
 /// The most threads one list ever answers.
 const MAX_LIMIT: usize = 500;
 
-/// The chat thread's entity in the FTS door (`centraid_search::NAMED`).
-const THREAD_ENTITY: &str = "chat.thread";
+/// The chat thread's kind in the search door.
+const THREAD_ENTITY: &str = "thread";
 
 fn row_to_wire(row: ThreadRow) -> wire::ChatThreadRow {
     wire::ChatThreadRow {
@@ -123,15 +123,24 @@ fn message_to_wire(message: StoredMessage) -> wire::ChatStoredMessage {
 fn attachment_to_wire(attachment: StoredAttachment) -> wire::ChatStoredAttachment {
     use wire::ChatStoredAttachmentKind as K;
     wire::ChatStoredAttachment {
-        kind: match attachment.kind.as_str() {
+        kind: match attachment.form.as_str() {
             "photo" => K::Photo,
             "document" => K::Document,
             "image" => K::Image,
             _ => K::Unspecified,
         } as i32,
         label: attachment.label,
-        asset_id: attachment.asset_id.unwrap_or_default(),
-        document_id: attachment.document_id.unwrap_or_default(),
+        // The wire names the entity by what it is (`asset_id` a photograph, `document_id` a
+        // document): the shells already route by those two words.
+        asset_id: attachment
+            .entity_id
+            .clone()
+            .filter(|_| attachment.form == "photo")
+            .unwrap_or_default(),
+        document_id: attachment
+            .entity_id
+            .filter(|_| attachment.form == "document")
+            .unwrap_or_default(),
         thumbnail_path: attachment.thumbnail_path.unwrap_or_default(),
     }
 }
@@ -164,7 +173,7 @@ pub(super) fn threads(
         }));
     }
     let found = vault.read(|connection| {
-        let index = match centraid_search::SqliteDoor::open(connection) {
+        let index = match centraid_search::SqliteDoor::open(connection, vault.words()) {
             Ok(index) => index,
             Err(error) => {
                 return Ok(Err(CoreError::Invariant {
@@ -180,7 +189,8 @@ pub(super) fn threads(
             &search,
             &[THREAD_ENTITY],
             &asked.term,
-            |rows: &Vec<ThreadRow>| rows.is_empty(),
+            |rows: &Vec<ThreadRow>| rows.len(),
+            |exact, again| filled(exact, again, limit, |row| row.thread_id.clone()),
             |term| {
                 let request = SearchRequest::new(THREAD_ENTITY, term, limit);
                 let ids: Vec<String> = match search.query(&Principal::Owner, &request) {
@@ -248,7 +258,7 @@ mod tests {
     /// The words inside the first `IN (...)` list after `anchor` in the baseline DDL: the schema's
     /// own list, so a word the CHECK gains and this mapping misses fails here.
     fn check_words(anchor: &str) -> Vec<String> {
-        // The anchor is unique in the baseline: only `chat_message` checks an `outcome`.
+        // The anchor is unique in the baseline: only `message` checks an `outcome`.
         let ddl = centraid_vault::migrations::BASELINE_SQL;
         let from = ddl
             .find(anchor)
@@ -264,8 +274,8 @@ mod tests {
 
     #[test]
     fn every_outcome_word_the_schema_allows_has_a_value() {
-        // contracts/migrations/001_baseline.sql: `chat_message.outcome CHECK (outcome IN …)`
-        let words = check_words("CHECK (outcome IN (");
+        // contracts/migrations/001_baseline.sql: `message.outcome CHECK (outcome IN …)`
+        let words = check_words("outcome    TEXT NOT NULL CHECK (outcome IN (");
         // a mis-read of the DDL must not pass for "no word is missing"
         assert!(words.contains(&"sent".to_owned()) && words.contains(&"failed".to_owned()));
         for word in &words {

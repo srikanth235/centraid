@@ -76,6 +76,12 @@ pub trait BlobStore {
     fn ids(&self) -> Result<BTreeSet<String>>;
     /// The stored size, for sizing a restore before fetching it.
     fn size(&self, id: &str) -> Result<u64>;
+    /// Delete a blob's file. `false` when it was not here, which is not an error:
+    /// the caller wanted it gone and it is. The default knows no way to delete,
+    /// for a store whose bytes someone else owns.
+    fn remove(&self, _id: &str) -> Result<bool> {
+        Ok(false)
+    }
     /// The FILE these bytes are in, when this store holds them whole.
     ///
     /// THE ANSWER `Vault::content_location` GIVES A GRID (#1025 S3). Every cell
@@ -94,7 +100,7 @@ pub trait BlobStore {
 }
 
 /// The byte door over one directory, one file per blob named by its BLAKE3
-/// ([`crate::content::content_digest`]).
+/// ([`crate::blob::content_digest`]).
 ///
 /// **A put is atomic or it did not happen**: the bytes go to a temp file in the
 /// same directory, are fsynced, renamed into place, and the directory is
@@ -200,7 +206,7 @@ impl FsBlobStore {
 
 impl BlobStore for FsBlobStore {
     fn put(&self, bytes: &[u8]) -> Result<String> {
-        let id = crate::content::content_digest(bytes);
+        let id = crate::blob::content_digest(bytes);
         let target = self.file_of(&id)?;
         if target.exists() {
             return Ok(id);
@@ -218,7 +224,7 @@ impl BlobStore for FsBlobStore {
             }
             Err(error) => return Err(io_at(&path)(error)),
         };
-        let actual = crate::content::content_digest(&bytes);
+        let actual = crate::blob::content_digest(&bytes);
         if actual != id {
             return Err(BlobError::Corrupt {
                 id: id.to_owned(),
@@ -266,12 +272,21 @@ impl BlobStore for FsBlobStore {
             Err(error) => Err(io_at(&path)(error)),
         }
     }
+
+    fn remove(&self, id: &str) -> Result<bool> {
+        let path = self.file_of(id)?;
+        match fs::remove_file(&path) {
+            Ok(()) => Ok(true),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(false),
+            Err(error) => Err(io_at(&path)(error)),
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::content::content_digest;
+    use crate::blob::content_digest;
 
     #[test]
     fn a_blob_is_named_by_its_bytes_and_a_second_put_is_one_blob() {

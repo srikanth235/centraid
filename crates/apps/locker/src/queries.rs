@@ -23,19 +23,29 @@
 //! them with the phone's loaders.
 
 use centraid_apps_kit::error::KitResult;
-use centraid_apps_kit::reads::in_list;
 use centraid_apps_kit::row::{Row, text_of};
 use centraid_apps_kit::statement::{PageBindValue, PageOrder, PageQuery};
 
-use crate::types::{AUTH_ENTITY_TYPE, ITEM_ENTITY_TYPE};
-
-/// THE BROWSABLE HALF OF A LOCKER ITEM (#996 wave 4, R8 and W6-D2).
+/// THE BROWSABLE HALF OF A LOCKER ITEM (#996 wave 4, R8 and W6-D2), as the
+/// folded row [`ItemRow`] carries it.
 ///
-/// A statement names its columns, and **no sealed cell is on this list**.
+/// A Locker item is an entity (#1135), so the row is read from three places and
+/// folded: the entity row ([`ENTITY_COLUMNS`]: title, stamps, trash), the kind
+/// row ([`KIND_COLUMNS`]) and the vault's `tagged` edges (the star and the
+/// archive are flags, the tags are vault tags). **No sealed cell is on this
+/// list, or on either statement list.**
 pub const ITEM_COLUMNS: &str = "item_id, type, title, username, url, notes, \
      cardholder, expiry, brand, fullname, email, phone, address, network, \
-     compromised, password_set_at, created_at, updated_at, \
+     compromised, password_set_at, starred, memo, created_at, updated_at, \
      archived_at, deleted_at, purge_at";
+
+/// What a statement reads of an item's ENTITY row.
+pub const ENTITY_COLUMNS: &str = "id, title, created_at, updated_at, deleted_at, purge_at";
+
+/// What a statement reads of an item's KIND row (`locker_item`): its typed
+/// plain columns and the memo, never a sealed cell.
+pub const KIND_COLUMNS: &str = "id, type, username, url, notes, cardholder, expiry, brand, \
+     fullname, email, phone, address, network, compromised, password_set_at, memo";
 
 /// The five columns of `locker_item` that hold ciphertext under `K`, named here
 /// only so [`tests`] can assert none of them is in [`ITEM_COLUMNS`].
@@ -55,17 +65,6 @@ pub const TRASH_ROWS: usize = 2_000;
 /// `access.ts:20`-`:21` — the default and the ceiling of the audit window.
 pub const ACCESS_DEFAULT: usize = 200;
 pub const ACCESS_MAX: usize = 2_000;
-
-/// The two concept schemes, and the star's notation.
-///
-/// Restated here because `_shared/concept-scheme-kit.ts` is an import-free leaf
-/// on the v0 side too. **The two URIs are spelled differently and that is
-/// deliberate**: the flags scheme is an `https` URI because flag SQL fragments
-/// are interpolated into condition SQL, where a `urn:`-style `:flags` reads as
-/// a NAMED PARAMETER (#258, the colon-literal trap).
-pub const FLAGS_SCHEME_URI: &str = "https://centraid.dev/schemes/flags";
-pub const LOCKER_TAGS_SCHEME_URI: &str = "https://centraid.dev/schemes/locker-tags";
-pub const STARRED_NOTATION: &str = "starred";
 
 /// Clamp a caller's `limit` the way v0 does: `min(max(limit || default, min), max)`.
 #[must_use]
@@ -87,35 +86,25 @@ pub fn access_window(limit: Option<i64>) -> usize {
     asked.clamp(ITEMS_MIN, ACCESS_MAX)
 }
 
-/// THE AUDIT WINDOW, AND THE INNER OF ITS TWO WALLS (census §A8).
+/// THE AUDIT WINDOW: Locker's own `receipt` table, newest first.
 ///
-/// The manifest's `rowFilter` on `object_type` is the outer wall, carried per
-/// call as the page door's execution clamp. This predicate names the same two
-/// types **in the statement**, so the page is filtered *before* the window
-/// rather than after — without it a busy vault's newest 200 receipts could be
-/// entirely someone else's and the clamp would hand this screen an empty
-/// history.
+/// A receipt is Locker's evidence and nothing else's, so there is no type wall
+/// to carry: the table is the wall. A page for one item names it
+/// (`item_id = ?`); the whole history takes no predicate, and an export or an
+/// unlock, which name no item, are in it.
 pub fn access_statement(item_id: Option<&str>) -> KitResult<PageQuery> {
-    let types = in_list(
-        "object_type",
-        &[ITEM_ENTITY_TYPE.to_owned(), AUTH_ENTITY_TYPE.to_owned()],
-    )?;
-    let (predicate, mut bind) = match item_id {
-        Some(id) if !id.is_empty() => (format!("{} AND object_id = ?", types.sql), {
-            let mut bind = types.bind;
-            bind.push(PageBindValue::Text(id.to_owned()));
-            bind
-        }),
-        _ => (types.sql, types.bind),
-    };
-    bind.shrink_to_fit();
-    Ok(PageQuery::new(
+    let query = PageQuery::new(
         "locker.access.receipts",
-        "receipt_id, action, object_type, object_id, decision, occurred_at, detail_json",
-        "access_receipt",
-        PageOrder::desc("occurred_at", "receipt_id"),
-    )
-    .filter(&predicate, bind))
+        "seq, at, item_id, act",
+        "receipt",
+        PageOrder::desc("at", "seq"),
+    );
+    Ok(match item_id {
+        Some(id) if !id.is_empty() => {
+            query.filter("item_id = ?", vec![PageBindValue::Text(id.to_owned())])
+        }
+        _ => query,
+    })
 }
 
 /// One raw `locker_item` row, in the browsable projection.
@@ -141,15 +130,21 @@ pub struct ItemRow {
     /// When the CURRENT password was set. `None` honestly says "unknown"
     /// rather than claiming an age Review would then reason from.
     pub password_set_at: Option<String>,
+    /// Whether the member starred it: the vault's `flag:starred`, a `tagged`
+    /// edge, set by `flag.set`.
+    pub starred: bool,
+    /// The member's plaintext memo, a column of the item.
+    pub memo: Option<String>,
     pub created_at: Option<String>,
     pub updated_at: Option<String>,
+    /// When it was archived: the day the `flag:archived` edge was put on it.
     pub archived_at: Option<String>,
     pub deleted_at: Option<String>,
     pub purge_at: Option<String>,
 }
 
 impl ItemRow {
-    /// Read one row of [`ITEM_COLUMNS`].
+    /// Read one folded row of [`ITEM_COLUMNS`].
     #[must_use]
     pub fn of(row: &Row) -> Self {
         Self {
@@ -169,45 +164,14 @@ impl ItemRow {
             network: text_of(row, "network"),
             compromised: truthy(row, "compromised"),
             password_set_at: text_of(row, "password_set_at"),
+            starred: truthy(row, "starred"),
+            memo: text_of(row, "memo").filter(|memo| !memo.is_empty()),
             created_at: text_of(row, "created_at"),
             updated_at: text_of(row, "updated_at"),
             archived_at: text_of(row, "archived_at"),
             deleted_at: text_of(row, "deleted_at"),
             purge_at: text_of(row, "purge_at"),
         }
-    }
-
-    /// The plain texts a search reads on this row: title, username and address
-    /// (v0's three) and, since #1097 (R6), the note, the full name, the email,
-    /// the phone and the card brand a member typed.
-    ///
-    /// **Never a sealed cell**: this reads the browsable half only, so
-    /// `password`, `otp_seed`, `card_number`, `cvv` and `content` cannot be
-    /// matched or offered as a correction — they are not on [`ITEM_COLUMNS`].
-    /// `cardholder`, `address`, `network` and `expiry` are not searched.
-    /// The memo and the aliases are other tables' rows and are the walker's.
-    pub fn searchable(&self) -> impl Iterator<Item = &str> {
-        std::iter::once(self.title.as_str()).chain(
-            [
-                &self.username,
-                &self.url,
-                &self.notes,
-                &self.fullname,
-                &self.email,
-                &self.phone,
-                &self.brand,
-            ]
-            .into_iter()
-            .filter_map(|value| value.as_deref()),
-        )
-    }
-
-    /// Whether the term (already lowercased) matches this row's
-    /// [`searchable`](Self::searchable) texts, case-insensitively.
-    #[must_use]
-    pub fn matches(&self, term: &str) -> bool {
-        self.searchable()
-            .any(|value| value.to_lowercase().contains(term))
     }
 }
 
@@ -242,13 +206,13 @@ pub fn subtitle_of(row: &ItemRow) -> String {
 /// One audit entry, and which of the four things it records.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AccessKind {
-    /// An unlock. `object_type = locker.auth`.
+    /// An unlock (`unlock`, `unlock_refused`).
     Auth,
     /// A reveal or a copy of one sealed cell in the app.
     Reveal,
-    /// A one-time code made from an item's seed (`context.derivation = totp`).
+    /// A one-time code made from an item's seed (`code`, `code_copy`).
     Code,
-    /// Every secret into a file (`context.derivation = export`): the one
+    /// Every secret into a file (`export`): the one
     /// receipt that names the whole Locker and no item (#1047 T2).
     Export,
 }
@@ -305,68 +269,75 @@ pub struct AccessAnswer {
     pub truncated: bool,
 }
 
+/// What a receipt's `act` says: the verb, the cells that were opened, and the
+/// custom field when one was. `crates/vault`'s `locker.reveal_receipt` writes it
+/// as `<verb>[ <column>[,<column>…][ <field id>]]`, names and never values.
+struct Act<'a> {
+    verb: &'a str,
+    columns: Vec<String>,
+    field_id: Option<String>,
+}
+
+fn act_of(act: &str) -> Act<'_> {
+    let mut words = act.split(' ');
+    let verb = words.next().unwrap_or_default();
+    let columns = words
+        .next()
+        .map(|columns| columns.split(',').map(str::to_owned).collect())
+        .unwrap_or_default();
+    Act {
+        verb,
+        columns,
+        field_id: words.next().map(str::to_owned),
+    }
+}
+
 /// Fold the audit window.
 ///
 /// The re-sort is v0's and is kept: the page already comes back
-/// `occurred_at DESC`, and the fold sorts again by the same key so two receipts
-/// in one millisecond land in a stable order rather than the keyset's.
+/// `at DESC`, and the fold sorts again by the same key so two receipts in one
+/// millisecond land in a stable order rather than the keyset's.
 #[must_use]
 pub fn access_answer(window: usize, rows: &[Row]) -> AccessAnswer {
     let mut entries: Vec<AccessEntry> = rows
         .iter()
         .map(|row| {
-            let object_type = text_of(row, "object_type").unwrap_or_default();
-            let detail = text_of(row, "detail_json")
-                .and_then(|json| serde_json::from_str::<serde_json::Value>(&json).ok())
-                .unwrap_or(serde_json::Value::Null);
-            let derivation = detail["context"]["derivation"].as_str().map(str::to_owned);
-            // THE KIND IS READ OFF THE RECEIPT: an unlock by its object type,
-            // a code and an export by the derivation the command recorded.
-            let kind = if object_type == AUTH_ENTITY_TYPE {
-                AccessKind::Auth
-            } else {
-                match derivation.as_deref() {
-                    Some("export") => AccessKind::Export,
-                    Some("totp") => AccessKind::Code,
-                    _ => AccessKind::Reveal,
-                }
+            let act = text_of(row, "act").unwrap_or_default();
+            let parsed = act_of(&act);
+            // THE KIND IS READ OFF THE VERB the command wrote.
+            let (kind, derivation) = match parsed.verb {
+                "unlock" | "unlock_refused" => (AccessKind::Auth, None),
+                "export" => (AccessKind::Export, Some("export")),
+                "code" | "code_copy" => (AccessKind::Code, Some("totp")),
+                _ => (AccessKind::Reveal, None),
             };
             AccessEntry {
-                receipt_id: text_of(row, "receipt_id").unwrap_or_default(),
+                receipt_id: text_of(row, "seq").unwrap_or_default(),
                 kind,
-                action: text_of(row, "action").unwrap_or_default(),
-                allowed: text_of(row, "decision").as_deref() != Some("deny"),
-                // AN EXPORT NAMES NO ITEM: its receipt's `object_id` is the
-                // word `export`, which is not an item's id.
-                item_id: if object_type == ITEM_ENTITY_TYPE && kind != AccessKind::Export {
-                    text_of(row, "object_id")
-                } else {
-                    None
-                },
-                occurred_at: text_of(row, "occurred_at"),
-                columns: detail["columns"].as_array().map(|columns| {
-                    columns
-                        .iter()
-                        .map(|column| match column.as_str() {
-                            Some(text) => text.to_owned(),
-                            None => column.to_string(),
-                        })
-                        .collect()
-                }),
-                reason: detail["failing"].as_str().map(str::to_owned),
-                derivation,
-                copied: detail["context"]["use"].as_str() == Some("copy"),
-                field_id: detail["field_id"].as_str().map(str::to_owned),
+                action: parsed.verb.to_owned(),
+                allowed: !parsed.verb.ends_with("_refused"),
+                // AN EXPORT NAMES NO ITEM, and neither does an unlock: their
+                // receipts carry none.
+                item_id: text_of(row, "item_id"),
+                occurred_at: text_of(row, "at"),
+                columns: (!parsed.columns.is_empty()).then_some(parsed.columns),
+                // The sentence a refusal said is in the journal row the receipt
+                // names, and is not copied here.
+                reason: None,
+                derivation: derivation.map(str::to_owned),
+                copied: matches!(parsed.verb, "copy" | "code_copy"),
+                field_id: parsed.field_id,
                 item_title: None,
                 field_label: None,
             }
         })
         .collect();
     entries.sort_by(|left, right| {
-        right
-            .occurred_at
-            .cmp(&left.occurred_at)
-            .then_with(|| left.receipt_id.cmp(&right.receipt_id))
+        right.occurred_at.cmp(&left.occurred_at).then_with(|| {
+            // `seq` is a number: a later receipt sorts first on a tie.
+            let seq = |entry: &AccessEntry| entry.receipt_id.parse::<i64>().unwrap_or_default();
+            seq(right).cmp(&seq(left))
+        })
     });
     AccessAnswer {
         truncated: rows.len() >= window,
@@ -392,10 +363,12 @@ mod tests {
     #[test]
     fn no_sealed_column_is_in_the_browsable_projection() {
         for column in SEALED_ITEM_COLUMNS {
-            assert!(
-                !ITEM_COLUMNS.split(", ").any(|named| named.trim() == column),
-                "{column} is a sealed cell and it is in ITEM_COLUMNS"
-            );
+            for list in [ITEM_COLUMNS, KIND_COLUMNS, ENTITY_COLUMNS] {
+                assert!(
+                    !list.split(", ").any(|named| named.trim() == column),
+                    "{column} is a sealed cell and it is in a browsable list"
+                );
+            }
         }
         // The two sidecar sealed columns are not on it either.
         for column in ["value_sealed", "private_key"] {
@@ -410,22 +383,23 @@ mod tests {
         }
     }
 
-    /// THE INNER WALL. Without the predicate the clamp filters AFTER the
-    /// window and a busy vault's newest 200 receipts are someone else's.
+    /// THE AUDIT STATEMENT READS LOCKER'S OWN TABLE and narrows to an item
+    /// only when asked: the table is the wall.
     #[test]
-    fn the_audit_statement_names_both_object_types_in_sql() {
-        let query = access_statement(None).expect("the statement builds");
-        let predicate = query.r#where.clone().expect("a predicate");
-        assert_eq!(predicate, "object_type IN (?, ?)");
-        assert_eq!(query.bind.len(), 2);
+    fn the_audit_statement_reads_the_receipt_table_and_narrows_to_one_item_on_request() {
+        let whole = access_statement(None).expect("the statement builds");
+        assert_eq!(whole.from, "receipt");
+        assert!(whole.r#where.is_none());
         let pinned = access_statement(Some("item-1")).expect("the statement builds");
-        assert_eq!(
-            pinned.r#where.as_deref(),
-            Some("object_type IN (?, ?) AND object_id = ?")
-        );
-        assert_eq!(pinned.bind.len(), 3);
+        assert_eq!(pinned.r#where.as_deref(), Some("item_id = ?"));
+        assert_eq!(pinned.bind.len(), 1);
         // An empty id is not a filter, it is no filter.
-        assert_eq!(access_statement(Some("")).expect("builds").bind.len(), 2);
+        assert!(
+            access_statement(Some(""))
+                .expect("builds")
+                .r#where
+                .is_none()
+        );
     }
 
     #[test]
@@ -456,51 +430,14 @@ mod tests {
         assert_eq!(subtitle_of(&login), "—");
     }
 
+    /// THE ROW LEVEL, where a planted plaintext sealed value is visible. A row
+    /// that carries all five sealed cells as readable words, read the way a shelf
+    /// reads a row, must hold none of them in any field: `ItemRow::of` reads no
+    /// sealed key into the row. (The core test of the same property sees
+    /// ciphertext after the relock, so it cannot notice a sealed cell joining a
+    /// row; this one can. The index's side of it is the vault's plaintext gate.)
     #[test]
-    fn the_search_fold_matches_what_a_member_typed_and_nothing_else() {
-        let row = ItemRow {
-            item_id: "i1".to_owned(),
-            title: "Bank".to_owned(),
-            username: Some("ada@example.com".to_owned()),
-            url: Some("https://bank.example".to_owned()),
-            notes: Some("a memorable note".to_owned()),
-            fullname: Some("Ada Lovelace".to_owned()),
-            email: Some("ada.l@mail.test".to_owned()),
-            phone: Some("555-0100".to_owned()),
-            brand: Some("Visa".to_owned()),
-            cardholder: Some("Cardholder Name".to_owned()),
-            address: Some("12 Analytical Way".to_owned()),
-            network: Some("HomeNet".to_owned()),
-            expiry: Some("04/27".to_owned()),
-            ..ItemRow::default()
-        };
-        // v0's three, and (#1097, R6) the note, name, email, phone and brand.
-        for found in [
-            "bank",
-            "ada@",
-            "bank.example",
-            "memorable",
-            "lovelace",
-            "mail.test",
-            "555-01",
-            "visa",
-        ] {
-            assert!(row.matches(found), "{found} is typed text of the item");
-        }
-        // The columns a search does not read.
-        for not in ["cardholder", "analytical", "homenet", "04/27"] {
-            assert!(!row.matches(not), "{not} is not searched");
-        }
-    }
-
-    /// THE WALKER LEVEL, where a planted plaintext sealed value is visible. A
-    /// row that carries all five sealed cells as readable words, read the way the
-    /// walker reads a row, must put none of them in the texts a search matches or
-    /// offers as a correction: `ItemRow::of` reads no sealed key into any field.
-    /// (The core test of the same property sees ciphertext after the relock, so
-    /// it cannot notice a sealed cell joining the walk; this one can.)
-    #[test]
-    fn a_planted_sealed_value_joins_no_searched_text() {
+    fn a_planted_sealed_value_joins_no_field_of_the_row() {
         let planted: Vec<(String, String)> = SEALED_ITEM_COLUMNS
             .iter()
             .map(|column| ((*column).to_owned(), format!("plaintext-of-{column}")))
@@ -519,18 +456,15 @@ mod tests {
         ];
         pairs.extend(planted.iter().map(|(k, v)| (k.as_str(), v.as_str())));
         let item = ItemRow::of(&row(&pairs));
+        let shown = format!("{item:?}");
         for (column, value) in &planted {
             assert!(
-                item.searchable().all(|text| !text.contains(value.as_str())),
-                "the sealed {column} is in a text a search reads"
-            );
-            assert!(
-                !item.matches(&value.to_lowercase()),
-                "the sealed {column} is matched"
+                !shown.contains(value.as_str()),
+                "the sealed {column} is in a field of the row"
             );
         }
         // The control: the typed texts of the same row are all read.
-        assert_eq!(item.searchable().count(), 8);
+        assert!(shown.contains("Lovelace") && shown.contains("mail.test"));
     }
 
     #[test]
@@ -547,162 +481,122 @@ mod tests {
         }
     }
 
+    fn receipt(seq: &str, at: &str, item: Option<&str>, act: &str) -> Row {
+        let mut cells = row(&[("seq", seq), ("at", at), ("act", act)]);
+        if let Some(item) = item {
+            cells.insert("item_id".to_owned(), Cell::Text(item.to_owned()));
+        }
+        cells
+    }
+
     #[test]
     fn an_auth_receipt_names_no_item_and_a_reveal_names_its_cell() {
         let rows = vec![
-            row(&[
-                ("receipt_id", "r2"),
-                ("action", "reveal"),
-                ("object_type", "locker.item"),
-                ("object_id", "i1"),
-                ("decision", "allow"),
-                ("occurred_at", "2026-01-02T00:00:00.000Z"),
-                (
-                    "detail_json",
-                    r#"{"context":{"kind":"reveal"},"columns":["password"]}"#,
-                ),
-            ]),
-            row(&[
-                ("receipt_id", "r1"),
-                ("action", "unlock"),
-                ("object_type", "locker.auth"),
-                ("decision", "deny"),
-                ("occurred_at", "2026-01-01T00:00:00.000Z"),
-                (
-                    "detail_json",
-                    r#"{"failing":"the passphrase did not match"}"#,
-                ),
-            ]),
+            receipt(
+                "2",
+                "2026-01-02T00:00:00.000Z",
+                Some("item-1"),
+                "reveal password",
+            ),
+            receipt("1", "2026-01-01T00:00:00.000Z", None, "unlock"),
         ];
         let answer = access_answer(200, &rows);
-        assert_eq!(answer.entries.len(), 2);
-        assert_eq!(answer.entries[0].kind, AccessKind::Reveal);
+        let reveal = &answer.entries[0];
+        assert_eq!(reveal.kind, AccessKind::Reveal);
+        assert_eq!(reveal.item_id.as_deref(), Some("item-1"));
         assert_eq!(
-            answer.entries[0].columns.as_deref(),
+            reveal.columns.as_deref(),
             Some(&["password".to_owned()][..])
         );
-        assert_eq!(answer.entries[0].item_id.as_deref(), Some("i1"));
-        assert_eq!(answer.entries[1].kind, AccessKind::Auth);
-        assert!(!answer.entries[1].allowed);
+        assert!(reveal.allowed && !reveal.copied);
+        let unlock = &answer.entries[1];
+        assert_eq!(unlock.kind, AccessKind::Auth);
         // An auth receipt names no item, because it is about the vault.
-        assert_eq!(answer.entries[1].item_id, None);
-        assert!(!answer.truncated);
+        assert_eq!(unlock.item_id, None);
+        assert_eq!(unlock.columns, None);
+        assert_eq!(unlock.receipt_id, "1");
     }
 
-    /// A CODE, A COPY AND A FIELD ARE NAMED AS SUCH (#1047 T2), from what
-    /// the receipt's detail already says — never from a value.
+    /// WHAT THE VERB SAYS, never a value: a code, a copy, a field and a refusal
+    /// are read off the act `crates/vault` wrote.
     #[test]
     fn a_code_a_copy_and_a_field_are_read_off_the_receipt() {
         let rows = vec![
-            row(&[
-                ("receipt_id", "r3"),
-                ("action", "reveal locker.totp_code"),
-                ("object_type", "locker.item"),
-                ("object_id", "i1"),
-                ("decision", "allow"),
-                ("occurred_at", "2026-01-03T00:00:00.000Z"),
-                (
-                    "detail_json",
-                    r#"{"columns":["otp_seed"],"context":{"kind":"reveal","derivation":"totp","use":"copy"}}"#,
-                ),
-            ]),
-            row(&[
-                ("receipt_id", "r2"),
-                ("action", "reveal locker.item"),
-                ("object_type", "locker.item"),
-                ("object_id", "i1"),
-                ("decision", "allow"),
-                ("occurred_at", "2026-01-02T00:00:00.000Z"),
-                (
-                    "detail_json",
-                    r#"{"columns":["value_sealed"],"field_id":"f1","context":{"kind":"reveal","use":"show"}}"#,
-                ),
-            ]),
+            receipt(
+                "4",
+                "2026-01-04T00:00:00.000Z",
+                Some("item-1"),
+                "code_copy otp_seed",
+            ),
+            receipt(
+                "3",
+                "2026-01-03T00:00:00.000Z",
+                Some("item-1"),
+                "copy value_sealed field-1",
+            ),
+            receipt(
+                "2",
+                "2026-01-02T00:00:00.000Z",
+                Some("item-1"),
+                "code otp_seed",
+            ),
+            receipt(
+                "1",
+                "2026-01-01T00:00:00.000Z",
+                Some("item-1"),
+                "reveal_refused password",
+            ),
         ];
         let answer = access_answer(200, &rows);
-        assert_eq!(answer.entries[0].derivation.as_deref(), Some("totp"));
-        assert_eq!(answer.entries[0].kind, AccessKind::Code);
-        assert!(answer.entries[0].copied);
-        assert_eq!(answer.entries[1].field_id.as_deref(), Some("f1"));
-        assert_eq!(answer.entries[1].kind, AccessKind::Reveal);
-        assert!(!answer.entries[1].copied);
-        assert_eq!(answer.entries[1].derivation, None);
+        let by_id = |id: &str| {
+            answer
+                .entries
+                .iter()
+                .find(|entry| entry.receipt_id == id)
+                .expect("an entry")
+        };
+        assert_eq!(by_id("4").kind, AccessKind::Code);
+        assert!(by_id("4").copied, "a copied code");
+        assert_eq!(by_id("4").derivation.as_deref(), Some("totp"));
+        assert!(!by_id("2").copied, "a shown code");
+        assert_eq!(by_id("3").field_id.as_deref(), Some("field-1"));
+        assert!(by_id("3").copied);
+        assert_eq!(
+            by_id("3").columns.as_deref(),
+            Some(&["value_sealed".to_owned()][..])
+        );
+        assert!(!by_id("1").allowed, "a refused reveal reads as a refusal");
     }
 
-    /// THE WHOLE-LOCKER HISTORY'S FOUR KINDS (Q-1047-21), read off the
-    /// receipts the commands write: an unlock names the vault, an export
-    /// names the Locker (its `object_id` is the word `export`, which must
-    /// never be taken for an item), a code and a reveal name an item.
     #[test]
     fn an_unlock_an_export_a_code_and_a_reveal_are_four_kinds() {
         let rows = vec![
-            row(&[
-                ("receipt_id", "r4"),
-                ("action", "reveal locker.export"),
-                ("object_type", "locker.item"),
-                ("object_id", "export"),
-                ("decision", "allow"),
-                ("occurred_at", "2026-01-04T00:00:00.000Z"),
-                (
-                    "detail_json",
-                    r#"{"columns":["password","otp_seed"],"context":{"kind":"reveal","derivation":"export"},"items":3}"#,
-                ),
-            ]),
-            row(&[
-                ("receipt_id", "r3"),
-                ("action", "reveal locker.item"),
-                ("object_type", "locker.auth"),
-                ("decision", "allow"),
-                ("occurred_at", "2026-01-03T00:00:00.000Z"),
-                (
-                    "detail_json",
-                    r#"{"columns":["session"],"context":{"kind":"auth"}}"#,
-                ),
-            ]),
-            row(&[
-                ("receipt_id", "r2"),
-                ("action", "reveal locker.totp_code"),
-                ("object_type", "locker.item"),
-                ("object_id", "i1"),
-                ("decision", "allow"),
-                ("occurred_at", "2026-01-02T00:00:00.000Z"),
-                (
-                    "detail_json",
-                    r#"{"columns":["otp_seed"],"context":{"kind":"reveal","derivation":"totp"}}"#,
-                ),
-            ]),
-            row(&[
-                ("receipt_id", "r1"),
-                ("action", "reveal locker.item"),
-                ("object_type", "locker.item"),
-                ("object_id", "i1"),
-                ("decision", "allow"),
-                ("occurred_at", "2026-01-01T00:00:00.000Z"),
-                (
-                    "detail_json",
-                    r#"{"columns":["password"],"context":{"kind":"reveal","use":"show"}}"#,
-                ),
-            ]),
+            receipt("4", "2026-01-04T00:00:00.000Z", None, "export"),
+            receipt("3", "2026-01-03T00:00:00.000Z", None, "unlock_refused"),
+            receipt("2", "2026-01-02T00:00:00.000Z", Some("i"), "code otp_seed"),
+            receipt("1", "2026-01-01T00:00:00.000Z", Some("i"), "reveal cvv"),
         ];
-        let answer = access_answer(200, &rows);
-        let kinds: Vec<(AccessKind, Option<&str>)> = answer
+        let kinds: Vec<(AccessKind, bool)> = access_answer(200, &rows)
             .entries
             .iter()
-            .map(|entry| (entry.kind, entry.item_id.as_deref()))
+            .map(|entry| (entry.kind, entry.allowed))
             .collect();
         assert_eq!(
             kinds,
             [
-                (AccessKind::Export, None),
-                (AccessKind::Auth, None),
-                (AccessKind::Code, Some("i1")),
-                (AccessKind::Reveal, Some("i1")),
+                (AccessKind::Export, true),
+                (AccessKind::Auth, false),
+                (AccessKind::Code, true),
+                (AccessKind::Reveal, true),
             ]
         );
-        // The fold names nobody: titles and labels are the loader's second
-        // read, and a fold over receipts alone holds ids.
+        // AN EXPORT NAMES NO ITEM, and its derivation says so.
+        let export = &access_answer(200, &rows).entries[0];
+        assert_eq!(export.item_id, None);
+        assert_eq!(export.derivation.as_deref(), Some("export"));
+        // A fold over receipts alone holds ids, never names.
         assert!(
-            answer
+            access_answer(200, &rows)
                 .entries
                 .iter()
                 .all(|entry| entry.item_title.is_none() && entry.field_label.is_none())
@@ -713,16 +607,12 @@ mod tests {
     fn a_full_window_says_it_is_truncated() {
         let rows: Vec<Row> = (0..3)
             .map(|index| {
-                row(&[
-                    ("receipt_id", "r"),
-                    ("action", "reveal"),
-                    ("object_type", "locker.item"),
-                    ("decision", "allow"),
-                    ("occurred_at", "2026-01-01T00:00:00.000Z"),
-                ])
-                .into_iter()
-                .chain([("object_id".to_owned(), Cell::Text(format!("i{index}")))])
-                .collect()
+                receipt(
+                    &index.to_string(),
+                    "2026-01-01T00:00:00.000Z",
+                    Some(&format!("i{index}")),
+                    "reveal password",
+                )
             })
             .collect();
         assert!(access_answer(3, &rows).truncated);

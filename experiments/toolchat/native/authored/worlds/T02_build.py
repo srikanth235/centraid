@@ -163,7 +163,7 @@ def tasks():
     t = [
         # client work
         {"key": "gl_sketches", "name": "Greenleaf mural sketches", "due": "2027-06-11T17:00", "priority": 1, "effort": 240,
-         "list": "clientwork", "status": "in_progress", "description": "three options, 1:20 scale"},
+         "list": "clientwork", "description": "three options, 1:20 scale"},
         {"key": "gl_thumbs", "name": "Thumbnail roughs", "parent": "gl_sketches", "completed": "2027-06-02T16:00"},
         {"key": "gl_colour", "name": "Colour studies", "parent": "gl_sketches", "due": "2027-06-10"},
         {"key": "gl_send", "name": "Send sketches to Marcus", "parent": "gl_sketches", "due": "2027-06-11T17:00"},
@@ -176,7 +176,7 @@ def tasks():
          "list": "clientwork"},
         {"key": "tide_final", "name": "Tidewater cover final art", "due": "2027-06-18T12:00", "priority": 1, "effort": 480,
          "list": "clientwork"},
-        {"key": "mf_spots", "name": "Maple & Fern spot illustrations", "due": "2027-06-24", "status": "in_progress",
+        {"key": "mf_spots", "name": "Maple & Fern spot illustrations", "due": "2027-06-24",
          "effort": 600, "list": "clientwork", "description": "four spots, autumn issue"},
         {"key": "tomo_logo", "name": "Tomo Coffee logo revisions", "due": "2027-06-09", "list": "clientwork", "effort": 90},
         {"key": "gst_q2", "name": "File GST return Q2", "due": "2027-07-31", "priority": 2, "list": "clientwork"},
@@ -185,7 +185,7 @@ def tasks():
         {"key": "ps_export", "name": "Export Haida Gwaii series", "parent": "portfolio_site"},
         {"key": "ps_about", "name": "Rewrite about page", "parent": "portfolio_site"},
         {"key": "adobe_renew", "name": "Renew Adobe subscription", "due": "2027-07-02"},
-        {"key": "scan_sketch", "name": "Scan sketchbook pages", "status": "in_progress", "effort": 60},
+        {"key": "scan_sketch", "name": "Scan sketchbook pages", "effort": 60},
         {"key": "tax_2026", "name": "Personal tax return 2026", "due": "2027-04-30", "completed": "2027-04-25T11:00"},
         {"key": "rachel_followup", "name": "Send Rachel the new portfolio PDF", "due": "2027-06-10"},
         # flat

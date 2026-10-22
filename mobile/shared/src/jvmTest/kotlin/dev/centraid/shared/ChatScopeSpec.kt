@@ -13,15 +13,17 @@ import java.io.File
  * THE APPS A CHAT CAN BE SCOPED TO ARE THE APPS THE CORE ACCEPTS.
  *
  * The iOS shell hand-listed six of them and left Money out, which the core
- * takes, so a member could never scope a chat to it. The list now lives once,
- * in [ChatMachine.SCOPABLE_APPS], and this spec ties it to every place the core
- * states it. The core is Rust and this module cannot link it, so the check
+ * takes, so a member could never scope a chat to it. The list now lives once in
+ * Kotlin, in [ChatMachine.SCOPABLE_APPS], and once in the core, as the vault's
+ * one roster (`centraid_vault::roster::APPS`, R-1135-7-1); this spec ties the
+ * two together. The core is Rust and this module cannot link it, so the check
  * reads its source, as `ShellCommandsExistSpec` does for the command registry.
  *
- * A CARD NAMES A DOMAIN; A CHAT IS SCOPED TO AN APP (#1128, R-1128-F2). The two
- * lists were one until Tasks folded into Agenda: a card still names `tasks`,
- * and the scopes are the card apps a member opens, so the card list is tied to
- * its own source and the scope list to the three that state it.
+ * A CARD NAMES A DOMAIN; A CHAT IS SCOPED TO AN APP (#1128, R-1128-F2). The roster
+ * lists every domain a card may name and the app a member opens it in; a scope is
+ * a roster entry that opens in itself. `thread.save_turn`'s schema, the
+ * assistant's `App` and this list all read that one constant, and no app word is
+ * in the vault's DDL (principle 6 of the model).
  */
 class ChatScopeSpec : StringSpec({
 
@@ -38,34 +40,34 @@ class ChatScopeSpec : StringSpec({
 
     fun quoted(text: String): List<String> = Regex("\"([a-z]+)\"").findAll(text).map { it.groupValues[1] }.toList()
 
-    "the scopes are the vault's card apps a member opens, and each card app opens in a scope" {
-        val array = Regex("""const CARD_APPS: \[&str; \d+\] = \[(.*?)\];""", RegexOption.DOT_MATCHES_ALL)
-            .find(source("crates/vault/src/chat.rs"))
-            ?: error("CARD_APPS is gone from crates/vault/src/chat.rs; point this spec at its replacement")
-        val cardApps = quoted(array.groupValues[1])
+    /** The roster's entries, `(id, opens_in)`, in the order the core states them. */
+    fun roster(): List<Pair<String, String>> {
+        val array = Regex("""pub const APPS: \[RosterApp; \d+\] = \[(.*?)\];""", RegexOption.DOT_MATCHES_ALL)
+            .find(source("crates/vault/src/roster.rs"))
+            ?: error("APPS is gone from crates/vault/src/roster.rs; point this spec at its replacement")
+        return Regex("""app\("([a-z]+)", "([a-z]+)"\)""").findAll(array.groupValues[1])
+            .map { it.groupValues[1] to it.groupValues[2] }
+            .toList()
+    }
+
+    "the scopes are the roster's apps that open in themselves, and each card app opens in a scope" {
+        val cardApps = roster().map { it.first }
         cardApps.filter(AppHomes::isLaunchable) shouldBe ChatMachine.SCOPABLE_APPS
+        roster().filter { it.first == it.second }.map { it.first } shouldBe ChatMachine.SCOPABLE_APPS
         // A card app that is no scope is a folded domain, read through the scope it opens in.
         cardApps.filterNot { it in ChatMachine.SCOPABLE_APPS } shouldBe listOf("tasks")
         cardApps.all { ChatMachine.scopeOf(it) == AppHomes.appOf(it) } shouldBe true
+        roster().all { (id, opensIn) -> AppHomes.appOf(id) == opensIn } shouldBe true
     }
 
-    "and the apps chat.save_turn accepts as a thread's scope" {
-        val schema = Regex(""""scope_app": \{\s*"enum": \[(.*?)\]""", RegexOption.DOT_MATCHES_ALL)
-            .find(source("crates/vault/src/commands/chat.rs"))
-            ?: error("scope_app's enum is gone from crates/vault/src/commands/chat.rs; point this spec at its replacement")
-        // The enum also admits null, the unscoped chat; `quoted` sees only the names.
-        quoted(schema.groupValues[1]) shouldBe ChatMachine.SCOPABLE_APPS
-    }
-
-    "and the chat_thread CHECK a vault holds at the ladder head" {
-        // `contracts/schema/vault-ddl.sql` is the schema a founded vault holds, and
-        // `crates/vault/tests/ladder_ddl.rs` diffs it against one on every run, so it
-        // names the rung that states the CHECK today whatever that rung is numbered.
-        val check = Regex("""scope_app IN \((.*?)\)""")
-            .find(source("contracts/schema/vault-ddl.sql"))
-            ?: error("chat_thread.scope_app's CHECK is gone from contracts/schema/vault-ddl.sql; point this spec at it")
-        Regex("'([a-z]+)'").findAll(check.groupValues[1]).map { it.groupValues[1] }.toList() shouldBe
-            ChatMachine.SCOPABLE_APPS
+    "and the vault's DDL holds no app word: the roster is the commands' schema, never a CHECK" {
+        // `thread.scope` is a bare column; the command holds it to the roster.
+        val ddl = source("contracts/schema/vault-ddl.sql")
+        val thread = Regex("""CREATE TABLE thread \((.*?)\) STRICT;""", RegexOption.DOT_MATCHES_ALL).find(ddl)
+            ?: error("thread is gone from contracts/schema/vault-ddl.sql; point this spec at its replacement")
+        thread.groupValues[1].contains("scope TEXT,") shouldBe true
+        thread.groupValues[1].contains("CHECK") shouldBe false
+        roster().map { it.first }.none { ddl.contains("'$it'") } shouldBe true
     }
 
     "and the scopes the assistant takes (App::SCOPES)" {
@@ -78,22 +80,15 @@ class ChatScopeSpec : StringSpec({
 
     "health is in no chat scope: Chat does not read Health (R-1129-11)" {
         // Off by default in "What Chat may read" (owner answer 1): until that screen grants it,
-        // no scope list names Health — the shells' menu, the vault's cards, the save_turn enum and
-        // the assistant's app set.
+        // no scope list names Health — the shells' menu, the roster every command schema reads
+        // and the assistant's app set (its ids are the roster's).
         ChatMachine.SCOPABLE_APPS.contains("health") shouldBe false
-        val cards = Regex("""const CARD_APPS: \[&str; \d+\] = \[(.*?)\];""", RegexOption.DOT_MATCHES_ALL)
-            .find(source("crates/vault/src/chat.rs"))!!.groupValues[1]
-        quoted(cards).contains("health") shouldBe false
-        val schema = Regex(""""scope_app": \{\s*"enum": \[(.*?)\]""", RegexOption.DOT_MATCHES_ALL)
-            .find(source("crates/vault/src/commands/chat.rs"))!!.groupValues[1]
-        quoted(schema).contains("health") shouldBe false
-        val assist = Regex("""Self::\w+ => "([a-z]+)",""").findAll(source("crates/assist/src/app.rs")).map { it.groupValues[1] }.toSet()
-        assist.contains("money") shouldBe true
-        assist.contains("health") shouldBe false
+        roster().map { it.first }.contains("health") shouldBe false
+        source("crates/assist/src/app.rs").contains("Health") shouldBe false
     }
 
-    "Locker is not among them, and the list is in the order the menu draws it" {
-        ChatMachine.SCOPABLE_APPS.contains("locker") shouldBe false
+    "Locker is among them, and the list is in the order the menu draws it" {
+        ChatMachine.SCOPABLE_APPS.contains("locker") shouldBe true
         ChatMachine.SCOPABLE_APPS shouldBe ChatMachine.SCOPABLE_APPS.sorted()
     }
 
@@ -102,7 +97,7 @@ class ChatScopeSpec : StringSpec({
         ChatMachine.SCOPABLE_APPS.all { SpringboardPolicy.SPRINGBOARD_ORDER.contains(it) } shouldBe true
         ChatMachine.scopeOf("tasks") shouldBe "agenda"
         ChatMachine.scopeOf("agenda") shouldBe "agenda"
-        ChatMachine.scopeOf("locker") shouldBe ""
+        ChatMachine.scopeOf("locker") shouldBe "locker"
         ChatMachine.scopeOf("") shouldBe ""
     }
 })

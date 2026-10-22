@@ -8,76 +8,74 @@
 //! does not park a command, and `confirm` is what does — plus the rule that a
 //! NON-OWNER invocation parks regardless of risk.
 //!
+//! The catalogue is two layers ([#1135](https://github.com/srikanth235/centraid/issues/1135)):
+//! the **shared verbs** in this module's children — `entity.*`, `tag.*`,
+//! `flag.*`, `edge.*`, `container.*`, `blob.*`, `derivative.*`, `person.merge`,
+//! `follow.<system>` — each serving every kind that allows it and refusing the
+//! rest with a sentence; and the **per-kind verbs** each app registers for its
+//! own kinds (`note.create`, `task.complete`, …). A per-kind verb that
+//! duplicates a shared verb is not written.
+//!
 //! ## The gate order, and each gate's reason
 //!
-//! 1. **Ontology version equality.** Not "at least": there is ONE served
-//!    ontology version, so a mismatch is a stale REGISTRATION rather than an
-//!    old client, and treating it as a compatibility range would let a command
-//!    registered against a schema that has moved keep running (#310).
-//! 2. **Input-schema validation**, with every error run through the sealed
-//!    scrub before it reaches a journal, a receipt or a response. A validation
-//!    message quotes the value that failed, which for a sealed field is the
-//!    secret.
-//! 3. **The LIVE definition is what runs.** `preconditions_json` in
-//!    `command_definition` is the registry's *record*; a predicate does not survive
-//!    `JSON.stringify`, so the row cannot be the thing that executes.
-//! 4. **Preconditions**, every result written as a `pre` check row, then the
-//!    first failure denies with the author's SENTENCE while the raw predicate
-//!    still reaches the audit trail.
-//! 5. `checked`.
-//! 6. **The handler, inside the commit guard** — so its writes are captured.
-//! 7. **Postconditions**, written as `post` check rows.
-//! 8. **The receipt.** A deny is receipted too.
+//! 1. **Input-schema validation**, with every error run through the sealed
+//!    scrub before it reaches the journal or a response. A validation message
+//!    quotes the value that failed, which for a sealed field is the secret.
+//! 2. **Authority**: the principal's declared reach, and whether it may act.
+//! 3. **The LIVE definition is what runs.** A predicate is a function; the
+//!    registry is Rust, not a table, and nothing is installed into the file.
+//! 4. **Preconditions**: the first failure refuses with the author's SENTENCE.
+//! 5. **The handler, inside the commit guard** — its writes, the entities it
+//!    touched and their search rows land together or not at all.
+//! 6. **Postconditions**: a failed one rolls the whole commit back.
+//! 7. **The journal row**, in the same transaction. A refusal is journalled
+//!    too; a handler that errored leaves a `failed` row written after the
+//!    rollback.
 //!
 //! ## There is no replay ledger
 //!
 //! `execute` takes a name and an input, and nothing else: no intent id, no
-//! device, no payload hash. `replica_intent_outcome`, which answered a seat
-//! resubmitting an intent over a network that could lose the answer, was
-//! deleted on purpose (#1029 §1, rung five), and it stays deleted (R-1088-12).
-//! The caller is the shell on the device the file is on, so a command that
-//! arrives twice **was made twice**: the second delivery runs the handler again.
-//!
-//! The `invoke_key` a shell sends is its own correlation key, which pairs an
-//! answer with the write that caused it. The core requires it
-//! (`centraid_core::api::invoke`) and it never reaches this module.
-//!
-//! So a write a shell may re-offer must be idempotent by its own content, or by
-//! an id the phone minted before the first attempt. The ones that do re-offer:
-//! the camera roll's re-walk (`media.add_asset` adopts the asset that already
-//! wraps the same bytes), Docs' "Try again" (only after a failure, which rolled
-//! back; the filing is keyed by a pre-minted document id that a second offer is
-//! refused on), and the chat's confirm (the core door's own key memory). Each is
-//! pinned by a test named in `docs/decisions.md` R-1088-12.
+//! device, no payload hash. The caller is the shell on the device the file is
+//! on, so a command that arrives twice **was made twice**: the second delivery
+//! runs the handler again (#1029 §1, R-1088-12). The `invoke_key` a shell sends
+//! is its own correlation key and never reaches this module. A write a shell
+//! may re-offer is idempotent by its own content, or by an id the phone minted
+//! before the first attempt.
 
-pub mod chat;
-pub mod core;
-pub mod core_links;
-mod event_time;
-pub mod health;
-pub mod knowledge;
+pub mod blob;
+pub mod contact_point;
+pub mod container;
+pub mod document;
+pub mod edge;
+pub mod entity;
+pub mod event;
+pub mod flag;
+pub mod follow;
 pub mod locker;
-pub mod media;
+pub mod measurement;
 pub mod money;
-pub mod people;
-pub mod phone;
-pub mod schedule;
-pub mod social;
-mod wikilinks;
+pub mod note;
+pub mod person;
+pub mod photo;
+pub mod place;
+pub mod rule;
+pub mod tag;
+pub mod task;
+pub mod thread;
+pub mod vault;
+pub mod workout;
 
 use std::collections::BTreeMap;
 
 use rusqlite::Connection;
 
 use crate::access::{Decision, Principal, Verb, evaluate_access};
-use crate::audit::{self, Check, Invocation, Receipt};
 use crate::clock::Ids;
 use crate::error::{Result, VaultError};
 use crate::file::Vault;
+use crate::journal::{self, Outcome};
 use crate::log::CommitTx;
-
-/// The one served ontology version. Equality, on purpose.
-pub const ONTOLOGY_VERSION: &str = "1.0";
+use crate::model::Kind;
 
 /// How safe a command is to run again.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -131,17 +129,18 @@ pub struct CommandCtx<'tx, 'conn> {
     pub input: serde_json::Value,
     pub principal: Principal,
     pub now: String,
-    pub invocation_id: String,
+    /// The `journal.seq` this invocation's row will take, reserved before the
+    /// handler runs so evidence a handler writes can name the row that
+    /// explains it.
+    pub journal_seq: i64,
     ids: &'tx dyn Ids,
-    clock: &'tx dyn crate::clock::Clock,
-    produced_ids: std::cell::RefCell<Vec<String>>,
     /// The vault's local content store, when it has one. See [`CommandCtx::blobs`].
     blobs: Option<&'tx (dyn crate::bytes::BlobStore + Send + Sync)>,
 }
 
 impl<'conn> CommandCtx<'_, 'conn> {
-    /// The connection this command writes through — the guard's, so every
-    /// write is captured.
+    /// The connection this command writes through — the guard's, so the
+    /// commit carries every write.
     #[must_use]
     pub const fn connection(&self) -> &'conn Connection {
         self.tx.connection()
@@ -151,8 +150,7 @@ impl<'conn> CommandCtx<'_, 'conn> {
     ///
     /// `None` means this vault was opened without a content store, and a
     /// handler that needs one must REFUSE rather than write a row pointing at
-    /// bytes nothing kept. `pre_inline_bytes_are_storable` is that refusal, so
-    /// in practice a handler reaching here has already been gated.
+    /// bytes nothing kept.
     #[must_use]
     pub const fn blobs(&self) -> Option<&(dyn crate::bytes::BlobStore + Send + Sync)> {
         self.blobs
@@ -160,46 +158,49 @@ impl<'conn> CommandCtx<'_, 'conn> {
 
     /// A fresh id.
     pub fn next_id(&self) -> String {
-        let id = self.ids.next();
-        self.produced_ids.borrow_mut().push(id.clone());
-        id
+        self.ids.next()
     }
 
-    /// Append a SUBJECT-BEARING receipt beside the command's own.
+    /// Stamp an entity as changed: `updated_at`, `version`, and a place on the
+    /// list the search index is rebuilt from at commit.
     ///
-    /// Gate 8 already writes one receipt per invocation, under
-    /// `object_type: "command.definition"`. That answers *which command ran*; it
-    /// does not answer *which row was opened*, and the two are different
-    /// audit questions — Locker's access history reads `object_type IN
-    /// ('locker.item', 'locker.auth')` and would never see a command receipt.
-    ///
-    /// So a command whose subject is a row, not itself, appends a second
-    /// receipt naming that row. It goes through the same chained writer — same
-    /// `seq`, same hash chain, same append-only triggers — because a reveal
-    /// receipt that a member could remove is not a receipt
-    /// (#1020, D-1020-L3).
-    pub fn write_subject_receipt(
-        &self,
-        action: &str,
-        object_type: &str,
-        object_id: Option<&str>,
-        decision: &str,
-        detail: serde_json::Value,
-    ) -> Result<String> {
-        audit::write_receipt(
-            self.connection(),
-            self.clock,
-            self.ids,
-            &Receipt {
-                authority_id: None,
-                invocation_id: &self.invocation_id,
-                action,
-                object_type,
-                object_id,
-                decision,
-                detail,
-            },
-        )
+    /// **Every command that changes an entity's row, its kind row or its child
+    /// rows calls this.** Adding or removing an `about` or `links` edge touches
+    /// the note at the edge's start.
+    pub fn touch(&self, id: &str) -> Result<()> {
+        self.tx.touch(id, &self.now)
+    }
+
+    /// Re-index an entity whose own row did not change but whose search text
+    /// did.
+    pub fn mark_for_index(&self, id: &str) {
+        self.tx.mark_for_index(id);
+    }
+
+    /// Mint an id and insert the entity row: the first half of every kind's
+    /// create. The command inserts the kind row next. Returns the new id.
+    pub fn insert_entity(&self, kind: Kind, title: &str) -> Result<String> {
+        let id = self.next_id();
+        self.insert_entity_as(&id, kind, title)?;
+        Ok(id)
+    }
+
+    /// [`Self::insert_entity`] for an id the caller minted first (a row a
+    /// shell may re-offer, keyed by an id the phone minted).
+    pub fn insert_entity_as(&self, id: &str, kind: Kind, title: &str) -> Result<()> {
+        self.tx.insert_entity(id, kind, title, &self.now)
+    }
+
+    /// Append Locker's access evidence: that an item (or, with `None`, the
+    /// locker itself) was opened, revealed or exported. The row names the
+    /// journal row that explains it; it is evidence a member can read, and
+    /// `receipt_is_evidence` refuses to rewrite it.
+    pub fn write_receipt(&self, item_id: Option<&str>, act: &str) -> Result<i64> {
+        self.connection().execute(
+            "INSERT INTO receipt (at, item_id, act, journal_seq) VALUES (?1, ?2, ?3, ?4)",
+            rusqlite::params![self.now, item_id, act, self.journal_seq],
+        )?;
+        Ok(self.connection().last_insert_rowid())
     }
 
     /// A required string input.
@@ -253,6 +254,33 @@ pub struct CommandDefinition {
     pub sealed_input: &'static [&'static str],
 }
 
+impl CommandDefinition {
+    /// A low-risk, unconfirmed command with no postconditions and no sealed
+    /// input: what almost every shared verb is.
+    #[must_use]
+    pub const fn plain(
+        name: &'static str,
+        owner_schema: &'static str,
+        input_schema: &'static str,
+        idempotency: Idempotency,
+        preconditions: &'static [CommandCondition],
+        handler: CommandHandler,
+    ) -> Self {
+        Self {
+            name,
+            owner_schema,
+            input_schema,
+            idempotency,
+            risk: Risk::Low,
+            confirm: false,
+            preconditions,
+            postconditions: &[],
+            handler,
+            sealed_input: &[],
+        }
+    }
+}
+
 /// A command plus its compiled validator.
 pub struct Registered {
     pub definition: CommandDefinition,
@@ -279,48 +307,36 @@ impl Registry {
         Self::default()
     }
 
-    /// The registry the gateway serves: every command this build carries.
+    /// The registry the phone serves: every command this build carries.
     pub fn with_system_commands() -> Result<Self> {
         let mut registry = Self::new();
-        for definition in chat::definitions() {
-            registry.register(definition)?;
-        }
-        for definition in core::definitions() {
-            registry.register(definition)?;
-        }
-        // The `core` schema arrives in two files: the parties/tags/documents
-        // half (slot 4b) and the link/attachment half (slot 4c). ONE schema,
-        // registered together — the split is where a lane took it, not a second
-        // owner (#1020, D-1020-N6).
-        for definition in core_links::definitions() {
-            registry.register(definition)?;
-        }
-        for definition in health::definitions() {
-            registry.register(definition)?;
-        }
-        for definition in knowledge::definitions() {
-            registry.register(definition)?;
-        }
-        for definition in locker::definitions() {
-            registry.register(definition)?;
-        }
-        for definition in media::definitions() {
-            registry.register(definition)?;
-        }
-        for definition in money::definitions() {
-            registry.register(definition)?;
-        }
-        for definition in people::definitions() {
-            registry.register(definition)?;
-        }
-        for definition in phone::definitions() {
-            registry.register(definition)?;
-        }
-        for definition in schedule::definitions() {
-            registry.register(definition)?;
-        }
-        for definition in social::definitions() {
-            registry.register(definition)?;
+        let modules: [fn() -> Vec<CommandDefinition>; 21] = [
+            blob::definitions,
+            contact_point::definitions,
+            container::definitions,
+            document::definitions,
+            edge::definitions,
+            entity::definitions,
+            event::definitions,
+            flag::definitions,
+            follow::definitions,
+            locker::definitions,
+            measurement::definitions,
+            money::definitions,
+            note::definitions,
+            person::definitions,
+            photo::definitions,
+            place::definitions,
+            rule::definitions,
+            tag::definitions,
+            task::definitions,
+            thread::definitions,
+            vault::definitions,
+        ];
+        for definitions in modules {
+            for definition in definitions() {
+                registry.register(definition)?;
+            }
         }
         Ok(registry)
     }
@@ -386,55 +402,6 @@ impl Registry {
     pub fn is_empty(&self) -> bool {
         self.commands.is_empty()
     }
-
-    /// Write the registry's RECORD into `command_definition`.
-    ///
-    /// The record, not the definition: a predicate is a function and does not
-    /// serialise, so these rows say what is registered and the Rust definition
-    /// says what runs. The `ontology_version` column is what gate one compares.
-    pub fn install(&self, vault: &Vault) -> Result<()> {
-        let outcome = vault.commit(|tx| {
-            tx.set_producer("registry.install");
-            for (name, entry) in &self.commands {
-                let definition = &entry.definition;
-                tx.connection().execute(
-                    "INSERT INTO command_definition
-                       (command_id, name, owner_schema, input_schema_json, output_schema_json,
-                        preconditions_json, postconditions_json, idempotency, risk, ontology_version)
-                     VALUES (?1, ?2, ?3, ?4, '{}', ?5, ?6, ?7, ?8, ?9)
-                     ON CONFLICT (command_id) DO UPDATE SET
-                       input_schema_json = excluded.input_schema_json,
-                       preconditions_json = excluded.preconditions_json,
-                       postconditions_json = excluded.postconditions_json,
-                       idempotency = excluded.idempotency,
-                       risk = excluded.risk,
-                       ontology_version = excluded.ontology_version",
-                    rusqlite::params![
-                        name,
-                        name,
-                        definition.owner_schema,
-                        definition.input_schema,
-                        predicate_names(definition.preconditions),
-                        predicate_names(definition.postconditions),
-                        definition.idempotency.as_str(),
-                        definition.risk.as_str(),
-                        ONTOLOGY_VERSION,
-                    ],
-                )?;
-            }
-            Ok(())
-        })?;
-        drop(outcome);
-        Ok(())
-    }
-}
-
-fn predicate_names(conditions: &[CommandCondition]) -> String {
-    let names: Vec<&str> = conditions
-        .iter()
-        .map(|condition| condition.predicate)
-        .collect();
-    serde_json::to_string(&names).unwrap_or_else(|_| "[]".to_owned())
 }
 
 /// What a caller asks for.
@@ -458,6 +425,7 @@ impl Command {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CommandStatus {
     Executed,
+    /// The gate refused it, with a sentence in [`CommandOutcome::reason`].
     Failed,
 }
 
@@ -465,20 +433,16 @@ pub enum CommandStatus {
 #[derive(Debug, Clone)]
 pub struct CommandOutcome {
     pub status: CommandStatus,
+    /// The `journal.seq` of the row that records this run, as text.
     pub invocation_id: String,
-    pub receipt_id: String,
     /// The tables this command changed, from the commit guard's
     /// `update_hook`. What a change event is made of (#1029 §1).
     pub tables: Vec<String>,
     pub output: serde_json::Value,
-    /// The owner-facing sentence, on a failure.
+    /// The owner-facing sentence, on a refusal.
     pub reason: Option<String>,
-    /// The raw predicate that failed, for the audit trail.
+    /// The raw predicate that refused, for the journal.
     pub predicate: Option<String>,
-    /// Always `false`: nothing sets it. There is no replay ledger to answer from
-    /// (#1029 §1, R-1088-12), so the handler ran for every outcome this module
-    /// returns. The field outlived the ledger and a test still asserts it.
-    pub replayed: bool,
 }
 
 impl Vault {
@@ -498,43 +462,12 @@ impl Vault {
             })?;
         let definition = &entry.definition;
 
-        // Gate 1. Read from the registry's own record, so a stale row is what
-        // is caught — comparing the constant against itself would prove
-        // nothing.
-        let registered: Option<String> = self.read(|connection| {
-            Ok(connection
-                .query_row(
-                    "SELECT ontology_version FROM command_definition WHERE name = ?1",
-                    [&command.name],
-                    |row| row.get(0),
-                )
-                .ok())
-        })?;
-        if let Some(registered) = registered
-            && registered != ONTOLOGY_VERSION
-        {
-            return Err(VaultError::OntologyVersionMismatch {
-                name: command.name.clone(),
-                registered,
-                served: ONTOLOGY_VERSION.to_owned(),
-            });
-        }
-
-        // NO REPLAY LEDGER (#1029 §1, R-1088-12). `replica_intent_outcome`
-        // answered a SEAT resubmitting an intent its gateway may already have
-        // run: the network between them could lose an answer, so the same write
-        // could arrive twice and the ledger was what made the second one a
-        // replay rather than a second execution. There is no network between
-        // the caller and this vault — the caller is the shell on the device the
-        // file is on — so a command that arrives twice was made twice. A write
-        // the shell may re-offer is idempotent by its own content or by an id
-        // the phone minted; see the module doc.
-        // Gate 2. Validation, with the scrub on every message.
+        // Gate 1. Validation, with the scrub on every message.
         let invalid: Vec<String> = entry
             .validator
             .iter_errors(&command.input)
             .map(|error| {
-                audit::scrub_sealed(
+                journal::scrub_sealed(
                     &format!("{}: {error}", error.instance_path),
                     definition.sealed_input,
                     &command.input,
@@ -542,66 +475,57 @@ impl Vault {
             })
             .collect();
 
-        let invocation_id = self.ids().next();
+        // Gate 2. A command acts on its schema as a whole; the per-table
+        // narrowing is the handler's reads, through the paged door.
         let decision = self.read(|connection| {
             evaluate_access(
                 connection,
                 principal,
                 definition.owner_schema,
-                // A command acts on its schema as a whole; the per-table
-                // narrowing is the handler's reads, through the paged door.
                 "command",
                 Verb::Act,
             )
         })?;
 
-        let result = self.commit(|tx| {
+        let ran = self.commit(|tx| {
             tx.set_producer(&command.name);
             let connection = tx.connection();
-            audit::insert_invocation(
-                connection,
-                self.clock(),
-                &Invocation {
-                    invocation_id: &invocation_id,
-                    command_id: &command.name,
-                    caller_id: principal.caller_id(),
-                    authority_id: match &decision {
-                        Decision::Allow { authority_id, .. }
-                        | Decision::Deny { authority_id, .. } => authority_id.as_deref(),
+            let seq = journal::next_seq(connection)?;
+            let at = self.clock().now_text();
+            let record = |outcome: Outcome, detail: Option<&str>| {
+                journal::write(
+                    connection,
+                    &journal::Entry {
+                        seq,
+                        at: &at,
+                        command: &command.name,
+                        input: &command.input,
+                        sealed_keys: definition.sealed_input,
+                        outcome,
+                        detail,
                     },
-                    input: &command.input,
-                    sealed_keys: definition.sealed_input,
-                },
-            )?;
-            audit::assert_invocation_identity(
-                connection,
-                &invocation_id,
-                &command.name,
-                principal.caller_id(),
-            )?;
+                )
+            };
+            let refused = |sentence: String, predicate: &str| -> Result<Ran> {
+                record(Outcome::Refused, Some(&sentence))?;
+                Ok(Ran {
+                    seq,
+                    refusal: Some((sentence, predicate.to_owned())),
+                    output: serde_json::Value::Null,
+                })
+            };
 
-            // Authority, before anything else is written.
             if let Decision::Deny { failing, .. } = &decision {
-                return deny(
-                    self,
-                    tx,
-                    definition,
-                    &invocation_id,
-                    failing,
-                    "authority",
-                    &decision,
-                );
+                return refused(failing.clone(), "authority");
             }
             if !invalid.is_empty() {
-                return deny(
-                    self,
-                    tx,
-                    definition,
-                    &invocation_id,
-                    &invalid.join("; "),
-                    "schema",
-                    &decision,
-                );
+                return refused(invalid.join("; "), "schema");
+            }
+
+            if principal.is_assistant()
+                && let Some(sentence) = assistant_refusal(connection, definition, &command.input)?
+            {
+                return refused(sentence, ASSISTANT_CLOSED_OUT);
             }
 
             let ctx = CommandCtx {
@@ -609,75 +533,28 @@ impl Vault {
                 command: definition.name,
                 input: command.input.clone(),
                 principal: principal.clone(),
-                now: self.clock().now_text(),
-                invocation_id: invocation_id.clone(),
+                now: at.clone(),
+                journal_seq: seq,
                 ids: self.ids(),
-                clock: self.clock(),
-                produced_ids: std::cell::RefCell::new(Vec::new()),
                 blobs: self.blobs(),
             };
 
-            // Gate 4. EVERY precondition's result is written, then the first
-            // failure denies.
-            let mut first_failure: Option<(&'static str, String)> = None;
+            // Gate 4. The first failure refuses, with the author's sentence
+            // and the raw predicate.
             for condition in definition.preconditions {
-                let outcome = (condition.check)(&ctx)?;
-                audit::write_check(
-                    connection,
-                    self.clock(),
-                    self.ids(),
-                    &Check {
-                        invocation_id: &invocation_id,
-                        phase: "pre",
-                        predicate: condition.predicate,
-                        passed: outcome.is_none(),
-                        observed: None,
-                    },
-                )?;
-                if first_failure.is_none()
-                    && let Some(sentence) = outcome
-                {
-                    first_failure = Some((condition.predicate, sentence));
+                if let Some(sentence) = (condition.check)(&ctx)? {
+                    return refused(sentence, condition.predicate);
                 }
             }
-            if let Some((predicate, sentence)) = first_failure {
-                return deny(
-                    self,
-                    tx,
-                    definition,
-                    &invocation_id,
-                    &sentence,
-                    predicate,
-                    &decision,
-                );
-            }
 
-            // Gate 5.
-            audit::set_invocation_status(connection, self.clock(), &invocation_id, "checked")?;
-
-            // Gate 6. Inside the guard, so the writes are captured.
+            // Gate 5. Inside the guard, so the writes are one commit.
             let output = (definition.handler)(&ctx)?;
 
-            // Gate 7.
+            // Gate 6. A FAILED POSTCONDITION ROLLS THE WHOLE COMMIT BACK. The
+            // handler's writes are not "mostly right"; either the command's own
+            // statement about what it did holds, or the command did not happen.
             for condition in definition.postconditions {
-                let outcome = (condition.check)(&ctx)?;
-                audit::write_check(
-                    connection,
-                    self.clock(),
-                    self.ids(),
-                    &Check {
-                        invocation_id: &invocation_id,
-                        phase: "post",
-                        predicate: condition.predicate,
-                        passed: outcome.is_none(),
-                        observed: None,
-                    },
-                )?;
-                if let Some(sentence) = outcome {
-                    // A FAILED POSTCONDITION ROLLS THE WHOLE COMMIT BACK. The
-                    // handler's writes are not "mostly right"; either the
-                    // command's own statement about what it did holds, or the
-                    // command did not happen.
+                if let Some(sentence) = (condition.check)(&ctx)? {
                     return Err(VaultError::Invariant {
                         context: format!(
                             "`{}` broke its own postcondition `{}`: {sentence}",
@@ -687,109 +564,201 @@ impl Vault {
                 }
             }
 
-            audit::set_invocation_status(connection, self.clock(), &invocation_id, "executed")?;
-            // Gate 8.
-            let receipt_id = audit::write_receipt(
-                connection,
-                self.clock(),
-                self.ids(),
-                &Receipt {
-                    authority_id: match &decision {
-                        Decision::Allow { authority_id, .. } => authority_id.as_deref(),
-                        Decision::Deny { .. } => None,
-                    },
-                    invocation_id: &invocation_id,
-                    action: &format!("act {}", definition.name),
-                    object_type: "command.definition",
-                    object_id: Some(definition.name),
-                    decision: "allow",
-                    detail: serde_json::json!({
-                        "risk": definition.risk.as_str(),
-                        "idempotency": definition.idempotency.as_str(),
-                    }),
-                },
-            )?;
-            Ok((CommandStatus::Executed, receipt_id, output, None, None))
-        })?;
+            // Gate 7.
+            record(Outcome::Executed, None)?;
+            Ok(Ran {
+                seq,
+                refusal: None,
+                output,
+            })
+        });
 
-        let (status, receipt_id, output, reason, predicate) = result.value;
+        let result = match ran {
+            Ok(result) => result,
+            Err(error) => {
+                // The command's writes rolled back and took the row with them,
+                // so the failure is written in a transaction of its own. Best
+                // effort: a vault that cannot take this write (a full disk) is
+                // the failure being reported, not a second one.
+                let _ = self.commit(|tx| {
+                    journal::write(
+                        tx.connection(),
+                        &journal::Entry {
+                            seq: journal::next_seq(tx.connection())?,
+                            at: &self.clock().now_text(),
+                            command: &command.name,
+                            input: &command.input,
+                            sealed_keys: definition.sealed_input,
+                            outcome: Outcome::Failed,
+                            detail: Some(&journal::scrub_sealed(
+                                &error.to_string(),
+                                definition.sealed_input,
+                                &command.input,
+                            )),
+                        },
+                    )
+                });
+                return Err(error);
+            }
+        };
 
+        let Ran {
+            seq,
+            refusal,
+            output,
+        } = result.value;
+        let (status, reason, predicate) = match refusal {
+            Some((sentence, predicate)) => (CommandStatus::Failed, Some(sentence), Some(predicate)),
+            None => (CommandStatus::Executed, None, None),
+        };
+        // A purge collected the blobs nothing names any more, inside its own
+        // commit; with the commit made, their files go from this device's store.
+        // A file that will not delete is left for a later sweep: the rows are
+        // already gone, so nothing refers to it.
+        if status == CommandStatus::Executed
+            && let (Some(store), Some(released)) = (
+                self.blobs(),
+                output.get("released").and_then(serde_json::Value::as_array),
+            )
+        {
+            for hash in released.iter().filter_map(serde_json::Value::as_str) {
+                let _ = store.remove(hash);
+            }
+        }
         Ok(CommandOutcome {
             status,
-            invocation_id,
-            receipt_id,
+            invocation_id: seq.to_string(),
             tables: result.tables,
             output,
             reason,
             predicate,
-            replayed: false,
         })
     }
 }
 
-/// The deny path: four things, every time.
-type DenyOutcome = (
-    CommandStatus,
-    String,
-    serde_json::Value,
-    Option<String>,
-    Option<String>,
-);
+/// The predicate a refusal of the assistant at a secret is journalled under.
+pub const ASSISTANT_CLOSED_OUT: &str = "assistant_cannot_touch_a_secret";
 
-fn deny(
-    vault: &Vault,
-    tx: &CommitTx<'_>,
+/// The `locker.*` commands that reveal a sealed value, write one, or destroy
+/// one, whatever their input says.
+///
+/// A duplicate copies every sealed cell and its `fields[].value` overrides set
+/// them; removing a custom field or a passkey destroys a sealed value the
+/// member can only get back by typing it again. `locker.add_item`,
+/// `locker.edit_item`, `locker.set_field` and `locker.set_passkey` are not here:
+/// they are refused by what their input carries (see [`assistant_refusal`]),
+/// so the assistant can still file or amend an item's plain fields.
+const SECRET_COMMANDS: [&str; 6] = [
+    "locker.totp_code",
+    "locker.export",
+    "locker.reveal_receipt",
+    "locker.duplicate_item",
+    "locker.remove_field",
+    "locker.clear_passkey",
+];
+
+/// THE ASSISTANT HAS THE OWNER'S ACCESS, EXCEPT TO A SEALED VALUE.
+///
+/// A Locker item is an entity, and the assistant runs the shared verbs on it
+/// like any other kind (retitle, trash, restore, purge, flags, edges, tags),
+/// under the confirmations the owner gets. What it cannot run is a command that
+/// reveals or writes a sealed value (`password`, `otp_seed`, `card_number`,
+/// `cvv`, `content`, `locker_item_field.value_sealed`,
+/// `locker_item_passkey.private_key`):
+///
+/// - [`SECRET_COMMANDS`];
+/// - any command whose input carries a key its definition declares sealed
+///   (`sealed_input`) with anything but the placeholder, which means "leave
+///   this secret alone";
+/// - `locker.edit_item` that leaves out a sealed cell the item holds, because
+///   an edit replaces and an omitted cell is cleared.
+///
+/// The refusal is the gate's and not each verb's, so a command added later that
+/// declares `sealed_input` is closed too. It is a sentence and not a lookup
+/// failure on purpose: the member asked, and it carries no secret.
+fn assistant_refusal(
+    connection: &Connection,
     definition: &CommandDefinition,
-    invocation_id: &str,
-    sentence: &str,
-    predicate: &str,
-    decision: &Decision,
-) -> Result<DenyOutcome> {
-    let connection = tx.connection();
-    audit::set_invocation_status(connection, vault.clock(), invocation_id, "failed")?;
-    let receipt_id = audit::write_receipt(
-        connection,
-        vault.clock(),
-        vault.ids(),
-        &Receipt {
-            authority_id: match decision {
-                Decision::Allow { authority_id, .. } | Decision::Deny { authority_id, .. } => {
-                    authority_id.as_deref()
+    input: &serde_json::Value,
+) -> Result<Option<String>> {
+    use crate::commands::locker::{SEALED_ITEM_CELLS, SEALED_PLACEHOLDER};
+    const SENTENCE: &str = "that is a secret, which the assistant cannot read or set; \
+        you can reveal or set it in Locker";
+    let refuse = || Ok(Some(SENTENCE.to_owned()));
+    if SECRET_COMMANDS.contains(&definition.name) {
+        return refuse();
+    }
+    let kept = |value: &serde_json::Value| value.as_str() == Some(SEALED_PLACEHOLDER);
+    if let Some(map) = input.as_object() {
+        // A custom field's `value` is sealed only when the field is: a text, url or date field is
+        // plain, so the assistant may write one, but never a sealed one or a plain one over a
+        // sealed one (the write would erase the secret).
+        if definition.name == "locker.set_field" {
+            let sealed_kind = map.get("kind").and_then(serde_json::Value::as_str) == Some("sealed");
+            let over_a_secret = match map.get("field_id").and_then(serde_json::Value::as_str) {
+                Some(field) => connection
+                    .query_row(
+                        "SELECT value_sealed IS NOT NULL FROM locker_item_field WHERE field_id = ?1",
+                        [field],
+                        |row| row.get::<_, bool>(0),
+                    )
+                    .unwrap_or(false),
+                None => false,
+            };
+            return if sealed_kind || over_a_secret {
+                refuse()
+            } else {
+                Ok(None)
+            };
+        }
+        for key in definition.sealed_input {
+            let carried = match key.split_once("[].") {
+                Some((array, inner)) => map
+                    .get(array)
+                    .and_then(serde_json::Value::as_array)
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|item| item.as_object()?.get(inner))
+                    .any(|value| !kept(value)),
+                None => map.get(*key).is_some_and(|value| !kept(value)),
+            };
+            if carried {
+                return refuse();
+            }
+        }
+        if definition.name == "locker.edit_item"
+            && let Some(item) = map.get("item_id").and_then(serde_json::Value::as_str)
+        {
+            for column in SEALED_ITEM_CELLS {
+                let held: bool = connection
+                    .query_row(
+                        &format!("SELECT {column} IS NOT NULL FROM locker_item WHERE id = ?1"),
+                        [item],
+                        |row| row.get(0),
+                    )
+                    .unwrap_or(false);
+                if held && !map.contains_key(column) {
+                    return refuse();
                 }
-            },
-            invocation_id,
-            action: &format!("act {}", definition.name),
-            object_type: "command.definition",
-            object_id: Some(definition.name),
-            decision: "deny",
-            detail: serde_json::json!({
-                "risk": definition.risk.as_str(),
-                "stage": predicate,
-            }),
-        },
-    )?;
-    audit::write_explanation(
-        connection,
-        vault.clock(),
-        vault.ids(),
-        invocation_id,
-        sentence,
-    )?;
-    Ok((
-        CommandStatus::Failed,
-        receipt_id,
-        serde_json::Value::Null,
-        Some(sentence.to_owned()),
-        Some(predicate.to_owned()),
-    ))
+            }
+        }
+    }
+    Ok(None)
+}
+
+/// What the gate's transaction produced.
+struct Ran {
+    seq: i64,
+    /// The sentence and the raw predicate, when the gate refused.
+    refusal: Option<(String, String)>,
+    output: serde_json::Value,
 }
 
 /// The handler every stub carries.
 ///
 /// A TYPED error, not a panic: a shell renders "not in this build yet" and the
 /// process survives. And it is reached only AFTER the gate order has run, so a
-/// stub still validates its input, writes its invocation row and receipts the
-/// refusal — which is what makes the registry useful before the bodies land.
+/// stub still validates its input and journals the refusal.
 pub fn not_implemented(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     Err(VaultError::NotImplemented {
         name: ctx.command.to_owned(),

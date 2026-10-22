@@ -229,7 +229,7 @@ public class PhotoLightboxBridge {
 
     private companion object {
         /** The owner a Photos asset reads its bytes as (`ContentRef.owner_type`). */
-        const val OWNER_TYPE: String = "media.asset"
+        const val OWNER_TYPE: String = "photo"
     }
 }
 

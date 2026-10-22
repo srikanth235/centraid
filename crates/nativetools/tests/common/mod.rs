@@ -200,18 +200,13 @@ pub fn journal(world: &World) -> BTreeMap<(String, String), usize> {
     let handle = vaultio::Handle::open(world.path(), SetClock::at(1_800_000_000_000), "journal")
         .expect("the journal opens");
     let rows = handle
-        .table(
-            "command_invocation",
-            "invocation_id, command_id, status, requested_at",
-            "requested_at",
-            "invocation_id",
-        )
+        .table("journal", "seq, command, outcome", "seq", "seq")
         .expect("the journal reads");
     let mut counts = BTreeMap::new();
     for row in &rows {
         let key = (
-            vaultio::text(row, "command_id").unwrap_or_default(),
-            vaultio::text(row, "status").unwrap_or_default(),
+            vaultio::text(row, "command").unwrap_or_default(),
+            vaultio::text(row, "outcome").unwrap_or_default(),
         );
         *counts.entry(key).or_insert(0) += 1;
     }
@@ -248,13 +243,15 @@ impl World {
         let handle = vaultio::Handle::open(&self.path, SetClock::at(1_900_000_000_000), "calendar")
             .expect("the vault opens");
         let rows = handle
-            .table(
-                "schedule_calendar",
-                "calendar_id, created_at",
-                "created_at",
-                "calendar_id",
+            .table_where(
+                "container",
+                "id, kind",
+                "id",
+                "id",
+                "kind = ?",
+                &["calendar".to_owned()],
             )
             .expect("calendars read");
-        vaultio::text(&rows[0], "calendar_id").expect("a calendar")
+        vaultio::text(&rows[0], "id").expect("a calendar")
     }
 }

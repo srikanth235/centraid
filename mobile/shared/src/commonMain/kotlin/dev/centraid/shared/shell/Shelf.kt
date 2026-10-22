@@ -148,7 +148,7 @@ public class Shelf(
         /**
          * What to call it.
          *
-         * Read out of the vault's own `core_vault.display_name` the moment
+         * Read out of the vault's own `vault.name` the moment
          * there is a file to read it from ([VaultRoster.identify]). A vault's
          * name lives inside the vault.
          */
@@ -308,7 +308,7 @@ public class Shelf(
          *
          * **The door exists now** (#1029 W5, hand-off 1): `envelope.proto`
          * carries a `FoundRequest` arm and `crates/core`'s `api::found` writes
-         * `core_vault` and the owner's `core_party` in one commit. This refusal
+         * the `vault` row and the owner's person in one commit. This refusal
          * is no longer the standing state of the build — it is what remains
          * when that write is REFUSED: a file that already holds a vault
          * (`ERROR_CODE_VAULT_ALREADY_HELD`), or a core that answered the found
@@ -488,10 +488,9 @@ public class Shelf(
      * A refusal on either step deletes the file rather than leaving one the
      * shelf can never name.
      *
-     * @param name what `core_vault.display_name` is set to. Empty is a real
-     *   state — a vault with no name draws "No vault yet" — and the member
-     *   renames it inside the vault afterwards.
-     * @param ownerName what the owner's `core_party` is called. A DISPLAY NAME
+     * @param name what `vault.name` is set to. It is never blank (the core refuses
+     *   a blank one); the member renames it inside the vault afterwards.
+     * @param ownerName what the owner's person is called. A DISPLAY NAME
      *   and nothing else: there is no email address, no phone number and no
      *   account anywhere on this path.
      */
@@ -700,7 +699,7 @@ public class Shelf(
      * HOLD WHAT A RESTORE BROUGHT BACK, KEYED (#1047 E1, R-1047-E3).
      *
      * Each file is asked which vault it is — the id the shelf keys on is the
-     * one the file names (`core_vault`), which is not the identity key a
+     * one the file names (`vault`), which is not the identity key a
      * restore reports — and that id is given the index the restore found it at,
      * before the keyed reopen. The
      * SEED must already be stored: `custody.Enrollment` stores it first. Answers how
@@ -831,8 +830,8 @@ public class Shelf(
     }
 
     /**
-     * RENAME A VAULT, IN ITS OWN FILE: `core.rename_vault` writes
-     * `core_vault.display_name`, the one place a vault's name lives
+     * RENAME A VAULT, IN ITS OWN FILE: `vault.rename` writes
+     * `vault.name`, the one place a vault's name lives
      * ([VaultRoster]), and the holding takes the name the core answered. A
      * resting holding is woken to be written; a vault that moved is read-only
      * and is not renamed. False when the name is blank or the core refused it.
@@ -843,8 +842,8 @@ public class Shelf(
         val holding = holdings.value.firstOrNull { it.vaultId == vaultId } ?: return false
         if (holding.readOnly) return false
         val core = awaken(vaultId) ?: return false
-        val input = "{\"display_name\":${PhoneImport.quote(wanted)}}"
-        if (!PhoneImport.write(core, "core.rename_vault", input)) return false
+        val input = "{\"name\":${PhoneImport.quote(wanted)}}"
+        if (!PhoneImport.write(core, "vault.rename", input)) return false
         rename(vaultId, wanted, holding.color)
         return true
     }
@@ -1146,7 +1145,7 @@ public class Shelf(
          * inside the vault is not app copy in the sense that table holds.
          *
          * **A DEFAULT AND NOT A PLACEHOLDER.** It is written to
-         * `core_vault.display_name`, the one place a vault's name lives, so a
+         * `vault.name`, the one place a vault's name lives, so a
          * member who never renames it reads this on the header — which is why
          * it is a sentence-case thing a person would say and not `Vault 1`.
          */
@@ -1155,7 +1154,7 @@ public class Shelf(
         /**
          * WHAT THE OWNER PARTY IS CALLED WHEN NOBODY NAMED THEM (#1029 W5).
          *
-         * A display name on a `core_party` of kind `person`, and the only party
+         * A title on an `entity` of kind `person`, and the only party
          * in a fresh vault. There is no email address, no phone number and no
          * account here and nowhere for one to arrive: a gateway, too, knows a
          * vault by its id and a phone by a token (`docs/gateway.md`).

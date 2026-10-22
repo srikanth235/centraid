@@ -68,7 +68,7 @@ import dev.centraid.shared.shell.HomeSession
 import kotlinx.coroutines.CoroutineScope
 
 /**
- * HOME'S SEARCH (R-CHROME-6): one field over every app but Locker, pushed from
+ * HOME'S SEARCH (R-CHROME-6): one field over every app, pushed from
  * Home's search bar. Not an app's routes — Home is not an app — but the same
  * seam, so the activity's list holds it like any other.
  *

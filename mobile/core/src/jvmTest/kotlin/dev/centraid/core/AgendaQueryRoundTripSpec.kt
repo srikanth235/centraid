@@ -13,6 +13,7 @@ import centraid.core.v1.Envelope
 import centraid.core.v1.Request
 import dev.centraid.core.AbiRoundTripSpec.Companion.openRealCore
 import dev.centraid.core.AbiRoundTripSpec.Companion.shouldBeAnsweredWith
+import io.kotest.assertions.withClue
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContain
@@ -55,27 +56,27 @@ class AgendaQueryRoundTripSpec : StringSpec({
             val calendarId = core.upcoming().calendars.first().calendar_id
 
             core.write(
-                "schedule.propose_event",
-                """{"summary":"Dentist","dtstart":"2099-06-03T09:00:00.000Z",""" +
-                    """"dtend":"2099-06-03T10:00:00.000Z","calendar_id":"$calendarId"}""",
+                "event.propose",
+                """{"title":"Dentist","starts":"2099-06-03T09:00:00.000Z",""" +
+                    """"ends":"2099-06-03T10:00:00.000Z","zone":"Etc/UTC","calendar_id":"$calendarId"}""",
                 key = "agenda-round-trip-one-off",
             )
-            // Anchored AT the window's start, so every occurrence answered is
+            // A FLOATING wall clock (07:00 wherever the member is), anchored AT the window's start, so every occurrence answered is
             // inside it and the count below is the range's and nothing else's.
             val series = core.write(
-                "schedule.propose_event",
-                """{"summary":"Morning run","dtstart":"2099-06-01T07:00:00.000Z",""" +
-                    """"dtend":"2099-06-01T08:00:00.000Z","calendar_id":"$calendarId",""" +
-                    """"rrule":"FREQ=WEEKLY","reminders":[{"minutes_before":10}]}""",
+                "event.propose",
+                """{"title":"Morning run","starts":"2099-06-01T07:00:00",""" +
+                    """"ends":"2099-06-01T08:00:00","timing":"floating","calendar_id":"$calendarId",""" +
+                    """"rule":"FREQ=WEEKLY","reminders":[10]}""",
                 key = "agenda-round-trip-series",
             )
 
             // ZONED, in London, at 03:30Z on the 4th: 23:30 on the 3rd in New
             // York, the zone every query here states.
             val lateCall = core.write(
-                "schedule.propose_event",
-                """{"summary":"Late call","dtstart":"2099-06-04T03:30:00.000Z",""" +
-                    """"dtend":"2099-06-04T05:00:00.000Z","start_tz":"Europe/London",""" +
+                "event.propose",
+                """{"title":"Late call","starts":"2099-06-04T03:30:00.000Z",""" +
+                    """"ends":"2099-06-04T05:00:00.000Z","zone":"Europe/London",""" +
                     """"calendar_id":"$calendarId"}""",
                 key = "agenda-round-trip-late-call",
             )
@@ -195,22 +196,22 @@ class AgendaQueryRoundTripSpec : StringSpec({
         try {
             val calendarId = core.upcoming().calendars.first().calendar_id
             val kept = core.write(
-                "schedule.propose_event",
-                """{"summary":"Kept","dtstart":"2099-06-02T09:00:00.000Z",""" +
-                    """"dtend":"2099-06-02T10:00:00.000Z","calendar_id":"$calendarId"}""",
+                "event.propose",
+                """{"title":"Kept","starts":"2099-06-02T09:00:00.000Z",""" +
+                    """"ends":"2099-06-02T10:00:00.000Z","zone":"Etc/UTC","calendar_id":"$calendarId"}""",
                 key = "agenda-round-trip-kept",
             )
             val cancelled = core.write(
-                "schedule.propose_event",
-                """{"summary":"Cancelled","dtstart":"2099-06-02T11:00:00.000Z",""" +
-                    """"dtend":"2099-06-02T12:00:00.000Z","calendar_id":"$calendarId"}""",
+                "event.propose",
+                """{"title":"Cancelled","starts":"2099-06-02T11:00:00.000Z",""" +
+                    """"ends":"2099-06-02T12:00:00.000Z","zone":"Etc/UTC","calendar_id":"$calendarId"}""",
                 key = "agenda-round-trip-cancelled",
             )
             val trashed = core.write(
-                "schedule.propose_event",
-                """{"summary":"Trashed","dtstart":"2099-06-02T13:00:00.000Z",""" +
-                    """"dtend":"2099-06-02T14:00:00.000Z","calendar_id":"$calendarId",""" +
-                    """"rrule":"FREQ=WEEKLY"}""",
+                "event.propose",
+                """{"title":"Trashed","starts":"2099-06-02T13:00:00.000Z",""" +
+                    """"ends":"2099-06-02T14:00:00.000Z","zone":"Etc/UTC","calendar_id":"$calendarId",""" +
+                    """"rule":"FREQ=WEEKLY"}""",
                 key = "agenda-round-trip-trashed",
             )
             // All three are on it first — the fixture vault is shared by
@@ -220,15 +221,15 @@ class AgendaQueryRoundTripSpec : StringSpec({
             listOf(kept, cancelled, trashed).forEach { before shouldContain it }
 
             core.write(
-                "schedule.cancel_event",
-                """{"event_id":"$cancelled"}""",
+                "event.cancel",
+                """{"id":"$cancelled"}""",
                 key = "agenda-round-trip-cancel",
             )
             // A SERIES, TRASHED: the anchor read is the one that would bring
             // it back one week at a time, and it does not.
             core.write(
-                "schedule.delete_event",
-                """{"event_id":"$trashed"}""",
+                "entity.trash",
+                """{"id":"$trashed"}""",
                 key = "agenda-round-trip-delete",
             )
             val after = core.upcoming().events.map { it.event_id }.toSet()
@@ -244,9 +245,9 @@ class AgendaQueryRoundTripSpec : StringSpec({
         try {
             val calendarId = core.upcoming().calendars.first().calendar_id
             val dinner = core.write(
-                "schedule.propose_event",
-                """{"summary":"Dinner with Maya","dtstart":"2099-06-05T19:00:00.000Z",""" +
-                    """"dtend":"2099-06-05T21:00:00.000Z","calendar_id":"$calendarId"}""",
+                "event.propose",
+                """{"title":"Dinner with Maya","starts":"2099-06-05T19:00:00.000Z",""" +
+                    """"ends":"2099-06-05T21:00:00.000Z","zone":"Etc/UTC","calendar_id":"$calendarId"}""",
                 key = "agenda-round-trip-search",
             )
             for (term in listOf("Dinner", "dinner", "Din")) {
@@ -291,7 +292,7 @@ class AgendaQueryRoundTripSpec : StringSpec({
             return answer!!
         }
 
-        /** One command through the command plane; answers its `event_id`. */
+        /** One command through the command plane; answers its `id`. */
         suspend fun CentraidCore.write(name: String, input: String, key: String): String {
             var eventId = ""
             call(
@@ -307,12 +308,12 @@ class AgendaQueryRoundTripSpec : StringSpec({
                 ),
             ).shouldBeAnsweredWith { envelope ->
                 val outcome = envelope.response?.command ?: error("a CommandOutcome")
-                outcome.status shouldBe CommandStatus.COMMAND_STATUS_EXECUTED
-                eventId = Regex("\"event_id\":\"([^\"]+)\"")
+                withClue(outcome.reason) { outcome.status shouldBe CommandStatus.COMMAND_STATUS_EXECUTED }
+                eventId = Regex("\"id\":\"([^\"]+)\"")
                     .find(outcome.output.utf8())
                     ?.groupValues
                     ?.get(1)
-                    ?: error("no event_id in ${outcome.output.utf8()}")
+                    ?: ""
             }
             return eventId
         }

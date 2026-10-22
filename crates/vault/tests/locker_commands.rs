@@ -61,9 +61,6 @@ impl World {
     fn new(seed: &str, key_id: &str) -> Self {
         let scratch = common::Scratch::founded(seed).expect("a vault is founded");
         let registry = registry();
-        registry
-            .install(&scratch.vault)
-            .expect("the record installs");
         if !key_id.is_empty() {
             scratch
                 .vault
@@ -126,7 +123,7 @@ impl World {
             .expect("the read answers")
     }
 
-    /// One login, sealed, through the real command path.
+    /// One login, sealed, through the real command path, and tagged `money`.
     fn login(&self, item_id: &str, key_id: &str) -> serde_json::Value {
         self.ok(
             "locker.add_item",
@@ -138,9 +135,13 @@ impl World {
                 "url": "https://bank.example",
                 "password": ciphertext(item_id),
                 "password_rotated": true,
-                "key_id": key_id,
-                "tags": ["money", "money", " "]
+                "key_id": key_id
             }),
+        );
+        // A Locker tag is a vault tag, put on by the shared verb.
+        self.ok(
+            "tag.add",
+            serde_json::json!({ "id": item_id, "label": "money" }),
         )
     }
 }
@@ -149,11 +150,14 @@ impl World {
 // The catalogue itself.
 // ---------------------------------------------------------------------------
 
-/// NINETEEN OF V0'S TWENTY, PLUS ONE — and the split is asserted, not assumed.
-/// v0's twentieth, `locker.watchtower`, is deleted with the weak/reused
-/// scoring (Q-1047-16).
+/// WHAT INVOLVES A SECRET OR LOCKER'S OWN STRUCTURE, and nothing the vault's
+/// shared verbs already do (#1135, the Locker lane): trash, restore, purge,
+/// archive, star and tags are `entity.*`, `flag.*` and `tag.*` for a Locker
+/// item as for every kind. v0's `locker.watchtower` is deleted with the
+/// weak/reused scoring (Q-1047-16), and `locker.rotate_key` with the
+/// multi-seat custody plane (#1047 slice D1).
 #[test]
-fn the_catalogue_is_v0s_nineteen_plus_the_reveal_receipt() {
+fn the_catalogue_is_what_involves_a_secret_plus_the_reveal_receipt() {
     use centraid_vault::commands::Idempotency;
 
     let definitions = centraid_vault::commands::locker::definitions();
@@ -161,23 +165,14 @@ fn the_catalogue_is_v0s_nineteen_plus_the_reveal_receipt() {
         .iter()
         .map(|definition| definition.name)
         .collect();
-    assert_eq!(names.len(), 20);
+    assert_eq!(names.len(), 13);
     assert!(!names.contains(&"locker.watchtower"));
 
-    // v0's twenty less Watchtower, by name, in `locker.ts` + `locker-extras.ts` +
-    // `locker-export.ts` order.
-    let v0 = [
+    let kept = [
         "locker.add_item",
         "locker.edit_item",
-        "locker.trash_item",
-        "locker.restore_item",
-        "locker.purge_item",
-        "locker.star_item",
-        "locker.unstar_item",
         "locker.totp_code",
         "locker.set_memo",
-        "locker.archive_item",
-        "locker.unarchive_item",
         "locker.duplicate_item",
         "locker.set_field",
         "locker.remove_field",
@@ -187,16 +182,25 @@ fn the_catalogue_is_v0s_nineteen_plus_the_reveal_receipt() {
         "locker.counts",
         "locker.export",
     ];
-    for name in v0 {
+    for name in kept {
         assert!(names.contains(&name), "{name} is not in the catalogue");
     }
-    // The one add, and only that one. `locker.rotate_key` is deleted with the
-    // multi-seat custody plane (#1047 slice D1): `K` is the seed's one leaf.
-    let added: Vec<&&str> = names.iter().filter(|name| !v0.contains(name)).collect();
+    // THE VERBS THE VAULT ALREADY HAS ARE NOT SPELLED A SECOND TIME.
+    for gone in [
+        "locker.trash_item",
+        "locker.restore_item",
+        "locker.purge_item",
+        "locker.star_item",
+        "locker.unstar_item",
+        "locker.archive_item",
+        "locker.unarchive_item",
+    ] {
+        assert!(!names.contains(&gone), "{gone} duplicates a shared verb");
+    }
+    // The one add, and only that one.
+    let added: Vec<&&str> = names.iter().filter(|name| !kept.contains(name)).collect();
     assert_eq!(added, [&"locker.reveal_receipt"]);
 
-    // V0'S IDEMPOTENCY SPLIT, EXACTLY: 13 idempotent / 3 once / 4 retry-safe
-    // over the twenty (census §A0's tally), less Watchtower's retry-safe one.
     let class_of = |name: &str| {
         definitions
             .iter()
@@ -207,7 +211,7 @@ fn the_catalogue_is_v0s_nineteen_plus_the_reveal_receipt() {
     let mut idempotent = 0;
     let mut once = 0;
     let mut retry_safe = 0;
-    for name in v0 {
+    for name in kept {
         match class_of(name) {
             Idempotency::Idempotent => idempotent += 1,
             Idempotency::Once => once += 1,
@@ -216,8 +220,8 @@ fn the_catalogue_is_v0s_nineteen_plus_the_reveal_receipt() {
     }
     assert_eq!(
         (idempotent, once, retry_safe),
-        (13, 3, 3),
-        "v0's idempotency split for the locker schema moved"
+        (7, 2, 3),
+        "the locker schema's idempotency split moved"
     );
     // The add writes once: a receipt per reveal.
     assert_eq!(class_of("locker.reveal_receipt"), Idempotency::Once);
@@ -226,21 +230,20 @@ fn the_catalogue_is_v0s_nineteen_plus_the_reveal_receipt() {
 /// THE TWO CONFIRMATION GATES, KEPT DISTINCT (census §A0).
 ///
 /// `confirm` on a definition parks a NON-OWNER invocation regardless of risk.
-/// v0 carries it on exactly two of the twenty, and the census's own tally says
-/// three — which is this lane's finding: the third
-/// (`locker.import_secret`/`locker.rogue_probe`) existed only as a test
-/// fixture and was never a product command.
+/// Locker's own catalogue carries it on `locker.export` alone: a permanent
+/// delete is the vault's one `entity.purge` / `entity.empty_trash`, and those
+/// carry the same confirmation and the same risk for EVERY kind, Locker's
+/// included (the Locker lane, L5).
 #[test]
-fn exactly_two_of_v0s_twenty_park_a_non_owner() {
+fn a_permanent_delete_is_confirmed_the_same_for_every_kind() {
     let definitions = centraid_vault::commands::locker::definitions();
     let confirmed: Vec<&str> = definitions
         .iter()
         .filter(|definition| definition.confirm)
         .map(|definition| definition.name)
         .collect();
-    assert_eq!(confirmed, ["locker.purge_item", "locker.export"]);
-    // Risk is SALIENCE ONLY and never an approval trigger: `export` is high
-    // risk and `purge_item` is medium, and neither is what parks them.
+    assert_eq!(confirmed, ["locker.export"]);
+    use centraid_vault::commands::Risk;
     let risk_of = |name: &str| {
         definitions
             .iter()
@@ -248,10 +251,25 @@ fn exactly_two_of_v0s_twenty_park_a_non_owner() {
             .map(|definition| definition.risk)
             .expect("a definition")
     };
-    use centraid_vault::commands::Risk;
+    // Risk is SALIENCE ONLY and never an approval trigger.
     assert_eq!(risk_of("locker.export"), Risk::High);
-    assert_eq!(risk_of("locker.purge_item"), Risk::Medium);
-    assert_eq!(risk_of("locker.trash_item"), Risk::Low);
+
+    let shared = centraid_vault::commands::entity::definitions();
+    for name in ["entity.purge", "entity.empty_trash"] {
+        let definition = shared
+            .iter()
+            .find(|definition| definition.name == name)
+            .expect("a shared delete");
+        assert!(definition.confirm, "{name} is not confirmed");
+        assert_eq!(definition.risk, Risk::Medium, "{name}");
+    }
+    for name in ["entity.trash", "entity.restore", "entity.retitle"] {
+        let definition = shared
+            .iter()
+            .find(|definition| definition.name == name)
+            .expect("a shared verb");
+        assert!(!definition.confirm, "{name} is confirmed and is reversible");
+    }
 }
 
 /// The journal records keyed hashes at the sealed paths, never values (#293) —
@@ -270,7 +288,19 @@ fn every_sealed_input_path_is_declared() {
     let five = ["password", "otp_seed", "card_number", "cvv", "content"];
     assert_eq!(sealed_of("locker.add_item"), five);
     assert_eq!(sealed_of("locker.edit_item"), five);
-    assert_eq!(sealed_of("locker.duplicate_item"), five);
+    // The copy's re-sealed custom fields ride the same command, so their values
+    // are declared too: a nested ciphertext is tokenised like a top-level one.
+    assert_eq!(
+        sealed_of("locker.duplicate_item"),
+        [
+            "password",
+            "otp_seed",
+            "card_number",
+            "cvv",
+            "content",
+            "fields[].value"
+        ]
+    );
     assert_eq!(sealed_of("locker.set_field"), ["value"]);
     assert_eq!(sealed_of("locker.set_passkey"), ["private_key"]);
 }
@@ -460,7 +490,7 @@ fn a_password_write_without_the_rotation_claim_is_refused() {
 
     world.login("item-1", "key-1");
     let before: String = world.one(
-        "SELECT password_set_at FROM locker_item WHERE item_id = ?1",
+        "SELECT password_set_at FROM locker_item WHERE id = ?1",
         &["item-1"],
     );
 
@@ -476,12 +506,16 @@ fn a_password_write_without_the_rotation_claim_is_refused() {
             "item_id": "item-1",
             "username": "ada@example.com",
             "url": "https://bank.example",
-            "password": "«sealed»",
-            "tags": ["rotated"]
+            "password": "«sealed»"
         }),
     );
+    // The retag itself is the vault's verb, and cannot touch the password's age.
+    world.ok(
+        "tag.add",
+        serde_json::json!({ "id": "item-1", "label": "rotated" }),
+    );
     let after: String = world.one(
-        "SELECT password_set_at FROM locker_item WHERE item_id = ?1",
+        "SELECT password_set_at FROM locker_item WHERE id = ?1",
         &["item-1"],
     );
     assert_eq!(before, after, "a retag re-stamped the password's age");
@@ -498,7 +532,7 @@ fn a_password_write_without_the_rotation_claim_is_refused() {
         }),
     );
     let untouched: String = world.one(
-        "SELECT password FROM locker_item WHERE item_id = ?1",
+        "SELECT password FROM locker_item WHERE id = ?1",
         &["item-1"],
     );
     assert_eq!(
@@ -522,7 +556,7 @@ fn a_password_write_without_the_rotation_claim_is_refused() {
     );
     assert_eq!(output["rotated"], serde_json::json!(true));
     let rotated: String = world.one(
-        "SELECT password_set_at FROM locker_item WHERE item_id = ?1",
+        "SELECT password_set_at FROM locker_item WHERE id = ?1",
         &["item-1"],
     );
     assert_ne!(before, rotated, "a real rotation did not re-stamp the age");
@@ -544,7 +578,7 @@ fn a_password_write_without_the_rotation_claim_is_refused() {
 /// command's schema (`the_edit_commands_schema_says_it_replaces`), the
 /// manifest's `edit-item`, the editor's proto comment and the Locker README.
 /// This test holds the behaviour: the clearing, what an omission leaves alone
-/// (title, tags, the compromised flag), and what keeps a secret through a
+/// (title, the compromised flag), and what keeps a secret through a
 /// replace, the placeholder.
 #[test]
 fn an_edit_rewrites_the_types_fields_rather_than_patching_them() {
@@ -552,7 +586,7 @@ fn an_edit_rewrites_the_types_fields_rather_than_patching_them() {
     world.login("item-1", "key-1");
     assert_eq!(
         world.one::<String>(
-            "SELECT username FROM locker_item WHERE item_id = ?1",
+            "SELECT username FROM locker_item WHERE id = ?1",
             &["item-1"]
         ),
         "ada@example.com"
@@ -570,34 +604,36 @@ fn an_edit_rewrites_the_types_fields_rather_than_patching_them() {
     // THE OMITTED COLUMNS ARE CLEARED. This is the contract.
     for column in ["username", "url", "otp_seed", "notes"] {
         let value: Option<String> = world.one(
-            &format!("SELECT {column} FROM locker_item WHERE item_id = ?1"),
+            &format!("SELECT {column} FROM locker_item WHERE id = ?1"),
             &["item-1"],
         );
         assert_eq!(value, None, "{column} survived a rewrite");
     }
     // …and the title, which is NOT a type field, is untouched.
     assert_eq!(
-        world.one::<String>(
-            "SELECT title FROM locker_item WHERE item_id = ?1",
-            &["item-1"]
-        ),
+        world.one::<String>("SELECT title FROM entity WHERE id = ?1", &["item-1"]),
         "The bank"
     );
-    // THE TAGS ARE NOT A TYPE FIELD EITHER: the login's one (`money` once,
-    // the repeat and the blank dropped) came through an edit that did not
-    // name them, and an empty list is how a caller clears them.
+    // THE TAGS ARE NOT A TYPE FIELD EITHER, and not this command's at all:
+    // they are the vault's `tagged` edges, put on and taken off by `tag.*`, so
+    // an edit leaves them alone.
     let tags = |world: &World| {
         world.one::<i64>(
-            "SELECT COUNT(*) FROM core_tag WHERE target_id = ?1",
+            "SELECT COUNT(*) FROM edge WHERE from_id = ?1 AND rel = 'tagged'",
             &["item-1"],
         )
     };
-    assert_eq!(tags(&world), 1, "an edit that named no tags changed them");
+    assert_eq!(tags(&world), 1, "an edit changed the tags");
     world.ok(
         "locker.edit_item",
-        serde_json::json!({ "item_id": "item-1", "password": "«sealed»", "tags": [] }),
+        serde_json::json!({ "item_id": "item-1", "password": "«sealed»" }),
     );
-    assert_eq!(tags(&world), 0, "an empty list did not clear the tags");
+    assert_eq!(tags(&world), 1, "an edit changed the tags");
+    world.ok(
+        "tag.remove",
+        serde_json::json!({ "id": "item-1", "label": "money" }),
+    );
+    assert_eq!(tags(&world), 0, "tag.remove did not clear the tag");
     // A COMPROMISED FLAG THE EDIT DOES NOT STATE IS LEFT ALONE, too.
     world.ok(
         "locker.edit_item",
@@ -609,7 +645,7 @@ fn an_edit_rewrites_the_types_fields_rather_than_patching_them() {
     );
     assert_eq!(
         world.one::<i64>(
-            "SELECT compromised FROM locker_item WHERE item_id = ?1",
+            "SELECT compromised FROM locker_item WHERE id = ?1",
             &["item-1"]
         ),
         1,
@@ -629,7 +665,7 @@ fn an_edit_rewrites_the_types_fields_rather_than_patching_them() {
     );
     assert_eq!(
         world.one::<String>(
-            "SELECT username FROM locker_item WHERE item_id = ?1",
+            "SELECT username FROM locker_item WHERE id = ?1",
             &["item-1"]
         ),
         "ada@example.com"
@@ -637,7 +673,7 @@ fn an_edit_rewrites_the_types_fields_rather_than_patching_them() {
     // The placeholder left the secret alone.
     assert_eq!(
         world.one::<String>(
-            "SELECT password FROM locker_item WHERE item_id = ?1",
+            "SELECT password FROM locker_item WHERE id = ?1",
             &["item-1"]
         ),
         ciphertext("rotated")
@@ -682,7 +718,7 @@ fn the_member_flags_a_compromised_item_and_a_rotation_clears_it() {
     world.login("item-1", "key-1");
     let flagged = |world: &World| {
         world.one::<i64>(
-            "SELECT compromised FROM locker_item WHERE item_id = ?1",
+            "SELECT compromised FROM locker_item WHERE id = ?1",
             &["item-1"],
         )
     };
@@ -755,23 +791,14 @@ fn trash_is_reversible_and_a_lapsed_window_is_not() {
     let world = World::new("locker-trash", "key-1");
     world.login("item-1", "key-1");
 
-    world.ok(
-        "locker.trash_item",
-        serde_json::json!({ "item_id": "item-1" }),
-    );
-    let purge_at: String = world.one(
-        "SELECT purge_at FROM locker_item WHERE item_id = ?1",
-        &["item-1"],
-    );
+    world.ok("entity.trash", serde_json::json!({ "id": "item-1" }));
+    let purge_at: String = world.one("SELECT purge_at FROM entity WHERE id = ?1", &["item-1"]);
     assert!(purge_at > world.scratch.clock.now_text());
 
-    world.ok(
-        "locker.restore_item",
-        serde_json::json!({ "item_id": "item-1" }),
-    );
+    world.ok("entity.restore", serde_json::json!({ "id": "item-1" }));
     assert_eq!(
         world.one::<i64>(
-            "SELECT COUNT(*) FROM locker_item WHERE item_id = ?1 AND deleted_at IS NULL",
+            "SELECT COUNT(*) FROM entity WHERE id = ?1 AND deleted_at IS NULL",
             &["item-1"]
         ),
         1
@@ -779,61 +806,72 @@ fn trash_is_reversible_and_a_lapsed_window_is_not() {
 
     // A RESTORE PAST THE WINDOW RESURRECTS WHAT THE MEMBER WAS TOLD HAD BEEN
     // DELETED (#916, review 1.5).
-    world.ok(
-        "locker.trash_item",
-        serde_json::json!({ "item_id": "item-1" }),
-    );
+    world.ok("entity.trash", serde_json::json!({ "id": "item-1" }));
     world.scratch.clock.advance_ms(31 * 86_400_000);
-    let reason = world.refused(
-        "locker.restore_item",
-        serde_json::json!({ "item_id": "item-1" }),
-    );
-    assert!(reason.contains("30 days have run out"), "{reason}");
+    let reason = world.refused("entity.restore", serde_json::json!({ "id": "item-1" }));
+    assert!(reason.contains("past its grace window"), "{reason}");
 }
 
+/// ARCHIVE IS A FLAG, NOT A TRASH, AND TRASH WINS OVER IT — as for every kind
+/// (the Locker lane, L5). The schema no longer makes archived-and-trashed
+/// unrepresentable: a trashed item may be archived and a restore returns an
+/// archived item to the archive.
 #[test]
-fn archive_is_not_trash_and_carries_no_purge_date() {
+fn archive_is_not_trash_and_trash_wins_over_it() {
     let world = World::new("locker-archive", "key-1");
     world.login("item-1", "key-1");
     world.ok(
-        "locker.archive_item",
-        serde_json::json!({ "item_id": "item-1" }),
+        "flag.set",
+        serde_json::json!({ "id": "item-1", "flag": "archived" }),
     );
-    let purge_at: Option<String> = world.one(
-        "SELECT purge_at FROM locker_item WHERE item_id = ?1",
-        &["item-1"],
-    );
+    let purge_at: Option<String> =
+        world.one("SELECT purge_at FROM entity WHERE id = ?1", &["item-1"]);
     assert_eq!(purge_at, None, "archive set a purge date");
-    assert_eq!(
+    let archived = |world: &World| {
         world.one::<i64>(
-            "SELECT COUNT(*) FROM locker_item
-              WHERE item_id = ?1 AND archived_at IS NOT NULL AND deleted_at IS NULL",
-            &["item-1"]
+            "SELECT COUNT(*) FROM edge
+              WHERE from_id = ?1 AND rel = 'tagged' AND to_id = 'flag:archived'",
+            &["item-1"],
+        )
+    };
+    assert_eq!(archived(&world), 1);
+
+    // TRASH WINS: an archived item can be trashed, and it counts as trashed.
+    world.ok("entity.trash", serde_json::json!({ "id": "item-1" }));
+    let counts = world.ok("locker.counts", serde_json::json!({}));
+    assert_eq!(
+        (
+            counts["live"].as_i64(),
+            counts["archived"].as_i64(),
+            counts["trashed"].as_i64()
         ),
-        1
+        (Some(0), Some(0), Some(1)),
+        "a trashed, archived item is trashed and nothing else"
     );
+    // …and RESTORE RETURNS IT TO THE ARCHIVE.
+    world.ok("entity.restore", serde_json::json!({ "id": "item-1" }));
+    assert_eq!(archived(&world), 1, "a restore lost the archive");
+    let counts = world.ok("locker.counts", serde_json::json!({}));
+    assert_eq!(counts["archived"].as_i64(), Some(1));
+
     world.ok(
-        "locker.unarchive_item",
-        serde_json::json!({ "item_id": "item-1" }),
+        "flag.clear",
+        serde_json::json!({ "id": "item-1", "flag": "archived" }),
     );
-    let archived_at: Option<String> = world.one(
-        "SELECT archived_at FROM locker_item WHERE item_id = ?1",
-        &["item-1"],
-    );
-    assert_eq!(archived_at, None);
+    assert_eq!(archived(&world), 0);
 }
 
 /// A PURGE TAKES THE SIDECARS, THE TAGS AND THE MEMO WITH IT, explicitly —
 /// because a cascade fires no `AFTER DELETE` trigger unless
 /// `recursive_triggers` is on, and an offline phone would keep rows whose item
-/// is gone.
+/// is gone. It is the vault's `entity.purge`, which asks for the trash first.
 #[test]
 fn a_purge_deletes_every_sidecar_in_the_same_transaction() {
     let world = World::new("locker-purge", "key-1");
     world.login("item-1", "key-1");
     world.ok(
-        "locker.star_item",
-        serde_json::json!({ "item_id": "item-1" }),
+        "flag.set",
+        serde_json::json!({ "id": "item-1", "flag": "starred" }),
     );
     world.ok(
         "locker.set_memo",
@@ -864,17 +902,29 @@ fn a_purge_deletes_every_sidecar_in_the_same_transaction() {
             "key_id": "key-1"
         }),
     );
-
     world.ok(
-        "locker.purge_item",
-        serde_json::json!({ "item_id": "item-1" }),
+        "locker.reveal_receipt",
+        serde_json::json!({
+            "object_type": "locker.item",
+            "item_id": "item-1",
+            "columns": ["password"],
+            "kind": "reveal"
+        }),
     );
+
+    // Not from the live shelf: the trash comes first, as for every kind.
+    let reason = world.refused("entity.purge", serde_json::json!({ "id": "item-1" }));
+    assert!(reason.contains("is not in the trash"), "{reason}");
+    world.ok("entity.trash", serde_json::json!({ "id": "item-1" }));
+    world.ok("entity.purge", serde_json::json!({ "id": "item-1" }));
     for (table, column) in [
-        ("locker_item", "item_id"),
+        ("entity", "id"),
+        ("locker_item", "id"),
         ("locker_item_field", "item_id"),
         ("locker_item_address", "item_id"),
         ("locker_item_passkey", "item_id"),
         ("locker_item_alias", "item_id"),
+        ("edge", "from_id"),
     ] {
         assert_eq!(
             world.one::<i64>(
@@ -885,75 +935,76 @@ fn a_purge_deletes_every_sidecar_in_the_same_transaction() {
             "{table} kept a row whose item is gone"
         );
     }
+    // The receipts stay: they are evidence, and name the item by value.
     assert_eq!(
         world.one::<i64>(
-            "SELECT COUNT(*) FROM core_tag WHERE target_id = ?1",
+            "SELECT COUNT(*) FROM receipt WHERE item_id = ?1",
             &["item-1"]
         ),
-        0,
-        "core_tag is polymorphic and no CASCADE reaches it"
-    );
-    assert_eq!(
-        world.one::<i64>(
-            "SELECT COUNT(*) FROM knowledge_annotation WHERE target_id = ?1",
-            &["item-1"]
-        ),
-        0
+        1,
+        "a purge erased the evidence of a reveal"
     );
 }
 
-/// A STAR IS A TAG AND A LOCKER TAG IS LOCKER'S OWN (#274, #310).
+/// A STAR IS A FLAG AND A LABEL IS A VAULT TAG (#1135, the Locker lane): a
+/// Locker item is an entity, so the shared verbs tag and star it, and the same
+/// words reach the vault's own tag rail. Nothing of its secrets rides along.
 #[test]
-fn a_star_is_a_flags_tag_and_a_label_is_a_locker_tag() {
+fn a_star_is_a_flag_and_a_label_is_a_vault_tag() {
     let world = World::new("locker-tags", "key-1");
     world.login("item-1", "key-1");
-    world.ok(
-        "locker.star_item",
-        serde_json::json!({ "item_id": "item-1" }),
-    );
-
-    let flags: i64 = world.one(
-        "SELECT COUNT(*) FROM core_tag t
-           JOIN core_concept c ON c.concept_id = t.concept_id
-           JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
-          WHERE t.target_id = ?1 AND s.uri = 'https://centraid.dev/schemes/flags'",
-        &["item-1"],
-    );
-    assert_eq!(flags, 1);
-    // Locker's own scheme, not the shared `centraid:tags:v1` one: labels are
-    // as private as the item, and they never appear in another app's rail.
-    let locker: i64 = world.one(
-        "SELECT COUNT(*) FROM core_tag t
-           JOIN core_concept c ON c.concept_id = t.concept_id
-           JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
-          WHERE t.target_id = ?1 AND s.uri = 'https://centraid.dev/schemes/locker-tags'",
-        &["item-1"],
-    );
-    // "money" twice and a blank one: deduplicated and trimmed away.
-    assert_eq!(locker, 1);
-    assert_eq!(
+    let starred = |world: &World| {
         world.one::<i64>(
-            "SELECT COUNT(*) FROM core_concept_scheme WHERE uri = 'centraid:tags:v1'",
-            &[]
-        ),
-        0,
-        "a Locker tag reached the shared tags scheme"
-    );
-
-    // Unstarring removes the flag and leaves the label.
+            "SELECT COUNT(*) FROM edge
+              WHERE from_id = ?1 AND rel = 'tagged' AND to_id = 'flag:starred'",
+            &["item-1"],
+        )
+    };
+    assert_eq!(starred(&world), 0);
     world.ok(
-        "locker.unstar_item",
-        serde_json::json!({ "item_id": "item-1" }),
+        "flag.set",
+        serde_json::json!({ "id": "item-1", "flag": "starred" }),
+    );
+    assert_eq!(starred(&world), 1);
+    // The word `money` is a vault tag, one concept however it is spelt.
+    world.ok(
+        "tag.add",
+        serde_json::json!({ "id": "item-1", "label": "  MONEY " }),
+    );
+    assert_eq!(
+        world.one::<i64>("SELECT COUNT(*) FROM entity WHERE kind = 'tag'", &[]),
+        1,
+        "the tag is the vault's, one concept"
     );
     assert_eq!(
         world.one::<i64>(
-            "SELECT COUNT(*) FROM core_tag t
-               JOIN core_concept c ON c.concept_id = t.concept_id
-               JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
-              WHERE t.target_id = ?1 AND s.uri = 'https://centraid.dev/schemes/flags'",
+            "SELECT COUNT(*) FROM edge WHERE from_id = ?1 AND to_id = 'tag:money'",
             &["item-1"]
         ),
-        0
+        1
+    );
+
+    // Unstarring clears the edge and leaves the tag.
+    world.ok(
+        "flag.clear",
+        serde_json::json!({ "id": "item-1", "flag": "starred" }),
+    );
+    assert_eq!(starred(&world), 0);
+    assert_eq!(
+        world.one::<i64>(
+            "SELECT COUNT(*) FROM edge WHERE from_id = ?1 AND rel = 'tagged'",
+            &["item-1"]
+        ),
+        1
+    );
+    // A retitle is the shared verb too.
+    world.ok(
+        "entity.retitle",
+        serde_json::json!({ "id": "item-1", "title": "Joint account" }),
+    );
+    assert_eq!(
+        world.one::<String>("SELECT title FROM entity WHERE id = ?1", &["item-1"]),
+        "Joint account"
     );
 }
 
@@ -1012,8 +1063,8 @@ fn a_duplicate_takes_the_re_sealed_cells_and_leaves_the_alias_behind() {
         serde_json::json!({ "item_id": "item-1", "alias": "bank" }),
     );
     world.ok(
-        "locker.star_item",
-        serde_json::json!({ "item_id": "item-1" }),
+        "flag.set",
+        serde_json::json!({ "id": "item-1", "flag": "starred" }),
     );
     world.ok(
         "locker.set_addresses",
@@ -1036,7 +1087,7 @@ fn a_duplicate_takes_the_re_sealed_cells_and_leaves_the_alias_behind() {
     // The COPY's ciphertext is the caller's, sealed against the new row.
     assert_eq!(
         world.one::<String>(
-            "SELECT password FROM locker_item WHERE item_id = ?1",
+            "SELECT password FROM locker_item WHERE id = ?1",
             &["item-copy"]
         ),
         ciphertext("item-copy")
@@ -1053,10 +1104,7 @@ fn a_duplicate_takes_the_re_sealed_cells_and_leaves_the_alias_behind() {
     // Nor the star.
     assert_eq!(
         world.one::<i64>(
-            "SELECT COUNT(*) FROM core_tag t
-               JOIN core_concept c ON c.concept_id = t.concept_id
-               JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
-              WHERE t.target_id = ?1 AND s.uri = 'https://centraid.dev/schemes/flags'",
+            "SELECT COUNT(*) FROM edge WHERE from_id = ?1 AND to_id = 'flag:starred'",
             &["item-copy"]
         ),
         0
@@ -1071,7 +1119,7 @@ fn a_duplicate_takes_the_re_sealed_cells_and_leaves_the_alias_behind() {
     );
     assert_eq!(
         world.one::<i64>(
-            "SELECT COUNT(*) FROM core_tag WHERE target_id = ?1",
+            "SELECT COUNT(*) FROM edge WHERE from_id = ?1 AND to_id = 'tag:money'",
             &["item-copy"]
         ),
         1
@@ -1189,23 +1237,25 @@ fn a_reveal_receipt_names_a_sealed_column_and_lands_where_the_history_reads() {
             "kind": "reveal"
         }),
     );
-    let (object_type, object_id, kind): (String, String, String) = world
+    let (item, act, journal): (String, String, String) = world
         .scratch
         .vault
         .read(|connection| {
             Ok(connection.query_row(
-                "SELECT object_type, object_id,
-                        json_extract(detail_json, '$.context.kind')
-                   FROM access_receipt WHERE action = 'reveal locker.item'
-                  ORDER BY seq DESC LIMIT 1",
+                "SELECT r.item_id, r.act, j.command
+                   FROM receipt r JOIN journal j ON j.seq = r.journal_seq
+                  ORDER BY r.seq DESC LIMIT 1",
                 [],
                 |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
             )?)
         })
         .expect("the receipt is there");
-    assert_eq!(object_type, "locker.item");
-    assert_eq!(object_id, "item-1");
-    assert_eq!(kind, "reveal");
+    assert_eq!(item, "item-1");
+    assert_eq!(act, "reveal password", "the verb, then the cells it opened");
+    assert_eq!(
+        journal, "locker.reveal_receipt",
+        "the receipt names the journal row that explains it"
+    );
 
     // A RECEIPT THAT NAMES A PLAIN COLUMN IS A LIE about what was revealed.
     let reason = world.refused(
@@ -1252,8 +1302,7 @@ fn a_reveal_receipt_names_a_sealed_column_and_lands_where_the_history_reads() {
     );
     assert_eq!(
         world.one::<i64>(
-            "SELECT COUNT(*) FROM access_receipt
-              WHERE object_type = 'locker.auth' AND object_id IS NULL",
+            "SELECT COUNT(*) FROM receipt WHERE act = 'unlock' AND item_id IS NULL",
             &[]
         ),
         1
@@ -1274,13 +1323,10 @@ fn the_counts_are_exact_and_partitioned() {
         serde_json::json!({ "item_id": "item-3", "type": "note", "title": "Another" }),
     );
     world.ok(
-        "locker.archive_item",
-        serde_json::json!({ "item_id": "item-2" }),
+        "flag.set",
+        serde_json::json!({ "id": "item-2", "flag": "archived" }),
     );
-    world.ok(
-        "locker.trash_item",
-        serde_json::json!({ "item_id": "item-3" }),
-    );
+    world.ok("entity.trash", serde_json::json!({ "id": "item-3" }));
 
     let counts = world.ok("locker.counts", serde_json::json!({}));
     assert_eq!(counts["live"], serde_json::json!(1));
@@ -1327,12 +1373,11 @@ fn an_export_is_confirmed_receipted_and_carries_no_plaintext() {
     assert!(output.get("unseals_on").is_none());
 
     // And the one receipt a mass reveal owes.
-    let columns: String = world.one(
-        "SELECT json_extract(detail_json, '$.context.derivation') FROM access_receipt
-          WHERE action = 'reveal locker.export' ORDER BY seq DESC LIMIT 1",
+    let act: String = world.one(
+        "SELECT act FROM receipt WHERE item_id IS NULL ORDER BY seq DESC LIMIT 1",
         &[],
     );
-    assert_eq!(columns, "export");
+    assert_eq!(act, "export");
 }
 
 /// THE TOTP DOOR IS A RECEIPT DOOR NOW, and its precondition is a PRESENCE
@@ -1384,22 +1429,11 @@ fn a_field_reveal_receipt_names_the_field_and_what_the_value_was_for() {
             "kind": "reveal"
         }),
     );
-    let (field, used): (String, String) = world
-        .scratch
-        .vault
-        .read(|connection| {
-            Ok(connection.query_row(
-                "SELECT json_extract(detail_json, '$.field_id'),
-                        json_extract(detail_json, '$.context.use')
-                   FROM access_receipt WHERE action = 'reveal locker.item'
-                  ORDER BY seq DESC LIMIT 1",
-                [],
-                |row| Ok((row.get(0)?, row.get(1)?)),
-            )?)
-        })
-        .expect("the receipt is there");
-    assert_eq!(field, "field-1");
-    assert_eq!(used, "copy");
+    let act: String = world.one("SELECT act FROM receipt ORDER BY seq DESC LIMIT 1", &[]);
+    assert_eq!(
+        act, "copy value_sealed field-1",
+        "a copy, of the field's one sealed cell"
+    );
 
     // A FIELD RECEIPT THAT NAMES AN ITEM CELL is a lie about what opened.
     let reason = world.refused(
@@ -1437,12 +1471,8 @@ fn a_field_reveal_receipt_names_the_field_and_what_the_value_was_for() {
         "locker.totp_code",
         serde_json::json!({ "item_id": "item-1", "use": "copy" }),
     );
-    let used: String = world.one(
-        "SELECT json_extract(detail_json, '$.context.use') FROM access_receipt
-          WHERE action = 'reveal locker.totp_code' ORDER BY seq DESC LIMIT 1",
-        &[],
-    );
-    assert_eq!(used, "copy");
+    let act: String = world.one("SELECT act FROM receipt ORDER BY seq DESC LIMIT 1", &[]);
+    assert_eq!(act, "code_copy otp_seed");
 }
 
 /// THE SEALED-FIELD DOOR (#1047 T2): a live item's sealed field, with the
@@ -1498,10 +1528,7 @@ fn the_sealed_field_door_answers_a_live_items_sealed_field_only() {
             .is_none(),
         "another item's field answered"
     );
-    world.ok(
-        "locker.trash_item",
-        serde_json::json!({ "item_id": "item-1" }),
-    );
+    world.ok("entity.trash", serde_json::json!({ "id": "item-1" }));
     assert!(
         vault
             .locker_sealed_field_cell("item-1", "field-1")
@@ -1564,4 +1591,362 @@ fn a_passkey_renamed_with_the_placeholder_keeps_its_key_and_generation() {
         ),
         "key-1"
     );
+}
+
+// ---------------------------------------------------------------------------
+// The assistant has the owner's access to Locker, but for a sealed value (the owner's ruling of
+// 2026-10-22, #1135).
+// ---------------------------------------------------------------------------
+
+impl World {
+    fn run_as_assistant(
+        &self,
+        name: &str,
+        input: serde_json::Value,
+    ) -> centraid_vault::CommandOutcome {
+        self.scratch
+            .vault
+            .execute(
+                &self.registry,
+                &Principal::assistant("device-1"),
+                &Command::new(name, input),
+            )
+            .expect("the command plane answers")
+    }
+
+    /// The assistant is refused `name`: failed under the secret predicate, with a sentence that
+    /// says it is a secret and carries no title and no ciphertext, and the journal gains no
+    /// executed command.
+    fn assert_secret_refused(&self, name: &str, input: serde_json::Value) {
+        let before: i64 = self.one(
+            "SELECT COUNT(*) FROM journal WHERE outcome = 'executed'",
+            &[],
+        );
+        let outcome = self.run_as_assistant(name, input);
+        assert_eq!(
+            outcome.status,
+            CommandStatus::Failed,
+            "{name} reached a secret"
+        );
+        assert_eq!(
+            outcome.predicate.as_deref(),
+            Some(centraid_vault::commands::ASSISTANT_CLOSED_OUT),
+            "{name}: {:?}",
+            outcome.reason
+        );
+        let said = outcome.reason.unwrap_or_default();
+        assert!(
+            said.contains("secret") && said.contains("Locker"),
+            "the sentence names a secret and where the member opens it: {said}"
+        );
+        assert!(
+            !said.contains("The bank") && !said.contains("lk1:"),
+            "{said}"
+        );
+        assert_eq!(
+            before,
+            self.one::<i64>(
+                "SELECT COUNT(*) FROM journal WHERE outcome = 'executed'",
+                &[]
+            ),
+            "{name} wrote"
+        );
+    }
+
+    fn assert_assistant_runs(&self, name: &str, input: serde_json::Value) {
+        let outcome = self.run_as_assistant(name, input);
+        assert_eq!(
+            outcome.status,
+            CommandStatus::Executed,
+            "{name}: {:?}",
+            outcome.reason
+        );
+    }
+}
+
+/// A Locker item is an entity, so the shared verbs run on it for the assistant as they do for the
+/// member: retitle, tag, flag, link, trash, restore and purge.
+#[test]
+fn the_assistant_runs_the_shared_verbs_on_a_locker_item() {
+    let world = World::new("locker-assistant", "key-1");
+    world.login("item-1", "key-1");
+    let note = world.ok(
+        "note.create",
+        serde_json::json!({ "title": "A note", "body": "" }),
+    )["id"]
+        .as_str()
+        .expect("a note id")
+        .to_owned();
+
+    world.assert_assistant_runs(
+        "entity.retitle",
+        serde_json::json!({ "id": "item-1", "title": "The savings bank" }),
+    );
+    world.assert_assistant_runs(
+        "tag.add",
+        serde_json::json!({ "id": "item-1", "label": "spy" }),
+    );
+    world.assert_assistant_runs(
+        "tag.remove",
+        serde_json::json!({ "id": "item-1", "label": "money" }),
+    );
+    world.assert_assistant_runs(
+        "flag.set",
+        serde_json::json!({ "id": "item-1", "flag": "starred" }),
+    );
+    world.assert_assistant_runs(
+        "flag.clear",
+        serde_json::json!({ "id": "item-1", "flag": "starred" }),
+    );
+    world.assert_assistant_runs(
+        "edge.add",
+        serde_json::json!({ "from": note, "rel": "links", "to": "item-1" }),
+    );
+    world.assert_assistant_runs(
+        "edge.remove",
+        serde_json::json!({ "from": note, "rel": "links", "to": "item-1" }),
+    );
+    world.assert_assistant_runs("locker.counts", serde_json::json!({}));
+    // Plain edits through Locker's own commands: the memo, and an edit that keeps every secret
+    // (the placeholder means "leave it alone").
+    world.assert_assistant_runs(
+        "locker.set_memo",
+        serde_json::json!({ "item_id": "item-1", "note": "the joint account" }),
+    );
+    world.assert_assistant_runs(
+        "locker.edit_item",
+        serde_json::json!({
+            "item_id": "item-1", "title": "Bank", "username": "ada@new.example",
+            "url": "https://bank.example", "password": "«sealed»"
+        }),
+    );
+    assert_eq!(
+        world.one::<String>("SELECT password FROM locker_item WHERE id = 'item-1'", &[]),
+        ciphertext("item-1"),
+        "an edit that kept the placeholder left the sealed cell alone"
+    );
+    assert_eq!(
+        world.one::<String>("SELECT username FROM locker_item WHERE id = 'item-1'", &[]),
+        "ada@new.example"
+    );
+    // A plain item is filed by the assistant; a secret is not.
+    world.assert_assistant_runs(
+        "locker.add_item",
+        serde_json::json!({ "item_id": "item-2", "type": "login", "title": "Forum", "username": "ada" }),
+    );
+
+    // The trash: trash, restore and purge, then the assistant's empty-trash takes Locker's rows
+    // with every other kind's.
+    world.assert_assistant_runs("entity.trash", serde_json::json!({ "id": "item-1" }));
+    world.assert_assistant_runs("entity.restore", serde_json::json!({ "id": "item-1" }));
+    world.assert_assistant_runs("entity.trash", serde_json::json!({ "id": "item-1" }));
+    world.assert_assistant_runs("entity.trash", serde_json::json!({ "id": note }));
+    world.assert_assistant_runs("entity.empty_trash", serde_json::json!({}));
+    assert_eq!(
+        world.one::<i64>("SELECT COUNT(*) FROM entity WHERE id = 'item-1'", &[]),
+        0,
+        "the assistant's empty-trash takes Locker's trash like every kind's"
+    );
+}
+
+/// WHAT THE ASSISTANT CANNOT RUN is a command that reveals or writes a sealed value: the refusal
+/// is about the secret, whichever item and whichever verb carries it.
+#[test]
+fn every_secret_touching_command_is_refused_under_the_assistants_principal() {
+    let world = World::new("locker-assistant-secrets", "key-1");
+    world.login("item-1", "key-1");
+    world.ok(
+        "locker.set_field",
+        serde_json::json!({
+            "item_id": "item-1", "field_id": "field-1", "label": "PIN", "kind": "sealed",
+            "value": ciphertext("pin"), "key_id": "key-1"
+        }),
+    );
+    let cells_before = world.one::<String>(
+        "SELECT password || '|' || key_id FROM locker_item WHERE id = 'item-1'",
+        &[],
+    );
+    let new_cipher = ciphertext("a new password");
+    for (name, input) in [
+        // They reveal.
+        (
+            "locker.totp_code",
+            serde_json::json!({ "item_id": "item-1" }),
+        ),
+        ("locker.export", serde_json::json!({ "confirm": true })),
+        (
+            "locker.reveal_receipt",
+            serde_json::json!({
+                "object_type": "locker.item", "item_id": "item-1", "columns": ["password"]
+            }),
+        ),
+        // They set a sealed cell, a sealed custom field or a passkey key.
+        (
+            "locker.edit_item",
+            serde_json::json!({ "item_id": "item-1", "password": new_cipher, "key_id": "key-1" }),
+        ),
+        (
+            "locker.edit_item",
+            serde_json::json!({ "item_id": "item-1", "password": "" }),
+        ),
+        (
+            "locker.add_item",
+            serde_json::json!({
+                "item_id": "item-9", "type": "login", "title": "New", "password": new_cipher,
+                "key_id": "key-1"
+            }),
+        ),
+        (
+            "locker.set_field",
+            serde_json::json!({
+                "item_id": "item-1", "field_id": "field-1", "label": "PIN", "kind": "sealed",
+                "value": new_cipher, "key_id": "key-1"
+            }),
+        ),
+        // A plain value over a sealed one would erase the secret.
+        (
+            "locker.set_field",
+            serde_json::json!({
+                "item_id": "item-1", "field_id": "field-1", "label": "PIN", "kind": "text",
+                "value": "1234"
+            }),
+        ),
+        (
+            "locker.set_passkey",
+            serde_json::json!({
+                "item_id": "item-1", "rp_id": "bank.example", "user_handle": "ada",
+                "display_name": "Ada", "credential_id": "cred-1", "algorithm": "ES256",
+                "private_key": new_cipher
+            }),
+        ),
+        // They copy or destroy one.
+        (
+            "locker.duplicate_item",
+            serde_json::json!({ "item_id": "item-1", "new_item_id": "item-8" }),
+        ),
+        (
+            "locker.remove_field",
+            serde_json::json!({ "item_id": "item-1", "field_id": "field-1" }),
+        ),
+        (
+            "locker.clear_passkey",
+            serde_json::json!({ "item_id": "item-1" }),
+        ),
+    ] {
+        world.assert_secret_refused(name, input);
+    }
+    // An edit that leaves a held secret out would clear it: refused as a write of that cell.
+    world.assert_secret_refused(
+        "locker.edit_item",
+        serde_json::json!({ "item_id": "item-1", "title": "x", "username": "ada" }),
+    );
+    // Nothing moved: the sealed cell is the ciphertext it was, and the item is as it was.
+    assert_eq!(
+        world.one::<String>(
+            "SELECT password || '|' || key_id FROM locker_item WHERE id = 'item-1'",
+            &[]
+        ),
+        cells_before
+    );
+    assert_eq!(
+        world.one::<i64>("SELECT COUNT(*) FROM entity WHERE id = 'item-1' AND title = 'The bank' AND deleted_at IS NULL", &[]),
+        1
+    );
+    assert_eq!(
+        world.one::<i64>(
+            "SELECT COUNT(*) FROM entity WHERE id IN ('item-8', 'item-9')",
+            &[]
+        ),
+        0
+    );
+    assert_eq!(
+        world.one::<String>(
+            "SELECT value_sealed FROM locker_item_field WHERE field_id = 'field-1'",
+            &[]
+        ),
+        ciphertext("pin")
+    );
+    // A plain custom field is the assistant's to write.
+    world.assert_assistant_runs(
+        "locker.set_field",
+        serde_json::json!({
+            "item_id": "item-1", "field_id": "field-2", "label": "Branch", "kind": "text",
+            "value": "Main street"
+        }),
+    );
+    // The member's own door is untouched by any of it.
+    world.ok("locker.counts", serde_json::json!({}));
+}
+
+/// A NOTE'S `[[title]]` NAMES A LOCKER ITEM (#1135), for the assistant as for the member: its
+/// title is a plain field, and the link is an edge.
+#[test]
+fn a_wikilink_resolves_a_locker_item_for_the_member_and_for_the_assistant() {
+    let world = World::new("locker-wikilink", "key-1");
+    world.login("item-1", "key-1");
+    let linked = |note: &str| -> i64 {
+        world.one(
+            "SELECT COUNT(*) FROM edge WHERE from_id = ?1 AND rel = 'links' AND to_id = 'item-1'",
+            &[note],
+        )
+    };
+    let owner = world.ok(
+        "note.create",
+        serde_json::json!({ "title": "Mine", "body": "see [[The bank]]" }),
+    )["id"]
+        .as_str()
+        .expect("a note id")
+        .to_owned();
+    assert_eq!(linked(&owner), 1);
+    let outcome = world.run_as_assistant(
+        "note.create",
+        serde_json::json!({ "title": "Its", "body": "see [[The bank]]" }),
+    );
+    assert_eq!(
+        outcome.status,
+        CommandStatus::Executed,
+        "{:?}",
+        outcome.reason
+    );
+    let its = outcome.output["id"].as_str().expect("a note id").to_owned();
+    assert_eq!(
+        linked(&its),
+        1,
+        "the assistant's compile resolves the title"
+    );
+}
+
+/// A RE-SEALED CUSTOM FIELD IN A DUPLICATE IS TOKENISED IN THE JOURNAL like a
+/// top-level cell: the nested `fields[].value` path is declared.
+#[test]
+fn a_duplicates_nested_field_ciphertext_never_lands_in_the_journal() {
+    let world = World::new("locker-duplicate-journal", "key-1");
+    world.login("item-1", "key-1");
+    let sealed = ciphertext("copied-field");
+    world.ok(
+        "locker.duplicate_item",
+        serde_json::json!({
+            "item_id": "item-1",
+            "new_item_id": "item-copy",
+            "password": ciphertext("item-copy"),
+            "key_id": "key-1",
+            "fields": [{
+                "field_id": "copied-field",
+                "section": "",
+                "label": "Recovery code",
+                "kind": "sealed",
+                "value": sealed
+            }]
+        }),
+    );
+    let journal: String = world.one(
+        "SELECT input FROM journal WHERE command = 'locker.duplicate_item'",
+        &[],
+    );
+    assert!(
+        !journal.contains(&sealed),
+        "the nested ciphertext is in the journal"
+    );
+    assert!(!journal.contains(&ciphertext("item-copy")), "{journal}");
+    assert!(journal.contains("sealed:blake3:"), "{journal}");
 }

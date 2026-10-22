@@ -5,10 +5,8 @@ import dev.centraid.core.CentraidCore
 import dev.centraid.design.copy.HealthCopy
 import dev.centraid.shared.platform.DeviceClock
 import dev.centraid.shared.platform.platformServices
-import dev.centraid.shared.sync.phone.GoneChoice
 import dev.centraid.shared.sync.phone.OriginGone
 import dev.centraid.shared.sync.phone.PhoneFollowPass
-import dev.centraid.shared.sync.phone.PhoneFollowReads
 import dev.centraid.shared.sync.phone.PhoneFollowSource
 import dev.centraid.shared.sync.phone.PhoneSource
 
@@ -114,7 +112,13 @@ public interface HealthReader {
     public fun read(window: HealthWindow, deliver: (HealthRead?) -> Unit)
 }
 
-/** THE HEALTH STORE → HEALTH, FOLLOWED (#1129): the shell hands this to the follower with its [reader]. */
+/**
+ * THE HEALTH STORE → HEALTH, FOLLOWED (#1129, #1135): the shell hands this to the follower with its
+ * [reader]. A pass sends the store's days and workouts to the vault, which merges them
+ * ([HealthImport.run]); nothing is held for a question, because the vault decides what a workout
+ * gone from a complete read does (it keeps the row and forgets the source, R-1129-14), and a store
+ * that left the phone sends nothing. Deleting a workout is the member's own, from Health.
+ */
 public class HealthFollow(
     private val reader: HealthReader,
     private val clock: DeviceClock = platformServices().clock,
@@ -122,12 +126,10 @@ public class HealthFollow(
     override val source: PhoneSource = PhoneSource.HEALTH
 
     override fun bind(core: CentraidCore): PhoneFollowPass = object : PhoneFollowPass {
-        override suspend fun imported(): Boolean? = PhoneFollowReads.imported(core, PhoneSource.HEALTH)
+        override suspend fun imported(): Boolean? = HealthImport.connected(core)
 
-        override suspend fun run(): List<OriginGone>? = HealthImport.pass(core, reader, clock)?.gone
+        override suspend fun run(): List<OriginGone>? = HealthImport.pass(core, reader, clock)?.let { emptyList() }
 
-        override suspend fun resolve(gone: OriginGone, keep: Boolean) {
-            HealthImport.resolveGone(core, gone.originId, if (keep) GoneChoice.KEEP else GoneChoice.TRASH, gone.seenBefore.ifEmpty { null })
-        }
+        override suspend fun resolve(gone: OriginGone, keep: Boolean) = Unit
     }
 }

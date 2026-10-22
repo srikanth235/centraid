@@ -147,9 +147,9 @@ class AgendaEventSpec : StringSpec({
         val sent = drive(landed, rsvp("accepted"))
         sent.effects shouldBe listOf(
             ScreenEffect.SubmitWrite(
-                command = "schedule.respond_rsvp",
-                inputJson = """{"event_id":"e1","party_id":"p-me","partstat":"accepted"}""",
-                invokeKey = "schedule.respond_rsvp:e1:p-me:accepted",
+                command = "event.respond",
+                inputJson = """{"id":"e1","person_id":"p-me","state":"accepted"}""",
+                invokeKey = "event.respond:e1:p-me:accepted",
             ),
         )
         val data = sent.state.screen.data_.shouldNotBeNull()
@@ -164,7 +164,7 @@ class AgendaEventSpec : StringSpec({
 
         val refused = drive(
             sent.state,
-            AgendaEventReads().settled(CommandStatus.COMMAND_STATUS_FAILED, "That event is cancelled.", "schedule.respond_rsvp:e1:p-me:accepted"),
+            AgendaEventReads().settled(CommandStatus.COMMAND_STATUS_FAILED, "That event is cancelled.", "event.respond:e1:p-me:accepted"),
         ).state
         refused.sentPartstat.shouldBeNull()
         refused.screen.write.shouldNotBeNull().phase shouldBe WriteState.Phase.PHASE_REFUSED
@@ -172,10 +172,10 @@ class AgendaEventSpec : StringSpec({
         refused.screen.data_.shouldNotBeNull().rsvp.shouldNotBeNull().choices.none { it.selected } shouldBe true
 
         // COMMITTED: the optimistic answer stands until the re-read has it.
-        val committed = drive(sent.state, AgendaEventReads().settled(CommandStatus.COMMAND_STATUS_EXECUTED, "", "schedule.respond_rsvp:e1:p-me:accepted")).state
+        val committed = drive(sent.state, AgendaEventReads().settled(CommandStatus.COMMAND_STATUS_EXECUTED, "", "event.respond:e1:p-me:accepted")).state
         committed.sentPartstat shouldBe "accepted"
         val reread = answer(
-            drive(committed, rowsChanged("schedule_attendee")).state,
+            drive(committed, rowsChanged("edge")).state,
             upcoming(event.copy(attendees = listOf(guest("p-2", "Priya", "accepted"), you("accepted")))),
         )
         reread.sentPartstat.shouldBeNull()
@@ -199,11 +199,11 @@ class AgendaEventSpec : StringSpec({
 
         val sent = drive(asked.state, confirmed())
         sent.effects shouldBe listOf(
-            ScreenEffect.SubmitWrite("schedule.cancel_event", """{"event_id":"e1"}""", "schedule.cancel_event:e1"),
+            ScreenEffect.SubmitWrite("event.cancel", """{"id":"e1"}""", "event.cancel:e1"),
         )
         sent.state.screen.confirm.shouldBeNull()
         sent.state.screen.data_.shouldNotBeNull().chip shouldBe StatusChip(label = "cancellation asked", tone = StatusChip.Tone.TONE_NET)
-        val done = drive(sent.state, AgendaEventReads().settled(CommandStatus.COMMAND_STATUS_EXECUTED, "", "schedule.cancel_event:e1")).state
+        val done = drive(sent.state, AgendaEventReads().settled(CommandStatus.COMMAND_STATUS_EXECUTED, "", "event.cancel:e1")).state
         done.screen.dismissed shouldBe true
     }
 
@@ -226,18 +226,18 @@ class AgendaEventSpec : StringSpec({
         }
         cancelWith(AgendaScope.AGENDA_SCOPE_OCCURRENCE).effects shouldBe listOf(
             ScreenEffect.SubmitWrite(
-                "schedule.edit_event_occurrence",
-                """{"event_id":"s1","original_start_local":"2026-06-15T10:00:00","scope":"occurrence","action":"skip"}""",
-                "schedule.edit_event_occurrence:s1:2026-06-15T10:00:00:occurrence:skip",
+                "event.edit_occurrence",
+                """{"id":"s1","original_start":"2026-06-15T10:00:00","scope":"occurrence","action":"skip"}""",
+                "event.edit_occurrence:s1:2026-06-15T10:00:00:occurrence:skip",
             ),
         )
         cancelWith(AgendaScope.AGENDA_SCOPE_FUTURE).effects.single().let {
             (it as ScreenEffect.SubmitWrite).inputJson shouldBe
-                """{"event_id":"s1","original_start_local":"2026-06-15T10:00:00","scope":"future","action":"skip"}"""
+                """{"id":"s1","original_start":"2026-06-15T10:00:00","scope":"future","action":"skip"}"""
         }
         val whole = cancelWith(AgendaScope.AGENDA_SCOPE_SERIES)
         whole.effects shouldBe listOf(
-            ScreenEffect.SubmitWrite("schedule.cancel_event", """{"event_id":"s1"}""", "schedule.cancel_event:s1"),
+            ScreenEffect.SubmitWrite("event.cancel", """{"id":"s1"}""", "event.cancel:s1"),
         )
         whole.state.screen.sheet shouldBe AgendaEventState.Sheet.SHEET_NONE
 
@@ -268,15 +268,15 @@ class AgendaEventSpec : StringSpec({
         drive(opened, refused(failure)).state.screen.failure shouldBe failure
 
         val landed = landed(timed("e1", "A", "2026-06-15T08:00"))
-        val reread = drive(landed, rowsChanged("core_event"))
+        val reread = drive(landed, rowsChanged("event"))
         reread.effects shouldBe listOf(ScreenEffect.ReadPage(AgendaEventMachine.SCREEN_ID, null))
         drive(reread.state, refused(failure)).state.screen.data_.shouldNotBeNull()
-        AgendaEventMachine.rowsChanged("schedule_task", listOf("k")).shouldBeNull()
+        AgendaEventMachine.rowsChanged("task", listOf("k")).shouldBeNull()
     }
 
     "a write refused after the screen was left comes back as the parked card" {
         val marks = AgendaMarks()
-        val cancel = ScreenEffect.SubmitWrite("schedule.cancel_event", """{"event_id":"e1"}""", "schedule.cancel_event:e1")
+        val cancel = ScreenEffect.SubmitWrite("event.cancel", """{"id":"e1"}""", "event.cancel:e1")
         marks.submitted(cancel)
         AgendaMarks.cancelIds(marks.held.value) shouldBe listOf("e1")
         AgendaEventReads(marks).settled(CommandStatus.COMMAND_STATUS_FAILED, "That event is not here to change.", cancel.invokeKey)
@@ -291,7 +291,7 @@ class AgendaEventSpec : StringSpec({
         // TRY AGAIN resubmits what was refused, under a new key.
         val retried = drive(reopened, view(AgendaEventEvent(parked_retried = AgendaEventEvent.ParkedRetried())))
         retried.effects shouldBe listOf(
-            ScreenEffect.SubmitWrite("schedule.cancel_event", """{"event_id":"e1"}""", "schedule.cancel_event:e1:again"),
+            ScreenEffect.SubmitWrite("event.cancel", """{"id":"e1"}""", "event.cancel:e1:again"),
         )
         // DISMISS clears the session's refusal.
         marks.dismissed("e1")
@@ -300,14 +300,14 @@ class AgendaEventSpec : StringSpec({
 
     "the session's marks: an answer that outruns its write, and the home's chips" {
         val marks = AgendaMarks()
-        val rsvp = ScreenEffect.SubmitWrite(AgendaWrites.RSVP, "{}", "schedule.respond_rsvp:e2:p-me:accepted")
+        val rsvp = ScreenEffect.SubmitWrite(AgendaWrites.RSVP, "{}", "event.respond:e2:p-me:accepted")
         marks.settled(rsvp.invokeKey, committed = true, sentence = "")
         marks.submitted(rsvp)
         marks.held.value.shouldBeEmpty()
 
         marks.submitted(rsvp)
-        marks.submitted(ScreenEffect.SubmitWrite(AgendaWrites.OCCURRENCE, """{"action":"skip"}""", "schedule.edit_event_occurrence:s1:x"))
-        marks.submitted(ScreenEffect.SubmitWrite(AgendaWrites.PROPOSE, "{}", "schedule.propose_event:new:1"))
+        marks.submitted(ScreenEffect.SubmitWrite(AgendaWrites.OCCURRENCE, """{"action":"skip"}""", "event.edit_occurrence:s1:x"))
+        marks.submitted(ScreenEffect.SubmitWrite(AgendaWrites.PROPOSE, "{}", "event.propose:new:1"))
         AgendaMarks.pendingIds(marks.held.value) shouldBe listOf("e2")
         AgendaMarks.cancelIds(marks.held.value) shouldBe listOf("s1")
 

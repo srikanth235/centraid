@@ -5,10 +5,8 @@ import centraid.core.v1.AppQueryResponse
 import centraid.core.v1.CommandOutcome
 import centraid.core.v1.CommandStatus
 import centraid.core.v1.Envelope
-import centraid.core.v1.Page
+import centraid.core.v1.NotesNote
 import centraid.core.v1.Response
-import centraid.core.v1.Row
-import centraid.core.v1.Value
 import centraid.screen.v1.NotesEditorEvent
 import centraid.screen.v1.NotesEditorState
 import centraid.screen.v1.ReadFailure
@@ -160,7 +158,7 @@ class KitRuntimeSpec : StringSpec({
                 commands += command.input.utf8()
                 executed()
             } else {
-                notePage()
+                noteAnswer()
             }
         }
         val session = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -172,10 +170,11 @@ class KitRuntimeSpec : StringSpec({
                 dispatcher = Dispatchers.Default,
             )
             bridge.attachOn(session) {
-                ScreenRuntime(
+                ScreenQueryRuntime(
                     core = { core },
                     host = bridge.host,
-                    reads = NotesReads,
+                    queries = NotesReads,
+                    clock = FakeDeviceClock(),
                     scope = session,
                     writes = NotesReads,
                     left = { bridge.left },
@@ -189,7 +188,7 @@ class KitRuntimeSpec : StringSpec({
             withTimeout(5_000) {
                 bridge.host.state.first { it.autosave?.saved_seq == 1L }
             }
-            commands.single() shouldBe "{\"note_id\":\"n-1\",\"body_text\":\"milk and eggs\"}"
+            commands.single() shouldBe "{\"id\":\"n-1\",\"body\":\"milk and eggs\"}"
         } finally {
             session.cancel()
             core.close()
@@ -208,7 +207,7 @@ class KitRuntimeSpec : StringSpec({
                     ),
                 )
             } else {
-                notePage()
+                noteAnswer()
             }
         }
         val stranded = ConcurrentLinkedQueue<Triple<String, String, String>>()
@@ -216,10 +215,11 @@ class KitRuntimeSpec : StringSpec({
         try {
             val bridge = ScreenBridge(NotesEditorMachine, NotesEditorEvent.ADAPTER, {}, Dispatchers.Default)
             bridge.attachOn(session) {
-                ScreenRuntime(
+                ScreenQueryRuntime(
                     core = { core },
                     host = bridge.host,
-                    reads = NotesReads,
+                    queries = NotesReads,
+                    clock = FakeDeviceClock(),
                     scope = session,
                     writes = NotesReads,
                     left = { bridge.left },
@@ -275,22 +275,17 @@ class KitRuntimeSpec : StringSpec({
             override fun refused(failure: ReadFailure): String = "refused"
         }
 
-        /** The one row the editor reads: note n-1, "milk". */
-        fun notePage(): Envelope = Envelope(
+        /** The one note the editor reads: n-1, "milk". */
+        fun noteAnswer(): Envelope = Envelope(
             response = Response(
-                page = Page(
-                    rows = listOf(
-                        Row(
-                            values = listOf(
-                                Value(text = "n-1"),
-                                Value(text = "Groceries"),
-                                Value(text = "plain"),
-                                Value(integer = 0),
-                                Value(text = "rev-1"),
-                                Value(text = "2026-09-24T08:00:00Z"),
-                                Value(text = "milk"),
-                            ),
-                        ),
+                app_query = AppQueryResponse(
+                    notes_note = NotesNote(
+                        found = true,
+                        note_id = "n-1",
+                        title = "Groceries",
+                        format = "plain",
+                        body = "milk",
+                        row_version = 1L,
                     ),
                 ),
             ),

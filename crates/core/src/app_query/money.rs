@@ -31,7 +31,7 @@ use centraid_apps_money::rules::MatchKind;
 use centraid_apps_money::{civil, phone};
 use centraid_vault::Vault;
 
-use super::{VaultDoor, settle, zone_of};
+use super::{VaultDoor, corrected_search, filled, settle, with_search, zone_of};
 use crate::error::{CoreError, Result};
 
 type Answer = wire::app_query_response::Answer;
@@ -364,7 +364,6 @@ pub(super) fn transaction(
                         pattern: o.pattern,
                         category_id: o.category_id,
                         category_label: o.category_label,
-                        display_name: o.display_name,
                         support: count(o.support),
                         of: count(o.of),
                     }),
@@ -482,7 +481,6 @@ pub(super) fn rules(door: &VaultDoor<'_>) -> Result<Answer> {
                     amount_max: r.amount_max,
                     account_label: r.account_label,
                     category_label: r.category_label,
-                    display_name: r.display_name,
                     specificity: r.specificity,
                 })
                 .collect(),
@@ -598,7 +596,6 @@ pub(super) fn search(
 ) -> Result<Answer> {
     let limit = limit_required(asked.limit, "a money search")?;
     let today = today_of(vault, &asked.tz, now)?;
-    let month = month_of(&asked.month, &today)?;
     // An empty term answers no results without reading.
     if asked.term.trim().is_empty() {
         return Ok(Answer::MoneySearch(wire::MoneySearch {
@@ -606,20 +603,35 @@ pub(super) fn search(
             ..wire::MoneySearch::default()
         }));
     }
-    settle(
-        door,
-        done(phone::search(door, &month, &asked.term, limit, &today)),
-        |data| {
-            Answer::MoneySearch(wire::MoneySearch {
-                term: data.term,
-                rows: data.rows.into_iter().map(activity_row).collect(),
-                total_matches: count(data.total_matches),
-                corrected: data.corrected,
-                truncated: data.truncated,
-                months_walked: count(data.months_walked),
-            })
-        },
-    )
+    // The whole ledger, ranked, through the full-text door (`asked.month` is not
+    // read: there is no month to start from).
+    let loaded = with_search(vault, door, |search| {
+        corrected_search(
+            search,
+            &[queries::TXN_KIND],
+            &asked.term,
+            |found: &phone::MoneySearch| found.rows.len(),
+            |exact, again| phone::MoneySearch {
+                rows: filled(
+                    exact.rows,
+                    again.rows,
+                    limit.min(queries::SEARCH_ROWS),
+                    |row| row.txn_id.clone(),
+                ),
+            },
+            |term| phone::search(door, search, term, limit, &today),
+        )
+    })?;
+    settle(door, loaded, |(found, corrected)| {
+        Answer::MoneySearch(wire::MoneySearch {
+            term: asked.term.clone(),
+            total_matches: count(found.rows.len()),
+            rows: found.rows.into_iter().map(activity_row).collect(),
+            corrected: (!corrected.is_empty()).then_some(corrected),
+            truncated: false,
+            months_walked: 0,
+        })
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -717,52 +729,60 @@ fn profile_message(profile: SavedProfile) -> wire::MoneyImportProfile {
     }
 }
 
-/// The `money.import_transactions` input for a plan's rows, as canonical JSON
-/// bytes: the rows `keep` selects, each with a transaction id the phone mints
-/// now. Empty when no row is kept.
+/// The `follow.statement` input for a plan's rows, as canonical JSON bytes: the
+/// rows `keep` selects, each a record the account's statement origin follows.
+/// A line's identity is the id its statement derived (`ofx:<FITID>` or
+/// `csv:<digest>`), so sending a line the vault holds is the same line and writes
+/// nothing. The origin's `ref` is the bank's number, or the account's own id when
+/// it has none. Empty when no row is kept.
 fn publish_input(
-    vault: &Vault,
     plan: &ImportPlan,
     account: &AccountRow,
     source: Source,
     keep: impl Fn(&RowVerdict) -> bool,
 ) -> Result<Vec<u8>> {
-    let rows: Vec<serde_json::Value> = plan
+    let records: Vec<serde_json::Value> = plan
         .rows
         .iter()
         .filter(|entry| keep(&entry.verdict))
         .filter_map(|entry| entry.row.as_ref())
         .map(|row| {
-            let mut value = serde_json::to_value(row).map_err(|error| CoreError::Invariant {
-                context: format!("an import row will not serialise: {error}"),
-            })?;
-            if let Some(object) = value.as_object_mut() {
-                object.insert(
-                    "txn_id".to_owned(),
-                    serde_json::Value::String(vault.ids().next()),
-                );
+            let mut line = serde_json::Map::new();
+            line.insert("imported_from".to_owned(), source.as_str().into());
+            for (key, value) in [
+                ("memo", &row.memo),
+                ("check_number", &row.check_number),
+                ("bank_type", &row.bank_type),
+            ] {
+                if let Some(value) = value {
+                    line.insert(key.to_owned(), value.as_str().into());
+                }
             }
-            Ok(value)
+            let mut fields = serde_json::json!({
+                "title": row.description,
+                "posted_on": row.posted_on,
+                "amount_minor": row.signed_minor(),
+                "line": line,
+            });
+            if let (Some(object), Some(category)) =
+                (fields.as_object_mut(), &row.category_concept_id)
+            {
+                object.insert("category_id".to_owned(), category.as_str().into());
+            }
+            serde_json::json!({ "external_id": row.external_id, "fields": fields })
         })
-        .collect::<Result<_>>()?;
-    if rows.is_empty() {
+        .collect();
+    if records.is_empty() {
         return Ok(Vec::new());
     }
-    let mut input = serde_json::json!({
-        "account_id": account.account_id,
-        "source": source.as_str(),
-        "rows": rows,
+    let input = serde_json::json!({
+        "origin": {
+            "ref": account.external_ref.as_deref().unwrap_or(&account.account_id),
+            "label": account.name,
+            "fills": account.account_id,
+        },
+        "records": records,
     });
-    if let (Some(object), Some(checkpoint)) = (input.as_object_mut(), &plan.checkpoint) {
-        object.insert(
-            "checkpoint".to_owned(),
-            serde_json::json!({
-                "as_of": checkpoint.as_of,
-                "balance_minor": checkpoint.balance_minor,
-                "currency": account.currency,
-            }),
-        );
-    }
     serde_json::to_vec(&input).map_err(|error| CoreError::Invariant {
         context: format!("an import input will not serialise: {error}"),
     })
@@ -770,7 +790,6 @@ fn publish_input(
 
 /// One statement, planned against one account.
 fn plan_statement(
-    vault: &Vault,
     door: &VaultDoor<'_>,
     account: &AccountRow,
     statement: &Statement,
@@ -807,15 +826,13 @@ fn plan_statement(
     );
     let shown = phone::import_plan(&plan, &categories, matching_saved(saved, statement));
     let source = statement.source;
-    let new_only = publish_input(vault, &plan, account, source, |v| {
-        matches!(v, RowVerdict::New)
-    })?;
+    let new_only = publish_input(&plan, account, source, |v| matches!(v, RowVerdict::New))?;
     let with_proposed = if plan
         .rows
         .iter()
         .any(|r| matches!(r.verdict, RowVerdict::ProposedDuplicate { .. }))
     {
-        publish_input(vault, &plan, account, source, |v| {
+        publish_input(&plan, account, source, |v| {
             matches!(v, RowVerdict::New | RowVerdict::ProposedDuplicate { .. })
         })?
     } else {
@@ -859,7 +876,6 @@ fn statement_message(
                 posted_on: row.posted_on,
                 amount: some_amount(row.amount.as_ref()),
                 description: row.description,
-                display_name: row.display_name,
                 category_label: row.category_label,
                 future_dated: row.future_dated,
                 existing_txn_id: row.existing_txn_id,
@@ -983,9 +999,7 @@ pub(crate) fn import_plan(
             };
             Ok(wire::MoneyImportPlan {
                 refusal: None,
-                statements: vec![plan_statement(
-                    vault, &door, account, &statement, &saved, &today,
-                )?],
+                statements: vec![plan_statement(&door, account, &statement, &saved, &today)?],
             })
         }
         wire::MoneySource::Ofx => {
@@ -1011,7 +1025,6 @@ pub(crate) fn import_plan(
                 match resolved {
                     Ok(account) => {
                         statements.push(plan_statement(
-                            vault,
                             &door,
                             account,
                             &one.statement,

@@ -1,57 +1,58 @@
 # `centraid-apps-people` — a personal CRM as a projection of the vault
 
-People is 7 queries, **29 actions — the largest action surface of any bundled app** — and 16 scopes over five schemas, plus a demo seed. This crate is the read plane and the action table; the writes are `crates/vault`'s `people` schema (all twenty-eight), the `social` schema (four), and one `core.*` command — `core.merge_party`, the ontology primitive behind `merge-people`.
+People is five queries, twenty-five actions and thirty-three scopes. It stores nothing of its own ([#1135](https://github.com/srikanth235/centraid/issues/1135)): a person is an `entity` of kind `person` with its columns, and everything else a screen shows is another row joined by an edge. This crate is the read plane and the action table; the writes are `person.*` commands in `crates/vault/src/commands/{person,contact_point}.rs` and the shared verbs (`entity.*`, `flag.*`, `container.*`), and the phone shell reaches the reads through `crates/core`'s `app_query` ([`people.proto`](../../api-proto/proto/centraid/core/v1/people.proto)).
 
 | Module | What it is |
 | --- | --- |
-| `manifest` | The app's `manifest.json`, parsed by the kit's parser at load time. Two copies of "which tables does People write" is how the two answers drift. |
-| `queries` | The thirty statements, the taxonomy pair, the list and star fold, the reminder fold, and the three declared windows. |
-| `roster` | `people`, `search` and `trash` — the three queries that answer in the people-row shape. |
-| `person` | The sheet, and the reading (links) that denies independently of it. |
-| `dashboard` | The keep-in-touch summary, and the birthday rail the daily brief reads. |
-| `journal` | The owner's entries folded together with what they logged. |
+| `manifest` | The app's `manifest.json`, parsed by the kit's parser at load time. |
+| `queries` | What People reads, one table at a time: the circle's window, the star, the lists, the touches (computed last-contacted), the notes about a person, the yearly dates, and the three declared windows. |
+| `roster` | `people`, `search` and `trash`: the three reads that answer in the people-row shape. |
+| `person` | The sheet. |
+| `dashboard` | The keep-in-touch summary: Reconnect, Upcoming and the latest touches. |
 | `dates` | Civil time against a `today` the caller states, and elapsed time for cadence. There is no clock in this crate. |
-| `phone` | The phone's readings of the folds (#1046): the roster's chips and sort, each person's cadence facts, and each annual date's distance from `today`. `crates/core`'s `app_query` answers them as `people.proto`. |
-| `commands` | The twenty-nine actions as invocations, `invoke_key` mandatory. |
+| `phone` | The phone's readings of the folds: the roster's chips and sort, each person's cadence facts and each annual date's distance from `today`. |
+| `commands` | The twenty-five actions as invocations, `invoke_key` mandatory. |
+
+## How the model draws a person
+
+| A screen's word | The model |
+| --- | --- |
+| a person, how you met, cadence | `entity` + `person` (`form` is `person`, `org`, `group` or `pet`) |
+| starred | a `tagged` edge to `flag:starred` |
+| a list | a `list` container with ordered `contains` edges; a person is in one at a time (`person.move`) |
+| a touch | an `activity` of an activity kind with a `with` edge; the words kept of it are a `note` `about` the activity |
+| last contacted | **computed at read** from the activities `with` the person |
+| a note, a journal entry | a `note` `about` the person; an entry is about the owner, titled by its mood |
+| a follow-up, a gift idea | a `task` `about` the person; a gift also carries the `gift` tag |
+| the birthday | the person's `birthday` column (`MM-DD`, or `YYYY-MM-DD`); its reminder is always on |
+| any other important date | a yearly all-day `event` `about` the person (R-FP-2) |
+| a relationship | a `related` edge labelled by a `relation` concept |
+| how to reach them | `contact_point` rows (one preferred per kind) |
+
+**The circle is the people you keep**: every live person but the owner and a pet. The roster, the dashboard, the sheet, the search and Home's person hits answer for that one set.
+
+## What this crate is allowed to contain
+
+SQL, in any form, is refused by `cargo xtask rules` (`sql-confinement`): a read is a `PageQuery` over one table, and the paged door pages one table (a join is refused at the vault's door), so every read is a window and then, per table, the rows its ids name. `Read::among` names a set of ids only while it is small, and otherwise takes the table under the read's own predicate: a keyset page re-binds the whole `IN` list on every page, and the first cut took 19 s for a 5,000-person roster where the table scans take 0.56 s (R-1135-3-14). A write from a query is not expressible. A denial is a value (`Denial`), never an error.
 
 ## The rulings this crate is shaped by
 
-Every one is an answer to a way this crate could be wrong, and every one has a test named after it.
+R-1135-3-1 to R-1135-3-14 are in [docs/decisions.md](../../../docs/decisions.md#people). The ones a reader of this crate meets first:
 
-**D-1020-PE1 — independent denials, one type.** `Person { profile, contact, links }` with `ReadState<T> = Loading | Denied | Ready(T)`. Revoking `core.link` or `social.contact_channel` must not answer `{person: null}`: a member who revoked either plane would lose their grandfather's birthday. Each reading denies independently of the profile and of the other, and the fact lives INSIDE the state, so a denied reading has no list to draw as empty — the phone gets `channels_known` / `touches_known` and says the rail could not be read rather than "No channels" (P1, [docs/release/v1-handoffs.md](../../../docs/release/v1-handoffs.md)). `tests/three_state.rs` runs the real queries through a door that refuses one plane at a time. There is no sharing reading (v1 has no share plane, [#1029](https://github.com/srikanth235/centraid/issues/1029)) and no debts reading (Tally and its obligations left in rung fifteen, [#1099](https://github.com/srikanth235/centraid/issues/1099)).
+- **A toggle is two actions.** `toggle-gift` is `complete-task` and `reopen-task`, `toggle-reminder` is `set-reminder`; three commands (`task.complete`, `task.reopen`, `event.edit`) are Agenda's and `ActionRow::pending_schema` names them until that lane lands.
+- **Four actions are confirm-gated** by the manifest, which is the surface's gate: `trash-person`, `purge-person`, `delete-contact-channel` and `merge-people`. No command sets the command-level `confirm`.
+- **A person holds what is written about them alone**: their notes, touches and yearly dates go to the trash and are purged with them; a task about them stays.
+- **`people.limit` is 20-10,000**, the widest window in the tree and the manifest's own (D-1020-PE4); the walk reports `truncated` when it filled.
+- **There is no clock here.** A civil date is read in a zone somebody stated (D-1020-PE7).
 
-**D-1020-PE2 — `merge_party` is exhaustive by construction.** The sweep is generated from the live schema rather than from a hand-kept registry: forty-four engine foreign keys onto `core_party`, and the composite `(type, id)` pointers into the entity supertype. Every column is planted by a row builder that reads each table's own schema, and zero rows name the folded-in party afterwards. Two registry findings fell out of generating it — see the receipt.
+## The five queries
 
-**D-1020-PE3 — the test-to-action ratio is fixed here.** Every command has a fixture case in `contracts/apps/people/commands.json` (61 steps over 33 distinct commands, 15 of them refusals on purpose), and each of the fourteen `once` commands has an idempotency replay: a repeated `invoke_key` writes no second row and no second invocation.
-
-**D-1020-PE4 — `people.limit` is 20–10,000.** This crate honours the declared maximum, where the captured fixture stopped at 9,999; **nothing in the manifest explains why the number is 10,000 at all**, and every other app's widest window is 2,000. The parity mapping lowers this crate's answer onto the fixture's so the comparison stays exact.
-
-**D-1020-PE5 — one nullable sort column, and it is the trash shelf.** Of the thirty statements, only `people.trash.profiles` orders by a column the DDL declares without `NOT NULL` (`people_profile.deleted_at`), so the kit's door refuses to CONTINUE a page over it. The shelf's predicate makes the column non-null and the door reads the DDL rather than the `where` — so the shelf is safe because `TRASH_ROWS` is exactly `MAX_PAGE_ROWS` and is never continued. A window of 501 refuses, and that is the demonstrated red. Where a nullable sort column must genuinely be continued, the adopted order is **nulls last, then by primary key**.
-
-**D-1020-PE6 — four manifest confirmations, and one command-level park.** `trash-person`, `delete-contact-channel`, `merge-people` and `purge-person` (#1015 D1) carry `confirmation: "required"`, which is the DISPATCHING surface's gate. Exactly one of the thirty commands carries `confirm: true`, and it is `core.merge_party` — a NON-OWNER park, because an irreversible fold of one person into another is not a thing an assistant does on the member's behalf. Neither gate substitutes for the other.
-
-**D-1020-PE7 — the birthday rail is civil time, in a zone somebody stated.** Reading the HOST's local midnight is wrong: a member's day is not the machine's. `dates` takes the civil date as an argument and there is no clock here to read the wrong one from; the phone's queries state it as the device's `tz`, else the vault's own zone (`app_query.proto`'s rule). **February 29 clamps to 28 February in a common year**, so a leap-day birthday still fires; the fixture carries one.
-
-**D-1020-PE8 — a command's name and its owner schema must agree.** The gateway authorises by owner schema and the caller types the name, so a `people.*_contact_channel` command owned by `social` would answer to two different schemas; the registry refuses the split by construction. The three contact-channel commands are `people`-owned, so the whole-schema `people` grant covers them; the three narrow `social` act scopes that named commands which do not exist are gone (P3), and `every_act_scope_names_a_command_an_action_invokes_and_every_command_is_covered` holds the manifest to its action table.
-
-**D-1020-PE9 — the recurrence rollover is not People's to own.** `people.complete_task` refuses a task carrying an `rrule`, with a sentence naming `schedule.organize_task`. Reproducing the rollover here would re-introduce exactly the drift (#996 R21, ONT-27) that took People's own `toggle_task` away — a repeating task completed from People never got its next occurrence, because only Tasks' code knew how to spawn one.
-
-**D-1020-PE10 — which parity lists are compared in order, and which as sets.** A list whose statement orders by a MINTED ID is compared as a set, because the fixture's `id-NNNN` tokens are assigned in first-appearance order across the whole bundle and a date whose id first appears inside a revision's snapshot gets a lower token than one that appears in its own table. That order is a fact about the canonicaliser. Six lists are named in `tests/parity.rs`; every other list is compared in order.
-
-## The seven queries
-
-The roster's window is a **walked page set** over `people_profile`, newest-created first. Everything else — the parties, the tags and the important dates — is `IN`-bounded by ids that walk returned. The host clamps a page to 500, so reading the window as ONE page would return five hundred of ten thousand; this crate walks the stated window and `truncated` is the walk's own answer.
-
-`person` is the largest query in the app: the party, its profile, then two readings that deny on their own — the contact rail with a collision search bounded by the values this person holds, and the linked reading. `dashboard` folds the same window into four counts. `journal` projects two shapes into one feed and is the one read in the workspace whose denial is deliberately NOT graceful — an empty marker set would leak journal entries into Notes' library. `search` ranks FTS hits (name, then role, then notes, as v0 did) and the fold keeps that order; on the phone only the `core.party` name index exists in `crates/search`, so the name index is the whole search. `trash` is secret-free by construction. Emptying it is `purge-person` (`people.purge_person`, one person per call): the party, the profile, its owned children (dates, handles, channels), its participation rows (attendance, circle and thread membership), the interactions about only them and their gift ideas go, and the entity cascade takes every link, tag and annotation on them; a task about them stays as the member's own. It is refused, naming the columns, while money, messages or any other `NO ACTION` record still names them — generated from the live schema, as the merge sweep is. `core.merge_party` folds two profiles into one (nickname and liveness included: a live side keeps the survivor live). `history` is the undo rail, row-filtered by the manifest to this app's own entity type.
+`people` is the roster: a window of the circle, newest-added first, with the star, the list, the reminders that are on and when each person was last touched. `person` is one sheet: the roster's row, nickname, how you met, contact points (with who else holds the same value), dates, notes and the touch log. `dashboard` folds Reconnect (most overdue first, ties by id), Upcoming (nearest first across the year boundary) and the newest 30 touches over the whole window. `search` is the vault's one index over `person` (name, nickname, role, how you met, contact points and the notes about them and about their touches), ranked, with a snippet. `trash` is the reversible shelf, most recently trashed first.
 
 ## On the phone
 
-The v1 phone shell reaches `people` (as `roster`), `dashboard` (as `touch`), `person`, `search` and `trash` through `AppQueryRequest` arms 20–24 (`crates/api-proto/proto/centraid/core/v1/people.proto`, `crates/core-ffi/CONTRACT.md` clause 4e). The roster is the live `people_profile` rows: a party with no profile — the owner, or a face-review party made with `core.add_party` — is not a People row, and a surface that makes a person for People makes it with `people.add_person`.
-
-## Parity
-
-`contracts/apps/people/` is a frozen golden, captured from an independent implementation's real handlers over a real vault: the app's own demo seed, then a script of all twenty-eight `people.*` commands, the four `social.*` ones and `core.merge_party`, then all seven queries at twenty-seven inputs. `tests/parity.rs` rebuilds the vault from `rows.json` and compares this crate's answers case by case.
+The v1 phone shell reaches `people` (as `roster`), `dashboard` (as `touch`), `person`, `search` and `trash` through `AppQueryRequest` arms 20-24. `party_id` on the wire is the person's entity id. Every civil date is answered in the device's zone (`tz`): the answer carries `today` and each annual date's `in_days` from it. The avatar hue is not stored (R-1135-3-8): `avatar_color` is `reserved` and a shell draws the hue from the id. `touches_known` and `channels_known` stay on the wire and are always true.
 
 ## Volume
 
-`centraid_apps_kit::fixtures::year3_people` is the axis People's ceilings are stated at, and it includes `people_profile` rows, not just parties: five thousand people, 250 of them trashed, 12,000 important dates with 6,000 live reminders, 20,000 interactions and 600 obligations. A shrunken axis runs on every `cargo test`; the measured run is `#[ignore]`d and its numbers are in the lane's receipt.
+`centraid_apps_kit::fixtures::year3_people` is the axis People's ceilings are stated at: 5,000 people (250 trashed) beside 100 pets and the owner, 10,000 yearly dates and 2,000 birthdays, 20,000 touches (8,000 with a note), 3,000 notes about people and 8,000 contact points. `tests/year3.rs` asserts that the walk reaches past the door's 500-row page, that the circle holds nothing else, and that last-contacted is the newest touch; `cargo test -p centraid-apps-people --test year3 -- --ignored --nocapture` prints the declared profile's numbers (the roster in 0.56 s and the dashboard in 0.49 s, a debug build on `ci-linux-x64-4c`, projected, never a ceiling).

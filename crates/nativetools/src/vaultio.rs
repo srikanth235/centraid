@@ -15,7 +15,7 @@ use centraid_apps_kit::reads::{FanOutBound, read_pages};
 use centraid_apps_kit::row::Row;
 use centraid_apps_kit::statement::{PageBindValue, PageOrder, PageQuery};
 use centraid_apps_kit::testdoor::TestDoor;
-use centraid_assist::native::{Flags, Session, world::World};
+use centraid_assist::native::{Flags, Session};
 use centraid_vault::access::Principal;
 use centraid_vault::bytes::FsBlobStore;
 use centraid_vault::{Clock, Command, CommandStatus, Registry, SeededIds, Vault};
@@ -146,9 +146,6 @@ impl Handle {
             .found_in("Nativetools", me, currency)
             .map_err(|error| error.to_string())?;
         let registry = Registry::with_system_commands().map_err(|error| error.to_string())?;
-        registry
-            .install(&vault)
-            .map_err(|error| error.to_string())?;
         Ok(Self {
             vault,
             registry,
@@ -171,6 +168,32 @@ impl Handle {
             clock,
             path: path.to_path_buf(),
         })
+    }
+
+    /// Keep some bytes in the content store beside the vault: `(hash, size)`, the pair a command
+    /// that names bytes claims them by.
+    pub fn keep(&self, bytes: &[u8]) -> Result<(String, i64), String> {
+        let store = self
+            .vault
+            .blobs()
+            .ok_or("this vault has no content store")?;
+        let hash = store.put(bytes).map_err(|error| error.to_string())?;
+        Ok((hash, i64::try_from(bytes.len()).unwrap_or(i64::MAX)))
+    }
+
+    /// The entity a followed line made, by the id its source gave the line.
+    pub fn followed(&self, external_id: &str) -> Result<String, String> {
+        self.table_where(
+            "source",
+            "external_id, entity_id",
+            "external_id",
+            "external_id",
+            "external_id = ?",
+            &[external_id.to_owned()],
+        )?
+        .first()
+        .and_then(|row| text(row, "entity_id"))
+        .ok_or_else(|| format!("no line was followed as {external_id}"))
     }
 
     /// Run one command a second after the last: a session's writes each get
@@ -304,12 +327,13 @@ impl Handle {
             .read(|connection| {
                 use centraid_search::Search as _;
                 let answer =
-                    centraid_search::sqlite::SqliteDoor::open(connection).and_then(|door| {
-                        door.query(
-                            &centraid_search::Principal::Owner,
-                            &centraid_search::SearchRequest::new(entity, text, limit),
-                        )
-                    });
+                    centraid_search::sqlite::SqliteDoor::open(connection, self.vault.words())
+                        .and_then(|door| {
+                            door.query(
+                                &centraid_search::Principal::Owner,
+                                &centraid_search::SearchRequest::new(entity, text, limit),
+                            )
+                        });
                 Ok(answer)
             })
             .map_err(|error| error.to_string())?
@@ -427,7 +451,7 @@ impl Door for Handle {
 }
 
 /// Open a session over the vault FILE at `path`: the clock starts at `now`, and the id sequence
-/// is named from the journal's size, so two sessions over one file never mint the same id and
+/// is named from the count of the vault's entities, so two sessions over one file never mint the same id and
 /// the same file and clock always mint the same ones.
 pub fn open_session(
     path: &Path,
@@ -449,9 +473,9 @@ pub fn open_session_in(
     flags: Flags,
 ) -> Result<Session, String> {
     let clock = SetClock::at(millis_of(now));
-    // A probe handle reads the journal size, which names this session's id sequence.
+    // A probe handle counts the vault's entities, which names this session's id sequence.
     let probe = Handle::open(path, clock.clone(), "nativetools:probe")?;
-    let count = World::load(&probe)?.entity_count;
+    let count = probe.table("entity", "n, id", "n", "id")?.len();
     drop(probe);
     let handle = Handle::open(path, clock, &format!("nativetools:session:{count}:{now}"))?;
     Session::with_door_in(Box::new(handle), now, tz, me, flags)

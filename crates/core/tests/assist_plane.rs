@@ -124,11 +124,12 @@ fn the_model_is_absent_then_without_an_engine_then_present_then_ready() {
 }
 
 #[test]
-fn a_chat_is_scoped_to_an_app_the_assistant_reads_and_never_to_locker() {
+fn a_chat_is_scoped_to_an_app_the_assistant_reads() {
     let sample = common::chat::sample();
     let first = sample.start("");
     assert_eq!(sample.start("notes"), first + 1);
-    for bad in ["locker", "nope", "NOTES"] {
+    assert_eq!(sample.start("locker"), first + 2);
+    for bad in ["tasks", "nope", "NOTES"] {
         let refused = sample.assist(Ask::Start(wire::AssistStartRequest {
             app: bad.to_owned(),
             ..wire::AssistStartRequest::default()
@@ -286,8 +287,9 @@ fn a_new_chat_forgets_the_transcript_and_keeps_the_scope() {
 }
 
 #[test]
-fn locker_is_in_no_prompt_a_session_ever_builds() {
+fn no_sealed_value_is_in_any_prompt_a_session_ever_builds() {
     let sample = common::chat::sample();
+    common::chat::with_a_locker_item(&sample);
     let model = common::chat::script(&[
         common::chat::decline("sealed_egress"),
         common::chat::decline("sealed_egress"),
@@ -296,18 +298,25 @@ fn locker_is_in_no_prompt_a_session_ever_builds() {
     // Every scope a chat can have, asked a question a vault's secrets answer.
     for app in ["", "agenda"] {
         let session = sample.start(app);
-        sample.send(session, 1, "What is my wifi password?");
+        sample.send(session, 1, "What is my Vaultbank login password?");
     }
     let prompts = model.prompts();
     assert_eq!(prompts.len(), 4);
-    // The kind card still names the kind the model was trained with (R-1088-10), but the world
-    // the phone loads holds no Locker row (R-1088-3): no item is listed in any prompt.
+    // The world the phone loads holds the Locker item by its plain rows (the owner's ruling of
+    // 2026-10-22), so its title is listed; a sealed value never was in a prompt and so cannot be
+    // in an answer (R-1088-3).
     assert!(
         prompts
             .iter()
-            .all(|prompt| !prompt.contains("locker items:")),
-        "a secret that was never in a prompt cannot be in an answer"
+            .any(|prompt| prompt.contains("Vaultbank login")),
+        "the Locker item is in the model's world"
     );
+    for prompt in &prompts {
+        for planted in common::chat::PLANTED_SECRETS {
+            assert!(!prompt.contains(planted), "{planted}");
+        }
+        assert!(!prompt.contains("lk1:"));
+    }
 }
 
 #[test]
@@ -496,9 +505,11 @@ fn suggestions_name_things_from_this_vault() {
         }
         other => panic!("the task domain was taken as a scope: {other:?}"),
     }
+    // LOCKER IS A SCOPE: its three questions read plain fields and never a sealed value.
+    assert_eq!(prompts("locker").len(), 3);
     assert!(matches!(
         sample.assist(Ask::Suggest(wire::AssistSuggestRequest {
-            app: "locker".to_owned(),
+            app: "nope".to_owned(),
             tz: String::new()
         })),
         Err(CoreError::InvalidRequest { .. })

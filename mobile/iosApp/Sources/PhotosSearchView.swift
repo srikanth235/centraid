@@ -47,10 +47,8 @@ struct PhotosSearchView: View {
                 if cells.isEmpty, topHits.isEmpty {
                     // NOTHING MATCHED IS NOT NOTHING TYPED. The machine quotes the
                     // query back and says everywhere search looked (v0's
-                    // `SEARCH_COPY.miss`), and offers Ask as the one action when
-                    // the field names a question (#1097, R-1097-30): the kit's
-                    // search empty view draws it, as every app's search does.
-                    SearchEmptyView(empty, ask: state.ask)
+                    // `SEARCH_COPY.miss`).
+                    EmptyStateView(empty)
                         .accessibilityIdentifier("photos-search-no-match")
                 } else {
                     // THE DOORS FIRST (v0 §9: "each one tap from the surface
@@ -81,6 +79,8 @@ struct PhotosSearchView: View {
                         )
                     }
                 }
+                // THE ASK ROW closes the answer, matched or not (#1135).
+                if state.hasAskRow { SearchAskRow(ask: state.askRow) }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -243,13 +243,13 @@ struct PhotosSearchStateView {
     /// What the member has typed, as the reducer last published it.
     var query: String { state.query }
 
-    /// The question the no-match state offers to send to the assistant, or empty
-    /// for no Ask (#1097, R-1097-28).
-    var ask: String { state.search.ask }
+    /// The Ask row at the foot of the answer, when the field holds one (#1135).
+    var hasAskRow: Bool { state.search.hasAskRow }
+    var askRow: Centraid_Screen_V1_SearchAsk { state.search.askRow }
 
     /// THE SHARED SEARCH FIELD, as the machine holds it (#1097, R-1097-27): the
     /// term and the words the answer corrected, which the kit's field draws as
-    /// "Showing results for". [open] is the grid's destination and the caller's
+    /// "Including results for". [open] is the grid's destination and the caller's
     /// to state; a field that is not open carries no term and no correction.
     func field(open: Bool) -> Centraid_Screen_V1_SearchField {
         guard open else { return Centraid_Screen_V1_SearchField() }

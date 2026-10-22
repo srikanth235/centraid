@@ -18,9 +18,9 @@ import dev.centraid.shared.screen.Step
 /**
  * A PHOTO SHELF: the library under a predicate (#1029, the photos port).
  *
- * One machine for four of v0's routes. `PhotoStateView` (favourites, archive,
- * trash, videos), `AlbumDetail`, `PlaceDetail` and a memory's
- * members were four screens reading one table in one order and drawing one
+ * One machine for three of v0's routes. `PhotoStateView` (favourites, archive,
+ * trash, videos), `AlbumDetail` and `PlaceDetail`
+ * were three screens reading one table in one order and drawing one
  * cell, and they drifted exactly where four copies drift: `AlbumDetail.tsx`
  * grew a selection mode the state views never got, `PlaceDetail.tsx` its own
  * empty sentence, and `PhotoStateView`'s trash a countdown none of the others
@@ -118,18 +118,18 @@ public object PhotoShelfMachine : ScreenMachine<PhotoShelfState, PhotoShelfEvent
             // A ROW MOVED UNDER THIS SHELF.
             //
             // Two cases, and the empty list is the second one. A change on
-            // `media_asset` names ASSET ids, so the shelf re-reads only when it
+            // a change on `photo` names PHOTOGRAPH ids, so the shelf re-reads only when it
             // is showing one of them — a roll gaining rows all day during a
-            // backup must not redraw an album. A change on one of the four
-            // MEMBERSHIP tables names entry, tag, region or member-row ids,
-            // which are not asset ids and match nothing this shelf holds; the
+            // backup must not redraw an album. A change on one of the
+            // MEMBERSHIP tables names entity or edge ids, which are not
+            // photograph ids and match nothing this shelf holds; the
             // machine's `rowsChanged` turns those into an EMPTY list, which is
             // this screen's own spelling of "the membership moved and I cannot
             // tell whose" — and the honest answer to that is to read again.
-            // The core never delivers an empty key list, so the two cannot be
-            // confused.
+            // A change event names its tables and no
+            // keys, so a `photo` event arrives here empty too and reads the same.
             //
-            // A THIRD CASE: ONLY THE ALBUM LIST MOVED. `core_collection` names
+            // A THIRD CASE: ONLY THE ALBUM LIST MOVED. `container` names
             // no photograph on any shelf, so the page stays; what moves is the
             // "Add to album" list, and only while that sheet is up — which is
             // how an album made from the sheet's own "New album…" appears in it.
@@ -193,7 +193,7 @@ public object PhotoShelfMachine : ScreenMachine<PhotoShelfState, PhotoShelfEvent
 
             // OUT OF THE TRASH, OR OUT OF THE ARCHIVE — one event, because the
             // SHELF already says which and the vault has one verb for the
-            // first. An archived asset is un-archived through `update_asset`;
+            // first. An archived photograph is un-archived with `flag.clear`;
             // a trashed one is restored. [restoreWrites] is where that fork
             // lives, once.
             event.restore != null -> written(state, restoreWrites(state))
@@ -206,9 +206,8 @@ public object PhotoShelfMachine : ScreenMachine<PhotoShelfState, PhotoShelfEvent
 
             event.archive != null -> written(state, archiveWrites(state, event.archive.archived))
 
-            // A STAR IS `media.set_favorite`, one per picked photograph — the
-            // lightbox's verb, not `update_asset`'s general edit
-            // (`PhotoLightboxMachine.FAVORITE_COMMAND`'s note).
+            // A STAR IS THE SHARED `flag.set` OF THE `starred` FLAG, one per
+            // picked photograph.
             event.favorite != null -> written(state, favoriteWrites(state, event.favorite.favorite))
 
             // "ADD TO ALBUM" — the shared sheet (`AlbumChoice.kt`). It opens
@@ -245,7 +244,7 @@ public object PhotoShelfMachine : ScreenMachine<PhotoShelfState, PhotoShelfEvent
 
             // THE SHEET STAYS UP. The vault mints the new album's id and no
             // settle carries it back, so the album joins the list when its
-            // commit moves `core_collection` and the member's next tap puts the
+            // commit moves `container` and the member's next tap puts the
             // pick in it (`AlbumChoice.kt`).
             event.album_choice_created != null ->
                 written(state, AlbumChoice.createEffects(event.album_choice_created.title))
@@ -271,7 +270,7 @@ public object PhotoShelfMachine : ScreenMachine<PhotoShelfState, PhotoShelfEvent
                     Step(state)
                 }
 
-            // ONE `media.purge_asset` PER TRASHED PHOTOGRAPH, keyed as the
+            // ONE `entity.purge` PER TRASHED PHOTOGRAPH, keyed as the
             // selection's Delete-forever keys them, so a photograph purged
             // either way is the same intent.
             event.trash_listed != null ->
@@ -345,7 +344,7 @@ public object PhotoShelfMachine : ScreenMachine<PhotoShelfState, PhotoShelfEvent
                 }
                 // THE ALBUM'S OWN VERBS SETTLE ABOUT NO ROW. A committed rename
                 // retitles the head — the name rode the route, and nothing else
-                // on this screen reads `core_collection` — and a committed
+                // on this screen reads `container` — and a committed
                 // delete closes the shelf, because the album it is showing is
                 // gone.
                 val album = state.shelf?.album
@@ -396,14 +395,12 @@ public object PhotoShelfMachine : ScreenMachine<PhotoShelfState, PhotoShelfEvent
      *
      * Every one of these is v0's own words where v0 had words, because a port
      * that reworded the copy would be a port a member can tell they are using.
-     * The two that are new are the ones v0 never wrote: a memory's members had
-     * no screen of their own, and the place sentence is `PlaceDetail.tsx`'s
-     * with the heading it already interpolated.
+     * The one that is new is the one v0 never wrote: the place sentence is
+     * `PlaceDetail.tsx`'s with the heading it already interpolated.
      */
     public fun emptySentence(shelf: PhotoShelf?): String {
         val album = shelf?.album
         val place = shelf?.place
-        val memory = shelf?.memory
         val view = shelf?.state_view
         return when {
             album != null -> "Nothing in this album yet."
@@ -411,7 +408,6 @@ public object PhotoShelfMachine : ScreenMachine<PhotoShelfState, PhotoShelfEvent
             // empty means every photograph has one, which is the good news.
             place != null && place.unplaced -> "Every photo has a place."
             place != null -> "No photos at ${place.place_name} yet."
-            memory != null -> "No photos from this memory are on this phone."
             view != null -> emptyStateViewSentence(view)
             // A SHELF WITH NO PREDICATE IS NOT AN EMPTY LIBRARY. It is a screen
             // opened without its parameter, which is a defect and not a state a
@@ -452,12 +448,10 @@ public object PhotoShelfMachine : ScreenMachine<PhotoShelfState, PhotoShelfEvent
     public fun title(shelf: PhotoShelf?): String {
         val album = shelf?.album
         val place = shelf?.place
-        val memory = shelf?.memory
         val view = shelf?.state_view
         return when {
             album != null -> album.name
             place != null -> place.place_name
-            memory != null -> memory.title
             view != null -> stateViewTitle(view)
             else -> PhotosCopy.PHOTOS_SHELF_TITLE
         }
@@ -484,12 +478,9 @@ public object PhotoShelfMachine : ScreenMachine<PhotoShelfState, PhotoShelfEvent
     /**
      * THE TRASH WINDOW, AS THE VAULT ITSELF COUNTS IT.
      *
-     * Thirty days, from `crates/vault/src/commands/media.rs`'s
-     * `PURGE_AFTER_DAYS` — the constant `media.delete_asset` stamps `purge_at`
-     * with. Restated here rather than read from a registry because
-     * `contracts/schema/v0-registries.json`'s `retentionWindows` holds the
-     * AUDIT and LEDGER windows only; there is no media entry in it, so a read
-     * of that file would be a read of the wrong number.
+     * Thirty days, from `crates/vault/src/commands/entity.rs`'s
+     * `TRASH_DAYS` — the constant `entity.trash` stamps `purge_at`
+     * with. Restated here because `commonMain` cannot read a Rust constant.
      *
      * It is a WINDOW and not a countdown, and `PhotoShelfState`'s field says so
      * in its name: a per-row countdown would need `purge_at` on the state — and
@@ -519,12 +510,11 @@ public object PhotoShelfMachine : ScreenMachine<PhotoShelfState, PhotoShelfEvent
     /**
      * OUT OF THE TRASH, OR OUT OF THE ARCHIVE — the fork, in one place.
      *
-     * `media.restore_asset` clears `deleted_at`, and it REFUSES an asset whose
-     * window has lapsed (`asset_is_trashed_within_its_window`). An archived
-     * asset was never deleted, so restoring it is `media.update_asset` with
-     * `archived = 0`: sending `restore_asset` for it would be refused by the
-     * precondition, and a member unarchiving a photograph would read "that
-     * photograph is not in the trash".
+     * `entity.restore` clears the trash stamp, and it REFUSES a photograph whose
+     * window has lapsed. An archived photograph was never deleted, so restoring
+     * it is `flag.clear` of `archived`: sending `entity.restore` for it would be
+     * refused by the precondition, and a member unarchiving a photograph would
+     * read "that photograph is not in the trash".
      */
     private fun restoreWrites(state: PhotoShelfState): List<ScreenEffect.SubmitWrite> =
         if (isArchive(state.shelf)) {
@@ -533,7 +523,7 @@ public object PhotoShelfMachine : ScreenMachine<PhotoShelfState, PhotoShelfEvent
             state.selected_asset_ids.map { assetId ->
                 ScreenEffect.SubmitWrite(
                     command = RESTORE_COMMAND,
-                    inputJson = assetInput(assetId),
+                    inputJson = PhotoWrites.idOnly(assetId),
                     invokeKey = "$RESTORE_COMMAND:$assetId",
                 )
             }
@@ -546,7 +536,7 @@ public object PhotoShelfMachine : ScreenMachine<PhotoShelfState, PhotoShelfEvent
         val command = if (permanent) PURGE_COMMAND else DELETE_COMMAND
         ScreenEffect.SubmitWrite(
             command = command,
-            inputJson = assetInput(assetId),
+            inputJson = PhotoWrites.idOnly(assetId),
             // THE KEY NAMES THE VERB AS WELL AS THE ROW. Trashing and purging
             // one photograph are two intents over one id, and a key that was
             // the id alone would make the second look like a replay of the
@@ -560,14 +550,13 @@ public object PhotoShelfMachine : ScreenMachine<PhotoShelfState, PhotoShelfEvent
         archived: Boolean,
     ): List<ScreenEffect.SubmitWrite> = state.selected_asset_ids.map { assetId ->
         ScreenEffect.SubmitWrite(
-            command = UPDATE_COMMAND,
-            inputJson = "{\"asset_id\":${jsonString(assetId)}," +
-                "\"archived\":${if (archived) 1 else 0}}",
-            // A PER-ROW WRITE KEYS ON THE ROW AND THE VALUE BEING SET, never on
+            command = PhotoWrites.flagCommand(archived),
+            inputJson = PhotoWrites.flag(assetId, PhotoWrites.ARCHIVED),
+            // A PER-ROW WRITE KEYS ON THE ROW AND THE FLAG BEING SET, never on
             // an ordinal (`NotesEditorMachine`'s own note on this): archiving
             // and un-archiving the same photograph are two different intents
             // and must not share a key.
-            invokeKey = "$UPDATE_COMMAND:archived=${if (archived) 1 else 0}:$assetId",
+            invokeKey = "${PhotoWrites.flagCommand(archived)}:${PhotoWrites.ARCHIVED}:$assetId",
         )
     }
 
@@ -605,14 +594,13 @@ public object PhotoShelfMachine : ScreenMachine<PhotoShelfState, PhotoShelfEvent
     }
 
     private fun favoriteWrites(state: PhotoShelfState, favorite: Boolean): List<ScreenEffect> {
-        val value = if (favorite) 1 else 0
         return state.selected_asset_ids.map { assetId ->
             ScreenEffect.SubmitWrite(
-                command = FAVORITE_COMMAND,
-                inputJson = "{\"asset_id\":${jsonString(assetId)},\"favorite\":$value}",
-                // THE ROW AND THE VALUE, as the archive keys them: starring and
+                command = PhotoWrites.flagCommand(favorite),
+                inputJson = PhotoWrites.flag(assetId, PhotoWrites.STARRED),
+                // THE ROW AND THE FLAG, as the archive keys them: starring and
                 // unstarring one photograph are two intents over one id.
-                invokeKey = "$FAVORITE_COMMAND:favorite=$value:$assetId",
+                invokeKey = "${PhotoWrites.flagCommand(favorite)}:${PhotoWrites.STARRED}:$assetId",
             )
         }
     }
@@ -632,9 +620,8 @@ public object PhotoShelfMachine : ScreenMachine<PhotoShelfState, PhotoShelfEvent
         if (name.isEmpty() || name == album.name) return emptyList()
         return listOf(
             ScreenEffect.SubmitWrite(
-                command = RENAME_ALBUM_COMMAND,
-                inputJson = "{\"album_id\":${jsonString(album.collection_id)}," +
-                    "\"title\":${jsonString(name)}}",
+                command = PhotoWrites.RETITLE,
+                inputJson = PhotoWrites.retitle(album.collection_id, name),
                 invokeKey = "$RENAME_ALBUM_COMMAND:${album.collection_id}:$name",
             ),
         )
@@ -645,8 +632,8 @@ public object PhotoShelfMachine : ScreenMachine<PhotoShelfState, PhotoShelfEvent
         val album = state.shelf?.album ?: return emptyList()
         return listOf(
             ScreenEffect.SubmitWrite(
-                command = DELETE_ALBUM_COMMAND,
-                inputJson = "{\"album_id\":${jsonString(album.collection_id)}}",
+                command = PhotoWrites.TRASH,
+                inputJson = PhotoWrites.idOnly(album.collection_id),
                 invokeKey = "$DELETE_ALBUM_COMMAND:${album.collection_id}",
             ),
         )
@@ -663,8 +650,7 @@ public object PhotoShelfMachine : ScreenMachine<PhotoShelfState, PhotoShelfEvent
         return listOf(
             ScreenEffect.SubmitWrite(
                 command = SET_COVER_COMMAND,
-                inputJson = "{\"album_id\":${jsonString(album.collection_id)}," +
-                    "\"asset_id\":${jsonString(assetId)}}",
+                inputJson = PhotoWrites.setCover(album.collection_id, assetId),
                 invokeKey = "$SET_COVER_COMMAND:${album.collection_id}:$assetId",
             ),
         )
@@ -676,8 +662,7 @@ public object PhotoShelfMachine : ScreenMachine<PhotoShelfState, PhotoShelfEvent
         return state.selected_asset_ids.map { assetId ->
             ScreenEffect.SubmitWrite(
                 command = REMOVE_FROM_ALBUM_COMMAND,
-                inputJson = "{\"album_id\":${jsonString(album.collection_id)}," +
-                    "\"asset_id\":${jsonString(assetId)}}",
+                inputJson = PhotoWrites.membership(album.collection_id, assetId),
                 invokeKey = "$REMOVE_FROM_ALBUM_COMMAND:${album.collection_id}:$assetId",
             )
         }
@@ -685,7 +670,7 @@ public object PhotoShelfMachine : ScreenMachine<PhotoShelfState, PhotoShelfEvent
 
     private fun purgeWrite(assetId: String): ScreenEffect = ScreenEffect.SubmitWrite(
         command = PURGE_COMMAND,
-        inputJson = assetInput(assetId),
+        inputJson = PhotoWrites.idOnly(assetId),
         invokeKey = "$PURGE_COMMAND:$assetId",
     )
 
@@ -708,9 +693,6 @@ public object PhotoShelfMachine : ScreenMachine<PhotoShelfState, PhotoShelfEvent
     public const val WRITE_REFUSED_SENTENCE: String =
         "Centraid could not make that change."
 
-    private fun assetInput(assetId: String): String =
-        "{\"asset_id\":${jsonString(assetId)}}"
-
     /**
      * The registered command names, and nothing else may spell them.
      *
@@ -718,18 +700,21 @@ public object PhotoShelfMachine : ScreenMachine<PhotoShelfState, PhotoShelfEvent
      * `knowledge.save_note`, the registry has no such command, and a member
      * read "That request does not make sense to this build" on every window for
      * ever because nothing in the product had ever submitted a write. These
-     * four are `crates/vault/src/commands/media.rs`'s, and `ShellCommandsExist`
+     * are the vault's shared verbs and `album.set_cover`, and `ShellCommandsExist`
      * is what keeps them that way.
+     *
+     * The album's rename and delete are `entity.retitle` and `entity.trash`,
+     * which a photograph's verbs share, so they KEY under names of their own
+     * ([RENAME_ALBUM_COMMAND], [DELETE_ALBUM_COMMAND]): a settle is told what it
+     * was about by its key.
      */
-    public const val RESTORE_COMMAND: String = "media.restore_asset"
-    public const val DELETE_COMMAND: String = "media.delete_asset"
-    public const val PURGE_COMMAND: String = "media.purge_asset"
-    public const val UPDATE_COMMAND: String = "media.update_asset"
-    public const val FAVORITE_COMMAND: String = "media.set_favorite"
-    public const val RENAME_ALBUM_COMMAND: String = "media.rename_album"
-    public const val DELETE_ALBUM_COMMAND: String = "media.delete_album"
-    public const val SET_COVER_COMMAND: String = "media.set_album_cover"
-    public const val REMOVE_FROM_ALBUM_COMMAND: String = "media.remove_from_album"
+    public const val RESTORE_COMMAND: String = PhotoWrites.RESTORE
+    public const val DELETE_COMMAND: String = PhotoWrites.TRASH
+    public const val PURGE_COMMAND: String = PhotoWrites.PURGE
+    public const val RENAME_ALBUM_COMMAND: String = PhotoWrites.KEY_RENAME_ALBUM
+    public const val DELETE_ALBUM_COMMAND: String = PhotoWrites.KEY_DELETE_ALBUM
+    public const val SET_COVER_COMMAND: String = PhotoWrites.SET_COVER
+    public const val REMOVE_FROM_ALBUM_COMMAND: String = PhotoWrites.EDGE_REMOVE
 
     private fun firstLoad(state: PhotoShelfState): Step<PhotoShelfState> = Step(
         state.copy(
@@ -753,23 +738,21 @@ public object PhotoShelfMachine : ScreenMachine<PhotoShelfState, PhotoShelfEvent
         state.data_?.cells?.map { it.asset_id }?.toSet() ?: emptySet()
 
     /**
-     * FOUR TABLES, AND ONLY ONE OF THEM ANSWERS IN ASSET IDS.
+     * `photo` ANSWERS IN PHOTOGRAPH IDS, AND THE REST DO NOT.
      *
-     * `media_asset` is the table the page is read from, so its keys ARE the
-     * ids this shelf holds and the reducer can ask whether it is showing one.
+     * `photo` is the table the page is read from, so its keys ARE the ids this
+     * shelf holds and the reducer can ask whether it is showing one.
      *
-     * The other three are the MEMBERSHIPS the shelf's predicate is over, and
-     * every one of them is a real way a shelf changes without `media_asset`
-     * moving at all: `media.add_to_album` writes `core_collection_entry` and
-     * nothing else, a star is a `core_tag` row (`set_starred`), and a memory
-     * pass writes `media_memory_member`. A shelf that listened to `media_asset` alone would
-     * be right only after a relaunch — which is the silent staleness
+     * `entity` and `edge` are what the shelf's predicate is over, and each is a
+     * real way a shelf changes without `photo` moving at all: the trash, a
+     * restore and a rename are `entity`'s, and an album's membership, a star and
+     * the archive are `edge`'s. A shelf that listened to `photo` alone would be
+     * right only after a relaunch — which is the silent staleness
      * `ScreenReads.table`'s own comment describes.
      *
-     * Their keys are entry, tag and member-row ids, which this shelf
-     * cannot match against anything, so the event carries an EMPTY list and
-     * [reduce] reads that as "re-read, I cannot tell whose". The core never
-     * delivers an empty key list, so the two readings cannot collide.
+     * Their keys are entity and edge ids, which this shelf cannot match against
+     * anything, so the event carries an EMPTY list and [reduce] reads that as
+     * "re-read, I cannot tell whose".
      */
     override fun rowsChanged(table: String, keys: List<String>): PhotoShelfEvent? = when (table) {
         ASSET_TABLE ->
@@ -778,8 +761,8 @@ public object PhotoShelfMachine : ScreenMachine<PhotoShelfState, PhotoShelfEvent
         in MEMBERSHIP_TABLES ->
             PhotoShelfEvent(rows_changed = PhotoShelfEvent.RowsChanged(asset_ids = emptyList()))
 
-        // THE ALBUMS THEMSELVES — a rename, a new album, a delete. No shelf's
-        // page reads this table, so it moves only the "Add to album" list.
+        // THE ALBUMS THEMSELVES — a new album, a cover. No shelf's page reads
+        // this table, so it moves only the "Add to album" list.
         ALBUM_TABLE ->
             PhotoShelfEvent(
                 rows_changed = PhotoShelfEvent.RowsChanged(asset_ids = emptyList(), albums_only = true),
@@ -788,15 +771,11 @@ public object PhotoShelfMachine : ScreenMachine<PhotoShelfState, PhotoShelfEvent
         else -> null
     }
 
-    private const val ASSET_TABLE: String = "media_asset"
+    private const val ASSET_TABLE: String = "photo"
 
-    private const val ALBUM_TABLE: String = "core_collection"
+    private const val ALBUM_TABLE: String = "container"
 
-    private val MEMBERSHIP_TABLES: Set<String> = setOf(
-        "core_collection_entry",
-        "core_tag",
-        "media_memory_member",
-    )
+    private val MEMBERSHIP_TABLES: Set<String> = setOf("entity", "edge")
 
     override fun seatChanged(seat: SeatState): PhotoShelfEvent =
         PhotoShelfEvent(seat_changed = PhotoShelfEvent.SeatChanged(seat = seat))

@@ -264,9 +264,6 @@ struct MoneyRulesView: View {
                     value: editor.categoryLabel.isEmpty ? editor.clearCategoryLabel_p : editor.categoryLabel,
                     identifier: "money-rule-category"
                 ) { send(event { $0.categorySheet = .init() }) }
-                MoneyTextField(key: editor.nameLabel, value: editor.displayName, identifier: "money-rule-name") { text in
-                    send(event { $0.name = .with { $0.text = text } })
-                }
                 MoneyChoiceField(
                     key: editor.accountRowLabel,
                     value: editor.accountLabel.isEmpty ? editor.clearAccountLabel_p : editor.accountLabel,

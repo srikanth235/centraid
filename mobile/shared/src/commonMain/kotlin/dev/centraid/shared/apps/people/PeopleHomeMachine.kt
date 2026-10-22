@@ -59,24 +59,23 @@ import dev.centraid.shared.screen.Step
 public object PeopleHomeMachine : ScreenMachine<PeopleHomeState, PeopleHomeEvent> {
     public const val SCREEN_ID: String = ScreenIds.PEOPLE_HOME
 
-    public const val STAR_COMMAND: String = "people.star_person"
-    public const val UNSTAR_COMMAND: String = "people.unstar_person"
+    public const val STAR_COMMAND: String = "flag.set"
+    public const val UNSTAR_COMMAND: String = "flag.clear"
 
     /**
      * THE TABLES THE ROSTER, TOUCH AND SEARCH ANSWERS ARE FOLDED FROM: the
-     * profile and its party, the star and list tags with their vocabulary,
-     * important dates, and the touches (`core_activity` linked by
-     * `core_link`). `PeopleHomeReads.tables` is this set.
+     * person and its entity, the star and list edges, the lists, yearly dates
+     * (events), the touches (`activity` rows `with` them) and the notes about
+     * them. `PeopleHomeReads.tables` is this set.
      */
     public val TABLES: Set<String> = setOf(
-        "people_profile",
-        "core_party",
-        "core_tag",
-        "core_concept",
-        "core_concept_scheme",
-        "people_important_date",
-        "core_activity",
-        "core_link",
+        "entity",
+        "person",
+        "edge",
+        "container",
+        "event",
+        "activity",
+        "note",
     )
 
     override fun initial(): PeopleHomeState = decorate(
@@ -234,13 +233,8 @@ public object PeopleHomeMachine : ScreenMachine<PeopleHomeState, PeopleHomeEvent
         val term = activeTerm(state)
         if (event.search != null) {
             if (term == null) return Step(settled)
-            val answered = SearchLaw.answered(Search, settled, term, event.corrected, rows = event.search.rows.size)
-            // THE ONE ACTION OF THE NO-MATCH SENTENCE is Ask, when the law offered it (#1097).
-            val data = event.search.copy(
-                term = term,
-                empty = event.search.empty?.let { SearchLaw.asking(it, answered.search ?: SearchField()) },
-            )
-            return Step(answered.copy(search_data = data))
+            val answered = SearchLaw.answered(Search, settled, term, event.corrected)
+            return Step(answered.copy(search_data = event.search.copy(term = term)))
         }
         val data = event.data_ ?: return Step(settled)
         // The surface must be the one on screen; anything else is re-asked.
@@ -273,7 +267,7 @@ public object PeopleHomeMachine : ScreenMachine<PeopleHomeState, PeopleHomeEvent
         val target = !row.starred
         val command = if (target) STAR_COMMAND else UNSTAR_COMMAND
         val key = InvokeKeys.of(command, partyId)
-        val step = WriteLaw.submit(Writes, state, command, "{\"party_id\":${jsonString(partyId)}}", key)
+        val step = WriteLaw.submit(Writes, state, command, "{\"id\":${jsonString(partyId)},\"flag\":\"starred\"}", key)
         return Step(
             step.state.copy(
                 star_pending = state.star_pending.filter { it.party_id != partyId } +
@@ -425,7 +419,7 @@ public object PeopleHomeMachine : ScreenMachine<PeopleHomeState, PeopleHomeEvent
 
     private object Search : SearchLens<PeopleHomeState> {
         override val screenId: String = SCREEN_ID
-        override val asks: Boolean = true
+        override val askScope: String = "people"
 
         override fun field(state: PeopleHomeState): SearchField = state.search ?: SearchField()
 

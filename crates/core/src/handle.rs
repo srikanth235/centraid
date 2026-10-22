@@ -360,7 +360,7 @@ impl Handle {
     ///
     /// One per vault: the grid reads it and the commands write it
     /// (D-1025-S3-1). Attaching it puts the vault's byte door over it, so
-    /// `media.add_asset` spills into it and `content_location` answers with a
+    /// a command spills into it and `content_location` answers with a
     /// file a platform can open.
     ///
     /// A core that is never handed one holds text and refuses photographs,
@@ -493,49 +493,6 @@ impl Handle {
     #[must_use]
     pub fn bytes(&self) -> Option<centraid_blobs::ContentBytes> {
         self.bytes.lock().ok().and_then(|held| held.clone())
-    }
-
-    /// DERIVE THE TIERS THIS VAULT IS MISSING, once (#1025 S3, D-1025-S7-53).
-    ///
-    /// The process calls this at start, after the byte door is attached. It is
-    /// bounded (`limit` items) and resumable — an item that gained its rows is
-    /// no longer a candidate — so a large old vault converges over several
-    /// starts rather than holding the first one open.
-    ///
-    /// Non-fatal by construction for the caller too: it returns the number of
-    /// items that gained tiers, and a vault with no byte store returns zero.
-    ///
-    /// **THE GUARD IS AN OPEN VAULT, AND NOTHING ELSE** (#1029 §1). It used to
-    /// ask the role as well, and the role predicate was wrong twice over: the
-    /// clause `!self.is_gateway() || self.holds_a_replica()` fired on every
-    /// gateway, so the backfill this command exists for never ran once. There
-    /// is one role now, so the only question left is whether there is a file.
-    pub fn derive_missing_tiers(&self, limit: usize) -> Result<u64> {
-        // NO FILE, NOTHING TO SWEEP. `with_vault` below would answer
-        // `Unpaired`, and an error is the wrong shape for "there is nothing
-        // here": this returns an honest zero.
-        if !self.holds_a_replica() {
-            return Ok(0);
-        }
-        // The owner of this device's own vault — the same principal every
-        // other command on this core runs as (`Handle::owner`). There is no
-        // remote caller to attribute housekeeping to, and inventing one would
-        // be claiming an authority nothing granted.
-        let principal = self.owner();
-        let command = centraid_vault::Command::new(
-            "media.derive_missing",
-            serde_json::json!({ "limit": limit }),
-        );
-        let outcome = self.with_vault(|vault| {
-            vault
-                .execute(&self.registry, &principal, &command)
-                .map_err(Into::into)
-        })?;
-        Ok(outcome
-            .output
-            .get("derived")
-            .and_then(serde_json::Value::as_u64)
-            .unwrap_or_default())
     }
 
     /// Answer one request.
@@ -781,6 +738,15 @@ impl Handle {
         centraid_vault::Principal::owner(OWNER_DEVICE)
     }
 
+    /// The chat's assistant, riding this device: the owner's own, with a
+    /// sealed value closed to it. The vault refuses any command run under this
+    /// principal that reveals or sets a sealed value, through whatever verb
+    /// (R-1088-3, the owner's ruling of 2026-10-22, #1135).
+    #[must_use]
+    pub fn assistant(&self) -> centraid_vault::Principal {
+        centraid_vault::Principal::assistant(OWNER_DEVICE)
+    }
+
     /// THE DOOR A CHAT'S NATIVE SESSION READS AND WRITES THROUGH (#1088).
     ///
     /// It holds clones of this handle's own lock, registry and event queue, so
@@ -792,7 +758,7 @@ impl Handle {
             Arc::clone(&self.vault),
             Arc::clone(&self.registry),
             self.events(),
-            self.owner(),
+            self.assistant(),
         )
     }
 
@@ -1197,9 +1163,9 @@ impl Handle {
             .unwrap_or_else(std::sync::PoisonError::into_inner) = plan;
     }
 
-    /// Record a closed session: owned bytes are staged for the command that
-    /// names them, a derivative beside its parent, and a library item in the
-    /// ledger — where it lives, and its sealed parts in the queue.
+    /// Record a closed session: owned bytes are held for the command that names
+    /// and claims them, a derivative is claimed beside its parent, and a library
+    /// item is in the ledger — where it lives, and its sealed parts in the queue.
     fn record_staged(&self, staged: crate::stage::Staged) -> Result<wire::StageHandle> {
         use crate::stage::Staged;
         match staged {
@@ -1209,28 +1175,23 @@ impl Handle {
                 derivative,
             } => {
                 let hash = stored.hash.to_hex();
-                let byte_size = i64::try_from(stored.bytes).unwrap_or(i64::MAX);
-                self.with_vault(|vault| {
-                    match derivative {
-                        Some((variant_of, variant)) => {
-                            vault.stage_derivative(&centraid_vault::content::StagedDerivative {
+                // A derivative is claimed beside its parent; an original is claimed
+                // by the command that names it (`document.add`, `photo.add`), so
+                // bytes staged and never named leave no row to collect.
+                if let Some((variant_of, variant)) = derivative {
+                    let byte_size = i64::try_from(stored.bytes).unwrap_or(i64::MAX);
+                    self.with_vault(|vault| {
+                        Ok(
+                            vault.stage_derivative(&centraid_vault::blob::StagedDerivative {
                                 hash: hash.clone(),
                                 byte_size,
                                 media_type,
                                 variant,
                                 variant_of,
-                            })?;
-                        }
-                        None => {
-                            vault.stage_bytes(&[centraid_vault::content::NeededBytes {
-                                hash: hash.clone(),
-                                byte_size,
-                                media_type,
-                            }])?;
-                        }
-                    }
-                    Ok(())
-                })?;
+                            })?,
+                        )
+                    })?;
+                }
                 Ok(wire::StageHandle {
                     content_hash: hash,
                     byte_size: stored.bytes,
@@ -1276,14 +1237,7 @@ impl Handle {
                     )?;
                 }
                 let hash = h.to_hex();
-                let derivatives = self.with_vault(|vault| {
-                    vault.stage_bytes(&[centraid_vault::content::NeededBytes {
-                        hash: hash.clone(),
-                        byte_size: i64::try_from(len).unwrap_or(i64::MAX),
-                        media_type,
-                    }])?;
-                    Ok(vault.derivatives_of(&hash)?)
-                })?;
+                let derivatives = self.with_vault(|vault| Ok(vault.derivatives_of(&hash)?))?;
                 Ok(wire::StageHandle {
                     content_hash: hash,
                     byte_size: len,
@@ -1456,7 +1410,7 @@ mod tests {
 
     impl Scratch {
         fn founded() -> Self {
-            let dir = centraid_ontology::golden::scratch_dir();
+            let dir = centraid_ontology::scratch::scratch_dir();
             std::fs::create_dir_all(&dir).expect("the directory is made");
             let handle = Core::open(CoreConfig::new(dir.join("vault.db"))).expect("it opens");
             handle
@@ -1521,14 +1475,26 @@ mod tests {
             .handle
             .open_own_bytes(scratch.dir.join("vault.bytes"))
             .expect("the byte store opens");
+        // The bytes a shell staged: in the store, named by their hash, and claimed
+        // by the command that names them.
+        let png = {
+            use base64::Engine as _;
+            base64::engine::general_purpose::STANDARD
+                .decode(ONE_PIXEL_PNG)
+                .expect("a PNG")
+        };
+        let blob =
+            centraid_vault::bytes::BlobStore::put(&scratch.handle.bytes().expect("a door"), &png)
+                .expect("the store takes it");
         let Some(wire::response::Kind::Command(outcome)) = scratch
             .handle
             .call(&wire::Request {
                 kind: Some(wire::request::Kind::Command(wire::Command {
-                    name: "media.add_asset".to_owned(),
+                    name: "photo.add".to_owned(),
                     input: serde_json::to_vec(&serde_json::json!({
-                        "data_uri": format!("data:image/png;base64,{ONE_PIXEL_PNG}"),
-                        "kind": "photo",
+                        "blob": blob,
+                        "size": png.len(),
+                        "media_type": "image/png",
                     }))
                     .expect("json"),
                     invoke_key: "content-urls-library".to_owned(),
@@ -1549,12 +1515,9 @@ mod tests {
         let output: serde_json::Value =
             serde_json::from_slice(&outcome.output).expect("the output is JSON");
         let reference = wire::ContentRef {
-            content_id: output["content_id"]
-                .as_str()
-                .expect("a content id")
-                .to_owned(),
-            owner_type: "media.asset".to_owned(),
-            owner_id: output["asset_id"].as_str().expect("an asset id").to_owned(),
+            content_id: blob.clone(),
+            owner_type: "photo".to_owned(),
+            owner_id: output["id"].as_str().expect("a photograph id").to_owned(),
         };
         let locate = || {
             let Some(wire::response::Kind::ContentUrls(urls)) = scratch
@@ -1626,7 +1589,7 @@ mod tests {
     /// the found that follows it — which is a state nothing could leave over
     /// this ABI until #1029 W5 added the door.
     fn unfounded() -> Scratch {
-        let dir = centraid_ontology::golden::scratch_dir();
+        let dir = centraid_ontology::scratch::scratch_dir();
         std::fs::create_dir_all(&dir).expect("the directory is made");
         let handle = Core::open(CoreConfig::new(dir.join("vault.db"))).expect("it opens");
         Scratch { dir, handle }
@@ -1752,7 +1715,7 @@ mod tests {
     /// released case, which is the one that matters in production.
     #[test]
     fn an_expected_digest_is_carried_into_open_and_a_mismatch_is_typed() {
-        let dir = centraid_ontology::golden::scratch_dir();
+        let dir = centraid_ontology::scratch::scratch_dir();
         std::fs::create_dir_all(&dir).expect("the directory is made");
         let handle =
             Core::open(CoreConfig::new(dir.join("vault.db")).expecting_digest("aaaa1111bbbb2222"))
@@ -1898,7 +1861,7 @@ mod tests {
 
     /// A founded core holding the vault's keys, its content store open.
     fn unlocked() -> Scratch {
-        let dir = centraid_ontology::golden::scratch_dir();
+        let dir = centraid_ontology::scratch::scratch_dir();
         std::fs::create_dir_all(&dir).expect("the directory is made");
         let words = "abandon abandon abandon abandon abandon abandon abandon abandon \
                      abandon abandon abandon abandon abandon abandon abandon abandon \
@@ -2146,6 +2109,17 @@ mod tests {
             b"a picture",
         );
         assert!(again.already_held, "the same bytes again are held already");
+        // A derivative is claimed beside its parent, so the parent is named first,
+        // as the command that files it would.
+        scratch
+            .handle
+            .with_vault(|vault| {
+                Ok(vault.stage_bytes(&[centraid_vault::blob::NeededBytes {
+                    hash: original.content_hash.clone(),
+                    byte_size: 9,
+                }])?)
+            })
+            .expect("the original is claimed");
         let thumb = put(
             wire::StageBegin {
                 media_type: "image/jpeg".to_owned(),
@@ -2247,18 +2221,19 @@ mod tests {
         let request = wire::Request {
             kind: Some(wire::request::Kind::Page(wire::PageRequest {
                 query: Some(wire::PageQuery {
-                    name: "parties".to_owned(),
-                    select: vec!["party_id".to_owned(), "created_at".to_owned()],
-                    from: "core_party".to_owned(),
-                    r#where: None,
-                    bind: Vec::new(),
+                    name: "people".to_owned(),
+                    select: vec!["id".to_owned(), "created_at".to_owned()],
+                    from: "entity".to_owned(),
+                    r#where: Some("kind = ?".to_owned()),
+                    bind: vec![wire::Value {
+                        kind: Some(wire::value::Kind::Text("person".to_owned())),
+                    }],
                     order: Some(wire::PageOrder {
                         sort_column: "created_at".to_owned(),
-                        pk_column: "party_id".to_owned(),
+                        pk_column: "id".to_owned(),
                         descending: false,
                     }),
                     with_held_thumbnail: false,
-                    with_note_body: false,
                     with_document_size: false,
                     with_minor_units: false,
                     local_day_columns: Vec::new(),
@@ -2273,7 +2248,7 @@ mod tests {
         else {
             panic!("a page comes back");
         };
-        // The founded vault has its owner party and nothing else, so the rows
+        // The founded vault has its owner and nothing else, so the rows
         // ended and `next` is ABSENT — never a cursor past the end.
         assert!(!page.rows.is_empty());
         assert!(page.next.is_none());
@@ -2300,8 +2275,8 @@ mod tests {
             .handle
             .call(&wire::Request {
                 kind: Some(wire::request::Kind::Command(wire::Command {
-                    name: "core.add_party".to_owned(),
-                    input: br#"{"display_name":"Ada Lovelace"}"#.to_vec(),
+                    name: "person.add".to_owned(),
+                    input: br#"{"title":"Ada Lovelace"}"#.to_vec(),
                     invoke_key: "w2-change-event".to_owned(),
                     ..Default::default()
                 })),
@@ -2319,7 +2294,7 @@ mod tests {
             }
         }
         assert!(
-            tables.iter().any(|table| table == "core_party"),
+            tables.iter().any(|table| table == "person"),
             "the write produced no change event for the table it wrote: {tables:?}"
         );
     }
@@ -2331,8 +2306,8 @@ mod tests {
             .handle
             .call(&wire::Request {
                 kind: Some(wire::request::Kind::Command(wire::Command {
-                    name: "people.add_person".to_owned(),
-                    input: br#"{"display_name":"Ada","cadence_days":0}"#.to_vec(),
+                    name: "person.add".to_owned(),
+                    input: br#"{"title":"Ada","cadence_days":0}"#.to_vec(),
                     invoke_key: "w1-principal-from-the-handle".to_owned(),
                     // ABSENT, and that is the assertion.
                     principal: None,
@@ -2364,8 +2339,8 @@ mod tests {
                 .handle
                 .call(&wire::Request {
                     kind: Some(wire::request::Kind::Command(wire::Command {
-                        name: "people.add_person".to_owned(),
-                        input: br#"{"display_name":"Grace","cadence_days":0}"#.to_vec(),
+                        name: "person.add".to_owned(),
+                        input: br#"{"title":"Grace","cadence_days":0}"#.to_vec(),
                         invoke_key: key.to_owned(),
                         principal,
                         ..Default::default()

@@ -1,6 +1,8 @@
 package dev.centraid.shared
 
+import centraid.core.v1.AppQueryResponse
 import centraid.core.v1.ErrorCode
+import centraid.core.v1.NotesNote
 import centraid.core.v1.PageCursor
 import centraid.core.v1.Row
 import centraid.core.v1.Value
@@ -90,6 +92,7 @@ import centraid.screen.v1.PhotoLightboxEvent
 import centraid.screen.v1.PhotoPickerEvent
 import centraid.screen.v1.DuplicateReviewEvent
 import dev.centraid.shared.apps.photos.DuplicateReviewMachine
+import dev.centraid.shared.apps.photos.DuplicateClusterMembers
 import dev.centraid.shared.apps.photos.DuplicateReviewReads
 import dev.centraid.shared.apps.photos.DuplicatesMachine
 import dev.centraid.shared.apps.photos.DuplicatesReads
@@ -100,8 +103,6 @@ import dev.centraid.shared.apps.photos.PhotoPickerReads
 import dev.centraid.shared.apps.photos.PhotoShelfMachine
 import dev.centraid.shared.apps.photos.PhotoShelfReads
 import dev.centraid.shared.apps.photos.PhotosGridMachine
-import dev.centraid.shared.apps.photos.PhotosMemoriesMachine
-import dev.centraid.shared.apps.photos.PhotosMemoriesReads
 import dev.centraid.shared.apps.photos.PhotosReads
 import dev.centraid.shared.apps.photos.PlacesMachine
 import dev.centraid.shared.apps.photos.PlacesReads
@@ -154,7 +155,6 @@ class AppReadsSpec : StringSpec({
      */
     val screens: List<Triple<String, ScreenReads<*, *>, ScreenMachine<*, *>>> = listOf(
         Triple("photos", PhotosReads, PhotosGridMachine),
-        Triple("notes", NotesReads, NotesEditorMachine),
         // THE PHOTOS MINIAPP'S OTHER SCREENS (#1029, photos port). Seven of
         // them are `ScreenReads` and belong here; the ones that are not —
         // Collections and Search — fan several statements out in their
@@ -165,16 +165,11 @@ class AppReadsSpec : StringSpec({
         Triple("photos.picker", PhotoPickerReads, PhotoPickerMachine),
         Triple("photos.lightbox", PhotoLightboxReads, PhotoLightboxMachine),
         Triple("photos.places", PlacesReads, PlacesMachine),
-        // MEMORIES IS SERVED BY ITS OWN BRIDGE — the shelf, then a trip's
-        // route legs, folded into one page (`PhotosMemoriesBridge`) — but its
-        // SHELF is still one `ScreenReads` statement, and that statement is
-        // what this list asserts. The route fold is `PhotosMemoriesSpec`'s.
-        Triple("photos.memories", PhotosMemoriesReads, PhotosMemoriesMachine),
-        Triple("photos.duplicates", DuplicatesReads, DuplicatesMachine),
+        // THE DUPLICATES SHELF IS AN APP QUERY (`photos.duplicates`, the core's
+        // clustering), and is in `queryScreens`.
         Triple("photos.duplicate", DuplicateReviewReads, DuplicateReviewMachine),
         Triple("docs.trash", DocsTrashReads, DocsTrashMachine),
-        Triple("tasks.trash", TasksTrashMachine.reads, TasksTrashMachine.machine),
-        // LOCKER (#1047): the kit's trash over `locker_item`. The statement is
+        // LOCKER (#1047): the kit's trash over `entity`, kind `locker_item` (#1135). The statement is
         // the kit's own; `LockerTrashReads` adds only the gate in front of it
         // (`LockerSpec`).
         Triple("locker.trash", TrashReads(LOCKER_TRASH), LockerTrashMachine),
@@ -183,10 +178,6 @@ class AppReadsSpec : StringSpec({
     /** The statement each screen makes when it is holding a state that can read. */
     fun statementOf(name: String) = when (name) {
         "photos" -> PhotosReads.query(PhotosGridMachine.initial(), null)
-        "notes" -> NotesReads.query(
-            NotesEditorMachine.initial().copy(note_id = "note-0001"),
-            null,
-        )
         // A PARAMETERISED SCREEN IS ASKED IN THE STATE IT WOULD REALLY READ IN.
         // `query` returns null when a screen cannot yet say what to read, so a
         // shelf asked with no shelf, a lightbox with no asset or a review with
@@ -227,20 +218,22 @@ class AppReadsSpec : StringSpec({
             null,
         )
         "photos.places" -> PlacesReads.query(PlacesMachine.initial(), null)
-        "photos.memories" -> PhotosMemoriesReads.query(PhotosMemoriesMachine.initial(), null)
-        "photos.duplicates" -> DuplicatesReads.query(DuplicatesMachine.initial(), null)
         "docs.trash" -> DocsTrashReads.query(DocsTrashMachine.initial(), null)
-        "tasks.trash" -> TasksTrashMachine.reads.query(TasksTrashMachine.machine.initial(), null)
         "locker.trash" -> TrashReads(LOCKER_TRASH).query(LockerTrashMachine.initial(), null)
-        else -> DuplicateReviewReads.query(
-            DuplicateReviewMachine.reduce(
-                DuplicateReviewMachine.initial(),
-                DuplicateReviewEvent(
-                    opened = DuplicateReviewEvent.Opened(cluster_id = "dup-1"),
-                ),
-            ).state,
-            null,
-        )
+        else -> {
+            // THE CLUSTER'S MEMBERS ARE THE CORE'S, asked as the screen opens; a
+            // cluster the core did not answer has no members to read.
+            DuplicateClusterMembers.remember("dup-1", listOf("ast-1", "ast-2"))
+            DuplicateReviewReads.query(
+                DuplicateReviewMachine.reduce(
+                    DuplicateReviewMachine.initial(),
+                    DuplicateReviewEvent(
+                        opened = DuplicateReviewEvent.Opened(cluster_id = "dup-1"),
+                    ),
+                ).state,
+                null,
+            )
+        }
     }
 
     "every screen's select carries both order columns" {
@@ -307,6 +300,7 @@ class AppReadsSpec : StringSpec({
      * join this list as they land.
      */
     val queryScreens: List<Triple<String, ScreenQueries<*, *>, ScreenMachine<*, *>>> = listOf(
+        Triple("notes.editor", NotesReads, NotesEditorMachine),
         Triple("agenda.home", AgendaReads, AgendaHomeMachine),
         Triple("agenda.event", AgendaEventReads(), AgendaEventMachine),
         Triple("agenda.editor", AgendaEditorReads(), AgendaEditorMachine),
@@ -326,18 +320,21 @@ class AppReadsSpec : StringSpec({
         Triple("docs.drive", DocsDriveReads, DocsDriveMachine),
         Triple("docs.document", DocsDocumentReads, DocsDocumentMachine),
         Triple("docs.editor", DocsEditorReads, DocsEditorMachine),
-        // TASKS (#1029 port). The trash is the kit's page read.
+        // PHOTOS' DUPLICATES (#1135): the core's clustering, asked as an app query.
+        Triple("photos.duplicates", DuplicatesReads, DuplicatesMachine),
+        // TASKS (#1029 port). The trash is `tasks.trash`, an app query: the trash is the entity's.
+        Triple("tasks.trash", TasksTrashMachine.reads, TasksTrashMachine.machine),
         Triple("tasks.list", TasksListReads, TasksListMachine),
         Triple("tasks.project", TasksProjectReads, TasksProjectMachine),
         Triple("tasks.detail", TasksDetailReads, TasksDetailMachine),
         Triple("tasks.catch_up", TasksCatchUpReads, TasksCatchUpMachine),
         // LOCKER (#1047). Every read screen shares one table set — the item,
-        // its sidecars, the tag plane and the memo; the generator reads none.
+        // its sidecars and its tags; the generator reads none.
         Triple("locker.home", LockerHomeReads, LockerHomeMachine),
         Triple("locker.item", LockerItemReads, LockerItemMachine),
         Triple("locker.editor", LockerEditorReads, LockerEditorMachine),
         Triple("locker.generator", LockerGeneratorReads, LockerGeneratorMachine),
-        // #1047 T2: the item page reads its access history (`access_receipt`);
+        // #1047 T2: the item page reads its access history (`receipt`);
         // export and import read the shelf's counts.
         Triple("locker.export", LockerExportReads, LockerExportMachine),
         Triple("locker.import", LockerImportReads, LockerImportMachine),
@@ -369,11 +366,15 @@ class AppReadsSpec : StringSpec({
         // THE SAME PAIRING AS A PAGE READ'S, and a stricter one: a page read
         // has one table, an app query several, and a table read and not
         // re-read on is a screen that goes stale on sync with nothing red.
-        vaultTables.size shouldBeGreaterThan 50
-        vaultTables.containsAll(HomeReads.TABLES) shouldBe true
+        vaultTables.size shouldBeGreaterThan 35
+        withClue("home reads ${HomeReads.TABLES - vaultTables}") {
+            vaultTables.containsAll(HomeReads.TABLES) shouldBe true
+        }
         queryScreens.forEach { (name, queries, machine) ->
             withClue(name) {
-                vaultTables.containsAll(queries.tables) shouldBe true
+                withClue("absent from the DDL: ${queries.tables - vaultTables}") {
+                    vaultTables.containsAll(queries.tables) shouldBe true
+                }
                 reactsTo(machine) shouldBe queries.tables
             }
         }
@@ -383,19 +384,16 @@ class AppReadsSpec : StringSpec({
     }
 
     "the notes editor will not read until it knows which note" {
-        // A STATEMENT WITH NO NOTE IS NOT A STATEMENT OVER EVERY NOTE. The
-        // predicate binds the id, so a missing id could only have become an
-        // unbound read of the whole table — which would open the editor on
-        // whichever note sorted first.
-        NotesReads.query(NotesEditorMachine.initial(), null) shouldBe null
-        val query = NotesReads.query(
+        val now = dev.centraid.shared.platform.DeviceClock.Reading(zone = "Europe/Lisbon", epochMillis = 1_773_230_400_000)
+        // A READ WITH NO NOTE IS NOT A READ OF EVERY NOTE: the request binds the
+        // id, so a missing id answers null, which the runtime turns into a
+        // sentence rather than an editor opened on whichever note sorted first.
+        NotesReads.requests(NotesEditorMachine.initial(), now) shouldBe null
+        val requests = NotesReads.requests(
             NotesEditorMachine.initial().copy(note_id = "note-0001"),
-            null,
+            now,
         ).shouldNotBeNull()
-        query.bind.map { it.text } shouldBe listOf("note-0001")
-        query.where_.shouldNotBeNull() shouldNotContain "note-0001"
-        // R-NOTES-1: the door appends `body_text` from `core_content_text`.
-        query.with_note_body shouldBe true
+        requests.single().notes_note.shouldNotBeNull().note_id shouldBe "note-0001"
     }
 
     "a photo cell is projected off the columns it selected" {
@@ -486,70 +484,45 @@ class AppReadsSpec : StringSpec({
         cell.capture_group_id shouldBe null
     }
 
-    "a note draft whose core_content_text row arrived fills the body" {
-        // R-NOTES-1: the editor reads the same text the replica holds. The
-        // door appends `body_text` from `core_content_text` (not `seat_blob_held`)
-        // after the named columns, the same way `thumbnail_path` rides a photos
-        // page (#1025 live-notes).
-        val row = Row(
-            values = listOf(
-                Value(text = "note-1"),
-                Value(text = "Groceries"),
-                Value(text = "markdown"),
-                Value(integer = 1L),
-                Value(text = "rev-7"),
-                Value(text = "2026-02-03T10:00:00Z"),
-                Value(text = "milk and eggs"),
+    "a note the core found is the draft, with its row_version as the base" {
+        val draft = NotesReads.arrived(
+            listOf(
+                AppQueryResponse(
+                    notes_note = NotesNote(
+                        found = true,
+                        note_id = "note-1",
+                        title = "Groceries",
+                        format = "markdown",
+                        pinned = true,
+                        body = "milk and eggs",
+                        row_version = 7L,
+                    ),
+                ),
             ),
-        )
-        val draft = NotesReads.arrived(listOf(row), null).data_.shouldNotBeNull().draft
+        ).data_.shouldNotBeNull().draft
         draft shouldBe NoteDraft(
             title = "Groceries",
             body = "milk and eggs",
-            body_unavailable = false,
             format = NoteDraft.Format.FORMAT_MARKDOWN,
             pinned = true,
-            base_revision_id = "rev-7",
+            base_revision_id = "7",
         )
     }
 
-    "a note draft without a core_content_text row is unavailable, not empty" {
-        // NULL on the appended column is "not on this device". An empty string
-        // would be a real body of zero characters, and collapsing the two would
-        // let a save blank a note whose words simply have not landed yet.
-        val row = Row(
-            values = listOf(
-                Value(text = "note-1"),
-                Value(text = "Groceries"),
-                Value(text = "markdown"),
-                Value(integer = 1L),
-                Value(text = "rev-7"),
-                Value(text = "2026-02-03T10:00:00Z"),
-                Value(null_ = centraid.core.v1.NullValue()),
-            ),
-        )
-        val draft = NotesReads.arrived(listOf(row), null).data_.shouldNotBeNull().draft
-        draft shouldBe NoteDraft(
-            title = "Groceries",
-            body = "",
-            body_unavailable = true,
-            format = NoteDraft.Format.FORMAT_MARKDOWN,
-            pinned = true,
-            base_revision_id = "rev-7",
-        )
-    }
-
-    "a note that is not there is a sentence, not an empty editor" {
-        // AN EMPTY PAGE IS NOT AN EMPTY NOTE. An empty list is a real answer;
-        // an editor with no row is an editor over a note that was deleted,
-        // purged or never reached this seat, and an empty title over an empty
-        // body would invite a member to type into a document that does not
-        // exist.
-        val event = NotesReads.arrived(emptyList(), null)
-        event.data_ shouldBe null
-        val failure = event.refused.shouldNotBeNull().failure.shouldNotBeNull()
-        failure.kind shouldBe ReadFailureKind.READ_FAILURE_KIND_REFUSED
-        failure.sentence shouldNotContain "null"
+    "a note that is not there, or is in the trash, is a sentence, not an editor" {
+        // AN ABSENT NOTE IS NOT AN EMPTY NOTE: an editor over one that was purged
+        // or never made would invite a member to type into a document that does
+        // not exist, and `note.edit` refuses a trashed one.
+        for (answer in listOf(
+            NotesNote(found = false, note_id = "gone"),
+            NotesNote(found = true, note_id = "n", deleted_at = "2026-03-01T00:00:00.000Z"),
+        )) {
+            val event = NotesReads.arrived(listOf(AppQueryResponse(notes_note = answer)))
+            event.data_ shouldBe null
+            val failure = event.refused.shouldNotBeNull().failure.shouldNotBeNull()
+            failure.kind shouldBe ReadFailureKind.READ_FAILURE_KIND_REFUSED
+            failure.sentence shouldNotContain "null"
+        }
     }
 
     "the cursor pair survives the one string a screen carries" {

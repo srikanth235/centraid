@@ -19,7 +19,7 @@ import dev.centraid.shared.nav.ScreenIds
 import dev.centraid.shared.screen.Step
 
 /** Every table one workout's read touches. */
-public val HEALTH_WORKOUT_TABLES: Set<String> = setOf("health_workout", "core_activity", "core_concept")
+public val HEALTH_WORKOUT_TABLES: Set<String> = setOf("workout", "activity", "concept", "entity")
 
 /**
  * ONE WORKOUT (#1129): its kind, when, and every figure the store measured — distance, time, pace,

@@ -1,6 +1,6 @@
 # `crates/apps/money` — accounts and transactions the member imports
 
-Money is a personal-finance app: accounts, transactions that enter by **importing a bank statement**, categories by rule, spending by month ([#1099](https://github.com/srikanth235/centraid/issues/1099), [decisions](../../../docs/decisions.md#money-1099)). Its doctrine:
+Money is a personal-finance app: accounts, transactions that enter by **importing a bank statement**, categories by rule, spending by month ([#1099](https://github.com/srikanth235/centraid/issues/1099), [decisions](../../../docs/decisions.md#money)). Its doctrine:
 
 - one account is one currency; nothing sums across currencies;
 - an imported transaction is never edited (a category and a void are the member's decisions);
@@ -22,12 +22,12 @@ The crate has two halves: the import (`import`, `rules`) and the reads and folds
 | `import::keys` | The dedupe key (R-1099-3): `ofx:<FITID>`, `ofx-nofitid:<hash>`, `csv:<64 hex>` over day, signed amount, raw description and ordinal within that triple |
 | `import::plan` | `plan`: rules, then exact de-duplication (one-to-one), in-file repeats, then the fuzzy **proposal**; a verdict per row and the file's totals |
 | `rules` | The rule semantics the vault's `apply_rule_to_history` agrees with (seam S2), the merchant key and the counting learner |
-| `queries` | Every read as a `PageQuery` with a stated ceiling: a month window by `posted_at` range, the Activity keyset page, accounts, targets, rules, checkpoints, categories, transfer links, the existing-rows window for a plan, and the search walk (R-1099-44). Single tables only; Money's decoration is read by id. A read that stops at a ceiling says so (`Bounded::truncated`) |
+| `queries` | Every read as a `PageQuery` with a stated ceiling: a month window by `posted_at` range, the Activity keyset page, accounts, targets, rules, checkpoints, categories, transfer links, the existing-rows window for a plan, and a search over the full-text index. Single tables only; Money's decoration is read by id. A read that stops at a ceiling says so (`Bounded::truncated`) |
 | `engine` | The folds, pure and per currency: spending (refund credit, uncategorised, transfers and future rows left out and counted), in/out/net, cash flow and savings rate, balances against checkpoints, net worth, the target reducer with carry (envelope mode dormant) and transfer proposals (moved from Tally, R-1099-38) |
 | `recurring` | Detection of weekly, biweekly, monthly, quarterly and yearly charges, projected through `centraid_vault::time` (no second expander, no stored series), the due/late/paid statuses, "seen N times" and the month-end forecast |
 | `phone` | The typed answer to each screen: Spending, Activity, Cash flow, a transaction, Accounts, Rules, Categories, the target sheet, Recurring, Home's tile, search and the import plan. No clock and no zone: `today` and the month come in as text |
-| `manifest`, `commands`, `door` | `manifest.json` (id `money`, `Coin`, `indigo`) parsed by the kit; the 20-row action table, one vault command each, `invoke_key` required, a denial a value; the real door over the vault's `execute` behind `vault-door` |
-| `year3` | A deterministic generator: 4 accounts, 18,000 rows, as Chase-shaped CSV text |
+| `manifest`, `commands` | `manifest.json` (id `money`, `Coin`, `indigo`) parsed by the kit; the 22-row action table, one vault command each (`account.*`, `txn.*`, `budget.*`, `checkpoint.*`, `rule.*`, `category.*`, `follow.statement`), `invoke_key` required, a denial a value |
+| `year3` | A deterministic generator: 4 accounts, 18,000 rows, as Chase-shaped CSV text; `tests/year3.rs` follows it through `follow.statement` |
 
 ## What this crate may not contain, and what stops it
 
@@ -50,7 +50,8 @@ The crate has two halves: the import (`import`, `rules`) and the reads and folds
 | `SIMILARITY_THRESHOLD` | 0.5 | bigram Dice of the two descriptions; see the constant's comment |
 | `RULES` | 500 | rules a vault holds |
 | `MONTH_ROWS` | 2,000 | one month window |
-| `CASHFLOW_MONTHS` / `SEARCH_MONTHS` / `RECURRING_MONTHS` | 12 / 12 / 13 | the windows the cash-flow fold, a search walk and the recurring detector read |
+| `CASHFLOW_MONTHS` / `RECURRING_MONTHS` | 12 / 13 | the windows the cash-flow fold and the recurring detector read |
+| `SEARCH_ROWS` | 200 | lines one search answers, best match first, from the whole ledger |
 | `ACCOUNT_ROWS` | 40,000 | one account's history, for its balance; past it the balance is unavailable, never short |
 | `MATCH_SCAN_ROWS` | 500 | newest rows per account a transfer is looked for among |
 | `EXISTING_ROWS` | 40,000 | rows an import plan compares against |
@@ -74,7 +75,7 @@ Every figure is derived at read time and keyed by currency; the definitions the 
 
 ## Tests
 
-`tests/folds.rs`, `tests/phone.rs` and `tests/door.rs` run the reads, the folds and the door over the fixtures in `contracts/apps/money/` (`rows.json`, `spending.json`, `cashflow.json`, `balances.json`, `targets.json`, `transfers.json`, `recurring.json`, `rules.json`, each hand-computed and explained in its `_` field). `rules.json` is seam S2: the crate's `rules::apply` and the vault's `money.apply_rule_to_history` read the same cases. `tests/year3.rs` imports 18,000 rows through the real command path and reconciles the screens over both keyset assemblers.
+The folds, the screens and the rules are unit-tested beside their modules (`engine`, `phone`, `recurring`, `rules`). `tests/vault.rs` reads a founded vault the commands fill and holds seam S2: the crate's `rules::apply` and the vault's `rule.apply` agree on every shared case. `tests/year3.rs` follows 18,000 lines through `follow.statement` and reconciles the screens to the cent (the full profile is `#[ignore]`; a quarter of it runs by default).
 
 The import corpus:
 

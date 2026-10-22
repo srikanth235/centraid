@@ -5,6 +5,7 @@ import centraid.core.v1.AppQueryResponse
 import centraid.core.v1.VaultSearch
 import centraid.core.v1.VaultSearchHit
 import centraid.core.v1.VaultSearchRequest
+import centraid.screen.v1.SearchAsk
 import centraid.screen.v1.ChatCard
 import centraid.screen.v1.HomeSearchEvent
 import centraid.screen.v1.HomeSearchState
@@ -23,8 +24,8 @@ import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 
 /**
- * HOME'S SEARCH (R-CHROME-6): grouped by app in Home's tile order, Locker
- * never on it, a blank term reading nothing, the latest term winning, this
+ * HOME'S SEARCH (R-CHROME-6): grouped by app in Home's tile order, Locker's
+ * items among them (#1135), a blank term reading nothing, the latest term winning, this
  * session's searches remembered, and a row opening where its app opens it.
  */
 class HomeSearchSpec : StringSpec({
@@ -51,7 +52,7 @@ class HomeSearchSpec : StringSpec({
         fun answered(term: String, corrected: String) = HomeSearchReads.arrived(
             listOf(
                 AppQueryResponse(
-                    vault_search = VaultSearch(hits = listOf(hit("tasks", "schedule.task", "t1", "Buy sunscreen")), corrected = corrected),
+                    vault_search = VaultSearch(hits = listOf(hit("tasks", "task", "t1", "Buy sunscreen")), corrected = corrected),
                 ),
             ),
             listOf(AppQueryRequest(vault_search = VaultSearchRequest(term = term, tz = now.zone))),
@@ -70,28 +71,29 @@ class HomeSearchSpec : StringSpec({
         step(slipped, answered("sun", "sunscreen")).state.field_!!.corrected shouldBe ""
     }
 
-    "nothing matching offers one action, which asks the assistant about the term, and asking records the search (#1097)" {
+    "every answer offers one Ask row, unscoped, which asks the assistant about the term, and asking records the search (#1097, #1135)" {
         val nothing = step(typed(opened, "zzqx").state, answer("zzqx")).state
         val empty = nothing.data_!!.empty.shouldNotBeNull()
         empty.headline shouldBe SharedCopy.HOME_SEARCH_NO_MATCH_HEADLINE
-        empty.action_label shouldBe "Ask about “zzqx”"
-        nothing.data_.ask_question shouldBe "Find zzqx"
+        empty.action_label shouldBe ""
+        nothing.field_!!.ask_row shouldBe SearchAsk(label = "Ask about “zzqx”", question = "Find zzqx", scope = "")
+
         // The shell carries the action out; the machine remembers the term.
         step(nothing, HomeSearchEvent(asked = HomeSearchEvent.Asked())).state.recent shouldBe listOf("zzqx")
-        // Rows found: no empty state, no question.
-        val found = step(typed(opened, "cab").state, answer("cab", hit("notes", "knowledge.note", "n1", "Cabin"))).state
+        // Rows found: no empty state, and the same row at the foot.
+        val found = step(typed(opened, "cab").state, answer("cab", hit("notes", "note", "n1", "Cabin"))).state
         found.data_!!.empty.shouldBeNull()
-        found.data_.ask_question shouldBe ""
+        found.field_!!.ask_row shouldBe SearchAsk(label = "Ask about “cab”", question = "Find cab", scope = "")
     }
 
     "the hits are grouped by app in Home's tile order, each counted, each row named by its kind" {
         val data = HomeSearchMachine.fold(
             listOf(
-                hit("notes", "knowledge.note", "n1", "Cabin packing"),
-                hit("agenda", "core.event", "e1", "Cabin weekend"),
-                hit("notes", "knowledge.note", "n2", "Cabin key"),
-                hit("photos", "core.content_item", "c1", "Cabin at dusk", openId = "a1"),
-                hit("tasks", "schedule.task", "t1", "Book the cabin"),
+                hit("notes", "note", "n1", "Cabin packing"),
+                hit("agenda", "event", "e1", "Cabin weekend"),
+                hit("notes", "note", "n2", "Cabin key"),
+                hit("photos", "photo", "a1", "Cabin at dusk"),
+                hit("tasks", "task", "t1", "Book the cabin"),
             ),
         )
         // SPRINGBOARD_ORDER: photos, docs, agenda, notes, money, people. The task hit is
@@ -110,14 +112,21 @@ class HomeSearchSpec : StringSpec({
         data.groups[2].rows[0].accessibility_label shouldBe "Note, Cabin packing"
     }
 
-    "Locker never appears, even if a hit names it" {
+    "a Locker item is a hit in Locker's group, named by its kind and opening the item (#1135)" {
         val data = HomeSearchMachine.fold(
             listOf(
-                hit("locker", "locker.item", "l1", "Cabin door code"),
-                hit("notes", "knowledge.note", "n1", "Cabin packing"),
+                hit("locker", "locker_item", "l1", "Cabin door code"),
+                hit("notes", "note", "n1", "Cabin packing"),
             ),
         )
-        data.groups.map { it.app_id } shouldContainExactly listOf("notes")
+        data.groups.map { it.app_id }.toSet() shouldBe setOf("notes", "locker")
+        val row = data.groups.first { it.app_id == "locker" }.rows.single()
+        row.kind_label shouldBe SharedCopy.SEARCH_KIND_LOCKER_ITEM
+        row.title shouldBe "Cabin door code"
+        // The row opens through the router a chat card uses: Locker's item page, behind its lock wall.
+        row.target!!.app shouldBe "locker"
+        row.target.entity shouldBe "locker_item"
+        row.target.id shouldBe "l1"
     }
 
     "a blank term reads nothing and rests on the recent searches" {
@@ -129,7 +138,7 @@ class HomeSearchSpec : StringSpec({
         typedThenCleared.effects.shouldBeEmpty()
         typedThenCleared.state.resting.shouldNotBeNull()
         // An answer that lands after the clear is not drawn over the rest.
-        step(typedThenCleared.state, answer("cab", hit("notes", "knowledge.note", "n1", "Cabin"))).state
+        step(typedThenCleared.state, answer("cab", hit("notes", "note", "n1", "Cabin"))).state
             .data_.shouldBeNull()
     }
 
@@ -140,9 +149,9 @@ class HomeSearchSpec : StringSpec({
             VaultSearchRequest(term = "ca", tz = now.zone)
         val second = typed(first.state, "cabin").state
         // The answer for "ca" lands after the member typed "cabin": dropped.
-        val stale = step(second, answer("ca", hit("notes", "knowledge.note", "n9", "Calendar")))
+        val stale = step(second, answer("ca", hit("notes", "note", "n9", "Calendar")))
         stale.state.data_.shouldBeNull()
-        val current = step(second, answer("cabin", hit("notes", "knowledge.note", "n1", "Cabin packing"))).state
+        val current = step(second, answer("cabin", hit("notes", "note", "n1", "Cabin packing"))).state
         current.data_!!.groups.single().rows.single().title shouldBe "Cabin packing"
         current.field_!!.answered_term shouldBe "cabin"
         // And the rows on screen stay while the next term reads.
@@ -159,7 +168,7 @@ class HomeSearchSpec : StringSpec({
         var state = opened
         listOf("alpha", "beta", "gamma", "delta", "epsilon", "Beta").forEach { term ->
             state = typed(state, term).state
-            state = step(state, answer(term, hit("notes", "knowledge.note", "n-$term", term))).state
+            state = step(state, answer(term, hit("notes", "note", "n-$term", term))).state
             val row = state.data_!!.groups.single().rows.single()
             state = step(state, HomeSearchEvent(row = HomeSearchEvent.RowPicked(row = row))).state
         }
@@ -186,7 +195,7 @@ class HomeSearchSpec : StringSpec({
 
     "another vault in front takes the term, the rows and the recent searches with it" {
         var state = typed(opened, "cabin").state
-        state = step(state, answer("cabin", hit("notes", "knowledge.note", "n-1", "Cabin trip"))).state
+        state = step(state, answer("cabin", hit("notes", "note", "n-1", "Cabin trip"))).state
         state = step(state, HomeSearchEvent(submitted = HomeSearchEvent.Submitted())).state
         state.recent shouldContainExactly listOf("cabin")
         val switched = step(state, HomeSearchEvent(vault_changed = HomeSearchEvent.VaultChanged())).state
@@ -195,18 +204,18 @@ class HomeSearchSpec : StringSpec({
         switched.recent.shouldBeEmpty()
         switched.resting!!.suggestions.shouldBeEmpty()
         // A late answer for the last vault's term is not this vault's.
-        step(switched, answer("cabin", hit("notes", "knowledge.note", "n-1", "Cabin trip"))).state.data_.shouldBeNull()
+        step(switched, answer("cabin", hit("notes", "note", "n-1", "Cabin trip"))).state.data_.shouldBeNull()
     }
 
     "a row's target opens the item in its own app" {
         val data = HomeSearchMachine.fold(
             listOf(
-                hit("notes", "knowledge.note", "n1", "Cabin packing"),
-                hit("people", "core.party", "p1", "Kate Bell"),
-                hit("agenda", "core.event", "e1", "Cabin weekend"),
-                hit("tasks", "schedule.task", "t1", "Book the cabin"),
-                hit("docs", "core.document", "d1", "Cabin lease"),
-                hit("photos", "core.content_item", "c1", "Cabin at dusk", openId = "a1"),
+                hit("notes", "note", "n1", "Cabin packing"),
+                hit("people", "person", "p1", "Kate Bell"),
+                hit("agenda", "event", "e1", "Cabin weekend"),
+                hit("tasks", "task", "t1", "Book the cabin"),
+                hit("docs", "document", "d1", "Cabin lease"),
+                hit("photos", "photo", "a1", "Cabin at dusk"),
             ),
         )
         // A task hit sits in Agenda's group and still opens in its own app's router (R-CHROME-6).
@@ -223,7 +232,7 @@ class HomeSearchSpec : StringSpec({
         opens["docs"] shouldBe Destination.DocsDocument("d1", "Cabin lease", parent = "Search")
         opens["photos"] shouldBe Destination.PhotoLightbox("a1", listOf("a1"))
         // Picking a row is an intent: the machine records, the shell opens.
-        val shown = step(typed(opened, "cabin").state, answer("cabin", hit("notes", "knowledge.note", "n1", "Cabin packing"))).state
+        val shown = step(typed(opened, "cabin").state, answer("cabin", hit("notes", "note", "n1", "Cabin packing"))).state
         val row = shown.data_!!.groups.single().rows.single()
         val picked = step(shown, HomeSearchEvent(row = HomeSearchEvent.RowPicked(row = row)))
         picked.effects.shouldBeEmpty()
@@ -233,8 +242,8 @@ class HomeSearchSpec : StringSpec({
 
     // ---- THE CHAT GROUP (#1097, R-1097-24) ---------------------------------------------------------
 
-    val chatThread = hit("chat", "chat.thread", "th-1", "Where is the marmalade recipe?")
-    val noteHit = hit("notes", "knowledge.note", "n1", "Cabin packing")
+    val chatThread = hit("chat", "thread", "th-1", "Where is the marmalade recipe?")
+    val noteHit = hit("notes", "note", "n1", "Cabin packing")
     val withChatTab = step(HomeSearchMachine.initial(), HomeSearchEvent(opened = HomeSearchEvent.Opened(chat_tab = true))).state
 
     "a conversation is a chat row in a Chats group, last, whose target is the thread (R-1097-24)" {
@@ -270,7 +279,7 @@ class HomeSearchSpec : StringSpec({
         val off = step(typed(opened, "marmalade").state, answer("marmalade", chatThread)).state
         off.data_!!.groups.shouldBeEmpty()
         off.data_.empty.shouldNotBeNull()
-        off.data_.ask_question shouldBe "Find marmalade"
+        off.field_!!.ask_row?.question shouldBe "Find marmalade"
         val on = step(typed(withChatTab, "marmalade").state, answer("marmalade", chatThread)).state
         on.data_!!.empty.shouldBeNull()
         on.data_.groups.single().app_id shouldBe "chat"

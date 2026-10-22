@@ -22,7 +22,7 @@
 //! `tests/log_plane.rs` asserts both halves, and the receipt carries the grep
 //! that shows no other public function returns a `Connection`.
 
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::path::{Path, PathBuf};
 
 use rusqlite::Connection;
@@ -55,7 +55,7 @@ pub const JOURNAL_SIZE_LIMIT: i64 = 64 * 1024 * 1024;
 
 /// How a vault file was opened.
 pub struct Vault {
-    connection: Connection,
+    connection: Held,
     path: PathBuf,
     schema_version: i64,
     clock: Box<dyn Clock>,
@@ -63,8 +63,16 @@ pub struct Vault {
     /// Commit-guard depth. A nested `commit` is a deliberate no-op: the inner
     /// body runs inside the outer pair, and one pair is one transaction.
     pub(crate) depth: Cell<u32>,
+    pub(crate) pending: RefCell<crate::log::guard::Pending>,
     /// Read depth, so a nested read does not clear `query_only` early.
     read_depth: Cell<u32>,
+    /// The index's words, read through a cache that checks itself against the
+    /// table ([`crate::words`]).
+    words: crate::words::Words,
+    /// The statements of the page reads since [`Vault::tap_pages`], while a test
+    /// is asking what they plan to do ([`crate::plans`]); `None` otherwise, which
+    /// is every run that is not a plan test.
+    pub(crate) page_tap: RefCell<Option<Vec<crate::plans::TappedPage>>>,
     /// A fault to inject, for the snapshot builder's interrupted-build test.
     pub(crate) fault: Cell<Option<crate::snapshot::Fault>>,
     /// THE LOCAL CONTENT STORE, where bytes that are not text go.
@@ -124,19 +132,12 @@ impl Vault {
         connection.pragma_update(None, "auto_vacuum", "NONE")?;
         Self::apply_pragmas(&connection)?;
         connection.pragma_update(None, "application_id", APPLICATION_ID)?;
-        // OFF for the ladder: the baseline creates a hundred tables whose
-        // foreign keys point at each other, and SQLite resolves an FK's target
-        // lazily, so leaving enforcement on during creation would only make the
-        // order matter for no benefit. It also seeds rows (the money
-        // categories and their `core_entity` rows) that point at the registry
-        // `seed_entity_kinds` derives only afterwards.
+        // OFF for the ladder: the baseline's tables point at each other (the
+        // vault row at its owner, a kind row at its entity), SQLite resolves a
+        // foreign key's target lazily, and the seeds are written in the order
+        // that reads best rather than the order that satisfies a check.
         connection.pragma_update(None, "foreign_keys", "OFF")?;
         crate::migrations::run_from(&connection, 0)?;
-        // The registry the schema's own foreign keys point into, derived from
-        // the DDL that was just run (D-1020-D1-15). Before `foreign_keys = ON`,
-        // because `core_entity_kind` is what makes the first entity insert
-        // legal and seeding it is not itself an entity write.
-        crate::migrations::seed_entity_kinds(&connection)?;
         connection.pragma_update(None, "foreign_keys", "ON")?;
 
         Self::wrap(connection, path, head_version(), clock, ids)
@@ -271,13 +272,16 @@ impl Vault {
         // opens the file for writing.
         Self::apply_pragmas(&connection)?;
         Ok(Self {
-            connection,
+            connection: Held(Some(connection)),
             path,
             schema_version,
             clock,
             ids,
             depth: Cell::new(0),
+            pending: RefCell::default(),
             read_depth: Cell::new(0),
+            words: crate::words::Words::default(),
+            page_tap: RefCell::new(None),
             fault: Cell::new(None),
             blobs: None,
         })
@@ -394,21 +398,27 @@ impl Vault {
         body(&self.connection)
     }
 
+    /// The words the index holds, as a list kept in memory and checked against
+    /// the table on every use. Read it inside [`Self::read`]:
+    /// `vault.read(|connection| Ok(vault.words().current(connection)?.to_vec()))`.
+    #[must_use]
+    pub const fn words(&self) -> &crate::words::Words {
+        &self.words
+    }
+
     /// The connection, for this crate's own internals only.
     ///
     /// Crate-private on purpose: the snapshot builder needs `VACUUM INTO`,
     /// which `query_only` forbids and which is not a write to the live file,
     /// and the log store needs to insert its rows inside the guard's
     /// transaction. Neither is a caller-facing write path.
-    pub(crate) const fn connection(&self) -> &Connection {
+    pub(crate) fn connection(&self) -> &Connection {
         &self.connection
     }
 
     /// Close the file, surfacing a failure to close rather than swallowing it.
     pub fn close(self) -> Result<()> {
-        self.connection
-            .close()
-            .map_err(|(_, error)| VaultError::Sqlite(error))
+        self.connection.close().map_err(VaultError::Sqlite)
     }
 
     /// CHECKPOINT AND CLOSE, so the `.db` **alone** is the whole vault, and a
@@ -424,6 +434,9 @@ impl Vault {
     /// `TRUNCATE` here, which folds every frame into the database, and the
     /// connection is closed after it.
     pub fn finish(self) -> Result<()> {
+        // The statistics first: the checkpoint folds what `PRAGMA optimize` wrote
+        // into the file, so the `.db` alone carries them.
+        self.connection.optimize();
         self.connection
             .query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |row| {
                 row.get::<_, i64>(0)
@@ -433,13 +446,61 @@ impl Vault {
     }
 }
 
+/// The vault's one connection, which learns the file's statistics before it goes.
+///
+/// `PRAGMA optimize` re-analyses only the tables whose shape changed enough
+/// since they were last analysed, so a connection that runs it when it closes
+/// leaves the planner what it needs to prefer an index over a scan without any
+/// caller having to remember. It is the vault that closes a file, whether by
+/// [`Vault::close`], [`Vault::finish`] or by being dropped, and every way goes
+/// through here.
+struct Held(Option<Connection>);
+
+impl Held {
+    /// Learn the statistics. **Its failure is ignored, on purpose.** It is
+    /// advisory (a plan without statistics is a slower plan, never a wrong
+    /// answer), it runs on the way out of a file that may already be failing (a
+    /// full disk, a connection dropped by a panic mid-commit), and the one thing
+    /// a close must not do is fail for the sake of an optimisation.
+    fn optimize(&self) {
+        if let Some(connection) = &self.0 {
+            crate::index::optimize(connection);
+        }
+    }
+
+    fn close(mut self) -> std::result::Result<(), rusqlite::Error> {
+        self.optimize();
+        match self.0.take() {
+            Some(connection) => connection.close().map_err(|(_, error)| error),
+            None => Ok(()),
+        }
+    }
+}
+
+impl std::ops::Deref for Held {
+    type Target = Connection;
+
+    fn deref(&self) -> &Connection {
+        // `None` only after `close` took it, and `close` consumed the holder.
+        self.0
+            .as_ref()
+            .expect("the connection is held until the vault closes")
+    }
+}
+
+impl Drop for Held {
+    fn drop(&mut self) {
+        self.optimize();
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::clock::{FixedClock, SeededIds};
 
     fn scratch() -> PathBuf {
-        centraid_ontology::golden::scratch_dir()
+        centraid_ontology::scratch::scratch_dir()
     }
 
     #[test]
@@ -574,8 +635,7 @@ mod tests {
         let reopened = Vault::open(copy.join("vault.db")).expect("the copy opens");
         let name: String = reopened
             .read(|connection| {
-                Ok(connection
-                    .query_row("SELECT display_name FROM core_vault", [], |row| row.get(0))?)
+                Ok(connection.query_row("SELECT name FROM vault", [], |row| row.get(0))?)
             })
             .expect("the vault row reads");
         assert_eq!(name, "Durable", "the `.db` alone carries the founding");
@@ -610,7 +670,7 @@ mod tests {
         .expect("a vault is founded");
         let outcome = vault.read(|connection| {
             connection
-                .execute("UPDATE core_vault SET display_name = 'x'", [])
+                .execute("UPDATE vault SET name = 'x'", [])
                 .map_err(VaultError::Sqlite)
         });
         let error = outcome.expect_err("a write through a read connection must be refused");
@@ -704,15 +764,13 @@ mod tests {
         std::fs::create_dir_all(&dir).expect("the scratch dir is made");
         let path = dir.join("vault.db");
 
-        // Session one: found the vault (two minted ids — the vault row and its
-        // owner party) and close the file.
+        // Session one: found the vault (one minted id — the self person) and close the file.
         let vault = Vault::create(&path).expect("a founded vault");
         vault.found("Test", "Test Owner").expect("it founds");
         vault.close().expect("it closes");
 
-        // Session two: the same file, a fresh source of ids. Two writes,
-        // because `found` minted two: with a per-instance counter the first
-        // reopened id is the vault row's and the second is the owner party's.
+        // Session two: the same file, a fresh source of ids. A per-instance
+        // counter would hand out the id founding already used for the self person.
         let vault = Vault::open(&path).expect("it reopens");
         let now = vault.clock().now_text();
         for label in ["after-reopen-1", "after-reopen-2"] {
@@ -720,12 +778,9 @@ mod tests {
             vault
                 .commit(|tx| {
                     tx.set_producer("test.reopen");
-                    tx.connection().execute(
-                        "INSERT INTO core_party
-                           (party_id, kind, display_name, created_at, updated_at)
-                         VALUES (?1, 'person', ?2, ?3, ?3)",
-                        rusqlite::params![id, label, now],
-                    )?;
+                    tx.insert_entity(&id, crate::model::Kind::Person, label, &now)?;
+                    tx.connection()
+                        .execute("INSERT INTO person (id) VALUES (?1)", [&id])?;
                     Ok(())
                 })
                 .unwrap_or_else(|error| {
@@ -734,13 +789,11 @@ mod tests {
         }
 
         // And the ids really are fresh rather than merely accepted.
-        let parties: i64 =
-            vault
-                .read(|connection| {
-                    Ok(connection
-                        .query_row("SELECT count(*) FROM core_party", [], |row| row.get(0))?)
-                })
-                .expect("the count reads");
+        let parties: i64 = vault
+            .read(|connection| {
+                Ok(connection.query_row("SELECT count(*) FROM person", [], |row| row.get(0))?)
+            })
+            .expect("the count reads");
         assert_eq!(
             parties, 3,
             "the owner plus the two written after the reopen"

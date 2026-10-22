@@ -50,7 +50,7 @@ import okio.use
  *    request through [onRender] and answers with [rendered] or
  *    [renderRefused].
  * 3. **This bridge** ingests the rendered file down THE SAME BYTE PATH THE
- *    CAMERA ROLL USES: [Staging.stage] names the bytes, then `media.add_asset`
+ *    CAMERA ROLL USES: [Staging.stage] names the bytes, then `photo.add`
  *    commits the row over them, keyed on the content hash exactly as
  *    `CameraRoll.offer` keys it. A second ingest path would be a second answer
  *    to "how does a photograph enter the library", and v0 refused one in so
@@ -207,7 +207,11 @@ public class PhotoEditorBridge {
                     return
                 }
                 val (path, reason) = original(core, PhotoEditorReads.contentId(row), assetId)
-                host.send(PhotoEditorReads.arrived(row, path, reason))
+                // THE TITLE IS THE ENTITY'S: a failed lookup is a photograph with no
+                // caption, not a photograph that failed.
+                val title = (core.photosPage(PhotoEditorReads.titleQuery(assetId), limit = 1) as? PhotosPage.Rows)
+                    ?.rows?.firstOrNull()?.values?.getOrNull(1)?.text.orEmpty()
+                host.send(PhotoEditorReads.arrived(row, title, path, reason))
             }
         }
     }
@@ -266,27 +270,21 @@ public class PhotoEditorBridge {
     }
 
     /**
-     * STAGE THE RENDERED FILE, COMMIT THE ROW OVER IT, THEN GIVE IT THE
-     * ORIGINAL'S PLACE. Three writes, in this order and no other:
+     * STAGE THE RENDERED FILE, THEN COMMIT THE ROW OVER IT. Two steps, in this
+     * order and no other:
      *
      * 1. `StageRequest` (`Staging.stage`) — the bytes, named by the core.
-     * 2. `media.add_asset` — the row, carrying the original's `captured_at`,
-     *    `tz_offset_min` and caption (as `title`) and its `source_asset_id`.
+     * 2. `photo.add` — the row, carrying the original's `taken_at`,
+     *    `offset_min` and caption (as `title`) and its `edited_from`.
      *    `CameraRoll.offer`, for a file this phone drew rather than one Photos
      *    handed it, and keyed on the CONTENT HASH for that function's reason:
-     *    the same bytes saved twice are one intent, and `add_asset` adopts the
-     *    asset on the content row for the second (`deduped: 1`). The core
-     *    remembers no key (no replay ledger, #1029 §1, R-1088-12).
-     * 3. `media.set_asset_place` — only when the original has a place. Not on
-     *    the ingest, because `add_asset` can only MINT a place from a
-     *    coordinate, and the original's place is a row that already exists —
-     *    a second `core_place` a metre away would be a second pin for one spot.
-     *    Keyed on `(new asset, place)`, which is the whole of its intent.
+     *    the same bytes saved twice are one intent, and `photo.add` adopts the
+     *    photograph on the blob for the second (`deduped`). The core remembers
+     *    no key (no replay ledger, #1029 §1, R-1088-12).
      *
-     * **A REFUSED PLACE DOES NOT UNSAVE THE PHOTOGRAPH.** The edit is in the
-     * library by then; reporting the save as failed would invite a member to
-     * save a second copy. It settles committed, and the place is one tap away
-     * in the info sheet.
+     * **THE ORIGINAL'S PLACE NEEDS NO WRITE OF ITS OWN**: `photo.add` keeps the
+     * place of the photograph it was edited from, so a second `place` a metre away
+     * is never minted for one spot.
      */
     private suspend fun ingest(
         request: ScreenEffect.RenderEdit,
@@ -323,6 +321,7 @@ public class PhotoEditorBridge {
         }
         val input = addInput(
             hash = hash,
+            size = size,
             capturedAt = request.capturedAt,
             tzOffsetMinutes = request.tzOffsetMinutes?.coerceIn(-TZ_LIMIT, TZ_LIMIT),
             sourceAssetId = request.sourceAssetId,
@@ -350,32 +349,13 @@ public class PhotoEditorBridge {
                     command == null -> settled(key, false, "", "")
                     command.status != CommandStatus.COMMAND_STATUS_EXECUTED ->
                         settled(key, false, "", command.reason)
-                    else -> {
-                        val saved = assetIdOf(command.output.utf8())
-                        if (saved.isNotEmpty() && request.placeId.isNotEmpty()) {
-                            place(core, saved, request.placeId)
-                        }
-                        settled(key, true, saved, "")
-                    }
+                    // THE ORIGINAL'S PLACE COMES ALONG: `photo.add` keeps what the
+                    // photograph it was edited from says of its date, its zone, its
+                    // caption and its place, so there is no third write.
+                    else -> settled(key, true, assetIdOf(command.output.utf8()), "")
                 }
             }
         }
-    }
-
-    /** The third write. See [ingest] for why its refusal is not the save's. */
-    private suspend fun place(core: CentraidCore, assetId: String, placeId: String) {
-        core.call(
-            Envelope(
-                request_id = 0,
-                request = Request(
-                    command = Command(
-                        name = PLACE_COMMAND,
-                        invoke_key = "$PLACE_COMMAND:$assetId:$placeId",
-                        input = placeInput(assetId, placeId).encodeUtf8(),
-                    ),
-                ),
-            ),
-        )
     }
 
     private fun settled(key: String, committed: Boolean, assetId: String, sentence: String) =
@@ -393,11 +373,10 @@ public class PhotoEditorBridge {
     }
 
     internal companion object {
-        const val ADD_COMMAND: String = "media.add_asset"
-        const val PLACE_COMMAND: String = "media.set_asset_place"
+        const val ADD_COMMAND: String = PhotoWrites.ADD
         const val MEDIA_TYPE: String = "image/jpeg"
 
-        /** `media.add_asset`'s own bound on `tz_offset_min`. */
+        /** `photo.add`'s own bound on `offset_min`. */
         const val TZ_LIMIT: Int = 1080
 
         const val NO_RENDERER: String = "This phone cannot draw the edit."
@@ -405,12 +384,14 @@ public class PhotoEditorBridge {
         const val NO_FILE: String = "Centraid could not read the edited photo."
 
         /**
-         * `media.add_asset`'s input, HAND-SPELLED for `CameraRoll.inputFor`'s
+         * `photo.add`'s input, HAND-SPELLED for `CameraRoll.inputFor`'s
          * reason: it is the hash preimage the core rehashes, and key order is
-         * not something this layer leaves to a library.
+         * not something this layer leaves to a library. `size` is the bytes the
+         * core counted when they were staged: a command claims what it names.
          */
         fun addInput(
             hash: String,
+            size: Long,
             capturedAt: String,
             tzOffsetMinutes: Int?,
             sourceAssetId: String,
@@ -418,17 +399,19 @@ public class PhotoEditorBridge {
             width: Int,
             height: Int,
         ): String = buildString {
-            append("{\"staged_sha\":").append(jsonString(hash))
-            append(",\"kind\":\"photo\"")
+            append("{\"blob\":").append(jsonString(hash))
+            append(",\"size\":").append(size)
+            append(",\"media_type\":").append(jsonString(MEDIA_TYPE))
+            append(",\"form\":\"photo\"")
             // THE ORIGINAL'S DATE, AS THE VAULT WROTE IT, and nothing when it
             // recorded none: a photograph with no capture time stays one.
             if (capturedAt.isNotEmpty()) {
-                append(",\"captured_at\":").append(jsonString(capturedAt))
+                append(",\"taken_at\":").append(jsonString(capturedAt))
             }
-            if (tzOffsetMinutes != null) append(",\"tz_offset_min\":").append(tzOffsetMinutes)
+            if (tzOffsetMinutes != null) append(",\"offset_min\":").append(tzOffsetMinutes)
             // EDIT LINEAGE (#711), and only when there is an original to name.
             if (sourceAssetId.isNotEmpty()) {
-                append(",\"source_asset_id\":").append(jsonString(sourceAssetId))
+                append(",\"edited_from\":").append(jsonString(sourceAssetId))
             }
             if (title.isNotEmpty()) {
                 append(",\"title\":").append(jsonString(title))
@@ -438,20 +421,15 @@ public class PhotoEditorBridge {
             append('}')
         }
 
-        /** `media.set_asset_place`'s input, hand-spelled for the same reason. */
-        fun placeInput(assetId: String, placeId: String): String =
-            "{\"asset_id\":" + jsonString(assetId) +
-                ",\"place_id\":" + jsonString(placeId) + "}"
-
         /**
-         * The new asset's id off the command's output — `{"asset_id": …}` from
-         * `add_asset_handler`, which answers the ADOPTED id on a dedupe too.
+         * The new photograph's id off the command's output — `{"id": …}` from
+         * `photo.add`, which answers the ADOPTED id on a dedupe too.
          * Empty when the output says nothing, and the shell then returns to
          * the photograph it came from rather than to a guess.
          */
         fun assetIdOf(output: String): String =
             ASSET_ID.find(output)?.groupValues?.getOrNull(1).orEmpty()
 
-        private val ASSET_ID = Regex("\"asset_id\"\\s*:\\s*\"([^\"]+)\"")
+        private val ASSET_ID = Regex("\"id\"\\s*:\\s*\"([^\"]+)\"")
     }
 }

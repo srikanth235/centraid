@@ -18,7 +18,7 @@
 //! | folder | docs | `folder` | the folder's page |
 //! | list | tasks | `project` | the project |
 //! | transaction | money | `transaction` | the transaction's page |
-//! | locker item | none | none | never drawn: the Locker is off on the phone (R-1088-3) |
+//! | locker item | locker | `locker_item` | the item's page, behind the Locker's lock wall |
 //!
 //! The album, notebook and folder routes are the shell's since the containers became search results
 //! (#1097, `ChatRouting.swift`): the card's `id` is the container's id and its `title` the name the route needs.
@@ -61,8 +61,8 @@ const fn row(kind: Kind, app: App, entity: &'static str) -> CardKind {
     }
 }
 
-/// THE TABLE. Every kind but the Locker item.
-pub const TABLE: [CardKind; 11] = [
+/// THE TABLE. Every kind.
+pub const TABLE: [CardKind; 12] = [
     row(Kind::Person, App::People, "person"),
     row(Kind::Event, App::Agenda, "event"),
     row(Kind::Task, App::Tasks, "task"),
@@ -74,9 +74,10 @@ pub const TABLE: [CardKind; 11] = [
     row(Kind::Folder, App::Docs, "folder"),
     row(Kind::List, App::Tasks, "project"),
     row(Kind::Transaction, App::Money, "transaction"),
+    row(Kind::LockerItem, App::Locker, "locker_item"),
 ];
 
-/// How a kind is drawn, or `None` for the one that is never drawn.
+/// How a kind is drawn.
 #[must_use]
 pub fn card_kind(kind: Kind) -> Option<&'static CardKind> {
     TABLE.iter().find(|entry| entry.kind == kind)
@@ -132,24 +133,37 @@ mod tests {
     }
 
     #[test]
-    fn every_kind_but_the_locker_item_has_one_row_and_the_locker_item_has_none() {
+    fn every_kind_has_one_row() {
         for kind in Kind::ALL {
             let rows = TABLE.iter().filter(|entry| entry.kind == kind).count();
-            if kind == Kind::LockerItem {
-                assert_eq!(rows, 0);
-                assert!(card_kind(kind).is_none() && app_of(kind).is_none());
-            } else {
-                assert_eq!(rows, 1, "{kind:?}");
-            }
+            assert_eq!(rows, 1, "{kind:?}");
         }
     }
 
     #[test]
-    fn no_card_names_locker_and_every_app_is_one_the_chat_stores() {
+    fn a_card_never_carries_a_sealed_value_and_every_app_is_one_the_chat_stores() {
         for entry in TABLE {
-            assert_ne!(entry.app.id(), "locker");
+            assert!(
+                centraid_vault::roster::is_card_app(entry.app.id()),
+                "{entry:?}"
+            );
             assert!(App::from_id(entry.app.id()).is_some(), "{entry:?}");
         }
+        // A Locker item's card holds its title and its type, the plain half of the row.
+        let item = Row {
+            kind: Kind::LockerItem,
+            id: "i1".to_owned(),
+            name: "Bank".to_owned(),
+            date: None,
+            fields: std::collections::BTreeMap::new(),
+            trashed: false,
+            created: String::new(),
+            updated: String::new(),
+            extra: std::collections::BTreeMap::from([("password", "lk1:x".to_owned())]),
+        };
+        let card = card_of(&item, Date::constant(2026, 10, 22)).expect("a Locker item has a card");
+        assert!(!format!("{card:?}").contains("lk1:x"));
+        assert_eq!(card.app, App::Locker);
     }
 
     #[test]

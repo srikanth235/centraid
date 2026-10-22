@@ -1,201 +1,159 @@
-//! THE YEAR-3 TASKS AXIS (#1020, D-1020-D3-7, D-1020-S5).
+//! YEAR-3 TASKS VOLUME ([#1135](https://github.com/srikanth235/centraid/issues/1135)).
 //!
-//! v0's year-3 generator writes **no `schedule_task` rows at all** (#1020 apps
-//! §5.2), so the board's caller-sized window — the app's ONLY bound — had no
-//! golden artifact behind it. [`centraid_apps_kit::fixtures::year3_tasks`] is
-//! that artifact.
+//! `centraid_apps_kit::fixtures::year3_tasks` writes the profile `YEAR3_TASKS`
+//! declares: 3,000 open and 12,000 done tasks over three years, 400 cancelled and
+//! 300 trashed, 40 projects of 4 sections, 200 repeating, 600 subtasks and 1,200
+//! tagged. This suite asks Tasks' own board, trash and chrome reads for the
+//! answer over that volume and asserts what a count cannot: the open walk reaches
+//! its declared 500-row window and says when more open work exists, the logbook is a bounded read of
+//! the newest closed, and a trashed task is on no list.
 //!
-//! The full run is `#[ignore]`d: it seeds 9,000 tasks and is longer than the
-//! whole `local` gate budget. A SHRUNKEN axis runs unignored, through the same
-//! statements.
-//!
-//! ## What the shape is built to prove
-//!
-//! * **`truncated` is the page's own cursor.** At 9,000 tasks a 500-row window
-//!   is eighteen pages deep, so `rows.length >= window` and "a cursor exists"
-//!   answer the same at the boundary and differently one row either side.
-//! * **The promotion rule holds at volume.** 150 released families of four
-//!   means 450 promoted children, every one of which a port that nested them
-//!   under a closed parent would lose.
-//! * **Nulls last is measured.** 2,000 undated tasks and 800 cancelled ones
-//!   (whose `completed_at` is NULL) are the two nullable columns the board
-//!   orders by — lane V's finding, at volume.
+//! **A timing here is a DEBUG build** and is projected provenance, never a ceiling.
 
-use std::fs;
-use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::time::Instant;
 
-use centraid_apps_kit::contract_vault::open_contract_vault;
-use centraid_apps_kit::fixtures::{YEAR3_TASKS, Year3TasksShape, year3_tasks};
+use centraid_apps_kit::fixtures::{YEAR3_TASKS, Year3TasksCounts, Year3TasksShape, year3_tasks};
 use centraid_apps_kit::testdoor::TestDoor;
-use centraid_apps_tasks::board::{BOARD_MAX, LOGBOOK_ROWS, is_open_status};
-use centraid_apps_tasks::queries::load_board;
+use centraid_apps_tasks::queries::{load_board, load_chrome, load_trash};
+use centraid_vault::Vault;
+use centraid_vault::clock::{FixedClock, SeededIds};
 use centraid_vault::time::zone::FireZone;
 
-const NOW: &str = "2099-06-01T09:00:00.000Z";
+const SEED: u64 = 1_135_005;
+const NOW: &str = "2025-06-02T09:00:00.000Z";
 
-/// The member's zone. Every fixture due here is an instant, which no zone moves.
-fn utc() -> FireZone {
-    FireZone::named("Etc/UTC").expect("a real zone")
-}
-const SEED: u64 = 679_003;
-
-fn root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("..")
-        .join("..")
-        .join("..")
-        .to_path_buf()
-}
-
-fn empty_vault() -> rusqlite::Connection {
-    let ddl = fs::read_to_string(root().join("contracts/schema/vault-ddl.sql"))
-        .expect("the committed DDL is readable");
-    open_contract_vault(&ddl, "[]").expect("an empty fixture vault is built")
-}
-
-/// A tenth of the year-3 shape: the same statements, the same edges, small
-/// enough for the gate.
-const SHRUNKEN: Year3TasksShape = Year3TasksShape {
-    tasks: 900,
-    closed: 300,
-    cancelled: 80,
-    families: 60,
-    children: 4,
-    released: 15,
-    undated: 200,
-    projects: 6,
-    sections: 18,
-    tags: 30,
+/// A smaller profile in the SHAPE of the declared one; a field added to the
+/// shape fails this literal rather than being inherited silently.
+const SAMPLE: Year3TasksShape = Year3TasksShape {
+    open: 900,
+    done: 3_000,
+    cancelled: 100,
+    trashed: 80,
+    projects: 10,
+    sections: 4,
+    dated: 500,
+    repeating: 50,
+    subtasks: 150,
     tagged: 300,
-    repeating: 40,
 };
 
-#[test]
-fn the_shrunken_axis_seeds_and_the_board_reads_it() {
-    let connection = empty_vault();
-    let counts = year3_tasks(&connection, SHRUNKEN, SEED).expect("the axis seeds");
-    assert_eq!(
-        counts.tasks,
-        SHRUNKEN.tasks + SHRUNKEN.families * (SHRUNKEN.children + 1)
-    );
-    assert_eq!(counts.cancelled, SHRUNKEN.cancelled);
-    assert_eq!(counts.released, SHRUNKEN.released);
-    assert_eq!(counts.projects, SHRUNKEN.projects);
-    assert_eq!(counts.sections, SHRUNKEN.sections);
+struct Seeded {
+    dir: std::path::PathBuf,
+    vault: Vault,
+    counts: Year3TasksCounts,
+}
 
-    let door = TestDoor::new(&connection);
-    let (board, denial) = load_board(&door, Some(50), NOW, &utc()).expect("the board reads");
-    assert!(denial.is_none());
-    assert_eq!(board.window, 50);
-    // THE PAGE'S OWN CURSOR: 900 tasks against a 50-row window.
-    assert!(board.truncated, "a year-3 board is many windows deep");
-    assert!(board.logbook.len() <= LOGBOOK_ROWS);
-    assert_eq!(board.projects.len(), SHRUNKEN.projects);
-    assert_eq!(board.sections.len(), SHRUNKEN.sections);
-    assert!(!board.tags.is_empty(), "the tag rail is not empty");
-    // NO ROW IS DRAWN TWICE: an open root is never also a child of a root.
-    let roots: std::collections::BTreeSet<&str> = board
-        .open
-        .iter()
-        .map(|task| task.task_id.as_str())
-        .collect();
-    for root_task in board.open.iter().chain(board.logbook.iter()) {
-        for child in &root_task.children {
-            assert!(
-                !roots.contains(child.task_id.as_str()),
-                "{} is drawn as a root and as a child",
-                child.task_id
-            );
-        }
-    }
-    // A LOGBOOK PARENT KEEPS ONLY ITS CLOSED CHILDREN.
-    for entry in &board.logbook {
-        assert!(
-            entry
-                .children
-                .iter()
-                .all(|child| !is_open_status(&child.status)),
-            "{} keeps an open child in the logbook",
-            entry.task_id
-        );
-        assert_eq!(
-            entry.done_children,
-            Some(entry.children.len()),
-            "{}: every logbook child is done",
-            entry.task_id
-        );
-    }
-    // NULLS LAST: within the open board, no dated row follows an undated one.
-    let mut seen_undated = false;
-    for task in &board.open {
-        if task.due_at.is_none() {
-            seen_undated = true;
-        } else {
-            assert!(
-                !seen_undated,
-                "{} is dated and follows an undated row",
-                task.task_id
-            );
-        }
+impl Drop for Seeded {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.dir);
     }
 }
 
-/// THE PROMOTION RULE AT VOLUME: every open child of a released family is a
-/// root of the open board.
-#[test]
-fn a_released_family_promotes_every_unfinished_child() {
-    let connection = empty_vault();
-    year3_tasks(&connection, SHRUNKEN, SEED).expect("the axis seeds");
-    let door = TestDoor::new(&connection);
-    // The whole board, so the promotion is not a window artifact.
-    let (board, _) = load_board(
-        &door,
-        Some(i64::try_from(BOARD_MAX).unwrap_or(500)),
-        NOW,
-        &utc(),
+fn seeded(shape: Year3TasksShape) -> Seeded {
+    let dir = centraid_ontology::scratch::scratch_dir();
+    std::fs::create_dir_all(&dir).expect("a scratch directory");
+    let vault = Vault::create_with(
+        dir.join("vault.db"),
+        Box::new(Arc::new(FixedClock::frozen())),
+        Box::new(SeededIds::new("year3")),
     )
-    .expect("the board reads");
-    let promoted = board
-        .open
-        .iter()
-        .filter(|task| task.parent_task_id.is_some())
-        .count();
-    // Three open children per released family — the fourth of every four is
-    // done.
-    assert_eq!(
-        promoted,
-        SHRUNKEN.released * (SHRUNKEN.children - 1),
-        "every unfinished child of a closed parent is a root of its own"
+    .expect("a vault");
+    vault.found("Year 3", "Owner").expect("founded");
+    let counts = vault
+        .commit(|tx| Ok(year3_tasks(tx.connection(), shape, SEED).expect("seeded")))
+        .expect("the corpus lands")
+        .value;
+    Seeded { dir, vault, counts }
+}
+
+fn utc() -> FireZone {
+    FireZone::named("Etc/UTC").expect("UTC is in the bundled database")
+}
+
+/// THE BOARD WALKS ITS WINDOW AND SAYS WHEN IT FILLED, THE TRASH IS BESIDE IT, AND THE CHROME HOLDS THE PROJECTS.
+#[test]
+fn the_board_walks_every_open_task_and_the_trash_is_on_no_list() {
+    let world = seeded(SAMPLE);
+    let started = Instant::now();
+    let (board, trash, chrome) = world
+        .vault
+        .read(|connection| {
+            let door = TestDoor::new(connection);
+            let (board, denial) = load_board(&door, None, NOW, &utc()).expect("the board reads");
+            assert!(denial.is_none(), "{denial:?}");
+            let (trash, _) = load_trash(&door).expect("the trash reads");
+            let chrome = load_chrome(&door).expect("the chrome reads");
+            Ok((board, trash, chrome))
+        })
+        .expect("a read");
+    eprintln!(
+        "year3 tasks (sample): {} open rows of {} fetched open ({} subtasks), {} logbook, {} trashed in {:?}",
+        board.open.len(),
+        board.open_count,
+        board
+            .open
+            .iter()
+            .map(|row| row.children.len())
+            .sum::<usize>(),
+        board.logbook.len(),
+        trash.tasks.len(),
+        started.elapsed()
+    );
+    // THE BOARD IS A DECLARED WINDOW (500 rows, `BOARD_MAX`): more open work than
+    // that is said (`truncated`), never shown as a short board that reads whole.
+    // The walk fills its window with open tasks; subtasks are folded under their parent.
+    assert!(board.open_count >= world.counts.open.min(board.window));
+    assert_eq!(board.truncated, world.counts.open > board.window);
+    // The logbook is the newest closed work, not all twelve thousand.
+    assert!(!board.logbook.is_empty());
+    assert!(board.logbook.len() < world.counts.done);
+    assert_eq!(trash.tasks.len(), world.counts.trashed);
+    assert_eq!(chrome.0.len(), SAMPLE.projects);
+    assert_eq!(chrome.1.len(), SAMPLE.projects * SAMPLE.sections);
+    // A trashed task is not among the open ones.
+    let open: std::collections::HashSet<&str> =
+        board.open.iter().map(|row| row.task_id.as_str()).collect();
+    assert!(
+        trash
+            .tasks
+            .iter()
+            .all(|row| !open.contains(row.task_id.as_str()))
     );
 }
 
-/// THE MEASURED PROFILE. Ignored by default; run it with
+/// The declared profile, run on demand:
 /// `cargo test -p centraid-apps-tasks --test year3 -- --ignored --nocapture`.
 #[test]
-#[ignore = "seeds 9,000 tasks; longer than the whole local gate budget"]
-fn the_year3_tasks_axis_measures_the_boards_own_window() {
-    let connection = empty_vault();
-    let counts = year3_tasks(&connection, YEAR3_TASKS, SEED).expect("the axis seeds");
-    let door = TestDoor::new(&connection);
-    let (board, _) = load_board(
-        &door,
-        Some(i64::try_from(BOARD_MAX).unwrap_or(500)),
-        NOW,
-        &utc(),
-    )
-    .expect("the board reads");
-    println!(
-        "year3 tasks: {} rows ({} open, {} closed, {} cancelled), board window {} → \
-         {} open roots, {} logbook, truncated {}",
-        counts.tasks,
-        counts.open,
-        counts.closed,
-        counts.cancelled,
-        board.window,
+#[ignore = "the declared 15,000-task profile; run for the receipt's numbers"]
+fn the_declared_profile() {
+    let started = Instant::now();
+    let world = seeded(YEAR3_TASKS);
+    eprintln!(
+        "year3 tasks: seeded {} open, {} done in {:?}",
+        world.counts.open,
+        world.counts.done,
+        started.elapsed()
+    );
+    let started = Instant::now();
+    let board = world
+        .vault
+        .read(|connection| {
+            let door = TestDoor::new(connection);
+            Ok(load_board(&door, None, NOW, &utc())
+                .expect("the board reads")
+                .0)
+        })
+        .expect("a read");
+    eprintln!(
+        "year3 tasks: the board walked {} open and {} logbook in {:?}",
         board.open.len(),
         board.logbook.len(),
-        board.truncated
+        started.elapsed()
     );
-    assert!(board.truncated, "eighteen windows deep");
-    assert_eq!(board.window, BOARD_MAX);
+    assert!(
+        board.truncated,
+        "3,000 open tasks overrun the 500-row window, and say so"
+    );
+    assert!(board.open_count >= board.window);
 }

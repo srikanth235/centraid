@@ -17,7 +17,7 @@ public sealed interface FoundResult {
      * The vault exists and is in front.
      *
      * [vaultName] comes OUT OF THE VAULT and never off anything the shell
-     * supplied (#1025 S7-9): `VaultRoster.identify` reads `core_vault`'s own
+     * supplied (#1025 S7-9): `VaultRoster.identify` reads `vault`'s own
      * `display_name` from the file that was just founded. The old pairing path
      * printed the gateway's `--vault-name` CLI flag here and named the wrong
      * thing at the one moment a member was checking.

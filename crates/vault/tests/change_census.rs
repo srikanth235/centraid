@@ -34,21 +34,17 @@ fn a_commit_that_edits_one_table_reports_that_table_only() {
         .vault
         .commit(|tx| {
             tx.set_producer("test.one-table");
-            tx.connection().execute(
-                "INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at)
-                 VALUES ('p-one', 'person', 'One', ?1, ?1)",
-                [&"2026-01-01T00:00:00.000Z"],
-            )?;
+            common::add_person(tx, "p-one", "One", "2026-01-01T00:00:00.000Z")?;
             Ok(())
         })
         .expect("the commit lands");
 
-    // `core_entity` too, and that is CORRECT rather than noise: the entity
-    // supertype row is written by `core_party`'s own trigger, inside this
-    // commit, and a screen reading entities has to re-read. What must NOT be
-    // here is an FTS shadow table or a table this commit never touched.
+    // `entity` too, and that is CORRECT rather than noise: a person is an entity
+    // and its kind row, written in this commit, and a screen reading entities
+    // has to re-read. What must NOT be here is the search index, the journal or a
+    // table this commit never touched.
     assert!(
-        outcome.tables.contains(&"core_party".to_owned()),
+        outcome.tables.contains(&"person".to_owned()),
         "{:?}",
         outcome.tables
     );
@@ -56,36 +52,34 @@ fn a_commit_that_edits_one_table_reports_that_table_only() {
         outcome
             .tables
             .iter()
-            .all(|table| table == "core_party" || table == "core_entity"),
+            .all(|table| table == "person" || table == "entity"),
         "the census named a table the commit did not write: {:?}",
         outcome.tables
     );
     assert!(outcome.rows >= 1, "at least the inserted row was seen");
 
     // AND THE NEXT COMMIT STARTS FROM EMPTY. A hook left installed, or a
-    // census not cleared, would make this one report `core_party` as well.
+    // census not cleared, would make this one report `person` as well.
     let second = scratch
         .vault
         .commit(|tx| {
             tx.set_producer("test.other-table");
             // A SECOND TABLE WITH NO HASH COLUMN, no foreign key and no
-            // trigger, deliberately: a fixture that typed a `content_hash`
-            // would be a writer of one, and `tests/one_hash.rs` holds every
-            // such writer to naming where its value came from.
+            // trigger, deliberately.
             tx.connection().execute(
-                "INSERT INTO core_entity_kind (kind) VALUES ('test.one')",
+                "INSERT INTO locker_key (key_id, created_at) VALUES ('one', '2026-01-01T00:00:00.000Z')",
                 [],
             )?;
             Ok(())
         })
         .expect("the second commit lands");
     assert!(
-        !second.tables.contains(&"core_party".to_owned()),
+        !second.tables.contains(&"person".to_owned()),
         "the first commit's tables leaked into the second: {:?}",
         second.tables
     );
     assert!(
-        second.tables.contains(&"core_entity_kind".to_owned()),
+        second.tables.contains(&"locker_key".to_owned()),
         "{:?}",
         second.tables
     );
@@ -98,11 +92,7 @@ fn a_rollback_reports_nothing_and_does_not_leak_into_the_next_commit() {
     let scratch = common::Scratch::founded("census-rollback").expect("a vault is founded");
     let refusal = scratch.vault.commit(|tx| {
         tx.set_producer("test.rolled-back");
-        tx.connection().execute(
-            "INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at)
-             VALUES ('p-gone', 'person', 'Gone', ?1, ?1)",
-            [&"2026-01-01T00:00:00.000Z"],
-        )?;
+        common::add_person(tx, "p-gone", "Gone", "2026-01-01T00:00:00.000Z")?;
         Err::<(), _>(centraid_vault::VaultError::Invariant {
             context: "the body refuses after writing".to_owned(),
         })
@@ -114,7 +104,7 @@ fn a_rollback_reports_nothing_and_does_not_leak_into_the_next_commit() {
         .vault
         .read(|connection| {
             Ok(connection.query_row(
-                "SELECT COUNT(*) FROM core_party WHERE party_id = 'p-gone'",
+                "SELECT COUNT(*) FROM entity WHERE id = 'p-gone'",
                 [],
                 |row| row.get(0),
             )?)
@@ -131,19 +121,19 @@ fn a_rollback_reports_nothing_and_does_not_leak_into_the_next_commit() {
         .commit(|tx| {
             tx.set_producer("test.after-rollback");
             tx.connection().execute(
-                "INSERT INTO core_entity_kind (kind) VALUES ('test.after')",
+                "INSERT INTO locker_key (key_id, created_at) VALUES ('after', '2026-01-01T00:00:00.000Z')",
                 [],
             )?;
             Ok(())
         })
         .expect("the vault still works");
     assert!(
-        !after.tables.contains(&"core_party".to_owned()),
+        !after.tables.contains(&"person".to_owned()),
         "the rolled-back commit's tables leaked into the next one: {:?}",
         after.tables
     );
     assert!(
-        after.tables.contains(&"core_entity_kind".to_owned()),
+        after.tables.contains(&"locker_key".to_owned()),
         "{:?}",
         after.tables
     );

@@ -216,7 +216,7 @@ def tasks():
     t = [
         # cruise prep
         {"key": "nets", "name": "Pack plankton nets", "due": "2026-11-20", "effort": 60, "list": "prep_l"},
-        {"key": "ctd", "name": "Calibrate CTD sensors", "due": "2026-11-19", "effort": 240, "status": "in_progress",
+        {"key": "ctd", "name": "Calibrate CTD sensors", "due": "2026-11-19", "effort": 240,
          "list": "prep_l"},
         {"key": "formalin", "name": "Order formalin", "due": "2026-11-12", "effort": 20, "priority": 1, "list": "prep_l",
          "description": "2 x 5 litres from Chemtrade"},
@@ -234,8 +234,7 @@ def tasks():
         {"key": "boots", "name": "Resole deck boots", "due": "2026-10-10", "completed": "2026-10-09T15:00",
          "list": "gear_l"},
         # lab
-        {"key": "copepods", "name": "Analyse copepod samples from HV-2610", "due": "2026-12-18", "effort": 600,
-         "status": "in_progress", "priority": 2, "list": "lab_l"},
+        {"key": "copepods", "name": "Analyse copepod samples from HV-2610", "due": "2026-12-18", "effort": 600, "priority": 2, "list": "lab_l"},
         {"key": "report", "name": "Write cruise report HV-2610", "due": "2026-11-13", "effort": 300, "priority": 1,
          "list": "lab_l"},
         {"key": "ctd_profiles", "name": "Compile CTD profiles", "parent": "report", "due": "2026-11-11", "effort": 120},
@@ -248,8 +247,7 @@ def tasks():
          "list": "lab_l"},
         {"key": "kiel_reply", "name": "Reply to Jan about data sharing", "due": "2026-11-10", "effort": 20,
          "list": "lab_l"},
-        {"key": "slides", "name": "Prepare seminar slides", "due": "2026-11-10T12:00", "effort": 180, "priority": 1,
-         "status": "in_progress", "list": "lab_l"},
+        {"key": "slides", "name": "Prepare seminar slides", "due": "2026-11-10T12:00", "effort": 180, "priority": 1, "list": "lab_l"},
         {"key": "inventory", "name": "Update lab inventory", "status": "cancelled", "list": "lab_l"},
         {"key": "claim", "name": "Travel claim for HV-2610", "due": "2026-11-20", "effort": 45, "list": "lab_l",
          "description": "receipts are in the blue envelope"},

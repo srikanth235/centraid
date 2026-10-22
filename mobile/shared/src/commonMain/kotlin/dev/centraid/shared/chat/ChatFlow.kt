@@ -298,7 +298,7 @@ public class CoreChatDoor(
 
     /**
      * A WRITE, through the command plane. The chat's writes are registered
-     * commands (`chat.*`); this is the door a shell sends one through, and the
+     * commands (`thread.*`, and the shared `entity.purge` for a delete); this is the door a shell sends one through, and the
      * only answer it keeps is whether the vault did it. The key names the intent
      * and its subject, so a double tap is one write.
      */
@@ -322,12 +322,13 @@ public class CoreChatDoor(
     }
 
     override suspend fun renameThread(threadId: String, title: String): Boolean =
-        write("chat.rename_thread", """{"thread_id":${jsonString(threadId)},"title":${jsonString(title)}}""", threadId, title)
+        write("thread.rename", """{"thread_id":${jsonString(threadId)},"title":${jsonString(title)}}""", threadId, title)
 
     override suspend fun deleteThread(threadId: String): Boolean =
-        write("chat.delete_thread", """{"thread_id":${jsonString(threadId)}}""", threadId)
+        // a chat has no trash (R-CHAT-8): its delete is the shared permanent one
+        write("entity.purge", """{"id":${jsonString(threadId)}}""", threadId)
 
-    override suspend fun deleteAllThreads(): Boolean = write("chat.clear", "{}", "all")
+    override suspend fun deleteAllThreads(): Boolean = write("thread.clear", "{}", "all")
 
     override suspend fun cardLive(app: String, entity: String, id: String): Boolean =
         query(AppQueryRequest(chat_card = ChatCardRequest(app = app, entity = entity, id = id)))

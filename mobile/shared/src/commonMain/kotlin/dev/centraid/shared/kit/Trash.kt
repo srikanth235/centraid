@@ -42,6 +42,11 @@ public data class TrashSpec(
     val idColumn: String,
     val titleColumn: String,
     val deletedAtColumn: String = "deleted_at",
+    /**
+     * The `kind` of the rows this trash lists, for a table that holds every
+     * kind (`entity`, #1135); empty reads the table whole.
+     */
+    val kind: String = "",
     val purgeWindowDays: Int,
     /**
      * The column holding the day a row is erased by the purge sweep, or null
@@ -212,7 +217,7 @@ public class TrashMachine(public val spec: TrashSpec) : ScreenMachine<TrashListS
                 // double tap while the first is in flight is one write and an
                 // emptying after new deletions is a new command.
                 val shown = list.dataOf(state)?.rows?.joinToString(",") { it.id } ?: ""
-                WriteLaw.submit(Writes, dismissed(state), empty, "{}", InvokeKeys.of(empty, spec.appId, shown))
+                WriteLaw.submit(Writes, dismissed(state), empty, emptyInput(), InvokeKeys.of(empty, spec.appId, shown))
             }
             else -> Step(dismissed(state))
         }
@@ -232,6 +237,9 @@ public class TrashMachine(public val spec: TrashSpec) : ScreenMachine<TrashListS
         empty = EmptyState(headline = spec.copy.emptyHeadline, body = spec.copy.emptyStateBody),
         empty_label = if (spec.emptyCommand == null || data.rows.isEmpty()) "" else spec.copy.emptyAction,
     )
+
+    /** Emptying is scoped to the app's kind when the table holds every kind. */
+    private fun emptyInput(): String = if (spec.kind.isEmpty()) "{}" else "{\"kind\":${jsonString(spec.kind)}}"
 
     private fun idInput(id: String): String = "{${jsonString(spec.idColumn)}:${jsonString(id)}}"
 
@@ -315,7 +323,11 @@ public class TrashReads(public val spec: TrashSpec) :
         name = "$screenId.rows",
         select = listOfNotNull(spec.idColumn, spec.titleColumn, spec.deletedAtColumn, spec.purgeAtColumn),
         from = spec.table,
-        where_ = "${spec.deletedAtColumn} IS NOT NULL",
+        where_ = if (spec.kind.isEmpty()) {
+            "${spec.deletedAtColumn} IS NOT NULL"
+        } else {
+            "${spec.deletedAtColumn} IS NOT NULL AND kind = '${spec.kind}'"
+        },
         order = PageOrder(sort_column = spec.deletedAtColumn, pk_column = spec.idColumn, descending = true),
         local_day_columns = listOfNotNull(spec.deletedAtColumn, spec.purgeAtColumn),
         tz = zone,

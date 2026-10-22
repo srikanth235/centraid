@@ -191,8 +191,7 @@ def events():
 def tasks():
     t = [
         # thesis
-        {"key": "litrev", "name": "Draft literature review chapter", "due": "2026-09-30", "effort": 600, "priority": 1,
-         "status": "in_progress", "list": "thesis_l"},
+        {"key": "litrev", "name": "Draft literature review chapter", "due": "2026-09-30", "effort": 600, "priority": 1, "list": "thesis_l"},
         {"key": "summarise", "name": "Summarise perovskite papers", "parent": "litrev", "due": "2026-09-15", "effort": 240},
         {"key": "zotero", "name": "Fix citations in Zotero", "parent": "litrev", "due": "2026-09-12", "effort": 90},
         {"key": "send_helen", "name": "Send draft to Helen", "parent": "litrev", "due": "2026-09-30", "effort": 10},
@@ -204,8 +203,7 @@ def tasks():
         {"key": "review_form", "name": "Submit annual review form", "due": "2026-10-09", "effort": 45, "priority": 1,
          "list": "thesis_l"},
         # lab
-        {"key": "xrd_analyse", "name": "Analyse XRD data from August", "due": "2026-09-06", "effort": 240,
-         "status": "in_progress", "list": "lab_l"},
+        {"key": "xrd_analyse", "name": "Analyse XRD data from August", "due": "2026-09-06", "effort": 240, "list": "lab_l"},
         {"key": "xrd_book", "name": "Book XRD slot", "due": "2026-09-04", "effort": 10, "list": "lab_l"},
         {"key": "xrd_book_lukas", "name": "Book XRD slot for Lukas", "due": "2026-09-10", "effort": 10, "list": "lab_l"},
         {"key": "precursors", "name": "Order precursor chemicals", "due": "2026-09-07", "effort": 30, "priority": 1,
@@ -241,7 +239,7 @@ def tasks():
         {"key": "flyer", "name": "Design freshers flyer", "due": "2026-09-12", "effort": 120, "list": "nigsoc_l"},
         {"key": "logo", "name": "Get NigSoc logo from Emeka", "parent": "flyer", "due": "2026-09-07", "effort": 5},
         {"key": "print_flyers", "name": "Print 200 flyers", "parent": "flyer", "due": "2026-09-14", "effort": 30},
-        {"key": "mailing", "name": "Update society mailing list", "status": "in_progress", "effort": 60, "list": "nigsoc_l"},
+        {"key": "mailing", "name": "Update society mailing list", "effort": 60, "list": "nigsoc_l"},
         {"key": "fees", "name": "Collect membership fees", "due": "2026-10-02", "effort": 90, "list": "nigsoc_l"},
         {"key": "minutes_task", "name": "Type up committee minutes", "due": "2026-08-25", "completed": "2026-08-24T22:00",
          "list": "nigsoc_l"},

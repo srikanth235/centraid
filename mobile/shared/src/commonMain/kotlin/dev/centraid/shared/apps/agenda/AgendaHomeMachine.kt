@@ -138,26 +138,13 @@ public object AgendaHomeMachine : ScreenMachine<AgendaHome, AgendaInput> {
     public const val LIST_DAYS: Int = 120
 
     /**
-     * THE TABLES THIS SCREEN'S QUERIES READ — the event and its calendar
-     * edge, guests, a series' skipped and moved occurrences, calendars, the
-     * people a birthday and a guest name come from, and the tasks, their
-     * projects and sections, and the tags on a row's meta line. `AgendaReads.tables`
-     * is this set, and `AppReadsSpec` asserts [rowsChanged] answers for exactly
-     * it over every vault table.
+     * THE TABLES THIS SCREEN'S QUERIES READ — the event and its guests, a series' skipped and
+     * moved days, the calendars, the people a birthday and a guest name come from, and the tasks,
+     * their projects and sections, and the tags on a row's meta line. `AgendaReads.tables` is
+     * this set, and `AppReadsSpec` asserts [rowsChanged] answers for exactly it over every vault
+     * table.
      */
-    public val TABLES: Set<String> = setOf(
-        "core_event",
-        "schedule_event_ext",
-        "schedule_attendee",
-        "schedule_recurrence_exception",
-        "schedule_calendar",
-        "core_party",
-        "schedule_task",
-        "schedule_project",
-        "schedule_section",
-        "core_tag",
-        "core_concept",
-    )
+    public val TABLES: Set<String> = AgendaTables.HOME
 
     override fun initial(): AgendaHome = decorate(
         AgendaHome(
@@ -248,7 +235,7 @@ public object AgendaHomeMachine : ScreenMachine<AgendaHome, AgendaInput> {
                             search_open = false,
                             search_term = "",
                             search_corrected = "",
-                            search_ask = "",
+                            search_ask_row = null,
                             sheet = AgendaHomeState.Sheet.SHEET_NONE,
                             filing_task_id = "",
                             new_project_name = "",
@@ -316,7 +303,7 @@ public object AgendaHomeMachine : ScreenMachine<AgendaHome, AgendaInput> {
             event.search_term != null -> {
                 val opened = openSearch(shut(state))
                 val typed = opened.copy(
-                    screen = opened.screen.copy(search_term = event.search_term.term, search_corrected = "", search_ask = ""),
+                    screen = opened.screen.copy(search_term = event.search_term.term, search_corrected = "", search_ask_row = null),
                 )
                 if (activeTerm(typed.screen) == null) {
                     // NO TERM, NO SEARCH: the window's own list, re-folded.
@@ -436,8 +423,8 @@ public object AgendaHomeMachine : ScreenMachine<AgendaHome, AgendaInput> {
                 } else {
                     val out = TaskOpsLaw.created(
                         state.tasks.ops,
-                        TaskOpsLaw.SAVE_PROJECT,
-                        "{\"name\":${jsonString(name)}}",
+                        TaskOpsLaw.CREATE_CONTAINER,
+                        "{\"kind\":\"project\",\"title\":${jsonString(name)}}",
                         name,
                         TasksCopy.PROJECT_CREATED,
                     )
@@ -564,7 +551,7 @@ public object AgendaHomeMachine : ScreenMachine<AgendaHome, AgendaInput> {
     /** Search shut, and its term CLEARED (v0 kept it — a defect not carried). */
     private fun closedSearch(state: AgendaHome): AgendaHome = withoutSearch(
         state.copy(
-            screen = state.screen.copy(search_open = false, search_term = "", search_corrected = "", search_ask = ""),
+            screen = state.screen.copy(search_open = false, search_term = "", search_corrected = "", search_ask_row = null),
         ),
     )
 
@@ -714,16 +701,12 @@ public object AgendaHomeMachine : ScreenMachine<AgendaHome, AgendaInput> {
             } else {
                 ""
             },
-            // THE QUESTION THE NO-MATCH STATE OFFERS (#1097, R-1097-28): for a search's own answer to the
-            // term on screen, with no event, task or project container in it. Agenda keeps flat fields, so
-            // this is the law by hand.
-            search_ask = if (searching && answer.search != null &&
-                answer.search.events.isEmpty() && incoming.search?.tasks.isNullOrEmpty() &&
-                AgendaFold.projectContainers(incoming.search).isEmpty()
-            ) {
-                SearchLaw.question(state.screen.search_term)
+            // THE ASK ROW (#1097, R-1097-28, #1135): for a search's own answer to the term on screen,
+            // matched or not. Agenda keeps flat fields, so this is the law by hand.
+            search_ask_row = if (searching && answer.search != null) {
+                SearchLaw.offer(state.screen.search_term, "agenda")
             } else {
-                ""
+                null
             },
         )
         val held = AgendaAnswers(
@@ -795,7 +778,7 @@ public object AgendaHomeMachine : ScreenMachine<AgendaHome, AgendaInput> {
                     search_open = false,
                     search_term = "",
                     search_corrected = "",
-                    search_ask = "",
+                    search_ask_row = null,
                     sheet = AgendaHomeState.Sheet.SHEET_NONE,
                 ),
             ),

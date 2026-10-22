@@ -449,6 +449,7 @@ name = "centraid-apps-agenda"
 version = "1.0.0-alpha.0"
 dependencies = [
  "centraid-apps-kit",
+ "centraid-ontology",
  "centraid-search",
  "centraid-vault",
  "rusqlite",
@@ -476,6 +477,7 @@ name = "centraid-apps-health"
 version = "1.0.0-alpha.0"
 dependencies = [
  "centraid-apps-kit",
+ "centraid-ontology",
  "centraid-vault",
  "serde_json",
 ]
@@ -499,6 +501,7 @@ name = "centraid-apps-locker"
 version = "1.0.0-alpha.0"
 dependencies = [
  "centraid-apps-kit",
+ "centraid-search",
  "rusqlite",
  "serde_json",
  "thiserror",
@@ -511,6 +514,7 @@ dependencies = [
  "blake3",
  "centraid-apps-kit",
  "centraid-ontology",
+ "centraid-search",
  "centraid-vault",
  "hex",
  "rusqlite",
@@ -523,13 +527,10 @@ dependencies = [
 name = "centraid-apps-notes"
 version = "1.0.0-alpha.0"
 dependencies = [
- "centraid-api-proto",
  "centraid-apps-kit",
- "centraid-media",
+ "centraid-ontology",
  "centraid-search",
  "centraid-vault",
- "prost",
- "rusqlite",
  "serde",
  "serde_json",
  "thiserror",
@@ -541,6 +542,8 @@ version = "1.0.0-alpha.0"
 dependencies = [
  "centraid-apps-kit",
  "centraid-design",
+ "centraid-ontology",
+ "centraid-vault",
  "rusqlite",
  "serde_json",
  "thiserror",
@@ -552,7 +555,9 @@ version = "1.0.0-alpha.0"
 dependencies = [
  "centraid-apps-kit",
  "centraid-media",
+ "centraid-ontology",
  "centraid-search",
+ "centraid-vault",
  "rusqlite",
  "serde_json",
  "thiserror",
@@ -563,6 +568,7 @@ name = "centraid-apps-tasks"
 version = "1.0.0-alpha.0"
 dependencies = [
  "centraid-apps-kit",
+ "centraid-ontology",
  "centraid-search",
  "centraid-vault",
  "rusqlite",
@@ -769,11 +775,7 @@ dependencies = [
 name = "centraid-ontology"
 version = "1.0.0-alpha.0"
 dependencies = [
- "blake3",
- "flate2",
- "hex",
  "rusqlite",
- "serde",
  "serde_json",
  "thiserror",
 ]
@@ -797,6 +799,7 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
+ "tempfile",
  "thiserror",
 ]
 
@@ -823,6 +826,7 @@ dependencies = [
  "tempfile",
  "thiserror",
  "tracing",
+ "unicode-normalization",
 ]
 
 [[package]]
@@ -3928,8 +3932,6 @@ name = "xtask"
 version = "1.0.0-alpha.0"
 dependencies = [
  "anyhow",
- "base64 0.22.1",
- "blake3",
  "clap",
  "serde_json",
  "sha2",

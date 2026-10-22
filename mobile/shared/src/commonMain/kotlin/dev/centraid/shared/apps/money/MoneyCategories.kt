@@ -35,9 +35,12 @@ import dev.centraid.shared.nav.ScreenIds
 public object MoneyCategoriesMachine :
     MoneyQueryMachine<MoneyCategoriesState, MoneyCategoriesEvent, MoneyCategoriesData>("money.categories", MONEY_TABLES) {
     public const val SCREEN_ID: String = ScreenIds.MONEY_CATEGORIES
-    public const val CMD_ADD: String = "money.add_category"
-    public const val CMD_MERGE: String = "money.merge_category"
-    public const val CMD_ARCHIVE: String = "money.archive_category"
+    public const val CMD_ADD: String = "category.add"
+    public const val CMD_MERGE: String = "category.merge"
+
+    /** Archiving a category is the archived flag on it: the shared verbs. */
+    public const val CMD_ARCHIVE: String = "flag.set"
+    public const val CMD_RESTORE: String = "flag.clear"
 
     public const val ROW_MERGE: String = "merge"
     public const val ROW_ARCHIVE: String = "archive"
@@ -125,8 +128,8 @@ public object MoneyCategoriesMachine :
 
             event.confirm_accepted != null && screen.confirm != null && screen.merge_into.isNotEmpty() -> {
                 val input = MoneyFold.json(
-                    "from_concept_id" to MoneyFold.str(screen.category_id),
-                    "into_concept_id" to MoneyFold.str(screen.merge_into),
+                    "from_id" to MoneyFold.str(screen.category_id),
+                    "into_id" to MoneyFold.str(screen.merge_into),
                 )
                 val cleared = held.copy(screen = screen.copy(confirm = null, sheet = MoneyCategoriesState.Sheet.SHEET_NONE))
                 WriteLaw.submit(Writes, cleared, CMD_MERGE, input, InvokeKeys.of(CMD_MERGE, screen.category_id, screen.merge_into))
@@ -150,15 +153,16 @@ public object MoneyCategoriesMachine :
             ROW_ARCHIVE, ROW_RESTORE -> {
                 val archived = key == ROW_ARCHIVE
                 val input = MoneyFold.json(
-                    "concept_id" to MoneyFold.str(screen.category_id),
-                    "archived" to archived.toString(),
+                    "id" to MoneyFold.str(screen.category_id),
+                    "flag" to MoneyFold.str("archived"),
                 )
+                val command = if (archived) CMD_ARCHIVE else CMD_RESTORE
                 WriteLaw.submit(
                     Writes,
                     held.copy(screen = screen.copy(sheet = MoneyCategoriesState.Sheet.SHEET_NONE)),
-                    CMD_ARCHIVE,
+                    command,
                     input,
-                    InvokeKeys.of(CMD_ARCHIVE, screen.category_id, archived.toString()),
+                    InvokeKeys.of(command, screen.category_id),
                 )
             }
             else -> Step(held)
@@ -169,11 +173,11 @@ public object MoneyCategoriesMachine :
         val screen = held.screen
         val name = screen.name_draft.trim()
         if (name.isEmpty() || name.length > NAME_MAX) return Step(held)
-        val id = "category-${screen.draft_token}-${held.tokens + 1}"
+        // A category is named by its words and its group, so asking again is the same ask.
+        val id = "${screen.group_id}/$name"
         val input = MoneyFold.json(
-            "category_id" to MoneyFold.str(id),
-            "name" to MoneyFold.str(name),
-            "parent_concept_id" to screen.group_id.ifEmpty { null }?.let(MoneyFold::str),
+            "title" to MoneyFold.str(name),
+            "parent_id" to screen.group_id.ifEmpty { null }?.let(MoneyFold::str),
         )
         return WriteLaw.submit(
             Writes,

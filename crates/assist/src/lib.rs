@@ -12,7 +12,7 @@
 //! |---|---|
 //! | [`native`] | The tool runtime: eight flat tools over a vault, one metadata table, the date evaluator, observations and the system prompt (`experiments/toolchat/native/SPEC.md`). |
 //! | [`native_turn`] | The turn loop (#1088): the model drives [`native`] one call per message; the chat's own cards, a line composed from the effect, and the free reply when a question is out of scope. |
-//! | [`app`] | The seven domains a card can name and the six apps a chat scope can (Agenda's covers Tasks, R-1128-F2). Locker is neither. |
+//! | [`app`] | The eight domains a card can name and the seven apps a chat scope can (Agenda's covers Tasks, R-1128-F2). |
 //! | [`result`] | The result card: a reference to a real row. |
 //! | [`prompt`] | The Qwen ChatML pieces both paths share: the free-reply prompt, the stored turn, the question, the token estimate and the context budget. |
 //! | [`model`], [`host`] | The [`model::Model`] trait an engine implements, and the slot a loaded model lives in. |

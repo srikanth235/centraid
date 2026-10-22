@@ -10,22 +10,25 @@ import dev.centraid.shared.kit.TrashSpec
  * DOCS' TRASH: the kit's one trash screen with Docs as the parameter.
  *
  * DOCS DESTROYS, ON PHOTOS' PATH (D-1 of 2026-09-25, `docs.proto`'s header):
- * "Delete forever" is `core.purge_document` and "Empty trash" is
- * `core.empty_document_trash`, each behind the kit's destructive confirm —
+ * "Delete forever" is `entity.purge` and "Empty trash" is
+ * `entity.empty_trash`, each behind the kit's destructive confirm —
  * the row goes now and its bytes are released when nothing else names them.
  * So the kit's own sentences ("leaves this vault for good") are true here.
  * No sweep runs on the phone, so no row says when it will be erased.
  */
 public val DocsTrashSpec: TrashSpec = TrashSpec(
     appId = DocsWrites.APP_ID,
-    table = "core_document",
+    table = "entity",
+    kind = DocsWrites.DOCUMENT_KIND,
     restoreCommand = DocsWrites.RESTORE,
     purgeCommand = DocsWrites.PURGE,
     emptyCommand = DocsWrites.EMPTY_TRASH,
-    idColumn = "document_id",
+    idColumn = "id",
     titleColumn = "title",
     purgeWindowDays = 30,
     copy = TrashCopy(emptyStateBody = DocsCopy.TRASH_EMPTY_STATE_BODY),
+    // An `entity` change covers every kind; the shelf lists documents only.
+    reReadOnAnyChange = true,
     backLabel = DocsCopy.APP_TITLE,
 )
 
@@ -35,5 +38,5 @@ public val DocsTrashSpec: TrashSpec = TrashSpec(
  */
 public val DocsTrashMachine: TrashMachine = TrashMachine(DocsTrashSpec)
 
-/** What Docs' trash reads and writes: the kit's, over `core_document`. */
+/** What Docs' trash reads and writes: the kit's, over `entity` rows of kind `document`. */
 public val DocsTrashReads: TrashReads = TrashReads(DocsTrashSpec)

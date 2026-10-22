@@ -162,12 +162,6 @@
     "door": "hook",
     "why": "An owner that no lane schedules is a claim with no evidence."
   },
-  "lint:app-conformance": {
-    "class": "product",
-    "rung": 1,
-    "door": "hook",
-    "why": "A launcher tile that reaches no screen — buildLauncherItems drops an unmapped app id silently."
-  },
   "lint:e2e-claims": {
     "class": "contract",
     "rung": 1,

@@ -328,7 +328,6 @@ class HomeMachineSpec : StringSpec({
             listOf("notes", "money"),
             listOf("health", "people"),
             listOf("locker"),
-            listOf("people", "locker"),
         )
     }
 
@@ -682,12 +681,12 @@ class HomeMachineSpec : StringSpec({
     }
 
     "a write stranded by its screen's closing is Home's status line, in the attention tone" {
-        val quiet = strandedStatus(StrandedWrite(appId = "notes", command = "knowledge.edit_note", sentence = ""))
+        val quiet = strandedStatus(StrandedWrite(appId = "notes", command = "note.edit", sentence = ""))
         quiet.tone shouldBe HomeStatus.Tone.TONE_ATTENTION
         quiet.copy shouldBe "Your last change in Notes was not saved."
         quiet.action shouldBe ""
         quiet.destination shouldBe HomeStatus.Destination.DESTINATION_NONE
-        strandedStatus(StrandedWrite("tasks", "schedule.edit_task", "That task is gone.")).copy shouldBe
+        strandedStatus(StrandedWrite("tasks", "task.edit", "That task is gone.")).copy shouldBe
             "Agenda: That task is gone."
         val told = HomeMachine.reduce(named("v1", "Demo vault"), HomeEvent(status = HomeEvent.StatusChanged(status = quiet))).state
         told.data_.shouldNotBeNull().status shouldBe quiet

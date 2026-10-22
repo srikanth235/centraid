@@ -23,7 +23,7 @@ centraid-gateway install --data-dir ~/centraid-gateway             # writes it, 
 
 ## Getting it reachable
 
-**LAN first** ([R-1080-9](../../docs/decisions.md#backups-from-first-principles-1080)). A phone on the same network finds the gateway by its addresses and by Bonjour, and that is the ordinary case: the backup happens at home, overnight, on Wi-Fi. Away from home, the phone reaches only an address it can dial directly:
+**LAN first** ([R-1080-9](../../docs/decisions.md#backup-and-the-gateway)). A phone on the same network finds the gateway by its addresses and by Bonjour, and that is the ordinary case: the backup happens at home, overnight, on Wi-Fi. Away from home, the phone reaches only an address it can dial directly:
 
 | Shape | How |
 | --- | --- |
@@ -49,7 +49,7 @@ Host networking, because the phone dials the addresses `pair` lists and Bonjour 
 
 Stop the gateway, copy its data directory whole, start it again. **That is everything.** There is no key to export and no credential to keep in step: what the directory holds is the gateway's own TLS identity, hashes of tokens and pairing secrets, the index, and ciphertext nobody there can open. Copied to another machine and started there, it is the same gateway, and every paired phone still trusts it.
 
-A second gateway somewhere else, paired from the phone, is the better answer to a box that dies with the house: the phone backs up to each gateway it can reach ([R-1080-8](../../docs/decisions.md#backups-from-first-principles-1080)).
+A second gateway somewhere else, paired from the phone, is the better answer to a box that dies with the house: the phone backs up to each gateway it can reach ([R-1080-8](../../docs/decisions.md#backup-and-the-gateway)).
 
 ## What the gateway does on its own
 

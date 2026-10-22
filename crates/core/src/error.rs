@@ -38,11 +38,10 @@ pub enum CoreError {
     /// It guarded `Handle::pair`, which bootstrapped a first copy into the file
     /// this core was open on. There is no pairing plane and no copy to take
     /// (#1029 §1), and the hazard moved intact to the door that replaced it:
-    /// `crate::api::found` writes `core_vault`, and `Vault::found` mints a
-    /// fresh id and inserts unconditionally — so a second found leaves TWO
-    /// vault rows in one file, and `Vault::vault_id`'s `ORDER BY vault_id LIMIT
-    /// 1` answers whichever of them sorted first. The member's own vault would
-    /// start answering to a different id after a double tap.
+    /// `crate::api::found` writes the `vault` row, and `Vault::found` mints a
+    /// fresh self person and inserts unconditionally — so a second found would
+    /// fail on the one-row `vault` after minting a second person, in a file the
+    /// shell had taken for founded. A double tap must not reach that.
     ///
     /// Refused BEFORE anything is written, and the vault that is here is left
     /// exactly as it was. The remedy is a fresh file, which a shell always has:

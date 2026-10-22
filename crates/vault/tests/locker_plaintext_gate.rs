@@ -26,6 +26,15 @@
 //! multi-seat file custody they policed (#1047 slice D1): there is no key file
 //! for a reader to open.
 //!
+//! ## The search index
+//!
+//! A Locker item is indexed by its plain fields (its title, username, address,
+//! aliases, notes ...), so the gate is not "the index holds nothing of Locker"
+//! but "the index holds nothing SEALED": no word of a planted sealed cell is in
+//! `search_vocab`, `search_word`, the FTS5 shadow tables' bytes or `text_of`,
+//! while the planted plain fields are (a positive control, so the scan cannot be
+//! passing by looking nowhere).
+//!
 //! ## The falsification
 //!
 //! A search that finds nothing is the same output as a search that looks
@@ -40,6 +49,7 @@ use centraid_vault::custody::locker_key::{
     LOCKER_ENCRYPTED_COLUMNS, decrypt_under_locker_key, encrypt_under_locker_key,
     is_locker_ciphertext,
 };
+use centraid_vault::model::Kind;
 
 /// The plaintexts planted, and the strings the gate hunts for.
 ///
@@ -101,9 +111,6 @@ impl Sealed {
         let scratch =
             common::Scratch::founded("locker-plaintext-gate").expect("a vault is founded");
         let registry = Registry::with_system_commands().expect("the registry builds");
-        registry
-            .install(&scratch.vault)
-            .expect("the record installs");
         let key = locker_key();
         scratch
             .vault
@@ -115,15 +122,28 @@ impl Sealed {
                      VALUES ('key-1', '2026-01-01T00:00:00.000Z')",
                     [],
                 )?;
-                for (item_id, title) in [("item-1", "The bank"), ("item-2", "The card")] {
+                for (item_id, title, username, brand) in [
+                    ("item-1", "The bank", "plainuser-xylophone9", None),
+                    (
+                        "item-2",
+                        "The card",
+                        "plainname-quokka7",
+                        Some("plainbrand-zeppelin3"),
+                    ),
+                ] {
+                    // A Locker item is an entity first; its kind row joins it.
+                    tx.insert_entity(item_id, Kind::LockerItem, title, "2026-01-01T00:00:00.000Z")?;
                     connection.execute(
-                        "INSERT INTO locker_item
-                           (item_id, type, title, created_at, updated_at, key_id)
-                         VALUES (?1, 'login', ?2, '2026-01-01T00:00:00.000Z',
-                                 '2026-01-01T00:00:00.000Z', 'key-1')",
-                        rusqlite::params![item_id, title],
+                        "INSERT INTO locker_item (id, type, username, brand, key_id)
+                         VALUES (?1, 'login', ?2, ?3, 'key-1')",
+                        rusqlite::params![item_id, username, brand],
                     )?;
                 }
+                connection.execute(
+                    "INSERT INTO locker_item_alias (alias, item_id, created_at)
+                     VALUES ('plainalias-narwhal5', 'item-1', '2026-01-01T00:00:00.000Z')",
+                    [],
+                )?;
                 connection.execute(
                     "INSERT INTO locker_item_field
                        (field_id, item_id, section, label, kind, created_at, updated_at, key_id)
@@ -189,6 +209,30 @@ fn needles() -> Vec<&'static str> {
         .collect()
 }
 
+/// The digit-bearing words of each planted secret (`zq7xk4`, `mv9wr2`, ...): the
+/// tokenizer splits `PLANTED-PASSWORD-zq7xk4-...` at its hyphens, so a scan for
+/// the whole string cannot see a secret indexed as words. These are what the
+/// index would actually hold.
+fn secret_tokens() -> Vec<String> {
+    needles()
+        .iter()
+        .flat_map(|needle| needle.split('-'))
+        .filter(|token| token.chars().any(|letter| letter.is_ascii_digit()))
+        .map(str::to_lowercase)
+        .collect()
+}
+
+/// Assert no word of any planted secret appears in the bytes.
+fn carries_no_secret_token(what: &str, answer: &[u8]) {
+    let lower = answer.to_ascii_lowercase();
+    for token in secret_tokens() {
+        assert!(
+            !contains(&lower, token.as_bytes()),
+            "{what} holds `{token}`, a word of a sealed cell's plaintext"
+        );
+    }
+}
+
 /// Assert a door's answer carries no planted secret, as text AND as bytes.
 fn carries_no_secret(what: &str, answer: &[u8]) {
     for needle in needles() {
@@ -222,7 +266,7 @@ fn nothing_the_vault_serves_or_backs_up_carries_locker_plaintext() {
             .scratch
             .vault
             .keyset_page(&centraid_vault::page::KeysetPage {
-                name: "gate".to_owned(),
+                name: "locker.gate".to_owned(),
                 select: select.clone(),
                 from: (*table).to_owned(),
                 predicate: None,
@@ -233,7 +277,6 @@ fn nothing_the_vault_serves_or_backs_up_carries_locker_plaintext() {
                 limit: 100,
                 after: None,
                 held_thumbnail: false,
-                note_body: false,
                 document_size: false,
             })
             .expect("the door answers");
@@ -279,6 +322,184 @@ fn nothing_the_vault_serves_or_backs_up_carries_locker_plaintext() {
     for (name, input) in answers {
         let answer = sealed_vault.run(name, input);
         carries_no_secret(&format!("{name}'s answer"), answer.as_bytes());
+    }
+
+    // ---- 2b. THE READERS OF EVERY ENTITY (a Locker item is one) -----------
+    //
+    // A Locker item is an entity, so every reader that serves "entities" is a
+    // reader that could serve it. None may carry a cell, and none may carry the
+    // item at all unless it is one of Locker's.
+    {
+        let vault = &sealed_vault.scratch.vault;
+        let page_of = |name: &str, from: &str, select: &[&str], sort: &str, pk: &str| {
+            vault.keyset_page(&centraid_vault::page::KeysetPage {
+                name: name.to_owned(),
+                select: select.iter().map(|column| (*column).to_owned()).collect(),
+                from: from.to_owned(),
+                predicate: None,
+                binds: Vec::new(),
+                sort_column: sort.to_owned(),
+                pk_column: pk.to_owned(),
+                descending: false,
+                limit: 100,
+                after: None,
+                held_thumbnail: false,
+                document_size: false,
+            })
+        };
+        // keyset_page over `entity`: the vault's own owner and the seeded words,
+        // and not a Locker row.
+        let entities = page_of(
+            "generic.entities",
+            "entity",
+            &["id", "kind", "title"],
+            "id",
+            "id",
+        )
+        .expect("the door answers");
+        assert!(!entities.rows.is_empty(), "the entity page served nothing");
+        let rendered = format!("{:?}", entities.rows);
+        carries_no_secret("a generic page over entity", rendered.as_bytes());
+        assert!(
+            !rendered.contains("locker_item") && !rendered.contains("The bank"),
+            "a generic page over entity served a Locker item: {rendered}"
+        );
+        // …while Locker's own read of the same table does see its items.
+        let own = page_of(
+            "locker.phone.shelves",
+            "entity",
+            &["id", "kind", "title"],
+            "id",
+            "id",
+        )
+        .expect("the door answers");
+        assert!(format!("{:?}", own.rows).contains("The bank"));
+        // keyset_page over `edge`: no edge that touches an item.
+        sealed_vault
+            .scratch
+            .vault
+            .commit(|tx| {
+                tx.set_producer("test.fixture");
+                tx.connection().execute(
+                    "INSERT INTO edge (from_id, rel, to_id, created_at)
+                     VALUES ('item-1', 'tagged', 'flag:starred', '2026-01-01T00:00:00.000Z')",
+                    [],
+                )?;
+                Ok(())
+            })
+            .expect("a star lands");
+        let edges = page_of(
+            "generic.edges",
+            "edge",
+            &["from_id", "to_id"],
+            "from_id",
+            "to_id",
+        )
+        .expect("the door answers");
+        assert!(
+            edges.rows.is_empty(),
+            "a generic page over edge served a Locker edge"
+        );
+        let own_edges = page_of(
+            "locker.phone.tags",
+            "edge",
+            &["from_id", "to_id"],
+            "from_id",
+            "to_id",
+        )
+        .expect("the door answers");
+        assert_eq!(own_edges.rows.len(), 1, "Locker's own read lost its star");
+        // And a Locker TABLE is Locker's alone: a generic read is refused.
+        for table in ["locker_item", "locker_item_field", "locker_item_passkey"] {
+            let pk = if table == "locker_item" {
+                "id"
+            } else {
+                "item_id"
+            };
+            let refused = page_of("generic.peek", table, &[pk], pk, pk);
+            assert!(refused.is_err(), "a generic read of {table} was served");
+        }
+        // THE SEARCH INDEX holds a Locker item by its PLAIN text and by nothing
+        // sealed. The scan is of the index's vocabulary, its word list,
+        // `text_of`, and the raw bytes of the FTS5 shadow tables.
+        vault
+            .read(|connection| {
+                let words: Vec<String> = connection
+                    .prepare(
+                        "SELECT term FROM search_vocab UNION ALL SELECT word FROM search_word",
+                    )?
+                    .query_map([], |row| row.get::<_, String>(0))?
+                    .collect::<rusqlite::Result<Vec<_>>>()?;
+                let index_text = words.join(" ");
+                carries_no_secret("the search index's words", index_text.as_bytes());
+                carries_no_secret_token("the search index's words", index_text.as_bytes());
+                // The shadow tables, as bytes: leaf blocks, the segment index,
+                // the doc sizes and the config.
+                let mut shadow = Vec::new();
+                for (table, column) in [
+                    ("search_data", "block"),
+                    ("search_docsize", "sz"),
+                    ("search_idx", "term"),
+                    ("search_config", "v"),
+                ] {
+                    for cell in connection
+                        .prepare(&format!("SELECT {column} FROM {table}"))?
+                        .query_map([], |row| row.get::<_, rusqlite::types::Value>(0))?
+                    {
+                        match cell? {
+                            rusqlite::types::Value::Blob(bytes) => shadow.extend(bytes),
+                            rusqlite::types::Value::Text(text) => shadow.extend(text.into_bytes()),
+                            other => shadow.extend(format!("{other:?}").into_bytes()),
+                        }
+                    }
+                }
+                carries_no_secret("the search shadow tables", &shadow);
+                carries_no_secret_token("the search shadow tables", &shadow);
+                // POSITIVE CONTROLS: the planted PLAIN fields are findable, and
+                // the scan above can see a word in these very bytes — so its
+                // silence about the secrets is not a scan that looks nowhere.
+                for plain in ["bank", "card", "quokka7", "zeppelin3", "narwhal5"] {
+                    assert!(
+                        words.iter().any(|word| word == plain),
+                        "the plain word `{plain}` of a Locker item is not in the index"
+                    );
+                }
+                assert!(
+                    contains(&shadow, b"zeppelin3"),
+                    "the byte scan cannot see a plain word in the shadow tables, so it proves nothing"
+                );
+                // text_of answers with the plain fields and nothing sealed.
+                for item in ["item-1", "item-2"] {
+                    let text = centraid_vault::index::text_of(connection, item, Kind::LockerItem)?
+                        .expect("text_of answered for a Locker item");
+                    carries_no_secret("text_of", text.as_bytes());
+                    carries_no_secret_token("text_of", text.as_bytes());
+                }
+                // (`locker.edit_item` above REPLACED item-1's cells, so the plain
+                // cells that are still there are item-1's alias and item-2's two.)
+                for (item, plain) in [
+                    ("item-1", "narwhal5"),
+                    ("item-2", "quokka7"),
+                    ("item-2", "zeppelin3"),
+                ] {
+                    let text = centraid_vault::index::text_of(connection, item, Kind::LockerItem)?
+                        .unwrap_or_default();
+                    assert!(text.contains(plain), "text_of lost `{plain}`: {text}");
+                }
+                // The journal carried no cell (every command above ran), and a
+                // Locker item has no revision to carry one.
+                let journal: String = connection
+                    .prepare("SELECT input || ' ' || COALESCE(detail, '') FROM journal")?
+                    .query_map([], |row| row.get::<_, String>(0))?
+                    .collect::<rusqlite::Result<Vec<_>>>()?
+                    .join("\n");
+                carries_no_secret("the journal", journal.as_bytes());
+                let revisions: i64 =
+                    connection.query_row("SELECT COUNT(*) FROM revision", [], |row| row.get(0))?;
+                assert_eq!(revisions, 0, "a Locker item left a revision");
+                Ok(())
+            })
+            .expect("the readers answer");
     }
 
     // ---- 3. THE SNAPSHOT ---------------------------------------------------
@@ -494,4 +715,146 @@ fn the_search_fires_when_the_key_is_present() {
         "no planted cell could be opened even WITH the key: the falsification \
          itself is vacuous"
     );
+}
+
+// ---------------------------------------------------------------------------
+// THE ASSISTANT'S READS (the owner's ruling of 2026-10-22, #1135)
+//
+// The assistant reads the vault through pages named `assist.native.*`. It has the owner's access
+// to a Locker item's plain rows, and no access to a sealed value: the page serves the rows and
+// refuses every way to name a sealed column but its presence bit.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn the_assistants_reads_serve_a_locker_items_plain_rows_and_never_a_sealed_column() {
+    let sealed_vault = Sealed::founded();
+    let vault = &sealed_vault.scratch.vault;
+    sealed_vault
+        .scratch
+        .vault
+        .commit(|tx| {
+            tx.set_producer("test.fixture");
+            tx.connection().execute(
+                "INSERT INTO edge (from_id, rel, to_id, created_at)
+                 VALUES ('item-1', 'tagged', 'flag:starred', '2026-01-01T00:00:00.000Z')",
+                [],
+            )?;
+            Ok(())
+        })
+        .expect("a star lands");
+    let page = |name: &str, from: &str, select: &[&str], sort: &str, predicate: Option<&str>| {
+        vault.keyset_page(&centraid_vault::page::KeysetPage {
+            name: name.to_owned(),
+            select: select.iter().map(|column| (*column).to_owned()).collect(),
+            from: from.to_owned(),
+            predicate: predicate.map(str::to_owned),
+            binds: Vec::new(),
+            sort_column: sort.to_owned(),
+            pk_column: sort.to_owned(),
+            descending: false,
+            limit: 100,
+            after: None,
+            held_thumbnail: false,
+            document_size: false,
+        })
+    };
+
+    // The rows a Locker item is made of, plain: its entity, its edges, its kind row.
+    let entities = page(
+        "assist.native.entity",
+        "entity",
+        &["id", "kind", "title"],
+        "id",
+        None,
+    )
+    .expect("the door answers");
+    let rendered = format!("{:?}", entities.rows);
+    assert!(
+        rendered.contains("locker_item") && rendered.contains("The bank"),
+        "{rendered}"
+    );
+    let edges = page(
+        "assist.native.edge",
+        "edge",
+        &["from_id", "to_id"],
+        "from_id",
+        None,
+    )
+    .expect("the door answers");
+    assert_eq!(
+        edges.rows.len(),
+        1,
+        "the item's star is an edge the assistant reads"
+    );
+    let items = page(
+        "assist.native.locker_item",
+        "locker_item",
+        &[
+            "id",
+            "type",
+            "username",
+            "brand",
+            "password IS NOT NULL AS has_password",
+            "otp_seed IS NOT NULL AS has_otp_seed",
+            "card_number IS NOT NULL AS has_card_number",
+        ],
+        "id",
+        None,
+    )
+    .expect("the door answers");
+    let rendered = format!("{:?}", items.rows);
+    assert!(rendered.contains("plainuser-xylophone9"), "{rendered}");
+    assert!(
+        rendered.contains("has_password") && rendered.contains("Integer(1)"),
+        "the presence bit is served: {rendered}"
+    );
+    carries_no_secret("the assistant's read of locker_item", rendered.as_bytes());
+    assert!(
+        !rendered.contains("lk1:"),
+        "no ciphertext either: {rendered}"
+    );
+
+    // …and every way to name a sealed column is refused: projected, ordered by, filtered on,
+    // or read out of a JSON path.
+    for (table, pk, column) in [
+        ("locker_item", "id", "password"),
+        ("locker_item", "id", "otp_seed"),
+        ("locker_item", "id", "card_number"),
+        ("locker_item", "id", "cvv"),
+        ("locker_item", "id", "content"),
+        ("locker_item_field", "item_id", "value_sealed"),
+        ("locker_item_passkey", "item_id", "private_key"),
+    ] {
+        let read = |select: &[&str], sort: &str, predicate: Option<&str>| {
+            page("assist.native.read", table, select, sort, predicate)
+        };
+        assert!(
+            read(&[pk, column], pk, None).is_err(),
+            "projected {table}.{column}"
+        );
+        assert!(
+            read(&[pk], column, None).is_err(),
+            "ordered by {table}.{column}"
+        );
+        assert!(
+            read(&[pk], pk, Some(&format!("{column} LIKE 'lk1:%'"))).is_err(),
+            "filtered on {table}.{column}"
+        );
+        assert!(
+            read(
+                &[&format!("json_extract({column}, '$.x') AS x"), pk],
+                pk,
+                None
+            )
+            .is_err(),
+            "extracted from {table}.{column}"
+        );
+        // The presence bit is the one way to name it.
+        assert!(
+            read(&[pk, &format!("{column} IS NOT NULL AS has_it")], pk, None).is_ok(),
+            "the presence of {table}.{column}"
+        );
+    }
+    // A read that is neither Locker's nor the assistant's is served no Locker table.
+    assert!(page("generic.peek", "locker_item", &["id"], "id", None).is_err());
 }

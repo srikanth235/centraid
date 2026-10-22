@@ -55,15 +55,10 @@ const TYPES: Record<string, string> = {
   // parameter, not a screen*, which is why there is a `photos-shelf` and no
   // album, place or album-detail directory beside it — those are `PhotoShelf`
   // arms, and the fixtures in `photos-shelf` are what hold them to one message.
-  //
-  // `photos-memories` is the LIST of computed memories; a single memory's
-  // members are a `PhotoShelf.Memory`, which is why both exist and neither is
-  // the other's page.
   "photos-collections": "centraid.screen.v1.PhotosCollectionsState",
   "photos-duplicate-review": "centraid.screen.v1.DuplicateReviewState",
   "photos-duplicates": "centraid.screen.v1.DuplicatesState",
   "photos-lightbox": "centraid.screen.v1.PhotoLightboxState",
-  "photos-memories": "centraid.screen.v1.PhotosMemoriesState",
   "photos-picker": "centraid.screen.v1.PhotoPickerState",
   "photos-places": "centraid.screen.v1.PlacesState",
   "photos-search": "centraid.screen.v1.PhotosSearchState",

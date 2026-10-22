@@ -246,13 +246,12 @@ class ScreenMachineSpec : StringSpec({
         saving.state.save shouldBe NotesEditorState.SaveState.SAVE_STATE_SAVING
         val write = saving.effects.single() as ScreenEffect.SubmitWrite
         write.command shouldBe NotesEditorMachine.SAVE_COMMAND
-        write.invokeKey shouldBe "knowledge.edit_note:note-0001:seq=1"
-        // THE BASE REVISION IS NOT AN INPUT: `knowledge.edit_note`'s schema is
+        write.invokeKey shouldBe "note.edit:note-0001:seq=1"
+        // THE BASE REVISION IS NOT AN INPUT: `note.edit`'s schema is
         // `additionalProperties: false`, and there is no vault-side revision
         // check — the last save on this phone wins.
         write.inputJson.contains("base_revision_id").shouldBeFalse()
-        // The column is `body_text`, not `body`.
-        write.inputJson.contains("\"body_text\":\"Book the cabin.\"").shouldBeTrue()
+        write.inputJson.contains("\"body\":\"Book the cabin.\"").shouldBeTrue()
         // ONLY WHAT CHANGED: the pin did not, so it is not sent.
         write.inputJson.contains("pinned").shouldBeFalse()
 

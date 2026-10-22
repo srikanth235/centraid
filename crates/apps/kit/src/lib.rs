@@ -33,9 +33,9 @@
 //! | Invoke a command without an `invoke_key` | the key is a required field on the invocation, not an option (D-1020-D3-5): v0's fallback is the call's ordinal, which is stable only for a handler that makes the same call sequence every time |
 //! | Turn a denial into an error | a denial is a value in the app's own payload; the kit's [`error::KitError`] has no denial variant |
 
+pub mod attached;
 pub mod canonical;
 pub mod changes;
-pub mod contract_vault;
 pub mod csv;
 pub mod denial;
 pub mod error;
@@ -45,8 +45,8 @@ pub mod manifest;
 pub mod money;
 pub mod page;
 pub mod reads;
-pub mod representations;
 pub mod row;
+pub mod search_corpus;
 pub mod spelling;
 pub mod statement;
 pub mod testdoor;
@@ -59,7 +59,6 @@ pub use reads::{
     FanOutBound, JOIN_FAN_OUT, PageDoor, Window, in_list, read_by_id, read_page, read_pages,
     read_window,
 };
-pub use representations::{RepresentationIndex, read_representations};
 pub use row::{Cell, Row};
 pub use statement::{
     PageBindValue, PageOrder, PageQuery, page_cursor_boundary, page_cursor_of, page_statement,

@@ -7,18 +7,27 @@
 //! (`filled`/`truncated`) rather than answering short: **a balance or a total
 //! derived from a silently short ledger is a wrong number, not a slow screen.**
 //!
-//! A transaction is read from `core_transaction` alone, keyset-ordered, and its
-//! Money decoration (`money_transaction`: the member's name, the memo, the
-//! cheque number) is read by id in a second bounded statement. A join would put
-//! two `txn_id` columns under the keyset's row value, which no door can order.
+//! ## The model Money reads (#1135)
 //!
-//! The ceilings (R-1099-44 and the plan):
+//! A line is a `txn` row: the account, the day, the signed amount, a status, a
+//! category and the other half of a transfer. What the member calls it is the
+//! entity's `title`; **what the bank said** (its words, a memo, a check number,
+//! the file format) is what the statement origin's `source` row last stated. The
+//! paged door serves one table per statement, so a screen is a keyset window of
+//! `txn` and then, for the ids it returned, one bounded read of `entity` (the
+//! name, and whether the line is in the trash) and one of `source` (the bank's
+//! words). An account is its `account` row, its entity (the name), its statement
+//! `origin` (the bank number is the origin's `ref`, the remembered column layout
+//! its `config`) and the `archived` flag edge that closes it. A category is a
+//! `concept` of kind `category` under its group, a plan a `budget` row.
+//!
+//! The ceilings:
 //!
 //! | Name | Value | What it bounds |
 //! | --- | --- | --- |
 //! | [`MONTH_ROWS`] | 2,000 | one month window of one vault |
 //! | [`CASHFLOW_MONTHS`] | 12 | the windows the cash-flow screen folds |
-//! | [`SEARCH_MONTHS`] | 12 | the windows a search walks, newest first |
+//! | [`SEARCH_ROWS`] | 200 | the lines one search answers, best match first |
 //! | [`ACCOUNT_ROWS`] | 40,000 | one account's whole history, for its balance |
 //! | [`MATCH_SCAN_ROWS`] | 500 | the newest rows of each account a transfer is looked for among |
 //! | [`EXISTING_ROWS`] | 40,000 | the rows an import plan compares against |
@@ -26,12 +35,13 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use centraid_apps_kit::Denial;
 use centraid_apps_kit::error::{KitError, KitResult};
 use centraid_apps_kit::page::{Page, PageRequest};
-use centraid_apps_kit::reads::{FanOutBound, PageDoor, Window, in_list, read_page, read_pages};
-use centraid_apps_kit::row::{Row, integer_or_zero, text_of};
-use centraid_apps_kit::spelling::WalkedWords;
+use centraid_apps_kit::reads::{FanOutBound, PageDoor, Read, Window, read_page, read_pages};
+use centraid_apps_kit::row::{Cell, Row, integer_or_zero, text_of};
 use centraid_apps_kit::statement::{PageBindValue, PageOrder, PageQuery};
+use centraid_search::{Answer, Principal, Search, SearchError, SearchRequest};
 
 use crate::civil;
 use crate::import::{Direction, ExistingTxn};
@@ -41,8 +51,6 @@ use crate::rules::{MatchKind, RULES, Rule};
 pub const MONTH_ROWS: usize = 2_000;
 /// The month windows the cash-flow fold reads.
 pub const CASHFLOW_MONTHS: usize = 12;
-/// The month windows a search walks, newest first (R-1099-44).
-pub const SEARCH_MONTHS: usize = 12;
 /// One account's whole history, for a derived balance.
 pub const ACCOUNT_ROWS: usize = 40_000;
 /// Newest rows per account a transfer is looked for among.
@@ -51,23 +59,21 @@ pub const MATCH_SCAN_ROWS: usize = 500;
 pub const EXISTING_ROWS: usize = 40_000;
 /// Accounts a vault lists.
 pub const ACCOUNT_LIMIT: usize = 200;
-/// Targets read at once (13 months of ~40 categories is 520).
+/// Plans read at once (13 months of ~40 categories is 520).
 pub const TARGET_ROWS: usize = 1_000;
 /// Checkpoints read at once; one page, so no keyset ties can matter.
 pub const CHECKPOINT_ROWS: usize = 400;
 /// Categories, including archived ones.
 pub const CATEGORY_ROWS: usize = 300;
-/// Live transfer links.
+/// Live transfers.
 pub const LINK_ROWS: usize = 2_000;
-/// Rows of a decoration read: ids per statement.
-const DECORATION_CHUNK: usize = 400;
+/// Lines in the trash that a read subtracts from its window.
+pub const TRASHED_ROWS: usize = 40_000;
 
-/// The scheme every Money category lives in.
-pub const CATEGORIES_SCHEME_ID: &str = "money:categories";
-/// The `transfer` link relation's concept id.
-pub const TRANSFER_RELATION_ID: &str = "money:relation:transfer";
-/// The group a category belongs to when it is income.
-pub const INCOME_GROUP: &str = "money:cat:income";
+/// The group a category belongs to when it is income: the seeded group's id.
+pub const INCOME_GROUP: &str = "category:income";
+/// The flag that closes an account and archives a category.
+pub const ARCHIVED: &str = "flag:archived";
 
 /// Money's reads that can stop at a ceiling say so.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -81,7 +87,7 @@ pub struct Bounded<T> {
 // Rows.
 // ---------------------------------------------------------------------------
 
-/// An account as Money shows it: Money's decoration and the spine's currency.
+/// An account as Money shows it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AccountRow {
     pub account_id: String,
@@ -89,15 +95,17 @@ pub struct AccountRow {
     /// `checking` | `savings` | `credit_card` | `cash`.
     pub kind: String,
     pub on_budget: bool,
+    /// Where the account stood before its first line.
     pub opening_minor: i64,
-    pub opening_on: Option<String>,
+    /// The day the account was closed (the `archived` flag's), if it was.
     pub closed_on: Option<String>,
     pub currency: String,
-    /// The bank-side id the member entered, if any.
+    /// The bank's account number, if the member entered one.
     pub external_ref: Option<String>,
 }
 
-/// A transaction with its Money decoration.
+/// A transaction as Money shows it: the line, the member's name for it and what
+/// the bank said.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TxnRow {
     pub txn_id: String,
@@ -114,8 +122,11 @@ pub struct TxnRow {
     pub description: String,
     pub category_concept_id: Option<String>,
     pub external_id: Option<String>,
+    /// The other half of a transfer the member accepted.
+    pub transfer_id: Option<String>,
+    /// The member's name for it, when it is not the bank's words.
     pub display_name: Option<String>,
-    /// `rule` | `member`.
+    /// `member`, when [`Self::display_name`] is set.
     pub display_name_source: Option<String>,
     pub memo: Option<String>,
     pub check_number: Option<String>,
@@ -157,7 +168,6 @@ pub struct TargetRow {
 pub struct CheckpointRow {
     pub account_id: String,
     pub as_of: String,
-    pub source: String,
     /// Signed.
     pub balance_minor: i64,
     pub currency: String,
@@ -174,10 +184,9 @@ pub struct CategoryRow {
     pub archived: bool,
 }
 
-/// One live transfer link: the debit end `from`, the credit end `to`.
+/// One live transfer: the debit end `from`, the credit end `to`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TransferLink {
-    pub link_id: String,
     pub from_txn: String,
     pub to_txn: String,
 }
@@ -206,21 +215,21 @@ fn query(name: &str, select: &str, from: &str, order: PageOrder) -> PageQuery {
     PageQuery::new(name, select, from, order)
 }
 
-const TXN_COLUMNS: &str = "txn_id, account_id, posted_at, amount_minor, currency, direction, \
-                           status, description, category_concept_id, external_id";
+const TXN_COLUMNS: &str =
+    "id, account_id, posted_on, amount_minor, currency, status, category_id, transfer_id";
 
-/// `money.transactions.month` — a month's rows by `posted_at` range, newest
-/// first. The month is a bind, never a pattern: `posted_at` is
-/// `YYYY-MM-DDT00:00:00Z` (R-1099-2) and a range uses the index.
+/// `money.transactions.month` — a month's rows by `posted_on` range, newest
+/// first. The month is a bind, never a pattern: `posted_on` is a printed day
+/// (R-1099-2) and a range uses the index.
 pub fn month_statement(month: &str, filter: &ActivityFilter) -> KitResult<PageQuery> {
     let next = civil::add_months(month, 1).ok_or_else(|| KitError::GrammarRefused {
         query: "money.transactions.month".to_owned(),
         why: "not a month".to_owned(),
     })?;
-    let mut predicate = String::from("posted_at >= ? AND posted_at < ?");
+    let mut predicate = String::from("posted_on >= ? AND posted_on < ?");
     let mut bind = vec![
-        PageBindValue::from(civil::month_start_stamp(month)),
-        PageBindValue::from(civil::month_start_stamp(&next)),
+        PageBindValue::from(format!("{month}-01")),
+        PageBindValue::from(format!("{next}-01")),
     ];
     if let Some(account) = &filter.account_id {
         predicate.push_str(" AND account_id = ?");
@@ -229,18 +238,18 @@ pub fn month_statement(month: &str, filter: &ActivityFilter) -> KitResult<PageQu
     match &filter.category {
         CategoryFilter::Any => {}
         CategoryFilter::Uncategorised => {
-            predicate.push_str(" AND category_concept_id IS NULL AND status <> 'void'");
+            predicate.push_str(" AND category_id IS NULL AND status <> 'void'");
         }
         CategoryFilter::Is(category) => {
-            predicate.push_str(" AND category_concept_id = ?");
+            predicate.push_str(" AND category_id = ?");
             bind.push(PageBindValue::from(category.as_str()));
         }
     }
     Ok(query(
         "money.transactions.month",
         TXN_COLUMNS,
-        "core_transaction",
-        PageOrder::desc("posted_at", "txn_id"),
+        "txn",
+        PageOrder::desc("posted_on", "id"),
     )
     .filter(&predicate, bind))
 }
@@ -250,54 +259,109 @@ pub fn transaction_statement(txn_id: &str) -> PageQuery {
     query(
         "money.transaction",
         TXN_COLUMNS,
-        "core_transaction",
-        PageOrder::asc("txn_id", "txn_id"),
+        "txn",
+        PageOrder::asc("id", "id"),
     )
-    .filter("txn_id = ?", vec![PageBindValue::from(txn_id)])
+    .filter("id = ?", vec![PageBindValue::from(txn_id)])
 }
 
-/// `money.imports.last` — the newest import, by its stamp.
+/// `money.imports.last` — the newest statement line, by when a statement last
+/// spoke of it.
 pub fn last_import_statement() -> PageQuery {
     query(
         "money.imports.last",
-        "txn_id, imported_at, imported_from",
-        "money_transaction",
-        PageOrder::desc("imported_at", "txn_id"),
+        "id, entity_id, seen_at, stated",
+        "source",
+        PageOrder::desc("seen_at", "id"),
+    )
+    .filter(
+        "system = ? AND entity_id IS NOT NULL",
+        vec![PageBindValue::from("statement")],
     )
 }
 
-/// `money.transactions.decorations` — Money's columns for a set of rows.
-pub fn decoration_statement(txn_ids: &[String]) -> KitResult<PageQuery> {
-    let fragment = in_list("txn_id", txn_ids)?;
-    Ok(query(
-        "money.transactions.decorations",
-        "txn_id, display_name, display_name_source, memo, check_number, bank_type, imported_from",
-        "money_transaction",
-        PageOrder::asc("txn_id", "txn_id"),
+/// The member's name and whether it is in the trash, for a set of lines.
+const ENTITIES: Read = Read {
+    name: "money.transactions.entities",
+    table: "entity",
+    select: "id, title, deleted_at",
+    order: ("id", "id"),
+    column: "id",
+};
+
+/// What a statement last said of a set of lines.
+const STATEMENTS: Read = Read {
+    name: "money.transactions.statements",
+    table: "source",
+    select: "entity_id, external_id, stated",
+    order: ("entity_id", "entity_id"),
+    column: "entity_id",
+};
+
+/// `money.transactions.trashed` — the lines in the trash (a trashed account takes
+/// its lines with it), which a window subtracts.
+pub fn trashed_statement() -> PageQuery {
+    query(
+        "money.transactions.trashed",
+        "id",
+        "entity",
+        PageOrder::asc("id", "id"),
     )
-    .filter(&fragment.sql, fragment.bind))
+    .filter(
+        "kind = ? AND deleted_at IS NOT NULL",
+        vec![PageBindValue::from("txn")],
+    )
 }
 
 /// `money.accounts` — Money's accounts.
 pub fn accounts_statement() -> PageQuery {
     query(
         "money.accounts",
-        "account_id, name, kind, on_budget, opening_minor, opening_on, closed_on",
-        "money_account",
-        PageOrder::asc("account_id", "account_id"),
+        "id, type, currency, opening_minor, on_budget",
+        "account",
+        PageOrder::asc("id", "id"),
     )
 }
 
-/// `money.accounts.spine` — the spine's currency and bank-side id for them.
-pub fn account_spine_statement(account_ids: &[String]) -> KitResult<PageQuery> {
-    let fragment = in_list("account_id", account_ids)?;
-    Ok(query(
-        "money.accounts.spine",
-        "account_id, currency, external_ref",
-        "core_account",
-        PageOrder::asc("account_id", "account_id"),
+/// `money.accounts.entities` — the accounts' names, and which are in the trash.
+pub fn account_entities_statement() -> PageQuery {
+    query(
+        "money.accounts.entities",
+        "id, title",
+        "entity",
+        PageOrder::asc("id", "id"),
     )
-    .filter(&fragment.sql, fragment.bind))
+    .filter(
+        "kind = ? AND deleted_at IS NULL",
+        vec![PageBindValue::from("account")],
+    )
+}
+
+/// `money.accounts.origins` — the statement origins: the bank's number is each
+/// one's `ref`, its remembered column layout its `config`.
+pub fn origins_statement() -> PageQuery {
+    query(
+        "money.accounts.origins",
+        "id, ref, fills, config",
+        "origin",
+        PageOrder::asc("id", "id"),
+    )
+    .filter("system = ?", vec![PageBindValue::from("statement")])
+}
+
+/// `money.archived` — everything carrying the `archived` flag (a closed account,
+/// an archived category) and when it was marked.
+pub fn archived_statement() -> PageQuery {
+    query(
+        "money.archived",
+        "from_id, created_at",
+        "edge",
+        PageOrder::asc("from_id", "from_id"),
+    )
+    .filter(
+        "rel = ? AND to_id = ?",
+        vec![PageBindValue::from("tagged"), PageBindValue::from(ARCHIVED)],
+    )
 }
 
 /// `money.account.ledger` — one account's rows, oldest first, only the columns
@@ -305,9 +369,9 @@ pub fn account_spine_statement(account_ids: &[String]) -> KitResult<PageQuery> {
 pub fn ledger_statement(account_id: &str) -> PageQuery {
     query(
         "money.account.ledger",
-        "txn_id, posted_at, amount_minor, direction, status",
-        "core_transaction",
-        PageOrder::asc("posted_at", "txn_id"),
+        "id, posted_on, amount_minor, status",
+        "txn",
+        PageOrder::asc("posted_on", "id"),
     )
     .filter("account_id = ?", vec![PageBindValue::from(account_id)])
 }
@@ -317,8 +381,8 @@ pub fn recent_statement(account_id: &str) -> PageQuery {
     query(
         "money.account.recent",
         TXN_COLUMNS,
-        "core_transaction",
-        PageOrder::desc("posted_at", "txn_id"),
+        "txn",
+        PageOrder::desc("posted_on", "id"),
     )
     .filter(
         "account_id = ? AND status <> ?",
@@ -330,9 +394,9 @@ pub fn recent_statement(account_id: &str) -> PageQuery {
 pub fn targets_statement(from_month: &str, to_month: &str) -> PageQuery {
     query(
         "money.targets",
-        "month, category_concept_id, amount_minor, currency, carry",
-        "money_target",
-        PageOrder::asc("month", "category_concept_id"),
+        "month, category_id, amount_minor, currency, carry",
+        "budget",
+        PageOrder::asc("month", "category_id"),
     )
     .filter(
         "month >= ? AND month <= ?",
@@ -347,10 +411,9 @@ pub fn targets_statement(from_month: &str, to_month: &str) -> PageQuery {
 pub fn rules_statement() -> PageQuery {
     query(
         "money.rules",
-        "rule_id, match_kind, pattern, amount_min_minor, amount_max_minor, account_id, \
-         set_category_concept_id, set_display_name, position",
-        "money_rule",
-        PageOrder::asc("position", "rule_id"),
+        "id, pattern, category_id, position",
+        "rule",
+        PageOrder::asc("position", "id"),
     )
 }
 
@@ -358,104 +421,68 @@ pub fn rules_statement() -> PageQuery {
 pub fn checkpoints_statement() -> PageQuery {
     query(
         "money.checkpoints",
-        "account_id, as_of, source, balance_minor, currency",
-        "money_balance_checkpoint",
-        PageOrder::desc("as_of", "account_id"),
+        "account_id, day, balance_minor",
+        "checkpoint",
+        PageOrder::desc("day", "account_id"),
     )
 }
 
-/// `money.categories` — the scheme's concepts.
+/// `money.categories` — the categories and the groups they sit under.
 pub fn categories_statement() -> PageQuery {
     query(
         "money.categories",
-        "concept_id, notation, pref_label, broader_concept_id",
-        "core_concept",
-        PageOrder::asc("concept_id", "concept_id"),
+        "id, key, parent_id",
+        "concept",
+        PageOrder::asc("id", "id"),
+    )
+    .filter("kind = ?", vec![PageBindValue::from("category")])
+}
+
+/// `money.categories.entities` — their names.
+pub fn category_entities_statement() -> PageQuery {
+    query(
+        "money.categories.entities",
+        "id, title",
+        "entity",
+        PageOrder::asc("id", "id"),
     )
     .filter(
-        "scheme_id = ?",
-        vec![PageBindValue::from(CATEGORIES_SCHEME_ID)],
+        "kind = ? AND deleted_at IS NULL",
+        vec![PageBindValue::from("category")],
     )
 }
 
-/// `money.categories.archived.concept` — the flags scheme's `archived` concept
-/// (found by its notation: a single table, because the vault's paged door takes
-/// no join).
-pub fn archived_concept_statement() -> PageQuery {
-    query(
-        "money.categories.archived.concept",
-        "concept_id",
-        "core_concept",
-        PageOrder::asc("concept_id", "concept_id"),
-    )
-    .filter("notation = ?", vec![PageBindValue::from("archived")])
-}
-
-/// `money.categories.archived` — the tags that mark a concept archived.
-pub fn archived_statement(flag_concept_ids: &[String]) -> KitResult<PageQuery> {
-    let fragment = in_list("concept_id", flag_concept_ids)?;
-    let mut bind = vec![PageBindValue::from("core.concept")];
-    bind.extend(fragment.bind);
-    Ok(query(
-        "money.categories.archived",
-        "tag_id, target_id",
-        "core_tag",
-        PageOrder::asc("tag_id", "tag_id"),
-    )
-    .filter(&format!("target_type = ? AND {}", fragment.sql), bind))
-}
-
-/// `money.links.transfer` — live transfer links between two transactions.
+/// `money.links.transfer` — the debit half of each transfer the member accepted;
+/// `transfer_id` is the credit half.
 pub fn transfer_links_statement() -> PageQuery {
     query(
         "money.links.transfer",
-        "link_id, from_id, to_id",
-        "core_link",
-        PageOrder::asc("link_id", "link_id"),
+        "id, transfer_id",
+        "txn",
+        PageOrder::asc("id", "id"),
     )
     .filter(
-        "from_type = ? AND to_type = ? AND relation_concept_id = ? AND valid_to IS NULL",
-        vec![
-            PageBindValue::from("core.transaction"),
-            PageBindValue::from("core.transaction"),
-            PageBindValue::from(TRANSFER_RELATION_ID),
-        ],
+        "transfer_id IS NOT NULL AND amount_minor < ?",
+        vec![PageBindValue::from(0_i64)],
     )
 }
 
 /// `money.import.existing` — an account's rows in a day range, for a plan.
 pub fn existing_statement(account_id: &str, from_day: &str, to_day: &str) -> KitResult<PageQuery> {
-    let after = civil::shift(to_day, 1).ok_or_else(|| KitError::GrammarRefused {
-        query: "money.import.existing".to_owned(),
-        why: "not a day".to_owned(),
-    })?;
     Ok(query(
         "money.import.existing",
-        "txn_id, external_id, posted_at, amount_minor, direction, description, status",
-        "core_transaction",
-        PageOrder::asc("posted_at", "txn_id"),
+        TXN_COLUMNS,
+        "txn",
+        PageOrder::asc("posted_on", "id"),
     )
     .filter(
-        "account_id = ? AND posted_at >= ? AND posted_at < ?",
+        "account_id = ? AND posted_on >= ? AND posted_on <= ?",
         vec![
             PageBindValue::from(account_id),
-            PageBindValue::from(format!("{from_day}T00:00:00Z")),
-            PageBindValue::from(format!("{after}T00:00:00Z")),
+            PageBindValue::from(from_day),
+            PageBindValue::from(to_day),
         ],
     ))
-}
-
-/// `money.import.profile` — the saved layouts of an account.
-pub fn profiles_statement(account_id: &str) -> PageQuery {
-    query(
-        "money.import.profile",
-        "account_id, header_fingerprint, delimiter, skip_lines, date_order, sign_mode, \
-         date_col, amount_col, debit_col, credit_col, desc_col, memo_col, indicator_col, \
-         indicator_out_value",
-        "money_import_profile",
-        PageOrder::asc("header_fingerprint", "header_fingerprint"),
-    )
-    .filter("account_id = ?", vec![PageBindValue::from(account_id)])
 }
 
 // ---------------------------------------------------------------------------
@@ -470,6 +497,8 @@ pub const PAGE_ROWS: usize = 500;
 
 const SMALL: FanOutBound = FanOutBound::new(PAGE_ROWS, 4);
 const LARGE: FanOutBound = FanOutBound::new(PAGE_ROWS, 82);
+/// One chunk of ids, one page of its rows.
+const CHUNK: FanOutBound = FanOutBound::new(PAGE_ROWS, 2);
 
 /// A stated window of `rows`, walked page by page (the kit's `read_window`, at
 /// [`PAGE_ROWS`]).
@@ -502,32 +531,35 @@ fn read_window(door: &dyn PageDoor, query: &PageQuery, rows: usize) -> KitResult
     })
 }
 
-fn day_of(row: &Row) -> String {
-    text_of(row, "posted_at")
-        .map(|stamp| stamp.chars().take(10).collect())
-        .unwrap_or_default()
-}
-
-fn direction_of(row: &Row) -> Direction {
-    if text_of(row, "direction").as_deref() == Some("credit") {
-        Direction::Credit
-    } else {
-        Direction::Debit
+fn real_of(row: &Row, column: &str) -> f64 {
+    match row.get(column) {
+        Some(Cell::Real(value)) => *value,
+        #[allow(clippy::cast_precision_loss)]
+        Some(Cell::Integer(value)) => *value as f64,
+        _ => 0.0,
     }
 }
 
+/// The base columns of a line; the bank's words and the member's name are
+/// [`decorate`]'s. The amount is signed in the vault and a magnitude here.
 fn txn_of(row: &Row) -> TxnRow {
+    let signed = integer_or_zero(row, "amount_minor");
     TxnRow {
-        txn_id: text_of(row, "txn_id").unwrap_or_default(),
+        txn_id: text_of(row, "id").unwrap_or_default(),
         account_id: text_of(row, "account_id").unwrap_or_default(),
-        posted_on: day_of(row),
-        amount_minor: integer_or_zero(row, "amount_minor"),
+        posted_on: text_of(row, "posted_on").unwrap_or_default(),
+        amount_minor: signed.abs(),
         currency: text_of(row, "currency").unwrap_or_default(),
-        direction: direction_of(row),
+        direction: if signed < 0 {
+            Direction::Debit
+        } else {
+            Direction::Credit
+        },
         status: text_of(row, "status").unwrap_or_default(),
-        description: text_of(row, "description").unwrap_or_default(),
-        category_concept_id: text_of(row, "category_concept_id"),
-        external_id: text_of(row, "external_id"),
+        description: String::new(),
+        category_concept_id: text_of(row, "category_id"),
+        external_id: None,
+        transfer_id: text_of(row, "transfer_id"),
         display_name: None,
         display_name_source: None,
         memo: None,
@@ -537,26 +569,81 @@ fn txn_of(row: &Row) -> TxnRow {
     }
 }
 
-/// Fills each row's Money columns, `DECORATION_CHUNK` ids to a statement.
-pub fn decorate(door: &dyn PageDoor, rows: &mut [TxnRow]) -> KitResult<()> {
-    let mut found: BTreeMap<String, Row> = BTreeMap::new();
+/// The lines in the trash.
+fn trashed(door: &dyn PageDoor) -> KitResult<BTreeSet<String>> {
+    Ok(read_pages(door, &trashed_statement(), LARGE)?
+        .iter()
+        .filter_map(|row| text_of(row, "id"))
+        .collect())
+}
+
+/// Takes the lines in the trash out of a window.
+fn drop_trashed(door: &dyn PageDoor, rows: &mut Vec<TxnRow>) -> KitResult<()> {
+    if rows.is_empty() {
+        return Ok(());
+    }
+    let gone = trashed(door)?;
+    if !gone.is_empty() {
+        rows.retain(|row| !gone.contains(&row.txn_id));
+    }
+    Ok(())
+}
+
+fn stated_text(stated: &serde_json::Value, path: &[&str]) -> Option<String> {
+    let mut at = stated;
+    for key in path {
+        at = at.get(key)?;
+    }
+    at.as_str()
+        .map(str::trim)
+        .filter(|text| !text.is_empty())
+        .map(str::to_owned)
+}
+
+/// Fills each row's words: what the bank said (its text, memo, check number,
+/// type and file format, from the statement the line came in) and the member's
+/// name for it when it differs. Takes lines in the trash out.
+pub fn decorate(door: &dyn PageDoor, rows: &mut Vec<TxnRow>) -> KitResult<()> {
+    let mut entities: BTreeMap<String, Row> = BTreeMap::new();
+    let mut statements: BTreeMap<String, Row> = BTreeMap::new();
     let ids: Vec<String> = rows.iter().map(|row| row.txn_id.clone()).collect();
-    for chunk in ids.chunks(DECORATION_CHUNK) {
-        for row in read_pages(door, &decoration_statement(chunk)?, SMALL)? {
-            if let Some(id) = text_of(&row, "txn_id") {
-                found.insert(id, row);
+    for chunk in ids.chunks(PAGE_ROWS) {
+        for row in ENTITIES.within(CHUNK, door, chunk, None)? {
+            if let Some(id) = text_of(&row, "id") {
+                entities.insert(id, row);
+            }
+        }
+        for row in STATEMENTS.within(CHUNK, door, chunk, None)? {
+            if let Some(id) = text_of(&row, "entity_id") {
+                statements.insert(id, row);
             }
         }
     }
+    rows.retain(|row| {
+        entities
+            .get(&row.txn_id)
+            .is_none_or(|entity| matches!(entity.get("deleted_at"), None | Some(Cell::Null)))
+    });
     for txn in rows.iter_mut() {
-        if let Some(row) = found.get(&txn.txn_id) {
-            txn.display_name = text_of(row, "display_name");
-            txn.display_name_source = text_of(row, "display_name_source");
-            txn.memo = text_of(row, "memo");
-            txn.check_number = text_of(row, "check_number");
-            txn.bank_type = text_of(row, "bank_type");
-            txn.imported_from = text_of(row, "imported_from");
+        let title = entities
+            .get(&txn.txn_id)
+            .and_then(|entity| text_of(entity, "title"))
+            .unwrap_or_default();
+        let source = statements.get(&txn.txn_id);
+        let stated = source
+            .and_then(|row| text_of(row, "stated"))
+            .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok())
+            .unwrap_or(serde_json::Value::Null);
+        txn.external_id = source.and_then(|row| text_of(row, "external_id"));
+        txn.description = stated_text(&stated, &["title"]).unwrap_or_else(|| title.clone());
+        if !title.is_empty() && title != txn.description {
+            txn.display_name = Some(title);
+            txn.display_name_source = Some("member".to_owned());
         }
+        txn.memo = stated_text(&stated, &["line", "memo"]);
+        txn.check_number = stated_text(&stated, &["line", "check_number"]);
+        txn.bank_type = stated_text(&stated, &["line", "bank_type"]);
+        txn.imported_from = stated_text(&stated, &["line", "imported_from"]);
     }
     Ok(())
 }
@@ -568,15 +655,23 @@ pub fn load_month(
     month: &str,
     filter: &ActivityFilter,
 ) -> KitResult<Bounded<Vec<TxnRow>>> {
-    let mut window = load_month_plain(door, month, filter)?;
-    if !window.value.is_empty() {
-        decorate(door, &mut window.value)?;
-    }
+    let mut window = load_month_base(door, month, filter)?;
+    decorate(door, &mut window.value)?;
     Ok(window)
 }
 
-/// A month's rows without Money's columns: all a fold needs.
+/// A month's rows without their words: all a fold needs.
 pub fn load_month_plain(
+    door: &dyn PageDoor,
+    month: &str,
+    filter: &ActivityFilter,
+) -> KitResult<Bounded<Vec<TxnRow>>> {
+    let mut window = load_month_base(door, month, filter)?;
+    drop_trashed(door, &mut window.value)?;
+    Ok(window)
+}
+
+fn load_month_base(
     door: &dyn PageDoor,
     month: &str,
     filter: &ActivityFilter,
@@ -589,7 +684,7 @@ pub fn load_month_plain(
 }
 
 /// The rows of the `months` windows ending at `through_month`, oldest window
-/// first and undecorated (a merchant is read off the bank's own words);
+/// first and decorated (a merchant is read off the bank's own words);
 /// `truncated` when any window held more than [`MONTH_ROWS`].
 pub fn load_lookback(
     door: &dyn PageDoor,
@@ -611,6 +706,7 @@ pub fn load_lookback(
         truncated |= window.filled;
         rows.extend(window.rows.iter().map(txn_of));
     }
+    decorate(door, &mut rows)?;
     Ok(Bounded {
         value: rows,
         truncated,
@@ -638,22 +734,17 @@ pub fn load_activity_page(
     };
     let page: Page<Row> = read_page(door, &month_statement(month, filter)?, &request)?;
     let mut rows: Vec<TxnRow> = page.rows.iter().map(txn_of).collect();
-    if !rows.is_empty() {
-        decorate(door, &mut rows)?;
-    }
+    decorate(door, &mut rows)?;
     Ok(ActivityPage {
         rows,
         next: page.next.map(|cursor| (cursor.sort_key, cursor.pk)),
     })
 }
 
-/// One transaction with its Money columns, or none.
+/// One transaction with its words, or none.
 pub fn load_transaction(door: &dyn PageDoor, txn_id: &str) -> KitResult<Option<TxnRow>> {
     let page = read_page(door, &transaction_statement(txn_id), &PageRequest::first(1))?;
     let mut rows: Vec<TxnRow> = page.rows.iter().map(txn_of).collect();
-    if rows.is_empty() {
-        return Ok(None);
-    }
     decorate(door, &mut rows)?;
     Ok(rows.pop())
 }
@@ -667,57 +758,93 @@ pub struct LastImport {
     pub account_id: Option<String>,
 }
 
-/// The newest import, if any row was ever imported.
+/// The newest import, if any line was ever imported.
 pub fn load_last_import(door: &dyn PageDoor) -> KitResult<Option<LastImport>> {
     let page = read_page(door, &last_import_statement(), &PageRequest::first(1))?;
     let Some(row) = page.rows.first() else {
         return Ok(None);
     };
-    let account_id = match text_of(row, "txn_id") {
+    let stated = text_of(row, "stated")
+        .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok())
+        .unwrap_or(serde_json::Value::Null);
+    let account_id = match text_of(row, "entity_id") {
         Some(id) => load_transaction(door, &id)?.map(|t| t.account_id),
         None => None,
     };
     Ok(Some(LastImport {
-        imported_at: text_of(row, "imported_at").unwrap_or_default(),
-        source: text_of(row, "imported_from").unwrap_or_default(),
+        imported_at: text_of(row, "seen_at").unwrap_or_default(),
+        source: stated_text(&stated, &["line", "imported_from"]).unwrap_or_default(),
         account_id,
     }))
 }
 
-/// Money's accounts, with the spine's currency.
+/// The days the `archived` flag was put on, by what carries it.
+fn archived_on(door: &dyn PageDoor) -> KitResult<BTreeMap<String, String>> {
+    Ok(read_pages(door, &archived_statement(), SMALL)?
+        .iter()
+        .filter_map(|row| {
+            Some((
+                text_of(row, "from_id")?,
+                text_of(row, "created_at")?.chars().take(10).collect(),
+            ))
+        })
+        .collect())
+}
+
+/// The bank's number and the remembered layout of each account, by account id.
+struct Origin {
+    reference: String,
+    config: Option<String>,
+}
+
+fn origins(door: &dyn PageDoor) -> KitResult<BTreeMap<String, Origin>> {
+    Ok(read_pages(door, &origins_statement(), SMALL)?
+        .iter()
+        .filter_map(|row| {
+            Some((
+                text_of(row, "fills")?,
+                Origin {
+                    reference: text_of(row, "ref")?,
+                    config: text_of(row, "config"),
+                },
+            ))
+        })
+        .collect())
+}
+
+/// Money's accounts (those not in the trash), with their currency, the bank's
+/// number and the day they were closed.
 pub fn load_accounts(door: &dyn PageDoor) -> KitResult<Vec<AccountRow>> {
     let rows = read_window(door, &accounts_statement(), ACCOUNT_LIMIT)?.rows;
     if rows.is_empty() {
         return Ok(Vec::new());
     }
-    let ids: Vec<String> = rows
+    let names: BTreeMap<String, String> = read_pages(door, &account_entities_statement(), SMALL)?
         .iter()
-        .filter_map(|r| text_of(r, "account_id"))
+        .filter_map(|row| Some((text_of(row, "id")?, text_of(row, "title")?)))
         .collect();
-    let mut spine: BTreeMap<String, Row> = BTreeMap::new();
-    for row in read_pages(door, &account_spine_statement(&ids)?, SMALL)? {
-        if let Some(id) = text_of(&row, "account_id") {
-            spine.insert(id, row);
-        }
-    }
+    let origins = origins(door)?;
+    let closed = archived_on(door)?;
     Ok(rows
         .iter()
-        .map(|row| {
-            let id = text_of(row, "account_id").unwrap_or_default();
-            let core = spine.get(&id);
-            AccountRow {
-                name: text_of(row, "name").unwrap_or_default(),
-                kind: text_of(row, "kind").unwrap_or_default(),
+        .filter_map(|row| {
+            let id = text_of(row, "id")?;
+            let name = names.get(&id)?.clone();
+            // With no number the origin's `ref` is the account's own id.
+            let external_ref = origins
+                .get(&id)
+                .map(|origin| origin.reference.clone())
+                .filter(|reference| *reference != id);
+            Some(AccountRow {
+                name,
+                kind: text_of(row, "type").unwrap_or_default(),
                 on_budget: integer_or_zero(row, "on_budget") != 0,
                 opening_minor: integer_or_zero(row, "opening_minor"),
-                opening_on: text_of(row, "opening_on"),
-                closed_on: text_of(row, "closed_on"),
-                currency: core
-                    .and_then(|c| text_of(c, "currency"))
-                    .unwrap_or_default(),
-                external_ref: core.and_then(|c| text_of(c, "external_ref")),
+                closed_on: closed.get(&id).cloned(),
+                currency: text_of(row, "currency").unwrap_or_default(),
+                external_ref,
                 account_id: id,
-            }
+            })
         })
         .collect())
 }
@@ -726,16 +853,18 @@ pub fn load_accounts(door: &dyn PageDoor) -> KitResult<Vec<AccountRow>> {
 /// balance cannot be derived.
 pub fn load_ledger(door: &dyn PageDoor, account_id: &str) -> KitResult<Bounded<Vec<TxnRow>>> {
     let window = read_window(door, &ledger_statement(account_id), ACCOUNT_ROWS)?;
+    let mut rows: Vec<TxnRow> = window
+        .rows
+        .iter()
+        .map(|row| {
+            let mut txn = txn_of(row);
+            txn.account_id = account_id.to_owned();
+            txn
+        })
+        .collect();
+    drop_trashed(door, &mut rows)?;
     Ok(Bounded {
-        value: window
-            .rows
-            .iter()
-            .map(|row| {
-                let mut txn = txn_of(row);
-                txn.account_id = account_id.to_owned();
-                txn
-            })
-            .collect(),
+        value: rows,
         truncated: window.filled,
     })
 }
@@ -753,7 +882,7 @@ pub fn load_targets(
             .iter()
             .map(|row| TargetRow {
                 month: text_of(row, "month").unwrap_or_default(),
-                category_concept_id: text_of(row, "category_concept_id").unwrap_or_default(),
+                category_concept_id: text_of(row, "category_id").unwrap_or_default(),
                 amount_minor: integer_or_zero(row, "amount_minor"),
                 currency: text_of(row, "currency").unwrap_or_default(),
                 carry: integer_or_zero(row, "carry") != 0,
@@ -763,38 +892,35 @@ pub fn load_targets(
     })
 }
 
-fn kind_of(text: &str) -> MatchKind {
-    match text {
-        "is" => MatchKind::Is,
-        "matches" => MatchKind::Matches,
-        _ => MatchKind::Contains,
+/// A rule's pattern is one JSON value: `{"match", "text", "min", "max", "account"}`.
+fn rule_of(row: &Row) -> Rule {
+    let pattern: serde_json::Value = text_of(row, "pattern")
+        .and_then(|text| serde_json::from_str(&text).ok())
+        .unwrap_or(serde_json::Value::Null);
+    let bound = |key: &str| pattern.get(key).and_then(serde_json::Value::as_i64);
+    #[allow(clippy::cast_possible_truncation)]
+    let position = real_of(row, "position") as i64;
+    Rule {
+        rule_id: text_of(row, "id").unwrap_or_default(),
+        kind: match pattern.get("match").and_then(serde_json::Value::as_str) {
+            Some("is") => MatchKind::Is,
+            Some("matches") => MatchKind::Matches,
+            _ => MatchKind::Contains,
+        },
+        pattern: stated_text(&pattern, &["text"]).unwrap_or_default(),
+        amount_min_minor: bound("min"),
+        amount_max_minor: bound("max"),
+        account_id: stated_text(&pattern, &["account"]),
+        category_concept_id: text_of(row, "category_id"),
+        position,
     }
-}
-
-fn optional_integer(row: &Row, column: &str) -> Option<i64> {
-    row.get(column)
-        .and_then(centraid_apps_kit::row::Cell::integer)
 }
 
 /// The rules, at most [`RULES`]; `truncated` when the vault holds more.
 pub fn load_rules(door: &dyn PageDoor) -> KitResult<Bounded<Vec<Rule>>> {
     let window = read_window(door, &rules_statement(), RULES)?;
     Ok(Bounded {
-        value: window
-            .rows
-            .iter()
-            .map(|row| Rule {
-                rule_id: text_of(row, "rule_id").unwrap_or_default(),
-                kind: kind_of(&text_of(row, "match_kind").unwrap_or_default()),
-                pattern: text_of(row, "pattern").unwrap_or_default(),
-                amount_min_minor: optional_integer(row, "amount_min_minor"),
-                amount_max_minor: optional_integer(row, "amount_max_minor"),
-                account_id: text_of(row, "account_id"),
-                category_concept_id: text_of(row, "set_category_concept_id"),
-                display_name: text_of(row, "set_display_name"),
-                position: integer_or_zero(row, "position"),
-            })
-            .collect(),
+        value: window.rows.iter().map(rule_of).collect(),
         truncated: window.filled,
     })
 }
@@ -806,53 +932,54 @@ pub fn load_checkpoints(door: &dyn PageDoor) -> KitResult<Bounded<Vec<Checkpoint
         &checkpoints_statement(),
         &PageRequest::first(CHECKPOINT_ROWS),
     )?;
+    let currencies: BTreeMap<String, String> =
+        read_window(door, &accounts_statement(), ACCOUNT_LIMIT)?
+            .rows
+            .iter()
+            .filter_map(|row| Some((text_of(row, "id")?, text_of(row, "currency")?)))
+            .collect();
     Ok(Bounded {
         truncated: page.next.is_some(),
         value: page
             .rows
             .iter()
-            .map(|row| CheckpointRow {
-                account_id: text_of(row, "account_id").unwrap_or_default(),
-                as_of: text_of(row, "as_of").unwrap_or_default(),
-                source: text_of(row, "source").unwrap_or_default(),
-                balance_minor: integer_or_zero(row, "balance_minor"),
-                currency: text_of(row, "currency").unwrap_or_default(),
+            .map(|row| {
+                let account_id = text_of(row, "account_id").unwrap_or_default();
+                CheckpointRow {
+                    currency: currencies.get(&account_id).cloned().unwrap_or_default(),
+                    account_id,
+                    as_of: text_of(row, "day").unwrap_or_default(),
+                    balance_minor: integer_or_zero(row, "balance_minor"),
+                }
             })
             .collect(),
     })
 }
 
-/// The categories scheme, archived ones marked.
+/// The categories, archived ones marked.
 pub fn load_categories(door: &dyn PageDoor) -> KitResult<Vec<CategoryRow>> {
-    let flags: Vec<String> = read_pages(door, &archived_concept_statement(), SMALL)?
+    let archived = archived_on(door)?;
+    let names: BTreeMap<String, String> = read_pages(door, &category_entities_statement(), SMALL)?
         .iter()
-        .filter_map(|row| text_of(row, "concept_id"))
+        .filter_map(|row| Some((text_of(row, "id")?, text_of(row, "title")?)))
         .collect();
-    let archived: BTreeSet<String> = if flags.is_empty() {
-        BTreeSet::new()
-    } else {
-        read_pages(door, &archived_statement(&flags)?, SMALL)?
-            .iter()
-            .filter_map(|row| text_of(row, "target_id"))
-            .collect()
-    };
     let rows = read_window(door, &categories_statement(), CATEGORY_ROWS)?.rows;
     Ok(rows
         .iter()
-        .map(|row| {
-            let concept_id = text_of(row, "concept_id").unwrap_or_default();
-            CategoryRow {
-                archived: archived.contains(&concept_id),
-                notation: text_of(row, "notation").unwrap_or_default(),
-                label: text_of(row, "pref_label").unwrap_or_default(),
-                parent: text_of(row, "broader_concept_id"),
+        .filter_map(|row| {
+            let concept_id = text_of(row, "id")?;
+            Some(CategoryRow {
+                archived: archived.contains_key(&concept_id),
+                notation: text_of(row, "key").unwrap_or_default(),
+                label: names.get(&concept_id)?.clone(),
+                parent: text_of(row, "parent_id"),
                 concept_id,
-            }
+            })
         })
         .collect())
 }
 
-/// Live transfer links, at most [`LINK_ROWS`].
+/// Live transfers, at most [`LINK_ROWS`].
 pub fn load_transfer_links(door: &dyn PageDoor) -> KitResult<Bounded<Vec<TransferLink>>> {
     let window = read_window(door, &transfer_links_statement(), LINK_ROWS)?;
     Ok(Bounded {
@@ -860,9 +987,8 @@ pub fn load_transfer_links(door: &dyn PageDoor) -> KitResult<Bounded<Vec<Transfe
             .rows
             .iter()
             .map(|row| TransferLink {
-                link_id: text_of(row, "link_id").unwrap_or_default(),
-                from_txn: text_of(row, "from_id").unwrap_or_default(),
-                to_txn: text_of(row, "to_id").unwrap_or_default(),
+                from_txn: text_of(row, "id").unwrap_or_default(),
+                to_txn: text_of(row, "transfer_id").unwrap_or_default(),
             })
             .collect(),
         truncated: window.filled,
@@ -884,48 +1010,57 @@ pub fn load_existing(
         &existing_statement(account_id, from_day, to_day)?,
         LARGE,
     )?;
-    Ok(rows
-        .iter()
-        .map(|row| ExistingTxn {
-            txn_id: text_of(row, "txn_id").unwrap_or_default(),
-            external_id: text_of(row, "external_id"),
-            posted_on: day_of(row),
-            amount_minor: integer_or_zero(row, "amount_minor"),
-            direction: direction_of(row),
-            description: text_of(row, "description").unwrap_or_default(),
-            display_name: None,
-            void: text_of(row, "status").as_deref() == Some("void"),
+    let mut lines: Vec<TxnRow> = rows.iter().map(txn_of).collect();
+    decorate(door, &mut lines)?;
+    Ok(lines
+        .into_iter()
+        .map(|line| ExistingTxn {
+            void: line.status == "void",
+            txn_id: line.txn_id,
+            external_id: line.external_id,
+            posted_on: line.posted_on,
+            amount_minor: line.amount_minor,
+            direction: line.direction,
+            description: line.description,
+            display_name: line.display_name,
         })
         .collect())
 }
 
-fn optional_column(row: &Row, column: &str) -> Option<usize> {
-    optional_integer(row, column).and_then(|n| usize::try_from(n).ok())
+fn column_of(layout: &serde_json::Value, key: &str) -> Option<usize> {
+    layout
+        .get(key)
+        .and_then(serde_json::Value::as_u64)
+        .and_then(|n| usize::try_from(n).ok())
 }
 
-/// The layouts saved for an account, one per header fingerprint.
+/// The layout remembered for an account: the one its statements were last read
+/// with, if any.
 pub fn load_saved_profiles(
     door: &dyn PageDoor,
     account_id: &str,
 ) -> KitResult<Vec<crate::import::SavedProfile>> {
-    let rows = read_pages(door, &profiles_statement(account_id), SMALL)?;
-    Ok(rows
-        .iter()
-        .map(|row| crate::import::SavedProfile {
-            header_fingerprint: text_of(row, "header_fingerprint").unwrap_or_default(),
-            delimiter: text_of(row, "delimiter").unwrap_or_default(),
-            skip_lines: optional_column(row, "skip_lines").unwrap_or(0),
-            date_order: text_of(row, "date_order").unwrap_or_default(),
-            sign_mode: text_of(row, "sign_mode").unwrap_or_default(),
-            date_col: optional_column(row, "date_col").unwrap_or(0),
-            amount_col: optional_column(row, "amount_col"),
-            debit_col: optional_column(row, "debit_col"),
-            credit_col: optional_column(row, "credit_col"),
-            desc_col: optional_column(row, "desc_col").unwrap_or(0),
-            memo_col: optional_column(row, "memo_col"),
-            indicator_col: optional_column(row, "indicator_col"),
-            indicator_out_value: text_of(row, "indicator_out_value"),
+    let layout = origins(door)?
+        .remove(account_id)
+        .and_then(|origin| origin.config)
+        .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok());
+    Ok(layout
+        .map(|layout| crate::import::SavedProfile {
+            header_fingerprint: stated_text(&layout, &["header_fingerprint"]).unwrap_or_default(),
+            delimiter: stated_text(&layout, &["delimiter"]).unwrap_or_default(),
+            skip_lines: column_of(&layout, "skip_lines").unwrap_or(0),
+            date_order: stated_text(&layout, &["date_order"]).unwrap_or_default(),
+            sign_mode: stated_text(&layout, &["sign_mode"]).unwrap_or_default(),
+            date_col: column_of(&layout, "date_col").unwrap_or(0),
+            amount_col: column_of(&layout, "amount_col"),
+            debit_col: column_of(&layout, "debit_col"),
+            credit_col: column_of(&layout, "credit_col"),
+            desc_col: column_of(&layout, "desc_col").unwrap_or(0),
+            memo_col: column_of(&layout, "memo_col"),
+            indicator_col: column_of(&layout, "indicator_col"),
+            indicator_out_value: stated_text(&layout, &["indicator_out_value"]),
         })
+        .into_iter()
         .collect())
 }
 
@@ -943,110 +1078,113 @@ pub fn load_transfer_candidates(
         )?;
         out.extend(window.rows.iter().map(txn_of));
     }
+    decorate(door, &mut out)?;
     Ok(out)
 }
 
 // ---------------------------------------------------------------------------
-// Search (R-1099-44).
+// Search.
 // ---------------------------------------------------------------------------
 
-/// What a search found.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SearchHits {
+/// The most transactions one search answers.
+pub const SEARCH_ROWS: usize = 200;
+
+/// The kind a transaction is in the full-text index.
+pub const TXN_KIND: &str = "txn";
+
+/// What a search found: the lines, best match first.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SearchData {
     pub rows: Vec<TxnRow>,
-    /// Matches found in the months walked, before `limit`.
-    pub total_matches: usize,
-    /// The typed words, corrected, if the exact walk found nothing and the
-    /// corrected one did.
-    pub corrected: Option<String>,
-    /// A month hit [`MONTH_ROWS`], so some of its rows were not read. (A walk
-    /// always stops at [`SEARCH_MONTHS`]; the screen says how far back it looked.)
-    pub truncated: bool,
 }
 
-fn searchable(row: &TxnRow, categories: &BTreeMap<String, String>) -> Vec<String> {
-    let mut texts = vec![row.description.to_lowercase()];
-    texts.extend(row.display_name.as_ref().map(|n| n.to_lowercase()));
-    texts.extend(row.memo.as_ref().map(|n| n.to_lowercase()));
-    texts.extend(
-        row.category_concept_id
-            .as_ref()
-            .and_then(|id| categories.get(id))
-            .map(|label| label.to_lowercase()),
-    );
-    texts
+/// The lines among a set of ids.
+const TXNS: Read = Read {
+    name: "money.search.transactions",
+    table: "txn",
+    select: TXN_COLUMNS,
+    order: ("id", "id"),
+    column: "id",
+};
+
+/// The lines the full-text index ranked, as rows, in the index's order.
+///
+/// A line in the trash is dropped ([`decorate`]). A hit the table no longer
+/// holds is dropped too.
+///
+/// # Errors
+///
+/// A door refusal or a reached bound, as every read here.
+pub fn load_search(door: &dyn PageDoor, ids: &[String]) -> KitResult<SearchData> {
+    let mut found: BTreeMap<String, TxnRow> = BTreeMap::new();
+    for chunk in ids.chunks(PAGE_ROWS) {
+        for row in TXNS.within(CHUNK, door, chunk, None)? {
+            let line = txn_of(&row);
+            found.insert(line.txn_id.clone(), line);
+        }
+    }
+    let mut rows: Vec<TxnRow> = ids.iter().filter_map(|id| found.remove(id)).collect();
+    decorate(door, &mut rows)?;
+    Ok(SearchData { rows })
 }
 
-/// Searches the newest [`SEARCH_MONTHS`] months from `month` (inclusive) back:
-/// description, the member's name, the category label and the memo, by
-/// lowercase `contains`, with the kit's walked-word typo correction. There is
-/// no index (Q-1097-1 retired the full-text one); the walk is the search.
-pub fn search(
+/// Search the ledger from a term: the full-text index over every transaction
+/// ever imported, ranked, its title (what the member calls the line) first and
+/// the bank's words, the category, the account and the notes about it after.
+/// A blank term, a term with no searchable word and a zero `limit` answer the
+/// empty shape and no denial; a door the index cannot use at all is the answer's
+/// denial, because a surface renders it.
+///
+/// # Errors
+///
+/// A reached bound, as [`load_search`].
+pub fn load_search_term(
     door: &dyn PageDoor,
-    from_month: &str,
+    search: &dyn Search,
+    principal: &Principal,
     term: &str,
     limit: usize,
-) -> KitResult<SearchHits> {
-    let needle = term.trim().to_lowercase();
-    let empty = SearchHits {
-        rows: Vec::new(),
-        total_matches: 0,
-        corrected: None,
-        truncated: false,
+) -> KitResult<(SearchData, Option<Denial>)> {
+    let term = term.trim();
+    if term.is_empty() || limit == 0 {
+        return Ok((SearchData::default(), None));
+    }
+    let request = SearchRequest::new(TXN_KIND, term, limit.min(SEARCH_ROWS));
+    let page = match search.query(principal, &request) {
+        Ok(Answer::Data { page, .. }) => page,
+        Ok(Answer::Denied(denial)) => {
+            return Ok((
+                SearchData::default(),
+                Some(Denial {
+                    code: denial.code,
+                    message: denial.message,
+                    revoked_at: denial.revoked_at,
+                }),
+            ));
+        }
+        Err(SearchError::NoSearchableWords { .. }) => return Ok((SearchData::default(), None)),
+        Err(other) => {
+            return Ok((
+                SearchData::default(),
+                Some(Denial {
+                    code: None,
+                    message: Some(other.to_string()),
+                    revoked_at: None,
+                }),
+            ));
+        }
     };
-    if needle.is_empty() {
-        return Ok(empty);
+    let ids: Vec<String> = page.rows.into_iter().map(|target| target.id).collect();
+    match load_search(door, &ids) {
+        Ok(data) => Ok((data, None)),
+        Err(KitError::Door(message)) => Ok((
+            SearchData::default(),
+            Some(Denial {
+                code: None,
+                message: Some(message),
+                revoked_at: None,
+            }),
+        )),
+        Err(other) => Err(other),
     }
-    let categories: BTreeMap<String, String> = load_categories(door)?
-        .into_iter()
-        .map(|c| (c.concept_id, c.label))
-        .collect();
-    let mut truncated = false;
-    let mut walked: Vec<TxnRow> = Vec::new();
-    let mut month = from_month.to_owned();
-    for step in 0..SEARCH_MONTHS {
-        let window = load_month(door, &month, &ActivityFilter::default())?;
-        truncated |= window.truncated;
-        walked.extend(window.value);
-        if step + 1 < SEARCH_MONTHS {
-            match civil::add_months(&month, -1) {
-                Some(previous) => month = previous,
-                None => break,
-            }
-        }
-    }
-    let haystacks: Vec<Vec<String>> = walked.iter().map(|r| searchable(r, &categories)).collect();
-    let find = |needle: &str| -> Vec<usize> {
-        haystacks
-            .iter()
-            .enumerate()
-            .filter(|(_, texts)| texts.iter().any(|text| text.contains(needle)))
-            .map(|(at, _)| at)
-            .collect()
-    };
-    let mut matched = find(&needle);
-    let mut corrected = None;
-    if matched.is_empty() {
-        let mut words = WalkedWords::new();
-        for texts in &haystacks {
-            words.add_row(texts.iter().map(String::as_str));
-        }
-        if let Some(words) = words.correct(term) {
-            let again = find(&words.to_lowercase());
-            if !again.is_empty() {
-                matched = again;
-                corrected = Some(words);
-            }
-        }
-    }
-    Ok(SearchHits {
-        total_matches: matched.len(),
-        rows: matched
-            .into_iter()
-            .take(limit)
-            .map(|at| walked[at].clone())
-            .collect(),
-        corrected,
-        truncated,
-    })
 }

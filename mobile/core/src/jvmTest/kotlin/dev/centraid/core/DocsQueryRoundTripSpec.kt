@@ -40,41 +40,40 @@ class DocsQueryRoundTripSpec : StringSpec({
         val core = openRealCore()
         try {
             val folder = core.write(
-                "core.create_folder",
-                """{"name":"Round trip leases"}""",
+                "container.create",
+                """{"kind":"folder","title":"Round trip leases"}""",
                 key = "docs-round-trip-folder",
-                field = "folder_id",
+                field = "id",
             )
             val lease = core.write(
-                "core.add_document",
-                """{"title":"Round trip lease","data_uri":"data:text/plain;charset=utf-8,rent",""" +
-                    """"folder_id":"$folder"}""",
+                "document.create_text",
+                """{"title":"Round trip lease","body_text":"rent","folder_id":"$folder"}""",
                 key = "docs-round-trip-lease",
-                field = "document_id",
+                field = "id",
             )
             core.write(
-                "core.edit_document",
-                """{"document_id":"$lease","body_text":"rent is due"}""",
+                "document.edit",
+                """{"id":"$lease","body_text":"rent is due"}""",
                 key = "docs-round-trip-edit",
-                field = "document_id",
+                field = "id",
             )
             val blank = core.write(
-                "core.add_document",
-                """{"title":"Round trip blank","data_uri":"data:text/plain;charset=utf-8,"}""",
+                "document.create_text",
+                """{"title":"Round trip blank","body_text":""}""",
                 key = "docs-round-trip-blank",
-                field = "document_id",
+                field = "id",
             )
             val binned = core.write(
-                "core.add_document",
-                """{"title":"Round trip binned","data_uri":"data:text/plain;charset=utf-8,old"}""",
+                "document.create_text",
+                """{"title":"Round trip binned","body_text":"old"}""",
                 key = "docs-round-trip-binned",
-                field = "document_id",
+                field = "id",
             )
             core.write(
-                "core.trash_document",
-                """{"document_id":"$binned"}""",
+                "entity.trash",
+                """{"id":"$binned"}""",
                 key = "docs-round-trip-trash",
-                field = "document_id",
+                field = "purge_at",
             )
 
             // --- docs.drive -------------------------------------------------

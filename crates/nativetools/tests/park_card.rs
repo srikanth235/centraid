@@ -157,27 +157,27 @@ fn a_rename_names_the_row_as_the_member_knew_it_and_a_reschedule_says_old_to_new
         })
         .collect();
     assert_eq!(
-        seen["edit person -> people.edit_person"],
+        seen["edit person -> person.edit"],
         "Change person \"Ray Ochoa\": name \"Ray Ochoa\" → \"Ray renamed\""
     );
     assert_eq!(
-        seen["reschedule task -> schedule.edit_task"],
+        seen["reschedule task -> task.edit"],
         "Reschedule task \"Book the cabin\": due next Friday 09:00 → tomorrow 09:00"
     );
     assert_eq!(
-        seen["add_to task -> schedule.organize_task"],
+        seen["add_to task -> task.organize"],
         "Add task \"Pay rent\" to list \"Home\""
     );
     assert_eq!(
-        seen["remove_from task -> schedule.organize_task"],
+        seen["remove_from task -> task.organize"],
         "Remove task \"Book the cabin\" from list \"Home\""
     );
     assert_eq!(
-        seen["create task -> schedule.add_task"],
+        seen["create task -> task.add"],
         "Add task \"Call plumber\": due tomorrow, status open, effort 15 min"
     );
     assert_eq!(
-        seen["delete task -> schedule.delete_task"],
+        seen["delete task -> entity.trash"],
         "Delete task \"Mend reed for Benedikt\""
     );
 }

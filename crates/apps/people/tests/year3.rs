@@ -1,169 +1,212 @@
-//! THE YEAR-3 PEOPLE AXIS (#1020, D-1020-D3-7, slot 4c).
+//! YEAR-3 PEOPLE VOLUME, and the numbers the receipt reports (#1020, D-1020-PE4;
+//! rebuilt on the new model, #1135).
 //!
-//! v0's year-3 generator writes **5,000 `core_party` rows and no
-//! `people_profile` at all** (`packages/test-kit/src/year3-vault.ts:77`-`:92`),
-//! so People's stated ceilings — a 20–10,000 roster window, a dashboard that
-//! folds over 9,999 rows, a 500-row trash shelf — had no golden artifact behind
-//! them. [`year3_people`] is that artifact.
+//! `centraid_apps_kit::fixtures::year3_people` writes the profile [`YEAR3_PEOPLE`]
+//! declares: 5,000 people (250 trashed) beside 100 pets and the owner, 10,000 yearly
+//! dates and 2,000 birthdays, 20,000 touches (8,000 with a note about them), 3,000
+//! notes about people and 8,000 contact points. This suite turns that into
+//! measurements and asserts what a count cannot: the roster walks past the door's
+//! 500-row page and says whether it filled, a pet and the owner are not in the
+//! circle, and last-contacted is computed from the touches.
 //!
-//! The full run is `#[ignore]`d for the reason Docs' and Photos' are: it seeds
-//! five thousand people, twelve thousand important dates and twenty thousand
-//! interactions, and is longer than the whole `local` gate budget. A SHRUNKEN
-//! axis runs unignored, through the same statements, so the generator cannot rot
-//! while the measured number waits for a machine — and the shrunken run is what
-//! proves the fixture's SHAPE, which is the half a measurement cannot.
+//! **A timing here is `ci-linux-x64-4c` and a DEBUG build.** Every number this file
+//! prints is reported as *projected provenance* (D-1020-D3-7's pattern), never as a
+//! ceiling.
 
-use std::fs;
-use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::time::Instant;
 
-use centraid_apps_kit::contract_vault::open_contract_vault;
 use centraid_apps_kit::fixtures::{YEAR3_PEOPLE, Year3PeopleShape, year3_people};
 use centraid_apps_kit::testdoor::TestDoor;
 use centraid_apps_people::dashboard::load_dashboard;
 use centraid_apps_people::dates::{CivilDate, parse_instant};
+use centraid_apps_people::person::load_person;
 use centraid_apps_people::roster::{PeopleInput, load_people, load_trash};
+use centraid_vault::Vault;
+use centraid_vault::clock::{FixedClock, SeededIds};
 
-/// The seed every run uses, so two runs of one shape write one fixture.
-const SEED: u64 = 679_003;
-/// The instant the folds are measured against, and the vault's own civil date.
-const NOW: &str = "2099-06-01T09:00:00.000Z";
-const TODAY: CivilDate = CivilDate::new(2099, 6, 1);
+const SEED: u64 = 679_004;
 
-fn root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("..")
-        .join("..")
-        .join("..")
-        .to_path_buf()
-}
-
-fn empty_vault() -> rusqlite::Connection {
-    let ddl = fs::read_to_string(root().join("contracts/schema/vault-ddl.sql"))
-        .expect("the committed DDL is readable");
-    open_contract_vault(&ddl, "[]").expect("an empty fixture vault is built")
-}
-
-/// A shrunken axis: the same generator, the same statements, one twenty-fifth
-/// of the rows.
-const SHRUNKEN: Year3PeopleShape = Year3PeopleShape {
-    people: 200,
-    trashed: 20,
-    starred: 16,
-    lists: 4,
-    filed: 120,
-    important_dates: 480,
-    reminders: 240,
-    interactions: 800,
-    notes: 160,
-    start: "2097-01-01",
+/// A smaller profile for the suite's own runtime, in the SHAPE of the declared one.
+/// Every field is named on purpose: a field added to the shape fails this literal
+/// rather than being inherited silently.
+const SAMPLE: Year3PeopleShape = Year3PeopleShape {
+    people: 1_400,
+    trashed: 100,
+    pets: 30,
+    starred: 120,
+    lists: 8,
+    filed: 800,
+    birthdays: 500,
+    dates: 2_400,
+    reminded: 1_500,
+    touches: 4_800,
+    touch_notes: 2_000,
+    notes: 700,
+    contact_points: 2_000,
 };
 
+struct Seeded {
+    dir: std::path::PathBuf,
+    vault: Vault,
+    counts: centraid_apps_kit::fixtures::Year3PeopleCounts,
+}
+
+impl Drop for Seeded {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.dir);
+    }
+}
+
+fn seeded(shape: Year3PeopleShape) -> Seeded {
+    let dir = centraid_ontology::scratch::scratch_dir();
+    std::fs::create_dir_all(&dir).expect("a scratch directory");
+    let vault = Vault::create_with(
+        dir.join("vault.db"),
+        Box::new(Arc::new(FixedClock::frozen())),
+        Box::new(SeededIds::new("year3")),
+    )
+    .expect("a vault");
+    vault.found("Year 3", "Owner").expect("founded");
+    let counts = vault
+        .commit(|tx| Ok(year3_people(tx.connection(), shape, SEED).expect("seeded")))
+        .expect("the corpus lands")
+        .value;
+    Seeded { dir, vault, counts }
+}
+
+fn read<T>(world: &Seeded, body: impl FnOnce(&TestDoor<'_>) -> T) -> T {
+    world
+        .vault
+        .read(|connection| Ok(body(&TestDoor::new(connection))))
+        .expect("a read")
+}
+
+/// THE ROSTER WALKS ITS WINDOW, AND THE CIRCLE LEAVES OUT THE OWNER, A PET AND THE TRASH.
 #[test]
-fn a_shrunken_axis_is_readable_through_the_roster_the_shelf_and_the_dashboard() {
-    let connection = empty_vault();
-    let counts = year3_people(&connection, SHRUNKEN, SEED).expect("the axis seeds");
-    assert_eq!(counts.profiles, SHRUNKEN.people);
-    assert_eq!(counts.trashed, SHRUNKEN.trashed);
-    assert_eq!(counts.live_profiles, SHRUNKEN.people - SHRUNKEN.trashed);
-    assert_eq!(counts.important_dates, SHRUNKEN.important_dates);
-    assert_eq!(counts.reminders, SHRUNKEN.reminders);
-    assert_eq!(counts.activities, SHRUNKEN.interactions);
-    // Every interaction is an activity, a link and an annotation; the owner's
-    // own notes are annotations too.
-    assert_eq!(counts.links, SHRUNKEN.interactions);
-    assert_eq!(counts.annotations, SHRUNKEN.interactions + SHRUNKEN.notes);
-
-    let door = TestDoor::new(&connection);
-    let (roster, denial) =
-        load_people(&door, PeopleInput { limit: Some(500) }).expect("the roster reads");
-    assert!(denial.is_none(), "the axis is not denied: {denial:?}");
-    // THE WINDOW IS WALKED, NOT CLAMPED. 180 live people is under the 500 the
-    // caller asked for, so the walk ends on its own and `truncated` is false —
-    // and the count is the whole live set, which a single clamped page of 500
-    // would also have given. The clamp is proved at volume below.
-    assert_eq!(roster.people.len(), SHRUNKEN.people - SHRUNKEN.trashed);
+fn the_roster_walks_past_a_page_and_holds_the_circle_and_nothing_else() {
+    let world = seeded(SAMPLE);
+    let started = Instant::now();
+    let (roster, denial) = read(&world, |door| {
+        load_people(door, PeopleInput::default()).expect("folds")
+    });
+    let elapsed = started.elapsed();
+    assert!(denial.is_none());
+    eprintln!(
+        "year3 people (sample): the roster walked {} people in {elapsed:?}",
+        roster.people.len()
+    );
+    // A page is 500 rows (`MAX_PAGE_ROWS`); the walked window reaches past one.
+    assert!(roster.people.len() > 500, "reached {}", roster.people.len());
+    // The window fits, so it did not fill; the pets and the trash are not in it.
     assert!(!roster.truncated);
-    assert_eq!(roster.lists.len(), SHRUNKEN.lists);
-    let (shelf, denial) = load_trash(&door).expect("the shelf reads");
-    assert!(denial.is_none());
-    assert_eq!(shelf.people.len(), SHRUNKEN.trashed);
-    assert!(!shelf.truncated);
+    assert_eq!(roster.people.len(), world.counts.live);
+    assert_eq!(
+        roster.people.iter().filter(|row| row.starred).count(),
+        SAMPLE.starred
+    );
+    assert_eq!(roster.lists.len(), SAMPLE.lists);
+    // LAST CONTACTED IS COMPUTED: a person the touches name has one, and it is the newest of theirs.
+    let touched = roster
+        .people
+        .iter()
+        .filter(|row| row.last_contacted_at.is_some())
+        .count();
+    assert!(
+        touched > 0 && touched <= SAMPLE.touches,
+        "{touched} people were touched"
+    );
+    // A narrow window says it did not fill the roster.
+    let (narrow, _) = read(&world, |door| {
+        load_people(door, PeopleInput { limit: Some(300) }).expect("folds")
+    });
+    assert!(narrow.truncated && narrow.window == 300);
+    assert!(narrow.people.len() <= 300);
+}
 
-    let now_ms = parse_instant(NOW).expect("an instant");
-    let (dashboard, denial) = load_dashboard(&door, TODAY, now_ms).expect("the summary reads");
+#[test]
+fn the_dashboard_folds_the_whole_circle_and_the_trash_shelf_holds_the_rest() {
+    let world = seeded(SAMPLE);
+    let now = parse_instant("2026-06-01T00:00:00.000Z").expect("an instant");
+    let started = Instant::now();
+    let (dashboard, denial) = read(&world, |door| {
+        load_dashboard(door, CivilDate::new(2026, 6, 1), now).expect("folds")
+    });
+    let elapsed = started.elapsed();
+    assert!(denial.is_none() && !dashboard.truncated);
+    eprintln!(
+        "year3 people (sample): the dashboard folded {} people in {elapsed:?}",
+        dashboard.counts.all
+    );
+    assert_eq!(dashboard.counts.all, world.counts.live);
+    assert_eq!(dashboard.counts.starred, SAMPLE.starred);
+    assert!(dashboard.recent.len() <= 30 && !dashboard.recent.is_empty());
+    assert!(
+        !dashboard.upcoming.is_empty()
+            && dashboard.upcoming.len() <= SAMPLE.reminded + SAMPLE.birthdays
+    );
+    let (shelf, _) = read(&world, |door| load_trash(door).expect("reads"));
+    assert_eq!(shelf.people.len(), SAMPLE.trashed);
+}
+
+#[test]
+fn one_sheet_opens_over_the_volume() {
+    let world = seeded(SAMPLE);
+    let (roster, _) = read(&world, |door| {
+        load_people(door, PeopleInput::default()).expect("folds")
+    });
+    let id = roster
+        .people
+        .iter()
+        .find(|row| row.last_contacted_at.is_some())
+        .expect("a touched person")
+        .party_id
+        .clone();
+    let started = Instant::now();
+    let (data, denial) = read(&world, |door| load_person(door, &id).expect("reads"));
+    eprintln!(
+        "year3 people (sample): one sheet in {:?}",
+        started.elapsed()
+    );
     assert!(denial.is_none());
-    // THE COUNTS ARE A FOLD OVER THE WHOLE LIVE SET, which is the half v0 gets
-    // wrong at volume (finding PE-F3).
-    assert_eq!(dashboard.counts.all, SHRUNKEN.people - SHRUNKEN.trashed);
-    assert!(!dashboard.truncated);
-    assert!(
-        dashboard.counts.upcoming > 0,
-        "the Upcoming rail is empty: the reminder fold proves nothing"
-    );
-    assert!(
-        dashboard.counts.reconnect > 0,
-        "nobody is overdue: the cadence fold proves nothing"
-    );
-    assert!(dashboard.recent.len() <= 30, "the recent rail is a window");
-    // THE LEAP-DAY CASE IS IN THE CORPUS, because a birthday rail without one
-    // cannot show the clamp (D-1020-PE7).
-    assert!(
-        dashboard
-            .upcoming
-            .iter()
-            .any(|row| row.month_day == "02-29"),
-        "no 29 February reminder: the clamp proves nothing"
+    let sheet = data.person.expect("a sheet");
+    assert!(!sheet.touches.is_empty());
+    assert_eq!(
+        sheet.profile.last_contacted_at.as_deref(),
+        sheet.touches.first().map(|t| t.at.as_str())
     );
 }
 
-/// THE MEASURED RUN. `#[ignore]`d; `cargo test -p centraid-apps-people --test
-/// year3 -- --ignored --nocapture` prints the numbers this lane's receipt
-/// quotes as projected provenance (D-1020-D3-7).
+/// The declared profile, run on demand: `cargo test -p centraid-apps-people --test year3 -- --ignored --nocapture`.
 #[test]
-#[ignore = "seeds 5,000 people and 20,000 interactions; longer than the local gate budget"]
-fn the_year_three_roster_walks_its_declared_window() {
-    let connection = empty_vault();
-    let seeded = std::time::Instant::now();
-    let counts = year3_people(&connection, YEAR3_PEOPLE, SEED).expect("the axis seeds");
-    let seeding = seeded.elapsed();
-    assert_eq!(counts.profiles, YEAR3_PEOPLE.people);
-
-    let door = TestDoor::new(&connection);
-    let read = std::time::Instant::now();
-    let (roster, denial) = load_people(
-        &door,
-        PeopleInput {
-            limit: Some(centraid_apps_people::queries::ROSTER_MAX),
-        },
-    )
-    .expect("the roster reads");
-    let walked = read.elapsed();
-    assert!(denial.is_none());
-    // FOUR THOUSAND SEVEN HUNDRED AND FIFTY LIVE PEOPLE, WALKED. v0 asks for
-    // this as ONE page and the host clamps it to 500 (finding PE-F3).
-    assert_eq!(
-        roster.people.len(),
-        YEAR3_PEOPLE.people - YEAR3_PEOPLE.trashed
+#[ignore = "the declared 5,000-person profile; run for the receipt's numbers"]
+fn the_declared_profile() {
+    let started = Instant::now();
+    let world = seeded(YEAR3_PEOPLE);
+    eprintln!(
+        "year3 people: seeded {} people, {} touches in {:?}",
+        world.counts.live,
+        world.counts.touches,
+        started.elapsed()
     );
-    assert!(!roster.truncated, "the whole live set is inside the window");
-
-    let now_ms = parse_instant(NOW).expect("an instant");
-    let folded = std::time::Instant::now();
-    let (dashboard, denial) = load_dashboard(&door, TODAY, now_ms).expect("the summary reads");
-    let folding = folded.elapsed();
-    assert!(denial.is_none());
-    assert_eq!(
+    let started = Instant::now();
+    let (roster, _) = read(&world, |door| {
+        load_people(door, PeopleInput::default()).expect("folds")
+    });
+    eprintln!(
+        "year3 people: the roster walked {} in {:?}",
+        roster.people.len(),
+        started.elapsed()
+    );
+    let now = parse_instant("2026-06-01T00:00:00.000Z").expect("an instant");
+    let started = Instant::now();
+    let (dashboard, _) = read(&world, |door| {
+        load_dashboard(door, CivilDate::new(2026, 6, 1), now).expect("folds")
+    });
+    eprintln!(
+        "year3 people: the dashboard folded {} in {:?}",
         dashboard.counts.all,
-        YEAR3_PEOPLE.people - YEAR3_PEOPLE.trashed
+        started.elapsed()
     );
-
-    println!(
-        "year3-people: seeded {} people / {} dates / {} interactions in {seeding:?}; \
-         roster walked {} rows in {walked:?}; dashboard folded {} in {folding:?}",
-        counts.profiles,
-        counts.important_dates,
-        counts.activities,
-        roster.people.len(),
-        dashboard.counts.all
-    );
+    assert_eq!(roster.people.len(), world.counts.live);
 }

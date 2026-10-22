@@ -496,7 +496,7 @@ recurring("pp", "Pay Madame Lise for piano", dt.date(2024, 3, 1), dt.date(2027, 
 
 # projects with subtasks
 PROJECTS = [
-    ("sous_sol_proj", "Rénovation du sous-sol", "sous_sol", "2026-04-30", "in_progress", [
+    ("sous_sol_proj", "Rénovation du sous-sol", "sous_sol", "2026-04-30", "open", [
         ("Get three quotes", "2025-10-15", True), ("Choose the contractor", "2025-11-10", True),
         ("Order the vinyl flooring", "2025-12-05", True), ("Move the storage boxes", "2026-01-10", True),
         ("Demolition weekend", "2026-01-24", True), ("Rough-in plumbing", "2026-02-20", True),
@@ -516,7 +516,7 @@ PROJECTS = [
         ("Gather the RL-1 slips", "2026-02-20", True), ("Collect the daycare receipts", "2026-03-05", True),
         ("Send everything to the accountant", "2026-03-20", True), ("Sign the returns", "2026-04-10", True),
         ("Pay the balance", "2026-04-28", True)]),
-    ("impots27", "Déclarations d'impôts 2026", "budget", "2027-04-30", "in_progress", [
+    ("impots27", "Déclarations d'impôts 2026", "budget", "2027-04-30", "open", [
         ("Gather the RL-1 slips", "2027-02-20", False), ("Collect the daycare receipts", "2027-03-05", False),
         ("Send everything to the accountant", "2027-03-20", False)]),
     ("chambre_lea", "Chambre de Léa", "famille", "2025-09-01", "completed", [
@@ -528,7 +528,7 @@ for pkey, pname, plist, pdue, pstatus, subs in PROJECTS:
     if pstatus == "completed":
         row["completed"] = f"{pdue}T20:00"
     else:
-        row["status"] = "in_progress"
+        pass  # no started state since #1135: the row stays open (the draw above is kept)
     for i, (sname, sdue, sdone) in enumerate(subs):
         sub = add_task(f"{pkey}_{i + 1}", sname, sdue, plist, parent=pkey)
         if sdone:
@@ -585,7 +585,7 @@ for n in range(215):
             row["status"] = "cancelled"
         # the rest stays open and overdue
     elif R.chance(10):
-        row["status"] = "in_progress"
+        pass  # no started state since #1135: the row stays open (the draw above is kept)
 
 # trashed tasks: several inside the window, several past it
 _t = [t for t in tasks if t["key"].startswith("t_")]

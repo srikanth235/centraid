@@ -69,7 +69,7 @@ pub fn decline(reason: &str) -> [String; 2] {
 /// A founded vault seeded with the scenario, with its byte store, and no
 /// model loaded.
 pub fn sample() -> Sample {
-    let dir = centraid_ontology::golden::scratch_dir();
+    let dir = centraid_ontology::scratch::scratch_dir();
     std::fs::create_dir_all(&dir).expect("the directory is made");
     let path = dir.join("vault.db");
     let handle = Core::open(CoreConfig::new(&path)).expect("a core opens with create");
@@ -179,4 +179,61 @@ impl Sample {
         }
         out
     }
+}
+
+/// The plaintexts planted in the Locker item [`with_a_locker_item`] files: its sealed password
+/// and its sealed one-time-code seed. The vault holds only their ciphertext.
+pub const PLANTED_SECRETS: [&str; 2] = [
+    "PLANTED-PASSWORD-zq7xk4-not-in-any-payload",
+    "PLANTED-OTPSEED-mv9wr2-not-in-any-payload",
+];
+
+/// File a Locker item, `Vaultbank login` (username `ada.vault`), whose password and code seed are
+/// sealed under a key written nowhere, through the owner's own door. Returns its id.
+pub fn with_a_locker_item(sample: &Sample) -> String {
+    use centraid_vault::custody::locker_key::encrypt_under_locker_key;
+    let owner = sample.handle.owner();
+    let key = sample
+        .handle
+        .with_vault(|vault| {
+            vault
+                .locker_generation()
+                .map_err(|error| centraid_core::CoreError::InvalidRequest {
+                    detail: error.to_string(),
+                })
+        })
+        .expect("the key plane lands");
+    let seal = |plaintext: &str| {
+        encrypt_under_locker_key(&[0x5a_u8; 32], &key, "lk-vaultbank", plaintext)
+            .expect("the cell seals")
+    };
+    let ran = sample
+        .handle
+        .with_vault(|vault| {
+            vault
+                .execute(
+                    sample.handle.registry(),
+                    &owner,
+                    &centraid_vault::commands::Command::new(
+                        "locker.add_item",
+                        serde_json::json!({
+                            "item_id": "lk-vaultbank", "type": "login",
+                            "title": "Vaultbank login", "username": "ada.vault",
+                            "url": "https://vaultbank.example",
+                            "password": seal(PLANTED_SECRETS[0]),
+                            "otp_seed": seal(PLANTED_SECRETS[1]),
+                            "password_rotated": true, "key_id": key
+                        }),
+                    ),
+                )
+                .map_err(centraid_core::CoreError::from)
+        })
+        .expect("the owner's command answers");
+    assert_eq!(
+        ran.status,
+        centraid_vault::CommandStatus::Executed,
+        "{:?}",
+        ran.reason
+    );
+    "lk-vaultbank".to_owned()
 }

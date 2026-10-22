@@ -132,8 +132,6 @@ public object PhotosSearchMachine : ScreenMachine<PhotosSearchState, PhotosSearc
                     state.copy(loading = null, failure = null, resting = null, hits = hits),
                     state.query,
                     event.data_.corrected,
-                    // ASK (#1097, R-1097-28): rows are the photographs and the doors, the screen's only results.
-                    rows = hits?.let { it.cells.size + it.top_hits.size },
                 )
                 Step(answered.copy(hits = hits?.let { noMatch(it, answered) }))
             }
@@ -173,10 +171,10 @@ public object PhotosSearchMachine : ScreenMachine<PhotosSearchState, PhotosSearc
         //   screen stay until the new ones land, because a resting page that
         //   blinked empty on every commit would read as "you have nobody".
         // * A query re-reads its hits only when the change can be its own. The
-        //   keys are asset ids for `media_asset` and are checked against the
+        //   keys are photograph ids for `photo` and are checked against the
         //   cells on screen, EXCEPT when there are none: an empty list means
         //   "this table moved and nobody can say which rows" (every local
-        //   commit, and every table that is not `media_asset`), so it is a
+        //   commit, and every table that is not `photo`), so it is a
         //   re-read and not a shrug.
         event.rows_changed != null -> {
             val ids = event.rows_changed.asset_ids
@@ -213,19 +211,15 @@ public object PhotosSearchMachine : ScreenMachine<PhotosSearchState, PhotosSearc
     /**
      * THE NO-MATCH STATE of an answer that holds no photograph and no door
      * (#1097, R-1097-30): the query quoted back and the line saying everywhere
-     * search looked (v0's `SEARCH_COPY.miss`), with Ask as its one action when the
-     * field offers it ([SearchLaw.asking]). An answer with anything in it carries none.
+     * search looked (v0's `SEARCH_COPY.miss`). An answer with anything in it carries none.
      */
     private fun noMatch(hits: SearchHits, state: PhotosSearchState): SearchHits {
         if (hits.cells.isNotEmpty() || hits.top_hits.isNotEmpty()) return hits.copy(empty = null)
         val sentence = PhotosCopy.PHOTOS_SEARCH_NO_MATCH_QUERY.replace("{query}", state.query)
         return hits.copy(
-            empty = SearchLaw.asking(
-                EmptyState(
-                    headline = PhotosCopy.PHOTOS_SEARCH_NO_RESULTS,
-                    body = "$sentence ${PhotosCopy.PHOTOS_SEARCH_NO_MATCH_SCOPE}",
-                ),
-                state.search ?: SearchField(),
+            empty = EmptyState(
+                headline = PhotosCopy.PHOTOS_SEARCH_NO_RESULTS,
+                body = "$sentence ${PhotosCopy.PHOTOS_SEARCH_NO_MATCH_SCOPE}",
             ),
         )
     }
@@ -274,7 +268,7 @@ public object PhotosSearchMachine : ScreenMachine<PhotosSearchState, PhotosSearc
     /**
      * EVERY TABLE A SEARCH READS, because every one can change an answer.
      *
-     * `media_asset` carries its keys, which are this screen's own cell ids and
+     * `photo` carries its keys, which are this screen's own cell ids and
      * are filtered by the reducer. The others — a place renamed, an album filled, a label put on — carry none: their keys are not
      * asset ids, and a filter over them would always say "not mine".
      */
@@ -285,20 +279,19 @@ public object PhotosSearchMachine : ScreenMachine<PhotosSearchState, PhotosSearc
         else -> null
     }
 
-    internal const val TABLE: String = "media_asset"
+    internal const val TABLE: String = "photo"
 
-    private val VOCABULARY_TABLES: Set<String> = setOf(
-        "core_place",
-        "core_collection",
-        "core_collection_entry",
-        "core_tag",
-        "core_concept",
-    )
+    /**
+     * What names a place, an album or a label, and what files a photograph under
+     * one: the `entity` (a title, the trash), the `place` row, the `container` and
+     * the `edge`s (`contains`, `tagged`).
+     */
+    private val VOCABULARY_TABLES: Set<String> = setOf("entity", "place", "container", "edge")
 
     /** Where this screen keeps the shared field. */
     private object Search : SearchLens<PhotosSearchState> {
         override val screenId: String = SCREEN_ID
-        override val asks: Boolean = true
+        override val askScope: String = "photos"
 
         override fun field(state: PhotosSearchState): SearchField = state.search ?: SearchField()
 

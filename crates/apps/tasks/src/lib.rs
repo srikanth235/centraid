@@ -1,6 +1,6 @@
 //! # Tasks — two queries, thirteen actions, and one promotion rule
 //!
-//! 8,005 lines of v0 TypeScript, **2 queries**, 11 actions, 22 scopes — the
+//! 8,005 lines of v0 TypeScript, **2 queries**, 15 actions, 21 scopes — the
 //! smallest surface of any app (#1020, wave 4 census §A7). Its doctrine, from
 //! the board's own header:
 //!
@@ -58,8 +58,8 @@ pub use board::{
 pub use commands::{ACTIONS, Commands, Invocation, Outcome};
 pub use manifest::{APP_ID, manifest};
 pub use queries::{
-    BoardData, SearchData, TaskDetailData, TaskRow, load_board, load_search, load_search_term,
-    load_task,
+    BoardData, SearchData, TaskDetailData, TaskRow, TrashData, TrashRow, load_board, load_search,
+    load_search_term, load_task, load_trash,
 };
 
 /// A CONSENT DENIAL, as the payload carries it: the kit's one type, shared by

@@ -12,10 +12,6 @@ name = "centraid_vault"
 path = "src/lib.rs"
 
 [[bin]]
-name = "export-baseline"
-path = "src/bin/export-baseline.rs"
-
-[[bin]]
 name = "export-ladder-ddl"
 path = "src/bin/export-ladder-ddl.rs"
 
@@ -35,6 +31,7 @@ serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
+unicode-normalization.workspace = true
 
 [dev-dependencies]
 # The derivative tests BUILD their fixtures (#1025 S3): a 4000x3000 JPEG with

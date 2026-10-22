@@ -18,7 +18,6 @@ import centraid.screen.v1.MoneyTransactionState
 import centraid.screen.v1.Springboard
 import centraid.screen.v1.TileStatus
 import centraid.screen.v1.MediaPermission
-import centraid.screen.v1.MemoryRow
 import centraid.screen.v1.NotesEditorState
 import centraid.screen.v1.PhotoCell
 import centraid.screen.v1.PhotoLightboxState
@@ -27,7 +26,6 @@ import centraid.screen.v1.PhotoShelfState
 import centraid.screen.v1.PhotoStateView
 import centraid.screen.v1.PhotosCollectionsState
 import centraid.screen.v1.PhotosGridState
-import centraid.screen.v1.PhotosMemoriesState
 import centraid.screen.v1.PhotosSearchState
 import centraid.screen.v1.PlacesState
 import centraid.screen.v1.ReadFailureKind
@@ -168,7 +166,7 @@ class ScreenFixtureSpec : StringSpec({
         trash.shelf.shouldNotBeNull().state_view.shouldNotBeNull().mode
             .shouldNotBeNull().kind shouldBe PhotoStateView.Mode.Kind.KIND_TRASH
         trash.purge_window_days shouldBe 30
-        listOf("album-selecting", "memory-empty-but-titled").forEach { case ->
+        listOf("album-selecting").forEach { case ->
             shelf(case).purge_window_days shouldBe 0
         }
     }
@@ -184,15 +182,6 @@ class ScreenFixtureSpec : StringSpec({
         loaded.contains("ast-0204").shouldBeFalse()
         // A keyset cursor, and it is the SORT KEY plus the primary key.
         album.data_.next_cursor.shouldNotBeNull().contains('|').shouldBeTrue()
-    }
-
-    "photos-shelf: an empty shelf is data, and its head still has a title" {
-        val memory = shelf("memory-empty-but-titled")
-        memory.data_.shouldNotBeNull().cells.shouldContainExactly()
-        memory.failure.shouldBeNull()
-        // The title rides on the shelf, so there is something to draw over the
-        // empty frame without a read.
-        memory.shelf.shouldNotBeNull().memory.shouldNotBeNull().title shouldBe "Lisbon, April"
     }
 
     fun lightbox(case: String): PhotoLightboxState =
@@ -268,7 +257,7 @@ class ScreenFixtureSpec : StringSpec({
         val duplicates = data.doors.single { it.kind == CollectionsDoor.Kind.KIND_DUPLICATES }
         duplicates.count shouldBe 3
         duplicates.needs_attention shouldBe 3
-        data.doors.size shouldBe 3
+        data.doors.size shouldBe 2
     }
 
     "photos-collections: the new-album sheet leaves the list underneath intact" {
@@ -336,7 +325,7 @@ class ScreenFixtureSpec : StringSpec({
 
     "photos-search: a corrected answer is the field's words, and the hits answer what was typed" {
         // #1097, R-1097-27. The correction rides the shared field, which the
-        // kit draws as "Showing results for"; the hits still answer the TYPED
+        // kit draws as "Including results for"; the hits still answer the TYPED
         // words, so a reducer can tell a late page from a current one.
         val corrected = search("corrected")
         corrected.query shouldBe "sunscren"
@@ -448,43 +437,6 @@ class ScreenFixtureSpec : StringSpec({
         whole.clusters.none { it.member_count_capped }.shouldBeTrue()
     }
 
-    fun memories(case: String): PhotosMemoriesState =
-        PhotosMemoriesState.ADAPTER.decode(screens.bytes("photos-memories/$case"))
-
-    "photos-memories: not yet computed is not 'there are none'" {
-        // The same shape as `scan_complete`, and for the same reason: both
-        // screens are a pass's output with an empty list while it is pending.
-        // Asserted against each other, because two separate assertions pass
-        // just as happily against a shell that collapsed them.
-        val notYet = memories("not-yet-computed")
-        val none = memories("computed-and-empty")
-        notYet.data_.shouldNotBeNull().memories.shouldContainExactly()
-        none.data_.shouldNotBeNull().memories.shouldContainExactly()
-        notYet.data_.computed.shouldBeFalse()
-        none.data_.computed.shouldBeTrue()
-        (notYet.data_ == none.data_).shouldBeFalse()
-        // Data, not a failure: a retry does not make a pass run.
-        notYet.failure.shouldBeNull()
-    }
-
-    "photos-memories: a memory the pass could not name has no title to store" {
-        // The view composes from `day_key` and `place_name`. A title written
-        // into the vault by a view is a title no other surface agrees with,
-        // and it outlives the view that invented it.
-        val rows = memories("title-hint-absent").data_.shouldNotBeNull().memories
-        val unnamed = rows.single { it.memory_id == "mem-0020" }
-        unnamed.title_hint shouldBe ""
-        unnamed.day_key shouldBe "2024-06-14"
-        unnamed.place_name.isNotBlank().shouldBeTrue()
-        // A span, not a day: the two kinds compose differently, which is why
-        // the ends are on the row rather than derived from `day_key`.
-        unnamed.kind shouldBe MemoryRow.Kind.KIND_TRIP
-        (unnamed.ended_at > unnamed.started_at).shouldBeTrue()
-        // The branch: one row has a hint the pass wrote, and a fixture with
-        // only one of them passes against a view that handles neither.
-        rows.single { it.memory_id == "mem-0021" }.title_hint shouldBe "On this day"
-    }
-
     fun duplicateReview(case: String): DuplicateReviewState =
         DuplicateReviewState.ADAPTER.decode(screens.bytes("photos-duplicate-review/$case"))
 
@@ -579,10 +531,6 @@ class ScreenFixtureSpec : StringSpec({
         }
         sweep("photos-places") { bytes ->
             PlacesState.ADAPTER.decode(bytes)
-                .let { contentCount(it.loading, it.failure, it.data_) }
-        }
-        sweep("photos-memories") { bytes ->
-            PhotosMemoriesState.ADAPTER.decode(bytes)
                 .let { contentCount(it.loading, it.failure, it.data_) }
         }
         sweep("photos-duplicates") { bytes ->

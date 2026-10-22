@@ -21,10 +21,10 @@ use common::*;
 fn note(handle: &centraid_core::Handle, title: &str, body: &str) -> String {
     command(
         handle,
-        "knowledge.create_note",
-        &json!({ "title": title, "body_text": body, "format": "plain" }),
+        "note.create",
+        &json!({ "title": title, "body": body, "format": "plain" }),
         &format!("note:{title}"),
-    )["note_id"]
+    )["id"]
         .as_str()
         .unwrap_or_default()
         .to_owned()
@@ -149,8 +149,8 @@ fn pairing_again_with_a_gateway_that_lost_the_vault_sends_everything_again() {
     );
     let photo_handle = stage(&phone, owned("image/heic", &photo), &photo);
     let thumb = bytes_of("its thumbnail, before the disk went", 5_000);
-    stage(&phone, thumb_of(&photo_handle, &thumb), &thumb);
     add_asset(&phone, &photo_handle, "photo");
+    stage(&phone, thumb_of(&photo_handle, &thumb), &thumb);
     drain(&phone, at_home());
     let before = status(&phone);
     assert_eq!((before.content_confirmed, before.content_total), (2, 2));
@@ -487,9 +487,17 @@ fn what_the_gateway_lost_is_sent_again_by_the_next_launch() {
     let photo = bytes_of("a photograph the gateway's disk lost", 150_000);
     let photo_handle = stage(&phone, owned("image/heic", &photo), &photo);
     let thumb = bytes_of("its thumbnail, lost with it", 5_000);
-    stage(&phone, thumb_of(&photo_handle, &thumb), &thumb);
     add_asset(&phone, &photo_handle, "photo");
+    stage(&phone, thumb_of(&photo_handle, &thumb), &thumb);
     note(&phone, "Kept", "a note in the records the head holds");
+    drain(&phone, at_home());
+
+    // A VAULT LEARNS ITS STATISTICS WHEN IT CLOSES (`PRAGMA optimize`), which
+    // writes the file once. The head the files go from has to be of the file the
+    // next launch will find, so the first close is settled before it: close,
+    // open, and take the head again. A second close writes nothing.
+    drop(phone);
+    let phone = reopen(&path);
     drain(&phone, at_home());
 
     // THE FILES GO: the photograph's, the thumbnail's, and one range of the
@@ -885,11 +893,11 @@ fn the_same_bytes_under_two_assets_are_stored_once() {
     add_asset(&phone, &first, "photo");
     let again = command(
         &phone,
-        "media.add_asset",
-        &json!({ "staged_sha": second.content_hash, "kind": "photo" }),
+        "photo.add",
+        &json!({ "blob": second.content_hash, "size": second.byte_size, "media_type": "image/jpeg" }),
         "the-second-import",
     );
-    assert!(again["asset_id"].is_string(), "{again}");
+    assert_eq!(again["deduped"], json!(true), "{again}");
     drain(&phone, at_home());
     let backed = status(&phone);
     assert_eq!((backed.content_confirmed, backed.content_total), (1, 1));
@@ -1375,8 +1383,8 @@ fn an_item_deleted_after_backup_is_collected_once_purged() {
 
     command(
         &phone,
-        "media.delete_asset",
-        &json!({ "asset_id": asset }),
+        "entity.trash",
+        &json!({ "id": asset }),
         "to-the-trash",
     );
     let trashed = status(&phone);
@@ -1388,8 +1396,8 @@ fn an_item_deleted_after_backup_is_collected_once_purged() {
 
     command(
         &phone,
-        "media.purge_asset",
-        &json!({ "asset_id": asset }),
+        "entity.purge",
+        &json!({ "id": asset }),
         "deleted-forever",
     );
     let purged = status(&phone);
@@ -1651,14 +1659,14 @@ fn a_deleted_file_stays_while_a_kept_snapshot_may_name_it() {
     clock.advance_days(2);
     command(
         &phone,
-        "media.delete_asset",
-        &json!({ "asset_id": asset }),
+        "entity.trash",
+        &json!({ "id": asset }),
         "to-the-trash",
     );
     command(
         &phone,
-        "media.purge_asset",
-        &json!({ "asset_id": asset }),
+        "entity.purge",
+        &json!({ "id": asset }),
         "deleted-forever",
     );
     drain(&phone, at_home());

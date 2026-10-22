@@ -19,6 +19,7 @@ import centraid.core.v1.PeopleTouchEntry
 import centraid.core.v1.PeopleTrash
 import centraid.core.v1.PeopleTrashRow
 import centraid.core.v1.PeopleUpcoming
+import centraid.screen.v1.SearchAsk
 import centraid.screen.v1.Autosave
 import centraid.screen.v1.PeopleChannelIntent
 import centraid.screen.v1.PeopleChipKey
@@ -207,7 +208,7 @@ class PeopleSpec : StringSpec({
         val row = home(
             opened(),
             roster(
-                person("p1", "Dana Reyes", { it.copy(role = "Designer", due = true, last_contacted_at = "2026-06-01T09:00:00.000Z", days_since_contact = 14, avatar_color = "var(--c-teal)") }, {
+                person("p1", "Dana Reyes", { it.copy(role = "Designer", due = true, last_contacted_at = "2026-06-01T09:00:00.000Z", days_since_contact = 14) }, {
                     it.copy(
                         reminders = listOf(
                             PeopleDate(date_id = "d2", label = "Anniversary", month_day = "09-01", reminder_on = true, in_days = 78),
@@ -220,7 +221,7 @@ class PeopleSpec : StringSpec({
         ).state.data_.shouldNotBeNull().roster.shouldNotBeNull().rows.single()
         row.avatar.shouldNotBeNull().initials shouldBe "DR"
         // A HUE KEY, never the stored `var()` (the v0 merge-screen defect).
-        row.avatar.shouldNotBeNull().hue_key shouldBe "cTeal"
+        row.avatar.shouldNotBeNull().hue_key shouldBe PeopleWords.hueKey("p1")
         row.meta shouldBe "Last touch 14 days ago"
         row.chips.map { it.label to it.tone } shouldBe listOf(
             "Overdue" to StatusChip.Tone.TONE_NET,
@@ -235,9 +236,9 @@ class PeopleSpec : StringSpec({
         val landed = home(opened(), roster(person("p1", "Dana"))).state
         val asked = PeopleHomeMachine.reduce(landed, PeopleHomeEvent(star = PeopleHomeEvent.StarToggled(party_id = "p1")))
         val write = asked.effects.single() as ScreenEffect.SubmitWrite
-        write.command shouldBe "people.star_person"
-        write.inputJson shouldBe """{"party_id":"p1"}"""
-        write.invokeKey shouldBe "people.star_person:p1"
+        write.command shouldBe "flag.set"
+        write.inputJson shouldBe """{"id":"p1","flag":"starred"}"""
+        write.invokeKey shouldBe "flag.set:p1"
         val drawn = asked.state.data_.shouldNotBeNull().roster.shouldNotBeNull().rows.single()
         drawn.starred shouldBe true
         drawn.star_pending shouldBe true
@@ -298,7 +299,7 @@ class PeopleSpec : StringSpec({
         }
         PeopleHomeMachine.rowsChanged("locker_item", listOf("k")).shouldBeNull()
         val landed = home(opened(), roster(person("p1", "Dana"))).state
-        val moved = PeopleHomeMachine.reduce(landed, PeopleHomeMachine.rowsChanged("core_tag", listOf("t"))!!)
+        val moved = PeopleHomeMachine.reduce(landed, PeopleHomeMachine.rowsChanged("edge", listOf("t"))!!)
         moved.effects shouldBe listOf(ScreenEffect.ReadPage("people.home", null))
         // The rows stay while the re-read is out.
         moved.state.data_.shouldNotBeNull()
@@ -359,7 +360,7 @@ class PeopleSpec : StringSpec({
             .state.search.shouldNotBeNull().corrected shouldBe ""
     }
 
-    "search: Ask is the no-match question: set by a wholly empty current answer, cleared by a new term, a close, a denial or a stale answer, and never set when anything was found (#1097, R-1097-28)" {
+    "search: Ask is the row at the foot of a current answer, matched or not, cleared by a new term, a close, a denial or a stale answer (#1097, R-1097-28, #1135)" {
         val landed = home(opened(), roster(person("p1", "Dana"))).state
         val typed = run(
             PeopleHomeMachine,
@@ -369,20 +370,20 @@ class PeopleSpec : StringSpec({
         ).state
         fun answer(search: PeopleSearch) = PeopleHomeReads.arrived(listOf(AppQueryResponse(people_search = search)))
         val none = PeopleHomeMachine.reduce(typed, answer(PeopleSearch())).state
-        none.search.shouldNotBeNull().ask shouldBe "Find zzqx"
-        none.search_data.shouldNotBeNull().empty.shouldNotBeNull().action_label shouldBe "Ask about “zzqx”"
-        // A person found is no Ask.
+        none.search.shouldNotBeNull().ask_row shouldBe SearchAsk(label = "Ask about “zzqx”", question = "Find zzqx", scope = "people")
+        none.search_data.shouldNotBeNull().empty.shouldNotBeNull().action_label shouldBe ""
+        // A person found still has Ask at the foot.
         val found = PeopleHomeMachine.reduce(typed, answer(PeopleSearch(people = listOf(centraid.core.v1.PeopleRosterRow(party_id = "p1", name = "Dana"))))).state
-        found.search.shouldNotBeNull().ask shouldBe ""
+        found.search.shouldNotBeNull().ask_row shouldBe none.search.shouldNotBeNull().ask_row
         // A new term, a close and a denial clear it; an answer for a closed search sets none.
         PeopleHomeMachine.reduce(none, PeopleHomeEvent(search_term = PeopleHomeEvent.SearchTermChanged(term = "zzq")))
-            .state.search.shouldNotBeNull().ask shouldBe ""
+            .state.search.shouldNotBeNull().ask_row shouldBe null
         PeopleHomeMachine.reduce(none, PeopleHomeEvent(search_closed = PeopleHomeEvent.SearchClosed()))
-            .state.search.shouldNotBeNull().ask shouldBe ""
+            .state.search.shouldNotBeNull().ask_row shouldBe null
         PeopleHomeMachine.reduce(none, PeopleHomeReads.denied(AppQueryDenial(message = "No grant for people.")))
-            .state.search.shouldNotBeNull().ask shouldBe ""
+            .state.search.shouldNotBeNull().ask_row shouldBe null
         val closed = PeopleHomeMachine.reduce(typed, PeopleHomeEvent(search_closed = PeopleHomeEvent.SearchClosed())).state
-        PeopleHomeMachine.reduce(closed, answer(PeopleSearch())).state.search.shouldNotBeNull().ask shouldBe ""
+        PeopleHomeMachine.reduce(closed, answer(PeopleSearch())).state.search.shouldNotBeNull().ask_row shouldBe null
     }
 
     // --- Home: Touch -----------------------------------------------------
@@ -469,7 +470,7 @@ class PeopleSpec : StringSpec({
 
     // --- Person ------------------------------------------------------------
 
-    fun sheet(touchesKnown: Boolean = true, channelsKnown: Boolean = true) = PeoplePerson(
+    fun sheet() = PeoplePerson(
         today = TODAY,
         sheet = PeopleSheet(
             person = person("p1", "Dana Reyes", { it.copy(role = "Designer", cadence_days = 14, last_contacted_at = "2026-06-12T10:00:00.000Z", days_since_contact = 3) }),
@@ -481,8 +482,6 @@ class PeopleSpec : StringSpec({
             ),
             dates = listOf(PeopleDate(date_id = "d1", label = "Birthday", month_day = "08-14", reminder_on = true, in_days = 60)),
             notes = listOf(PeopleNote(annotation_id = "n1", text = "Loves ceramics", created_at = "2026-06-15T08:00:00.000Z", created_local_day = "2026-06-15")),
-            channels_known = channelsKnown,
-            touches_known = touchesKnown,
             touches = listOf(PeopleTouchEntry(interaction_id = "i1", kind = "call", text = "Caught up", occurred_at = "2026-06-12T10:00:00.000Z", occurred_local_day = "2026-06-12")),
         ),
     )
@@ -522,31 +521,12 @@ class PeopleSpec : StringSpec({
         // THE LOG v0 NEVER SHOWED.
         data.touches.single().kind_label shouldBe "Call"
         data.touches_head.shouldNotBeNull().count shouldBe 1
-        // A KNOWN RAIL says its count and no unreadable sentence.
+        // A RAIL says its count and no empty sentence.
         data.channels_head.shouldNotBeNull().count shouldBe 2
         data.channels_empty shouldBe ""
     }
 
-    "an unreadable contact rail is said, not drawn as no channels, and the rest of the sheet stands" {
-        val unknown = run(
-            PeoplePersonMachine,
-            PeoplePersonMachine.initial(),
-            PeoplePersonEvent(opened = PeoplePersonEvent.Opened(party_id = "p1")),
-            PeoplePersonReads.arrived(listOf(AppQueryResponse(people_person = sheet(channelsKnown = false).let { asked ->
-                // The core sends no channels with a refused plane, whatever else it knows.
-                asked.copy(sheet = asked.sheet?.copy(channels = emptyList()))
-            }))),
-        ).state.data_.shouldNotBeNull()
-        unknown.channels.shouldBeEmpty()
-        unknown.channels_empty shouldBe "The channels could not be read."
-        unknown.channels_head.shouldNotBeNull().count.shouldBeNull()
-        // THE SHEET STANDS: the person, the dates, the notes and the log are all there.
-        unknown.name shouldBe "Dana Reyes"
-        unknown.dates.single().label shouldBe "Birthday"
-        unknown.notes.single().text shouldBe "Loves ceramics"
-        unknown.touches.single().kind_label shouldBe "Call"
-
-        // KNOWN AND EMPTY IS A FACT, said in its own words.
+    "a person with no channels says so" {
         val empty = run(
             PeoplePersonMachine,
             PeoplePersonMachine.initial(),
@@ -559,17 +539,7 @@ class PeopleSpec : StringSpec({
         empty.channels_head.shouldNotBeNull().count shouldBe 0
     }
 
-    "an unreadable touch log is said, not drawn as nothing; a person who is not there is gone, not an error" {
-        val unknown = run(
-            PeoplePersonMachine,
-            PeoplePersonMachine.initial(),
-            PeoplePersonEvent(opened = PeoplePersonEvent.Opened(party_id = "p1")),
-            PeoplePersonReads.arrived(listOf(AppQueryResponse(people_person = sheet(touchesKnown = false)))),
-        ).state.data_.shouldNotBeNull()
-        unknown.touches.shouldBeEmpty()
-        unknown.touches_empty shouldBe "The touch log could not be read."
-        unknown.touches_head.shouldNotBeNull().count.shouldBeNull()
-
+    "a person who is not there is gone, not an error" {
         val gone = run(
             PeoplePersonMachine,
             PeoplePersonMachine.initial(),
@@ -596,8 +566,8 @@ class PeopleSpec : StringSpec({
             PeoplePersonEvent(submitted = PeoplePersonEvent.SheetSubmitted()),
         )
         val write = sent.effects.single() as ScreenEffect.SubmitWrite
-        write.command shouldBe "people.log_interaction"
-        write.inputJson shouldBe """{"party_id":"p1","kind":"met up","text":"Coffee in town"}"""
+        write.command shouldBe "person.log_interaction"
+        write.inputJson shouldBe """{"id":"p1","kind":"met up","text":"Coffee in town"}"""
         sent.state.sheet.shouldNotBeNull().log_touch.shouldNotBeNull().frame.shouldNotBeNull().sending shouldBe true
 
         val refused = PeoplePersonMachine.reduce(sent.state, PeoplePersonEvent(write_settled = settled(write.invokeKey, false, "That person is in the trash."))).state
@@ -627,7 +597,7 @@ class PeopleSpec : StringSpec({
         val fixed = PeoplePersonMachine.reduce(typed, PeoplePersonEvent(second_text = PeoplePersonEvent.SecondTextChanged(text = "02-29")))
         fixed.state.sheet.shouldNotBeNull().date.shouldNotBeNull().frame.shouldNotBeNull().submit_enabled shouldBe true
         val write = PeoplePersonMachine.reduce(fixed.state, PeoplePersonEvent(submitted = PeoplePersonEvent.SheetSubmitted())).effects.single() as ScreenEffect.SubmitWrite
-        write.inputJson shouldBe """{"party_id":"p1","label":"Birthday","month_day":"02-29","reminder_on":true}"""
+        write.inputJson shouldBe """{"id":"p1","label":"Birthday","month_day":"02-29","reminder_on":true}"""
     }
 
     "move to trash and remove a channel are asked first in full sentences; the trash commit pops the screen" {
@@ -638,7 +608,7 @@ class PeopleSpec : StringSpec({
         confirm.destructive shouldBe true
         val sent = PeoplePersonMachine.reduce(asked, PeoplePersonEvent(confirmed = PeoplePersonEvent.Confirmed()))
         val write = sent.effects.single() as ScreenEffect.SubmitWrite
-        write.command shouldBe "people.trash_person"
+        write.command shouldBe "entity.trash"
         sent.state.confirm.shouldBeNull()
         val done = PeoplePersonMachine.reduce(sent.state, PeoplePersonEvent(write_settled = settled(write.invokeKey, true))).state
         done.done shouldBe true
@@ -649,7 +619,7 @@ class PeopleSpec : StringSpec({
         PeoplePersonMachine.reduce(channel, PeoplePersonEvent(dismissed = PeoplePersonEvent.Dismissed())).state.confirm.shouldBeNull()
     }
 
-    "merge is a choices sheet from the roster, without the person themselves, then a confirm, then core.merge_party" {
+    "merge is a choices sheet from the roster, without the person themselves, then a confirm, then person.merge" {
         val opened = PeoplePersonMachine.reduce(
             personOpened().state,
             PeoplePersonEvent(sheet_opened = PeoplePersonEvent.SheetOpened(which = PeoplePersonEvent.SheetOpened.Which.WHICH_MERGE)),
@@ -666,7 +636,7 @@ class PeopleSpec : StringSpec({
                     AppQueryResponse(people_person = sheet()),
                     AppQueryResponse(
                         people_roster = PeopleRoster(
-                            people = listOf(person("p1", "Dana Reyes"), person("p2", "Dana R", { it.copy(avatar_color = "var(--c-rose)") })),
+                            people = listOf(person("p1", "Dana Reyes"), person("p2", "Dana R", { it })),
                         ),
                     ),
                 ),
@@ -675,7 +645,7 @@ class PeopleSpec : StringSpec({
         val merge = choices.sheet.shouldNotBeNull().merge.shouldNotBeNull()
         merge.title shouldBe "Merge in"
         merge.choices.shouldNotBeNull().choices.map { it.party_id } shouldBe listOf("p2")
-        merge.choices.shouldNotBeNull().choices.single().avatar.shouldNotBeNull().hue_key shouldBe "cRose"
+        merge.choices.shouldNotBeNull().choices.single().avatar.shouldNotBeNull().hue_key shouldBe PeopleWords.hueKey("p2")
 
         val confirm = PeoplePersonMachine.reduce(choices, PeoplePersonEvent(merge_picked = PeoplePersonEvent.MergePicked(party_id = "p2"))).state
         confirm.sheet.shouldBeNull()
@@ -683,8 +653,8 @@ class PeopleSpec : StringSpec({
         confirm.confirm.shouldNotBeNull().body shouldBe "Merging cannot be undone."
         val sent = PeoplePersonMachine.reduce(confirm, PeoplePersonEvent(confirmed = PeoplePersonEvent.Confirmed()))
         val write = sent.effects.single() as ScreenEffect.SubmitWrite
-        write.command shouldBe "core.merge_party"
-        write.inputJson shouldBe """{"survivor_party_id":"p1","merged_party_id":"p2"}"""
+        write.command shouldBe "person.merge"
+        write.inputJson shouldBe """{"into":"p1","from":"p2"}"""
         PeoplePersonMachine.reduce(sent.state, PeoplePersonEvent(write_settled = settled(write.invokeKey, true))).state.status shouldBe
             "Dana R merged into Dana Reyes"
 
@@ -700,7 +670,7 @@ class PeopleSpec : StringSpec({
         PeoplePersonMachine.TABLES.forEach { table ->
             withClue(table) { PeoplePersonMachine.rowsChanged(table, emptyList()).shouldNotBeNull() }
         }
-        val moved = PeoplePersonMachine.reduce(personOpened().state, PeoplePersonMachine.rowsChanged("knowledge_annotation", listOf("n2"))!!)
+        val moved = PeoplePersonMachine.reduce(personOpened().state, PeoplePersonMachine.rowsChanged("note", listOf("n2"))!!)
         moved.effects shouldBe listOf(ScreenEffect.ReadPage("people.person", null))
     }
 
@@ -729,14 +699,14 @@ class PeopleSpec : StringSpec({
         tick.delayMs shouldBe AutosaveLaw.DEBOUNCE_MS
         val saved = PeopleEditorMachine.reduce(typed.state, PeopleEditorMachine.ticked(tick.token))
         val write = saved.effects.single() as ScreenEffect.SubmitWrite
-        write.command shouldBe "people.edit_person"
-        write.inputJson shouldBe """{"party_id":"p1","met":"At the studio"}"""
-        write.invokeKey shouldBe "people.edit_person:p1:seq=1"
+        write.command shouldBe "person.edit"
+        write.inputJson shouldBe """{"id":"p1","met":"At the studio"}"""
+        write.invokeKey shouldBe "person.edit:p1:seq=1"
         saved.state.save_label shouldBe "Saving…"
 
         // Close before the tick: the words are saved now.
         val left = PeopleEditorMachine.reduce(typed.state, PeopleEditorMachine.left())
-        (left.effects.single() as ScreenEffect.SubmitWrite).command shouldBe "people.edit_person"
+        (left.effects.single() as ScreenEffect.SubmitWrite).command shouldBe "person.edit"
 
         // A name cleared to nothing is refused here, and the words stay.
         val blank = run(
@@ -762,8 +732,8 @@ class PeopleSpec : StringSpec({
         ).state
         val step = PeopleEditorMachine.reduce(loaded, PeopleEditorEvent(cadence = PeopleEditorEvent.CadencePicked(days = 30)))
         val write = step.effects.single() as ScreenEffect.SubmitWrite
-        write.command shouldBe "people.set_cadence"
-        write.inputJson shouldBe """{"party_id":"p1","cadence_days":30}"""
+        write.command shouldBe "person.edit"
+        write.inputJson shouldBe """{"id":"p1","cadence_days":30}"""
         step.state.cadences.single { it.selected }.days shouldBe 30L
         // It is not an autosaved field: nothing else is owed.
         step.state.autosave.shouldNotBeNull().phase shouldBe Autosave.Phase.PHASE_CLEAN
@@ -793,16 +763,16 @@ class PeopleSpec : StringSpec({
         typed.state.chrome.shouldNotBeNull().close_label shouldBe "Done"
         val add = PeopleEditorMachine.reduce(typed.state, PeopleEditorMachine.left())
         val write = add.effects.single() as ScreenEffect.SubmitWrite
-        write.command shouldBe "people.add_person"
-        write.inputJson shouldBe """{"party_id":"new-1","display_name":"Ana","cadence_days":7}"""
+        write.command shouldBe "person.add"
+        write.inputJson shouldBe """{"id":"new-1","title":"Ana","cadence_days":7}"""
 
         // add_person takes no how-you-met: it is owed, and goes by edit_person.
         val created = PeopleEditorMachine.reduce(add.state, PeopleEditorEvent(write_settled = settled(write.invokeKey, true)))
         created.state.created shouldBe true
         val tick = created.effects.single() as ScreenEffect.Schedule
         val edit = PeopleEditorMachine.reduce(created.state, PeopleEditorMachine.ticked(tick.token)).effects.single() as ScreenEffect.SubmitWrite
-        edit.command shouldBe "people.edit_person"
-        edit.inputJson shouldBe """{"party_id":"new-1","met":"School"}"""
+        edit.command shouldBe "person.edit"
+        edit.inputJson shouldBe """{"id":"new-1","met":"School"}"""
     }
 
     "words typed while the add is in flight are an edit of the person it made, never a second add_person (#1089)" {
@@ -815,7 +785,7 @@ class PeopleSpec : StringSpec({
         val named = PeopleEditorMachine.reduce(opened.state, PeopleEditorEvent(name = PeopleEditorEvent.NameChanged(text = "Ana")))
         val add = PeopleEditorMachine.reduce(named.state, PeopleEditorMachine.left())
         val write = add.effects.single() as ScreenEffect.SubmitWrite
-        write.command shouldBe "people.add_person"
+        write.command shouldBe "person.add"
         // THE MEMBER KEEPS TYPING while the create is in flight; it waits for the answer.
         val typing = PeopleEditorMachine.reduce(add.state, PeopleEditorEvent(nickname = PeopleEditorEvent.NicknameChanged(text = "Annie")))
         typing.effects.filterIsInstance<ScreenEffect.SubmitWrite>().shouldBeEmpty()
@@ -823,8 +793,8 @@ class PeopleSpec : StringSpec({
         created.state.created shouldBe true
         // What the commit sends next is an edit of the person that now exists.
         val next = created.effects.filterIsInstance<ScreenEffect.SubmitWrite>().single()
-        next.command shouldBe "people.edit_person"
-        next.inputJson shouldBe """{"party_id":"new-1","nickname":"Annie"}"""
+        next.command shouldBe "person.edit"
+        next.inputJson shouldBe """{"id":"new-1","nickname":"Annie"}"""
     }
 
     // --- Trash -------------------------------------------------------------
@@ -894,7 +864,7 @@ class PeopleSpec : StringSpec({
         ).state
         val data = landed.data_.shouldNotBeNull()
         data.rows.single().meta shouldBe "Designer · Deleted Mon 15 June · Erased Wed 15 July"
-        // DELETE FOREVER is `people.purge_person`; there is no emptying.
+        // DELETE FOREVER is `entity.purge`; there is no emptying.
         data.rows.single().purge_label shouldBe SharedCopy.TRASH_PURGE
         data.rows.single().restore_label shouldBe SharedCopy.TRASH_RESTORE
         data.empty_label shouldBe ""
@@ -904,15 +874,15 @@ class PeopleSpec : StringSpec({
         asked.confirm.shouldNotBeNull().body shouldBe PeopleCopy.TRASH_PURGE_BODY
         val purged = PeopleTrashMachine.reduce(asked, TrashListEvent(confirmed = TrashListEvent.Confirmed()))
         (purged.effects.single() as ScreenEffect.SubmitWrite).let {
-            it.command shouldBe "people.purge_person"
-            it.inputJson shouldBe """{"party_id":"p1"}"""
+            it.command shouldBe "entity.purge"
+            it.inputJson shouldBe """{"id":"p1"}"""
         }
         val restore = PeopleTrashMachine.reduce(landed, TrashListEvent(restore = TrashListEvent.RestoreTapped(id = "p1")))
         val write = restore.effects.single() as ScreenEffect.SubmitWrite
-        write.command shouldBe "people.restore_person"
-        write.inputJson shouldBe """{"party_id":"p1"}"""
-        // A profile's key is its profile_id, never a shown party id: re-read anyway.
-        PeopleTrashMachine.reduce(landed, PeopleTrashMachine.rowsChanged("people_profile", listOf("prof-9"))!!)
+        write.command shouldBe "entity.restore"
+        write.inputJson shouldBe """{"id":"p1"}"""
+        // An entity change covers every kind and the shelf lists people only: re-read anyway.
+        PeopleTrashMachine.reduce(landed, PeopleTrashMachine.rowsChanged("entity", listOf("prof-9"))!!)
             .effects shouldBe listOf(ScreenEffect.ReadPage("people.trash", null))
         val state: TrashListState = landed
         state.app_id shouldBe "people"

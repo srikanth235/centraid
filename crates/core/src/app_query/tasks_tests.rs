@@ -34,7 +34,7 @@ impl Scratch {
     /// Founded with the vault clock stopped at `now` — the way to stand inside
     /// the hours a run happened to miss (#1090).
     fn founded_at(now: &str) -> Self {
-        let dir = centraid_ontology::golden::scratch_dir();
+        let dir = centraid_ontology::scratch::scratch_dir();
         std::fs::create_dir_all(&dir).expect("the directory is made");
         let now = centraid_vault::time::recurrence::parse_instant_ms(now).expect("an instant");
         let clock = std::sync::Arc::new(centraid_vault::clock::FixedClock::at(now));
@@ -105,7 +105,7 @@ impl Scratch {
     }
 
     fn add(&self, input: serde_json::Value) -> String {
-        self.run("schedule.add_task", input)["task_id"]
+        self.run("task.add", input)["id"]
             .as_str()
             .expect("a task id")
             .to_owned()
@@ -114,7 +114,7 @@ impl Scratch {
     fn titled(&self, title: &str, due: Option<&str>) -> String {
         let mut input = serde_json::json!({ "title": title });
         if let Some(due) = due {
-            input["due_at"] = serde_json::json!(due);
+            input["due"] = serde_json::json!(due);
         }
         self.add(input)
     }
@@ -235,7 +235,7 @@ fn the_board_groups_today_in_the_request_zone() {
     assert!(!today.truncated);
 }
 
-/// THE TRASH IS NOT THE BOARD. `schedule.delete_task` trashes a task and its
+/// THE TRASH IS NOT THE BOARD. `entity.trash` trashes a task and its
 /// subtasks; before #1046 every board statement brought them back — on the
 /// open board, in the logbook, and as a promoted orphan.
 #[test]
@@ -243,20 +243,11 @@ fn a_trashed_task_and_its_family_are_on_no_place() {
     let scratch = Scratch::founded();
     let kept = scratch.titled("Kept", None);
     let parent = scratch.titled("Trashed parent", Some("2099-06-05"));
-    let child = scratch.add(serde_json::json!({ "title": "Its child", "parent_task_id": parent }));
+    let child = scratch.add(serde_json::json!({ "title": "Its child", "parent_id": parent }));
     let done = scratch.titled("Done then trashed", None);
-    scratch.run(
-        "schedule.set_task_status",
-        serde_json::json!({ "task_id": done, "status": "completed" }),
-    );
-    scratch.run(
-        "schedule.delete_task",
-        serde_json::json!({ "task_id": parent }),
-    );
-    scratch.run(
-        "schedule.delete_task",
-        serde_json::json!({ "task_id": done }),
-    );
+    scratch.run("task.complete", serde_json::json!({ "id": done }));
+    scratch.run("entity.trash", serde_json::json!({ "id": parent }));
+    scratch.run("entity.trash", serde_json::json!({ "id": done }));
 
     let all = scratch.board(wire::TasksView::All);
     let logbook = scratch.board(wire::TasksView::Logbook);
@@ -283,13 +274,13 @@ fn a_trashed_task_and_its_family_are_on_no_place() {
 fn local_times_follow_daylight_saving_and_the_reminder_is_read() {
     let scratch = Scratch::founded();
     scratch.add(serde_json::json!({
-        "title": "Winter", "due_at": "2100-01-15T14:00:00.000Z", "remind_before_min": 30,
+        "title": "Winter", "due": "2100-01-15T14:00:00.000Z", "remind_before_min": 30,
     }));
     scratch.add(serde_json::json!({
-        "title": "Summer", "due_at": "2099-07-15T14:00:00.000Z", "remind_before_min": 90,
+        "title": "Summer", "due": "2099-07-15T14:00:00.000Z", "remind_before_min": 90,
     }));
     scratch.add(serde_json::json!({
-        "title": "Dated only", "due_at": "2099-07-20", "remind_before_min": 15,
+        "title": "Dated only", "due": "2099-07-20", "remind_before_min": 15,
     }));
     let all = scratch.board(wire::TasksView::All);
     let dated = &all.groups[0];
@@ -319,7 +310,7 @@ fn local_times_follow_daylight_saving_and_the_reminder_is_read() {
 fn a_repeating_task_carries_its_summary_and_next_period() {
     let scratch = Scratch::founded();
     let daily = scratch.add(serde_json::json!({
-        "title": "Water the plants", "due_at": "2099-05-20", "rrule": "FREQ=DAILY",
+        "title": "Water the plants", "due": "2099-05-20", "rule": "FREQ=DAILY",
     }));
     let detail = scratch.detail(&daily);
     let task = detail.task.expect("the task");
@@ -346,7 +337,7 @@ fn a_repeating_task_due_by_date_is_on_today_at_every_hour_of_the_devices_day() {
     // 04:00Z is midnight in New York (EDT) on 7 October.
     let scratch = Scratch::founded_at("2026-10-07T04:00:00.000Z");
     let daily = scratch.add(serde_json::json!({
-        "title": "Water the plants", "due_at": "2026-10-03", "rrule": "FREQ=DAILY",
+        "title": "Water the plants", "due": "2026-10-03", "rule": "FREQ=DAILY",
     }));
     let mut problems: Vec<String> = Vec::new();
     for _ in 0..96 {
@@ -408,7 +399,7 @@ fn the_round_trip_specs_daily_task_is_on_today_at_the_hours_it_failed() {
             wall_iso(add_wall_days(today, -4), false)
         };
         let daily = scratch.add(serde_json::json!({
-            "title": "Tasks spec daily", "due_at": due, "rrule": "FREQ=DAILY",
+            "title": "Tasks spec daily", "due": due, "rule": "FREQ=DAILY",
         }));
         let board = scratch.board(wire::TasksView::Today);
         let row = board
@@ -437,14 +428,11 @@ fn the_round_trip_specs_daily_task_is_on_today_at_the_hours_it_failed() {
 fn completing_a_date_only_occurrence_leaves_the_successor_on_the_calendar() {
     let scratch = Scratch::founded_at("2026-10-08T03:25:00.000Z");
     let daily = scratch.add(serde_json::json!({
-        "title": "Water the plants", "due_at": "2026-10-03", "rrule": "FREQ=DAILY",
+        "title": "Water the plants", "due": "2026-10-03", "rule": "FREQ=DAILY",
     }));
-    let done = scratch.run(
-        "schedule.set_task_status",
-        serde_json::json!({ "task_id": daily, "status": "completed" }),
-    );
-    assert_eq!(done["next_due_at"], serde_json::json!("2026-10-04"));
-    let successor = done["next_task_id"].as_str().expect("a successor");
+    let done = scratch.run("task.complete", serde_json::json!({ "id": daily }));
+    assert_eq!(done["next_due"], serde_json::json!("2026-10-04"));
+    let successor = done["next_id"].as_str().expect("a successor");
 
     let board = scratch.board(wire::TasksView::Today);
     assert_eq!(board.today, "2026-10-07", "23:25 on the 7th in New York");
@@ -464,35 +452,30 @@ fn completing_a_date_only_occurrence_leaves_the_successor_on_the_calendar() {
 fn the_detail_answers_the_family_and_the_filing() {
     let scratch = Scratch::founded();
     let project = scratch.run(
-        "schedule.save_project",
-        serde_json::json!({ "name": "House" }),
-    )["project_id"]
+        "container.create",
+        serde_json::json!({ "kind": "project", "title": "House" }),
+    )["id"]
         .as_str()
         .expect("a project")
         .to_owned();
     let section = scratch.run(
-        "schedule.save_section",
-        serde_json::json!({ "project_id": project, "name": "Kitchen" }),
-    )["section_id"]
+        "container.create",
+        serde_json::json!({ "kind": "section", "title": "Kitchen", "parent": project }),
+    )["id"]
         .as_str()
         .expect("a section")
         .to_owned();
     let parent = scratch.titled("Paint the kitchen", Some("2099-06-10"));
     scratch.run(
-        "schedule.organize_task",
+        "task.organize",
         serde_json::json!({
-            "task_id": parent, "project_id": project, "section_id": section, "sort_order": 1,
-            "tz": "Europe/London",
+            "id": parent, "project_id": project, "section_id": section, "position": 1,
+            "zone": "Europe/London",
         }),
     );
-    let open_child =
-        scratch.add(serde_json::json!({ "title": "Buy paint", "parent_task_id": parent }));
-    let done_child =
-        scratch.add(serde_json::json!({ "title": "Tape edges", "parent_task_id": parent }));
-    scratch.run(
-        "schedule.set_task_status",
-        serde_json::json!({ "task_id": done_child, "status": "completed" }),
-    );
+    let open_child = scratch.add(serde_json::json!({ "title": "Buy paint", "parent_id": parent }));
+    let done_child = scratch.add(serde_json::json!({ "title": "Tape edges", "parent_id": parent }));
+    scratch.run("task.complete", serde_json::json!({ "id": done_child }));
 
     let detail = scratch.detail(&parent);
     let task = detail.task.expect("the task");
@@ -552,13 +535,13 @@ fn the_detail_answers_the_family_and_the_filing() {
 #[test]
 fn search_answers_ranked_live_tasks() {
     let scratch = Scratch::founded();
-    let cabin = scratch.titled("Book the cabin", Some("2099-06-03"));
+    // The title alone is a hit without an excerpt; the words about it are the snippet.
+    let cabin = scratch.add(serde_json::json!({
+        "title": "Book the cabin", "due": "2099-06-03", "description": "the cabin by the lake",
+    }));
     let trashed = scratch.titled("Cabin deposit", None);
     scratch.titled("Dentist", None);
-    scratch.run(
-        "schedule.delete_task",
-        serde_json::json!({ "task_id": trashed }),
-    );
+    scratch.run("entity.trash", serde_json::json!({ "id": trashed }));
     let search = |limit: u32| {
         scratch.ask(Q::TasksSearch(wire::TasksSearchRequest {
             term: "cabin".to_owned(),
@@ -593,7 +576,10 @@ fn search_answers_ranked_live_tasks() {
 #[test]
 fn a_typo_finds_the_task_and_says_what_it_searched() {
     let scratch = Scratch::founded();
-    let cabin = scratch.titled("Book the cabin", Some("2099-06-03"));
+    // The title alone is a hit without an excerpt; the words about it are the snippet.
+    let cabin = scratch.add(serde_json::json!({
+        "title": "Book the cabin", "due": "2099-06-03", "description": "the cabin by the lake",
+    }));
     scratch.titled("Dentist", None);
     let search = |term: &str| {
         let A::TasksSearch(found) = scratch
@@ -641,7 +627,7 @@ fn catch_up_names_a_long_absence() {
     let late: Vec<&str> = piles.dated.iter().map(|task| task.title.as_str()).collect();
     assert_eq!(late, ["Ten days late", "Yesterday"]);
     assert!(piles.repeating.is_empty());
-    // `sitting` is not asserted here: `schedule.add_task` stamps `created_at`
+    // `sitting` is not asserted here: `task.add` stamps `created_at`
     // from SQLite's own clock, not the vault clock this test stops in 2099, so
     // every task made here "sat" since today's real date (an owner question in
     // the crate README). `views`' own tests cover the pile.
@@ -720,9 +706,9 @@ fn a_tasks_denial_is_answered_as_the_denied_arm() {
 fn a_project_is_found_by_name_beside_the_tasks() {
     let scratch = Scratch::founded();
     let project = scratch.run(
-        "schedule.save_project",
-        serde_json::json!({ "name": "Kitchen refit" }),
-    )["project_id"]
+        "container.create",
+        serde_json::json!({ "kind": "project", "title": "Kitchen refit" }),
+    )["id"]
         .as_str()
         .expect("a project id")
         .to_owned();
@@ -747,14 +733,14 @@ fn a_project_is_found_by_name_beside_the_tasks() {
     let hit = &found.containers[0];
     assert_eq!(
         (hit.entity.as_str(), hit.id.as_str(), hit.app_id.as_str()),
-        ("schedule.project", project.as_str(), "tasks")
+        ("project", project.as_str(), "tasks")
     );
     assert_eq!(hit.title, "Kitchen refit");
 
     // A WORD ONLY THE PROJECT HOLDS, slipped: corrected, and the project found.
     scratch.run(
-        "schedule.save_project",
-        serde_json::json!({ "name": "Wombat shelter" }),
+        "container.create",
+        serde_json::json!({ "kind": "project", "title": "Wombat shelter" }),
     );
     let slipped = search("womabt");
     assert_eq!(slipped.corrected, "wombat");
@@ -778,7 +764,7 @@ fn priority_runs_higher_more_urgent_and_subtasks_are_ordered_that_way() {
     let scratch = Scratch::founded();
     let parent = scratch.titled("Parent", None);
     let child = |title: &str, priority: Option<i64>| {
-        let mut input = serde_json::json!({ "title": title, "parent_task_id": parent });
+        let mut input = serde_json::json!({ "title": title, "parent_id": parent });
         if let Some(priority) = priority {
             input["priority"] = serde_json::json!(priority);
         }
@@ -816,4 +802,41 @@ fn priority_runs_higher_more_urgent_and_subtasks_are_ordered_that_way() {
         "{}",
         centraid_assist::native::meta::PRIORITY_SCALE
     );
+}
+
+/// THE TRASH SHELF is the entity's: the trashed tasks and the subtasks that went with
+/// them, each day read in the request zone, and a restore empties it.
+#[test]
+fn the_trash_shelf_lists_what_was_trashed_with_its_days_in_the_request_zone() {
+    let scratch = Scratch::founded();
+    let parent = scratch.titled("Move house", None);
+    let child = scratch.add(serde_json::json!({ "title": "Pack the books", "parent_id": parent }));
+    scratch.titled("Kept", None);
+    let shelf = || {
+        let A::TasksTrash(shelf) = scratch
+            .ask(Q::TasksTrash(wire::TasksTrashRequest { tz: TZ.to_owned() }))
+            .expect("the shelf answers")
+        else {
+            panic!("the shelf answered as something else");
+        };
+        shelf
+    };
+    assert!(shelf().tasks.is_empty());
+    scratch.run("entity.trash", serde_json::json!({ "id": parent }));
+    let trashed = shelf();
+    let mut titles: Vec<&str> = trashed.tasks.iter().map(|row| row.title.as_str()).collect();
+    titles.sort_unstable();
+    assert_eq!(titles, ["Move house", "Pack the books"]);
+    let row = trashed
+        .tasks
+        .iter()
+        .find(|row| row.task_id == child)
+        .expect("the subtask is a row of its own");
+    assert_eq!(
+        row.deleted_local_day, "2099-06-01",
+        "22:00 on the 1st in New York"
+    );
+    assert_eq!(row.purge_local_day, "2099-07-01", "thirty days on");
+    scratch.run("entity.restore", serde_json::json!({ "id": parent }));
+    assert!(shelf().tasks.is_empty());
 }

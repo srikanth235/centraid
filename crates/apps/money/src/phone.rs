@@ -603,7 +603,6 @@ pub struct RuleOffer {
     pub pattern: String,
     pub category_id: String,
     pub category_label: String,
-    pub display_name: String,
     pub support: usize,
     pub of: usize,
 }
@@ -649,7 +648,6 @@ fn offer_of(rule: RuleProposal, data: &MoneyData) -> RuleOffer {
         pattern: rule.pattern,
         category_label: data.label(&rule.category_concept_id),
         category_id: rule.category_concept_id,
-        display_name: rule.display_name,
         support: rule.support,
         of: rule.of,
     }
@@ -728,7 +726,6 @@ pub fn transaction(
             description: r.description.clone(),
             posted_on: r.posted_on.clone(),
             category_concept_id: r.category_concept_id.clone(),
-            member_name: None,
         })
         .collect();
     let rule_proposal = row.category_concept_id.as_ref().and_then(|_| {
@@ -737,10 +734,6 @@ pub fn transaction(
             description: row.description.clone(),
             posted_on: row.posted_on.clone(),
             category_concept_id: row.category_concept_id.clone(),
-            member_name: row
-                .display_name
-                .clone()
-                .filter(|_| row.display_name_source.as_deref() == Some("member")),
         };
         rules::propose_rule(
             &data.rules,
@@ -975,7 +968,6 @@ pub struct RuleLine {
     pub amount_max: Option<i64>,
     pub account_label: Option<String>,
     pub category_label: Option<String>,
-    pub display_name: Option<String>,
     pub specificity: u32,
 }
 
@@ -1001,7 +993,6 @@ pub fn rules(door: &dyn PageDoor) -> KitResult<MoneyRules> {
                 amount_max: rule.amount_max_minor,
                 account_label: rule.account_id.as_deref().map(|id| data.account_name(id)),
                 category_label: rule.category_concept_id.as_deref().map(|id| data.label(id)),
-                display_name: rule.display_name.clone(),
                 specificity: rules::specificity(rule),
             })
             .collect(),
@@ -1175,19 +1166,8 @@ pub fn recurring_screen(door: &dyn PageDoor, today: &str) -> KitResult<MoneyRecu
                 .find(|p| p.status != Status::Paid)
                 .or_else(|| projected.last())
                 .map_or(Status::Due, |p| p.status);
-            // A member sees the name a rule would give it, else the merchant.
-            let applied = rules::apply(
-                &data.rules,
-                &rules::Candidate {
-                    description: &s.merchant_key,
-                    amount_minor: s.median_amount_minor,
-                    account_id: &s.account_id,
-                },
-            );
             RecurringLine {
-                merchant: applied
-                    .display_name
-                    .unwrap_or_else(|| s.merchant_key.clone()),
+                merchant: s.merchant_key.clone(),
                 account_label: data.account_name(&s.account_id),
                 cadence: s.cadence,
                 cadence_words: s.cadence.words(),
@@ -1237,39 +1217,45 @@ pub fn home_tile(door: &dyn PageDoor, month: &str, today: &str) -> KitResult<Mon
 // Search.
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// The lines a search found, best match first, as Activity draws them.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct MoneySearch {
-    pub term: String,
     pub rows: Vec<ActivityRow>,
-    pub total_matches: usize,
-    pub corrected: Option<String>,
-    pub truncated: bool,
-    /// How many months back the walk went.
-    pub months_walked: usize,
 }
 
-/// Search from `month` back (R-1099-44).
+/// Search the whole ledger for `term` ([`queries::load_search_term`]), and
+/// report a denial the way every search does.
+///
+/// There is no month to start from and no reach to state: the index holds every
+/// line, so a line from years ago is found as readily as last week's.
 pub fn search(
     door: &dyn PageDoor,
-    month: &str,
+    search: &dyn centraid_search::Search,
     term: &str,
     limit: usize,
     today: &str,
-) -> KitResult<MoneySearch> {
+) -> KitResult<(MoneySearch, Option<centraid_apps_kit::Denial>)> {
+    let (found, denial) = queries::load_search_term(
+        door,
+        search,
+        &centraid_search::Principal::Owner,
+        term,
+        limit,
+    )?;
+    if denial.is_some() || found.rows.is_empty() {
+        return Ok((MoneySearch::default(), denial));
+    }
     let data = MoneyData::load(door)?;
-    let hits = queries::search(door, month, term, limit)?;
-    Ok(MoneySearch {
-        term: term.to_owned(),
-        rows: hits
-            .rows
-            .iter()
-            .map(|r| activity_row(r, &data, today))
-            .collect(),
-        total_matches: hits.total_matches,
-        corrected: hits.corrected,
-        truncated: hits.truncated,
-        months_walked: queries::SEARCH_MONTHS,
-    })
+    Ok((
+        MoneySearch {
+            rows: found
+                .rows
+                .iter()
+                .map(|r| activity_row(r, &data, today))
+                .collect(),
+        },
+        None,
+    ))
 }
 
 // ---------------------------------------------------------------------------
@@ -1293,8 +1279,6 @@ pub struct ImportPlanRow {
     pub posted_on: Option<String>,
     pub amount: Option<Money>,
     pub description: Option<String>,
-    /// After the rules.
-    pub display_name: Option<String>,
     pub category_label: Option<String>,
     pub future_dated: bool,
     /// The existing transaction an `AlreadyIn` or a proposal points at.
@@ -1372,7 +1356,6 @@ pub fn import_plan(
                     .as_ref()
                     .map(|r| money(r.signed_minor(), currency)),
                 description: entry.row.as_ref().map(|r| r.description.clone()),
-                display_name: entry.row.as_ref().and_then(|r| r.display_name.clone()),
                 category_label: entry
                     .row
                     .as_ref()

@@ -25,7 +25,7 @@ impl Scratch {
     /// Founded with the vault clock stopped at `now` — the way to stand inside
     /// the hours a run happened to miss (#1090).
     fn founded_at(now: &str) -> Self {
-        let dir = centraid_ontology::golden::scratch_dir();
+        let dir = centraid_ontology::scratch::scratch_dir();
         std::fs::create_dir_all(&dir).expect("the directory is made");
         let now = centraid_vault::time::recurrence::parse_instant_ms(now).expect("an instant");
         let clock = std::sync::Arc::new(centraid_vault::clock::FixedClock::at(now));
@@ -39,6 +39,11 @@ impl Scratch {
         handle
             .with_vault(|vault| Ok(vault.found("Docs", "Owner")?))
             .expect("it founds");
+        // The phone's own byte store, as the shell opens it: a document written
+        // from words puts its bytes there.
+        handle
+            .open_own_bytes(dir.join("vault.bytes"))
+            .expect("the byte store opens");
         Self {
             dir,
             handle,
@@ -120,31 +125,43 @@ impl Scratch {
         (outcome.status, outcome.reason)
     }
 
+    /// A text document written from words, as the Add sheet's Text writes one.
     fn add(&self, title: &str, body: &str, folder_id: Option<&str>) -> String {
-        self.add_uri(
-            title,
-            &format!("data:text/plain;charset=utf-8,{body}"),
-            folder_id,
-        )
-    }
-
-    fn add_uri(&self, title: &str, data_uri: &str, folder_id: Option<&str>) -> String {
-        let mut input = serde_json::json!({ "title": title, "data_uri": data_uri });
+        let mut input = serde_json::json!({ "title": title, "body_text": body });
         if let Some(folder_id) = folder_id {
             input["folder_id"] = serde_json::json!(folder_id);
         }
-        self.run("core.add_document", input)["document_id"]
+        self.run("document.create_text", input)["id"]
+            .as_str()
+            .expect("a document id")
+            .to_owned()
+    }
+
+    /// A file of these bytes, staged the way a shell stages one and filed.
+    fn add_bytes(
+        &self,
+        title: &str,
+        bytes: &[u8],
+        media_type: &str,
+        folder_id: Option<&str>,
+    ) -> String {
+        let blob = self.stage(bytes, media_type);
+        let mut input = serde_json::json!({ "title": title, "blob": blob, "size": bytes.len(), "media_type": media_type });
+        if let Some(folder_id) = folder_id {
+            input["folder_id"] = serde_json::json!(folder_id);
+        }
+        self.run("document.add", input)["id"]
             .as_str()
             .expect("a document id")
             .to_owned()
     }
 
     fn folder(&self, name: &str, parent: Option<&str>) -> String {
-        let mut input = serde_json::json!({ "name": name });
+        let mut input = serde_json::json!({ "kind": "folder", "title": name });
         if let Some(parent) = parent {
-            input["parent_folder_id"] = serde_json::json!(parent);
+            input["parent"] = serde_json::json!(parent);
         }
-        self.run("core.create_folder", input)["folder_id"]
+        self.run("container.create", input)["id"]
             .as_str()
             .expect("a folder id")
             .to_owned()
@@ -237,13 +254,10 @@ fn a_trashed_document_is_excluded_from_the_drive_and_dated_in_trash() {
     let lease = scratch.add("Lease", "rent", None);
     let receipt = scratch.add("Receipt", "paid", None);
     scratch.run(
-        "core.star_document",
-        serde_json::json!({ "document_id": receipt }),
+        "flag.set",
+        serde_json::json!({ "id": receipt, "flag": "starred" }),
     );
-    scratch.run(
-        "core.trash_document",
-        serde_json::json!({ "document_id": receipt }),
-    );
+    scratch.run("entity.trash", serde_json::json!({ "id": receipt }));
 
     let all = scratch.shelf(wire::DocsShelf::All);
     assert_eq!(titles(&all), ["Lease"]);
@@ -306,16 +320,13 @@ fn a_truncated_window_does_not_truncate_trash_starred_or_recent() {
     }
     for index in [0, 1, 2] {
         scratch.run(
-            "core.star_document",
-            serde_json::json!({ "document_id": ids[index] }),
+            "flag.set",
+            serde_json::json!({ "id": ids[index], "flag": "starred" }),
         );
     }
     for index in [1, 3] {
         scratch.clock.advance_ms(60_000);
-        scratch.run(
-            "core.trash_document",
-            serde_json::json!({ "document_id": ids[index] }),
-        );
+        scratch.run("entity.trash", serde_json::json!({ "id": ids[index] }));
     }
     let at = |shelf: wire::DocsShelf| {
         scratch.drive(wire::DocsDriveRequest {
@@ -370,13 +381,10 @@ fn a_window_that_holds_the_drive_leaves_the_shelves_alone() {
     let kept = scratch.add("Kept", "body", None);
     let gone = scratch.add("Gone", "body", None);
     scratch.run(
-        "core.star_document",
-        serde_json::json!({ "document_id": kept }),
+        "flag.set",
+        serde_json::json!({ "id": kept, "flag": "starred" }),
     );
-    scratch.run(
-        "core.trash_document",
-        serde_json::json!({ "document_id": gone }),
-    );
+    scratch.run("entity.trash", serde_json::json!({ "id": gone }));
     for (shelf, expected) in [
         (wire::DocsShelf::All, vec!["Kept"]),
         (wire::DocsShelf::Starred, vec!["Kept"]),
@@ -414,10 +422,7 @@ fn a_fresh_trash_row_counts_thirty_days_whatever_the_calendar_did_in_between() {
     ] {
         let scratch = Scratch::founded_at(trashed_at);
         let document = scratch.add("Old lease", "rent", None);
-        scratch.run(
-            "core.trash_document",
-            serde_json::json!({ "document_id": document }),
-        );
+        scratch.run("entity.trash", serde_json::json!({ "id": document }));
         let trash = scratch.shelf(wire::DocsShelf::Trash);
         let row = &trash.documents[0];
         assert_eq!(row.trashed_at, trashed_at);
@@ -431,7 +436,7 @@ fn a_fresh_trash_row_counts_thirty_days_whatever_the_calendar_did_in_between() {
 }
 
 /// THE COUNTDOWN IS THE VAULT'S GATE (#1090). `purge_in_days > 0` is what
-/// enables Restore on the phone, and `core.restore_document` refuses once
+/// enables Restore on the phone, and `entity.restore` refuses once
 /// `purge_at <= now` — an instant. A count of civil days said 0 for the last
 /// local day of the window, hours before the vault would refuse, so the phone
 /// called the window lapsed while it was open. Whole days left, rounded up,
@@ -441,10 +446,7 @@ fn the_countdown_is_positive_exactly_while_the_vault_will_restore() {
     let trashed_at = "2026-10-08T04:10:00.000Z";
     let scratch = Scratch::founded_at(trashed_at);
     let document = scratch.add("Old lease", "rent", None);
-    scratch.run(
-        "core.trash_document",
-        serde_json::json!({ "document_id": document }),
-    );
+    scratch.run("entity.trash", serde_json::json!({ "id": document }));
     let days_left =
         |scratch: &Scratch| scratch.shelf(wire::DocsShelf::Trash).documents[0].purge_in_days;
 
@@ -461,25 +463,16 @@ fn the_countdown_is_positive_exactly_while_the_vault_will_restore() {
     // day and the vault still restores.
     scratch.advance_to("2026-11-07T03:10:00.000Z");
     assert_eq!(days_left(&scratch), 1, "an hour before the window closes");
-    scratch.run(
-        "core.restore_document",
-        serde_json::json!({ "document_id": document }),
-    );
+    scratch.run("entity.restore", serde_json::json!({ "id": document }));
 
     let lapsed = Scratch::founded_at(trashed_at);
     let document = lapsed.add("Old lease", "rent", None);
-    lapsed.run(
-        "core.trash_document",
-        serde_json::json!({ "document_id": document }),
-    );
+    lapsed.run("entity.trash", serde_json::json!({ "id": document }));
     lapsed.advance_to("2026-11-07T04:09:59.999Z");
     assert_eq!(days_left(&lapsed), 1, "a millisecond before purge_at");
     lapsed.advance_to("2026-11-07T04:10:00.000Z");
     assert_eq!(days_left(&lapsed), 0, "at purge_at the window has run out");
-    let (_, reason) = lapsed.refused(
-        "core.restore_document",
-        serde_json::json!({ "document_id": document }),
-    );
+    let (_, reason) = lapsed.refused("entity.restore", serde_json::json!({ "id": document }));
     assert!(reason.contains("grace window"), "{reason}");
     lapsed.advance_to("2026-11-08T16:10:00.000Z");
     assert!(days_left(&lapsed) < 0, "a day and a half late is negative");
@@ -541,8 +534,8 @@ fn the_version_history_is_newest_first_and_numbered_from_the_oldest() {
     let lease = scratch.add("Lease", "first", None);
     for body in ["second", "third"] {
         scratch.run(
-            "core.edit_document",
-            serde_json::json!({ "document_id": lease, "body_text": body }),
+            "document.edit",
+            serde_json::json!({ "id": lease, "body_text": body }),
         );
     }
     let opened = scratch.document(&lease);
@@ -562,9 +555,7 @@ fn the_version_history_is_newest_first_and_numbered_from_the_oldest() {
     assert!(opened.versions[1..].iter().all(|version| !version.current));
     assert_eq!(opened.versions[0].content_id, row.content_id);
     assert_eq!(opened.versions[2].size, "5 bytes");
-    // A text document's words are its body, not a file on this device.
-    assert!(!opened.bytes_held);
-    assert!(!opened.bytes_absent_reason.is_empty());
+    assert!(opened.bytes_held, "the words are a file in the store too");
 }
 
 /// BODY ABSENT IS NOT BODY EMPTY: an empty text document answers `Some("")`,
@@ -574,8 +565,8 @@ fn an_absent_body_and_an_empty_body_are_two_answers() {
     let scratch = Scratch::founded();
     let empty = scratch.add("Blank", "", None);
     assert_eq!(scratch.document(&empty).body.as_deref(), Some(""));
-    // 0xFF is not UTF-8: the one decoder writes no text row for it.
-    let undecodable = scratch.add_uri("Garbled", "data:text/plain;base64,/w==", None);
+    // 0xFF is not UTF-8: nothing extracted words from it, so there is no text row.
+    let undecodable = scratch.add_bytes("Garbled", &[0xFF], "text/plain", None);
     let opened = scratch.document(&undecodable);
     assert!(opened.document.is_some());
     assert_eq!(opened.body, None);
@@ -583,21 +574,14 @@ fn an_absent_body_and_an_empty_body_are_two_answers() {
 
 /// Filters compose, the sort is the member's, and a label is matched exactly.
 ///
-/// The Modified filter is proved in `crates/apps/docs/tests/phone.rs` and not
-/// here: `core.add_document` leaves `updated_at` to the
-/// `core_document_touch_updated_at` trigger, which stamps SQLite's own clock
-/// rather than the vault's, so under this suite's stopped clock a new row's
-/// `updated_at` is today's host date and not 2099's.
+/// The Modified filter is proved in `crates/apps/docs/tests/phone.rs`.
 #[test]
 fn filters_compose_and_the_sort_is_the_requests() {
     let scratch = Scratch::founded();
     let ten = scratch.add("Scan 10", "b", None);
     scratch.add("scan 2", "a", None);
     scratch.add("Budget.md", "c", None);
-    scratch.run(
-        "core.tag_item",
-        serde_json::json!({ "subject_type": "core.document", "subject_id": ten, "label": "Tax" }),
-    );
+    scratch.run("tag.add", serde_json::json!({ "id": ten, "label": "Tax" }));
     let by_name = scratch.drive(wire::DocsDriveRequest {
         sort: wire::DocsSort::Name as i32,
         ascending: true,
@@ -629,16 +613,35 @@ fn filters_compose_and_the_sort_is_the_requests() {
     assert!(nothing.documents.is_empty());
 }
 
-/// The activity rail reads the vault's own trail; the zone rule refuses a name
-/// the database does not know, as every app query does.
+/// The activity rail reads the journal: the commands that named the document,
+/// newest first. The zone rule refuses a name the database does not know, as
+/// every app query does.
 #[test]
 fn activity_answers_and_an_unknown_zone_is_refused() {
     let scratch = Scratch::founded();
-    let lease = scratch.add("Lease", "rent", None);
+    // A shell mints the id it files under, so the journal names the document
+    // from its very first command.
+    let lease = "11111111-1111-4111-8111-111111111111";
+    scratch.run(
+        "document.create_text",
+        serde_json::json!({ "id": lease, "title": "Lease", "body_text": "rent" }),
+    );
+    scratch.clock.advance_ms(60_000);
+    scratch.run(
+        "flag.set",
+        serde_json::json!({ "id": lease, "flag": "starred" }),
+    );
+    scratch.clock.advance_ms(60_000);
+    scratch.run(
+        "document.edit",
+        serde_json::json!({ "id": lease, "body_text": "rent due" }),
+    );
+    let other = scratch.add("Elsewhere", "unrelated", None);
+    scratch.run("entity.trash", serde_json::json!({ "id": other }));
     let wire::app_query_response::Answer::DocsActivity(rail) = scratch
         .ask(wire::app_query_request::Query::DocsActivity(
             wire::DocsActivityRequest {
-                document_id: lease,
+                document_id: lease.to_owned(),
                 tz: TZ.to_owned(),
             },
         ))
@@ -646,9 +649,14 @@ fn activity_answers_and_an_unknown_zone_is_refused() {
     else {
         panic!("activity answered as something else");
     };
-    for event in &rail.events {
-        assert_eq!(event.occurred_local, "2099-06-01T22:00");
-    }
+    let said: Vec<&str> = rail
+        .events
+        .iter()
+        .map(|event| event.activity.as_str())
+        .collect();
+    assert_eq!(said, ["document.edit", "flag.set", "document.create_text"]);
+    assert_eq!(rail.events[0].occurred_local, "2099-06-01T22:02");
+    assert_eq!(rail.events[2].occurred_local, "2099-06-01T22:00");
 
     let refused = scratch
         .ask(wire::app_query_request::Query::DocsDrive(
@@ -712,7 +720,7 @@ fn titles_of(found: &wire::DocsSearch) -> Vec<&str> {
 
 impl Scratch {
     /// Stage bytes the way a shell does: begin, one chunk, end — the handle's
-    /// hash is what `core.add_document` names as `staged_sha`.
+    /// hash is what `document.add` names as `blob`.
     fn stage(&self, bytes: &[u8], media_type: &str) -> String {
         let frame = |kind: wire::stage_request::Kind| match self
             .handle
@@ -753,27 +761,15 @@ impl Scratch {
 }
 
 /// THE PHONE'S INGEST AND ITS STAGE (#1047): a file staged through the stage
-/// frames files through `core.add_document`'s `staged_sha`, and the document
+/// frames files through `document.add`'s `blob`, and the document
 /// answer hands the media stage the held file's path; a text document written
 /// from words answers its body and no path.
 #[test]
 fn a_staged_file_files_and_its_document_answers_the_held_path() {
     let scratch = Scratch::founded();
-    // The phone's own byte store, as the shell opens it.
-    scratch
-        .handle
-        .open_own_bytes(scratch.dir.join("vault.bytes"))
-        .expect("the byte store opens");
     let pdf = b"%PDF-1.7\n1 0 obj<</Type/Catalog>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n";
-    let sha = scratch.stage(pdf, "application/pdf");
     let folder = scratch.folder("Scans", None);
-    let document_id = scratch.run(
-        "core.add_document",
-        serde_json::json!({ "title": "Receipt scan", "staged_sha": sha, "folder_id": folder }),
-    )["document_id"]
-        .as_str()
-        .expect("a document id")
-        .to_owned();
+    let document_id = scratch.add_bytes("Receipt scan", pdf, "application/pdf", Some(&folder));
 
     let answer = scratch.document(&document_id);
     let row = answer.document.as_ref().expect("the document is there");
@@ -790,23 +786,16 @@ fn a_staged_file_files_and_its_document_answers_the_held_path() {
         "and it holds exactly the staged bytes"
     );
 
-    let text = scratch.run(
-        "core.create_text_document",
-        serde_json::json!({ "title": "Untitled" }),
-    )["document_id"]
-        .as_str()
-        .expect("a document id")
-        .to_owned();
+    let text = scratch.add("Untitled", "", None);
     let answer = scratch.document(&text);
     assert_eq!(
         answer.body.as_deref(),
         Some(""),
         "an empty text, not no text"
     );
-    assert!(
-        answer.bytes_path.is_empty(),
-        "a text document's words are its body"
-    );
+    // The words are the body the reader draws, and they are also a file in the
+    // store like any other document's bytes.
+    assert!(answer.bytes_held);
 }
 
 /// PURGE AND EMPTY-TRASH DESTROY (D-1, 2026-09-25): the document
@@ -818,51 +807,52 @@ fn a_purged_document_is_gone_from_the_drive_and_its_bytes_released() {
     let emptied = scratch.add("Old receipt", "void", None);
     scratch.add("Lease", "current", None);
     for document_id in [&doomed, &emptied] {
-        scratch.run(
-            "core.trash_document",
-            serde_json::json!({ "document_id": document_id }),
-        );
+        scratch.run("entity.trash", serde_json::json!({ "id": document_id }));
     }
     assert_eq!(scratch.shelf(wire::DocsShelf::Trash).trash_count, 2);
+    let store = scratch.dir.join("vault.bytes");
+    let files = || std::fs::read_dir(&store).map_or(0, |entries| entries.count());
+    let before = files();
 
-    let purged = scratch.run(
-        "core.purge_document",
-        serde_json::json!({ "document_id": doomed }),
+    let purged = scratch.run("entity.purge", serde_json::json!({ "id": doomed }));
+    assert_eq!(purged["purged"], serde_json::json!([doomed]));
+    assert_eq!(
+        purged["released"].as_array().map(Vec::len),
+        Some(1),
+        "its bytes are released"
     );
-    assert_eq!(purged["content_released"], serde_json::json!(1));
     assert!(
         scratch.document(&doomed).document.is_none(),
         "the row is gone"
     );
+    assert_eq!(files(), before - 1, "and the file leaves the store");
     let trash = scratch.shelf(wire::DocsShelf::Trash);
     assert_eq!(trash.trash_count, 1);
     assert_eq!(titles(&trash), ["Old receipt"]);
 
-    let emptied = scratch.run("core.empty_document_trash", serde_json::json!({}));
-    assert_eq!(emptied["documents_released"], serde_json::json!(1));
+    let emptied = scratch.run(
+        "entity.empty_trash",
+        serde_json::json!({ "kind": "document" }),
+    );
+    assert_eq!(emptied["purged"], serde_json::json!(1));
     assert_eq!(
-        emptied["content_released"],
-        serde_json::json!(1),
+        emptied["released"].as_array().map(Vec::len),
+        Some(1),
         "the emptied document's bytes are released too"
     );
+    assert_eq!(files(), before - 2);
     let all = scratch.shelf(wire::DocsShelf::All);
     assert_eq!(all.trash_count, 0);
     assert_eq!(titles(&all), ["Lease"], "the live document is untouched");
 }
 
 /// A FOLDER IS A SEARCH RESULT OF ITS OWN (#1097, R-1097-19..21): its name finds
-/// it, the drive's root never is one, it opens by its concept id, a deleted
-/// folder is gone, and a slip in a word only a folder holds is corrected.
+/// it, it opens by its own id, a deleted folder is gone, and a slip in a word
+/// only a folder holds is corrected.
 #[test]
 fn a_folder_is_found_by_name_and_the_root_is_not() {
     let scratch = Scratch::founded();
-    let folder = scratch.run(
-        "core.create_folder",
-        serde_json::json!({ "name": "Leases" }),
-    )["folder_id"]
-        .as_str()
-        .expect("a folder id")
-        .to_owned();
+    let folder = scratch.folder("Leases", None);
     let search = |term: &str| {
         let wire::app_query_response::Answer::DocsSearch(found) = scratch
             .ask(wire::app_query_request::Query::DocsSearch(
@@ -883,18 +873,14 @@ fn a_folder_is_found_by_name_and_the_root_is_not() {
     let hit = &found.containers[0];
     assert_eq!(
         (hit.entity.as_str(), hit.id.as_str(), hit.app_id.as_str()),
-        ("core.concept", folder.as_str(), "docs")
+        ("folder", folder.as_str(), "docs")
     );
     assert_eq!(hit.title, "Leases");
-    // The drive's top level is a concept of the same scheme, labelled
-    // `Documents`, and is not a folder anyone named.
+    // The drive's top level is no folder anyone named.
     assert!(search("documents").containers.is_empty());
     let slipped = search("laeses");
     assert_eq!(slipped.corrected, "leases");
     assert_eq!(slipped.containers.len(), 1);
-    scratch.run(
-        "core.delete_folder",
-        serde_json::json!({ "folder_id": folder }),
-    );
+    scratch.run("entity.trash", serde_json::json!({ "id": folder }));
     assert!(search("leases").containers.is_empty());
 }

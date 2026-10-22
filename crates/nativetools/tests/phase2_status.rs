@@ -1,9 +1,12 @@
 //! The status convention (D-1044-7): in a `where`, `status = open` selects the
-//! active rows, so a task that has been started counts as open.
+//! active rows. A task had a started state beside open; the model of #1135 has none (a task is
+//! open, done or cancelled), so the rule widens nothing and these tests hold what is left of it:
+//! the status words select exactly themselves, `!=` and `in` agree with them, and a word the
+//! task no longer has is an error that names the three.
 //!
-//! The fixture has no task in progress, so each test builds a world with two
-//! started tasks and one cancelled task beside the fixture's open, completed
-//! and trashed ones.
+//! The fixture has one cancelled task fewer than these tests want, so each test builds a world
+//! with two more open tasks and one cancelled task beside the fixture's open, completed and
+//! trashed ones.
 
 mod common;
 
@@ -12,23 +15,19 @@ use centraid_nativetools::whr;
 use common::{call, diff_rows, ids, seeded_with, text};
 use serde_json::{Value, json};
 
-/// The fixture plus `survey` and `plumber` (in progress) and `parked`
-/// (cancelled). Tasks that are not trashed: open `cabin`, `reed`, `outline`,
-/// `pay`; in progress `survey`, `plumber`; completed `report`; cancelled
-/// `parked`.
+/// The fixture plus `survey` and `plumber` (open) and `parked` (cancelled). Tasks that are not
+/// trashed: open `cabin`, `reed`, `outline`, `pay`, `survey`, `plumber`; completed `report`;
+/// cancelled `parked`.
 fn world_in_progress() -> common::World {
     let mut world: Value = serde_json::from_str(common::FIXTURE).unwrap();
     let tasks = world["tasks"].as_array_mut().unwrap();
-    tasks.push(json!({"key": "survey", "name": "Survey the garden", "status": "in_progress"}));
-    tasks.push(json!({
-        "key": "plumber", "name": "Call the plumber", "status": "in_progress", "effort": 15
-    }));
+    tasks.push(json!({"key": "survey", "name": "Survey the garden"}));
+    tasks.push(json!({"key": "plumber", "name": "Call the plumber", "effort": 15}));
     tasks.push(json!({"key": "parked", "name": "Park the car", "status": "cancelled"}));
     seeded_with(&world)
 }
 
-const OPEN: [&str; 4] = ["cabin", "reed", "outline", "pay"];
-const IN_PROGRESS: [&str; 2] = ["survey", "plumber"];
+const OPEN: [&str; 6] = ["cabin", "reed", "outline", "pay", "survey", "plumber"];
 const COMPLETED: [&str; 1] = ["report"];
 const CANCELLED: [&str; 1] = ["parked"];
 
@@ -63,9 +62,9 @@ fn tasks(world: &common::World, clause: &str) -> Vec<String> {
 }
 
 #[test]
-fn open_selects_the_open_and_the_started_rows_and_nothing_finished() {
+fn open_selects_the_open_rows_and_nothing_finished() {
     let world = world_in_progress();
-    let active = keys(&world, &[&OPEN, &IN_PROGRESS]);
+    let active = keys(&world, &[&OPEN]);
     // the bare word, quoted, and in any case: all one reading
     for clause in [
         "status = open",
@@ -77,7 +76,7 @@ fn open_selects_the_open_and_the_started_rows_and_nothing_finished() {
         assert_eq!(tasks(&world, clause), active, "{clause}");
     }
     let rows = tasks(&world, "status = open");
-    for key in OPEN.iter().chain(IN_PROGRESS.iter()) {
+    for key in OPEN {
         assert!(rows.contains(&world.id(key)), "{key} is active");
     }
     for key in COMPLETED.iter().chain(CANCELLED.iter()) {
@@ -88,25 +87,23 @@ fn open_selects_the_open_and_the_started_rows_and_nothing_finished() {
 #[test]
 fn in_with_open_reads_open_the_same_way() {
     let world = world_in_progress();
-    let active = keys(&world, &[&OPEN, &IN_PROGRESS]);
+    let active = keys(&world, &[&OPEN]);
     for clause in [
         "status in (\"open\")",
         "status in (open)",
         "status in(\"open\")",
         "status in (\"Open\")",
-        "status in (\"open\", \"in_progress\")",
-        "status in (\"in_progress\", \"open\")",
     ] {
         assert_eq!(tasks(&world, clause), active, "{clause}");
     }
-    // `open` beside another status adds the active rows to it
+    // `open` beside another status adds the open rows to it
     assert_eq!(
         tasks(&world, "status in (\"open\", \"completed\")"),
-        keys(&world, &[&OPEN, &IN_PROGRESS, &COMPLETED])
+        keys(&world, &[&OPEN, &COMPLETED])
     );
     assert_eq!(
         tasks(&world, "status in (\"open\", \"cancelled\")"),
-        keys(&world, &[&OPEN, &IN_PROGRESS, &CANCELLED])
+        keys(&world, &[&OPEN, &CANCELLED])
     );
 }
 
@@ -122,54 +119,32 @@ fn every_other_status_keeps_its_own_meaning() {
         keys(&world, &[&CANCELLED])
     );
     assert_eq!(
-        tasks(&world, "status = in_progress"),
-        keys(&world, &[&IN_PROGRESS])
-    );
-    assert_eq!(
-        tasks(&world, "status = \"in progress\""),
-        keys(&world, &[&IN_PROGRESS])
-    );
-    assert_eq!(
-        tasks(&world, "status in (\"in_progress\")"),
-        keys(&world, &[&IN_PROGRESS])
-    );
-    assert_eq!(
         tasks(&world, "status in (\"completed\", \"cancelled\")"),
         keys(&world, &[&COMPLETED, &CANCELLED])
     );
-    // `!=` of a finished status leaves the active rows in, started ones too
     assert_eq!(
         tasks(&world, "status != completed"),
-        keys(&world, &[&OPEN, &IN_PROGRESS, &CANCELLED])
+        keys(&world, &[&OPEN, &CANCELLED])
     );
     assert_eq!(
         tasks(&world, "status != cancelled"),
-        keys(&world, &[&OPEN, &IN_PROGRESS, &COMPLETED])
-    );
-    assert_eq!(
-        tasks(&world, "status != in_progress"),
-        keys(&world, &[&OPEN, &COMPLETED, &CANCELLED])
+        keys(&world, &[&OPEN, &COMPLETED])
     );
 }
 
 #[test]
-fn not_open_leaves_out_every_active_row() {
+fn not_open_leaves_out_every_open_row() {
     let world = world_in_progress();
     assert_eq!(
         tasks(&world, "status != open"),
         keys(&world, &[&COMPLETED, &CANCELLED])
-    );
-    // the way to ask for the rows not yet started is to say so
-    assert_eq!(
-        tasks(&world, "status = open and status != in_progress"),
-        keys(&world, &[&OPEN])
     );
 }
 
 #[test]
 fn the_rule_composes_with_the_other_conditions() {
     let world = world_in_progress();
-    // plumber is in progress with an effort; cabin and reed are open with one
+    // plumber, cabin and reed are open with an effort
     assert_eq!(
         tasks(&world, "status = open and effort is set"),
         keys(&world, &[&["cabin", "reed", "plumber"]])
@@ -185,9 +160,8 @@ fn the_rule_composes_with_the_other_conditions() {
 }
 
 #[test]
-fn a_status_without_in_progress_keeps_open_to_itself() {
-    // An event is confirmed, tentative or cancelled. It has no started state, so
-    // nothing widens.
+fn an_events_status_words_select_themselves() {
+    // An event is confirmed, tentative or cancelled.
     let world = world_in_progress();
     assert_eq!(
         selected(&world, "event", "status = cancelled"),
@@ -214,17 +188,9 @@ fn a_count_and_a_bulk_write_read_the_same_rows() {
         json!({"op": "count", "kind": "task", "where": "status = open"}),
     );
     assert_eq!(count["effect"]["value"]["values"][0]["amount"], 6);
-    session.user("");
-    let started = call(
-        &mut session,
-        "answer",
-        json!({"op": "count", "kind": "task", "where": "status = in_progress"}),
-    );
-    assert_eq!(started["effect"]["value"]["values"][0]["amount"], 2);
 
     // a write over several rows names them through the result of a find (a
-    // selector that fits several is `ambiguous:`), so the started task is
-    // among the rows the open ones are written with
+    // selector that fits several is `ambiguous:`)
     session.user("tick off everything open with an effort");
     let found = call(
         &mut session,
@@ -257,8 +223,8 @@ fn a_count_and_a_bulk_write_read_the_same_rows() {
     let plumber = changed
         .iter()
         .find(|(id, _)| *id == world.id("plumber"))
-        .expect("the started task is completed with the open ones");
-    assert_eq!(plumber.1, json!(["in_progress", "completed"]));
+        .expect("the plumber is completed with the open ones");
+    assert_eq!(plumber.1, json!(["open", "completed"]));
 }
 
 #[test]
@@ -277,46 +243,36 @@ fn a_narrowing_follow_up_reads_the_rule_too() {
     );
     let mut got = ids(&open["effect"]["rows"]);
     got.sort();
-    assert_eq!(
-        got,
-        keys(&world, &[&OPEN, &IN_PROGRESS]),
-        "{}",
-        open["text"]
-    );
+    assert_eq!(got, keys(&world, &[&OPEN]), "{}", open["text"]);
 }
 
 #[test]
 fn an_edit_writes_the_status_it_is_given() {
-    // The rule belongs to selection: `edit status: open` on a started task
-    // stores open, not in_progress, and a later selection finds it among the
-    // open rows and no longer among the started ones.
+    // A status is three commands of the vault, one for each word; an edit of it is the command of
+    // the word it is given, and a later selection finds the row where the word puts it.
     let world = world_in_progress();
     let mut session = world.session();
-    session.user("move the garden survey back to open");
+    session.user("call off the garden survey");
     let edited = call(
         &mut session,
         "act",
         json!({"verb": "edit", "kind": "task", "name": "Survey the garden",
-               "args": "status: open"}),
+               "args": "status: cancelled"}),
     );
     let change = diff_rows(&edited)
         .iter()
         .find_map(|row| row["fields"].get("status").cloned())
         .unwrap_or_default();
-    assert_eq!(change, json!(["in_progress", "open"]), "{}", edited["text"]);
+    assert_eq!(change, json!(["open", "cancelled"]), "{}", edited["text"]);
     assert_eq!(
-        tasks(&world, "status = in_progress"),
-        keys(&world, &[&["plumber"]])
-    );
-    assert_eq!(
-        tasks(&world, "status = open and status != in_progress"),
-        keys(&world, &[&OPEN, &["survey"]])
+        tasks(&world, "status = cancelled"),
+        keys(&world, &[&CANCELLED, &["survey"]])
     );
 }
 
 #[test]
 fn an_unknown_status_still_names_every_value() {
-    // the rule adds no word: `active` is not a status, and the error says which are
+    // `active` is not a status, and nor is `in_progress` any more: the error says which are
     let world = world_in_progress();
     let mut session = world.session();
     session.user("");
@@ -329,9 +285,16 @@ fn an_unknown_status_still_names_every_value() {
         refused.starts_with("error: status has no value \"active\"."),
         "{refused}"
     );
+    assert!(refused.contains("open, completed, cancelled"), "{refused}");
+    session.user("");
+    let started = text(
+        &mut session,
+        "find",
+        json!({"kind": "task", "where": "status = in_progress"}),
+    );
     assert!(
-        refused.contains("open, in_progress, completed, cancelled"),
-        "{refused}"
+        started.starts_with("error: status has no value \"in_progress\"."),
+        "{started}"
     );
 }
 
@@ -343,20 +306,20 @@ fn the_status_condition_parses_as_it_always_did() {
         "status = open",
         "status != open",
         "status in (\"open\")",
-        "status in (\"open\", \"in_progress\")",
+        "status in (\"open\", \"completed\")",
     ] {
         assert_eq!(whr::parse(Kind::Task, clause).unwrap().len(), 1, "{clause}");
     }
-    assert!(whr::parse(Kind::Task, "status = open or status = in_progress").is_err());
+    assert!(whr::parse(Kind::Task, "status = open or status = completed").is_err());
 }
 
 #[test]
-fn in_is_the_union_of_its_members_under_the_rule() {
+fn in_is_the_union_of_its_members() {
     // `in (a, b, …)` selects exactly the rows some `= a`, `= b`, … selects,
-    // `open` widened in both: the one `or` the language has is still the
-    // union of its members. Every non-empty subset of the four statuses.
+    // the one `or` the language has is still the union of its members. Every non-empty subset of
+    // the three statuses.
     let world = world_in_progress();
-    let statuses = ["open", "in_progress", "completed", "cancelled"];
+    let statuses = ["open", "completed", "cancelled"];
     for mask in 1_u32..(1 << statuses.len()) {
         let pick: Vec<&str> = statuses
             .iter()

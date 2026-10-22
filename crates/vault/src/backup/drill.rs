@@ -36,9 +36,7 @@ use super::retention::{garbage, keep, live_names};
 use super::snapshot::{self, APP, Settled, Snapshot};
 use super::spool::{SPOOL_CEILING_BYTES, Spool};
 use super::store::{self, MemoryStore, Store, StoreError};
-use crate::access::Principal;
 use crate::clock::{Clock, SystemClock};
-use crate::commands::{Command, CommandStatus, Registry};
 use crate::error::VaultError;
 use crate::file::Vault;
 
@@ -120,35 +118,43 @@ fn body(index: usize, bytes: usize) -> String {
     out
 }
 
-fn write_notes(
+/// Write `count` documents whose bytes are about `bytes` bytes of text, each a
+/// claimed blob under a document of its own. Returns `(hash, text)` for each,
+/// so the drill can seal the bytes the vault's rows name.
+fn write_documents(
     vault: &Vault,
-    registry: &Registry,
     from: usize,
     count: usize,
     bytes: usize,
-) -> Result<(), DrillError> {
-    let principal = Principal::owner("drill");
-    for index in from..from + count {
-        let outcome = vault.execute(
-            registry,
-            &principal,
-            &Command::new(
-                "knowledge.create_note",
-                serde_json::json!({
-                    "title": format!("Note {index}"),
-                    "body_text": body(index, bytes),
-                    "format": "plain",
-                }),
-            ),
-        )?;
-        if outcome.status != CommandStatus::Executed {
-            return Err(fail(format!(
-                "note {index} was refused: {:?}",
-                outcome.reason
-            )));
+) -> Result<Vec<(String, String)>, DrillError> {
+    let now = vault.clock().now_text();
+    let mut written = Vec::with_capacity(count);
+    vault.commit(|tx| {
+        tx.set_producer("drill.write");
+        for index in from..from + count {
+            let text = body(index, bytes);
+            let hash = crate::blob::content_digest(text.as_bytes());
+            crate::blob::stage(
+                tx.connection(),
+                &hash,
+                i64::try_from(text.len()).unwrap_or(0),
+            )?;
+            let id = vault.ids().next();
+            tx.insert_entity(
+                &id,
+                crate::model::Kind::Document,
+                &format!("Note {index}"),
+                &now,
+            )?;
+            tx.connection().execute(
+                "INSERT INTO document (id, blob, media_type) VALUES (?1, ?2, 'text/plain')",
+                rusqlite::params![id, hash],
+            )?;
+            written.push((hash, text));
         }
-    }
-    Ok(())
+        Ok(())
+    })?;
+    Ok(written)
 }
 
 /// Every row of every table a member has rows in, as text, sorted per table.
@@ -233,16 +239,8 @@ fn back_up_content(
     ledger: &Ledger,
     spool: &Spool,
     store: &dyn Store,
+    bodies: &[(String, String)],
 ) -> Result<(usize, usize), DrillError> {
-    let bodies: Vec<(String, String)> = vault.read(|connection| {
-        let mut statement = connection.prepare(
-            "SELECT i.content_hash, t.body_text FROM core_content_item i
-               JOIN core_content_text t ON t.content_id = i.content_id
-              ORDER BY i.content_hash",
-        )?;
-        let rows = statement.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?;
-        Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
-    })?;
     let mut parts = 0;
     for (index, (hash, text)) in bodies.iter().enumerate() {
         let tag = index.to_string();
@@ -308,9 +306,7 @@ pub fn run(dir: &Path) -> Result<DrillReport, DrillError> {
     // ---- 1. found and write ------------------------------------------------
     let vault = Vault::create(&vault_path)?;
     vault.found("The Drill Household", "Ada")?;
-    let registry = Registry::with_system_commands()?;
-    registry.install(&vault)?;
-    write_notes(&vault, &registry, 0, FIRST_NOTES, FIRST_BODY_BYTES)?;
+    let first_written = write_documents(&vault, 0, FIRST_NOTES, FIRST_BODY_BYTES)?;
 
     let ledger = Ledger::open(Ledger::path_for(&vault_path))?;
     ledger.put_destination(&Destination {
@@ -336,10 +332,11 @@ pub fn run(dir: &Path) -> Result<DrillReport, DrillError> {
     }
 
     // ---- 3. the content, by name -------------------------------------------
-    let (content_files, content_parts) = back_up_content(&vault, &keys, &ledger, &spool, &store)?;
+    let (content_files, content_parts) =
+        back_up_content(&vault, &keys, &ledger, &spool, &store, &first_written)?;
 
     // ---- 4. more commits, and only what changed ----------------------------
-    write_notes(&vault, &registry, FIRST_NOTES, SECOND_NOTES, 200)?;
+    write_documents(&vault, FIRST_NOTES, SECOND_NOTES, 200)?;
     let before: BTreeSet<Name> = store::list_all(&store)?
         .iter()
         .map(|entry| entry.name)

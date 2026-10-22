@@ -707,7 +707,7 @@ impl Session {
         let parse = |field: &str| -> Option<jiff::civil::DateTime> {
             input.get(field)?.as_str()?.parse().ok()
         };
-        let (start, end) = (parse("dtstart")?, parse("dtend")?);
+        let (start, end) = (parse("starts")?, parse("ends")?);
         let clashing: Vec<Key> = self
             .world
             .of_kind(Kind::Event)
@@ -749,7 +749,7 @@ impl Session {
             json!({
                 "verb": "create",
                 "kind": "event",
-                "command": "schedule.propose_event",
+                "command": "event.propose",
                 "predicate": "no_busy_conflict",
                 "reason": refusal,
                 "outcome": "ask",

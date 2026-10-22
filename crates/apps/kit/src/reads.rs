@@ -85,6 +85,9 @@ pub fn in_list(column: &str, ids: &[String]) -> KitResult<InListFragment> {
     })
 }
 
+/// The most ids [`Read::among`] names in an `IN` list.
+pub const AMONG_LIMIT: usize = 64;
+
 /// How far a fan-out may walk before it is a question about an unbounded set.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FanOutBound {
@@ -137,6 +140,103 @@ impl FanOutBound {
 /// (`paged-reads.ts:62`). v0's own default is already at the window's ceiling,
 /// which is why the arithmetic above is invisible until an app raises it.
 pub const JOIN_FAN_OUT: FanOutBound = FanOutBound::new(500, 8);
+
+/// One table read for a set of ids: where it lives, what it selects, which
+/// column the ids are in and the two columns its keyset walks.
+///
+/// The paged door's one shape is a keyset page of one table, so what a screen
+/// shows about a window of rows (their kind rows, their edges, their tags) is
+/// one of these per table, each bounded by the window's ids.
+#[derive(Debug, Clone, Copy)]
+pub struct Read {
+    pub name: &'static str,
+    pub table: &'static str,
+    pub select: &'static str,
+    pub order: (&'static str, &'static str),
+    pub column: &'static str,
+}
+
+impl Read {
+    /// `column IN (…)` plus the handler's own predicate, walked to the end of the
+    /// kit's default fan-out. No ids is no read.
+    pub fn of(
+        &self,
+        door: &dyn PageDoor,
+        ids: &[String],
+        extra: Option<(&str, Vec<PageBindValue>)>,
+    ) -> KitResult<Vec<Row>> {
+        self.within(JOIN_FAN_OUT, door, ids, extra)
+    }
+
+    /// The rows whose `column` is among `ids`, however many ids there are.
+    ///
+    /// A keyset page re-binds the whole `IN` list on every page, so a list of
+    /// thousands over a table of tens of thousands of rows costs the list times
+    /// the pages. Up to [`AMONG_LIMIT`] ids the read names them; past it the read
+    /// takes the table (under the caller's predicate, which should already be
+    /// narrow) and keeps the rows whose `column` is among them. The answer is
+    /// the same either way.
+    pub fn among(
+        &self,
+        bound: FanOutBound,
+        door: &dyn PageDoor,
+        ids: &[String],
+        extra: Option<(&str, Vec<PageBindValue>)>,
+    ) -> KitResult<Vec<Row>> {
+        if ids.len() <= AMONG_LIMIT {
+            return self.within(bound, door, ids, extra);
+        }
+        let mut query = PageQuery::new(
+            self.name,
+            self.select,
+            self.table,
+            crate::statement::PageOrder::asc(self.order.0, self.order.1),
+        );
+        if let Some((clause, bind)) = extra {
+            query = query.filter(clause, bind);
+        }
+        let wanted: std::collections::BTreeSet<&str> = ids.iter().map(String::as_str).collect();
+        Ok(read_pages(door, &query, bound)?
+            .into_iter()
+            .filter(|row| {
+                crate::row::text_of(row, self.column).is_some_and(|id| wanted.contains(id.as_str()))
+            })
+            .collect())
+    }
+
+    /// [`Self::of`] over a fan-out the caller states, for a window wider than
+    /// the default reaches (People's roster is declared 10,000 wide).
+    pub fn within(
+        &self,
+        bound: FanOutBound,
+        door: &dyn PageDoor,
+        ids: &[String],
+        extra: Option<(&str, Vec<PageBindValue>)>,
+    ) -> KitResult<Vec<Row>> {
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let fragment = in_list(self.column, ids)?;
+        let (predicate, bind) = match extra {
+            Some((clause, mut bind)) => {
+                bind.extend(fragment.bind);
+                (format!("{clause} AND {}", fragment.sql), bind)
+            }
+            None => (fragment.sql, fragment.bind),
+        };
+        read_pages(
+            door,
+            &PageQuery::new(
+                self.name,
+                self.select,
+                self.table,
+                crate::statement::PageOrder::asc(self.order.0, self.order.1),
+            )
+            .filter(&predicate, bind),
+            bound,
+        )
+    }
+}
 
 /// THE ROW A SCREEN WAS OPENED ON.
 ///

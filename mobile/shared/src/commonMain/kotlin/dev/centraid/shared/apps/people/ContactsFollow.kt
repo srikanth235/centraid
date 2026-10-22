@@ -1,7 +1,6 @@
 package dev.centraid.shared.apps.people
 
 import dev.centraid.core.CentraidCore
-import dev.centraid.shared.sync.phone.GoneChoice
 import dev.centraid.shared.sync.phone.OriginGone
 import dev.centraid.shared.sync.phone.PhoneFollowPass
 import dev.centraid.shared.sync.phone.PhoneFollowReads
@@ -25,7 +24,12 @@ public interface ContactsReader {
     public fun read(deliver: (ContactsRead?) -> Unit)
 }
 
-/** CONTACTS → PEOPLE, FOLLOWED (#1127): the shell hands this to the follower with its [reader]. */
+/**
+ * CONTACTS → PEOPLE, FOLLOWED (#1127): the shell hands this to the follower with its [reader]. A
+ * pass sends the address book to the vault, which merges it ([ContactsImport.run]); nothing is held
+ * for a question, because the vault decides what a record gone from a read does (a person the
+ * member never edited goes to the trash, one they did keeps the row and stops following).
+ */
 public class ContactsFollow(private val reader: ContactsReader) : PhoneFollowSource {
     override val source: PhoneSource = PhoneSource.CONTACTS
 
@@ -34,16 +38,10 @@ public class ContactsFollow(private val reader: ContactsReader) : PhoneFollowSou
 
         override suspend fun run(): List<OriginGone>? {
             val read = PhoneFollowReads.await<ContactsRead> { reader.read(it) } ?: return null
-            return ContactsImport.run(core, read.contacts, read.origins, read.complete).gone
+            ContactsImport.run(core, read.contacts, read.origins, read.complete)
+            return emptyList()
         }
 
-        override suspend fun resolve(gone: OriginGone, keep: Boolean) {
-            ContactsImport.resolveGone(
-                core,
-                gone.originId,
-                if (keep) GoneChoice.KEEP else GoneChoice.TRASH,
-                gone.seenBefore.ifEmpty { null },
-            )
-        }
+        override suspend fun resolve(gone: OriginGone, keep: Boolean) = Unit
     }
 }

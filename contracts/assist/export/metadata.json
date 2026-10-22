@@ -70,24 +70,24 @@
   ],
   "kinds": [
     {
-      "card": "person: name, date (last contacted), role, nickname, met, cadence (days), starred (yes|no) · links: events, tasks, notes, photos · verbs: create edit delete restore star unstar log",
+      "card": "person: name, date (last contacted), role, nickname, met, cadence (days), starred (yes|no) · links: events, tasks, notes · verbs: create edit delete restore star unstar log",
       "container": false,
       "date": {
         "label": "last contacted",
         "source": {
-          "column": "last_contacted_at",
-          "table": "people_profile"
+          "column": "starts",
+          "table": "activity"
         }
       },
-      "entity": "core.party",
+      "entity": "person",
       "fields": [
         {
           "create": true,
-          "edit": "people.edit_person",
+          "edit": "person.edit",
           "name": "role",
           "source": {
             "column": "role",
-            "table": "people_profile"
+            "table": "person"
           },
           "type": "text",
           "unit": null,
@@ -95,11 +95,11 @@
         },
         {
           "create": true,
-          "edit": "people.edit_person",
+          "edit": "person.edit",
           "name": "nickname",
           "source": {
             "column": "nickname",
-            "table": "people_profile"
+            "table": "person"
           },
           "type": "text",
           "unit": null,
@@ -107,11 +107,11 @@
         },
         {
           "create": false,
-          "edit": "people.edit_person",
+          "edit": "person.edit",
           "name": "met",
           "source": {
             "column": "met",
-            "table": "people_profile"
+            "table": "person"
           },
           "type": "text",
           "unit": null,
@@ -119,11 +119,11 @@
         },
         {
           "create": true,
-          "edit": "people.set_cadence",
+          "edit": "person.edit",
           "name": "cadence",
           "source": {
             "column": "cadence_days",
-            "table": "people_profile"
+            "table": "person"
           },
           "type": "number",
           "unit": "days",
@@ -134,8 +134,8 @@
           "edit": null,
           "name": "starred",
           "source": {
-            "column": "concept_id",
-            "table": "core_tag"
+            "column": "to_id",
+            "table": "edge"
           },
           "type": "bool",
           "unit": null,
@@ -158,21 +158,16 @@
           "kind": "note",
           "label": "notes",
           "via": "about"
-        },
-        {
-          "kind": "photo",
-          "label": "photos",
-          "via": "about"
         }
       ],
       "name": "person",
       "name_source": {
-        "column": "display_name",
-        "table": "core_party"
+        "column": "title",
+        "table": "entity"
       },
-      "pk": "party_id",
+      "pk": "id",
       "plural": "people",
-      "table": "core_party",
+      "table": "person",
       "trash": true,
       "verbs": [
         "create",
@@ -197,11 +192,11 @@
       "date": {
         "label": "start",
         "source": {
-          "column": "dtstart",
-          "table": "core_event"
+          "column": "starts",
+          "table": "event"
         }
       },
-      "entity": "core.event",
+      "entity": "event",
       "fields": [
         {
           "create": false,
@@ -209,7 +204,7 @@
           "name": "status",
           "source": {
             "column": "status",
-            "table": "core_event"
+            "table": "event"
           },
           "type": "enum",
           "unit": null,
@@ -230,11 +225,11 @@
         },
         {
           "create": true,
-          "edit": "schedule.edit_event",
+          "edit": "event.edit",
           "name": "duration",
           "source": {
-            "column": "dtend",
-            "table": "core_event"
+            "column": "ends",
+            "table": "event"
           },
           "type": "number",
           "unit": "min",
@@ -242,11 +237,11 @@
         },
         {
           "create": true,
-          "edit": "schedule.edit_event",
+          "edit": "event.edit",
           "name": "description",
           "source": {
             "column": "description",
-            "table": "core_event"
+            "table": "event"
           },
           "type": "text",
           "unit": null,
@@ -263,12 +258,12 @@
       ],
       "name": "event",
       "name_source": {
-        "column": "summary",
-        "table": "core_event"
+        "column": "title",
+        "table": "entity"
       },
-      "pk": "event_id",
+      "pk": "id",
       "plural": "events",
-      "table": "core_event",
+      "table": "event",
       "trash": true,
       "verbs": [
         "create",
@@ -285,39 +280,35 @@
       ]
     },
     {
-      "card": "task: name, date (due), status (open|in_progress|completed|cancelled), effort (min), priority (9 highest..1 lowest, 0 none), completed (date), description · links: subtasks, people, list · verbs: create edit reschedule complete reopen delete restore add_to remove_from",
+      "card": "task: name, date (due), status (open|completed|cancelled), effort (min), priority (9 highest..1 lowest, 0 none), completed (date), description · links: subtasks, people, list · verbs: create edit reschedule complete reopen delete restore add_to remove_from",
       "container": false,
       "date": {
         "label": "due",
         "source": {
-          "column": "due_at",
-          "table": "schedule_task"
+          "column": "due",
+          "table": "task"
         }
       },
-      "entity": "schedule.task",
+      "entity": "task",
       "fields": [
         {
           "create": false,
-          "edit": "schedule.set_task_status",
+          "edit": "task.complete",
           "name": "status",
           "source": {
             "column": "status",
-            "table": "schedule_task"
+            "table": "task"
           },
           "type": "enum",
           "unit": null,
           "values": [
             [
               "open",
-              "needs-action"
-            ],
-            [
-              "in_progress",
-              "in-process"
+              "open"
             ],
             [
               "completed",
-              "completed"
+              "done"
             ],
             [
               "cancelled",
@@ -327,11 +318,11 @@
         },
         {
           "create": true,
-          "edit": "schedule.edit_task",
+          "edit": "task.edit",
           "name": "effort",
           "source": {
             "column": "effort_min",
-            "table": "schedule_task"
+            "table": "task"
           },
           "type": "number",
           "unit": "min",
@@ -339,11 +330,11 @@
         },
         {
           "create": true,
-          "edit": "schedule.edit_task",
+          "edit": "task.edit",
           "name": "priority",
           "source": {
             "column": "priority",
-            "table": "schedule_task"
+            "table": "task"
           },
           "type": "number",
           "unit": "9 highest..1 lowest, 0 none",
@@ -354,8 +345,8 @@
           "edit": null,
           "name": "completed",
           "source": {
-            "column": "completed_at",
-            "table": "schedule_task"
+            "column": "done_at",
+            "table": "task"
           },
           "type": "date",
           "unit": null,
@@ -363,11 +354,11 @@
         },
         {
           "create": true,
-          "edit": "schedule.edit_task",
+          "edit": "task.edit",
           "name": "description",
           "source": {
             "column": "description",
-            "table": "schedule_task"
+            "table": "task"
           },
           "type": "text",
           "unit": null,
@@ -395,11 +386,11 @@
       "name": "task",
       "name_source": {
         "column": "title",
-        "table": "schedule_task"
+        "table": "entity"
       },
-      "pk": "task_id",
+      "pk": "id",
       "plural": "tasks",
-      "table": "schedule_task",
+      "table": "task",
       "trash": true,
       "verbs": [
         "create",
@@ -427,18 +418,18 @@
         "label": "created",
         "source": {
           "column": "created_at",
-          "table": "knowledge_note"
+          "table": "entity"
         }
       },
-      "entity": "knowledge.note",
+      "entity": "note",
       "fields": [
         {
           "create": true,
-          "edit": "knowledge.edit_note",
+          "edit": "note.edit",
           "name": "body",
           "source": {
-            "column": "body_text",
-            "table": "core_content_text"
+            "column": "body",
+            "table": "note"
           },
           "type": "text",
           "unit": null,
@@ -446,11 +437,11 @@
         },
         {
           "create": false,
-          "edit": "knowledge.edit_note",
+          "edit": "flag.set",
           "name": "pinned",
           "source": {
-            "column": "pinned",
-            "table": "knowledge_note"
+            "column": "to_id",
+            "table": "edge"
           },
           "type": "bool",
           "unit": null,
@@ -473,11 +464,11 @@
       "name": "note",
       "name_source": {
         "column": "title",
-        "table": "knowledge_note"
+        "table": "entity"
       },
-      "pk": "note_id",
+      "pk": "id",
       "plural": "notes",
-      "table": "knowledge_note",
+      "table": "note",
       "trash": true,
       "verbs": [
         "create",
@@ -499,18 +490,18 @@
         "label": "created",
         "source": {
           "column": "created_at",
-          "table": "core_document"
+          "table": "entity"
         }
       },
-      "entity": "core.document",
+      "entity": "document",
       "fields": [
         {
           "create": false,
           "edit": null,
           "name": "starred",
           "source": {
-            "column": "concept_id",
-            "table": "core_tag"
+            "column": "to_id",
+            "table": "edge"
           },
           "type": "bool",
           "unit": null,
@@ -522,17 +513,17 @@
         {
           "kind": "folder",
           "label": "folder",
-          "via": "folder_tag"
+          "via": "folder_column"
         }
       ],
       "name": "document",
       "name_source": {
         "column": "title",
-        "table": "core_document"
+        "table": "entity"
       },
-      "pk": "document_id",
+      "pk": "id",
       "plural": "documents",
-      "table": "core_document",
+      "table": "document",
       "trash": true,
       "verbs": [
         "create",
@@ -549,24 +540,24 @@
       ]
     },
     {
-      "card": "photo: name, date (taken), starred (yes|no) · links: albums, people · verbs: edit delete restore star unstar add_to remove_from",
+      "card": "photo: name, date (taken), starred (yes|no) · links: albums · verbs: edit delete restore star unstar add_to remove_from",
       "container": false,
       "date": {
         "label": "taken",
         "source": {
-          "column": "captured_at",
-          "table": "media_asset"
+          "column": "taken_at",
+          "table": "photo"
         }
       },
-      "entity": "media.asset",
+      "entity": "photo",
       "fields": [
         {
           "create": false,
           "edit": null,
           "name": "starred",
           "source": {
-            "column": "concept_id",
-            "table": "core_tag"
+            "column": "to_id",
+            "table": "edge"
           },
           "type": "bool",
           "unit": null,
@@ -579,21 +570,16 @@
           "kind": "album",
           "label": "albums",
           "via": "entry"
-        },
-        {
-          "kind": "person",
-          "label": "people",
-          "via": "about"
         }
       ],
       "name": "photo",
       "name_source": {
         "column": "title",
-        "table": "media_asset"
+        "table": "entity"
       },
-      "pk": "asset_id",
+      "pk": "id",
       "plural": "photos",
-      "table": "media_asset",
+      "table": "photo",
       "trash": true,
       "verbs": [
         "edit",
@@ -612,7 +598,7 @@
       "card": "album: name · links: photos · verbs: create edit delete",
       "container": true,
       "date": null,
-      "entity": "core.collection",
+      "entity": "album",
       "fields": [],
       "kind": "album",
       "links": [
@@ -624,12 +610,12 @@
       ],
       "name": "album",
       "name_source": {
-        "column": "name",
-        "table": "core_collection"
+        "column": "title",
+        "table": "entity"
       },
-      "pk": "collection_id",
+      "pk": "id",
       "plural": "albums",
-      "table": "core_collection",
+      "table": "container",
       "trash": false,
       "verbs": [
         "create",
@@ -642,7 +628,7 @@
       "card": "locker item: name, type (login|card|note|identity|wifi|password|ssh_key|api_credential|passport|bank_account|driving_licence|software_licence|crypto_wallet|membership|document), username, url, notes, starred (yes|no) · verbs: create edit delete restore star unstar reveal",
       "container": false,
       "date": null,
-      "entity": "locker.item",
+      "entity": "locker_item",
       "fields": [
         {
           "create": true,
@@ -758,8 +744,8 @@
           "edit": null,
           "name": "starred",
           "source": {
-            "column": "concept_id",
-            "table": "core_tag"
+            "column": "to_id",
+            "table": "edge"
           },
           "type": "bool",
           "unit": null,
@@ -771,9 +757,9 @@
       "name": "locker item",
       "name_source": {
         "column": "title",
-        "table": "locker_item"
+        "table": "entity"
       },
-      "pk": "item_id",
+      "pk": "id",
       "plural": "locker items",
       "table": "locker_item",
       "trash": true,
@@ -798,7 +784,7 @@
       "card": "notebook: name · links: notes · verbs: create edit delete",
       "container": true,
       "date": null,
-      "entity": "core.collection",
+      "entity": "notebook",
       "fields": [],
       "kind": "notebook",
       "links": [
@@ -810,12 +796,12 @@
       ],
       "name": "notebook",
       "name_source": {
-        "column": "name",
-        "table": "core_collection"
+        "column": "title",
+        "table": "entity"
       },
-      "pk": "collection_id",
+      "pk": "id",
       "plural": "notebooks",
-      "table": "core_collection",
+      "table": "container",
       "trash": false,
       "verbs": [
         "create",
@@ -828,24 +814,24 @@
       "card": "folder: name · links: documents · verbs: create edit delete",
       "container": true,
       "date": null,
-      "entity": "core.concept",
+      "entity": "folder",
       "fields": [],
       "kind": "folder",
       "links": [
         {
           "kind": "document",
           "label": "documents",
-          "via": "folder_tag"
+          "via": "folder_column"
         }
       ],
       "name": "folder",
       "name_source": {
-        "column": "pref_label",
-        "table": "core_concept"
+        "column": "title",
+        "table": "entity"
       },
-      "pk": "concept_id",
+      "pk": "id",
       "plural": "folders",
-      "table": "core_concept",
+      "table": "container",
       "trash": false,
       "verbs": [
         "create",
@@ -858,15 +844,15 @@
       "card": "list: name, area · links: tasks · verbs: create edit",
       "container": true,
       "date": null,
-      "entity": "schedule.project",
+      "entity": "project",
       "fields": [
         {
           "create": true,
-          "edit": "schedule.save_project",
+          "edit": "container.move",
           "name": "area",
           "source": {
-            "column": "area",
-            "table": "schedule_project"
+            "column": "parent_id",
+            "table": "container"
           },
           "type": "text",
           "unit": null,
@@ -883,12 +869,12 @@
       ],
       "name": "list",
       "name_source": {
-        "column": "name",
-        "table": "schedule_project"
+        "column": "title",
+        "table": "entity"
       },
-      "pk": "project_id",
+      "pk": "id",
       "plural": "lists",
-      "table": "schedule_project",
+      "table": "container",
       "trash": false,
       "verbs": [
         "create",
@@ -904,11 +890,11 @@
       "date": {
         "label": "posted",
         "source": {
-          "column": "posted_at",
-          "table": "core_transaction"
+          "column": "posted_on",
+          "table": "txn"
         }
       },
-      "entity": "core.transaction",
+      "entity": "txn",
       "fields": [
         {
           "create": false,
@@ -916,7 +902,7 @@
           "name": "amount",
           "source": {
             "column": "amount_minor",
-            "table": "core_transaction"
+            "table": "txn"
           },
           "type": "money",
           "unit": null,
@@ -927,8 +913,8 @@
           "edit": null,
           "name": "account",
           "source": {
-            "column": "name",
-            "table": "core_account"
+            "column": "account_id",
+            "table": "txn"
           },
           "type": "text",
           "unit": null,
@@ -939,8 +925,8 @@
           "edit": null,
           "name": "category",
           "source": {
-            "column": "pref_label",
-            "table": "core_concept"
+            "column": "category_id",
+            "table": "txn"
           },
           "type": "text",
           "unit": null,
@@ -952,7 +938,7 @@
           "name": "status",
           "source": {
             "column": "status",
-            "table": "core_transaction"
+            "table": "txn"
           },
           "type": "enum",
           "unit": null,
@@ -972,12 +958,12 @@
       "links": [],
       "name": "transaction",
       "name_source": {
-        "column": "display_name",
-        "table": "money_transaction"
+        "column": "title",
+        "table": "entity"
       },
-      "pk": "txn_id",
+      "pk": "id",
       "plural": "transactions",
-      "table": "core_transaction",
+      "table": "txn",
       "trash": false,
       "verbs": [],
       "where_fields": [
@@ -995,118 +981,76 @@
     "coffee"
   ],
   "mapped_columns": [
-    "core_account.name",
-    "core_collection.collection_id",
-    "core_collection.name",
-    "core_concept.concept_id",
-    "core_concept.pref_label",
-    "core_content_text.body_text",
-    "core_document.created_at",
-    "core_document.document_id",
-    "core_document.title",
-    "core_event.description",
-    "core_event.dtend",
-    "core_event.dtstart",
-    "core_event.event_id",
-    "core_event.status",
-    "core_event.summary",
-    "core_party.display_name",
-    "core_party.party_id",
-    "core_tag.concept_id",
-    "core_transaction.amount_minor",
-    "core_transaction.posted_at",
-    "core_transaction.status",
-    "core_transaction.txn_id",
-    "knowledge_note.created_at",
-    "knowledge_note.note_id",
-    "knowledge_note.pinned",
-    "knowledge_note.title",
-    "locker_item.item_id",
+    "activity.starts",
+    "container.id",
+    "container.parent_id",
+    "document.id",
+    "edge.to_id",
+    "entity.created_at",
+    "entity.title",
+    "event.description",
+    "event.ends",
+    "event.id",
+    "event.starts",
+    "event.status",
+    "locker_item.id",
     "locker_item.notes",
-    "locker_item.title",
     "locker_item.type",
     "locker_item.url",
     "locker_item.username",
-    "media_asset.asset_id",
-    "media_asset.captured_at",
-    "media_asset.title",
-    "money_transaction.display_name",
-    "people_profile.cadence_days",
-    "people_profile.last_contacted_at",
-    "people_profile.met",
-    "people_profile.nickname",
-    "people_profile.role",
-    "schedule_project.area",
-    "schedule_project.name",
-    "schedule_project.project_id",
-    "schedule_task.completed_at",
-    "schedule_task.description",
-    "schedule_task.due_at",
-    "schedule_task.effort_min",
-    "schedule_task.priority",
-    "schedule_task.status",
-    "schedule_task.task_id",
-    "schedule_task.title"
+    "note.body",
+    "note.id",
+    "person.cadence_days",
+    "person.id",
+    "person.met",
+    "person.nickname",
+    "person.role",
+    "photo.id",
+    "photo.taken_at",
+    "task.description",
+    "task.done_at",
+    "task.due",
+    "task.effort_min",
+    "task.id",
+    "task.priority",
+    "task.status",
+    "txn.account_id",
+    "txn.amount_minor",
+    "txn.category_id",
+    "txn.id",
+    "txn.posted_on",
+    "txn.status"
   ],
   "mapped_commands": [
-    "core.add_document",
-    "core.create_folder",
-    "core.delete_folder",
-    "core.link_entities",
-    "core.move_document",
-    "core.rename_document",
-    "core.rename_folder",
-    "core.restore_document",
-    "core.star_document",
-    "core.trash_document",
-    "core.unlink_entities",
-    "core.unstar_document",
-    "knowledge.create_note",
-    "knowledge.create_notebook",
-    "knowledge.delete_note",
-    "knowledge.delete_notebook",
-    "knowledge.edit_note",
-    "knowledge.move_note",
-    "knowledge.rename_notebook",
-    "knowledge.restore_note",
+    "container.create",
+    "container.move",
+    "document.create_text",
+    "document.move",
+    "edge.add",
+    "edge.remove",
+    "entity.restore",
+    "entity.retitle",
+    "entity.trash",
+    "event.cancel",
+    "event.edit",
+    "event.propose",
+    "flag.clear",
+    "flag.set",
     "locker.add_item",
     "locker.edit_item",
-    "locker.restore_item",
     "locker.reveal_receipt",
-    "locker.star_item",
-    "locker.trash_item",
-    "locker.unstar_item",
-    "media.add_asset",
-    "media.add_to_album",
-    "media.create_album",
-    "media.delete_album",
-    "media.delete_asset",
-    "media.remove_from_album",
-    "media.rename_album",
-    "media.restore_asset",
-    "media.set_favorite",
-    "media.update_asset",
-    "people.add_person",
-    "people.edit_person",
-    "people.log_interaction",
-    "people.restore_person",
-    "people.set_cadence",
-    "people.star_person",
-    "people.trash_person",
-    "people.unstar_person",
-    "schedule.add_task",
-    "schedule.cancel_event",
-    "schedule.delete_event",
-    "schedule.delete_task",
-    "schedule.edit_event",
-    "schedule.edit_task",
-    "schedule.organize_task",
-    "schedule.propose_event",
-    "schedule.reschedule_event",
-    "schedule.restore_event",
-    "schedule.restore_task",
-    "schedule.save_project",
-    "schedule.set_task_status"
+    "note.create",
+    "note.edit",
+    "note.move",
+    "person.add",
+    "person.edit",
+    "person.log_interaction",
+    "task.add",
+    "task.cancel",
+    "task.complete",
+    "task.edit",
+    "task.organize",
+    "task.reopen"
   ],
   "multi_kind_params": [
     "kind",
@@ -1174,27 +1118,27 @@
       "commands": [
         [
           "person",
-          "people.add_person"
+          "person.add"
         ],
         [
           "event",
-          "schedule.propose_event"
+          "event.propose"
         ],
         [
           "task",
-          "schedule.add_task"
+          "task.add"
         ],
         [
           "note",
-          "knowledge.create_note"
+          "note.create"
         ],
         [
           "document",
-          "core.add_document"
+          "document.create_text"
         ],
         [
           "album",
-          "media.create_album"
+          "container.create"
         ],
         [
           "locker_item",
@@ -1202,15 +1146,15 @@
         ],
         [
           "notebook",
-          "knowledge.create_notebook"
+          "container.create"
         ],
         [
           "folder",
-          "core.create_folder"
+          "container.create"
         ],
         [
           "list",
-          "schedule.save_project"
+          "container.create"
         ]
       ],
       "done": "created",
@@ -1222,31 +1166,31 @@
       "commands": [
         [
           "person",
-          "people.edit_person"
+          "person.edit"
         ],
         [
           "event",
-          "schedule.edit_event"
+          "event.edit"
         ],
         [
           "task",
-          "schedule.edit_task"
+          "task.edit"
         ],
         [
           "note",
-          "knowledge.edit_note"
+          "note.edit"
         ],
         [
           "document",
-          "core.rename_document"
+          "entity.retitle"
         ],
         [
           "photo",
-          "media.update_asset"
+          "entity.retitle"
         ],
         [
           "album",
-          "media.rename_album"
+          "entity.retitle"
         ],
         [
           "locker_item",
@@ -1254,15 +1198,15 @@
         ],
         [
           "notebook",
-          "knowledge.rename_notebook"
+          "entity.retitle"
         ],
         [
           "folder",
-          "core.rename_folder"
+          "entity.retitle"
         ],
         [
           "list",
-          "schedule.save_project"
+          "entity.retitle"
         ]
       ],
       "done": "edited",
@@ -1274,11 +1218,11 @@
       "commands": [
         [
           "task",
-          "schedule.edit_task"
+          "task.edit"
         ],
         [
           "event",
-          "schedule.reschedule_event"
+          "event.edit"
         ]
       ],
       "done": "rescheduled",
@@ -1290,7 +1234,7 @@
       "commands": [
         [
           "task",
-          "schedule.set_task_status"
+          "task.complete"
         ]
       ],
       "done": "completed",
@@ -1302,7 +1246,7 @@
       "commands": [
         [
           "task",
-          "schedule.set_task_status"
+          "task.reopen"
         ]
       ],
       "done": "reopened",
@@ -1314,7 +1258,7 @@
       "commands": [
         [
           "event",
-          "schedule.cancel_event"
+          "event.cancel"
         ]
       ],
       "done": "cancelled",
@@ -1326,43 +1270,43 @@
       "commands": [
         [
           "person",
-          "people.trash_person"
+          "entity.trash"
         ],
         [
           "event",
-          "schedule.delete_event"
+          "entity.trash"
         ],
         [
           "task",
-          "schedule.delete_task"
+          "entity.trash"
         ],
         [
           "note",
-          "knowledge.delete_note"
+          "entity.trash"
         ],
         [
           "document",
-          "core.trash_document"
+          "entity.trash"
         ],
         [
           "photo",
-          "media.delete_asset"
+          "entity.trash"
         ],
         [
           "album",
-          "media.delete_album"
+          "entity.trash"
         ],
         [
           "locker_item",
-          "locker.trash_item"
+          "entity.trash"
         ],
         [
           "notebook",
-          "knowledge.delete_notebook"
+          "entity.trash"
         ],
         [
           "folder",
-          "core.delete_folder"
+          "entity.trash"
         ]
       ],
       "done": "deleted",
@@ -1374,31 +1318,31 @@
       "commands": [
         [
           "person",
-          "people.restore_person"
+          "entity.restore"
         ],
         [
           "event",
-          "schedule.restore_event"
+          "entity.restore"
         ],
         [
           "task",
-          "schedule.restore_task"
+          "entity.restore"
         ],
         [
           "note",
-          "knowledge.restore_note"
+          "entity.restore"
         ],
         [
           "document",
-          "core.restore_document"
+          "entity.restore"
         ],
         [
           "photo",
-          "media.restore_asset"
+          "entity.restore"
         ],
         [
           "locker_item",
-          "locker.restore_item"
+          "entity.restore"
         ]
       ],
       "done": "restored",
@@ -1410,19 +1354,19 @@
       "commands": [
         [
           "person",
-          "people.star_person"
+          "flag.set"
         ],
         [
           "document",
-          "core.star_document"
+          "flag.set"
         ],
         [
           "photo",
-          "media.set_favorite"
+          "flag.set"
         ],
         [
           "locker_item",
-          "locker.star_item"
+          "flag.set"
         ]
       ],
       "done": "starred",
@@ -1434,19 +1378,19 @@
       "commands": [
         [
           "person",
-          "people.unstar_person"
+          "flag.clear"
         ],
         [
           "document",
-          "core.unstar_document"
+          "flag.clear"
         ],
         [
           "photo",
-          "media.set_favorite"
+          "flag.clear"
         ],
         [
           "locker_item",
-          "locker.unstar_item"
+          "flag.clear"
         ]
       ],
       "done": "unstarred",
@@ -1458,19 +1402,19 @@
       "commands": [
         [
           "photo",
-          "media.add_to_album"
+          "edge.add"
         ],
         [
           "note",
-          "knowledge.move_note"
+          "note.move"
         ],
         [
           "document",
-          "core.move_document"
+          "document.move"
         ],
         [
           "task",
-          "schedule.organize_task"
+          "task.organize"
         ]
       ],
       "done": "added",
@@ -1482,19 +1426,19 @@
       "commands": [
         [
           "photo",
-          "media.remove_from_album"
+          "edge.remove"
         ],
         [
           "note",
-          "knowledge.move_note"
+          "note.move"
         ],
         [
           "document",
-          "core.move_document"
+          "document.move"
         ],
         [
           "task",
-          "schedule.organize_task"
+          "task.organize"
         ]
       ],
       "done": "removed",
@@ -1506,7 +1450,7 @@
       "commands": [
         [
           "person",
-          "people.log_interaction"
+          "person.log_interaction"
         ]
       ],
       "done": "logged",

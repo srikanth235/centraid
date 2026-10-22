@@ -163,9 +163,9 @@ fn where_order_limit_within_and_exclude() {
     let linked = call(
         &mut session,
         "find",
-        json!({"kind": "person", "where": "photo count >= 1"}),
+        json!({"kind": "person", "where": "task count >= 1"}),
     );
-    assert_eq!(ids(&linked["effect"]["rows"]), vec![world.id("neha_r")]);
+    assert_eq!(ids(&linked["effect"]["rows"]), vec![world.id("benedikt")]);
 }
 
 #[test]
@@ -176,7 +176,7 @@ fn linked_to_reads_the_metadata_links() {
         &mut session,
         &[
             ("task", "Write report"),
-            ("person", "Neha Rao"),
+            ("person", "Benedikt"),
             ("album", "Summer"),
         ],
     );
@@ -199,12 +199,12 @@ fn linked_to_reads_the_metadata_links() {
         json!({"kind": "task", "linked_to": found[0]}),
     );
     assert_eq!(ids(&subtasks["effect"]["rows"]), vec![world.id("outline")]);
-    let photos = call(
+    let about = call(
         &mut session,
         "find",
-        json!({"kind": "photo", "linked_to": found[1]}),
+        json!({"kind": "task", "linked_to": found[1]}),
     );
-    assert_eq!(ids(&photos["effect"]["rows"]), vec![world.id("beach")]);
+    assert_eq!(ids(&about["effect"]["rows"]), vec![world.id("reed")]);
 }
 
 #[test]
@@ -259,9 +259,9 @@ fn search_is_fuzzy_ranked_and_carries_links() {
 fn open_shows_every_fact_and_its_links_with_counts() {
     let world = seeded();
     let mut session = world.session();
-    let neha = number(&mut session, "person", "Neha Rao");
-    let opened = text(&mut session, "open", json!({"row": neha}));
-    assert!(opened.contains("photos (1): #"), "{opened}");
+    let benedikt = number(&mut session, "person", "Benedikt");
+    let opened = text(&mut session, "open", json!({"row": benedikt}));
+    assert!(opened.contains("tasks (1): #"), "{opened}");
     let many = text(&mut session, "open", json!({"row": "#1, #2"}));
     assert!(
         many.starts_with("error: open takes exactly one row, #n.\nrows you can still use: #"),

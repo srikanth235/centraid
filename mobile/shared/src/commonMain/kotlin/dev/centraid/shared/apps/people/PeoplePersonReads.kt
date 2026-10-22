@@ -95,7 +95,7 @@ public object PeopleSheetFold {
         return PeoplePersonData(
             party_id = person.party_id,
             name = person.name,
-            avatar = PeopleWords.avatar(person.party_id, person.name, person.avatar_color),
+            avatar = PeopleWords.avatar(person.party_id, person.name),
             role = person.role,
             cadence_line = "${PeopleWords.cadence(person.cadence_days)} · ${lastTouch.replaceFirstChar { it.lowercase() }}",
             due_chip = if (person.due) StatusChip(label = PeopleCopy.CHIP_OVERDUE, tone = StatusChip.Tone.TONE_NET) else null,
@@ -106,12 +106,9 @@ public object PeopleSheetFold {
                 if (sheet.nickname.isNotBlank()) add(PeopleFact(label = PeopleCopy.FACT_NICKNAME, value_ = sheet.nickname))
                 if (sheet.met.isNotBlank()) add(PeopleFact(label = PeopleCopy.FACT_MET, value_ = sheet.met))
             },
-            // A refused contact plane is UNKNOWN, never an empty rail (P1): no
-            // count is drawn and the empty line says it could not be read,
-            // exactly as the touch log does below.
             channels_head = SectionHead(
                 title = PeopleCopy.SECTION_CHANNELS,
-                count = if (sheet.channels_known) sheet.channels.size else null,
+                count = sheet.channels.size,
                 verb_label = PeopleCopy.ADD_CHANNEL,
             ),
             channels = sheet.channels.map { channel ->
@@ -134,11 +131,7 @@ public object PeopleSheetFold {
                     accessibility_label = fill(PeopleCopy.CHANNEL_A11Y, "kind" to kind, "value" to channel.value_),
                 )
             },
-            channels_empty = when {
-                !sheet.channels_known -> PeopleCopy.CHANNELS_UNKNOWN
-                sheet.channels.isEmpty() -> PeopleCopy.EMPTY_CHANNELS
-                else -> ""
-            },
+            channels_empty = if (sheet.channels.isEmpty()) PeopleCopy.EMPTY_CHANNELS else "",
             dates_head = SectionHead(
                 title = PeopleCopy.SECTION_DATES,
                 count = sheet.dates.size,
@@ -176,31 +169,22 @@ public object PeopleSheetFold {
             notes_empty = if (sheet.notes.isEmpty()) PeopleCopy.EMPTY_NOTES else "",
             touches_head = SectionHead(
                 title = PeopleCopy.SECTION_TOUCHES,
-                count = if (sheet.touches_known) sheet.touches.size else null,
+                count = sheet.touches.size,
                 verb_label = PeopleCopy.LOG_TOUCH,
             ),
-            // v0 NEVER SHOWED THE LOG it wrote (audit): here it is, and an
-            // unreadable log says so rather than drawing "nothing logged".
-            touches = if (!sheet.touches_known) {
-                emptyList()
-            } else {
-                sheet.touches.map { touch ->
-                    val kind = PeopleWords.touchKind(touch.kind)
-                    val whenLabel = PeopleWords.whenLogged(touch.occurred_local_day, today)
-                    PeopleTouchRow(
-                        interaction_id = touch.interaction_id,
-                        kind_label = kind,
-                        text = touch.text,
-                        when_label = whenLabel,
-                        accessibility_label = fill(PeopleCopy.TOUCH_A11Y, "kind" to kind, "when" to whenLabel),
-                    )
-                }
+            // v0 NEVER SHOWED THE LOG it wrote (audit): here it is.
+            touches = sheet.touches.map { touch ->
+                val kind = PeopleWords.touchKind(touch.kind)
+                val whenLabel = PeopleWords.whenLogged(touch.occurred_local_day, today)
+                PeopleTouchRow(
+                    interaction_id = touch.interaction_id,
+                    kind_label = kind,
+                    text = touch.text,
+                    when_label = whenLabel,
+                    accessibility_label = fill(PeopleCopy.TOUCH_A11Y, "kind" to kind, "when" to whenLabel),
+                )
             },
-            touches_empty = when {
-                !sheet.touches_known -> PeopleCopy.TOUCHES_UNKNOWN
-                sheet.touches.isEmpty() -> PeopleCopy.EMPTY_TOUCHES
-                else -> ""
-            },
+            touches_empty = if (sheet.touches.isEmpty()) PeopleCopy.EMPTY_TOUCHES else "",
             today = today,
         )
     }
@@ -211,7 +195,7 @@ public object PeopleSheetFold {
             PeopleMergeChoice(
                 party_id = row.party_id,
                 name = row.name,
-                avatar = PeopleWords.avatar(row.party_id, row.name, row.avatar_color),
+                avatar = PeopleWords.avatar(row.party_id, row.name),
                 role = row.role,
             )
         },

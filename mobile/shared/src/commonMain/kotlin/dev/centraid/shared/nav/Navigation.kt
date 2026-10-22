@@ -41,7 +41,7 @@ public sealed interface Destination {
     public data object Capture : Destination
 
     /**
-     * HOME'S SEARCH (R-CHROME-6): one field over every app but Locker, pushed
+     * HOME'S SEARCH (R-CHROME-6): one field over every app, pushed
      * from Home's search bar. A shell forwards `HomeSearchEvent.Opened` at the
      * push, never on re-appearance, so a member coming back from a row finds
      * the results they left.
@@ -161,8 +161,6 @@ public sealed interface Destination {
         val presentation: PlacesState.Presentation =
             PlacesState.Presentation.PRESENTATION_CARDS,
     ) : Destination
-
-    public data object PhotosMemories : Destination
 
     public data object PhotoDuplicates : Destination
 

@@ -55,7 +55,7 @@ impl Scratch {
     }
 
     fn founded_with(seed: Option<centraid_identity::Seed>) -> Self {
-        let dir = centraid_ontology::golden::scratch_dir();
+        let dir = centraid_ontology::scratch::scratch_dir();
         std::fs::create_dir_all(&dir).expect("the directory is made");
         let handle = open_at(dir.join("vault.db"), seed);
         handle
@@ -72,7 +72,7 @@ impl Scratch {
     /// a directory of its own, opened by a core holding `words`' seed. No key
     /// directory travels, because there is none.
     fn restored(&self, words: &str) -> Self {
-        let dir = centraid_ontology::golden::scratch_dir();
+        let dir = centraid_ontology::scratch::scratch_dir();
         std::fs::create_dir_all(&dir).expect("the directory is made");
         // The file and its write-ahead log, which SQLite folds in on open;
         // nothing writes while the copy is taken.
@@ -242,10 +242,11 @@ fn stocked() -> Scratch {
         json!({
             "item_id": "item-bank", "type": "login", "title": "Bank",
             "username": "maya@example.com", "password": PASSWORD,
-            "url": "https://bank.example.com", "notes": "recovery words live here",
-            "tags": ["finance"]
+            "url": "https://bank.example.com", "notes": "recovery words live here"
         }),
     );
+    // A Locker tag is a vault tag, put on by the shared verb.
+    scratch.run("tag.add", json!({ "id": "item-bank", "label": "finance" }));
     scratch.run(
         "locker.add_item",
         json!({ "item_id": "item-forum", "type": "login", "title": "Old forum",
@@ -270,13 +271,16 @@ fn stocked() -> Scratch {
         "locker.add_item",
         json!({ "item_id": "item-archived", "type": "note", "title": "Old note" }),
     );
-    scratch.run("locker.archive_item", json!({ "item_id": "item-archived" }));
+    scratch.run(
+        "flag.set",
+        json!({ "id": "item-archived", "flag": "archived" }),
+    );
     scratch.run(
         "locker.add_item",
         json!({ "item_id": "item-trashed", "type": "password", "title": "Gone" }),
     );
-    scratch.run("locker.trash_item", json!({ "item_id": "item-trashed" }));
-    scratch.run("locker.star_item", json!({ "item_id": "item-bank" }));
+    scratch.run("entity.trash", json!({ "id": "item-trashed" }));
+    scratch.run("flag.set", json!({ "id": "item-bank", "flag": "starred" }));
     scratch.relock();
     scratch
 }
@@ -412,7 +416,12 @@ fn search_is_the_typed_text_of_a_live_item_and_never_a_secret() {
             .collect()
     };
     assert_eq!(hits("bank"), vec!["item-bank".to_owned()]);
-    assert_eq!(hits("MAYA@"), vec!["item-bank".to_owned()]);
+    // A match is a word of the index, not a substring: `MAYA@` is the word `maya`,
+    // which the forum's username holds too, and the whole address is the bank's alone.
+    let mut maya = hits("MAYA@");
+    maya.sort();
+    assert_eq!(maya, vec!["item-bank".to_owned(), "item-forum".to_owned()]);
+    assert_eq!(hits("maya@example.com"), vec!["item-bank".to_owned()]);
     assert_eq!(hits("forum.example"), vec!["item-forum".to_owned()]);
     // The note is typed text and is searched since #1097 (R6).
     assert_eq!(hits("recovery"), vec!["item-bank".to_owned()]);
@@ -1249,7 +1258,7 @@ fn an_items_access_history_is_its_receipts_as_metadata() {
 /// nothing, and not one value anywhere in the bytes.
 ///
 /// It is also the answer to L1 (v1-handoffs): the phone's page door has no
-/// entity catalog to widen, so `access_receipt` is readable here today, and
+/// entity catalog to widen, so Locker's `receipt` is readable here today, and
 /// what keeps another surface's receipts out is the statement's own
 /// `object_type` wall, which this test counts exactly.
 #[test]
@@ -1292,9 +1301,9 @@ fn the_whole_lockers_access_history_names_every_receipt_and_carries_no_value() {
     scratch.reveal("item-card", "card_number");
     scratch.reveal("item-bin", "password");
     scratch.reveal("item-temp", "password");
-    scratch.run("locker.trash_item", json!({ "item_id": "item-bin" }));
-    scratch.run("locker.trash_item", json!({ "item_id": "item-temp" }));
-    scratch.run("locker.purge_item", json!({ "item_id": "item-temp" }));
+    scratch.run("entity.trash", json!({ "id": "item-bin" }));
+    scratch.run("entity.trash", json!({ "id": "item-temp" }));
+    scratch.run("entity.purge", json!({ "id": "item-temp" }));
     assert!(
         scratch
             .export(wire::LockerExportFormat::Csv)

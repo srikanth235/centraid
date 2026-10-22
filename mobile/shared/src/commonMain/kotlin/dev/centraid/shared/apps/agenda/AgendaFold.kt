@@ -25,7 +25,6 @@ import dev.centraid.design.copy.AgendaCopy
 import dev.centraid.design.copy.TasksCopy
 import dev.centraid.shared.design.PartyHueWheel
 import dev.centraid.shared.kit.SearchContainers
-import dev.centraid.shared.kit.SearchLaw
 import dev.centraid.shared.kit.time.dayOfMonthOf
 import dev.centraid.shared.kit.time.isoWeekdayOf
 import dev.centraid.shared.kit.time.plusDays
@@ -200,12 +199,7 @@ internal object AgendaFold {
                 AgendaCopy.EMPTY_DAY_ONE_BODY,
                 AgendaCopy.NEW_EVENT,
             )
-            // THE ONE ACTION is Ask, when the machine offered it (#1097): the shell draws and sends it.
-            AgendaEmpty.AGENDA_EMPTY_NO_MATCH -> Triple(
-                AgendaCopy.EMPTY_NO_MATCH,
-                AgendaCopy.EMPTY_NO_MATCH_BODY,
-                if (screen.search_ask.isEmpty()) "" else SearchLaw.askLabel(screen.search_term),
-            )
+            AgendaEmpty.AGENDA_EMPTY_NO_MATCH -> Triple(AgendaCopy.EMPTY_NO_MATCH, AgendaCopy.EMPTY_NO_MATCH_BODY, "")
             AgendaEmpty.AGENDA_EMPTY_NOTHING_WAITING -> Triple(AgendaCopy.EMPTY_WAITING, "", "")
             AgendaEmpty.AGENDA_EMPTY_NOTHING_ON_DAY -> Triple(
                 if (span == 1) AgendaCopy.EMPTY_DAY else AgendaCopy.EMPTY_DAYS,
@@ -619,7 +613,7 @@ internal object AgendaFold {
     private const val NO_CALENDAR_HUE: String = "cSlate"
 
     /** The index entity a project container carries (`SearchContainers`). */
-    private const val PROJECT_ENTITY: String = "schedule.project"
+    private const val PROJECT_ENTITY: String = "project"
 
     private const val CANCELLED: String = "cancelled"
     private const val NEEDS_ACTION: String = "needs-action"

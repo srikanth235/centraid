@@ -4,7 +4,7 @@ package dev.centraid.shared.platform
  * A CAPTURE'S TIME-ZONE OFFSET, READ OFF ITS EXIF TAG (D-1025-S7-77, ruled
  * 2026-10-15).
  *
- * `captured_at` is a UTC instant and `media_asset.tz_offset_min` is the zone the
+ * `captured_at` is a UTC instant and `photo.offset_min` is the zone the
  * shutter fired in, so a photograph keeps its capture DAY wherever the reader
  * stands (#419). Neither `PHAsset` nor MediaStore publishes that zone; the
  * camera wrote it into the file as `OffsetTimeOriginal`. A platform reads that

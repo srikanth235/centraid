@@ -3,6 +3,7 @@ package dev.centraid.shared
 import centraid.core.v1.CommandStatus
 import centraid.core.v1.Row
 import centraid.core.v1.Value
+import centraid.screen.v1.SearchAsk
 import centraid.screen.v1.Autosave
 import centraid.screen.v1.NoteDraft
 import centraid.screen.v1.NotesEditorEvent
@@ -164,7 +165,7 @@ class KitLawsSpec : StringSpec({
         var field = SearchField()
         val lens = object : SearchLens<SearchField> {
             override val screenId: String = "probe.search"
-            override val asks: Boolean = true
+            override val askScope: String = "notes"
             override fun field(state: SearchField): SearchField = state
             override fun with(state: SearchField, field: SearchField): SearchField = field
         }
@@ -181,7 +182,7 @@ class KitLawsSpec : StringSpec({
     "search: an answer for a term the member has since changed is stale" {
         val lens = object : SearchLens<SearchField> {
             override val screenId: String = "probe.search"
-            override val asks: Boolean = true
+            override val askScope: String = "notes"
             override fun field(state: SearchField): SearchField = state
             override fun with(state: SearchField, field: SearchField): SearchField = field
         }
@@ -194,7 +195,7 @@ class KitLawsSpec : StringSpec({
     "search: the words corrected are kept for the current answer, cleared by a new term or a close, and never set for a stale or blank one (#1097)" {
         val lens = object : SearchLens<SearchField> {
             override val screenId: String = "probe.search"
-            override val asks: Boolean = true
+            override val askScope: String = "notes"
             override fun field(state: SearchField): SearchField = state
             override fun with(state: SearchField, field: SearchField): SearchField = field
         }
@@ -215,34 +216,32 @@ class KitLawsSpec : StringSpec({
         SearchLaw.answered(lens, SearchLaw.term(lens, typed, "dinnre ").state, "dinnre", "dinner").corrected shouldBe "dinner"
     }
 
-    "search: Ask is the question of a wholly empty current answer for a lens that asks, and nothing else sets it (#1097, R-1097-28)" {
-        fun lens(asks: Boolean) = object : SearchLens<SearchField> {
+    "search: Ask is one row, with its label, question and scope, on every current answer of a lens that asks, matched or not (#1097, #1135)" {
+        fun lens(scope: String?) = object : SearchLens<SearchField> {
             override val screenId: String = "probe.search"
-            override val asks: Boolean = asks
+            override val askScope: String? = scope
             override fun field(state: SearchField): SearchField = state
             override fun with(state: SearchField, field: SearchField): SearchField = field
         }
-        val lens = lens(true)
+        val lens = lens("notes")
         val typed = SearchLaw.term(lens, SearchLaw.opened(lens, SearchField()).state, "zzqx ").state
         val found = centraid.screen.v1.SearchContainer(entity = "core.collection", id = "c", kind_label = "Notebook")
-        val asking = SearchLaw.answered(lens, typed, "zzqx", rows = 0)
-        asking.ask shouldBe "Find zzqx"
-        SearchLaw.asking(centraid.screen.v1.EmptyState(headline = "Nothing."), asking).action_label shouldBe "Ask about “zzqx”"
-        SearchLaw.asking(centraid.screen.v1.EmptyState(headline = "Nothing."), SearchField()).action_label shouldBe ""
-        // Anything found, or no count to speak of, is no Ask.
-        SearchLaw.answered(lens, typed, "zzqx", rows = 1).ask shouldBe ""
-        SearchLaw.answered(lens, typed, "zzqx", containers = listOf(found), rows = 0).ask shouldBe ""
-        SearchLaw.answered(lens, typed, "zzqx").ask shouldBe ""
+        val asking = SearchLaw.answered(lens, typed, "zzqx")
+        asking.ask_row shouldBe SearchAsk(label = "Ask about “zzqx”", question = "Find zzqx", scope = "notes")
+        // Something found is still an answer the member may ask the assistant about.
+        SearchLaw.answered(lens, typed, "zzqx", containers = listOf(found)).ask_row shouldBe asking.ask_row
+        // Home's is unscoped.
+        SearchLaw.answered(lens(""), typed, "zzqx").ask_row?.scope shouldBe ""
         // A stale answer, a closed field and a blank term set none.
-        SearchLaw.answered(lens, typed, "zzq", rows = 0).ask shouldBe ""
-        SearchLaw.answered(lens, SearchLaw.closed(lens, asking).state, "zzqx", rows = 0).ask shouldBe ""
-        SearchLaw.answered(lens, SearchLaw.term(lens, typed, " ").state, " ", rows = 0).ask shouldBe ""
+        SearchLaw.answered(lens, typed, "zzq").ask_row shouldBe null
+        SearchLaw.answered(lens, SearchLaw.closed(lens, asking).state, "zzqx").ask_row shouldBe null
+        SearchLaw.answered(lens, SearchLaw.term(lens, typed, " ").state, " ").ask_row shouldBe null
         // A lens that does not ask never sets it.
-        SearchLaw.answered(lens(false), typed, "zzqx", rows = 0).ask shouldBe ""
+        SearchLaw.answered(lens(null), typed, "zzqx").ask_row shouldBe null
         // A new term, a close and a denial clear it.
-        SearchLaw.term(lens, asking, "zzq").state.ask shouldBe ""
-        SearchLaw.closed(lens, asking).state.ask shouldBe ""
-        SearchLaw.unasked(lens, asking).ask shouldBe ""
+        SearchLaw.term(lens, asking, "zzq").state.ask_row shouldBe null
+        SearchLaw.closed(lens, asking).state.ask_row shouldBe null
+        SearchLaw.unasked(lens, asking).ask_row shouldBe null
         SearchLaw.unasked(lens, SearchField()) shouldBe SearchField()
     }
 
@@ -272,15 +271,16 @@ class KitLawsSpec : StringSpec({
     "autosave: only the changed fields are sent" {
         val titleOnly = notes(notes(loaded(), title("New")).state, tick("save:1"))
         val input = (titleOnly.effects.single() as ScreenEffect.SubmitWrite).inputJson
-        input shouldBe "{\"note_id\":\"note-1\",\"title\":\"New\"}"
-        input shouldNotContain "body_text"
+        input shouldBe "{\"id\":\"note-1\",\"title\":\"New\"}"
+        input shouldNotContain "body"
         input shouldNotContain "pinned"
     }
 
-    "autosave: a pin saves at once, with no debounce" {
+    "autosave: a pin is the shared flag verb, sent at once with no debounce" {
         val pinned = notes(loaded(), NotesEditorEvent(pin = NotesEditorEvent.PinToggled()))
         val write = pinned.effects.single() as ScreenEffect.SubmitWrite
-        write.inputJson shouldBe "{\"note_id\":\"note-1\",\"pinned\":1}"
+        write.command shouldBe "flag.set"
+        write.inputJson shouldBe "{\"id\":\"note-1\",\"flag\":\"pinned\"}"
     }
 
     "autosave: a change from the vault never replaces words being typed" {
@@ -319,17 +319,17 @@ class KitLawsSpec : StringSpec({
         // Their tick comes due against a SAVING editor, and does nothing.
         notes(more, tick("save:2")).effects.shouldBeEmpty()
         val next = notes(more, settled(key, committed = true))
-        (next.effects.single() as ScreenEffect.SubmitWrite).inputJson shouldContain "\"body_text\":\"xy\""
+        (next.effects.single() as ScreenEffect.SubmitWrite).inputJson shouldContain "\"body\":\"xy\""
     }
 
     "autosave: an untitled note is titled from its first line; an emptied body is saved empty" {
         val untitled = notes(notes(loaded(title = ""), body("\n  Shopping list \nmilk")).state, tick("save:1"))
         (untitled.effects.single() as ScreenEffect.SubmitWrite).inputJson shouldContain "\"title\":\"Shopping list\""
 
-        // `body_text` takes an empty string: clearing a note is the member's words.
+        // `body` takes an empty string: clearing a note is the member's words.
         val emptied = notes(notes(loaded(), body("")).state, tick("save:1"))
         (emptied.effects.single() as ScreenEffect.SubmitWrite).inputJson shouldBe
-            "{\"note_id\":\"note-1\",\"body_text\":\"\"}"
+            "{\"id\":\"note-1\",\"body\":\"\"}"
         emptied.state.save shouldBe NotesEditorState.SaveState.SAVE_STATE_SAVING
     }
 
@@ -460,10 +460,10 @@ class KitLawsSpec : StringSpec({
         refused.write.shouldNotBeNull().phase shouldBe WriteState.Phase.PHASE_REFUSED
 
         val query = TrashReads(tasksTrash).query(machine.initial(), null)
-        query.from shouldBe "schedule_task"
+        query.from shouldBe "task"
         query.where_ shouldBe "deleted_at IS NOT NULL"
         query.select shouldBe listOf("task_id", "title", "deleted_at")
-        machine.rowsChanged("schedule_task", emptyList()).shouldNotBeNull()
+        machine.rowsChanged("task", emptyList()).shouldNotBeNull()
         machine.rowsChanged("other", emptyList()).shouldBeNull()
     }
 
@@ -544,7 +544,7 @@ class KitLawsSpec : StringSpec({
 
     "trash: a table keyed unlike its rows re-reads on any change" {
         val machine = TrashMachine(tasksTrash.copy(reReadOnAnyChange = true))
-        machine.rowsChanged("schedule_task", listOf("profile-9")).shouldNotBeNull().rows_changed
+        machine.rowsChanged("task", listOf("profile-9")).shouldNotBeNull().rows_changed
             .shouldNotBeNull().ids.shouldBeEmpty()
         machine.rowsChanged("other", listOf("k")).shouldBeNull()
     }
@@ -552,7 +552,7 @@ class KitLawsSpec : StringSpec({
     private companion object {
         val tasksTrash = TrashSpec(
             appId = "tasks",
-            table = "schedule_task",
+            table = "task",
             restoreCommand = "tasks.restore_task",
             purgeCommand = "tasks.purge_task",
             emptyCommand = "tasks.empty_trash",

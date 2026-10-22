@@ -289,21 +289,15 @@ pub fn cashflow(
 // Balances.
 // ---------------------------------------------------------------------------
 
-/// The balance of an account on `day`: opening plus the signed posted rows
-/// after the opening date and on or before `day`.
+/// The balance of an account on `day`: where it opened plus every signed posted
+/// row on or before `day`. The opening balance is what the account held before
+/// its first line, so every line counts.
 #[must_use]
 pub fn balance_on(account: &AccountRow, ledger: &[TxnRow], day: &str) -> i64 {
     account.opening_minor
         + ledger
             .iter()
-            .filter(|row| {
-                row.status == "posted"
-                    && row.posted_on.as_str() <= day
-                    && account
-                        .opening_on
-                        .as_deref()
-                        .is_none_or(|opening| row.posted_on.as_str() > opening)
-            })
+            .filter(|row| row.status == "posted" && row.posted_on.as_str() <= day)
             .map(TxnRow::signed_minor)
             .sum::<i64>()
 }
@@ -312,7 +306,6 @@ pub fn balance_on(account: &AccountRow, ledger: &[TxnRow], day: &str) -> i64 {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CheckpointCompare {
     pub as_of: String,
-    pub source: String,
     pub stated_minor: i64,
     /// Derived less stated.
     pub delta_minor: i64,
@@ -341,14 +334,11 @@ pub fn account_balance(
     let checkpoint = checkpoints
         .iter()
         .filter(|c| c.account_id == account.account_id && c.as_of.as_str() <= today)
-        .max_by(|a, b| {
-            (a.as_of.as_str(), a.source.as_str()).cmp(&(b.as_of.as_str(), b.source.as_str()))
-        })
+        .max_by(|a, b| a.as_of.cmp(&b.as_of))
         .and_then(|c| {
             let derived = balance_on(account, ledger?, &c.as_of);
             Some(CheckpointCompare {
                 as_of: c.as_of.clone(),
-                source: c.source.clone(),
                 stated_minor: c.balance_minor,
                 delta_minor: derived - c.balance_minor,
                 agrees: derived == c.balance_minor,

@@ -32,17 +32,12 @@ fn executed(world: &World) -> BTreeMap<String, usize> {
     let handle = vaultio::Handle::open(world.path(), SetClock::at(1_800_000_000_000), "coverage")
         .expect("the journal opens");
     let rows = handle
-        .table(
-            "command_invocation",
-            "invocation_id, command_id, status, requested_at",
-            "requested_at",
-            "invocation_id",
-        )
+        .table("journal", "seq, command, outcome", "seq", "seq")
         .expect("the journal reads");
     let mut counts = BTreeMap::new();
     for row in &rows {
-        if vaultio::text(row, "status").as_deref() == Some("executed") {
-            let command = vaultio::text(row, "command_id").unwrap_or_default();
+        if vaultio::text(row, "outcome").as_deref() == Some("executed") {
+            let command = vaultio::text(row, "command").unwrap_or_default();
             *counts.entry(command).or_insert(0) += 1;
         }
     }

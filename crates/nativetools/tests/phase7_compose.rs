@@ -555,7 +555,10 @@ fn a_write_on_a_trashed_row_declines_and_a_restore_finds_it() {
     );
     assert_declined(&near, "not_found");
     assert_eq!(near["effect"]["refusal"]["id"], world.id("old"), "{near}");
-    assert_eq!(near["effect"]["refusal"]["predicate"], "person_trashed");
+    assert_eq!(
+        near["effect"]["refusal"]["predicate"],
+        "entity_is_in_the_trash"
+    );
     // the refusal keeps its own marker, and says no write ran
     assert_eq!(family(&near), fix("refused_write", "decline"));
     assert!(!text(&near).contains("applied to"), "{near}");
@@ -896,14 +899,16 @@ fn a_cancelled_event_to_reschedule_asks_over_that_event() {
 
 #[test]
 fn the_refusals_the_model_repairs_stay_errors() {
-    // a name in use is the model's to change
+    // a subtask's parent must be an open task with no parent of its own: the model's to change.
+    // (A name in use is no refusal since #1135.)
     let world = seeded();
     let mut session = world.session();
-    session.user("rename ideas to recipes");
+    session.user("add a part to the finished report");
+    let report = common::number(&mut session, "task", "Write report");
     let reply = call(
         &mut session,
         "act",
-        json!({"verb": "edit", "kind": "notebook", "name": "Ideas", "args": "name: Recipes"}),
+        json!({"verb": "create", "kind": "task", "args": format!("name: Part two\nparent: {report}")}),
     );
     assert_eq!(reply["ends_turn"], false, "{reply}");
     assert!(text(&reply).contains("was refused: "), "{reply}");

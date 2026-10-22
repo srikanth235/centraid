@@ -11,11 +11,6 @@ use crate::native::dates::Stamp;
 use crate::native::door::{Door, int, text};
 use crate::native::meta::{Field, FieldType, Kind, Via};
 
-pub const FLAGS_SCHEME: &str = "https://centraid.dev/schemes/flags";
-pub const FOLDER_SCHEME: &str = "https://centraid.dev/schemes/folders";
-pub const STARRED: &str = "starred";
-pub const ROOT_FOLDER: &str = "root";
-
 /// The days before today the runtime reads events in, in the person's zone, with every repeating
 /// series expanded (R-1088-8). An event farther away is read as stored.
 pub const EVENT_DAYS_BACK: i64 = 31;
@@ -171,6 +166,25 @@ pub struct Row {
 }
 
 impl Row {
+    /// A row from its entity: the name, the stamps and the trash window are the entity's own.
+    fn of(kind: Kind, id: &str, entity: &VaultRow, fields: BTreeMap<&'static str, Val>) -> Self {
+        let mut extra = BTreeMap::new();
+        if let Some(purge) = text(entity, "purge_at") {
+            extra.insert("purge_at", purge);
+        }
+        Self {
+            kind,
+            id: id.to_owned(),
+            name: text(entity, "title").unwrap_or_default(),
+            date: None,
+            fields,
+            trashed: text(entity, "deleted_at").is_some(),
+            created: text(entity, "created_at").unwrap_or_default(),
+            updated: text(entity, "updated_at").unwrap_or_default(),
+            extra,
+        }
+    }
+
     #[must_use]
     pub fn key(&self) -> Key {
         (self.kind, self.id.clone())
@@ -193,8 +207,6 @@ pub struct Edge {
     pub from: Key,
     pub to: Key,
     pub via: Via,
-    /// The `core_link` row behind an `About` edge.
-    pub link_id: Option<String>,
 }
 
 /// Everything the tools read.
@@ -205,10 +217,9 @@ pub struct World {
     pub me: String,
     pub currency: String,
     pub calendar: String,
-    pub root_folder: Option<String>,
     pub locker_key: Option<String>,
-    /// Invocations in the journal, for the seed that numbers a session.
-    pub entity_count: usize,
+    /// The areas lists sit in, `(id, title)`: containers the model has no kind for.
+    pub areas: Vec<(String, String)>,
 }
 
 fn stamp(value: Option<String>) -> Option<Stamp> {
@@ -291,68 +302,52 @@ impl World {
         Self::load_with(door, true)
     }
 
-    /// Load everything. With `locker` false (`Flags::locker`) no Locker table and no sealed
-    /// column is read, and the world holds no Locker item. Events are read as stored. The recent
-    /// transactions are read (`Flags::money`, on).
-    pub fn load_with(door: &dyn Door, locker: bool) -> Result<Self, String> {
-        Self::load_in(door, locker, true, None)
+    /// Load everything. With `secrets` false (`Flags::secrets`) no sealed column is read: a
+    /// Locker item is in the world by its plain rows, and each sealed cell it holds is a presence
+    /// bit. Events are read as stored. The recent transactions are read (`Flags::money`, on).
+    pub fn load_with(door: &dyn Door, secrets: bool) -> Result<Self, String> {
+        Self::load_in(door, secrets, true, None)
     }
 
     /// Load everything, the events of the days around `at.today` read in the zone `at.tz` with
     /// every repeating series expanded (R-1088-8, [`Door::events`]). With `money` false
     /// (`Flags::money`) no Money table is read and the world holds no transaction; with it on,
     /// the transactions of the last [`TRANSACTION_MONTHS`] months are.
+    ///
+    /// **The vault's tables, read as an app reads them** (#1135): an entity row (its title, its
+    /// trash) beside its kind row, and the relations as edges or as the column that holds them.
+    /// Nothing is read from the journal, and a container's kind is the container's own.
     pub fn load_in(
         door: &dyn Door,
-        locker: bool,
+        secrets: bool,
         money: bool,
         at: Option<&Standing>,
     ) -> Result<Self, String> {
         let mut world = Self::default();
-        let vault = door.table(
-            "core_vault",
-            "vault_id, self_party_id, base_currency, created_at",
-            "created_at",
-            "vault_id",
-        )?;
+        let vault = door.table("vault", "id, self_id, currency", "id", "id")?;
         let vault = vault.first().ok_or("the vault has not been founded")?;
-        world.me = text(vault, "self_party_id").unwrap_or_default();
-        world.currency = text(vault, "base_currency").unwrap_or_else(|| "USD".to_owned());
-        world.calendar = door
-            .table(
-                "schedule_calendar",
-                "calendar_id, created_at",
-                "created_at",
-                "calendar_id",
-            )?
-            .first()
-            .and_then(|row| text(row, "calendar_id"))
-            .unwrap_or_default();
-        world.entity_count = door
-            .table(
-                "command_invocation",
-                "invocation_id, requested_at",
-                "requested_at",
-                "invocation_id",
-            )?
-            .len();
+        world.me = text(vault, "self_id").unwrap_or_default();
+        world.currency = text(vault, "currency").unwrap_or_else(|| "USD".to_owned());
+        world.calendar = centraid_vault::model::DEFAULT_CALENDAR_ID.to_owned();
 
-        let concepts = Concepts::load(door)?;
-        world.root_folder = concepts.root_folder.clone();
-        world.load_people(door, &concepts)?;
+        let flags = Flags::load(door)?;
+        world.load_people(door, &flags)?;
         world.load_events(door, at)?;
         world.load_tasks(door)?;
-        // Photos before collections: an album's entries are edges to them.
-        world.load_photos(door, &concepts)?;
-        world.load_notes_and_collections(door)?;
-        world.load_documents(door, &concepts)?;
-        if locker {
-            world.load_locker(door, &concepts)?;
-        }
+        world.load_photos(door, &flags)?;
+        world.load_notes(door, &flags)?;
+        world.load_containers(door)?;
+        world.load_documents(door, &flags)?;
+        world.load_locker(door, &flags, secrets)?;
         if money {
             world.load_transactions(door, at)?;
         }
         world.load_links(door)?;
+        // an edge is kept when both of its ends are rows the model talks about
+        let rows = &world.rows;
+        world
+            .edges
+            .retain(|edge| rows.contains_key(&edge.from) && rows.contains_key(&edge.to));
         world.edges.sort();
         world.edges.dedup();
         Ok(world)
@@ -362,97 +357,64 @@ impl World {
         self.rows.insert(row.key(), row);
     }
 
-    fn edge(&mut self, from: Key, to: Key, via: Via, link_id: Option<String>) {
-        if self.rows.contains_key(&from) && self.rows.contains_key(&to) {
-            self.edges.push(Edge {
-                from,
-                to,
-                via,
-                link_id,
-            });
-        }
+    fn edge(&mut self, from: Key, to: Key, via: Via) {
+        self.edges.push(Edge { from, to, via });
     }
 
-    fn load_people(&mut self, door: &dyn Door, concepts: &Concepts) -> Result<(), String> {
-        let parties = door.table(
-            "core_party",
-            "party_id, kind, display_name, created_at, updated_at",
-            "created_at",
-            "party_id",
+    fn load_people(&mut self, door: &dyn Door, flags: &Flags) -> Result<(), String> {
+        let entities = entities(door, "person")?;
+        let people = door.table(
+            "person",
+            "id, form, role, nickname, met, cadence_days",
+            "id",
+            "id",
         )?;
-        let profiles = door.table(
-            "people_profile",
-            "profile_id, party_id, role, nickname, cadence_days, last_contacted_at, met, \
-             created_at, updated_at, deleted_at, purge_at",
-            "created_at",
-            "profile_id",
-        )?;
-        let by_party: BTreeMap<String, &VaultRow> = profiles
-            .iter()
-            .filter_map(|row| text(row, "party_id").map(|id| (id, row)))
-            .collect();
-        for party in &parties {
-            if text(party, "kind").as_deref() != Some("person") {
+        let touched = last_contacts(door)?;
+        for person in &people {
+            let id = text(person, "id").unwrap_or_default();
+            let Some(entity) = entities.get(&id) else {
+                continue;
+            };
+            if text(person, "form").as_deref() != Some("person") {
                 continue;
             }
-            let id = text(party, "party_id").unwrap_or_default();
-            let profile = by_party.get(&id).copied();
             let mut fields = BTreeMap::new();
-            let mut date = None;
-            let mut trashed = false;
-            let mut updated = text(party, "updated_at").unwrap_or_default();
-            if let Some(profile) = profile {
-                put(&mut fields, "role", nonempty(text(profile, "role")));
-                put(&mut fields, "nickname", nonempty(text(profile, "nickname")));
-                put(&mut fields, "met", nonempty(text(profile, "met")));
-                put(
-                    &mut fields,
-                    "cadence",
-                    int(profile, "cadence_days")
-                        .filter(|days| *days > 0)
-                        .map(Val::Num),
-                );
-                date = stamp(text(profile, "last_contacted_at"));
-                trashed = text(profile, "deleted_at").is_some();
-                updated = updated.max(text(profile, "updated_at").unwrap_or_default());
-            }
-            fields.insert("starred", Val::Bool(concepts.starred("core.party", &id)));
-            let mut extra = BTreeMap::new();
-            if profile.is_some() {
-                extra.insert("profile", "yes".to_owned());
-            }
-            if let Some(purge) = profile.and_then(|profile| text(profile, "purge_at")) {
-                extra.insert("purge_at", purge);
-            }
+            put(&mut fields, "role", nonempty(text(person, "role")));
+            put(&mut fields, "nickname", nonempty(text(person, "nickname")));
+            put(&mut fields, "met", nonempty(text(person, "met")));
+            put(
+                &mut fields,
+                "cadence",
+                int(person, "cadence_days")
+                    .filter(|days| *days > 0)
+                    .map(Val::Num),
+            );
+            fields.insert("starred", Val::Bool(flags.starred.contains(&id)));
             self.insert(Row {
                 kind: Kind::Person,
-                name: text(party, "display_name").unwrap_or_default(),
-                id,
-                date,
-                fields,
-                trashed,
-                created: text(party, "created_at").unwrap_or_default(),
-                updated,
-                extra,
+                date: touched.get(&id).and_then(|at| Stamp::parse(at)),
+                ..Row::of(Kind::Person, &id, entity, fields)
             });
         }
         Ok(())
     }
 
     fn load_events(&mut self, door: &dyn Door, at: Option<&Standing>) -> Result<(), String> {
+        let entities = entities(door, "event")?;
         let events = door.table(
-            "core_event",
-            "event_id, summary, description, dtstart, dtend, status, rrule, created_at, \
-             updated_at, deleted_at, purge_at",
-            "created_at",
-            "event_id",
+            "event",
+            "id, starts, ends, timing, zone, rule, status, description",
+            "id",
+            "id",
         )?;
+        let spec = Kind::Event.spec();
         for event in &events {
-            let start = stamp(text(event, "dtstart"));
-            let end = stamp(text(event, "dtend"));
+            let id = text(event, "id").unwrap_or_default();
+            let Some(entity) = entities.get(&id) else {
+                continue;
+            };
             let mut fields = BTreeMap::new();
             let status = text(event, "status").unwrap_or_default();
-            let spec = Kind::Event.spec();
             if let Some(value) = spec
                 .field("status")
                 .and_then(|field| field.model_value(&status))
@@ -464,50 +426,39 @@ impl World {
                 "description",
                 nonempty(text(event, "description")),
             );
-            let mut extra = BTreeMap::new();
+            let mut row = Row::of(Kind::Event, &id, entity, fields);
             // the stored spellings of the span and the trash window: what a write's checks read
             // (the clash of a new event, the restore window)
             for (name, column) in [
-                ("dtstart", "dtstart"),
-                ("dtend", "dtend"),
-                ("purge_at", "purge_at"),
-                ("rrule", "rrule"),
+                ("dtstart", "starts"),
+                ("dtend", "ends"),
+                ("rrule", "rule"),
+                ("timing", "timing"),
+                ("zone", "zone"),
             ] {
                 if let Some(value) = text(event, column) {
-                    extra.insert(name, value);
+                    row.extra.insert(name, value);
                 }
             }
-            let mut row = Row {
-                kind: Kind::Event,
-                id: text(event, "event_id").unwrap_or_default(),
-                name: text(event, "summary").unwrap_or_default(),
-                date: None,
-                fields,
-                trashed: text(event, "deleted_at").is_some(),
-                created: text(event, "created_at").unwrap_or_default(),
-                updated: text(event, "updated_at").unwrap_or_default(),
-                extra,
-            };
-            shape_event(&mut row, start, end);
-            self.insert(row);
-        }
-        let attendees = door.table(
-            "schedule_attendee",
-            "attendee_id, event_id, party_id, created_at",
-            "created_at",
-            "attendee_id",
-        )?;
-        for attendee in &attendees {
-            if let (Some(event), Some(party)) =
-                (text(attendee, "event_id"), text(attendee, "party_id"))
-            {
-                self.edge(
-                    (Kind::Event, event),
-                    (Kind::Person, party),
-                    Via::Attendee,
-                    None,
+            let all_day = row.extra.get("timing").map(String::as_str) == Some("all-day");
+            if all_day {
+                // an all-day event is a day (or days) and never a clock time; its end is the LAST
+                // day, inclusive
+                row.date = stamp(text(event, "starts")).map(|start| Stamp {
+                    date: start.date,
+                    time: None,
+                });
+            } else {
+                shape_event(
+                    &mut row,
+                    stamp(text(event, "starts")),
+                    stamp(text(event, "ends")),
                 );
             }
+            self.insert(row);
+        }
+        for (event, guest) in pairs(door, "attendee")? {
+            self.edge((Kind::Event, event), (Kind::Person, guest), Via::Attendee);
         }
         if let Some(at) = at {
             self.read_event_window(door, at);
@@ -604,12 +555,7 @@ impl World {
                 let id = row.id.clone();
                 self.insert(row);
                 for guest in &guests {
-                    self.edge(
-                        (Kind::Event, id.clone()),
-                        guest.clone(),
-                        Via::Attendee,
-                        None,
-                    );
+                    self.edge((Kind::Event, id.clone()), guest.clone(), Via::Attendee);
                 }
             }
         }
@@ -639,36 +585,20 @@ impl World {
     }
 
     fn load_tasks(&mut self, door: &dyn Door) -> Result<(), String> {
-        let projects = door.table(
-            "schedule_project",
-            "project_id, name, area, archived_at, created_at, updated_at",
-            "created_at",
-            "project_id",
-        )?;
-        for project in &projects {
-            let mut fields = BTreeMap::new();
-            put(&mut fields, "area", nonempty(text(project, "area")));
-            self.insert(Row {
-                kind: Kind::List,
-                id: text(project, "project_id").unwrap_or_default(),
-                name: text(project, "name").unwrap_or_default(),
-                date: None,
-                fields,
-                trashed: false,
-                created: text(project, "created_at").unwrap_or_default(),
-                updated: text(project, "updated_at").unwrap_or_default(),
-                extra: BTreeMap::new(),
-            });
-        }
+        let entities = entities(door, "task")?;
         let tasks = door.table(
-            "schedule_task",
-            "task_id, title, description, status, priority, due_at, completed_at, effort_min, \
-             parent_task_id, project_id, created_at, updated_at, deleted_at, purge_at, rrule",
-            "created_at",
-            "task_id",
+            "task",
+            "id, status, priority, due, done_at, rule, effort_min, parent_id, project_id, \
+             description",
+            "id",
+            "id",
         )?;
         let spec = Kind::Task.spec();
         for task in &tasks {
+            let id = text(task, "id").unwrap_or_default();
+            let Some(entity) = entities.get(&id) else {
+                continue;
+            };
             let mut fields = BTreeMap::new();
             let status = text(task, "status").unwrap_or_default();
             if let Some(value) = spec
@@ -688,288 +618,179 @@ impl World {
             put(
                 &mut fields,
                 "completed",
-                stamp(text(task, "completed_at")).map(Val::Date),
+                stamp(text(task, "done_at")).map(Val::Date),
             );
             put(
                 &mut fields,
                 "description",
                 nonempty(text(task, "description")),
             );
-            let mut extra = BTreeMap::new();
-            for column in ["purge_at", "rrule"] {
-                if let Some(value) = text(task, column) {
-                    extra.insert(column, value);
-                }
+            let mut row = Row::of(Kind::Task, &id, entity, fields);
+            row.date = stamp(text(task, "due"));
+            if let Some(rule) = text(task, "rule") {
+                row.extra.insert("rrule", rule);
             }
-            self.insert(Row {
-                kind: Kind::Task,
-                id: text(task, "task_id").unwrap_or_default(),
-                name: text(task, "title").unwrap_or_default(),
-                date: stamp(text(task, "due_at")),
-                fields,
-                trashed: text(task, "deleted_at").is_some(),
-                created: text(task, "created_at").unwrap_or_default(),
-                updated: text(task, "updated_at").unwrap_or_default(),
-                extra,
-            });
+            self.insert(row);
         }
         for task in &tasks {
-            let id = text(task, "task_id").unwrap_or_default();
-            if let Some(parent) = text(task, "parent_task_id") {
-                self.edge(
-                    (Kind::Task, parent),
-                    (Kind::Task, id.clone()),
-                    Via::Subtask,
-                    None,
-                );
+            let id = text(task, "id").unwrap_or_default();
+            if let Some(parent) = text(task, "parent_id") {
+                self.edge((Kind::Task, parent), (Kind::Task, id.clone()), Via::Subtask);
             }
             if let Some(project) = text(task, "project_id") {
+                self.edge((Kind::List, project), (Kind::Task, id), Via::ListColumn);
+            }
+        }
+        Ok(())
+    }
+
+    fn load_notes(&mut self, door: &dyn Door, flags: &Flags) -> Result<(), String> {
+        let entities = entities(door, "note")?;
+        let notes = door.table("note", "id, body, notebook_id", "id", "id")?;
+        for note in &notes {
+            let id = text(note, "id").unwrap_or_default();
+            let Some(entity) = entities.get(&id) else {
+                continue;
+            };
+            let mut fields = BTreeMap::new();
+            put(&mut fields, "body", nonempty(text(note, "body")));
+            fields.insert("pinned", Val::Bool(flags.pinned.contains(&id)));
+            let created = text(entity, "created_at").unwrap_or_default();
+            self.insert(Row {
+                date: Stamp::parse(&created),
+                ..Row::of(Kind::Note, &id, entity, fields)
+            });
+        }
+        for note in &notes {
+            if let (Some(id), Some(notebook)) = (text(note, "id"), text(note, "notebook_id")) {
+                self.edge((Kind::Notebook, notebook), (Kind::Note, id), Via::Entry);
+            }
+        }
+        Ok(())
+    }
+
+    /// THE CONTAINERS, each of the kind its own row states: an album and a notebook are both
+    /// `container` rows, and the row says which. A trashed container is gone to the model (its
+    /// members went to the trash with it and read as trashed).
+    fn load_containers(&mut self, door: &dyn Door) -> Result<(), String> {
+        let areas = entities(door, "area")?;
+        self.areas = areas
+            .iter()
+            .filter(|(_, area)| text(area, "deleted_at").is_none())
+            .filter_map(|(id, area)| Some((id.clone(), text(area, "title")?)))
+            .collect();
+        for (vault_kind, kind) in [
+            ("notebook", Kind::Notebook),
+            ("album", Kind::Album),
+            ("folder", Kind::Folder),
+            ("project", Kind::List),
+        ] {
+            let entities = entities(door, vault_kind)?;
+            let containers = door.table_where(
+                "container",
+                "id, parent_id",
+                "id",
+                "id",
+                "kind = ?",
+                &[vault_kind.to_owned()],
+            )?;
+            for container in &containers {
+                let id = text(container, "id").unwrap_or_default();
+                let Some(entity) = entities.get(&id) else {
+                    continue;
+                };
+                if text(entity, "deleted_at").is_some() {
+                    continue;
+                }
+                let parent = text(container, "parent_id");
+                let mut fields = BTreeMap::new();
+                if kind == Kind::List {
+                    put(
+                        &mut fields,
+                        "area",
+                        parent
+                            .as_ref()
+                            .and_then(|area| areas.get(area))
+                            .and_then(|area| nonempty(text(area, "title"))),
+                    );
+                }
+                let mut row = Row::of(kind, &id, entity, fields);
+                row.extra.remove("purge_at");
+                if let Some(parent) = parent {
+                    // a list's parent is the area it sits in; a notebook's or folder's, the one it
+                    // is nested under
+                    row.extra.insert(
+                        if kind == Kind::List {
+                            "area_id"
+                        } else {
+                            "parent"
+                        },
+                        parent,
+                    );
+                }
+                self.insert(row);
+            }
+        }
+        for (album, photo) in pairs(door, "contains")? {
+            self.edge((Kind::Album, album), (Kind::Photo, photo), Via::Entry);
+        }
+        Ok(())
+    }
+
+    fn load_documents(&mut self, door: &dyn Door, flags: &Flags) -> Result<(), String> {
+        let entities = entities(door, "document")?;
+        let documents = door.table("document", "id, folder_id", "id", "id")?;
+        for document in &documents {
+            let id = text(document, "id").unwrap_or_default();
+            let Some(entity) = entities.get(&id) else {
+                continue;
+            };
+            let mut fields = BTreeMap::new();
+            fields.insert("starred", Val::Bool(flags.starred.contains(&id)));
+            let created = text(entity, "created_at").unwrap_or_default();
+            self.insert(Row {
+                date: Stamp::parse(&created),
+                ..Row::of(Kind::Document, &id, entity, fields)
+            });
+            if let Some(folder) = text(document, "folder_id") {
                 self.edge(
-                    (Kind::List, project),
-                    (Kind::Task, id),
-                    Via::ListColumn,
-                    None,
+                    (Kind::Folder, folder),
+                    (Kind::Document, id),
+                    Via::FolderColumn,
                 );
             }
         }
         Ok(())
     }
 
-    fn load_notes_and_collections(&mut self, door: &dyn Door) -> Result<(), String> {
-        let texts = door.table(
-            "core_content_text",
-            "content_id, body_text, created_at",
-            "created_at",
-            "content_id",
-        )?;
-        let bodies: BTreeMap<String, String> = texts
-            .iter()
-            .filter_map(|row| Some((text(row, "content_id")?, text(row, "body_text")?)))
-            .collect();
-        let notes = door.table(
-            "knowledge_note",
-            "note_id, title, body_content_id, pinned, created_at, updated_at, deleted_at, purge_at",
-            "created_at",
-            "note_id",
-        )?;
-        for note in &notes {
+    fn load_photos(&mut self, door: &dyn Door, flags: &Flags) -> Result<(), String> {
+        let entities = entities(door, "photo")?;
+        let photos = door.table("photo", "id, form, taken_at", "id", "id")?;
+        for photo in &photos {
+            let id = text(photo, "id").unwrap_or_default();
+            let Some(entity) = entities.get(&id) else {
+                continue;
+            };
+            // a video and a scan are not pictures the model talks about
+            if text(photo, "form").as_deref() != Some("photo") {
+                continue;
+            }
             let mut fields = BTreeMap::new();
-            let body = text(note, "body_content_id").and_then(|id| bodies.get(&id).cloned());
-            put(&mut fields, "body", nonempty(body));
-            fields.insert("pinned", Val::Bool(int(note, "pinned") == Some(1)));
-            let created = text(note, "created_at").unwrap_or_default();
-            let mut extra = BTreeMap::new();
-            if let Some(purge) = text(note, "purge_at") {
-                extra.insert("purge_at", purge);
+            fields.insert("starred", Val::Bool(flags.starred.contains(&id)));
+            let mut row = Row::of(Kind::Photo, &id, entity, fields);
+            row.date = stamp(text(photo, "taken_at"));
+            if row.name.is_empty() {
+                row.name = "untitled".to_owned();
             }
-            self.insert(Row {
-                kind: Kind::Note,
-                id: text(note, "note_id").unwrap_or_default(),
-                name: text(note, "title").unwrap_or_default(),
-                date: Stamp::parse(&created),
-                fields,
-                trashed: text(note, "deleted_at").is_some(),
-                created,
-                updated: text(note, "updated_at").unwrap_or_default(),
-                extra,
-            });
-        }
-        // ALBUM OR NOTEBOOK. Both are `core_collection` rows and the table
-        // does not say which. The journal does: every collection this
-        // runtime or its seeder makes is created with an explicit id, so the
-        // executed `media.create_album` / `knowledge.create_notebook`
-        // invocation naming that id is the answer. Failing that, what the
-        // collection holds; failing that, a notebook.
-        let invocations = door.table(
-            "command_invocation",
-            "invocation_id, command_id, input_json, status, requested_at",
-            "requested_at",
-            "invocation_id",
-        )?;
-        let mut roles: BTreeMap<String, Kind> = BTreeMap::new();
-        for invocation in &invocations {
-            if text(invocation, "status").as_deref() != Some("executed") {
-                continue;
-            }
-            let command = text(invocation, "command_id").unwrap_or_default();
-            let input: serde_json::Value =
-                serde_json::from_str(&text(invocation, "input_json").unwrap_or_default())
-                    .unwrap_or_default();
-            let (kind, key) = match command.as_str() {
-                "media.create_album" => (Kind::Album, "album_id"),
-                "knowledge.create_notebook" => (Kind::Notebook, "notebook_id"),
-                _ => continue,
-            };
-            if let Some(id) = input.get(key).and_then(serde_json::Value::as_str) {
-                roles.insert(id.to_owned(), kind);
-            }
-        }
-        let entries = door.table(
-            "core_collection_entry",
-            "entry_id, collection_id, target_type, target_id, added_at",
-            "added_at",
-            "entry_id",
-        )?;
-        for entry in &entries {
-            let (Some(collection), Some(target_type)) =
-                (text(entry, "collection_id"), text(entry, "target_type"))
-            else {
-                continue;
-            };
-            let role = match target_type.as_str() {
-                "media.asset" => Kind::Album,
-                "knowledge.note" => Kind::Notebook,
-                _ => continue,
-            };
-            roles.entry(collection).or_insert(role);
-        }
-        let collections = door.table(
-            "core_collection",
-            "collection_id, name, parent_collection_id, created_at, updated_at",
-            "created_at",
-            "collection_id",
-        )?;
-        for collection in &collections {
-            let id = text(collection, "collection_id").unwrap_or_default();
-            let kind = roles.get(&id).copied().unwrap_or(Kind::Notebook);
-            let mut extra = BTreeMap::new();
-            if let Some(parent) = text(collection, "parent_collection_id") {
-                extra.insert("parent", parent);
-            }
-            self.insert(Row {
-                kind,
-                name: text(collection, "name").unwrap_or_default(),
-                id,
-                date: None,
-                fields: BTreeMap::new(),
-                trashed: false,
-                created: text(collection, "created_at").unwrap_or_default(),
-                updated: text(collection, "updated_at").unwrap_or_default(),
-                extra,
-            });
-        }
-        for entry in &entries {
-            let (Some(collection), Some(target_type), Some(target)) = (
-                text(entry, "collection_id"),
-                text(entry, "target_type"),
-                text(entry, "target_id"),
-            ) else {
-                continue;
-            };
-            match target_type.as_str() {
-                "media.asset" => self.edge(
-                    (Kind::Album, collection),
-                    (Kind::Photo, target),
-                    Via::Entry,
-                    None,
-                ),
-                "knowledge.note" => self.edge(
-                    (Kind::Notebook, collection),
-                    (Kind::Note, target),
-                    Via::Entry,
-                    None,
-                ),
-                _ => {}
-            }
+            self.insert(row);
         }
         Ok(())
     }
 
-    fn load_documents(&mut self, door: &dyn Door, concepts: &Concepts) -> Result<(), String> {
-        for (id, label, created, updated, parent) in &concepts.folders {
-            let mut extra = BTreeMap::new();
-            if let Some(parent) = parent {
-                extra.insert("parent", parent.clone());
-            }
-            self.insert(Row {
-                kind: Kind::Folder,
-                id: id.clone(),
-                name: label.clone(),
-                date: None,
-                fields: BTreeMap::new(),
-                trashed: false,
-                created: created.clone(),
-                updated: updated.clone(),
-                extra,
-            });
-        }
-        let documents = door.table(
-            "core_document",
-            "document_id, title, created_at, updated_at, deleted_at, purge_at",
-            "created_at",
-            "document_id",
-        )?;
-        for document in &documents {
-            let id = text(document, "document_id").unwrap_or_default();
-            let mut fields = BTreeMap::new();
-            fields.insert("starred", Val::Bool(concepts.starred("core.document", &id)));
-            let created = text(document, "created_at").unwrap_or_default();
-            let mut extra = BTreeMap::new();
-            if let Some(purge) = text(document, "purge_at") {
-                extra.insert("purge_at", purge);
-            }
-            self.insert(Row {
-                kind: Kind::Document,
-                name: text(document, "title").unwrap_or_default(),
-                id,
-                date: Stamp::parse(&created),
-                fields,
-                trashed: text(document, "deleted_at").is_some(),
-                created,
-                updated: text(document, "updated_at").unwrap_or_default(),
-                extra,
-            });
-        }
-        for (document, folder) in &concepts.filed {
-            self.edge(
-                (Kind::Folder, folder.clone()),
-                (Kind::Document, document.clone()),
-                Via::FolderTag,
-                None,
-            );
-        }
-        Ok(())
-    }
-
-    fn load_photos(&mut self, door: &dyn Door, concepts: &Concepts) -> Result<(), String> {
-        let assets = door.table(
-            "media_asset",
-            "asset_id, kind, title, captured_at, created_at, updated_at, deleted_at, purge_at",
-            "created_at",
-            "asset_id",
-        )?;
-        for asset in &assets {
-            if text(asset, "kind").as_deref() != Some("photo") {
-                continue;
-            }
-            let id = text(asset, "asset_id").unwrap_or_default();
-            let mut fields = BTreeMap::new();
-            fields.insert("starred", Val::Bool(concepts.starred("media.asset", &id)));
-            let mut extra = BTreeMap::new();
-            if let Some(purge) = text(asset, "purge_at") {
-                extra.insert("purge_at", purge);
-            }
-            self.insert(Row {
-                kind: Kind::Photo,
-                name: text(asset, "title")
-                    .filter(|title| !title.is_empty())
-                    .unwrap_or_else(|| "untitled".to_owned()),
-                id,
-                date: stamp(text(asset, "captured_at")),
-                fields,
-                trashed: text(asset, "deleted_at").is_some(),
-                created: text(asset, "created_at").unwrap_or_default(),
-                updated: text(asset, "updated_at").unwrap_or_default(),
-                extra,
-            });
-        }
-        Ok(())
-    }
-
-    /// The transactions posted in the last [`TRANSACTION_MONTHS`] months, with Money's display
-    /// name, the account's name and the category's label (#1099, R-1099-8). `amount` is signed:
-    /// money out of the account is negative. Nothing is written or derived beyond that; the
-    /// rows are read as stored.
+    /// The transactions posted in the last [`TRANSACTION_MONTHS`] months, with the account's name
+    /// and the category's title (#1099, R-1099-8). `amount` is signed: money out of the account
+    /// is negative, as the vault stores it. Nothing is written or derived beyond that; the rows
+    /// are read as stored. A transaction's name is its own title (Money's display name).
     fn load_transactions(&mut self, door: &dyn Door, at: Option<&Standing>) -> Result<(), String> {
         let today = match at {
             Some(standing) => standing.today,
@@ -984,69 +805,56 @@ impl World {
             .map_err(|error| format!("the transaction window is out of range: {error}"))?;
         let floor = first.to_string();
         let rows = door.table_where(
-            "core_transaction",
-            "txn_id, account_id, posted_at, amount_minor, currency, direction, status, \
-             description, category_concept_id, created_at, updated_at",
-            "posted_at",
-            "txn_id",
-            "posted_at >= ?",
+            "txn",
+            "id, account_id, currency, posted_on, amount_minor, status, category_id",
+            "posted_on",
+            "id",
+            "posted_on >= ?",
             &[floor],
         )?;
         if rows.is_empty() {
             return Ok(());
         }
-        let accounts = door.table(
-            "core_account",
-            "account_id, name",
-            "account_id",
-            "account_id",
-        )?;
-        let account_names: BTreeMap<String, String> = accounts
-            .iter()
-            .filter_map(|row| Some((text(row, "account_id")?, text(row, "name")?)))
-            .collect();
-        let categories = door.table(
-            "core_concept",
-            "concept_id, pref_label, created_at",
-            "created_at",
-            "concept_id",
-        )?;
-        let category_names: BTreeMap<String, String> = categories
-            .iter()
-            .filter_map(|row| Some((text(row, "concept_id")?, text(row, "pref_label")?)))
-            .collect();
-        let ids: Vec<String> = rows.iter().filter_map(|row| text(row, "txn_id")).collect();
-        let mut display: BTreeMap<String, String> = BTreeMap::new();
+        let titles = |kind: &str| -> Result<BTreeMap<String, String>, String> {
+            Ok(entities(door, kind)?
+                .into_iter()
+                .filter_map(|(id, row)| Some((id, text(&row, "title")?)))
+                .collect())
+        };
+        let account_names = titles("account")?;
+        let category_names = titles("category")?;
+        let ids: Vec<String> = rows.iter().filter_map(|row| text(row, "id")).collect();
+        let mut named: BTreeMap<String, VaultRow> = BTreeMap::new();
         for chunk in ids.chunks(DECORATION_CHUNK) {
             let marks = vec!["?"; chunk.len()].join(", ");
-            let decorations = door.table_where(
-                "money_transaction",
-                "txn_id, display_name",
-                "txn_id",
-                "txn_id",
-                &format!("txn_id IN ({marks})"),
+            let found = door.table_where(
+                "entity",
+                "id, title, created_at, updated_at, deleted_at, purge_at",
+                "id",
+                "id",
+                &format!("id IN ({marks})"),
                 chunk,
             )?;
-            for decoration in &decorations {
-                if let (Some(id), Some(name)) =
-                    (text(decoration, "txn_id"), text(decoration, "display_name"))
-                    && !name.is_empty()
-                {
-                    display.insert(id, name);
+            for entity in found {
+                if let Some(id) = text(&entity, "id") {
+                    named.insert(id, entity);
                 }
             }
         }
         for transaction in &rows {
-            let id = text(transaction, "txn_id").unwrap_or_default();
-            let currency = text(transaction, "currency").unwrap_or_else(|| self.currency.clone());
-            let magnitude = int(transaction, "amount_minor").unwrap_or_default();
-            let signed = if text(transaction, "direction").as_deref() == Some("debit") {
-                -magnitude
-            } else {
-                magnitude
+            let id = text(transaction, "id").unwrap_or_default();
+            let Some(entity) = named.get(&id).filter(|e| text(e, "deleted_at").is_none()) else {
+                continue;
             };
+            let currency = text(transaction, "currency").unwrap_or_else(|| self.currency.clone());
             let mut fields = BTreeMap::new();
-            fields.insert("amount", Val::Money(signed, currency));
+            fields.insert(
+                "amount",
+                Val::Money(
+                    int(transaction, "amount_minor").unwrap_or_default(),
+                    currency,
+                ),
+            );
             let account = text(transaction, "account_id").unwrap_or_default();
             put(
                 &mut fields,
@@ -1056,8 +864,8 @@ impl World {
             put(
                 &mut fields,
                 "category",
-                text(transaction, "category_concept_id")
-                    .and_then(|concept| category_names.get(&concept).cloned())
+                text(transaction, "category_id")
+                    .and_then(|category| category_names.get(&category).cloned())
                     .map(Val::Text),
             );
             let status = match text(transaction, "status").as_deref() {
@@ -1065,43 +873,52 @@ impl World {
                 _ => "posted",
             };
             fields.insert("status", Val::Enum(status));
-            let description = text(transaction, "description").unwrap_or_default();
-            let name = display
-                .get(&id)
-                .cloned()
-                .filter(|name| !name.is_empty())
-                .unwrap_or(description);
-            self.insert(Row {
-                kind: Kind::Transaction,
-                name,
-                // a printed civil day (R-1099-2): stored at midnight, shown as the day
-                date: stamp(text(transaction, "posted_at")).map(|posted| Stamp {
-                    date: posted.date,
-                    time: None,
-                }),
-                fields,
-                trashed: false,
-                created: text(transaction, "created_at").unwrap_or_default(),
-                updated: text(transaction, "updated_at").unwrap_or_default(),
-                extra: BTreeMap::new(),
-                id,
+            let mut row = Row::of(Kind::Transaction, &id, entity, fields);
+            // a printed civil day (R-1099-2): shown as the day
+            row.date = stamp(text(transaction, "posted_on")).map(|posted| Stamp {
+                date: posted.date,
+                time: None,
             });
+            row.extra.remove("purge_at");
+            self.insert(row);
         }
         Ok(())
     }
 
-    fn load_locker(&mut self, door: &dyn Door, concepts: &Concepts) -> Result<(), String> {
-        let items = door.table(
-            "locker_item",
-            "item_id, type, title, username, url, notes, created_at, updated_at, deleted_at, \
-             purge_at, key_id, password, otp_seed, card_number, cvv, content, cardholder, expiry, brand, \
-             fullname, email, phone, address, network",
-            "created_at",
-            "item_id",
-        )?;
+    /// The Locker items, read as the owner reads them but for their sealed values: the item's
+    /// entity row (its title, stamps and trash) beside its kind row, and its star from the flags
+    /// every kind shares. With `secrets` (`Flags::secrets`, the harness) the sealed cells are
+    /// read too, for `reveal`; without it (the phone) they are `PRESENT` where the item holds one,
+    /// read as `<cell> IS NOT NULL` and never as a value (the owner's ruling of 2026-10-22).
+    fn load_locker(&mut self, door: &dyn Door, flags: &Flags, secrets: bool) -> Result<(), String> {
+        let entities = entities(door, "locker_item")?;
+        let plain = "id, type, username, url, notes, key_id, cardholder, expiry, brand, fullname, \
+                     email, phone, address, network";
+        let sealed = if secrets {
+            "password, otp_seed, card_number, cvv, content".to_owned()
+        } else {
+            "password IS NOT NULL AS has_password, otp_seed IS NOT NULL AS has_otp_seed, \
+             card_number IS NOT NULL AS has_card_number, cvv IS NOT NULL AS has_cvv, \
+             content IS NOT NULL AS has_content"
+                .to_owned()
+        };
+        let items = door.table("locker_item", &format!("{plain}, {sealed}"), "id", "id")?;
         let spec = Kind::LockerItem.spec();
+        // A sealed cell as the world holds it: its ciphertext under `secrets`, the vault's
+        // placeholder ("a secret is here, leave it alone") on the presence bit without.
+        let held = |item: &VaultRow, column: &str| -> Option<String> {
+            if secrets {
+                text(item, column)
+            } else {
+                (int(item, &format!("has_{column}")) == Some(1))
+                    .then(|| centraid_vault::commands::locker::SEALED_PLACEHOLDER.to_owned())
+            }
+        };
         for item in &items {
-            let id = text(item, "item_id").unwrap_or_default();
+            let id = text(item, "id").unwrap_or_default();
+            let Some(entity) = entities.get(&id) else {
+                continue;
+            };
             let mut fields = BTreeMap::new();
             let kind = text(item, "type").unwrap_or_default();
             if let Some(value) = spec
@@ -1115,19 +932,19 @@ impl World {
             put(&mut fields, "notes", nonempty(text(item, "notes")));
             // A NOTE ITEM'S NOTES ARE ITS SEALED `content`: the row says it
             // has them, and `reveal field: notes` opens them.
-            if kind == "note" && nonempty(text(item, "content")).is_some() {
+            if kind == "note" && nonempty(held(item, "content")).is_some() {
                 fields.insert("notes", Val::Text(SEALED.to_owned()));
             }
-            fields.insert("starred", Val::Bool(concepts.starred("locker.item", &id)));
+            fields.insert("starred", Val::Bool(flags.starred.contains(&id)));
             let mut extra = BTreeMap::new();
             if let Some(key) = text(item, "key_id") {
                 extra.insert("key_id", key);
             }
-            if let Some(purge) = text(item, "purge_at") {
+            if let Some(purge) = text(entity, "purge_at") {
                 extra.insert("purge_at", purge);
             }
             for (_, column) in crate::native::meta::REVEAL_FIELDS {
-                if let Some(sealed) = text(item, column) {
+                if let Some(sealed) = held(item, column) {
                     extra.insert(column, sealed);
                 }
             }
@@ -1140,154 +957,135 @@ impl World {
             }
             self.insert(Row {
                 kind: Kind::LockerItem,
-                name: text(item, "title").unwrap_or_default(),
+                name: text(entity, "title").unwrap_or_default(),
                 id,
                 date: None,
                 fields,
-                trashed: text(item, "deleted_at").is_some(),
-                created: text(item, "created_at").unwrap_or_default(),
-                updated: text(item, "updated_at").unwrap_or_default(),
+                trashed: text(entity, "deleted_at").is_some(),
+                created: text(entity, "created_at").unwrap_or_default(),
+                updated: text(entity, "updated_at").unwrap_or_default(),
                 extra,
             });
         }
         Ok(())
     }
 
+    /// What a note, a task or an event is `about`: an edge from it to the person (or the row)
+    /// it names. A relation the model has no word for is not here.
     fn load_links(&mut self, door: &dyn Door) -> Result<(), String> {
-        let links = door.table(
-            "core_link",
-            "link_id, from_type, from_id, to_type, to_id, valid_from, valid_to",
-            "valid_from",
-            "link_id",
-        )?;
-        for link in &links {
-            if text(link, "valid_to").is_some() {
-                continue;
-            }
-            let (Some(from_type), Some(from), Some(to_type), Some(to)) = (
-                text(link, "from_type"),
-                text(link, "from_id"),
-                text(link, "to_type"),
-                text(link, "to_id"),
-            ) else {
+        let kinds: BTreeMap<String, Kind> = self
+            .rows
+            .keys()
+            .map(|(kind, id)| (id.clone(), *kind))
+            .collect();
+        for (from, to) in pairs(door, "about")? {
+            let (Some(from_kind), Some(to_kind)) = (kinds.get(&from), kinds.get(&to)) else {
                 continue;
             };
-            let (Some(from_kind), Some(to_kind)) =
-                (self.kind_of(&from_type, &from), self.kind_of(&to_type, &to))
-            else {
-                continue;
-            };
-            self.edge(
-                (from_kind, from),
-                (to_kind, to),
-                Via::About,
-                text(link, "link_id"),
-            );
+            self.edge((*from_kind, from), (*to_kind, to), Via::About);
         }
         Ok(())
     }
-
-    /// Which model kind a vault entity row is, if it is one.
-    #[must_use]
-    pub fn kind_of(&self, entity: &str, id: &str) -> Option<Kind> {
-        Kind::ALL.into_iter().find(|kind| {
-            kind.spec().entity == entity && self.rows.contains_key(&(*kind, id.to_owned()))
-        })
-    }
 }
 
-/// The concept plane: stars and folders.
-struct Concepts {
-    starred: BTreeSet<(String, String)>,
-    /// `(id, label, created, updated, parent)`.
-    folders: Vec<(String, String, String, String, Option<String>)>,
-    /// `(document, folder)` — not the root.
-    filed: Vec<(String, String)>,
-    root_folder: Option<String>,
+/// The flags the world reads: who is starred and who is pinned, each a `tagged` edge to the
+/// flag's own entity.
+struct Flags {
+    starred: BTreeSet<String>,
+    pinned: BTreeSet<String>,
 }
 
-impl Concepts {
+impl Flags {
     fn load(door: &dyn Door) -> Result<Self, String> {
-        let schemes = door.table(
-            "core_concept_scheme",
-            "scheme_id, uri, created_at",
-            "created_at",
-            "scheme_id",
-        )?;
-        let scheme_of = |uri: &str| -> Option<String> {
-            schemes
+        let of = |flag: centraid_vault::model::Flag| -> Result<BTreeSet<String>, String> {
+            Ok(door
+                .table_where(
+                    "edge",
+                    "from_id, to_id",
+                    "from_id",
+                    "to_id",
+                    "rel = ? AND to_id = ?",
+                    &["tagged".to_owned(), flag.id()],
+                )?
                 .iter()
-                .find(|row| text(row, "uri").as_deref() == Some(uri))
-                .and_then(|row| text(row, "scheme_id"))
+                .filter_map(|row| text(row, "from_id"))
+                .collect())
         };
-        let flags = scheme_of(FLAGS_SCHEME);
-        let folders_scheme = scheme_of(FOLDER_SCHEME);
-        let concepts = door.table(
-            "core_concept",
-            "concept_id, scheme_id, notation, pref_label, broader_concept_id, created_at, updated_at",
-            "created_at",
-            "concept_id",
-        )?;
-        let mut starred_concepts = BTreeSet::new();
-        let mut folders = Vec::new();
-        let mut folder_ids = BTreeSet::new();
-        let mut root_folder = None;
-        for concept in &concepts {
-            let scheme = text(concept, "scheme_id");
-            let id = text(concept, "concept_id").unwrap_or_default();
-            let notation = text(concept, "notation").unwrap_or_default();
-            if scheme.is_some() && scheme == flags && notation == STARRED {
-                starred_concepts.insert(id.clone());
-            }
-            if scheme.is_some() && scheme == folders_scheme {
-                if notation == ROOT_FOLDER {
-                    root_folder = Some(id.clone());
-                } else {
-                    folder_ids.insert(id.clone());
-                    folders.push((
-                        id,
-                        text(concept, "pref_label").unwrap_or_default(),
-                        text(concept, "created_at").unwrap_or_default(),
-                        text(concept, "updated_at").unwrap_or_default(),
-                        text(concept, "broader_concept_id"),
-                    ));
-                }
-            }
-        }
-        let tags = door.table(
-            "core_tag",
-            "tag_id, target_type, target_id, concept_id, tagged_at",
-            "tagged_at",
-            "tag_id",
-        )?;
-        let mut starred = BTreeSet::new();
-        let mut filed = Vec::new();
-        for tag in &tags {
-            let (Some(target_type), Some(target), Some(concept)) = (
-                text(tag, "target_type"),
-                text(tag, "target_id"),
-                text(tag, "concept_id"),
-            ) else {
-                continue;
-            };
-            if starred_concepts.contains(&concept) {
-                starred.insert((target_type.clone(), target.clone()));
-            }
-            if target_type == "core.document" && folder_ids.contains(&concept) {
-                filed.push((target, concept));
-            }
-        }
         Ok(Self {
-            starred,
-            folders,
-            filed,
-            root_folder,
+            starred: of(centraid_vault::model::Flag::Starred)?,
+            pinned: of(centraid_vault::model::Flag::Pinned)?,
         })
     }
+}
 
-    fn starred(&self, entity: &str, id: &str) -> bool {
-        self.starred.contains(&(entity.to_owned(), id.to_owned()))
+/// Every entity of one kind, live or in the trash, by id.
+fn entities(door: &dyn Door, kind: &str) -> Result<BTreeMap<String, VaultRow>, String> {
+    Ok(door
+        .table_where(
+            "entity",
+            "id, title, created_at, updated_at, deleted_at, purge_at",
+            "created_at",
+            "id",
+            "kind = ?",
+            &[kind.to_owned()],
+        )?
+        .into_iter()
+        .filter_map(|row| Some((text(&row, "id")?, row)))
+        .collect())
+}
+
+/// The `(from, to)` ends of every edge of one relation.
+fn pairs(door: &dyn Door, rel: &str) -> Result<Vec<(String, String)>, String> {
+    Ok(door
+        .table_where(
+            "edge",
+            "from_id, to_id",
+            "from_id",
+            "to_id",
+            "rel = ?",
+            &[rel.to_owned()],
+        )?
+        .iter()
+        .filter_map(|row| Some((text(row, "from_id")?, text(row, "to_id")?)))
+        .collect())
+}
+
+/// When each person was last touched: the latest `starts` of an activity of an activity kind
+/// (a call, a visit; a workout is not a touch) that is `with` them. Computed at read, as
+/// People computes it (`last_contacted` is stored nowhere).
+fn last_contacts(door: &dyn Door) -> Result<BTreeMap<String, String>, String> {
+    let with = pairs(door, "with")?;
+    if with.is_empty() {
+        return Ok(BTreeMap::new());
     }
+    let starts: BTreeMap<String, String> = door
+        .table_where(
+            "activity",
+            "id, starts",
+            "id",
+            "id",
+            "type_kind = ?",
+            &["activity_kind".to_owned()],
+        )?
+        .iter()
+        .filter_map(|row| Some((text(row, "id")?, text(row, "starts")?)))
+        .collect();
+    let live: BTreeSet<String> = entities(door, "activity")?
+        .into_iter()
+        .filter(|(_, row)| text(row, "deleted_at").is_none())
+        .map(|(id, _)| id)
+        .collect();
+    let mut last: BTreeMap<String, String> = BTreeMap::new();
+    for (activity, person) in with {
+        let Some(at) = starts.get(&activity).filter(|_| live.contains(&activity)) else {
+            continue;
+        };
+        let held = last.entry(person).or_default();
+        if at > held {
+            held.clone_from(at);
+        }
+    }
+    Ok(last)
 }
 
 /// A field's type, for the where-language and `compute`.

@@ -1,34 +1,25 @@
-//! The v1 schema authority: open a vault file, know its shape, verify it.
+//! The schema authority: open a vault file, know its shape, verify it.
 //!
-//! This is the first crate of the v1 tree
-//! ([#1020](https://github.com/srikanth235/centraid/issues/1020)) and it is
-//! deliberately narrow. It can OPEN a vault, describe its shape, reproduce v0's
-//! golden-corpus digests, and answer two engine-level soundness questions. It
-//! cannot migrate one or run the ladder; it reaches the registries through the
-//! transcribed fixture in `contracts/schema/v0-registries.json`.
-//!
-//! Wave 1's checkpoint is one sentence: **the ontology crate opens the v0
-//! golden vault**, and `tests/golden_vault.rs` is that sentence as a test.
+//! This crate is deliberately narrow ([#1020](https://github.com/srikanth235/centraid/issues/1020),
+//! [#1135](https://github.com/srikanth235/centraid/issues/1135)). It opens a
+//! file, renders its DDL as the committed fixture, and answers two engine-level
+//! soundness questions. The model itself, with its kinds, relations and
+//! registries, is `crates/vault`'s baseline and `docs/vault-ontology.md`; there
+//! is no second copy of it here. The one other thing it holds is [`text`]: the
+//! fold and the tokenizer of the vault's search index, which the vault, the app
+//! kit and the search door all need to agree on.
 
 #![forbid(unsafe_code)]
 
 pub mod ddl;
 pub mod doctor;
 pub mod error;
-pub mod golden;
 pub mod jsvalue;
-pub mod registries;
-pub mod snapshot;
+pub mod scratch;
+pub mod text;
 pub mod vault;
 
 pub use ddl::{DDL_FIXTURE_HEADER, ddl_fixture, render_ddl, render_ddl_objects};
 pub use doctor::{DoctorReport, format_doctor_report, vault_doctor};
 pub use error::{OntologyError, Result};
-pub use snapshot::{
-    Compared, SnapshotComparison, TableSnapshot, VaultSnapshot, compare_snapshot, snapshot_table,
-    snapshot_tables, snapshot_vault,
-};
-pub use vault::{
-    ONTOLOGY_VERSION, SchemaObject, Vault, expected_user_version, ladder_user_version,
-    schema_objects_of,
-};
+pub use vault::{ONTOLOGY_VERSION, SchemaObject, Vault, schema_objects_of};

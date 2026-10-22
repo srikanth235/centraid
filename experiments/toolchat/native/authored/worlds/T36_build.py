@@ -190,7 +190,7 @@ for mo, due, done in [("jul", "2026-07-03", "2026-07-02T21:00"), ("aug", "2026-0
 task("emi_dec", "Pay scooter EMI", "scooter_list", "2026-12-03", "2026-12-03T09:00")
 task("emi_jan", "Pay scooter EMI", "scooter_list", "2027-01-03")
 
-task("wrap", "Wedding wrap-up", "wedding_list", "2026-12-31", priority=2, status="in_progress")
+task("wrap", "Wedding wrap-up", "wedding_list", "2026-12-31", priority=2)
 for k, name, due, done, extra in [
     ("settle", "Settle up with the relatives", "2026-12-20", None, {"priority": 2}),
     ("thanks_cards", "Send thank-you cards", "2026-12-15", None, {"effort": 90}),
@@ -204,7 +204,7 @@ for k, name, due, done, extra in [
 task("thanks_msgs", "Send thank-you messages", "wedding_list", "2026-12-10", effort=60)
 task("thanks_cards_old", "Send thank-you cards", "wedding_list", "2026-11-28", "2026-11-28T20:00")
 
-task("name_change", "Anjali's name change paperwork", "home_list", "2027-01-31", status="in_progress", priority=2)
+task("name_change", "Anjali's name change paperwork", "home_list", "2027-01-31", priority=2)
 for k, name, due, done, extra in [
     ("marriage_cert", "Get the marriage certificate", "2026-12-08", "2026-12-08T12:30", {}),
     ("aadhaar", "Update address on Aadhaar", "2026-12-18", None, {"effort": 30}),

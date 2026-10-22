@@ -80,8 +80,8 @@ public interface DocsIngestPort {
  * ## Then
  *
  * The bytes go through the stage frames — the camera roll's door — and the
- * core names them; `core.add_document{document_id, staged_sha, title,
- * folder_id}` files them. Text is `core.create_text_document`. When the state
+ * core names them; `document.add{id, blob, size, media_type, title,
+ * folder_id}` files them. Text is `document.create_text`. When the state
  * reaches FILED the shell pushes `Destination.DocsEditor` (`open_editor`) or
  * `Destination.DocsDocument` with `document_id` and `parent`, then calls
  * [routed] — observed at the shell's ROOT (Android `AppRoutes.Global`, the
@@ -106,6 +106,7 @@ public class DocsIngestBridge internal constructor(
     /** The picked file, held between picking and filing (and for Try again). */
     private var file: Picked? = null
     private var stagedSha: String = ""
+    private var stagedSize: Long = 0
 
     private data class Picked(val path: String, val mediaType: String, val owned: Boolean)
 
@@ -164,6 +165,7 @@ public class DocsIngestBridge internal constructor(
                 discardHeld()
                 file = Picked(path, DocsIngestMachine.mediaTypeOf(name, mediaType), owned)
                 stagedSha = ""
+                stagedSize = 0
                 apply(DocsIngestEvent(picked = DocsIngestEvent.Picked(name = name, media_type = mediaType, byte_size = size)))
             }
         }
@@ -272,6 +274,7 @@ public class DocsIngestBridge internal constructor(
             is Staging.Outcome.No -> apply(settled(false, outcome.refused.sentence))
             is Staging.Outcome.Ok -> {
                 stagedSha = outcome.staged.contentHash
+                stagedSize = outcome.staged.byteSize
                 apply(DocsIngestEvent(staged = DocsIngestEvent.Staged(staged_sha = stagedSha)))
             }
         }
@@ -280,7 +283,7 @@ public class DocsIngestBridge internal constructor(
     private suspend fun file(state: DocsIngestState) {
         val io = port ?: return apply(settled(false, DocsCopy.INGEST_NO_VAULT))
         if (io.readOnly()) return apply(settled(false, Shelf.MOVED_SENTENCE))
-        val (command, input, key) = DocsIngestMachine.filing(state, stagedSha)
+        val (command, input, key) = DocsIngestMachine.filing(state, stagedSha, stagedSize, file?.mediaType.orEmpty())
             ?: return apply(settled(false, DocsCopy.INGEST_NO_FILE))
         val (committed, sentence) = io.write(command, input, key)
         apply(settled(committed, sentence))
@@ -293,6 +296,7 @@ public class DocsIngestBridge internal constructor(
         val held = file ?: return
         file = null
         stagedSha = ""
+        stagedSize = 0
         if (held.owned) discard(held.path)
     }
 

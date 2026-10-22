@@ -62,8 +62,8 @@ fn a_trashed_asset_is_not_an_answer() {
 
     command(
         &phone,
-        "media.delete_asset",
-        &serde_json::json!({ "asset_id": asset }),
+        "entity.trash",
+        &serde_json::json!({ "id": asset }),
         "delete-7",
     );
     assert!(

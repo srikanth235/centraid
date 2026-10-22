@@ -62,8 +62,8 @@ fn a_phone_pairs_backs_up_and_its_gateway_holds_only_ciphertext() {
     let still = bytes_of("a photograph the library holds", 150_000);
     let film = bytes_of("a film the library holds", 300_000);
     let photo_handle = stage(&phone, owned("image/heic", &photo), &photo);
-    let thumb_handle = stage(&phone, thumb_of(&photo_handle, &thumb), &thumb);
     add_asset(&phone, &photo_handle, "photo");
+    let thumb_handle = stage(&phone, thumb_of(&photo_handle, &thumb), &thumb);
     let still_handle = stage(
         &phone,
         library("image/heic", "lib-still", &still, false),
@@ -186,8 +186,8 @@ fn the_operating_system_moves_a_handed_off_part_and_settle_records_it() {
     let photo = bytes_of("a photograph on a train", 120_000);
     let photo_handle = stage(&phone, owned("image/heic", &photo), &photo);
     let thumb = bytes_of("its thumbnail on a train", 4_000);
-    stage(&phone, thumb_of(&photo_handle, &thumb), &thumb);
     add_asset(&phone, &photo_handle, "photo");
+    stage(&phone, thumb_of(&photo_handle, &thumb), &thumb);
 
     // ON CELLULAR, UNDER WI-FI ONLY: the thumbnail crosses, the original is
     // sealed and held back, and the records wait.
@@ -458,7 +458,7 @@ fn an_original_comes_back_by_name_and_a_safe_library_item_is_offered_whole() {
     let mut told = false;
     while let Some(event) = phone.next_event(Duration::from_millis(50)).expect("events") {
         if let Some(wire::event::Kind::Change(change)) = event.kind
-            && change.table == "media_asset"
+            && change.table == "photo"
         {
             told = true;
         }
@@ -546,7 +546,7 @@ fn an_original_comes_back_by_name_and_a_safe_library_item_is_offered_whole() {
     let mut announced = false;
     while let Some(event) = phone.next_event(Duration::from_millis(50)).expect("events") {
         if let Some(wire::event::Kind::Change(change)) = event.kind
-            && change.table == "media_asset"
+            && change.table == "photo"
             && !change.pk_set.is_empty()
         {
             announced = true;
@@ -695,8 +695,8 @@ fn a_restore_brings_every_vault_back_and_the_old_phone_freezes() {
     let photo = bytes_of("a photograph from before the phone was lost", 100_000);
     let photo_handle = stage(&old, owned("image/heic", &photo), &photo);
     let thumb = bytes_of("the grid's picture of it", 5_000);
-    let thumb_handle = stage(&old, thumb_of(&photo_handle, &thumb), &thumb);
     add_asset(&old, &photo_handle, "photo");
+    let thumb_handle = stage(&old, thumb_of(&photo_handle, &thumb), &thumb);
     drain(&old, at_home());
     let lost = census(&old_dir.path().join("vault.db"));
 
@@ -740,9 +740,9 @@ fn a_restore_brings_every_vault_back_and_the_old_phone_freezes() {
     // THE OLD PHONE'S NEXT PASS IS REFUSED, AND IT READS FROZEN.
     let note = old.call(&wire::Request {
         kind: Some(wire::request::Kind::Command(wire::Command {
-            name: "knowledge.create_note".to_owned(),
+            name: "note.create".to_owned(),
             input: serde_json::to_vec(&serde_json::json!({
-                "title": "after", "body_text": "written on the lost phone", "format": "plain"
+                "title": "after", "body": "written on the lost phone", "format": "plain"
             }))
             .expect("json"),
             invoke_key: "after-the-restore".to_owned(),
@@ -846,9 +846,9 @@ fn a_head_set_between_the_check_and_the_claim_is_checked_before_it_is_claimed() 
                 ask(
                     &old,
                     wire::request::Kind::Command(wire::Command {
-                        name: "knowledge.create_note".to_owned(),
+                        name: "note.create".to_owned(),
                         input: serde_json::to_vec(&serde_json::json!({
-                            "title": "in the window", "body_text": "between check and claim",
+                            "title": "in the window", "body": "between check and claim",
                             "format": "plain"
                         }))
                         .expect("json"),

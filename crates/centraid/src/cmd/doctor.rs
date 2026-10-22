@@ -74,16 +74,10 @@ pub fn run(args: DoctorArgs) -> u8 {
         "clean": clean,
         "integrity": report.integrity,
         "foreignKeyViolations": report.foreign_key_violations,
-        "receiptsChecked": report.receipts_checked,
-        "danglingReceipts": report.dangling_receipts,
     });
 
     if clean {
-        eprintln!(
-            "centraid: doctor: clean — pages sound, {} foreign keys hold, {} receipt(s) checked",
-            report.foreign_key_violations.len(),
-            report.receipts_checked
-        );
+        eprintln!("centraid: doctor: clean — pages sound and every foreign key holds");
         if args.json {
             println!("{document:#}");
         }

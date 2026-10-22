@@ -14,5 +14,5 @@ import dev.centraid.shared.kit.ScreenBridge
 public class NotesBridge : ScreenBridge<NotesEditorState, NotesEditorEvent>(
     machine = NotesEditorMachine,
     events = NotesEditorEvent.ADAPTER,
-    wire = { w -> w.session.attachScreen(w.host, NotesReads, NotesReads, left = w.left) },
+    wire = { w -> w.session.attachQueries(w.host, NotesReads, NotesReads, left = w.left) },
 )

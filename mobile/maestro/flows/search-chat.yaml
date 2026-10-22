@@ -85,7 +85,7 @@ name: search-chat
     visible:
       id: "search-corrected"
     timeout: 10000
-- assertVisible: "Showing results for “quarzlux”"
+- assertVisible: "Including results for “quarzlux”"
 - assertVisible:
     id: "chat-thread-row"
 - eraseText: 8

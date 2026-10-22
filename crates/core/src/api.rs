@@ -38,11 +38,14 @@ pub fn content_urls(vault: &Vault, request: &wire::ContentUrlRequest) -> Result<
         .iter()
         .take(MAX_CONTENT_URLS)
         .map(|reference| {
-            let found = vault.content_location(
-                &reference.content_id,
-                &reference.owner_type,
-                &reference.owner_id,
-            )?;
+            // BY WHAT THE GRID HAS: the owner's id (a photograph's, a
+            // document's) when it names one, and the blob's hash otherwise.
+            let asked = if reference.owner_id.is_empty() {
+                &reference.content_id
+            } else {
+                &reference.owner_id
+            };
+            let found = vault.content_location(asked)?;
             // THE STORE, THE LIBRARY, OR NOWHERE (#1080 ruling 6). A path is
             // answered for the store only; an original the operating system's
             // library holds is named by the library's identifier, for the
@@ -53,8 +56,8 @@ pub fn content_urls(vault: &Vault, request: &wire::ContentUrlRequest) -> Result<
                 (None, None) => (wire::ContentSource::None, String::new()),
             };
             Ok(wire::ContentUrl {
-                content_id: found.content_id,
-                // A PATH AND NOT BYTES. See `centraid_vault::content`: the
+                content_id: reference.content_id.clone(),
+                // A PATH AND NOT BYTES. See `centraid_vault::blob`: the
                 // platform opens the file, so caching and range requests stay
                 // where they belong and the core never buffers a photograph.
                 path: found.path.map(|path| path.to_string_lossy().into_owned()),
@@ -82,7 +85,7 @@ pub const MAX_CONTENT_URLS: usize = 100;
 /// a table in `from`, and a door that reads any table by name is wider than any
 /// screen needs: it would page the receipts, the provenance log, the Locker's
 /// fields and passkeys, the money ledger and every revision snapshot for a
-/// shell that asked. So it reads these twenty-six and refuses the rest as an
+/// shell that asked. So it reads these thirteen and refuses the rest as an
 /// invalid request, before the vault is asked.
 ///
 /// The set is every `from` a shell sends today, read off `mobile/shared`'s
@@ -90,23 +93,32 @@ pub const MAX_CONTENT_URLS: usize = 100;
 ///
 /// | Screens | Tables |
 /// |---|---|
-/// | The vault roster | `core_vault` |
-/// | Home's tiles | `media_asset`, `core_document`, `knowledge_note`, `schedule_task`, `core_party`, `locker_item` |
-/// | Trash (Notes, Docs, Tasks, People, Locker) | `knowledge_note`, `core_document`, `schedule_task`, `people_profile`, `locker_item` |
-/// | Photos (grid, shelves, lightbox, collections, search, picker, places, memories, duplicates, album choice, editor) | `media_asset`, `media_asset_phash`, `media_memory`, `media_memory_member`, `core_collection`, `core_collection_entry`, `core_concept`, `core_concept_scheme`, `core_tag`, `core_place`, `core_content_item` |
-/// | Notes' editor | `knowledge_note` |
-/// | Calendar import | `schedule_calendar` |
-/// | Phone sync (People, Agenda and Docs follow the phone, #1127) | `phone_link`, `phone_origin`, `core_event`, `social_contact_channel`, `people_important_date` (a followed contact's birthday), `schedule_recurrence_exception` (a followed series' skipped and moved occurrences) (and `core_party`, `people_profile`, which People already pages) |
-/// | `with_minor_units` | `core_account` |
+/// | The vault roster | `vault` |
+/// | People (Home's tile counts the circle; its trash shelf pages the trashed) | `entity`, `person`, `vault` |
+/// | Home's tiles | `entity`, `document`, `person`, `vault` |
+/// | Trash (Docs, Photos, Tasks, People, Locker) | `entity` |
+/// | Photos (grid, shelves, lightbox, collections, search, picker, places, album choice, editor) | `photo`, `entity`, `edge`, `container`, `place`, `derivative`, `blob` |
+/// | Phone sync (Docs follows the phone through `follow.files`, #1127; whether a source was imported is its `origin`, and what a followed file last stated is its `source`) | `origin`, `source` |
+/// | `with_minor_units` | `account` |
 ///
-/// `core_account` has no shell caller: it is the one table whose `currency`
+/// `account` has no shell caller: it is the one table whose `currency`
 /// the `with_minor_units` arm is specified over, so the arm stays reachable
 /// and tested; Home's money tile rides its own arm (`Request.money`).
 ///
-/// NOT HERE, ON PURPOSE: every other Locker table (`locker_item_field`,
-/// `locker_item_passkey`, `locker_item_address`, `locker_item_alias`), the
-/// audit band (`access_receipt`, `access_provenance`), `core_entity_revision`,
-/// `core_link`, the money tables and `core_transaction`. The apps that read
+/// A Locker item is an entity (#1135), so Home's count of Locker's items and
+/// Locker's trash page `entity` like every kind's, as reads named for Locker
+/// (`home.locker`, `locker.*`), which is what the vault serves a Locker item's
+/// row to ([`centraid_vault::page::reaches_locker`]): any other page over
+/// `entity` or `edge` is given the page without Locker's rows. The assistant's reads
+/// (`assist.native.*`) are the one other exception: they reach a Locker item's plain rows as the
+/// owner does, and `page::withholds_sealed_value` keeps a sealed column out of them. This list
+/// governs the wire door, which the assistant does not use.
+///
+/// NOT HERE, ON PURPOSE: every Locker table (`locker_item`,
+/// `locker_item_field`, `locker_item_passkey`, `locker_item_address`,
+/// `locker_item_alias`), the journal and Locker's receipts, the `revision` snapshots, the money
+/// tables (`txn`, `budget`, `checkpoint`, `rule`) and Health's (`measurement`,
+/// `activity`, `workout`). The apps that read
 /// those do it in the core (`Request.app_query`, `Request.money`), through
 /// [`crate::app_query::VaultDoor`], which this list does not govern. A screen
 /// that starts paging a new table adds it here, in the same change, and the
@@ -115,37 +127,24 @@ pub const MAX_CONTENT_URLS: usize = 100;
 ///
 /// The `where` is held to the same list: it is predicate text and could name
 /// a subquery on any table, so the vault prepares it under an authorizer that
-/// refuses a read outside these twenty-six
+/// refuses a read outside these thirteen
 /// ([`Vault::keyset_page_reading_only`]). The vault's test
 /// `a_predicate_that_reads_a_table_outside_the_list_is_refused` is where that
 /// is read: the predicates it tries are SQL, which lives in that crate.
-pub const PAGE_TABLES: [&str; 26] = [
-    "core_account",
-    "core_collection",
-    "core_collection_entry",
-    "core_concept",
-    "core_concept_scheme",
-    "core_content_item",
-    "core_document",
-    "core_event",
-    "core_party",
-    "core_place",
-    "core_tag",
-    "core_vault",
-    "knowledge_note",
-    "locker_item",
-    "media_asset",
-    "media_asset_phash",
-    "media_memory",
-    "media_memory_member",
-    "people_important_date",
-    "people_profile",
-    "phone_link",
-    "phone_origin",
-    "schedule_calendar",
-    "schedule_recurrence_exception",
-    "schedule_task",
-    "social_contact_channel",
+pub const PAGE_TABLES: [&str; 13] = [
+    "account",
+    "blob",
+    "container",
+    "derivative",
+    "document",
+    "edge",
+    "entity",
+    "origin",
+    "person",
+    "photo",
+    "place",
+    "source",
+    "vault",
 ];
 
 /// One page of rows, as the wire spells it.
@@ -230,7 +229,6 @@ pub fn page(vault: &Vault, request: &wire::PageRequest) -> Result<wire::Page> {
                 .as_ref()
                 .map(|cursor| (cursor.sort_key.clone(), cursor.pk.clone())),
             held_thumbnail: query.with_held_thumbnail,
-            note_body: query.with_note_body,
             document_size: query.with_document_size,
         },
         &PAGE_TABLES,
@@ -268,14 +266,6 @@ pub fn page(vault: &Vault, request: &wire::PageRequest) -> Result<wire::Page> {
                             .into_iter()
                             .flatten()
                             .map(ToOwned::to_owned),
-                    )
-                    // NOTE BODY RIDES AFTER THE THUMBNAIL COLUMNS when both
-                    // are asked, and alone after `select` when only it is
-                    // (#1025 live-notes, R-NOTES-1). Same positional contract.
-                    .chain(
-                        query
-                            .with_note_body
-                            .then(|| centraid_vault::page::NOTE_BODY_COLUMN.to_owned()),
                     )
                     // AND THE DOCUMENT'S SIZE LAST, when it is asked for at
                     // all (#1029, Home's Docs tile). Same positional contract
@@ -425,7 +415,8 @@ pub fn invoke(
         // the audit trail and never a member.
         reason: outcome.reason.unwrap_or_default(),
         invocation_id: outcome.invocation_id,
-        receipt_id: outcome.receipt_id,
+        // The journal row is the evidence; nothing else is a receipt.
+        receipt_id: String::new(),
         revoked_at: None,
     })
 }
@@ -520,17 +511,16 @@ pub fn resolve(_handle: &str) -> Result<serde_json::Value> {
 ///
 /// The door `Core::open` with `create` left missing. `Vault::create` lays the
 /// migrations down; `Vault::found` writes the two rows that make those tables a
-/// vault — `core_vault` and the owner's `core_party` — inside one commit, and
+/// vault — the `vault` row and its owner's person — inside one commit, and
 /// until this function existed nothing over the C ABI could reach it. A phone
 /// could create a file that could never say which vault it was, which is
 /// exactly what `Shelf.FoundRefusal.NOT_FOUNDED` was refusing honestly.
 ///
 /// **A SECOND FOUND IS REFUSED, AND THE VAULT THAT IS HERE IS LEFT ALONE.**
 /// `Vault::found` mints a fresh id and inserts unconditionally, so running it
-/// twice would leave two `core_vault` rows in one file — and `Vault::vault_id`
-/// reads `ORDER BY vault_id LIMIT 1`, so the file would answer whichever id
-/// sorted first. That is a vault whose identity depends on a random draw. The
-/// refusal carries `ERROR_CODE_VAULT_ALREADY_HELD` and names the id already
+/// twice would write a second self person beside the first — and `vault` holds
+/// one row (`CHECK (id = 1)`), so the insert would fail half-way into a file
+/// the shell took for founded. The refusal carries `ERROR_CODE_VAULT_ALREADY_HELD` and names the id already
 /// here, so a shell that raced itself can tell "I founded it" from "something
 /// is wrong".
 ///
@@ -553,7 +543,15 @@ pub fn found(
                 request.content
             ),
         })?;
-    if let Some(vault_id) = vault.vault_id()? {
+    // A vault has a name (`vault.name` is `CHECK (length(trim(name)) > 0)`), so a
+    // blank one is refused here, before the file is touched. The shells found
+    // with `Shelf.DEFAULT_VAULT_NAME` and the member renames it afterwards.
+    if request.display_name.trim().is_empty() {
+        return Err(CoreError::InvalidRequest {
+            detail: "a vault needs a name".to_owned(),
+        });
+    }
+    if let Some(vault_id) = vault.self_id()? {
         return Err(CoreError::VaultAlreadyHeld { vault_id });
     }
     let founded = vault.found(&request.display_name, &request.owner_name)?;
@@ -564,8 +562,8 @@ pub fn found(
         }
     }
     Ok(wire::FoundResponse {
-        vault_id: founded.vault_id,
-        owner_party_id: founded.owner_party_id,
+        vault_id: founded.self_id.clone(),
+        owner_party_id: founded.self_id,
     })
 }
 
@@ -591,7 +589,7 @@ mod tests {
         wire::PageQuery {
             name: "test".to_owned(),
             select: select.iter().map(|c| (*c).to_owned()).collect(),
-            from: "core_party".to_owned(),
+            from: "entity".to_owned(),
             r#where: None,
             bind: Vec::new(),
             order: Some(wire::PageOrder {
@@ -600,7 +598,6 @@ mod tests {
                 descending: false,
             }),
             with_held_thumbnail: false,
-            with_note_body: false,
             with_document_size: false,
             with_minor_units: false,
             local_day_columns: Vec::new(),
@@ -614,11 +611,11 @@ mod tests {
     /// vault that names none.
     #[test]
     fn a_local_day_column_is_each_instants_day_in_the_stated_zone() {
-        let scratch = centraid_ontology::golden::scratch_dir();
+        let scratch = centraid_ontology::scratch::scratch_dir();
         std::fs::create_dir_all(&scratch).expect("made");
         let vault = Vault::create(scratch.join("v.db")).expect("a vault");
         vault.found("T", "O").expect("founded");
-        let mut asked = query(&["party_id", "created_at"], "party_id", "party_id");
+        let mut asked = query(&["id", "created_at"], "id", "id");
         asked.local_day_columns = vec!["created_at".to_owned()];
         asked.tz = "Pacific/Kiritimati".to_owned();
         let answer = page(
@@ -690,7 +687,7 @@ mod tests {
     /// than as an internal error the shell would restart the core over.
     #[test]
     fn a_zero_limit_and_a_missing_order_column_reach_the_shell_as_invalid_request() {
-        let scratch = centraid_ontology::golden::scratch_dir();
+        let scratch = centraid_ontology::scratch::scratch_dir();
         std::fs::create_dir_all(&scratch).expect("the directory is made");
         let vault = Vault::create(scratch.join("v.db")).expect("a vault");
         vault.found("T", "O").expect("founded");
@@ -698,7 +695,7 @@ mod tests {
         let zero = page(
             &vault,
             &wire::PageRequest {
-                query: Some(query(&["party_id", "created_at"], "created_at", "party_id")),
+                query: Some(query(&["id", "created_at"], "created_at", "id")),
                 limit: 0,
                 after: None,
             },
@@ -710,7 +707,7 @@ mod tests {
         let unprojected = page(
             &vault,
             &wire::PageRequest {
-                query: Some(query(&["party_id"], "created_at", "party_id")),
+                query: Some(query(&["id"], "created_at", "id")),
                 limit: 10,
                 after: None,
             },
@@ -725,7 +722,7 @@ mod tests {
     /// `currency` to state it of is refused rather than answered with 2s.
     #[test]
     fn the_minor_units_column_is_the_kits_exponent_of_each_rows_currency() {
-        let scratch = centraid_ontology::golden::scratch_dir();
+        let scratch = centraid_ontology::scratch::scratch_dir();
         std::fs::create_dir_all(&scratch).expect("made");
         let vault = Vault::create(scratch.join("v.db")).expect("a vault");
         vault.found("T", "O").expect("founded");
@@ -737,9 +734,9 @@ mod tests {
                     &registry,
                     &owner,
                     &Command::new(
-                        "money.add_account",
+                        "account.add",
                         serde_json::json!({
-                            "account_id": name, "name": name, "kind": "cash", "currency": currency,
+                            "id": name, "title": name, "type": "cash", "currency": currency,
                         }),
                     ),
                 )
@@ -752,8 +749,8 @@ mod tests {
             );
         }
 
-        let mut asked = query(&["account_id", "currency"], "account_id", "account_id");
-        asked.from = "core_account".to_owned();
+        let mut asked = query(&["id", "currency"], "id", "id");
+        asked.from = "account".to_owned();
         asked.with_minor_units = true;
         let answer = page(
             &vault,
@@ -783,7 +780,7 @@ mod tests {
             ]
         );
 
-        asked.select = vec!["account_id".to_owned()];
+        asked.select = vec!["id".to_owned()];
         let refused = page(
             &vault,
             &wire::PageRequest {
@@ -809,50 +806,38 @@ mod tests {
     /// Every table a screen pages, with a column that can key its cursor. Spelled
     /// here, not derived from the allowlist, so the allowlist cannot grow without
     /// this list (and the paragraph above it) being read.
-    const PAGED_BY_A_SCREEN: [(&str, &str); 26] = [
-        ("core_account", "account_id"),
-        ("core_collection", "collection_id"),
-        ("core_collection_entry", "entry_id"),
-        ("core_concept", "concept_id"),
-        ("core_concept_scheme", "scheme_id"),
-        ("core_content_item", "content_id"),
-        ("core_document", "document_id"),
-        ("core_event", "event_id"),
-        ("core_party", "party_id"),
-        ("core_place", "place_id"),
-        ("core_tag", "tag_id"),
-        ("core_vault", "vault_id"),
-        ("knowledge_note", "note_id"),
-        ("locker_item", "item_id"),
-        ("media_asset", "asset_id"),
-        ("media_asset_phash", "asset_id"),
-        ("media_memory", "memory_id"),
-        ("media_memory_member", "memory_id"),
-        ("people_important_date", "date_id"),
-        ("people_profile", "profile_id"),
-        ("phone_link", "link_id"),
-        ("phone_origin", "origin_id"),
-        ("schedule_calendar", "calendar_id"),
-        ("schedule_recurrence_exception", "exception_id"),
-        ("schedule_task", "task_id"),
-        ("social_contact_channel", "channel_id"),
+    const PAGED_BY_A_SCREEN: [(&str, &str); 13] = [
+        ("account", "id"),
+        ("blob", "hash"),
+        ("container", "id"),
+        ("derivative", "blob"),
+        ("document", "id"),
+        ("edge", "from_id"),
+        ("entity", "id"),
+        ("origin", "id"),
+        ("person", "id"),
+        ("photo", "id"),
+        ("place", "id"),
+        ("source", "id"),
+        ("vault", "self_id"),
     ];
 
     #[test]
     fn a_table_no_screen_pages_is_refused_and_one_a_screen_pages_still_answers() {
-        let scratch = centraid_ontology::golden::scratch_dir();
+        let scratch = centraid_ontology::scratch::scratch_dir();
         std::fs::create_dir_all(&scratch).expect("made");
         let vault = Vault::create(scratch.join("v.db")).expect("a vault");
         vault.found("T", "O").expect("founded");
         for (table, pk) in [
-            ("access_receipt", "receipt_id"),
-            ("access_provenance", "prov_id"),
+            ("journal", "seq"),
+            ("receipt", "seq"),
+            ("locker_item", "id"),
             ("locker_item_field", "field_id"),
             ("locker_item_passkey", "item_id"),
             ("locker_item_address", "address_id"),
-            ("core_transaction", "txn_id"),
-            ("money_transaction", "txn_id"),
-            ("core_entity_revision", "revision_id"),
+            ("txn", "id"),
+            ("measurement", "person_id"),
+            ("revision", "entity_id"),
             ("sqlite_master", "name"),
         ] {
             let mut asked = query(&[pk], pk, pk);
@@ -897,374 +882,13 @@ mod tests {
         let _ = std::fs::remove_dir_all(&scratch);
     }
 
-    /// THE PHONE LINK PAGES THROUGH THE DOOR (#1127, lane A): the sync engine reads every link of
-    /// a source, in the phone's own id order, with a keyset cursor, and the predicate it writes
-    /// (`source = ?`) reads only `phone_link`.
-    #[test]
-    fn the_phone_link_pages_by_source_through_the_door() {
-        let scratch = centraid_ontology::golden::scratch_dir();
-        std::fs::create_dir_all(&scratch).expect("made");
-        let vault = Vault::create(scratch.join("v.db")).expect("a vault");
-        vault.found("T", "O").expect("founded");
-        let registry = Registry::with_system_commands().expect("the registry");
-        let owner = centraid_vault::Principal::owner("test-device");
-        let run = |name: &str, input: serde_json::Value| {
-            let outcome = vault
-                .execute(&registry, &owner, &Command::new(name, input))
-                .expect("the command answers");
-            assert_eq!(
-                outcome.status,
-                CommandStatus::Executed,
-                "{name}: {:?}",
-                outcome.reason
-            );
-            outcome.output
-        };
-        let origin = run(
-            "phone.origin",
-            serde_json::json!({ "source": "contacts", "device_id": "device-a", "phone_origin": "acct:1", "label": "Main" }),
-        )["origin_id"]
-            .clone();
-        for (phone_id, name) in [("c3", "Cy"), ("c1", "Ada"), ("c2", "Bo")] {
-            let person = run(
-                "people.add_person",
-                serde_json::json!({ "display_name": name, "cadence_days": 30 }),
-            );
-            run(
-                "phone.link",
-                serde_json::json!({
-                    "source": "contacts", "phone_id": phone_id, "device_id": "device-a", "origin_id": origin,
-                    "entity_id": person["party_id"], "fingerprint": format!("fp-{phone_id}"),
-                }),
-            );
-        }
-
-        let text = |value: &str| wire::Value {
-            kind: Some(wire::value::Kind::Text(value.to_owned())),
-        };
-        let mut asked = query(
-            &[
-                "link_id",
-                "phone_id",
-                "entity_id",
-                "fingerprint",
-                "detached_at",
-            ],
-            "phone_id",
-            "link_id",
-        );
-        asked.from = "phone_link".to_owned();
-        asked.r#where = Some("source = ?".to_owned());
-        asked.bind = vec![text("contacts")];
-        let phone_ids = |page: &wire::Page| -> Vec<String> {
-            page.rows
-                .iter()
-                .map(|row| match &row.values[1].kind {
-                    Some(wire::value::Kind::Text(id)) => id.clone(),
-                    other => panic!("a phone id is text, got {other:?}"),
-                })
-                .collect()
-        };
-
-        let first = page(
-            &vault,
-            &wire::PageRequest {
-                query: Some(asked.clone()),
-                limit: 2,
-                after: None,
-            },
-        )
-        .expect("the links page");
-        assert_eq!(phone_ids(&first), ["c1", "c2"], "ordered by the phone's id");
-        assert!(
-            matches!(
-                first.rows[0].values[4].kind,
-                Some(wire::value::Kind::Null(_))
-            ),
-            "a followed link has no detached_at"
-        );
-        let second = page(
-            &vault,
-            &wire::PageRequest {
-                query: Some(asked.clone()),
-                limit: 2,
-                after: first.next.clone(),
-            },
-        )
-        .expect("the next page");
-        assert_eq!(phone_ids(&second), ["c3"]);
-        assert!(second.next.is_none(), "the rows ended");
-
-        // Another source's links are not in this page. (A predicate that reaches a table off the
-        // list is refused by the vault's authorizer; its test is in `crates/vault/src/page.rs`.)
-        asked.bind = vec![text("calendar")];
-        let none = page(
-            &vault,
-            &wire::PageRequest {
-                query: Some(asked.clone()),
-                limit: 10,
-                after: None,
-            },
-        )
-        .expect("a source with no links pages empty");
-        assert!(none.rows.is_empty());
-        let _ = std::fs::remove_dir_all(&scratch);
-    }
-
-    /// THE TWO READS A FOLLOWED CONTACT AND A FOLLOWED SERIES ADD (#1127, lane C): a person's
-    /// birthday dates and a series' occurrence exceptions page through the door with the exact
-    /// predicates the stores write, including the `lower(...) LIKE` and the event-scoped bind.
-    #[test]
-    fn a_followed_birthday_and_a_followed_exception_page_through_the_door() {
-        let scratch = centraid_ontology::golden::scratch_dir();
-        std::fs::create_dir_all(&scratch).expect("made");
-        let vault = Vault::create(scratch.join("v.db")).expect("a vault");
-        vault.found("T", "O").expect("founded");
-        let registry = Registry::with_system_commands().expect("the registry");
-        let owner = centraid_vault::Principal::owner("test-device");
-        let run = |name: &str, input: serde_json::Value| {
-            let outcome = vault
-                .execute(&registry, &owner, &Command::new(name, input))
-                .expect("the command answers");
-            assert_eq!(
-                outcome.status,
-                CommandStatus::Executed,
-                "{name}: {:?}",
-                outcome.reason
-            );
-            outcome.output
-        };
-        let text = |value: &str| wire::Value {
-            kind: Some(wire::value::Kind::Text(value.to_owned())),
-        };
-        let cell = |value: &wire::Value| match &value.kind {
-            Some(wire::value::Kind::Text(text)) => text.clone(),
-            other => panic!("a text cell, got {other:?}"),
-        };
-
-        // A BIRTHDAY, AND A DATE THAT IS NOT ONE.
-        let person = run(
-            "people.add_person",
-            serde_json::json!({ "display_name": "Ada", "cadence_days": 30 }),
-        )["party_id"]
-            .as_str()
-            .expect("a party id")
-            .to_owned();
-        run(
-            "people.add_important_date",
-            serde_json::json!({ "party_id": person, "label": "Birthday", "month_day": "12-10" }),
-        );
-        run(
-            "people.add_important_date",
-            serde_json::json!({ "party_id": person, "label": "Anniversary", "month_day": "03-02" }),
-        );
-        let mut dates = query(&["date_id", "party_id", "month_day"], "date_id", "date_id");
-        dates.from = "people_important_date".to_owned();
-        dates.r#where = Some(
-            "party_id = ? AND lower(label) LIKE '%birthday%' AND deleted_at IS NULL".to_owned(),
-        );
-        dates.bind = vec![text(&person)];
-        let birthdays = page(
-            &vault,
-            &wire::PageRequest {
-                query: Some(dates),
-                limit: 10,
-                after: None,
-            },
-        )
-        .expect("the birthdays page");
-        assert_eq!(birthdays.rows.len(), 1, "only the birthday");
-        assert_eq!(cell(&birthdays.rows[0].values[2]), "12-10");
-
-        // A SERIES' EXCEPTION, scoped to the event.
-        let mut calendars = query(&["calendar_id"], "calendar_id", "calendar_id");
-        calendars.from = "schedule_calendar".to_owned();
-        let calendar = cell(
-            &page(
-                &vault,
-                &wire::PageRequest {
-                    query: Some(calendars),
-                    limit: 1,
-                    after: None,
-                },
-            )
-            .expect("the calendars page")
-            .rows[0]
-                .values[0],
-        );
-        let event = run(
-            "schedule.propose_event",
-            serde_json::json!({
-                "summary": "Standup", "calendar_id": calendar, "tz": "UTC",
-                "dtstart": "2026-10-05T09:00:00", "dtend": "2026-10-05T09:30:00",
-                "rrule": "FREQ=WEEKLY;BYDAY=MO",
-            }),
-        )["event_id"]
-            .as_str()
-            .expect("an event id")
-            .to_owned();
-        run(
-            "schedule.edit_event_occurrence",
-            serde_json::json!({
-                "event_id": event, "original_start_local": "2026-10-19T09:00:00",
-                "scope": "occurrence", "action": "skip",
-            }),
-        );
-        let mut exceptions = query(
-            &[
-                "exception_id",
-                "target_id",
-                "original_start_local",
-                "scope",
-                "action",
-                "override_json",
-            ],
-            "exception_id",
-            "exception_id",
-        );
-        exceptions.from = "schedule_recurrence_exception".to_owned();
-        exceptions.r#where = Some("target_type = 'core.event' AND target_id = ?".to_owned());
-        exceptions.bind = vec![text(&event)];
-        let held = page(
-            &vault,
-            &wire::PageRequest {
-                query: Some(exceptions.clone()),
-                limit: 10,
-                after: None,
-            },
-        )
-        .expect("the exceptions page");
-        assert_eq!(held.rows.len(), 1);
-        assert_eq!(cell(&held.rows[0].values[2]), "2026-10-19T09:00:00");
-        assert_eq!(cell(&held.rows[0].values[4]), "skip");
-        // Another event's exceptions are not in it.
-        exceptions.bind = vec![text("another-event")];
-        let none = page(
-            &vault,
-            &wire::PageRequest {
-                query: Some(exceptions),
-                limit: 10,
-                after: None,
-            },
-        )
-        .expect("an event with none pages empty");
-        assert!(none.rows.is_empty());
-        let _ = std::fs::remove_dir_all(&scratch);
-    }
-
-    /// THE DOCUMENT READ AND THE ONE REVISION A FOLLOWED FOLDER MAKES (#1127, lane F): `FilesStore`
-    /// pages documents through the door, and a changed file is `core.replace_document_content`:
-    /// the same document, a new head, a new revision. Its head-hash subquery is held in
-    /// `crates/vault/src/page.rs` (`a_followed_folders_head_hash_subquery_answers`).
-    #[test]
-    fn a_followed_folder_reads_its_documents_and_a_change_is_a_revision() {
-        let scratch = centraid_ontology::golden::scratch_dir();
-        std::fs::create_dir_all(&scratch).expect("made");
-        let vault = Vault::create(scratch.join("v.db")).expect("a vault");
-        vault.found("T", "O").expect("founded");
-        let registry = Registry::with_system_commands().expect("the registry");
-        let owner = centraid_vault::Principal::owner("test-device");
-        let run = |name: &str, input: serde_json::Value| {
-            let outcome = vault
-                .execute(&registry, &owner, &Command::new(name, input))
-                .expect("the command answers");
-            assert_eq!(
-                outcome.status,
-                CommandStatus::Executed,
-                "{name}: {:?}",
-                outcome.reason
-            );
-            outcome.output
-        };
-        let text = |value: &str| wire::Value {
-            kind: Some(wire::value::Kind::Text(value.to_owned())),
-        };
-        let cell = |value: &wire::Value| match &value.kind {
-            Some(wire::value::Kind::Text(text)) => text.clone(),
-            None | Some(wire::value::Kind::Null(_)) => String::new(),
-            other => panic!("a text cell, got {other:?}"),
-        };
-        let add = |title: &str, uri: &str| {
-            run(
-                "core.add_document",
-                serde_json::json!({ "title": title, "data_uri": uri }),
-            )["document_id"]
-                .as_str()
-                .expect("a document id")
-                .to_owned()
-        };
-        let notes = add("notes.txt", "data:text/plain,one");
-        let other = add("other.txt", "data:text/plain,elsewhere");
-
-        // THE STORE'S DOCUMENT READ, as `FilesStore.read` writes it, for one document. Its
-        // head-hash subquery is held in `crates/vault/src/page.rs`, where SQL may be written.
-        let documents_of = |only: &str| {
-            let mut documents = query(
-                &[
-                    "document_id",
-                    "title",
-                    "current_content_id",
-                    "deleted_at",
-                    "current_revision_id",
-                ],
-                "document_id",
-                "document_id",
-            );
-            documents.from = "core_document".to_owned();
-            documents.r#where = Some("document_id = ?".to_owned());
-            documents.bind = vec![text(only)];
-            page(
-                &vault,
-                &wire::PageRequest {
-                    query: Some(documents),
-                    limit: 10,
-                    after: None,
-                },
-            )
-            .expect("the documents page")
-        };
-        let before = documents_of(&notes);
-        assert_eq!(before.rows.len(), 1);
-        assert_eq!(cell(&before.rows[0].values[1]), "notes.txt");
-        assert_eq!(cell(&before.rows[0].values[3]), "", "live");
-        let (head, revision) = (
-            cell(&before.rows[0].values[2]),
-            cell(&before.rows[0].values[4]),
-        );
-        assert!(!head.is_empty() && !revision.is_empty());
-        assert_ne!(
-            cell(&documents_of(&other).rows[0].values[2]),
-            head,
-            "another document's head is not this one's"
-        );
-
-        // A CHANGED FILE: the same document, a new head, a new revision of it.
-        run(
-            "core.replace_document_content",
-            serde_json::json!({ "document_id": notes, "data_uri": "data:text/plain,two" }),
-        );
-        let after = documents_of(&notes);
-        assert_eq!(after.rows.len(), 1, "still one document");
-        assert_ne!(
-            cell(&after.rows[0].values[2]),
-            head,
-            "the head moved to the new bytes"
-        );
-        assert_ne!(
-            cell(&after.rows[0].values[4]),
-            revision,
-            "the change is a new revision of the same document"
-        );
-        let _ = std::fs::remove_dir_all(&scratch);
-    }
-
     #[test]
     fn a_query_with_no_order_is_refused() {
-        let scratch = centraid_ontology::golden::scratch_dir();
+        let scratch = centraid_ontology::scratch::scratch_dir();
         std::fs::create_dir_all(&scratch).expect("made");
         let vault = Vault::create(scratch.join("v.db")).expect("a vault");
         vault.found("T", "O").expect("founded");
-        let mut unordered = query(&["party_id"], "created_at", "party_id");
+        let mut unordered = query(&["id"], "created_at", "id");
         unordered.order = None;
         // Refused HERE rather than by the vault: a `KeysetPage` has no way to
         // express "no order", so the absence has to be caught at the wire
@@ -1290,7 +914,7 @@ mod tests {
     /// one statement `VaultRoster.identify` uses.
     #[test]
     fn founding_turns_a_created_file_into_a_vault_that_can_name_itself() {
-        let scratch = centraid_ontology::golden::scratch_dir();
+        let scratch = centraid_ontology::scratch::scratch_dir();
         std::fs::create_dir_all(&scratch).expect("the directory is made");
         let vault = Vault::create(scratch.join("v.db")).expect("a vault file");
 
@@ -1329,7 +953,7 @@ mod tests {
     /// a vault whose identity depends on a random draw.
     #[test]
     fn a_second_found_is_refused_and_the_vault_already_here_is_untouched() {
-        let scratch = centraid_ontology::golden::scratch_dir();
+        let scratch = centraid_ontology::scratch::scratch_dir();
         std::fs::create_dir_all(&scratch).expect("the directory is made");
         let vault = Vault::create(scratch.join("v.db")).expect("a vault file");
         let first = found_here(
@@ -1363,16 +987,119 @@ mod tests {
         let _ = std::fs::remove_dir_all(&scratch);
     }
 
-    /// An empty name is a REAL STATE, not a validation failure: the shell draws
-    /// "No vault yet" over it and the member renames the vault from inside it.
+    /// A vault has a name: a blank one is refused before the file is touched,
+    /// and the file stays unfounded so the shell can found it again.
     #[test]
-    fn an_empty_display_name_founds_a_vault_that_is_simply_unnamed() {
-        let scratch = centraid_ontology::golden::scratch_dir();
+    fn a_blank_display_name_is_refused_and_founds_nothing() {
+        let scratch = centraid_ontology::scratch::scratch_dir();
         std::fs::create_dir_all(&scratch).expect("the directory is made");
         let vault = Vault::create(scratch.join("v.db")).expect("a vault file");
-        let answer = found_here(&vault, &wire::FoundRequest::default()).expect("founded");
-        assert!(!answer.vault_id.is_empty());
-        assert_eq!(vault.display_name().expect("read").as_deref(), Some(""));
+        for blank in ["", "  \t"] {
+            let refused = found_here(
+                &vault,
+                &wire::FoundRequest {
+                    display_name: blank.to_owned(),
+                    ..wire::FoundRequest::default()
+                },
+            )
+            .expect_err("a blank name is refused");
+            assert_eq!(refused.code(), wire::ErrorCode::InvalidRequest, "{refused}");
+        }
+        assert_eq!(vault.self_id().expect("read"), None);
+        let _ = std::fs::remove_dir_all(&scratch);
+    }
+
+    /// A LOCKER ITEM IS AN ENTITY, AND THE WIRE'S PAGE SERVES IT ONLY TO A READ
+    /// NAMED FOR LOCKER (#1135, L4). A page over `entity` or `edge` under any
+    /// other name is given the page without the item's row or its edges; the
+    /// kind's own tables are not tables a screen pages at all.
+    #[test]
+    fn a_page_serves_a_locker_item_only_to_a_read_named_for_locker() {
+        let scratch = centraid_ontology::scratch::scratch_dir();
+        std::fs::create_dir_all(&scratch).expect("made");
+        let vault = Vault::create(scratch.join("v.db")).expect("a vault");
+        vault.found("T", "O").expect("founded");
+        let registry = Registry::with_system_commands().expect("the registry builds");
+        let owner = Principal::owner("test-device");
+        for (name, input) in [
+            (
+                "locker.add_item",
+                serde_json::json!({"item_id": "lk1", "type": "login", "title": "Bank login"}),
+            ),
+            (
+                "flag.set",
+                serde_json::json!({"id": "lk1", "flag": "starred"}),
+            ),
+        ] {
+            let ran = vault
+                .execute(
+                    &registry,
+                    &owner,
+                    &centraid_vault::commands::Command::new(name, input),
+                )
+                .expect("the command is answered");
+            assert_eq!(
+                ran.status,
+                centraid_vault::CommandStatus::Executed,
+                "{name}: {:?}",
+                ran.reason
+            );
+        }
+        let ask = |name: &str, from: &str, select: &[&str], sort: &str, pk: &str| {
+            let mut asked = query(select, sort, pk);
+            asked.name = name.to_owned();
+            asked.from = from.to_owned();
+            page(
+                &vault,
+                &wire::PageRequest {
+                    query: Some(asked),
+                    limit: 100,
+                    after: None,
+                },
+            )
+        };
+        let titles = |answer: &wire::Page| -> Vec<String> {
+            answer
+                .rows
+                .iter()
+                .filter_map(|row| match &row.values[1].kind {
+                    Some(wire::value::Kind::Text(text)) => Some(text.clone()),
+                    _ => None,
+                })
+                .collect()
+        };
+        for name in ["test", "home.people", "tasks.trash", "assist.native"] {
+            let answer = ask(name, "entity", &["id", "title"], "id", "id").expect("a page");
+            assert!(
+                !titles(&answer).contains(&"Bank login".to_owned()),
+                "{name}"
+            );
+            let edges =
+                ask(name, "edge", &["from_id", "to_id"], "from_id", "to_id").expect("a page");
+            assert!(edges.rows.is_empty(), "{name} saw a Locker edge");
+        }
+        for name in [
+            "home.locker",
+            "locker.trash",
+            "locker.phone.shelves",
+            "assist.native.entity",
+        ] {
+            let answer = ask(name, "entity", &["id", "title"], "id", "id").expect("a page");
+            assert!(titles(&answer).contains(&"Bank login".to_owned()), "{name}");
+        }
+        let edges = ask(
+            "locker.phone.tags",
+            "edge",
+            &["from_id", "to_id"],
+            "from_id",
+            "to_id",
+        )
+        .expect("a page");
+        assert_eq!(edges.rows.len(), 1);
+        // The kind's own table is not a table any screen pages.
+        let refused = ask("locker.phone.rows", "locker_item", &["id"], "id", "id")
+            .expect_err("`locker_item` is not a paged table");
+        assert_eq!(refused.code(), wire::ErrorCode::InvalidRequest);
         let _ = std::fs::remove_dir_all(&scratch);
     }
 

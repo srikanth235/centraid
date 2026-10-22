@@ -27,7 +27,7 @@
 use centraid_api_proto::core_v1 as wire;
 use centraid_assist::Refusal;
 use centraid_assist::attach::{Attachments, IMAGE_MAX_EDGE, ImageData, TextDoc, label};
-use centraid_vault::content::{DocumentSource, PhotoSource};
+use centraid_vault::chat::{DocumentSource, PhotoSource};
 use image::imageops::FilterType;
 
 use crate::error::{CoreError, Result};
@@ -90,8 +90,8 @@ pub fn decode_image(bytes: &[u8], caption: &str) -> std::result::Result<ImageDat
 }
 
 /// One photograph from the vault.
-fn vault_photo(handle: &Handle, asset_id: &str) -> Result<std::result::Result<ImageData, Refusal>> {
-    let source = handle.with_vault(|vault| Ok(vault.attachment_photo(asset_id)?))?;
+fn vault_photo(handle: &Handle, photo_id: &str) -> Result<std::result::Result<ImageData, Refusal>> {
+    let source = handle.with_vault(|vault| Ok(vault.attachment_photo(photo_id)?))?;
     Ok(match source {
         PhotoSource::Held { path, title, .. } => {
             let size = std::fs::metadata(&path).map(|meta| meta.len());

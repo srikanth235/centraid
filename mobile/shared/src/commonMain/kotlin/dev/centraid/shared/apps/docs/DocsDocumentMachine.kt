@@ -56,7 +56,7 @@ public object DocsDocumentMachine : ScreenMachine<DocsDocumentState, DocsDocumen
      * The drive's tables, the version chain and the audit trail the activity
      * rail reads. `DocsDocumentReads.tables` is this set.
      */
-    public val TABLES: Set<String> = DocsDriveMachine.TABLES + setOf("core_entity_revision", "access_provenance")
+    public val TABLES: Set<String> = DocsTables.ACTIVITY
 
     override fun initial(): DocsDocumentState = decorate(
         DocsDocumentState(
@@ -137,11 +137,19 @@ public object DocsDocumentMachine : ScreenMachine<DocsDocumentState, DocsDocumen
         event.label_added != null -> labelAdded(state, event.label_added.label)
 
         event.label_removed != null -> {
-            val tagId = event.label_removed.tag_id
-            if (tagId.isEmpty()) {
+            // The vault removes a label by its words: the row's label this tag stands for.
+            val row = Content.dataOf(state)?.row
+            val label = row?.labels?.firstOrNull { it.tag_id == event.label_removed.tag_id }?.label
+            if (row == null || label == null) {
                 Step(state)
             } else {
-                WriteLaw.submit(Writes, state, DocsWrites.UNTAG, DocsWrites.untag(tagId), InvokeKeys.of(DocsWrites.UNTAG, tagId))
+                WriteLaw.submit(
+                    Writes,
+                    state,
+                    DocsWrites.UNTAG,
+                    DocsWrites.untag(row.document_id, label),
+                    InvokeKeys.of(DocsWrites.UNTAG, row.document_id, label),
+                )
             }
         }
 
@@ -221,7 +229,7 @@ public object DocsDocumentMachine : ScreenMachine<DocsDocumentState, DocsDocumen
         return when (offered.key) {
             DocsWrites.KEY_STAR, DocsWrites.KEY_UNSTAR -> {
                 val command = if (key == DocsWrites.KEY_STAR) DocsWrites.STAR else DocsWrites.UNSTAR
-                WriteLaw.submit(Writes, state, command, DocsWrites.documentOnly(id), InvokeKeys.of(command, id))
+                WriteLaw.submit(Writes, state, command, DocsWrites.star(id), InvokeKeys.of(command, id))
             }
             DocsWrites.KEY_RESTORE ->
                 WriteLaw.submit(Writes, state, DocsWrites.RESTORE, DocsWrites.documentOnly(id), InvokeKeys.of(DocsWrites.RESTORE, id))
@@ -287,18 +295,24 @@ public object DocsDocumentMachine : ScreenMachine<DocsDocumentState, DocsDocumen
         )
     }
 
-    private fun versionRestore(state: DocsDocumentState, contentId: String): Step<DocsDocumentState> {
+    /**
+     * [key] is the version's own key: its number (a revision's `seq`), as the
+     * row says it. Two versions can hold the same bytes (A, B, A), so the
+     * bytes' hash names none of them.
+     */
+    private fun versionRestore(state: DocsDocumentState, key: String): Step<DocsDocumentState> {
         val data = Content.dataOf(state) ?: return Step(state)
         val row = data.row ?: return Step(state)
-        val version = data.versions.firstOrNull { it.content_id == contentId } ?: return Step(state)
+        val version = data.versions.firstOrNull { it.content_id == key } ?: return Step(state)
+        val seq = key.toIntOrNull() ?: return Step(state)
         // THE ROW SAID WHETHER IT CAN: an earlier version of a live document.
         if (version.restore_label.isEmpty()) return Step(state)
         return WriteLaw.submit(
             Writes,
             state,
             DocsWrites.RESTORE_VERSION,
-            DocsWrites.restoreVersion(row.document_id, contentId),
-            InvokeKeys.of(DocsWrites.RESTORE_VERSION, row.document_id, contentId),
+            DocsWrites.restoreVersion(row.document_id, seq),
+            InvokeKeys.of(DocsWrites.RESTORE_VERSION, row.document_id, key),
         )
     }
 

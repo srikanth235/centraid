@@ -38,14 +38,14 @@ mod tests {
         let manifest = manifest();
         assert_eq!(manifest.id, APP_ID);
         assert_eq!(manifest.manifest_version, 1);
-        assert_eq!(manifest.version, "0.3.1");
+        assert_eq!(manifest.version, "0.4.0");
     }
 
     #[test]
-    fn it_declares_two_queries_and_thirteen_actions() {
+    fn it_declares_two_queries_and_fifteen_actions() {
         let manifest = manifest();
         assert_eq!(manifest.queries.len(), 2);
-        assert_eq!(manifest.actions.len(), 13);
+        assert_eq!(manifest.actions.len(), 15);
         for name in ["board", "search"] {
             assert!(manifest.query(name).is_some(), "no query {name}");
         }
@@ -92,42 +92,42 @@ mod tests {
         }
     }
 
-    /// TWENTY-FOUR SCOPES: eleven reads and **thirteen `act` scopes, one per
-    /// action**, all narrow — Tasks does not use the whole-schema `read+act`
-    /// form that agenda and people do.
+    /// TWENTY-ONE SCOPES: seven reads of the vault's own tables and one `act` per
+    /// command the actions invoke (fourteen: `create-project` and
+    /// `create-section` are one `container.create`). The `act` half is compared
+    /// against the action table rather than transcribed.
     #[test]
-    fn it_declares_twenty_four_scopes_with_one_act_scope_per_action() {
+    fn it_declares_seven_reads_and_one_act_scope_per_command() {
         let manifest = manifest();
         let vault = manifest.vault.as_ref().expect("Tasks declares its reach");
-        assert_eq!(vault.scopes.len(), 24);
-        let mut schemas: Vec<&str> = vault
-            .scopes
-            .iter()
-            .map(|scope| scope.schema.as_str())
-            .collect();
-        schemas.sort_unstable();
-        schemas.dedup();
-        assert_eq!(schemas, ["core", "schedule"]);
-        let mut declared_acts: Vec<&str> = vault
+        assert_eq!(vault.scopes.len(), 21);
+        let mut declared: Vec<(&str, &str)> = vault
             .scopes
             .iter()
             .filter(|scope| scope.verbs == ScopeVerbs::Act)
             .map(|scope| {
-                scope
-                    .table
-                    .as_deref()
-                    .expect("an act scope over a whole schema would be the widest form")
+                (
+                    scope.schema.as_str(),
+                    scope
+                        .table
+                        .as_deref()
+                        .expect("an act scope names a command"),
+                )
             })
             .collect();
-        declared_acts.sort_unstable();
-        assert_eq!(declared_acts, act_scope_tables());
-        assert_eq!(declared_acts.len(), 13);
-        let reads = vault
+        declared.sort_unstable();
+        assert_eq!(declared, act_scope_tables());
+        assert_eq!(declared.len(), 14);
+        let reads: Vec<&str> = vault
             .scopes
             .iter()
             .filter(|scope| scope.verbs == ScopeVerbs::Read)
-            .count();
-        assert_eq!(reads, 11);
+            .map(|scope| {
+                assert_eq!(scope.schema, "vault");
+                scope.table.as_deref().expect("a read names a table")
+            })
+            .collect();
+        assert_eq!(reads.len(), 7);
         assert!(
             vault
                 .scopes

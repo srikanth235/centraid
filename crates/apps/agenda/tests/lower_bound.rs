@@ -65,36 +65,23 @@ impl Scratch {
             .expect("the read runs")
     }
 
-    fn calendar_id(&self) -> String {
-        self.vault
-            .read(|connection| {
-                let door = TestDoor::new(connection);
-                let utc = FireZone::named("Etc/UTC").expect("UTC");
-                let (data, _) =
-                    load_upcoming(&door, Some(FROM), Some(TO), FROM, &utc).expect("upcoming reads");
-                Ok(data.calendars[0].calendar_id.clone())
-            })
-            .expect("the read runs")
-    }
-
-    /// A ZONED event in New York: `start_tz` and a `Z` instant.
+    /// A ZONED event in New York: its `zone` and a `Z` instant.
     fn propose(&self, summary: &str, dtstart: &str, dtend: &str, rrule: Option<&str>) {
         let mut input = json!({
-            "summary": summary,
-            "dtstart": dtstart,
-            "dtend": dtend,
-            "start_tz": "America/New_York",
-            "calendar_id": self.calendar_id(),
+            "title": summary,
+            "starts": dtstart,
+            "ends": dtend,
+            "zone": "America/New_York",
         });
         if let Some(rule) = rrule {
-            input["rrule"] = json!(rule);
+            input["rule"] = json!(rule);
         }
         let outcome = self
             .vault
             .execute(
                 &self.registry,
                 &Principal::owner("agenda-bound-test"),
-                &Command::new("schedule.propose_event", input),
+                &Command::new("event.propose", input),
             )
             .expect("the proposal runs");
         assert_eq!(

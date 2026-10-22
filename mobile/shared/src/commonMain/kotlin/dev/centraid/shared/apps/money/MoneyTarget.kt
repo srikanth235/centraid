@@ -28,7 +28,7 @@ import dev.centraid.shared.nav.ScreenIds
 public object MoneyTargetMachine :
     MoneyQueryMachine<MoneyTargetState, MoneyTargetEvent, MoneyTargetData>("money.target", MONEY_TABLES) {
     public const val SCREEN_ID: String = ScreenIds.MONEY_TARGET
-    public const val CMD_SET: String = "money.set_target"
+    public const val CMD_SET: String = "budget.set"
 
     override val lens: ContentLens<MoneyTargetState, MoneyTargetData> = Lens
 
@@ -85,7 +85,7 @@ public object MoneyTargetMachine :
         val minor = if (remove) null else typed(held) ?: return Step(held)
         val input = MoneyFold.json(
             "month" to MoneyFold.str(screen.month),
-            "category_concept_id" to MoneyFold.str(screen.category_id),
+            "category_id" to MoneyFold.str(screen.category_id),
             "amount_minor" to (minor?.toString() ?: "null"),
             "currency" to MoneyFold.str(screen.currency),
             "carry" to if (remove) null else screen.carry.toString(),

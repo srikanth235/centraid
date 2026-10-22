@@ -134,6 +134,15 @@ pub enum Principal {
         may_act: bool,
         scope_clamp: Option<ScopeClamp>,
     },
+    /// The chat's assistant, riding the owner's device. It acts as the owner
+    /// does and is refused one thing: a sealed value. A Locker item is an entity
+    /// it finds, reads and acts on through the shared verbs; a command run under
+    /// this principal that reveals or sets a sealed value (`locker.reveal_receipt`,
+    /// `locker.totp_code`, `locker.export`, or any input that carries a sealed
+    /// cell, a sealed custom field or a passkey key) is refused before its
+    /// preconditions run (`commands::execute`), whichever verb carries it
+    /// (R-1088-3, the owner's ruling of 2026-10-22, #1135).
+    Assistant { device_id: String },
     // TWO VARIANTS LEFT WITH THEIR CALLERS (#1029 §1). `Agent` was the
     // assistant and any ACP harness riding an owner, and `Automation` was a
     // compiled manifest running on a schedule. `crates/assist` and
@@ -159,10 +168,25 @@ impl Principal {
         }
     }
 
+    /// The assistant on this owner device: acts as the owner, minus a sealed value.
+    #[must_use]
+    pub fn assistant(device_id: impl Into<String>) -> Self {
+        Self::Assistant {
+            device_id: device_id.into(),
+        }
+    }
+
+    /// Whether this is the assistant, which no sealed value is open to.
+    #[must_use]
+    pub const fn is_assistant(&self) -> bool {
+        matches!(self, Self::Assistant { .. })
+    }
+
     #[must_use]
     pub fn may_act(&self) -> bool {
         match self {
             Self::OwnerDevice { may_act, .. } => *may_act,
+            Self::Assistant { .. } => true,
         }
     }
 
@@ -170,6 +194,7 @@ impl Principal {
     pub const fn scope_clamp(&self) -> Option<&ScopeClamp> {
         match self {
             Self::OwnerDevice { scope_clamp, .. } => scope_clamp.as_ref(),
+            Self::Assistant { .. } => None,
         }
     }
 
@@ -177,7 +202,7 @@ impl Principal {
     #[must_use]
     pub fn caller_id(&self) -> &str {
         match self {
-            Self::OwnerDevice { device_id, .. } => device_id,
+            Self::OwnerDevice { device_id, .. } | Self::Assistant { device_id } => device_id,
         }
     }
 }

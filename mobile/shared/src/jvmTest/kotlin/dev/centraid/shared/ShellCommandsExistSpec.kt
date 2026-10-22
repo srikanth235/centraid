@@ -41,7 +41,7 @@ import java.io.File
  * recognised by what the source says rather than by a list of names:
  *
  * 1. **A vault object type**: `ns.thing` where `ns_thing` is a table in
- *    `contracts/schema/vault-ddl.sql` (`core.party`, `knowledge.note`) — the
+ *    `contracts/schema/vault-ddl.sql` (`locker.item`, `knowledge.note`) — the
  *    names a search hit or a link target carries.
  * 2. **A screen id or page-read name**: bound to `screenId`, `SCREEN_ID`, a
  *    machine's constructor name or a `PageQuery`'s `name`, or a constant that a
@@ -122,20 +122,36 @@ class ShellCommandsExistSpec : StringSpec({
             .flatMap { (_, text) -> commandLiterals(text, tables, registeredScreenIds(sharedSources(mobileRoot))) }
             .map { it.second }
             .toSet()
+        val registered = registeredCommands(repositoryRoot)
         listOf(
-            "knowledge.edit_note", // a `const val SAVE_COMMAND`
-            "schedule.set_task_status", // a bare `const val STATUS`
-            "people.purge_person", // an argument to a trash spec
+            "note.edit", // a `const val SAVE_COMMAND`
+            "task.complete", // a bare `const val STATUS`
+            "entity.purge", // an argument to a trash spec
             "locker.edit_item", // an `if` branch
-            "chat.clear", // an argument to a helper
-            "core.restore_document_version", // a `when` arm
+            "thread.clear", // an argument to a helper
+            "document.restore_version", // a `when` arm
         ).forEach { command ->
             withClue(command) {
                 (command in seen).shouldBeTrue()
                 (command in known).shouldBeTrue()
             }
         }
-        withClue("${seen.size} distinct command ids found in shared code") { (seen.size >= 90).shouldBeTrue() }
+        // NO FLOOR TO KEEP IN STEP: the scan is held to a second reading of the
+        // same source. Every command the registry registers that the shared
+        // code quotes on a line that is not a comment must be one the scan
+        // saw, so a pattern that stopped matching a shape drops a name it is
+        // answerable for, whatever number of commands the shell uses this month.
+        // `nav/ScreenIds.kt` is left out: what it spells is a screen id by
+        // definition, and `locker.export` is both a screen and a command.
+        val quoted = sharedSources(mobileRoot).filterNot { (name, _) -> name.endsWith("nav/ScreenIds.kt") }.flatMap { (_, text) ->
+            text.lineSequence().filterNot { it.trim().let { l -> l.startsWith("//") || l.startsWith("*") || l.startsWith("/*") } }
+                .flatMap { line -> dotted.findAll(line).map { it.groupValues[1] } }.toList()
+        }.toSet()
+        val missed = (quoted intersect registered) - seen
+        withClue("registered commands the shared code quotes and the scan did not see: $missed") {
+            missed shouldBe emptySet()
+        }
+        withClue("the scan saw ${seen.size} command ids") { seen.isNotEmpty().shouldBeTrue() }
     }
 
     "a typo is a finding, and a screen id or an object type is not" {
@@ -146,7 +162,7 @@ class ShellCommandsExistSpec : StringSpec({
             public const val SCREEN_ID: String = "people.home"
             private const val LOCKER_IMPORT: String = "locker.import"
             screenId = LOCKER_IMPORT,
-            kind = "core.party"
+            kind = "locker.item"
             // "people.sing_a_song" in a comment is nobody's command
         """.trimIndent()
         unknownIds("Synthetic.kt", source, known, tables).map { it.id } shouldBe listOf("knowledge.save_note")
@@ -157,10 +173,16 @@ class ShellCommandsExistSpec : StringSpec({
         // platform-free rule asserts its own scope: a source-scanning gate
         // pointed at a moved directory reports no findings for ever.
         val known = declaredCommands(repositoryRoot)
-        withClue("${known.size} command names found in the registry's source") {
-            (known.size >= 150).shouldBeTrue()
-        }
-        known.contains("knowledge.edit_note").shouldBeTrue()
+        // THE ORACLE IS HELD TO THE REGISTRY, NOT TO A NUMBER. The scan reads
+        // Rust source; `contracts/schema/vault-commands.txt` is what the
+        // registry itself registers (`crates/vault/tests/command_list.rs` keeps
+        // it true). A declaration form the scan does not know shows up here as
+        // a name the registry has and the scan lacks, by name.
+        val registered = registeredCommands(repositoryRoot)
+        withClue("${registered.size} commands registered") { registered.isNotEmpty().shouldBeTrue() }
+        withClue("the registry has them and the scan does not") { (registered - known) shouldBe emptySet() }
+        withClue("the scan has them and the registry does not") { (known - registered) shouldBe emptySet() }
+        known.contains("note.edit").shouldBeTrue()
         // And the name that was wrong is genuinely absent, so this spec would
         // have been red on the tree that shipped it.
         known.contains("knowledge.save_note") shouldBe false
@@ -218,6 +240,15 @@ private val declaredByName =
 /** `definition("app.verb", …)`, the helper `locker`, `money` and `schedule` declare through. */
 private val declaredByHelper = Regex("\\bdefinition\\(\\s*\"([a-z_]+\\.[a-z_]+)\"")
 
+/** `CommandDefinition::plain("app.verb", …)`, the constructor every shared verb and every per-kind verb (#1135) declares through. */
+private val declaredByPlain = Regex("\\bCommandDefinition::plain\\(\\s*\"([a-z_]+\\.[a-z_]+)\"")
+
+/**
+ * A followed system's command: `follow.rs` declares the five `follow.<system>` commands from one table
+ * (`SystemMap`), each carrying its own name as `command: "follow.<system>"`, and registers them in a loop.
+ */
+private val declaredBySystem = Regex("\\bcommand: \"(follow\\.[a-z_]+)\"")
+
 /** A definition's own `owner_schema:` field, which is not a doc comment's mention of one. */
 private val ownerSchemaField = Regex("(?m)^\\s*owner_schema:")
 
@@ -235,17 +266,25 @@ private fun declaredCommands(repositoryRoot: File): Set<String> {
         val text = file.readText()
         val byName = declaredByName.findAll(text).map { it.groupValues[1] }.toList()
         val byHelper = declaredByHelper.findAll(text).map { it.groupValues[1] }.toList()
+        val byPlain = declaredByPlain.findAll(text).map { it.groupValues[1] }.toList() +
+            declaredBySystem.findAll(text).map { it.groupValues[1] }.toList()
         val fields = ownerSchemaField.findAll(text).count()
         // A file with the helper has one `owner_schema:` (the helper's own body)
         // and many calls; every other file has one field per `name:`.
         val helper = "fn definition(" in text
+        // The registry's own `plain` constructor names `owner_schema:` once, as a parameter.
+        val constructor = if ("const fn plain(" in text) 1 else 0
         withClue("${file.name}: $fields `owner_schema:` fields, ${byName.size} by name, ${byHelper.size} by helper") {
-            fields shouldBe if (helper) 1 else byName.size
+            fields shouldBe (if (helper) 1 else byName.size) + constructor
             if (helper) byHelper.isNotEmpty().shouldBeTrue() else byHelper shouldBe emptyList()
         }
-        byName + byHelper
+        byName + byHelper + byPlain
     }.toSet()
 }
+
+/** Every command the registry registers, from the list `export-commands` renders. */
+private fun registeredCommands(repositoryRoot: File): Set<String> =
+    repositoryRoot.resolve("contracts/schema/vault-commands.txt").readLines().filter { it.isNotBlank() }.toSet()
 
 /** The vault's tables, from the DDL the vault is built from. */
 private fun vaultTables(repositoryRoot: File): Set<String> =

@@ -22,15 +22,13 @@
 //! ([`kept_hashes`]), and which asset rows a set of bytes belongs to
 //! ([`assets_for_hashes`]).
 //!
-//! ## THE KEPT JOIN IS BY ALBUM MEMBERSHIP, AND ONLY A PHOTOGRAPH'S
+//! ## THE KEPT JOIN IS BY ALBUM MEMBERSHIP
 //!
-//! `core_collection_entry.target_type` is polymorphic; only `media.asset` is a
-//! photograph (v0's `protectedAssetIdsFromPins` made the same cut). v0 also had
-//! to reach every identity a SHA-merged row answered to, because its timeline
-//! folded a device copy and a vault copy into one row. This vault has one row
-//! per set of bytes — `core_content_item.content_hash` is UNIQUE and
-//! `media_asset.content_id` is UNIQUE — so the asset id IS the identity and
-//! there is nothing to fold.
+//! An album holds a photograph by a `contains` edge, and `edge_shape` allows no
+//! other kind into an album, so the join needs no type test. A photograph's
+//! `blob` is UNIQUE, so the photograph's id IS the identity of its bytes and
+//! there is nothing to fold ([#1135](https://github.com/srikanth235/centraid/issues/1135)).
+//! The Photos lane owns what an original means beyond these four questions.
 
 use std::collections::BTreeSet;
 
@@ -98,14 +96,14 @@ pub fn census(vault: &Vault, kept_albums: &BTreeSet<String>) -> Result<Option<Or
         .unwrap_or_else(|_| "[]".to_owned());
     let rows: Vec<(String, i64, bool)> = vault.read(|connection| {
         let mut statement = connection.prepare(
-            "SELECT c.content_hash, c.byte_size,
-                    EXISTS (SELECT 1 FROM core_collection_entry e
-                             WHERE e.target_type = 'media.asset'
-                               AND e.target_id = a.asset_id
-                               AND e.collection_id IN (SELECT value FROM json_each(?1)))
-               FROM media_asset a
-               JOIN core_content_item c ON c.content_id = a.content_id
-              WHERE a.deleted_at IS NULL AND c.deleted_at IS NULL",
+            "SELECT p.blob, b.size,
+                    EXISTS (SELECT 1 FROM edge g
+                             WHERE g.rel = 'contains' AND g.to_id = p.id
+                               AND g.from_id IN (SELECT value FROM json_each(?1)))
+               FROM photo p
+               JOIN entity e ON e.id = p.id
+               JOIN blob b ON b.hash = p.blob
+              WHERE e.deleted_at IS NULL",
         )?;
         let rows = statement.query_map([kept_json], |row| {
             Ok((row.get(0)?, row.get(1)?, row.get::<_, i64>(2)? != 0))
@@ -140,13 +138,12 @@ pub fn kept_hashes(vault: &Vault, kept_albums: &BTreeSet<String>) -> Result<BTre
         .unwrap_or_else(|_| "[]".to_owned());
     vault.read(|connection| {
         let mut statement = connection.prepare(
-            "SELECT DISTINCT c.content_hash
-               FROM media_asset a
-               JOIN core_content_item c ON c.content_id = a.content_id
-               JOIN core_collection_entry e
-                 ON e.target_type = 'media.asset' AND e.target_id = a.asset_id
-              WHERE a.deleted_at IS NULL
-                AND e.collection_id IN (SELECT value FROM json_each(?1))",
+            "SELECT DISTINCT p.blob
+               FROM photo p
+               JOIN entity e ON e.id = p.id
+               JOIN edge g ON g.rel = 'contains' AND g.to_id = p.id
+              WHERE e.deleted_at IS NULL
+                AND g.from_id IN (SELECT value FROM json_each(?1))",
         )?;
         let rows = statement.query_map([kept_json], |row| row.get::<_, String>(0))?;
         Ok(rows.collect::<rusqlite::Result<BTreeSet<_>>>()?)
@@ -166,11 +163,9 @@ pub fn assets_for_hashes(vault: &Vault, hashes: &[String]) -> Result<Vec<String>
     let hashes_json = serde_json::to_string(hashes).unwrap_or_else(|_| "[]".to_owned());
     vault.read(|connection| {
         let mut statement = connection.prepare(
-            "SELECT a.asset_id
-               FROM media_asset a
-               JOIN core_content_item c ON c.content_id = a.content_id
-              WHERE c.content_hash IN (SELECT value FROM json_each(?1))
-              ORDER BY a.asset_id",
+            "SELECT p.id FROM photo p
+              WHERE p.blob IN (SELECT value FROM json_each(?1))
+              ORDER BY p.id",
         )?;
         let rows = statement.query_map([hashes_json], |row| row.get::<_, String>(0))?;
         Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
@@ -192,12 +187,12 @@ pub fn live_assets_for_hashes(vault: &Vault, hashes: &[String]) -> Result<Vec<(S
     let hashes_json = serde_json::to_string(hashes).unwrap_or_else(|_| "[]".to_owned());
     vault.read(|connection| {
         let mut statement = connection.prepare(
-            "SELECT c.content_hash, a.asset_id
-               FROM media_asset a
-               JOIN core_content_item c ON c.content_id = a.content_id
-              WHERE a.deleted_at IS NULL
-                AND c.content_hash IN (SELECT value FROM json_each(?1))
-              ORDER BY a.asset_id",
+            "SELECT p.blob, p.id
+               FROM photo p
+               JOIN entity e ON e.id = p.id
+              WHERE e.deleted_at IS NULL
+                AND p.blob IN (SELECT value FROM json_each(?1))
+              ORDER BY p.id",
         )?;
         let rows = statement.query_map([hashes_json], |row| {
             Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))

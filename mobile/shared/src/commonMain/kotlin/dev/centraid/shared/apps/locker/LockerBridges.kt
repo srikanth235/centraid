@@ -147,16 +147,20 @@ public class LockerAccessBridge : LockerScreenBridge<LockerAccessState, LockerAc
 /**
  * LOCKER'S TRASH, the kit's one trash screen (#1015 D1) with Locker as its
  * parameter: 30 days with the star and the tags kept, restore, and Delete
- * forever through `locker.purge_item` (confirmed). There is no Locker command
- * that empties the trash, so there is no "Empty trash" (R-1047-K5).
+ * forever, through the vault's own `entity.restore` and `entity.purge`
+ * (confirmed): a Locker item is an entity of kind `locker_item` (#1135). The
+ * read is named `locker.trash.rows`, which is what the vault serves a Locker
+ * item's row to. Locker does not ask for "Empty trash" (R-1047-K5), as no
+ * other app's trash does but Docs'.
  */
 public val LOCKER_TRASH: TrashSpec = TrashSpec(
     appId = "locker",
-    table = "locker_item",
-    restoreCommand = "locker.restore_item",
-    purgeCommand = "locker.purge_item",
+    table = "entity",
+    kind = "locker_item",
+    restoreCommand = "entity.restore",
+    purgeCommand = "entity.purge",
     emptyCommand = null,
-    idColumn = "item_id",
+    idColumn = "id",
     titleColumn = "title",
     purgeWindowDays = 30,
     purgeAtColumn = "purge_at",

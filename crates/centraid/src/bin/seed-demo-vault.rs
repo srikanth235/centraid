@@ -44,8 +44,8 @@
 //! **THROUGH THE REAL COMMAND PLANE, never SQL.** `sql-confinement` refuses SQL
 //! outside `crates/{ontology,vault,seat,search}` and `crates/apps/kit`, and the
 //! refusal is what makes this fixture worth anything: rows written by
-//! `Vault::execute` carry the `core_entity` siblings, the `row_version` and the
-//! ledger entries a real write produces, so a tile reading them reads the shape
+//! `Vault::execute` carry the `entity` row, the `version` and the
+//! journal entry a real write produces, so a tile reading them reads the shape
 //! the product actually stores.
 //!
 //! **It is a DEV binary and it is not the product.** v0 kept the same
@@ -64,12 +64,12 @@
 //! gone 1101 → 146. Two scenario runs were spent looking for a sync bug that
 //! was not there.
 //!
-//! So a file that already holds a `core_vault` row is REFUSED by name, and
+//! So a file that already holds a `vault` row is REFUSED by name, and
 //! `--force` is the only way past. "It is a dev binary" is the argument for the
 //! guard and not against it: a dev binary that can silently destroy a gateway's
 //! vault is the one class worth guarding, and the cost is one read.
 //!
-//! **THE BYTES ARE REAL.** `media.add_asset` stages the library's compiled-in
+//! **THE BYTES ARE REAL.** `photo.add` claims the library's compiled-in
 //! frames through the content plane, and both shells draw the mosaic and the
 //! grid from the files this seed leaves in `<stem>.bytes`. The one video seeds
 //! its own bytes and no `poster` derivative — nothing in the workspace writes
@@ -265,8 +265,25 @@ fn main() {
     // WHAT HOME WILL DRAW, READ BACK BEFORE THE HANDLE CLOSES. Each number is
     // the row count of the table that app's Home tile pages (`HomeReads.READS`
     // in `mobile/shared`).
-    let seeded =
-        SEEDED_TABLES.map(|(app, table, pk, filter)| (app, count_rows(&handle, table, pk, filter)));
+    let self_id = handle
+        .with_vault(|vault| Ok(vault.self_id()?.unwrap_or_default()))
+        .expect("the self person reads");
+    let seeded = SEEDED_TABLES.map(|(app, table, pk, filter)| {
+        let mut rows = read_all(&handle, table, pk, filter, &self_id);
+        // Locker's tile leaves out what is archived, and the archive is a flag
+        // (a `tagged` edge to `flag:archived`) and not a column.
+        if app == "locker" {
+            let archived = read_all(
+                &handle,
+                "edge",
+                "from_id",
+                Some("rel = 'tagged' AND to_id = 'flag:archived'"),
+                &self_id,
+            );
+            rows.retain(|id| !archived.contains(id));
+        }
+        (app, rows.len())
+    });
     handle.close();
     // AND THE FILE IS FINISHED BEFORE THIS PROCESS GOES (#1020 wave A).
     // `close` leaves the connection to teardown, which is right for a phone
@@ -314,68 +331,104 @@ fn main() {
 
 /// Each app, the table its Home tile pages, that table's primary key and the
 /// tile's filter — the `from`, the `pk_column` and the `where` of
-/// `HomeReads.READS`, in its order. People pages `core_party` for the parties
-/// with a live `people_profile` (#1047), so its mirror counts the profiles —
-/// this seeder trashes none, so every profile is live. Locker counts live,
-/// unarchived items, as its tile does; the trashed demo item is not one.
+/// `HomeReads.READS`, in its order. Every kind that is an entity is counted
+/// off `entity` by its `kind`, live (no `deleted_at`); People's circle is the
+/// persons that are not the vault's own self, as its tile counts them (the
+/// self id is the predicate's one bind). Locker
+/// counts live, unarchived items, as its tile does; the trashed demo item is
+/// not one.
 const SEEDED_TABLES: [(&str, &str, &str, Option<&str>); 8] = [
-    ("photos", "media_asset", "asset_id", None),
-    ("docs", "core_document", "document_id", None),
-    ("notes", "knowledge_note", "note_id", None),
-    ("agenda", "core_event", "event_id", None),
-    ("tasks", "schedule_task", "task_id", None),
-    ("people", "people_profile", "profile_id", None),
-    ("money", "core_transaction", "txn_id", None),
+    ("photos", "photo", "id", None),
+    ("docs", "document", "id", None),
+    (
+        "notes",
+        "entity",
+        "id",
+        Some("kind = 'note' AND deleted_at IS NULL"),
+    ),
+    (
+        "agenda",
+        "entity",
+        "id",
+        Some("kind = 'event' AND deleted_at IS NULL"),
+    ),
+    (
+        "tasks",
+        "entity",
+        "id",
+        Some("kind = 'task' AND deleted_at IS NULL"),
+    ),
+    (
+        "people",
+        "entity",
+        "id",
+        Some("kind = 'person' AND deleted_at IS NULL AND id <> ?1"),
+    ),
+    ("money", "txn", "id", None),
     (
         "locker",
-        "locker_item",
-        "item_id",
-        Some("deleted_at IS NULL AND archived_at IS NULL"),
+        "entity",
+        "id",
+        Some("kind = 'locker_item' AND deleted_at IS NULL"),
     ),
 ];
 
-/// Every row of a table, counted by paging it through the vault's keyset door to the end.
+/// The `pk` of every row of a table, read by paging it through the vault's keyset door to the end.
 ///
 /// There is no `COUNT(*)` on the door and `sql-confinement` refuses SQL here
-/// (see [`first_row`]), so the count is the rows the pages hand back. It goes
+/// (see [`first_row`]), so a count is the rows the pages hand back. It goes
 /// through `Vault::keyset_page` and not the wire's `Request::Page`, because the
 /// wire door pages only the tables a screen pages (`centraid_core::api::PAGE_TABLES`)
-/// and this mirror also counts `core_event` and `core_transaction`, whose Home
+/// and this mirror also counts `entity` and `txn`, whose Home
 /// tiles ride their own arms.
-fn count_rows(
+fn read_all(
     handle: &centraid_core::Handle,
     table: &str,
     pk: &str,
     filter: Option<&str>,
-) -> usize {
+    self_id: &str,
+) -> Vec<String> {
     handle
         .with_vault(|vault| {
-            let mut rows = 0;
+            let mut rows = Vec::new();
             let mut after = None;
             loop {
                 let answer = vault.keyset_page(&centraid_vault::page::KeysetPage {
-                    name: "seed.count".to_owned(),
+                    // Home's Locker tile is a read the vault serves Locker's
+                    // rows to, by name; the mirror asks as Home does.
+                    name: if filter.is_some_and(|text| {
+                        text.contains("locker_item") || text.contains("flag:archived")
+                    }) {
+                        "home.locker".to_owned()
+                    } else {
+                        "seed.count".to_owned()
+                    },
                     select: vec![pk.to_owned()],
                     from: table.to_owned(),
                     predicate: filter.map(str::to_owned),
-                    binds: Vec::new(),
+                    binds: filter
+                        .filter(|text| text.contains("?1"))
+                        .map(|_| vec![centraid_vault::value::Value::Text(self_id.to_owned())])
+                        .unwrap_or_default(),
                     sort_column: pk.to_owned(),
                     pk_column: pk.to_owned(),
                     descending: false,
                     limit: 500,
                     after,
                     held_thumbnail: false,
-                    note_body: false,
                     document_size: false,
                 })?;
-                rows += answer.rows.len();
+                rows.extend(answer.rows.iter().filter_map(|row| match row.get(pk) {
+                    Some(centraid_vault::value::Value::Text(text)) => Some(text.clone()),
+                    _ => None,
+                }));
                 match answer.next {
                     Some(next) => after = Some(next),
                     None => return Ok(rows),
                 }
             }
         })
-        .unwrap_or_else(|refusal| panic!("counting {table} was refused: {refusal:?}"))
+        .unwrap_or_else(|refusal| panic!("reading {table} was refused: {refusal:?}"))
 }
 
 // ---------------------------------------------------------------------------
@@ -411,7 +464,7 @@ fn locker_items() -> Vec<(&'static str, Value)> {
             json!({
                 "item_id": "demo-locker-bank", "type": "login", "title": "Sierra Credit Union",
                 "username": "owner@example.com", "password": "Granite-Lake-47-Pine",
-                "url": "https://sierracu.example.com", "tags": ["finance"],
+                "url": "https://sierracu.example.com",
                 "notes": "Joint account for the cabin fund.",
                 // RFC 6238 Appendix B's own seed, as the QR code a bank shows
                 // would carry it, so the item page's code can be checked
@@ -456,11 +509,17 @@ fn locker_items() -> Vec<(&'static str, Value)> {
                 "password": "admin1234"
             }),
         ),
+        // Trash, star and tags are the vault's shared verbs: a Locker item is an
+        // entity (#1135).
+        ("entity.trash", json!({ "id": "demo-locker-gone" })),
         (
-            "locker.trash_item",
-            json!({ "item_id": "demo-locker-gone" }),
+            "flag.set",
+            json!({ "id": "demo-locker-bank", "flag": "starred" }),
         ),
-        ("locker.star_item", json!({ "item_id": "demo-locker-bank" })),
+        (
+            "tag.add",
+            json!({ "id": "demo-locker-bank", "label": "finance" }),
+        ),
         // CUSTOM FIELDS (#1047 T2): a sealed one the core seals against its
         // own id, and a plain one, so the item page shows both kinds.
         (

@@ -82,11 +82,21 @@ public data class TaskOps(
  * Logbook's box reopens, and hides the row there the same way.
  */
 public object TaskOpsLaw {
-    public const val STATUS: String = "schedule.set_task_status"
-    public const val ADD: String = "schedule.add_task"
-    public const val ORGANIZE: String = "schedule.organize_task"
-    public const val SAVE_PROJECT: String = "schedule.save_project"
-    public const val SAVE_SECTION: String = "schedule.save_section"
+    public const val COMPLETE: String = "task.complete"
+    public const val REOPEN: String = "task.reopen"
+    public const val CANCEL: String = "task.cancel"
+    public const val ADD: String = "task.add"
+    public const val ORGANIZE: String = "task.organize"
+
+    /** A project, an area and a section are containers: one shared verb makes them. */
+    public const val CREATE_CONTAINER: String = "container.create"
+
+    /** The command that puts a task in [status]: an action says the state it wants (R-1135-3-10). */
+    public fun commandFor(status: String): String = when (status) {
+        TasksRows.STATUS_DONE -> COMPLETE
+        TasksRows.STATUS_CANCELLED -> CANCEL
+        else -> REOPEN
+    }
 
     public data class Out(val ops: TaskOps, val effects: List<ScreenEffect> = emptyList())
 
@@ -98,7 +108,7 @@ public object TaskOpsLaw {
     public fun checked(ops: TaskOps, task: TasksTask): Out {
         if (task.task_id in ops.hidden) return Out(ops)
         val open = TasksRows.isOpen(task)
-        val to = if (open) TasksRows.STATUS_COMPLETED else TasksRows.STATUS_NEEDS_ACTION
+        val to = if (open) TasksRows.STATUS_DONE else TasksRows.STATUS_OPEN
         val title = task.title.ifBlank { TasksCopy.UNTITLED }
         val op = TaskOp(
             kind = TaskOp.Kind.STATUS,
@@ -143,7 +153,7 @@ public object TaskOpsLaw {
                 status = null,
                 undo = null,
                 nextOf = null,
-                completed = if (undo.to == TasksRows.STATUS_COMPLETED) (ops.completed - 1).coerceAtLeast(0) else ops.completed,
+                completed = if (undo.to == TasksRows.STATUS_DONE) (ops.completed - 1).coerceAtLeast(0) else ops.completed,
             ),
             listOf(effect),
         )
@@ -164,9 +174,9 @@ public object TaskOpsLaw {
         sectionId: String? = null,
     ): Out {
         val input = buildString {
-            append("{\"task_id\":").append(jsonString(taskId))
+            append("{\"id\":").append(jsonString(taskId))
             append(",\"title\":").append(jsonString(title))
-            if (dueDay.isNotEmpty()) append(",\"due_at\":").append(jsonString(dueDay))
+            if (dueDay.isNotEmpty()) append(",\"due\":").append(jsonString(dueDay))
             append('}')
         }
         val key = InvokeKeys.of(ADD, taskId)
@@ -230,19 +240,14 @@ public object TaskOpsLaw {
     }
 
     /**
-     * `organize_task`'s input. A project without a section CLEARS the section,
-     * because a section of another project would be refused
-     * (`task_section_agrees_with_project`); the Inbox clears both.
+     * `task.organize`'s input. A project without a section CLEARS the section, because a section
+     * of another project would be refused; the Inbox clears both (`null` clears what it names).
      */
-    public fun organizeInput(taskId: String, projectId: String?, sectionId: String?, sortOrder: Long): String = buildString {
-        append("{\"task_id\":").append(jsonString(taskId))
-        when {
-            projectId == null -> append(",\"clear_project\":true")
-            sectionId == null -> append(",\"project_id\":").append(jsonString(projectId)).append(",\"clear_section\":true")
-            else -> append(",\"project_id\":").append(jsonString(projectId))
-                .append(",\"section_id\":").append(jsonString(sectionId))
-        }
-        append(",\"sort_order\":").append(sortOrder)
+    public fun organizeInput(taskId: String, projectId: String?, sectionId: String?, position: Long): String = buildString {
+        append("{\"id\":").append(jsonString(taskId))
+        append(",\"project_id\":").append(projectId?.let { jsonString(it) } ?: "null")
+        append(",\"section_id\":").append(if (projectId == null) "null" else sectionId?.let { jsonString(it) } ?: "null")
+        append(",\"position\":").append(position)
         append('}')
     }
 
@@ -332,8 +337,9 @@ public object TaskOpsLaw {
     /** One status write, under a key no earlier gesture used. */
     private fun status(ops: TaskOps, taskId: String, to: String): Triple<Long, String, ScreenEffect> {
         val seq = ops.seq + 1
-        val key = InvokeKeys.of(STATUS, taskId, "to=$to", "n=$seq")
-        val input = "{\"task_id\":${jsonString(taskId)},\"status\":${jsonString(to)}}"
-        return Triple(seq, key, ScreenEffect.SubmitWrite(STATUS, input, key))
+        val command = commandFor(to)
+        val key = InvokeKeys.of(command, taskId, "to=$to", "n=$seq")
+        val input = "{\"id\":${jsonString(taskId)}}"
+        return Triple(seq, key, ScreenEffect.SubmitWrite(command, input, key))
     }
 }

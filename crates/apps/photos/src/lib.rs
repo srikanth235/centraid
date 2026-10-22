@@ -1,37 +1,33 @@
-//! # Photos — a manifest, five statement sets, pure folds, 18 actions
+//! # Photos — a manifest, three queries, pure folds, nineteen actions
 //!
-//! Photos is the largest app in the product: 21,348 lines of v0 TypeScript, 8
-//! queries (five today: the three face ones were retired, Q-1047-2), 18 actions, 38 scopes over five schemas and a 551-line demo seed
-//! (#1020, wave 4 census §A2). Its doctrine, from the manifest's own
-//! description (`manifest.json`, copied verbatim from v0's `app.json`):
+//! Its doctrine, from the manifest's own description (`manifest.json`):
 //!
-//! - the library is a **projection**: the meaning — assets, albums, captions,
-//!   capture times — is owned in the vault and the bytes are rented behind each
-//!   content item's `content_uri`;
-//! - **a star is a tag, not a column.** `media_asset.favorite` is gone
-//!   (#916, ONT-03); the star is the `starred` concept in the flags scheme that
-//!   Docs, Locker and People read, each anchored on its own subject, so a
-//!   photo's star is one row in one place;
-//! - **the storage answer is the gateway's sweep**, never something the app can
-//!   compute: local-CAS presence is a filesystem fact. Until the sweep has run
-//!   the answer is *not counted yet* — never zeroes ([`storage`], D-1020-P1);
-//! - **duplicates are read, never computed here.** The union-find over phash
-//!   Hamming distance ≤ 6 lives in `crates/media::duplicates`; this app reads
-//!   the `cluster_id` a sweep already stamped ([`duplicates`], D-1020-P3);
-//! - **enrichment status is a read-only mirror** of `enrich.policy`, and
-//!   `request-enrichment` writes a **priority hint**, never a gate
-//!   ([`enrichment`], D-1020-P4);
-//! - **the Places facet stays inside Photos.** There is no `crates/apps/places`:
-//!   `core_place` joins in the library and search reads, and the phrase logic
-//!   that keeps a location a *phrase* rather than a coordinate lives in
-//!   [`places`] (D-1020-P5).
+//! - the library is a **projection**: the meaning — photographs, albums, captions,
+//!   capture times — is owned in the vault (`entity`, `photo`, `container`, `edge`)
+//!   and the bytes are the blob plane's, named by hash (#1135);
+//! - **the same bytes are one photograph**: `photo.blob` is unique, so a re-upload
+//!   adopts what is there and brings it back from the trash;
+//! - **a star is an edge, not a column**: a heart and the archive are `tagged`
+//!   edges to `flag:starred` and `flag:archived`, the flags Docs, Notes and Locker
+//!   read, each anchored on its own subject;
+//! - **an edit folds its original, a crop folds nothing** ([`queries`]'s module
+//!   note): the library draws the newest live photograph of a burst;
+//! - **duplicates are a projection of the perceptual hashes**, clustered at read by
+//!   the one clustering `crates/media` owns ([`duplicates`], D-1020-P3); nothing is
+//!   stored and no sweep has to run;
+//! - **the Places facet stays inside Photos.** There is no `crates/apps/places`: a
+//!   `place` entity joins in the library and search reads, and the phrase logic
+//!   that keeps a location a *phrase* rather than a coordinate lives in [`places`]
+//!   (D-1020-P5);
+//! - **faces and memories are gone**: nothing produces a face region or a memory,
+//!   so no surface draws one (R-FP-10, Q-1047-2).
 //!
 //! ## What this crate is allowed to contain, and what stops the rest
 //!
 //! | Not allowed | What stops it |
 //! |---|---|
-//! | SQL, in any form | `cargo xtask rules`' `sql-confinement` scans this crate; SQL lives only under `crates/{ontology,vault,seat,search}` and `crates/apps/kit`. A statement here is a [`centraid_apps_kit::PageQuery`] — a projection, a `from`, a predicate and an order, as data |
-//! | A model, a codec or a hash | recognition is the automations lane's and the byte plane is `crates/media`'s; the only dependencies here are the kit and `serde_json` |
+//! | SQL, in any form | `cargo xtask rules`' `sql-confinement` scans this crate; SQL lives only under `crates/{ontology,vault,search}` and `crates/apps/kit`. A statement here is a [`centraid_apps_kit::PageQuery`] — a projection, a `from`, a predicate and an order, as data |
+//! | A model, a codec or a hash | recognition is the phone's and the byte plane is `crates/media`'s; the only dependencies here are the kit and `serde_json` |
 //! | A write from a query | [`queries`] holds statements and a [`centraid_apps_kit::PageDoor`], whose one method reads |
 //! | An invocation with no `invoke_key` | the field is required on [`commands::Invocation`] (D-1020-D3-5) |
 //! | A denial turned into an error | [`commands::Outcome::Denied`] and [`Denial`] are states a surface renders |
@@ -39,26 +35,22 @@
 //!
 //! ## The manifest
 //!
-//! `manifest.json` is v0's `app.json`, byte for byte, and [`manifest`] parses
-//! it with the kit's parser at load time rather than restating it in Rust. Two
-//! copies of "which tables does Photos write" is how the two answers drift.
+//! `manifest.json` is the contract; [`manifest`] parses it with the kit's parser at
+//! load time rather than restating it in Rust. Two copies of "which commands does
+//! Photos send" is how the two answers drift, so the action table
+//! ([`commands::ACTIONS`]) is compared with it by a test.
 
 pub mod commands;
 pub mod duplicates;
-pub mod enrichment;
 pub mod manifest;
 pub mod places;
 pub mod queries;
-pub mod representations;
-pub mod storage;
 
 pub use commands::{ACTIONS, Commands, Invocation, Outcome};
-pub use duplicates::{DuplicateCluster, duplicate_clusters};
-pub use enrichment::{EnrichmentStatus, Tier};
+pub use duplicates::{DuplicateCluster, Fingerprint, duplicate_clusters};
 pub use manifest::{APP_ID, manifest};
 pub use places::{PlacePhrase, PlacePhraseSource, PlaceRow, place_phrase};
-pub use queries::{LibraryData, LibraryInput, load_library};
-pub use storage::{StorageSummary, storage_summary};
+pub use queries::{LibraryData, LibraryInput, SearchData, load_library, load_search_term};
 
 /// A CONSENT DENIAL, as the payload carries it: the kit's one type, shared by
 /// every app so the core settles all of them through one door.

@@ -6,7 +6,6 @@ import centraid.screen.v1.DuplicateReviewState
 import centraid.screen.v1.Loading
 import centraid.screen.v1.ReadFailure
 import centraid.screen.v1.SeatState
-import dev.centraid.shared.kit.jsonString
 import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.ScreenMachine
@@ -52,7 +51,7 @@ import dev.centraid.shared.screen.Step
  * deletions it committed, and a repeat re-sends whatever the screen still lists:
  * the vault refuses a member that already landed ("that photograph is already in
  * the trash") and trashes the rest. The key does not do that — the core
- * remembers no key (#1029 §1, R-1088-12) — `media.delete_asset`'s own
+ * remembers no key (#1029 §1, R-1088-12) — `entity.trash`'s own
  * precondition does.
  */
 public object DuplicateReviewMachine :
@@ -62,12 +61,12 @@ public object DuplicateReviewMachine :
     /**
      * THE COMMAND THE VAULT ACTUALLY HAS.
      *
-     * `media.delete_asset` takes one required `asset_id` and moves the row to
-     * the trash. **Not `media.purge_asset`**, which is the confirmation-gated
-     * permanent one: see the header for why this screen does not offer it and
-     * why that is not an omission to fill in.
+     * `entity.trash` takes one required `id` and moves the photograph to the
+     * trash. **Not `entity.purge`**, which is the confirmation-gated permanent
+     * one: see the header for why this screen does not offer it and why that is
+     * not an omission to fill in.
      */
-    public const val TRASH_COMMAND: String = "media.delete_asset"
+    public const val TRASH_COMMAND: String = PhotoWrites.TRASH
 
     /**
      * THE SECOND STATEMENT THIS SCREEN MAKES (#1029, photos port).
@@ -78,14 +77,12 @@ public object DuplicateReviewMachine :
      * of these and its note on why a phase field would race applies unchanged.
      *
      * One leg, and the ceiling is stated rather than discovered: this answers
-     * the ALBUM half of `member_placed`. The favourite half is a `core_tag` row
-     * on the flags scheme's `starred` concept (#916), which is two further
-     * reads to resolve before the tags can be asked for — see
-     * [DuplicateReviewLeg]. The byte size is a third table again and has no
-     * carrier on `DuplicateMember`; both are in this lane's report.
+     * `member_placed` — a copy in an album, or a favourite, both `edge`s (#916).
+     * The byte size is another table again and has no carrier on
+     * `DuplicateMember`: see [DuplicateReviewReads].
      */
     public enum class Leg {
-        /** `core_collection_entry`, for `DuplicateMember.member_placed`. */
+        /** `edge`, for `DuplicateMember.member_placed`. */
         PLACEMENTS,
     }
 
@@ -264,7 +261,7 @@ public object DuplicateReviewMachine :
         //   committed must still say two were refused, and a success that wiped
         //   `write_failure` would make the order the settles happen to arrive
         //   in decide whether the member is told. The trashed row's own change
-        //   arrives as `rows_changed` on `media_asset` and re-reads through the
+        //   arrives as `rows_changed` on `entity` and re-reads through the
         //   path above, which is the path that cannot lie; re-reading here as
         //   well would fire one read per member for the same truth.
         // * **Not committed** — the sentence lands on `write_failure`, and the
@@ -335,7 +332,7 @@ public object DuplicateReviewMachine :
             doomed.map { assetId ->
                 ScreenEffect.SubmitWrite(
                     command = TRASH_COMMAND,
-                    inputJson = "{\"asset_id\":${jsonString(assetId)}}",
+                    inputJson = PhotoWrites.idOnly(assetId),
                     // THE INVOKE KEY IS THE ASSET, NOT AN ORDINAL.
                     //
                     // v0's fallback was the call's ORDINAL and was only stable
@@ -405,28 +402,27 @@ public object DuplicateReviewMachine :
         data?.members?.map { it.asset_id }?.toSet() ?: emptySet()
 
     /**
-     * `media_asset` — the members' own rows, which is also what this screen
-     * reads (see [DuplicateReviewReads]).
+     * `photo` — the members' own rows, which is also what this screen reads (see
+     * [DuplicateReviewReads]) — and `entity`, where a trashed copy leaves it.
      *
-     * **`media_asset_phash` is NOT declared here, and that is a known gap.**
-     * A sweep that re-clusters while a member is mid-review changes WHICH
-     * assets belong to this cluster without touching a single `media_asset`
-     * row, so this screen would not notice. `rowsChanged` names one table by
-     * design — one declaration cannot disagree with itself — and the trade is
-     * the right way round: a re-clustering is rare and a member is looking at
-     * the screen, while a trashed member is the common case and is caught.
-     * Named in this lane's report.
+     * **THE CLUSTER'S MEMBERSHIP IS NOT DECLARED HERE, and that is a known gap.**
+     * The cluster is asked of the core when the screen opens, and a new hash that
+     * re-groups while a member is mid-review changes WHICH photographs belong to
+     * this cluster without touching a row this screen reads, so this screen would
+     * not notice. The trade is the right way round: a re-clustering is rare and a
+     * member is looking at the screen, while a trashed member is the common case
+     * and is caught.
      */
     override fun rowsChanged(table: String, keys: List<String>): DuplicateReviewEvent? =
         when (table) {
-            TABLE -> DuplicateReviewEvent(
+            TABLE, "entity", "edge" -> DuplicateReviewEvent(
                 rows_changed = DuplicateReviewEvent.RowsChanged(asset_ids = keys),
             )
 
             else -> null
         }
 
-    private const val TABLE: String = "media_asset"
+    private const val TABLE: String = "photo"
 
     override fun seatChanged(seat: SeatState): DuplicateReviewEvent =
         DuplicateReviewEvent(seat_changed = DuplicateReviewEvent.SeatChanged(seat = seat))

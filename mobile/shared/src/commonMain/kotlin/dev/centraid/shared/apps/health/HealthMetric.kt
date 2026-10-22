@@ -23,6 +23,9 @@ import dev.centraid.shared.kit.time.CivilWords
 import dev.centraid.shared.nav.ScreenIds
 import dev.centraid.shared.screen.Step
 
+/** What `health.series` reads: the vault's owner and the days. */
+public val HEALTH_METRIC_TABLES: Set<String> = setOf("vault", "measurement")
+
 /**
  * ONE METRIC OVER A WEEK, A MONTH OR A YEAR (#1129), opened from a Today or a Trends row: the
  * period's per-day average against the member's typical, the chart's buckets with the typical
@@ -30,7 +33,7 @@ import dev.centraid.shared.screen.Step
  * marks only the bucket today falls in (R-1129-10).
  */
 public object HealthMetricMachine :
-    HealthQueryMachine<HealthMetricState, HealthMetricEvent, HealthMetricData>(ScreenIds.HEALTH_METRIC, setOf("health_daily")) {
+    HealthQueryMachine<HealthMetricState, HealthMetricEvent, HealthMetricData>(ScreenIds.HEALTH_METRIC, HEALTH_METRIC_TABLES) {
     public const val SCREEN_ID: String = ScreenIds.HEALTH_METRIC
 
     public const val RANGE_WEEK: String = "week"
@@ -239,7 +242,7 @@ public object HealthMetricMachine :
 /** What a metric page asks: its series, over the range in view. */
 public object HealthMetricReads : HealthQueries<HealthMetricState, HealthMetricEvent>(
     screenId = HealthMetricMachine.SCREEN_ID,
-    tables = setOf("health_daily"),
+    tables = HEALTH_METRIC_TABLES,
     ask = { held, tz ->
         val metric = HealthMetrics.ofKey(held.screen.metric)
         if (metric == null) {

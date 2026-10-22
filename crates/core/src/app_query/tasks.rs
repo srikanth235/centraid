@@ -18,7 +18,10 @@ use centraid_apps_tasks::views::{self, GroupKind, Placed, View};
 use centraid_vault::Vault;
 use centraid_vault::time::zone::FireZone;
 
-use super::{RecordingSearch, VaultDoor, corrected_search, named, settle, zone_of};
+use super::{
+    RecordingSearch, VaultDoor, corrected_search, filled, filled_targets, named, settle,
+    zone_if_any, zone_of,
+};
 use crate::error::{CoreError, Result};
 
 type Answer = wire::app_query_response::Answer;
@@ -193,6 +196,40 @@ pub(super) fn projects(
     })
 }
 
+/// `tasks.trash`: the trashed tasks, each day read in the request's zone (none
+/// when no zone resolved).
+pub(super) fn trash(
+    vault: &Vault,
+    door: &VaultDoor<'_>,
+    asked: &wire::TasksTrashRequest,
+) -> Result<Answer> {
+    let zone = zone_if_any(vault, &asked.tz)?;
+    let day_in = |instant: Option<&str>| {
+        zone.as_ref()
+            .zip(instant)
+            .and_then(|(zone, instant)| local::read(instant, zone))
+            .map(|civil| civil.day_text())
+            .unwrap_or_default()
+    };
+    settle(door, tasks::load_trash(door), |data| {
+        Answer::TasksTrash(wire::TasksTrash {
+            tasks: data
+                .tasks
+                .into_iter()
+                .map(|row| wire::TasksTrashRow {
+                    deleted_local_day: day_in(row.deleted_at.as_deref()),
+                    purge_local_day: day_in(row.purge_at.as_deref()),
+                    deleted_at: row.deleted_at.unwrap_or_default(),
+                    task_id: row.task_id,
+                    title: row.title,
+                    purge_at: row.purge_at,
+                })
+                .collect(),
+            truncated: data.truncated,
+        })
+    })
+}
+
 pub(super) fn search(
     vault: &Vault,
     door: &VaultDoor<'_>,
@@ -210,7 +247,7 @@ pub(super) fn search(
     let zone = zone_of(vault, &asked.tz)?;
     let today = today_in(&zone, now)?;
     let loaded = vault.read(|connection| {
-        let index = match centraid_search::SqliteDoor::open(connection) {
+        let index = match centraid_search::SqliteDoor::open(connection, vault.words()) {
             Ok(index) => index,
             Err(error) => {
                 return Ok(Err(CoreError::Invariant {
@@ -223,15 +260,23 @@ pub(super) fn search(
             door,
         };
         let limit = usize::try_from(asked.limit).unwrap_or(usize::MAX);
-        // THE PROJECTS THE TERM NAMES RIDE BESIDE THE TASKS (#1097, R-1097-19..21),
-        // and the correction treats the two as one answer.
-        let entities = named::entities_of(centraid_apps_tasks::queries::TASK_TARGET_TYPE, "tasks");
+        // THE PROJECTS THE TERM NAMES RIDE BESIDE THE TASKS, and the correction
+        // treats the two as one answer.
+        let entities = named::entities_of(centraid_apps_tasks::queries::TASK_KIND, "tasks");
         Ok(Ok(corrected_search(
             &search,
             &entities,
             &asked.term,
             |(data, found): &(tasks::SearchData, Vec<centraid_search::Target>)| {
-                data.tasks.is_empty() && found.is_empty()
+                data.tasks.len() + found.len()
+            },
+            |(exact, exact_found), (again, again_found)| {
+                (
+                    tasks::SearchData {
+                        tasks: filled(exact.tasks, again.tasks, limit, |row| row.task_id.clone()),
+                    },
+                    filled_targets(exact_found, again_found, limit.min(named::CONTAINER_ROWS)),
+                )
             },
             |term| {
                 let (data, denial) = tasks::load_search_term(
@@ -408,7 +453,6 @@ fn task_to_wire(placed: &Placed) -> wire::TasksTask {
             .tags
             .iter()
             .map(|tag| wire::TasksTag {
-                tag_id: tag.tag_id.clone(),
                 concept_id: tag.concept_id.clone(),
                 label: tag.label.clone(),
             })
@@ -419,8 +463,6 @@ fn task_to_wire(placed: &Placed) -> wire::TasksTask {
             .map(|attachment| wire::TasksAttachment {
                 attachment_id: attachment.attachment_id.clone(),
                 content_id: attachment.content_id.clone(),
-                role: attachment.role.clone(),
-                is_primary: attachment.is_primary.unwrap_or_default() != 0,
                 media_type: attachment.media_type.clone(),
                 content_uri: attachment.content_uri.clone(),
                 byte_size: attachment.byte_size,
@@ -430,7 +472,6 @@ fn task_to_wire(placed: &Placed) -> wire::TasksTask {
             .references
             .iter()
             .map(|reference| wire::TasksReference {
-                link_id: reference.link_id.clone(),
                 to_type: reference.to_type.clone(),
                 to_id: reference.to_id.clone(),
             })

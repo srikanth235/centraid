@@ -2,7 +2,7 @@
   "manifestVersion": 1,
   "id": "locker",
   "name": "Locker",
-  "description": "Everything, locked up — a personal password manager over the vault on this phone. Logins, cards, secure notes, identities, Wi-Fi and standalone passwords (and nine template types), each an owner-only locker.item. Secrets are sealed under a key K derived from the member's 24 words and held only in the phone core's memory behind the phone's own lock (biometric, passcode fallback); the list is metadata and every secret is revealed per field, per gesture, receipted before its value exists, and concealed after 30 seconds. One-time codes are RFC 6238 codes the core makes from a seed that is never shown. Custom fields may be sealed; a passkey is stored, never revealed, and cannot be made on the phone. Review is metadata only — the compromised flag, http:// addresses and card expiry — and names weak/reused passwords and breach checking as not checked here. Import reads a password-manager CSV or a Locker export and seals it in; export writes every secret to a plaintext file through the system's save sheet after a fresh owner check. Favorites are the canonical flags-scheme star; tags are free-form. Every write runs through a typed vault command, receipted.",
+  "description": "Everything, locked up — a personal password manager over the vault on this phone. Logins, cards, secure notes, identities, Wi-Fi and standalone passwords (and nine template types), each an owner-only locker.item. Secrets are sealed under a key K derived from the member's 24 words and held only in the phone core's memory behind the phone's own lock (biometric, passcode fallback); the list is metadata and every secret is revealed per field, per gesture, receipted before its value exists, and concealed after 30 seconds. One-time codes are RFC 6238 codes the core makes from a seed that is never shown. Custom fields may be sealed; a passkey is stored, never revealed, and cannot be made on the phone. Review is metadata only — the compromised flag, http:// addresses and card expiry — and names weak/reused passwords and breach checking as not checked here. Import reads a password-manager CSV or a Locker export and seals it in; export writes every secret to a plaintext file through the system's save sheet after a fresh owner check. Favorites are the vault's canonical star and tags are the vault's own tags, the same words every other app reads. Every write runs through a typed vault command, receipted.",
   "version": "0.3.0",
   "iconKey": "Lock",
   "colorKey": "rose",
@@ -20,21 +20,6 @@
         "verbs": "reveal"
       },
       {
-        "schema": "core",
-        "table": "tag",
-        "verbs": "read"
-      },
-      {
-        "schema": "core",
-        "table": "concept",
-        "verbs": "read"
-      },
-      {
-        "schema": "core",
-        "table": "concept_scheme",
-        "verbs": "read"
-      },
-      {
         "schema": "locker",
         "table": "add_item",
         "verbs": "act"
@@ -42,31 +27,6 @@
       {
         "schema": "locker",
         "table": "edit_item",
-        "verbs": "act"
-      },
-      {
-        "schema": "locker",
-        "table": "trash_item",
-        "verbs": "act"
-      },
-      {
-        "schema": "locker",
-        "table": "restore_item",
-        "verbs": "act"
-      },
-      {
-        "schema": "locker",
-        "table": "purge_item",
-        "verbs": "act"
-      },
-      {
-        "schema": "locker",
-        "table": "star_item",
-        "verbs": "act"
-      },
-      {
-        "schema": "locker",
-        "table": "unstar_item",
         "verbs": "act"
       },
       {
@@ -100,63 +60,9 @@
         "verbs": "reveal"
       },
       {
-        "schema": "core",
-        "table": "entity_revision",
-        "verbs": "read",
-        "rowFilter": [
-          {
-            "column": "entity_type",
-            "op": "eq",
-            "value": "locker.item"
-          }
-        ],
-        "fieldMask": [
-          "revision_id",
-          "entity_type",
-          "entity_id",
-          "operation",
-          "snapshot_json",
-          "recorded_at",
-          "undo_until",
-          "undone_at"
-        ]
-      },
-      {
-        "schema": "core",
-        "table": "attachment",
-        "verbs": "read"
-      },
-      {
-        "schema": "core",
-        "table": "content_item",
-        "verbs": "read"
-      },
-      {
-        "schema": "core",
-        "table": "content_representation",
-        "verbs": "read"
-      },
-      {
-        "schema": "access",
+        "schema": "locker",
         "table": "receipt",
-        "verbs": "read",
-        "rowFilter": [
-          {
-            "column": "object_type",
-            "op": "in",
-            "value": ["locker.item", "locker.auth"]
-          }
-        ]
-      },
-      {
-        "schema": "locker",
-        "table": "archive_item",
-        "verbs": "act"
-      },
-      {
-        "schema": "locker",
-        "table": "unarchive_item",
-        "verbs": "act"
+        "verbs": "read"
       },
       {
         "schema": "locker",
@@ -197,6 +103,51 @@
         "schema": "locker",
         "table": "export",
         "verbs": "act"
+      },
+      {
+        "schema": "entity",
+        "table": "trash",
+        "verbs": "act"
+      },
+      {
+        "schema": "entity",
+        "table": "restore",
+        "verbs": "act"
+      },
+      {
+        "schema": "entity",
+        "table": "purge",
+        "verbs": "act"
+      },
+      {
+        "schema": "flag",
+        "table": "set",
+        "verbs": "act"
+      },
+      {
+        "schema": "flag",
+        "table": "clear",
+        "verbs": "act"
+      },
+      {
+        "schema": "tag",
+        "table": "add",
+        "verbs": "act"
+      },
+      {
+        "schema": "tag",
+        "table": "remove",
+        "verbs": "act"
+      },
+      {
+        "schema": "vault",
+        "table": "entity",
+        "verbs": "read"
+      },
+      {
+        "schema": "vault",
+        "table": "edge",
+        "verbs": "read"
       }
     ]
   },
@@ -232,12 +183,6 @@
           "title": {
             "type": "string",
             "minLength": 1
-          },
-          "tags": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
           },
           "compromised": {
             "type": "boolean",
@@ -315,11 +260,11 @@
     },
     {
       "name": "edit-item",
-      "description": "Replace an item's type fields through locker.edit_item. This REPLACES and does not patch: every field of the item's type that the input leaves out or empty is cleared, so send the whole draft (a sealed secret you keep goes as the placeholder «sealed»). The title, tags, alias and compromised flag are left alone when omitted, and a changed password clears the flag. Refuses trashed items.",
+      "description": "Replace an item's type fields through locker.edit_item. This REPLACES and does not patch: every field of the item's type that the input leaves out or empty is cleared, so send the whole draft (a sealed secret you keep goes as the placeholder «sealed»). The title, alias and compromised flag are left alone when omitted. A changed password clears the compromised flag. Tags, the star and the archive are not this command's: they are tag.add and flag.set. Refuses trashed items.",
       "confirmation": "none",
       "input": {
         "type": "object",
-        "description": "REPLACES, does not patch. Every field of the item's type (username, url, password, one-time-code seed, notes, and the rest of its type's columns) is rewritten from this input, and each one the input leaves out or leaves empty is CLEARED: an edit carrying only a password erases the username, address, seed and notes. Send the whole draft; a sealed secret you are keeping goes as the placeholder «sealed». Only the title, the tags (an empty list clears them), the alias (an empty one clears it) and the compromised flag (a changed password clears it) are left alone when omitted. Custom fields, addresses, the passkey and the memo are their own commands and are never touched here.",
+        "description": "REPLACES, does not patch. Every field of the item's type (username, url, password, one-time-code seed, notes, and the rest of its type's columns) is rewritten from this input, and each one the input leaves out or leaves empty is CLEARED: an edit carrying only a password erases the username, address, seed and notes. Send the whole draft; a sealed secret you are keeping goes as the placeholder «sealed». Only the title, the alias (an empty one clears it) and the compromised flag (a changed password clears it) are left alone when omitted. Tags, the star and the archive are the vault's own (`tag.add`, `flag.set`); custom fields, addresses, the passkey and the memo are their own commands. None is touched here.",
         "properties": {
           "item_id": {
             "type": "string",
@@ -328,12 +273,6 @@
           "title": {
             "type": "string",
             "minLength": 1
-          },
-          "tags": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
           },
           "compromised": {
             "type": "boolean",
@@ -411,17 +350,17 @@
     },
     {
       "name": "trash-item",
-      "description": "Move an item to the trash through locker.trash_item; it keeps its star and auto-purges about 30 days later.",
+      "description": "Move an item to the trash through entity.trash, the vault's one trash verb; it keeps its star, its tags and its archive and is purged about 30 days later.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "item_id": {
+          "id": {
             "type": "string",
             "minLength": 1
           }
         },
-        "required": ["item_id"],
+        "required": ["id"],
         "additionalProperties": false
       },
       "output": {
@@ -441,17 +380,17 @@
     },
     {
       "name": "restore-item",
-      "description": "Bring an item back from the trash through locker.restore_item.",
+      "description": "Bring an item back from the trash through entity.restore. An archived item comes back to the archive.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "item_id": {
+          "id": {
             "type": "string",
             "minLength": 1
           }
         },
-        "required": ["item_id"],
+        "required": ["id"],
         "additionalProperties": false
       },
       "output": {
@@ -471,17 +410,17 @@
     },
     {
       "name": "purge-item",
-      "description": "Erase an item for good through locker.purge_item — permanent and irreversible, so it is confirmed.",
+      "description": "Erase a trashed item for good through entity.purge — permanent and irreversible, so it is confirmed.",
       "confirmation": "required",
       "input": {
         "type": "object",
         "properties": {
-          "item_id": {
+          "id": {
             "type": "string",
             "minLength": 1
           }
         },
-        "required": ["item_id"],
+        "required": ["id"],
         "additionalProperties": false
       },
       "output": {
@@ -501,17 +440,21 @@
     },
     {
       "name": "star-item",
-      "description": "Star an item through locker.star_item — one flags-scheme tag on the item, the same star every other surface reads. Idempotent; refuses trashed items.",
+      "description": "Star an item through flag.set — the vault's one canonical star, the same every other surface reads. Idempotent; refuses trashed items.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "item_id": {
+          "id": {
             "type": "string",
             "minLength": 1
+          },
+          "flag": {
+            "type": "string",
+            "enum": ["starred"]
           }
         },
-        "required": ["item_id"],
+        "required": ["id", "flag"],
         "additionalProperties": false
       },
       "output": {
@@ -531,17 +474,21 @@
     },
     {
       "name": "unstar-item",
-      "description": "Remove an item's star through locker.unstar_item. Idempotent.",
+      "description": "Remove an item's star through flag.clear. Idempotent.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "item_id": {
+          "id": {
             "type": "string",
             "minLength": 1
+          },
+          "flag": {
+            "type": "string",
+            "enum": ["starred"]
           }
         },
-        "required": ["item_id"],
+        "required": ["id", "flag"],
         "additionalProperties": false
       },
       "output": {
@@ -561,17 +508,21 @@
     },
     {
       "name": "archive-item",
-      "description": "Archive an item through locker.archive_item — keep it forever, out of the lists. Not a trash: no purge date is set and nothing expires.",
+      "description": "Archive an item through flag.set — keep it forever, out of the lists. Not a trash: no purge date is set and nothing expires. Trash wins: an archived item can still be trashed.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "item_id": {
+          "id": {
             "type": "string",
             "minLength": 1
+          },
+          "flag": {
+            "type": "string",
+            "enum": ["archived"]
           }
         },
-        "required": ["item_id"],
+        "required": ["id", "flag"],
         "additionalProperties": false
       },
       "output": {
@@ -591,17 +542,91 @@
     },
     {
       "name": "unarchive-item",
-      "description": "Bring an archived item back into the lists through locker.unarchive_item.",
+      "description": "Bring an archived item back into the lists through flag.clear.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "item_id": {
+          "id": {
             "type": "string",
             "minLength": 1
+          },
+          "flag": {
+            "type": "string",
+            "enum": ["archived"]
           }
         },
-        "required": ["item_id"],
+        "required": ["id", "flag"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "add-tag",
+      "description": "Put a word on an item through tag.add — a vault tag, the same one every other surface reads. Idempotent; refuses trashed items.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "required": ["id", "label"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "remove-tag",
+      "description": "Take a word off an item through tag.remove. Idempotent.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "required": ["id", "label"],
         "additionalProperties": false
       },
       "output": {
@@ -621,7 +646,7 @@
     },
     {
       "name": "duplicate-item",
-      "description": "Clone an item through locker.duplicate_item for a sibling account. Sealed values are copied inside the vault and never round-trip through this device; the copy is titled \"… copy\", is not starred, and does not take the original's connector alias.",
+      "description": "Clone an item through locker.duplicate_item for a sibling account. Sealed values are copied inside the vault and never round-trip through this device; the copy is titled \"… copy\", keeps the original's tags but is not starred, and does not take the original's connector alias.",
       "confirmation": "none",
       "input": {
         "type": "object",

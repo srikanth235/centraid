@@ -195,7 +195,7 @@ def events():
 def tasks():
     t = [
         # wedding
-        {"key": "guest_list", "name": "Finalize guest list", "due": "2026-05-15", "status": "in_progress", "priority": 1,
+        {"key": "guest_list", "name": "Finalize guest list", "due": "2026-05-15", "priority": 1,
          "effort": 120, "list": "wed_list", "description": "cap at 140, Dad still adding cousins"},
         {"key": "gl_addr", "name": "Get Dad's side addresses", "parent": "guest_list", "completed": "2026-05-09T21:00"},
         {"key": "gl_plus", "name": "Confirm plus-ones with bridesmaids", "parent": "guest_list", "due": "2026-05-14"},
@@ -223,8 +223,7 @@ def tasks():
          "priority": 3},
         {"key": "mock_exam", "name": "Run timed mock exam", "due": "2026-05-26", "effort": 210, "list": "bar_list"},
         # work
-        {"key": "factum", "name": "Draft factum for Brightline", "due": "2026-05-16", "priority": 1, "effort": 480,
-         "status": "in_progress", "list": "work_list", "description": "Margaret wants it by Saturday noon"},
+        {"key": "factum", "name": "Draft factum for Brightline", "due": "2026-05-16", "priority": 1, "effort": 480, "list": "work_list", "description": "Margaret wants it by Saturday noon"},
         {"key": "f_research", "name": "Case law research", "parent": "factum", "completed": "2026-05-08T18:00"},
         {"key": "f_facts", "name": "Draft statement of facts", "parent": "factum", "due": "2026-05-14"},
         {"key": "f_cite", "name": "Cite-check the factum", "parent": "factum", "due": "2026-05-15"},

@@ -820,13 +820,14 @@ message NotesEditorState {
   // The draft the save in flight carries; it becomes `baseline` on commit.
   NoteDraft sending = 9;
   // A NEW NOTE: the id was minted on the phone and nothing is in the vault
-  // yet. The first save is `knowledge.create_note` under that id; every later
-  // one is `edit_note`. Cleared when the create commits.
+  // yet. The first save is `note.create` under that id; every later one is
+  // `note.edit`. Cleared when the create commits.
   bool is_new = 10;
-  // False while the body is not on this device: the title and the pin still
-  // save, and the body is read-only with `body_notice` over it.
-  bool body_editable = 11;
-  string body_notice = 12;
+  // `body_editable` (11) and `body_notice` (12): a note's body is its own column on
+  // the phone that is the vault, so it is never "not on this device" and the editor
+  // is editable once the draft is (#1135).
+  reserved 11, 12;
+  reserved "body_editable", "body_notice";
   // THE POWERBOX IS OPEN: the shell presents `notes.link_targets` over the
   // editor and forwards its pick as `LinkPicked`.
   bool link_sheet_open = 13;
@@ -881,27 +882,22 @@ message NoteDraft {
   string body = 2;
   Format format = 3;
   bool pinned = 4;
-  // The revision this draft was read from, so a save can be concurrency-checked
-  // rather than last-write-wins.
+  // The note's `row_version` when this draft was read: a marker, not a check
+  // (the last save on this phone wins, R-1047-K3).
   string base_revision_id = 5;
   // Set when the save was refused; the sentence a member reads.
   optional ReadFailure save_failure = 6;
-  // THE BODY HAS NOT ARRIVED, which is not the same as an empty note (#1025
-  // S5). A note's body is not a column: it lives in the content item
-  // `body_content_id` points at and is read through the byte door, and a seat
-  // whose reads cannot reach that door yet answers a draft with no body in it.
-  //
-  // An editor that could not tell those apart would let a member save an empty
-  // body over a real one — `knowledge.save_note` takes the whole draft, so a
-  // blank field is an instruction to blank the note. The flag exists so the
-  // save can be REFUSED rather than made destructive, and it is on the draft
-  // rather than on the state because it is a fact about the row that arrived.
-  bool body_unavailable = 7;
+  // `body_unavailable` (7): a note's body is its own column and always arrives
+  // (#1135); nothing can set it.
+  reserved 7;
+  reserved "body_unavailable";
 
   enum Format {
     FORMAT_UNSPECIFIED = 0;
     FORMAT_MARKDOWN = 1;
-    FORMAT_HTML = 2;
+    // `html`: a note is `markdown` or `plain` (the `note.format` CHECK, #1135).
+    reserved 2;
+    reserved "FORMAT_HTML";
     FORMAT_PLAIN = 3;
   }
 }
@@ -1627,7 +1623,7 @@ message HomeEvent {
 // ---------------------------------------------------------------------------
 //
 // `home.search`: the full screen Home's search bar pushes. One field over
-// every app but Locker (`vault_search`, the powerbox's loader asked from
+// every app, Locker included (`vault_search`, the powerbox's loader asked from
 // Home), the answer GROUPED BY THE APP each row opens in, the groups in
 // Home's tile order. A tap opens the row in its own app, through the router a
 // chat card already uses (`target`); Cancel pops back to Home and clears.
@@ -1695,12 +1691,11 @@ message HomeSearchGroup {
 message HomeSearchData {
   // In Home's tile order (`SpringboardPolicy.SPRINGBOARD_ORDER`).
   repeated HomeSearchGroup groups = 1;
-  // Set when nothing matched the term: the one sentence, and one action that
-  // asks the assistant about the term (`empty.action_label`, #1097).
+  // Set when nothing matched the term: the one sentence. The way on is the Ask
+  // row, `HomeSearchState.field.ask_row`, drawn under the groups or this sentence.
   EmptyState empty = 2;
-  // THE QUESTION the shell sends to Chat when that action is pressed; set with
-  // `empty`, EMPTY otherwise. Finished here so a shell sends the machine's words.
-  string ask_question = 3;
+  reserved 3;
+  reserved "ask_question";
 }
 
 message HomeSearchState {
@@ -1744,9 +1739,8 @@ message HomeSearchEvent {
     // Another vault came to the front: its recent searches and results go
     // with the vault they were typed in.
     VaultChanged vault_changed = 12;
-    // INTENT: the empty state's "Ask about" action. The shell switches to the
-    // Chat tab and sends `data.ask_question`; the machine records the term as a
-    // recent search.
+    // INTENT: the Ask row. The shell switches to the Chat tab and sends
+    // `field.ask_row`; the machine records the term as a recent search.
     Asked asked = 13;
     // INTENT: the shell opens `container.target` in its app (#1097); the
     // machine records the term as a recent search, as it does for a row.
@@ -1806,15 +1800,15 @@ message HomeSearchEvent {
 // ---------------------------------------------------------------------------
 //
 // v0 shipped FOURTEEN photos routes (`navigation.ts`, `PhotosStackParamList`).
-// This package declares TEN screens for them, and the seven that collapsed did
+// This package declares NINE screens for them, and the seven that collapsed did
 // so under law 2 — *a band destination is a parameter, not a screen* — read one
 // step further than wave 3 read it.
 //
-// `PhotoStateView`, `AlbumDetail`, `PlaceDetail` and a memory's members are
-// **the library under a predicate**. Each one is a page of `media_asset` in
-// `captured_at DESC` order with a different `WHERE`, drawing the same
+// `PhotoStateView`, `AlbumDetail` and `PlaceDetail` are
+// **the library under a predicate**. Each one is a page of `photo` in
+// `taken_at DESC` order with a different `WHERE`, drawing the same
 // `PhotoCell` with the same held states and the same download arrow. v0 wrote
-// four screens for them and they drifted: `AlbumDetail.tsx` grew a selection
+// four screens for them (a memory's members were the fourth) and they drifted: `AlbumDetail.tsx` grew a selection
 // mode the state views never got, `PlaceDetail.tsx` its own empty sentence, and
 // `PhotoStateView`'s trash a countdown none of the others could show. One
 // message with a `Shelf` oneof is the same doctrine a destination parameter
@@ -1833,7 +1827,6 @@ message HomeSearchEvent {
 // - **`DuplicatesState`** / **`DuplicateReviewState`** — a shelf of clusters,
 //   and one cluster with a keep decision. Two, for the reason v0 gave: listing
 //   clusters and choosing within one are different jobs with different writes.
-// - **`PhotosMemoriesState`** — computed memories; their MEMBERS are a shelf.
 // - **`PhotoPickerState`** — a grid with a picked set and a destination album.
 //   Not a shelf: the picked set is the screen's own state (§10) and a shelf
 //   that could be picked from would carry it on every other surface too.
@@ -1849,8 +1842,12 @@ message PhotoShelf {
     PhotoStateView state_view = 1;
     Album album = 2;
     Place place = 3;
-    Memory memory = 4;
   }
+
+  // 4 was `Memory`: the shelf of one computed memory's members. Nothing
+  // computes memories, so the surface left (R-FP-10, Q-1047-2).
+  reserved 4;
+  reserved "memory";
 
   // NAMES RIDE ALONG (law 2's sibling, `navigation.ts:63-69`): every one of
   // these carries the title its app bar shows, so a head never waits for the
@@ -1868,11 +1865,6 @@ message PhotoShelf {
     // an empty id is also what a place row with a missing key would send, and
     // the two must not open the same shelf.
     bool unplaced = 3;
-  }
-
-  message Memory {
-    string memory_id = 1;
-    string title = 2;
   }
 }
 
@@ -1902,10 +1894,9 @@ message PhotoShelfState {
   // field on `DataArrived` plus a clock on the read path.
   //
   // The window needs neither and is what v0's trash meta line actually said:
-  // "purged 30 days after deletion". The constant is `PURGE_AFTER_DAYS` in
-  // `crates/vault/src/commands/media.rs` — NOT `retentionWindows` in
-  // `contracts/schema/v0-registries.json`, which holds only `audit` and
-  // `ledger`.
+  // "purged 30 days after deletion". The constant is `TRASH_DAYS` in
+  // `crates/vault/src/commands/entity.rs`, which `entity.trash` stamps
+  // `purge_at` with.
   //
   // 0 on every other shelf.
   uint32 purge_window_days = 8;
@@ -2653,7 +2644,7 @@ message PhotoLightboxEvent {
 // v0 drew two component families here and had to keep their covers, counts and
 // empty states in step by hand.
 //
-// The DOORS that are not shelves — Places, Memories, Duplicates — are
+// The DOORS that are not shelves — Places and Duplicates — are
 // [CollectionsDoor] below, because their tap lands somewhere else.
 message ShelfRow {
   PhotoShelf shelf = 1;
@@ -2701,7 +2692,10 @@ message CollectionsDoor {
     reserved 1;
     reserved "KIND_PEOPLE";
     KIND_PLACES = 2;
-    KIND_MEMORIES = 3;
+    // 3 was `KIND_MEMORIES`, the door to computed memories: nothing computes
+    // them, so the surface left (R-FP-10, Q-1047-2).
+    reserved 3;
+    reserved "KIND_MEMORIES";
     KIND_DUPLICATES = 4;
   }
 }
@@ -2825,7 +2819,7 @@ message PhotosSearchState {
     SearchHits hits = 6;
   }
   // THE SHARED SEARCH FIELD (#1097, R-1097-27): the machine owns it through
-  // `SearchLaw`, so the kit's field draws "Showing results for" under it when
+  // `SearchLaw`, so the kit's field draws "Including results for" under it when
   // the term was corrected, as it does for every app. `term` mirrors `query`
   // (the typed words stay the screen's own, in `query`); `corrected` is the
   // words the answer searched instead, set only for a current answer and cleared
@@ -3387,119 +3381,6 @@ message DuplicateReviewEvent {
 }
 
 // ---------------------------------------------------------------------------
-// Memories
-// ---------------------------------------------------------------------------
-
-message MemoryRow {
-  string memory_id = 1;
-  Kind kind = 2;
-  // What the pass called it, empty when it had nothing to call it. The view
-  // composes a title from the day and the place in that case, rather than
-  // storing one the vault never wrote.
-  string title_hint = 3;
-  // THE VAULT'S OWN KEY FOR THIS MEMORY'S DAY, PASSED THROUGH AND NEVER
-  // PARSED.
-  //
-  // It said `YYYY-MM-DD`, and that is not what the column holds: the shape
-  // differs by kind, and an on-this-day row keys by MONTH AND DAY — it is the
-  // same date in other years, so a year in the key would defeat it. The
-  // deterministic ids are built from it (`otd:<day_key>`,
-  // `docs/photos/derived-ledger.md`), which is why it travels at all.
-  //
-  // **A view takes its dates from `started_at` and `ended_at`, not from
-  // here.** Those are unambiguous instants; this is a key whose format is the
-  // projection's business.
-  string day_key = 4;
-  string place_name = 5;
-  uint32 member_count = 6;
-  optional string cover_thumbnail_path = 7;
-  string started_at = 8;
-  string ended_at = 9;
-  // A TRIP'S ROUTE: the places its photographs were taken at, in the order
-  // they were taken, a repeat of the stop before collapsed. Only stops with a
-  // coordinate — a place with no pin cannot be sketched. Empty on every other
-  // kind, and on a trip whose photographs carry no place.
-  //
-  // Drawn as a private sketch from the member's own coordinates and never over
-  // a basemap: a tile is a request that tells a server where the member has
-  // been (`docs/photos/places.md`).
-  repeated MemoryStop route = 10;
-
-  enum Kind {
-    KIND_UNSPECIFIED = 0;
-    // This day, in other years.
-    KIND_ON_THIS_DAY = 1;
-    // A run of days away from home.
-    KIND_TRIP = 2;
-    // Photographs that look like each other.
-    KIND_SIMILAR = 3;
-  }
-}
-
-// ONE STOP ON A TRIP'S ROUTE.
-message MemoryStop {
-  string place_id = 1;
-  double latitude = 2;
-  double longitude = 3;
-  // WHERE THE STOP FALLS IN THE ROUTE'S SKETCH, in a box 1 high and as wide as
-  // the sketch's plate: 0,0 top left, 1,1 bottom right, y growing SOUTH. The
-  // machine projects the route (`PhotosMemoriesMachine.sketch`) so neither
-  // shell does; a view multiplies by its own box. Set with the route.
-  double sketch_x = 4;
-  double sketch_y = 5;
-}
-
-message PhotosMemoriesState {
-  SeatState seat = 1;
-  oneof content {
-    Loading loading = 2;
-    ReadFailure failure = 3;
-    PhotosMemoriesData data = 4;
-  }
-}
-
-message PhotosMemoriesData {
-  repeated MemoryRow memories = 1;
-  optional string next_cursor = 2;
-  // Memories are COMPUTED, by a pass that may not have run. An empty list with
-  // this false is "not yet"; with it true it is "there are none".
-  bool computed = 3;
-}
-
-message PhotosMemoriesEvent {
-  oneof kind {
-    Opened opened = 1;
-    NextPageRequested next_page = 2;
-    DataArrived data = 3;
-    ReadRefused refused = 4;
-    RowsChanged rows_changed = 5;
-    SeatChanged seat_changed = 6;
-  }
-
-  message Opened {}
-
-  message NextPageRequested {
-    string after_cursor = 1;
-  }
-
-  message DataArrived {
-    PhotosMemoriesData data = 1;
-  }
-
-  message ReadRefused {
-    ReadFailure failure = 1;
-  }
-
-  message RowsChanged {
-    repeated string memory_ids = 1;
-  }
-
-  message SeatChanged {
-    SeatState seat = 1;
-  }
-}
-
-// ---------------------------------------------------------------------------
 // The picker
 // ---------------------------------------------------------------------------
 
@@ -3882,11 +3763,12 @@ message AgendaHomeState {
   // screen and not a `SearchField`, so the correction sits beside the term.
   // A new term, closing search, and a refusal clear it.
   string search_corrected = 19;
-  // THE QUESTION THE NO-MATCH STATE OFFERS TO SEND TO THE ASSISTANT (#1097,
-  // R-1097-28), the twin of `SearchField.ask` on Agenda's flat fields: set
-  // when the hits for the current term come back wholly empty, cleared by a
-  // new term, closing search and a refusal.
-  string search_ask = 20;
+  // THE ASK ROW OF AGENDA'S SEARCH (#1097, R-1097-28, #1135), the twin of
+  // `SearchField.ask_row` on Agenda's flat fields: set by the hits for the current
+  // term, matched or not, cleared by a new term, closing search and a refusal.
+  reserved 20;
+  reserved "search_ask";
+  SearchAsk search_ask_row = 29;
   // THE TASK WRITE'S STATUS LINE (#1128): "Task done" with Undo, a filing's
   // "Filed in …", or the vault's own refusal. Empty when nothing was written.
   StatusLine status = 21;
@@ -5011,22 +4893,35 @@ enum ImportSource {
 // answer that is still the current one for a term that is not blank, and
 // cleared by a new term and a close; a stale answer never sets them.
 //
-// `ask` is THE QUESTION THE NO-MATCH STATE OFFERS TO SEND TO THE ASSISTANT
-// (#1097, R-1097-28): "Find <term>", finished by `SearchLaw`, set by an answer
-// that is still the current one, not denied and wholly empty (rows plus
-// containers), and ONLY for an app that offers Ask. EMPTY means no Ask: a new
-// term, a close, a denial, a stale answer and any answer with something in it
-// clear it. Locker never sets it (R-1097-29): its search term can be a secret,
-// and Ask would write it into a chat thread and the chat index. The shell
-// draws the action only where it has a Chat tab (R-1097-30) and sends this
-// string through its router, never a string the view built.
+// `ask_row` is THE ASK ROW AT THE FOOT OF THE ANSWER (#1097, R-1097-28, #1135):
+// set by an answer that is still the current one for a term that is not blank,
+// whether or not anything matched, and ONLY for an app that offers Ask (the
+// chat drawer's search and Locker's do not). Absent means no Ask: a new term, a
+// close, a denial and a stale answer clear it. Locker never sets it (R-1097-29):
+// its search term can be a secret, and Ask would write it into a chat thread
+// and the chat index. The shell draws the row only where it has a Chat tab
+// (R-1097-30) and hands the whole `SearchAsk` to its router, never a string the
+// view built.
 message SearchField {
+  reserved 6;
+  reserved "ask";
   bool open = 1;
   string term = 2;
   string answered_term = 3;
   string corrected = 4;
   repeated SearchContainer containers = 5;
-  string ask = 6;
+  SearchAsk ask_row = 7;
+}
+
+// THE ONE ASK A SEARCH OFFERS (#1135), finished by `SearchLaw` so every app reads
+// it the same way: `label` is the row's words ("Ask about “x”"), `question` is
+// what the chat is sent ("Find x"), and `scope` is the chat scope to open it in,
+// the id of the app the member searched from (`agenda`, `notes`, ...), or EMPTY
+// for Home's, which asks the assistant across every app.
+message SearchAsk {
+  string label = 1;
+  string question = 2;
+  string scope = 3;
 }
 
 // A CONTAINER AS A SEARCH RESULT (#1097, R-1097-19..21): one notebook, album,
@@ -5034,8 +4929,8 @@ message SearchField {
 // search and the three owning apps' own searches draw the same row and open it
 // through the one router a row reference has.
 message SearchContainer {
-  // The index's entity (`core.collection`, `schedule.project`,
-  // `core.concept`) and the row's own id.
+  // The index's entity kind (`notebook`, `album`, `project`, `folder`) and the
+  // row's own id.
   string entity = 1;
   string id = 2;
   // The app it opens in: `notes`, `photos`, `tasks`, `docs`.
@@ -5934,6 +5829,8 @@ message NotesJournalEvent {
 // --- History ---
 
 message NotesVersionRow {
+  // The version's key: its `revision`'s `seq` as text, "0" for the current
+  // words. (The name is the views' and stays; a version is no content item.)
   string content_id = 1;
   // "3 March · 14:05" / "Current version".
   string label = 2;
@@ -5973,7 +5870,7 @@ message NotesHistoryState {
   }
   NotesHistoryChrome chrome = 8;
   WriteState write = 9;
-  // The version a restore in flight is for.
+  // The version (its key, as `NotesVersionRow.content_id`) a restore in flight is for.
   string restoring_content_id = 10;
 }
 
@@ -6043,7 +5940,7 @@ message NotesLinkPickerChrome {
   string close = 3;
   string retry = 4;
   string loading = 5;
-  // "Locker is not searched · a secret is never a link target".
+  // "Locker items link by name; their secrets stay sealed".
   string foot = 6;
 }
 
@@ -6907,16 +6804,11 @@ message PeopleProfileDraft {
   string role = 2;
   string nickname = 3;
   string met = 4;
-  // A `PartyHueWheel` key; empty is the id's own hue.
-  string hue_key = 5;
+  // `hue_key` (5): a person's hue is drawn from their id and nothing stores one (#1135).
+  reserved 5;
+  reserved "hue_key";
   // 0 is no cadence.
   int64 cadence_days = 6;
-}
-
-message PeopleHueChoice {
-  string hue_key = 1;
-  bool selected = 2;
-  string accessibility_label = 3;
 }
 
 message PeopleCadenceChoice {
@@ -6934,7 +6826,8 @@ message PeopleEditorChrome {
   string role_placeholder = 4;
   string nickname_field = 5;
   string met_field = 6;
-  string colour_field = 7;
+  reserved 7;
+  reserved "colour_field";
   string cadence_field = 8;
   // "Cancel" before the first keystroke of a new person, else "Done".
   string close_label = 9;
@@ -6963,7 +6856,8 @@ message PeopleEditorState {
   optional PeopleProfileDraft baseline = 11;
   optional PeopleProfileDraft sending = 12;
   PeopleEditorChrome chrome = 13;
-  repeated PeopleHueChoice hues = 14;
+  reserved 14;
+  reserved "hues";
   repeated PeopleCadenceChoice cadences = 15;
   // "Saving…" / "Saved" / the refusal's sentence; empty when clean.
   string save_label = 16;
@@ -6987,11 +6881,14 @@ message PeopleEditorEvent {
     RoleChanged role = 10;
     NicknameChanged nickname = 11;
     MetChanged met = 12;
-    HuePicked hue = 13;
     CadencePicked cadence = 14;
     Tick tick = 15;
     Left left = 16;
   }
+
+  // `hue` (13): a person's hue is drawn from their id and no picker offers one (#1135).
+  reserved 13;
+  reserved "hue";
 
   // An existing person, or a new one under `minted_party_id`.
   message Opened {
@@ -7033,10 +6930,6 @@ message PeopleEditorEvent {
 
   message MetChanged {
     string text = 1;
-  }
-
-  message HuePicked {
-    string hue_key = 1;
   }
 
   message CadencePicked {
@@ -10930,7 +10823,7 @@ message ChatState {
   // every app's search carries. `open` shows the field in place of the opener;
   // `term` is what the member typed; `answered_term` is the term `threads`
   // answers; `corrected` is the words the core searched instead when it
-  // corrected a typo (the field draws "Showing results for ..."). While a term
+  // corrected a typo (the field draws "Including results for ..."). While a term
   // is answered, `threads` are the chats it FOUND, best match first, and
   // `threads_empty_line` says nothing matched.
   SearchField drawer_search = 48;
@@ -12370,7 +12263,9 @@ message MoneyRuleEditor {
   string pattern = 4;
   string category_id = 5;
   string category_label = 6;
-  string display_name = 7;
+  // A rule files a line and no longer names it (#1135).
+  reserved 7, 17;
+  reserved "display_name", "name_label";
   bool can_save = 8;
   string issue = 9;
   string title = 10;
@@ -12380,7 +12275,6 @@ message MoneyRuleEditor {
   string pattern_label = 14;
   string pattern_note = 15;
   string category_row_label = 16;
-  string name_label = 17;
   string delete_label = 18;
   string apply_label = 19;
   string cancel_label = 20;
@@ -12423,7 +12317,6 @@ message MoneyRulesEvent {
     RulePicked rule = 4;
     KindPicked kind_picked = 5;
     PatternEdited pattern = 6;
-    NameEdited name = 7;
     CategorySheetOpened category_sheet = 8;
     CategoryPicked category = 9;
     Save save = 10;
@@ -12437,6 +12330,10 @@ message MoneyRulesEvent {
     AccountSheetOpened account_sheet = 18;
     AccountPicked account = 19;
   }
+
+  // A rule files a line and no longer names it (#1135).
+  reserved 7;
+  reserved "name";
 
   message Opened {
     string parent = 1;
@@ -12456,10 +12353,6 @@ message MoneyRulesEvent {
   }
 
   message PatternEdited {
-    string text = 1;
-  }
-
-  message NameEdited {
     string text = 1;
   }
 

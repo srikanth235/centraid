@@ -698,7 +698,7 @@ mod tests {
         };
         assert_eq!(
             stored.hash.to_hex(),
-            centraid_vault::content::content_digest(&bytes),
+            centraid_vault::blob::content_digest(&bytes),
             "the handle is what the vault deduplicates on"
         );
         assert_eq!(std::fs::read(&stored.path).expect("reads"), bytes);

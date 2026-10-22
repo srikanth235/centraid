@@ -197,7 +197,7 @@ def events():
 def tasks():
     t = [
         # wedding
-        {"key": "speech", "name": "Write maid of honour speech", "due": "2026-12-05", "status": "in_progress", "priority": 2,
+        {"key": "speech", "name": "Write maid of honour speech", "due": "2026-12-05", "priority": 2,
          "effort": 180, "list": "wedlist", "description": "funny but not the Blackpool story"},
         {"key": "speech_draft", "name": "First draft of speech", "parent": "speech", "completed": "2026-10-04T22:00"},
         {"key": "speech_photos", "name": "Dig out childhood photos for speech", "parent": "speech", "due": "2026-10-31"},
@@ -208,7 +208,7 @@ def tasks():
         {"key": "save_dates", "name": "Send save the dates", "due": "2026-07-01", "completed": "2026-06-28T20:00", "list": "wedlist"},
         {"key": "mehndi_book", "name": "Book mehndi artist", "completed": "2026-08-02T12:00", "list": "wedlist"},
         {"key": "rsvps", "name": "Chase RSVPs from dad's side", "due": "2026-10-25", "list": "wedlist", "effort": 60},
-        {"key": "mehndi_outfit", "name": "Buy outfit for mehndi", "due": "2026-10-31", "status": "in_progress", "list": "wedlist"},
+        {"key": "mehndi_outfit", "name": "Buy outfit for mehndi", "due": "2026-10-31", "list": "wedlist"},
         {"key": "playlist", "name": "Make mehndi playlist", "list": "wedlist", "effort": 45},
         {"key": "seating", "name": "Seating plan draft", "due": "2026-11-15", "list": "wedlist", "effort": 120},
         # hen do
@@ -218,7 +218,7 @@ def tasks():
         {"key": "evisa", "name": "Check if we need an e-visa", "completed": "2026-07-21T09:00", "list": "istlist"},
         {"key": "airport_parking", "name": "Book airport parking", "due": "2026-11-06", "list": "istlist"},
         # work
-        {"key": "audit", "name": "Finish sepsis audit", "due": "2026-10-23", "priority": 1, "effort": 240, "status": "in_progress",
+        {"key": "audit", "name": "Finish sepsis audit", "due": "2026-10-23", "priority": 1, "effort": 240,
          "list": "worklist", "description": "30 notes from AMU, compare against the trust pathway"},
         {"key": "audit_data", "name": "Collect audit data", "parent": "audit", "completed": "2026-10-09T17:00"},
         {"key": "audit_slides", "name": "Make audit slides", "parent": "audit", "due": "2026-10-22"},
@@ -248,7 +248,7 @@ def tasks():
         # photography
         {"key": "develop", "name": "Develop the Whitby rolls", "due": "2026-10-15", "effort": 120},
         {"key": "hp5", "name": "Buy HP5 film", "due": "2026-10-29"},
-        {"key": "scan", "name": "Scan Whitby negatives", "status": "in_progress", "effort": 180},
+        {"key": "scan", "name": "Scan Whitby negatives", "effort": 180},
         {"key": "light_seal", "name": "Fix Pentax light seals", "effort": 45},
         # car and personal
         {"key": "car_ins", "name": "Renew car insurance", "due": "2026-11-03", "priority": 2},

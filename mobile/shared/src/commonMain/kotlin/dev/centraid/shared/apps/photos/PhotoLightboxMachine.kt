@@ -9,7 +9,6 @@ import centraid.screen.v1.PhotoLightboxState
 import centraid.screen.v1.PhotoPlaceChoice
 import centraid.screen.v1.SeatState
 import dev.centraid.design.copy.PhotosCopy
-import dev.centraid.shared.kit.jsonString
 import dev.centraid.shared.nav.ScreenIds
 import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.screen.ScreenEffect
@@ -73,16 +72,16 @@ public object PhotoLightboxMachine : ScreenMachine<PhotoLightboxState, PhotoLigh
      * The other direction would be a cycle.
      */
     public enum class Leg {
-        /** `core_place`, for [PhotoDetail.place_name]. */
+        /** `place`, for the coordinate "Copy exact location" copies. */
         PLACE,
 
-        /** `core_tag` on this asset, for [PhotoDetail.labels]' concept ids. */
+        /** `tagged` edges from this photograph: [PhotoDetail.labels]' ids, the star and the archive. */
         TAGS,
 
-        /** `core_concept`, to put a WORD on each of those concept ids. */
+        /** `entity`, for the title, the trash, the place's name and a WORD on each label. */
         CONCEPTS,
 
-        /** `core_content_item`, for [PhotoDetail.byte_size]. */
+        /** `blob`, for [PhotoDetail.byte_size]. */
         CONTENT,
     }
 
@@ -100,13 +99,13 @@ public object PhotoLightboxMachine : ScreenMachine<PhotoLightboxState, PhotoLigh
      * leg, rather than of most of them.
      */
     public enum class Side {
-        /** `media_asset` over a window of neighbours, for the filmstrip. */
+        /** `photo` over a window of neighbours, for the filmstrip. */
         FILM,
 
-        /** `core_place`, for the "Adjust location" picker. */
+        /** `entity` places, for the "Adjust location" picker. */
         PLACES,
 
-        /** `media_asset` by capture group, for a Live Photo's movie. */
+        /** `photo` by burst, for a Live Photo's movie. */
         LIVE,
     }
 
@@ -250,7 +249,7 @@ public object PhotoLightboxMachine : ScreenMachine<PhotoLightboxState, PhotoLigh
         // is the difference between a lightbox and a slideshow of spinners.
         // Rows for other assets move nothing — a backup gains rows all day.
         event.rows_changed != null ->
-            if (state.asset_id in event.rows_changed.asset_ids) {
+            if (event.rows_changed.asset_ids.isEmpty() || state.asset_id in event.rows_changed.asset_ids) {
                 Step(state, listOf(ScreenEffect.ReadPage(SCREEN_ID, afterCursor = null)))
             } else {
                 Step(state)
@@ -319,31 +318,31 @@ public object PhotoLightboxMachine : ScreenMachine<PhotoLightboxState, PhotoLigh
                     state,
                     command = TAG_COMMAND,
                     verb = "tag",
-                    input = "{\"subject_type\":" + jsonString(TAG_SUBJECT_TYPE) +
-                        ",\"subject_id\":" + jsonString(state.asset_id) +
-                        ",\"label\":" + jsonString(label) + "}",
+                    input = PhotoWrites.label(state.asset_id, label),
                     key = TAG_COMMAND + ":" + state.asset_id + ":" + label,
                 )
             }
         }
 
-        // BY THE EDGE, NEVER BY THE WORD. Two schemes can spell one word, and
-        // an untag that matched on it would take the wrong one off.
-        event.tag_removed != null ->
-            if (event.tag_removed.tag_id.isEmpty()) {
+        // BY THE WORD THE LABEL CARRIES: the vault removes a label by its words,
+        // and the chip the member tapped is the one that says which.
+        event.tag_removed != null -> {
+            val label = state.detail?.labels?.firstOrNull { it.tag_id == event.tag_removed.tag_id }?.label.orEmpty()
+            if (label.isEmpty()) {
                 Step(state)
             } else {
                 write(
                     state,
                     command = UNTAG_COMMAND,
                     verb = "untag",
-                    input = "{\"tag_id\":" + jsonString(event.tag_removed.tag_id) + "}",
-                    key = UNTAG_COMMAND + ":" + event.tag_removed.tag_id,
+                    input = PhotoWrites.label(state.asset_id, label),
+                    key = UNTAG_COMMAND + ":" + state.asset_id + ":" + label,
                 )
             }
+        }
 
         // AN EMPTY CHOICE CLEARS THE PLACE, and clears it by OMITTING the
-        // field: `media.set_asset_place` reads an absent `place_id` as "back to
+        // field: `photo.set_place` reads an absent `place_id` as "back to
         // unknown", and an empty string is a value its schema refuses.
         event.place_chosen != null -> {
             val placeId = event.place_chosen.place_id
@@ -351,8 +350,7 @@ public object PhotoLightboxMachine : ScreenMachine<PhotoLightboxState, PhotoLigh
                 state.copy(sheet = PhotoLightboxState.Sheet.SHEET_NONE),
                 command = PLACE_COMMAND,
                 verb = "place",
-                input = "{\"asset_id\":" + jsonString(state.asset_id) +
-                    (if (placeId.isEmpty()) "" else ",\"place_id\":" + jsonString(placeId)) + "}",
+                input = PhotoWrites.setPlace(state.asset_id, placeId),
                 key = PLACE_COMMAND + ":" + state.asset_id + ":" + placeId,
             )
         }
@@ -379,8 +377,7 @@ public object PhotoLightboxMachine : ScreenMachine<PhotoLightboxState, PhotoLigh
                     state,
                     command = COVER_COMMAND,
                     verb = "cover",
-                    input = "{\"album_id\":" + jsonString(state.album_id) +
-                        ",\"asset_id\":" + jsonString(state.asset_id) + "}",
+                    input = PhotoWrites.setCover(state.album_id, state.asset_id),
                     key = COVER_COMMAND + ":" + state.album_id + ":" + state.asset_id,
                 )
             }
@@ -456,22 +453,20 @@ public object PhotoLightboxMachine : ScreenMachine<PhotoLightboxState, PhotoLigh
 
         event.favorite != null -> write(
             state,
-            command = FAVORITE_COMMAND,
+            command = PhotoWrites.flagCommand(event.favorite.favorite),
             verb = "favorite",
-            input = "{\"asset_id\":" + jsonString(state.asset_id) + ",\"favorite\":" +
-                (if (event.favorite.favorite) "1" else "0") + "}",
-            key = FAVORITE_COMMAND + ":" + state.asset_id + ":" +
-                (if (event.favorite.favorite) "1" else "0"),
+            input = PhotoWrites.flag(state.asset_id, PhotoWrites.STARRED),
+            key = PhotoWrites.flagCommand(event.favorite.favorite) + ":" + PhotoWrites.STARRED + ":" +
+                state.asset_id,
         )
 
         event.archive != null -> write(
             state,
-            command = UPDATE_COMMAND,
+            command = PhotoWrites.flagCommand(event.archive.archived),
             verb = "archive",
-            input = "{\"asset_id\":" + jsonString(state.asset_id) + ",\"archived\":" +
-                (if (event.archive.archived) "1" else "0") + "}",
-            key = UPDATE_COMMAND + ":archived:" + state.asset_id + ":" +
-                (if (event.archive.archived) "1" else "0"),
+            input = PhotoWrites.flag(state.asset_id, PhotoWrites.ARCHIVED),
+            key = PhotoWrites.flagCommand(event.archive.archived) + ":" + PhotoWrites.ARCHIVED + ":" +
+                state.asset_id,
         )
 
         // TWO COMMANDS, ONE TAP APART, AND ONLY ONE OF THEM IS REVERSIBLE. The
@@ -484,7 +479,7 @@ public object PhotoLightboxMachine : ScreenMachine<PhotoLightboxState, PhotoLigh
                 state,
                 command = command,
                 verb = "trash",
-                input = "{\"asset_id\":" + jsonString(state.asset_id) + "}",
+                input = PhotoWrites.idOnly(state.asset_id),
                 key = command + ":" + state.asset_id,
             )
         }
@@ -538,8 +533,8 @@ public object PhotoLightboxMachine : ScreenMachine<PhotoLightboxState, PhotoLigh
                 )
             }
 
-        // A COMMITTED WRITE IS A RE-READ. Favorite is a `core_tag` row, archive
-        // and trash are `media_asset` columns, and none of the three is a fact
+        // A COMMITTED WRITE IS A RE-READ. Favorite and archive are flag edges, the
+        // trash is the entity's stamp, and none of the three is a fact
         // this reducer may paint on the detail by hand — a star drawn because a
         // command was SENT is a star that stays on when the command was denied.
         //
@@ -586,47 +581,26 @@ public object PhotoLightboxMachine : ScreenMachine<PhotoLightboxState, PhotoLigh
     public const val WRITE_REFUSED_WITHOUT_A_REASON: String =
         "Centraid could not make that change."
 
-    /**
-     * `media.set_favorite` AND NOT `media.update_asset`.
-     *
-     * Both take a `favorite` integer and both end in the same place — a
-     * `core_tag` row against the flags scheme's `starred` concept — but
-     * `update_asset` is a general edit whose other fields (`title`,
-     * `captured_at`) this tap does not touch, and a command whose input says
-     * "change the favourite and nothing else" is the one whose `invoke_key` can
-     * honestly be `(asset, value)`. `update_asset` keyed that way would collide
-     * with a title edit of the same asset.
-     */
-    public const val FAVORITE_COMMAND: String = "media.set_favorite"
-
-    /** `media.update_asset` — the `archived` column's own verb. */
-    public const val UPDATE_COMMAND: String = "media.update_asset"
-
-    /** Into the trash. Reversible by `media.restore_asset` from the trash shelf. */
-    public const val DELETE_COMMAND: String = "media.delete_asset"
+    /** Into the trash. Reversible by `entity.restore` from the trash shelf. */
+    public const val DELETE_COMMAND: String = PhotoWrites.TRASH
 
     /** OUT OF THE VAULT. The registry marks it confirmation-required. */
-    public const val PURGE_COMMAND: String = "media.purge_asset"
+    public const val PURGE_COMMAND: String = PhotoWrites.PURGE
 
-    /**
-     * `core.tag_item`, as the VAULT registers it. The Photos action
-     * `tag-asset` is this command with `subject_type` filled in
-     * (`crates/apps/photos/src/commands.rs`), and a screen submits the
-     * command, so it fills it in itself.
-     */
-    public const val TAG_COMMAND: String = "core.tag_item"
+    /** `tag.add` — a label, by its words. */
+    public const val TAG_COMMAND: String = PhotoWrites.TAG
 
-    /** `core.untag_item` — by the edge's id. */
-    public const val UNTAG_COMMAND: String = "core.untag_item"
+    /** `tag.remove` — by the label's words. */
+    public const val UNTAG_COMMAND: String = PhotoWrites.UNTAG
 
-    /** `crates/apps/photos`' `TAG_SUBJECT_TYPE`, spelled the same. */
-    public const val TAG_SUBJECT_TYPE: String = "media.asset"
+    /** `photo.set_place` — the Photos action `set-place`. */
+    public const val PLACE_COMMAND: String = PhotoWrites.SET_PLACE
 
-    /** `media.set_asset_place` — the Photos action `set-place`. */
-    public const val PLACE_COMMAND: String = "media.set_asset_place"
+    /** `album.set_cover` — the Photos action `set-album-cover`. */
+    public const val COVER_COMMAND: String = PhotoWrites.SET_COVER
 
-    /** `media.set_album_cover` — the Photos action `set-album-cover`. */
-    public const val COVER_COMMAND: String = "media.set_album_cover"
+    /** `entity.retitle` — the caption is the photograph's title. */
+    public const val CAPTION_COMMAND: String = PhotoWrites.RETITLE
 
     /** What a member reads when a hand-off failed and did not say why. */
     public const val HAND_OFF_FAILED: String = EXPORT_FAILED
@@ -691,7 +665,7 @@ public object PhotoLightboxMachine : ScreenMachine<PhotoLightboxState, PhotoLigh
     }
 
     /**
-     * THE CAPTION IS THE ASSET'S `title`, and `media.update_asset` is its
+     * THE CAPTION IS THE ASSET'S `title`, and `entity.retitle` is its
      * verb. Trimmed, and a caption identical to the one on screen is not a
      * write: a field that lost focus without being changed would otherwise
      * commit the same words every time the info sheet closed.
@@ -701,14 +675,13 @@ public object PhotoLightboxMachine : ScreenMachine<PhotoLightboxState, PhotoLigh
         if (state.detail == null || caption == state.detail.title.trim()) return Step(state)
         return write(
             state,
-            command = UPDATE_COMMAND,
+            command = CAPTION_COMMAND,
             verb = "caption",
-            input = "{\"asset_id\":" + jsonString(state.asset_id) + ",\"title\":" +
-                jsonString(caption) + "}",
+            input = PhotoWrites.retitle(state.asset_id, caption),
             // THE WORDS ARE THE INTENT, so they are in the key: a caption
             // changed twice is two writes, and the second is not a replay of
             // the first.
-            key = UPDATE_COMMAND + ":title:" + state.asset_id + ":" + caption,
+            key = CAPTION_COMMAND + ":title:" + state.asset_id + ":" + caption,
         )
     }
 
@@ -894,12 +867,14 @@ public object PhotoLightboxMachine : ScreenMachine<PhotoLightboxState, PhotoLigh
      * The reads the ASSET's own row makes possible, and only those.
      *
      * A place is read when there is a place id; the byte size when there is a
-     * content hash to find the item by. Tags are always read — their absence is
-     * a real answer and the only way to learn it is to ask.
+     * content hash to find the item by. Tags and the entities (the title and the
+     * trash are the entity's) are always read — their absence is a real answer and
+     * the only way to learn it is to ask.
      */
     private fun openers(state: PhotoLightboxState, detail: PhotoDetail): List<ScreenEffect> =
         buildList {
             add(ScreenEffect.ReadPage(readId(Leg.TAGS), null))
+            add(ScreenEffect.ReadPage(readId(Leg.CONCEPTS), null))
             if (detail.place_id.isNotEmpty()) add(ScreenEffect.ReadPage(readId(Leg.PLACE), null))
             if (detail.original_hash.isNotEmpty()) {
                 add(ScreenEffect.ReadPage(readId(Leg.CONTENT), null))
@@ -946,7 +921,7 @@ public object PhotoLightboxMachine : ScreenMachine<PhotoLightboxState, PhotoLigh
      *
      * A tag names a concept and does not carry the WORD, so it needs one more
      * read. The follow-up fires only for ids this arrival INTRODUCED — `after`
-     * minus `before` — so a `core_concept` read that came back without a row
+     * minus `before` — so an entities read that came back without a row
      * for somebody (a concept purged between the two reads) introduces no new
      * unworded id and asks again about nothing. A rule of "read while anything
      * is unworded" would ask for ever.
@@ -971,25 +946,29 @@ public object PhotoLightboxMachine : ScreenMachine<PhotoLightboxState, PhotoLigh
     private fun amend(current: PhotoDetail, part: PhotoDetail): PhotoDetail = current.copy(
         unread_parts = (current.unread_parts + part.unread_parts).distinct()
             .filterNot { it in answered(part) },
-        // [Leg.PLACE].
+        // [Leg.CONCEPTS]: the title and the trash are the photograph's entity's,
+        // and the name is its place's. The asset read resets all of them, so a
+        // restore or a rename is the next answer's and never a stale one.
+        title = part.title.ifEmpty { current.title },
+        trashed = current.trashed || part.trashed,
         place_name = part.place_name.ifEmpty { current.place_name },
-        // [Leg.CONTENT]. Zero is the absence: `core_content_item.byte_size` is
-        // `CHECK (byte_size >= 0)`, and an item of zero bytes is not a
+        // [Leg.CONTENT]. Zero is the absence: an item of zero bytes is not a
         // photograph anybody has.
         byte_size = if (part.byte_size > 0L) part.byte_size else current.byte_size,
-        // [Leg.CONTENT] too: the id the byte door locates the original by.
+        // [Leg.CONTENT] too: the blob's hash, which the byte door locates the original by.
         content_id = part.content_id.ifEmpty { current.content_id },
         // [Leg.PLACE]. Both halves or neither, and `place_has_coordinate` is
         // what says which.
         place_latitude = if (part.place_has_coordinate) part.place_latitude else current.place_latitude,
         place_longitude = if (part.place_has_coordinate) part.place_longitude else current.place_longitude,
         place_has_coordinate = current.place_has_coordinate || part.place_has_coordinate,
-        // [Leg.CONCEPTS], which is the only read that can see the flags
-        // scheme's `starred` notation. Monotone within one photograph's life
-        // because exactly one leg answers it; an unstar is a WRITE, and a
-        // committed write re-reads the asset, which resets this to false before
-        // the concepts are asked again.
+        // [Leg.TAGS], which is the only read that can see the `starred` and
+        // `archived` flags' edges. Monotone within one photograph's life
+        // because exactly one leg answers each; an unstar is a WRITE, and a
+        // committed write re-reads the asset, which resets these to false before
+        // the tags are asked again.
         favorite = current.favorite || part.favorite,
+        archived = current.archived || part.archived,
         labels = mergeLabels(current.labels, part.labels),
     )
 
@@ -1011,7 +990,8 @@ public object PhotoLightboxMachine : ScreenMachine<PhotoLightboxState, PhotoLigh
      * is a screen contradicting itself.
      */
     private fun answered(part: PhotoDetail): Set<PhotoDetail.Part> = buildSet {
-        if (part.place_name.isNotEmpty()) add(PhotoDetail.Part.PART_PLACE)
+        // The place is two reads now: its name is the entity's and its pin is the place's own.
+        if (part.place_name.isNotEmpty() || part.place_has_coordinate) add(PhotoDetail.Part.PART_PLACE)
         if (part.labels.isNotEmpty()) add(PhotoDetail.Part.PART_LABELS)
         if (part.byte_size > 0L) add(PhotoDetail.Part.PART_CONTENT)
     }
@@ -1046,23 +1026,25 @@ public object PhotoLightboxMachine : ScreenMachine<PhotoLightboxState, PhotoLigh
     }
 
     /**
-     * `media_asset` — this photograph's own row, and nothing else.
+     * `photo` — this photograph's own row — and the two tables the rest of it is.
      *
-     * NOT `core_tag`, although a favourite IS a tag row: the core's change
-     * stream says `(table, keys)`, the keys on that table are TAG ids, and
-     * `PhotoLightboxEvent.RowsChanged` carries `asset_ids`. Putting tag ids in
-     * that field would be a lie the reducer then matches against its own asset
-     * id and never hits — a re-read that looks wired and never fires. The
-     * favourite still moves, through the write that made it:
-     * `write_settled.committed` re-reads.
+     * A change event names its tables and no keys, so a `photo` event arrives
+     * with an empty list and reads as "re-read, I cannot tell whose": a photograph
+     * is also an `entity` (its title and its trash) and an `edge` away from its
+     * star, its archive and its labels, and a commit on any of the three can be
+     * this photograph's. A commit that names keys names photograph ids, and moves
+     * only the photograph it names. A backup gaining rows moves `photo` all day;
+     * the event queue coalesces them per table, and the re-read is a local SQLite
+     * read.
      */
     override fun rowsChanged(table: String, keys: List<String>): PhotoLightboxEvent? =
         when (table) {
-            TABLE -> PhotoLightboxEvent(rows_changed = PhotoLightboxEvent.RowsChanged(asset_ids = keys))
+            TABLE, "entity", "edge" ->
+                PhotoLightboxEvent(rows_changed = PhotoLightboxEvent.RowsChanged(asset_ids = keys))
             else -> null
         }
 
-    private const val TABLE: String = "media_asset"
+    private const val TABLE: String = "photo"
 
     /** The lightbox renders the seat: what is durable here decides what the
      *  info sheet can honestly say about where the bytes are. */

@@ -13,7 +13,7 @@ import dev.centraid.shared.platform.FakePlatformServices
 import dev.centraid.shared.screen.ScreenHost
 import dev.centraid.shared.shell.CameraRoll
 import dev.centraid.shared.shell.Shelf
-import dev.centraid.shared.sync.ScreenRuntime
+import dev.centraid.shared.sync.ScreenQueryRuntime
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.booleans.shouldBeFalse
 import io.kotest.matchers.booleans.shouldBeTrue
@@ -132,10 +132,11 @@ class VaultMovedSpec : StringSpec({
             // failing it, and `Unconfined` is what makes the effects run inline
             // (the same shape `ChangeStreamSpec` uses).
             val runtimeScope = CoroutineScope(Dispatchers.Unconfined)
-            ScreenRuntime(
+            ScreenQueryRuntime(
                 core = { core },
                 host = host,
-                reads = NotesReads,
+                queries = NotesReads,
+                clock = dev.centraid.shared.platform.FakeDeviceClock(),
                 scope = runtimeScope,
                 writes = object : dev.centraid.shared.sync.ScreenWrites<
                     NotesEditorState,

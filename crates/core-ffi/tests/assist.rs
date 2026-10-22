@@ -40,7 +40,7 @@ impl Opened {
     }
 
     fn open(private_slot: bool) -> Self {
-        let dir = centraid_ontology::golden::scratch_dir();
+        let dir = centraid_ontology::scratch::scratch_dir();
         std::fs::create_dir_all(&dir).expect("the directory is made");
         let config = format!(
             r#"{{"path":{:?},"create":true}}"#,
@@ -754,7 +754,6 @@ fn id_of(
                 descending: false,
             }),
             with_held_thumbnail: false,
-            with_note_body: false,
             with_document_size: false,
             with_minor_units: false,
             local_day_columns: Vec::new(),
@@ -781,26 +780,16 @@ fn id_of(
 
 /// The document with this exact title.
 fn document_titled(opened: &Opened, title: &str) -> String {
-    id_of(
-        opened,
-        "core_document",
-        "document_id",
-        &["title"],
-        0,
-        |cells| cells[0] == title,
-    )
+    id_of(opened, "entity", "id", &["kind", "title"], 0, |cells| {
+        cells[0] == "document" && cells[1] == title
+    })
 }
 
 /// The `nth` titled photograph, in key order.
 fn photo(opened: &Opened, nth: usize) -> String {
-    id_of(
-        opened,
-        "media_asset",
-        "asset_id",
-        &["kind", "title"],
-        nth,
-        |cells| cells[0] == "photo" && !cells[1].is_empty(),
-    )
+    id_of(opened, "photo", "id", &["form"], nth, |cells| {
+        cells[0] == "photo"
+    })
 }
 
 fn start(opened: &Opened) -> u64 {
@@ -987,7 +976,7 @@ fn what_the_chat_does_not_read_is_a_typed_refusal_and_a_malformed_request_is_an_
     let seeing = Arc::new(ScriptedModel::empty().seeing());
     opened.core().assist().host().install(seeing.clone());
     let session = start(&opened);
-    let video = id_of(&opened, "media_asset", "asset_id", &["kind"], 0, |cells| {
+    let video = id_of(&opened, "photo", "id", &["form"], 0, |cells| {
         cells[0] == "video"
     });
     let bytes = |bytes: &[u8], mime: &str| wire::AssistAttachment {
@@ -1259,26 +1248,16 @@ fn the_real_model_reads_sample_photos_and_a_sample_document_attachments() {
         assert!(streamed > 0 && !answer.text.is_empty());
     };
     for offset in [0, 7, 15] {
-        let asset = id_of(
-            &opened,
-            "media_asset",
-            "asset_id",
-            &["kind"],
-            offset,
-            |cells| cells[0] == "photo",
-        );
+        let asset = id_of(&opened, "photo", "id", &["form"], offset, |cells| {
+            cells[0] == "photo"
+        });
         ask("What is in this photo?", vec![photo_of(&asset)]);
     }
     let packing = document_titled(&opened, "Tahoe packing list");
     ask("What should I not forget?", vec![doc_of(&packing)]);
-    let cabin = id_of(
-        &opened,
-        "core_document",
-        "document_id",
-        &["title"],
-        0,
-        |cells| cells[0].to_lowercase().starts_with("cabin rental"),
-    );
+    let cabin = id_of(&opened, "entity", "id", &["kind", "title"], 0, |cells| {
+        cells[0] == "document" && cells[1].to_lowercase().starts_with("cabin rental")
+    });
     ask(
         "What is the nightly rate and the deposit?",
         vec![doc_of(&cabin)],

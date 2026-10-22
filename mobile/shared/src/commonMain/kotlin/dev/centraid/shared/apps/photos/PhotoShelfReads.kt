@@ -14,9 +14,9 @@ import dev.centraid.shared.sync.ScreenReads
 import dev.centraid.shared.sync.ScreenWrites
 
 /**
- * WHAT A PHOTO SHELF READS (#1029, the photos port).
+ * WHAT A PHOTO SHELF READS (#1029, the photos port; #1135).
  *
- * Seven predicates over one table, one order and one projection. The shelf is
+ * Six predicates over one table, one order and one projection. The shelf is
  * the parameter; the STATEMENT is the only thing that changes, which is the
  * whole claim `PhotoShelfState` makes — and this file is where that claim is
  * either true or is four screens wearing one message.
@@ -39,57 +39,36 @@ import dev.centraid.shared.sync.ScreenWrites
  * `PhotoCell.Held` for every surface that draws a photograph. v0 had four and
  * only one of them ever grew the "no pack at all" sentence.
  *
- * ## The order is the DESKTOP's, arm by arm — and the trash's is `deleted_at`
+ * ## The order is the library's, shelf by shelf
  *
- * `crates/apps/photos`' `trash_statement` orders the trash `deleted_at DESC,
- * asset_id DESC` and every other shelf `captured_at DESC, asset_id DESC`, and
- * this follows both. A shelf in a different order from the desktop's over the
- * same assets is two libraries — and on the trash it is worse than a
- * difference of taste: *what did I just delete* is the question a trash shelf
- * exists to answer, and a `captured_at` order scatters a batch a member deleted
- * together across however many years those photographs were taken in.
+ * Every shelf is `taken_at DESC, id DESC`, a timeline under a predicate, and the
+ * trash's is `id DESC` (R-1135-5-17: the trash stamp is the `entity`'s, and the
+ * door pages one table).
  *
- * **What that costs, and why it is arithmetic rather than a second projection.**
- * The door reads the cursor off the row by the two columns the ORDER BY names,
- * so ordering by `deleted_at` means projecting it — and the door APPENDS its
- * computed columns after the named ones, so a sixth named column moves
- * `thumbnail_path`, `original_hash` and `original_held` by one. `PhotosReads`
- * holds those three as constants against ITS five. The first draft of this file
- * answered that by ordering the trash `captured_at` like everything else, which
- * bought one layout at the price of the one shelf whose order carries meaning.
- *
- * What it does instead is select the sixth column on EVERY arm and compute the
- * appended indices from [SELECT]`.size`, in [asGridRow], which reshapes each row
- * into the eight-value layout `PhotosReads` projects. So there is still one
- * projection and one `heldOf` — the only thing that moved is where two numbers
- * come from, and they now come from the list rather than from a comment asking
- * the next person not to add a column.
- *
- * **A NULL `captured_at` RIDES THE FIRST WINDOW AND NO OTHER**, which is
+ * **A NULL `taken_at` RIDES THE FIRST WINDOW AND NO OTHER**, which is
  * `PhotosReads`' inherited property and not a defect to patch here: the keyset
- * comparison `captured_at < ?` is false for NULL in SQL, and an undated asset
+ * comparison `taken_at < ?` is false for NULL in SQL, and an undated photograph
  * has no place in a timeline cursor. The trash is the one shelf this cannot
- * touch: its predicate is `deleted_at IS NOT NULL`, so its sort column has no
- * NULL to drop.
+ * touch: it sorts on the id, which has no NULL to drop.
  *
  * ## There is no join on this door, and there is no roster either
  *
- * Three of the seven shelves are a membership — an album's entries, a memory's
- * members, a star — and the door has no join
- * clause. The honest shape would be two reads: resolve the ids, then page the
- * assets. **`PhotoShelfState` has nowhere to put a roster** (no field) and
- * `PhotoShelfEvent` has no arm that carries one, so a two-read walk cannot be
- * expressed against this contract at all; and a roster read at this screen's
- * page limit would silently truncate a shelf whose membership is longer than
- * one page, which is worse than not having it.
+ * Three of the six shelves are a membership — an album's members, a star, the
+ * archive — and the door has no join clause. The honest shape would be two
+ * reads: resolve the ids, then page the photographs. **`PhotoShelfState` has
+ * nowhere to put a roster** (no field) and `PhotoShelfEvent` has no arm that
+ * carries one, so a two-read walk cannot be expressed against this contract at
+ * all; and a roster read at this screen's page limit would silently truncate a
+ * shelf whose membership is longer than one page, which is worse than not
+ * having it.
  *
- * So the membership rides in the PREDICATE, as `asset_id IN (SELECT …)` over
- * one table at a time. That is not a join and not a fabricated column: it is
- * the door's own idiom — `with_held_thumbnail` is three correlated subqueries
- * in `crates/vault/src/page.rs` — the paged read is still the asset read, the
- * cursor still comes off `media_asset`, and every value is bound rather than
- * interpolated. Reported to the umbrella all the same, because the root's
- * instruction was two reads and this is not two reads.
+ * So the membership rides in the PREDICATE, as `id IN (SELECT …)` over one
+ * table at a time. That is not a join and not a fabricated column: it is the
+ * door's own idiom — `with_held_thumbnail` is correlated subqueries in
+ * `crates/vault/src/page.rs` — the paged read is still the photograph read, the
+ * cursor still comes off `photo`, and every value is bound rather than
+ * interpolated. The vault authorizes the subqueries against the tables a screen
+ * may page.
  */
 public object PhotoShelfReads :
     ScreenReads<PhotoShelfState, PhotoShelfEvent>,
@@ -97,38 +76,35 @@ public object PhotoShelfReads :
     override val screenId: String = PhotoShelfMachine.SCREEN_ID
 
     /**
-     * `media_asset` — the table every arm pages, and the one the machine's
-     * `rowsChanged` answers in asset ids for. The four membership tables move
-     * this screen too, and the machine names them; this is the table the PAGE
+     * `photo` — the table every arm pages, and the one the machine's
+     * `rowsChanged` answers in photograph ids for. `entity` and `edge` move this
+     * screen too, and the machine names them; this is the table the PAGE
      * comes from, which is the pairing `ScreenReads.table` is about.
      */
-    override val table: String = "media_asset"
+    override val table: String = "photo"
 
     /** A mosaic's page, the same as the library grid's. See `PhotosReads.limit`. */
     override val limit: Int = 120
 
     /**
-     * THE PROJECTION: `PhotosReads`' FIVE, IN ITS ORDER, PLUS THE TRASH'S SORT.
+     * THE PROJECTION: `PhotosReads`' FIVE, IN ITS ORDER.
      *
      * The first five are the cell's and may not be reordered or dropped —
      * [PhotosReads] projects a row positionally and this file hands it one.
-     * `deleted_at` is sixth because the trash orders by it and the door reads
-     * the cursor off the row by the two columns the ORDER BY names; it is
-     * selected on EVERY arm rather than on the trash alone so that every arm
-     * has one row shape, which is what lets [asGridRow] be arithmetic instead
-     * of a per-arm table.
+     * [asGridRow] is derived from [SELECT]`.size`, so a sixth column added
+     * here changes a number it reads off the list and nothing else.
      *
-     * The other seven arms never read it. That is the cheap half of the trade:
-     * one column of a hundred and twenty rows, against a trash shelf that
-     * answers "what did I just delete".
+     * The trash orders by `id` and not by when a photograph was deleted: the
+     * trash stamp is the `entity`'s, and the door pages one table (R-1135-5-17).
+     * A photograph's id is minted in time order, so the trash reads newest-added
+     * first.
      */
     private val SELECT: List<String> = listOf(
-        "asset_id",
-        "captured_at",
-        "tz_offset_min",
-        "kind",
-        "capture_group_id",
-        "deleted_at",
+        "id",
+        "taken_at",
+        "offset_min",
+        "form",
+        "burst",
     )
 
     /**
@@ -146,39 +122,11 @@ public object PhotoShelfReads :
     /** The live library: not trashed, not put away, not folded under an edit. `PhotosReads`' predicate. */
     private const val LIVE: String = PhotoFold.LIVE
 
-    /**
-     * A STAR IS A TAG, NOT A COLUMN (#916, and `media.rs`'s `set_starred`).
-     *
-     * `media_asset` has no `favorite` column and never had one.
-     * `media.update_asset`'s `favorite` input calls `set_starred`, which
-     * DELETEs and re-INSERTs one `core_tag` row pointing at the `starred`
-     * concept of the flags scheme. So the favourites shelf reads what that
-     * write writes, through three nested single-table subqueries rather than
-     * `is_starred`'s two JOINs — the door pages one table and joins none, and a
-     * `FROM a JOIN b` here would break both the projection and the keyset.
-     *
-     * The three literals are the vault's own constants, restated for the reason
-     * `crates/apps/photos/src/queries.rs` restates them: this side cannot
-     * import Rust, and the parity is asserted rather than assumed.
-     *
-     * **The flags scheme is an `https` URI and the tags scheme is not**, which
-     * is not drift to tidy: a `urn:`-style `:flags` reads as a NAMED PARAMETER
-     * in condition SQL (#258, the colon-literal trap).
-     */
-    private const val ASSET_TARGET_TYPE: String = "media.asset"
-    private const val FLAGS_SCHEME_URI: String = "https://centraid.dev/schemes/flags"
-    private const val STARRED_NOTATION: String = "starred"
+    /** A STAR IS A FLAG EDGE: the favourites shelf's predicate ([PhotoFold.STARRED]). */
+    private const val STARRED: String = PhotoFold.STARRED
 
-    private const val STARRED = "asset_id IN (SELECT target_id FROM core_tag " +
-        "WHERE target_type = ? AND concept_id IN (SELECT concept_id FROM core_concept " +
-        "WHERE notation = ? AND scheme_id IN (SELECT scheme_id FROM core_concept_scheme " +
-        "WHERE uri = ?)))"
-
-    private const val IN_ALBUM = "asset_id IN (SELECT target_id FROM core_collection_entry " +
-        "WHERE collection_id = ? AND target_type = ?)"
-
-    private const val IN_MEMORY = "asset_id IN (SELECT asset_id FROM media_memory_member " +
-        "WHERE memory_id = ?)"
+    /** An album's members: the `contains` edges from it. Its id is bound. */
+    private const val IN_ALBUM: String = "id IN (SELECT to_id FROM edge WHERE from_id = ? AND rel = 'contains')"
 
     /**
      * The statement for whichever shelf is open, or null before one is.
@@ -206,7 +154,7 @@ public object PhotoShelfReads :
             // a member did and sorts by when they did it.
             order = PageOrder(
                 sort_column = arm.sortColumn,
-                pk_column = "asset_id",
+                pk_column = "id",
                 descending = true,
             ),
             // THE DOOR RESOLVES WHAT THIS DEVICE HOLDS, IN THE SAME STATEMENT
@@ -229,28 +177,24 @@ public object PhotoShelfReads :
         val name: String,
         val where: String,
         val bind: List<Value> = emptyList(),
-        val sortColumn: String = "captured_at",
+        val sortColumn: String = "taken_at",
     )
 
     private fun armOf(shelf: PhotoShelf): Arm? {
         val album = shelf.album
         val place = shelf.place
-        val memory = shelf.memory
         val view = shelf.state_view
         return when {
             // AN ALBUM SHOWS ARCHIVED PHOTOGRAPHS AND THE LIBRARY DOES NOT.
             // Archiving is "put this away from the timeline", not "take it out
             // of the lists I curated", and v0's `AlbumDetail.tsx` filtered
-            // neither flag. Trashed ones cannot appear at all: `delete_asset`
-            // DELETEs the asset's `core_collection_entry` rows before it stamps
-            // `deleted_at`, so the membership is already gone.
+            // neither flag. A trashed photograph keeps its membership (a restore
+            // brings it back into the album) and is not drawn while it is in the
+            // trash.
             album != null -> Arm(
                 name = "photos.shelf.album",
-                where = "deleted_at IS NULL AND $IN_ALBUM",
-                bind = listOf(
-                    Value(text = album.collection_id),
-                    Value(text = ASSET_TARGET_TYPE),
-                ),
+                where = "${PhotoFold.NOT_TRASHED} AND $IN_ALBUM",
+                bind = listOf(Value(text = album.collection_id)),
             )
 
             // THE PHOTOGRAPHS WITH NO PLACE (v0's "No location yet", #816) —
@@ -267,15 +211,6 @@ public object PhotoShelfReads :
                 bind = listOf(Value(text = place.place_id)),
             )
 
-            memory != null -> Arm(
-                name = "photos.shelf.memory",
-                // A memory is computed over the LIVE library, so a trashed
-                // photograph leaves the memory it was in rather than sitting in
-                // it as a hole.
-                where = "$LIVE AND $IN_MEMORY",
-                bind = listOf(Value(text = memory.memory_id)),
-            )
-
             view != null -> stateViewArm(view)
 
             else -> null
@@ -287,45 +222,35 @@ public object PhotoShelfReads :
             PhotoStateView.Mode.Kind.KIND_FAVORITES -> Arm(
                 name = "photos.shelf.favorites",
                 where = "$LIVE AND $STARRED",
-                bind = listOf(
-                    Value(text = ASSET_TARGET_TYPE),
-                    Value(text = STARRED_NOTATION),
-                    Value(text = FLAGS_SCHEME_URI),
-                ),
             )
 
-            // THE ARCHIVE IS THE LIBRARY'S COMPLEMENT ON ONE COLUMN, and both
-            // halves of the predicate are needed: the DDL's CHECK keeps a row
-            // out of the trash and the archive at once, but a shelf that asked
-            // only for `archived_at IS NOT NULL` would show a member every
-            // photograph they had archived AND then thrown away.
+            // THE ARCHIVE IS THE LIBRARY'S COMPLEMENT ON ONE FLAG, and both
+            // halves of the predicate are needed: a shelf that asked only for
+            // the `archived` flag would show a member every photograph they had
+            // archived AND then thrown away.
             PhotoStateView.Mode.Kind.KIND_ARCHIVE -> Arm(
                 name = "photos.shelf.archive",
-                where = "deleted_at IS NULL AND archived_at IS NOT NULL",
+                where = "${PhotoFold.NOT_TRASHED} AND ${PhotoFold.ARCHIVED}",
             )
 
-            // THE TRASH IS EVERY DELETED ROW, archived or not: a photograph put
-            // away and then deleted is in the trash, and it is the only shelf
-            // it is on.
+            // THE TRASH IS EVERY TRASHED PHOTOGRAPH, archived or not: a
+            // photograph put away and then deleted is in the trash, and it is
+            // the only shelf it is on.
             //
-            // AND IT SORTS BY WHEN IT WAS DELETED, which is
-            // `crates/apps/photos`' `trash_statement` and is the only arm that
-            // leaves the timeline. The question a trash shelf exists to answer
-            // is "what did I just delete", and a capture-time order scatters a
-            // batch deleted together across however many years those
-            // photographs were taken in. The predicate also makes this the one
-            // sort column on this screen with no NULL in it.
+            // IT SORTS BY ID (newest added first) and not by when it was deleted:
+            // the trash stamp is the `entity`'s and the door pages one table
+            // (R-1135-5-17). The id is a total order with no NULL in it.
             PhotoStateView.Mode.Kind.KIND_TRASH -> Arm(
                 name = "photos.shelf.trash",
-                where = "deleted_at IS NOT NULL",
-                sortColumn = "deleted_at",
+                where = PhotoFold.TRASHED,
+                sortColumn = "id",
             )
 
             PhotoStateView.Mode.Kind.KIND_VIDEOS -> Arm(
                 name = "photos.shelf.videos",
-                where = "$LIVE AND kind = ?",
-                // THE DDL's OWN WORD, bound and not interpolated. `media_asset`'s
-                // CHECK admits four values and `video` is one of them;
+                where = "$LIVE AND form = ?",
+                // THE DDL's OWN WORD, bound and not interpolated. `photo`'s
+                // CHECK admits three values and `video` is one of them;
                 // `PhotosReads.kindOf` reads the same spelling back.
                 bind = listOf(Value(text = "video")),
             )
@@ -440,11 +365,11 @@ public object PhotoShelfReads :
     private val ALBUM_LEVEL_COMMANDS: Set<String> = setOf(
         PhotoShelfMachine.RENAME_ALBUM_COMMAND,
         PhotoShelfMachine.DELETE_ALBUM_COMMAND,
-        AlbumChoice.CREATE_COMMAND,
+        AlbumChoice.CREATE_KEY,
     )
 
     /**
-     * `media.rename_album:<albumId>:<title>` → `<title>`. The album id is a
+     * `album-rename:<albumId>:<title>` → `<title>`. The album id is a
      * vault-minted id with no colon in it, and the title may have any number,
      * so the split is after the SECOND colon and never at the last.
      */
@@ -453,31 +378,31 @@ public object PhotoShelfReads :
             .substringAfter(':', missingDelimiterValue = "")
 
     /**
-     * EVERY TRASHED ASSET, for Empty Trash — `deleted_at IS NOT NULL`, the trash
-     * arm's own predicate, walked by the column it cannot be null on.
+     * EVERY TRASHED PHOTOGRAPH, for Empty Trash — the trash arm's own predicate,
+     * walked by the column it cannot be null on.
      */
     public fun trashListQuery(): PageQuery = PageQuery(
         name = "photos.shelf.trashList",
-        select = listOf("asset_id", "deleted_at"),
+        select = listOf("id"),
         from = table,
-        where_ = "deleted_at IS NOT NULL",
-        order = PageOrder(sort_column = "deleted_at", pk_column = "asset_id", descending = true),
+        where_ = PhotoFold.TRASHED,
+        order = PageOrder(sort_column = "id", pk_column = "id", descending = true),
     )
 
     /**
-     * The content item behind each picked photograph — what the byte door
-     * locates an original by (`ContentRef.content_id`). Null for no ids.
+     * The blob behind each picked photograph — what the byte door locates an
+     * original by. Null for no ids.
      */
     public fun contentOfQuery(assetIds: List<String>): PageQuery? {
         val ids = assetIds.filter { it.isNotEmpty() }.distinct()
         if (ids.isEmpty()) return null
         return PageQuery(
             name = "photos.shelf.contentOf",
-            select = listOf("asset_id", "content_id", "kind"),
+            select = listOf("id", "blob", "form"),
             from = table,
-            where_ = "asset_id IN (" + ids.joinToString(", ") { "?" } + ")",
+            where_ = "id IN (" + ids.joinToString(", ") { "?" } + ")",
             bind = ids.map { Value(text = it) },
-            order = PageOrder(sort_column = "asset_id", pk_column = "asset_id"),
+            order = PageOrder(sort_column = "id", pk_column = "id"),
         )
     }
 

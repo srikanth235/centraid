@@ -36,11 +36,13 @@
     "device-fixture": "Whatever the CI gateway fixture seeded onto the simulator's device replica. NOT the declared year-3 50,000 replica rows / 90,000 photo assets: reaching those needs a device run, which this container has none of.",
     "shared-album": "One album of 200 photos, shared whole. Big enough that projection dominates the grant plane's fixed cost.",
     "year3-50k-assets": "50,000 photo assets in the library, on the device that is browsing them — the volume [#1020](https://github.com/srikanth235/centraid/issues/1020) states its memory, interaction and battery targets at. Distinct from `year3-photos` (90,000 assets), which is the GATEWAY-side library profile: 50k is the size at which a phone's grid, its thumbnail cache and its sync pass are all under real pressure at once, and stating a phone ceiling at 90k would be stating it at a volume no reference device has been asked to hold.",
-    "year3-docs": "The drive at year three: 8,000 documents (7,600 live / 400 trashed), 10,000 content items, 10,000 occurrences, 12,600 tags, 400 folders four levels deep, and 2,000 standing answers half of them on folders. `crates/apps/kit::fixtures::year3_docs`.",
-    "year3-notes": "The notebook at year three: 10,000 notes — 400 trashed, 200 pinned, 1,200 journal entries — with a 48 KiB body on 600 of them, the largest body the product holds. `crates/apps/kit::fixtures::year3_notes`.",
+    "year3-docs": "The drive at year three: 8,000 documents (7,600 live / 400 trashed) each filed in one of 400 folders four levels deep, 10,000 blobs (2,000 documents carry a replaced version, a `revision` row each), 600 stars and 4,000 labelled documents over 2,000 labels. `crates/apps/kit::fixtures::year3_docs`.",
+    "year3-notes": "The notebook at year three: 10,000 notes — 400 trashed, 200 pinned, 1,200 memos (notes about a person, the Journal's entries) — with a 48 KiB body on 600 of them, the largest body the product holds. `crates/apps/kit::fixtures::year3_notes`.",
     "year3-people": "The roster at year three: 5,000 people, 12,000 important dates, 20,000 interactions. `crates/apps/kit::fixtures::year3_people`. v0's own year-3 generator writes 5,000 `core_party` rows and no `people_profile` at all, so these reads had no artifact behind them before [#1020](https://github.com/srikanth235/centraid/issues/1020).",
     "year3-agenda": "The calendar at year three: 12,000 events, 800 recurring series, 1,200 exceptions. `crates/apps/kit::fixtures::year3_agenda`. It is the volume at which a six-month `upcoming` window genuinely reaches the 1,500-instance expansion cap, which is what makes the cap's error a real answer rather than a synthetic one.",
-    "year3-tasks": "The board at year three: 12,000 tasks — 8,250 open, 3,750 closed, 800 cancelled. `crates/apps/kit::fixtures::year3_tasks`."
+    "year3-tasks": "The board at year three: 12,000 tasks — 8,250 open, 3,750 closed, 800 cancelled. `crates/apps/kit::fixtures::year3_tasks`.",
+    "year3-money": "The ledger at year three: 4 accounts, 18,000 statement lines over three years, each account's statement followed through `follow.statement`. `crates/apps/money/src/year3.rs` writes the CSV text; the vault is filled by the real command path.",
+    "year3-health": "The health store at year three: 1,095 days of the six daily totals (6,570 values) and 1,200 workouts, written through `measurement.record` and `follow.health`. `crates/apps/health/tests/year3.rs`."
   },
   "journeys": {
     "cold-open": "Process start to the first screen the owner can act on.",
@@ -1588,61 +1590,6 @@
         }
       }
     },
-    "gateway/app-read/year3-50k-assets/ci-linux-x64-4c": {
-      "surface": "gateway",
-      "journey": "app-read",
-      "volume": "year3-50k-assets",
-      "hardware": "ci-linux-x64-4c",
-      "spans": [],
-      "consumers": ["crates/apps/photos/tests/year3.rs"],
-      "tolerancePercent": 20,
-      "metrics": {
-        "libraryPage": {
-          "status": "projected",
-          "probe": "cargo test -p centraid-apps-photos --test year3 -- --ignored --nocapture",
-          "_observedMs": 48,
-          "_basis": "One run on ci-linux-x64-4c under concurrent lanes, through the app crate's real query path over a vault seeded by `crates/apps/kit::fixtures`. PROJECTED in this ledger's sense and in D-1020-D3-7's: the number is observed, but one run on one contended container is not a distribution, and the target this journey exists to protect is stated on a reference DEVICE, which this host is not. Every number here is parked under a leading underscore so the ratchet cannot read it as a ceiling; the device lane of R-1020-20 is what promotes one.",
-          "_provenance": {
-            "at": "2026-09-13",
-            "host": "ci-linux-x64-4c, 4 vCPU / 15 GB, shared with concurrent lanes",
-            "note": "The library at its 500 default window. Asked for 2,000 it serves ONE page in 42 ms, deliberately: its sort column is nullable, so a keyset walk would silently drop every undated asset (D-1020-P11). Ten cursored pages are 458 ms."
-          }
-        },
-        "duplicates": {
-          "status": "projected",
-          "probe": "cargo test -p centraid-apps-photos --test year3 -- --ignored --nocapture",
-          "_observedMs": 16,
-          "_basis": "One run on ci-linux-x64-4c under concurrent lanes, through the app crate's real query path over a vault seeded by `crates/apps/kit::fixtures`. PROJECTED in this ledger's sense and in D-1020-D3-7's: the number is observed, but one run on one contended container is not a distribution, and the target this journey exists to protect is stated on a reference DEVICE, which this host is not. Every number here is parked under a leading underscore so the ratchet cannot read it as a ceiling; the device lane of R-1020-20 is what promotes one.",
-          "_provenance": {
-            "at": "2026-09-13",
-            "host": "ci-linux-x64-4c, 4 vCPU / 15 GB, shared with concurrent lanes",
-            "note": "Over 4,000 clustered fingerprints. This is the number that says the year-3 library is NOT where the cost is: the pairwise clustering v0 avoids with multi-index banding is 16 ms here, which is why the banding is named as unported rather than ported without a rig that could check it."
-          }
-        }
-      }
-    },
-    "gateway/app-read/year3-docs/ci-linux-x64-4c": {
-      "surface": "gateway",
-      "journey": "app-read",
-      "volume": "year3-docs",
-      "hardware": "ci-linux-x64-4c",
-      "spans": [],
-      "consumers": ["crates/apps/docs/tests/year3.rs"],
-      "tolerancePercent": 20,
-      "metrics": {
-        "driveWindowWalked": {
-          "status": "projected",
-          "probe": "cargo test -p centraid-apps-docs --test year3 -- --ignored --nocapture",
-          "_observedMs": 480,
-          "_basis": "One run on ci-linux-x64-4c under concurrent lanes, through the app crate's real query path over a vault seeded by `crates/apps/kit::fixtures`. PROJECTED in this ledger's sense and in D-1020-D3-7's: the number is observed, but one run on one contended container is not a distribution, and the target this journey exists to protect is stated on a reference DEVICE, which this host is not. Every number here is parked under a leading underscore so the ratchet cannot read it as a ceiling; the device lane of R-1020-20 is what promotes one.",
-          "_provenance": {
-            "at": "2026-09-13",
-            "host": "ci-linux-x64-4c, 4 vCPU / 15 GB, shared with concurrent lanes",
-            "note": "A 2,000-row drive answers 2,000 documents and 400 folders. The same read before D-1020-DC10 answered 500 of 7,600 live documents in 141 ms and discarded the cursor that said there were more — the number moves with the mechanism in both directions, which is what makes the walk real rather than a rename."
-          }
-        }
-      }
-    },
     "gateway/app-read/year3-notes/ci-linux-x64-4c": {
       "surface": "gateway",
       "journey": "app-read",
@@ -1655,21 +1602,21 @@
         "libraryFold": {
           "status": "projected",
           "probe": "cargo test -p centraid-apps-notes --test year3 -- --ignored --nocapture",
-          "_observedMs": 496,
-          "_basis": "One run on ci-linux-x64-4c under concurrent lanes, through the app crate's real query path over a vault seeded by `crates/apps/kit::fixtures`. PROJECTED in this ledger's sense and in D-1020-D3-7's: the number is observed, but one run on one contended container is not a distribution, and the target this journey exists to protect is stated on a reference DEVICE, which this host is not. Every number here is parked under a leading underscore so the ratchet cannot read it as a ceiling; the device lane of R-1020-20 is what promotes one.",
+          "_observedMs": 371,
+          "_basis": "One run on ci-linux-x64-4c under concurrent lanes, through the app crate's real query path over a vault seeded by `crates/apps/kit::fixtures::year3_notes`. PROJECTED in this ledger's sense and in D-1020-D3-7's: the number is observed, but one run on one contended container is not a distribution, and the target this journey exists to protect is stated on a reference DEVICE, which this host is not. Every number here is parked under a leading underscore so the ratchet cannot read it as a ceiling; the device lane of R-1020-20 is what promotes one.",
           "_provenance": {
-            "at": "2026-09-13",
+            "at": "2026-10-21",
             "host": "ci-linux-x64-4c, 4 vCPU / 15 GB, shared with concurrent lanes",
-            "note": "`library(limit=2000)` folds 2,200 rows plus 200 trashed — the window is 2,000 PLUS every pinned note on the shelf, which is the assertion that was wrong the first time. The same test prints that v0 would have folded 500 of those 2,200."
+            "note": "`library(limit=2000)` over the declared profile folds 1,943 live rows plus 200 trashed — the window is 2,000 recent notes less the memos among them (1,743), PLUS every pinned note, which are all older than the window. Rebuilt on the new model (#1135): one table at a time over the ids the window returned."
           }
         },
         "editorOpenPull": {
           "status": "projected",
           "probe": "cargo test -p centraid-apps-notes --test year3 -- --ignored --nocapture",
-          "_observedMs": 1.13,
-          "_basis": "One run on ci-linux-x64-4c under concurrent lanes, through the app crate's real query path over a vault seeded by `crates/apps/kit::fixtures`. PROJECTED in this ledger's sense and in D-1020-D3-7's: the number is observed, but one run on one contended container is not a distribution, and the target this journey exists to protect is stated on a reference DEVICE, which this host is not. Every number here is parked under a leading underscore so the ratchet cannot read it as a ceiling; the device lane of R-1020-20 is what promotes one.",
+          "_observedMs": 1.5,
+          "_basis": "One run on ci-linux-x64-4c under concurrent lanes, through the app crate's real query path over a vault seeded by `crates/apps/kit::fixtures::year3_notes`. PROJECTED in this ledger's sense and in D-1020-D3-7's: the number is observed, but one run on one contended container is not a distribution, and the target this journey exists to protect is stated on a reference DEVICE, which this host is not. Every number here is parked under a leading underscore so the ratchet cannot read it as a ceiling; the device lane of R-1020-20 is what promotes one.",
           "_provenance": {
-            "at": "2026-09-13",
+            "at": "2026-10-21",
             "host": "ci-linux-x64-4c, 4 vCPU / 15 GB, shared with concurrent lanes",
             "note": "The on-open pull over the largest body the product holds (48 KiB). This is the RUST half of the typing target only: the round trip the target is stated on runs through the editor's state machine in Kotlin, which has no Rust twin, and that half is an owner hand-off."
           }
@@ -1688,23 +1635,23 @@
         "rosterWalk": {
           "status": "projected",
           "probe": "cargo test -p centraid-apps-people --test year3 -- --ignored --nocapture",
-          "_observedMs": 825,
-          "_basis": "One run on ci-linux-x64-4c under concurrent lanes, through the app crate's real query path over a vault seeded by `crates/apps/kit::fixtures`. PROJECTED in this ledger's sense and in D-1020-D3-7's: the number is observed, but one run on one contended container is not a distribution, and the target this journey exists to protect is stated on a reference DEVICE, which this host is not. Every number here is parked under a leading underscore so the ratchet cannot read it as a ceiling; the device lane of R-1020-20 is what promotes one.",
+          "_observedMs": 557,
+          "_basis": "One run on ci-linux-x64-4c under concurrent lanes, through the app crate's real query path over a vault seeded by `crates/apps/kit::fixtures::year3_people`. PROJECTED in this ledger's sense and in D-1020-D3-7's: the number is observed, but one run on one contended container is not a distribution, and the target this journey exists to protect is stated on a reference DEVICE, which this host is not. Every number here is parked under a leading underscore so the ratchet cannot read it as a ceiling; the device lane of R-1020-20 is what promotes one.",
           "_provenance": {
-            "at": "2026-09-13",
+            "at": "2026-10-21",
             "host": "ci-linux-x64-4c, 4 vCPU / 15 GB, shared with concurrent lanes",
-            "note": "4,750 live rows walked. v0 asks for `window = 9_999` as ONE page and `MAX_PAGE_ROWS` clamps it to 500, so a vault with more than 500 live people reports `all: 500` with no `truncated` anywhere in the payload — the axis measures both, 4,750 against 500."
+            "note": "4,750 live people walked in one window (ten pages of 500; the door clamps a page, so the walk is the window), each with its star, list, reminders and last-contacted computed from 20,000 touches. Rebuilt on the new model (#1135): one table at a time, and a set past 64 ids is not named in an IN list (a keyset page re-binds the list on every page); the first cut named it and took 19 s."
           }
         },
         "dashboardFold": {
           "status": "projected",
           "probe": "cargo test -p centraid-apps-people --test year3 -- --ignored --nocapture",
-          "_observedMs": 4340,
-          "_basis": "One run on ci-linux-x64-4c under concurrent lanes, through the app crate's real query path over a vault seeded by `crates/apps/kit::fixtures`. PROJECTED in this ledger's sense and in D-1020-D3-7's: the number is observed, but one run on one contended container is not a distribution, and the target this journey exists to protect is stated on a reference DEVICE, which this host is not. Every number here is parked under a leading underscore so the ratchet cannot read it as a ceiling; the device lane of R-1020-20 is what promotes one.",
+          "_observedMs": 489,
+          "_basis": "One run on ci-linux-x64-4c under concurrent lanes, through the app crate's real query path over a vault seeded by `crates/apps/kit::fixtures::year3_people`. PROJECTED in this ledger's sense and in D-1020-D3-7's: the number is observed, but one run on one contended container is not a distribution, and the target this journey exists to protect is stated on a reference DEVICE, which this host is not. Every number here is parked under a leading underscore so the ratchet cannot read it as a ceiling; the device lane of R-1020-20 is what promotes one.",
           "_provenance": {
-            "at": "2026-09-13",
+            "at": "2026-10-21",
             "host": "ci-linux-x64-4c, 4 vCPU / 15 GB, shared with concurrent lanes",
-            "note": "The dashboard folds all 4,750. The largest number in this entry and the one that most wants a device figure beside it."
+            "note": "The dashboard folds the same 4,750, 12,000 dates and the newest 30 touches. The largest numbers in this entry want a device figure beside them."
           }
         }
       }
@@ -1718,26 +1665,15 @@
       "consumers": ["crates/apps/agenda/tests/year3.rs"],
       "tolerancePercent": 20,
       "metrics": {
-        "dayContextRows": {
+        "upcomingExpansionBound": {
           "status": "projected",
           "probe": "cargo test -p centraid-apps-agenda --test year3 -- --ignored --nocapture",
-          "_observedRows": 813,
-          "_basis": "One run on ci-linux-x64-4c under concurrent lanes, through the app crate's real query path over a vault seeded by `crates/apps/kit::fixtures`. PROJECTED in this ledger's sense and in D-1020-D3-7's: the number is observed, but one run on one contended container is not a distribution, and the target this journey exists to protect is stated on a reference DEVICE, which this host is not. Every number here is parked under a leading underscore so the ratchet cannot read it as a ceiling; the device lane of R-1020-20 is what promotes one.",
+          "_observedMs": 181,
+          "_basis": "One run on ci-linux-x64-4c under concurrent lanes, through the app crate's real query path over a vault seeded by `crates/apps/kit::fixtures::year3_events`. PROJECTED in this ledger's sense and in D-1020-D3-7's: the number is observed, but one run on one contended container is not a distribution, and the target this journey exists to protect is stated on a reference DEVICE, which this host is not. Every number here is parked under a leading underscore so the ratchet cannot read it as a ceiling; the device lane of R-1020-20 is what promotes one.",
           "_provenance": {
-            "at": "2026-09-13",
+            "at": "2026-10-21",
             "host": "ci-linux-x64-4c, 4 vCPU / 15 GB, shared with concurrent lanes",
-            "note": "One day's `day-context` folds 813 rows at 12,000 events / 800 recurring series / 1,200 exceptions. Recorded as the ROW COUNT rather than a wall clock, because the number the fold's cost scales with is the row count and the wall clock on a contended container is the noisier of the two."
-          }
-        },
-        "upcomingSixMonthWindow": {
-          "status": "projected",
-          "probe": "cargo test -p centraid-apps-agenda --test year3 -- --ignored --nocapture",
-          "_observedInstanceCap": 1500,
-          "_basis": "One run on ci-linux-x64-4c under concurrent lanes, through the app crate's real query path over a vault seeded by `crates/apps/kit::fixtures`. PROJECTED in this ledger's sense and in D-1020-D3-7's: the number is observed, but one run on one contended container is not a distribution, and the target this journey exists to protect is stated on a reference DEVICE, which this host is not. Every number here is parked under a leading underscore so the ratchet cannot read it as a ceiling; the device lane of R-1020-20 is what promotes one.",
-          "_provenance": {
-            "at": "2026-09-13",
-            "host": "ci-linux-x64-4c, 4 vCPU / 15 GB, shared with concurrent lanes",
-            "note": "A six-month `upcoming` window TRIPS the 1,500-instance cap, and tripping it is an error that names the query and the cap rather than a silently truncated calendar. v0 truncates at the same number and hands back a calendar that is quietly incomplete — the divergence is visible only at this volume, which is why this axis is the test's fixture rather than a hand-built series."
+            "note": "12,000 events and 800 DAILY series: the default 45-day `upcoming` window is tens of thousands of occurrences against the 1,500-instance bound, so the read errors at the size it reaches (`FanOutExceeded agenda.upcoming.expansion`, which the core answers as `ReadBoundReached`) in 181 ms instead of returning a short agenda that reads as a whole one (D-1020-D3-12). The same read over a realistic calendar (60 series, six of them daily) answers whole in 51 ms. Rebuilt on the new model (#1135): the window's ids are read with a wide fan-out, because a set past 64 ids through the whole-table walk overran its 4,000-row cap at 12,000 events."
           }
         }
       }
@@ -1751,15 +1687,147 @@
       "consumers": ["crates/apps/tasks/tests/year3.rs"],
       "tolerancePercent": 20,
       "metrics": {
-        "boardWindowRows": {
+        "boardWindow": {
           "status": "projected",
           "probe": "cargo test -p centraid-apps-tasks --test year3 -- --ignored --nocapture",
-          "_observedRows": 175,
-          "_basis": "One run on ci-linux-x64-4c under concurrent lanes, through the app crate's real query path over a vault seeded by `crates/apps/kit::fixtures`. PROJECTED in this ledger's sense and in D-1020-D3-7's: the number is observed, but one run on one contended container is not a distribution, and the target this journey exists to protect is stated on a reference DEVICE, which this host is not. Every number here is parked under a leading underscore so the ratchet cannot read it as a ceiling; the device lane of R-1020-20 is what promotes one.",
+          "_observedMs": 56,
+          "_basis": "One run on ci-linux-x64-4c under concurrent lanes, through the app crate's real query path over a vault seeded by `crates/apps/kit::fixtures::year3_tasks`. PROJECTED in this ledger's sense and in D-1020-D3-7's: the number is observed, but one run on one contended container is not a distribution, and the target this journey exists to protect is stated on a reference DEVICE, which this host is not. Every number here is parked under a leading underscore so the ratchet cannot read it as a ceiling; the device lane of R-1020-20 is what promotes one.",
           "_provenance": {
-            "at": "2026-09-13",
+            "at": "2026-10-21",
             "host": "ci-linux-x64-4c, 4 vCPU / 15 GB, shared with concurrent lanes",
-            "note": "The board's 500-row window folds to 125 open roots and 50 logbook rows, `truncated` true — the open page's own cursor, not a count comparison. At 12,000 tasks (8,250 open, 3,750 closed, 800 cancelled)."
+            "note": "The board's 500-row window over 3,000 open and 12,000 closed tasks walks the newest 500 entities, folds subtasks under their parents (475 roots) and reads 50 logbook rows, `truncated` true from the walk's own cursor, not a count comparison."
+          }
+        }
+      }
+    },
+    "gateway/app-read/year3-money/ci-linux-x64-4c": {
+      "surface": "gateway",
+      "journey": "app-read",
+      "volume": "year3-money",
+      "hardware": "ci-linux-x64-4c",
+      "spans": [],
+      "consumers": ["crates/apps/money/tests/year3.rs"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "sixScreens": {
+          "status": "projected",
+          "probe": "cargo test -p centraid-apps-money --test year3 -- --ignored --nocapture",
+          "_observedMs": 19796,
+          "_basis": "One DEBUG-build run on ci-linux-x64-4c under concurrent lanes, through the app crate's real query path over a vault filled by the commands the phone uses. PROJECTED in this ledger's sense and in D-1020-D3-7's: the number is observed, but one run on one contended container is not a distribution, and the target this journey exists to protect is stated on a reference DEVICE, which this host is not. Every number here is parked under a leading underscore so the ratchet cannot read it as a ceiling; the device lane of R-1020-20 is what promotes one.",
+          "_provenance": {
+            "at": "2026-10-21",
+            "host": "ci-linux-x64-4c, 4 vCPU / 15 GB, shared with concurrent lanes",
+            "note": "Spending, cash flow, accounts, recurring, activity and search over 18,000 lines on four accounts; the 18,000 lines follow in 4.4 s and a re-follow writes nothing. Reconciled to the cent against the parsed rows."
+          }
+        }
+      }
+    },
+    "gateway/app-read/year3-health/ci-linux-x64-4c": {
+      "surface": "gateway",
+      "journey": "app-read",
+      "volume": "year3-health",
+      "hardware": "ci-linux-x64-4c",
+      "spans": [],
+      "consumers": ["crates/apps/health/tests/year3.rs"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "threeYearScreens": {
+          "status": "projected",
+          "probe": "cargo test -p centraid-apps-health --test year3 -- --ignored --nocapture",
+          "_observedMs": 92,
+          "_basis": "One DEBUG-build run on ci-linux-x64-4c under concurrent lanes, through the app crate's real query path over a vault filled by the commands the phone uses. PROJECTED in this ledger's sense and in D-1020-D3-7's: the number is observed, but one run on one contended container is not a distribution, and the target this journey exists to protect is stated on a reference DEVICE, which this host is not. Every number here is parked under a leading underscore so the ratchet cannot read it as a ceiling; the device lane of R-1020-20 is what promotes one.",
+          "_provenance": {
+            "at": "2026-10-21",
+            "host": "ci-linux-x64-4c, 4 vCPU / 15 GB, shared with concurrent lanes",
+            "note": "Series, trends, today, the follow view and a walk of all 1,200 workouts over 6,570 daily values; the writes take 0.8 s and a re-read writes nothing."
+          }
+        }
+      }
+    },
+    "gateway/app-read/year3-docs/ci-linux-x64-4c": {
+      "surface": "gateway",
+      "journey": "app-read",
+      "volume": "year3-docs",
+      "hardware": "ci-linux-x64-4c",
+      "spans": [],
+      "consumers": ["crates/apps/docs/tests/year3.rs"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "driveWindowWalked": {
+          "status": "projected",
+          "probe": "cargo test -p centraid-apps-docs --test year3 -- --ignored --nocapture",
+          "_observedMs": 126,
+          "_basis": "One run on ci-linux-x64-4c under concurrent lanes, through the app crate's real query path over a vault seeded by `crates/apps/kit::fixtures::year3_docs`. PROJECTED in this ledger's sense and in D-1020-D3-7's: the number is observed, but one run on one contended container is not a distribution, and the target this journey exists to protect is stated on a reference DEVICE, which this host is not. Every number here is parked under a leading underscore so the ratchet cannot read it as a ceiling; the device lane of R-1020-20 is what promotes one.",
+          "_provenance": {
+            "at": "2026-10-21",
+            "host": "ci-linux-x64-4c, 4 vCPU / 15 GB, shared with concurrent lanes",
+            "note": "A 2,000-row drive answers 2,000 of 8,000 documents and 400 folders, `truncated` true from the walk's own cursor. Rebuilt on the new model (#1135): one table at a time over the ids the window returned. The trash shelf (400 documents, read from its own set because the trash is older than any window) is 16 ms."
+          }
+        }
+      }
+    },
+    "gateway/app-read/year3-photos/ci-linux-x64-4c": {
+      "surface": "gateway",
+      "journey": "app-read",
+      "volume": "year3-photos",
+      "hardware": "ci-linux-x64-4c",
+      "spans": [],
+      "consumers": ["crates/apps/photos/tests/year3.rs"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "libraryPage": {
+          "status": "projected",
+          "probe": "cargo test -p centraid-apps-photos --test year3 -- --ignored --nocapture",
+          "_observedMs": 54,
+          "_basis": "One run on ci-linux-x64-4c under concurrent lanes, through the app crate's real query path over a vault seeded by `crates/apps/kit::fixtures::year3_photos`. PROJECTED in this ledger's sense and in D-1020-D3-7's: the number is observed, but one run on one contended container is not a distribution, and the target this journey exists to protect is stated on a reference DEVICE, which this host is not. Every number here is parked under a leading underscore so the ratchet cannot read it as a ceiling; the device lane of R-1020-20 is what promotes one.",
+          "_provenance": {
+            "at": "2026-10-21",
+            "host": "ci-linux-x64-4c, 4 vCPU / 15 GB, shared with concurrent lanes",
+            "note": "The library at its 500 default window folds 495 rows and 200 trashed, in the newest-500 order with the archive and a burst's older still taken out. Asked for 2,000 it serves ONE page in 47 ms, deliberately: its sort column is nullable, so a keyset walk would silently drop every undated photograph (D-1020-P11). Seeding the 90,000 photographs is 5.5 s."
+          }
+        },
+        "duplicates": {
+          "status": "projected",
+          "probe": "cargo test -p centraid-apps-photos --test year3 -- --ignored --nocapture",
+          "_observedMs": 10032,
+          "_basis": "One run on ci-linux-x64-4c under concurrent lanes, through the app crate's real query path over a vault seeded by `crates/apps/kit::fixtures::year3_photos`. PROJECTED in this ledger's sense and in D-1020-D3-7's: the number is observed, but one run on one contended container is not a distribution, and the target this journey exists to protect is stated on a reference DEVICE, which this host is not. Every number here is parked under a leading underscore so the ratchet cannot read it as a ceiling; the device lane of R-1020-20 is what promotes one.",
+          "_provenance": {
+            "at": "2026-10-21",
+            "host": "ci-linux-x64-4c, 4 vCPU / 15 GB, shared with concurrent lanes",
+            "note": "The duplicates read over the first 4,000 of 9,000 fingerprints (3,000 families of three) clusters 1,333 families and stops at its cap. The time is the pairwise clustering in `centraid_media::duplicates`, in a debug build, and not the read: the banding v0 used to avoid it is still named as unported."
+          }
+        }
+      }
+    },
+    "gateway/app-read/year3-50k-assets/ci-linux-x64-4c": {
+      "surface": "gateway",
+      "journey": "app-read",
+      "volume": "year3-50k-assets",
+      "hardware": "ci-linux-x64-4c",
+      "spans": [],
+      "consumers": ["crates/apps/photos/tests/year3.rs"],
+      "tolerancePercent": 20,
+      "metrics": {
+        "libraryPage": {
+          "status": "projected",
+          "probe": "cargo test -p centraid-apps-photos --test year3 -- --ignored --nocapture",
+          "_observedMs": 57,
+          "_basis": "One run on ci-linux-x64-4c under concurrent lanes, through the app crate's real query path over a vault seeded by `crates/apps/kit::fixtures::year3_photos`. PROJECTED in this ledger's sense and in D-1020-D3-7's: the number is observed, but one run on one contended container is not a distribution, and the target this journey exists to protect is stated on a reference DEVICE, which this host is not. Every number here is parked under a leading underscore so the ratchet cannot read it as a ceiling; the device lane of R-1020-20 is what promotes one.",
+          "_provenance": {
+            "at": "2026-10-21",
+            "host": "ci-linux-x64-4c, 4 vCPU / 15 GB, shared with concurrent lanes",
+            "note": "The library at its 500 default window over 50,000 photographs folds 495 rows and 200 trashed. Asked for 2,000 it serves ONE page in 54 ms, deliberately: its sort column is nullable, so a keyset walk would silently drop every undated photograph (D-1020-P11). Rebuilt on the new model (#1135): one table at a time over the ids the window returned."
+          }
+        },
+        "duplicates": {
+          "status": "projected",
+          "probe": "cargo test -p centraid-apps-photos --test year3 -- --ignored --nocapture",
+          "_observedMs": 10310,
+          "_basis": "One run on ci-linux-x64-4c under concurrent lanes, through the app crate's real query path over a vault seeded by `crates/apps/kit::fixtures::year3_photos`. PROJECTED in this ledger's sense and in D-1020-D3-7's: the number is observed, but one run on one contended container is not a distribution, and the target this journey exists to protect is stated on a reference DEVICE, which this host is not. Every number here is parked under a leading underscore so the ratchet cannot read it as a ceiling; the device lane of R-1020-20 is what promotes one.",
+          "_provenance": {
+            "at": "2026-10-21",
+            "host": "ci-linux-x64-4c, 4 vCPU / 15 GB, shared with concurrent lanes",
+            "note": "Over the first 4,000 of 4,500 fingerprints (1,500 families of three): 1,333 families clustered, the read stopped at its cap. The time is the pairwise clustering in `centraid_media::duplicates`, in a debug build, and not the read: the banding v0 used to avoid it is still named as unported."
           }
         }
       }

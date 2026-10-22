@@ -30,9 +30,10 @@ public object KitWords {
     public const val REFRESH: String = SharedCopy.KIT_REFRESH
 
     /**
-     * THE LINE UNDER A SEARCH FIELD when the core corrected a typo (#1097):
-     * "Showing results for “sunscreen”". [corrected] is the words the rows
-     * answer (`SearchField.corrected`); a shell draws this only when it is
+     * THE LINE UNDER A SEARCH FIELD when the core corrected a typo:
+     * "Including results for “sunscreen”": one phrase that is true whether the
+     * corrected words replaced an empty answer or added to a thin one.
+     * [corrected] is the words the rows answer (`SearchField.corrected`); a shell draws this only when it is
      * not empty.
      */
     public fun searchCorrected(corrected: String): String =

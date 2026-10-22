@@ -219,11 +219,20 @@ fn command(handle: &Handle, name: &str, input: &serde_json::Value, key: &str) ->
 }
 
 fn add_asset(handle: &Handle, staged: &wire::StageHandle, kind: &str) {
+    let media_type = if kind == "video" {
+        "video/mp4"
+    } else {
+        "image/jpeg"
+    };
     command(
         handle,
-        "media.add_asset",
-        &serde_json::json!({ "staged_sha": staged.content_hash, "kind": kind }),
-        &format!("media.add_asset:{}", staged.content_hash),
+        "photo.add",
+        &serde_json::json!({
+            "blob": staged.content_hash,
+            "size": staged.byte_size,
+            "media_type": media_type,
+        }),
+        &format!("photo.add:{}", staged.content_hash),
     );
 }
 
@@ -313,6 +322,8 @@ fn lose_the_phone_restore_from_the_words_and_the_old_phone_freezes() {
     add_asset(&old, &real_handle, "photo");
     let photo = bytes_of("a photograph the app holds", 2 * 1024 * 1024);
     let photo_handle = stage(&old, owned("image/heic", &photo), &photo);
+    // A photograph is named first: its thumbnail and preview are claimed beside it.
+    add_asset(&old, &photo_handle, "photo");
     let photo_thumb = bytes_of("the photograph's thumbnail", 9_000);
     stage(
         &old,
@@ -325,15 +336,14 @@ fn lose_the_phone_restore_from_the_words_and_the_old_phone_freezes() {
         derivative(&photo_handle, "preview", &photo_preview),
         &photo_preview,
     );
-    add_asset(&old, &photo_handle, "photo");
     let still = bytes_of("a photograph the library holds", 300_000);
     let still_handle = stage(&old, library("image/heic", "lib-still", &still), &still);
     add_asset(&old, &still_handle, "photo");
     let film = bytes_of("a film above one part", LARGE_FILM_BYTES);
     let film_handle = stage(&old, owned("video/mp4", &film), &film);
+    add_asset(&old, &film_handle, "video");
     let poster = bytes_of("the film's poster", 12_000);
     stage(&old, derivative(&film_handle, "poster", &poster), &poster);
-    add_asset(&old, &film_handle, "video");
 
     let first = drain(&old);
     assert_eq!(first.stopped, wire::DrainStop::Empty as i32, "{first:?}");
@@ -436,10 +446,10 @@ fn lose_the_phone_restore_from_the_words_and_the_old_phone_freezes() {
     for index in 0..50 {
         command(
             &old,
-            "knowledge.create_note",
+            "note.create",
             &serde_json::json!({
                 "title": format!("after the first backup {index}"),
-                "body_text": format!("a note written after the first snapshot, number {index}"),
+                "body": format!("a note written after the first snapshot, number {index}"),
                 "format": "plain",
             }),
             &format!("drill-note-{index}"),
@@ -452,8 +462,7 @@ fn lose_the_phone_restore_from_the_words_and_the_old_phone_freezes() {
         .with_vault(|vault| Ok(dump(vault)))
         .expect("the lost vault dumps");
     assert!(
-        lost.get("knowledge_note")
-            .is_some_and(|rows| rows.len() >= 50),
+        lost.get("note").is_some_and(|rows| rows.len() >= 50),
         "the fifty notes are in what was lost"
     );
 

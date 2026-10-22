@@ -87,7 +87,7 @@ mod people;
 mod photos;
 // Tasks' arm (#1046): its conversions and tests, beside this one.
 mod tasks;
-// Home's arm (R-CHROME-6): every app's search domain but Locker's.
+// Home's arm (R-CHROME-6): every app's search domain, Locker's included.
 mod vault;
 
 /// Answer one app query against the open vault.
@@ -208,6 +208,7 @@ pub fn answer(vault: &Vault, request: &wire::AppQueryRequest) -> Result<wire::Ap
         Q::TasksProjects(asked) => tasks::projects(vault, &door, &now, asked)?,
         Q::TasksSearch(asked) => tasks::search(vault, &door, &now, asked)?,
         Q::TasksCatchUp(asked) => tasks::catch_up(vault, &door, &now, asked)?,
+        Q::TasksTrash(asked) => tasks::trash(vault, &door, asked)?,
         Q::LockerItems(asked) => locker::items(vault, &door, &now, asked)?,
         Q::LockerItem(asked) => locker::item(vault, &door, &now, asked)?,
         Q::LockerSearch(asked) => locker::search(vault, &door, asked)?,
@@ -218,6 +219,7 @@ pub fn answer(vault: &Vault, request: &wire::AppQueryRequest) -> Result<wire::Ap
         Q::ChatCard(asked) => chat::card(vault, asked)?,
         Q::VaultSearch(asked) => vault::search(vault, &door, asked)?,
         Q::PhotosSearch(asked) => photos::search(vault, &door, asked)?,
+        Q::PhotosDuplicates(_) => photos::duplicates(&door)?,
         Q::MoneySpending(asked) => money::spending(vault, &door, &now, asked)?,
         Q::MoneyActivity(asked) => money::activity(vault, &door, &now, asked)?,
         Q::MoneyTransaction(asked) => money::transaction(vault, &door, &now, asked)?,
@@ -328,7 +330,7 @@ fn search_events(
     limit: u32,
 ) -> Result<KitResult<Corrected<agenda::SearchData>>> {
     vault.read(|connection| {
-        let index = match centraid_search::SqliteDoor::open(connection) {
+        let index = match centraid_search::SqliteDoor::open(connection, vault.words()) {
             Ok(index) => index,
             Err(error) => {
                 return Ok(Err(CoreError::Invariant {
@@ -343,9 +345,14 @@ fn search_events(
         let limit = usize::try_from(limit).unwrap_or(usize::MAX);
         Ok(Ok(corrected_search(
             &search,
-            &[agenda::EVENT_TARGET_TYPE],
+            &[agenda::EVENT_KIND],
             term,
-            |data: &agenda::SearchData| data.events.is_empty(),
+            |data: &agenda::SearchData| data.events.len(),
+            |exact, again| agenda::SearchData {
+                events: filled(exact.events, again.events, limit, |row| {
+                    row.event_id.clone()
+                }),
+            },
             |term| {
                 agenda::load_search_term(
                     door,
@@ -378,6 +385,30 @@ impl centraid_search::Search for RecordingSearch<'_, '_> {
             .inspect_err(|error| self.keep(error))
     }
 
+    /// **FORWARDED, because the trait's default asks `query` once per kind.**
+    fn query_each(
+        &self,
+        principal: &centraid_search::Principal,
+        request: &centraid_search::EachRequest,
+    ) -> std::result::Result<Vec<centraid_search::Target>, centraid_search::SearchError> {
+        self.inner
+            .query_each(principal, request)
+            .inspect_err(|error| self.keep(error))
+    }
+
+    /// **FORWARDED, because the trait's default is `correct`, which a door that
+    /// wraps another cannot reach.**
+    fn correct_thin(
+        &self,
+        principal: &centraid_search::Principal,
+        entities: &[&str],
+        query: &str,
+    ) -> std::result::Result<Option<String>, centraid_search::SearchError> {
+        self.inner
+            .correct_thin(principal, entities, query)
+            .inspect_err(|error| self.keep(error))
+    }
+
     /// **FORWARDED, because the trait's default is `Ok(None)`.** A recorder that
     /// only wrapped `query` would silently correct nothing for every caller in
     /// this crate; the failure is kept the way `query`'s is.
@@ -406,22 +437,65 @@ impl RecordingSearch<'_, '_> {
     }
 }
 
+/// The FTS door over the read connection the page door uses, with its
+/// failures kept as [`VaultDoor`] keeps the page door's.
+pub(super) fn with_search<T>(
+    vault: &Vault,
+    door: &VaultDoor<'_>,
+    run: impl FnOnce(&dyn centraid_search::Search) -> T,
+) -> Result<T> {
+    vault.read(|connection| {
+        let index = match centraid_search::SqliteDoor::open(connection, vault.words()) {
+            Ok(index) => index,
+            Err(error) => {
+                return Ok(Err(CoreError::Invariant {
+                    context: format!("the search index will not open: {error}"),
+                }));
+            }
+        };
+        let search = RecordingSearch {
+            inner: &index,
+            door,
+        };
+        Ok(Ok(run(&search)))
+    })?
+}
+
 /// A loader's answer through [`corrected_search`]: the data and the words it was
 /// corrected to (empty when none), then the denial, if any.
 type Corrected<T> = ((T, String), Option<centraid_apps_kit::Denial>);
 
-/// THE CORRECTION PASS, once for every surface the full-text door answers
-/// (#1097, R4, R8).
+/// An exact answer with fewer rows than this is thin, and is filled from the
+/// corrected words.
 ///
-/// `run` is the surface's whole search at one term; `is_empty` says whether its
-/// answer holds nothing. The exact term runs first. **Only when that answer is
-/// empty and carries no denial** does the door correct the term against the
-/// vocabulary of `entities` (the domains the surface is about to search again);
-/// with a correction the surface runs again, and the corrected words are kept
-/// **only if that run found something**. A denial is never corrected around, and
-/// a correction that found nothing is not reported. The second element of the
-/// answer is the corrected words, empty when none answered — the wire's
-/// `corrected`.
+/// A member who types `budegt` and has one note called "Budget" is served by
+/// that note and by the others the slip would have found; a member who has none
+/// is served by the others alone. Three is the least that reads as a list rather
+/// than as the one thing that happened to match.
+const FILL_BELOW: usize = centraid_search::THIN_ANSWER;
+
+/// THE CORRECTION PASS, once for every surface the full-text door answers.
+///
+/// `run` is the surface's whole search at one term; `rows` counts the rows its
+/// answer holds; `fill` joins the exact answer and the corrected one. The exact
+/// term runs first. **Only when that answer is thin (fewer than [`FILL_BELOW`]
+/// rows) and carries no denial** does the door correct the term against the
+/// vocabulary of `entities` (the domains the surface is about to search again):
+/// for an empty answer a word the vault holds is kept; for one or two rows
+/// the door's filled pass also corrects a typed word that is a whole word held by
+/// fewer than three documents when a neighbour holds more
+/// ([`centraid_search::Search::correct_thin`]).
+/// With a correction the surface runs again, and `fill(exact, corrected)` answers
+/// the exact rows FIRST and then the corrected rows that are not among them, up
+/// to the surface's window. The corrected words are reported **only if they added
+/// a row**: a correction that found nothing new is not reported, and an exact
+/// answer that was empty is replaced by the corrected rows, as it always was. A
+/// denial is never corrected around. The second element of the answer is the
+/// words, empty when none answered — the wire's `corrected`.
+///
+/// A filled answer carries no continuation: no search answer pages past its
+/// window, and a window of exact rows followed by another term's rows is not a
+/// sequence a cursor could resume.
 ///
 /// A failure of the door's `correct` is the recorder's to keep (it is kept the
 /// way `query`'s is); here it only means there is no correction.
@@ -429,22 +503,67 @@ fn corrected_search<T>(
     search: &dyn centraid_search::Search,
     entities: &[&str],
     term: &str,
-    is_empty: impl Fn(&T) -> bool,
+    rows: impl Fn(&T) -> usize,
+    fill: impl Fn(T, T) -> T,
     mut run: impl FnMut(&str) -> KitResult<(T, Option<centraid_apps_kit::Denial>)>,
 ) -> KitResult<Corrected<T>> {
     let (exact, denial) = run(term)?;
-    if denial.is_some() || !is_empty(&exact) || term.trim().is_empty() {
+    if denial.is_some() || rows(&exact) >= FILL_BELOW || term.trim().is_empty() {
         return Ok(((exact, String::new()), denial));
     }
-    let Ok(Some(words)) = search.correct(&centraid_search::Principal::Owner, entities, term) else {
+    // An empty answer is corrected as ever: a word the vault holds is kept. A thin
+    // one found its words, so only the door's filled pass may correct a rare one.
+    let principal = centraid_search::Principal::Owner;
+    let corrected = if rows(&exact) == 0 {
+        search.correct(&principal, entities, term)
+    } else {
+        search.correct_thin(&principal, entities, term)
+    };
+    let Ok(Some(words)) = corrected else {
         return Ok(((exact, String::new()), None));
     };
     let (again, denial) = run(&words)?;
-    if denial.is_none() && !is_empty(&again) {
-        Ok(((again, words), None))
-    } else {
-        Ok(((exact, String::new()), None))
+    if denial.is_some() || rows(&again) == 0 {
+        return Ok(((exact, String::new()), None));
     }
+    let had = rows(&exact);
+    let filled = fill(exact, again);
+    if rows(&filled) > had {
+        Ok(((filled, words), None))
+    } else {
+        Ok(((filled, String::new()), None))
+    }
+}
+
+/// The rows of `exact`, then those of `extra` whose key is not among them, up to
+/// `window` in all. The exact rows are never dropped or reordered.
+fn filled<R, K: Ord>(
+    mut exact: Vec<R>,
+    extra: Vec<R>,
+    window: usize,
+    key: impl Fn(&R) -> K,
+) -> Vec<R> {
+    let mut seen: std::collections::BTreeSet<K> = exact.iter().map(&key).collect();
+    for row in extra {
+        if exact.len() >= window {
+            break;
+        }
+        if seen.insert(key(&row)) {
+            exact.push(row);
+        }
+    }
+    exact
+}
+
+/// [`filled`] over the door's own hits, which are keyed by kind and id.
+fn filled_targets(
+    exact: Vec<centraid_search::Target>,
+    extra: Vec<centraid_search::Target>,
+    window: usize,
+) -> Vec<centraid_search::Target> {
+    filled(exact, extra, window, |target| {
+        (target.entity.clone(), target.id.clone())
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -511,7 +630,6 @@ impl PageDoor for VaultDoor<'_> {
                 .as_ref()
                 .map(|cursor| (cursor.sort_key.clone(), cursor.pk.clone())),
             held_thumbnail: false,
-            note_body: false,
             document_size: false,
         });
         match answer {
@@ -618,9 +736,14 @@ fn event_to_wire(event: agenda::EventRow, zone: &FireZone) -> wire::AgendaEvent 
         local_end: placed.local_end,
         local_days: placed.local_days,
         all_day,
-        reminders: reminders_of(event.reminders_json.as_deref()),
+        reminders: event
+            .reminders
+            .iter()
+            .map(|minutes_before| wire::AgendaReminder {
+                minutes_before: *minutes_before,
+            })
+            .collect(),
         event_id: event.event_id,
-        ical_uid: event.ical_uid,
         summary: event.summary,
         description: event.description,
         dtstart: event.dtstart,
@@ -633,8 +756,6 @@ fn event_to_wire(event: agenda::EventRow, zone: &FireZone) -> wire::AgendaEvent 
         status: event.status,
         location_place_id: event.location_place_id,
         location_name: event.location_name,
-        organizer_party_id: event.organizer_party_id,
-        sequence: event.sequence,
         created_at: event.created_at,
         updated_at: event.updated_at,
         calendar_id: event.calendar_id,
@@ -645,8 +766,6 @@ fn event_to_wire(event: agenda::EventRow, zone: &FireZone) -> wire::AgendaEvent 
             .map(|attachment| wire::AgendaAttachment {
                 attachment_id: attachment.attachment_id,
                 content_id: attachment.content_id,
-                role: attachment.role,
-                is_primary: attachment.is_primary,
                 media_type: attachment.media_type,
                 content_uri: attachment.content_uri,
                 byte_size: attachment.byte_size,
@@ -656,11 +775,9 @@ fn event_to_wire(event: agenda::EventRow, zone: &FireZone) -> wire::AgendaEvent 
             .attendees
             .into_iter()
             .map(|attendee| wire::AgendaAttendee {
-                attendee_id: attendee.attendee_id,
                 party_id: attendee.party_id,
                 name: attendee.name,
                 partstat: attendee.partstat,
-                role: attendee.role,
                 is_you: attendee.is_you,
             })
             .collect(),
@@ -677,37 +794,11 @@ fn event_to_wire(event: agenda::EventRow, zone: &FireZone) -> wire::AgendaEvent 
     }
 }
 
-/// `schedule_event_ext.reminders_json`, decoded ONCE, here.
-///
-/// The one writer is the command plane, whose input schema admits exactly
-/// `[{ "minutes_before": <integer ≥ 0> }]` (`schedule.propose_event`,
-/// `edit_event`, `edit_event_occurrence`). An entry of any other shape is
-/// skipped rather than guessed at, and a column that will not parse at all is
-/// no reminders: a reminder list is a decoration of an event a member can
-/// still see, and failing the whole agenda over one row's decoration would take
-/// the calendar away to report it.
-fn reminders_of(json: Option<&str>) -> Vec<wire::AgendaReminder> {
-    let Some(entries) = json.and_then(|text| serde_json::from_str::<serde_json::Value>(text).ok())
-    else {
-        return Vec::new();
-    };
-    entries
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter_map(|entry| entry.get("minutes_before")?.as_i64())
-        .map(|minutes_before| wire::AgendaReminder { minutes_before })
-        .collect()
-}
-
 fn calendar_to_wire(calendar: agenda::CalendarRow) -> wire::AgendaCalendar {
     wire::AgendaCalendar {
         calendar_id: calendar.calendar_id,
-        owner_party_id: calendar.owner_party_id,
         name: calendar.name,
         color: calendar.color,
-        default_tz: calendar.default_tz,
-        visibility: calendar.visibility,
     }
 }
 
@@ -776,7 +867,7 @@ mod tests {
 
     impl Scratch {
         fn founded() -> Self {
-            let dir = centraid_ontology::golden::scratch_dir();
+            let dir = centraid_ontology::scratch::scratch_dir();
             std::fs::create_dir_all(&dir).expect("the directory is made");
             let now = centraid_vault::time::recurrence::parse_instant_ms(NOW).expect("an instant");
             let handle = Core::open(CoreConfig::new(dir.join("vault.db")).with_clock(
@@ -856,33 +947,23 @@ mod tests {
             serde_json::from_slice(&outcome.output).expect("the output is JSON")
         }
 
-        fn calendar_id(&self) -> String {
-            self.upcoming(FROM, TO)
-                .expect("upcoming answers")
-                .calendars
-                .first()
-                .map(|calendar| calendar.calendar_id.clone())
-                .expect("founding makes a calendar")
-        }
-
         fn propose(&self, summary: &str, start: &str, end: &str, rrule: Option<&str>) -> String {
             let mut input = serde_json::json!({
-                "summary": summary,
-                "dtstart": start,
-                "dtend": end,
-                "calendar_id": self.calendar_id(),
-                "reminders": [{ "minutes_before": 10 }],
+                "title": summary,
+                "starts": start,
+                "ends": end,
+                "zone": "Etc/UTC",
+                "reminders": [10],
             });
             if let Some(rule) = rrule {
-                input["rrule"] = serde_json::json!(rule);
+                input["rule"] = serde_json::json!(rule);
             }
             self.propose_with(input)
         }
 
-        /// A proposal with every field the caller's, the calendar added.
-        fn propose_with(&self, mut input: serde_json::Value) -> String {
-            input["calendar_id"] = serde_json::json!(self.calendar_id());
-            self.run("schedule.propose_event", input)["event_id"]
+        /// A proposal with every field the caller's.
+        fn propose_with(&self, input: serde_json::Value) -> String {
+            self.run("event.propose", input)["id"]
                 .as_str()
                 .expect("an event id")
                 .to_owned()
@@ -920,10 +1001,7 @@ mod tests {
             "2099-06-04T10:00:00.000Z",
             None,
         );
-        scratch.run(
-            "schedule.delete_event",
-            serde_json::json!({ "event_id": trashed }),
-        );
+        scratch.run("entity.trash", serde_json::json!({ "id": trashed }));
 
         let upcoming = scratch.upcoming(FROM, TO).expect("upcoming answers");
         assert_eq!(upcoming.calendars.len(), 1, "the calendar founding made");
@@ -969,20 +1047,52 @@ mod tests {
     /// three-day all-day run is dates, end inclusive, and on all three; the
     /// answer's today and now are New York's reading of the vault clock; and
     /// nothing answered ended before `from`.
+    /// A WINDOW TOO FULL TO EXPAND IS A BOUND THE SHELL IS TOLD, NOT A SHORT AGENDA.
+    ///
+    /// Forty daily series over six months are about 7,000 occurrences against
+    /// `MAX_TOTAL_INSTANCES` (1,500): the read errors at the size it reaches, the
+    /// core answers `ReadBoundReached` naming it, and a day of the same vault
+    /// answers whole.
+    #[test]
+    fn a_window_too_full_to_expand_is_a_bound_reached_and_a_day_of_it_is_whole() {
+        let scratch = Scratch::founded();
+        for k in 0..40 {
+            // Twenty minutes apart, so no two of them are the same busy time.
+            let (hour, minute) = (k / 3, (k % 3) * 20);
+            scratch.propose(
+                &format!("Daily {k}"),
+                &format!("2099-05-01T{hour:02}:{minute:02}:00.000Z"),
+                &format!("2099-05-01T{hour:02}:{:02}:00.000Z", minute + 15),
+                Some("FREQ=DAILY"),
+            );
+        }
+        match scratch.upcoming("2099-06-01T00:00:00.000Z", "2099-12-01T00:00:00.000Z") {
+            Err(CoreError::ReadBoundReached { query, cap }) => {
+                assert_eq!(query, "agenda.upcoming.expansion");
+                assert_eq!(cap, centraid_apps_agenda::MAX_TOTAL_INSTANCES);
+            }
+            other => panic!("a window past the bound answers a bound, not {other:?}"),
+        }
+        let day = scratch
+            .upcoming("2099-06-03T04:00:00.000Z", "2099-06-04T04:00:00.000Z")
+            .expect("a day reads");
+        assert_eq!(day.events.len(), 40);
+    }
+
     #[test]
     fn upcoming_answers_each_occurrence_in_the_request_zone() {
         let scratch = Scratch::founded();
         let late = scratch.propose_with(serde_json::json!({
-            "summary": "Late call",
-            "dtstart": "2099-06-04T03:30:00.000Z",
-            "dtend": "2099-06-04T05:00:00.000Z",
-            "start_tz": "Europe/London",
+            "title": "Late call",
+            "starts": "2099-06-04T03:30:00.000Z",
+            "ends": "2099-06-04T05:00:00.000Z",
+            "zone": "Europe/London",
         }));
         let away = scratch.propose_with(serde_json::json!({
-            "summary": "Away",
-            "dtstart": "2099-06-10",
-            "dtend": "2099-06-12",
-            "recurrence_semantics": "all-day",
+            "title": "Away",
+            "starts": "2099-06-10",
+            "ends": "2099-06-12",
+            "timing": "all-day",
         }));
         // A weekly series anchored a year back: its reach-back month is not
         // answered.
@@ -1130,12 +1240,12 @@ mod tests {
     #[test]
     fn search_answers_in_rank_order_with_a_snippet() {
         let scratch = Scratch::founded();
-        let cabin = scratch.propose(
-            "Cabin weekend",
-            "2099-06-05T16:00:00.000Z",
-            "2099-06-05T18:00:00.000Z",
-            None,
-        );
+        // The title alone is a hit without an excerpt; the words about it are the snippet.
+        let cabin = scratch.propose_with(serde_json::json!({
+            "title": "Cabin weekend", "starts": "2099-06-05T16:00:00.000Z",
+            "ends": "2099-06-05T18:00:00.000Z", "zone": "Etc/UTC",
+            "description": "the cabin sleeps six",
+        }));
         scratch.propose(
             "Dentist",
             "2099-06-03T09:00:00.000Z",
@@ -1264,9 +1374,9 @@ mod tests {
                 );
                 // A failure of the vocabulary is kept the way `query`'s is, so
                 // `settle` reports it rather than the member seeing "no match".
-                let broken = Inner(Err(SearchError::NotADomain {
-                    entity: "locker.item".to_owned(),
-                    count: 7,
+                let broken = Inner(Err(SearchError::NotSearchable {
+                    kind: "locker.item".to_owned(),
+                    count: 13,
                 }));
                 let recording = RecordingSearch {
                     inner: &broken,
@@ -1358,9 +1468,9 @@ mod tests {
                 // refuses the shape, as it would for a shell's own page.
                 let broken = PageQuery::new(
                     "test.broken",
-                    "party_id",
-                    "core_party",
-                    centraid_apps_kit::statement::PageOrder::asc("created_at", "party_id"),
+                    "id",
+                    "entity",
+                    centraid_apps_kit::statement::PageOrder::asc("created_at", "id"),
                 );
                 let loaded = door
                     .page(&broken, &PageRequest::first(1))
@@ -1381,11 +1491,11 @@ mod tests {
         let scratch = Scratch::founded();
         // A wall clock in the device's zone, as the phone writes it.
         let series = scratch.propose_with(serde_json::json!({
-            "summary": "Morning run",
-            "dtstart": "2099-05-04T07:00:00",
-            "dtend": "2099-05-04T08:00:00",
-            "tz": TZ,
-            "rrule": "FREQ=WEEKLY",
+            "title": "Morning run",
+            "starts": "2099-05-04T07:00:00",
+            "ends": "2099-05-04T08:00:00",
+            "zone": TZ,
+            "rule": "FREQ=WEEKLY",
         }));
         let ask = |event_id: &str, instance_key: &str| match scratch
             .ask(wire::app_query_request::Query::AgendaEvent(
@@ -1456,7 +1566,8 @@ mod tests {
             &door,
             &["core.content_item"],
             "cabn",
-            |found: &Vec<&str>| found.is_empty(),
+            |found: &Vec<&str>| found.len(),
+            |exact, again| filled(exact, again, 8, |row| (*row).to_owned()),
             |words| {
                 runs.borrow_mut().push(words.to_owned());
                 Ok((Vec::new(), Some(denial.clone())))
@@ -1477,7 +1588,8 @@ mod tests {
             &door,
             &["core.content_item"],
             "cabn",
-            |found: &Vec<&str>| found.is_empty(),
+            |found: &Vec<&str>| found.len(),
+            |exact, again| filled(exact, again, 8, |row| (*row).to_owned()),
             |words| {
                 runs.borrow_mut().push(words.to_owned());
                 Ok((
@@ -1497,5 +1609,73 @@ mod tests {
             (found, corrected, refused),
             (vec!["row"], "cabin".to_owned(), None)
         );
+    }
+
+    /// THE FILL RULE: a thin exact answer (fewer than three rows) is followed by
+    /// the corrected words' rows, the exact rows first and none twice; a full
+    /// answer is not corrected; and the words are reported only when they added
+    /// a row.
+    #[test]
+    fn a_thin_answer_is_filled_from_the_corrected_words_and_a_full_one_is_not() {
+        let door = EagerDoor {
+            asked: std::cell::Cell::new(0),
+        };
+        let fill = |exact: Vec<&'static str>, again: Vec<&'static str>| {
+            filled(exact, again, 4, |row| (*row).to_owned())
+        };
+        let run = |answers: &'static [(&'static str, &'static [&'static str])]| {
+            move |words: &str| -> KitResult<(Vec<&'static str>, Option<centraid_apps_kit::Denial>)> {
+                let rows = answers
+                    .iter()
+                    .find(|(term, _)| *term == words)
+                    .map_or(Vec::new(), |(_, rows)| rows.to_vec());
+                Ok((rows, None))
+            }
+        };
+        let ask = |answers: &'static [(&'static str, &'static [&'static str])]| {
+            corrected_search(
+                &door,
+                &["note"],
+                "cabn",
+                |found: &Vec<&str>| found.len(),
+                fill,
+                run(answers),
+            )
+            .expect("it answers")
+        };
+
+        // One exact row and three more at the corrected words: the exact row
+        // first, then the new ones up to the window of four; the words are said.
+        let ((rows, corrected), _) = ask(&[("cabn", &["own"]), ("cabin", &["own", "a", "b", "c"])]);
+        assert_eq!(
+            (rows, corrected.as_str()),
+            (vec!["own", "a", "b", "c"], "cabin")
+        );
+        assert_eq!(door.asked.get(), 1);
+
+        // Two exact rows is thin too; empty is the old case, and the corrected
+        // rows alone are the answer.
+        let ((rows, corrected), _) = ask(&[("cabn", &["x", "y"]), ("cabin", &["z"])]);
+        assert_eq!((rows, corrected.as_str()), (vec!["x", "y", "z"], "cabin"));
+        let ((rows, corrected), _) = ask(&[("cabin", &["z"])]);
+        assert_eq!((rows, corrected.as_str()), (vec!["z"], "cabin"));
+
+        // The corrected words that add nothing are not reported.
+        let ((rows, corrected), _) = ask(&[("cabn", &["x"]), ("cabin", &["x"])]);
+        assert_eq!((rows, corrected.as_str()), (vec!["x"], ""));
+        let ((rows, corrected), _) = ask(&[("cabn", &["x"])]);
+        assert_eq!((rows, corrected.as_str()), (vec!["x"], ""));
+
+        // Three exact rows is a list: the door is not even asked.
+        let before = door.asked.get();
+        let ((rows, corrected), _) = ask(&[("cabn", &["x", "y", "z"]), ("cabin", &["w"])]);
+        assert_eq!((rows, corrected.as_str()), (vec!["x", "y", "z"], ""));
+        assert_eq!(door.asked.get(), before);
+    }
+
+    #[test]
+    fn the_exact_rows_are_never_dropped_to_make_room() {
+        assert_eq!(filled(vec![1, 2], vec![2, 3, 4, 5], 3, |n| *n), [1, 2, 3]);
+        assert_eq!(filled(vec![1, 2, 3], vec![4], 2, |n| *n), [1, 2, 3]);
     }
 }

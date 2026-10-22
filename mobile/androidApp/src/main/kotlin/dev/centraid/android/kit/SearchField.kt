@@ -66,7 +66,7 @@ public fun CentraidSearchField(
     val shape = RoundedCornerShape(KitGeometry.RADIUS)
     // THE LINE UNDER THE FIELD is where the correction is said (#1097): this
     // field is the one every app's search slot, Home's search
-    // and every app's search page draw, so "Showing results for ..." is drawn once, here.
+    // and every app's search page draw, so "Including results for ..." is drawn once, here.
     // The caller's modifier sits on the column: a `weight` beside a Cancel
     // belongs to the whole field, line included.
     Column(modifier) {

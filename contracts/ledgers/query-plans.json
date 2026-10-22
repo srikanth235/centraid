@@ -1,0 +1,94 @@
+{
+  "_comment": "THE QUERY-PLAN ALLOWLIST (#1135). A read that plans as a full scan of a table over `scanFloorRows` rows, or as a sort of every row it read on a paged read, fails `crates/core/tests/query_plans.rs` unless it is listed here with its home and the one-line reason it is fine. Down-only: `scanFloorRows` may only fall (a lower floor checks more tables) and each `allowed` count may only fall, so the allowlist cannot grow in the change that needs it; an entry no read needs any more fails the test too. The fix for a hot read is the index it wants, in the baseline, never a row here.",
+  "_provenance": {
+    "measuredBy": "cargo test -p centraid-core --test query_plans -- --nocapture",
+    "shape": "EXPLAIN QUERY PLAN on (a) every page statement the vault composes while the core answers every app query, with each shelf, view, sort and filter that changes the statement, and (b) every hand-written SELECT or WITH in crates/{vault,apps/kit,search,ontology}/src that prepares alone, over the year-3 rows vault (centraid_apps_kit::search_corpus::YEAR3_ROWS, about 45,000 entities), closed and reopened so SQLite holds statistics",
+    "seededFrom": "the first run of the sweep (#1135): every finding it made is either an index added to the baseline or an entry here with its reason"
+  },
+  "scanFloorRows": 1000,
+  "pages": {
+    "allowed": 10,
+    "entries": [
+      {
+        "home": "agenda.upcoming.calendars",
+        "reason": "kind = 'calendar': one row per calendar the member keeps (a handful), sorted for the page"
+      },
+      {
+        "home": "docs.folders",
+        "reason": "kind = 'folder': the member's folders (hundreds at most), sorted by id for a 500-row page"
+      },
+      {
+        "home": "docs.shelf.starred",
+        "reason": "the star edges, one per star the member gave (any kind), sorted newest first; bounded by the stars given, not by the vault"
+      },
+      {
+        "home": "health.kinds.names",
+        "reason": "kind = 'workout_kind': a few dozen kinds, sorted by id"
+      },
+      {
+        "home": "locker.phone.trashed",
+        "reason": "the Locker trash: a row leaves it at purge_at, so what is sorted is the trash and not the kind"
+      },
+      {
+        "home": "money.links.transfer",
+        "reason": "linked transfers only (the partial index txn_by_transfer): two rows per transfer the member recorded, tens a year"
+      },
+      {
+        "home": "money.transactions.trashed",
+        "reason": "the trash: a row leaves it at purge_at, so what is sorted is the trash and not the ledger"
+      },
+      {
+        "home": "notes.notebooks.filed",
+        "reason": "reads (id, notebook_id) of every note filed in a notebook, to count per notebook, and sorts them for a 500-row page; about 2,000 rows in the year-3 corpus. A GROUP BY is the fix if it grows, not an index (a multi-value IN cannot stream in id order)"
+      },
+      {
+        "home": "photos.duplicates.phashes",
+        "reason": "the clustering needs every perceptual hash by design: the first page is a primary-key-order walk of derivative and each later page resumes at its cursor, so a whole pass reads derivative once"
+      },
+      {
+        "home": "tasks.board.logbook",
+        "reason": "reads every closed task and sorts them for a 50-row page (about 1,800 in the corpus, a few ms). An index alone does not change it (task_by_done on done_at was added, was not chosen, and was removed): the fix is the app's statement split into status = 'done' ordered by done_at, which an index (status, done_at, id) can stream, then cancelled"
+      }
+    ]
+  },
+  "statements": {
+    "allowed": 7,
+    "entries": [
+      {
+        "home": "crates/vault/src/backup/files.rs",
+        "statement": "SELECT b.hash, b.size, (SELECT variant FROM derivative",
+        "reason": "the backup pass lists every content item once: O(N) by definition and off the request path"
+      },
+      {
+        "home": "crates/vault/src/backup/naming.rs",
+        "statement": "SELECT hash, size FROM blob ORDER BY hash",
+        "reason": "the backup pass names every blob, in the primary key's order"
+      },
+      {
+        "home": "crates/vault/src/chat.rs",
+        "statement": "SELECT e.id, e.title, d.media_type, e.updated_at FROM document d",
+        "reason": "the assistant's attachable documents: reads every document, sorts, takes 500 (about 2,500 here); the fix is a kind = 'document' on the statement so entity_by_updated streams, a source change outside the measurement lane"
+      },
+      {
+        "home": "crates/vault/src/commands/person.rs",
+        "statement": "SELECT e.id FROM entity e JOIN person p",
+        "reason": "one lookup per contact imported: scans the member's contacts (hundreds); a NOCASE title match has no index"
+      },
+      {
+        "home": "crates/vault/src/index.rs",
+        "statement": "SELECT id FROM entity ORDER BY n",
+        "reason": "the index rebuild walks every entity by definition"
+      },
+      {
+        "home": "crates/vault/src/originals.rs",
+        "statement": "SELECT p.blob, b.size, EXISTS",
+        "reason": "a pass over every photograph by design: the library's originals"
+      },
+      {
+        "home": "crates/vault/src/words.rs",
+        "statement": "SELECT (SELECT max(n) FROM search_word), (SELECT count(*) FROM search_word)",
+        "reason": "count(*) walks the word list's pages, 40 microseconds at 150,000 words (words.rs measures it); it is the check that the cache is still the table"
+      }
+    ]
+  }
+}

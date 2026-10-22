@@ -19,14 +19,14 @@ import kotlinx.coroutines.launch
  * thinks. Android does not use this — Compose collects [host]'s `StateFlow`
  * directly, which on that side already is the right shape.
  *
- * ## IT ATTACHES TWO READS, AND ROUTES THE HOST ONCE
+ * ## IT ATTACHES THREE READS, AND ROUTES THE HOST ONCE
  *
- * Places is a join the door will not do, so the machine emits two
- * `ReadPage`s under two screen ids ([PlacesMachine.SCREEN_ID] and
- * [PlacesMachine.ASSETS_SCREEN_ID]) and each needs its own runtime — a runtime
+ * Places is a join the door will not do, so the machine emits three
+ * `ReadPage`s under three screen ids ([PlacesMachine.SCREEN_ID],
+ * [PlacesMachine.ASSETS_SCREEN_ID] and [PlacesMachine.NAMES_SCREEN_ID]) and each needs its own runtime — a runtime
  * serves the one `screenId` its `ScreenReads` names.
  *
- * Only the FIRST goes through [HomeSession.attachScreen], and the second
+ * Only the FIRST goes through [HomeSession.attachScreen], and the others
  * through [HomeSession.attachReads], which is the same thing WITHOUT
  * `changes.route(host)`. That distinction is the whole reason the second method
  * exists: routing is registration with no removal, so a second `attachScreen`
@@ -55,14 +55,15 @@ public class PlacesBridge {
      */
     public fun attach(session: HomeSession) {
         session.attachScreen(host, PlacesReads, PlacesReads)
-        // THE SECOND PASS, WITHOUT A SECOND ROUTE. See the class note, and
+        // THE OTHER PASSES, WITHOUT A SECOND ROUTE. See the class note, and
         // `attachReads`' own, which carries the reason in full.
         //
-        // No writes on this one: `media.name_place` is submitted through the
+        // No writes on these: `entity.retitle` is submitted through the
         // runtime attached above, which is the one carrying `PlacesReads`'
         // `ScreenWrites`. A second writer would be a second gate over one
         // command.
         session.attachReads(host, PlacesAssetReads)
+        session.attachReads(host, PlacesNameReads)
         scope.launch { host.state.collect { state -> onState?.invoke(state.encode()) } }
     }
 

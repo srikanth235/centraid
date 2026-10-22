@@ -306,6 +306,16 @@
     },
     {
       "argument": "verb",
+      "example": null,
+      "family": "vault",
+      "id": "act.x_name_was_refused_reason",
+      "source": "act.rs",
+      "template": "error: {} {name} was refused: {reason}",
+      "tool": "act",
+      "why_no_example": "a vault refusal with no named predicate; the fixture vault always names one (see the refused: families)"
+    },
+    {
+      "argument": "verb",
       "example": [
         {
           "args": {
@@ -334,16 +344,6 @@
       "template": "error: restore {name} was refused: it is in the trash but past the vault's restore window, so it cannot come back (vault: {reason}).",
       "tool": "act",
       "why_no_example": "reaches the reply as the refused: restore line below; this error form is the vault's refusal with no named predicate"
-    },
-    {
-      "argument": "verb",
-      "example": null,
-      "family": "vault",
-      "id": "act.x_name_was_refused_reason",
-      "source": "act.rs",
-      "template": "error: {} {name} was refused: {reason}",
-      "tool": "act",
-      "why_no_example": "a vault refusal with no named predicate; the fixture vault always names one (see the refused: families)"
     },
     {
       "argument": "args",
@@ -891,6 +891,16 @@
     },
     {
       "argument": "args",
+      "example": null,
+      "family": "value",
+      "id": "act.field_is_a_sealed_value_which",
+      "source": "act.rs",
+      "template": "error: {field} is a sealed value, which the assistant cannot set; the member sets it in Locker.",
+      "tool": "act",
+      "why_no_example": "needs a session with the secrets off (Flags::secrets, the phone); every example runs the harness session, which holds the key, so tests/locker_parity.rs drives it"
+    },
+    {
+      "argument": "args",
       "example": [
         {
           "args": {
@@ -1087,24 +1097,13 @@
     },
     {
       "argument": "verb",
-      "example": [
-        {
-          "args": {
-            "kind": "folder",
-            "name": "Taxes",
-            "verb": "delete"
-          },
-          "think": null,
-          "tool": "act",
-          "user": null
-        }
-      ],
+      "example": null,
       "family": "vault",
       "id": "act.x_name_said",
       "source": "act.rs",
       "template": "refused: {} {name}: {said}.",
       "tool": "act",
-      "why_no_example": ""
+      "why_no_example": "composed only: the vault refuses a delete no more (a container's members go to the trash with it, #1135), so the ask this line leads is the one a cancelled event's reschedule ends in, and the asks the runtime composes are not said to the model uncomposed"
     },
     {
       "argument": "verb",

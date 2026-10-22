@@ -1,6 +1,6 @@
 # `crates/apps/agenda` — the calendar, and the one recurrence engine
 
-Agenda is **4 manifest queries plus the core's by-id `event` read, 7 actions, 14 scopes** — the smallest scope set of any app, and the only one besides People that takes `read+act` over a whole schema ([#1020](https://github.com/srikanth235/centraid/issues/1020)).
+Agenda is **4 manifest queries plus the core's by-id `event` read, 7 actions, 17 scopes (10 reads, 7 acts)** — the smallest scope set of any app, and the only one besides People that takes `read+act` over a whole schema ([#1020](https://github.com/srikanth235/centraid/issues/1020)).
 
 ## What is here
 
@@ -8,7 +8,7 @@ Agenda is **4 manifest queries plus the core's by-id `event` read, 7 actions, 14
 | --- | --- |
 | `manifest.json` | the app's manifest: queries, actions and scopes |
 | `src/manifest.rs` | the parse, and the claims the manifest makes about itself |
-| `src/queries.rs` | the four queries: statements as data, and the folds over them. `search` from a term asks `crates/search`'s FTS door (`load_search_term`) and folds its hits (`load_search`). Every row carries `location_name`, its place's name (the `core.place` read scope) |
+| `src/queries.rs` | the four queries: statements as data, and the folds over them. `search` from a term asks `crates/search`'s FTS door (`load_search_term`) and folds its hits (`load_search`). Every row carries `location_name`, its place's name. The reads are one table at a time: the window's `event` rows, then the entity, guests (`attendee` edges), overrides (`occurrence`) and calendars of the ids it named, joined here ([R-1135-4-8](../../../docs/decisions.md#agenda)) |
 | `src/detail.rs` | `load_event`: one event, or one occurrence named by `original_start_local` or `instance_key`, by id — the detail screen's read ([#1029](https://github.com/srikanth235/centraid/issues/1029)); absent for an unknown, trashed or skipped one. It also carries the event's calendar row (#1047). `next_occurrence` names the occurrence a repeating search hit opens: the first at or after the vault clock within a year, else the last before it. |
 | `src/expansion.rs` | the recurrence FOLD — one row per occurrence, and the cap |
 | `src/local.rs` | where an occurrence falls in a stated zone: its local wall clock, the civil days it occupies (a timed end exclusive, an all-day end inclusive), today and now — what the core answers a shell with no calendar |
@@ -25,14 +25,16 @@ Agenda is **4 manifest queries plus the core's by-id `event` read, 7 actions, 14
 
 ## How a command states an event's times
 
-`schedule.propose_event`, `schedule.edit_event` and `schedule.edit_event_occurrence` take `dtstart`/`dtend` in one of two shapes (`crates/vault/src/commands/event_time.rs`, [#1029](https://github.com/srikanth235/centraid/issues/1029)):
+`event.propose`, `event.edit` and `event.edit_occurrence` take `starts`/`ends` in one of four shapes (`crates/vault/src/commands/event.rs`, [R-1135-4-3](../../../docs/decisions.md#agenda)):
 
-| Input | `dtstart` / `dtend` | Stored |
+| Input | `starts` / `ends` | Stored |
 | --- | --- | --- |
-| no `tz` | an instant (`…Z`, with `start_tz` for a zoned series), a floating wall clock, or an all-day date with `recurrence_semantics: "all-day"` | verbatim |
-| `tz` (IANA, e.g. `Asia/Kolkata`) | wall clocks in that zone, `YYYY-MM-DDTHH:MM[:SS]`, no `Z` or offset | the resolved instants, `start_tz = end_tz = tz`, `recurrence_semantics = "zoned"` |
+| an instant with `zone` | `…Z` and an IANA name | verbatim, `timing = "zoned"` |
+| a wall clock with `zone` | `YYYY-MM-DDTHH:MM[:SS]` in that zone | the resolved instant, `timing = "zoned"` |
+| `timing: "floating"` | a wall clock, no zone | verbatim: 09:00 wherever the member is |
+| `timing: "all-day"` | dates; `ends` is the LAST day | verbatim |
 
-`tz` is exclusive with `start_tz`, `end_tz` and a non-`zoned` `recurrence_semantics`; an unknown zone and a wall clock the zone skips (the spring gap) are refused, and one it repeats takes the earlier instant. A timed end must be after its start; **an all-day end is the last day, inclusive**, so a one-day all-day event has `dtend == dtstart` and that equality is admitted — for all-day only, on the series, occurrence and series-edit paths alike.
+An instant with no zone, an unknown zone and a wall clock the zone skips are refused; one it repeats takes the earlier instant. A timed end must not precede its start. A series' days are overridden by `event.edit_occurrence` (`override`, `skip`, `restore`; scope `occurrence` or `future`, [R-1135-4-1](../../../docs/decisions.md#agenda)), keyed by the series-local wall clock.
 
 ## The bounds, and where each one is stated
 

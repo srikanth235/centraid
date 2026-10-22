@@ -32,7 +32,7 @@ use centraid_vault::time::rrule;
 use centraid_vault::time::zone::FireZone;
 use serde_json::Value;
 
-use crate::queries::{Attendee, EventRow};
+use crate::queries::EventRow;
 
 /// Reach back past `from` so still-running multi-day events are not cut off
 /// (`upcoming.ts:172`).
@@ -183,22 +183,6 @@ fn occurrence_row(
     EventRow {
         summary: text("summary").or_else(|| event.summary.clone()),
         description: text("description").or_else(|| event.description.clone()),
-        recurrence_semantics: text("recurrence_semantics")
-            .or_else(|| event.recurrence_semantics.clone()),
-        calendar_id: text("calendar_id").or_else(|| event.calendar_id.clone()),
-        conferencing_uri: text("conferencing_uri").or_else(|| event.conferencing_uri.clone()),
-        reminders_json: match field("reminders") {
-            Some(reminders) => Some(reminders.to_string()),
-            None => event.reminders_json.clone(),
-        },
-        attendees: match field("attendee_party_ids").and_then(Value::as_array) {
-            Some(ids) => ids
-                .iter()
-                .filter_map(Value::as_str)
-                .map(|party_id| overridden_attendee(event, party_id))
-                .collect(),
-            None => event.attendees.clone(),
-        },
         dtstart: instance.start.clone(),
         dtend,
         is_recurrence_instance: !is_anchor,
@@ -207,25 +191,6 @@ fn occurrence_row(
         recurrence_overlap: Some(instance.overlap),
         ..event.clone()
     }
-}
-
-/// An attendee an override names: the one already on the series where there is
-/// one, and a bare guest otherwise. **`role` is absent on the fallback**, as it
-/// is in v0 — a guest an override introduced has no declared role.
-fn overridden_attendee(event: &EventRow, party_id: &str) -> Attendee {
-    event
-        .attendees
-        .iter()
-        .find(|guest| guest.party_id == party_id)
-        .cloned()
-        .unwrap_or_else(|| Attendee {
-            attendee_id: Some(party_id.to_owned()),
-            party_id: party_id.to_owned(),
-            name: "Guest".to_owned(),
-            partstat: "needs-action".to_owned(),
-            role: None,
-            is_you: false,
-        })
 }
 
 /// THE ONE MEMBER-FACING RECURRENCE SENTENCE, resolved here (#834).

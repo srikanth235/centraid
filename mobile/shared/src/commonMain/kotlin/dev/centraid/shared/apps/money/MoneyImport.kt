@@ -54,15 +54,16 @@ import dev.centraid.shared.nav.ScreenIds
  * question (a date order the file cannot answer) and offer one override (which
  * sign means money out); each answer plans the same file again. A row proposed
  * as a duplicate is skipped unless the member says otherwise. PUBLISHING IS THE
- * ORDINARY COMMAND, `money.import_transactions`, with the plan's own
- * `publish_input` unchanged, one statement at a time; a CSV's layout is
- * remembered only after every one has committed.
+ * ORDINARY COMMAND, `follow.statement`, with the plan's own `publish_input`
+ * unchanged, one statement at a time; the balance a statement stated and a CSV's
+ * layout are remembered only after every one has committed.
  */
 public object MoneyImportMachine :
     MoneyQueryMachine<MoneyImportState, MoneyImportEvent, MoneyImportData>("money.import", MONEY_TABLES) {
     public const val SCREEN_ID: String = ScreenIds.MONEY_IMPORT
-    public const val CMD_IMPORT: String = "money.import_transactions"
-    public const val CMD_PROFILE: String = "money.save_import_profile"
+    public const val CMD_IMPORT: String = "follow.statement"
+    public const val CMD_PROFILE: String = "account.remember_layout"
+    public const val CMD_CHECKPOINT: String = "checkpoint.record"
 
     /** Rows of each kind drawn under a statement; the rest are counted. */
     private const val SHOWN_ROWS: Int = 25
@@ -314,7 +315,7 @@ public object MoneyImportMachine :
                     status = StatusLine(sentence = MoneyFold.fill(MoneyCopy.IMPORT_DONE, "rows" to MoneyFold.count(written, MoneyCopy.ROW_ONE, MoneyCopy.ROW_MANY))),
                 ),
             ),
-        ).let { step -> Step(step.state, step.effects + profileSaves(held)) }
+        ).let { step -> Step(step.state, step.effects + checkpointRecords(held) + profileSaves(held)) }
     }
 
     /** Rows a publish wrote, as the plan counted them. */
@@ -323,12 +324,25 @@ public object MoneyImportMachine :
             statement.new + if (held.screen.keep_proposed) statement.proposed_duplicates else 0
         }
 
+    /** The balance each statement stated: a checkpoint for its account on its day. */
+    private fun checkpointRecords(held: MoneyHeld<MoneyImportState>): List<ScreenEffect> =
+        held.plan?.statements.orEmpty().mapNotNull { statement ->
+            val stated = statement.checkpoint ?: return@mapNotNull null
+            val balance = stated.balance?.minor ?: return@mapNotNull null
+            val account = statement.account_id ?: return@mapNotNull null
+            val input = MoneyFold.json(
+                "account_id" to MoneyFold.str(account),
+                "day" to MoneyFold.str(stated.as_of),
+                "balance_minor" to balance.toString(),
+            )
+            ScreenEffect.SubmitWrite(CMD_CHECKPOINT, input, InvokeKeys.of(CMD_CHECKPOINT, account, stated.as_of))
+        }
+
     private fun profileSaves(held: MoneyHeld<MoneyImportState>): List<ScreenEffect> =
         held.plan?.statements.orEmpty().mapNotNull { statement ->
             val profile = statement.profile_to_save ?: return@mapNotNull null
             val account = statement.account_id ?: return@mapNotNull null
-            val input = MoneyFold.json(
-                "account_id" to MoneyFold.str(account),
+            val layout = MoneyFold.json(
                 "header_fingerprint" to MoneyFold.str(profile.header_fingerprint),
                 "delimiter" to MoneyFold.str(profile.delimiter),
                 "skip_lines" to profile.skip_lines.toString(),
@@ -343,6 +357,7 @@ public object MoneyImportMachine :
                 "indicator_col" to profile.indicator_col?.toString(),
                 "indicator_out_value" to profile.indicator_out_value?.let(MoneyFold::str),
             )
+            val input = MoneyFold.json("id" to MoneyFold.str(account), "layout" to layout)
             ScreenEffect.SubmitWrite(CMD_PROFILE, input, InvokeKeys.of(CMD_PROFILE, account, held.screen.draft_token))
         }
 
@@ -524,7 +539,7 @@ public object MoneyImportMachine :
             else -> MoneyCopy.CHIP_CANT_READ to StatusChip.Tone.TONE_WARNING
         }
         val day = row.posted_on?.let(MoneyFold::dayShort).orEmpty()
-        val title = row.display_name?.takeIf { it.isNotEmpty() } ?: row.description.orEmpty()
+        val title = row.description.orEmpty()
         val meta = when (verdict) {
             MoneyImportVerdict.MONEY_IMPORT_VERDICT_NEW ->
                 listOf(day, row.category_label ?: MoneyCopy.NO_CATEGORY).filter { it.isNotEmpty() }.joinToString(" · ")

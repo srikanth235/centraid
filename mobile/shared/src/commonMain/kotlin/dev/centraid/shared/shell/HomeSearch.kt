@@ -37,12 +37,14 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 /**
- * HOME'S SEARCH (R-CHROME-6): one field over every app but Locker, the answer
+ * HOME'S SEARCH (R-CHROME-6): one field over every app, the answer
  * grouped by the app each row opens in.
  *
  * The read is `vault_search`, which is Notes' powerbox loader asked from Home
- * (D-1020-N1) — one probe per search domain, Locker never one of them. This
- * machine groups the hits in Home's tile order, names each row's kind, and
+ * (D-1020-N1) — one probe per search domain, and a Locker item is a hit like the
+ * rest (#1135): the index holds its plain text whether or not Locker is locked, a
+ * sealed secret never, and a tap on the row passes through Locker's own lock wall
+ * like any Locker destination. This machine groups the hits in Home's tile order, names each row's kind, and
  * says where a tap goes ([HomeSearchRow.target], the reference a chat card
  * carries, so the shell's one router opens it).
  *
@@ -108,8 +110,8 @@ public object HomeSearchMachine : ScreenMachine<HomeSearchState, HomeSearchEvent
     private fun term(state: HomeSearchState, term: String): Step<HomeSearchState> {
         val field = state.field_ ?: SearchField()
         if (field.open_ && field.term == term && state.resting == null) return Step(state)
-        // A NEW TERM clears the words the last one was corrected to.
-        val next = state.copy(field_ = field.copy(open_ = true, term = term, corrected = ""))
+        // A NEW TERM clears the words the last one was corrected to, and the Ask it offered.
+        val next = state.copy(field_ = field.copy(open_ = true, term = term, corrected = "", ask_row = null))
         if (term.isBlank()) return Step(rest(next.copy(field_ = next.field_?.copy(answered_term = ""))))
         return Step(loading(next), listOf(read()))
     }
@@ -133,20 +135,17 @@ public object HomeSearchMachine : ScreenMachine<HomeSearchState, HomeSearchEvent
         // only a conversation holds is the no-match state, not a row that goes nowhere.
         val kept = if (state.chat_tab) data else data.copy(groups = data.groups.filterNot { it.app_id == CHAT })
         val shown = if (kept.groups.isEmpty()) {
-            // NOTHING MATCHED: one sentence and one action, which asks the
-            // assistant about the term (the shell sends `ask_question` to Chat).
+            // NOTHING MATCHED: one sentence; the Ask row under it is the law's, as it is under rows.
             kept.copy(
                 empty = EmptyState(
                     headline = SharedCopy.HOME_SEARCH_NO_MATCH_HEADLINE,
                     body = SharedCopy.HOME_SEARCH_NO_MATCH_BODY.replace("{term}", answered.trim()),
-                    action_label = SharedCopy.SEARCH_ASK_ABOUT.replace("{term}", answered.trim()),
                 ),
-                ask_question = SharedCopy.SEARCH_ASK_QUESTION.replace("{term}", answered.trim()),
             )
         } else {
-            kept.copy(empty = null, ask_question = "")
+            kept.copy(empty = null)
         }
-        // The words the rows answer are kept by the law, for an answer still current.
+        // The words the rows answer and the Ask row are kept by the law, for an answer still current.
         return SearchLaw.answered(Field, state, answered.trim(), corrected).copy(
             resting = null,
             loading = null,
@@ -166,8 +165,8 @@ public object HomeSearchMachine : ScreenMachine<HomeSearchState, HomeSearchEvent
 
     private object Field : SearchLens<HomeSearchState> {
         override val screenId: String = SCREEN_ID
-        // Home keeps its own `ask_question` on its data (#1097, R-1097-28).
-        override val asks: Boolean = false
+        // Home asks across every app: the chat it opens is unscoped (#1135).
+        override val askScope: String = ""
 
         override fun field(state: HomeSearchState): SearchField = state.field_ ?: SearchField()
 
@@ -202,9 +201,9 @@ public object HomeSearchMachine : ScreenMachine<HomeSearchState, HomeSearchEvent
     )
 
     /**
-     * THE CORE'S HITS, GROUPED BY APP IN HOME'S TILE ORDER. A Locker hit
-     * cannot exist (Locker is not a search domain); one is dropped here all
-     * the same, so a domain added by mistake still never draws a secret's row.
+     * THE CORE'S HITS, GROUPED BY APP IN HOME'S TILE ORDER. A Locker hit is
+     * the item's plain title and kind, never a secret (the index holds none);
+     * it sits in Locker's group and opens through Locker's lock wall.
      *
      * A HIT IS GROUPED UNDER THE APP A MEMBER OPENS IT IN (#1128, R-1128-7): a
      * task hit sits in Agenda's group, among its events, and the group's header,
@@ -215,7 +214,7 @@ public object HomeSearchMachine : ScreenMachine<HomeSearchState, HomeSearchEvent
     public fun fold(hits: List<VaultSearchHit>): HomeSearchData {
         val order = SpringboardPolicy.SPRINGBOARD_ORDER
         val groups = hits
-            .filter { it.app_id != LOCKER && it.app_id.isNotBlank() }
+            .filter { it.app_id.isNotBlank() }
             .groupBy { AppHomes.appOf(it.app_id) }
             .entries
             .sortedBy { (app, _) -> order.indexOf(app).let { if (it < 0) order.size else it } }
@@ -261,12 +260,13 @@ public object HomeSearchMachine : ScreenMachine<HomeSearchState, HomeSearchEvent
 
     /** What one row IS, in a word — the soft column beside its title. */
     private fun kindOf(entity: String): String = when (entity) {
-        "knowledge.note" -> SharedCopy.SEARCH_KIND_NOTE
-        "core.party" -> SharedCopy.SEARCH_KIND_PERSON
-        "core.event" -> SharedCopy.SEARCH_KIND_EVENT
-        "schedule.task" -> SharedCopy.SEARCH_KIND_TASK
-        "core.content_item", "media.asset" -> SharedCopy.SEARCH_KIND_PHOTO
-        "core.document" -> SharedCopy.SEARCH_KIND_DOCUMENT
+        "note" -> SharedCopy.SEARCH_KIND_NOTE
+        "person" -> SharedCopy.SEARCH_KIND_PERSON
+        "event" -> SharedCopy.SEARCH_KIND_EVENT
+        "task" -> SharedCopy.SEARCH_KIND_TASK
+        "photo" -> SharedCopy.SEARCH_KIND_PHOTO
+        "document" -> SharedCopy.SEARCH_KIND_DOCUMENT
+        LOCKER_ITEM -> SharedCopy.SEARCH_KIND_LOCKER_ITEM
         CHAT_THREAD -> SharedCopy.SEARCH_KIND_CHAT
         else -> ""
     }
@@ -277,21 +277,23 @@ public object HomeSearchMachine : ScreenMachine<HomeSearchState, HomeSearchEvent
      * opens as the app's home.
      */
     private fun routeEntityOf(entity: String): String = when (entity) {
-        "knowledge.note" -> "note"
-        "core.party" -> "person"
-        "core.event" -> "event"
-        "schedule.task" -> "task"
-        "core.content_item", "media.asset" -> "photo"
-        "core.document" -> "document"
+        "note" -> "note"
+        "person" -> "person"
+        "event" -> "event"
+        "task" -> "task"
+        "photo" -> "photo"
+        "document" -> "document"
+        LOCKER_ITEM -> LOCKER_ITEM
         CHAT_THREAD -> CHAT_THREAD_NOUN
         else -> ""
     }
 
-    private const val LOCKER: String = "locker"
+    /** A Locker item (#1135): the index's entity and the router's noun are the same word. */
+    private const val LOCKER_ITEM: String = "locker_item"
 
     /** The member's conversations (R-1097-22): the app id the core answers them under, the index's entity, and the router's noun. */
     public const val CHAT: String = "chat"
-    private const val CHAT_THREAD: String = "chat.thread"
+    private const val CHAT_THREAD: String = "thread"
 
     /** `ChatCard.entity` for a thread: the shell's router opens it in the Chat tab, not as a route. */
     public const val CHAT_THREAD_NOUN: String = "thread"

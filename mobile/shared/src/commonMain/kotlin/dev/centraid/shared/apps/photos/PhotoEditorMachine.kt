@@ -49,7 +49,7 @@ import kotlin.math.sin
  *
  * ## What v0 did that this keeps, and the one thing it adds
  *
- * - The save lands as `media.add_asset` with `source_asset_id` naming the
+ * - The save lands as `photo.add` with `edited_from` naming the
  *   original — EDIT LINEAGE (#711), omitted never invented.
  *
  * And two things it changes:
@@ -58,9 +58,9 @@ import kotlin.math.sin
  *   ruling, #1029 photos port — Apple Photos' behaviour). v0 dated an edit
  *   today and carried neither place nor caption, which filed a crop of a 2019
  *   holiday at the top of the library, under today, nowhere. The capture time
- *   and its offset ride the ingest itself; the place is `media.set_asset_place`
- *   once the asset exists, because `add_asset` can only MINT a place from a
- *   coordinate and the original's place is a row that already exists.
+ *   and its offset ride the ingest itself, and so does the place:
+ *   `photo.add` keeps what the photograph it was edited from says of its date, its
+ *   zone, its caption and its place.
  * - **Cancel asks first when there is something to lose.** v0's Cancel dropped
  *   an edit without a word; a crop is minutes of fiddling, and a back gesture
  *   that throws it away is the kind of loss a member does not forgive. An
@@ -499,7 +499,7 @@ public object PhotoEditorMachine : ScreenMachine<PhotoEditorState, PhotoEditorEv
      * otherwise an `-edited` file name — v0's `editedFilename`, the suffix the
      * web editor writes, so the member can find it by name.
      *
-     * `media_asset.title` holds a caption and a file name in one column, and a
+     * an entity's title holds a caption and a file name in one column, and a
      * value still SHAPED like a file name was never captioned: it gives its
      * stem. An empty title gives v0's own `photograph`.
      */

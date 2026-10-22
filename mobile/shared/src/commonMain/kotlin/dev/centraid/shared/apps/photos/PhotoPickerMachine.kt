@@ -6,7 +6,6 @@ import centraid.screen.v1.PhotoPickerState
 import centraid.screen.v1.PhotosGridData
 import centraid.screen.v1.SeatState
 import dev.centraid.design.copy.PhotosCopy
-import dev.centraid.shared.kit.jsonString
 import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.ScreenMachine
@@ -56,8 +55,8 @@ public object PhotoPickerMachine : ScreenMachine<PhotoPickerState, PhotoPickerEv
             // THE ALBUM AND ITS NAME ARRIVE WITH THE OPEN, so the head says
             // "Add to Portugal" before any read has landed. And so does what
             // the album already holds — the picker cannot ask for it, because
-            // this screen's one read is over `media_asset` and the membership
-            // is `core_collection_entry`; the surface that pushed this screen
+            // this screen's one read is over `photo` and the membership
+            // is the album's `contains` edges; the surface that pushed this screen
             // was already showing the album and has the answer.
             event.opened != null -> {
                 val opened = event.opened
@@ -103,7 +102,7 @@ public object PhotoPickerMachine : ScreenMachine<PhotoPickerState, PhotoPickerEv
                 ),
             )
 
-            // A CHANGE ON `media_asset` — the library gained or lost a row.
+            // A CHANGE ON `photo` — the library gained or lost a row.
             //
             // Re-read rather than patch, for the grid's reason: the page's
             // ORDER is by capture time and a patched cell in the wrong position
@@ -132,7 +131,7 @@ public object PhotoPickerMachine : ScreenMachine<PhotoPickerState, PhotoPickerEv
             //
             // The guard is here and not only in the two views because it is the
             // rule and not the drawing: a member who could pick a taken cell
-            // would send `media.add_to_album` for a row the album has, and the
+            // would send `edge.add` for a row the album has, and the
             // command's own precondition would refuse it — which is a refusal
             // the member reads as a failure rather than as a no-op.
             event.pick != null -> {
@@ -153,7 +152,7 @@ public object PhotoPickerMachine : ScreenMachine<PhotoPickerState, PhotoPickerEv
                 }
             }
 
-            // ONE `media.add_to_album` PER PICKED ASSET.
+            // ONE `edge.add` PER PICKED ASSET.
             //
             // The command takes one `album_id` and one `asset_id` and its
             // schema is `additionalProperties: false`, so there is no batch to
@@ -195,14 +194,14 @@ public object PhotoPickerMachine : ScreenMachine<PhotoPickerState, PhotoPickerEv
             // A committed add moves the photograph from picked to taken, HERE
             // and not by re-reading: `already_in_album_asset_ids` is this
             // screen's own knowledge — the membership lives in
-            // `core_collection_entry` and this screen's read is over
-            // `media_asset` — so nothing a re-read could fetch would say it.
+            // the album's `contains` edges and this screen's read is over
+            // `photo` — so nothing a re-read could fetch would say it.
             // The cell stops being pickable and starts drawing as taken, which
             // is the same state it would have had if the member had opened the
             // picker a second later.
             //
             // **THE SETTLE IS KEYED TO ITS ROW.** A confirm submits one
-            // `media.add_to_album` per picked asset, and a screen that moved
+            // `edge.add` per picked asset, and a screen that moved
             // the WHOLE picked set to taken on the first commit would tell a
             // member their photographs are in an album when some of the adds
             // were refused. So one id moves. An EMPTY id means the settle is
@@ -288,7 +287,7 @@ public object PhotoPickerMachine : ScreenMachine<PhotoPickerState, PhotoPickerEv
     /**
      * The `ReadPage.screenId` that asks for the album's membership — served
      * beside the library page by `PhotoPickerBridge`, because this screen's
-     * page is `media_asset` and the membership is `core_collection_entry`.
+     * page is `photo` and the membership is the album's `contains` edges.
      */
     public const val MEMBERS_READ_ID: String = "photos.picker.members"
 
@@ -309,16 +308,15 @@ public object PhotoPickerMachine : ScreenMachine<PhotoPickerState, PhotoPickerEv
     /**
      * The registered command, spelled once.
      *
-     * `media.add_to_album` — `crates/vault/src/commands/media.rs`. See
+     * `edge.add` of a `contains` edge — `crates/vault/src/commands/edge.rs`. See
      * `NotesEditorMachine.SAVE_COMMAND` for what a command name that is not in
      * the registry costs: a member reading "That request does not make sense to
      * this build" on every attempt, for ever, with nothing red anywhere.
      */
-    public const val ADD_COMMAND: String = "media.add_to_album"
+    public const val ADD_COMMAND: String = PhotoWrites.EDGE_ADD
 
     internal fun addInput(collectionId: String, assetId: String): String =
-        "{\"album_id\":${jsonString(collectionId)}," +
-            "\"asset_id\":${jsonString(assetId)}}"
+        PhotoWrites.membership(collectionId, assetId)
 
     private fun firstLoad(state: PhotoPickerState): Step<PhotoPickerState> = Step(
         state.copy(
@@ -342,21 +340,23 @@ public object PhotoPickerMachine : ScreenMachine<PhotoPickerState, PhotoPickerEv
         state.data_?.cells?.map { it.asset_id }?.toSet() ?: emptySet()
 
     /**
-     * `media_asset` — the library this picker offers, and nothing else.
+     * `photo` — the library this picker offers — and the two tables its
+     * liveness is: `entity` (a trashed photograph leaves) and `edge` (an archived
+     * one does, and a starred one stays). A change that names no keys reads as
+     * "re-read", which is what every locally committed command emits.
      *
-     * NOT `core_collection_entry`, although the album's membership lives there
-     * and this screen renders it: `already_in_album_asset_ids` arrived with the
-     * route and is moved by this machine's own settle, so a change event over
-     * that table would ask for a re-read that could not answer the question.
-     * The shelf behind this picker is the surface that listens to it.
+     * The album's membership is an `edge` too, and a re-read over it is harmless:
+     * `already_in_album_asset_ids` arrived with the route and is moved by this
+     * machine's own settle, and what has been picked survives the re-read.
      */
     override fun rowsChanged(table: String, keys: List<String>): PhotoPickerEvent? =
         when (table) {
-            TABLE -> PhotoPickerEvent(rows_changed = PhotoPickerEvent.RowsChanged(asset_ids = keys))
+            TABLE, "entity", "edge" ->
+                PhotoPickerEvent(rows_changed = PhotoPickerEvent.RowsChanged(asset_ids = keys))
             else -> null
         }
 
-    private const val TABLE: String = "media_asset"
+    private const val TABLE: String = "photo"
 
     override fun seatChanged(seat: SeatState): PhotoPickerEvent =
         PhotoPickerEvent(seat_changed = PhotoPickerEvent.SeatChanged(seat = seat))

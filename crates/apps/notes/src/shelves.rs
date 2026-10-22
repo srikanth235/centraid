@@ -14,55 +14,51 @@
 //! stays what the window said so the screen can offer a wider one. The pinned
 //! filter is complete, because every pinned note is read beside the window.
 //!
-//! ## A NOTEBOOK IS A COLLECTION OF KIND `notebook`
+//! ## A NOTEBOOK HOLDS NOTES BY ONE COLUMN
 //!
-//! `core_collection` holds Photos' albums too, and says which a row is
-//! (`kind`, rung six). [`spine_statement`] reads notebooks only, so nothing
-//! here counts, hides or guesses at an album.
+//! A note names its notebook (`note.notebook_id`), so a notebook's count is the
+//! live shelf notes that name it, and the "Unfiled" row is the ones that name
+//! none. A trashed notebook took its notes to the trash with it, so a live note
+//! never names one.
 
 use std::collections::{BTreeMap, BTreeSet};
 
 use centraid_apps_kit::error::{KitError, KitResult};
-use centraid_apps_kit::page::PageRequest;
-use centraid_apps_kit::reads::{JOIN_FAN_OUT, PageDoor, in_list, read_pages, read_window};
-use centraid_apps_kit::row::{integer_or_zero, text_of};
-use centraid_apps_kit::statement::{PageOrder, PageQuery};
+use centraid_apps_kit::reads::{PageDoor, read_window};
+use centraid_apps_kit::row::text_of;
+use centraid_apps_kit::statement::PageBindValue;
 
 use crate::Denial;
-use crate::cards::CardDoor;
-use crate::journal::read_journal_note_ids;
+use crate::journal::read_memo_ids;
 use crate::queries::{
-    LibraryData, LibraryRow, NOTE_TARGET_TYPE, SHELF_ROWS, WINDOW_DEFAULT, WINDOW_MIN,
-    load_library, notebook_kind_bind, pinned_statement, recent_statement,
+    LibraryData, LibraryRow, WINDOW_DEFAULT, WINDOW_MIN, load_library, note_rows, notebooks,
+    pinned_ids, recent_statement, texts,
 };
+use centraid_apps_kit::reads::Read;
 
-/// How the shelf is ordered. Pinned notes lead under every order.
+/// How the library's shelf is ordered. PINNED NOTES LEAD under every order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Sort {
-    /// Newest `updated_at` first — the library's own order.
     #[default]
     Updated,
-    /// Newest `created_at` first.
     Created,
-    /// Title, case-insensitively.
     Title,
 }
 
-/// What the screen narrows the library to.
+/// What the screen narrows the shelf by.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct LibraryFilter {
     pub sort: Sort,
     pub pinned_only: bool,
-    /// Only notes filed here.
+    /// Only notes filed in this notebook.
     pub notebook_id: Option<String>,
-    /// Only notes filed nowhere. Ignored when `notebook_id` is set.
+    /// Only notes filed in no notebook; ignored when `notebook_id` is set.
     pub unfiled_only: bool,
-    /// Only notes carrying EVERY one of these concepts.
+    /// Only notes carrying every one of these tags.
     pub tag_concept_ids: Vec<String>,
 }
 
-/// The library, narrowed and ordered. The trash shelf is dropped: it is its
-/// own query ([`load_trash`]).
+/// Narrow and order what [`load_library`] folded. The trash is not part of it.
 #[must_use]
 pub fn shape_library(data: LibraryData, filter: &LibraryFilter) -> LibraryData {
     let wanted_tags: BTreeSet<&str> = filter
@@ -74,7 +70,7 @@ pub fn shape_library(data: LibraryData, filter: &LibraryFilter) -> LibraryData {
     let mut notes: Vec<LibraryRow> = data
         .notes
         .into_iter()
-        .filter(|row| !filter.pinned_only || row.pinned == 1)
+        .filter(|row| !filter.pinned_only || row.pinned)
         .filter(|row| match (&filter.notebook_id, filter.unfiled_only) {
             (Some(notebook), _) => row.notebook_ids.iter().any(|id| id == notebook),
             (None, true) => row.notebook_ids.is_empty(),
@@ -88,32 +84,24 @@ pub fn shape_library(data: LibraryData, filter: &LibraryFilter) -> LibraryData {
             })
         })
         .collect();
-    // STABLE, and pinned first under every order: the fold's own order is the
-    // tie-break, so two notes with one instant keep their page order.
     match filter.sort {
-        Sort::Updated => {
-            notes.sort_by(|left, right| {
-                right
-                    .pinned
-                    .cmp(&left.pinned)
-                    .then_with(|| right.updated_at.cmp(&left.updated_at))
-            });
-        }
-        Sort::Created => {
-            notes.sort_by(|left, right| {
-                right
-                    .pinned
-                    .cmp(&left.pinned)
-                    .then_with(|| right.created_at.cmp(&left.created_at))
-            });
-        }
-        Sort::Title => {
-            notes.sort_by(|left, right| {
-                right.pinned.cmp(&left.pinned).then_with(|| {
-                    title_key(left.title.as_deref()).cmp(&title_key(right.title.as_deref()))
-                })
-            });
-        }
+        Sort::Updated => notes.sort_by(|left, right| {
+            right
+                .pinned
+                .cmp(&left.pinned)
+                .then_with(|| right.updated_at.cmp(&left.updated_at))
+        }),
+        Sort::Created => notes.sort_by(|left, right| {
+            right
+                .pinned
+                .cmp(&left.pinned)
+                .then_with(|| right.created_at.cmp(&left.created_at))
+        }),
+        Sort::Title => notes.sort_by(|left, right| {
+            right.pinned.cmp(&left.pinned).then_with(|| {
+                title_key(left.title.as_deref()).cmp(&title_key(right.title.as_deref()))
+            })
+        }),
     }
     LibraryData {
         notes,
@@ -122,71 +110,47 @@ pub fn shape_library(data: LibraryData, filter: &LibraryFilter) -> LibraryData {
     }
 }
 
+/// A title as the shelf sorts it: trimmed, case-folded.
 fn title_key(title: Option<&str>) -> String {
     title.unwrap_or_default().trim().to_lowercase()
 }
 
-/// The trash shelf: newest `deleted_at` first, at most
-/// [`crate::queries::SHELF_ROWS`], journal entries excluded (D-1020-N3).
-///
-/// It is the library fold's own `trash`, read with the SMALLEST recent window
-/// the manifest allows, so the decorations (notebooks, tags, cards) are the
-/// ones the library would draw and the recent window costs as little as it
-/// can.
+/// The trash shelf: trashed notes, newest deleted first, memos left out.
 ///
 /// # Errors
 ///
-/// The kit's own refusals; a denial is the tuple's second element.
-pub fn load_trash(
-    door: &dyn PageDoor,
-    cards: &dyn CardDoor,
-) -> KitResult<(Vec<LibraryRow>, Option<Denial>)> {
+/// The kit's own refusals; a door's refusal is the tuple's second element.
+pub fn load_trash(door: &dyn PageDoor) -> KitResult<(Vec<LibraryRow>, Option<Denial>)> {
     let window = i64::try_from(WINDOW_MIN).unwrap_or(i64::MAX);
-    let (data, denial) = load_library(door, cards, Some(window))?;
+    let (data, denial) = load_library(door, Some(window))?;
     Ok((data.trash, denial))
 }
 
-/// One collection on the spine.
+/// One notebook on the spine, with the live notes filed in it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NotebookEntry {
     pub notebook_id: String,
     pub name: Option<String>,
     pub sort_order: i64,
     pub parent_notebook_id: Option<String>,
-    /// Live, non-journal notes filed here.
     pub note_count: usize,
 }
 
-/// What `notebooks` answers.
+/// What `notes.notebooks` answers.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct NotebooksData {
     pub notebooks: Vec<NotebookEntry>,
-    /// The "Unfiled" row's count (#1047): live, non-journal notes filed in no
-    /// notebook, over the library's default window plus every pinned note —
-    /// the rows `LibraryFilter::unfiled_only` draws at that window.
+    /// The "Unfiled" row's count, over the same window the library reads.
     pub unfiled_count: usize,
-    /// More live notes exist beyond that window.
+    /// The window filled, so more unfiled notes may exist.
     pub unfiled_truncated: bool,
 }
 
-/// Every notebook, with its parent — `kind = 'notebook'`, never an album.
-#[must_use]
-pub fn spine_statement() -> PageQuery {
-    PageQuery::new(
-        "notes.notebooks.collections",
-        "collection_id, name, sort_order, parent_collection_id",
-        "core_collection",
-        PageOrder::asc("collection_id", "collection_id"),
-    )
-    .filter("kind = ?", notebook_kind_bind())
-}
-
-/// The notebooks, by `sort_order` then id, with their counts.
+/// The notebook spine with its counts.
 ///
 /// # Errors
 ///
-/// The kit's own refusals — a fan-out past its cap included. A denial is the
-/// tuple's second element.
+/// The kit's own refusals; a door's refusal is the tuple's second element.
 pub fn load_notebooks(door: &dyn PageDoor) -> KitResult<(NotebooksData, Option<Denial>)> {
     match notebooks_body(door) {
         Ok(data) => Ok((data, None)),
@@ -203,118 +167,73 @@ pub fn load_notebooks(door: &dyn PageDoor) -> KitResult<(NotebooksData, Option<D
 }
 
 fn notebooks_body(door: &dyn PageDoor) -> KitResult<NotebooksData> {
-    let collections = read_pages(door, &spine_statement(), JOIN_FAN_OUT)?;
-    let ids: Vec<String> = collections
-        .iter()
-        .filter_map(|row| text_of(row, "collection_id"))
-        .collect();
-    let journal: BTreeSet<String> = read_journal_note_ids(door)?.into_iter().collect();
-    if ids.is_empty() {
-        let (unfiled_count, unfiled_truncated) = unfiled(door, &BTreeSet::new(), &journal)?;
-        return Ok(NotebooksData {
-            notebooks: Vec::new(),
-            unfiled_count,
-            unfiled_truncated,
-        });
+    let books = notebooks(door)?;
+    let memos: BTreeSet<String> = read_memo_ids(door)?.into_iter().collect();
+    let book_ids: Vec<String> = books.iter().map(|book| book.notebook_id.clone()).collect();
+    // Which notes name a notebook, then which of those are live shelf notes.
+    let filed = Read {
+        name: "notes.notebooks.filed",
+        table: "note",
+        select: "id, notebook_id",
+        order: ("id", "id"),
+        column: "notebook_id",
     }
-    let fragment = in_list("collection_id", &ids)?;
-    let entries = read_pages(
+    .of(door, &book_ids, None)?;
+    let live: BTreeSet<String> = Read {
+        name: "notes.notebooks.live",
+        table: "entity",
+        select: "id",
+        order: ("id", "id"),
+        column: "id",
+    }
+    .of(
         door,
-        &PageQuery::new(
-            "notes.notebooks.entries",
-            "entry_id, collection_id, target_type, target_id",
-            "core_collection_entry",
-            PageOrder::asc("entry_id", "entry_id"),
-        )
-        .filter(&fragment.sql, fragment.bind),
-        JOIN_FAN_OUT,
-    )?;
-    let mut note_ids: Vec<String> = entries
-        .iter()
-        .filter(|row| text_of(row, "target_type").as_deref() == Some(NOTE_TARGET_TYPE))
-        .filter_map(|row| text_of(row, "target_id"))
-        .collect();
-    note_ids.sort_unstable();
-    note_ids.dedup();
-    // A NOTE COUNTS WHEN IT IS ON THE SHELF: live, and not a journal entry
-    // (D-1020-N3) — the same rows the library would draw in this notebook.
-    let filed: BTreeSet<String> = note_ids.iter().cloned().collect();
-    let live: BTreeSet<String> = if note_ids.is_empty() {
-        BTreeSet::new()
-    } else {
-        let fragment = in_list("note_id", &note_ids)?;
-        read_pages(
-            door,
-            &PageQuery::new(
-                "notes.notebooks.live",
-                "note_id",
-                "knowledge_note",
-                PageOrder::asc("note_id", "note_id"),
-            )
-            .filter(
-                &format!("{} AND deleted_at IS NULL", fragment.sql),
-                fragment.bind,
-            ),
-            JOIN_FAN_OUT,
-        )?
-        .iter()
-        .filter_map(|row| text_of(row, "note_id"))
-        .filter(|id| !journal.contains(id))
-        .collect()
-    };
-    let mut notes: BTreeMap<String, usize> = BTreeMap::new();
-    for entry in &entries {
-        let Some(collection) = text_of(entry, "collection_id") else {
-            continue;
-        };
-        if text_of(entry, "target_type").as_deref() == Some(NOTE_TARGET_TYPE)
-            && text_of(entry, "target_id").is_some_and(|id| live.contains(&id))
+        &texts(&filed, "id"),
+        Some((
+            "kind = ? AND deleted_at IS NULL",
+            vec![PageBindValue::Text("note".to_owned())],
+        )),
+    )?
+    .iter()
+    .filter_map(|row| text_of(row, "id"))
+    .filter(|id| !memos.contains(id))
+    .collect();
+    let mut counts: BTreeMap<String, usize> = BTreeMap::new();
+    for row in &filed {
+        if let (Some(id), Some(book)) = (text_of(row, "id"), text_of(row, "notebook_id"))
+            && live.contains(&id)
         {
-            *notes.entry(collection).or_default() += 1;
+            *counts.entry(book).or_default() += 1;
         }
     }
-    let mut notebooks: Vec<NotebookEntry> = collections
-        .iter()
-        .filter_map(|row| {
-            let notebook_id = text_of(row, "collection_id")?;
-            Some(NotebookEntry {
-                name: text_of(row, "name"),
-                sort_order: integer_or_zero(row, "sort_order"),
-                parent_notebook_id: text_of(row, "parent_collection_id"),
-                note_count: notes.get(&notebook_id).copied().unwrap_or_default(),
-                notebook_id,
-            })
-        })
-        .collect();
-    // `sort_order` is sibling-scoped, so it is a sort, not a key; the id read
-    // order is the tie-break.
-    notebooks.sort_by_key(|notebook| notebook.sort_order);
-    let (unfiled_count, unfiled_truncated) = unfiled(door, &filed, &journal)?;
+    let (unfiled_count, unfiled_truncated) = unfiled(door, &memos)?;
     Ok(NotebooksData {
-        notebooks,
+        notebooks: books
+            .into_iter()
+            .map(|book| NotebookEntry {
+                note_count: counts.get(&book.notebook_id).copied().unwrap_or_default(),
+                notebook_id: book.notebook_id,
+                name: book.name,
+                sort_order: book.sort_order,
+                parent_notebook_id: book.parent_notebook_id,
+            })
+            .collect(),
         unfiled_count,
         unfiled_truncated,
     })
 }
 
-/// THE "UNFILED" COUNT, over the library's own reads: the default recent
-/// window plus every pinned note (read beside it, as the library does), minus
-/// the journal and every note filed in a notebook. Whether the window filled
-/// is the second half of the answer, so a count of a window never reads as a
-/// count of the vault.
-fn unfiled(
-    door: &dyn PageDoor,
-    filed: &BTreeSet<String>,
-    journal: &BTreeSet<String>,
-) -> KitResult<(usize, bool)> {
+/// The "Unfiled" row: the shelf's notes (the window and every pin) filed in no
+/// notebook, memos left out.
+fn unfiled(door: &dyn PageDoor, memos: &BTreeSet<String>) -> KitResult<(usize, bool)> {
     let recent = read_window(door, &recent_statement(), WINDOW_DEFAULT)?;
-    let pinned = door.page(&pinned_statement(), &PageRequest::first(SHELF_ROWS))?;
-    let shelf: BTreeSet<String> = recent
-        .rows
-        .iter()
-        .chain(&pinned.rows)
-        .filter_map(|row| text_of(row, "note_id"))
-        .filter(|id| !filed.contains(id) && !journal.contains(id))
-        .collect();
-    Ok((shelf.len(), recent.filled))
+    let mut shelf: BTreeSet<String> = texts(&recent.rows, "id").into_iter().collect();
+    shelf.extend(pinned_ids(door)?);
+    shelf.retain(|id| !memos.contains(id));
+    let ids: Vec<String> = shelf.into_iter().collect();
+    let count = note_rows(door, &ids)?
+        .values()
+        .filter(|note| note.deleted_at.is_none() && note.notebook_id.is_none())
+        .count();
+    Ok((count, recent.filled))
 }

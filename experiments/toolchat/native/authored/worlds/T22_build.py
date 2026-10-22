@@ -202,7 +202,7 @@ def tasks():
         {"key": "gutter", "name": "Clean the gutters", "due": "2026-06-20", "completed": "2026-06-21T11:00",
          "list": "home_l"},
         # summer house
-        {"key": "fence", "name": "Paint the summer house fence", "status": "in_progress", "priority": 3, "effort": 480,
+        {"key": "fence", "name": "Paint the summer house fence", "priority": 3, "effort": 480,
          "list": "sh_l", "description": "falu red, two coats"},
         {"key": "hose", "name": "Buy new garden hose", "due": "2026-07-24", "effort": 20, "list": "sh_l"},
         {"key": "sh_share", "name": "Transfer summer house share to Karin", "due": "2026-07-26", "priority": 1,
@@ -215,8 +215,7 @@ def tasks():
         {"key": "shutters", "name": "Oil the window shutters", "due": "2026-08-08", "priority": 4, "effort": 90,
          "list": "shr_l"},
         # warehouse
-        {"key": "aug_schedule", "name": "Shift schedule for August", "due": "2026-07-20", "priority": 1, "effort": 90,
-         "status": "in_progress", "list": "work_l", "description": "late shift, cover the holiday gaps"},
+        {"key": "aug_schedule", "name": "Shift schedule for August", "due": "2026-07-20", "priority": 1, "effort": 90, "list": "work_l", "description": "late shift, cover the holiday gaps"},
         {"key": "holiday_req", "name": "Collect holiday requests", "parent": "aug_schedule", "due": "2026-07-15",
          "effort": 30},
         {"key": "licences", "name": "Check forklift licences", "parent": "aug_schedule", "due": "2026-07-17",
@@ -228,7 +227,7 @@ def tasks():
         {"key": "racking", "name": "Report broken pallet racking", "due": "2026-07-10",
          "completed": "2026-07-09T22:00", "list": "work_l"},
         {"key": "vests", "name": "Order new safety vests", "priority": 3, "effort": 15, "list": "work_l"},
-        {"key": "onboard", "name": "Onboard Aisha", "status": "in_progress", "effort": 240, "list": "work_l",
+        {"key": "onboard", "name": "Onboard Aisha", "effort": 240, "list": "work_l",
          "description": "buddy with Fatima for two weeks"},
         {"key": "sick_report", "name": "Send the sick leave report", "due": "2026-07-14", "effort": 20, "list": "work_l"},
         {"key": "scanners", "name": "Return broken scanners", "due": "2026-07-17", "effort": 15, "priority": 2},
@@ -253,7 +252,7 @@ def tasks():
         {"key": "sunscreen", "name": "Buy sunscreen", "effort": 5, "list": "shop_l"},
         {"key": "charcoal", "name": "Buy charcoal", "due": "2026-07-18", "effort": 10, "list": "shop_l"},
         # party
-        {"key": "party", "name": "Mamma's 70th", "due": "2026-07-25", "priority": 2, "status": "in_progress"},
+        {"key": "party", "name": "Mamma's 70th", "due": "2026-07-25", "priority": 2},
         {"key": "cake", "name": "Order the cake", "parent": "party", "due": "2026-07-20", "effort": 15},
         {"key": "speech", "name": "Write a speech", "parent": "party", "due": "2026-07-24", "effort": 60},
         # misc

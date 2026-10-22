@@ -209,7 +209,7 @@ def tasks():
         {"key": "inverter", "name": "Replace inverter battery", "due": "2026-01-31", "priority": 2, "effort": 60},
         # temple
         {"key": "volunteers", "name": "Finalise Thai Poosam volunteer list", "due": "2026-01-24", "list": "templelist",
-         "priority": 1, "effort": 60, "status": "in_progress", "description": "20 people, two shifts"},
+         "priority": 1, "effort": 60, "description": "20 people, two shifts"},
         {"key": "vol_call", "name": "Call the college volunteers", "parent": "volunteers", "due": "2026-01-22", "effort": 30},
         {"key": "vol_print", "name": "Print the volunteer badges", "parent": "volunteers", "due": "2026-01-29", "effort": 30},
         {"key": "rice_order", "name": "Order annadhanam rice", "completed": "2026-01-10T19:00", "list": "templelist"},
@@ -223,7 +223,7 @@ def tasks():
         {"key": "cne_hours", "name": "Log CNE hours", "due": "2026-01-31", "list": "iculist", "effort": 30},
         {"key": "tnnmc", "name": "Renew TNNMC registration", "due": "2026-03-15", "list": "iculist", "priority": 2, "effort": 60,
          "description": "online portal"},
-        {"key": "handover_sheet", "name": "Update handover sheet template", "list": "iculist", "status": "in_progress",
+        {"key": "handover_sheet", "name": "Update handover sheet template", "list": "iculist",
          "effort": 45},
         {"key": "farhan_card", "name": "Get a card for Farhan", "due": "2026-01-29", "list": "iculist"},
         {"key": "uniform", "name": "Collect new uniforms", "completed": "2026-01-07T19:30", "list": "iculist"},

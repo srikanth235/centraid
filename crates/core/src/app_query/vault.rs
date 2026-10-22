@@ -1,35 +1,33 @@
-//! HOME'S ARM OF THE APP QUERY (R-CHROME-6): `vault.search`, every app's
-//! search domain but Locker's, for Home's search bar.
+//! HOME'S ARM OF THE APP QUERY: `vault.search`, every app's kinds, Locker's
+//! included, for Home's search bar.
 //!
-//! **NOT A SECOND SEARCH.** The rows are Notes' powerbox's
-//! ([`queries::load_link_targets`]): one isolated probe per
-//! `centraid_search::DOMAINS` domain, the owner as principal, People's journal
-//! notes left out, Locker never a domain (D-1020-N1). This module opens the FTS
-//! door, runs that loader and converts — plus the one thing a hit needs to be
-//! OPENED rather than linked: a photo is a content item in the index and a
-//! media asset in Photos, so its asset is read here, by content id, and a
-//! photo whose asset is gone or trashed is dropped; a person is a `core.party`
-//! in the index and a live `people_profile` in People, so a party with no live
-//! profile (a bare party, a trashed person) is dropped too.
+//! **ONE QUESTION PER KEYSTROKE.** The rows are the kinds Notes' powerbox can
+//! link ([`queries::load_link_targets`] asks them one probe each, a sheet of seven
+//! columns, Locker items among them) and the NAMED kinds beside them, a notebook
+//! or an album, a project, a Docs folder, and a chat thread (entity `thread`, app `chat`, found by its
+//! title and by what the member said). Home asks the door ONCE
+//! ([`queries::load_targets_each`], `Search::query_each`) for at most eight
+//! rows of each kind: eleven statements per keystroke were seconds on a vault of
+//! years, and one is milliseconds. The owner is the principal, People's journal
+//! notes are left out. A Locker item is a kind the index holds by its plain text,
+//! so it is a row whether or not Locker is locked; a sealed secret is never in
+//! the index, and opening the row passes through Locker's own gate, on the shell
+//! side.
 //!
-//! **THE NAMED ARE HITS TOO** (#1097, R-1097-19..24): one more probe per named
-//! index ([`centraid_search::NAMED`]) — a notebook or an album, a project, a
-//! Docs folder, and a chat thread (entity `chat.thread`, app
-//! `chat`, found by its title and by what the member said) — appended after the
-//! domains' rows, each with the app it opens in; every one opens by its `id`. They are not domains: the Notes powerbox above
-//! does not see them. A shell with no Chat tab draws no `chat` row.
+//! The linkable rows come first and the containers after them, each with the app
+//! it opens in; every one opens by its `id`. A shell with no Chat tab draws no
+//! `chat` row. A photo opens by its own id (the index holds live photographs
+//! only, so none is trashed); a person is in People's circle only when live and
+//! neither the owner nor a pet, so those are dropped.
 //!
-//! **A TYPO IS CORRECTED ACROSS THE SIX DOMAINS AND THE NAMED KINDS** (#1097,
-//! R4, R8), only when the whole answer, rows and containers, is empty, and the
-//! answer says so in `corrected`.
+//! **A typo is corrected across all of those kinds**, only when the whole answer,
+//! rows and containers, is empty, and the answer says so in `corrected`.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
 use centraid_api_proto::core_v1 as wire;
 use centraid_apps_kit::error::KitResult;
-use centraid_apps_kit::reads::{FanOutBound, PageDoor, in_list, read_pages};
-use centraid_apps_kit::row::text_of;
-use centraid_apps_kit::statement::{PageOrder, PageQuery};
+use centraid_apps_kit::reads::PageDoor;
 use centraid_apps_notes::queries;
 use centraid_search::{Principal, Target};
 use centraid_vault::Vault;
@@ -41,104 +39,104 @@ use crate::error::{CoreError, Result};
 type Answer = wire::app_query_response::Answer;
 
 /// The entity a photo is in the index (`centraid_search::DOMAINS`).
-const PHOTO_ENTITY: &str = "core.content_item";
+const PHOTO_ENTITY: &str = "photo";
 
-/// The party entity a person is in the index (`centraid_search::DOMAINS`).
-const PARTY_ENTITY: &str = "core.party";
+/// The kind a person is in the index.
+const PERSON_ENTITY: &str = "person";
 
-/// The rows one answer can open: the loader's eight per domain, with room.
-const OPENABLE: FanOutBound = FanOutBound::new(64, 1);
-
-/// What a Home answer is made of: the hits that open something, the media
-/// asset each photo opens by, and the containers that matched.
-type Opened = (Vec<Target>, BTreeMap<String, String>, Vec<Target>);
+/// What a Home answer is made of: the hits that open something and the
+/// containers that matched.
+type Opened = (Vec<Target>, Vec<Target>);
 
 pub(super) fn search(
     vault: &Vault,
     door: &VaultDoor<'_>,
     asked: &wire::VaultSearchRequest,
 ) -> Result<Answer> {
-    // ISOLATED PER DOMAIN, as the powerbox is (`notes::link_targets`): the
-    // plain FTS door, so one domain's refusal drops its rows and not the answer.
-    //
-    // THE CORRECTION SPANS THE SIX DOMAINS AND THE NAMED KINDS (#1097, R4, R8,
-    // R-1097-19..21) and runs only when the whole answer, after the rows that
-    // cannot be opened are dropped, is empty; the vocabulary it reads is every
-    // domain's and every container index's.
+    // THE CORRECTION SPANS THE LINKABLE AND THE NAMED KINDS and runs only when
+    // the whole answer, after the rows that cannot be opened are dropped, is
+    // empty; the vocabulary it reads is the one index's.
     let loaded = vault.read(|connection| {
-        let index =
-            centraid_search::SqliteDoor::open(connection).map_err(|error| CoreError::Invariant {
+        let index = centraid_search::SqliteDoor::open(connection, vault.words()).map_err(|error| {
+            CoreError::Invariant {
                 context: format!("the search index will not open: {error}"),
-            });
-        let entities: Vec<&str> = centraid_search::DOMAINS
+            }
+        });
+        let entities: Vec<&str> = centraid_vault::index::SEARCHABLE
             .iter()
-            .map(|domain| domain.entity)
-            .chain(
-                centraid_search::NAMED
-                    .iter()
-                    .map(|container| container.entity),
-            )
+            .map(|kind| kind.as_str())
             .collect();
         Ok(index.map(|index| {
             corrected_search(
                 &index,
                 &entities,
                 &asked.term,
-                |(targets, _, found): &Opened| targets.is_empty() && found.is_empty(),
+                |(targets, found): &Opened| targets.len() + found.len(),
+                |(exact, exact_found), (again, again_found)| {
+                    (
+                        filled_each_kind(exact, again, &row_kinds()),
+                        filled_each_kind(exact_found, again_found, named::all()),
+                    )
+                },
                 |term| {
-                    let (data, denial) =
-                        queries::load_link_targets(door, &index, &Principal::Owner, term)?;
+                    // ONE STATEMENT for the linkable kinds (Locker's among them) and the
+                    // named kinds.
+                    let (all, denial) = queries::load_targets_each(
+                        door,
+                        &index,
+                        &Principal::Owner,
+                        term,
+                        named::all(),
+                    )?;
                     if denial.is_some() {
-                        return Ok(((Vec::new(), BTreeMap::new(), Vec::new()), denial));
+                        return Ok(((Vec::new(), Vec::new()), denial));
                     }
-                    let assets = photo_assets(door, &data.targets)?;
-                    let people = live_people(door, &data.targets)?;
-                    let targets = data
-                        .targets
+                    let (found, rows): (Vec<Target>, Vec<Target>) = all
                         .into_iter()
-                        .filter(|target| match target.entity.as_str() {
-                            PHOTO_ENTITY => assets.contains_key(&target.id),
-                            PARTY_ENTITY => people.contains(&target.id),
-                            _ => true,
+                        .partition(|target| named::is_named(&target.entity));
+                    let people = live_people(door, &rows)?;
+                    let targets = rows
+                        .into_iter()
+                        .filter(|target| {
+                            target.entity != PERSON_ENTITY || people.contains(&target.id)
                         })
                         .collect();
-                    // ISOLATED PER NAMED INDEX, like the domains above.
-                    let found = named::of_all(&index, term);
-                    Ok(((targets, assets, found), None))
+                    Ok(((targets, found), None))
                 },
             )
         }))
     })??;
     let zone = zone_if_any(vault, &asked.tz)?;
-    settle(door, loaded, |((targets, assets, found), corrected)| {
+    settle(door, loaded, |((targets, found), corrected)| {
         Answer::VaultSearch(wire::VaultSearch {
             corrected,
             hits: targets
                 .into_iter()
                 .map(|target| {
+                    // A photograph opens by its own id.
                     let open_id = if target.entity == PHOTO_ENTITY {
-                        assets.get(&target.id).cloned().unwrap_or_default()
+                        target.id.clone()
                     } else {
                         String::new()
                     };
                     wire::VaultSearchHit {
+                        app_id: named::app_of(&target.entity).to_owned(),
                         subtitle_local_day: subtitle_day(zone.as_ref(), &target.subtitle),
                         entity: target.entity,
                         id: target.id,
                         title: target.title,
                         subtitle: target.subtitle,
-                        app_id: target.app_id,
                         snippet: target.snippet,
                         open_id,
                     }
                 })
                 .chain(found.into_iter().map(|container| wire::VaultSearchHit {
+                    app_id: named::app_of(&container.entity).to_owned(),
                     subtitle_local_day: subtitle_day(zone.as_ref(), &container.subtitle),
                     entity: container.entity,
                     id: container.id,
                     title: container.title,
                     subtitle: container.subtitle,
-                    app_id: container.app_id,
                     snippet: container.snippet,
                     open_id: String::new(),
                 }))
@@ -147,76 +145,60 @@ pub(super) fn search(
     })
 }
 
-/// Each photo hit's LIVE media asset, by content id. Empty when no hit is a
-/// photo — an `IN ()` is a read nobody needed.
-fn photo_assets(door: &dyn PageDoor, targets: &[Target]) -> KitResult<BTreeMap<String, String>> {
-    let content_ids: Vec<String> = targets
-        .iter()
-        .filter(|target| target.entity == PHOTO_ENTITY)
-        .map(|target| target.id.clone())
-        .collect();
-    if content_ids.is_empty() {
-        return Ok(BTreeMap::new());
+/// The hits of `exact`, then those of `extra` that are not among them, at most
+/// [`queries::LINK_TARGET_ROWS`] of each kind: Home's window is per kind.
+/// The kinds' order is kept: a kind that gained a row is still where its kind was.
+fn filled_each_kind(exact: Vec<Target>, extra: Vec<Target>, kinds: &[&str]) -> Vec<Target> {
+    let mut per_kind: std::collections::BTreeMap<String, usize> = std::collections::BTreeMap::new();
+    for target in &exact {
+        *per_kind.entry(target.entity.clone()).or_default() += 1;
     }
-    let fragment = in_list("content_id", &content_ids)?;
-    let rows = read_pages(
-        door,
-        &PageQuery::new(
-            "vault.search.photo_assets",
-            "asset_id, content_id",
-            "media_asset",
-            PageOrder::asc("asset_id", "asset_id"),
-        )
-        .filter(
-            &format!("{} AND deleted_at IS NULL", fragment.sql),
-            fragment.bind,
-        ),
-        OPENABLE,
-    )?;
-    Ok(rows
+    let mut seen: BTreeSet<(String, String)> = exact
         .iter()
-        .filter_map(|row| Some((text_of(row, "content_id")?, text_of(row, "asset_id")?)))
-        .collect())
+        .map(|target| (target.entity.clone(), target.id.clone()))
+        .collect();
+    let mut hits = exact;
+    for target in extra {
+        let held = per_kind.entry(target.entity.clone()).or_default();
+        if *held < queries::LINK_TARGET_ROWS
+            && seen.insert((target.entity.clone(), target.id.clone()))
+        {
+            *held += 1;
+            hits.push(target);
+        }
+    }
+    hits.sort_by_key(|target| kinds.iter().position(|kind| *kind == target.entity));
+    hits
 }
 
-/// The party hits that have a LIVE People profile: the ones People can show.
-///
-/// `core.party` is every party in the vault — a bare party, a trashed person
-/// — and only a live `people_profile` makes one a person in People, whose own
-/// search drops the rest (`people_profile.deleted_at IS NULL`). A Home row opens
-/// People at that person, so one that cannot be shown is not a hit.
-fn live_people(door: &dyn PageDoor, targets: &[Target]) -> KitResult<BTreeSet<String>> {
-    let party_ids: Vec<String> = targets
+/// The kinds Home lists as rows, in the order it lists them: the kinds a note
+/// can link, Locker's item last.
+fn row_kinds() -> Vec<&'static str> {
+    centraid_vault::commands::note::LINKABLE
         .iter()
-        .filter(|target| target.entity == PARTY_ENTITY)
+        .map(|kind| kind.as_str())
+        .collect()
+}
+
+/// The person hits People can show: the live circle. The index holds the owner
+/// and a pet too, and a Home row opens People at that person, so one that cannot
+/// be shown is not a hit.
+fn live_people(door: &dyn PageDoor, targets: &[Target]) -> KitResult<BTreeSet<String>> {
+    let person_ids: Vec<String> = targets
+        .iter()
+        .filter(|target| target.entity == PERSON_ENTITY)
         .map(|target| target.id.clone())
         .collect();
-    if party_ids.is_empty() {
+    if person_ids.is_empty() {
         return Ok(BTreeSet::new());
     }
-    let fragment = in_list("party_id", &party_ids)?;
-    let rows = read_pages(
-        door,
-        &PageQuery::new(
-            "vault.search.live_people",
-            "party_id",
-            "people_profile",
-            PageOrder::asc("party_id", "party_id"),
-        )
-        .filter(
-            &format!("{} AND deleted_at IS NULL", fragment.sql),
-            fragment.bind,
-        ),
-        OPENABLE,
-    )?;
-    Ok(rows
-        .iter()
-        .filter_map(|row| text_of(row, "party_id"))
-        .collect())
+    centraid_apps_people::queries::circle_among(door, &person_ids)
 }
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
     use super::*;
     use crate::config::CoreConfig;
     use crate::handle::{Core, Handle};
@@ -239,7 +221,7 @@ mod tests {
 
     impl Scratch {
         fn founded() -> Self {
-            let dir = centraid_ontology::golden::scratch_dir();
+            let dir = centraid_ontology::scratch::scratch_dir();
             std::fs::create_dir_all(&dir).expect("the directory is made");
             let now = centraid_vault::time::recurrence::parse_instant_ms(NOW).expect("an instant");
             let handle = Core::open(CoreConfig::new(dir.join("vault.db")).with_clock(
@@ -308,45 +290,49 @@ mod tests {
 
     /// ONE TERM, EVERY APP THAT HOLDS IT: a note and a task that share a word
     /// both answer, each naming the app it opens in; a blank term answers
-    /// nothing rather than every row; and Locker is never asked — it is not a
-    /// domain, so no hit can name it.
+    /// nothing rather than every row; and a Locker item answers by its plain
+    /// text, never by a sealed cell.
     #[test]
-    fn one_term_answers_every_app_but_locker() {
+    fn one_term_answers_every_app_locker_included() {
         let scratch = Scratch::founded();
         let note = scratch.run(
-            "knowledge.create_note",
-            serde_json::json!({ "title": "Cabin packing", "body_text": "bring the lantern" }),
-        )["note_id"]
+            "note.create",
+            serde_json::json!({ "title": "Cabin packing", "body": "bring the lantern" }),
+        )["id"]
             .as_str()
             .expect("a note id")
             .to_owned();
-        let task = scratch.run(
-            "schedule.add_task",
-            serde_json::json!({ "title": "Book the cabin" }),
-        )["task_id"]
+        let task = scratch.run("task.add", serde_json::json!({ "title": "Book the cabin" }))["id"]
             .as_str()
             .expect("a task id")
             .to_owned();
+        let item = "cabin-keys".to_owned();
+        scratch.run(
+            "locker.add_item",
+            serde_json::json!({"item_id": item, "type": "login", "title": "Cabin keys",
+                               "username": "cabinwarden"}),
+        );
         let found = scratch.search("cabin");
         let hits: Vec<(&str, &str, &str)> = found
             .hits
             .iter()
             .map(|hit| (hit.app_id.as_str(), hit.entity.as_str(), hit.id.as_str()))
             .collect();
+        assert!(hits.contains(&("notes", "note", note.as_str())), "{hits:?}");
+        assert!(hits.contains(&("tasks", "task", task.as_str())), "{hits:?}");
         assert!(
-            hits.contains(&("notes", "knowledge.note", note.as_str())),
+            hits.contains(&("locker", "locker_item", item.as_str())),
             "{hits:?}"
         );
+        // Found by a plain cell too, though the title does not hold the word.
+        let by_cell = scratch.search("cabinwarden");
         assert!(
-            hits.contains(&("tasks", "schedule.task", task.as_str())),
-            "{hits:?}"
-        );
-        assert!(
-            centraid_search::DOMAINS
+            by_cell
+                .hits
                 .iter()
-                .all(|domain| domain.app_id != "locker")
-                && found.hits.iter().all(|hit| hit.app_id != "locker"),
-            "Locker is never searched: {hits:?}"
+                .any(|hit| hit.app_id == "locker" && hit.id == item),
+            "{:?}",
+            by_cell.hits
         );
         assert!(
             found.hits.iter().all(|hit| hit.open_id.is_empty()),
@@ -365,13 +351,10 @@ mod tests {
     fn a_typo_is_corrected_across_every_domain_and_an_exact_term_is_not() {
         let scratch = Scratch::founded();
         scratch.run(
-            "knowledge.create_note",
-            serde_json::json!({ "title": "Cabin packing", "body_text": "bring the lantern" }),
+            "note.create",
+            serde_json::json!({ "title": "Cabin packing", "body": "bring the lantern" }),
         );
-        scratch.run(
-            "schedule.add_task",
-            serde_json::json!({ "title": "Book the cabin" }),
-        );
+        scratch.run("task.add", serde_json::json!({ "title": "Book the cabin" }));
         let slipped = scratch.search("cabni");
         let apps: Vec<&str> = slipped.hits.iter().map(|hit| hit.app_id.as_str()).collect();
         assert!(
@@ -386,58 +369,45 @@ mod tests {
         assert!(nothing.hits.is_empty() && nothing.corrected.is_empty());
     }
 
-    /// A HOME ROW OPENS A PERSON PEOPLE CAN SHOW (#1097): a `core.party` with no
-    /// live People profile — a bare party, a trashed person — is in the index
-    /// and is not a hit.
+    /// A HOME ROW OPENS A PERSON PEOPLE CAN SHOW (#1097): a pet is in the index
+    /// and is not a hit, and a trashed person leaves the index.
     #[test]
-    fn a_party_with_no_live_profile_is_no_home_hit() {
+    fn a_pet_and_a_trashed_person_are_no_home_hit() {
         let scratch = Scratch::founded();
-        let person = scratch.run(
-            "people.add_person",
-            serde_json::json!({ "display_name": "Zelda Person", "cadence_days": 30 }),
-        )["party_id"]
-            .as_str()
-            .expect("a party id")
-            .to_owned();
-        let gone = scratch.run(
-            "people.add_person",
-            serde_json::json!({ "display_name": "Zelda Trashed", "cadence_days": 30 }),
-        )["party_id"]
-            .as_str()
-            .expect("a party id")
-            .to_owned();
-        scratch.run(
-            "people.trash_person",
-            serde_json::json!({ "party_id": gone }),
-        );
-        let friend = scratch.run(
-            "core.add_party",
-            serde_json::json!({ "display_name": "Zelda Friend" }),
-        )["party_id"]
-            .as_str()
-            .expect("a party id")
-            .to_owned();
-        let parties = |term: &str| -> Vec<String> {
+        let add = |title: &str, form: &str| -> String {
+            scratch.run(
+                "person.add",
+                serde_json::json!({ "title": title, "form": form }),
+            )["id"]
+                .as_str()
+                .expect("an id")
+                .to_owned()
+        };
+        let person = add("Zelda Person", "person");
+        let gone = add("Zelda Trashed", "person");
+        scratch.run("entity.trash", serde_json::json!({ "id": gone }));
+        let pet = add("Zelda Pet", "pet");
+        let people = |term: &str| -> Vec<String> {
             scratch
                 .search(term)
                 .hits
                 .into_iter()
-                .filter(|hit| hit.entity == "core.party")
+                .filter(|hit| hit.entity == "person")
                 .map(|hit| hit.id)
                 .collect()
         };
-        assert_eq!(parties("zelda"), std::slice::from_ref(&person));
-        assert!(!parties("zelda").contains(&gone) && !parties("zelda").contains(&friend));
-        // The answer is judged after the drop: a term only a bare party holds
-        // is an empty answer, and it is corrected like any other.
-        assert!(parties("zelda friend").is_empty());
+        assert_eq!(people("zelda"), std::slice::from_ref(&person));
+        assert!(!people("zelda").contains(&gone) && !people("zelda").contains(&pet));
+        // The answer is judged after the drop: a term only a pet holds is an
+        // empty answer, and it is corrected like any other.
+        assert!(people("zelda pet").is_empty());
         let slipped = scratch.search("zleda");
         assert_eq!(slipped.corrected, "zelda");
         assert_eq!(
             slipped
                 .hits
                 .iter()
-                .filter(|hit| hit.entity == "core.party")
+                .filter(|hit| hit.entity == "person")
                 .map(|hit| hit.id.clone())
                 .collect::<Vec<_>>(),
             [person]
@@ -451,29 +421,26 @@ mod tests {
     #[test]
     fn an_interaction_note_finds_its_person_on_home() {
         let scratch = Scratch::founded();
-        let ravi = scratch.run(
-            "people.add_person",
-            serde_json::json!({ "display_name": "Ravi Menon", "cadence_days": 30 }),
-        )["party_id"]
-            .as_str()
-            .expect("a party id")
-            .to_owned();
-        let other = scratch.run(
-            "people.add_person",
-            serde_json::json!({ "display_name": "Jake Bennett", "cadence_days": 30 }),
-        )["party_id"]
-            .as_str()
-            .expect("a party id")
-            .to_owned();
+        let add = |title: &str| -> String {
+            scratch.run(
+                "person.add",
+                serde_json::json!({ "title": title, "cadence_days": 30 }),
+            )["id"]
+                .as_str()
+                .expect("an id")
+                .to_owned()
+        };
+        let ravi = add("Ravi Menon");
+        let other = add("Jake Bennett");
         scratch.run(
-            "people.log_interaction",
-            serde_json::json!({ "party_id": ravi, "kind": "lunch", "text": "lunch at Rao's" }),
+            "person.log_interaction",
+            serde_json::json!({ "id": ravi, "kind": "lunch", "text": "lunch at Rao's" }),
         );
         let parties = |found: wire::VaultSearch| -> Vec<(String, String)> {
             found
                 .hits
                 .into_iter()
-                .filter(|hit| hit.entity == "core.party")
+                .filter(|hit| hit.entity == "person")
                 .map(|hit| (hit.app_id, hit.id))
                 .collect()
         };
@@ -491,41 +458,47 @@ mod tests {
         assert_eq!(parties(slipped), [("people".to_owned(), ravi)]);
     }
 
-    /// A PHOTO OPENS AS ITS ASSET: the index answers its content item, and the
-    /// hit carries the media asset Photos opens by; once that asset is in the
-    /// trash the photo is no hit at all.
+    /// A PHOTO OPENS BY ITS OWN ID, and once it is in the trash the photo is no
+    /// hit at all.
     #[test]
-    fn a_photo_hit_carries_its_asset_and_a_trashed_one_is_gone() {
+    fn a_photo_hit_opens_by_its_id_and_a_trashed_one_is_gone() {
         const ONE_PIXEL_PNG: &str = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
         let scratch = Scratch::founded();
         scratch
             .handle
             .open_own_bytes(scratch.dir.join("vault.bytes"))
             .expect("the byte store opens");
-        let asset = scratch.run(
-            "media.add_asset",
+        let png = {
+            use base64::Engine as _;
+            base64::engine::general_purpose::STANDARD
+                .decode(ONE_PIXEL_PNG)
+                .expect("a PNG")
+        };
+        let blob =
+            centraid_vault::bytes::BlobStore::put(&scratch.handle.bytes().expect("a door"), &png)
+                .expect("the store takes it");
+        let photo = scratch.run(
+            "photo.add",
             serde_json::json!({
-                "data_uri": format!("data:image/png;base64,{ONE_PIXEL_PNG}"),
-                "kind": "photo",
+                "blob": blob, "size": png.len(), "media_type": "image/png",
                 "title": "Cabin at dusk",
             }),
-        )["asset_id"]
+        )["id"]
             .as_str()
-            .expect("an asset id")
+            .expect("a photo id")
             .to_owned();
         let found = scratch.search("dusk");
-        let photo = found
+        let hit = found
             .hits
             .iter()
             .find(|hit| hit.app_id == "photos")
             .expect("the photo is a hit");
-        assert_eq!(photo.entity, PHOTO_ENTITY);
-        assert_eq!(photo.open_id, asset);
-        assert_ne!(photo.id, asset, "the hit's id is the content item's");
-        scratch.run(
-            "media.delete_asset",
-            serde_json::json!({ "asset_id": asset }),
+        assert_eq!(hit.entity, PHOTO_ENTITY);
+        assert_eq!(
+            (hit.id.as_str(), hit.open_id.as_str()),
+            (photo.as_str(), photo.as_str())
         );
+        scratch.run("entity.trash", serde_json::json!({ "id": photo }));
         assert!(
             scratch
                 .search("dusk")
@@ -547,31 +520,31 @@ mod tests {
         };
         let notebook = id(
             scratch.run(
-                "knowledge.create_notebook",
-                serde_json::json!({ "name": "Heron notes" }),
+                "container.create",
+                serde_json::json!({ "kind": "notebook", "title": "Heron notes" }),
             ),
-            "notebook_id",
+            "id",
         );
         let album = id(
             scratch.run(
-                "media.create_album",
-                serde_json::json!({ "title": "Heron trip" }),
+                "container.create",
+                serde_json::json!({ "kind": "album", "title": "Heron trip" }),
             ),
-            "album_id",
+            "id",
         );
         let project = id(
             scratch.run(
-                "schedule.save_project",
-                serde_json::json!({ "name": "Heron hide" }),
+                "container.create",
+                serde_json::json!({ "kind": "project", "title": "Heron hide" }),
             ),
-            "project_id",
+            "id",
         );
         let folder = id(
             scratch.run(
-                "core.create_folder",
-                serde_json::json!({ "name": "Heron papers" }),
+                "container.create",
+                serde_json::json!({ "kind": "folder", "title": "Heron papers" }),
             ),
-            "folder_id",
+            "id",
         );
         let found = scratch.search("heron");
         let hits: BTreeMap<(&str, &str), (&str, &str)> = found
@@ -585,14 +558,14 @@ mod tests {
             })
             .collect();
         assert_eq!(hits.len(), 4, "{hits:?}");
-        assert_eq!(hits[&("notes", "core.collection")], (notebook.as_str(), ""));
-        assert_eq!(hits[&("photos", "core.collection")], (album.as_str(), ""));
-        assert_eq!(hits[&("tasks", "schedule.project")], (project.as_str(), ""));
-        assert_eq!(hits[&("docs", "core.concept")], (folder.as_str(), ""));
-        // Titles are the names; a container's subtitle is its app.
+        assert_eq!(hits[&("notes", "notebook")], (notebook.as_str(), ""));
+        assert_eq!(hits[&("photos", "album")], (album.as_str(), ""));
+        assert_eq!(hits[&("tasks", "project")], (project.as_str(), ""));
+        assert_eq!(hits[&("docs", "folder")], (folder.as_str(), ""));
+        // Titles are the names; a container's subtitle is its kind.
         let titled: BTreeSet<&str> = found.hits.iter().map(|hit| hit.title.as_str()).collect();
         assert!(titled.contains("Heron notes") && titled.contains("Heron hide"));
-        assert!(found.hits.iter().all(|hit| hit.subtitle == hit.app_id));
+        assert!(found.hits.iter().all(|hit| hit.subtitle == hit.entity));
         assert!(found.corrected.is_empty());
     }
 
@@ -606,38 +579,29 @@ mod tests {
         };
         let notebook = id(
             scratch.run(
-                "knowledge.create_notebook",
-                serde_json::json!({ "name": "Ibis notes" }),
+                "container.create",
+                serde_json::json!({ "kind": "notebook", "title": "Ibis notes" }),
             ),
-            "notebook_id",
+            "id",
         );
         let album = id(
             scratch.run(
-                "media.create_album",
-                serde_json::json!({ "title": "Ibis trip" }),
+                "container.create",
+                serde_json::json!({ "kind": "album", "title": "Ibis trip" }),
             ),
-            "album_id",
+            "id",
         );
         let folder = id(
             scratch.run(
-                "core.create_folder",
-                serde_json::json!({ "name": "Ibis papers" }),
+                "container.create",
+                serde_json::json!({ "kind": "folder", "title": "Ibis papers" }),
             ),
-            "folder_id",
+            "id",
         );
         assert_eq!(scratch.search("ibis").hits.len(), 3);
-        scratch.run(
-            "knowledge.delete_notebook",
-            serde_json::json!({ "notebook_id": notebook }),
-        );
-        scratch.run(
-            "media.delete_album",
-            serde_json::json!({ "album_id": album }),
-        );
-        scratch.run(
-            "core.delete_folder",
-            serde_json::json!({ "folder_id": folder }),
-        );
+        scratch.run("entity.trash", serde_json::json!({ "id": notebook }));
+        scratch.run("entity.trash", serde_json::json!({ "id": album }));
+        scratch.run("entity.trash", serde_json::json!({ "id": folder }));
         assert!(scratch.search("ibis").hits.is_empty());
         assert!(
             scratch.search("ibsi").corrected.is_empty(),
@@ -652,8 +616,8 @@ mod tests {
     fn a_typo_in_a_container_name_is_corrected_on_home() {
         let scratch = Scratch::founded();
         scratch.run(
-            "knowledge.create_notebook",
-            serde_json::json!({ "name": "Marmoset recipes" }),
+            "container.create",
+            serde_json::json!({ "kind": "notebook", "title": "Marmoset recipes" }),
         );
         let slipped = scratch.search("marmsoet");
         assert_eq!(slipped.corrected, "marmoset");

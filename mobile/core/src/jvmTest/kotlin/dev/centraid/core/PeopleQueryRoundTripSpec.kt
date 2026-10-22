@@ -48,37 +48,37 @@ class PeopleQueryRoundTripSpec : StringSpec({
         val core = openRealCore()
         try {
             val ada = core.write(
-                "people.add_person",
-                """{"display_name":"Ada Roundtrip","cadence_days":30,"role":"Mentor"}""",
+                "person.add",
+                """{"title":"Ada Roundtrip","cadence_days":30,"role":"Mentor"}""",
                 key = "people-round-trip-ada",
             )
             val gone = core.write(
-                "people.add_person",
-                """{"display_name":"Gone Roundtrip","cadence_days":0}""",
+                "person.add",
+                """{"title":"Gone Roundtrip","cadence_days":0}""",
                 key = "people-round-trip-gone",
             )
             core.write(
-                "people.star_person",
-                """{"party_id":"$ada"}""",
+                "flag.set",
+                """{"id":"$ada","flag":"starred"}""",
                 key = "people-round-trip-star",
             )
             // TOMORROW, in the device's zone: `in_days` is 1 whatever the date.
             val tomorrow = LocalDate.now(ZoneId.of(TZ)).plusDays(1)
             val monthDay = "%02d-%02d".format(tomorrow.monthValue, tomorrow.dayOfMonth)
             core.write(
-                "people.add_important_date",
-                """{"party_id":"$ada","label":"Birthday","month_day":"$monthDay",""" +
+                "person.add_date",
+                """{"id":"$ada","label":"Birthday","month_day":"$monthDay",""" +
                     """"reminder_on":true}""",
                 key = "people-round-trip-birthday",
             )
             core.write(
-                "people.log_interaction",
-                """{"party_id":"$ada","kind":"call","text":"Caught up"}""",
+                "person.log_interaction",
+                """{"id":"$ada","kind":"call","text":"Caught up"}""",
                 key = "people-round-trip-touch",
             )
             core.write(
-                "people.trash_person",
-                """{"party_id":"$gone"}""",
+                "entity.trash",
+                """{"id":"$gone"}""",
                 key = "people-round-trip-trash",
             )
 
@@ -101,8 +101,6 @@ class PeopleQueryRoundTripSpec : StringSpec({
             val sheet = core.person(ada).sheet ?: error("Ada has a sheet")
             sheet.person?.party_id shouldBe ada
             sheet.dates.single().label shouldBe "Birthday"
-            sheet.touches_known shouldBe true
-            sheet.channels_known shouldBe true
             sheet.touches.single().text shouldBe "Caught up"
             // A TRASHED PERSON HAS NO SHEET — an absence, not a denial.
             core.person(gone).sheet shouldBe null
@@ -177,7 +175,7 @@ class PeopleQueryRoundTripSpec : StringSpec({
             AppQueryRequest(people_trash = PeopleTrashRequest()),
         ) { it.people_trash }
 
-        /** One command through the command plane; answers its `party_id`, if any. */
+        /** One command through the command plane; answers its `id`, if any. */
         suspend fun CentraidCore.write(name: String, input: String, key: String): String {
             var partyId = ""
             call(
@@ -194,7 +192,7 @@ class PeopleQueryRoundTripSpec : StringSpec({
             ).shouldBeAnsweredWith { envelope ->
                 val outcome = envelope.response?.command ?: error("a CommandOutcome")
                 outcome.status shouldBe CommandStatus.COMMAND_STATUS_EXECUTED
-                partyId = Regex("\"party_id\":\"([^\"]+)\"")
+                partyId = Regex("\"id\":\"([^\"]+)\"")
                     .find(outcome.output.utf8())
                     ?.groupValues
                     ?.get(1)

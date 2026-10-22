@@ -34,24 +34,24 @@ pub fn manifest() -> &'static Manifest {
 mod tests {
     use super::*;
     use crate::commands::{ACTIONS, Confirm, action_row};
-    use centraid_apps_kit::manifest::{CANONICAL_DESIGNED_STATES, Confirmation};
+    use centraid_apps_kit::manifest::{CANONICAL_DESIGNED_STATES, Confirmation, ScopeVerbs};
 
     #[test]
     fn the_committed_manifest_parses_and_is_moneys() {
         let manifest = manifest();
         assert_eq!(manifest.id, APP_ID);
         assert_eq!(manifest.manifest_version, 1);
-        assert_eq!(manifest.version, "0.1.0");
+        assert_eq!(manifest.version, "0.2.0");
         let raw: serde_json::Value = serde_json::from_str(MANIFEST_JSON).unwrap();
         assert_eq!(raw["iconKey"], "Coin");
         assert_eq!(raw["colorKey"], "indigo", "R-1099-23");
     }
 
     #[test]
-    fn it_declares_eleven_queries_and_twenty_actions() {
+    fn it_declares_eleven_queries_and_twenty_two_actions() {
         let manifest = manifest();
         assert_eq!(manifest.queries.len(), 11);
-        assert_eq!(manifest.actions.len(), 20);
+        assert_eq!(manifest.actions.len(), 22);
         for name in [
             "spending",
             "activity",
@@ -102,17 +102,18 @@ mod tests {
         }
     }
 
-    /// MONEY REACHES `money` AND THE SPINE, and no other schema, read or act.
-    /// What each command wrote is the commit's own census, not a list a
-    /// manifest carries (V3), so the reach is stated by the scopes and the
-    /// commands the actions invoke.
+    /// MONEY REACHES ITS OWN VERBS AND THE SHARED ONES, and the vault's own
+    /// tables, read-only. What each command wrote is the commit's own census,
+    /// not a list a manifest carries (V3).
     #[test]
-    fn money_reaches_only_money_and_the_spine() {
+    fn money_reaches_its_own_verbs_the_shared_ones_and_the_vaults_tables() {
         let vault = manifest().vault.as_ref().expect("a vault block");
         for scope in &vault.scopes {
-            assert!(
-                ["money", "core"].contains(&scope.schema.as_str()),
-                "{}.{:?} is outside Money's reach",
+            let reads = scope.verbs == ScopeVerbs::Read;
+            assert_eq!(
+                reads,
+                scope.schema == "vault",
+                "{}.{:?} is neither a read of the vault's tables nor an act on a command",
                 scope.schema,
                 scope.table
             );
@@ -120,8 +121,51 @@ mod tests {
         for row in ACTIONS {
             let schema = row.command.split('.').next().unwrap_or_default();
             assert!(
-                ["money", "core"].contains(&schema),
+                [
+                    "account",
+                    "txn",
+                    "budget",
+                    "checkpoint",
+                    "rule",
+                    "category",
+                    "follow",
+                    "entity",
+                    "flag"
+                ]
+                .contains(&schema),
                 "{} invokes {}, which is outside Money's reach",
+                row.action,
+                row.command
+            );
+        }
+    }
+
+    /// THE ACT SCOPES AND THE ACTIONS AGREE, both ways: a narrow `act` scope
+    /// names a command some action invokes, and every action's command is
+    /// covered by a scope.
+    #[test]
+    fn every_act_scope_names_a_command_an_action_invokes_and_every_command_is_covered() {
+        let commands: Vec<&str> = ACTIONS.iter().map(|row| row.command).collect();
+        assert_eq!(
+            manifest().act_scope_disagreements(&commands),
+            Vec::<String>::new()
+        );
+    }
+
+    /// An action's input is its command's own schema, copied verbatim: two
+    /// copies of "what does `txn.categorize` take" is how the two drift.
+    #[test]
+    fn every_action_is_a_vault_command_with_its_schema() {
+        let registry = centraid_vault::commands::Registry::with_system_commands()
+            .expect("the registry builds");
+        for row in ACTIONS {
+            let registered = registry
+                .get(row.command)
+                .unwrap_or_else(|| panic!("{} is not a vault command", row.command));
+            assert_eq!(
+                &manifest().action(row.action).expect("declared").input,
+                registered.schema(),
+                "{}'s input is not {}'s schema",
                 row.action,
                 row.command
             );

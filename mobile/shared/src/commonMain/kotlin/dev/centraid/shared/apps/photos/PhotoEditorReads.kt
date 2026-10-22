@@ -28,11 +28,11 @@ import dev.centraid.shared.sync.LinkConditions
  * the bridge's.
  */
 public object PhotoEditorReads {
-    /** `media_asset` and nothing else: the editor never writes a row it reads. */
-    public const val TABLE: String = "media_asset"
+    /** `photo` and the title's `entity`: the editor never writes a row it reads. */
+    public const val TABLE: String = "photo"
 
     /** What the byte door calls the reading this asset makes of its bytes. */
-    public const val OWNER_TYPE: String = "media.asset"
+    public const val OWNER_TYPE: String = "photo"
 
     /**
      * One photograph, bound by id.
@@ -45,23 +45,32 @@ public object PhotoEditorReads {
     public fun query(assetId: String): PageQuery = PageQuery(
         name = "photos.editor.asset",
         select = listOf(
-            "asset_id",
-            "kind",
-            "title",
-            "captured_at",
-            "content_id",
+            "id",
+            "form",
+            "taken_at",
+            "blob",
             // THE ORIGINAL'S OFFSET AND PLACE, which the new photograph keeps.
-            "tz_offset_min",
+            "offset_min",
             "place_id",
         ),
         from = TABLE,
-        where_ = "asset_id = ?",
+        where_ = "id = ?",
         bind = listOf(Value(text = assetId)),
-        order = PageOrder(sort_column = "captured_at", pk_column = "asset_id", descending = true),
+        order = PageOrder(sort_column = "taken_at", pk_column = "id", descending = true),
         with_held_thumbnail = true,
     )
 
-    /** The content id the byte door is asked about, or empty. */
+    /** The photograph's title, which is its `entity`'s: a second read, by the same id. */
+    public fun titleQuery(assetId: String): PageQuery = PageQuery(
+        name = "photos.editor.title",
+        select = listOf("id", "title"),
+        from = "entity",
+        where_ = "id = ?",
+        bind = listOf(Value(text = assetId)),
+        order = PageOrder(sort_column = "id", pk_column = "id"),
+    )
+
+    /** The blob's hash the byte door is asked about, or empty. */
     public fun contentId(row: Row): String = row.text(CONTENT_ID)
 
     /**
@@ -70,7 +79,7 @@ public object PhotoEditorReads {
      * [originalPath] is null when the byte door had none, and [absentReason]
      * is then its own member-facing sentence — never a path, never a sha.
      */
-    public fun arrived(row: Row, originalPath: String?, absentReason: String): PhotoEditorEvent {
+    public fun arrived(row: Row, title: String, originalPath: String?, absentReason: String): PhotoEditorEvent {
         val kind = PhotosReads.kindOf(row.text(KIND))
         val originalHeld = row.integer(ORIGINAL_HELD) > 0L
         return PhotoEditorEvent(
@@ -83,7 +92,7 @@ public object PhotoEditorReads {
                     // is what keeps a racing fetch from handing the renderer a
                     // file that is still being written.
                     original_path = originalPath?.takeIf { it.isNotEmpty() && originalHeld },
-                    title = row.text(TITLE),
+                    title = title,
                     captured_at = row.text(CAPTURED_AT),
                     kind = kind,
                     held = PhotosReads.heldOf(
@@ -114,20 +123,19 @@ public object PhotoEditorReads {
 
     private const val ASSET_ID: Int = 0
     private const val KIND: Int = 1
-    private const val TITLE: Int = 2
-    private const val CAPTURED_AT: Int = 3
-    private const val CONTENT_ID: Int = 4
-    private const val TZ_OFFSET: Int = 5
-    private const val PLACE_ID: Int = 6
+    private const val CAPTURED_AT: Int = 2
+    private const val CONTENT_ID: Int = 3
+    private const val TZ_OFFSET: Int = 4
+    private const val PLACE_ID: Int = 5
 
     /**
      * The three computed columns, in the order `crates/core`'s `api::page`
-     * appends them — after the seven this statement named. They move with the
+     * appends them — after the six this statement named. They move with the
      * `select` list above and nowhere else.
      */
-    private const val THUMBNAIL: Int = 7
-    private const val ORIGINAL_HASH: Int = 8
-    private const val ORIGINAL_HELD: Int = 9
+    private const val THUMBNAIL: Int = 6
+    private const val ORIGINAL_HASH: Int = 7
+    private const val ORIGINAL_HELD: Int = 8
 
     private fun Row.text(index: Int): String = values.getOrNull(index)?.text ?: ""
 

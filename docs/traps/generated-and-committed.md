@@ -37,5 +37,5 @@ For each hit, ask the two questions in order: what writes this, and what would g
 ## Related
 
 - `mobile/iosApp/project.yml` — the source
-- [../decisions.md](../decisions.md#traps-recorded-1029) — T-1029-2
+- [../decisions.md](../decisions.md#the-vault-model) — T-1029-2
 - [stale-core-slice.md](stale-core-slice.md) — the same shape one layer down: a committed artifact that is really build output

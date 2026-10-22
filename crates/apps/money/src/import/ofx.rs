@@ -520,6 +520,5 @@ fn read_txn(
         check_number: some(&raw.check),
         bank_type: some(&raw.kind),
         category_concept_id: None,
-        display_name: None,
     })
 }

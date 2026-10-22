@@ -1,344 +1,208 @@
-//! THE FOUR QUERIES: `drive`, `search`, `history` and `activity`.
+//! DOCS' READS, over the model's own tables, one table at a time (#1135).
 //!
-//! `queries/drive.ts` is the one to read first (287 lines). Its doctrine, in
-//! its own words: *"A BOUNDED recent window (#262): documents arrive
-//! newest-filed-first via their folders-scheme tags, never a whole-table pull.
-//! Identity is the core.document wrapper (#352), not the content item it points
-//! at, and every decoration is `IN`-bounded by the same window."*
+//! A document is an `entity` of kind `document`; what it is lives on its
+//! `document` row (the blob's hash, what the bytes are, the folder it is filed
+//! in); a folder is a `container`; a star or a label is a `tagged` edge; a past
+//! version is a `revision`; the words extracted from the bytes are the blob's
+//! `text` derivative. The paged door's one shape is a keyset page of one table,
+//! so a screen is a window of `entity` rows and then, for the ids it returned,
+//! one bounded read of each table that decorates them.
 //!
-//! ## The reads that DISCOVER rows, and the ones that decorate them
+//! ## What the drive shows
 //!
-//! | Read | What it is |
-//! |---|---|
-//! | `docs.drive.filed` | **the drive's window is a PAGE.** One page of `core_tag`, newest `tagged_at` first, sized by the caller. Everything below joins over what it returned |
-//! | `docs.shelf.trash`, `docs.shelf.starred`, `docs.shelf.recent` | **the three shelves' own reads** (Q-1047-7). Asked for only when the window is truncated, because a shelf the window does not define cannot be cut from it. See [`ShelfArm`] |
-//! | `ctx.vault.search` | `search`'s own FTS read, which is `crates/search`'s and not a [`PageQuery`] — the hits arrive here in RANK ORDER and the fold keeps that order |
+//! The drive is the newest `limit` documents by when they were made, trashed ones
+//! included (the shelves cut them), plus the folders. The window is ordered by
+//! `created_at` and not `updated_at`, so a star, a trash or a rename does not
+//! move a document in or out of it. **A document that is
+//! attached to something and filed in no folder shows only where it is
+//! attached**: it is a receipt on a transaction or a file on an event, and
+//! listing it at the drive's top level would put somebody else's paper in the
+//! member's own cabinet. The exclusion runs after the window, so `truncated` is
+//! the vault's own cursor and `documents` may hold fewer rows than `window`
+//! while it is true. A document opens by id whatever it is attached to.
 //!
-//! Everything else — the documents themselves, the stars, the labels, the
-//! content rows, the custody states, the representations and the whole share
-//! fold — is bounded by ids one of those already returned.
+//! The three shelves the window does not define (Trash, Starred, Recent) are read
+//! for themselves ([`ShelfArm`], Q-1047-7), so a truncated window never cuts
+//! them.
 //!
-//! ## `truncated` IS THE PAGE'S OWN CURSOR, NOT A GUESS AT IT
+//! ## What a version is
 //!
-//! `rows.length >= window` cannot tell a window that filled exactly from one
-//! that ran out; a cursor exists or it does not, and it is also where to carry
-//! on from (`drive.ts:266`-`:269`).
-//!
-//! ## The taxonomy pair, and a v0 column that is not selected
-//!
-//! `_shared/taxonomy-reads.ts` selects `concept_id, scheme_id, pref_label,
-//! notation` — **and not `broader_concept_id`**, which `drive.ts` reads for
-//! `folders[].parent_id` and `_shared.ts` reads to build the folder chain a
-//! share walks up. On the gateway's paged door the row is a plain object, so
-//! the unselected column reads as `undefined` and the two consequences are
-//! silent: every folder reports as top-level, and **a share on a grandparent
-//! folder never reaches the document**. This port selects the column
-//! ([`taxonomy_concepts_statement`]) and the divergence is R-1020-35 finding 1
-//! in this lane's receipt, with the one-line v0 fix quoted.
+//! The current bytes, then each `revision` newest first. A revision is the bytes
+//! a replace put down, and its `at` is the instant the next bytes became current;
+//! so a version became current when the one before it was replaced, and the
+//! first when the document was made. A revision has a `seq`, and that number is
+//! the version's number on the screen.
 
 use std::collections::{BTreeMap, BTreeSet};
 
 use centraid_apps_kit::error::{KitError, KitResult};
-use centraid_apps_kit::page::{MAX_PAGE_ROWS, PageRequest};
-use centraid_apps_kit::reads::{FanOutBound, PageDoor, in_list, read_pages, read_window};
-use centraid_apps_kit::representations::{RepresentationIndex, read_representations};
-use centraid_apps_kit::row::{Cell, Row, text_of};
+use centraid_apps_kit::page::PageRequest;
+use centraid_apps_kit::reads::{
+    FanOutBound, JOIN_FAN_OUT, PageDoor, Read, read_pages, read_window,
+};
+use centraid_apps_kit::row::{Row, integer_or_zero, text_of};
 use centraid_apps_kit::statement::{PageBindValue, PageOrder, PageQuery};
 
 use crate::Denial;
 
-/// The folders scheme. **An `https` URI, not a `urn:`, and that is not drift**:
-/// the literal is interpolated into condition SQL on the command side, where
-/// `:folders` reads as a NAMED PARAMETER (#258, the colon-literal trap) and no
-/// parameter name can start with a slash. The tags scheme, never interpolated,
-/// is `centraid:tags:v1`.
-pub const FOLDER_SCHEME_URI: &str = "https://centraid.dev/schemes/folders";
-pub const FLAGS_SCHEME_URI: &str = "https://centraid.dev/schemes/flags";
-pub const TAGS_SCHEME_URI: &str = "centraid:tags:v1";
-pub const STARRED_NOTATION: &str = "starred";
-/// Not a folder a member can rename.
-pub const ROOT_FOLDER_NOTATION: &str = "root";
+/// What the index and the door call a document.
+pub const DOCUMENT_KIND: &str = "document";
 
-/// The drive's declared window, from the manifest's input schema: `limit`
-/// 20…2,000 with a default of 200 (`drive.ts:48`).
+/// The flag a star is: a `tagged` edge to this concept.
+pub const STARRED: &str = "flag:starred";
+
+/// The drive's window, as the manifest declares it.
 pub const DRIVE_MIN: usize = 20;
 pub const DRIVE_MAX: usize = 2_000;
 pub const DRIVE_DEFAULT: usize = 200;
 
-/// FTS answers at most this many matches (`search.ts:55`).
+/// How many ranked hits `search` folds.
 pub const SEARCH_LIMIT: usize = 100;
 
-/// Caps a malformed version chain; a well-formed one terminates on a null
-/// parent (`history.ts:23`).
-pub const MAX_CHAIN_STEPS: usize = 500;
+/// The newest versions a history draws.
+pub const MAX_VERSIONS: usize = 500;
 
-/// A join per windowed document: 500 × 8 = 4,000 rows, the kit's default. The
-/// share fold's own bound is the same number and is named separately, because
-/// it is the one v0 states at its call sites.
-pub const DOC_JOIN_BOUND: FanOutBound = FanOutBound::new(500, 8);
+/// The activity rail's length.
+pub const ACTIVITY_ROWS: usize = 100;
 
-/// Tags are `(document, concept)` pairs over a 2,000-document window, and a
-/// document carries a folder tag, maybe a star and any number of labels:
-/// 500 × 32 = 16,000 rows, stated.
-pub const DOC_PAIR_BOUND: FanOutBound = FanOutBound::new(500, 32);
+/// Pages one starred walk may take. A star is the owner's own gesture, so 8 x
+/// 500 stars is a bound a member does not reach; past it the read says so rather
+/// than answering short.
+const STARRED_PAGES: usize = 8;
 
-/// The blob route a `blob:` content URI becomes (`drive.ts:216`).
-pub const BLOB_ROUTE: &str = "/centraid/_vault/blobs";
+/// The fan-out a window of documents' decorations may walk.
+const BOUND: FanOutBound = JOIN_FAN_OUT;
+
+const ENTITY_COLUMNS: &str = "id, title, created_at, updated_at, deleted_at, purge_at";
+
+fn text(value: &str) -> Vec<PageBindValue> {
+    vec![PageBindValue::Text(value.to_owned())]
+}
+
+fn denial_of(message: String) -> Denial {
+    Denial {
+        code: None,
+        message: Some(message),
+        revoked_at: None,
+    }
+}
+
+/// A loader's body, with a door's refusal answered as the denial beside the
+/// empty shape instead of an `Err`.
+fn guarded<T: Default>(body: impl FnOnce() -> KitResult<T>) -> KitResult<(T, Option<Denial>)> {
+    match body() {
+        Ok(value) => Ok((value, None)),
+        Err(KitError::Door(message)) => Ok((T::default(), Some(denial_of(message)))),
+        Err(other) => Err(other),
+    }
+}
 
 // ---------------------------------------------------------------------------
-// Statements.
+// Statements
 // ---------------------------------------------------------------------------
 
-/// `_shared/taxonomy.concepts` — a vault's vocabulary, which is what bounds the
-/// rest. Owner-curated and small, so the walk is honest.
-///
-/// **`broader_concept_id` is in the projection and is not in v0's**; see the
-/// module note.
+/// The drive's window: documents, newest first, in the trash or not.
 #[must_use]
-pub fn taxonomy_concepts_statement() -> PageQuery {
+pub fn window_statement() -> PageQuery {
     PageQuery::new(
-        "_shared/taxonomy.concepts",
-        "concept_id, scheme_id, pref_label, notation, broader_concept_id",
-        "core_concept",
-        PageOrder::asc("concept_id", "concept_id"),
+        "docs.drive.window",
+        ENTITY_COLUMNS,
+        "entity",
+        PageOrder::desc("created_at", "id"),
     )
+    .filter("kind = ?", text(DOCUMENT_KIND))
 }
 
-/// `_shared/taxonomy.schemes` — the other half of the pair. Two reads, not one:
-/// they are different tables, and each is walked to the end of itself.
-#[must_use]
-pub fn taxonomy_schemes_statement() -> PageQuery {
-    PageQuery::new(
-        "_shared/taxonomy.schemes",
-        "scheme_id, uri, title",
-        "core_concept_scheme",
-        PageOrder::asc("scheme_id", "scheme_id"),
-    )
-}
-
-/// `docs.drive.filed` — THE DRIVE'S WINDOW, as a page.
-///
-/// Newest-filed-first by `tagged_at`, which is `NOT NULL` on `core_tag`, so the
-/// page is continuable and `truncated` is its cursor.
-pub fn filed_statement(folder_concept_ids: &[String]) -> KitResult<PageQuery> {
-    let fragment = in_list("concept_id", folder_concept_ids)?;
-    let mut bind = vec![PageBindValue::Text(DOCUMENT_TARGET_TYPE.to_owned())];
-    bind.extend(fragment.bind);
-    Ok(PageQuery::new(
-        "docs.drive.filed",
-        "tag_id, target_id, concept_id, target_type, tagged_at",
-        "core_tag",
-        PageOrder::desc("tagged_at", "tag_id"),
-    )
-    .filter(&format!("target_type = ? AND {}", fragment.sql), bind))
-}
-
-/// The wrapper columns every document read selects, so the window's read and a
-/// shelf's own read cannot disagree about what a row is.
-const DOCUMENT_COLUMNS: &str = "document_id, current_content_id, current_revision_id, title, \
-     created_at, updated_at, deleted_at, purge_at";
-
-/// `docs.drive.documents` — the wrappers the window named.
-pub fn documents_statement(document_ids: &[String]) -> KitResult<PageQuery> {
-    let fragment = in_list("document_id", document_ids)?;
-    Ok(PageQuery::new(
-        "docs.drive.documents",
-        DOCUMENT_COLUMNS,
-        "core_document",
-        PageOrder::asc("document_id", "document_id"),
-    )
-    .filter(&fragment.sql, fragment.bind))
-}
-
-/// `docs.shelf.trash` — THE TRASH SHELF'S OWN READ (Q-1047-7): every trashed
-/// wrapper, newest-changed first.
-///
-/// `updated_at` is the sort and not `deleted_at`: the latter is nullable, and a
-/// keyset page cannot be continued over a nullable column
-/// ([`centraid_apps_kit::error::KitError::NullableSortKey`]). `core.trash_document`
-/// stamps both with one instant, and a trashed document is frozen, so the order
-/// is the same one — and the shelf's own fold re-sorts by `deleted_at` anyway.
-#[must_use]
-pub fn trash_statement() -> PageQuery {
-    PageQuery::new(
-        "docs.shelf.trash",
-        DOCUMENT_COLUMNS,
-        "core_document",
-        PageOrder::desc("updated_at", "document_id"),
-    )
-    .filter("deleted_at IS NOT NULL", Vec::new())
-}
-
-/// `docs.shelf.recent` — RECENTLY ADDED'S OWN READ (Q-1047-7): live wrappers,
-/// newest-created first, which is the order `Recent` is defined by.
+/// The newest live documents by when they were made.
 #[must_use]
 pub fn recent_statement() -> PageQuery {
     PageQuery::new(
         "docs.shelf.recent",
-        DOCUMENT_COLUMNS,
-        "core_document",
-        PageOrder::desc("created_at", "document_id"),
+        ENTITY_COLUMNS,
+        "entity",
+        PageOrder::desc("created_at", "id"),
     )
-    .filter("deleted_at IS NULL", Vec::new())
+    .filter("kind = ? AND deleted_at IS NULL", text(DOCUMENT_KIND))
 }
 
-/// `docs.shelf.starred` — THE STAR TAGS, newest-starred first (Q-1047-7).
-///
-/// A star is a flags-scheme tag on the wrapper, and it survives the trash, so
-/// the tag alone does not say the document is on the Starred shelf: the arm
-/// reads the wrappers these name and keeps the live ones.
+/// The trash, newest first.
 #[must_use]
-pub fn starred_tags_statement(concept_id: &str) -> PageQuery {
+pub fn trash_statement() -> PageQuery {
+    PageQuery::new(
+        "docs.shelf.trash",
+        ENTITY_COLUMNS,
+        "entity",
+        PageOrder::desc("deleted_at", "id"),
+    )
+    .filter("kind = ? AND deleted_at IS NOT NULL", text(DOCUMENT_KIND))
+}
+
+/// Everything carrying the star, newest star first. A star outlives the trash,
+/// and other kinds carry it too, so the entities these name are read after.
+#[must_use]
+pub fn starred_statement() -> PageQuery {
     PageQuery::new(
         "docs.shelf.starred",
-        "tag_id, target_id, tagged_at",
-        "core_tag",
-        PageOrder::desc("tagged_at", "tag_id"),
+        "from_id, to_id, created_at",
+        "edge",
+        PageOrder::desc("created_at", "from_id"),
     )
-    .filter(
-        "concept_id = ? AND target_type = ?",
-        vec![
-            PageBindValue::Text(concept_id.to_owned()),
-            PageBindValue::Text(DOCUMENT_TARGET_TYPE.to_owned()),
-        ],
-    )
+    .filter("rel = ? AND to_id = ?", {
+        let mut bind = text("tagged");
+        bind.extend(text(STARRED));
+        bind
+    })
 }
 
-/// `docs.drive.starred` — the star, which is a flags-scheme tag on the WRAPPER.
-pub fn starred_statement(concept_id: &str, document_ids: &[String]) -> KitResult<PageQuery> {
-    let fragment = in_list("target_id", document_ids)?;
-    let mut bind = vec![
-        PageBindValue::Text(concept_id.to_owned()),
-        PageBindValue::Text(DOCUMENT_TARGET_TYPE.to_owned()),
-    ];
-    bind.extend(fragment.bind);
-    Ok(PageQuery::new(
-        "docs.drive.starred",
-        "tag_id, target_id, concept_id",
-        "core_tag",
-        PageOrder::asc("tag_id", "tag_id"),
-    )
-    .filter(
-        &format!("concept_id = ? AND target_type = ? AND {}", fragment.sql),
-        bind,
-    ))
-}
-
-/// `docs.labels.tags` — every tag on the windowed documents, so the labels and
-/// the star are two readings of one read.
-///
-/// Each entry carries its `tag_id` because `untag` removes **by tag_id, never
-/// by label** (`_shared.ts:52`-`:54`).
-pub fn labels_statement(document_ids: &[String]) -> KitResult<PageQuery> {
-    let fragment = in_list("target_id", document_ids)?;
-    let mut bind = vec![PageBindValue::Text(DOCUMENT_TARGET_TYPE.to_owned())];
-    bind.extend(fragment.bind);
-    Ok(PageQuery::new(
-        "docs.labels.tags",
-        "tag_id, target_id, concept_id, target_type",
-        "core_tag",
-        PageOrder::asc("tag_id", "tag_id"),
-    )
-    .filter(&format!("target_type = ? AND {}", fragment.sql), bind))
-}
-
-/// `docs.drive.contents` — the byte rows the wrappers' heads name.
-///
-/// No `media_type`: the byte row carries none since #996 R20(b), and THIS
-/// document's representation says what it reads those bytes as.
-pub fn contents_statement(name: &str, content_ids: &[String]) -> KitResult<PageQuery> {
-    let fragment = in_list("content_id", content_ids)?;
-    Ok(PageQuery::new(
-        name,
-        "content_id, byte_size, content_uri, created_at",
-        "core_content_item",
-        PageOrder::asc("content_id", "content_id"),
-    )
-    .filter(&fragment.sql, fragment.bind))
-}
-
-/// `docs.custody.byContent` — where the bytes actually are.
-///
-/// An ABSENT content id means inline bytes custody cannot track, or a sweep
-/// that has not run; callers render nothing rather than claim a state the vault
-/// never asserted (`_shared.ts:94`-`:97`).
-pub fn custody_statement(content_ids: &[String]) -> KitResult<PageQuery> {
-    let fragment = in_list("content_id", content_ids)?;
-    Ok(PageQuery::new(
-        "docs.custody.byContent",
-        "content_id, custody_state",
-        "blob_custody_state",
-        PageOrder::asc("content_id", "content_id"),
-    )
-    .filter(&fragment.sql, fragment.bind))
-}
-
-/// `docs.history.revisions` — every occurrence of THIS document, newest first.
-///
-/// ONE READ: the chain is walked in memory over ids the same read returned, so
-/// a long history costs one round trip rather than one per version.
+/// This document's replaced bytes, newest first.
+#[must_use]
 pub fn revisions_statement(document_id: &str) -> PageQuery {
     PageQuery::new(
         "docs.history.revisions",
-        "revision_id, content_id, parent_revision_id, recorded_at",
-        "core_entity_revision",
-        PageOrder::desc("recorded_at", "revision_id"),
+        "entity_id, seq, at, blob, media_type",
+        "revision",
+        PageOrder::desc("seq", "entity_id"),
+    )
+    .filter("entity_id = ?", text(document_id))
+}
+
+/// The commands that named this document, newest first: the journal is the
+/// evidence of what was done to it, and a command names its subject as `id`, or
+/// as an edge's two ends.
+#[must_use]
+pub fn activity_statement(document_id: &str) -> PageQuery {
+    PageQuery::new(
+        "docs.activity.journal",
+        "seq, at, command",
+        "journal",
+        PageOrder::desc("seq", "seq"),
     )
     .filter(
-        "entity_type = ? AND entity_id = ?",
-        vec![
-            PageBindValue::Text(DOCUMENT_TARGET_TYPE.to_owned()),
-            PageBindValue::Text(document_id.to_owned()),
-        ],
+        "outcome = ? AND (json_extract(input, '$.id') = ? OR json_extract(input, '$.from') = ? \
+         OR json_extract(input, '$.to') = ?)",
+        {
+            let mut bind = text("executed");
+            bind.extend(text(document_id));
+            bind.extend(text(document_id));
+            bind.extend(text(document_id));
+            bind
+        },
     )
 }
 
-/// `docs.activity.provenance` — THE TRAIL OF ONE DOCUMENT IS A WALK, NOT A
-/// WINDOW (#996 wave 4, R8).
-///
-/// The read said "accept truncation", which on a long-lived document meant the
-/// rail showed whichever end of its history the reader's default happened to
-/// reach — and a trail that silently omits events is worse than one that says
-/// it cannot be shown (`activity.ts:4`-`:8`).
-pub fn provenance_statement(document_id: &str) -> PageQuery {
+/// The folders: live, and the `container` row each sits on.
+fn folders_statement() -> PageQuery {
     PageQuery::new(
-        "docs.activity.provenance",
-        "prov_id, prov_activity, agent_kind, occurred_at",
-        "access_provenance",
-        PageOrder::desc("occurred_at", "prov_id"),
+        "docs.folders",
+        "id, title",
+        "entity",
+        PageOrder::asc("id", "id"),
     )
-    .filter(
-        "entity_type = ? AND entity_id = ?",
-        vec![
-            PageBindValue::Text(DOCUMENT_TARGET_TYPE.to_owned()),
-            PageBindValue::Text(document_id.to_owned()),
-        ],
-    )
-}
-
-/// `docs.document.body` — THE DECODED TEXT OF ONE CONTENT ITEM (#1046).
-///
-/// `core_content_text` is what the vault's one decoder wrote at write time
-/// (`index_content_text`): a row per `text/*` content item whose bytes decoded,
-/// `body_text NOT NULL`. So an ABSENT row is "no text for these bytes" and a
-/// row holding `""` is an empty text document — two facts a reader draws
-/// differently, and the reason this is its own read rather than a decode of
-/// `content_uri` here.
-pub fn body_statement(content_id: &str) -> PageQuery {
-    PageQuery::new(
-        "docs.document.body",
-        "content_id, body_text",
-        "core_content_text",
-        PageOrder::asc("content_id", "content_id"),
-    )
-    .filter(
-        "content_id = ?",
-        vec![PageBindValue::Text(content_id.to_owned())],
-    )
+    .filter("kind = ? AND deleted_at IS NULL", text("folder"))
 }
 
 // ---------------------------------------------------------------------------
-// Rows and payloads.
+// Rows and payloads
 // ---------------------------------------------------------------------------
 
 /// One folder, as the sidebar draws it.
@@ -346,15 +210,14 @@ pub fn body_statement(content_id: &str) -> PageQuery {
 pub struct FolderRow {
     pub folder_id: String,
     pub name: Option<String>,
-    /// `None` at the drive's top level — which is both "no parent" and "the
-    /// root concept is the parent", because the root is the drive and not a
-    /// folder.
+    /// `None` at the drive's top level.
     pub parent_id: Option<String>,
 }
 
-/// One free-form label, with the edge that removes it.
+/// One free-form label.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LabelEntry {
+    /// The tag concept's id: the key a chip is drawn under.
     pub tag_id: String,
     pub label: String,
 }
@@ -363,48 +226,36 @@ pub struct LabelEntry {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DocumentRow {
     pub document_id: String,
+    /// The bytes' hash: what the head's bytes are called in the content store.
     pub content_id: String,
     pub title: Option<String>,
-    /// From the representation index, keyed on `(core.document, document_id)`.
     /// `None` is "nothing says what these bytes are", never a default type.
     pub media_type: Option<String>,
     pub byte_size: Option<i64>,
-    pub content_uri: Option<String>,
-    pub poster_uri: Option<String>,
     pub created_at: Option<String>,
     pub updated_at: Option<String>,
     pub folder_id: Option<String>,
     pub starred: bool,
     pub trashed: bool,
-    /// When it went to the trash; `None` on a live row. Trash's own order.
+    /// When it went to the trash; `None` on a live row.
     pub deleted_at: Option<String>,
     pub purge_at: Option<String>,
     pub tags: Vec<LabelEntry>,
-    pub custody_state: Option<String>,
     /// The hit snippet, on a `search` row only.
     pub snippet: Option<String>,
 }
-
-/// Tags and provenance name a document by this type.
-///
-/// It lived in `shares.rs`, which leaves with the sharing plane (#1029, rung
-/// five); it was never about sharing — it is the `target_type` every
-/// document-scoped row in this vault carries.
-pub const DOCUMENT_TARGET_TYPE: &str = "core.document";
 
 /// What `drive` answers.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct DriveData {
     pub folders: Vec<FolderRow>,
     pub documents: Vec<DocumentRow>,
-    pub root_folder_id: Option<String>,
-    /// Older documents exist beyond the window. **The page's own cursor**, not
-    /// a row count.
+    /// Older documents exist beyond the window: the page's own cursor.
     pub truncated: bool,
     pub window: usize,
 }
 
-/// What `search` answers: the same rows, in **vault rank order**.
+/// What `search` answers: the same rows, in rank order.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct SearchData {
     pub documents: Vec<DocumentRow>,
@@ -413,36 +264,30 @@ pub struct SearchData {
 /// One version, in the history rail.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VersionRow {
+    /// The version's number: a revision's `seq`, and the head's is one more.
+    pub number: usize,
     pub content_id: String,
     pub media_type: Option<String>,
     pub byte_size: Option<i64>,
-    pub content_uri: Option<String>,
-    pub poster_uri: Option<String>,
     pub current: bool,
-    /// The OCCURRENCE's own instant — when this version became current — never
-    /// the content item's `created_at`, because restoring an old version reads
-    /// as the newest entry even though its bytes are old.
+    /// When these bytes became current.
     pub asserted_at: Option<String>,
 }
 
-/// What `history` answers.
+/// What `history` answers, newest version first.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct HistoryData {
     pub versions: Vec<VersionRow>,
 }
 
-/// One event on the activity rail.
+/// One command on the activity rail.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ActivityEvent {
     pub activity: Option<String>,
-    pub agent_kind: Option<String>,
     pub occurred_at: Option<String>,
 }
 
-/// What `activity` answers.
-///
-/// AN EMPTY LIST IS HONEST: no activity has been recorded yet (a freshly
-/// recreated schema), not an error.
+/// What `activity` answers. An empty list is honest: nothing has been done yet.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct ActivityData {
     pub events: Vec<ActivityEvent>,
@@ -455,12 +300,8 @@ pub struct DriveInput {
 }
 
 impl DriveInput {
-    /// The window this input asks for.
-    ///
-    /// A CLAMP, NOT A REFUSAL, and in v0's own order:
-    /// `min(max(limit || 200, 20), 2000)` (`drive.ts:48`) — so a `0` falls back
-    /// to the default rather than clamping up to the floor, which is what
-    /// `||` does and `??` would not.
+    /// The window this input asks for: a clamp, not a refusal, and a `0` falls
+    /// back to the default rather than clamping up to the floor.
     #[must_use]
     pub fn window(self) -> usize {
         self.limit
@@ -470,135 +311,195 @@ impl DriveInput {
     }
 }
 
-/// `srcOf` / `posterOf`, ported (`drive.ts:213`-`:221`).
-///
-/// Blob bytes (#296) serve as SAME-ORIGIN URLs so Range and caching work;
-/// `data:` URIs pass through and have no poster, because there is no derivative
-/// to ask for.
-#[must_use]
-fn uris_of(content: Option<&ContentRow>) -> (Option<String>, Option<String>) {
-    let Some(uri) = content.and_then(|content| content.content_uri.as_deref()) else {
-        return (None, None);
-    };
-    if !uri.starts_with("blob:") {
-        return (Some(uri.to_owned()), None);
-    }
-    let content_id = content
-        .map(|content| content.content_id.as_str())
-        .unwrap_or("");
-    (
-        Some(format!("{BLOB_ROUTE}/{content_id}")),
-        Some(format!("{BLOB_ROUTE}/{content_id}?variant=poster")),
-    )
+// ---------------------------------------------------------------------------
+// The decorations of a set of documents
+// ---------------------------------------------------------------------------
+
+/// Where a document is, and what its bytes are.
+struct Held {
+    blob: String,
+    media_type: String,
+    folder_id: Option<String>,
 }
 
-/// One `core_content_item` row, as the drive reads it.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ContentRow {
-    pub content_id: String,
-    pub byte_size: Option<i64>,
-    pub content_uri: Option<String>,
-    pub created_at: Option<String>,
+fn ids_of(rows: &[Row], column: &str) -> Vec<String> {
+    rows.iter().filter_map(|row| text_of(row, column)).collect()
 }
 
-impl ContentRow {
-    #[must_use]
-    pub fn of(row: &Row) -> Option<Self> {
-        Some(Self {
-            content_id: text_of(row, "content_id")?,
-            byte_size: row.get("byte_size").and_then(Cell::integer),
-            content_uri: text_of(row, "content_uri"),
-            created_at: text_of(row, "created_at"),
-        })
+fn read_of(
+    door: &dyn PageDoor,
+    name: &'static str,
+    table: &'static str,
+    select: &'static str,
+    column: &'static str,
+    ids: &[String],
+    extra: Option<(&str, Vec<PageBindValue>)>,
+) -> KitResult<Vec<Row>> {
+    Read {
+        name,
+        table,
+        select,
+        order: (column, column),
+        column,
     }
+    .within(BOUND, door, ids, extra)
 }
 
-/// The vault's vocabulary, read once and handed to everything that folds it.
-#[derive(Debug, Clone, Default)]
-pub struct Taxonomy {
-    pub concepts: Vec<Row>,
-    pub schemes: Vec<Row>,
-}
-
-impl Taxonomy {
-    /// A scheme's id, by URI.
-    #[must_use]
-    pub fn scheme_id(&self, uri: &str) -> Option<String> {
-        self.schemes
-            .iter()
-            .find(|row| text_of(row, "uri").as_deref() == Some(uri))
-            .and_then(|row| text_of(row, "scheme_id"))
+/// The rows documents are, folded from their entities and the tables that hang
+/// off them. `entities` keeps its order. A document that is attached to
+/// something and filed nowhere is left out unless `with_attached_only`.
+fn fold(
+    door: &dyn PageDoor,
+    entities: &[Row],
+    snippets: &BTreeMap<String, String>,
+    with_attached_only: bool,
+) -> KitResult<Vec<DocumentRow>> {
+    let ids = ids_of(entities, "id");
+    if ids.is_empty() {
+        return Ok(Vec::new());
     }
-
-    /// Every concept in one scheme.
-    #[must_use]
-    pub fn concepts_in(&self, uri: &str) -> Vec<&Row> {
-        let Some(scheme_id) = self.scheme_id(uri) else {
-            return Vec::new();
-        };
-        self.concepts
-            .iter()
-            .filter(|row| text_of(row, "scheme_id").as_deref() == Some(scheme_id.as_str()))
-            .collect()
-    }
-
-    /// One concept in one scheme, by notation.
-    #[must_use]
-    pub fn concept(&self, uri: &str, notation: &str) -> Option<String> {
-        self.concepts_in(uri)
-            .into_iter()
-            .find(|row| text_of(row, "notation").as_deref() == Some(notation))
-            .and_then(|row| text_of(row, "concept_id"))
-    }
-
-    /// `concept_id -> broader_concept_id`, over the folders scheme.
-    #[must_use]
-    pub fn folder_parents(&self) -> BTreeMap<String, Option<String>> {
-        self.concepts_in(FOLDER_SCHEME_URI)
-            .into_iter()
-            .filter_map(|row| {
-                text_of(row, "concept_id").map(|id| (id, text_of(row, "broader_concept_id")))
-            })
-            .collect()
-    }
-}
-
-/// Read the taxonomy pair.
-pub fn read_taxonomy(door: &dyn PageDoor) -> KitResult<Taxonomy> {
-    Ok(Taxonomy {
-        concepts: read_pages(door, &taxonomy_concepts_statement(), DOC_PAIR_BOUND)?,
-        schemes: read_pages(door, &taxonomy_schemes_statement(), DOC_JOIN_BOUND)?,
+    let held: BTreeMap<String, Held> = read_of(
+        door,
+        "docs.rows.document",
+        "document",
+        "id, blob, media_type, folder_id",
+        "id",
+        &ids,
+        None,
+    )?
+    .iter()
+    .filter_map(|row| {
+        Some((
+            text_of(row, "id")?,
+            Held {
+                blob: text_of(row, "blob")?,
+                media_type: text_of(row, "media_type").unwrap_or_default(),
+                folder_id: text_of(row, "folder_id"),
+            },
+        ))
     })
-}
-
-/// The folder rail: every folder in the owner's scheme except the root.
-///
-/// Sorted by name. v0 sorts with `String(a.name).localeCompare(…)`; for the
-/// ASCII folder names in the fixtures byte order agrees, and the parity
-/// manifest carries `order: "set"` for the case it does not (apps seam 4).
-#[must_use]
-pub fn fold_folders(taxonomy: &Taxonomy) -> (Vec<FolderRow>, Option<String>) {
-    let root = taxonomy.concept(FOLDER_SCHEME_URI, ROOT_FOLDER_NOTATION);
-    let mut folders: Vec<FolderRow> = taxonomy
-        .concepts_in(FOLDER_SCHEME_URI)
+    .collect();
+    let hashes: Vec<String> = held.values().map(|held| held.blob.clone()).collect();
+    let sizes: BTreeMap<String, i64> = read_of(
+        door,
+        "docs.rows.blob",
+        "blob",
+        "hash, size",
+        "hash",
+        &hashes,
+        None,
+    )?
+    .iter()
+    .filter_map(|row| Some((text_of(row, "hash")?, integer_or_zero(row, "size"))))
+    .collect();
+    let tag_edges = read_of(
+        door,
+        "docs.rows.tagged",
+        "edge",
+        "from_id, to_id",
+        "from_id",
+        &ids,
+        Some(("rel = ?", text("tagged"))),
+    )?;
+    let mut concept_ids = ids_of(&tag_edges, "to_id");
+    concept_ids.sort_unstable();
+    concept_ids.dedup();
+    let labels: BTreeMap<String, String> = read_of(
+        door,
+        "docs.rows.tags",
+        "entity",
+        "id, title",
+        "id",
+        &concept_ids,
+        Some(("kind = ?", text("tag"))),
+    )?
+    .iter()
+    .filter_map(|row| Some((text_of(row, "id")?, text_of(row, "title")?)))
+    .collect();
+    let mut starred: BTreeSet<String> = BTreeSet::new();
+    let mut tags: BTreeMap<String, Vec<LabelEntry>> = BTreeMap::new();
+    for edge in &tag_edges {
+        let (Some(from), Some(to)) = (text_of(edge, "from_id"), text_of(edge, "to_id")) else {
+            continue;
+        };
+        if to == STARRED {
+            starred.insert(from);
+        } else if let Some(label) = labels.get(&to) {
+            tags.entry(from).or_default().push(LabelEntry {
+                tag_id: to,
+                label: label.clone(),
+            });
+        }
+    }
+    let attached: BTreeSet<String> = if with_attached_only {
+        BTreeSet::new()
+    } else {
+        ids_of(
+            &read_of(
+                door,
+                "docs.rows.attached",
+                "edge",
+                "from_id, to_id",
+                "to_id",
+                &ids,
+                Some(("rel = ?", text("attached"))),
+            )?,
+            "to_id",
+        )
         .into_iter()
-        .filter_map(|row| {
-            let folder_id = text_of(row, "concept_id")?;
-            if Some(&folder_id) == root.as_ref() {
+        .collect()
+    };
+    Ok(entities
+        .iter()
+        .filter_map(|entity| {
+            let id = text_of(entity, "id")?;
+            let held = held.get(&id)?;
+            if held.folder_id.is_none() && attached.contains(&id) {
                 return None;
             }
-            let broader = text_of(row, "broader_concept_id");
+            Some(DocumentRow {
+                content_id: held.blob.clone(),
+                media_type: Some(held.media_type.clone()).filter(|kind| !kind.is_empty()),
+                byte_size: sizes.get(&held.blob).copied(),
+                folder_id: held.folder_id.clone(),
+                starred: starred.contains(&id),
+                trashed: text_of(entity, "deleted_at").is_some(),
+                tags: tags.remove(&id).unwrap_or_default(),
+                snippet: snippets.get(&id).cloned(),
+                title: text_of(entity, "title"),
+                created_at: text_of(entity, "created_at"),
+                updated_at: text_of(entity, "updated_at"),
+                deleted_at: text_of(entity, "deleted_at"),
+                purge_at: text_of(entity, "purge_at"),
+                document_id: id,
+            })
+        })
+        .collect())
+}
+
+/// Every live folder, with its parent, by name.
+fn read_folders(door: &dyn PageDoor) -> KitResult<Vec<FolderRow>> {
+    let entities = read_pages(door, &folders_statement(), BOUND)?;
+    let parents: BTreeMap<String, Option<String>> = read_of(
+        door,
+        "docs.folders.containers",
+        "container",
+        "id, parent_id",
+        "id",
+        &ids_of(&entities, "id"),
+        None,
+    )?
+    .iter()
+    .filter_map(|row| Some((text_of(row, "id")?, text_of(row, "parent_id"))))
+    .collect();
+    let mut folders: Vec<FolderRow> = entities
+        .iter()
+        .filter_map(|row| {
+            let folder_id = text_of(row, "id")?;
             Some(FolderRow {
+                parent_id: parents.get(&folder_id).cloned().flatten(),
+                name: text_of(row, "title"),
                 folder_id,
-                name: text_of(row, "pref_label"),
-                // THE ROOT IS THE DRIVE, NOT A FOLDER: a folder filed under it
-                // is top-level, and saying so as `null` is what keeps the rail
-                // from drawing a folder called "Documents" above everything.
-                parent_id: match (&broader, &root) {
-                    (None, _) => None,
-                    (Some(parent), Some(root)) if parent == root => None,
-                    (Some(parent), _) => Some(parent.clone()),
-                },
             })
         })
         .collect();
@@ -609,388 +510,45 @@ pub fn fold_folders(taxonomy: &Taxonomy) -> (Vec<FolderRow>, Option<String>) {
             .cmp(right.name.as_deref().unwrap_or_default())
             .then_with(|| left.folder_id.cmp(&right.folder_id))
     });
-    (folders, root)
+    Ok(folders)
 }
 
-/// The labels on a window of documents, split from the same tag read.
-///
-/// A tag whose concept is not in the TAGS scheme is skipped — it is a
-/// folders-scheme or flags-scheme tag on the same document, and printing it as
-/// a label would put "Leases" and "Starred" in the chip rail.
-#[must_use]
-pub fn fold_labels(taxonomy: &Taxonomy, tags: &[Row]) -> BTreeMap<String, Vec<LabelEntry>> {
-    let label_of: BTreeMap<String, String> = taxonomy
-        .concepts_in(TAGS_SCHEME_URI)
-        .into_iter()
-        .filter_map(|row| {
-            let concept_id = text_of(row, "concept_id")?;
-            let label = text_of(row, "pref_label").or_else(|| text_of(row, "notation"))?;
-            Some((concept_id, label))
-        })
-        .collect();
-    let mut by_document: BTreeMap<String, Vec<LabelEntry>> = BTreeMap::new();
-    for row in tags {
-        let (Some(tag_id), Some(target_id), Some(concept_id)) = (
-            text_of(row, "tag_id"),
-            text_of(row, "target_id"),
-            text_of(row, "concept_id"),
-        ) else {
-            continue;
-        };
-        let Some(label) = label_of.get(&concept_id) else {
-            continue;
-        };
-        by_document.entry(target_id).or_default().push(LabelEntry {
-            tag_id,
-            label: label.clone(),
-        });
-    }
-    by_document
-}
+// ---------------------------------------------------------------------------
+// `drive`
+// ---------------------------------------------------------------------------
 
-/// `content_id -> custody_state`, from the bounded custody read.
-#[must_use]
-pub fn fold_custody(rows: &[Row]) -> BTreeMap<String, String> {
-    rows.iter()
-        .filter_map(|row| Some((text_of(row, "content_id")?, text_of(row, "custody_state")?)))
-        .collect()
-}
-
-/// Everything the row fold needs that is not the wrapper itself.
-struct Decorations {
-    folder_by_document: BTreeMap<String, String>,
-    root_folder_id: Option<String>,
-    starred: BTreeSet<String>,
-    labels: BTreeMap<String, Vec<LabelEntry>>,
-    custody: BTreeMap<String, String>,
-    representations: RepresentationIndex,
-    contents: BTreeMap<String, ContentRow>,
-    snippets: BTreeMap<String, String>,
-}
-
-/// One drive row, out of the wrapper and its decorations.
-fn fold_row(wrapper: &Row, decorations: &Decorations) -> Option<DocumentRow> {
-    let document_id = text_of(wrapper, "document_id")?;
-    let content_id = text_of(wrapper, "current_content_id")?;
-    let content = decorations.contents.get(&content_id);
-    let (content_uri, poster_uri) = uris_of(content);
-    let folder = decorations.folder_by_document.get(&document_id);
-    Some(DocumentRow {
-        media_type: decorations
-            .representations
-            .owner(DOCUMENT_TARGET_TYPE, &document_id)
-            .map(str::to_owned),
-        byte_size: content.and_then(|content| content.byte_size),
-        content_uri,
-        poster_uri,
-        title: text_of(wrapper, "title"),
-        created_at: text_of(wrapper, "created_at"),
-        updated_at: text_of(wrapper, "updated_at"),
-        folder_id: match (folder, &decorations.root_folder_id) {
-            (None, _) => None,
-            (Some(folder), Some(root)) if folder == root => None,
-            (Some(folder), _) => Some(folder.clone()),
-        },
-        starred: decorations.starred.contains(&document_id),
-        trashed: text_of(wrapper, "deleted_at").is_some(),
-        deleted_at: text_of(wrapper, "deleted_at"),
-        purge_at: text_of(wrapper, "purge_at"),
-        tags: decorations
-            .labels
-            .get(&document_id)
-            .cloned()
-            .unwrap_or_default(),
-        custody_state: decorations.custody.get(&content_id).cloned(),
-        snippet: decorations.snippets.get(&document_id).cloned(),
-        document_id,
-        content_id,
-    })
-}
-
-/// A walk that answers a denial as a value.
-enum Walked {
-    Rows(Vec<Row>),
-    Denied(Denial),
-}
-
-fn walk(door: &dyn PageDoor, statement: &PageQuery, bound: FanOutBound) -> KitResult<Walked> {
-    match read_pages(door, statement, bound) {
-        Ok(rows) => Ok(Walked::Rows(rows)),
-        Err(KitError::Door(message)) => Ok(Walked::Denied(Denial {
-            code: None,
-            message: Some(message),
-            revoked_at: None,
-        })),
-        Err(other) => Err(other),
-    }
-}
-
-/// Read and fold the decorations a window of documents needs.
-fn read_decorations(
-    door: &dyn PageDoor,
-    taxonomy: &Taxonomy,
-    wrappers: &[Row],
-    folder_by_document: BTreeMap<String, String>,
-    root_folder_id: Option<String>,
-) -> KitResult<Result<Decorations, Denial>> {
-    let document_ids: Vec<String> = wrappers
-        .iter()
-        .filter_map(|row| text_of(row, "document_id"))
-        .collect();
-    let content_ids: Vec<String> = wrappers
-        .iter()
-        .filter_map(|row| text_of(row, "current_content_id"))
-        .collect::<BTreeSet<String>>()
-        .into_iter()
-        .collect();
-
-    let starred_concept = taxonomy.concept(FLAGS_SCHEME_URI, STARRED_NOTATION);
-    // NO CONCEPT, NEVER STARRED (#274): the flags scheme is created on first
-    // use, so a vault where nothing was ever starred has none — and reading
-    // that as "every document is starred" is the inverse mistake.
-    let starred = match &starred_concept {
-        None => BTreeSet::new(),
-        Some(concept_id) if document_ids.is_empty() => {
-            let _ = concept_id;
-            BTreeSet::new()
-        }
-        Some(concept_id) => {
-            match walk(
-                door,
-                &starred_statement(concept_id, &document_ids)?,
-                DOC_JOIN_BOUND,
-            )? {
-                Walked::Denied(denial) => return Ok(Err(denial)),
-                Walked::Rows(rows) => rows
-                    .iter()
-                    .filter_map(|row| text_of(row, "target_id"))
-                    .collect(),
-            }
-        }
-    };
-
-    let labels = if document_ids.is_empty() {
-        BTreeMap::new()
-    } else {
-        match walk(door, &labels_statement(&document_ids)?, DOC_PAIR_BOUND)? {
-            Walked::Denied(denial) => return Ok(Err(denial)),
-            Walked::Rows(rows) => fold_labels(taxonomy, &rows),
-        }
-    };
-
-    let contents = if content_ids.is_empty() {
-        BTreeMap::new()
-    } else {
-        match walk(
-            door,
-            &contents_statement("docs.drive.contents", &content_ids)?,
-            DOC_JOIN_BOUND,
-        )? {
-            Walked::Denied(denial) => return Ok(Err(denial)),
-            Walked::Rows(rows) => rows
-                .iter()
-                .filter_map(ContentRow::of)
-                .map(|content| (content.content_id.clone(), content))
-                .collect(),
-        }
-    };
-
-    let custody = if content_ids.is_empty() {
-        BTreeMap::new()
-    } else {
-        match walk(door, &custody_statement(&content_ids)?, DOC_JOIN_BOUND)? {
-            // Custody is a DECORATION: a denial leaves the field absent rather
-            // than taking the drive down. v0's helper does not catch, so this
-            // is a narrowing in the port's favour and it is named in the receipt.
-            Walked::Denied(_) => BTreeMap::new(),
-            Walked::Rows(rows) => fold_custody(&rows),
-        }
-    };
-
-    // The representation index answers with an empty map for a door that
-    // refuses: a row with no media type is what "we may not read that" looks
-    // like on a tile.
-    let representations =
-        read_representations(door, &content_ids, DOC_JOIN_BOUND).unwrap_or_default();
-
-    Ok(Ok(Decorations {
-        folder_by_document,
-        root_folder_id,
-        starred,
-        labels,
-        custody,
-        representations,
-        contents,
-        snippets: BTreeMap::new(),
-    }))
-}
-
-/// A denied query's payload: the empty answer plus the denial.
-fn denied_drive(denial: Denial, window: usize) -> (DriveData, Option<Denial>) {
-    (
-        DriveData {
-            window,
-            ..DriveData::default()
-        },
-        Some(denial),
-    )
-}
-
-/// `drive` — the whole projection.
-///
-/// Returns the payload and, separately, the denial v0 ships as `vaultDenied`:
-/// a caller renders both, and a denial is never an `Err`.
+/// `drive`: the folders and the newest `limit` documents.
 pub fn load_drive(
     door: &dyn PageDoor,
     input: DriveInput,
 ) -> KitResult<(DriveData, Option<Denial>)> {
     let window = input.window();
-    let taxonomy = match read_taxonomy(door) {
-        Ok(taxonomy) => taxonomy,
-        Err(KitError::Door(message)) => {
-            return Ok(denied_drive(
-                Denial {
-                    code: None,
-                    message: Some(message),
-                    revoked_at: None,
-                },
-                window,
-            ));
-        }
-        Err(other) => return Err(other),
-    };
-    let (folders, root_folder_id) = fold_folders(&taxonomy);
-
-    let folder_concept_ids: Vec<String> = taxonomy
-        .concepts_in(FOLDER_SCHEME_URI)
-        .into_iter()
-        .filter_map(|row| text_of(row, "concept_id"))
-        .collect();
-    // An `IN` filter with an empty array is a refusal in the kit's grammar: no
-    // scheme means no filed documents, and asking is the error.
-    // THE DECLARED WINDOW IS WALKED TO ITS STATED SIZE (D-1020-DC10, and the
-    // second half of D-1020-D3-12).
-    //
-    // `MAX_PAGE_ROWS` clamps a PAGE to 500, and v0 asks for its 2,000-row
-    // window as one page and takes `.rows` — so a drive declaring `limit: 2000`
-    // answers 500 documents and discards the cursor that says there are more.
-    // Measured at the year-3 profile: 500 of 7,600 live documents
-    // (`crates/apps/docs/tests/year3.rs`).
-    //
-    // The drive is a LIST, and a list is where a clamp is defensible — but the
-    // clamp has to be the one the caller ASKED for, not one the page contract
-    // imposed behind it. `core_tag.tagged_at` is `NOT NULL`, so the keyset walk
-    // is continuable and the stated window is reachable; Photos' library takes
-    // one page instead because its own sort column is nullable and a walk there
-    // would silently drop every NULL (D-1020-P11). `filled` is the same claim
-    // v0's `next !== undefined` makes, so `truncated` still comes from the read
-    // rather than from a row count.
-    let filed = if folder_concept_ids.is_empty() {
-        None
-    } else {
-        match read_window(door, &filed_statement(&folder_concept_ids)?, window) {
-            Ok(walked) => Some(walked),
-            Err(KitError::Door(message)) => {
-                return Ok(denied_drive(
-                    Denial {
-                        code: None,
-                        message: Some(message),
-                        revoked_at: None,
-                    },
-                    window,
-                ));
-            }
-            Err(other) => return Err(other),
-        }
-    };
-    let truncated = filed.as_ref().is_some_and(|walked| walked.filled);
-    let mut folder_by_document: BTreeMap<String, String> = BTreeMap::new();
-    for row in filed.iter().flat_map(|walked| walked.rows.iter()) {
-        if let (Some(target_id), Some(concept_id)) =
-            (text_of(row, "target_id"), text_of(row, "concept_id"))
-        {
-            folder_by_document.insert(target_id, concept_id);
-        }
-    }
-
-    // THE FILED WINDOW IS THE WHOLE WINDOW. It used to be unioned with the
-    // documents a share placed here, which is the plane rung five drops
-    // (#1029): nothing delivers a copy into this vault any more.
-    let windowed: Vec<String> = folder_by_document
-        .keys()
-        .cloned()
-        .collect::<BTreeSet<String>>()
-        .into_iter()
-        .collect();
-    if windowed.is_empty() {
-        return Ok((
-            DriveData {
-                folders,
-                documents: Vec::new(),
-                root_folder_id,
-                truncated: false,
-                window,
-            },
-            None,
-        ));
-    }
-
-    let wrappers = match walk(door, &documents_statement(&windowed)?, DOC_JOIN_BOUND)? {
-        Walked::Denied(denial) => return Ok(denied_drive(denial, window)),
-        Walked::Rows(rows) => rows,
-    };
-    let decorations = match read_decorations(
-        door,
-        &taxonomy,
-        &wrappers,
-        folder_by_document,
-        root_folder_id.clone(),
-    )? {
-        Err(denial) => return Ok(denied_drive(denial, window)),
-        Ok(decorations) => decorations,
-    };
-
-    let mut documents: Vec<DocumentRow> = wrappers
-        .iter()
-        .filter_map(|wrapper| fold_row(wrapper, &decorations))
-        .collect();
-    // NEWEST FIRST BY `created_at`, the wrapper's own mint. v0 compares the
-    // strings (`String(b.created_at).localeCompare(…)`) and these are ISO
-    // instants, where byte order and collation agree.
-    documents.sort_by(|left, right| {
-        right
-            .created_at
-            .as_deref()
-            .unwrap_or_default()
-            .cmp(left.created_at.as_deref().unwrap_or_default())
-            .then_with(|| left.document_id.cmp(&right.document_id))
-    });
-
-    Ok((
-        DriveData {
+    let (mut data, denial) = guarded(|| {
+        let folders = read_folders(door)?;
+        let newest = read_window(door, &window_statement(), window)?;
+        let documents = fold(door, &newest.rows, &BTreeMap::new(), false)?;
+        Ok(DriveData {
             folders,
             documents,
-            root_folder_id,
-            truncated,
+            truncated: newest.filled,
             window,
-        },
-        None,
-    ))
+        })
+    })?;
+    data.window = window;
+    Ok((data, denial))
 }
 
 // ---------------------------------------------------------------------------
-// The three shelves that read for themselves (Q-1047-7).
+// The three shelves that read for themselves (Q-1047-7)
 // ---------------------------------------------------------------------------
 
-/// A shelf that is cut from its OWN read when the drive's window is truncated.
+/// A shelf that is cut from its own read when the drive's window is truncated.
 ///
-/// The window is the newest `limit` documents *filed*, and the three shelves
-/// below are not defined by when a document was filed: Trash is whatever was
-/// trashed, Starred whatever the member starred, Recent the newest *created*.
-/// Cut from the window they inherit its cut — a trashed document filed a year
-/// ago is on no Trash shelf, and a star on an old document is no star — so each
-/// reads its own set, and the window keeps only the two shelves it defines: All
-/// and Folders (owner ruling 2026-10-15).
+/// The window is the newest `limit` documents made, and these three are not
+/// defined by when a document was made: Trash is whatever was trashed, Starred
+/// whatever the member starred, Recent the newest *made*. Cut from the window they
+/// would inherit its cut, so each reads its own set and the window keeps only the
+/// two shelves it defines, All and Folders.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ShelfArm {
     Trash,
@@ -998,548 +556,199 @@ pub enum ShelfArm {
     Recent,
 }
 
-/// What an arm found: its rows, folded as the drive folds them, and whether
-/// more exist beyond them. `filled` is the read's own cursor, never a count.
+/// What an arm found: its rows, folded as the drive folds them, and whether more
+/// exist beyond them.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct ArmData {
     pub documents: Vec<DocumentRow>,
     pub filled: bool,
 }
 
-/// How many rows an arm holds, read without decorating any of them — the rail
-/// states the Starred and Trash counts whichever shelf is open. `filled` makes
-/// `rows` a floor: the arm stopped at its window.
+/// How many rows an arm holds, read without decorating any of them. `filled`
+/// makes `rows` a floor: the arm stopped at its window.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct ArmCount {
     pub rows: usize,
     pub filled: bool,
 }
 
-/// Pages one starred walk may take. A star is the owner's own gesture, so 8 ×
-/// 500 stars is a bound a member does not reach; past it the read says so
-/// rather than answering short.
-const STARRED_PAGES: usize = 8;
-
-/// An arm's wrappers before any decoration.
-struct ArmRows {
-    wrappers: Vec<Row>,
-    filled: bool,
-}
-
-fn window_arm(
-    door: &dyn PageDoor,
-    statement: &PageQuery,
-    rows: usize,
-) -> KitResult<Result<ArmRows, Denial>> {
-    match read_window(door, statement, rows) {
-        Ok(window) => Ok(Ok(ArmRows {
-            wrappers: window.rows,
-            filled: window.filled,
-        })),
-        Err(KitError::Door(message)) => Ok(Err(denial_of(message))),
-        Err(other) => Err(other),
-    }
-}
-
-/// The live starred wrappers, newest-starred first, up to `rows`.
+/// The live starred documents, newest star first, up to `rows`.
 ///
-/// Two reads per page of tags — the tags, then the wrappers they name — because
-/// a star survives the trash: the first `rows` tags may name trashed documents,
-/// and counting them would answer a short shelf while live stars waited beyond.
-/// So the walk goes on until `rows + 1` live ones are found (the extra one is
-/// the proof that the shelf is longer than it) or the tags run out.
-fn starred_arm(
-    door: &dyn PageDoor,
-    taxonomy: &Taxonomy,
-    rows: usize,
-) -> KitResult<Result<ArmRows, Denial>> {
-    // NO CONCEPT, NEVER STARRED (#274): the flags scheme is created on first use.
-    let Some(concept_id) = taxonomy.concept(FLAGS_SCHEME_URI, STARRED_NOTATION) else {
-        return Ok(Ok(ArmRows {
-            wrappers: Vec::new(),
-            filled: false,
-        }));
-    };
-    let statement = starred_tags_statement(&concept_id);
-    let mut live: Vec<Row> = Vec::new();
-    let mut seen: BTreeSet<String> = BTreeSet::new();
+/// A star survives the trash and other kinds carry it, so the first `rows` stars
+/// may name none that is a live document: the walk goes on until `rows + 1` live
+/// ones are found (the extra one proves the shelf is longer) or the stars run out.
+fn starred_rows(door: &dyn PageDoor, rows: usize) -> KitResult<(Vec<Row>, bool)> {
+    let query = starred_statement();
+    let mut found: Vec<Row> = Vec::new();
     let mut after = None;
     for _ in 0..STARRED_PAGES {
-        let page = match door.page(
-            &statement,
+        let page = door.page(
+            &query,
             &PageRequest {
-                limit: MAX_PAGE_ROWS,
+                limit: centraid_apps_kit::page::MAX_PAGE_ROWS,
                 after: after.clone(),
             },
-        ) {
-            Ok(page) => page,
-            Err(KitError::Door(message)) => return Ok(Err(denial_of(message))),
-            Err(other) => return Err(other),
-        };
-        let ids: Vec<String> = page
-            .rows
-            .iter()
-            .filter_map(|row| text_of(row, "target_id"))
+        )?;
+        let ids = ids_of(&page.rows, "from_id");
+        let live = read_of(
+            door,
+            "docs.shelf.starred.entities",
+            "entity",
+            ENTITY_COLUMNS,
+            "id",
+            &ids,
+            Some(("kind = ? AND deleted_at IS NULL", text(DOCUMENT_KIND))),
+        )?;
+        let by_id: BTreeMap<String, Row> = live
+            .into_iter()
+            .filter_map(|row| Some((text_of(&row, "id")?, row)))
             .collect();
-        if !ids.is_empty() {
-            let named = match walk(door, &documents_statement(&ids)?, DOC_JOIN_BOUND)? {
-                Walked::Denied(denial) => return Ok(Err(denial)),
-                Walked::Rows(found) => found,
-            };
-            let by_id: BTreeMap<String, Row> = named
-                .into_iter()
-                .filter_map(|row| Some((text_of(&row, "document_id")?, row)))
-                .collect();
-            for id in &ids {
-                if let Some(wrapper) = by_id.get(id)
-                    && text_of(wrapper, "deleted_at").is_none()
-                    && seen.insert(id.clone())
-                {
-                    live.push(wrapper.clone());
-                }
-            }
-        }
-        if live.len() > rows {
-            live.truncate(rows);
-            return Ok(Ok(ArmRows {
-                wrappers: live,
-                filled: true,
-            }));
-        }
+        // Newest star first, the order the page came in.
+        found.extend(ids.iter().filter_map(|id| by_id.get(id).cloned()));
         match page.next {
-            None => {
-                return Ok(Ok(ArmRows {
-                    wrappers: live,
-                    filled: false,
-                }));
-            }
-            Some(next) => after = Some(next),
+            Some(next) if found.len() <= rows => after = Some(next),
+            Some(_) => break,
+            None => return Ok((trim(found, rows), false)),
         }
     }
-    Err(KitError::FanOutExceeded {
-        query: statement.name,
-        cap: STARRED_PAGES * MAX_PAGE_ROWS,
-    })
+    let filled = found.len() > rows;
+    Ok((trim(found, rows), filled))
 }
 
-fn read_arm(
-    door: &dyn PageDoor,
-    taxonomy: &Taxonomy,
-    arm: ShelfArm,
-    rows: usize,
-) -> KitResult<Result<ArmRows, Denial>> {
-    match arm {
-        ShelfArm::Trash => window_arm(door, &trash_statement(), rows),
-        ShelfArm::Recent => window_arm(door, &recent_statement(), rows),
-        ShelfArm::Starred => starred_arm(door, taxonomy, rows),
-    }
+fn trim(mut rows: Vec<Row>, to: usize) -> Vec<Row> {
+    rows.truncate(to);
+    rows
 }
 
-fn taxonomy_or_denial(door: &dyn PageDoor) -> KitResult<Result<Taxonomy, Denial>> {
-    match read_taxonomy(door) {
-        Ok(taxonomy) => Ok(Ok(taxonomy)),
-        Err(KitError::Door(message)) => Ok(Err(denial_of(message))),
-        Err(other) => Err(other),
-    }
+fn arm_entities(door: &dyn PageDoor, arm: ShelfArm, rows: usize) -> KitResult<(Vec<Row>, bool)> {
+    let statement = match arm {
+        ShelfArm::Starred => return starred_rows(door, rows),
+        ShelfArm::Trash => trash_statement(),
+        ShelfArm::Recent => recent_statement(),
+    };
+    let window = read_window(door, &statement, rows)?;
+    Ok((window.rows, window.filled))
 }
 
-/// `shelf` — ONE SHELF, FROM ITS OWN READ (Q-1047-7): up to `rows` of the arm's
-/// documents, decorated as the drive decorates them.
-///
-/// Asked for only when the drive says `truncated`: under a window that holds the
-/// whole drive the window's cut is already complete, and the parity corpus —
-/// which is smaller than any window — never reaches this.
+/// One arm's documents, folded as the drive folds them.
 pub fn load_shelf_arm(
     door: &dyn PageDoor,
     arm: ShelfArm,
     rows: usize,
 ) -> KitResult<(ArmData, Option<Denial>)> {
-    let taxonomy = match taxonomy_or_denial(door)? {
-        Ok(taxonomy) => taxonomy,
-        Err(denial) => return Ok((ArmData::default(), Some(denial))),
-    };
-    let found = match read_arm(door, &taxonomy, arm, rows)? {
-        Ok(found) => found,
-        Err(denial) => return Ok((ArmData::default(), Some(denial))),
-    };
-    if found.wrappers.is_empty() {
-        return Ok((ArmData::default(), None));
-    }
-    let (_, root_folder_id) = fold_folders(&taxonomy);
-    let folder_concepts: BTreeSet<String> = taxonomy
-        .concepts_in(FOLDER_SCHEME_URI)
-        .into_iter()
-        .filter_map(|row| text_of(row, "concept_id"))
-        .collect();
-    let document_ids: Vec<String> = found
-        .wrappers
-        .iter()
-        .filter_map(|row| text_of(row, "document_id"))
-        .collect();
-    // THE FOLDER IS THE ONE FOLDERS-SCHEME TAG, as `load_document` reads it.
-    let tags = match walk(door, &labels_statement(&document_ids)?, DOC_PAIR_BOUND)? {
-        Walked::Denied(denial) => return Ok((ArmData::default(), Some(denial))),
-        Walked::Rows(tagged) => tagged,
-    };
-    let folder_by_document: BTreeMap<String, String> = tags
-        .iter()
-        .filter_map(|row| Some((text_of(row, "target_id")?, text_of(row, "concept_id")?)))
-        .filter(|(_, concept_id)| folder_concepts.contains(concept_id))
-        .collect();
-    let decorations = match read_decorations(
-        door,
-        &taxonomy,
-        &found.wrappers,
-        folder_by_document,
-        root_folder_id,
-    )? {
-        Err(denial) => return Ok((ArmData::default(), Some(denial))),
-        Ok(decorations) => decorations,
-    };
-    Ok((
-        ArmData {
-            documents: found
-                .wrappers
-                .iter()
-                .filter_map(|wrapper| fold_row(wrapper, &decorations))
-                .collect(),
-            filled: found.filled,
-        },
-        None,
-    ))
-}
-
-/// How many documents an arm holds, up to `rows`, without decorating them.
-pub fn count_shelf_arm(
-    door: &dyn PageDoor,
-    arm: ShelfArm,
-    rows: usize,
-) -> KitResult<(ArmCount, Option<Denial>)> {
-    // Only Starred needs the vocabulary (the flag's concept); the other two are
-    // a predicate on the wrapper.
-    let taxonomy = if arm == ShelfArm::Starred {
-        match taxonomy_or_denial(door)? {
-            Ok(taxonomy) => taxonomy,
-            Err(denial) => return Ok((ArmCount::default(), Some(denial))),
-        }
-    } else {
-        Taxonomy::default()
-    };
-    Ok(match read_arm(door, &taxonomy, arm, rows)? {
-        Ok(found) => (
-            ArmCount {
-                rows: found.wrappers.len(),
-                filled: found.filled,
-            },
-            None,
-        ),
-        Err(denial) => (ArmCount::default(), Some(denial)),
+    guarded(|| {
+        let (entities, filled) = arm_entities(door, arm, rows)?;
+        Ok(ArmData {
+            documents: fold(door, &entities, &BTreeMap::new(), false)?,
+            filled,
+        })
     })
 }
 
-/// `search` — the same rows, in the order the index ranked them.
+/// How many rows an arm holds, with none of them decorated.
+pub fn count_shelf_arm(
+    door: &dyn PageDoor,
+    arm: ShelfArm,
+    window: usize,
+) -> KitResult<(ArmCount, Option<Denial>)> {
+    guarded(|| {
+        let (entities, filled) = arm_entities(door, arm, window)?;
+        Ok(ArmCount {
+            rows: entities.len(),
+            filled,
+        })
+    })
+}
+
+// ---------------------------------------------------------------------------
+// `search`
+// ---------------------------------------------------------------------------
+
+/// `search` from a TERM: the index's hits for documents, laid onto their rows in
+/// rank order.
 ///
-/// The FTS read is `ctx.vault.search`, which is not a [`PageQuery`] and belongs
-/// to `crates/search`; the hits arrive here as the rows the index answered, **in
-/// rank order**, and the fold keeps that order.
-///
-/// ONLY WRAPPERS CARRYING A FOLDERS-SCHEME TAG COME BACK, which is also why
-/// trashed documents never match: a trashed document keeps its folder tag, so
-/// the filter that drops an untagged hit is not what excludes it — the index is
-/// (`search.ts:5`). A port that re-derived the exclusion from `deleted_at`
-/// would drop a document the index was right to return.
-pub fn load_search(door: &dyn PageDoor, hits: &[Row]) -> KitResult<(SearchData, Option<Denial>)> {
-    if hits.is_empty() {
+/// The index holds live documents only, which is why a trashed document never
+/// matches. A term with no searchable word is an answer, no rows, and never an
+/// error.
+pub fn load_search_term(
+    door: &dyn PageDoor,
+    search: &dyn centraid_search::Search,
+    principal: &centraid_search::Principal,
+    term: &str,
+    limit: usize,
+) -> KitResult<(SearchData, Option<Denial>)> {
+    let term = term.trim();
+    if term.is_empty() || limit == 0 {
         return Ok((SearchData::default(), None));
     }
-    let document_ids: Vec<String> = hits
-        .iter()
-        .filter_map(|row| text_of(row, "document_id"))
-        .collect();
-    if document_ids.is_empty() {
-        return Ok((SearchData::default(), None));
-    }
-    let taxonomy = match read_taxonomy(door) {
-        Ok(taxonomy) => taxonomy,
-        Err(KitError::Door(message)) => {
+    let request = centraid_search::SearchRequest::new(DOCUMENT_KIND, term, limit.min(SEARCH_LIMIT));
+    let page = match search.query(principal, &request) {
+        Ok(centraid_search::Answer::Data { page, .. }) => page,
+        Ok(centraid_search::Answer::Denied(denial)) => {
             return Ok((
                 SearchData::default(),
                 Some(Denial {
-                    code: None,
-                    message: Some(message),
-                    revoked_at: None,
+                    code: denial.code,
+                    message: denial.message,
+                    revoked_at: denial.revoked_at,
                 }),
             ));
         }
-        Err(other) => return Err(other),
-    };
-    let (_, root_folder_id) = fold_folders(&taxonomy);
-    let folder_concepts: BTreeSet<String> = taxonomy
-        .concepts_in(FOLDER_SCHEME_URI)
-        .into_iter()
-        .filter_map(|row| text_of(row, "concept_id"))
-        .collect();
-
-    let tags = match walk(door, &labels_statement(&document_ids)?, DOC_PAIR_BOUND)? {
-        Walked::Denied(denial) => return Ok((SearchData::default(), Some(denial))),
-        Walked::Rows(rows) => rows,
-    };
-    let mut folder_by_document: BTreeMap<String, String> = BTreeMap::new();
-    for row in &tags {
-        if let (Some(target_id), Some(concept_id)) =
-            (text_of(row, "target_id"), text_of(row, "concept_id"))
-            && folder_concepts.contains(&concept_id)
-        {
-            folder_by_document.insert(target_id, concept_id);
+        Err(centraid_search::SearchError::NoSearchableWords { .. }) => {
+            return Ok((SearchData::default(), None));
         }
-    }
-    // A match with no folders-scheme tag is not a document of this drive.
-    let matched: Vec<&Row> = hits
-        .iter()
-        .filter(|row| {
-            text_of(row, "document_id")
-                .is_some_and(|document_id| folder_by_document.contains_key(&document_id))
-        })
-        .collect();
-    if matched.is_empty() {
+        Err(other) => return Ok((SearchData::default(), Some(denial_of(other.to_string())))),
+    };
+    if page.rows.is_empty() {
         return Ok((SearchData::default(), None));
     }
-    let wrappers: Vec<Row> = matched.iter().map(|row| (*row).clone()).collect();
-    let mut decorations = match read_decorations(
-        door,
-        &taxonomy,
-        &wrappers,
-        folder_by_document,
-        root_folder_id,
-    )? {
-        Err(denial) => return Ok((SearchData::default(), Some(denial))),
-        Ok(decorations) => decorations,
-    };
-    decorations.snippets = hits
+    let ids: Vec<String> = page.rows.iter().map(|target| target.id.clone()).collect();
+    let snippets: BTreeMap<String, String> = page
+        .rows
         .iter()
-        .filter_map(|row| Some((text_of(row, "document_id")?, text_of(row, "_snippet")?)))
+        .map(|target| (target.id.clone(), target.snippet.clone()))
         .collect();
-
-    // VAULT ORDER IS RANK ORDER (best match first) — keep it. No sort here, and
-    // that absence is the behaviour.
-    let documents: Vec<DocumentRow> = wrappers
-        .iter()
-        .filter_map(|wrapper| fold_row(wrapper, &decorations))
-        .map(|mut row| {
-            // v0 ships `""` rather than `null` for a hit with no snippet, so a
-            // renderer never prints "null".
-            row.snippet = Some(row.snippet.unwrap_or_default());
-            row
-        })
-        .collect();
-    Ok((SearchData { documents }, None))
-}
-
-/// `history` — a document's version chain.
-///
-/// Walked from `current_revision_id` through `parent_revision_id`, newest
-/// first, each occurrence naming the content that became current at that moment
-/// — so a document that returns to bytes it already held reads as two versions
-/// rather than one node a content-keyed walk had to collapse (#996 R20(a)).
-pub fn load_history(
-    door: &dyn PageDoor,
-    document_id: &str,
-) -> KitResult<(HistoryData, Option<Denial>)> {
-    if document_id.is_empty() {
-        return Ok((HistoryData::default(), None));
-    }
-    // ONE ROW, ASKED FOR AS ONE ROW: a page's window is part of its type, so
-    // the document read says `limit: 1` and means it.
-    let wrapper = match door.page(
-        &documents_statement(&[document_id.to_owned()])?,
-        &PageRequest::first(1),
-    ) {
-        Ok(page) => page.rows.into_iter().next(),
-        Err(KitError::Door(message)) => {
-            return Ok((
-                HistoryData::default(),
-                Some(Denial {
-                    code: None,
-                    message: Some(message),
-                    revoked_at: None,
-                }),
-            ));
-        }
-        Err(other) => return Err(other),
-    };
-    let Some(wrapper) = wrapper else {
-        return Ok((HistoryData::default(), None));
-    };
-
-    let revisions = match door.page(
-        &revisions_statement(document_id),
-        &PageRequest::first(MAX_CHAIN_STEPS.min(MAX_PAGE_ROWS)),
-    ) {
-        Ok(page) => page.rows,
-        Err(KitError::Door(message)) => {
-            return Ok((
-                HistoryData::default(),
-                Some(Denial {
-                    code: None,
-                    message: Some(message),
-                    revoked_at: None,
-                }),
-            ));
-        }
-        Err(other) => return Err(other),
-    };
-
-    let (chain, asserted_at) = walk_chain(&wrapper, &revisions);
-    let chain = if chain.is_empty() {
-        // A DOCUMENT MINTED BEFORE ITS WRAPPER CARRIED A POINTER still has one
-        // version: the bytes it is currently made of. Honest absence, not a hole.
-        text_of(&wrapper, "current_content_id")
-            .map(|content_id| vec![content_id])
-            .unwrap_or_default()
-    } else {
-        chain
-    };
-    if chain.is_empty() {
-        return Ok((HistoryData::default(), None));
-    }
-
-    let unique: Vec<String> = chain
-        .iter()
-        .cloned()
-        .collect::<BTreeSet<String>>()
+    guarded(|| {
+        let mut entities: BTreeMap<String, Row> = read_of(
+            door,
+            "docs.search.entities",
+            "entity",
+            ENTITY_COLUMNS,
+            "id",
+            &ids,
+            None,
+        )?
         .into_iter()
+        .filter_map(|row| Some((text_of(&row, "id")?, row)))
         .collect();
-    let contents: BTreeMap<String, ContentRow> = match walk(
-        door,
-        &contents_statement("docs.history.contents", &unique)?,
-        DOC_JOIN_BOUND,
-    )? {
-        Walked::Denied(denial) => return Ok((HistoryData::default(), Some(denial))),
-        Walked::Rows(rows) => rows
-            .iter()
-            .filter_map(ContentRow::of)
-            .map(|content| (content.content_id.clone(), content))
-            .collect(),
-    };
-    // Bytes carry no media type since #996 R20(b). A SUPERSEDED version has no
-    // representation of its own — the document's moved with the head — and an
-    // edit never changes the format, so the head's answer covers the whole
-    // chain, with the content index as the fallback for a version some other
-    // owner also reads.
-    let representations = read_representations(door, &unique, DOC_JOIN_BOUND).unwrap_or_default();
-    let head_type = representations
-        .owner(DOCUMENT_TARGET_TYPE, document_id)
-        .map(str::to_owned);
-
-    let versions = chain
-        .iter()
-        .enumerate()
-        .map(|(index, content_id)| {
-            let content = contents.get(content_id);
-            let (content_uri, poster_uri) = uris_of(content);
-            VersionRow {
-                media_type: representations
-                    .content(content_id)
-                    .map(str::to_owned)
-                    .or_else(|| head_type.clone()),
-                byte_size: content.and_then(|content| content.byte_size),
-                content_uri,
-                poster_uri,
-                current: index == 0,
-                // The occurrence's own instant; a pre-#996 document with no
-                // occurrence falls back to the content's mint, then the
-                // document's.
-                asserted_at: asserted_at
-                    .get(content_id)
-                    .cloned()
-                    .or_else(|| content.and_then(|content| content.created_at.clone()))
-                    .or_else(|| text_of(&wrapper, "created_at")),
-                content_id: content_id.clone(),
-            }
+        // The rows come back in id order; the hit list's order is the rank.
+        let ranked: Vec<Row> = ids.iter().filter_map(|id| entities.remove(id)).collect();
+        Ok(SearchData {
+            documents: fold(door, &ranked, &snippets, false)?
+                .into_iter()
+                // v0 ships "" rather than null for a hit with no snippet.
+                .map(|mut row| {
+                    row.snippet = Some(row.snippet.unwrap_or_default());
+                    row
+                })
+                .collect(),
         })
-        .collect();
-    Ok((HistoryData { versions }, None))
+    })
 }
 
-/// Walk the occurrence chain in memory, over ids one read returned.
-///
-/// Returns the content ids newest-first and, per content id, the instant it
-/// FIRST became current — because a content id can appear twice and the date
-/// shown is the occurrence's.
-#[must_use]
-pub fn walk_chain(wrapper: &Row, revisions: &[Row]) -> (Vec<String>, BTreeMap<String, String>) {
-    let by_id: BTreeMap<String, &Row> = revisions
-        .iter()
-        .filter_map(|row| text_of(row, "revision_id").map(|id| (id, row)))
-        .collect();
-    let mut chain: Vec<String> = Vec::new();
-    let mut asserted_at: BTreeMap<String, String> = BTreeMap::new();
-    let mut seen: BTreeSet<String> = BTreeSet::new();
-    let mut at = text_of(wrapper, "current_revision_id");
-    for _ in 0..MAX_CHAIN_STEPS {
-        let Some(revision_id) = at.clone() else { break };
-        if !seen.insert(revision_id.clone()) {
-            break;
-        }
-        let Some(revision) = by_id.get(&revision_id) else {
-            break;
-        };
-        let Some(content_id) = text_of(revision, "content_id") else {
-            break;
-        };
-        chain.push(content_id.clone());
-        if let Some(recorded_at) = text_of(revision, "recorded_at") {
-            asserted_at.entry(content_id).or_insert(recorded_at);
-        }
-        at = text_of(revision, "parent_revision_id");
-    }
-    (chain, asserted_at)
-}
+// ---------------------------------------------------------------------------
+// `document`
+// ---------------------------------------------------------------------------
 
-/// `activity` — the app-plane read over `access.provenance`.
-///
-/// The vault's ACTUAL audit trail, one row per command write, scoped to exactly
-/// this document. **Never a synthesized guess from `created_at`/`updated_at`.**
-pub fn load_activity(
-    door: &dyn PageDoor,
-    document_id: &str,
-) -> KitResult<(ActivityData, Option<Denial>)> {
-    if document_id.is_empty() {
-        return Ok((ActivityData::default(), None));
-    }
-    let rows = match walk(door, &provenance_statement(document_id), DOC_PAIR_BOUND)? {
-        Walked::Denied(denial) => return Ok((ActivityData::default(), Some(denial))),
-        Walked::Rows(rows) => rows,
-    };
-    let mut events: Vec<ActivityEvent> = rows
-        .iter()
-        .map(|row| ActivityEvent {
-            activity: text_of(row, "prov_activity"),
-            agent_kind: text_of(row, "agent_kind"),
-            occurred_at: text_of(row, "occurred_at"),
-        })
-        .collect();
-    // The walk already ordered by `occurred_at`; the sort survives because the
-    // rail's order is the RAIL'S OWN CLAIM, not a page boundary's.
-    events.sort_by(|left, right| {
-        right
-            .occurred_at
-            .as_deref()
-            .unwrap_or_default()
-            .cmp(left.occurred_at.as_deref().unwrap_or_default())
-    });
-    Ok((ActivityData { events }, None))
-}
-
-/// What `document` answers: one row, where it is filed, and its text.
+/// What `document` answers.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct DocumentData {
-    /// `None` when no such document exists — a state, not an error.
+    /// `None` when no such document exists: a state, not an error.
     pub row: Option<DocumentRow>,
     /// The folder chain from the top level down to the document's folder.
     pub path: Vec<FolderRow>,
-    /// The decoded text of the head's content: `None` is "no text row", and
-    /// `Some("")` is an empty text document ([`body_statement`]).
+    /// The words extracted from the head's bytes: `None` is "no text row", and
+    /// `Some("")` is an empty text document.
     pub body: Option<String>,
 }
 
@@ -1563,10 +772,9 @@ pub fn folder_path(folders: &[FolderRow], folder_id: Option<&str>) -> Vec<Folder
     path
 }
 
-/// `document` — ONE document, as the reader, the viewer and the properties
-/// sheet draw it (#1046). The same row the drive folds, found by id rather
-/// than through the filed window — so a document beyond the window, or one
-/// search found, opens exactly as a browsed one does.
+/// ONE document, as the reader, the viewer and the properties sheet draw it. The
+/// same row the drive folds, found by id, so a document beyond the window, or one
+/// search found, or one attached to an event, opens exactly as a browsed one does.
 pub fn load_document(
     door: &dyn PageDoor,
     document_id: &str,
@@ -1574,166 +782,180 @@ pub fn load_document(
     if document_id.is_empty() {
         return Ok((DocumentData::default(), None));
     }
-    let wrappers = match walk(
-        door,
-        &documents_statement(&[document_id.to_owned()])?,
-        DOC_JOIN_BOUND,
-    )? {
-        Walked::Denied(denial) => return Ok((DocumentData::default(), Some(denial))),
-        Walked::Rows(rows) => rows,
-    };
-    if wrappers.is_empty() {
-        return Ok((DocumentData::default(), None));
-    }
-    let taxonomy = match read_taxonomy(door) {
-        Ok(taxonomy) => taxonomy,
-        Err(KitError::Door(message)) => {
-            return Ok((DocumentData::default(), Some(denial_of(message))));
-        }
-        Err(other) => return Err(other),
-    };
-    let (folders, root_folder_id) = fold_folders(&taxonomy);
-    let folder_concepts: BTreeSet<String> = taxonomy
-        .concepts_in(FOLDER_SCHEME_URI)
-        .into_iter()
-        .filter_map(|row| text_of(row, "concept_id"))
-        .collect();
-    let tags = match walk(
-        door,
-        &labels_statement(&[document_id.to_owned()])?,
-        DOC_PAIR_BOUND,
-    )? {
-        Walked::Denied(denial) => return Ok((DocumentData::default(), Some(denial))),
-        Walked::Rows(rows) => rows,
-    };
-    let folder_by_document: BTreeMap<String, String> = tags
+    guarded(|| {
+        let ids = [document_id.to_owned()];
+        let entities = read_of(
+            door,
+            "docs.document.entity",
+            "entity",
+            ENTITY_COLUMNS,
+            "id",
+            &ids,
+            Some(("kind = ?", text(DOCUMENT_KIND))),
+        )?;
+        let Some(row) = fold(door, &entities, &BTreeMap::new(), true)?
+            .into_iter()
+            .next()
+        else {
+            return Ok(DocumentData::default());
+        };
+        let folders = read_folders(door)?;
+        let body = read_of(
+            door,
+            "docs.document.body",
+            "derivative",
+            "blob, text",
+            "blob",
+            std::slice::from_ref(&row.content_id),
+            Some(("variant = ?", text("text"))),
+        )?
         .iter()
-        .filter_map(|row| Some((text_of(row, "target_id")?, text_of(row, "concept_id")?)))
-        .filter(|(_, concept_id)| folder_concepts.contains(concept_id))
-        .collect();
-    let decorations = match read_decorations(
-        door,
-        &taxonomy,
-        &wrappers,
-        folder_by_document,
-        root_folder_id,
-    )? {
-        Err(denial) => return Ok((DocumentData::default(), Some(denial))),
-        Ok(decorations) => decorations,
-    };
-    let Some(row) = wrappers
-        .iter()
-        .find_map(|wrapper| fold_row(wrapper, &decorations))
-    else {
-        return Ok((DocumentData::default(), None));
-    };
-    let body = match walk(door, &body_statement(&row.content_id), DOC_JOIN_BOUND)? {
-        Walked::Denied(denial) => return Ok((DocumentData::default(), Some(denial))),
-        Walked::Rows(rows) => rows.iter().find_map(|row| text_of(row, "body_text")),
-    };
-    Ok((
-        DocumentData {
+        .find_map(|derived| text_of(derived, "text"));
+        Ok(DocumentData {
             path: folder_path(&folders, row.folder_id.as_deref()),
             row: Some(row),
             body,
-        },
-        None,
-    ))
-}
-
-/// `search` from a TERM: the FTS door's hits for `core.document`, laid onto
-/// their wrappers in rank order and folded by [`load_search`].
-///
-/// The index holds live documents only, which is why a trashed document never
-/// matches ([`load_search`]'s note). A term with no searchable word is an
-/// answer — no rows — and never an error.
-pub fn load_search_term(
-    door: &dyn PageDoor,
-    search: &dyn centraid_search::Search,
-    principal: &centraid_search::Principal,
-    term: &str,
-    limit: usize,
-) -> KitResult<(SearchData, Option<Denial>)> {
-    let term = term.trim();
-    if term.is_empty() || limit == 0 {
-        return Ok((SearchData::default(), None));
-    }
-    let request =
-        centraid_search::SearchRequest::new(DOCUMENT_TARGET_TYPE, term, limit.min(SEARCH_LIMIT));
-    let page = match search.query(principal, &request) {
-        Ok(centraid_search::Answer::Data { page, .. }) => page,
-        Ok(centraid_search::Answer::Denied(denial)) => {
-            return Ok((
-                SearchData::default(),
-                Some(Denial {
-                    code: denial.code,
-                    message: denial.message,
-                    revoked_at: denial.revoked_at,
-                }),
-            ));
-        }
-        Err(centraid_search::SearchError::NoSearchableWords { .. }) => {
-            return Ok((SearchData::default(), None));
-        }
-        Err(other) => return Ok((SearchData::default(), Some(denial_of(other.to_string())))),
-    };
-    if page.rows.is_empty() {
-        return Ok((SearchData::default(), None));
-    }
-    let ids: Vec<String> = page.rows.iter().map(|target| target.id.clone()).collect();
-    let mut wrappers: BTreeMap<String, Row> =
-        match walk(door, &documents_statement(&ids)?, DOC_JOIN_BOUND)? {
-            Walked::Denied(denial) => return Ok((SearchData::default(), Some(denial))),
-            Walked::Rows(rows) => rows
-                .into_iter()
-                .filter_map(|row| text_of(&row, "document_id").map(|id| (id, row)))
-                .collect(),
-        };
-    let hits: Vec<Row> = page
-        .rows
-        .iter()
-        .filter_map(|target| {
-            let mut row = wrappers.remove(&target.id)?;
-            row.insert("_snippet".to_owned(), Cell::Text(target.snippet.clone()));
-            Some(row)
         })
-        .collect();
-    load_search(door, &hits)
+    })
 }
 
-fn denial_of(message: String) -> Denial {
-    Denial {
-        code: None,
-        message: Some(message),
-        revoked_at: None,
+// ---------------------------------------------------------------------------
+// `history` and `activity`
+// ---------------------------------------------------------------------------
+
+/// `history`: the head's bytes, then each version a replace put down, newest
+/// first.
+pub fn load_history(
+    door: &dyn PageDoor,
+    document_id: &str,
+) -> KitResult<(HistoryData, Option<Denial>)> {
+    if document_id.is_empty() {
+        return Ok((HistoryData::default(), None));
     }
+    guarded(|| {
+        let ids = [document_id.to_owned()];
+        let made = read_of(
+            door,
+            "docs.history.entity",
+            "entity",
+            "id, created_at",
+            "id",
+            &ids,
+            Some(("kind = ?", text(DOCUMENT_KIND))),
+        )?;
+        let Some(created_at) = made.first().and_then(|row| text_of(row, "created_at")) else {
+            return Ok(HistoryData::default());
+        };
+        let head = read_of(
+            door,
+            "docs.history.document",
+            "document",
+            "id, blob, media_type",
+            "id",
+            &ids,
+            None,
+        )?;
+        let Some(head) = head.first() else {
+            return Ok(HistoryData::default());
+        };
+        let revisions = read_window(door, &revisions_statement(document_id), MAX_VERSIONS)?.rows;
+        let mut hashes = ids_of(&revisions, "blob");
+        hashes.extend(text_of(head, "blob"));
+        hashes.sort_unstable();
+        hashes.dedup();
+        let sizes: BTreeMap<String, i64> = read_of(
+            door,
+            "docs.history.blobs",
+            "blob",
+            "hash, size",
+            "hash",
+            &hashes,
+            None,
+        )?
+        .iter()
+        .filter_map(|row| Some((text_of(row, "hash")?, integer_or_zero(row, "size"))))
+        .collect();
+        // A version became current when the one before it was replaced; the
+        // revision `at` is that instant for the NEXT version, so shift by one.
+        let replaced_at: BTreeMap<i64, String> = revisions
+            .iter()
+            .filter_map(|row| Some((row.get("seq")?.integer()?, text_of(row, "at")?)))
+            .collect();
+        let became_current = |seq: i64| {
+            if seq <= 1 {
+                Some(created_at.clone())
+            } else {
+                replaced_at.get(&(seq - 1)).cloned()
+            }
+        };
+        let newest = revisions
+            .iter()
+            .filter_map(|row| row.get("seq").and_then(|cell| cell.integer()))
+            .max()
+            .unwrap_or(0);
+        let current_blob = text_of(head, "blob").unwrap_or_default();
+        let mut versions = vec![VersionRow {
+            number: usize::try_from(newest + 1).unwrap_or(1),
+            byte_size: sizes.get(&current_blob).copied(),
+            content_id: current_blob,
+            media_type: text_of(head, "media_type"),
+            current: true,
+            asserted_at: became_current(newest + 1),
+        }];
+        for row in &revisions {
+            let Some(seq) = row.get("seq").and_then(|cell| cell.integer()) else {
+                continue;
+            };
+            let blob = text_of(row, "blob").unwrap_or_default();
+            versions.push(VersionRow {
+                number: usize::try_from(seq).unwrap_or(1),
+                byte_size: sizes.get(&blob).copied(),
+                content_id: blob,
+                media_type: text_of(row, "media_type"),
+                current: false,
+                asserted_at: became_current(seq),
+            });
+        }
+        Ok(HistoryData { versions })
+    })
 }
 
-/// The nine windows the whole app walks under [`SHARE_FAN_OUT`], plus the
-/// statements this module owns — named so a plan snapshot and a parity fixture
-/// can be compared against one list.
+/// `activity`: what was done to this document, newest first.
+pub fn load_activity(
+    door: &dyn PageDoor,
+    document_id: &str,
+) -> KitResult<(ActivityData, Option<Denial>)> {
+    if document_id.is_empty() {
+        return Ok((ActivityData::default(), None));
+    }
+    guarded(|| {
+        let rows = read_window(door, &activity_statement(document_id), ACTIVITY_ROWS)?.rows;
+        Ok(ActivityData {
+            events: rows
+                .iter()
+                .map(|row| ActivityEvent {
+                    activity: text_of(row, "command"),
+                    occurred_at: text_of(row, "at"),
+                })
+                .collect(),
+        })
+    })
+}
+
+/// The statements this module owns, named so a plan snapshot can be compared
+/// against one list.
 #[must_use]
 pub fn statement_names() -> Vec<&'static str> {
     let mut names = vec![
-        "_shared/taxonomy.concepts",
-        "_shared/taxonomy.schemes",
-        "_shared/representations",
-        "docs.drive.filed",
-        "docs.drive.documents",
-        "docs.drive.starred",
-        "docs.drive.contents",
+        "docs.drive.window",
         "docs.shelf.recent",
         "docs.shelf.starred",
         "docs.shelf.trash",
-        "docs.labels.tags",
-        "docs.custody.byContent",
         "docs.history.revisions",
-        "docs.history.contents",
-        "docs.activity.provenance",
-        "docs.document.body",
+        "docs.activity.journal",
+        "docs.folders",
     ];
     names.sort_unstable();
-    names.dedup();
     names
 }
 
@@ -1741,259 +963,54 @@ pub fn statement_names() -> Vec<&'static str> {
 mod tests {
     use super::*;
 
-    fn row(pairs: &[(&str, &str)]) -> Row {
-        let mut row = Row::new();
-        for (column, value) in pairs {
-            row.insert((*column).to_owned(), Cell::Text((*value).to_owned()));
-        }
-        row
-    }
-
-    /// A CLAMP, NOT A REFUSAL, and in v0's own order: a `0` limit falls back to
-    /// the default because v0 writes `Number(input?.limit) || 200`, which `??`
-    /// would not do.
+    /// A CLAMP, NOT A REFUSAL, and a `0` limit falls back to the default.
     #[test]
     fn the_drive_window_clamps_the_way_v0_clamps() {
         assert_eq!(DriveInput { limit: None }.window(), DRIVE_DEFAULT);
         assert_eq!(DriveInput { limit: Some(0) }.window(), DRIVE_DEFAULT);
         assert_eq!(DriveInput { limit: Some(1) }.window(), DRIVE_MIN);
         assert_eq!(DriveInput { limit: Some(500) }.window(), 500);
-        assert_eq!(DriveInput { limit: Some(9_000) }.window(), DRIVE_MAX);
+        assert_eq!(DriveInput { limit: Some(9_999) }.window(), DRIVE_MAX);
     }
 
-    /// A tag from another scheme is not a label. Printing one would put
-    /// "Leases" and "Starred" in the chip rail.
     #[test]
-    fn only_tags_scheme_concepts_are_labels() {
-        let taxonomy = Taxonomy {
-            schemes: vec![
-                row(&[("scheme_id", "tags"), ("uri", TAGS_SCHEME_URI)]),
-                row(&[("scheme_id", "folders"), ("uri", FOLDER_SCHEME_URI)]),
-            ],
-            concepts: vec![
-                row(&[
-                    ("concept_id", "c-appliances"),
-                    ("scheme_id", "tags"),
-                    ("pref_label", "Appliances"),
-                ]),
-                row(&[
-                    ("concept_id", "c-leases"),
-                    ("scheme_id", "folders"),
-                    ("pref_label", "Leases"),
-                ]),
-            ],
+    fn a_folder_path_runs_from_the_top_and_a_cycle_terminates() {
+        let folder = |id: &str, parent: Option<&str>| FolderRow {
+            folder_id: id.to_owned(),
+            name: Some(id.to_owned()),
+            parent_id: parent.map(str::to_owned),
         };
-        let labels = fold_labels(
-            &taxonomy,
-            &[
-                row(&[
-                    ("tag_id", "t1"),
-                    ("target_id", "d1"),
-                    ("concept_id", "c-appliances"),
-                ]),
-                row(&[
-                    ("tag_id", "t2"),
-                    ("target_id", "d1"),
-                    ("concept_id", "c-leases"),
-                ]),
-            ],
-        );
-        assert_eq!(labels["d1"].len(), 1);
-        assert_eq!(labels["d1"][0].label, "Appliances");
-        // The tag_id is carried because `untag` removes by the edge.
-        assert_eq!(labels["d1"][0].tag_id, "t1");
-    }
-
-    /// A label falls back to its NOTATION where the concept has no preferred
-    /// label, so a tag written by an importer still prints as a word.
-    #[test]
-    fn a_label_falls_back_to_its_notation() {
-        let taxonomy = Taxonomy {
-            schemes: vec![row(&[("scheme_id", "tags"), ("uri", TAGS_SCHEME_URI)])],
-            concepts: vec![row(&[
-                ("concept_id", "c1"),
-                ("scheme_id", "tags"),
-                ("notation", "warranty"),
-            ])],
-        };
-        let labels = fold_labels(
-            &taxonomy,
-            &[row(&[
-                ("tag_id", "t1"),
-                ("target_id", "d1"),
-                ("concept_id", "c1"),
-            ])],
-        );
-        assert_eq!(labels["d1"][0].label, "warranty");
-    }
-
-    /// #296: BLOB BYTES SERVE AS SAME-ORIGIN URLs so Range and caching work;
-    /// a `data:` URI passes through and has no poster, because there is no
-    /// derivative to ask for.
-    #[test]
-    fn a_blob_uri_becomes_a_route_and_a_data_uri_passes_through() {
-        let blob = ContentRow {
-            content_id: "c1".to_owned(),
-            byte_size: Some(9),
-            content_uri: Some("blob:blake3-ab".to_owned()),
-            created_at: None,
-        };
-        let (src, poster) = uris_of(Some(&blob));
-        assert_eq!(src.as_deref(), Some("/centraid/_vault/blobs/c1"));
-        assert_eq!(
-            poster.as_deref(),
-            Some("/centraid/_vault/blobs/c1?variant=poster")
-        );
-
-        let inline = ContentRow {
-            content_uri: Some("data:text/plain,hi".to_owned()),
-            ..blob.clone()
-        };
-        let (src, poster) = uris_of(Some(&inline));
-        assert_eq!(src.as_deref(), Some("data:text/plain,hi"));
-        assert_eq!(poster, None);
-
-        // NO URI IS NOT A BLANK SRC: a tile with no bytes is a state.
-        let empty = ContentRow {
-            content_uri: None,
-            ..blob
-        };
-        assert_eq!(uris_of(Some(&empty)), (None, None));
-        assert_eq!(uris_of(None), (None, None));
-    }
-
-    /// #996 R20(a): A CONTENT ID CAN APPEAR TWICE IN ONE CHAIN, and the date
-    /// shown is the OCCURRENCE's — its first, walking back from the head.
-    #[test]
-    fn the_chain_walks_occurrences_and_dates_each_by_its_own() {
-        let wrapper = row(&[
-            ("document_id", "d1"),
-            ("current_content_id", "cb"),
-            ("current_revision_id", "r4"),
-        ]);
-        // A -> B -> A -> B, newest last written.
-        let revisions = vec![
-            row(&[
-                ("revision_id", "r1"),
-                ("content_id", "ca"),
-                ("recorded_at", "2099-06-01T00:00:00.000Z"),
-            ]),
-            row(&[
-                ("revision_id", "r2"),
-                ("content_id", "cb"),
-                ("parent_revision_id", "r1"),
-                ("recorded_at", "2099-06-02T00:00:00.000Z"),
-            ]),
-            row(&[
-                ("revision_id", "r3"),
-                ("content_id", "ca"),
-                ("parent_revision_id", "r2"),
-                ("recorded_at", "2099-06-03T00:00:00.000Z"),
-            ]),
-            row(&[
-                ("revision_id", "r4"),
-                ("content_id", "cb"),
-                ("parent_revision_id", "r3"),
-                ("recorded_at", "2099-06-04T00:00:00.000Z"),
-            ]),
+        let folders = [
+            folder("a", None),
+            folder("b", Some("a")),
+            folder("c", Some("b")),
         ];
-        let (chain, asserted_at) = walk_chain(&wrapper, &revisions);
-        assert_eq!(chain, ["cb", "ca", "cb", "ca"], "four versions, not two");
-        // The FIRST occurrence walking back from the head is the one dated.
+        let path = folder_path(&folders, Some("c"));
         assert_eq!(
-            asserted_at["cb"].as_str(),
-            "2099-06-04T00:00:00.000Z",
-            "the newest occurrence of those bytes"
+            path.iter()
+                .map(|f| f.folder_id.as_str())
+                .collect::<Vec<_>>(),
+            ["a", "b", "c"]
         );
-        assert_eq!(asserted_at["ca"].as_str(), "2099-06-03T00:00:00.000Z");
+        let cycle = [folder("x", Some("y")), folder("y", Some("x"))];
+        assert!(folder_path(&cycle, Some("x")).len() <= 3);
+        assert!(folder_path(&folders, None).is_empty());
     }
 
-    /// A CYCLE IN THE OCCURRENCE CHAIN TERMINATES rather than hanging the rail,
-    /// and a chain longer than the cap stops at the cap.
     #[test]
-    fn a_malformed_chain_is_capped_and_a_cycle_terminates() {
-        let wrapper = row(&[("document_id", "d1"), ("current_revision_id", "r1")]);
-        let cyclic = vec![
-            row(&[
-                ("revision_id", "r1"),
-                ("content_id", "c1"),
-                ("parent_revision_id", "r2"),
-            ]),
-            row(&[
-                ("revision_id", "r2"),
-                ("content_id", "c2"),
-                ("parent_revision_id", "r1"),
-            ]),
+    fn every_statement_this_module_names_is_one_it_builds() {
+        let built = [
+            window_statement().name,
+            recent_statement().name,
+            starred_statement().name,
+            trash_statement().name,
+            revisions_statement("d").name,
+            activity_statement("d").name,
+            folders_statement().name,
         ];
-        let (chain, _) = walk_chain(&wrapper, &cyclic);
-        assert_eq!(chain, ["c1", "c2"]);
-
-        let long: Vec<Row> = (0..600)
-            .map(|index| {
-                let mut row = Row::new();
-                row.insert("revision_id".to_owned(), Cell::Text(format!("r{index}")));
-                row.insert("content_id".to_owned(), Cell::Text(format!("c{index}")));
-                row.insert(
-                    "parent_revision_id".to_owned(),
-                    Cell::Text(format!("r{}", index + 1)),
-                );
-                row
-            })
-            .collect();
-        let (chain, _) = walk_chain(&row(&[("current_revision_id", "r0")]), &long);
-        assert_eq!(chain.len(), MAX_CHAIN_STEPS);
-    }
-
-    /// An occurrence whose content was purged TRUNCATES the chain rather than
-    /// dangling: `core_entity_revision.content_id` is `ON DELETE SET NULL`
-    /// precisely so a purge does not wedge a delete, and a legible short answer
-    /// beats a hole.
-    #[test]
-    fn an_occurrence_with_no_content_ends_the_walk() {
-        let mut purged = row(&[("revision_id", "r2"), ("parent_revision_id", "r3")]);
-        purged.insert("content_id".to_owned(), Cell::Null);
-        let revisions = vec![
-            row(&[
-                ("revision_id", "r1"),
-                ("content_id", "c1"),
-                ("parent_revision_id", "r2"),
-            ]),
-            purged,
-            row(&[("revision_id", "r3"), ("content_id", "c3")]),
-        ];
-        let (chain, _) = walk_chain(&row(&[("current_revision_id", "r1")]), &revisions);
-        assert_eq!(chain, ["c1"]);
-    }
-
-    /// Every statement this app runs is named once. The nine share windows
-    /// used to be among them; rung five drops the tables they read (#1029).
-    #[test]
-    fn every_statement_is_named_once() {
-        let names = statement_names();
-        assert_eq!(names.len(), 16);
-        for name in &names {
-            assert!(
-                name.starts_with("docs.") || name.starts_with("_shared/"),
-                "{name} is not a Docs statement"
-            );
-        }
-    }
-
-    /// The activity rail reads the vault's own audit trail, scoped by the
-    /// polymorphic `(entity_type, entity_id)` pair — the seam D-1020-DC6 asks
-    /// about, and the answer is YES, Docs depends on it.
-    #[test]
-    fn the_activity_rail_is_scoped_by_the_polymorphic_pair() {
-        let statement = provenance_statement("d1");
-        assert_eq!(statement.from, "access_provenance");
-        assert_eq!(
-            statement.r#where.as_deref(),
-            Some("entity_type = ? AND entity_id = ?")
-        );
-        assert_eq!(
-            statement.bind.first(),
-            Some(&PageBindValue::Text(DOCUMENT_TARGET_TYPE.to_owned()))
-        );
-        assert!(statement.order.descending, "newest first");
+        let mut expected: Vec<String> = built.to_vec();
+        expected.sort();
+        let named: Vec<String> = statement_names().into_iter().map(str::to_owned).collect();
+        assert_eq!(named, expected);
     }
 }

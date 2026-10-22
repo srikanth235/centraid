@@ -250,10 +250,10 @@ class MoneyScreensSpec : StringSpec({
         val home = answered(MoneyHomeMachine, open(MoneyHomeMachine, MoneyHomeEvent(opened = MoneyHomeEvent.Opened())), spending())
         MoneyHomeMachine.rowsChanged("people_note", listOf("k")).shouldBeNull()
         MONEY_TABLES.forEach { MoneyHomeMachine.rowsChanged(it, emptyList()).shouldNotBeNull() }
-        val first = MoneyHomeMachine.reduce(home, MoneyHomeMachine.rowsChanged("core_transaction", emptyList())!!)
+        val first = MoneyHomeMachine.reduce(home, MoneyHomeMachine.rowsChanged("txn", emptyList())!!)
         first.effects shouldBe listOf(ScreenEffect.ReadPage("money.home", afterCursor = null))
         first.state.screen.data_.shouldNotBeNull()
-        val second = MoneyHomeMachine.reduce(first.state, MoneyHomeMachine.rowsChanged("money_rule", emptyList())!!)
+        val second = MoneyHomeMachine.reduce(first.state, MoneyHomeMachine.rowsChanged("rule", emptyList())!!)
         second.effects.shouldBeEmpty()
         val stale = MoneyHomeMachine.reduce(second.state, MoneyInput.Answered(listOf(AppQueryResponse(money_spending = spending()))))
         stale.effects shouldBe listOf(ScreenEffect.ReadPage("money.home", afterCursor = null))
@@ -276,7 +276,7 @@ class MoneyScreensSpec : StringSpec({
         data.title shouldBe "Trader Joe’s"
         data.direction_label shouldBe MoneyCopy.MONEY_OUT
         data.amount?.minor shouldBe -6_418L
-        data.facts.first { it.label == MoneyCopy.FACT_NAME }.detail shouldBe "Trader Joe’s · ${MoneyCopy.FROM_RULE}"
+        data.facts.first { it.label == MoneyCopy.FACT_NAME }.detail shouldBe "Trader Joe’s · ${MoneyCopy.FROM_YOU}"
         data.facts.first { it.label == MoneyCopy.FACT_BANK_WROTE }.detail shouldBe "TRADER JOE S #552"
         // A FACT A MEMBER CAN CHANGE NAMES ITS ACTION, so no shell reads a label to find it.
         data.facts.associate { it.label to it.action } shouldBe mapOf(
@@ -299,8 +299,8 @@ class MoneyScreensSpec : StringSpec({
         // Accepting the transfer is one write, with the other half's id.
         val link = MoneyTransactionMachine.reduce(held, view(MoneyTransactionEvent(offer_accepted = MoneyTransactionEvent.OfferAccepted(key = "transfer"))))
         val linkWrite = link.effects.single() as ScreenEffect.SubmitWrite
-        linkWrite.command shouldBe "money.link_transfer"
-        linkWrite.inputJson shouldBe """{"txn_id":"t1","other_txn_id":"t2"}"""
+        linkWrite.command shouldBe "txn.link_transfer"
+        linkWrite.inputJson shouldBe """{"id":"t1","other_id":"t2"}"""
         // A double tap while it is in flight is the same write.
         MoneyTransactionMachine.reduce(link.state, view(MoneyTransactionEvent(offer_accepted = MoneyTransactionEvent.OfferAccepted(key = "transfer")))).effects.shouldBeEmpty()
         val settled = MoneyTransactionMachine.reduce(link.state, MoneyInput.Settled(WriteSettled(invoke_key = linkWrite.invokeKey, committed = true)))
@@ -309,9 +309,9 @@ class MoneyScreensSpec : StringSpec({
         // Accepting the rule mints its id from the sitting's token.
         val rule = MoneyTransactionMachine.reduce(held, view(MoneyTransactionEvent(offer_accepted = MoneyTransactionEvent.OfferAccepted(key = "rule"))))
         val ruleWrite = rule.effects.single() as ScreenEffect.SubmitWrite
-        ruleWrite.command shouldBe "money.add_rule"
+        ruleWrite.command shouldBe "rule.add"
         ruleWrite.inputJson shouldBe
-            """{"rule_id":"rule-tok","match_kind":"contains","pattern":"TRADER JOE S","set_category_concept_id":"c-groc","set_display_name":"Trader Joe’s"}"""
+            """{"id":"rule-tok","match":"contains","text":"TRADER JOE S","category_id":"c-groc"}"""
 
         // Waving an offer off hides it and writes nothing.
         val dismissed = MoneyTransactionMachine.reduce(held, view(MoneyTransactionEvent(offer_dismissed = MoneyTransactionEvent.OfferDismissed(key = "rule"))))
@@ -346,23 +346,25 @@ class MoneyScreensSpec : StringSpec({
         sheet.state.screen.sheet shouldBe MoneyTransactionState.Sheet.SHEET_CATEGORY
         sheet.state.screen.data_?.category_options?.map { it.key } shouldBe listOf("", "c-groc", "c-util")
         val filed = MoneyTransactionMachine.reduce(sheet.state, view(MoneyTransactionEvent(category = MoneyTransactionEvent.CategoryPicked(category_id = "c-groc"))))
-        (filed.effects.single() as ScreenEffect.SubmitWrite).inputJson shouldBe """{"txn_ids":["t1"],"category_concept_id":"c-groc"}"""
+        (filed.effects.single() as ScreenEffect.SubmitWrite).inputJson shouldBe """{"ids":["t1"],"category_id":"c-groc"}"""
         filed.state.screen.sheet shouldBe MoneyTransactionState.Sheet.SHEET_NONE
         // Clearing sends an explicit null.
         val cleared = MoneyTransactionMachine.reduce(held, view(MoneyTransactionEvent(category = MoneyTransactionEvent.CategoryPicked(category_id = ""))))
-        (cleared.effects.single() as ScreenEffect.SubmitWrite).inputJson shouldBe """{"txn_ids":["t1"],"category_concept_id":null}"""
+        (cleared.effects.single() as ScreenEffect.SubmitWrite).inputJson shouldBe """{"ids":["t1"],"category_id":null}"""
 
         val name = MoneyTransactionMachine.reduce(held, view(MoneyTransactionEvent(action = MoneyTransactionEvent.ActionPicked(key = "name"))))
         name.state.screen.name_draft shouldBe "Trader Joe’s"
         val typed = MoneyTransactionMachine.reduce(name.state, view(MoneyTransactionEvent(name_edited = MoneyTransactionEvent.NameEdited(text = "  TJ  "))))
         val saved = MoneyTransactionMachine.reduce(typed.state, view(MoneyTransactionEvent(name_saved = MoneyTransactionEvent.NameSaved())))
-        (saved.effects.single() as ScreenEffect.SubmitWrite).inputJson shouldBe """{"txn_id":"t1","display_name":"TJ"}"""
+        val rename = saved.effects.single() as ScreenEffect.SubmitWrite
+        rename.command shouldBe "entity.retitle"
+        rename.inputJson shouldBe """{"id":"t1","title":"TJ"}"""
 
         val ask = MoneyTransactionMachine.reduce(held, view(MoneyTransactionEvent(action = MoneyTransactionEvent.ActionPicked(key = "void"))))
         ask.effects.shouldBeEmpty()
         ask.state.screen.confirm?.destructive shouldBe true
         val voided = MoneyTransactionMachine.reduce(ask.state, view(MoneyTransactionEvent(confirm_accepted = MoneyTransactionEvent.ConfirmAccepted())))
-        (voided.effects.single() as ScreenEffect.SubmitWrite).command shouldBe "money.void_transaction"
+        (voided.effects.single() as ScreenEffect.SubmitWrite).command shouldBe "txn.void"
         val refused = MoneyTransactionMachine.reduce(
             voided.state,
             MoneyInput.Settled(WriteSettled(invoke_key = (voided.effects.single() as ScreenEffect.SubmitWrite).invokeKey, committed = false)),
@@ -412,14 +414,14 @@ class MoneyScreensSpec : StringSpec({
         average.state.screen.amount_text shouldBe "231.40"
         val save = MoneyTargetMachine.reduce(carry.state, view(MoneyTargetEvent(save = MoneyTargetEvent.Save())))
         val write = save.effects.single() as ScreenEffect.SubmitWrite
-        write.command shouldBe "money.set_target"
-        write.inputJson shouldBe """{"month":"2026-10","category_concept_id":"c-util","amount_minor":23140,"currency":"USD","carry":true}"""
+        write.command shouldBe "budget.set"
+        write.inputJson shouldBe """{"month":"2026-10","category_id":"c-util","amount_minor":23140,"currency":"USD","carry":true}"""
         // Something that is not an amount cannot be saved.
         val bad = MoneyTargetMachine.reduce(held, view(MoneyTargetEvent(amount = MoneyTargetEvent.AmountEdited(text = "2x0"))))
         MoneyTargetMachine.reduce(bad.state, view(MoneyTargetEvent(save = MoneyTargetEvent.Save()))).effects.shouldBeEmpty()
         val remove = MoneyTargetMachine.reduce(held, view(MoneyTargetEvent(remove = MoneyTargetEvent.Remove())))
         (remove.effects.single() as ScreenEffect.SubmitWrite).inputJson shouldBe
-            """{"month":"2026-10","category_concept_id":"c-util","amount_minor":null,"currency":"USD"}"""
+            """{"month":"2026-10","category_id":"c-util","amount_minor":null,"currency":"USD"}"""
     }
 
     "typed amounts parse by the currency's exponent, never as floats" {
@@ -474,7 +476,7 @@ class MoneyScreensSpec : StringSpec({
         val start = open(MoneySearchMachine, MoneySearchEvent(opened = MoneySearchEvent.Opened()))
         start.screen.resting.shouldNotBeNull()
         MoneySearchReads.requests(start, CLOCK).shouldBeNull()
-        MoneySearchMachine.reduce(start, MoneySearchMachine.rowsChanged("core_transaction", emptyList())!!).effects.shouldBeEmpty()
+        MoneySearchMachine.reduce(start, MoneySearchMachine.rowsChanged("txn", emptyList())!!).effects.shouldBeEmpty()
         val typed = MoneySearchMachine.reduce(start, view(MoneySearchEvent(term = MoneySearchEvent.TermChanged(term = "coffee"))))
         typed.effects shouldBe listOf(ScreenEffect.ReadPage("money.search", afterCursor = null))
         val request = MoneySearchReads.requests(typed.state, CLOCK)!!.single().money_search.shouldNotBeNull()
@@ -547,7 +549,7 @@ class MoneyScreensSpec : StringSpec({
         // Publishing is the ordinary command, with the plan's input UNCHANGED.
         val publish = MoneyImportMachine.reduce(planned, view(MoneyImportEvent(publish = MoneyImportEvent.Publish())))
         val write = publish.effects.single() as ScreenEffect.SubmitWrite
-        write.command shouldBe "money.import_transactions"
+        write.command shouldBe "follow.statement"
         write.inputJson shouldBe """{"account_id":"a-chase","rows":[1,2]}"""
         publish.state.screen.phase shouldBe MoneyImportState.Phase.PHASE_PUBLISHING
         // A second tap while it is out writes nothing.
@@ -558,9 +560,13 @@ class MoneyScreensSpec : StringSpec({
         done.state.screen.phase shouldBe MoneyImportState.Phase.PHASE_PUBLISHED
         done.state.file?.bytes?.size shouldBe 0
         done.state.screen.status?.sentence shouldBe "Imported 2 rows"
-        val profile = done.effects.single() as ScreenEffect.SubmitWrite
-        profile.command shouldBe "money.save_import_profile"
-        profile.inputJson shouldContain """"account_id":"a-chase""""
+        // The balance the statement stated and the layout are each a command of their own, after the rows.
+        val after = done.effects.map { it as ScreenEffect.SubmitWrite }
+        after.map { it.command } shouldBe listOf("checkpoint.record", "account.remember_layout")
+        after[0].inputJson shouldBe """{"account_id":"a-chase","day":"2026-10-14","balance_minor":318452}"""
+        val profile = after[1]
+        profile.command shouldBe "account.remember_layout"
+        profile.inputJson shouldContain """"id":"a-chase""""
         profile.inputJson shouldContain """"header_fingerprint":"date,desc,amount""""
         profile.inputJson shouldContain """"amount_col":2"""
         profile.inputJson shouldNotContain "debit_col"
@@ -673,9 +679,9 @@ class MoneyScreensSpec : StringSpec({
         val currency = MoneyAccountsMachine.reduce(number, view(MoneyAccountsEvent(currency = MoneyAccountsEvent.CurrencyEdited(text = "cad")))).state
         val save = MoneyAccountsMachine.reduce(currency, view(MoneyAccountsEvent(save = MoneyAccountsEvent.Save())))
         val write = save.effects.single() as ScreenEffect.SubmitWrite
-        write.command shouldBe "money.add_account"
+        write.command shouldBe "account.add"
         write.inputJson shouldBe
-            """{"account_id":"account-tok-1","name":"Tangerine","kind":"checking","currency":"CAD","on_budget":true,"external_ref":"000123456"}"""
+            """{"id":"account-tok-1","title":"Tangerine","type":"checking","currency":"CAD","on_budget":true,"external_ref":"000123456"}"""
         // A bad currency code cannot be saved.
         val bad = MoneyAccountsMachine.reduce(currency, view(MoneyAccountsEvent(currency = MoneyAccountsEvent.CurrencyEdited(text = "ca"))))
         MoneyAccountsMachine.reduce(bad.state, view(MoneyAccountsEvent(save = MoneyAccountsEvent.Save()))).effects.shouldBeEmpty()
@@ -689,10 +695,13 @@ class MoneyScreensSpec : StringSpec({
         val rename = MoneyAccountsMachine.reduce(edit, view(MoneyAccountsEvent(name = MoneyAccountsEvent.NameEdited(text = "Chase Main")))).state
         val renamed = MoneyAccountsMachine.reduce(rename, view(MoneyAccountsEvent(save = MoneyAccountsEvent.Save())))
         (renamed.effects.single() as ScreenEffect.SubmitWrite).inputJson shouldBe
-            """{"account_id":"a-chase","name":"Chase Main","kind":"checking","on_budget":true}"""
+            """{"id":"a-chase","title":"Chase Main","type":"checking","on_budget":true}"""
+        // Closing is the archived flag, a command of its own sent beside the edit.
         val close = MoneyAccountsMachine.reduce(rename, view(MoneyAccountsEvent(closed = MoneyAccountsEvent.ClosedToggled()))).state
-        (MoneyAccountsMachine.reduce(close, view(MoneyAccountsEvent(save = MoneyAccountsEvent.Save()))).effects.single() as ScreenEffect.SubmitWrite).inputJson shouldBe
-            """{"account_id":"a-chase","name":"Chase Main","kind":"checking","on_budget":true,"closed_on":"2026-10-14"}"""
+        val closing = MoneyAccountsMachine.reduce(close, view(MoneyAccountsEvent(save = MoneyAccountsEvent.Save()))).effects.map { it as ScreenEffect.SubmitWrite }
+        closing.map { it.command } shouldBe listOf("account.edit", "flag.set")
+        closing[0].inputJson shouldBe """{"id":"a-chase","title":"Chase Main","type":"checking","on_budget":true}"""
+        closing[1].inputJson shouldBe """{"id":"a-chase","flag":"archived"}"""
     }
 
     "rules add, edit, delete and apply to history, each after the member decides" {
@@ -707,13 +716,13 @@ class MoneyScreensSpec : StringSpec({
         )
         val data = held.screen.data_.shouldNotBeNull()
         data.rows.single().title shouldBe "TRADER JOE S"
-        data.rows.single().meta shouldBe "contains · files under Groceries · names it Trader Joe’s"
+        data.rows.single().meta shouldBe "contains · files under Groceries"
         data.limit_line shouldBe "1 of 500"
 
         val add = MoneyRulesMachine.reduce(held, view(MoneyRulesEvent(add = MoneyRulesEvent.AddTapped()))).state
         add.screen.editor?.can_save shouldBe false
         val pattern = MoneyRulesMachine.reduce(add, view(MoneyRulesEvent(pattern = MoneyRulesEvent.PatternEdited(text = "BLUE BOTTLE")))).state
-        // A rule needs an effect: a category or a name.
+        // A rule needs a category to file under.
         pattern.screen.editor?.can_save shouldBe false
         val sheet = MoneyRulesMachine.reduce(pattern, view(MoneyRulesEvent(category_sheet = MoneyRulesEvent.CategorySheetOpened()))).state
         sheet.screen.sheet shouldBe MoneyRulesState.Sheet.SHEET_CATEGORY
@@ -722,25 +731,25 @@ class MoneyScreensSpec : StringSpec({
         filed.screen.sheet shouldBe MoneyRulesState.Sheet.SHEET_EDITOR
         val save = MoneyRulesMachine.reduce(filed, view(MoneyRulesEvent(save = MoneyRulesEvent.Save())))
         (save.effects.single() as ScreenEffect.SubmitWrite).inputJson shouldBe
-            """{"rule_id":"rule-tok-1","match_kind":"contains","pattern":"BLUE BOTTLE","set_category_concept_id":"c-groc"}"""
+            """{"id":"rule-tok-1","match":"contains","text":"BLUE BOTTLE","category_id":"c-groc"}"""
 
         // Editing sends every field this page shows, and clears nothing it cannot name.
         val edit = MoneyRulesMachine.reduce(held, view(MoneyRulesEvent(rule = MoneyRulesEvent.RulePicked(rule_id = "r1")))).state
         edit.screen.editor?.category_id shouldBe "c-groc"
         val saved = MoneyRulesMachine.reduce(edit, view(MoneyRulesEvent(save = MoneyRulesEvent.Save())))
         (saved.effects.single() as ScreenEffect.SubmitWrite).inputJson shouldBe
-            """{"rule_id":"r1","match_kind":"contains","pattern":"TRADER JOE S","set_category_concept_id":"c-groc","set_display_name":"Trader Joe’s","amount_min_minor":null,"amount_max_minor":null,"account_id":null}"""
+            """{"id":"r1","match":"contains","text":"TRADER JOE S","category_id":"c-groc","min":null,"max":null,"account_id":null}"""
 
         // Delete and apply both ask first.
         val delete = MoneyRulesMachine.reduce(edit, view(MoneyRulesEvent(delete = MoneyRulesEvent.DeleteTapped())))
         delete.effects.shouldBeEmpty()
         delete.state.screen.confirm?.destructive shouldBe true
         (MoneyRulesMachine.reduce(delete.state, view(MoneyRulesEvent(confirm_accepted = MoneyRulesEvent.ConfirmAccepted()))).effects.single() as ScreenEffect.SubmitWrite)
-            .command shouldBe "money.delete_rule"
+            .command shouldBe "rule.delete"
         val applyOne = MoneyRulesMachine.reduce(edit, view(MoneyRulesEvent(apply = MoneyRulesEvent.ApplyTapped())))
         applyOne.effects.shouldBeEmpty()
         (MoneyRulesMachine.reduce(applyOne.state, view(MoneyRulesEvent(confirm_accepted = MoneyRulesEvent.ConfirmAccepted()))).effects.single() as ScreenEffect.SubmitWrite)
-            .inputJson shouldBe """{"rule_id":"r1"}"""
+            .inputJson shouldBe """{"id":"r1"}"""
         val applyAll = MoneyRulesMachine.reduce(held, view(MoneyRulesEvent(apply = MoneyRulesEvent.ApplyTapped())))
         (MoneyRulesMachine.reduce(applyAll.state, view(MoneyRulesEvent(confirm_accepted = MoneyRulesEvent.ConfirmAccepted()))).effects.single() as ScreenEffect.SubmitWrite)
             .inputJson shouldBe "{}"
@@ -769,8 +778,8 @@ class MoneyScreensSpec : StringSpec({
         // Confirmed: the number alone, as null.
         val sent = MoneyAccountsMachine.reduce(ask.state, view(MoneyAccountsEvent(confirm_accepted = MoneyAccountsEvent.ConfirmAccepted())))
         val write = sent.effects.single() as ScreenEffect.SubmitWrite
-        write.command shouldBe "money.edit_account"
-        write.inputJson shouldBe """{"account_id":"a-chase","external_ref":null}"""
+        write.command shouldBe "account.edit"
+        write.inputJson shouldBe """{"id":"a-chase","external_ref":null}"""
         write.inputJson.contains("2291") shouldBe false
         sent.state.screen.confirm.shouldBeNull()
         val done = MoneyAccountsMachine.reduce(sent.state, MoneyInput.Settled(WriteSettled(invoke_key = write.invokeKey, committed = true))).state
@@ -780,7 +789,7 @@ class MoneyScreensSpec : StringSpec({
         // Typing a new number still replaces it, and an empty field keeps it.
         val typed = MoneyAccountsMachine.reduce(edit, view(MoneyAccountsEvent(external_ref = MoneyAccountsEvent.ExternalRefEdited(text = " 777001 ")))).state
         (MoneyAccountsMachine.reduce(typed, view(MoneyAccountsEvent(save = MoneyAccountsEvent.Save()))).effects.single() as ScreenEffect.SubmitWrite)
-            .inputJson shouldBe """{"account_id":"a-chase","name":"Chase Total Checking","kind":"checking","on_budget":true,"external_ref":"777001"}"""
+            .inputJson shouldBe """{"id":"a-chase","title":"Chase Total Checking","type":"checking","on_budget":true,"external_ref":"777001"}"""
 
         // An account with no number offers nothing to remove.
         val bare = accounts().copy(off_budget = accounts().off_budget.map { it.copy(mask = null) })
@@ -813,14 +822,14 @@ class MoneyScreensSpec : StringSpec({
         // UNTOUCHED: the same values go back.
         val untouched = MoneyRulesMachine.reduce(edit, view(MoneyRulesEvent(save = MoneyRulesEvent.Save())))
         (untouched.effects.single() as ScreenEffect.SubmitWrite).inputJson shouldBe
-            """{"rule_id":"r2","match_kind":"contains","pattern":"COSTCO","set_category_concept_id":"c-groc","set_display_name":null,"amount_min_minor":500,"amount_max_minor":20000,"account_id":"a-chase"}"""
+            """{"id":"r2","match":"contains","text":"COSTCO","category_id":"c-groc","min":500,"max":20000,"account_id":"a-chase"}"""
 
         // EDITED: the typed amounts, in minor units.
         val min = MoneyRulesMachine.reduce(edit, view(MoneyRulesEvent(amount_min = MoneyRulesEvent.AmountMinEdited(text = "10")))).state
         val max = MoneyRulesMachine.reduce(min, view(MoneyRulesEvent(amount_max = MoneyRulesEvent.AmountMaxEdited(text = "250.50")))).state
         (MoneyRulesMachine.reduce(max, view(MoneyRulesEvent(save = MoneyRulesEvent.Save()))).effects.single() as ScreenEffect.SubmitWrite)
             .inputJson shouldBe
-            """{"rule_id":"r2","match_kind":"contains","pattern":"COSTCO","set_category_concept_id":"c-groc","set_display_name":null,"amount_min_minor":1000,"amount_max_minor":25050,"account_id":"a-chase"}"""
+            """{"id":"r2","match":"contains","text":"COSTCO","category_id":"c-groc","min":1000,"max":25050,"account_id":"a-chase"}"""
 
         // CLEARED: each limit and the account go as null.
         val noMin = MoneyRulesMachine.reduce(edit, view(MoneyRulesEvent(amount_min = MoneyRulesEvent.AmountMinEdited(text = "")))).state
@@ -837,7 +846,7 @@ class MoneyScreensSpec : StringSpec({
         any.screen.editor?.account_label shouldBe ""
         (MoneyRulesMachine.reduce(any, view(MoneyRulesEvent(save = MoneyRulesEvent.Save()))).effects.single() as ScreenEffect.SubmitWrite)
             .inputJson shouldBe
-            """{"rule_id":"r2","match_kind":"contains","pattern":"COSTCO","set_category_concept_id":"c-groc","set_display_name":null,"amount_min_minor":null,"amount_max_minor":null,"account_id":null}"""
+            """{"id":"r2","match":"contains","text":"COSTCO","category_id":"c-groc","min":null,"max":null,"account_id":null}"""
 
         // Closing the account sheet returns to the editor with the account as it was.
         MoneyRulesMachine.reduce(sheet, view(MoneyRulesEvent(sheet_closed = MoneyRulesEvent.SheetClosed()))).state.screen.sheet shouldBe
@@ -883,7 +892,7 @@ class MoneyScreensSpec : StringSpec({
         locked.amount_min_text shouldBe ""
         (MoneyRulesMachine.reduce(edit, view(MoneyRulesEvent(save = MoneyRulesEvent.Save()))).effects.single() as ScreenEffect.SubmitWrite)
             .inputJson shouldBe
-            """{"rule_id":"r3","match_kind":"contains","pattern":"ATM","set_category_concept_id":"c-util","set_display_name":null,"amount_min_minor":500,"amount_max_minor":null,"account_id":null}"""
+            """{"id":"r3","match":"contains","text":"ATM","category_id":"c-util","min":500,"max":null,"account_id":null}"""
         // Naming an account says which decimals the limits are in: they show.
         val named = MoneyRulesMachine.reduce(edit, view(MoneyRulesEvent(account = MoneyRulesEvent.AccountPicked(account_id = "a-yen")))).state
         named.screen.editor?.limits_enabled shouldBe true
@@ -893,7 +902,7 @@ class MoneyScreensSpec : StringSpec({
         named.screen.editor?.amount_note shouldBe "${MoneyCopy.RULE_AMOUNT_NOTE} ${MoneyCopy.WHOLE_UNITS}"
         (MoneyRulesMachine.reduce(named, view(MoneyRulesEvent(save = MoneyRulesEvent.Save()))).effects.single() as ScreenEffect.SubmitWrite)
             .inputJson shouldBe
-            """{"rule_id":"r3","match_kind":"contains","pattern":"ATM","set_category_concept_id":"c-util","set_display_name":null,"amount_min_minor":500,"amount_max_minor":null,"account_id":"a-yen"}"""
+            """{"id":"r3","match":"contains","text":"ATM","category_id":"c-util","min":500,"max":null,"account_id":"a-yen"}"""
 
         // An account the page cannot name stays as it is, with its limits locked.
         val strange = MoneyRules(
@@ -905,7 +914,7 @@ class MoneyScreensSpec : StringSpec({
                     pattern = "OLD",
                     amount_max = 9_900,
                     account_label = "Closed Elsewhere",
-                    display_name = "Old",
+                    category_label = "Archived Thing",
                 ),
             ),
         )
@@ -916,7 +925,7 @@ class MoneyScreensSpec : StringSpec({
         strangeEdit.screen.editor?.limits_enabled shouldBe false
         (MoneyRulesMachine.reduce(strangeEdit, view(MoneyRulesEvent(save = MoneyRulesEvent.Save()))).effects.single() as ScreenEffect.SubmitWrite)
             .inputJson shouldBe
-            """{"rule_id":"r4","match_kind":"is","pattern":"OLD","set_category_concept_id":null,"set_display_name":"Old","amount_min_minor":null,"amount_max_minor":9900}"""
+            """{"id":"r4","match":"is","text":"OLD","min":null,"max":9900}"""
     }
 
     "a new rule can carry limits and an account, and sends only what is set" {
@@ -926,12 +935,13 @@ class MoneyScreensSpec : StringSpec({
         // Every account has two decimals, so the limits are typed in them.
         editor.limits_enabled shouldBe true
         val pattern = MoneyRulesMachine.reduce(add, view(MoneyRulesEvent(pattern = MoneyRulesEvent.PatternEdited(text = "COSTCO")))).state
-        val named = MoneyRulesMachine.reduce(pattern, view(MoneyRulesEvent(name = MoneyRulesEvent.NameEdited(text = "Costco")))).state
-        val max = MoneyRulesMachine.reduce(named, view(MoneyRulesEvent(amount_max = MoneyRulesEvent.AmountMaxEdited(text = "150")))).state
+        val sheet = MoneyRulesMachine.reduce(pattern, view(MoneyRulesEvent(category_sheet = MoneyRulesEvent.CategorySheetOpened()))).state
+        val filed = MoneyRulesMachine.reduce(sheet, view(MoneyRulesEvent(category = MoneyRulesEvent.CategoryPicked(category_id = "c-groc")))).state
+        val max = MoneyRulesMachine.reduce(filed, view(MoneyRulesEvent(amount_max = MoneyRulesEvent.AmountMaxEdited(text = "150")))).state
         val account = MoneyRulesMachine.reduce(max, view(MoneyRulesEvent(account = MoneyRulesEvent.AccountPicked(account_id = "a-amex")))).state
         (MoneyRulesMachine.reduce(account, view(MoneyRulesEvent(save = MoneyRulesEvent.Save()))).effects.single() as ScreenEffect.SubmitWrite)
             .inputJson shouldBe
-            """{"rule_id":"rule-tok-1","match_kind":"contains","pattern":"COSTCO","set_display_name":"Costco","amount_max_minor":15000,"account_id":"a-amex"}"""
+            """{"id":"rule-tok-1","match":"contains","text":"COSTCO","category_id":"c-groc","max":15000,"account_id":"a-amex"}"""
         // An account that is not among the answered ones is not taken.
         MoneyRulesMachine.reduce(max, view(MoneyRulesEvent(account = MoneyRulesEvent.AccountPicked(account_id = "a-nope")))).state shouldBe max
     }
@@ -947,12 +957,12 @@ class MoneyScreensSpec : StringSpec({
         val named = MoneyCategoriesMachine.reduce(add, view(MoneyCategoriesEvent(name = MoneyCategoriesEvent.NameEdited(text = " Coffee ")))).state
         val grouped = MoneyCategoriesMachine.reduce(named, view(MoneyCategoriesEvent(group = MoneyCategoriesEvent.GroupPicked(group_id = "g-food")))).state
         (MoneyCategoriesMachine.reduce(grouped, view(MoneyCategoriesEvent(save = MoneyCategoriesEvent.Save()))).effects.single() as ScreenEffect.SubmitWrite).inputJson shouldBe
-            """{"category_id":"category-tok-1","name":"Coffee","parent_concept_id":"g-food"}"""
+            """{"title":"Coffee","parent_id":"g-food"}"""
 
         val row = MoneyCategoriesMachine.reduce(held, view(MoneyCategoriesEvent(category = MoneyCategoriesEvent.CategoryPicked(category_id = "c-groc")))).state
         row.screen.data_?.row_actions?.map { it.key } shouldBe listOf("merge", "archive")
         val archive = MoneyCategoriesMachine.reduce(row, view(MoneyCategoriesEvent(row_action = MoneyCategoriesEvent.RowActionPicked(key = "archive"))))
-        (archive.effects.single() as ScreenEffect.SubmitWrite).inputJson shouldBe """{"concept_id":"c-groc","archived":true}"""
+        (archive.effects.single() as ScreenEffect.SubmitWrite).inputJson shouldBe """{"id":"c-groc","flag":"archived"}"""
 
         val merge = MoneyCategoriesMachine.reduce(row, view(MoneyCategoriesEvent(row_action = MoneyCategoriesEvent.RowActionPicked(key = "merge"))))
         merge.state.screen.data_?.merge_options?.map { it.key } shouldBe listOf("c-util")
@@ -961,7 +971,7 @@ class MoneyScreensSpec : StringSpec({
         into.effects.shouldBeEmpty()
         into.state.screen.confirm?.body shouldBe "Rows filed under Groceries move to Utilities."
         val done = MoneyCategoriesMachine.reduce(into.state, view(MoneyCategoriesEvent(confirm_accepted = MoneyCategoriesEvent.ConfirmAccepted())))
-        (done.effects.single() as ScreenEffect.SubmitWrite).inputJson shouldBe """{"from_concept_id":"c-groc","into_concept_id":"c-util"}"""
+        (done.effects.single() as ScreenEffect.SubmitWrite).inputJson shouldBe """{"from_id":"c-groc","into_id":"c-util"}"""
     }
 
     // --- Home's tile -------------------------------------------------------------
@@ -1163,7 +1173,6 @@ class MoneyScreensSpec : StringSpec({
                     kind = MoneyMatchKind.MONEY_MATCH_KIND_CONTAINS,
                     pattern = "TRADER JOE S",
                     category_label = "Groceries",
-                    display_name = "Trader Joe’s",
                     specificity = 1,
                 ),
             ),
@@ -1223,7 +1232,7 @@ class MoneyScreensSpec : StringSpec({
             txn_id = "t1",
             posted_on = "2026-10-13",
             display_name = "Trader Joe’s",
-            display_name_source = "rule",
+            display_name_source = "member",
             raw = "TRADER JOE S #552",
             amount = amount(-6_418),
             account_id = "a-chase",
@@ -1249,7 +1258,6 @@ class MoneyScreensSpec : StringSpec({
                     pattern = "TRADER JOE S",
                     category_id = "c-groc",
                     category_label = "Groceries",
-                    display_name = "Trader Joe’s",
                     support = 4,
                     of = 5,
                 )

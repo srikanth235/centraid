@@ -43,7 +43,7 @@ impl Kind {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Surface {
     /// `text/*`: the reader, over the decoded body — and the editor, because
-    /// `core.edit_document` accepts exactly `text/%` (the lockstep v0 states).
+    /// `document.edit` accepts exactly `text/*` (the lockstep v0 states).
     Reading,
     /// An image, audio, video or PDF: the stage, over the bytes.
     Stage,
@@ -140,7 +140,7 @@ fn is_text(media_type: Option<&str>) -> bool {
 
 /// Which screen opens it. ANY `text/*` document reads — a `text/csv` too, as
 /// v0's `readSurfaceFor` checks text before kind — because the reader and the
-/// editor are the one pair `core.edit_document` (`text/%`) serves; a kind the
+/// editor are the one pair `document.edit` (`text/*`) serves; a kind the
 /// phone can draw stages; the rest is facts.
 #[must_use]
 pub fn surface_of(media_type: Option<&str>, title: Option<&str>) -> Surface {

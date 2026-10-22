@@ -97,10 +97,14 @@ class AssistRoundTripSpec : StringSpec({
             tasks.failure.shouldBeInstanceOf<CoreFailure.Refused>().code shouldBe
                 ErrorCode.ERROR_CODE_INVALID_REQUEST.value
 
-            // Locker is not an app a chat can be scoped to: the request's fault.
+            // Locker is an app like any other: a chat may be scoped to it. An app the assistant
+            // does not read is the request's fault.
             val locker = core.assist(AssistRequest(start = AssistStartRequest(app = "locker")))
-            locker.shouldBeInstanceOf<CoreOutcome.Failed>()
-            val failure = locker.failure.shouldBeInstanceOf<CoreFailure.Refused>()
+                .answer().started!!
+            (locker.session_id > 0L) shouldBe true
+            val unknown = core.assist(AssistRequest(start = AssistStartRequest(app = "nope")))
+            unknown.shouldBeInstanceOf<CoreOutcome.Failed>()
+            val failure = unknown.failure.shouldBeInstanceOf<CoreFailure.Refused>()
             failure.code shouldBe ErrorCode.ERROR_CODE_INVALID_REQUEST.value
 
             // --- a turn with no model, and the event that says so --------------

@@ -223,44 +223,50 @@ struct EmptyStateView: View {
 }
 
 private struct AskChatKey: EnvironmentKey {
-    static let defaultValue: ((String) -> Void)? = nil
+    static let defaultValue: ((Centraid_Screen_V1_SearchAsk) -> Void)? = nil
 }
 
 extension EnvironmentValues {
     /// The shell's "ask the assistant" door, or nil where there is none
-    /// (previews). A search that found nothing reaches Chat through it, never
-    /// through a view's own routing (#1097, R-1097-30).
-    var askChat: ((String) -> Void)? {
+    /// (previews). A search reaches Chat through it, never through a view's
+    /// own routing (#1097, R-1097-30).
+    var askChat: ((Centraid_Screen_V1_SearchAsk) -> Void)? {
         get { self[AskChatKey.self] }
         set { self[AskChatKey.self] = newValue }
     }
 }
 
-/// THE NO-MATCH STATE OF AN APP'S SEARCH (#1097, R-1097-30): the kit empty
-/// state, with Ask as its one action when the machine named one. `ask` is the
-/// field's question and the words are the machine's (`SEARCH_ASK_ABOUT` is the
-/// action's label, finished in `empty`); this view only draws them and hands the
-/// question to the shell, which switches to the Chat tab and sends it. Empty `ask`
-/// is no action: a term typed since, a denial, or an app that offers none (Locker
-/// never does, R-1097-29, and does not draw this view).
-struct SearchEmptyView: View {
-    let empty: Centraid_Screen_V1_EmptyState
-    let ask: String
+/// THE ASK ROW AT THE FOOT OF AN APP'S SEARCH ANSWER (#1097, R-1097-30, #1135),
+/// whether or not anything matched. The label, the question and the chat scope
+/// are the machine's (`SearchAsk`); this view only draws the label and hands the
+/// whole row to the shell, which switches to the Chat tab scoped to the app the
+/// member searched from and sends the question. Drawn only where the state holds
+/// a row (`hasAskRow`): a term typed since, a denial, or an app that offers none
+/// (Locker never does, R-1097-29, and does not draw this view) holds none.
+struct SearchAskRow: View {
+    let ask: Centraid_Screen_V1_SearchAsk
+    /// Home records the search as a recent one when its row is pressed.
+    var onAsk: (() -> Void)? = nil
 
     @Environment(\.askChat) private var askChat
-
-    init(_ empty: Centraid_Screen_V1_EmptyState, ask: String) {
-        self.empty = empty
-        self.ask = ask
-    }
+    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        EmptyStateView(empty, actionIdentifier: "search-ask-about", onAction: action)
-    }
-
-    private var action: (() -> Void)? {
-        guard !ask.isEmpty, let askChat else { return nil }
-        return { askChat(ask) }
+        if let askChat {
+            Button {
+                onAsk?()
+                askChat(ask)
+            } label: {
+                Text(ask.label)
+                    .centraidType("smallStrong")
+                    .foregroundStyle(Theme.color("link", scheme))
+                    .padding(.horizontal, CentraidGeometry.pageMargin)
+                    .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse, alignment: .leading)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("search-ask-about")
+        }
     }
 }
 

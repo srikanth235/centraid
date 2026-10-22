@@ -724,7 +724,7 @@ fn issue_24_a_list_rename_keeps_its_area() {
 }
 
 #[test]
-fn issue_26_undoing_a_photo_delete_puts_it_back_in_its_album() {
+fn issue_26_a_photo_delete_keeps_its_albums_and_undoing_it_brings_the_photo_back() {
     let world = seeded();
     let mut session = world.session();
     let beach = number(&mut session, "photo", "Beach day");
@@ -733,16 +733,26 @@ fn issue_26_undoing_a_photo_delete_puts_it_back_in_its_album() {
         "act",
         json!({"verb": "delete", "rows": beach}),
     );
-    assert!(deleted.contains("no longer in"), "{deleted}");
+    // #1135: the vault keeps a trashed photograph in its albums (the edge stays; the trash is the
+    // entity's), so the delete moves no link and the undo has none to put back
+    assert!(deleted.contains("moved to the trash"), "{deleted}");
+    assert!(!deleted.contains("no longer in"), "{deleted}");
     session.user("undo that");
     let undone = call(&mut session, "act", json!({"verb": "undo"}));
     assert!(
-        undone["text"].as_str().unwrap().contains("now in"),
+        undone["text"]
+            .as_str()
+            .unwrap()
+            .contains("back from the trash"),
         "{undone}"
     );
-    let links = undone["effect"]["diff"]["links"].as_array().unwrap();
-    assert_eq!(links.len(), 1, "{undone}");
-    assert_eq!(links[0]["change"], "added", "{undone}");
+    session.user("which photos are in Summer");
+    let still = text(
+        &mut session,
+        "find",
+        json!({"kind": "photo", "name": "Beach day", "linked_to": "#2"}),
+    );
+    assert!(still.contains("Beach day"), "{still}");
 }
 
 #[test]

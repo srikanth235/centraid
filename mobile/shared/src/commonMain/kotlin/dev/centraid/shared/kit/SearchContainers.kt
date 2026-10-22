@@ -20,7 +20,7 @@ import dev.centraid.design.copy.SharedCopy
  * | --- | --- | --- | --- | --- |
  * | `core.collection` | notes | Notebook | `notebook` | the collection id |
  * | `core.collection` | photos | Album | `album` | the collection id |
- * | `schedule.project` | tasks | Project | `project` | the project id |
+ * | `project` | tasks | Project | `project` | the project id |
  * | `core.concept` | docs | Folder | `folder` | the concept id |
  *
  * A pair this table does not name is no container ([of] answers null), so a
@@ -49,9 +49,9 @@ public object SearchContainers {
     private class Kind(val label: String, val noun: String, val icon: String)
 
     private val KINDS: Map<Pair<String, String>, Kind> = mapOf(
-        ("core.collection" to "notes") to Kind(SharedCopy.SEARCH_KIND_NOTEBOOK, "notebook", "Book"),
-        ("core.collection" to "photos") to Kind(SharedCopy.SEARCH_KIND_ALBUM, "album", "Image"),
-        ("schedule.project" to "tasks") to Kind(SharedCopy.SEARCH_KIND_PROJECT, "project", "List"),
-        ("core.concept" to "docs") to Kind(SharedCopy.SEARCH_KIND_FOLDER, "folder", "Folder"),
+        ("notebook" to "notes") to Kind(SharedCopy.SEARCH_KIND_NOTEBOOK, "notebook", "Book"),
+        ("album" to "photos") to Kind(SharedCopy.SEARCH_KIND_ALBUM, "album", "Image"),
+        ("project" to "tasks") to Kind(SharedCopy.SEARCH_KIND_PROJECT, "project", "List"),
+        ("folder" to "docs") to Kind(SharedCopy.SEARCH_KIND_FOLDER, "folder", "Folder"),
     )
 }

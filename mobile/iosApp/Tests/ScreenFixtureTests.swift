@@ -228,7 +228,7 @@ final class ScreenFixtureTests: XCTestCase {
         }
         XCTAssertEqual(mode.kind, .trash)
         XCTAssertEqual(trash.purgeWindowDays, 30)
-        for case_ in ["album-selecting", "memory-empty-but-titled"] {
+        for case_ in ["album-selecting"] {
             XCTAssertEqual(try shelf(case_).purgeWindowDays, 0, "\(case_) may not state a window")
         }
     }
@@ -242,19 +242,6 @@ final class ScreenFixtureTests: XCTestCase {
         XCTAssertEqual(album.selectedAssetIds, ["ast-0201", "ast-0204"])
         let loaded = album.data.cells.map(\.assetID)
         XCTAssertFalse(loaded.contains("ast-0204"))
-    }
-
-    /// An empty shelf is DATA, and its head still has a title to draw.
-    func testAnEmptyShelfIsDataAndStillHasATitle() throws {
-        let memory = try shelf("memory-empty-but-titled")
-        guard case let .data(data) = memory.content else {
-            return XCTFail("an empty shelf decodes to the data case, never a failure")
-        }
-        XCTAssertTrue(data.cells.isEmpty)
-        guard case let .memory(row) = memory.shelf.of else {
-            return XCTFail("a memory shelf")
-        }
-        XCTAssertEqual(row.title, "Lisbon, April")
     }
 
     private func lightbox(_ case_: String) throws -> Centraid_Screen_V1_PhotoLightboxState {
@@ -347,7 +334,7 @@ final class ScreenFixtureTests: XCTestCase {
         let duplicates = try XCTUnwrap(data.doors.first { $0.kind == .duplicates })
         XCTAssertEqual(duplicates.count, 3)
         XCTAssertEqual(duplicates.needsAttention, 3)
-        XCTAssertEqual(data.doors.count, 3)
+        XCTAssertEqual(data.doors.count, 2)
     }
 
     /// A sheet leaves the list underneath intact — a shape a route could not
@@ -544,52 +531,6 @@ final class ScreenFixtureTests: XCTestCase {
         XCTAssertTrue(whole.clusters.allSatisfy { !$0.memberCountCapped })
     }
 
-    private func memories(_ case_: String) throws -> Centraid_Screen_V1_PhotosMemoriesState {
-        try Centraid_Screen_V1_PhotosMemoriesState(
-            serializedBytes: try bytes("photos-memories/\(case_)")
-        )
-    }
-
-    /// "Not yet computed" is not "there are none".
-    ///
-    /// The same shape as `scanComplete`, and for the same reason: both screens
-    /// are a pass's output with an empty list while it is pending. Asserted
-    /// against each other, because two separate assertions pass just as happily
-    /// against a shell that collapsed them.
-    func testNotYetComputedIsNotThereAreNone() throws {
-        let notYet = try memories("not-yet-computed")
-        let none = try memories("computed-and-empty")
-        XCTAssertTrue(notYet.data.memories.isEmpty)
-        XCTAssertTrue(none.data.memories.isEmpty)
-        XCTAssertFalse(notYet.data.computed)
-        XCTAssertTrue(none.data.computed)
-        XCTAssertNotEqual(notYet.data, none.data)
-        // Data, not a failure: a retry does not make a pass run.
-        guard case .data = notYet.content else {
-            return XCTFail("a pending pass is data, not a failure")
-        }
-    }
-
-    /// A memory the pass could not name has no title to store: the view
-    /// composes one from `dayKey` and `placeName`. A title written into the
-    /// vault by a view is a title no other surface agrees with, and it outlives
-    /// the view that invented it.
-    func testAMemoryThePassCouldNotNameHasNoTitleToStore() throws {
-        let rows = try memories("title-hint-absent").data.memories
-        let unnamed = try XCTUnwrap(rows.first { $0.memoryID == "mem-0020" })
-        XCTAssertTrue(unnamed.titleHint.isEmpty)
-        XCTAssertEqual(unnamed.dayKey, "2024-06-14")
-        XCTAssertFalse(unnamed.placeName.isEmpty)
-        // A span, not a day: the kinds compose differently, which is why the
-        // ends are on the row rather than derived from `dayKey`.
-        XCTAssertEqual(unnamed.kind, .trip)
-        XCTAssertGreaterThan(unnamed.endedAt, unnamed.startedAt)
-        // The branch: one row has a hint the pass wrote, and a fixture with
-        // only one of them passes against a view that handles neither.
-        let named = try XCTUnwrap(rows.first { $0.memoryID == "mem-0021" })
-        XCTAssertEqual(named.titleHint, "On this day")
-    }
-
     private func duplicateReview(
         _ case_: String
     ) throws -> Centraid_Screen_V1_DuplicateReviewState {
@@ -682,7 +623,7 @@ final class ScreenFixtureTests: XCTestCase {
         }
         try sweep(
             "photos-shelf",
-            ["album-selecting", "memory-empty-but-titled", "trash-states-its-window"]
+            ["album-selecting", "trash-states-its-window"]
         ) { try Centraid_Screen_V1_PhotoShelfState(serializedBytes: $0).content != nil }
         try sweep(
             "photos-lightbox",
@@ -695,10 +636,6 @@ final class ScreenFixtureTests: XCTestCase {
             "photos-collections",
             ["counts-are-floors", "new-album-sheet", "read-refused", "standing-and-owned"]
         ) { try Centraid_Screen_V1_PhotosCollectionsState(serializedBytes: $0).content != nil }
-        try sweep(
-            "photos-memories",
-            ["computed-and-empty", "not-yet-computed", "title-hint-absent"]
-        ) { try Centraid_Screen_V1_PhotosMemoriesState(serializedBytes: $0).content != nil }
         // Search has FOUR arms: resting is a third thing that is neither a load
         // nor a result, and it is still exactly one of them.
         try sweep(

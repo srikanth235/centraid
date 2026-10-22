@@ -138,7 +138,7 @@ struct HomeView: View {
                 backup: home.backupLine,
                 onOpenBackup: { shell.openBackup() },
                 // HOME'S SEARCH KEY (R-CHROME-6), at the lockup's trailing
-                // edge; a tap pushes the search over every app but Locker.
+                // edge; a tap pushes the search over every app.
                 onSearch: { HomeSearchScreens.open(shell) },
                 searchLabel: HomeSearchBar.placeholder(shell),
                 onAppearance: { shell.toggleAppearance() }

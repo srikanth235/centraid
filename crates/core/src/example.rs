@@ -32,7 +32,6 @@
 
 use std::collections::BTreeSet;
 
-use centraid_api_proto::core_v1 as wire;
 use centraid_vault::commands::{Command, CommandStatus, Registry};
 use centraid_vault::{Principal, Vault};
 use serde_json::{Value, json};
@@ -115,52 +114,12 @@ pub fn seed(
         seed_tasks(&mut seeder, now_ms);
     }
     if wanted("agenda") {
-        // THE CALENDAR IS DISCOVERED, never hard-coded: `Vault::found` mints a
-        // private "Personal" one, and a vault with none cannot hold an event.
-        match first_calendar(vault) {
-            Some(calendar_id) => seed_agenda(&mut seeder, now_ms, &calendar_id),
-            None => seeder
-                .report
-                .refused
-                .push("agenda: this vault has no calendar".to_owned()),
-        }
+        seed_agenda(&mut seeder, now_ms);
     }
     if wanted("money") {
         seed_money(&mut seeder, now_ms);
     }
     Ok(seeder.report)
-}
-
-/// The first calendar's id, read through the page door a shell reads through.
-fn first_calendar(vault: &Vault) -> Option<String> {
-    let request = wire::PageRequest {
-        query: Some(wire::PageQuery {
-            name: "example.calendar".to_owned(),
-            select: vec!["calendar_id".to_owned()],
-            from: "schedule_calendar".to_owned(),
-            r#where: None,
-            bind: Vec::new(),
-            order: Some(wire::PageOrder {
-                sort_column: "calendar_id".to_owned(),
-                pk_column: "calendar_id".to_owned(),
-                descending: false,
-            }),
-            with_held_thumbnail: false,
-            with_note_body: false,
-            with_document_size: false,
-            with_minor_units: false,
-            local_day_columns: Vec::new(),
-            tz: String::new(),
-        }),
-        limit: 1,
-        after: None,
-    };
-    let page = crate::api::page(vault, &request).ok()?;
-    let value = page.rows.first()?.values.first()?;
-    match value.kind.as_ref()? {
-        wire::value::Kind::Text(text) => Some(text.clone()),
-        _ => None,
-    }
 }
 
 const DAY_MS: i64 = 86_400_000;
@@ -243,6 +202,24 @@ impl Seeder<'_> {
         }
     }
 
+    /// Put bytes in the content store the scenario's vault holds and answer their
+    /// hash, or report that it holds none (the commands that name bytes claim
+    /// them by hash and size).
+    fn spill(&mut self, bytes: &[u8]) -> Option<String> {
+        let stored = self.vault.blobs().map(|store| store.put(bytes));
+        match stored {
+            Some(Ok(hash)) => Some(hash),
+            other => {
+                let why = match other {
+                    Some(Err(error)) => error.to_string(),
+                    _ => "the vault has no content store".to_owned(),
+                };
+                self.report.refused.push(format!("content store: {why}"));
+                None
+            }
+        }
+    }
+
     /// A minted id out of a command's output, or nothing.
     fn id(output: Option<&Value>, field: &str) -> Option<String> {
         output?
@@ -256,8 +233,8 @@ impl Seeder<'_> {
 // Money.
 //
 // "Three accounts and about three months of statement lines, imported the way a
-// member imports them: through `money.import_transactions`, with the dedupe key
-// the app's own reader would have computed. A few rules file the regulars; a
+// member imports them: through `follow.statement`, with the dedupe key the app's
+// own reader would have computed. A few rules file the regulars; a
 // handful of lines stay unfiled so Activity has something to ask, and one move
 // between checking and savings is left for the member to accept." (#1099, R-1099-9)
 //
@@ -272,12 +249,12 @@ struct MoneyLine {
     text: String,
 }
 
-/// A line the seed writes into `account`, at most once per (day, amount, text).
+/// A line the seed writes into `account`, at most once per (day, amount, text):
+/// a record the account's statement origin follows.
 fn money_rows(
     now: i64,
     lines: &[MoneyLine],
     ordinals: &mut centraid_apps_money::import::keys::Ordinals,
-    first_id: &mut u32,
 ) -> Vec<Value> {
     lines
         .iter()
@@ -289,14 +266,14 @@ fn money_rows(
                 line.signed_minor,
                 &line.text,
             );
-            *first_id += 1;
             json!({
-                "txn_id": format!("demo-money-txn-{first_id}"),
                 "external_id": external_id,
-                "posted_on": posted_on,
-                "amount_minor": line.signed_minor.abs(),
-                "direction": if line.signed_minor < 0 { "debit" } else { "credit" },
-                "description": line.text,
+                "fields": {
+                    "title": line.text,
+                    "posted_on": posted_on,
+                    "amount_minor": line.signed_minor,
+                    "line": { "imported_from": "csv" },
+                },
             })
         })
         .collect()
@@ -319,12 +296,12 @@ fn seed_money(seeder: &mut Seeder, now: i64) {
         ("demo-money-visa", "Visa", "credit_card", None),
     ] {
         let mut input = json!({
-            "account_id": id, "name": name, "kind": kind, "currency": "USD",
+            "id": id, "title": name, "type": kind, "currency": "USD",
         });
         if let Some(reference) = reference {
             input["external_ref"] = json!(reference);
         }
-        seeder.run("money.add_account", input);
+        seeder.run("account.add", input);
     }
 
     let line = |days_ago: i64, signed_minor: i64, text: &str| MoneyLine {
@@ -384,93 +361,79 @@ fn seed_money(seeder: &mut Seeder, now: i64) {
 
     // Dated oldest first within each account, as a statement is; the keys carry
     // an ordinal per (day, amount, text) triple so identical lines stay two.
-    let mut next_id = 0;
-    for (account, mut lines) in [
-        ("demo-money-everyday", everyday),
-        ("demo-money-rainy", rainy),
-        ("demo-money-visa", visa),
+    for (account, reference, mut lines) in [
+        ("demo-money-everyday", "000123456789", everyday),
+        ("demo-money-rainy", "000987654321", rainy),
+        ("demo-money-visa", "demo-money-visa", visa),
     ] {
         lines.sort_by_key(|l| std::cmp::Reverse(l.days_ago));
         let mut ordinals = centraid_apps_money::import::keys::Ordinals::default();
-        let rows = money_rows(now, &lines, &mut ordinals, &mut next_id);
+        let records = money_rows(now, &lines, &mut ordinals);
+        // The statement origin's `ref` is the bank's number, or the account's own id.
         seeder.run(
-            "money.import_transactions",
-            json!({ "account_id": account, "source": "csv", "rows": rows }),
+            "follow.statement",
+            json!({
+                "origin": { "ref": reference, "label": account, "fills": account },
+                "records": records,
+            }),
         );
     }
 
     // The regulars are filed by rules, applied to what is already in.
-    for (rule, pattern, category, name) in [
-        (
-            "demo-money-rule-pay",
-            "PAYROLL",
-            "money:cat:income.pay",
-            "Payroll",
-        ),
+    for (rule, pattern, category) in [
+        ("demo-money-rule-pay", "PAYROLL", "category:income.pay"),
         (
             "demo-money-rule-rent",
             "RENT PAYMENT",
-            "money:cat:housing.rent",
-            "Rent",
+            "category:housing.rent",
         ),
         (
             "demo-money-rule-netflix",
             "NETFLIX",
-            "money:cat:fun.subscriptions",
-            "Netflix",
+            "category:fun.subscriptions",
         ),
         (
             "demo-money-rule-comcast",
             "COMCAST",
-            "money:cat:utilities.phone",
-            "Comcast",
+            "category:utilities.phone",
         ),
         (
             "demo-money-rule-wf",
             "WHOLE FOODS",
-            "money:cat:food.groceries",
-            "Whole Foods",
+            "category:food.groceries",
         ),
-        (
-            "demo-money-rule-sbux",
-            "STARBUCKS",
-            "money:cat:food.dining",
-            "Starbucks",
-        ),
+        ("demo-money-rule-sbux", "STARBUCKS", "category:food.dining"),
         (
             "demo-money-rule-shell",
             "SHELL OIL",
-            "money:cat:transport.fuel",
-            "Shell",
+            "category:transport.fuel",
         ),
         (
             "demo-money-rule-bistro",
             "CORNER BISTRO",
-            "money:cat:food.dining",
-            "Corner Bistro",
+            "category:food.dining",
         ),
     ] {
         seeder.run(
-            "money.add_rule",
+            "rule.add",
             json!({
-                "rule_id": rule, "match_kind": "contains", "pattern": pattern,
-                "set_category_concept_id": category, "set_display_name": name,
+                "id": rule, "match": "contains", "text": pattern, "category_id": category,
             }),
         );
-        seeder.run("money.apply_rule_to_history", json!({ "rule_id": rule }));
+        seeder.run("rule.apply", json!({ "id": rule }));
     }
 
     // A plan for this month, so Spending has something to be measured against.
     let month = day(now, 0)[..7].to_owned();
     for (category, minor) in [
-        ("money:cat:food.groceries", 55_000),
-        ("money:cat:food.dining", 30_000),
-        ("money:cat:transport.fuel", 25_000),
+        ("category:food.groceries", 55_000),
+        ("category:food.dining", 30_000),
+        ("category:transport.fuel", 25_000),
     ] {
         seeder.run(
-            "money.set_target",
+            "budget.set",
             json!({
-                "month": month, "category_concept_id": category,
+                "month": month, "category_id": category,
                 "amount_minor": minor, "currency": "USD", "carry": true,
             }),
         );
@@ -494,10 +457,10 @@ fn seed_people(seeder: &mut Seeder) {
         ("Chris Okafor", "Design lead, ex-colleague", 60),
     ] {
         let output = seeder.run(
-            "people.add_person",
-            json!({ "display_name": name, "role": role, "cadence_days": cadence }),
+            "person.add",
+            json!({ "title": name, "role": role, "cadence_days": cadence }),
         );
-        if let Some(party) = Seeder::id(output.as_ref(), "party_id") {
+        if let Some(party) = Seeder::id(output.as_ref(), "id") {
             ids.push(party);
         }
     }
@@ -524,8 +487,8 @@ fn seed_people(seeder: &mut Seeder) {
         ),
     ] {
         seeder.run(
-            "people.log_interaction",
-            json!({ "party_id": party, "kind": kind, "text": text }),
+            "person.log_interaction",
+            json!({ "id": party, "kind": kind, "text": text }),
         );
     }
 
@@ -534,9 +497,9 @@ fn seed_people(seeder: &mut Seeder) {
         (&maya, "Birthday", "11-02", false),
     ] {
         seeder.run(
-            "people.add_important_date",
+            "person.add_date",
             json!({
-                "party_id": party,
+                "id": party,
                 "label": label,
                 "month_day": month_day,
                 "reminder_on": reminder,
@@ -548,10 +511,7 @@ fn seed_people(seeder: &mut Seeder) {
         (&grandpa, "Large-print edition of Lonesome Dove"),
         (&chris, "Fountain pen ink sampler"),
     ] {
-        seeder.run(
-            "people.add_gift",
-            json!({ "party_id": party, "text": text }),
-        );
+        seeder.run("person.add_gift", json!({ "id": party, "text": text }));
     }
 }
 
@@ -565,15 +525,21 @@ fn seed_people(seeder: &mut Seeder) {
 fn seed_notes(seeder: &mut Seeder) {
     let travel = Seeder::id(
         seeder
-            .run("knowledge.create_notebook", json!({ "name": "Travel" }))
+            .run(
+                "container.create",
+                json!({ "kind": "notebook", "title": "Travel" }),
+            )
             .as_ref(),
-        "notebook_id",
+        "id",
     );
     let recipes = Seeder::id(
         seeder
-            .run("knowledge.create_notebook", json!({ "name": "Recipes" }))
+            .run(
+                "container.create",
+                json!({ "kind": "notebook", "title": "Recipes" }),
+            )
             .as_ref(),
-        "notebook_id",
+        "id",
     );
 
     let notes: [(&str, &str, &str, Option<&String>); 5] = [
@@ -609,11 +575,11 @@ fn seed_notes(seeder: &mut Seeder) {
         ),
     ];
     for (title, body, format, notebook) in notes {
-        let mut input = json!({ "title": title, "body_text": body, "format": format });
+        let mut input = json!({ "title": title, "body": body, "format": format });
         if let Some(notebook) = notebook {
             input["notebook_id"] = json!(notebook);
         }
-        seeder.run("knowledge.create_note", input);
+        seeder.run("note.create", input);
     }
 }
 
@@ -621,38 +587,29 @@ fn seed_notes(seeder: &mut Seeder) {
 // Docs.
 //
 // "Two folders, three filed documents, a star, a tag, and one document with a
-// SECOND version so the history walk has something to walk." The bytes ride the
-// inline `data:` door as text/markdown, which is v0's choice and the reason the
-// FTS triggers index them.
+// SECOND version so the history walk has something to walk." Each is written as
+// text/markdown through `document.create_text`, so its words are what the index
+// finds it by.
 // ---------------------------------------------------------------------------
-
-fn markdown(text: &str) -> String {
-    // Percent-encoding by hand: the alternative is a URL crate in a fixture,
-    // and the set of characters these documents use is small and known.
-    let mut encoded = String::with_capacity(text.len() * 3);
-    for byte in text.bytes() {
-        match byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
-                encoded.push(byte as char);
-            }
-            _ => encoded.push_str(&format!("%{byte:02X}")),
-        }
-    }
-    format!("data:text/markdown;charset=utf-8,{encoded}")
-}
 
 fn seed_docs(seeder: &mut Seeder, now: i64) {
     let travel = Seeder::id(
         seeder
-            .run("core.create_folder", json!({ "name": "Travel" }))
+            .run(
+                "container.create",
+                json!({ "kind": "folder", "title": "Travel" }),
+            )
             .as_ref(),
-        "folder_id",
+        "id",
     );
     let home = Seeder::id(
         seeder
-            .run("core.create_folder", json!({ "name": "Home" }))
+            .run(
+                "container.create",
+                json!({ "kind": "folder", "title": "Home" }),
+            )
             .as_ref(),
-        "folder_id",
+        "id",
     );
 
     let leaving = day(now, 3);
@@ -663,34 +620,28 @@ fn seed_docs(seeder: &mut Seeder, now: i64) {
     );
     let mut packing_input = json!({
         "title": "Tahoe packing list",
-        "data_uri": markdown(&packing_body),
+        "body_text": packing_body,
+        "media_type": "text/markdown",
     });
     if let Some(travel) = travel.as_ref() {
         packing_input["folder_id"] = json!(travel);
     }
     let packing = Seeder::id(
-        seeder.run("core.add_document", packing_input).as_ref(),
-        "document_id",
+        seeder.run("document.create_text", packing_input).as_ref(),
+        "id",
     );
     if let Some(packing) = packing.as_ref() {
-        // ONE EDIT, so version history has two versions to show: the walk is
-        // `revises` links between CONTENT items, minted by this call.
+        // ONE EDIT, so version history has two versions to show: the words it
+        // replaced are version one.
         let revised = format!(
             "{packing_body}- Tire chains (I-80 requires them after a storm)\n- Cooler for the drive\n"
         );
         seeder.run(
-            "core.edit_document",
-            json!({ "document_id": packing, "body_text": revised }),
+            "document.edit",
+            json!({ "id": packing, "body_text": revised }),
         );
-        seeder.run("core.star_document", json!({ "document_id": packing }));
-        seeder.run(
-            "core.tag_item",
-            json!({
-                "subject_type": "core.document",
-                "subject_id": packing,
-                "label": "tahoe",
-            }),
-        );
+        seeder.run("flag.set", json!({ "id": packing, "flag": "starred" }));
+        seeder.run("tag.add", json!({ "id": packing, "label": "tahoe" }));
     }
 
     // "(sample)" IN THE TITLE, which is v0's own rule: a rental agreement and an
@@ -704,24 +655,26 @@ fn seed_docs(seeder: &mut Seeder, now: i64) {
     );
     let mut cabin_input = json!({
         "title": "Cabin rental agreement (sample)",
-        "data_uri": markdown(&cabin),
+        "body_text": cabin,
+        "media_type": "text/markdown",
     });
     if let Some(travel) = travel.as_ref() {
         cabin_input["folder_id"] = json!(travel);
     }
-    seeder.run("core.add_document", cabin_input);
+    seeder.run("document.create_text", cabin_input);
 
     let insurance = "# Renters insurance policy (sample)\n\nThis is sample demo data, not a real policy.\n\n\
          - Policy number: SAMPLE-0000-0000\n- Personal property: $30,000\n- Liability: $100,000\n\
          - Deductible: $500\n- Renews annually\n";
     let mut insurance_input = json!({
         "title": "Renters insurance policy (sample)",
-        "data_uri": markdown(insurance),
+        "body_text": insurance,
+        "media_type": "text/markdown",
     });
     if let Some(home) = home.as_ref() {
         insurance_input["folder_id"] = json!(home);
     }
-    seeder.run("core.add_document", insurance_input);
+    seeder.run("document.create_text", insurance_input);
 }
 
 // ---------------------------------------------------------------------------
@@ -937,14 +890,8 @@ fn roll() -> Vec<Frame> {
 ///
 /// These are ORIGINAL procedurally drawn frames, not photographs of anyone and
 /// not any third party's character art: every byte here has to be ours to
-/// distribute. v0's note says they are drawn with human face geometry rather
-/// than a stylised one, because a detector trained on human faces is what would
-/// eventually run over them.
-///
-/// **The face BOXES are not ported.** v0 stages them as `media.face_region`
-/// proposals; that is the recognition plane, and seeding boxes for a plane this
-/// build does not run would be rows nothing reads. The frames themselves carry
-/// the faces, so the boxes are one detection pass away whenever that lands.
+/// distribute. They are ordinary photographs of the roll: nothing recognises the
+/// faces in them, and no surface draws a face (R-FP-10, Q-1047-2).
 fn portraits() -> Vec<Frame> {
     vec![
         frame(
@@ -1069,96 +1016,70 @@ roll!(
 /// DIVERSITY, not playback fidelity. The viewer's capability rows and the
 /// video badge read the vault's honest kind and duration; the bytes only have
 /// to be real enough to have a sha and a media type.
-const VIDEO_BASE64: &str = "AAAAHGZ0eXBtcDQyAAAAAG1wNDJpc29t";
+const VIDEO_BYTES: [u8; 24] = *b"\0\0\0\x1cftypmp42\0\0\0\0mp42isom";
 
-/// ONE FRAME'S CALL, with its bytes.
+fn video_bytes() -> Vec<u8> {
+    VIDEO_BYTES.to_vec()
+}
+
+/// ONE FRAME'S CALL, over bytes the seeder has put in the store.
 ///
-/// The coordinate pair is spread in only when the frame has one: a
-/// place-less frame must send NEITHER, because `media.add_asset` refuses half
-/// a coordinate — half of one is no location at all, and accepting it would
-/// let this seeder believe it had placed a photograph it had not.
-fn frame_input(frame: &Frame, now: i64) -> Option<Value> {
-    let bytes = roll_bytes(frame.file)?;
+/// The coordinate pair is spread in only when the frame has one: a place-less
+/// frame must send NEITHER, because `photo.add` refuses half a coordinate — half
+/// of one is no location at all, and accepting it would let this seeder believe
+/// it had placed a photograph it had not.
+fn frame_input(frame: &Frame, now: i64, blob: &str, size: usize) -> Value {
     let mut input = json!({
-        "data_uri": format!(
-            "data:image/png;base64,{}",
-            base64_of(bytes),
-        ),
-        "kind": "photo",
+        "blob": blob,
+        "size": size,
+        "media_type": "image/png",
         "title": frame.title,
-        "captured_at": at(now, frame.day, frame.hour, frame.month_offset),
-        "tz_offset_min": TZ_OFFSET_MIN,
+        "taken_at": at(now, frame.day, frame.hour, frame.month_offset),
+        "offset_min": TZ_OFFSET_MIN,
         "width": frame.width,
         "height": frame.height,
         "thumbhash": frame.thumbhash,
         "phash": frame.phash,
     });
-    if let Some((lat, lng)) = place_of(frame.file) {
+    if let Some((lat, lon)) = place_of(frame.file) {
         let object = input.as_object_mut().expect("the input is an object");
-        object.insert("latitude".to_owned(), json!(lat));
-        object.insert("longitude".to_owned(), json!(lng));
+        object.insert("lat".to_owned(), json!(lat));
+        object.insert("lon".to_owned(), json!(lon));
     }
-    Some(input)
-}
-
-/// Standard base64, no line breaks — what a `data:` URI carries.
-fn base64_of(bytes: &[u8]) -> String {
-    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
-    for chunk in bytes.chunks(3) {
-        let b = [
-            chunk[0],
-            *chunk.get(1).unwrap_or(&0),
-            *chunk.get(2).unwrap_or(&0),
-        ];
-        let packed = (u32::from(b[0]) << 16) | (u32::from(b[1]) << 8) | u32::from(b[2]);
-        for shift in [18, 12, 6, 0] {
-            out.push(char::from(ALPHABET[((packed >> shift) & 0x3F) as usize]));
-        }
-        // The pad says how many of the last four characters are real.
-        let padding = 3 - chunk.len();
-        out.truncate(out.len() - padding);
-        for _ in 0..padding {
-            out.push('=');
-        }
-    }
-    out
+    input
 }
 
 /// The camera roll: eighteen frames with REAL BYTES, one video, one album.
 ///
-/// **The bytes are the point.** The first port of this seed sent titles and
-/// capture times with no `data_uri` at all, because `media.add_asset` had no
-/// handler — the blob door was missing from `CommandCtx`, so a vault could
-/// hold a note and not a photograph, and Photos seeded zero on every run. The
-/// door exists now (`Vault::with_blobs`), so this is v0's scenario entire:
-/// the same frames, the same places, the same two favourites, the same
-/// shortlist album.
+/// **The bytes are the point.** A vault that holds a note and not a photograph
+/// seeds zero photographs on every run, so the frames are put in the content
+/// store (`Vault::with_blobs`) and filed by `photo.add`, which claims them by
+/// hash and size: v0's scenario entire — the same frames, the same places, the
+/// same two favourites, the same shortlist album.
 fn seed_photos(seeder: &mut Seeder, now: i64) {
-    let mut asset_by_file: std::collections::BTreeMap<&str, String> =
+    let mut photo_by_file: std::collections::BTreeMap<&str, String> =
         std::collections::BTreeMap::new();
     // STRICTLY IN ORDER, as v0 runs them: ids are minted per invocation, so a
     // shuffled roll shuffles the timeline's tie-breaks and the album's member
     // positions run to run — and reproducibility is what a scenario generator
     // is for.
     for frame in roll().into_iter().chain(portraits()) {
-        let Some(input) = frame_input(&frame, now) else {
+        let Some(bytes) = roll_bytes(frame.file) else {
             continue;
         };
-        let Some(output) = seeder.run("media.add_asset", input) else {
+        let Some(blob) = seeder.spill(bytes) else {
             continue;
         };
-        let Some(asset_id) = Seeder::id(Some(&output), "asset_id") else {
+        let input = frame_input(&frame, now, &blob, bytes.len());
+        let Some(output) = seeder.run("photo.add", input) else {
             continue;
         };
-        asset_by_file.insert(frame.file, asset_id.clone());
+        let Some(photo_id) = Seeder::id(Some(&output), "id") else {
+            continue;
+        };
+        photo_by_file.insert(frame.file, photo_id.clone());
         if frame.favorite {
-            // The general editor rather than `set_favorite`: one command, and
-            // it is the path the app's own detail pane takes.
-            seeder.run(
-                "media.update_asset",
-                json!({ "asset_id": asset_id, "favorite": 1 }),
-            );
+            seeder.run("flag.set", json!({ "id": photo_id, "flag": "starred" }));
         }
     }
 
@@ -1166,23 +1087,27 @@ fn seed_photos(seeder: &mut Seeder, now: i64) {
     // can show — and the one cell in the demo library that draws no image.
     // Nothing in this workspace writes a `poster` derivative, so the mosaic has
     // no still to fall back to and says so by drawing an empty cell.
-    seeder.run(
-        "media.add_asset",
-        json!({
-            "data_uri": format!("data:video/mp4;base64,{VIDEO_BASE64}"),
-            "kind": "video",
-            "title": "Tahoe shoreline pan",
-            "captured_at": at(now, -2, 17, 0),
-            "tz_offset_min": TZ_OFFSET_MIN,
-            "width": 360,
-            "height": 240,
-            "duration_s": 12,
-            "latitude": WEST_SHORE_RIDGE.0,
-            "longitude": WEST_SHORE_RIDGE.1,
-        }),
-    );
+    let film = video_bytes();
+    if let Some(blob) = seeder.spill(&film) {
+        seeder.run(
+            "photo.add",
+            json!({
+                "blob": blob,
+                "size": film.len(),
+                "media_type": "video/mp4",
+                "title": "Tahoe shoreline pan",
+                "taken_at": at(now, -2, 17, 0),
+                "offset_min": TZ_OFFSET_MIN,
+                "width": 360,
+                "height": 240,
+                "duration_s": 12,
+                "lat": WEST_SHORE_RIDGE.0,
+                "lon": WEST_SHORE_RIDGE.1,
+            }),
+        );
+    }
 
-    seed_album(seeder, &asset_by_file);
+    seed_album(seeder, &photo_by_file);
 }
 
 /// The shortlist, as an album with a cover.
@@ -1190,26 +1115,29 @@ fn seed_photos(seeder: &mut Seeder, now: i64) {
 /// Separate from the roll because it can only run AFTER it: an album of four
 /// frames needs those four frames to have ids, and a cover needs to be a member
 /// of the album it covers.
-fn seed_album(seeder: &mut Seeder, asset_by_file: &std::collections::BTreeMap<&str, String>) {
-    let Some(output) = seeder.run("media.create_album", json!({ "title": ALBUM_TITLE })) else {
+fn seed_album(seeder: &mut Seeder, photo_by_file: &std::collections::BTreeMap<&str, String>) {
+    let Some(output) = seeder.run(
+        "container.create",
+        json!({ "kind": "album", "title": ALBUM_TITLE }),
+    ) else {
         return;
     };
-    let Some(album_id) = Seeder::id(Some(&output), "album_id") else {
+    let Some(album_id) = Seeder::id(Some(&output), "id") else {
         return;
     };
     for file in ALBUM_FILES {
-        let Some(asset_id) = asset_by_file.get(file) else {
+        let Some(photo_id) = photo_by_file.get(file) else {
             continue;
         };
         seeder.run(
-            "media.add_to_album",
-            json!({ "album_id": album_id, "asset_id": asset_id }),
+            "edge.add",
+            json!({ "from": album_id, "rel": "contains", "to": photo_id }),
         );
     }
-    if let Some(cover) = asset_by_file.get(ALBUM_COVER) {
+    if let Some(cover) = photo_by_file.get(ALBUM_COVER) {
         seeder.run(
-            "media.set_album_cover",
-            json!({ "album_id": album_id, "asset_id": cover }),
+            "album.set_cover",
+            json!({ "id": album_id, "photo_id": cover }),
         );
     }
 }
@@ -1218,23 +1146,23 @@ fn seed_album(seeder: &mut Seeder, asset_by_file: &std::collections::BTreeMap<&s
 // Tasks.
 //
 // "A believable week on the board — overdue errands, a project with subtasks,
-// done items, a someday idea." The project is a real `schedule_project` with a
+// done items, a someday idea." The project is a real container with a
 // section, so the project place is reachable (#1047).
 // ---------------------------------------------------------------------------
 
 fn seed_tasks(seeder: &mut Seeder, now: i64) {
     let add = |seeder: &mut Seeder, input: Value| -> Option<String> {
-        let output = seeder.run("schedule.add_task", input);
-        Seeder::id(output.as_ref(), "task_id")
+        let output = seeder.run("task.add", input);
+        Seeder::id(output.as_ref(), "id")
     };
 
     for input in [
-        json!({ "title": "Rotate the tires before the drive", "due_at": at(now, -2, 9, 0), "priority": 8 }),
-        json!({ "title": "Book dentist appointment", "due_at": at(now, 1, 9, 0), "priority": 5, "effort_min": 15 }),
+        json!({ "title": "Rotate the tires before the drive", "due": at(now, -2, 9, 0), "priority": 8 }),
+        json!({ "title": "Book dentist appointment", "due": at(now, 1, 9, 0), "priority": 5, "effort_min": 15 }),
         json!({
             "title": "Pick up the dry cleaning",
             "description": "Ticket is on the fridge.",
-            "due_at": at(now, 0, 9, 0),
+            "due": at(now, 0, 9, 0),
             "priority": 3,
         }),
     ] {
@@ -1246,7 +1174,7 @@ fn seed_tasks(seeder: &mut Seeder, now: i64) {
         json!({
             "title": "Plan the Tahoe trip",
             "description": "Long weekend at the lake with Maya, Jake and Chris.",
-            "due_at": at(now, 7, 9, 0),
+            "due": at(now, 7, 9, 0),
             "priority": 6,
         }),
     );
@@ -1255,64 +1183,57 @@ fn seed_tasks(seeder: &mut Seeder, now: i64) {
     let project = Seeder::id(
         seeder
             .run(
-                "schedule.save_project",
-                json!({ "name": "Tahoe trip", "color": "steelblue", "sort_order": 1 }),
+                "container.create",
+                json!({ "kind": "project", "title": "Tahoe trip", "color": "steelblue", "position": 1 }),
             )
             .as_ref(),
-        "project_id",
+        "id",
     );
     if let Some(project) = project.as_ref() {
         let section = Seeder::id(
             seeder
                 .run(
-                    "schedule.save_section",
-                    json!({ "project_id": project, "name": "Booking", "sort_order": 1 }),
+                    "container.create",
+                    json!({ "kind": "section", "title": "Booking", "parent": project, "position": 1 }),
                 )
                 .as_ref(),
-            "section_id",
+            "id",
         );
         let lift = add(
             seeder,
-            json!({ "title": "Buy lift tickets online", "due_at": at(now, 5, 9, 0), "priority": 4 }),
+            json!({ "title": "Buy lift tickets online", "due": at(now, 5, 9, 0), "priority": 4 }),
         );
-        for (task, sort_order) in [(trip.as_ref(), 1), (lift.as_ref(), 2)] {
+        for (task, position) in [(trip.as_ref(), 1), (lift.as_ref(), 2)] {
             let Some(task) = task else { continue };
-            let mut input =
-                json!({ "task_id": task, "project_id": project, "sort_order": sort_order });
+            let mut input = json!({ "id": task, "project_id": project, "position": position });
             if let Some(section) = section.as_ref() {
                 input["section_id"] = json!(section);
             }
-            seeder.run("schedule.organize_task", input);
+            seeder.run("task.organize", input);
         }
     }
     if let Some(trip) = trip.as_ref() {
         for input in [
-            json!({ "title": "Compare cabins — South Lake vs Truckee", "parent_task_id": trip, "effort_min": 45 }),
-            json!({ "title": "Book the Tahoe cabin", "parent_task_id": trip, "due_at": at(now, 3, 9, 0) }),
+            json!({ "title": "Compare cabins — South Lake vs Truckee", "parent_id": trip, "effort_min": 45 }),
+            json!({ "title": "Book the Tahoe cabin", "parent_id": trip, "due": at(now, 3, 9, 0) }),
         ] {
             add(seeder, input);
         }
         let packed = add(
             seeder,
-            json!({ "title": "Draft packing list", "parent_task_id": trip }),
+            json!({ "title": "Draft packing list", "parent_id": trip }),
         );
         if let Some(packed) = packed {
-            seeder.run(
-                "schedule.set_task_status",
-                json!({ "task_id": packed, "status": "completed" }),
-            );
+            seeder.run("task.complete", json!({ "id": packed }));
         }
     }
 
     let groceries = add(
         seeder,
-        json!({ "title": "Weekly grocery run", "due_at": at(now, -1, 9, 0), "priority": 4 }),
+        json!({ "title": "Weekly grocery run", "due": at(now, -1, 9, 0), "priority": 4 }),
     );
     if let Some(groceries) = groceries {
-        seeder.run(
-            "schedule.set_task_status",
-            json!({ "task_id": groceries, "status": "completed" }),
-        );
+        seeder.run("task.complete", json!({ "id": groceries }));
     }
     add(
         seeder,
@@ -1325,7 +1246,7 @@ fn seed_tasks(seeder: &mut Seeder, now: i64) {
 //
 // "One lived-in week on the calendar — something small today so the brief is
 // never blank, dinner with a friend, a deadline, a weekly recurring run with a
-// reminder, and next week's dentist." Every slot is DISJOINT: `propose_event`
+// reminder, and next week's dentist." Every slot is DISJOINT: `event.propose`
 // refuses any busy overlap, vault-wide.
 //
 // No attendees, which is v0's own note: resolving "Maya" to a party here would
@@ -1333,7 +1254,7 @@ fn seed_tasks(seeder: &mut Seeder, now: i64) {
 // names her in the summary instead.
 // ---------------------------------------------------------------------------
 
-fn seed_agenda(seeder: &mut Seeder, now: i64, calendar_id: &str) {
+fn seed_agenda(seeder: &mut Seeder, now: i64) {
     let slot = |days: i64, hour: i64, minute: i64, minutes: i64| {
         let start = at(now, days, hour, minute);
         let end = at(now, days, hour, minute + minutes);
@@ -1370,17 +1291,17 @@ fn seed_agenda(seeder: &mut Seeder, now: i64, calendar_id: &str) {
     ];
     for (summary, description, (dtstart, dtend), rrule) in events {
         let mut input = json!({
-            "calendar_id": calendar_id,
-            "summary": summary,
-            "dtstart": dtstart,
-            "dtend": dtend,
+            "title": summary,
+            "starts": dtstart,
+            "ends": dtend,
+            "zone": "Etc/UTC",
         });
         if let Some(description) = description {
             input["description"] = json!(description);
         }
         if let Some(rrule) = rrule {
-            input["rrule"] = json!(rrule);
+            input["rule"] = json!(rrule);
         }
-        seeder.run("schedule.propose_event", input);
+        seeder.run("event.propose", input);
     }
 }

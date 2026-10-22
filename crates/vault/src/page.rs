@@ -53,6 +53,7 @@ impl Vault {
     /// which means a grammar bug that let a write through is caught by SQLite
     /// rather than by a reviewer.
     pub fn page_raw(&self, page: &RawPage) -> Result<Vec<RowImage>> {
+        self.tapped("(raw)", page);
         self.page_clamped(page, MAX_PAGE_ROWS)
     }
 
@@ -359,189 +360,70 @@ pub struct KeysetPage {
     /// APPEND A `thumbnail_path` COLUMN, resolved from the bytes this device
     /// holds (#1025, D-1025-S7-20). See [`HELD_THUMBNAIL_COLUMN`].
     pub held_thumbnail: bool,
-    /// APPEND A `body_text` COLUMN from `core_content_text` (#1025, R-NOTES-1).
-    /// See [`NOTE_BODY_COLUMN`].
-    pub note_body: bool,
-    /// APPEND A `document_size` COLUMN — the row's bytes, ALREADY IN WORDS.
+    /// APPEND A `document_size` COLUMN: the row's bytes, ALREADY IN WORDS.
     /// See [`DOCUMENT_SIZE_COLUMN`].
     pub document_size: bool,
 }
 
-/// The computed column [`KeysetPage::held_thumbnail`] appends, and the whole of
-/// the join behind it.
+/// The computed column [`KeysetPage::held_thumbnail`] appends: the path of a
+/// picture a cell can draw, from the bytes THIS DEVICE holds, or NULL.
 ///
 /// **A correlated subquery and not a `LEFT JOIN`**, which is the same answer
-/// and is the only one that cannot change the page: a join through
-/// `core_content_derivative` multiplies a row by its derivatives, and a grid
-/// whose page silently held two of one photograph would break its own keyset
-/// cursor. One value per row, ordering and row count untouched.
+/// and is the only one that cannot change the page: a join through `derivative`
+/// multiplies a row by its derivatives, and a grid whose page silently held two
+/// of one photograph would break its own keyset cursor. One value per row,
+/// ordering and row count untouched.
 ///
-/// **The tier, and the fallback that makes v0 work.** `thumb` first, then
-/// `poster` — a video's frame is a `poster` and a photograph's is a `thumb` —
-/// and when no derivative row exists at all the ORIGINAL's hash is used. Every
-/// vault seeded from originals is that case; without the fallback the whole
-/// feature draws nothing on the only libraries that exist today.
+/// **The tier.** A `thumb` first, then a `poster` (a video's frame), and when no
+/// derivative has bytes the row's own `blob` is the candidate. The statement
+/// projects the candidate HASH and its media type, and
+/// [`Vault::resolve_held_bytes`] asks the byte store for the path: whether this
+/// device holds a blob is a question for the store, not for a table. It stays
+/// opt-in per query because it costs a store lookup per row.
 ///
-/// **THE DRAWABILITY RULE SURVIVED ITS TABLE.** `drawable = 1` was decided
-/// where the path was produced (`centraid_seat::held`) and read here as a
-/// column. With that plane deleted the rule is applied in
-/// [`Vault::resolve_held_bytes`], against the same list `content.read` serves
-/// inline by — still one predicate in one place, and still not something a
-/// caller's statement can express.
-///
-/// **THE PATH COMES FROM THE CONTENT STORE, NOT FROM A TABLE** (#1029 §1).
-///
-/// **THE `from` TABLE MUST CARRY `content_id`, AND ONE THAT DOES NOT IS REFUSED
-/// AT PREPARE** — the correlated subquery's outer reference is resolved before
-/// any row is read, so there is no "reports no thumbnail for every row" to
-/// fall back to. `query.proto` promised that fallback and has been corrected;
-/// `a_thumbnail_column_asked_of_a_table_that_has_no_content_is_refused` is the
-/// check. See [`DOCUMENT_SIZE_COLUMN`] for why this end is the right one.
-///
-/// This used to join `seat_blob_held`, a seat-owned table carrying a path and a
-/// `drawable` flag per blob. The seat plane went with the gateway and **the
-/// table went with it — nothing in the migration ladder creates it any more**,
-/// so this statement referenced a relation no vault has and every read that
-/// asked for a thumbnail failed at prepare. Home graded Photos as an app with
-/// nothing in it and offered "Bring in photos" over a library of nineteen; the
-/// grid drew placeholders. Nothing logged, because a refused tile read and an
-/// empty one look the same to a grid that has only rows to go on.
-///
-/// So the statement now projects the candidate HASH and its media type, and
-/// [`Vault::resolve_held_bytes`] asks the byte store for the path — the same
-/// two steps [`Vault::content_location`] takes for one item. It stays opt-in
-/// per query because it costs a store lookup per row, which a list of notes
-/// has no use for.
+/// **THE `from` TABLE MUST CARRY A `blob` COLUMN** (a `photo` or a `document`),
+/// and one that does not is REFUSED AT PREPARE: SQLite resolves a correlated
+/// subquery's outer reference before a single row is read, so there is no row
+/// loop in which to answer NULL. A flag set on the wrong table is a caller's
+/// bug, and a read that went quiet would be a screen nobody could debug.
 pub const HELD_THUMBNAIL_COLUMN: &str = "thumbnail_path";
 
 /// The hash the thumbnail lookup will try, projected by the statement and
-/// REMOVED from the row before it is served.
-///
-/// A working column: the caller's contract is [`HELD_THUMBNAIL_COLUMN`] and a
-/// sha in a row image is a second, unpromised way for a shell to reach one.
+/// REMOVED from the row before it is served: a sha in a row image is a second,
+/// unpromised way for a shell to reach one.
 const DRAWABLE_HASH_COLUMN: &str = "drawable_hash";
 
-/// The media type of whatever [`DRAWABLE_HASH_COLUMN`] names — the derivative's
-/// own, or the item's representation when the fallback took the original.
-/// Removed from the row with it; see [`Vault::resolve_held_bytes`] for why it
-/// is read at all.
+/// The media type of whatever [`DRAWABLE_HASH_COLUMN`] names: the derivative's
+/// own, or the row's when the fallback took the original. Removed with it.
 const DRAWABLE_TYPE_COLUMN: &str = "drawable_type";
 
-/// THE ORIGINAL'S OWN HASH, appended beside [`HELD_THUMBNAIL_COLUMN`]
-/// (#1025 S5, D-1025-S7-62).
-///
-/// `core_content_item.content_hash` for the row's content — NOT the derivative
-/// the thumbnail resolved to. It is what a download arrow names when a member
-/// taps it, and a cell that offered to fetch the thumbnail it is already
-/// drawing would be an affordance that does nothing.
-///
-/// NULL when this replica has no live content row for the asset, which is a
-/// real state and not an error: a cell with no original to ask for draws no
-/// arrow.
+/// THE ORIGINAL'S OWN HASH, appended beside [`HELD_THUMBNAIL_COLUMN`]: the
+/// row's `blob`, NOT the derivative the thumbnail resolved to. It is what a
+/// download arrow names when a member taps it.
 pub const HELD_ORIGINAL_HASH_COLUMN: &str = "original_hash";
 
-/// WHETHER THE ORIGINAL ITSELF IS ON THIS DEVICE, 1 or 0 — in the content
-/// store, or in the operating system's library the phone never copies from
-/// (#1080 ruling 6).
-///
-/// The one fact that separates "held" from "thumbnail only", and it cannot be
-/// inferred from [`HELD_THUMBNAIL_COLUMN`]: the thumbnail column falls back to
-/// the ORIGINAL's hash on a vault with no derivative rows, so a path there
-/// means the original on some libraries and a `thumb` on others. A cell that
-/// guessed would tell a member their full-size photograph is on the device
-/// whenever a thumbnail was.
-///
-/// **`drawable` is deliberately NOT part of this predicate.** A held video is
-/// held; what `drawable` governs is whether a PATH may be handed out, and this
-/// column hands out no path.
+/// WHETHER THE ORIGINAL ITSELF IS ON THIS DEVICE, 1 or 0: in the content store,
+/// or in the operating system's library the phone never copies from (#1080
+/// ruling 6). The one fact that separates "held" from "thumbnail only"; it
+/// cannot be inferred from [`HELD_THUMBNAIL_COLUMN`], whose fallback is the
+/// original. `drawable` is deliberately NOT part of it: a held video is held.
 pub const HELD_ORIGINAL_HELD_COLUMN: &str = "original_held";
 
-/// The computed column [`KeysetPage::note_body`] appends (#1025, R-NOTES-1).
+/// The computed column [`KeysetPage::document_size`] appends: **a phrase, not a
+/// number** (Home's Docs tile). The core decides how a size reads
+/// ([`format_byte_size`]), and a view never formats one from a byte count.
 ///
-/// **A correlated subquery and not a `LEFT JOIN`**, for the same reason as
-/// [`HELD_THUMBNAIL_COLUMN`]: a join through `core_content_text` is one-to-one
-/// today, and a subquery keeps the page's row count honest if that ever
-/// changes. One value per row, ordering untouched.
+/// The bytes are `blob.size` of the row's own `blob`: an edited document
+/// reports the edit's size, the only answer that matches what opening it would
+/// show. NULL is a real answer and is not a zero.
 ///
-/// **Text is a row, not a blob.** `core_content_text.body_text` is what the
-/// replica holds for a note; `seat_blob_held` is the wrong door. NULL means
-/// this device has no text row for the note's `body_content_id`.
-///
-/// **THE `from` TABLE MUST CARRY `body_content_id`, AND ONE THAT DOES NOT IS
-/// REFUSED AT PREPARE.** This comment used to promise the gentler thing — "one
-/// that does not simply answers NULL for every row" — and `query.proto`
-/// promised it to every caller of the door. It was never true and could not
-/// have been: the subquery is CORRELATED, so `{from}.body_content_id` is an
-/// outer reference SQLite resolves while it PREPARES the statement, before a
-/// single row is read. There is no row loop in which to answer NULL. Checked by
-/// `a_note_body_column_asked_of_a_table_that_has_no_body_is_refused`, which is
-/// the test [`DOCUMENT_SIZE_COLUMN`] asked for and did not run.
-///
-/// That is the right end to fail at, for the reason that column states: a flag
-/// set on the wrong table is a caller's bug, and a read that goes quiet is a
-/// screen nobody can debug.
-pub const NOTE_BODY_COLUMN: &str = "body_text";
-
-/// The computed column [`KeysetPage::document_size`] appends — **a phrase, not
-/// a number** (#1029, Home's Docs tile).
-///
-/// **The contract is a formatted string and it always was.**
-/// `TileBody.Docs.Row.size` says "already formatted by the core, which knows
-/// the vault's locale; never formatted in a view from a byte count", and both
-/// shells honour it: they draw this column's text in the `annot` role and draw
-/// NOTHING when it is empty. What the core never had was anything to format —
-/// the door offered no size column at all, so the only honest thing
-/// the shell could put in the field was the empty string it has been putting
-/// there, and the tile drew a bare list against a handoff that rules a trailing
-/// meta column. A projection that answers a question no caller can ask is the
-/// same defect as a statement naming a table no vault has ([`HELD_THUMBNAIL_COLUMN`]),
-/// read from the other end: nothing fails, and the screen is wrong.
-///
-/// **A correlated subquery and not a `LEFT JOIN`**, for the reason
-/// [`NOTE_BODY_COLUMN`] states: one value per row, row count and ordering
-/// untouched whatever the content plane grows into.
-///
-/// **THE BYTES ARE THE CURRENT REVISION'S, NOT THE DOCUMENT'S.** A document has
-/// no size of its own — `core_document.current_content_id` names the
-/// `core_content_item` that IS the document right now, and that row's
-/// `byte_size` is what `core.add_document` wrote from the bytes it stored. So
-/// an edited document reports the edit's size and not the original's, which is
-/// the only answer that matches what opening it would show.
-///
-/// `deleted_at IS NULL` on the content row, because a tombstoned item is not
-/// bytes a member has.
-///
-/// **NULL IS A REAL ANSWER AND IS NOT A ZERO.** A document whose content item
-/// has been tombstoned answers NULL, the shell sees an empty string, and the
-/// meta column is simply not drawn. "0 bytes" would be a claim about a file
-/// nobody has.
-///
-/// **THE `from` TABLE MUST CARRY `current_content_id`, AND ONE THAT DOES NOT IS
-/// REFUSED AT PREPARE.** Said plainly, and checked by
-/// `a_size_column_asked_of_a_table_that_has_no_content_is_refused`: SQLite
-/// resolves the outer reference when it prepares a correlated subquery, so the
-/// page FAILS rather than answering NULL for every row. That is the right end
-/// to fail at — a flag set on the wrong table is a caller bug, and the failure
-/// this whole column exists to undo was a read that went quiet.
-///
-/// [`NOTE_BODY_COLUMN`] and [`HELD_THUMBNAIL_COLUMN`] are the same construction,
-/// and their doc comments used to claim the gentler thing ("simply answers NULL
-/// for every row"). This comment said the claim was worth a test of its own
-/// rather than a reader's trust, and that test has now been written for both:
-/// `a_note_body_column_asked_of_a_table_that_has_no_body_is_refused` and
-/// `a_thumbnail_column_asked_of_a_table_that_has_no_content_is_refused`. **Both
-/// are refused at prepare, exactly as this one is.** The mechanism was one
-/// mechanism all along; what differed was only which of the three comments had
-/// been checked. All three, and `query.proto`'s copies of them, now say so.
+/// **THE `from` TABLE MUST CARRY A `blob` COLUMN**, and one that does not is
+/// REFUSED AT PREPARE, for the reason [`HELD_THUMBNAIL_COLUMN`] states.
 pub const DOCUMENT_SIZE_COLUMN: &str = "document_size";
 
-/// The byte count the statement projects, TURNED INTO WORDS AND REMOVED.
-///
-/// A working column, exactly like [`DRAWABLE_HASH_COLUMN`]: the caller's
-/// contract is [`DOCUMENT_SIZE_COLUMN`], and an integer left beside it would be
-/// a second, unpromised way for a shell to reach a byte count — which is the
-/// one thing the field's own comment forbids. Serving both would make the rule
-/// advice instead of a shape.
+/// The byte count the statement projects, TURNED INTO WORDS AND REMOVED: an
+/// integer left beside [`DOCUMENT_SIZE_COLUMN`] would be a second, unpromised
+/// way for a shell to reach a byte count.
 const DOCUMENT_BYTES_COLUMN: &str = "document_bytes";
 
 /// A BYTE COUNT IN THE UNITS A MEMBER READS, decided HERE because the contract
@@ -623,6 +505,103 @@ fn tenths(count: i64, unit: i64) -> (i64, i64) {
         tenth = 0;
     }
     (whole, tenth)
+}
+
+/// THE READS THAT MAY SEE A LOCKER ITEM'S ROW.
+///
+/// A Locker item is an entity, so a page over `entity` or `edge` would serve
+/// it with every other kind's rows: its title, its tags, the notes that link
+/// it. Locker's items are the member's most private rows, so a page serves
+/// them only to a read that is named as one that may (#1135, the Locker lane,
+/// L4):
+///
+/// - `locker.*`: Locker's own reads, behind its gate on the shell;
+/// - `home.locker`: Home's count of Locker's items, which selects ids and
+///   nothing a member wrote;
+/// - `notes.cards.entity`, `notes.library.links` and `notes.library.backlinks`:
+///   a note's link to an item and the card that renders its title (L8);
+/// - `assist.native.*`: the assistant's reads. It has the owner's access to a
+///   Locker item's plain rows (the owner's ruling of 2026-10-22), and no
+///   access to a sealed value, which [`withholds_sealed_value`] holds for it.
+///
+/// Every other read (a generic list, the Trash of another app) is given the
+/// page **without** them: the rows are not there, and no count of them is
+/// either.
+#[must_use]
+pub fn reaches_locker(name: &str) -> bool {
+    name.starts_with("locker.")
+        || name.starts_with(ASSISTANT_READ)
+        || matches!(
+            name,
+            "home.locker"
+                | "notes.cards.entity"
+                | "notes.library.links"
+                | "notes.library.backlinks"
+        )
+}
+
+/// The prefix of the assistant's reads of the vault's tables.
+const ASSISTANT_READ: &str = "assist.native.";
+
+/// Every sealed column of Locker's tables: the five cells of `locker_item`,
+/// `locker_item_field.value_sealed` and `locker_item_passkey.private_key`.
+const SEALED_COLUMNS: [&str; 7] = [
+    "password",
+    "otp_seed",
+    "card_number",
+    "cvv",
+    "content",
+    "value_sealed",
+    "private_key",
+];
+
+/// THE SEALED-COLUMN GUARD, which holds for every read that is not Locker's own.
+///
+/// [`reaches_locker`] lets the assistant's reads page a Locker table, and a
+/// sealed value is the one thing it has no access to. A read that is not
+/// named `locker.*` therefore may not project a sealed column, order by one or
+/// name one in its predicate (a predicate is an oracle: `password = 'x'`). Only
+/// the kit's presence test, `<cell> IS NOT NULL AS <name>`, names one, and it
+/// is a bit and not a value.
+fn withholds_sealed_value(page: &KeysetPage) -> bool {
+    let names_sealed = |text: &str| {
+        text.split(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+            .any(|word| SEALED_COLUMNS.contains(&word.to_ascii_lowercase().as_str()))
+    };
+    let is_presence = |column: &str| {
+        let words: Vec<&str> = column.split_whitespace().collect();
+        matches!(words.as_slice(), [_, is, not, null, r#as, _]
+            if is.eq_ignore_ascii_case("IS")
+                && not.eq_ignore_ascii_case("NOT")
+                && null.eq_ignore_ascii_case("NULL")
+                && r#as.eq_ignore_ascii_case("AS"))
+    };
+    page.select
+        .iter()
+        .any(|column| names_sealed(column) && !is_presence(column))
+        || names_sealed(&page.sort_column)
+        || names_sealed(&page.pk_column)
+        || page.predicate.as_deref().is_some_and(names_sealed)
+}
+
+/// Locker's own tables: the kind row and its sidecars. `receipt` and
+/// `locker_key` hold no secret and are paged by name like any other table.
+fn is_locker_table(table: &str) -> bool {
+    table == "locker_item" || table.starts_with("locker_item_")
+}
+
+/// The clause that takes Locker's items out of a page over `entity`, and the
+/// edges that touch one out of a page over `edge`.
+fn locker_exclusion(from: &str) -> Option<String> {
+    match from {
+        "entity" => Some("(\"kind\" <> 'locker_item')".to_owned()),
+        "edge" => Some(
+            "(NOT EXISTS (SELECT 1 FROM entity AS locker_end WHERE locker_end.kind = 'locker_item' \
+             AND locker_end.id IN (\"edge\".\"from_id\", \"edge\".\"to_id\", \"edge\".\"label_id\")))"
+                .to_owned(),
+        ),
+        _ => None,
+    }
 }
 
 /// One page of rows, plus the cursor to ask from next.
@@ -759,6 +738,31 @@ impl Vault {
             .as_ref()
             .map(|text| vec![format!("({text})")])
             .unwrap_or_default();
+        if is_locker_table(&page.from)
+            && !page.name.starts_with("locker.")
+            && withholds_sealed_value(page)
+        {
+            return Err(VaultError::InvalidInput {
+                name: page.name.clone(),
+                detail: format!(
+                    "`{}` holds a sealed value, and this read is not one of Locker's; \
+                     a sealed column is named only by its presence test",
+                    page.from
+                ),
+            });
+        }
+        if !reaches_locker(&page.name) {
+            if is_locker_table(&page.from) {
+                return Err(VaultError::InvalidInput {
+                    name: page.name.clone(),
+                    detail: format!(
+                        "`{}` is a Locker table, and this read is not one of Locker's",
+                        page.from
+                    ),
+                });
+            }
+            clauses.extend(locker_exclusion(&page.from));
+        }
         if let Some((sort_key, pk)) = &page.after {
             // A TUPLE COMPARISON on the two order columns. A `>` on the sort
             // column alone would skip every row that ties with the cursor's
@@ -785,39 +789,23 @@ impl Vault {
             .join(", ");
         let thumbnail = if page.held_thumbnail {
             // THE HASHES AND THE TYPE, IN SQL; THE PATH IN RUST. See
-            // [`HELD_THUMBNAIL_COLUMN`] for why the store is asked afterwards
-            // rather than joined here.
+            // [`HELD_THUMBNAIL_COLUMN`] for why the store is asked afterwards.
             format!(
                 ", COALESCE(
-                       (SELECT d.content_hash
-                          FROM core_content_derivative d
-                         WHERE d.content_id = {from}.content_id
-                           AND d.variant IN ('thumb', 'poster')
-                           AND d.content_hash IS NOT NULL
+                       (SELECT d.out FROM derivative d
+                         WHERE d.blob = {from}.blob AND d.variant IN ('thumb', 'poster')
                          ORDER BY CASE d.variant WHEN 'thumb' THEN 0 ELSE 1 END
                          LIMIT 1),
-                       (SELECT i.content_hash
-                          FROM core_content_item i
-                         WHERE i.content_id = {from}.content_id
-                           AND i.deleted_at IS NULL)
+                       {from}.blob
                    ) AS {drawable_hash}
                  , COALESCE(
-                       (SELECT d.media_type
-                          FROM core_content_derivative d
-                         WHERE d.content_id = {from}.content_id
-                           AND d.variant IN ('thumb', 'poster')
-                           AND d.content_hash IS NOT NULL
+                       (SELECT d.media_type FROM derivative d
+                         WHERE d.blob = {from}.blob AND d.variant IN ('thumb', 'poster')
                          ORDER BY CASE d.variant WHEN 'thumb' THEN 0 ELSE 1 END
                          LIMIT 1),
-                       (SELECT r.media_type
-                          FROM core_content_representation r
-                         WHERE r.content_id = {from}.content_id
-                         LIMIT 1)
+                       {from}.media_type
                    ) AS {drawable_type}
-                 , (SELECT i.content_hash
-                      FROM core_content_item i
-                     WHERE i.content_id = {from}.content_id
-                       AND i.deleted_at IS NULL) AS {hash_column}",
+                 , {from}.blob AS {hash_column}",
                 from = crate::log::quoted(&page.from),
                 drawable_hash = crate::log::quoted(DRAWABLE_HASH_COLUMN),
                 drawable_type = crate::log::quoted(DRAWABLE_TYPE_COLUMN),
@@ -826,28 +814,9 @@ impl Vault {
         } else {
             String::new()
         };
-        let note_body = if page.note_body {
-            format!(
-                ", (SELECT t.body_text FROM core_content_text t
-                      WHERE t.content_id = {from}.body_content_id
-                   ) AS {column}",
-                from = crate::log::quoted(&page.from),
-                column = crate::log::quoted(NOTE_BODY_COLUMN),
-            )
-        } else {
-            String::new()
-        };
         let document_size = if page.document_size {
-            // THE BYTES OF WHAT THE DOCUMENT IS NOW. `current_content_id` is
-            // the one hop from a wrapper to its content item. A `from` table
-            // that has no such column is REFUSED here, at prepare — see
-            // [`DOCUMENT_SIZE_COLUMN`] for why that is the right end to fail
-            // at and why the neighbouring comments' gentler claim is wrong.
             format!(
-                ", (SELECT i.byte_size FROM core_content_item i
-                      WHERE i.content_id = {from}.current_content_id
-                        AND i.deleted_at IS NULL
-                   ) AS {column}",
+                ", (SELECT b.size FROM blob b WHERE b.hash = {from}.blob) AS {column}",
                 from = crate::log::quoted(&page.from),
                 column = crate::log::quoted(DOCUMENT_BYTES_COLUMN),
             )
@@ -855,7 +824,7 @@ impl Vault {
             String::new()
         };
         let sql = format!(
-            "SELECT {projection}{thumbnail}{note_body}{document_size} FROM {from}{predicate} \
+            "SELECT {projection}{thumbnail}{document_size} FROM {from}{predicate} \
              ORDER BY {sort} {direction}, {pk} {direction} LIMIT {probe}",
             from = crate::log::quoted(&page.from),
             sort = crate::log::quoted(&page.sort_column),
@@ -863,14 +832,13 @@ impl Vault {
             probe = limit + 1,
         );
 
-        let mut rows = self.page_clamped(
-            &RawPage {
-                sql,
-                binds,
-                limit: limit + 1,
-            },
-            MAX_PAGE_ROWS + 1,
-        )?;
+        let composed = RawPage {
+            sql,
+            binds,
+            limit: limit + 1,
+        };
+        self.tapped(&page.name, &composed);
+        let mut rows = self.page_clamped(&composed, MAX_PAGE_ROWS + 1)?;
         let filled = i64::try_from(rows.len()).unwrap_or(i64::MAX) > limit;
         rows.truncate(usize::try_from(limit).unwrap_or(0));
         if page.held_thumbnail {
@@ -996,7 +964,7 @@ fn say_document_sizes(rows: &mut [RowImage]) {
 /// rule it gets no path — which is the truth, and `original_held` still says
 /// the file is on the device.
 fn drawable(media_type: &str) -> bool {
-    crate::content::may_serve_inline(media_type)
+    crate::blob::may_serve_inline(media_type)
         && media_type
             .trim_start()
             .to_ascii_lowercase()
@@ -1032,41 +1000,86 @@ mod keyset_tests {
     use super::*;
     use crate::bytes::BlobStore as _;
 
-    /// A PREDICATE IS HELD TO THE SAME LIST AS `from`. An allowed table with a
-    /// subquery on a refused one is refused — through a CTE and the schema
-    /// table too — and a subquery on another listed table, which Photos'
-    /// shelves send, still answers. The core's Page door passes its
-    /// `PAGE_TABLES` here.
-    #[test]
-    fn a_predicate_that_reads_a_table_outside_the_list_is_refused() {
-        let dir = centraid_ontology::golden::scratch_dir();
-        std::fs::create_dir_all(&dir).expect("the directory is made");
+    fn founded(dir: &std::path::Path) -> Vault {
+        std::fs::create_dir_all(dir).expect("the directory is made");
         let vault = Vault::create(dir.join("v.db")).expect("a vault");
         vault.found("T", "O").expect("founded");
-        let readable = ["core_party", "core_tag"];
-        let page = |predicate: &str| KeysetPage {
-            name: "people".to_owned(),
-            select: vec!["party_id".to_owned()],
-            from: "core_party".to_owned(),
-            predicate: Some(predicate.to_owned()),
+        vault
+    }
+
+    fn page(from: &str, select: &[&str], sort: &str, pk: &str) -> KeysetPage {
+        KeysetPage {
+            name: "test".to_owned(),
+            select: select.iter().map(|column| (*column).to_owned()).collect(),
+            from: from.to_owned(),
+            predicate: None,
             binds: Vec::new(),
-            sort_column: "party_id".to_owned(),
-            pk_column: "party_id".to_owned(),
+            sort_column: sort.to_owned(),
+            pk_column: pk.to_owned(),
             descending: false,
             limit: 10,
             after: None,
             held_thumbnail: false,
-            note_body: false,
             document_size: false,
+        }
+    }
+
+    /// One photograph whose original is `hash`, and a derivative of it when
+    /// `thumb` names one. Written through the commit guard, as a command would.
+    fn photograph(
+        vault: &Vault,
+        id: &str,
+        at: &str,
+        hash: &str,
+        size: i64,
+        media_type: &str,
+        thumb: Option<(&str, &str)>,
+    ) {
+        vault
+            .commit(|tx| {
+                let c = tx.connection();
+                crate::blob::stage(c, hash, size)?;
+                tx.insert_entity(id, crate::model::Kind::Photo, "", at)?;
+                c.execute(
+                    "INSERT INTO photo (id, blob, media_type, form, taken_at)
+                     VALUES (?1, ?2, ?3, 'photo', ?4)",
+                    rusqlite::params![id, hash, media_type, at],
+                )?;
+                if let Some((out, thumb_type)) = thumb {
+                    crate::blob::write_derivative(
+                        c,
+                        at,
+                        hash,
+                        "thumb",
+                        Some((out, size, thumb_type)),
+                        None,
+                    )?;
+                }
+                Ok(())
+            })
+            .expect("the photograph lands");
+    }
+
+    /// A PREDICATE IS HELD TO THE SAME LIST AS `from`. An allowed table with a
+    /// subquery on a refused one is refused, through a CTE and the schema table
+    /// too, and a subquery on another listed table still answers.
+    #[test]
+    fn a_predicate_that_reads_a_table_outside_the_list_is_refused() {
+        let dir = centraid_ontology::scratch::scratch_dir();
+        let vault = founded(&dir);
+        let readable = ["entity", "edge"];
+        let with = |predicate: &str| KeysetPage {
+            predicate: Some(predicate.to_owned()),
+            ..page("entity", &["id"], "id", "id")
         };
         for predicate in [
             "EXISTS (SELECT 1 FROM locker_item_field)",
-            "party_id IN (SELECT receipt_id FROM access_receipt)",
-            "EXISTS (WITH r AS (SELECT * FROM core_entity_revision) SELECT 1 FROM r)",
+            "id IN (SELECT CAST(seq AS TEXT) FROM receipt)",
+            "EXISTS (WITH r AS (SELECT * FROM revision) SELECT 1 FROM r)",
             "EXISTS (SELECT 1 FROM sqlite_master)",
         ] {
             let refused = vault
-                .keyset_page_reading_only(&page(predicate), &readable)
+                .keyset_page_reading_only(&with(predicate), &readable)
                 .expect_err(predicate);
             assert!(
                 matches!(refused, VaultError::InvalidInput { .. }),
@@ -1074,217 +1087,113 @@ mod keyset_tests {
             );
         }
         vault
-            .keyset_page_reading_only(
-                &page("party_id NOT IN (SELECT tag_id FROM core_tag)"),
-                &readable,
-            )
+            .keyset_page_reading_only(&with("id NOT IN (SELECT to_id FROM edge)"), &readable)
             .expect("a subquery on a listed table answers");
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// A THUMBNAIL READ REACHES THE BYTE STORE, AND THE STATEMENT PREPARES.
-    ///
-    /// The regression is the prepare: this projection joined `seat_blob_held`,
-    /// which the seat plane took with it (#1029 §1), so **every** read that
-    /// asked for a thumbnail failed against **every** vault — Home graded
-    /// Photos empty over a library of nineteen and offered "Bring in photos".
-    /// A page over an empty table would have caught it, so the first assertion
-    /// here is exactly that; the rest proves the path a cell actually draws.
+    /// A THUMBNAIL READ REACHES THE BYTE STORE, AND THE STATEMENT PREPARES, on
+    /// an empty table first: a statement naming a relation no vault has does
+    /// not need a row to fail.
     #[test]
     fn a_held_thumbnail_page_prepares_and_resolves_a_path_from_the_store() {
-        let dir = centraid_ontology::golden::scratch_dir();
-        std::fs::create_dir_all(&dir).expect("the directory is made");
-        let store_dir = dir.join("blobs");
-        let store = crate::bytes::FsBlobStore::open(&store_dir).expect("a blob store");
-        let bytes = b"not really a JPEG, and the store does not care";
-        let hash = store.put(bytes).expect("the bytes are stored");
-
-        let vault = Vault::create(dir.join("v.db")).expect("a vault");
-        vault.found("T", "O").expect("founded");
-
-        let page = KeysetPage {
-            name: "content".to_owned(),
-            select: vec!["content_id".to_owned(), "created_at".to_owned()],
-            from: "core_content_item".to_owned(),
-            predicate: None,
-            binds: Vec::new(),
-            sort_column: "created_at".to_owned(),
-            pk_column: "content_id".to_owned(),
-            descending: true,
-            limit: 10,
-            after: None,
+        let dir = centraid_ontology::scratch::scratch_dir();
+        let store = crate::bytes::FsBlobStore::open(dir.join("blobs")).expect("a blob store");
+        let original = store.put(b"not really a JPEG").expect("stored");
+        let thumb = store.put(b"its thumbnail").expect("stored");
+        let vault = founded(&dir);
+        let asked = KeysetPage {
             held_thumbnail: true,
-            note_body: false,
-            document_size: false,
+            descending: true,
+            ..page("photo", &["id", "taken_at"], "taken_at", "id")
         };
-        // THE PREPARE, ON AN EMPTY TABLE. This is the whole of the defect: a
-        // statement naming a relation no vault has does not need a row to fail.
         let empty = vault
-            .keyset_page(&page)
-            .expect("a held-thumbnail page prepares on a founded vault");
-        assert!(empty.rows.is_empty(), "a founded vault holds no content");
+            .keyset_page(&asked)
+            .expect("it prepares on a founded vault");
+        assert!(empty.rows.is_empty());
 
-        // ONE ITEM, WHOSE BYTES THE STORE HOLDS. Written through the replica
-        // door because this is a row a command plane would author and the test
-        // is about the READ.
-        vault
-            .apply_replica(|connection| {
-                // The supertype row first: `content_id` is an entity id.
-                connection.execute(
-                    "INSERT INTO core_entity (entity_id, entity_type, created_at)
-                     VALUES ('c1', 'core.content_item', '2026-01-01T00:00:00.000Z')",
-                    [],
-                )?;
-                connection.execute(
-                    "INSERT INTO core_content_item
-                       (content_id, content_uri, content_hash, byte_size, created_at)
-                     VALUES ('c1', ?1, ?2, ?3, '2026-01-01T00:00:00.000Z')",
-                    rusqlite::params![
-                        format!("blob:{hash}"),
-                        hash,
-                        i64::try_from(bytes.len()).unwrap_or_default()
-                    ],
-                )?;
-                // ITS THUMBNAIL TIER, which is what a photo library holds and
-                // what the statement prefers. The `core_entity` row for the
-                // derivative is the table's own trigger's business.
-                connection.execute(
-                    "INSERT INTO core_content_derivative
-                       (derivative_id, content_id, variant, content_hash,
-                        media_type, byte_size, created_at, updated_at)
-                     VALUES ('d1', 'c1', 'thumb', ?1, 'image/jpeg', ?2,
-                             '2026-01-01T00:00:00.000Z',
-                             '2026-01-01T00:00:00.000Z')",
-                    rusqlite::params![hash, i64::try_from(bytes.len()).unwrap_or_default()],
-                )?;
-                Ok(())
-            })
-            .expect("the fixture rows land");
+        photograph(
+            &vault,
+            "p1",
+            "2026-01-01T00:00:00.000Z",
+            &original,
+            17,
+            "image/jpeg",
+            Some((&thumb, "image/jpeg")),
+        );
 
-        // NO STORE, NO PATH, AND NO FAILURE. A vault with no byte door is the
-        // ordinary text-only case and the page still serves its rows.
-        let doorless = vault.keyset_page(&page).expect("it serves without a store");
-        assert_eq!(doorless.rows.len(), 1);
+        // NO STORE, NO PATH, AND NO FAILURE.
+        let doorless = vault
+            .keyset_page(&asked)
+            .expect("it serves without a store");
         assert_eq!(
             doorless.rows[0].get(HELD_THUMBNAIL_COLUMN),
-            Some(&Value::Null),
-            "a vault with no store has no path to give"
+            Some(&Value::Null)
         );
 
         let vault = vault.with_blobs(Box::new(store));
-        let answer = vault.keyset_page(&page).expect("it serves with a store");
+        let answer = vault.keyset_page(&asked).expect("it serves with a store");
         let row = &answer.rows[0];
         let Some(Value::Text(path)) = row.get(HELD_THUMBNAIL_COLUMN) else {
             panic!("the thumbnail did not resolve: {row:?}");
         };
+        assert!(std::path::Path::new(path).exists(), "{path}");
         assert!(
-            std::path::Path::new(path).exists(),
-            "the path handed to a grid does not exist: {path}"
+            path.contains(&thumb),
+            "the thumbnail tier, not the original: {path}"
         );
         assert_eq!(
             row.get(HELD_ORIGINAL_HASH_COLUMN),
-            Some(&Value::Text(hash.clone())),
-            "the original's own hash rides beside the thumbnail"
+            Some(&Value::Text(original))
         );
-        assert_eq!(
-            row.get(HELD_ORIGINAL_HELD_COLUMN),
-            Some(&Value::Integer(1)),
-            "this device holds the original"
-        );
-        // THE WORKING COLUMNS DO NOT ESCAPE. A sha in a row image is a second,
-        // unpromised way for a shell to reach one.
+        assert_eq!(row.get(HELD_ORIGINAL_HELD_COLUMN), Some(&Value::Integer(1)));
+        // THE WORKING COLUMNS DO NOT ESCAPE.
         assert!(row.get(DRAWABLE_HASH_COLUMN).is_none());
         assert!(row.get(DRAWABLE_TYPE_COLUMN).is_none());
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// WHAT `drawable = 1` USED TO REFUSE, THE TYPE REFUSES NOW.
-    ///
-    /// The bytes are held and the row is served; what a grid does NOT get is a
-    /// path it would hand to a web view. The rule outlived the table it was
-    /// stored in.
+    /// WHAT A SURFACE MAY NOT EMBED, THE TYPE REFUSES: the bytes are held and
+    /// the row is served; what a grid does NOT get is a path it would hand to a
+    /// web view, or an image view that cannot decode a video.
     #[test]
     fn a_reading_no_surface_may_embed_gets_no_path_though_the_bytes_are_held() {
         for (media_type, bytes) in [
-            // MARKUP: the security half. A path here is one a surface could be
-            // asked to render as a document.
             ("text/html", b"<html>not a photograph</html>".as_slice()),
-            // A VIDEO WITH NO POSTER: the honesty half. The bytes are held and
-            // are safe to serve; an image view still cannot draw them, and the
-            // demo library has exactly this asset.
             ("video/mp4", b"not really an MP4 either".as_slice()),
         ] {
-            no_path_for(media_type, bytes);
+            let dir = centraid_ontology::scratch::scratch_dir();
+            let store = crate::bytes::FsBlobStore::open(dir.join("blobs")).expect("a store");
+            let hash = store.put(bytes).expect("stored");
+            let vault = founded(&dir);
+            photograph(
+                &vault,
+                "p1",
+                "2026-01-01T00:00:00.000Z",
+                &hash,
+                29,
+                media_type,
+                None,
+            );
+            let vault = vault.with_blobs(Box::new(store));
+            let answer = vault
+                .keyset_page(&KeysetPage {
+                    held_thumbnail: true,
+                    ..page("photo", &["id", "taken_at"], "taken_at", "id")
+                })
+                .expect("it serves");
+            assert_eq!(
+                answer.rows[0].get(HELD_THUMBNAIL_COLUMN),
+                Some(&Value::Null),
+                "{media_type} must not come back as a path"
+            );
+            // "Held" and "drawable" are two facts, which is why they are two columns.
+            assert_eq!(
+                answer.rows[0].get(HELD_ORIGINAL_HELD_COLUMN),
+                Some(&Value::Integer(1))
+            );
+            let _ = std::fs::remove_dir_all(&dir);
         }
-    }
-
-    /// One vault holding one item of `media_type`, asserted to yield no
-    /// thumbnail path and to report the original as held.
-    fn no_path_for(media_type: &str, bytes: &[u8]) {
-        let dir = centraid_ontology::golden::scratch_dir();
-        std::fs::create_dir_all(&dir).expect("the directory is made");
-        let store = crate::bytes::FsBlobStore::open(dir.join("blobs")).expect("a store");
-        let hash = store.put(bytes).expect("stored");
-
-        let vault = Vault::create(dir.join("v.db")).expect("a vault");
-        vault.found("T", "O").expect("founded");
-        vault
-            .apply_replica(|connection| {
-                // The supertype row first: `content_id` is an entity id.
-                connection.execute(
-                    "INSERT INTO core_entity (entity_id, entity_type, created_at)
-                     VALUES ('c1', 'core.content_item', '2026-01-01T00:00:00.000Z')",
-                    [],
-                )?;
-                connection.execute(
-                    "INSERT INTO core_content_item
-                       (content_id, content_uri, content_hash, byte_size, created_at)
-                     VALUES ('c1', ?1, ?2, 29, '2026-01-01T00:00:00.000Z')",
-                    rusqlite::params![format!("blob:{hash}"), hash],
-                )?;
-                connection.execute(
-                    "INSERT INTO core_content_derivative
-                       (derivative_id, content_id, variant, content_hash,
-                        media_type, byte_size, created_at, updated_at)
-                     VALUES ('d1', 'c1', 'thumb', ?1, ?2, 29,
-                             '2026-01-01T00:00:00.000Z',
-                             '2026-01-01T00:00:00.000Z')",
-                    rusqlite::params![hash, media_type],
-                )?;
-                Ok(())
-            })
-            .expect("the fixture rows land");
-
-        let vault = vault.with_blobs(Box::new(store));
-        let answer = vault
-            .keyset_page(&KeysetPage {
-                name: "content".to_owned(),
-                select: vec!["content_id".to_owned(), "created_at".to_owned()],
-                from: "core_content_item".to_owned(),
-                predicate: None,
-                binds: Vec::new(),
-                sort_column: "created_at".to_owned(),
-                pk_column: "content_id".to_owned(),
-                descending: true,
-                limit: 10,
-                after: None,
-                held_thumbnail: true,
-                note_body: false,
-                document_size: false,
-            })
-            .expect("it serves");
-        assert_eq!(
-            answer.rows[0].get(HELD_THUMBNAIL_COLUMN),
-            Some(&Value::Null),
-            "{media_type} must not come back as a path"
-        );
-        // AND THE HOLDING IS STILL REPORTED. "Held" and "drawable" are two
-        // different facts, which is why they are two columns.
-        assert_eq!(
-            answer.rows[0].get(HELD_ORIGINAL_HELD_COLUMN),
-            Some(&Value::Integer(1))
-        );
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// A DOOR THAT HOLDS ONLY LIBRARY ITEMS: every hash it was given is in the
@@ -1322,63 +1231,42 @@ mod keyset_tests {
         }
     }
 
-    /// AN ORIGINAL THE LIBRARY HOLDS IS HELD, AND HAS NO PATH (#1080 ruling 6).
-    ///
-    /// The phone never copies a library item into its store, so its original
-    /// is on the device with no file to hand a cell: `original_held` is 1 and
-    /// the thumbnail column, which may fall back to the original, stays NULL.
-    /// An original the library does not hold either is not held at all.
+    /// AN ORIGINAL THE LIBRARY HOLDS IS HELD, AND HAS NO PATH (#1080 ruling 6):
+    /// `original_held` is 1 and the thumbnail column, which falls back to the
+    /// original, stays NULL. One the library does not hold is not held at all.
     #[test]
     fn an_original_the_library_holds_is_held_and_has_no_path() {
-        let dir = centraid_ontology::golden::scratch_dir();
-        std::fs::create_dir_all(&dir).expect("the directory is made");
-        let in_library = crate::content::content_digest(b"a camera original");
-        let elsewhere = crate::content::content_digest(b"an original on another phone");
-
-        let vault = Vault::create(dir.join("v.db")).expect("a vault");
-        vault.found("T", "O").expect("founded");
-        vault
-            .apply_replica(|connection| {
-                for (content_id, hash, at) in [
-                    ("c1", &in_library, "2026-01-01T00:00:00.000Z"),
-                    ("c2", &elsewhere, "2026-01-02T00:00:00.000Z"),
-                ] {
-                    connection.execute(
-                        "INSERT INTO core_entity (entity_id, entity_type, created_at)
-                         VALUES (?1, 'core.content_item', ?2)",
-                        rusqlite::params![content_id, at],
-                    )?;
-                    connection.execute(
-                        "INSERT INTO core_content_item
-                           (content_id, content_uri, content_hash, byte_size, created_at)
-                         VALUES (?1, ?2, ?3, 17, ?4)",
-                        rusqlite::params![content_id, format!("blob:{hash}"), hash, at],
-                    )?;
-                }
-                Ok(())
-            })
-            .expect("the fixture rows land");
-
+        let dir = centraid_ontology::scratch::scratch_dir();
+        let in_library = crate::blob::content_digest(b"a camera original");
+        let elsewhere = crate::blob::content_digest(b"an original on another phone");
+        let vault = founded(&dir);
+        photograph(
+            &vault,
+            "c1",
+            "2026-01-01T00:00:00.000Z",
+            &in_library,
+            17,
+            "image/jpeg",
+            None,
+        );
+        photograph(
+            &vault,
+            "c2",
+            "2026-01-02T00:00:00.000Z",
+            &elsewhere,
+            17,
+            "image/jpeg",
+            None,
+        );
         let vault = vault.with_blobs(Box::new(LibraryOnly(
-            [(in_library.clone(), "library-item-1".to_owned())]
+            [(in_library, "library-item-1".to_owned())]
                 .into_iter()
                 .collect(),
         )));
         let answer = vault
             .keyset_page(&KeysetPage {
-                name: "content".to_owned(),
-                select: vec!["content_id".to_owned(), "created_at".to_owned()],
-                from: "core_content_item".to_owned(),
-                predicate: None,
-                binds: Vec::new(),
-                sort_column: "created_at".to_owned(),
-                pk_column: "content_id".to_owned(),
-                descending: false,
-                limit: 10,
-                after: None,
                 held_thumbnail: true,
-                note_body: false,
-                document_size: false,
+                ..page("photo", &["id", "taken_at"], "taken_at", "id")
             })
             .expect("it serves");
         let held: Vec<(Option<&Value>, Option<&Value>)> = answer
@@ -1396,332 +1284,121 @@ mod keyset_tests {
             vec![
                 (Some(&Value::Null), Some(&Value::Integer(1))),
                 (Some(&Value::Null), Some(&Value::Integer(0))),
-            ],
-            "the library's original is held with no path; the other is not held"
+            ]
         );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn a_zero_limit_and_a_missing_order_column_are_both_refused() {
-        let dir = centraid_ontology::golden::scratch_dir();
-        std::fs::create_dir_all(&dir).expect("the directory is made");
-        let vault = Vault::create(dir.join("v.db")).expect("a vault");
-        vault.found("T", "O").expect("founded");
-
-        let base = KeysetPage {
-            name: "parties".to_owned(),
-            select: vec!["party_id".to_owned(), "created_at".to_owned()],
-            from: "core_party".to_owned(),
-            predicate: None,
-            binds: Vec::new(),
-            sort_column: "created_at".to_owned(),
-            pk_column: "party_id".to_owned(),
-            descending: false,
-            limit: 10,
-            after: None,
-            held_thumbnail: false,
-            note_body: false,
-            document_size: false,
-        };
+        let dir = centraid_ontology::scratch::scratch_dir();
+        let vault = founded(&dir);
+        let base = page("entity", &["id", "created_at"], "created_at", "id");
         assert!(vault.keyset_page(&base).is_ok());
 
-        let mut zero = base.clone();
-        zero.limit = 0;
+        let zero = KeysetPage {
+            limit: 0,
+            ..base.clone()
+        };
         assert!(vault.keyset_page(&zero).is_err());
 
-        let mut unprojected = base.clone();
-        unprojected.select = vec!["party_id".to_owned()];
+        let unprojected = KeysetPage {
+            select: vec!["id".to_owned()],
+            ..base.clone()
+        };
         let error = vault
             .keyset_page(&unprojected)
             .expect_err("an order column outside the projection is refused");
         assert!(error.to_string().contains("created_at"));
 
-        let mut nothing = base;
-        nothing.select = Vec::new();
+        let nothing = KeysetPage {
+            select: Vec::new(),
+            ..base
+        };
         assert!(vault.keyset_page(&nothing).is_err());
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// THE HEAD-HASH PREDICATE A FOLLOWED FOLDER SENDS (#1127, lane F): Docs' `FilesStore`
-    /// pages `core_content_item` with a subquery on `core_document` — one document's head, and
-    /// every document's — and both tables are on the core's list, so the predicate answers and
-    /// names exactly the heads.
-    #[test]
-    fn a_followed_folders_head_hash_subquery_answers() {
-        let dir = centraid_ontology::golden::scratch_dir();
-        std::fs::create_dir_all(&dir).expect("made");
-        let vault = Vault::create(dir.join("v.db")).expect("a vault");
-        vault.found("T", "O").expect("founded");
-        let registry = crate::commands::Registry::with_system_commands().expect("registry");
-        let principal = crate::access::Principal::owner("d1");
-        let add = |title: &str, uri: &str| {
-            let outcome = vault
-                .execute(
-                    &registry,
-                    &principal,
-                    &crate::commands::Command::new(
-                        "core.add_document",
-                        serde_json::json!({ "title": title, "data_uri": uri }),
-                    ),
-                )
-                .expect("the command executes");
-            outcome.output["document_id"]
-                .as_str()
-                .expect("a document id")
-                .to_owned()
-        };
-        let notes = add("notes.txt", "data:text/plain,one");
-        add("other.txt", "data:text/plain,elsewhere");
-        let readable = ["core_document", "core_content_item"];
-        let heads = |predicate: &str, binds: Vec<Value>| {
-            vault
-                .keyset_page_reading_only(
-                    &KeysetPage {
-                        name: "phone.files.hashes".to_owned(),
-                        select: vec!["content_id".to_owned(), "content_hash".to_owned()],
-                        from: "core_content_item".to_owned(),
-                        predicate: Some(predicate.to_owned()),
-                        binds,
-                        sort_column: "content_id".to_owned(),
-                        pk_column: "content_id".to_owned(),
-                        descending: false,
-                        limit: 10,
-                        after: None,
-                        held_thumbnail: false,
-                        note_body: false,
-                        document_size: false,
-                    },
-                    &readable,
-                )
-                .expect("the predicate answers")
-        };
-        let one = heads(
-            "content_id IN (SELECT current_content_id FROM core_document WHERE document_id = ?)",
-            vec![Value::Text(notes)],
-        );
-        assert_eq!(one.rows.len(), 1, "one document, one head");
-        assert_eq!(cursor_text(&one.rows[0], "content_hash").len(), 64);
-        let all = heads(
-            "content_id IN (SELECT current_content_id FROM core_document)",
-            Vec::new(),
-        );
-        assert_eq!(all.rows.len(), 2, "every document's head, and nothing else");
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-
+    /// `limit` rows and a cursor when more follow; fewer and none when the rows
+    /// end, including exactly at the ceiling.
     #[test]
     fn the_cursor_is_absent_when_the_rows_end_and_present_when_they_do_not() {
-        let dir = centraid_ontology::golden::scratch_dir();
-        std::fs::create_dir_all(&dir).expect("made");
-        let vault = Vault::create(dir.join("v.db")).expect("a vault");
-        vault.found("T", "O").expect("founded");
-        let registry = crate::commands::Registry::with_system_commands().expect("registry");
-        let principal = crate::access::Principal::owner("d1");
-        for index in 0..5 {
-            vault
-                .execute(
-                    &registry,
-                    &principal,
-                    &crate::commands::Command::new(
-                        "core.add_party",
-                        serde_json::json!({ "display_name": format!("P{index}"), "kind": "person" }),
-                    ),
-                )
-                .expect("the command executes");
-        }
-
-        let base = KeysetPage {
-            name: "parties".to_owned(),
-            select: vec!["party_id".to_owned(), "created_at".to_owned()],
-            from: "core_party".to_owned(),
-            predicate: None,
-            binds: Vec::new(),
-            sort_column: "created_at".to_owned(),
-            pk_column: "party_id".to_owned(),
-            descending: false,
-            limit: 2,
-            after: None,
-            held_thumbnail: false,
-            note_body: false,
-            document_size: false,
+        let dir = centraid_ontology::scratch::scratch_dir();
+        let vault = founded(&dir);
+        let now = vault.clock().now_text();
+        vault
+            .commit(|tx| {
+                for index in 0..4 {
+                    tx.insert_entity(
+                        &format!("t{index}"),
+                        crate::model::Kind::Tag,
+                        &format!("tag {index}"),
+                        &now,
+                    )?;
+                    tx.connection().execute(
+                        "INSERT INTO concept (id, kind, key) VALUES (?1, 'tag', ?2)",
+                        rusqlite::params![format!("t{index}"), format!("k{index}")],
+                    )?;
+                }
+                Ok(())
+            })
+            .expect("tags land");
+        let asked = |limit, after| KeysetPage {
+            limit,
+            after,
+            predicate: Some("kind = 'tag' AND id LIKE 't%'".to_owned()),
+            ..page("entity", &["id", "created_at"], "created_at", "id")
         };
-        let first = vault.keyset_page(&base).expect("a page serves");
-        assert_eq!(first.rows.len(), 2);
-        let cursor = first.next.clone().expect("there are more rows");
-
-        // AND THE CURSOR WALKS: the second page starts after the first ends,
-        // with no row served twice and none skipped.
-        let mut second_query = base.clone();
-        second_query.after = Some(cursor);
-        let second = vault.keyset_page(&second_query).expect("a page serves");
-        assert_eq!(second.rows.len(), 2);
-        let first_ids: Vec<String> = first
-            .rows
-            .iter()
-            .map(|row| cursor_text(row, "party_id"))
-            .collect();
-        let second_ids: Vec<String> = second
-            .rows
-            .iter()
-            .map(|row| cursor_text(row, "party_id"))
-            .collect();
+        let first = vault.keyset_page(&asked(3, None)).expect("page one");
+        assert_eq!(first.rows.len(), 3);
+        let next = first.next.expect("more follow");
+        let second = vault.keyset_page(&asked(3, Some(next))).expect("page two");
+        assert_eq!(second.rows.len(), 1);
+        assert!(second.next.is_none(), "the rows ended");
+        let exact = vault
+            .keyset_page(&asked(4, None))
+            .expect("exactly the rows");
+        assert_eq!(exact.rows.len(), 4);
         assert!(
-            first_ids.iter().all(|id| !second_ids.contains(id)),
-            "a row was served twice: {first_ids:?} / {second_ids:?}"
+            exact.next.is_none(),
+            "a full page that ends the rows has no cursor"
         );
-
-        // The last page ends, and its cursor is ABSENT rather than pointing
-        // past the end.
-        let mut last = base;
-        last.limit = 500;
-        let whole = vault.keyset_page(&last).expect("a page serves");
-        assert_eq!(whole.rows.len(), 6, "five parties plus the vault's owner");
-        assert!(whole.next.is_none());
         let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn a_page_asked_at_the_ceiling_still_says_more_rows_follow() {
-        // #1099 W4-a: the `limit + 1` probe was re-clamped to the ceiling, so a
-        // page asked at exactly MAX_PAGE_ROWS over MAX_PAGE_ROWS + 1 rows lost
-        // its cursor and the walk silently stopped one row short.
-        let dir = centraid_ontology::golden::scratch_dir();
-        std::fs::create_dir_all(&dir).expect("made");
-        let vault = Vault::create(dir.join("v.db")).expect("a vault");
-        vault.found("T", "O").expect("founded");
-        let registry = crate::commands::Registry::with_system_commands().expect("registry");
-        let principal = crate::access::Principal::owner("d1");
-        // The vault's owner is one row; MAX_PAGE_ROWS more make MAX + 1.
-        for index in 0..MAX_PAGE_ROWS {
-            vault
-                .execute(
-                    &registry,
-                    &principal,
-                    &crate::commands::Command::new(
-                        "core.add_party",
-                        serde_json::json!({ "display_name": format!("P{index}"), "kind": "person" }),
-                    ),
-                )
-                .expect("the command executes");
-        }
-        let page = KeysetPage {
-            name: "parties".to_owned(),
-            select: vec!["party_id".to_owned(), "created_at".to_owned()],
-            from: "core_party".to_owned(),
-            predicate: None,
-            binds: Vec::new(),
-            sort_column: "created_at".to_owned(),
-            pk_column: "party_id".to_owned(),
-            descending: false,
-            limit: MAX_PAGE_ROWS,
-            after: None,
-            held_thumbnail: false,
-            note_body: false,
-            document_size: false,
-        };
-        let first = vault.keyset_page(&page).expect("a page serves");
-        assert_eq!(first.rows.len(), 500);
-        let cursor = first.next.expect("one row remains, so a cursor is present");
-        let mut tail = page;
-        tail.after = Some(cursor);
-        let second = vault.keyset_page(&tail).expect("a page serves");
-        assert_eq!(second.rows.len(), 1);
-        assert!(second.next.is_none());
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-
-    #[test]
-    fn note_body_reads_core_content_text_and_null_when_absent() {
-        // R-NOTES-1: text is a row. The appended column is the replica's
-        // `core_content_text.body_text`, NULL when that row is missing.
-        let dir = centraid_ontology::golden::scratch_dir();
-        std::fs::create_dir_all(&dir).expect("made");
-        let vault = Vault::create(dir.join("v.db")).expect("a vault");
-        vault.found("T", "O").expect("founded");
+        let dir = centraid_ontology::scratch::scratch_dir();
+        let vault = founded(&dir);
+        let now = vault.clock().now_text();
+        let rows = usize::try_from(MAX_PAGE_ROWS).unwrap_or(500) + 3;
         vault
-            .apply_replica(|connection| {
-                connection.execute_batch(
-                    "INSERT OR IGNORE INTO core_entity_kind(kind) VALUES
-                       ('knowledge.note'), ('core.content_item'), ('core.content_text');
-                     INSERT INTO core_entity(entity_id, entity_type, created_at) VALUES
-                       ('c-yes','core.content_item','2026-01-01T00:00:00Z'),
-                       ('c-no','core.content_item','2026-01-01T00:00:00Z'),
-                       ('n-yes','knowledge.note','2026-01-01T00:00:00Z'),
-                       ('n-no','knowledge.note','2026-01-01T00:00:00Z');
-                     INSERT INTO core_content_item
-                       (content_id, content_uri, content_hash, byte_size, created_at) VALUES
-                       ('c-yes','data:text/plain,milk',
-                        'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-                        '4','2026-01-01T00:00:00Z'),
-                       ('c-no','data:text/plain,gone',
-                        'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
-                        '4','2026-01-01T00:00:00Z');
-                     INSERT INTO core_content_text
-                       (content_id, body_text, decoder, byte_size, created_at, updated_at)
-                       VALUES ('c-yes','milk and eggs','utf8',13,
-                               '2026-01-01T00:00:00Z','2026-01-01T00:00:00Z');
-                     INSERT INTO knowledge_note
-                       (note_id, author_party_id, title, body_content_id, format, pinned,
-                        created_at, updated_at) VALUES
-                       ('n-yes', (SELECT party_id FROM core_party LIMIT 1), 'Yes', 'c-yes',
-                        'plain', 0, '2026-01-01T00:00:00Z', '2026-01-02T00:00:00Z'),
-                       ('n-no', (SELECT party_id FROM core_party LIMIT 1), 'No', 'c-no',
-                        'plain', 0, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');",
-                )?;
+            .commit(|tx| {
+                for index in 0..rows {
+                    tx.insert_entity(&format!("n{index:05}"), crate::model::Kind::Tag, "t", &now)?;
+                    tx.connection().execute(
+                        "INSERT INTO concept (id, kind, key) VALUES (?1, 'tag', ?1)",
+                        [format!("n{index:05}")],
+                    )?;
+                }
                 Ok(())
             })
-            .expect("fixture");
-
+            .expect("tags land");
         let answer = vault
             .keyset_page(&KeysetPage {
-                name: "notes.editor.note".to_owned(),
-                select: vec![
-                    "note_id".to_owned(),
-                    "title".to_owned(),
-                    "updated_at".to_owned(),
-                ],
-                from: "knowledge_note".to_owned(),
-                predicate: Some("deleted_at IS NULL".to_owned()),
-                binds: Vec::new(),
-                sort_column: "updated_at".to_owned(),
-                pk_column: "note_id".to_owned(),
-                descending: true,
-                limit: 10,
-                after: None,
-                held_thumbnail: false,
-                note_body: true,
-                document_size: false,
+                limit: MAX_PAGE_ROWS + 100,
+                predicate: Some("id LIKE 'n%'".to_owned()),
+                ..page("entity", &["id", "created_at"], "created_at", "id")
             })
-            .expect("the page serves");
-        assert_eq!(answer.rows.len(), 2);
-        let by_id: std::collections::BTreeMap<_, _> = answer
-            .rows
-            .iter()
-            .map(|row| {
-                let id = match row.get("note_id") {
-                    Some(Value::Text(text)) => text.clone(),
-                    other => panic!("note_id is text, got {other:?}"),
-                };
-                let body = row.get(NOTE_BODY_COLUMN).cloned();
-                (id, body)
-            })
-            .collect();
-        assert_eq!(
-            by_id.get("n-yes"),
-            Some(&Some(Value::Text("milk and eggs".to_owned())))
+            .expect("it serves");
+        assert_eq!(i64::try_from(answer.rows.len()).unwrap_or(0), MAX_PAGE_ROWS);
+        assert!(
+            answer.next.is_some(),
+            "the ceiling is not the end of the rows"
         );
-        assert_eq!(by_id.get("n-no"), Some(&Some(Value::Null)));
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// THE PHRASE, AT EVERY RUNG AND ON BOTH SIDES OF EACH ONE.
-    ///
-    /// A table rather than a property because the rungs ARE the contract: the
-    /// design corpus spells `880 KB`, `1.2 MB` and `84.2 GB`, and a formatter
-    /// that agreed with the corpus on two of the three would put a launcher and
-    /// a drive row in disagreement about one file. The rounding cases are the
-    /// ones a truncating implementation passes everything else on.
     #[test]
     fn a_byte_count_is_said_the_way_the_corpus_says_it() {
         for (count, said) in [
@@ -1729,16 +1406,14 @@ mod keyset_tests {
             (1, "1 byte"),
             (2, "2 bytes"),
             (999, "999 bytes"),
-            // THE KILOBYTE RUNG, exactly. A three-hundred-byte note is
-            // "312 bytes" and not "0 KB", which is the whole reason the first
-            // rung is the count itself.
+            // THE KILOBYTE RUNG, exactly: a three-hundred-byte note is
+            // "312 bytes" and not "0 KB".
             (1_000, "1 KB"),
             (880_000, "880 KB"),
             (999_999, "999 KB"),
             (1_000_000, "1.0 MB"),
             (1_200_000, "1.2 MB"),
-            // ROUNDED, NOT TRUNCATED: 1 999 999 bytes is 2.0 MB to everybody
-            // who is not a computer.
+            // ROUNDED, NOT TRUNCATED.
             (1_999_999, "2.0 MB"),
             (4_100_000, "4.1 MB"),
             (999_999_999, "1.0 GB"),
@@ -1747,219 +1422,68 @@ mod keyset_tests {
         ] {
             assert_eq!(format_byte_size(count), said, "{count} was said wrong");
         }
-        // A NEGATIVE COUNT CANNOT REACH HERE — `core_content_item` carries
-        // `CHECK (byte_size >= 0)` — and it is clamped rather than panicking,
-        // because a tile is not the place to discover a schema violation.
+        // A NEGATIVE COUNT CANNOT REACH HERE (`blob.size` is CHECKed >= 0) and
+        // it is clamped rather than panicking.
         assert_eq!(format_byte_size(-1), "0 bytes");
     }
 
-    /// A DOCS PAGE CARRIES THE SIZE THE DOCUMENT ACTUALLY IS, AS WORDS.
-    ///
-    /// The defect this closes is Home's Docs tile drawing a bare list: the
-    /// `size` field the proto promises and both shells render had nothing
-    /// behind it, because the door could not project a size at all. The
-    /// document here is written through the REAL command, so the byte count is
-    /// the one `core.add_document` derived from the bytes it stored — never a
-    /// literal this test chose.
+    /// A DOCUMENTS PAGE CARRIES THE SIZE THE DOCUMENT ACTUALLY IS, AS WORDS, and
+    /// never the byte count: the contract is a phrase.
     #[test]
     fn a_document_page_says_its_size_and_never_hands_out_the_byte_count() {
-        let dir = centraid_ontology::golden::scratch_dir();
-        std::fs::create_dir_all(&dir).expect("made");
-        let vault = Vault::create(dir.join("v.db")).expect("a vault");
-        vault.found("T", "O").expect("founded");
-        let registry = crate::commands::Registry::with_system_commands().expect("registry");
-        let principal = crate::access::Principal::owner("d1");
-
-        // 1 200 BYTES OF MARKDOWN, so the answer lands on the megabyte side of
-        // nothing and the kilobyte rung is exercised by a real file rather than
-        // by arithmetic. The `data:` door is the one v0 seeds through.
-        let body = "#".repeat(1_200);
+        let dir = centraid_ontology::scratch::scratch_dir();
+        let vault = founded(&dir);
+        let now = vault.clock().now_text();
+        let hash = crate::blob::content_digest(b"some bytes");
         vault
-            .execute(
-                &registry,
-                &principal,
-                &crate::commands::Command::new(
-                    "core.add_document",
-                    serde_json::json!({
-                        "title": "A document with a size",
-                        "data_uri": format!("data:text/markdown;charset=utf-8,{body}"),
-                    }),
-                ),
-            )
-            .expect("the document is added");
-
-        let page = KeysetPage {
-            name: "home.docs".to_owned(),
-            select: vec![
-                "document_id".to_owned(),
-                "title".to_owned(),
-                "updated_at".to_owned(),
-            ],
-            from: "core_document".to_owned(),
-            predicate: None,
-            binds: Vec::new(),
-            sort_column: "updated_at".to_owned(),
-            pk_column: "document_id".to_owned(),
-            descending: true,
-            limit: 10,
-            after: None,
-            held_thumbnail: false,
-            note_body: false,
-            document_size: true,
-        };
-        let answer = vault.keyset_page(&page).expect("the docs page serves");
-        assert_eq!(answer.rows.len(), 1, "one document was added");
-        let row = &answer.rows[0];
-        assert_eq!(
-            row.get(DOCUMENT_SIZE_COLUMN),
-            Some(&Value::Text("1 KB".to_owned())),
-            "the tile's meta column is not the document's size"
-        );
-        // AND THE INTEGER IS GONE. The field's own contract is that a view
-        // never formats from a byte count; leaving the count in the row image
-        // would make that a request rather than a shape.
-        assert_eq!(
-            row.get(DOCUMENT_BYTES_COLUMN),
-            None,
-            "the working byte count was served to the caller"
-        );
-
-        // THE SAME PAGE WITHOUT THE FLAG CARRIES NEITHER COLUMN — the cost is
-        // opt-in, and a read that did not ask is not quietly widened.
-        let mut unasked = page.clone();
-        unasked.document_size = false;
-        let plain = vault.keyset_page(&unasked).expect("the page serves");
-        assert_eq!(plain.rows[0].get(DOCUMENT_SIZE_COLUMN), None);
-
-        // A TOMBSTONED CONTENT ITEM IS NULL AND NOT "0 bytes". A document whose
-        // bytes are gone has no size, and saying zero would state something no
-        // row in the vault says.
-        vault
-            .apply_replica(|connection| {
-                connection.execute(
-                    "UPDATE core_content_item SET deleted_at = '2026-01-01T00:00:00.000Z'",
-                    [],
+            .commit(|tx| {
+                crate::blob::stage(tx.connection(), &hash, 880_000)?;
+                tx.insert_entity("d1", crate::model::Kind::Document, "Report", &now)?;
+                tx.connection().execute(
+                    "INSERT INTO document (id, blob, media_type) VALUES ('d1', ?1, 'application/pdf')",
+                    [&hash],
                 )?;
                 Ok(())
             })
-            .expect("the content item is tombstoned");
-        let gone = vault.keyset_page(&page).expect("the page still serves");
-        assert_eq!(
-            gone.rows[0].get(DOCUMENT_SIZE_COLUMN),
-            Some(&Value::Null),
-            "a document with no live content item claimed a size anyway"
-        );
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-
-    /// THE FLAG ON A TABLE WITH NO `current_content_id` IS REFUSED, LOUDLY.
-    ///
-    /// The opposite of the failure that put this column here: a read that goes
-    /// quiet is a screen nobody can debug, and a caller who set the flag on the
-    /// wrong table has a bug rather than a row with no size.
-    #[test]
-    fn a_size_column_asked_of_a_table_that_has_no_content_is_refused() {
-        let dir = centraid_ontology::golden::scratch_dir();
-        std::fs::create_dir_all(&dir).expect("made");
-        let vault = Vault::create(dir.join("v.db")).expect("a vault");
-        vault.found("T", "O").expect("founded");
-        let error = vault
+            .expect("the document lands");
+        let answer = vault
             .keyset_page(&KeysetPage {
-                name: "parties".to_owned(),
-                select: vec!["party_id".to_owned(), "created_at".to_owned()],
-                from: "core_party".to_owned(),
-                predicate: None,
-                binds: Vec::new(),
-                sort_column: "created_at".to_owned(),
-                pk_column: "party_id".to_owned(),
-                descending: false,
-                limit: 10,
-                after: None,
-                held_thumbnail: false,
-                note_body: false,
                 document_size: true,
+                ..page("document", &["id"], "id", "id")
             })
-            .expect_err("a size over a table with no content was served anyway");
+            .expect("it serves");
+        let row = &answer.rows[0];
+        assert_eq!(
+            row.get(DOCUMENT_SIZE_COLUMN),
+            Some(&Value::Text("880 KB".to_owned()))
+        );
         assert!(
-            error.to_string().contains("current_content_id"),
-            "the refusal did not name the column it wanted: {error}"
+            row.get(DOCUMENT_BYTES_COLUMN).is_none(),
+            "the integer does not escape"
         );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// THE SAME REFUSAL FOR `note_body`, BECAUSE IT IS THE SAME MECHANISM.
-    ///
-    /// [`NOTE_BODY_COLUMN`]'s doc comment promised the gentler thing — "the
-    /// `from` table must carry `body_content_id`. One that does not simply
-    /// answers NULL for every row" — and `query.proto` promised it to every
-    /// caller of the door. It was never true and could not have been: the
-    /// subquery is CORRELATED, so `{from}.body_content_id` is an outer
-    /// reference that SQLite resolves at PREPARE, before a single row is read.
-    /// There is no row loop in which to answer NULL.
+    /// A SIZE OR A THUMBNAIL ASKED OF A TABLE THAT HAS NO `blob` IS REFUSED AT
+    /// PREPARE, never answered NULL for every row.
     #[test]
-    fn a_note_body_column_asked_of_a_table_that_has_no_body_is_refused() {
-        let dir = centraid_ontology::golden::scratch_dir();
-        std::fs::create_dir_all(&dir).expect("made");
-        let vault = Vault::create(dir.join("v.db")).expect("a vault");
-        vault.found("T", "O").expect("founded");
-        let error = vault
-            .keyset_page(&KeysetPage {
-                name: "parties".to_owned(),
-                select: vec!["party_id".to_owned(), "created_at".to_owned()],
-                from: "core_party".to_owned(),
-                predicate: None,
-                binds: Vec::new(),
-                sort_column: "created_at".to_owned(),
-                pk_column: "party_id".to_owned(),
-                descending: false,
-                limit: 10,
-                after: None,
-                held_thumbnail: false,
-                note_body: true,
-                document_size: false,
-            })
-            .expect_err("a note body over a table with no body was served anyway");
-        assert!(
-            error.to_string().contains("body_content_id"),
-            "the refusal did not name the column it wanted: {error}"
-        );
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-
-    /// AND FOR `held_thumbnail`, WHICH IS THE THIRD OF THE SAME SHAPE.
-    ///
-    /// `core_party` has no `content_id`, so the outer reference in the
-    /// candidate-hash subquery cannot resolve and the page never runs. The
-    /// third flag is tested for the same reason as the second: the three
-    /// columns are one construction, and a doc comment that guessed at the
-    /// behaviour of one of them guessed at all three.
-    #[test]
-    fn a_thumbnail_column_asked_of_a_table_that_has_no_content_is_refused() {
-        let dir = centraid_ontology::golden::scratch_dir();
-        std::fs::create_dir_all(&dir).expect("made");
-        let vault = Vault::create(dir.join("v.db")).expect("a vault");
-        vault.found("T", "O").expect("founded");
-        let error = vault
-            .keyset_page(&KeysetPage {
-                name: "parties".to_owned(),
-                select: vec!["party_id".to_owned(), "created_at".to_owned()],
-                from: "core_party".to_owned(),
-                predicate: None,
-                binds: Vec::new(),
-                sort_column: "created_at".to_owned(),
-                pk_column: "party_id".to_owned(),
-                descending: false,
-                limit: 10,
-                after: None,
+    fn a_computed_column_asked_of_a_table_that_has_no_blob_is_refused() {
+        let dir = centraid_ontology::scratch::scratch_dir();
+        let vault = founded(&dir);
+        for asked in [
+            KeysetPage {
+                document_size: true,
+                ..page("entity", &["id"], "id", "id")
+            },
+            KeysetPage {
                 held_thumbnail: true,
-                note_body: false,
-                document_size: false,
-            })
-            .expect_err("a thumbnail over a table with no content was served anyway");
-        assert!(
-            error.to_string().contains("content_id"),
-            "the refusal did not name the column it wanted: {error}"
-        );
+                ..page("entity", &["id"], "id", "id")
+            },
+        ] {
+            vault
+                .keyset_page(&asked)
+                .expect_err("a table with no `blob` cannot be asked for one");
+        }
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -1984,19 +1508,15 @@ mod keyset_tests {
     #[test]
     fn a_json_key_is_projected_as_one_and_a_near_miss_as_a_name() {
         assert_eq!(
-            projected("json_extract(settings_json, '$.timeZone') AS zone"),
-            "json_extract(\"settings_json\", '$.timeZone') AS \"zone\""
-        );
-        assert_eq!(
-            projected("json_extract(address_json, '$.gazetteer.name') AS gazetteer"),
-            "json_extract(\"address_json\", '$.gazetteer.name') AS \"gazetteer\""
+            projected("json_extract(exif, '$.make') AS make"),
+            "json_extract(\"exif\", '$.make') AS \"make\""
         );
         for near_miss in [
-            "json_extract(settings_json, '$.a'') AS b",
-            "json_extract(settings_json, '$.a') AS b; DROP",
-            "json_extract(settings_json, 'a') AS b",
-            "json_extract(settings json, '$.a') AS b",
-            "json_extract(settings_json, '$.a')",
+            "json_extract(exif, '$.a'') AS b",
+            "json_extract(exif, '$.a') AS b; DROP",
+            "json_extract(exif, 'a') AS b",
+            "json_extract(exif json, '$.a') AS b",
+            "json_extract(exif, '$.a')",
         ] {
             assert_eq!(
                 projected(near_miss),
@@ -2006,50 +1526,39 @@ mod keyset_tests {
         }
     }
 
-    /// AND THE VAULT READS IT: a key in the vault's own settings bag comes back
-    /// as its text.
+    /// AND THE VAULT READS IT: a key in a photograph's `exif` bag comes back as
+    /// its text.
     #[test]
     fn a_json_key_reads_back_through_the_page_door() {
-        let dir = std::env::temp_dir().join(format!("centraid-json-key-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).expect("the scratch dir is made");
-        let vault = Vault::create(dir.join("vault.db")).expect("a vault");
-        vault.found("Mine", "Me").expect("founded");
-        // NO COMMAND WRITES `settings_json`, so the test writes the one key it
-        // reads back — `timeZone`, the key `Vault::time_zone` reads.
+        let dir = centraid_ontology::scratch::scratch_dir();
+        let vault = founded(&dir);
+        photograph(
+            &vault,
+            "p1",
+            "2026-01-01T00:00:00.000Z",
+            &crate::blob::content_digest(b"x"),
+            1,
+            "image/jpeg",
+            None,
+        );
         vault
             .commit(|tx| {
-                tx.set_producer("test.settings");
-                tx.connection().execute(
-                    "UPDATE core_vault SET settings_json = '{\"timeZone\":\"America/Los_Angeles\"}'",
-                    [],
-                )?;
+                tx.connection()
+                    .execute("UPDATE photo SET exif = '{\"make\":\"Acme\"}'", [])?;
                 Ok(())
             })
-            .expect("the settings are written");
-        let page = vault
-            .keyset_page(&KeysetPage {
-                name: "test.zone".to_owned(),
-                select: vec![
-                    "vault_id".to_owned(),
-                    "json_extract(settings_json, '$.timeZone') AS zone".to_owned(),
-                ],
-                from: "core_vault".to_owned(),
-                predicate: None,
-                binds: Vec::new(),
-                sort_column: "vault_id".to_owned(),
-                pk_column: "vault_id".to_owned(),
-                descending: false,
-                limit: 1,
-                after: None,
-                held_thumbnail: false,
-                note_body: false,
-                document_size: false,
-            })
+            .expect("the exif is written");
+        let answer = vault
+            .keyset_page(&page(
+                "photo",
+                &["id", "json_extract(exif, '$.make') AS make"],
+                "id",
+                "id",
+            ))
             .expect("the page reads");
-        let row = page.rows.first().expect("one vault row");
         assert_eq!(
-            row.get("zone"),
-            Some(&Value::Text("America/Los_Angeles".to_owned()))
+            answer.rows[0].get("make"),
+            Some(&Value::Text("Acme".to_owned()))
         );
         let _ = std::fs::remove_dir_all(&dir);
     }

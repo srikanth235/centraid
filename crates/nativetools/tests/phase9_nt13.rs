@@ -278,16 +278,16 @@ fn nt13_r1_an_arg_literal_is_read_the_same_way() {
 fn nt13_r1_an_edit_arg_is_read_the_same_way() {
     let world = seeded();
     let mut session = world.session();
-    session.user("the report task is in progress");
+    session.user("the outline task is cancelled");
     let handle = find_in_turn(&mut session, "task", "outline");
     let edited = call(
         &mut session,
         "act",
-        json!({"verb": "edit", "rows": [handle], "args": "status: in progres"}),
+        json!({"verb": "edit", "rows": [handle], "args": "status: cancelld"}),
     );
     assert!(!text(&edited).starts_with("error:"), "{edited}");
     assert!(
-        text(&edited).contains("note: read in progres as in_progress"),
+        text(&edited).contains("note: read cancelld as cancelled"),
         "{edited}"
     );
 }

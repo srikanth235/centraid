@@ -37,8 +37,8 @@ import dev.centraid.shared.nav.ScreenIds
  * a create sheet. Picking a row is an intent — the shell opens the library
  * filtered to it (`NotesLibraryEvent.Opened`).
  *
- * ALBUMS NEVER ARRIVE: the core's read is `kind = 'notebook'` (rung six), so
- * nothing here tells a notebook from an album.
+ * ALBUMS NEVER ARRIVE: the core's read is of `notebook` entities, so nothing
+ * here tells a notebook from an album.
  */
 public object NotesNotebooksMachine : ScreenMachine<NotesNotebooksState, NotesNotebooksEvent> {
     public const val SCREEN_ID: String = ScreenIds.NOTES_NOTEBOOKS
@@ -46,9 +46,10 @@ public object NotesNotebooksMachine : ScreenMachine<NotesNotebooksState, NotesNo
     /** The id of the "Unfiled" row, which is no collection. */
     public const val UNFILED: String = "unfiled"
 
-    public val TABLES: Set<String> = setOf("core_collection", "core_collection_entry", "knowledge_note")
+    public val TABLES: Set<String> = NotesTables.SHELF
 
-    internal const val CREATE_COMMAND: String = "knowledge.create_notebook"
+    /** A notebook is the shared `container.create` of kind `notebook`. */
+    internal const val CREATE_COMMAND: String = "container.create"
 
     override fun initial(): NotesNotebooksState = decorate(
         NotesNotebooksState(loading = Loading(first_load = true), write = WriteState(phase = WriteState.Phase.PHASE_IDLE)),
@@ -76,7 +77,7 @@ public object NotesNotebooksMachine : ScreenMachine<NotesNotebooksState, NotesNo
                     Writes,
                     state,
                     CREATE_COMMAND,
-                    "{\"name\":${jsonString(name)}}",
+                    "{\"kind\":\"notebook\",\"title\":${jsonString(name)}}",
                     InvokeKeys.of(CREATE_COMMAND, "notebook", name),
                 )
             }

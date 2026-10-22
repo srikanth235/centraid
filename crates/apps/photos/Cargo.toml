@@ -21,4 +21,6 @@ thiserror.workspace = true
 
 [dev-dependencies]
 centraid-media = { path = "../../media" }
+centraid-vault = { path = "../../vault" }
+centraid-ontology = { path = "../../ontology" }
 rusqlite.workspace = true

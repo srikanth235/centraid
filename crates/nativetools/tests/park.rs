@@ -170,7 +170,7 @@ fn a_parked_session_leaves_the_vault_as_it_found_it() {
         "a parked create does not reach the vault"
     );
     assert_eq!(session.parked().len(), 1, "its one step is kept, in order");
-    assert_eq!(session.parked()[0].command, "schedule.add_task");
+    assert_eq!(session.parked()[0].command, "task.add");
 }
 
 #[test]
@@ -203,10 +203,10 @@ fn a_parked_chain_names_the_row_its_first_write_made() {
         .iter()
         .map(|step| step.command.as_str())
         .collect();
-    assert_eq!(steps, ["schedule.add_task", "schedule.set_task_status"]);
+    assert_eq!(steps, ["task.add", "task.complete"]);
     // the id the second step names is the id the first one makes
     assert_eq!(
-        session.parked()[1].input["task_id"],
-        session.parked()[0].input["task_id"]
+        session.parked()[1].input["id"],
+        session.parked()[0].input["id"]
     );
 }

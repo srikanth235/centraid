@@ -25,7 +25,7 @@ pub struct Scratch {
 impl Scratch {
     /// A vault with the schema and nothing else.
     pub fn empty(seed: &str) -> Result<Self> {
-        let dir = centraid_ontology::golden::scratch_dir();
+        let dir = centraid_ontology::scratch::scratch_dir();
         std::fs::create_dir_all(&dir)?;
         let clock = Arc::new(FixedClock::frozen());
         let vault = Vault::create_with(
@@ -56,7 +56,7 @@ impl Scratch {
     /// content store (D-1025-S3-1), so a test fixture that attached a second
     /// kind would be testing an arrangement no device has.
     pub fn founded_with_blobs(seed: &str) -> Result<Self> {
-        let dir = centraid_ontology::golden::scratch_dir();
+        let dir = centraid_ontology::scratch::scratch_dir();
         std::fs::create_dir_all(&dir)?;
         let clock = Arc::new(FixedClock::frozen());
         let file = dir.join("vault.db");
@@ -82,7 +82,7 @@ impl Scratch {
         Self,
         Arc<std::sync::Mutex<centraid_vault::backup::ledger::Ledger>>,
     )> {
-        let dir = centraid_ontology::golden::scratch_dir();
+        let dir = centraid_ontology::scratch::scratch_dir();
         std::fs::create_dir_all(&dir)?;
         let clock = Arc::new(FixedClock::frozen());
         let file = dir.join("vault.db");
@@ -124,94 +124,35 @@ impl Drop for Scratch {
     }
 }
 
-/// Insert a taggable note, returning its id. The cheapest replicated row with
-/// a `deleted_at` lifecycle, so it serves both the tag tests and the log ones.
+/// Insert a note, returning its id: an entity and its kind row, written as a
+/// command would, through the commit guard.
 pub fn insert_note(vault: &Vault, title: &str) -> Result<String> {
-    let note_id = vault.ids().next();
-    let author: String = vault.read(|connection| {
-        Ok(
-            connection.query_row("SELECT self_party_id FROM core_vault LIMIT 1", [], |row| {
-                row.get(0)
-            })?,
-        )
-    })?;
+    let id = vault.ids().next();
     let now = vault.clock().now_text();
-    let id = note_id.clone();
-    let content_id = vault.ids().next();
-    let body = title.to_owned();
     vault.commit(|tx| {
         tx.set_producer("test.insert_note");
-        // A note's identity is separate from its bytes (#352), so the pair the
-        // product writes is the pair a fixture writes: a content item, then the
-        // wrapper that addresses it.
+        tx.insert_entity(&id, centraid_vault::model::Kind::Note, title, &now)?;
         tx.connection().execute(
-            "INSERT INTO core_content_item
-               (content_id, content_uri, content_hash, byte_size, creator_party_id,
-                created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)",
-            rusqlite::params![
-                content_id,
-                format!("inline:{body}"),
-                centraid_vault::content::content_digest(body.as_bytes()),
-                body.len() as i64,
-                author,
-                now
-            ],
-        )?;
-        tx.connection().execute(
-            "INSERT INTO knowledge_note
-               (note_id, author_party_id, title, body_content_id, format, pinned,
-                created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, 'markdown', 0, ?5, ?5)",
-            rusqlite::params![id, author, title, content_id, now],
+            "INSERT INTO note (id, body) VALUES (?1, ?2)",
+            rusqlite::params![id, format!("the body of {title}")],
         )?;
         Ok(())
     })?;
-    Ok(note_id)
+    Ok(id)
 }
 
-/// A photograph's byte row and its asset, with the title the asset carries.
-///
-/// The bytes are stand-ins — the one hash over the asset id, which nothing
-/// opens — as `collection_kind.rs`'s photograph is. The index row for a byte
-/// row is written with it, and the asset comes after, so the byte row is
-/// touched once more and the index is written again with the asset's title.
-pub fn insert_photograph(vault: &Vault, asset_id: &str, title: &str) -> Result<()> {
-    let content_id = format!("content-{asset_id}");
-    let hash = centraid_vault::content::content_digest(asset_id.as_bytes());
-    vault.commit(|tx| {
-        tx.set_producer("test.insert_photograph");
-        tx.connection().execute(
-            "INSERT INTO core_content_item
-               (content_id, content_uri, content_hash, byte_size, created_at)
-             VALUES (?1, ?2, ?3, 1024, '2026-01-01T00:00:00.000Z')",
-            rusqlite::params![content_id, format!("blob:{hash}"), hash],
-        )?;
-        tx.connection().execute(
-            "INSERT INTO media_asset
-               (asset_id, content_id, kind, title, captured_at, created_at, updated_at)
-             VALUES (?1, ?2, 'photo', ?3, '2026-01-01T00:00:00.000Z',
-                     '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z')",
-            rusqlite::params![asset_id, content_id, title],
-        )?;
-        tx.connection().execute(
-            "UPDATE core_content_item SET byte_size = byte_size WHERE content_id = ?1",
-            [&content_id],
-        )?;
-        Ok(())
-    })?;
+/// Insert a person (an entity and its kind row) inside a commit, as a command
+/// would.
+pub fn add_person(tx: &centraid_vault::CommitTx<'_>, id: &str, name: &str, at: &str) -> Result<()> {
+    tx.insert_entity(id, centraid_vault::model::Kind::Person, name, at)?;
+    tx.connection()
+        .execute("INSERT INTO person (id) VALUES (?1)", [id])?;
     Ok(())
 }
 
-/// The vault's own owner party, for a test that needs a real party id.
-pub fn owner_party(vault: &Vault) -> Result<String> {
-    vault.read(|connection| {
-        Ok(
-            connection.query_row("SELECT self_party_id FROM core_vault LIMIT 1", [], |row| {
-                row.get(0)
-            })?,
-        )
-    })
+/// The vault's own self person, for a test that needs a real person id.
+pub fn self_person(vault: &Vault) -> Result<String> {
+    Ok(vault.self_id()?.expect("a founded vault has a self person"))
 }
 
 /// A credential-shaped canary planted in a private table, the Locker's key row, which a
@@ -229,113 +170,4 @@ pub fn plant_canary(vault: &Vault, canary: &str) -> Result<()> {
         Ok(())
     })?;
     Ok(())
-}
-
-/// One object's statement as rung one wrote it: the block under `-- <kind> <name>` in
-/// `001_baseline.sql`, up to the blank line that ends it.
-pub fn baseline_statement(kind: &str, name: &str) -> String {
-    let baseline = centraid_vault::migrations::BASELINE_SQL;
-    let header = format!("\n-- {kind} {name}\n");
-    let at = baseline
-        .find(&header)
-        .unwrap_or_else(|| panic!("the baseline holds no {kind} `{name}`"));
-    let body = &baseline[at + header.len()..];
-    let end = body.find("\n\n").unwrap_or(body.len());
-    body[..end].to_owned()
-}
-
-/// WIND A FILE BACK FROM RUNG FOUR TO RUNG THREE (#1129, F-R-1) by undoing the rung's own
-/// statements: `chat_message` is put back as rung one wrote it (no `updated_at`, no
-/// `row_version`, no touch trigger), every row kept, with its triggers as rung one wrote them.
-/// Foreign keys are turned off for the undo and back on after it (the bundled SQLite opens with
-/// them on), so dropping the message table cascades into neither child and the children are
-/// left as they are. The caller sets `user_version`.
-pub fn undo_rung_four(connection: &rusqlite::Connection) {
-    const TRIGGERS: [&str; 5] = [
-        "chat_message_is_not_born_settled",
-        "chat_message_outcome_settles_once",
-        "fts_chat_thread_from_chat_message_ad",
-        "fts_chat_thread_from_chat_message_ai",
-        "fts_chat_thread_from_chat_message_au",
-    ];
-    let foreign_keys: i64 = connection
-        .query_row("PRAGMA foreign_keys", [], |row| row.get(0))
-        .expect("the pragma reads");
-    let mut undo = vec![
-        "PRAGMA foreign_keys = OFF;".to_owned(),
-        "DROP TRIGGER chat_message_touch_updated_at;".to_owned(),
-    ];
-    undo.extend(TRIGGERS.map(|trigger| format!("DROP TRIGGER {trigger};")));
-    undo.push(
-        "CREATE TEMP TABLE chat_message_at_four AS SELECT * FROM main.chat_message;
-         DROP TABLE main.chat_message;"
-            .to_owned(),
-    );
-    undo.push(baseline_statement("table", "chat_message"));
-    undo.push(
-        "INSERT INTO chat_message
-           (thread_id, ordinal, role, text, outcome, refusal, notice, record_json, created_at)
-         SELECT thread_id, ordinal, role, text, outcome, refusal, notice, record_json, created_at
-           FROM temp.chat_message_at_four;
-         DROP TABLE temp.chat_message_at_four;"
-            .to_owned(),
-    );
-    undo.extend(TRIGGERS.map(|trigger| baseline_statement("trigger", trigger)));
-    undo.push(format!("PRAGMA foreign_keys = {foreign_keys};"));
-    connection
-        .execute_batch(&undo.join("\n"))
-        .expect("chat_message is put back as rung one wrote it");
-}
-
-/// WIND A FILE BACK FROM RUNG THREE TO RUNG TWO (#1129) by undoing the rung's own statements:
-/// the health tables and their touch triggers go, the seeded workout kinds and their entity rows
-/// go, and `core_activity` is rebuilt to the text rung one wrote (no `updated_at`, no
-/// `row_version`), every row kept, with its indexes and entity triggers as rung one wrote them.
-/// The caller sets `user_version`.
-pub fn undo_rung_three(connection: &rusqlite::Connection) {
-    connection
-        .execute_batch(
-            "DROP TRIGGER health_workout_touch_updated_at;
-             DROP TABLE health_workout;
-             DROP TRIGGER health_daily_touch_updated_at;
-             DROP TABLE health_daily;
-             DELETE FROM core_concept WHERE scheme_id = 'health:workout-kinds';
-             DELETE FROM core_concept_scheme WHERE scheme_id = 'health:workout-kinds';
-             DELETE FROM core_entity WHERE entity_id LIKE 'health:%';
-             DROP TRIGGER core_activity_touch_updated_at;
-             DROP TRIGGER core_activity_entity_delete;
-             DROP TRIGGER core_activity_entity_insert;
-             DROP INDEX core_activity_started_page_idx;
-             DROP INDEX idx_activity_actor_party;
-             DROP INDEX idx_activity_kind_concept;
-             DROP INDEX idx_activity_location_place;
-             DROP INDEX idx_activity_source_app;
-             ALTER TABLE core_activity RENAME TO core_activity_at_three;",
-        )
-        .expect("rung three's objects are undone");
-    let mut rung_one = vec![baseline_statement("table", "core_activity")];
-    rung_one.push(
-        "INSERT INTO core_activity
-           (activity_id, actor_party_id, kind_concept_id, started_at, ended_at,
-            location_place_id, source_app_id, created_at)
-         SELECT activity_id, actor_party_id, kind_concept_id, started_at, ended_at,
-                location_place_id, source_app_id, created_at
-           FROM core_activity_at_three;
-         DROP TABLE core_activity_at_three;"
-            .to_owned(),
-    );
-    for index in [
-        "idx_activity_actor_party",
-        "idx_activity_kind_concept",
-        "idx_activity_location_place",
-        "idx_activity_source_app",
-    ] {
-        rung_one.push(baseline_statement("index", index));
-    }
-    for trigger in ["core_activity_entity_delete", "core_activity_entity_insert"] {
-        rung_one.push(baseline_statement("trigger", trigger));
-    }
-    connection
-        .execute_batch(&rung_one.join("\n"))
-        .expect("core_activity is put back as rung one wrote it");
 }

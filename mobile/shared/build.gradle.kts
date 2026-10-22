@@ -338,11 +338,12 @@ tasks.withType<Test>().configureEach {
     // THE LIST IS WHAT THE SPECS OPEN, ONE LINE PER FAMILY OF READS:
     //   - `contracts/screens`, `design`, `copy`: the fixtures, the emitted token
     //     tables and the copy JSON;
-    //   - `crates/vault/src/commands`, `crates/vault/src/chat.rs`:
-    //     `ShellCommandsExistSpec` reads the registry's declarations and
-    //     `ChatScopeSpec` the card list the scope menu mirrors;
+    //   - `crates/vault/src/commands`: `ShellCommandsExistSpec` reads the
+    //     registry's declarations (`chat.rs`, which `ChatScopeSpec` read, left
+    //     with the old model, #1135: that spec is the chat lane's to re-point);
     //   - `contracts/schema/vault-ddl.sql`: `AppReadsSpec`'s table universe and
-    //     `ShellCommandsExistSpec`'s object types;
+    //     `ShellCommandsExistSpec`'s object types; and `vault-commands.txt`, the
+    //     registry's own command list, which that spec holds its scan to;
     //   - `crates/api-proto/proto`: `ScreenQueryRuntimeSpec`'s zone pre-check,
     //     which lists the proto's `tz` requests;
     //   - `shared/src` and `core/src`, WHOLE: `BackgroundSchedulingSpec`,
@@ -363,8 +364,8 @@ tasks.withType<Test>().configureEach {
         rootProject.layout.projectDirectory.dir("androidApp/src").asFile,
     ).forEach { dir -> inputs.dir(dir).withPathSensitivity(relative) }
     listOf(
-        repositoryRoot.resolve("crates/vault/src/chat.rs"),
         repositoryRoot.resolve("contracts/schema/vault-ddl.sql"),
+        repositoryRoot.resolve("contracts/schema/vault-commands.txt"),
     ).forEach { file -> inputs.file(file).withPathSensitivity(relative) }
     // The iOS tree WITHOUT what it builds. `Sources/Generated` is protoc's
     // output (`mobile/scripts/generate-swift-protos.sh`) and is a function of

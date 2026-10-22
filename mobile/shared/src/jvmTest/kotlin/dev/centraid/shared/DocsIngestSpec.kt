@@ -24,8 +24,8 @@ import java.util.Collections
 /**
  * Docs' Add sheet: Upload, Scan and Text (#1047, R-1047-Q4). The reducer's
  * phases and words, then the bridge end to end over a fake port — the picker
- * the shell supplies, the stage frames, `core.add_document` over the staged
- * hash and `core.create_text_document`.
+ * the shell supplies, the stage frames, `document.add` over the staged
+ * hash and `document.create_text`.
  */
 class DocsIngestSpec : StringSpec({
 
@@ -92,10 +92,10 @@ class DocsIngestSpec : StringSpec({
         filing.phase shouldBe DocsIngestState.Phase.PHASE_FILING
         filing.title shouldBe DocsCopy.INGEST_TEXT_TITLE
         filing.open_editor shouldBe true
-        val (command, input, key) = DocsIngestMachine.filing(filing, "")!!
-        command shouldBe "core.create_text_document"
-        input shouldBe """{"document_id":"d-new","title":"Untitled document","folder_id":"f-2"}"""
-        key shouldBe "core.create_text_document:d-new"
+        val (command, input, key) = DocsIngestMachine.filing(filing, "", 0, "")!!
+        command shouldBe "document.create_text"
+        input shouldBe """{"id":"d-new","title":"Untitled document","folder_id":"f-2"}"""
+        key shouldBe "document.create_text:d-new"
     }
 
     "a refusal is a failure with Try again: a held file restages, none re-picks" {
@@ -146,7 +146,7 @@ class DocsIngestSpec : StringSpec({
         DocsIngestMachine.mediaTypeOf("mystery.bin", "") shouldBe "application/octet-stream"
     }
 
-    "the bridge: the shell's picker, the stage, then core.add_document over the staged hash" {
+    "the bridge: the shell's picker, the stage, then document.add over the staged hash" {
         val port = FakePort()
         val bridge = DocsIngestBridge.over(port, Dispatchers.Default)
         val asked = Collections.synchronizedList(mutableListOf<DocsDriveEvent.AddRequested.Kind>())
@@ -162,9 +162,9 @@ class DocsIngestSpec : StringSpec({
             port.staged shouldBe listOf(file.absolutePath to "application/pdf")
             port.writes shouldHaveSize 1
             val (command, input, key) = port.writes.single()
-            command shouldBe "core.add_document"
-            input shouldBe """{"document_id":"${filed.document_id}","staged_sha":"${FakePort.HASH}","title":"Lease.pdf","folder_id":"f-1"}"""
-            key shouldBe "core.add_document:${filed.document_id}:${FakePort.HASH}"
+            command shouldBe "document.add"
+            input shouldBe """{"id":"${filed.document_id}","blob":"${FakePort.HASH}","size":64,"media_type":"application/pdf","title":"Lease.pdf","folder_id":"f-1"}"""
+            key shouldBe "document.add:${filed.document_id}:${FakePort.HASH}"
             filed.total_bytes shouldBe 64L
             filed.status_label shouldBe "Lease.pdf added"
             // THE BACK WORD RIDES IN STATE, so the root pushes from anywhere.
@@ -188,8 +188,8 @@ class DocsIngestSpec : StringSpec({
             filed.parent shouldBe DocsCopy.APP_TITLE
             filed.document_id.length shouldBe 36
             port.staged.shouldBeEmpty()
-            port.writes.single().first shouldBe "core.create_text_document"
-            port.writes.single().second shouldStartWith """{"document_id":"${filed.document_id}","title":"Untitled document"}"""
+            port.writes.single().first shouldBe "document.create_text"
+            port.writes.single().second shouldStartWith """{"id":"${filed.document_id}","title":"Untitled document"}"""
 
             bridge.dismiss()
             withTimeout(5_000) { bridge.host.state.first { it.phase == DocsIngestState.Phase.PHASE_IDLE } }

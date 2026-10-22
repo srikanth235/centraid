@@ -66,7 +66,7 @@ fn live(world: &World, kind: Kind) -> impl Iterator<Item = &Row> {
 
 /// A task that still has work in it.
 fn unfinished(row: &Row) -> bool {
-    is(row, "status", "open") || is(row, "status", "in_progress")
+    is(row, "status", "open")
 }
 
 /// The row that sorts first by `key`, ties broken by id.
@@ -198,6 +198,13 @@ fn candidates(app: App, world: &World, today: Date) -> Candidates {
             dataless.push(say(app, "What was my biggest expense this month?"));
             dataless.push(say(app, "What came in this month?"));
         }
+        // A Locker item's title is a chip a member did not ask to see, so none is backed; each
+        // question reads plain fields (`type`, `starred`) and never a sealed value (R-1088-3).
+        App::Locker => {
+            dataless.push(say(app, "What is in my Locker?"));
+            dataless.push(say(app, "Which logins do I have saved?"));
+            dataless.push(say(app, "Which Locker items are starred?"));
+        }
         App::Docs => {
             if let Some(doc) = first_by(live(world, Kind::Document), newest) {
                 backed.push(say(app, format!("Find the {}", lead_words(&doc.name, 3))));
@@ -255,8 +262,7 @@ pub fn suggest_in(world: &World, today: Date, scope: Option<App>) -> Vec<Suggest
                 .map(|domain| candidates(domain, world, today))
                 .collect();
             let backed: Vec<&[Suggestion]> = per_domain.iter().map(|c| &c.backed[..]).collect();
-            let dataless: Vec<&[Suggestion]> =
-                per_domain.iter().map(|c| &c.dataless[..]).collect();
+            let dataless: Vec<&[Suggestion]> = per_domain.iter().map(|c| &c.dataless[..]).collect();
             interleave(&mut out, &backed);
             interleave(&mut out, &dataless);
         }
@@ -292,8 +298,8 @@ pub fn suggest(door: &dyn Door, tz: &str, scope: Option<App>) -> Vec<Suggestion>
         today,
         tz: tz.to_owned(),
     };
-    // The Locker is off on the phone (R-1088-3): its rows are never read, so no
-    // suggestion can name one.
+    // Sealed values are out of reach on the phone (R-1088-3): the world holds Locker items by
+    // their plain rows, and no suggestion names one.
     let world = World::load_in(door, false, false, Some(&standing)).unwrap_or_default();
     suggest_in(&world, today, scope)
 }

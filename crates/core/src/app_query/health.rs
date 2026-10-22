@@ -119,7 +119,6 @@ fn workout_row(workout: Workout, zone: Option<&FireZone>) -> wire::HealthWorkout
         kind_concept_id: workout.kind.concept_id,
         kind_key: workout.kind.key,
         kind_label: workout.kind.label,
-        phone_kind: workout.phone_kind,
         started_at: workout.started_at,
         ended_at: workout.ended_at,
         moving_sec: workout.moving_sec,

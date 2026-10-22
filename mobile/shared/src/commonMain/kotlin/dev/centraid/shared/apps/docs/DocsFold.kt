@@ -307,7 +307,8 @@ public object DocsFold {
     }
 
     private fun version(version: DocsVersion, trashed: Boolean): DocsVersionRow = DocsVersionRow(
-        content_id = version.content_id,
+        // THE VERSION'S KEY is its number: two versions can hold the same bytes.
+        content_id = version.number.toString(),
         label = "${DocsCopy.VERSION} ${version.number}",
         meta = listOfNotNull(
             DocsCopy.CURRENT.takeIf { version.current },
@@ -322,29 +323,23 @@ public object DocsFold {
 
     private fun activity(event: DocsActivityEvent): DocsActivityRow = DocsActivityRow(
         label = when (event.activity) {
-            "core.add_document" -> DocsCopy.ACTIVITY_ADDED
-            "core.edit_document" -> DocsCopy.ACTIVITY_EDITED
-            "core.rename_document" -> DocsCopy.ACTIVITY_RENAMED
-            "core.move_document" -> DocsCopy.ACTIVITY_MOVED
-            "core.star_document" -> DocsCopy.ACTIVITY_STARRED
-            "core.unstar_document" -> DocsCopy.ACTIVITY_UNSTARRED
-            "core.trash_document" -> DocsCopy.ACTIVITY_TRASHED
-            "core.restore_document" -> DocsCopy.ACTIVITY_RESTORED
-            "core.replace_document_content" -> DocsCopy.ACTIVITY_REPLACED
-            "core.restore_document_version" -> DocsCopy.ACTIVITY_VERSION_RESTORED
-            "core.tag_item" -> DocsCopy.ACTIVITY_LABELLED
-            "core.untag_item" -> DocsCopy.ACTIVITY_UNLABELLED
-            "core.empty_document_trash" -> DocsCopy.ACTIVITY_TRASH_EMPTIED
+            "document.add", "document.create_text" -> DocsCopy.ACTIVITY_ADDED
+            "document.edit" -> DocsCopy.ACTIVITY_EDITED
+            "entity.retitle" -> DocsCopy.ACTIVITY_RENAMED
+            "document.move" -> DocsCopy.ACTIVITY_MOVED
+            "flag.set" -> DocsCopy.ACTIVITY_STARRED
+            "flag.clear" -> DocsCopy.ACTIVITY_UNSTARRED
+            "entity.trash" -> DocsCopy.ACTIVITY_TRASHED
+            "entity.restore" -> DocsCopy.ACTIVITY_RESTORED
+            "document.replace" -> DocsCopy.ACTIVITY_REPLACED
+            "document.restore_version" -> DocsCopy.ACTIVITY_VERSION_RESTORED
+            "tag.add" -> DocsCopy.ACTIVITY_LABELLED
+            "tag.remove" -> DocsCopy.ACTIVITY_UNLABELLED
+            "entity.empty_trash" -> DocsCopy.ACTIVITY_TRASH_EMPTIED
             else -> DocsCopy.ACTIVITY_OTHER
         },
-        meta = listOfNotNull(
-            when (event.agent_kind) {
-                "owner" -> DocsCopy.AGENT_YOU
-                "agent" -> DocsCopy.AGENT_ASSISTANT
-                else -> DocsCopy.AGENT_APP
-            },
-            stamp(event.occurred_local),
-        ).joinToString(" · "),
+        // THE JOURNAL DOES NOT SAY WHO ACTED (#1135): the line is the day alone.
+        meta = stamp(event.occurred_local).orEmpty(),
     )
 
     /** The head's actions: edit (text), star, rename, move, labels, then trash — or restore and delete forever. */

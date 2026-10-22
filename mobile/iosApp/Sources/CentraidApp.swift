@@ -158,18 +158,6 @@ struct CentraidApp: App {
                                     onOpenShelf: { shell.path.append(.photoShelf($0)) }
                                 )
 
-                            case .photosMemories:
-                                PhotosMemoriesView(
-                                    data: shell.photosMemoriesState,
-                                    send: { shell.send(screen: PhotosScreens.memories, event: $0) },
-                                    onOpenMemory: { identifier, title in
-                                        shell.path.append(.photoShelf(shell.memoryShelf(
-                                            identifier: identifier,
-                                            title: title
-                                        )))
-                                    }
-                                )
-
                             case .photoDuplicates:
                                 DuplicatesView(
                                     data: shell.duplicatesState,
@@ -221,8 +209,8 @@ struct CentraidApp: App {
                         // without sample data"): an app's empty state offers
                         // the phone's own data.
                         .environment(\.importFromPhone, { shell.importFromPhone($0) })
-                        // THE ASSISTANT'S DOOR for a search that found nothing (#1097, R-1097-30).
-                        .environment(\.askChat, { shell.askChat($0) })
+                        // THE ASSISTANT'S DOOR for a search's Ask row (#1097, R-1097-30, #1135).
+                        .environment(\.askChat, { shell.askChat($0.question, scope: $0.scope) })
                         // THE IMPORT'S LINE on every route, at the foot (DESIGN.md's
                         // one status line): above the app's band where the page
                         // has one, at the page's own foot where it does not.

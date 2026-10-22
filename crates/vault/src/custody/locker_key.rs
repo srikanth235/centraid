@@ -65,7 +65,7 @@ const TAG_BYTES: usize = 16;
 pub const LOCKER_ENCRYPTED_COLUMNS: &[(&str, &str, &[&str])] = &[
     (
         "locker_item",
-        "item_id",
+        "id",
         &["password", "otp_seed", "card_number", "cvv", "content"],
     ),
     ("locker_item_field", "field_id", &["value_sealed"]),
@@ -362,7 +362,8 @@ impl crate::file::Vault {
             // The column is one of five compile-time names, checked above, so
             // it is spliced; the id is bound.
             let sql = format!(
-                "SELECT {column}, key_id FROM locker_item WHERE item_id = ?1 AND deleted_at IS NULL"
+                "SELECT i.{column}, i.key_id FROM locker_item i JOIN entity e ON e.id = i.id
+                  WHERE i.id = ?1 AND e.deleted_at IS NULL"
             );
             let mut statement = connection.prepare(&sql)?;
             let mut rows = statement.query([item_id])?;
@@ -405,7 +406,7 @@ impl crate::file::Vault {
             let mut statement = connection.prepare(
                 "SELECT f.value_sealed, f.key_id
                    FROM locker_item_field f
-                   JOIN locker_item i ON i.item_id = f.item_id
+                   JOIN entity i ON i.id = f.item_id
                   WHERE f.field_id = ?1 AND f.item_id = ?2
                     AND f.kind = 'sealed' AND i.deleted_at IS NULL",
             )?;
@@ -469,8 +470,16 @@ mod tests {
     fn insert_item(connection: &rusqlite::Connection, item_id: &str, password: &str, key_id: &str) {
         connection
             .execute(
-                "INSERT INTO locker_item (item_id, type, title, password, key_id, created_at) \
-                 VALUES (?1, 'login', 'a login', ?2, ?3, '2026-01-01T00:00:00.000Z')",
+                "INSERT INTO entity (id, kind, title, created_at, updated_at) \
+                 VALUES (?1, 'locker_item', 'a login', '2026-01-01T00:00:00.000Z', \
+                         '2026-01-01T00:00:00.000Z')",
+                [item_id],
+            )
+            .unwrap();
+        connection
+            .execute(
+                "INSERT INTO locker_item (id, type, password, key_id) \
+                 VALUES (?1, 'login', ?2, ?3)",
                 (item_id, password, key_id),
             )
             .unwrap();
@@ -583,7 +592,7 @@ mod tests {
 
         let stolen = rusqlite::Connection::open(&fixture.vault_file).unwrap();
         let mut statement = stolen
-            .prepare("SELECT item_id, password, key_id FROM locker_item ORDER BY item_id")
+            .prepare("SELECT id, password, key_id FROM locker_item ORDER BY id")
             .unwrap();
         let cells = statement
             .query_map([], |row| {

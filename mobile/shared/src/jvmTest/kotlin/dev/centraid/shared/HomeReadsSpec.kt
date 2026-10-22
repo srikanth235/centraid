@@ -96,7 +96,7 @@ class HomeReadsSpec : StringSpec({
 
     // --- today's due tasks ride the tile (#1128, R-1128-8) -------------------
 
-    fun dueTask(title: String) = TasksTask(task_id = "t-$title", title = title, status = "needs-action")
+    fun dueTask(title: String) = TasksTask(task_id = "t-$title", title = title, status = "open")
 
     fun board(overdue: List<String>, due: List<String>) = TasksBoard(
         today = today,
@@ -338,15 +338,17 @@ class HomeReadsSpec : StringSpec({
     "tasks have no tile of their own: Agenda's carries them, and no page read names them (#1128)" {
         HomeReads.READS.map { it.appId } shouldNotContain "tasks"
         HomeReads.READ_APP_IDS shouldNotContain "tasks"
-        HomeReads.TABLES shouldContain "schedule_task"
+        HomeReads.TABLES shouldContain "task"
     }
 
-    "the people tile counts the roster's people — a live profile — not every party (#1047)" {
+    "the people tile counts the roster's people — the live circle, not the owner or a pet (#1047, #1135)" {
         val people = HomeReads.READS.single { it.appId == "people" }
-        people.query.where_.shouldNotBeNull() shouldContain
-            "party_id IN (SELECT party_id FROM people_profile WHERE deleted_at IS NULL)"
-        people.alsoReads shouldBe setOf("people_profile")
-        HomeReads.TABLES shouldContain "people_profile"
+        val where = people.query.where_.shouldNotBeNull()
+        where shouldContain "kind = 'person' AND deleted_at IS NULL"
+        where shouldContain "id <> (SELECT self_id FROM vault)"
+        where shouldContain "id NOT IN (SELECT id FROM person WHERE form = 'pet')"
+        people.alsoReads shouldBe setOf("person")
+        HomeReads.TABLES shouldContain "person"
     }
 
     // --- the photos mosaic draws what can be drawn --------------------------

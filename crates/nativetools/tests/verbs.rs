@@ -401,7 +401,7 @@ fn edit_changes_fields_through_their_commands() {
     let edited = call(
         &mut session,
         "act",
-        json!({"verb": "edit", "rows": cabin, "args": "name: Book the lake cabin\neffort: 45\nstatus: in_progress"}),
+        json!({"verb": "edit", "rows": cabin, "args": "name: Book the lake cabin\neffort: 45\nstatus: cancelled"}),
     );
     assert_eq!(
         field_change(&edited, "name"),
@@ -410,7 +410,7 @@ fn edit_changes_fields_through_their_commands() {
     assert_eq!(field_change(&edited, "effort"), json!([30, 45]));
     assert_eq!(
         field_change(&edited, "status"),
-        json!(["open", "in_progress"])
+        json!(["open", "cancelled"])
     );
     session.user("");
     let date = text(
@@ -435,7 +435,7 @@ fn edit_changes_fields_through_their_commands() {
         json!({"verb": "edit", "rows": cabin, "args": {"status": "finished"}}),
     );
     assert!(
-        bad_enum.contains("open, in_progress, completed, cancelled"),
+        bad_enum.contains("open, completed, cancelled"),
         "{bad_enum}"
     );
     let same = text(

@@ -101,8 +101,8 @@ impl Source {
     }
 }
 
-/// THE NORMALISED ROW (seam S1): what `money.import_transactions` takes, field
-/// for field. The `txn_id` is minted by the caller, not here.
+/// THE NORMALISED ROW (seam S1): what `follow.statement` takes of a line. The
+/// vault mints the line's id.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ImportRow {
     /// `ofx:<FITID>`, `ofx-nofitid:<hex>` or `csv:<64 hex>` (R-1099-3).
@@ -119,8 +119,6 @@ pub struct ImportRow {
     pub bank_type: Option<String>,
     /// Set by the rules (post-rules); `None` out of a parser.
     pub category_concept_id: Option<String>,
-    /// Set by the rules (post-rules); `None` out of a parser.
-    pub display_name: Option<String>,
 }
 
 impl ImportRow {

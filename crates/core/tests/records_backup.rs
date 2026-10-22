@@ -81,24 +81,24 @@ fn every_apps_records_come_back_row_for_row() {
             id_of(
                 &run(
                     &phone,
-                    "knowledge.create_note",
-                    &json!({ "title": format!("Note {index}"), "body_text": format!("body {index}"), "format": "plain" }),
+                    "note.create",
+                    &json!({ "title": format!("Note {index}"), "body": format!("body {index}"), "format": "plain" }),
                     &format!("note-{index}"),
                 ),
-                "note_id",
+                "id",
             )
         })
         .collect();
     run(
         &phone,
-        "knowledge.edit_note",
-        &json!({ "note_id": notes[0], "body_text": "body 0, edited" }),
+        "note.edit",
+        &json!({ "id": notes[0], "body": "body 0, edited" }),
         "edit-note-0",
     );
     run(
         &phone,
-        "knowledge.delete_note",
-        &json!({ "note_id": notes[1] }),
+        "entity.trash",
+        &json!({ "id": notes[1] }),
         "delete-note-1",
     );
     // TASKS: three added, one completed, one edited, one deleted.
@@ -107,39 +107,39 @@ fn every_apps_records_come_back_row_for_row() {
             id_of(
                 &run(
                     &phone,
-                    "schedule.add_task",
+                    "task.add",
                     &json!({ "title": format!("Task {index}") }),
                     &format!("task-{index}"),
                 ),
-                "task_id",
+                "id",
             )
         })
         .collect();
     run(
         &phone,
-        "schedule.set_task_status",
-        &json!({ "task_id": tasks[0], "status": "completed" }),
+        "task.complete",
+        &json!({ "id": tasks[0] }),
         "complete-task-0",
     );
     run(
         &phone,
-        "schedule.edit_task",
-        &json!({ "task_id": tasks[1], "title": "Task 1, renamed" }),
+        "task.edit",
+        &json!({ "id": tasks[1], "title": "Task 1, renamed" }),
         "edit-task-1",
     );
     run(
         &phone,
-        "schedule.delete_task",
-        &json!({ "task_id": tasks[2] }),
+        "entity.trash",
+        &json!({ "id": tasks[2] }),
         "delete-task-2",
     );
     // AN EVENT on the calendar founding seeded.
     run(
         &phone,
-        "schedule.propose_event",
+        "event.propose",
         &json!({
-            "summary": "Dentist", "dtstart": "2026-11-02", "dtend": "2026-11-02",
-            "recurrence_semantics": "all-day", "calendar_id": calendar,
+            "title": "Dentist", "starts": "2026-11-02", "ends": "2026-11-02",
+            "timing": "all-day", "calendar_id": calendar,
         }),
         "event-0",
     );
@@ -149,54 +149,54 @@ fn every_apps_records_come_back_row_for_row() {
             id_of(
                 &run(
                     &phone,
-                    "core.create_text_document",
+                    "document.create_text",
                     &json!({ "title": format!("Doc {index}"), "body_text": format!("draft {index}") }),
                     &format!("doc-{index}"),
                 ),
-                "document_id",
+                "id",
             )
         })
         .collect();
     run(
         &phone,
-        "core.edit_document",
-        &json!({ "document_id": documents[0], "body_text": "draft 0, edited" }),
+        "document.edit",
+        &json!({ "id": documents[0], "body_text": "draft 0, edited" }),
         "edit-doc-0",
     );
     run(
         &phone,
-        "core.trash_document",
-        &json!({ "document_id": documents[1] }),
+        "entity.trash",
+        &json!({ "id": documents[1] }),
         "trash-doc-1",
     );
     // PEOPLE: two added, one edited.
     let ray = id_of(
         &run(
             &phone,
-            "people.add_person",
-            &json!({ "display_name": "Ray", "cadence_days": 0 }),
+            "person.add",
+            &json!({ "title": "Ray", "cadence_days": 0 }),
             "person-ray",
         ),
-        "party_id",
+        "id",
     );
     run(
         &phone,
-        "people.add_person",
-        &json!({ "display_name": "Sol", "cadence_days": 30 }),
+        "person.add",
+        &json!({ "title": "Sol", "cadence_days": 30 }),
         "person-sol",
     );
     run(
         &phone,
-        "people.edit_person",
-        &json!({ "party_id": ray, "display_name": "Ray", "role": "Grandfather" }),
+        "person.edit",
+        &json!({ "id": ray, "title": "Ray", "role": "Grandfather" }),
         "edit-ray",
     );
     // A PHOTOGRAPH, with its thumbnail.
     let photo = bytes_of("a photograph among the records", 40_000);
     let staged = stage(&phone, owned("image/heic", &photo), &photo);
     let thumb = bytes_of("its thumbnail among the records", 3_000);
-    stage(&phone, thumb_of(&staged, &thumb), &thumb);
     add_asset(&phone, &staged, "photo");
+    stage(&phone, thumb_of(&staged, &thumb), &thumb);
 
     let drained = drain(&phone, at_home());
     assert!(drained.acked_at_ms.is_some(), "{drained:?}");
@@ -210,14 +210,7 @@ fn every_apps_records_come_back_row_for_row() {
         .filter(|table| lost.get(*table) != back.get(*table))
         .collect();
     assert!(differing.is_empty(), "rows differ in {differing:?}");
-    for table in [
-        "knowledge_note",
-        "schedule_task",
-        "core_event",
-        "core_document",
-        "people_profile",
-        "media_asset",
-    ] {
+    for table in ["note", "task", "event", "document", "person", "photo"] {
         assert!(
             lost.get(table).is_some_and(|rows| !rows.is_empty()),
             "{table} holds rows the restore had to bring back"
@@ -247,11 +240,11 @@ fn records_written_after_the_last_snapshot_wait_for_the_next() {
             })
             .expect("counts")
     };
-    let headed = |path: &Path| head_manifest(path).1.census.get("knowledge_note").copied();
+    let headed = |path: &Path| head_manifest(path).1.census.get("note").copied();
     run(
         &phone,
-        "knowledge.create_note",
-        &json!({ "title": "First", "body_text": "before the head", "format": "plain" }),
+        "note.create",
+        &json!({ "title": "First", "body": "before the head", "format": "plain" }),
         "first",
     );
     let first = drain(&phone, at_home());
@@ -262,8 +255,8 @@ fn records_written_after_the_last_snapshot_wait_for_the_next() {
     // A NOTE AFTER THE HEAD, AND AN ORDINARY PASS WITHIN THE HOUR.
     run(
         &phone,
-        "knowledge.create_note",
-        &json!({ "title": "Second", "body_text": "after the head", "format": "plain" }),
+        "note.create",
+        &json!({ "title": "Second", "body": "after the head", "format": "plain" }),
         "second",
     );
     let quiet = drain(&phone, quietly());
@@ -292,8 +285,8 @@ fn records_written_after_the_last_snapshot_wait_for_the_next() {
     // moved back past it.
     run(
         &phone,
-        "knowledge.create_note",
-        &json!({ "title": "Third", "body_text": "an hour later", "format": "plain" }),
+        "note.create",
+        &json!({ "title": "Third", "body": "an hour later", "format": "plain" }),
         "third",
     );
     let book = ledger(&path);
@@ -331,11 +324,11 @@ fn a_snapshot_asked_for_while_the_gateway_sleeps_is_taken_when_it_wakes() {
     let path = dir.path().join("vault.db");
     let phone = phone(dir.path());
     pair(&phone, &gateway);
-    let headed = |path: &Path| head_manifest(path).1.census.get("knowledge_note").copied();
+    let headed = |path: &Path| head_manifest(path).1.census.get("note").copied();
     run(
         &phone,
-        "knowledge.create_note",
-        &json!({ "title": "First", "body_text": "before the head", "format": "plain" }),
+        "note.create",
+        &json!({ "title": "First", "body": "before the head", "format": "plain" }),
         "first",
     );
     drain(&phone, at_home());
@@ -344,8 +337,8 @@ fn a_snapshot_asked_for_while_the_gateway_sleeps_is_taken_when_it_wakes() {
     // A NOTE, THEN THE APP LEAVES THE SCREEN WITH THE LAPTOP ASLEEP.
     run(
         &phone,
-        "knowledge.create_note",
-        &json!({ "title": "Second", "body_text": "written before leaving", "format": "plain" }),
+        "note.create",
+        &json!({ "title": "Second", "body": "written before leaving", "format": "plain" }),
         "second",
     );
     gateway.cable().cut();
@@ -395,10 +388,10 @@ fn a_snapshot_taken_while_the_apps_write_is_one_moment() {
             while !stop.load(std::sync::atomic::Ordering::SeqCst) {
                 run(
                     &phone,
-                    "knowledge.create_note",
+                    "note.create",
                     &json!({
                         "title": format!("n{written:05}"),
-                        "body_text": format!("written in order, number {written}"),
+                        "body": format!("written in order, number {written}"),
                         "format": "plain",
                     }),
                     &format!("racing-{written}"),
@@ -446,8 +439,8 @@ fn what_is_in_the_wal_is_in_the_snapshot() {
     for index in 0..20 {
         run(
             &phone,
-            "knowledge.create_note",
-            &json!({ "title": format!("In the WAL {index}"), "body_text": "not checkpointed", "format": "plain" }),
+            "note.create",
+            &json!({ "title": format!("In the WAL {index}"), "body": "not checkpointed", "format": "plain" }),
             &format!("wal-{index}"),
         );
     }
@@ -460,7 +453,7 @@ fn what_is_in_the_wal_is_in_the_snapshot() {
     let new_dir = tempfile::tempdir().expect("a directory");
     let restored = restore(new_dir.path(), &gateway);
     let back = rows(&PathBuf::from(&restored.vaults[0].path));
-    assert_eq!(back.get("knowledge_note").map(Vec::len), Some(20));
+    assert_eq!(back.get("note").map(Vec::len), Some(20));
     assert_eq!(back, rows(&path));
 }
 
@@ -538,16 +531,16 @@ fn a_snapshot_cut_short_before_its_head_is_finished_by_the_next_pass() {
     pair(&phone, &gateway);
     run(
         &phone,
-        "knowledge.create_note",
-        &json!({ "title": "Headed", "body_text": "in the head", "format": "plain" }),
+        "note.create",
+        &json!({ "title": "Headed", "body": "in the head", "format": "plain" }),
         "headed",
     );
     drain(&phone, at_home());
     let (previous, previous_manifest) = head_manifest(&path);
     run(
         &phone,
-        "knowledge.create_note",
-        &json!({ "title": "Cut", "body_text": "in the cut snapshot", "format": "plain" }),
+        "note.create",
+        &json!({ "title": "Cut", "body": "in the cut snapshot", "format": "plain" }),
         "cut",
     );
     let cut = moved_and_not_settled(&phone, &path);
@@ -596,15 +589,15 @@ fn a_snapshot_cut_short_and_superseded_leaks_nothing() {
     drain(&phone, at_home());
     run(
         &phone,
-        "knowledge.create_note",
-        &json!({ "title": "Cut", "body_text": "in the cut snapshot", "format": "plain" }),
+        "note.create",
+        &json!({ "title": "Cut", "body": "in the cut snapshot", "format": "plain" }),
         "cut",
     );
     let cut = moved_and_not_settled(&phone, &path);
     run(
         &phone,
-        "knowledge.create_note",
-        &json!({ "title": "Later", "body_text": "after the cut", "format": "plain" }),
+        "note.create",
+        &json!({ "title": "Later", "body": "after the cut", "format": "plain" }),
         "later",
     );
     let tapped = drain(
@@ -637,8 +630,8 @@ fn many_snapshots_keep_the_gateway_bounded() {
     for round in 0..6 {
         run(
             &phone,
-            "knowledge.create_note",
-            &json!({ "title": format!("Round {round}"), "body_text": "x".repeat(4_000), "format": "plain" }),
+            "note.create",
+            &json!({ "title": format!("Round {round}"), "body": "x".repeat(4_000), "format": "plain" }),
             &format!("round-{round}"),
         );
         let drained = drain(&phone, at_home());

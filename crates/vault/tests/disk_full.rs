@@ -140,7 +140,7 @@ fn a_full_disk_at_the_log_insert_rolls_the_whole_commit_back() {
     let parties_before: i64 = scratch
         .vault
         .read(|connection| {
-            Ok(connection.query_row("SELECT COUNT(*) FROM core_party", [], |row| row.get(0))?)
+            Ok(connection.query_row("SELECT COUNT(*) FROM person", [], |row| row.get(0))?)
         })
         .expect("the count reads");
 
@@ -156,16 +156,12 @@ fn a_full_disk_at_the_log_insert_rolls_the_whole_commit_back() {
         let outcome = scratch.vault.commit(|tx| {
             tx.set_producer("test.full");
             for inner in 0..20 {
-                tx.connection().execute(
-                    "INSERT INTO core_party
-                       (party_id, kind, display_name, sort_name, created_at, updated_at)
-                     VALUES (?1, 'person', ?2, ?2, ?3, ?3)",
-                    rusqlite::params![
-                        format!("full-{index}-{inner}"),
-                        // A long value, so the image is worth a page.
-                        "X".repeat(400),
-                        "2026-01-01T00:00:00.000Z"
-                    ],
+                // A long value, so the row is worth a page.
+                common::add_person(
+                    tx,
+                    &format!("full-{index}-{inner}"),
+                    &"X".repeat(400),
+                    "2026-01-01T00:00:00.000Z",
                 )?;
             }
             Ok(())
@@ -190,7 +186,7 @@ fn a_full_disk_at_the_log_insert_rolls_the_whole_commit_back() {
         .vault
         .read(|connection| {
             Ok(
-                connection.query_row("SELECT 0, (SELECT COUNT(*) FROM core_party)", [], |row| {
+                connection.query_row("SELECT 0, (SELECT COUNT(*) FROM person)", [], |row| {
                     Ok((row.get(0)?, row.get(1)?))
                 })?,
             )
@@ -216,11 +212,7 @@ fn a_full_disk_at_the_log_insert_rolls_the_whole_commit_back() {
         .vault
         .commit(|tx| {
             tx.set_producer("test.after");
-            tx.connection().execute(
-                "INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at)
-                 VALUES ('after-full', 'person', 'After', ?1, ?1)",
-                [&"2026-01-01T00:00:00.000Z"],
-            )?;
+            common::add_person(tx, "after-full", "After", "2026-01-01T00:00:00.000Z")?;
             Ok(())
         })
         .expect("the vault still works");

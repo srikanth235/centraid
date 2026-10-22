@@ -115,7 +115,7 @@ fn the_observations_read_exactly_as_specified() {
     assert_eq!(
         text(&mut session, "search", json!({"text": "beach"})),
         "@4 · search \"beach\": 1 photo (showing 1)\n\
-         #13 [1] photo \"Beach day\" · Wed 2026-07-01 10:00 · starred · links: person #11 \"Neha Rao\", album #2 \"Summer\""
+         #13 [1] photo \"Beach day\" · Wed 2026-07-01 10:00 · starred · links: album #2 \"Summer\""
     );
 }
 

@@ -185,11 +185,11 @@ fn a_snapshot_taken_while_another_thread_commits_is_exactly_a_committed_state() 
                     vault
                         .commit(|tx| {
                             for (id, side) in [(&first, "left"), (&second, "right")] {
-                                tx.connection().execute(
-                                    "INSERT INTO core_party
-                                       (party_id, kind, display_name, created_at, updated_at)
-                                     VALUES (?1, 'person', ?2, ?3, ?3)",
-                                    rusqlite::params![id, format!("{side} {round}.{index}"), now],
+                                common::add_person(
+                                    tx,
+                                    id,
+                                    &format!("{side} {round}.{index}"),
+                                    &now,
                                 )?;
                             }
                             Ok(())
@@ -212,7 +212,7 @@ fn a_snapshot_taken_while_another_thread_commits_is_exactly_a_committed_state() 
             snapshot::copy(&vault, &dir.path().join(format!("s{round}"))).expect("copies")
         };
         let described = snapshot::describe(&copied, &keys, VAULT_ID, APP).expect("describes");
-        let parties = described.manifest.census["core_party"];
+        let parties = described.manifest.census["person"];
         assert_eq!(
             parties,
             i64::try_from(1 + 2 * PER_ROUND * round).expect("fits"),
@@ -347,7 +347,7 @@ fn a_restore_refuses_every_file_that_is_not_the_snapshots_and_leaves_nothing() {
     // **Red first for the census and the hash**: a manifest the vault's own
     // keys sealed, saying one more party, or another file.
     let counted = forge(&store, &snapshot, |manifest| {
-        *manifest.census.get_mut("core_party").expect("a census row") += 1;
+        *manifest.census.get_mut("person").expect("a census row") += 1;
     });
     match restore_head(&store, &keys, &out) {
         Err(RestoreError::Census {
@@ -355,7 +355,7 @@ fn a_restore_refuses_every_file_that_is_not_the_snapshots_and_leaves_nothing() {
             expected,
             found,
         }) => {
-            assert_eq!(table, "core_party");
+            assert_eq!(table, "person");
             assert_eq!(expected, found.map(|rows| rows + 1));
         }
         other => panic!("the census did not refuse: {other:?}"),

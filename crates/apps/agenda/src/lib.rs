@@ -1,6 +1,6 @@
 //! # Agenda — four queries, seven actions, and the one recurrence engine
 //!
-//! 7,818 lines of v0 TypeScript, 4 queries, 7 actions, **14 scopes — the
+//! 7,818 lines of v0 TypeScript, 4 queries, 7 actions, **17 scopes — the
 //! smallest scope set of any app** (#1020, wave 4 census §A6). Its doctrine,
 //! from the manifest's own description (`manifest.json`, copied verbatim from
 //! v0's `app.json`):
@@ -59,7 +59,7 @@ pub use local::{Placement, place};
 pub use manifest::{APP_ID, manifest};
 pub use queries::{
     DayContextData, EVENT_WINDOW_CAP, MAX_RANGE_DAYS, PARTY_CAP, PartiesData, RECURRING_ANCHOR_CAP,
-    SEARCH_LIMIT, SearchData, TAG_CAP, UpcomingData, load_day_context, load_parties, load_search,
+    SEARCH_LIMIT, SearchData, UpcomingData, load_day_context, load_parties, load_search,
     load_search_term, load_upcoming,
 };
 pub use window::{Occurrence, occurrences};

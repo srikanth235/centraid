@@ -42,7 +42,6 @@ import dev.centraid.android.screens.PhotoPickerScreen
 import dev.centraid.android.screens.PhotoShelfScreen
 import dev.centraid.android.screens.PhotosCollectionsScreen
 import dev.centraid.android.screens.PhotosGridScreen
-import dev.centraid.android.screens.PhotosMemoriesScreen
 import dev.centraid.android.screens.PhotosSearchScreen
 import dev.centraid.android.screens.PhotosSelectionBar
 import dev.centraid.android.screens.PhotosSheets
@@ -62,8 +61,6 @@ import dev.centraid.shared.apps.photos.PhotoShelfBridge
 import dev.centraid.shared.apps.photos.PhotosCollectionsBridge
 import dev.centraid.shared.apps.photos.PhotosGridMachine
 import dev.centraid.shared.apps.photos.PhotosGridWiring
-import dev.centraid.shared.apps.photos.PhotosMemoriesBridge
-import dev.centraid.shared.apps.photos.PhotosMemoriesMachine
 import dev.centraid.shared.apps.photos.PhotosSearchBridge
 import dev.centraid.shared.apps.photos.PlacesBridge
 import dev.centraid.shared.apps.photos.PlacesMachine
@@ -107,7 +104,6 @@ public class PhotosRoutes(private val cacheDir: java.io.File) : AppRoutes {
     private val photoLightbox = PhotoLightboxBridge()
     private val photoPicker = PhotoPickerBridge()
     private val places = PlacesBridge()
-    private val photosMemories = PhotosMemoriesBridge()
     private val duplicates = DuplicatesBridge()
     private val duplicateReview = DuplicateReviewBridge()
     private val photosCollections = PhotosCollectionsBridge()
@@ -128,7 +124,6 @@ public class PhotosRoutes(private val cacheDir: java.io.File) : AppRoutes {
         is Destination.PhotoEditor,
         is Destination.PhotoPicker,
         is Destination.Places,
-        is Destination.PhotosMemories,
         is Destination.PhotoDuplicates,
         is Destination.PhotoDuplicateReview,
         -> true
@@ -160,7 +155,6 @@ public class PhotosRoutes(private val cacheDir: java.io.File) : AppRoutes {
         photoLightbox.attach(opened)
         photoPicker.attach(opened)
         places.attach(opened)
-        photosMemories.attach(opened)
         duplicates.attach(opened)
         duplicateReview.attach(opened)
         photosCollections.attach(opened)
@@ -348,7 +342,7 @@ public class PhotosRoutes(private val cacheDir: java.io.File) : AppRoutes {
                         } else {
                             RoomSearch(
                                 // THE MACHINE'S FIELD (#1097, R-1097-27): its term and the words its answer
-                                // corrected, so the shared field draws "Showing results for". Whether it is
+                                // corrected, so the shared field draws "Including results for". Whether it is
                                 // open is the grid's destination, stated here; nothing is decided.
                                 field = if (searching) {
                                     (searchState.search ?: SearchField()).copy(open_ = true, term = searchState.query)
@@ -491,8 +485,6 @@ public class PhotosRoutes(private val cacheDir: java.io.File) : AppRoutes {
                                     stack = when (kind) {
                                         CollectionsDoor.Kind.KIND_PLACES ->
                                             stack.push(Destination.Places())
-                                        CollectionsDoor.Kind.KIND_MEMORIES ->
-                                            stack.push(Destination.PhotosMemories)
                                         CollectionsDoor.Kind.KIND_DUPLICATES ->
                                             stack.push(Destination.PhotoDuplicates)
                                         // A door whose kind did not decode is a
@@ -740,30 +732,6 @@ public class PhotosRoutes(private val cacheDir: java.io.File) : AppRoutes {
                         // THE PHOTOGRAPHS WITH NO PLACE, as the machine builds it.
                         onOpenShelf = { shelf ->
                             stack = stack.push(Destination.PhotoShelfRoute(shelf))
-                        },
-                    )
-                }
-            }
-
-            is Destination.PhotosMemories -> {
-                LaunchedEffect(destination) { photosMemories.opened() }
-                val state by photosMemories.host.state.collectAsStateWithLifecycle()
-                PushedPage(
-                    title = PhotosCopy.PHOTOS_MEMORIES,
-                    parentTitle = PhotosCopy.PHOTOS_BAND_COLLECTIONS,
-                    onBack = { stack = stack.pop() },
-                ) {
-                    PhotosMemoriesScreen(
-                        state = state,
-                        onEvent = { event ->
-                            scope.launch { photosMemories.host.send(event) }
-                        },
-                        onOpenMemory = { row ->
-                            stack = stack.push(
-                                Destination.PhotoShelfRoute(
-                                    PhotosMemoriesMachine.shelfFor(row),
-                                ),
-                            )
                         },
                     )
                 }

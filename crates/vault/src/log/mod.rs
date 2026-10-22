@@ -23,15 +23,5 @@
 pub mod guard;
 pub mod identifiers;
 
-pub use guard::{ChangeCensus, CommitResult, CommitTx};
+pub use guard::{ChangeCensus, CommitResult, CommitTx, Pending};
 pub use identifiers::{primary_key_of, quoted, table_columns};
-
-/// The replica plane's constants, from the transcribed registry.
-///
-/// Read through a function rather than copied into Rust constants: a number
-/// here that disagreed with v0's would be a silent protocol change, and the
-/// registry fixture is the one place either side can be held to.
-#[must_use]
-pub fn constants() -> &'static centraid_ontology::registries::ReplicaConstants {
-    &centraid_ontology::registries::v0_registries().replica_constants
-}

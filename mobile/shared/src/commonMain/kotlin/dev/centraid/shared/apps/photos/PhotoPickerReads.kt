@@ -21,19 +21,18 @@ import dev.centraid.shared.sync.ScreenWrites
  *
  * ## Why a trashed photograph is not offered
  *
- * `deleted_at IS NULL` is v0's own filter here (`PhotoPicker.tsx`: "Trashed
+ * A trashed photograph is v0's own filter here (`PhotoPicker.tsx`: "Trashed
  * photographs are not offered: adding would put a deleted reference into a
- * curated album"), and the vault agrees from the other side —
- * `media.delete_asset` DELETEs an asset's `core_collection_entry` rows before
- * it stamps `deleted_at`, so a reference added to a trashed photograph would be
- * swept away again by the next trash. `archived_at IS NULL` rides with it for
- * the library's reason: an archived photograph is one the member put away, and
- * offering it here would put it back in front of them.
+ * curated album"). The vault keeps a trashed photograph's membership (a
+ * restore brings it back into its albums), so the filter is the picker's and
+ * not the vault's. Archived rides with it for the library's reason: an
+ * archived photograph is one the member put away, and offering it here would
+ * put it back in front of them.
  *
  * ## What is NOT in this statement, and why
  *
  * **The album's membership.** The door has no join and the membership is
- * `core_collection_entry`, so it is a SECOND statement — [membersQuery], walked
+ * the album's `contains` edges, so it is a SECOND statement — [membersQuery], walked
  * by `PhotoPickerBridge` beside this page and unioned into
  * `already_in_album_asset_ids` by the reducer. It used to ride the route from
  * the surface that pushed the picker, and no surface held more than one page of
@@ -50,19 +49,19 @@ public object PhotoPickerReads :
     ScreenWrites<PhotoPickerState, PhotoPickerEvent> {
     override val screenId: String = PhotoPickerMachine.SCREEN_ID
 
-    /** `media_asset`, the same table the machine's `rowsChanged` declares. */
-    override val table: String = "media_asset"
+    /** `photo`, the same table the machine's `rowsChanged` declares. */
+    override val table: String = "photo"
 
     /** A mosaic's page, the same as the library grid's. See `PhotosReads.limit`. */
     override val limit: Int = 120
 
     /** `PhotosReads`' five columns. See the file comment. */
     private val SELECT: List<String> = listOf(
-        "asset_id",
-        "captured_at",
-        "tz_offset_min",
-        "kind",
-        "capture_group_id",
+        "id",
+        "taken_at",
+        "offset_min",
+        "form",
+        "burst",
     )
 
     /**
@@ -83,10 +82,10 @@ public object PhotoPickerReads :
         name = "photos.picker.live",
         select = SELECT,
         from = table,
-        where_ = "deleted_at IS NULL AND archived_at IS NULL",
+        where_ = "${PhotoFold.NOT_TRASHED} AND ${PhotoFold.NOT_ARCHIVED}",
         order = PageOrder(
-            sort_column = "captured_at",
-            pk_column = "asset_id",
+            sort_column = "taken_at",
+            pk_column = "id",
             descending = true,
         ),
         with_held_thumbnail = true,
@@ -134,16 +133,19 @@ public object PhotoPickerReads :
         )
 
     /**
-     * WHAT THE ALBUM ALREADY HOLDS — its photographs' entries, by entry id, so
-     * the walk can continue past one page. `target_type` because the table is
-     * polymorphic and a notebook's notes live in it too.
+     * WHAT THE ALBUM ALREADY HOLDS — its `contains` edges, by photograph id, so
+     * the walk can continue past one page. An edge has no id of its own and
+     * `(from_id, to_id)` is unique under one `rel`, so the photograph is the sort
+     * and the album the key. Trashed photographs keep their membership (a restore
+     * brings it back), and the picker offers the live library only, so they are
+     * harmless here.
      */
     public fun membersQuery(collectionId: String): PageQuery = PageQuery(
         name = "photos.picker.members",
-        select = listOf("entry_id", "target_id"),
-        from = "core_collection_entry",
-        where_ = "collection_id = ? AND target_type = ?",
-        bind = listOf(Value(text = collectionId), Value(text = "media.asset")),
-        order = PageOrder(sort_column = "entry_id", pk_column = "entry_id"),
+        select = listOf("to_id", "from_id"),
+        from = "edge",
+        where_ = "from_id = ? AND rel = 'contains'",
+        bind = listOf(Value(text = collectionId)),
+        order = PageOrder(sort_column = "to_id", pk_column = "from_id"),
     )
 }

@@ -2,7 +2,9 @@ package dev.centraid.shared.apps.photos
 
 import centraid.core.v1.Command
 import centraid.core.v1.CommandStatus
+import centraid.core.v1.AppQueryRequest
 import centraid.core.v1.Envelope
+import centraid.core.v1.PhotosDuplicatesRequest
 import centraid.core.v1.Request
 import centraid.core.v1.Row
 import centraid.screen.v1.PhotosCollectionsEvent
@@ -12,7 +14,9 @@ import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.ScreenHost
 import dev.centraid.shared.shell.HomeSession
 import dev.centraid.shared.shell.Shelf
+import dev.centraid.shared.sync.AppQueryOutcome
 import dev.centraid.shared.sync.ScreenRuntime
+import dev.centraid.shared.sync.askCore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
@@ -23,7 +27,7 @@ import okio.ByteString.Companion.encodeUtf8
 
 /**
  * What SwiftUI holds instead of Collections' `StateFlow`, AND the runtime that
- * composes its nine reads (#1029, the photos port).
+ * composes its reads (#1029, the photos port; #1135).
  *
  * `PhotosBridge`'s shape for the boundary half, and both of its rules are
  * load-bearing:
@@ -41,15 +45,14 @@ import okio.ByteString.Companion.encodeUtf8
  *
  * `ScreenRuntime` serves ONE `ScreenReads` — one table, one statement — and
  * this screen is a list of SHELVES, which is to say a list of COUNTS, and the
- * door has no `COUNT(*)` and no join. So it reads nine tables:
- * `core_collection` for the albums, `core_collection_entry` for their sizes,
- * `media_asset` three times for Archive, Trash and Videos, the
- * scheme/concept/tag chain for Favorites, and one table each for the Places,
- * Memories and Duplicates doors.
+ * door has no `COUNT(*)` and no join. So it reads: `entity` for the albums'
+ * names, `container` for their covers, `edge` for their sizes and for the
+ * Favorites, `photo` three times for Archive, Trash and Videos, `entity` for the
+ * Places door, and the `photos.duplicates` app query for the Duplicates door.
  *
  * They cannot be chained through the reducer because `PhotosCollectionsState`'s
  * content is a protobuf `oneof`: `loading` and `data` cannot both be set, so
- * there is nowhere to hold eight answers while the ninth is in flight. Wire
+ * there is nowhere to hold seven answers while the eighth is in flight. Wire
  * refuses the state in its own constructor, which is the three-state read law
  * made structural. So the composition happens here, which is what `HomeRuntime`
  * already does and says it exists for.
@@ -113,19 +116,16 @@ public class PhotosCollectionsBridge {
     }
 
     /**
-     * THE NINE READS, AND THE ONE SCREEN THEY MAKE.
+     * THE READS, AND THE ONE SCREEN THEY MAKE.
      *
-     * Order is load-bearing in exactly one place — the star is a CHAIN, because
-     * a concept cannot be asked for until its scheme has been named — and
-     * nowhere else. A REFUSAL is load-bearing everywhere: the first one that
-     * refuses ends the trip and the screen draws a sentence, because a
-     * half-composed Collections is the fourth state the read law forbids and
-     * "Trash, 0" over a refused read is a worse lie than "Centraid could not
-     * read this".
+     * A REFUSAL is load-bearing everywhere: the first one that refuses ends the
+     * trip and the screen draws a sentence, because a half-composed Collections is
+     * the fourth state the read law forbids and "Trash, 0" over a refused read is
+     * a worse lie than "Centraid could not read this".
      *
      * The counts are re-read on a CONTINUED page too. A page of albums is a
-     * hundred rows and the counts are eight local reads against a file on this
-     * phone; the alternative is caching eight answers on a state that has no
+     * hundred rows and the counts are a handful of local reads against a file on
+     * this phone; the alternative is caching the answers on a state that has no
      * field for one, which is how a screen comes to show yesterday's numbers
      * beside today's rows.
      */
@@ -133,9 +133,9 @@ public class PhotosCollectionsBridge {
         val core = session.shelf.core()
 
         // THE ALBUMS ARE THE ONLY READ THAT WALKS. Every other statement on
-        // this screen sorts on a column that can be NULL, and the door refuses
-        // a CONTINUED page over a nullable sort key outright — so the rest ask
-        // for one page and say whether it filled.
+        // this screen sorts on a column that can be NULL or is a count over a
+        // set, and the door refuses a CONTINUED page over a nullable sort key
+        // outright — so the rest ask for one page and say whether it filled.
         val albums = core.photosPage(
             PhotosCollectionsReads.albumsQuery(),
             limit = PhotosCollectionsReads.ALBUM_LIMIT,
@@ -143,8 +143,8 @@ public class PhotosCollectionsBridge {
         )
         val albumScan = albums.scanOrRefuse() ?: return
         // THE CURSOR THE SCREEN CARRIES. `Scan` deliberately does not hold one:
-        // eight of these nine reads never walk, and a cursor field on the shape
-        // they share would be eight fields that are always null.
+        // the other reads never walk, and a cursor field on the shape they share
+        // would be fields that are always null.
         val albumsNextCursor = (albums as? PhotosPage.Rows)?.nextCursor
 
         val counts = listOf(
@@ -152,69 +152,56 @@ public class PhotosCollectionsBridge {
             PhotosCollectionsReads.archiveQuery(),
             PhotosCollectionsReads.trashQuery(),
             PhotosCollectionsReads.videosQuery(),
+            PhotosCollectionsReads.starredQuery(),
             PhotosCollectionsReads.placesQuery(),
-            PhotosCollectionsReads.memoriesQuery(),
-            PhotosCollectionsReads.duplicatesQuery(),
         ).map { query ->
             core.photosPage(query, limit = PhotosCollectionsReads.COUNT_LIMIT)
                 .scanOrRefuse() ?: return
         }
 
-        // THE STAR IS THREE READS AND THE MIDDLE ONE IS CONDITIONAL.
-        //
-        // `media_asset.favorite` does not exist (#916, ONT-03): the star is the
-        // `starred` concept in the flags scheme, so this walks scheme →
-        // concept → tags. **NO SCHEME OR NO CONCEPT MEANS NOTHING IS STARRED,
-        // AND THAT IS NOT AN ERROR** — `crates/apps/photos` says so in as many
-        // words, because a vault mints both the first time something is
-        // starred. An empty scan is the honest "none"; a refusal is still a
-        // refusal.
-        val scheme = core.photosPage(PhotosCollectionsReads.flagsSchemeQuery(), limit = 1)
-            .scanOrRefuse() ?: return
-        val schemeId = scheme.rows.firstOrNull().firstText()
-        val conceptId = if (schemeId.isEmpty()) {
-            ""
-        } else {
-            val concept = core.photosPage(
-                PhotosCollectionsReads.starredConceptQuery(schemeId),
-                limit = 1,
-            ).scanOrRefuse() ?: return
-            concept.rows.firstOrNull().firstText()
-        }
-        val starred = if (conceptId.isEmpty()) {
-            PhotosCollectionsReads.Scan()
-        } else {
-            core.photosPage(
-                PhotosCollectionsReads.starredTagsQuery(conceptId),
-                limit = PhotosCollectionsReads.COUNT_LIMIT,
-            ).scanOrRefuse() ?: return
+        // THE DUPLICATES DOOR IS THE CORE'S: a cluster is a projection of the
+        // photographs' perceptual hashes, computed where the clustering lives
+        // (`photos.duplicates`), and counted here. A denial or a refusal is the
+        // screen's sentence, like any read above.
+        val duplicates = when (val answer = askCore(core, listOf(AppQueryRequest(photos_duplicates = PhotosDuplicatesRequest())))) {
+            is AppQueryOutcome.Answered -> answer.answers.firstNotNullOfOrNull { it.photos_duplicates }?.clusters?.size ?: 0
+            is AppQueryOutcome.Denied -> 0
+            is AppQueryOutcome.Refused -> {
+                host.send(PhotosCollectionsReads.refused(answer.failure))
+                return
+            }
         }
 
         // THE COVERS ARE AN AMENDMENT, NOT A READ THE SCREEN WAITS ON. A
         // refusal here costs the cards their pictures and nothing else, so it is
         // not sent as the screen's sentence the way the reads above are.
-        val (coverContents, coverAssets) =
-            PhotosCollectionsReads.albumCoverKeys(albumScan, counts[ENTRIES])
-        val covers = PhotosCollectionsReads.albumCoversQuery(coverContents, coverAssets)
-            ?.let { query ->
-                (core.photosPage(query, limit = coverContents.size + coverAssets.size) as? PhotosPage.Rows)
-                    ?.let { PhotosCollectionsReads.Scan(it.rows) }
-            }
-            ?: PhotosCollectionsReads.Scan()
+        val coverBlob = PhotosCollectionsReads.albumCoverBlobsQuery(albumScan.rows.map { it.text(0) })
+            ?.let { query -> (core.photosPage(query, limit = PhotosCollectionsReads.ALBUM_LIMIT) as? PhotosPage.Rows)?.rows }
+            .orEmpty()
+            .filter { it.text(1).isNotEmpty() }
+            .associate { it.text(0) to it.text(1) }
+        val first = AlbumChoice.firstMembers(counts[ENTRIES].rows)
+        val covers = PhotosCollectionsReads.albumCoversQuery(
+            coverBlobs = coverBlob.values.toList(),
+            firstMembers = albumScan.rows.map { it.text(0) }.filter { it !in coverBlob }.mapNotNull { first[it] },
+        )?.let { query ->
+            (core.photosPage(query, limit = PhotosCollectionsReads.COUNT_LIMIT) as? PhotosPage.Rows)
+                ?.let { PhotosCollectionsReads.Scan(it.rows) }
+        } ?: PhotosCollectionsReads.Scan()
 
         host.send(
             PhotosCollectionsReads.arrived(
                 PhotosCollectionsReads.fold(
                     albums = albumScan,
                     albumsNextCursor = albumsNextCursor,
+                    coverBlob = coverBlob,
                     entries = counts[ENTRIES],
                     archive = counts[ARCHIVE],
                     trash = counts[TRASH],
                     videos = counts[VIDEOS],
-                    starred = starred,
+                    starred = counts[STARRED],
                     places = counts[PLACES],
-                    memories = counts[MEMORIES],
-                    duplicates = counts[DUPLICATES],
+                    duplicateClusters = duplicates,
                     covers = covers,
                 ),
             ),
@@ -243,8 +230,8 @@ public class PhotosCollectionsBridge {
         )
     }
 
-    /** The first TEXT column of a one-row lookup, or empty when there was none. */
-    private fun Row?.firstText(): String = this?.values?.firstOrNull()?.text ?: ""
+    /** Positional, as the door states. */
+    private fun Row.text(index: Int): String = values.getOrNull(index)?.text ?: ""
 
     /**
      * The album verbs, down the same door.
@@ -359,8 +346,7 @@ public class PhotosCollectionsBridge {
         private const val ARCHIVE: Int = 1
         private const val TRASH: Int = 2
         private const val VIDEOS: Int = 3
-        private const val PLACES: Int = 4
-        private const val MEMORIES: Int = 5
-        private const val DUPLICATES: Int = 6
+        private const val STARRED: Int = 4
+        private const val PLACES: Int = 5
     }
 }

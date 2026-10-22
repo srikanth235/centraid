@@ -23,7 +23,7 @@ import okio.ByteString.Companion.toByteString
  *
  * `MediaLibrary.Asset` carried a `sha256` documented as "THE identity" and it
  * was not one: the identity of a member's bytes is
- * `core_content_item.content_hash`, which is BLAKE3 and is UNIQUE — and
+ * `blob.hash`, which is BLAKE3 and is UNIQUE — and
  * **neither `CryptoKit` nor `MessageDigest` nor `crypto.subtle` offers
  * BLAKE3**. So every shell that declared a digest was declaring a different
  * function's value under the vault's name. The field is deleted; this is what
@@ -51,7 +51,7 @@ public object Staging {
     public data class Staged(
         /**
          * `content_digest` over exactly what arrived — the value a
-         * `media.add_asset` or `core.add_document` then names.
+         * `photo.add` or `document.add` then names.
          */
         public val contentHash: String,
         public val byteSize: Long,

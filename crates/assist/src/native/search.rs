@@ -7,7 +7,7 @@
 //! `search` ranks by retrieval, not interpretation: the vault's FTS door
 //! (`crates/search`, prefix phrases over each domain's label and indexed
 //! text) plus a whole-word / prefix / one-edit match over every model row's
-//! name, so kinds the FTS door does not index (groups, albums, locker items)
+//! name, so kinds the FTS door does not index (groups, albums)
 //! are found the same way. The pre-grounding block reads the name index
 //! alone: a word or the start of a word of a row's name or a person's nickname.
 
@@ -22,11 +22,12 @@ use crate::native::world::{Key, Row, Val};
 
 /// The FTS domains and the model kind each answers for.
 const FTS: &[(&str, Kind)] = &[
-    ("core.party", Kind::Person),
-    ("knowledge.note", Kind::Note),
-    ("core.event", Kind::Event),
-    ("schedule.task", Kind::Task),
-    ("core.document", Kind::Document),
+    ("person", Kind::Person),
+    ("note", Kind::Note),
+    ("event", Kind::Event),
+    ("task", Kind::Task),
+    ("document", Kind::Document),
+    ("locker_item", Kind::LockerItem),
 ];
 
 /// Words a message token must not be matched on.

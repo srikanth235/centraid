@@ -19,10 +19,6 @@ path = "src/main.rs"
 # (see src/rules.rs — tree-sitter arrives when a rule needs a parse tree).
 [dependencies]
 anyhow = { workspace = true }
-# `photos-sample` regenerates the fixtures that name the Photos roll by its one
-# hash (#1025 S4), so this tool computes the same digest the vault does.
-base64 = { workspace = true }
-blake3 = { workspace = true }
 clap = { workspace = true }
 serde_json = { workspace = true }
 # THE ONLY sha2 LEFT UNDER `crates/` (#1025 S4, D-1025-S4-5). `artifact-key`

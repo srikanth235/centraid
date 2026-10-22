@@ -8,8 +8,10 @@ import centraid.screen.v1.PlaceRow
 import centraid.screen.v1.PlacesData
 import centraid.screen.v1.PlacesEvent
 import centraid.screen.v1.PlacesState
+import dev.centraid.shared.apps.photos.PhotoFold
 import dev.centraid.shared.apps.photos.PlacesAssetReads
 import dev.centraid.shared.apps.photos.PlacesMachine
+import dev.centraid.shared.apps.photos.PlacesNameReads
 import dev.centraid.shared.apps.photos.PlacesReads
 import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.screen.ScreenEffect
@@ -31,24 +33,26 @@ import io.kotest.matchers.shouldBe
  */
 class PlacesSpec : StringSpec({
 
-    /** A `core_place` row as `PlacesReads.query` projects it. */
+    /** A `place` row as `PlacesReads.query` projects it: its pin and its zone, never its name. */
     fun placeRow(
         placeId: String,
-        name: String,
         latitude: Double? = null,
         longitude: Double? = null,
         timeZone: String = "",
     ) = Row(
         values = listOf(
             Value(text = placeId),
-            Value(text = name),
             latitude?.let { Value(real = it) } ?: Value(null_ = NullValue()),
             longitude?.let { Value(real = it) } ?: Value(null_ = NullValue()),
             Value(text = timeZone),
         ),
     )
 
-    /** A `media_asset` row as `PlacesAssetReads.query` projects it, thumbnail and all. */
+    /** An `entity` row as `PlacesNameReads` projects it: a place's id and its title. */
+    fun nameRow(placeId: String, title: String) =
+        Row(values = listOf(Value(text = placeId), Value(text = title)))
+
+    /** A `photo` row as `PlacesAssetReads.query` projects it, thumbnail and all. */
     fun assetRow(assetId: String, capturedAt: String, placeId: String, thumbnail: String = "") =
         Row(
             values = listOf(
@@ -59,10 +63,10 @@ class PlacesSpec : StringSpec({
             ),
         )
 
-    "the first open reads BOTH passes, because a card is a join the door will not do" {
-        // `core_place` knows a place's name and its pin; only `media_asset`
+    "the first open reads ALL THREE passes, because a card is a join the door will not do" {
+        // `place` knows a place's pin, `entity` its name, and only `photo`
         // knows how many photographs are at it. There is no join clause and no
-        // COUNT(*) on this door, so one screen asks two questions.
+        // COUNT(*) on this door, so one screen asks three questions.
         val opened = PlacesMachine.reduce(
             PlacesMachine.initial(),
             PlacesEvent(opened = PlacesEvent.Opened()),
@@ -70,6 +74,7 @@ class PlacesSpec : StringSpec({
         opened.effects shouldBe listOf(
             ScreenEffect.ReadPage(PlacesMachine.SCREEN_ID, afterCursor = null),
             ScreenEffect.ReadPage(PlacesMachine.ASSETS_SCREEN_ID, afterCursor = null),
+            ScreenEffect.ReadPage(PlacesMachine.NAMES_SCREEN_ID, afterCursor = null),
         )
         opened.state.loading.shouldNotBeNull().first_load.shouldBeTrue()
     }
@@ -150,23 +155,29 @@ class PlacesSpec : StringSpec({
         )
         moved.effects.shouldBeEmpty()
 
-        // A LIVE FEED DOES RE-READ, and it reads BOTH passes: a place's count
+        // A LIVE FEED DOES RE-READ, and it reads ALL passes: a place's count
         // is an aggregate and no subset of keys decides one.
         val live = PlacesMachine.reduce(
             PlacesMachine.initial(),
             PlacesEvent(rows_changed = PlacesEvent.RowsChanged(place_ids = listOf("p1"))),
         )
-        live.effects.size shouldBe 2
+        live.effects.size shouldBe 3
     }
 
     "a change on a table this screen does not read answers null" {
-        PlacesMachine.rowsChanged("core_place", listOf("p1")).shouldNotBeNull()
-        PlacesMachine.rowsChanged("media_asset", listOf("a1")).shouldNotBeNull()
-        PlacesMachine.rowsChanged("knowledge_note", listOf("n1")).shouldBeNull()
-        // AND THE ASSET EVENT CARRIES NO IDS. `RowsChanged.place_ids` is a list
-        // of PLACE ids and a `media_asset` change names assets, so the keys are
-        // dropped rather than mislabelled.
-        PlacesMachine.rowsChanged("media_asset", listOf("a1"))
+        PlacesMachine.rowsChanged("place", listOf("p1")).shouldNotBeNull()
+        PlacesMachine.rowsChanged("photo", listOf("a1")).shouldNotBeNull()
+        // A PLACE'S NAME IS ITS ENTITY'S, a photograph's trash is too, and a
+        // photograph put away is an edge.
+        PlacesMachine.rowsChanged("entity", listOf("p1")).shouldNotBeNull()
+        PlacesMachine.rowsChanged("edge", emptyList()).shouldNotBeNull()
+        PlacesMachine.rowsChanged("note", listOf("n1")).shouldBeNull()
+        PlacesMachine.rowsChanged("core_place", listOf("p1")).shouldBeNull()
+        PlacesMachine.rowsChanged("media_asset", listOf("a1")).shouldBeNull()
+        // AND THE PHOTOGRAPH EVENT CARRIES NO IDS. `RowsChanged.place_ids` is a
+        // list of PLACE ids and a `photo` change names photographs, so the keys
+        // are dropped rather than mislabelled.
+        PlacesMachine.rowsChanged("photo", listOf("a1"))
             .shouldNotBeNull().rows_changed.shouldNotBeNull().place_ids.shouldBeEmpty()
     }
 
@@ -178,6 +189,7 @@ class PlacesSpec : StringSpec({
         listOf(
             PlacesReads.table to PlacesReads.query(PlacesMachine.initial(), null),
             PlacesAssetReads.table to PlacesAssetReads.query(PlacesMachine.initial(), null),
+            PlacesNameReads.table to PlacesNameReads.query(PlacesMachine.initial(), null),
         ).forEach { (table, query) ->
             withClue("$table vs ${query.from}") {
                 query.from shouldBe table
@@ -193,6 +205,7 @@ class PlacesSpec : StringSpec({
         listOf(
             PlacesReads.query(PlacesMachine.initial(), null),
             PlacesAssetReads.query(PlacesMachine.initial(), null),
+            PlacesNameReads.query(PlacesMachine.initial(), null),
         ).forEach { query ->
             val order = query.order.shouldNotBeNull()
             withClue(query.select.toString()) {
@@ -202,25 +215,27 @@ class PlacesSpec : StringSpec({
         }
     }
 
-    "the places pass follows the desktop's own statement" {
-        // `photos.shared.places` in `crates/apps/photos/src/places.rs`:
-        // `core_place`, every row, ordered by `place_id`. A shelf in a
-        // different order from the desktop's over the same rows is two shelves.
+    "the places pass reads the live places, in id order" {
+        // `place`, every row whose entity is not in the trash, ordered by id.
+        // The name is the entity's and arrives on the names pass.
         val query = PlacesReads.query(PlacesMachine.initial(), null)
-        query.from shouldBe "core_place"
-        query.order.shouldNotBeNull().sort_column shouldBe "place_id"
+        query.from shouldBe "place"
+        query.order.shouldNotBeNull().sort_column shouldBe "id"
         query.order.shouldNotBeNull().descending.shouldBeFalse()
-        query.where_.shouldBeNull()
+        query.where_.shouldNotBeNull() shouldBe "id IN (SELECT id FROM entity WHERE deleted_at IS NULL)"
+        val names = PlacesNameReads.query(PlacesMachine.initial(), null)
+        names.from shouldBe "entity"
+        names.where_.shouldNotBeNull() shouldBe "kind = 'place' AND deleted_at IS NULL"
     }
 
     "the counting pass is the library's own predicate and order" {
-        // `photos.library.live`: live and unarchived, newest first. Following
-        // it is what makes the cover the NEWEST photograph at a place, as
-        // `placeCards` picked, and keeps the trash out.
+        // The library's live predicate, newest first. Following it is what
+        // makes the cover the NEWEST photograph at a place and keeps the trash out.
         val query = PlacesAssetReads.query(PlacesMachine.initial(), null)
-        query.from shouldBe "media_asset"
-        query.where_ shouldBe "deleted_at IS NULL AND archived_at IS NULL"
-        query.order.shouldNotBeNull().sort_column shouldBe "captured_at"
+        query.from shouldBe "photo"
+        query.where_ shouldBe PhotoFold.LIVE
+        query.order.shouldNotBeNull().sort_column shouldBe "taken_at"
+        query.order.shouldNotBeNull().pk_column shouldBe "id"
         query.order.shouldNotBeNull().descending.shouldBeTrue()
         query.with_held_thumbnail.shouldBeTrue()
     }
@@ -231,9 +246,9 @@ class PlacesSpec : StringSpec({
         // draw, and drawing it at zero would put a member's photographs there.
         val rows = PlacesReads.arrived(
             listOf(
-                placeRow("p-gulf", "The buoy", latitude = 0.0, longitude = 0.0),
-                placeRow("p-half", "Half a pin", latitude = 12.5, longitude = null),
-                placeRow("p-none", "No pin at all"),
+                placeRow("p-gulf", latitude = 0.0, longitude = 0.0),
+                placeRow("p-half", latitude = 12.5, longitude = null),
+                placeRow("p-none"),
             ),
             nextCursor = null,
         ).data_.shouldNotBeNull().data_.shouldNotBeNull().places
@@ -256,11 +271,17 @@ class PlacesSpec : StringSpec({
         // NOT COORDINATE-SHAPED, so it is a name: no decimal point on either
         // side, and four whole digits is outside the shape.
         PlacesReads.readableName("Pier 39, San Francisco") shouldBe "Pier 39, San Francisco"
-        val unnamed = PlacesReads.arrived(
-            listOf(placeRow("p1", "39.0682, -120.1268", 39.0682, -120.1268)),
+        val pins = PlacesReads.arrived(
+            listOf(placeRow("p1", 39.0682, -120.1268)),
             nextCursor = null,
-        ).data_.shouldNotBeNull().data_.shouldNotBeNull().places.single()
-        unnamed.name shouldBe PlacesMachine.NO_NAME
+        ).data_.shouldNotBeNull().data_.shouldNotBeNull()
+        val names = PlacesNameReads.arrived(listOf(nameRow("p1", "39.0682, -120.1268")), nextCursor = null)
+            .data_.shouldNotBeNull().data_.shouldNotBeNull()
+        // THE NAMES PASS SAYS NOTHING for a place named by its coordinates, and the
+        // join puts the sentence in, whichever pass landed first.
+        listOf(PlacesMachine.merge(pins, names), PlacesMachine.merge(names, pins)).forEach {
+            it.shouldNotBeNull().places.single().name shouldBe PlacesMachine.NO_NAME
+        }
     }
 
     "the counting pass counts by place, picks the newest cover, and counts the unplaced" {
@@ -307,11 +328,13 @@ class PlacesSpec : StringSpec({
         data.places.single().asset_count_capped.shouldBeFalse()
     }
 
-    "the two passes join, and the join does not care which landed first" {
+    "the three passes join, and the join does not care which landed first" {
         val places = PlacesReads.arrived(
-            listOf(placeRow("p1", "The cabin", 37.79, -122.39, "America/Los_Angeles")),
+            listOf(placeRow("p1", 37.79, -122.39, "America/Los_Angeles")),
             nextCursor = "p1|p1",
         ).data_.shouldNotBeNull().data_.shouldNotBeNull()
+        val names = PlacesNameReads.arrived(listOf(nameRow("p1", "The cabin")), nextCursor = null)
+            .data_.shouldNotBeNull().data_.shouldNotBeNull()
         val counts = PlacesAssetReads.arrived(
             listOf(
                 assetRow("a1", "2026-02-03T10:00:00Z", "p1", "/store/cover.data"),
@@ -320,9 +343,14 @@ class PlacesSpec : StringSpec({
             nextCursor = null,
         ).data_.shouldNotBeNull().data_.shouldNotBeNull()
 
+        fun fold(vararg order: PlacesData): PlacesData? =
+            order.fold<PlacesData, PlacesData?>(null) { held, next -> PlacesMachine.merge(held, next) }
+
         listOf(
-            PlacesMachine.merge(places, counts),
-            PlacesMachine.merge(counts, places),
+            fold(places, names, counts),
+            fold(counts, names, places),
+            fold(names, places, counts),
+            fold(counts, places, names),
         ).forEach { merged ->
             val joined = merged.shouldNotBeNull()
             val row = joined.places.single()
@@ -332,13 +360,12 @@ class PlacesSpec : StringSpec({
                 row.cover_thumbnail_path shouldBe "/store/cover.data"
                 row.has_coordinate.shouldBeTrue()
                 row.time_zone shouldBe "America/Los_Angeles"
-                // THE FLOOR TRAVELS WITH THE NUMBER, whichever order the two
-                // answers landed in. Losing it would leave a count that
-                // stopped at one page reading as a total.
+                // THE FLOOR TRAVELS WITH THE NUMBER, whichever order the
+                // answers landed in.
                 row.asset_count_capped.shouldBeFalse()
             }
-            // THE PLACE WALK OWNS `next_cursor`. The counting pass reports
-            // none, and `?:` is what stops it erasing the walk's own.
+            // THE PLACE WALK OWNS `next_cursor`. The other passes report none,
+            // and `?:` is what stops them erasing the walk's own.
             joined.next_cursor shouldBe "p1|p1"
             joined.unplaced_count shouldBe 1
         }
@@ -365,14 +392,13 @@ class PlacesSpec : StringSpec({
             ),
         )
         val write = step.effects.single() as ScreenEffect.SubmitWrite
-        write.command shouldBe "media.name_place"
-        // `kind` IS NOT SENT: it is optional on the command and it is how the
-        // ladder learns which place is Home, so writing one from a sheet that
-        // never asked would answer a question the member was not shown.
-        write.inputJson shouldBe "{\"place_id\":\"p1\",\"name\":\"The cabin\"}"
+        // NAMING A PLACE IS THE ENTITY'S OWN RETITLE: a place's name is its
+        // title, and there is no home rung to learn from a sheet that never asked.
+        write.command shouldBe "entity.retitle"
+        write.inputJson shouldBe "{\"id\":\"p1\",\"title\":\"The cabin\"}"
         // STABLE FOR THE SAME INTENT: the same rename is the same key. (The
         // core remembers no key; this is correlation, not a ledger.)
-        write.invokeKey shouldBe "media.name_place:p1:The cabin"
+        write.invokeKey shouldBe "entity.retitle:p1:The cabin"
         PlacesMachine.reduce(
             PlacesMachine.initial(),
             PlacesEvent(
@@ -382,7 +408,7 @@ class PlacesSpec : StringSpec({
     }
 
     "a blank name is refused here rather than sent to be refused there" {
-        // `media.name_place` refuses a blank name, so a round trip whose only
+        // `entity.retitle` refuses a blank title, so a round trip whose only
         // possible outcome is a denial is not made.
         PlacesMachine.reduce(
             PlacesMachine.initial(),
@@ -417,7 +443,7 @@ class PlacesSpec : StringSpec({
             PlacesMachine.initial(),
             PlacesEvent(write_settled = PlacesEvent.WriteSettled(committed = true)),
         )
-        committed.effects.size shouldBe 2
+        committed.effects.size shouldBe 3
         val denied = PlacesMachine.reduce(
             PlacesMachine.initial(),
             PlacesEvent(

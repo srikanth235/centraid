@@ -21,7 +21,7 @@ import dev.centraid.shared.platform.DeviceClock
  * It rides the app-query arm, on the two reads the Notes app itself draws its
  * places from: `notes.library` (the newest notes, and how many there are) and
  * `notes.notebooks` (the spine, with each notebook's count). A page read over
- * `knowledge_note` could say neither a notebook nor how many notes it holds,
+ * the `note` table could say neither a notebook nor how many notes it holds,
  * and the tile it drew — one note's title under a count of every note — read
  * as a note, not as Notes.
  *
@@ -41,9 +41,10 @@ public object HomeNotesTile {
     /**
      * THE TABLES WHOSE CHANGES MOVE THIS TILE, which `HomeReads.TABLES`
      * carries: the notes, the notebooks, and the filing between them — the
-     * Notebooks place's own set.
+     * Notebooks place's own set (`NotesTables.SHELF`, spelled out here because
+     * the shell imports nothing of `apps.notes`).
      */
-    public val TABLES: Set<String> = setOf("knowledge_note", "core_collection", "core_collection_entry")
+    public val TABLES: Set<String> = setOf("entity", "note", "edge", "container")
 
     /** The two queries, in this order: the library, then the spine. */
     public fun requests(now: DeviceClock.Reading): List<AppQueryRequest> = listOf(

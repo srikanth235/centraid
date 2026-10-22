@@ -34,7 +34,7 @@ mod tests {
     use super::*;
     use centraid_apps_kit::manifest::{CANONICAL_DESIGNED_STATES, Confirmation, ScopeVerbs};
 
-    use crate::commands::{ACTIONS, Confirm, action_row};
+    use crate::commands::{ACTIONS, Confirm, act_scope_tables, action_row};
     use crate::queries::{ROSTER_MAX, ROSTER_MIN};
 
     #[test]
@@ -42,29 +42,19 @@ mod tests {
         let manifest = manifest();
         assert_eq!(manifest.id, APP_ID);
         assert_eq!(manifest.manifest_version, 1);
-        assert_eq!(manifest.version, "0.1.2");
+        assert_eq!(manifest.version, "0.2.0");
     }
 
     #[test]
-    fn it_declares_seven_queries_and_twenty_eight_actions() {
+    fn it_declares_five_queries_and_twenty_five_actions() {
         let manifest = manifest();
-        assert_eq!(manifest.queries.len(), 7);
-        assert_eq!(manifest.actions.len(), 28);
-        // The seven are the handler FILES the dispatcher resolves —
-        // `queries/<name>.ts` — and `_shared.ts` and `person-contacts.ts` are
-        // helpers beside them rather than queries (`person-contacts.ts:17`).
-        for name in [
-            "people",
-            "person",
-            "dashboard",
-            "journal",
-            "search",
-            "trash",
-            "history",
-        ] {
+        assert_eq!(manifest.queries.len(), 5);
+        assert_eq!(manifest.actions.len(), 25);
+        for name in ["people", "person", "dashboard", "search", "trash"] {
             assert!(manifest.query(name).is_some(), "no query {name}");
         }
-        assert!(manifest.query("person-contacts").is_none());
+        // The Journal is Notes': People writes an entry and Notes shows it.
+        assert!(manifest.query("journal").is_none());
     }
 
     #[test]
@@ -77,15 +67,7 @@ mod tests {
                 action.name
             );
         }
-        for row in ACTIONS {
-            assert!(
-                manifest.action(row.action).is_some(),
-                "the command table names {} and the manifest does not",
-                row.action
-            );
-        }
-        // ORDER, not just membership: the table is the manifest's own order, so
-        // a reader comparing the two files reads them top to bottom.
+        // ORDER, not just membership: the table is the manifest's own order.
         let declared: Vec<&str> = manifest
             .actions
             .iter()
@@ -95,8 +77,8 @@ mod tests {
         assert_eq!(declared, ported);
     }
 
-    /// v0's `confirmation` and the port's [`Confirm`] must agree, because the
-    /// conversation surface reads one of them and the app reads the other.
+    /// The manifest's `confirmation` and the table's [`Confirm`] must agree,
+    /// because the conversation surface reads one of them and the app the other.
     #[test]
     fn the_confirmation_of_every_action_agrees_with_the_manifest() {
         for row in ACTIONS {
@@ -116,98 +98,17 @@ mod tests {
         }
     }
 
-    /// SIXTEEN SCOPES: fourteen reads, one narrow `act` (`core.merge_party`) and
-    /// **one `read+act` over the whole `people` schema**. The four `share.*`
-    /// reads went with the tables they named (#1029: v1 has no sharing plane),
-    /// `tally.obligation` with Tally (#1099) and three `social.*` act scopes
-    /// with the commands they never named (P3 in `docs/release/v1-handoffs.md`).
-    ///
-    /// The whole-schema form is the widest there is and only agenda and People
-    /// use it. It is asserted here rather than narrowed, because expanding it
-    /// into sixteen explicit scopes CHANGES THE GRANT'S MEANING — the
-    /// member consented to "People, over the People schema", and sixteen
-    /// rows is a different sentence even where the reach is the same.
+    /// THIRTY-THREE SCOPES: ten reads of the vault's own tables and one `act`
+    /// per command the actions invoke. The `act` half is compared against the
+    /// action table rather than transcribed: an action with no scope is an
+    /// action the grant does not cover, and a scope with no action is reach
+    /// nothing uses.
     #[test]
-    fn it_declares_sixteen_scopes_with_one_whole_schema_grant() {
+    fn it_declares_ten_reads_and_one_act_scope_per_command() {
         let manifest = manifest();
         let vault = manifest.vault.as_ref().expect("People declares its reach");
-        assert_eq!(vault.scopes.len(), 16);
-
-        let mut schemas: Vec<&str> = vault
-            .scopes
-            .iter()
-            .map(|scope| scope.schema.as_str())
-            .collect();
-        schemas.sort_unstable();
-        schemas.dedup();
-        assert_eq!(
-            schemas,
-            ["core", "knowledge", "people", "schedule", "social"]
-        );
-
-        let whole_schema: Vec<&str> = vault
-            .scopes
-            .iter()
-            .filter(|scope| scope.verbs == ScopeVerbs::ReadAct)
-            .map(|scope| scope.schema.as_str())
-            .collect();
-        assert_eq!(whole_schema, ["people"]);
-        assert!(
-            vault
-                .scopes
-                .iter()
-                .find(|scope| scope.verbs == ScopeVerbs::ReadAct)
-                .is_some_and(|scope| scope.table.is_none()),
-            "`read+act` over the whole schema is the widest form and is what People has"
-        );
-
-        assert_eq!(
-            vault
-                .scopes
-                .iter()
-                .filter(|scope| scope.verbs == ScopeVerbs::Read)
-                .count(),
-            14
-        );
-        assert_eq!(
-            vault
-                .scopes
-                .iter()
-                .filter(|scope| scope.verbs == ScopeVerbs::Act)
-                .count(),
-            1
-        );
-        // NOTHING REVEALED: `reveal` is Locker's alone.
-        assert!(
-            vault
-                .scopes
-                .iter()
-                .all(|scope| scope.verbs != ScopeVerbs::Reveal)
-        );
-        assert!(
-            manifest.ext_tables.is_empty(),
-            "People is a projection over the vault's own tables: no data of its own"
-        );
-    }
-
-    /// THE ACT SCOPES AND THE ACTIONS AGREE, both ways (finding PE-F1, closed by
-    /// P3). Three narrow `act` scopes once named `social.save_contact_channel`,
-    /// `social.delete_contact_channel` and `social.undo_contact_channel`. No
-    /// such commands exist — the three are `people.*`, authorised by the
-    /// whole-schema grant — so the rows granted nothing and told a consent
-    /// screen that the app reaches into `social` by three commands it never
-    /// calls. A narrow `act` scope is a command's name, so:
-    ///
-    /// 1. every narrow `act` scope names a command some action invokes, and
-    /// 2. every action's command is covered by a scope — the whole-schema
-    ///    `read+act` on its schema, or a narrow `act` naming it.
-    #[test]
-    fn every_act_scope_names_a_command_an_action_invokes_and_every_command_is_covered() {
-        let vault = manifest()
-            .vault
-            .as_ref()
-            .expect("People declares its reach");
-        let narrow: Vec<(&str, &str)> = vault
+        assert_eq!(vault.scopes.len(), 33);
+        let mut declared: Vec<(&str, &str)> = vault
             .scopes
             .iter()
             .filter(|scope| scope.verbs == ScopeVerbs::Act)
@@ -217,87 +118,34 @@ mod tests {
                     scope
                         .table
                         .as_deref()
-                        .expect("a narrow act scope names a command"),
+                        .expect("an act scope names a command"),
                 )
             })
             .collect();
-        for (schema, command) in &narrow {
-            let qualified = format!("{schema}.{command}");
-            assert!(
-                ACTIONS.iter().any(|row| row.command == qualified),
-                "the `act` scope {qualified} names a command no action invokes"
-            );
-        }
-        assert_eq!(
-            narrow,
-            [("core", "merge_party")],
-            "the one command People invokes outside its own schema"
-        );
-        let whole_schemas: Vec<&str> = vault
+        declared.sort_unstable();
+        assert_eq!(declared, act_scope_tables());
+        let reads: Vec<&str> = vault
             .scopes
             .iter()
-            .filter(|scope| scope.verbs == ScopeVerbs::ReadAct && scope.table.is_none())
-            .map(|scope| scope.schema.as_str())
+            .filter(|scope| scope.verbs == ScopeVerbs::Read)
+            .map(|scope| {
+                assert_eq!(scope.schema, "vault");
+                scope.table.as_deref().expect("a read names a table")
+            })
             .collect();
-        for row in ACTIONS {
-            let (schema, command) = row
-                .command
-                .split_once('.')
-                .expect("a command is `schema.name`");
-            assert!(
-                whole_schemas.contains(&schema) || narrow.contains(&(schema, command)),
-                "{} invokes {}, and no scope grants it",
-                row.action,
-                row.command
-            );
-        }
-    }
-
-    /// The `core.entity_revision` scope is the only row-filtered, field-masked
-    /// read in the manifest, and `history` is what it exists for.
-    #[test]
-    fn the_revision_scope_is_row_filtered_to_this_apps_own_entity() {
-        let vault = manifest()
-            .vault
-            .as_ref()
-            .expect("People declares its reach");
-        let revision = vault
-            .scopes
-            .iter()
-            .find(|scope| scope.table.as_deref() == Some("entity_revision"))
-            .expect("the revision scope");
-        assert_eq!(revision.schema, "core");
-        assert_eq!(revision.row_filter.len(), 1);
-        assert_eq!(revision.row_filter[0].column, "entity_type");
-        assert_eq!(revision.row_filter[0].op, "eq");
-        assert_eq!(
-            revision.row_filter[0].value,
-            Some(serde_json::json!("people.person"))
+        assert_eq!(reads.len(), 10);
+        // NOTHING WIDER and nothing revealed: no whole-schema grant, and
+        // `reveal` is Locker's alone.
+        assert!(
+            vault
+                .scopes
+                .iter()
+                .all(|scope| matches!(scope.verbs, ScopeVerbs::Read | ScopeVerbs::Act))
         );
-        // The mask is what stops `snapshot_json` of somebody else's entity
-        // riding a People payload; `snapshot_json` of THIS one is in it because
-        // the undo rail renders it.
-        let mask = revision
-            .field_mask
-            .as_ref()
-            .expect("the revision scope is masked");
-        assert!(mask.contains(&"snapshot_json".to_owned()));
-        assert!(!mask.contains(&"actor_party_id".to_owned()));
-    }
-
-    /// People is record-only, enabled on every seat, and has no origin act.
-    #[test]
-    fn it_is_record_only_with_no_origin_act() {
-        let raw: serde_json::Value =
-            serde_json::from_str(MANIFEST_JSON).expect("the manifest is JSON");
-        assert_eq!(raw["seats"]["byteBearing"], serde_json::json!(false));
-        assert_eq!(raw["seats"]["disabledOn"], serde_json::json!([]));
-        assert_eq!(raw["seats"]["originActs"], serde_json::json!([]));
-        assert_eq!(
-            raw["seats"]["northStar"],
-            serde_json::json!("google-contacts")
+        assert!(
+            manifest.ext_tables.is_empty(),
+            "People is a projection over the vault's own tables: no data of its own"
         );
-        assert_eq!(raw["actionSideEffect"], serde_json::json!("vault-write"));
     }
 
     #[test]
@@ -313,81 +161,55 @@ mod tests {
         );
     }
 
-    /// THE WIDEST WINDOW IN THE TREE (D-1020-PE4): `people.limit` is 20–10,000,
-    /// an order of magnitude above every other app's 2,000, and nothing in the
-    /// manifest explains it.
-    ///
-    /// Read off the manifest rather than restated, because the clamp and the
-    /// schema disagreeing is a refusal a member cannot act on — and here they
-    /// DO disagree in v0: the handler clamps to 9,999, so a caller passing the
-    /// schema's own maximum gets a window one short of it and is told
-    /// `window: 9999`. See [`crate::roster`].
+    /// THE WIDEST WINDOW IN THE TREE: `people.limit` is 20-10,000, five times
+    /// every other app's. Read off the manifest rather than restated, because a
+    /// clamp and a schema that disagree are a refusal a member cannot act on.
     #[test]
     fn the_rosters_window_is_the_one_the_manifest_declares() {
         let people = manifest().query("people").expect("the roster query");
         let limit = &people.input["properties"]["limit"];
-        assert_eq!(limit["minimum"], serde_json::json!(20));
-        assert_eq!(limit["maximum"], serde_json::json!(10_000));
+        assert_eq!(limit["minimum"], serde_json::json!(ROSTER_MIN));
+        assert_eq!(limit["maximum"], serde_json::json!(ROSTER_MAX));
+    }
+
+    /// An action's input carries every field its command takes: the manifest's
+    /// schema is `additionalProperties: false`, so a field it does not declare is
+    /// one the app can never send.
+    #[test]
+    fn an_action_declares_every_field_its_command_takes() {
+        let fields = |action: &str| -> Vec<String> {
+            let input = &manifest().action(action).expect("declared").input;
+            let mut names: Vec<String> = input["properties"]
+                .as_object()
+                .expect("properties")
+                .keys()
+                .cloned()
+                .collect();
+            names.sort();
+            names
+        };
         assert_eq!(
-            u64::try_from(ROSTER_MIN).unwrap_or_default(),
-            limit["minimum"].as_u64().unwrap_or_default()
+            fields("edit-person"),
+            [
+                "birthday",
+                "cadence_days",
+                "id",
+                "met",
+                "nickname",
+                "role",
+                "sort_name",
+                "title"
+            ]
+        );
+        // `tz` is why a member east of UTC+11:59 does not file today's entry
+        // under tomorrow.
+        assert_eq!(
+            fields("add-journal-entry"),
+            ["entry_date", "mood", "text", "tz"]
         );
         assert_eq!(
-            u64::try_from(ROSTER_MAX).unwrap_or_default(),
-            limit["maximum"].as_u64().unwrap_or_default(),
-            "the port honours the declared maximum; v0 clamps one below it"
+            fields("save-contact-channel"),
+            ["id", "kind", "label", "point_id", "preferred", "value"]
         );
-    }
-
-    /// THE PERSON DESCRIPTION NAMES NO SHARING FIELD. It once promised
-    /// `vaults` and `shared_with_them` (finding PE-F2: the second never
-    /// existed); v1 has no sharing plane (#1029), so the sentence went with
-    /// the tables it read.
-    #[test]
-    fn the_person_description_names_no_sharing_field() {
-        let person = manifest().query("person").expect("the person query");
-        let description = person.description.as_deref().unwrap_or_default();
-        assert!(!description.contains("shared_with_them"), "{description}");
-        assert!(!description.contains("`vaults`"), "{description}");
-    }
-
-    /// `add-journal-entry` CARRIES EVERY FIELD `people.add_journal_entry` TAKES,
-    /// `tz` included: the manifest's input schema is
-    /// `additionalProperties: false`, so a command field the manifest does not
-    /// declare is a field the app can never send — and without `tz` a member
-    /// east of UTC+11:59 files today's entry under tomorrow.
-    #[test]
-    fn add_journal_entry_declares_every_field_the_command_takes() {
-        let input = &manifest()
-            .action("add-journal-entry")
-            .expect("declared")
-            .input;
-        for field in ["mood", "text", "entry_date", "tz"] {
-            assert!(
-                input["properties"].get(field).is_some(),
-                "add-journal-entry does not declare {field}"
-            );
-        }
-        assert_eq!(input["required"], serde_json::json!(["mood", "text"]));
-    }
-
-    /// `edit-person` CARRIES EVERY FIELD `people.edit_person` TAKES. The
-    /// nickname was writable in the vault and unreachable from the app.
-    #[test]
-    fn edit_person_declares_every_field_the_command_takes() {
-        let input = &manifest().action("edit-person").expect("declared").input;
-        for field in [
-            "party_id",
-            "display_name",
-            "role",
-            "nickname",
-            "avatar_color",
-            "met",
-        ] {
-            assert!(
-                input["properties"].get(field).is_some(),
-                "edit-person does not declare {field}"
-            );
-        }
     }
 }

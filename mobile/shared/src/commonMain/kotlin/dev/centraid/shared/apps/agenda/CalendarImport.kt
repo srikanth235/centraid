@@ -1,30 +1,16 @@
 package dev.centraid.shared.apps.agenda
 
-import centraid.core.v1.AgendaUpcomingRequest
-import centraid.core.v1.AppQueryRequest
-import centraid.core.v1.Envelope
-import centraid.core.v1.PageOrder
-import centraid.core.v1.PageQuery
-import centraid.core.v1.PageRequest
-import centraid.core.v1.Request
 import dev.centraid.core.CentraidCore
-import dev.centraid.core.CoreOutcome
 import dev.centraid.design.copy.AgendaCopy
 import dev.centraid.shared.kit.PhoneImport
-import dev.centraid.shared.sync.phone.GoneChoice
-import dev.centraid.shared.sync.phone.OriginGone
+import dev.centraid.shared.kit.jsonString
+import dev.centraid.shared.kit.time.civilDayOf
+import dev.centraid.shared.kit.time.floorDiv
+import dev.centraid.shared.shell.HomeSession
 import dev.centraid.shared.sync.phone.PhoneDevice
 import dev.centraid.shared.sync.phone.PhoneFields
 import dev.centraid.shared.sync.phone.PhoneIds
 import dev.centraid.shared.sync.phone.PhoneOriginRef
-import dev.centraid.shared.sync.phone.PhoneRecord
-import dev.centraid.shared.sync.phone.PhoneSnapshot
-import dev.centraid.shared.sync.phone.PhoneSource
-import dev.centraid.shared.sync.phone.PhoneStore
-import dev.centraid.shared.sync.phone.PhoneSync
-import dev.centraid.shared.kit.time.civilDayOf
-import dev.centraid.shared.kit.time.floorDiv
-import dev.centraid.shared.shell.HomeSession
 import dev.centraid.shared.sync.rfc3339FromEpochMillis
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -93,37 +79,28 @@ public data class PhoneSeries(
 )
 
 /**
- * CALENDAR → AGENDA IN ONE TAP (docs/decisions.md, "Onboarding without sample
- * data", R-ONBOARD-4).
+ * CALENDAR → AGENDA, FOLLOWED (docs/decisions.md, "Onboarding without sample data",
+ * R-ONBOARD-4; #1127; #1135).
  *
- * Agenda's day one offers the import (`AgendaHomeData.import_source`); each
- * event becomes `schedule.propose_event` in the vault's first calendar — an
- * ordinary event of the member's, no mark — free or busy as the phone's
- * calendar holds it. **A busy event that would collide with one already
- * imported is kept, as free**, rather than dropped: Agenda refuses a busy
- * overlap the member types, but an import copies a calendar whose overlaps
- * already happened, and losing an event is worse than a second free one.
- * Duplicates within the read (one title at one start) are folded.
+ * Agenda's day one offers the import (`AgendaHomeData.import_source`); the shell reads the
+ * calendars once the OS has said yes and hands the events here. [run] sends each calendar's
+ * records to the vault in ONE command, `follow.calendar`, and **the vault does the merge**: a
+ * field the member never changed follows the phone, one they changed stands, an event the vault
+ * does not know is matched by title and start to one of the member's own before one is added,
+ * and one gone from a complete read goes to the trash if the member never edited it. The phone
+ * sends records; it keeps no fingerprint and no link, and writes nothing else.
  *
- * **A REPEATING SERIES STAYS ONE SERIES**, its rule kept, so it goes on
- * repeating past the window and editing "all events" edits all of them. The
- * vault's own expansion is then held against what the phone shows in the
- * window: an occurrence the vault expands and the phone does not show was
- * cancelled there, and becomes a skip; one the member moved becomes an
- * override (`schedule.edit_event_occurrence`); one the phone shows and the
- * vault does not expand is written on its own, so nothing is lost where the
- * two readings of a rule differ. **A rule the vault refuses** — `BYSETPOS`,
- * a `BYDAY` list or a `BYMONTHDAY` list, for instance (`rrule.rs` holds the
- * whole list) — falls back to the occurrences in the window, each its own
- * event: a refused rule kept would expand to nothing, and a reworded one
- * would repeat on the wrong days. What the vault takes of a monthly rule
- * (#1119, R-1119-1) is ONE positional `BYDAY` (`2MO`, `-1FR`; first to fourth
- * or last) or ONE `BYMONTHDAY` (`1`..`31` or `-1`), with RFC 5545's meaning —
- * a month without that day has no occurrence — so [rule] keeps both.
+ * **A REPEATING SERIES IS ONE RECORD**, its rule kept, so it goes on repeating past the window
+ * and editing "all events" edits all of them. The phone shows only the occurrences in a window
+ * and has no rule engine, so the record states what it SEES (`overrides`: the days it showed as
+ * the rule has them, and the ones the member moved, over the window) and the vault, which
+ * expands the rule, works out which days were skipped. **A rule the vault cannot expand** is
+ * kept as the phone wrote it and the event is flagged, so it shows at its anchor rather than
+ * vanishing; no occurrence-by-occurrence fallback is carried (R-1135-4-7).
  *
- * **The one loss**: an occurrence the member moved from inside the window to
- * outside it is not in the phone's answer at all, so it reads as cancelled
- * and becomes a skip. The phone's read cannot tell the two apart.
+ * **The one loss**: an occurrence the member moved from inside the window to outside it is not
+ * in the phone's answer at all, so it reads as cancelled and becomes a skip. The phone's read
+ * cannot tell the two apart.
  */
 public object CalendarImport {
     /** THE WINDOW READ: a week back, so the day-one Agenda has its recent past, and two months on. */
@@ -145,7 +122,6 @@ public object CalendarImport {
         public val updated: Int = 0,
         public val trashed: Int = 0,
         public val addAccount: Boolean = false,
-        public val gone: List<OriginGone> = emptyList(),
     )
 
     /**
@@ -167,174 +143,6 @@ public object CalendarImport {
 
     /** The origin of an event that names none: this phone's own calendars. */
     public const val DEFAULT_ORIGIN: String = "local:this-phone"
-
-    /**
-     * What the vault holds of [events] — read at [now], over [windowStart] to
-     * [windowEnd] — and the zone a timed one without its own falls back to. This is one pass of
-     * the phone sync (#1127): the first one brings the calendar in, later ones follow it.
-     * [origins] lists every calendar present, so one with no event in the window is not mistaken
-     * for gone; [complete] is false when the read may be partial, and nothing is then trashed.
-     * [device] is this install's [PhoneDevice] unless a caller names another.
-     */
-    public suspend fun run(
-        core: CentraidCore,
-        events: List<PhoneEvent>,
-        deviceTz: String,
-        now: Long,
-        origins: List<PhoneOriginRef> = emptyList(),
-        complete: Boolean = true,
-        device: String? = null,
-    ): Outcome {
-        val calendar = firstCalendar(core) ?: return Outcome(added = 0, refused = events.size)
-        return sync(CalendarStore(core, calendar, deviceTz, now, device ?: PhoneDevice.id()), events, origins, complete, now)
-    }
-
-    /**
-     * The member's answer to a calendar that left the phone (R-1127-9); [GoneChoice.KEEP] is the
-     * default. [seenBefore] is the question's own, for a calendar that only lost most of its events.
-     */
-    public suspend fun resolveGone(
-        core: CentraidCore,
-        originId: String,
-        choice: GoneChoice,
-        deviceTz: String,
-        now: Long,
-        seenBefore: String? = null,
-        device: String? = null,
-    ): Outcome {
-        val report = PhoneSync.resolveGone(CalendarStore(core, "", deviceTz, now, device ?: PhoneDevice.id()), originId, choice, seenBefore)
-        return Outcome(added = 0, refused = report.refused.size, trashed = report.trashed)
-    }
-
-    /**
-     * ONE PASS over [store]. **A series the vault refuses** (a rule it will not expand) is
-     * followed as its occurrences in the window, each its own event keyed `<series id>@<start>`:
-     * the first pass finds it out (the add is refused), writes nothing for it, and runs again with
-     * the series expanded; later passes expand it from the links alone.
-     */
-    internal suspend fun sync(store: PhoneStore, events: List<PhoneEvent>, origins: List<PhoneOriginRef>, complete: Boolean, now: Long): Outcome {
-        val links = store.links() ?: return Outcome(added = 0, refused = 0)
-        val series = plan(events).series
-        val expanded = series.map { it.id }.filter { id ->
-            links.none { it.phoneId == id } && links.any { it.phoneId.startsWith("$id@") }
-        }.toSet()
-        val first = snapshot(events, origins, complete, now, expanded)
-        val one = PhoneSync.run(store, first)
-        val retry = series.map { it.id }.filter { it in one.refused && it !in expanded }.toSet()
-        val two = if (retry.isEmpty()) null else PhoneSync.run(store, snapshot(events, origins, complete, now, expanded + retry))
-        val refused = one.refused.filterNot { it in retry } + two?.refused.orEmpty()
-        return Outcome(
-            added = one.added + one.adopted + (two?.let { it.added + it.adopted } ?: 0),
-            refused = refused.size,
-            updated = one.updated + one.followed + (two?.let { it.updated + it.followed } ?: 0),
-            trashed = one.trashed + (two?.trashed ?: 0),
-            addAccount = first.complete && first.records.isEmpty() && first.origins.isEmpty(),
-            gone = one.gone,
-        )
-    }
-
-    /**
-     * A READ OF THE CALENDAR AS A SNAPSHOT. A repeating series is ONE record keyed by its id, and
-     * every other event one record keyed by its own; an id that names no kind skips the event.
-     * [expanded] are the series followed as their occurrences instead (see [sync]).
-     */
-    public fun snapshot(
-        events: List<PhoneEvent>,
-        origins: List<PhoneOriginRef> = emptyList(),
-        complete: Boolean = true,
-        now: Long,
-        expanded: Set<String> = emptySet(),
-    ): PhoneSnapshot {
-        val plan = plan(events)
-        val records = linkedMapOf<String, PhoneRecord>()
-        val labels = events.filter { it.originLabel.isNotEmpty() }.associate { it.origin.ifEmpty { DEFAULT_ORIGIN } to it.originLabel }
-        fun keep(id: String, event: PhoneEvent, rrule: String, series: Series?) {
-            if (!PhoneIds.isValid(id) || event.title.isEmpty() || event.start.isEmpty() || event.end.isEmpty()) return
-            if (id !in records) records[id] = record(id, event, rrule, series, now)
-        }
-        for (event in plan.singles) keep(event.phoneId, event, "", null)
-        for (series in plan.series) {
-            if (series.id !in expanded) {
-                keep(series.id, series.event, series.rrule, series)
-                continue
-            }
-            for (occurrence in series.occurrences) {
-                // KEYED ON WHERE THE RULE PUT IT, so a moved occurrence keeps its link when it moves again.
-                val id = "${series.id}@${key(occurrence.originalStart.ifEmpty { occurrence.start }, occurrence.allDay)}"
-                tidy(occurrence)?.let { keep(id, it, "", null) }
-            }
-        }
-        val present = (origins + records.values.map { PhoneOriginRef(it.origin, "") }).distinctBy { it.id }.map { ref ->
-            val label = ref.label.ifEmpty {
-                labels[ref.id] ?: if (ref.id == DEFAULT_ORIGIN) AgendaCopy.IMPORT_ORIGIN_THIS_PHONE else ref.id
-            }
-            PhoneOriginRef(ref.id, label)
-        }
-        return PhoneSnapshot(PhoneSource.CALENDAR, complete, rfc3339FromEpochMillis(now), present, records.values.toList())
-    }
-
-    /** THE FIELDS A PHONE OWNS OF AN EVENT. `free` is written when the event is added and not followed. */
-    private fun record(id: String, event: PhoneEvent, rrule: String, series: Series?, now: Long): PhoneRecord = PhoneRecord(
-        phoneId = id,
-        origin = event.origin.ifEmpty { DEFAULT_ORIGIN },
-        fields = PhoneFields.of {
-            text("title", event.title)
-            text("notes", event.notes)
-            text("all_day", if (event.allDay) "1" else "0")
-            exact("start", event.start)
-            exact("end", event.end)
-            text("tz", event.tz)
-            text("rrule", rrule)
-        },
-        matchKey = PhoneFields.squash(event.title).lowercase(),
-        tiebreak = setOf(event.start),
-        satellite = series?.let { satellite(it, now) } ?: PhoneFields.EMPTY,
-        attributes = EventAttributes(event, rrule, series),
-    )
-
-    /**
-     * WHAT THE PHONE SAYS OF A SERIES' OCCURRENCES, as a digest to compare pass to pass (gap 2 of
-     * #1127): the occurrences it shows inside the window, unmoved, by the key the rule put them at,
-     * and each moved one with its own times and words. A key the vault expands that is missing from
-     * this was cancelled on the phone; one that was missing and is back was restored. The window
-     * moves a day at a time, so the digest does, and a pass that finds it changed reconciles.
-     */
-    private fun satellite(series: Series, now: Long): PhoneFields {
-        val allDay = series.event.allDay
-        val (first, last) = inner(now)
-        fun keyOf(occurrence: PhoneEvent): String = key(occurrence.originalStart.ifEmpty { occurrence.start }, allDay)
-        return PhoneFields.of {
-            set("shown", series.occurrences.filter { !it.moved }.map(::keyOf).filter { it.take(DAY) in first..last })
-            set(
-                "moved",
-                series.occurrences.filter { it.moved }.map {
-                    listOf(keyOf(it), it.start, it.end, it.title.trim(), it.notes.trim()).joinToString("|")
-                },
-            )
-        }
-    }
-
-    /**
-     * WRITE ONE SERIES AND ITS EXCEPTIONS: the event with its rule, then a skip for an occurrence
-     * the phone cancelled, an override for one it moved, and a one-off for one the vault's reading
-     * of the rule lacks. The new `event_id`, or null when the vault refused the series (the rule
-     * is one it will not expand: the caller follows its occurrences instead).
-     */
-    internal suspend fun writeSeries(core: CentraidCore, series: Series, calendar: String, deviceTz: String, now: Long): String? {
-        val eventId = propose(core, series.event, calendar, deviceTz, series.rrule)
-        if (eventId.isNullOrEmpty()) return null
-        // AN UNREAD EXPANSION WRITES NOTHING MORE: without it every
-        // occurrence would look like a stray and land twice.
-        val upcoming = upcoming(core, eventId, deviceTz, now) ?: return eventId
-        for (edit in reconcile(series, eventId, upcoming, now, deviceTz)) {
-            if (PhoneImport.write(core, AgendaWrites.OCCURRENCE, edit.input)) continue
-            // A REFUSED SKIP leaves that occurrence as the rule has it; a
-            // refused override keeps the moved occurrence as its own event.
-            edit.fallback?.let { single(core, it, calendar, deviceTz) }
-        }
-        for (event in strays(series, upcoming, now)) single(core, event, calendar, deviceTz)
-        return eventId
-    }
 
     /** One series to import: its own event, its rule, and its occurrences in the window. */
     public data class Series(
@@ -439,200 +247,174 @@ public object CalendarImport {
         }.joinToString(";")
     }
 
-    /** `schedule.propose_event`'s input for one event, repeating by [rrule] when it is not empty. */
-    public fun input(event: PhoneEvent, calendarId: String, deviceTz: String, free: Boolean, rrule: String = ""): String {
-        val fields = mutableListOf(
-            "\"summary\":${PhoneImport.quote(event.title)}",
-            "\"calendar_id\":${PhoneImport.quote(calendarId)}",
-            "\"dtstart\":${PhoneImport.quote(event.start)}",
-            "\"dtend\":${PhoneImport.quote(event.end)}",
-            "\"busy\":${PhoneImport.quote(if (free) "free" else "busy")}",
-        )
-        fields += when (val zone = zoneOf(event, deviceTz)) {
-            null -> "\"recurrence_semantics\":${PhoneImport.quote(if (event.allDay) "all-day" else "floating")}"
-            else -> "\"tz\":${PhoneImport.quote(zone)}"
-        }
-        if (event.notes.isNotEmpty()) fields += "\"description\":${PhoneImport.quote(event.notes)}"
-        if (rrule.isNotEmpty()) fields += "\"rrule\":${PhoneImport.quote(rrule)}"
-        return fields.joinToString(",", prefix = "{", postfix = "}")
-    }
-
     /**
-     * THE EXCEPTIONS A SERIES NEEDS, as `schedule.edit_event_occurrence`
-     * inputs, from the vault's own expansion ([upcoming]: the series' rows of
-     * `agenda.upcoming`, `original_start_local` to the row) held against the
-     * phone's occurrences:
-     *
-     * - **A skip** for an occurrence the vault expands and the phone does not
-     *   show — the member cancelled it there. Only inside the window with a
-     *   day's margin each side: the two ends are where a phone's "overlaps the
-     *   window" and the vault's "starts in it" disagree, and a skip written on
-     *   that disagreement would delete a real occurrence.
-     * - **An override** for an occurrence the member moved, keyed on where
-     *   the rule put it, carrying its own times and, where they differ from
-     *   the series', its title and notes.
+     * THE KEY AN OCCURRENCE IS MATCHED ON: the series-local wall clock to the second, or the day
+     * for an all-day series — the shape of the vault's `original_start` (`event.rs`).
      */
-    public fun reconcile(
-        series: Series,
-        eventId: String,
-        upcoming: Map<String, String>,
-        now: Long,
-        deviceTz: String,
-    ): List<OccurrenceEdit> {
-        val allDay = series.event.allDay
-        val shown = series.occurrences.map { key(it.originalStart.ifEmpty { it.start }, allDay) }.toSet()
-        val (first, last) = inner(now)
-        val writes = mutableListOf<OccurrenceEdit>()
-        for ((key, local) in upcoming) {
-            if (key in shown || key.take(10) < first || key.take(10) > last) continue
-            writes += OccurrenceEdit(occurrence(eventId, local, "skip"), fallback = null)
-        }
-        for (moved in series.occurrences.filter { it.moved }) {
-            // KEYED ON THE VAULT'S OWN SPELLING when the window holds the
-            // original; otherwise — moved in from past the window — on the
-            // phone's, which the vault checks against the series itself.
-            val original = key(moved.originalStart.ifEmpty { moved.start }, allDay)
-            val local = upcoming[original] ?: original
-            val fields = mutableListOf(
-                "\"dtstart\":${PhoneImport.quote(moved.start)}",
-                "\"dtend\":${PhoneImport.quote(moved.end)}",
-            )
-            // THE ZONE THE SERIES WAS PROPOSED IN: an occurrence with none of
-            // its own is the device's, as the series was, never a bare clock
-            // the vault would read as UTC.
-            fields += when (val zone = zoneOf(moved, deviceTz)) {
-                null -> "\"recurrence_semantics\":${PhoneImport.quote(if (moved.allDay) "all-day" else "floating")}"
-                else -> "\"tz\":${PhoneImport.quote(zone)}"
-            }
-            val title = moved.title.trim()
-            if (title.isNotEmpty() && title != series.event.title) fields += "\"summary\":${PhoneImport.quote(title)}"
-            val notes = moved.notes.trim()
-            if (notes != series.event.notes) fields += "\"description\":${PhoneImport.quote(notes)}"
-            writes += OccurrenceEdit(occurrence(eventId, local, "override", fields), fallback = events(listOf(moved)).firstOrNull())
-        }
-        return writes
-    }
+    internal fun key(start: String, allDay: Boolean): String = if (allDay) start.take(DAY) else start.take(19)
 
-    /** An exception the vault holds on a series: what it does, and the key it is stored under (`original_start_local`). */
-    internal data class HeldException(val action: String, val local: String)
-
-    /**
-     * THE EXCEPTIONS A FOLLOWED SERIES NEEDS NOW (gap 2 of #1127): [reconcile]'s skips for an
-     * occurrence the phone no longer shows and overrides for ones it moved, and **a restore** for
-     * an occurrence the phone shows as the rule has it that the vault still holds an exception on
-     * (the phone un-cancelled it or put it back). Only inside the window, as [reconcile] is. An
-     * occurrence that is not a skip or a move on either side is untouched, and a stray (one the
-     * phone shows and the vault's reading of the rule lacks) is not written again: it was written
-     * when the series was added.
-     */
-    internal fun followEdits(
-        series: Series,
-        eventId: String,
-        upcoming: Map<String, String>,
-        held: Map<String, HeldException>,
-        now: Long,
-        deviceTz: String,
-    ): List<OccurrenceEdit> {
-        val allDay = series.event.allDay
-        val (first, last) = inner(now)
-        val edits = reconcile(series, eventId, upcoming, now, deviceTz).toMutableList()
-        val moved = series.occurrences.filter { it.moved }.map { key(it.originalStart.ifEmpty { it.start }, allDay) }.toSet()
-        for (occurrence in series.occurrences.filter { !it.moved }) {
-            val key = key(occurrence.originalStart.ifEmpty { occurrence.start }, allDay)
-            if (key in moved || key.take(DAY) < first || key.take(DAY) > last) continue
-            val exception = held[key] ?: continue
-            edits += OccurrenceEdit(occurrence(eventId, exception.local, "restore"), fallback = null)
-        }
-        return edits
-    }
-
-    /**
-     * ONE `schedule.edit_event_occurrence` INPUT, and what to write instead
-     * when the vault refuses it: nothing for a skip, the moved occurrence as
-     * its own event for an override.
-     */
-    public data class OccurrenceEdit(
-        public val input: String,
-        public val fallback: PhoneEvent?,
-    )
-
-    /**
-     * THE OCCURRENCES THE SERIES DOES NOT CARRY: one the phone shows inside
-     * the window whose original start the vault's expansion lacks — the two
-     * readings of the rule differ there — written as an event of its own, so
-     * the member's calendar loses nothing. A moved occurrence is never one:
-     * [reconcile] overrides it, and writes it on its own only if refused.
-     */
-    public fun strays(series: Series, upcoming: Map<String, String>, now: Long): List<PhoneEvent> {
-        val allDay = series.event.allDay
-        val (first, last) = inner(now)
-        return events(
-            series.occurrences.filter { occurrence ->
-                val key = key(occurrence.originalStart.ifEmpty { occurrence.start }, allDay)
-                !occurrence.moved && key !in upcoming && key.take(10) >= first && key.take(10) <= last
-            },
-        )
-    }
-
-    private fun occurrence(eventId: String, local: String, action: String, fields: List<String> = emptyList()): String =
-        (
-            listOf(
-                "\"event_id\":${PhoneImport.quote(eventId)}",
-                "\"original_start_local\":${PhoneImport.quote(local)}",
-                "\"scope\":\"occurrence\"",
-                "\"action\":${PhoneImport.quote(action)}",
-            ) + fields
-            ).joinToString(",", prefix = "{", postfix = "}")
-
-    /**
-     * THE KEY AN OCCURRENCE IS MATCHED ON: the series-local wall clock to the
-     * second, or the day for an all-day series — the shape of the vault's
-     * `original_start_local` (`expansion.rs`).
-     */
-    internal fun key(start: String, allDay: Boolean): String = if (allDay) start.take(10) else start.take(19)
-
-    /** The window's days with a day's margin each side, `YYYY-MM-DD`, inclusive. */
-    internal fun inner(now: Long): Pair<String, String> = Pair(
-        civilDayOf(floorDiv(windowStart(now), DAY_MS) + 1),
-        civilDayOf(floorDiv(windowEnd(now), DAY_MS) - 1),
+    /** The window the vault holds the phone's word against: a day's margin each side, as UTC instants. */
+    internal fun observed(now: Long): Pair<String, String> = Pair(
+        rfc3339FromEpochMillis((floorDiv(windowStart(now), DAY_MS) + 1) * DAY_MS),
+        rfc3339FromEpochMillis((floorDiv(windowEnd(now), DAY_MS) - 1) * DAY_MS),
     )
 
     /** An event's zone — its own, else the device's — or null for an all-day one or none at all. */
     internal fun zoneOf(event: PhoneEvent, deviceTz: String): String? =
         if (event.allDay) null else event.tz.ifEmpty { deviceTz }.ifEmpty { null }
 
-    /** One event on its own: busy as the phone holds it, else kept free. */
-    internal suspend fun single(core: CentraidCore, event: PhoneEvent, calendar: String, deviceTz: String): Boolean =
-        propose(core, event, calendar, deviceTz, rrule = "") != null
+    /** ONE EVENT, as `follow.calendar` is told of it: an external id, and the fields the phone owns. */
+    internal data class EventRecord(val phoneId: String, val origin: String, val fields: String)
 
-    /** Propose [event], busy then free; the new `event_id`, or null when the vault refused both. */
-    internal suspend fun propose(core: CentraidCore, event: PhoneEvent, calendar: String, deviceTz: String, rrule: String): String? {
-        val output = PhoneImport.executed(core, AgendaWrites.PROPOSE, input(event, calendar, deviceTz, free = event.free, rrule = rrule))
-            ?: if (event.free) null else PhoneImport.executed(core, AgendaWrites.PROPOSE, input(event, calendar, deviceTz, free = true, rrule = rrule))
-        return output?.let { EVENT_ID.find(it)?.groupValues?.getOrNull(1).orEmpty() }
+    /**
+     * WHAT ONE READ OF THE CALENDARS SENDS: the events, one record each, in the calendars they were
+     * read in, and every calendar present (even one with no event in it).
+     *
+     * @property complete false for a read that may have missed events: the vault then trashes nothing.
+     */
+    internal data class CalendarBatch(
+        val complete: Boolean,
+        val origins: List<PhoneOriginRef>,
+        val records: List<EventRecord>,
+    )
+
+    /**
+     * A READ OF THE CALENDARS AS A BATCH. A repeating series is ONE record keyed by its id, and every
+     * other event one record keyed by its own; an id that names no kind skips the event.
+     */
+    internal fun batch(
+        events: List<PhoneEvent>,
+        origins: List<PhoneOriginRef> = emptyList(),
+        complete: Boolean = true,
+        now: Long,
+        deviceTz: String,
+    ): CalendarBatch {
+        val plan = plan(events)
+        val records = linkedMapOf<String, EventRecord>()
+        val labels = events.filter { it.originLabel.isNotEmpty() }.associate { it.origin.ifEmpty { DEFAULT_ORIGIN } to it.originLabel }
+        fun keep(id: String, event: PhoneEvent, rrule: String, series: Series?) {
+            if (!PhoneIds.isValid(id) || event.title.isEmpty() || event.start.isEmpty() || event.end.isEmpty()) return
+            if (id !in records) {
+                records[id] = EventRecord(id, event.origin.ifEmpty { DEFAULT_ORIGIN }, fields(event, rrule, series, now, deviceTz))
+            }
+        }
+        for (event in plan.singles) keep(event.phoneId, event, "", null)
+        for (series in plan.series) keep(series.id, series.event, series.rrule, series)
+        val present = (origins + records.values.map { PhoneOriginRef(it.origin, "") }).distinctBy { it.id }.map { ref ->
+            val label = ref.label.ifEmpty {
+                labels[ref.id] ?: if (ref.id == DEFAULT_ORIGIN) AgendaCopy.IMPORT_ORIGIN_THIS_PHONE else ref.id
+            }
+            PhoneOriginRef(ref.id, label)
+        }
+        return CalendarBatch(complete, present, records.values.toList())
     }
 
     /**
-     * The series' occurrences as the vault expands them over the window, by
-     * key, each to its exact `original_start_local`; null when the read fails
-     * — the expansion cap, a refusal, an unparsed `event_id` — which writes no
-     * exception and no stray rather than a wrong one.
+     * THE FIELDS A PHONE OWNS OF AN EVENT, as JSON: its words, when it is (a wall clock and its zone,
+     * which the vault resolves to the instant, or a floating time, or days), its rule, whether it
+     * blocks its time, and for a series what the phone shows of its days.
      */
-    internal suspend fun upcoming(core: CentraidCore, eventId: String, deviceTz: String, now: Long): Map<String, String>? {
-        if (eventId.isEmpty()) return null
-        val query = AppQueryRequest(
-            agenda_upcoming = AgendaUpcomingRequest(
-                from = rfc3339FromEpochMillis(windowStart(now)),
-                to = rfc3339FromEpochMillis(windowEnd(now)),
-                tz = deviceTz,
-            ),
-        )
-        val answer = core.call(Envelope(request_id = 0, request = Request(app_query = query)))
-        val events = (answer as? CoreOutcome.Answered)?.value?.response?.app_query?.agenda_upcoming?.events ?: return null
-        return events.filter { it.event_id == eventId }
-            .mapNotNull { it.original_start_local?.takeIf(String::isNotEmpty) }
-            .associateBy { local -> key(local, local.length == 10) }
+    internal fun fields(event: PhoneEvent, rrule: String, series: Series?, now: Long, deviceTz: String): String = buildString {
+        append("{\"title\":").append(jsonString(event.title))
+        append(",\"description\":").append(if (event.notes.isEmpty()) "null" else jsonString(event.notes))
+        if (event.allDay) {
+            append(",\"starts\":").append(jsonString(event.start.take(DAY)))
+            append(",\"ends\":").append(jsonString(event.end.take(DAY)))
+            append(",\"timing\":\"all-day\",\"zone\":null")
+        } else {
+            append(",\"starts\":").append(jsonString(event.start))
+            append(",\"ends\":").append(jsonString(event.end))
+            val zone = zoneOf(event, deviceTz)
+            append(",\"timing\":").append(jsonString(if (zone == null) "floating" else "zoned"))
+            append(",\"zone\":").append(if (zone == null) "null" else jsonString(zone))
+        }
+        append(",\"rule\":").append(if (rrule.isEmpty()) "null" else jsonString(rrule))
+        append(",\"busy\":").append(!event.free)
+        if (series != null) append(",\"overrides\":").append(overrides(series, now))
+        append('}')
     }
+
+    /**
+     * WHAT THE PHONE SAYS OF A SERIES' DAYS, over the window it read: the days it showed as the rule
+     * has them (`shown`, by the series-local wall clock) and each it moved (`moved`, with its own
+     * times and words). A day the rule produces in the window that is neither is one the member
+     * cancelled there; **the vault works that out**, because the phone has no rule engine.
+     */
+    internal fun overrides(series: Series, now: Long): String {
+        val allDay = series.event.allDay
+        val (from, to) = observed(now)
+        fun keyOf(occurrence: PhoneEvent): String = key(occurrence.originalStart.ifEmpty { occurrence.start }, allDay)
+        val shown = series.occurrences.filter { !it.moved }.map(::keyOf).distinct()
+        val moved = series.occurrences.filter { it.moved }
+        return buildString {
+            append("{\"from\":").append(jsonString(from)).append(",\"to\":").append(jsonString(to))
+            append(",\"shown\":[").append(shown.joinToString(",") { jsonString(it) }).append("]")
+            append(",\"moved\":[")
+            moved.forEachIndexed { index, day ->
+                if (index > 0) append(',')
+                append("{\"original_start\":").append(jsonString(keyOf(day)))
+                append(",\"starts\":").append(jsonString(if (allDay) day.start.take(DAY) else day.start))
+                append(",\"ends\":").append(jsonString(if (allDay) day.end.take(DAY) else day.end))
+                append(",\"title\":").append(jsonString(day.title.trim()))
+                append(",\"description\":").append(jsonString(day.notes.trim())).append('}')
+            }
+            append("]}")
+        }
+    }
+
+    /** The `follow.calendar` input for one calendar: its records, and whether the read was complete. */
+    internal fun input(origin: PhoneOriginRef, records: List<EventRecord>, complete: Boolean, device: String): String = buildString {
+        append("{\"origin\":{\"ref\":").append(jsonString(origin.id))
+        append(",\"label\":").append(jsonString(origin.label))
+        append(",\"device_id\":").append(jsonString(device)).append("},\"records\":[")
+        records.forEachIndexed { index, record ->
+            if (index > 0) append(',')
+            append("{\"external_id\":").append(jsonString(record.phoneId))
+            // A phone id that means something on this phone only is kept under the phone (R-1127-10).
+            append(",\"device_id\":").append(if (PhoneIds.isPortable(record.phoneId)) "null" else jsonString(device))
+            append(",\"fields\":").append(record.fields).append('}')
+        }
+        append("],\"complete\":").append(complete).append('}')
+    }
+
+    /**
+     * WRITE [events] INTO THE VAULT [core] HOLDS: one `follow.calendar` per calendar, read at [now].
+     * [origins] lists every calendar present, so one with no event is still told (its events that
+     * left are then trashed); [complete] is false when the read may be partial, and nothing is then
+     * trashed. [device] is this install's [PhoneDevice] unless a caller names another.
+     */
+    public suspend fun run(
+        core: CentraidCore,
+        events: List<PhoneEvent>,
+        deviceTz: String,
+        now: Long,
+        origins: List<PhoneOriginRef> = emptyList(),
+        complete: Boolean = true,
+        device: String? = null,
+    ): Outcome {
+        val batch = batch(events, origins, complete, now, deviceTz)
+        val phone = device ?: PhoneDevice.id()
+        var outcome = Outcome(added = 0, refused = 0, addAccount = complete && batch.records.isEmpty() && batch.origins.isEmpty())
+        for (origin in batch.origins) {
+            val records = batch.records.filter { it.origin == origin.id }
+            val told = PhoneImport.executed(core, "follow.calendar", input(origin, records, batch.complete, phone))
+            outcome = if (told == null) {
+                outcome.copy(refused = outcome.refused + records.size)
+            } else {
+                outcome.copy(
+                    added = outcome.added + count(told, "added") + count(told, "matched"),
+                    refused = outcome.refused + count(told, "refused"),
+                    updated = outcome.updated + count(told, "updated"),
+                    trashed = outcome.trashed + count(told, "trashed"),
+                )
+            }
+        }
+        return outcome
+    }
+
+    /** A count of the command's output: `"added":3`. */
+    private fun count(output: String, name: String): Int =
+        Regex("\"$name\"\\s*:\\s*(\\d+)").find(output)?.groupValues?.get(1)?.toIntOrNull() ?: 0
 
     /** The one sentence the shell shows when an import ends. */
     public fun sentence(outcome: Outcome): String = when {
@@ -641,21 +423,6 @@ public object CalendarImport {
         outcome.added == 0 -> AgendaCopy.IMPORT_CALENDAR_FAILED
         outcome.added == 1 -> AgendaCopy.IMPORT_CALENDAR_ONE
         else -> AgendaCopy.IMPORT_CALENDAR_DONE.replace("{count}", outcome.added.toString())
-    }
-
-    private val EVENT_ID = Regex("\"event_id\"\\s*:\\s*\"([^\"]+)\"")
-
-    /** The vault's first calendar — `Vault::found` mints a private one — read through the page door. */
-    internal suspend fun firstCalendar(core: CentraidCore): String? {
-        val query = PageQuery(
-            name = "agenda.import.calendar",
-            select = listOf("calendar_id"),
-            from = "schedule_calendar",
-            order = PageOrder(sort_column = "calendar_id", pk_column = "calendar_id"),
-        )
-        val answer = core.call(Envelope(request_id = 0, request = Request(page = PageRequest(query = query, limit = 1))))
-        val row = (answer as? CoreOutcome.Answered)?.value?.response?.page?.rows?.firstOrNull() ?: return null
-        return row.values.firstOrNull()?.text?.takeIf { it.isNotEmpty() }
     }
 }
 
@@ -683,7 +450,7 @@ public class CalendarImportBridge {
     /**
      * One pass of the phone sync: [events] with every calendar in [origins], and whether the read
      * was [complete]. [onDone] is handed the typed outcome, so the shell can show the
-     * add-your-account line (`addAccount`) and ask about a calendar that left (`gone`).
+     * add-your-account line (`addAccount`).
      */
     public fun sync(
         events: List<PhoneEvent>,
@@ -695,13 +462,5 @@ public class CalendarImportBridge {
     ) {
         val core = session?.shelf?.core() ?: return onDone(CalendarImport.Outcome(added = 0, refused = 0))
         scope.launch { onDone(CalendarImport.run(core, events, deviceTz, now, origins, complete)) }
-    }
-
-    /** The member's answer to a calendar that left the phone. */
-    public fun resolveGone(originId: String, keep: Boolean, deviceTz: String, now: Long, onDone: (CalendarImport.Outcome) -> Unit) {
-        val core = session?.shelf?.core() ?: return onDone(CalendarImport.Outcome(added = 0, refused = 0))
-        scope.launch {
-            onDone(CalendarImport.resolveGone(core, originId, if (keep) GoneChoice.KEEP else GoneChoice.TRASH, deviceTz, now))
-        }
     }
 }

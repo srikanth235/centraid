@@ -1,9 +1,13 @@
 package dev.centraid.shared.shell
 
 import centraid.core.v1.Envelope
+import centraid.core.v1.PageOrder
+import centraid.core.v1.PageQuery
 import centraid.core.v1.PageRequest
 import centraid.core.v1.Request
+import centraid.core.v1.Row
 import centraid.core.v1.TasksBoard
+import centraid.core.v1.Value
 import centraid.screen.v1.HomeEvent
 import centraid.screen.v1.ReadFailure
 import dev.centraid.core.CentraidCore
@@ -116,10 +120,31 @@ public class HomeRuntime(
                     appId = read.appId,
                     rows = answer.rows,
                     capped = answer.rows.size >= HomeReads.LIMIT,
+                    titles = if (read.titled) titlesOf(answer.rows) else emptyMap(),
                 ),
             )
             is Read.Refused -> host.send(refused(read.appId, answer.failure))
         }
+    }
+
+    /**
+     * THE TITLES OF THE ROWS A TILE LANDED, from their `entity` (a name is the entity's
+     * and the door pages one table). Only the rows the body draws are asked for; a read
+     * that does not answer leaves the names empty, and the tile still counts.
+     */
+    private suspend fun titlesOf(rows: List<Row>): Map<String, String> {
+        val ids = rows.take(HomeReads.PREVIEW).mapNotNull { it.values.firstOrNull()?.text }.filter { it.isNotEmpty() }
+        if (ids.isEmpty()) return emptyMap()
+        val query = PageQuery(
+            name = "home.titles",
+            select = listOf("id", "title"),
+            from = "entity",
+            where_ = "id IN (" + ids.joinToString(", ") { "?" } + ")",
+            bind = ids.map { Value(text = it) },
+            order = PageOrder(sort_column = "id", pk_column = "id"),
+        )
+        val answer = page(query, ids.size) as? Read.Rows ?: return emptyMap()
+        return answer.rows.associate { (it.values.getOrNull(0)?.text.orEmpty()) to (it.values.getOrNull(1)?.text.orEmpty()) }
     }
 
     /**
@@ -240,7 +265,7 @@ public class HomeRuntime(
     }
 
     private suspend fun page(
-        query: centraid.core.v1.PageQuery,
+        query: PageQuery,
         limit: Int,
     ): Read {
         val handle = core()

@@ -222,13 +222,13 @@ impl Snapshot {
     }
 }
 
-/// **HOW FAR A VAULT COPY HAS RUN**, from the one table that only grows: the
-/// receipt chain, one row per command, append-only by trigger. A snapshot's
+/// **HOW FAR A VAULT COPY HAS RUN**, from the journal: one row per command the
+/// gate was asked to run, never updated. A snapshot's
 /// census carries the same count, so a phone can tell whether a head holds
 /// commands its own copy never ran (#1080, the sweep's F4) without opening it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct History {
-    /// Receipts in the copy.
+    /// Journal rows in the copy.
     pub receipts: u64,
     /// When the newest command ran, on the vault's clock; `None` for a vault
     /// no command has touched.
@@ -237,7 +237,7 @@ pub struct History {
 
 /// The table [`History`] counts, and the key a manifest's census holds it
 /// under.
-pub const RECEIPT_TABLE: &str = "access_receipt";
+pub const RECEIPT_TABLE: &str = "journal";
 
 /// [`History`] of `vault`.
 ///
@@ -245,11 +245,11 @@ pub const RECEIPT_TABLE: &str = "access_receipt";
 /// SQLite's refusal.
 pub fn history(vault: &Vault) -> Result<History> {
     let (receipts, newest): (i64, Option<String>) = vault.read(|connection| {
-        Ok(connection.query_row(
-            "SELECT count(*), max(occurred_at) FROM access_receipt",
-            [],
-            |row| Ok((row.get(0)?, row.get(1)?)),
-        )?)
+        Ok(
+            connection.query_row("SELECT count(*), max(at) FROM journal", [], |row| {
+                Ok((row.get(0)?, row.get(1)?))
+            })?,
+        )
     })?;
     Ok(History {
         receipts: u64::try_from(receipts).unwrap_or(0),
@@ -375,7 +375,9 @@ pub(crate) fn census_of(connection: &Connection) -> Result<BTreeMap<String, i64>
         .collect::<rusqlite::Result<Vec<_>>>()?
         .into_iter()
         .filter(|(table, sql)| {
-            crate::log::guard::is_reportable(table) && !sql.contains("CREATE VIRTUAL TABLE")
+            !table.starts_with("sqlite_")
+                && !crate::log::guard::is_index(table)
+                && !sql.contains("CREATE VIRTUAL TABLE")
         })
         .map(|(table, _)| table)
         .collect();
@@ -740,10 +742,12 @@ mod tests {
         vault
             .commit(|tx| {
                 tx.connection().execute(
-                    "INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at)
+                    "INSERT INTO entity (id, kind, title, created_at, updated_at)
                      VALUES (?1, 'person', ?2, ?3, ?3)",
                     rusqlite::params![id, label, now],
                 )?;
+                tx.connection()
+                    .execute("INSERT INTO person (id) VALUES (?1)", [&id])?;
                 Ok(())
             })
             .expect("commits");
@@ -751,7 +755,7 @@ mod tests {
 
     fn parties(path: &Path) -> i64 {
         read_copy(path, |connection| {
-            Ok(connection.query_row("SELECT count(*) FROM core_party", [], |row| row.get(0))?)
+            Ok(connection.query_row("SELECT count(*) FROM person", [], |row| row.get(0))?)
         })
         .expect("counts")
     }
@@ -770,10 +774,12 @@ mod tests {
         let now = vault.clock().now_text();
         let outcome = vault.commit(|tx| {
             tx.connection().execute(
-                "INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at)
+                "INSERT INTO entity (id, kind, title, created_at, updated_at)
                  VALUES (?1, 'person', 'Nobody', ?2, ?2)",
                 rusqlite::params![id, now],
             )?;
+            tx.connection()
+                .execute("INSERT INTO person (id) VALUES (?1)", [&id])?;
             assert!(
                 matches!(
                     copy(&vault, &dir.path().join("scratch")),
@@ -816,7 +822,7 @@ mod tests {
             assert_eq!(range.h, PlaintextHash::of(&bytes[start..end]));
             assert_eq!(range.name, name(&keys, &range.h, 0));
         }
-        assert_eq!(snapshot.manifest.census.get("core_party"), Some(&1));
+        assert_eq!(snapshot.manifest.census.get("person"), Some(&1));
         assert!(
             !snapshot
                 .manifest

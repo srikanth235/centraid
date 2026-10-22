@@ -1,14 +1,12 @@
 package dev.centraid.shared.apps.agenda
 
 import dev.centraid.core.CentraidCore
-import dev.centraid.shared.sync.phone.GoneChoice
 import dev.centraid.shared.sync.phone.OriginGone
 import dev.centraid.shared.sync.phone.PhoneFollowPass
 import dev.centraid.shared.sync.phone.PhoneFollowReads
 import dev.centraid.shared.sync.phone.PhoneFollowSource
 import dev.centraid.shared.sync.phone.PhoneOriginRef
 import dev.centraid.shared.sync.phone.PhoneSource
-import kotlin.time.Clock
 
 /** WHAT THE SHELL READ OF THE CALENDARS for a following pass: [CalendarImportBridge.sync]'s arguments. */
 public data class CalendarRead(
@@ -29,7 +27,12 @@ public interface CalendarReader {
     public fun read(deliver: (CalendarRead?) -> Unit)
 }
 
-/** CALENDAR → AGENDA, FOLLOWED (#1127): the shell hands this to the follower with its [reader]. */
+/**
+ * CALENDAR → AGENDA, FOLLOWED (#1127, #1135): the shell hands this to the follower with its
+ * [reader]. A pass sends the calendars to the vault, which merges them ([CalendarImport.run]);
+ * nothing is held for a question, because the vault decides what an event gone from a read does
+ * (one the member never edited goes to the trash, one they did keeps the row and stops following).
+ */
 public class CalendarFollow(private val reader: CalendarReader) : PhoneFollowSource {
     override val source: PhoneSource = PhoneSource.CALENDAR
 
@@ -38,19 +41,10 @@ public class CalendarFollow(private val reader: CalendarReader) : PhoneFollowSou
 
         override suspend fun run(): List<OriginGone>? {
             val read = PhoneFollowReads.await<CalendarRead> { reader.read(it) } ?: return null
-            return CalendarImport.run(core, read.events, read.deviceTz, read.now, read.origins, read.complete).gone
+            CalendarImport.run(core, read.events, read.deviceTz, read.now, read.origins, read.complete)
+            return emptyList()
         }
 
-        override suspend fun resolve(gone: OriginGone, keep: Boolean) {
-            CalendarImport.resolveGone(
-                core,
-                gone.originId,
-                if (keep) GoneChoice.KEEP else GoneChoice.TRASH,
-                // Resolving reads no window, so the zone and the instant are only placeholders.
-                "",
-                Clock.System.now().toEpochMilliseconds(),
-                gone.seenBefore.ifEmpty { null },
-            )
-        }
+        override suspend fun resolve(gone: OriginGone, keep: Boolean) = Unit
     }
 }

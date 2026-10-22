@@ -45,13 +45,13 @@ public object DocsEditorMachine : ScreenMachine<DocsEditorState, DocsEditorEvent
     public const val SCREEN_ID: String = ScreenIds.DOCS_EDITOR
 
     /**
-     * What `docs.document` reads. Only `core_document`'s own rows are this
+     * What `docs.document` reads. Only `document`'s own rows are this
      * subject; the rest re-read through an empty key list, which every local
      * commit sends.
      */
-    public val TABLES: Set<String> = DocsDriveMachine.TABLES + "core_entity_revision"
+    public val TABLES: Set<String> = DocsTables.DOCUMENT
 
-    private const val SUBJECT_TABLE: String = "core_document"
+    private const val SUBJECT_TABLE: String = "document"
 
     override fun initial(): DocsEditorState = decorate(
         DocsEditorState(

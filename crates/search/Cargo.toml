@@ -19,14 +19,12 @@ path = "src/lib.rs"
 # continue the same way.
 centraid-apps-kit = { path = "../apps/kit" }
 centraid-ontology = { path = "../ontology" }
+# The text an entity was indexed from, for a snippet: the index is contentless.
+centraid-vault = { path = "../vault" }
 rusqlite.workspace = true
 serde.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
-# THE REAL SEALING, not a hand-made prefix. `tests/door.rs` plants what the
-# product actually writes — `encrypt_under_locker_key` for an `lk1:` cell —
-# so the secret-free proof is
-# over the vault's own ciphertext rather than over a string that looks like it.
-centraid-vault = { path = "../vault" }
+tempfile.workspace = true
 serde_json.workspace = true

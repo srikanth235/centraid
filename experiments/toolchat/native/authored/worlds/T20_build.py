@@ -214,7 +214,7 @@ def tasks():
     t = [
         # the move
         {"key": "pack", "name": "Pack the kitchen", "due": "2026-06-18", "list": "move_l", "effort": 240,
-         "priority": 2, "status": "in_progress", "description": "wrap the glasses in newspaper"},
+         "priority": 2, "description": "wrap the glasses in newspaper"},
         {"key": "pack_wine", "name": "Pack the wine collection", "due": "2026-06-17", "list": "move_l",
          "effort": 180, "priority": 1, "description": "two crates per shelf, label by region"},
         {"key": "boxes", "name": "Buy moving boxes", "due": "2026-06-05", "list": "move_l", "effort": 30},
@@ -239,7 +239,7 @@ def tasks():
         {"key": "chianti_2", "name": "Order Chianti Classico", "due": "2026-04-30", "completed": "2026-04-29T12:00",
          "list": "cantina_l", "effort": 20},
         {"key": "wine_list", "name": "Update the summer wine list", "due": "2026-06-12", "list": "cantina_l",
-         "priority": 1, "effort": 120, "status": "in_progress",
+         "priority": 1, "effort": 120,
          "description": "more whites and rosato, drop two Brunellos"},
         {"key": "list_whites", "name": "Pick five whites under 40 euro", "parent": "wine_list", "due": "2026-06-05",
          "effort": 60},
@@ -256,8 +256,7 @@ def tasks():
         {"key": "sofia_quiz", "name": "Quiz Sofia on the by-the-glass list", "due": "2026-06-03", "effort": 30},
         {"key": "breakage", "name": "Log the broken Brunello bottle", "due": "2026-05-22",
          "completed": "2026-05-22T23:30", "list": "cantina_l", "effort": 5},
-        {"key": "ais_study", "name": "Study for the AIS exam", "due": "2026-06-23", "priority": 1, "effort": 600,
-         "status": "in_progress", "description": "Loire and Rhone, blind tasting drills"},
+        {"key": "ais_study", "name": "Study for the AIS exam", "due": "2026-06-23", "priority": 1, "effort": 600, "description": "Loire and Rhone, blind tasting drills"},
         # bike
         {"key": "chain", "name": "Replace the bike chain", "due": "2026-05-30", "list": "bike_l", "effort": 45},
         {"key": "gf_register", "name": "Register for the gran fondo", "due": "2026-05-25",

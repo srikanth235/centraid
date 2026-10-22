@@ -202,13 +202,13 @@ def tasks():
     t = [
         # divorce admin
         {"key": "plan", "name": "Update parenting plan", "due": "2026-10-23", "priority": 1, "effort": 120,
-         "list": "legal_l", "status": "in_progress", "description": "holidays, summer, Mika's activities"},
+         "list": "legal_l", "description": "holidays, summer, Mika's activities"},
         {"key": "holiday_sched", "name": "Draft holiday schedule", "parent": "plan", "due": "2026-10-16", "effort": 60},
         {"key": "review_lawyer", "name": "Review plan with lawyer", "parent": "plan", "due": "2026-10-20",
          "effort": 30},
         {"key": "sign_plan", "name": "Sign final parenting plan", "parent": "plan", "due": "2026-10-23", "effort": 15},
         {"key": "joint_acct", "name": "Close joint bank account", "due": "2026-10-15", "priority": 1, "effort": 45,
-         "list": "legal_l", "status": "in_progress"},
+         "list": "legal_l"},
         {"key": "lease_name", "name": "Change name on hydro account", "due": "2026-10-30", "priority": 2,
          "effort": 20, "list": "legal_l"},
         {"key": "rrsp", "name": "Transfer RRSP split", "priority": 2, "effort": 60, "list": "legal_l",
@@ -219,7 +219,7 @@ def tasks():
          "completed": "2026-09-05T20:00", "list": "mika_l", "description": "summer camp"},
         # work
         {"key": "onboarding", "name": "Finish onboarding flow mockups", "due": "2026-10-14", "priority": 1,
-         "effort": 240, "list": "work_l", "status": "in_progress"},
+         "effort": 240, "list": "work_l"},
         {"key": "wireframes", "name": "Wireframes for step 3", "parent": "onboarding", "due": "2026-10-07",
          "completed": "2026-10-07T17:00", "effort": 90},
         {"key": "test_script", "name": "Write usability test script", "parent": "onboarding", "due": "2026-10-13",
@@ -228,8 +228,7 @@ def tasks():
          "effort": 30},
         {"key": "deck", "name": "Prepare portfolio review deck", "due": "2026-10-15", "priority": 2, "effort": 120,
          "list": "work_l"},
-        {"key": "ds_docs", "name": "Write design system docs", "priority": 4, "effort": 180, "list": "work_l",
-         "status": "in_progress"},
+        {"key": "ds_docs", "name": "Write design system docs", "priority": 4, "effort": 180, "list": "work_l"},
         {"key": "participants", "name": "Book usability participants", "due": "2026-10-16", "priority": 3,
          "effort": 45, "list": "work_l"},
         {"key": "expense_1", "name": "Submit expense report", "due": "2026-11-06", "effort": 20, "list": "work_l"},
@@ -253,7 +252,7 @@ def tasks():
         {"key": "costume", "name": "Sew Mika's fox costume", "due": "2026-10-29", "effort": 180, "list": "mika_l",
          "priority": 2},
         # home
-        {"key": "faucet", "name": "Fix the bathroom faucet", "status": "in_progress", "list": "home_l",
+        {"key": "faucet", "name": "Fix the bathroom faucet", "list": "home_l",
          "effort": 60},
         {"key": "gallery", "name": "Hang the gallery wall", "priority": 5, "effort": 90, "list": "home_l"},
         {"key": "smoke", "name": "Change smoke detector batteries", "due": "2026-11-01", "effort": 15,

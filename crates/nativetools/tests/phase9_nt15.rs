@@ -336,15 +336,16 @@ fn nt15_r1b_the_error_names_the_repair_when_it_is_not_normalised() {
 // ---------------------------------------------------------------------------------------------
 // R1c: which rows of a `linked_to` are links for the kind
 
-/// photos link to albums and people; the fixture's photo `Beach day` has Neha Rao in it.
+/// tasks link to tasks, people and lists; the fixture's task `reed` is about Benedikt (a photo is
+/// about no one since #1135: an album is the only thing it links to).
 fn mixed_links(session: &mut Session) -> (String, String, String) {
-    session.user("photos of neha and the dentist");
+    session.user("tasks about benedikt, the dentist and the dal");
     let ids = numbers(
         session,
         &[
-            ("person", "Neha Rao"),
+            ("person", "Benedikt"),
             ("event", "Dentist"),
-            ("task", "Pay rent"),
+            ("note", "Dal"),
         ],
     );
     (ids[0].clone(), ids[1].clone(), ids[2].clone())
@@ -358,13 +359,13 @@ fn nt15_r1c_a_linked_to_keeps_the_rows_that_are_links_for_the_kind() {
     let reply = call(
         &mut session,
         "find",
-        json!({"kind": "photo", "linked_to": format!("{neha}, {dentist}, {rent}")}),
+        json!({"kind": "task", "linked_to": format!("{neha}, {dentist}, {rent}")}),
     );
     assert!(!text(&reply).contains("not linked"), "{reply}");
-    assert_eq!(rows_of(&reply), vec![world.id("beach")], "{reply}");
+    assert_eq!(rows_of(&reply), vec![world.id("reed")], "{reply}");
     assert!(
         text(&reply).contains(&format!(
-            "note: used linked_to {neha}; ignored {dentist} event, {rent} task (photos link to"
+            "note: used linked_to {neha}; ignored {dentist} event, {rent} note (tasks link to"
         )),
         "{reply}"
     );
@@ -378,15 +379,15 @@ fn nt15_r1c_with_no_valid_row_the_reply_names_which_are_not_links() {
     let reply = call(
         &mut session,
         "find",
-        json!({"kind": "photo", "linked_to": format!("{dentist}, {rent}")}),
+        json!({"kind": "task", "linked_to": format!("{dentist}, {rent}")}),
     );
     assert!(
-        text(&reply).starts_with("photos are not linked to events."),
+        text(&reply).starts_with("tasks are not linked to events."),
         "{reply}"
     );
     assert!(
         text(&reply).contains(&format!(
-            "{dentist} event and {rent} task are not valid links for photos."
+            "{dentist} event and {rent} note are not valid links for tasks."
         )),
         "{reply}"
     );
@@ -400,11 +401,11 @@ fn nt15_r1c_not_normalised_the_reply_says_which_rows_are_valid_and_which_are_not
     let reply = call(
         &mut session,
         "find",
-        json!({"kind": "photo", "linked_to": format!("{dentist}, {neha}, {rent}")}),
+        json!({"kind": "task", "linked_to": format!("{dentist}, {neha}, {rent}")}),
     );
     assert!(
         text(&reply).contains(&format!(
-            "{neha} person is a valid link for photos; {dentist} event and {rent} task are not."
+            "{neha} person is a valid link for tasks; {dentist} event and {rent} note are not."
         )),
         "{reply}"
     );
@@ -413,7 +414,7 @@ fn nt15_r1c_not_normalised_the_reply_says_which_rows_are_valid_and_which_are_not
     let reply = call(
         &mut session,
         "find",
-        json!({"kind": "photo", "linked_to": dentist}),
+        json!({"kind": "task", "linked_to": dentist}),
     );
     assert!(!text(&reply).contains("valid link"), "{reply}");
 }

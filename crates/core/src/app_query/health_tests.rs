@@ -1,5 +1,6 @@
 //! Health's arm, through `Handle::call` — the door a shell uses — over a fortnight of daily
-//! totals and two workouts written by the real `health.*` commands (#1129).
+//! totals and two workouts written by the real `measurement.record` and `follow.health` commands
+//! (#1129, #1135).
 //!
 //! What each test holds:
 //!
@@ -38,7 +39,7 @@ impl Drop for Scratch {
 
 impl Scratch {
     fn founded() -> Self {
-        let dir = centraid_ontology::golden::scratch_dir();
+        let dir = centraid_ontology::scratch::scratch_dir();
         std::fs::create_dir_all(&dir).expect("the directory is made");
         let now = centraid_vault::time::recurrence::parse_instant_ms(NOW).expect("an instant");
         let config = CoreConfig::new(dir.join("vault.db")).with_clock(
@@ -116,25 +117,51 @@ impl Scratch {
         }
         days.push(json!({ "day": "2026-10-10", "metric": "weight_kg", "value": 72.0 }));
         days.push(json!({ "day": "2026-10-17", "metric": "weight_kg", "value": 71.4 }));
-        let written = scratch.run("health.record_days", json!({ "days": days }));
+        let written = scratch.run("measurement.record", json!({ "days": days }));
         assert_eq!(written["written"], 30);
         scratch.run(
-            "health.follow_workout",
+            "follow.health",
             json!({
-                "activity_id": "wk-run", "kind": "run", "phone_kind": "running",
-                "started_at": "2026-10-20T07:00:00Z", "ended_at": "2026-10-20T07:41:00Z",
-                "recorded_by": "Apple Watch", "moving_sec": 2400, "distance_m": 8012.5,
-                "energy_kcal": 412.0, "avg_hr_bpm": 151, "elevation_gain_m": 38.5,
-            }),
-        );
-        scratch.run(
-            "health.follow_workout",
-            json!({
-                "activity_id": "wk-walk", "kind": "walk", "phone_kind": "walking",
-                "started_at": "2026-10-18T17:30:00Z", "ended_at": "2026-10-18T18:10:00Z",
+                "origin": { "ref": "store:apple-health", "label": "Apple Health" },
+                "records": [
+                    { "external_id": "wk-run", "fields": {
+                        "kind": "run",
+                        "starts": "2026-10-20T07:00:00Z", "ends": "2026-10-20T07:41:00Z",
+                        "workout": {
+                            "recorded_by": "Apple Watch", "moving_s": 2400, "distance_m": 8012.5,
+                            "energy_kcal": 412.0, "heart_bpm": 151, "climb_m": 38.5,
+                        },
+                    } },
+                    { "external_id": "wk-walk", "fields": {
+                        "kind": "walk",
+                        "starts": "2026-10-18T17:30:00Z", "ends": "2026-10-18T18:10:00Z",
+                    } },
+                ],
             }),
         );
         scratch
+    }
+
+    /// The id the vault minted for the workout the store calls `external`.
+    fn workout_id(&self, external: &str) -> String {
+        self.handle
+            .with_vault(|vault| {
+                Ok(vault.read(|connection| {
+                    let door = centraid_apps_kit::testdoor::TestDoor::new(connection);
+                    let row = centraid_apps_kit::reads::read_by_id(
+                        &door,
+                        "health.test.workout",
+                        "entity_id, external_id",
+                        "source",
+                        "external_id",
+                        external,
+                    )
+                    .expect("the door answers");
+                    Ok(row.and_then(|row| centraid_apps_kit::row::text_of(&row, "entity_id")))
+                })?)
+            })
+            .expect("reads")
+            .expect("a followed workout")
     }
 
     fn today(&self) -> wire::HealthToday {
@@ -247,16 +274,13 @@ fn today_compares_today_with_the_whole_days_before_it() {
         .iter()
         .map(|workout| workout.activity_id.as_str())
         .collect();
-    assert_eq!(ids, ["wk-run"]);
+    assert_eq!(ids, [scratch.workout_id("wk-run").as_str()]);
     assert_eq!(today.workouts[0].started_at, "2026-10-20T07:00:00.000Z");
 
-    // Connected is a health origin, which the engine registers when the member connects.
-    assert!(!today.connected);
-    scratch.run(
-        "phone.origin",
-        json!({ "source": "health", "device_id": "device-a", "phone_origin": "store:apple-health", "label": "Apple Health" }),
-    );
-    assert!(scratch.today().connected);
+    // Connected is a health origin, which the first follow registers; a vault no store
+    // was ever followed in is not connected.
+    assert!(today.connected);
+    assert!(!Scratch::founded().today().connected);
 }
 
 #[test]
@@ -355,10 +379,9 @@ fn workouts_page_newest_first_with_every_kind_counted() {
             run.kind_key.as_str(),
             run.kind_label.as_str()
         ),
-        ("wk-run", "run", "Run")
+        (scratch.workout_id("wk-run").as_str(), "run", "Run")
     );
-    assert_eq!(run.kind_concept_id, "health:kind:run");
-    assert_eq!(run.phone_kind, "running");
+    assert_eq!(run.kind_concept_id, "workout_kind:run");
     assert_eq!(run.ended_at, "2026-10-20T07:41:00.000Z");
     assert_eq!(run.moving_sec, Some(2400));
     assert_eq!(
@@ -378,7 +401,7 @@ fn workouts_page_newest_first_with_every_kind_counted() {
 
     let second = scratch.workouts(None, 1, first.next);
     let walk = &second.workouts[0];
-    assert_eq!(walk.activity_id, "wk-walk");
+    assert_eq!(walk.activity_id, scratch.workout_id("wk-walk"));
     assert_eq!(
         (
             walk.distance_m,
@@ -393,7 +416,7 @@ fn workouts_page_newest_first_with_every_kind_counted() {
     );
     assert_eq!(second.next, None, "the walk was the last workout");
 
-    let walks = scratch.workouts(Some("health:kind:walk"), 50, None);
+    let walks = scratch.workouts(Some("workout_kind:walk"), 50, None);
     assert_eq!(walks.workouts.len(), 1);
     assert_eq!(
         walks.kinds.len(),
@@ -406,7 +429,7 @@ fn workouts_page_newest_first_with_every_kind_counted() {
 fn one_workout_reads_whole_and_an_activity_that_is_not_one_reads_as_none() {
     let scratch = Scratch::fortnight();
     let Answer::HealthWorkout(found) = scratch.ask(Q::HealthWorkout(wire::HealthWorkoutRequest {
-        activity_id: "wk-run".to_owned(),
+        activity_id: scratch.workout_id("wk-run"),
         tz: "America/Los_Angeles".to_owned(),
     })) else {
         panic!("a workout answered as something else");
@@ -417,24 +440,21 @@ fn one_workout_reads_whole_and_an_activity_that_is_not_one_reads_as_none() {
         "07:00Z is midnight on the Pacific's wall clock"
     );
     let Answer::HealthWorkout(found) = scratch.ask(Q::HealthWorkout(wire::HealthWorkoutRequest {
-        activity_id: "wk-run".to_owned(),
+        activity_id: scratch.workout_id("wk-run"),
         tz: UTC.to_owned(),
     })) else {
         panic!("a workout answered as something else");
     };
     assert!(close(found.workout.expect("the run").energy_kcal, 412.0));
 
-    let person = scratch.run(
-        "people.add_person",
-        json!({ "display_name": "Ada", "cadence_days": 30 }),
-    )["party_id"]
+    let person = scratch.run("person.add", json!({ "title": "Ada", "cadence_days": 30 }))["id"]
         .as_str()
         .expect("a party")
         .to_owned();
     // A logged interaction is an activity with no workout row.
     let interaction = scratch.run(
-        "people.log_interaction",
-        json!({ "party_id": person, "kind": "call" }),
+        "person.log_interaction",
+        json!({ "id": person, "kind": "call" }),
     )["interaction_id"]
         .as_str()
         .expect("an interaction id")

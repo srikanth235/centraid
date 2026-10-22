@@ -100,7 +100,7 @@ public fun HomeScreen(
     state: HomeState,
     onEvent: (HomeEvent) -> Unit,
     onForget: (String) -> Unit,
-    /** Rename a vault (`core.rename_vault`): its id and the name typed. */
+    /** Rename a vault (`vault.rename`): its id and the name typed. */
     onRename: (vaultId: String, name: String) -> Unit = { _, _ -> },
     /**
      * Open the transfer-rules sheet (#1025 S4). Defaulted so a preview renders
@@ -166,7 +166,7 @@ public fun HomeScreen(
             backup = state.backup_line,
             onOpenBackup = onOpenBackup,
             // HOME'S SEARCH KEY (R-CHROME-6), at the lockup's trailing edge;
-            // a tap opens the search over every app but Locker. Not on the
+            // a tap opens the search over every app. Not on the
             // Backup tab, which is the backup's and not the springboard's.
             onSearch = onOpenSearch.takeIf { !backupShown },
             searchLabel = searchPlaceholder,
