@@ -92,6 +92,12 @@ pub struct PageQuery {
     /// Binds the statement's own placeholders take, before the keyset's.
     pub bind: Vec<PageBindValue>,
     pub order: PageOrder,
+    /// APPEND THE DEVICE'S OWN BYTES TO EACH ROW (#1025, D-1025-S7-20): a
+    /// `thumbnail_path` a cell can draw, the row's `original_hash` and whether
+    /// the original is `original_held` on this device. The vault computes all
+    /// three beside the page, so an app cannot spell the lookup or the "may this
+    /// path be handed out" rule. Only a table with a `blob` column may ask.
+    pub held_thumbnail: bool,
 }
 
 impl PageQuery {
@@ -104,7 +110,14 @@ impl PageQuery {
             r#where: None,
             bind: Vec::new(),
             order,
+            held_thumbnail: false,
         }
+    }
+
+    /// Ask the door for the held-bytes columns ([`Self::held_thumbnail`]).
+    pub fn with_held_thumbnail(mut self) -> Self {
+        self.held_thumbnail = true;
+        self
     }
 
     /// The handler's own predicate and the binds it takes, set together so the

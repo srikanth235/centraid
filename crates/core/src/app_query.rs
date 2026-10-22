@@ -719,7 +719,7 @@ impl PageDoor for VaultDoor<'_> {
                 .after
                 .as_ref()
                 .map(|cursor| (cursor.sort_key.clone(), cursor.pk.clone())),
-            held_thumbnail: false,
+            held_thumbnail: query.held_thumbnail,
             document_size: false,
         });
         match answer {

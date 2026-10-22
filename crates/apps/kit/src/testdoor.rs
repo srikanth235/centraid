@@ -121,7 +121,14 @@ impl PageDoor for TestDoor<'_> {
         if request.after.is_some() {
             self.refuse_nullable_sort(query, &shape)?;
         }
-        let statement = page_statement(query, request, None)?;
+        // A held-bytes page: a test door holds no byte store, so the path is NULL
+        // and the original is not held; the original's hash is the row's `blob`.
+        let held = query.held_thumbnail.then(|| {
+            let mut widened = query.clone();
+            widened.select = format!("{}, blob AS original_hash", query.select);
+            widened
+        });
+        let statement = page_statement(held.as_ref().unwrap_or(query), request, None)?;
         let mut prepared = self
             .connection
             .prepare(&statement.sql)
@@ -164,6 +171,10 @@ impl PageDoor for TestDoor<'_> {
                     ValueRef::Blob(bytes) => Cell::Blob(bytes.to_vec()),
                 };
                 out.insert(column.clone(), cell);
+            }
+            if query.held_thumbnail {
+                out.insert("thumbnail_path".to_owned(), Cell::Null);
+                out.insert("original_held".to_owned(), Cell::Integer(0));
             }
             fetched.push(out);
         }
@@ -327,6 +338,28 @@ mod tests {
         let whole = door.page(&query, &PageRequest::first(9)).unwrap();
         assert_eq!(whole.rows.len(), 3);
         assert!(whole.next.is_none());
+    }
+
+    #[test]
+    fn a_held_bytes_page_carries_the_three_columns_with_no_store_behind_it() {
+        let connection = Connection::open_in_memory().expect("a connection");
+        connection
+            .execute_batch(
+                "CREATE TABLE photo (id TEXT PRIMARY KEY, blob TEXT NOT NULL);
+                 INSERT INTO photo VALUES ('p1', 'abc');",
+            )
+            .expect("seeded");
+        let door = TestDoor::new(&connection);
+        let query = PageQuery::new("kit.testdoor.held", "id", "photo", PageOrder::asc("id", "id"))
+            .with_held_thumbnail();
+        let page = door.page(&query, &PageRequest::first(5)).expect("a page");
+        let row = &page.rows[0];
+        assert_eq!(row.get("thumbnail_path"), Some(&Cell::Null));
+        assert_eq!(
+            row.get("original_hash"),
+            Some(&Cell::Text("abc".to_owned()))
+        );
+        assert_eq!(row.get("original_held"), Some(&Cell::Integer(0)));
     }
 
     #[test]
