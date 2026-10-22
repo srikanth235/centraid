@@ -506,6 +506,55 @@ fn tenths(count: i64, unit: i64) -> (i64, i64) {
     (whole, tenth)
 }
 
+/// THE READS THAT MAY SEE A LOCKER ITEM'S ROW.
+///
+/// A Locker item is an entity, so a page over `entity` or `edge` would serve
+/// it with every other kind's rows: its title, its tags, the notes that link
+/// it. Locker's items are the member's most private rows, so a page serves
+/// them only to a read that is named as one that may (#1135, the Locker lane,
+/// L4):
+///
+/// - `locker.*`: Locker's own reads, behind its gate on the shell;
+/// - `home.locker`: Home's count of Locker's items, which selects ids and
+///   nothing a member wrote;
+/// - `notes.cards.entity`, `notes.library.links` and `notes.library.backlinks`:
+///   a note's link to an item and the card that renders its title (L8).
+///
+/// Every other read (a generic list, the Trash of another app, the assistant's
+/// `assist.native.*`) is given the page **without** them: the rows are not
+/// there, and no count of them is either.
+#[must_use]
+pub fn reaches_locker(name: &str) -> bool {
+    name.starts_with("locker.")
+        || matches!(
+            name,
+            "home.locker"
+                | "notes.cards.entity"
+                | "notes.library.links"
+                | "notes.library.backlinks"
+        )
+}
+
+/// Locker's own tables: the kind row and its sidecars. `receipt` and
+/// `locker_key` hold no secret and are paged by name like any other table.
+fn is_locker_table(table: &str) -> bool {
+    table == "locker_item" || table.starts_with("locker_item_")
+}
+
+/// The clause that takes Locker's items out of a page over `entity`, and the
+/// edges that touch one out of a page over `edge`.
+fn locker_exclusion(from: &str) -> Option<String> {
+    match from {
+        "entity" => Some("(\"kind\" <> 'locker_item')".to_owned()),
+        "edge" => Some(
+            "(NOT EXISTS (SELECT 1 FROM entity AS locker_end WHERE locker_end.kind = 'locker_item' \
+             AND locker_end.id IN (\"edge\".\"from_id\", \"edge\".\"to_id\", \"edge\".\"label_id\")))"
+                .to_owned(),
+        ),
+        _ => None,
+    }
+}
+
 /// One page of rows, plus the cursor to ask from next.
 #[derive(Debug, Clone)]
 pub struct KeysetAnswer {
@@ -640,6 +689,18 @@ impl Vault {
             .as_ref()
             .map(|text| vec![format!("({text})")])
             .unwrap_or_default();
+        if !reaches_locker(&page.name) {
+            if is_locker_table(&page.from) {
+                return Err(VaultError::InvalidInput {
+                    name: page.name.clone(),
+                    detail: format!(
+                        "`{}` is a Locker table, and this read is not one of Locker's",
+                        page.from
+                    ),
+                });
+            }
+            clauses.extend(locker_exclusion(&page.from));
+        }
         if let Some((sort_key, pk)) = &page.after {
             // A TUPLE COMPARISON on the two order columns. A `>` on the sort
             // column alone would skip every row that ties with the cursor's

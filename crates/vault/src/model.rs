@@ -36,11 +36,12 @@ pub enum Kind {
     Section,
     Area,
     Calendar,
+    LockerItem,
 }
 
 impl Kind {
     /// Every kind, in the CHECK's order.
-    pub const ALL: [Self; 25] = [
+    pub const ALL: [Self; 26] = [
         Self::Person,
         Self::Place,
         Self::Event,
@@ -66,6 +67,7 @@ impl Kind {
         Self::Section,
         Self::Area,
         Self::Calendar,
+        Self::LockerItem,
     ];
 
     /// The kinds `concept` hosts: the `concept.kind` CHECK.
@@ -118,6 +120,7 @@ impl Kind {
             Self::Section => "section",
             Self::Area => "area",
             Self::Calendar => "calendar",
+            Self::LockerItem => "locker_item",
         }
     }
 

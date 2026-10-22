@@ -40,6 +40,7 @@ use centraid_vault::custody::locker_key::{
     LOCKER_ENCRYPTED_COLUMNS, decrypt_under_locker_key, encrypt_under_locker_key,
     is_locker_ciphertext,
 };
+use centraid_vault::model::Kind;
 
 /// The plaintexts planted, and the strings the gate hunts for.
 ///
@@ -113,12 +114,11 @@ impl Sealed {
                     [],
                 )?;
                 for (item_id, title) in [("item-1", "The bank"), ("item-2", "The card")] {
+                    // A Locker item is an entity first; its kind row joins it.
+                    tx.insert_entity(item_id, Kind::LockerItem, title, "2026-01-01T00:00:00.000Z")?;
                     connection.execute(
-                        "INSERT INTO locker_item
-                           (item_id, type, title, created_at, updated_at, key_id)
-                         VALUES (?1, 'login', ?2, '2026-01-01T00:00:00.000Z',
-                                 '2026-01-01T00:00:00.000Z', 'key-1')",
-                        rusqlite::params![item_id, title],
+                        "INSERT INTO locker_item (id, type, key_id) VALUES (?1, 'login', 'key-1')",
+                        rusqlite::params![item_id],
                     )?;
                 }
                 connection.execute(
@@ -219,7 +219,7 @@ fn nothing_the_vault_serves_or_backs_up_carries_locker_plaintext() {
             .scratch
             .vault
             .keyset_page(&centraid_vault::page::KeysetPage {
-                name: "gate".to_owned(),
+                name: "locker.gate".to_owned(),
                 select: select.clone(),
                 from: (*table).to_owned(),
                 predicate: None,
@@ -275,6 +275,149 @@ fn nothing_the_vault_serves_or_backs_up_carries_locker_plaintext() {
     for (name, input) in answers {
         let answer = sealed_vault.run(name, input);
         carries_no_secret(&format!("{name}'s answer"), answer.as_bytes());
+    }
+
+    // ---- 2b. THE READERS OF EVERY ENTITY (a Locker item is one) -----------
+    //
+    // A Locker item is an entity, so every reader that serves "entities" is a
+    // reader that could serve it. None may carry a cell, and none may carry the
+    // item at all unless it is one of Locker's.
+    {
+        let vault = &sealed_vault.scratch.vault;
+        let page_of = |name: &str, from: &str, select: &[&str], sort: &str, pk: &str| {
+            vault.keyset_page(&centraid_vault::page::KeysetPage {
+                name: name.to_owned(),
+                select: select.iter().map(|column| (*column).to_owned()).collect(),
+                from: from.to_owned(),
+                predicate: None,
+                binds: Vec::new(),
+                sort_column: sort.to_owned(),
+                pk_column: pk.to_owned(),
+                descending: false,
+                limit: 100,
+                after: None,
+                held_thumbnail: false,
+                document_size: false,
+            })
+        };
+        // keyset_page over `entity`: the vault's own owner and the seeded words,
+        // and not a Locker row.
+        let entities = page_of(
+            "generic.entities",
+            "entity",
+            &["id", "kind", "title"],
+            "id",
+            "id",
+        )
+        .expect("the door answers");
+        assert!(!entities.rows.is_empty(), "the entity page served nothing");
+        let rendered = format!("{:?}", entities.rows);
+        carries_no_secret("a generic page over entity", rendered.as_bytes());
+        assert!(
+            !rendered.contains("locker_item") && !rendered.contains("The bank"),
+            "a generic page over entity served a Locker item: {rendered}"
+        );
+        // …while Locker's own read of the same table does see its items.
+        let own = page_of(
+            "locker.phone.shelves",
+            "entity",
+            &["id", "kind", "title"],
+            "id",
+            "id",
+        )
+        .expect("the door answers");
+        assert!(format!("{:?}", own.rows).contains("The bank"));
+        // keyset_page over `edge`: no edge that touches an item.
+        sealed_vault
+            .scratch
+            .vault
+            .commit(|tx| {
+                tx.set_producer("test.fixture");
+                tx.connection().execute(
+                    "INSERT INTO edge (from_id, rel, to_id, created_at)
+                     VALUES ('item-1', 'tagged', 'flag:starred', '2026-01-01T00:00:00.000Z')",
+                    [],
+                )?;
+                Ok(())
+            })
+            .expect("a star lands");
+        let edges = page_of(
+            "generic.edges",
+            "edge",
+            &["from_id", "to_id"],
+            "from_id",
+            "to_id",
+        )
+        .expect("the door answers");
+        assert!(
+            edges.rows.is_empty(),
+            "a generic page over edge served a Locker edge"
+        );
+        let own_edges = page_of(
+            "locker.phone.tags",
+            "edge",
+            &["from_id", "to_id"],
+            "from_id",
+            "to_id",
+        )
+        .expect("the door answers");
+        assert_eq!(own_edges.rows.len(), 1, "Locker's own read lost its star");
+        // And a Locker TABLE is Locker's alone: a generic read is refused.
+        for table in ["locker_item", "locker_item_field", "locker_item_passkey"] {
+            let pk = if table == "locker_item" {
+                "id"
+            } else {
+                "item_id"
+            };
+            let refused = page_of("generic.peek", table, &[pk], pk, pk);
+            assert!(refused.is_err(), "a generic read of {table} was served");
+        }
+        // The search index holds no word of a Locker item, nor its row.
+        vault
+            .read(|connection| {
+                let index_text: String = connection
+                    .prepare(
+                        "SELECT term FROM search_vocab UNION ALL SELECT word FROM search_word",
+                    )?
+                    .query_map([], |row| row.get::<_, String>(0))?
+                    .collect::<rusqlite::Result<Vec<_>>>()?
+                    .join(" ");
+                carries_no_secret("the search index's words", index_text.as_bytes());
+                for title_word in ["bank", "card"] {
+                    assert!(
+                        !index_text.split(' ').any(|word| word == title_word),
+                        "the search index holds the title of a Locker item (`{title_word}`)"
+                    );
+                }
+                let indexed: i64 = connection.query_row(
+                    "SELECT COUNT(*) FROM search WHERE rowid IN
+                       (SELECT n FROM entity WHERE kind = 'locker_item')",
+                    [],
+                    |row| row.get(0),
+                )?;
+                assert_eq!(indexed, 0, "a Locker item has a row in the search index");
+                // text_of answers nothing for the kind, whatever its row holds.
+                for item in ["item-1", "item-2"] {
+                    assert!(
+                        centraid_vault::index::text_of(connection, item, Kind::LockerItem)?
+                            .is_none(),
+                        "text_of answered for a Locker item"
+                    );
+                }
+                // The journal carried no cell (every command above ran), and a
+                // Locker item has no revision to carry one.
+                let journal: String = connection
+                    .prepare("SELECT input || ' ' || COALESCE(detail, '') FROM journal")?
+                    .query_map([], |row| row.get::<_, String>(0))?
+                    .collect::<rusqlite::Result<Vec<_>>>()?
+                    .join("\n");
+                carries_no_secret("the journal", journal.as_bytes());
+                let revisions: i64 =
+                    connection.query_row("SELECT COUNT(*) FROM revision", [], |row| row.get(0))?;
+                assert_eq!(revisions, 0, "a Locker item left a revision");
+                Ok(())
+            })
+            .expect("the readers answer");
     }
 
     // ---- 3. THE SNAPSHOT ---------------------------------------------------

@@ -522,6 +522,12 @@ impl Vault {
                 return refused(invalid.join("; "), "schema");
             }
 
+            if principal.is_assistant()
+                && let Some(sentence) = assistant_refusal(connection, definition, &command.input)?
+            {
+                return refused(sentence, ASSISTANT_CLOSED_OUT);
+            }
+
             let ctx = CommandCtx {
                 tx,
                 command: definition.name,
@@ -627,6 +633,52 @@ impl Vault {
             reason,
             predicate,
         })
+    }
+}
+
+/// The predicate a refusal of the assistant at Locker's door is journalled under.
+pub const ASSISTANT_CLOSED_OUT: &str = "assistant_is_closed_out_of_locker";
+
+/// THE ASSISTANT HAS NO WAY INTO LOCKER, through any verb.
+///
+/// A Locker item is an entity, so the shared verbs (`entity.retitle`,
+/// `tag.add`, `edge.add`, …) would otherwise reach it by id. The refusal is the
+/// gate's and not each verb's, so a verb added later is closed too: under the
+/// assistant's principal a `locker.*` command is refused, and so is any command
+/// whose input names, anywhere, the id of a Locker item. It is a sentence and
+/// not a lookup failure on purpose: the member asked, and "that is in Locker"
+/// is true; it carries no title, no kind row and no secret.
+fn assistant_refusal(
+    connection: &Connection,
+    definition: &CommandDefinition,
+    input: &serde_json::Value,
+) -> Result<Option<String>> {
+    const SENTENCE: &str = "that is in your Locker, which the assistant cannot open";
+    if definition.owner_schema == "locker" {
+        return Ok(Some(SENTENCE.to_owned()));
+    }
+    let mut strings = Vec::new();
+    collect_strings(input, &mut strings);
+    let mut named =
+        connection.prepare_cached("SELECT 1 FROM entity WHERE id = ?1 AND kind = 'locker_item'")?;
+    for candidate in strings {
+        // The kind's own name is a way to name every item of it (`entity.empty_trash`).
+        if candidate == Kind::LockerItem.as_str() || named.exists([candidate])? {
+            return Ok(Some(SENTENCE.to_owned()));
+        }
+    }
+    Ok(None)
+}
+
+/// Every string in a JSON value, at any depth, that could be an id.
+fn collect_strings<'a>(value: &'a serde_json::Value, out: &mut Vec<&'a str>) {
+    match value {
+        serde_json::Value::String(text) if !text.is_empty() && text.len() <= 200 => {
+            out.push(text);
+        }
+        serde_json::Value::Array(items) => items.iter().for_each(|item| collect_strings(item, out)),
+        serde_json::Value::Object(map) => map.values().for_each(|item| collect_strings(item, out)),
+        _ => {}
     }
 }
 

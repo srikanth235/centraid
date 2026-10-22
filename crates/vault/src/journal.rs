@@ -35,6 +35,22 @@ impl Outcome {
     }
 }
 
+/// The token a secret becomes in the journal.
+fn token(value: &serde_json::Value) -> serde_json::Value {
+    let rendered = serde_json::to_string(value).unwrap_or_default();
+    serde_json::Value::String(format!(
+        "sealed:blake3:{}",
+        &hex::encode(blake3::hash(rendered.as_bytes()).as_bytes())[..16]
+    ))
+}
+
+/// A sealed key is a top-level name (`password`) or a name inside every element
+/// of a top-level array (`fields[].value`), which is how `locker.duplicate_item`
+/// carries the custom fields it re-sealed.
+fn nested(key: &str) -> Option<(&str, &str)> {
+    key.split_once("[].")
+}
+
 /// Replace the values of declared-secret keys with keyed tokens.
 ///
 /// A token, not a removal: a reviewer reading the journal needs to see that a
@@ -47,12 +63,16 @@ pub fn redact_command_input(input: &serde_json::Value, sealed_keys: &[&str]) -> 
     };
     let mut out = map.clone();
     for key in sealed_keys {
-        if let Some(value) = out.get_mut(*key) {
-            let rendered = serde_json::to_string(value).unwrap_or_default();
-            *value = serde_json::Value::String(format!(
-                "sealed:blake3:{}",
-                &hex::encode(blake3::hash(rendered.as_bytes()).as_bytes())[..16]
-            ));
+        if let Some((array, inner)) = nested(key) {
+            if let Some(serde_json::Value::Array(items)) = out.get_mut(array) {
+                for item in items {
+                    if let Some(value) = item.as_object_mut().and_then(|item| item.get_mut(inner)) {
+                        *value = token(value);
+                    }
+                }
+            }
+        } else if let Some(value) = out.get_mut(*key) {
+            *value = token(value);
         }
     }
     serde_json::Value::Object(out)
@@ -67,11 +87,22 @@ pub fn scrub_sealed(message: &str, sealed_keys: &[&str], input: &serde_json::Val
     let Some(map) = input.as_object() else {
         return out;
     };
-    for key in sealed_keys {
-        if let Some(serde_json::Value::String(secret)) = map.get(*key)
+    let mut scrub = |value: Option<&serde_json::Value>| {
+        if let Some(serde_json::Value::String(secret)) = value
             && !secret.is_empty()
         {
             out = out.replace(secret.as_str(), "‹sealed›");
+        }
+    };
+    for key in sealed_keys {
+        if let Some((array, inner)) = nested(key) {
+            if let Some(serde_json::Value::Array(items)) = map.get(array) {
+                for item in items {
+                    scrub(item.get(inner));
+                }
+            }
+        } else {
+            scrub(map.get(*key));
         }
     }
     out
