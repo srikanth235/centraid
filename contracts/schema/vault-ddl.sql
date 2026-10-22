@@ -52,6 +52,9 @@ CREATE INDEX edge_order ON edge(from_id, rel, position) WHERE position IS NOT NU
 -- index edge_to on edge
 CREATE INDEX edge_to    ON edge(to_id, rel, from_id);
 
+-- index entity_by_created on entity
+CREATE INDEX entity_by_created ON entity(kind, created_at, id);
+
 -- index entity_by_title on entity
 CREATE INDEX entity_by_title   ON entity(kind, deleted_at, title, id);
 
@@ -60,6 +63,9 @@ CREATE INDEX entity_by_updated ON entity(kind, deleted_at, updated_at, id);
 
 -- index entity_purge on entity
 CREATE INDEX entity_purge      ON entity(purge_at) WHERE purge_at IS NOT NULL;
+
+-- index entity_trashed on entity
+CREATE INDEX entity_trashed    ON entity(deleted_at, n) WHERE deleted_at IS NOT NULL;
 
 -- index event_by_calendar on event
 CREATE INDEX event_by_calendar ON event(calendar_id);
@@ -106,8 +112,11 @@ CREATE INDEX photo_by_place       ON photo(place_id) WHERE place_id IS NOT NULL;
 -- index photo_by_taken on photo
 CREATE INDEX photo_by_taken       ON photo(taken_at, id);
 
+-- index receipt_by_at on receipt
+CREATE INDEX receipt_by_at ON receipt(at, seq);
+
 -- index receipt_by_item on receipt
-CREATE INDEX receipt_by_item ON receipt(item_id, seq) WHERE item_id IS NOT NULL;
+CREATE INDEX receipt_by_item ON receipt(item_id, at, seq) WHERE item_id IS NOT NULL;
 
 -- index source_entity on source
 CREATE UNIQUE INDEX source_entity ON source(entity_id) WHERE entity_id IS NOT NULL;
