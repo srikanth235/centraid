@@ -16,7 +16,7 @@ use std::path::PathBuf;
 /// Every file in the tree, named rather than globbed: a `.proto` that is not on
 /// this list is a file nothing generates from, and a glob would hide that.
 /// `tests/tree.rs` asserts the list and the directory agree.
-const PROTOS: [&str; 28] = [
+const PROTOS: [&str; 29] = [
     "proto/centraid/core/v1/value.proto",
     "proto/centraid/core/v1/row.proto",
     "proto/centraid/core/v1/command.proto",
@@ -77,6 +77,9 @@ const PROTOS: [&str; 28] = [
     // THE ONE READ AND THE ONE WRITE (#1135): `load(app, query, params)` and
     // `act(app, action, input)`, spoken through each app's manifest.
     "proto/centraid/core/v1/action.proto",
+    // THE SCREEN RUNTIME'S WIRE (#1135, lane C2): route stacks, events, view
+    // states and effects, spoken through three arms of the one `Envelope`.
+    "proto/centraid/core/v1/screens.proto",
     // The on-device chat: a session, a question and a stream of events, over
     // reads an app already answers. Its own file because a turn is neither a
     // command nor a page read.
@@ -122,6 +125,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .boxed(".centraid.core.v1.Request.kind.act")
         .boxed(".centraid.core.v1.Response.kind.load")
         .boxed(".centraid.core.v1.Response.kind.act")
+        .boxed(".centraid.core.v1.Request.kind.screen")
+        .boxed(".centraid.core.v1.Response.kind.screen")
+        .boxed(".centraid.core.v1.Event.kind.screen")
         .boxed(".centraid.core.v1.AppQueryResponse.answer.tasks_task")
         // The event detail carries its calendar row since #1047.
         .boxed(".centraid.core.v1.AppQueryResponse.answer.agenda_event")

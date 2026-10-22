@@ -1,0 +1,11 @@
+// The C ABI as a Swift module (#1135, lane C2): the five symbols of
+// `crates/core-ffi/CONTRACT.md`, imported from the header cbindgen generates and
+// the repository COMMITS, so Swift calls the Rust core directly — no
+// Kotlin/Native framework between them.
+//
+// `SWIFT_INCLUDE_PATHS` in `project.yml` points here; `import CentraidCoreC`
+// in `Sources/Core.swift` is the only importer.
+module CentraidCoreC {
+    header "../../../crates/core-ffi/include/centraid.h"
+    export *
+}

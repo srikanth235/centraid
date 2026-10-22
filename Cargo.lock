@@ -668,6 +668,7 @@ dependencies = [
  "centraid-identity",
  "centraid-ontology",
  "centraid-protocol",
+ "centraid-screens",
  "centraid-vault",
  "hex",
  "libloading",
@@ -790,6 +791,16 @@ dependencies = [
  "centraid-api-proto",
  "prost",
  "thiserror",
+]
+
+[[package]]
+name = "centraid-screens"
+version = "1.0.0-alpha.0"
+dependencies = [
+ "centraid-api-proto",
+ "centraid-core",
+ "centraid-ontology",
+ "prost",
 ]
 
 [[package]]
