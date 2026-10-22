@@ -353,9 +353,13 @@ const SEEDED_TABLES: [(&str, &str, &str, Option<&str>); 8] = [
     ("money", "txn", "id", None),
     (
         "locker",
-        "locker_item",
-        "item_id",
-        Some("deleted_at IS NULL AND archived_at IS NULL"),
+        "entity",
+        "id",
+        Some(
+            "kind = 'locker_item' AND deleted_at IS NULL AND NOT EXISTS (
+               SELECT 1 FROM edge a WHERE a.from_id = entity.id
+                 AND a.rel = 'tagged' AND a.to_id = 'flag:archived')",
+        ),
     ),
 ];
 
@@ -380,7 +384,13 @@ fn count_rows(
             let mut after = None;
             loop {
                 let answer = vault.keyset_page(&centraid_vault::page::KeysetPage {
-                    name: "seed.count".to_owned(),
+                    // Home's Locker tile is a read the vault serves Locker's
+                    // rows to, by name; the mirror asks as Home does.
+                    name: if filter.is_some_and(|text| text.contains("locker_item")) {
+                        "home.locker".to_owned()
+                    } else {
+                        "seed.count".to_owned()
+                    },
                     select: vec![pk.to_owned()],
                     from: table.to_owned(),
                     predicate: filter.map(str::to_owned),
@@ -439,7 +449,7 @@ fn locker_items() -> Vec<(&'static str, Value)> {
             json!({
                 "item_id": "demo-locker-bank", "type": "login", "title": "Sierra Credit Union",
                 "username": "owner@example.com", "password": "Granite-Lake-47-Pine",
-                "url": "https://sierracu.example.com", "tags": ["finance"],
+                "url": "https://sierracu.example.com",
                 "notes": "Joint account for the cabin fund.",
                 // RFC 6238 Appendix B's own seed, as the QR code a bank shows
                 // would carry it, so the item page's code can be checked
@@ -484,11 +494,17 @@ fn locker_items() -> Vec<(&'static str, Value)> {
                 "password": "admin1234"
             }),
         ),
+        // Trash, star and tags are the vault's shared verbs: a Locker item is an
+        // entity (#1135).
+        ("entity.trash", json!({ "id": "demo-locker-gone" })),
         (
-            "locker.trash_item",
-            json!({ "item_id": "demo-locker-gone" }),
+            "flag.set",
+            json!({ "id": "demo-locker-bank", "flag": "starred" }),
         ),
-        ("locker.star_item", json!({ "item_id": "demo-locker-bank" })),
+        (
+            "tag.add",
+            json!({ "id": "demo-locker-bank", "label": "finance" }),
+        ),
         // CUSTOM FIELDS (#1047 T2): a sealed one the core seals against its
         // own id, and a plain one, so the item page shows both kinds.
         (

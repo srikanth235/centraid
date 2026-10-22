@@ -26,13 +26,26 @@ use centraid_apps_kit::error::KitResult;
 use centraid_apps_kit::row::{Row, text_of};
 use centraid_apps_kit::statement::{PageBindValue, PageOrder, PageQuery};
 
-/// THE BROWSABLE HALF OF A LOCKER ITEM (#996 wave 4, R8 and W6-D2).
+/// THE BROWSABLE HALF OF A LOCKER ITEM (#996 wave 4, R8 and W6-D2), as the
+/// folded row [`ItemRow`] carries it.
 ///
-/// A statement names its columns, and **no sealed cell is on this list**.
+/// A Locker item is an entity (#1135), so the row is read from three places and
+/// folded: the entity row ([`ENTITY_COLUMNS`]: title, stamps, trash), the kind
+/// row ([`KIND_COLUMNS`]) and the vault's `tagged` edges (the star and the
+/// archive are flags, the tags are vault tags). **No sealed cell is on this
+/// list, or on either statement list.**
 pub const ITEM_COLUMNS: &str = "item_id, type, title, username, url, notes, \
      cardholder, expiry, brand, fullname, email, phone, address, network, \
      compromised, password_set_at, starred, memo, created_at, updated_at, \
      archived_at, deleted_at, purge_at";
+
+/// What a statement reads of an item's ENTITY row.
+pub const ENTITY_COLUMNS: &str = "id, title, created_at, updated_at, deleted_at, purge_at";
+
+/// What a statement reads of an item's KIND row (`locker_item`): its typed
+/// plain columns and the memo, never a sealed cell.
+pub const KIND_COLUMNS: &str = "id, type, username, url, notes, cardholder, expiry, brand, \
+     fullname, email, phone, address, network, compromised, password_set_at, memo";
 
 /// The five columns of `locker_item` that hold ciphertext under `K`, named here
 /// only so [`tests`] can assert none of them is in [`ITEM_COLUMNS`].
@@ -117,20 +130,21 @@ pub struct ItemRow {
     /// When the CURRENT password was set. `None` honestly says "unknown"
     /// rather than claiming an age Review would then reason from.
     pub password_set_at: Option<String>,
-    /// Whether the member starred it: a column of the item, since a Locker item
-    /// is not an entity and the vault's `flag:starred` cannot reach it.
+    /// Whether the member starred it: the vault's `flag:starred`, a `tagged`
+    /// edge, set by `flag.set`.
     pub starred: bool,
     /// The member's plaintext memo, a column of the item.
     pub memo: Option<String>,
     pub created_at: Option<String>,
     pub updated_at: Option<String>,
+    /// When it was archived: the day the `flag:archived` edge was put on it.
     pub archived_at: Option<String>,
     pub deleted_at: Option<String>,
     pub purge_at: Option<String>,
 }
 
 impl ItemRow {
-    /// Read one row of [`ITEM_COLUMNS`].
+    /// Read one folded row of [`ITEM_COLUMNS`].
     #[must_use]
     pub fn of(row: &Row) -> Self {
         Self {
@@ -382,10 +396,12 @@ mod tests {
     #[test]
     fn no_sealed_column_is_in_the_browsable_projection() {
         for column in SEALED_ITEM_COLUMNS {
-            assert!(
-                !ITEM_COLUMNS.split(", ").any(|named| named.trim() == column),
-                "{column} is a sealed cell and it is in ITEM_COLUMNS"
-            );
+            for list in [ITEM_COLUMNS, KIND_COLUMNS, ENTITY_COLUMNS] {
+                assert!(
+                    !list.split(", ").any(|named| named.trim() == column),
+                    "{column} is a sealed cell and it is in a browsable list"
+                );
+            }
         }
         // The two sidecar sealed columns are not on it either.
         for column in ["value_sealed", "private_key"] {

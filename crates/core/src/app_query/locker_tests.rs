@@ -242,10 +242,11 @@ fn stocked() -> Scratch {
         json!({
             "item_id": "item-bank", "type": "login", "title": "Bank",
             "username": "maya@example.com", "password": PASSWORD,
-            "url": "https://bank.example.com", "notes": "recovery words live here",
-            "tags": ["finance"]
+            "url": "https://bank.example.com", "notes": "recovery words live here"
         }),
     );
+    // A Locker tag is a vault tag, put on by the shared verb.
+    scratch.run("tag.add", json!({ "id": "item-bank", "label": "finance" }));
     scratch.run(
         "locker.add_item",
         json!({ "item_id": "item-forum", "type": "login", "title": "Old forum",
@@ -270,13 +271,16 @@ fn stocked() -> Scratch {
         "locker.add_item",
         json!({ "item_id": "item-archived", "type": "note", "title": "Old note" }),
     );
-    scratch.run("locker.archive_item", json!({ "item_id": "item-archived" }));
+    scratch.run(
+        "flag.set",
+        json!({ "id": "item-archived", "flag": "archived" }),
+    );
     scratch.run(
         "locker.add_item",
         json!({ "item_id": "item-trashed", "type": "password", "title": "Gone" }),
     );
-    scratch.run("locker.trash_item", json!({ "item_id": "item-trashed" }));
-    scratch.run("locker.star_item", json!({ "item_id": "item-bank" }));
+    scratch.run("entity.trash", json!({ "id": "item-trashed" }));
+    scratch.run("flag.set", json!({ "id": "item-bank", "flag": "starred" }));
     scratch.relock();
     scratch
 }
@@ -1292,9 +1296,9 @@ fn the_whole_lockers_access_history_names_every_receipt_and_carries_no_value() {
     scratch.reveal("item-card", "card_number");
     scratch.reveal("item-bin", "password");
     scratch.reveal("item-temp", "password");
-    scratch.run("locker.trash_item", json!({ "item_id": "item-bin" }));
-    scratch.run("locker.trash_item", json!({ "item_id": "item-temp" }));
-    scratch.run("locker.purge_item", json!({ "item_id": "item-temp" }));
+    scratch.run("entity.trash", json!({ "id": "item-bin" }));
+    scratch.run("entity.trash", json!({ "id": "item-temp" }));
+    scratch.run("entity.purge", json!({ "id": "item-temp" }));
     assert!(
         scratch
             .export(wire::LockerExportFormat::Csv)

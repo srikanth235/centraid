@@ -280,7 +280,7 @@ impl Writer<'_> {
     }
 
     /// A NEW ITEM, whole: the item with its cells, then its fields, extra
-    /// addresses, memo, star and shelf — in that order, so a failure part way
+    /// addresses, memo, tags, star and shelf — in that order, so a failure part way
     /// leaves an item that holds what it was given so far.
     fn create(&self, entry: &Entry) -> Result<()> {
         let item_id = self.vault.ids().next();
@@ -294,9 +294,6 @@ impl Writer<'_> {
             if !value.is_empty() {
                 input[*column] = serde_json::Value::String(value.to_owned());
             }
-        }
-        if !entry.tags.is_empty() {
-            input["tags"] = serde_json::json!(entry.tags);
         }
         if entry.compromised {
             input["compromised"] = serde_json::Value::Bool(true);
@@ -333,16 +330,24 @@ impl Writer<'_> {
                 serde_json::json!({ "item_id": item_id, "note": entry.memo }),
             )?;
         }
+        // Tags, the star and the archive are the vault's: a Locker item is an
+        // entity, and these are the shared verbs every kind uses.
+        for tag in &entry.tags {
+            self.write(
+                "tag.add",
+                serde_json::json!({ "id": item_id, "label": tag }),
+            )?;
+        }
         if entry.starred {
             self.write(
-                "locker.star_item",
-                serde_json::json!({ "item_id": item_id }),
+                "flag.set",
+                serde_json::json!({ "id": item_id, "flag": "starred" }),
             )?;
         }
         if entry.archived {
             self.write(
-                "locker.archive_item",
-                serde_json::json!({ "item_id": item_id }),
+                "flag.set",
+                serde_json::json!({ "id": item_id, "flag": "archived" }),
             )?;
         }
         Ok(())

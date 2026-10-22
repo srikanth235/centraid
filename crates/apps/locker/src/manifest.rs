@@ -93,13 +93,13 @@ mod tests {
     }
 
     #[test]
-    fn it_declares_five_queries_and_seventeen_actions() {
+    fn it_declares_five_queries_and_nineteen_actions() {
         let manifest = manifest();
         // v0's eight less the two autofill queries, deleted with the fill
         // plane (R-1047-D3), and the Watchtower review, deleted with the
         // weak/reused scoring (Q-1047-16).
         assert_eq!(manifest.queries.len(), 5);
-        assert_eq!(manifest.actions.len(), 17);
+        assert_eq!(manifest.actions.len(), 19);
         for name in ["items", "item", "search", "trash", "access"] {
             assert!(manifest.query(name).is_some(), "no query {name}");
         }
@@ -167,13 +167,13 @@ mod tests {
     /// scopes are the manifest's declaration of what the app may ask the core
     /// to open, and they are still exactly three.
     #[test]
-    fn it_declares_twenty_seven_scopes_and_the_three_reveals_are_lockers_own() {
+    fn it_declares_twenty_eight_scopes_and_the_three_reveals_are_lockers_own() {
         let manifest = manifest();
         let vault = manifest
             .vault
             .as_ref()
             .expect("Locker declares its vault reach");
-        assert_eq!(vault.scopes.len(), 27);
+        assert_eq!(vault.scopes.len(), 28);
 
         let reveals: Vec<String> = vault
             .scopes
@@ -194,9 +194,10 @@ mod tests {
         );
 
         // The audit reach, declared: Locker's own `receipt` table, which is the
-        // wall (nothing else writes it), so no row filter rides with it. And
-        // nothing of the vault's shared model is in Locker's reach: an item is not
-        // an entity.
+        // wall (nothing else writes it), so no row filter rides with it. An item
+        // is an entity (#1135), so Locker also declares the shared verbs it
+        // wraps (`entity.*`, `flag.*`, `tag.*`) and its read of `entity` and
+        // `edge`, which the page door serves to a read named as Locker's own.
         let receipts = vault
             .scopes
             .iter()
@@ -205,8 +206,20 @@ mod tests {
         assert_eq!(receipts.schema, "locker");
         assert!(receipts.row_filter.is_empty());
         assert!(
-            vault.scopes.iter().all(|scope| scope.schema == "locker"),
-            "Locker reaches only Locker's own tables"
+            vault
+                .scopes
+                .iter()
+                .all(|scope| ["locker", "entity", "flag", "tag", "vault"]
+                    .contains(&scope.schema.as_str())),
+            "Locker reaches its own tables and the shared verbs, and nothing else"
+        );
+        assert!(
+            vault
+                .scopes
+                .iter()
+                .filter(|scope| scope.schema != "locker")
+                .all(|scope| scope.table.as_deref() != Some("person")),
+            "no scope reaches another app's table"
         );
 
         assert!(
