@@ -15,6 +15,7 @@
     {
       "name": "reschedule",
       "live": true,
+      "kindOrder": ["task", "event"],
       "args": "to: <date expression>",
       "done": "rescheduled"
     },
@@ -63,12 +64,14 @@
     {
       "name": "add_to",
       "live": true,
+      "kindOrder": ["photo", "note", "document", "task"],
       "args": "to: #n (the album, notebook, folder or list)",
       "done": "added"
     },
     {
       "name": "remove_from",
       "live": true,
+      "kindOrder": ["photo", "note", "document", "task"],
       "args": "from: #n",
       "done": "removed"
     },
@@ -185,6 +188,32 @@
       "live": false,
       "args": "",
       "done": "applied"
+    }
+  ],
+  "unbacked": [
+    {
+      "verb": "reveal",
+      "kind": "locker_item",
+      "command": "locker.reveal_receipt",
+      "why": "Locker declares no action that opens one sealed field: its `export` receipts a mass reveal, and the single reveal is a phone-side command the app table does not carry"
+    },
+    {
+      "verb": "delete",
+      "kind": "event",
+      "command": "entity.trash",
+      "why": "Agenda declares `cancel-event` and no action that moves an event to the trash"
+    },
+    {
+      "verb": "restore",
+      "kind": "event",
+      "command": "entity.restore",
+      "why": "Agenda declares no action that brings a trashed event back"
+    },
+    {
+      "verb": "edit",
+      "kind": "list",
+      "command": "entity.retitle",
+      "why": "Tasks declares no action that renames a project"
     }
   ]
 }

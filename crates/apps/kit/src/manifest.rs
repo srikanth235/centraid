@@ -673,9 +673,8 @@ fn parse_action_class(
     let vocabulary = chat_verb_names();
     let known = |verb: &str| vocabulary.iter().any(|known| known == verb);
 
-    let verb = required_string(entry, "verb", path).map_err(|_| {
-        refuse(format!("{who} must declare the chat \"verb\" it is"))
-    })?;
+    let verb = required_string(entry, "verb", path)
+        .map_err(|_| refuse(format!("{who} must declare the chat \"verb\" it is")))?;
     if !known(&verb) {
         return Err(refuse(format!(
             "{who} declares the verb \"{verb}\", which is not in contracts/assist/verbs.json"
@@ -724,9 +723,14 @@ fn parse_action_class(
         }
     };
     let command = required_string(entry, "command", path).map_err(|_| {
-        refuse(format!("{who} must declare the vault \"command\" it invokes"))
+        refuse(format!(
+            "{who} must declare the vault \"command\" it invokes"
+        ))
     })?;
-    if command.split_once('.').is_none_or(|(schema, name)| schema.is_empty() || name.is_empty()) {
+    if command
+        .split_once('.')
+        .is_none_or(|(schema, name)| schema.is_empty() || name.is_empty())
+    {
         return Err(refuse(format!(
             "{who} declares the command \"{command}\", which is not `schema.name`"
         )));
@@ -987,9 +991,7 @@ mod tests {
     const QUERY_CLASS: &str = r#""kind": "thing", "figures": ["things"]"#;
 
     fn action(name: &str, extra: &str) -> String {
-        format!(
-            r#"{{"name": "{name}", "confirmation": "none", "input": {{}}, {CLASS}{extra}}}"#
-        )
+        format!(r#"{{"name": "{name}", "confirmation": "none", "input": {{}}, {CLASS}{extra}}}"#)
     }
 
     fn query(name: &str) -> String {
@@ -1135,7 +1137,13 @@ mod tests {
     #[test]
     fn an_action_missing_any_classification_field_is_refused() {
         for dropped in [
-            "verb", "kind", "inverse", "sealed", "chat", "command", "phrasings",
+            "verb",
+            "kind",
+            "inverse",
+            "sealed",
+            "chat",
+            "command",
+            "phrasings",
         ] {
             let mut entry: Value = serde_json::from_str(&action("add", "")).unwrap();
             entry.as_object_mut().unwrap().remove(dropped);
@@ -1167,16 +1175,28 @@ mod tests {
             ((r#""verb": "create""#, r#""verb": "conjure""#), "verb"),
             ((r#""chat": "card""#, r#""chat": "maybe""#), "chat"),
             (
-                (r#""phrasings": ["add a thing", "make a thing", "new thing please"]"#, r#""phrasings": ["one", "two"]"#),
+                (
+                    r#""phrasings": ["add a thing", "make a thing", "new thing please"]"#,
+                    r#""phrasings": ["one", "two"]"#,
+                ),
                 "phrasings",
             ),
             ((r#""sealed": []"#, r#""sealed": ["password"]"#), "sealed"),
-            ((r#""command": "thing.add""#, r#""command": "add""#), "command"),
+            (
+                (r#""command": "thing.add""#, r#""command": "add""#),
+                "command",
+            ),
             ((r#""inverse": null"#, r#""inverse": "add""#), "inverse"),
         ] {
             let error = bad("", replace);
             assert!(
-                matches!(&error, KitError::Manifest { code: "invalid_handler_entry", .. }),
+                matches!(
+                    &error,
+                    KitError::Manifest {
+                        code: "invalid_handler_entry",
+                        ..
+                    }
+                ),
                 "{what}: {error}"
             );
         }
@@ -1230,14 +1250,26 @@ mod tests {
             assert_eq!(manifest.queries.len(), queries, "{app} queries");
             total = (total.0 + actions, total.1 + queries);
             for kind in &manifest.kinds {
-                assert!(orders.insert(kind.order), "{app}: order {} repeats", kind.order);
-                assert!(kind_ids.insert(kind.id.clone()), "{app}: kind {} repeats", kind.id);
+                assert!(
+                    orders.insert(kind.order),
+                    "{app}: order {} repeats",
+                    kind.order
+                );
+                assert!(
+                    kind_ids.insert(kind.id.clone()),
+                    "{app}: kind {} repeats",
+                    kind.id
+                );
             }
             for action in &manifest.actions {
                 // the parser already refuses a missing field; this is the
                 // census's own floor on what the fields say
                 assert!(!action.verb.is_empty() && !action.command.is_empty());
-                assert!((3..=5).contains(&action.phrasings.len()), "{app}/{}", action.name);
+                assert!(
+                    (3..=5).contains(&action.phrasings.len()),
+                    "{app}/{}",
+                    action.name
+                );
             }
             for query in &manifest.queries {
                 assert!(!query.figures.is_empty(), "{app}/{}", query.name);

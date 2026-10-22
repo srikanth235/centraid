@@ -1,4 +1,2802 @@
 {
+  "catalog": {
+    "actions": [
+      {
+        "action": "propose",
+        "also": [],
+        "app": "agenda",
+        "chat": "direct",
+        "command": "event.propose",
+        "inverse": "cancel-event",
+        "kind": "event",
+        "phrasings": [
+          "put lunch with Sam on Friday at noon",
+          "add a dentist appointment next Tuesday at 3pm",
+          "schedule a team sync every Monday morning"
+        ],
+        "sealed": [],
+        "verb": "create"
+      },
+      {
+        "action": "rsvp",
+        "also": [],
+        "app": "agenda",
+        "chat": "direct",
+        "command": "event.respond",
+        "inverse": null,
+        "kind": "event",
+        "phrasings": [
+          "accept the Friday dinner invite",
+          "decline Sam's party",
+          "mark me tentative for the offsite"
+        ],
+        "sealed": [],
+        "verb": "respond"
+      },
+      {
+        "action": "edit-event",
+        "also": [
+          "reschedule"
+        ],
+        "app": "agenda",
+        "chat": "direct",
+        "command": "event.edit",
+        "inverse": null,
+        "kind": "event",
+        "phrasings": [
+          "rename the dentist event to checkup",
+          "move the team sync to 4pm",
+          "add a note to Friday's dinner that it's at Luigi's"
+        ],
+        "sealed": [],
+        "verb": "edit"
+      },
+      {
+        "action": "edit-occurrence",
+        "also": [],
+        "app": "agenda",
+        "chat": "card",
+        "command": "event.edit_occurrence",
+        "inverse": null,
+        "kind": "event",
+        "phrasings": [
+          "skip this week's standup",
+          "move Thursday's yoga to Friday",
+          "rename tomorrow's call to planning"
+        ],
+        "sealed": [],
+        "verb": "reschedule"
+      },
+      {
+        "action": "cancel-event",
+        "also": [],
+        "app": "agenda",
+        "chat": "direct",
+        "command": "event.cancel",
+        "inverse": null,
+        "kind": "event",
+        "phrasings": [
+          "cancel the dentist appointment",
+          "call off Friday's dinner",
+          "cancel my 3pm meeting"
+        ],
+        "sealed": [],
+        "verb": "cancel"
+      },
+      {
+        "action": "attach",
+        "also": [],
+        "app": "agenda",
+        "chat": "card",
+        "command": "edge.add",
+        "inverse": "detach",
+        "kind": "event",
+        "phrasings": [
+          "attach the menu to Friday's dinner",
+          "add the boarding pass to my flight event",
+          "attach the agenda doc to the team sync"
+        ],
+        "sealed": [],
+        "verb": "attach"
+      },
+      {
+        "action": "detach",
+        "also": [],
+        "app": "agenda",
+        "chat": "card",
+        "command": "edge.remove",
+        "inverse": "attach",
+        "kind": "event",
+        "phrasings": [
+          "detach the menu from Friday's dinner",
+          "remove the boarding pass from my flight event",
+          "take the agenda doc off the team sync"
+        ],
+        "sealed": [],
+        "verb": "detach"
+      },
+      {
+        "action": "upload",
+        "also": [],
+        "app": "docs",
+        "chat": "card",
+        "command": "document.add",
+        "inverse": "trash",
+        "kind": "document",
+        "phrasings": [
+          "upload this PDF to my drive",
+          "add the scanned receipt to documents",
+          "save this file in Docs"
+        ],
+        "sealed": [],
+        "verb": "import"
+      },
+      {
+        "action": "create-text",
+        "also": [],
+        "app": "docs",
+        "chat": "direct",
+        "command": "document.create_text",
+        "inverse": "trash",
+        "kind": "document",
+        "phrasings": [
+          "write a doc called meeting notes",
+          "start a new text document named packing list",
+          "create a document titled budget ideas"
+        ],
+        "sealed": [],
+        "verb": "create"
+      },
+      {
+        "action": "rename",
+        "also": [],
+        "app": "docs",
+        "chat": "direct",
+        "command": "entity.retitle",
+        "inverse": null,
+        "kind": "document",
+        "phrasings": [
+          "rename the lease doc to apartment lease",
+          "call the scan tax return 2025",
+          "retitle my notes doc to ideas"
+        ],
+        "sealed": [],
+        "verb": "edit"
+      },
+      {
+        "action": "move",
+        "also": [
+          "remove_from"
+        ],
+        "app": "docs",
+        "chat": "direct",
+        "command": "document.move",
+        "inverse": null,
+        "kind": "document",
+        "phrasings": [
+          "put the lease in the Home folder",
+          "move the tax return to Finance",
+          "file this doc under Travel"
+        ],
+        "sealed": [],
+        "verb": "add_to"
+      },
+      {
+        "action": "trash",
+        "also": [],
+        "app": "docs",
+        "chat": "direct",
+        "command": "entity.trash",
+        "inverse": "restore",
+        "kind": "document",
+        "phrasings": [
+          "delete the old lease doc",
+          "trash the scan from last week",
+          "remove the draft document"
+        ],
+        "sealed": [],
+        "verb": "delete"
+      },
+      {
+        "action": "restore",
+        "also": [],
+        "app": "docs",
+        "chat": "direct",
+        "command": "entity.restore",
+        "inverse": "trash",
+        "kind": "document",
+        "phrasings": [
+          "bring back the lease doc",
+          "restore the document I just deleted",
+          "undelete the tax return"
+        ],
+        "sealed": [],
+        "verb": "restore"
+      },
+      {
+        "action": "purge",
+        "also": [],
+        "app": "docs",
+        "chat": "card",
+        "command": "entity.purge",
+        "inverse": null,
+        "kind": "document",
+        "phrasings": [
+          "delete the old lease forever",
+          "permanently erase the scan in the trash",
+          "purge that trashed document"
+        ],
+        "sealed": [],
+        "verb": "purge"
+      },
+      {
+        "action": "empty-trash",
+        "also": [],
+        "app": "docs",
+        "chat": "card",
+        "command": "entity.empty_trash",
+        "inverse": null,
+        "kind": "document",
+        "phrasings": [
+          "empty the document trash",
+          "clear out the Docs trash for good",
+          "permanently delete everything in the trash"
+        ],
+        "sealed": [],
+        "verb": "purge"
+      },
+      {
+        "action": "star",
+        "also": [],
+        "app": "docs",
+        "chat": "direct",
+        "command": "flag.set",
+        "inverse": "unstar",
+        "kind": "document",
+        "phrasings": [
+          "star the lease",
+          "favorite the tax return",
+          "mark the travel doc as a favorite"
+        ],
+        "sealed": [],
+        "verb": "star"
+      },
+      {
+        "action": "unstar",
+        "also": [],
+        "app": "docs",
+        "chat": "direct",
+        "command": "flag.clear",
+        "inverse": "star",
+        "kind": "document",
+        "phrasings": [
+          "unstar the lease",
+          "remove the star from the tax return",
+          "unfavorite the travel doc"
+        ],
+        "sealed": [],
+        "verb": "unstar"
+      },
+      {
+        "action": "tag",
+        "also": [],
+        "app": "docs",
+        "chat": "direct",
+        "command": "tag.add",
+        "inverse": "untag",
+        "kind": "document",
+        "phrasings": [
+          "tag the lease as home",
+          "label the tax return finance",
+          "add the tag travel to my itinerary doc"
+        ],
+        "sealed": [],
+        "verb": "tag"
+      },
+      {
+        "action": "untag",
+        "also": [],
+        "app": "docs",
+        "chat": "direct",
+        "command": "tag.remove",
+        "inverse": "tag",
+        "kind": "document",
+        "phrasings": [
+          "remove the home tag from the lease",
+          "untag the tax return",
+          "take the travel label off my itinerary"
+        ],
+        "sealed": [],
+        "verb": "untag"
+      },
+      {
+        "action": "edit",
+        "also": [],
+        "app": "docs",
+        "chat": "card",
+        "command": "document.edit",
+        "inverse": null,
+        "kind": "document",
+        "phrasings": [
+          "change the second line of my packing list",
+          "add milk to the grocery doc",
+          "fix the typo in the meeting notes"
+        ],
+        "sealed": [],
+        "verb": "edit"
+      },
+      {
+        "action": "replace",
+        "also": [],
+        "app": "docs",
+        "chat": "card",
+        "command": "document.replace",
+        "inverse": null,
+        "kind": "document",
+        "phrasings": [
+          "replace the lease with the new scan",
+          "swap in the corrected PDF",
+          "update the tax return file with this version"
+        ],
+        "sealed": [],
+        "verb": "edit"
+      },
+      {
+        "action": "restore-version",
+        "also": [],
+        "app": "docs",
+        "chat": "card",
+        "command": "document.restore_version",
+        "inverse": null,
+        "kind": "document",
+        "phrasings": [
+          "go back to yesterday's version of the lease",
+          "restore the previous version of my notes doc",
+          "undo the last change to the budget doc"
+        ],
+        "sealed": [],
+        "verb": "restore"
+      },
+      {
+        "action": "create-folder",
+        "also": [],
+        "app": "docs",
+        "chat": "direct",
+        "command": "container.create",
+        "inverse": "delete-folder",
+        "kind": "folder",
+        "phrasings": [
+          "make a folder called Taxes",
+          "create a Travel folder inside Home",
+          "add a new folder named Receipts"
+        ],
+        "sealed": [],
+        "verb": "create"
+      },
+      {
+        "action": "rename-folder",
+        "also": [],
+        "app": "docs",
+        "chat": "direct",
+        "command": "entity.retitle",
+        "inverse": null,
+        "kind": "folder",
+        "phrasings": [
+          "rename the Taxes folder to Finance",
+          "call the Travel folder Trips",
+          "retitle Receipts to Expenses"
+        ],
+        "sealed": [],
+        "verb": "edit"
+      },
+      {
+        "action": "delete-folder",
+        "also": [],
+        "app": "docs",
+        "chat": "direct",
+        "command": "entity.trash",
+        "inverse": null,
+        "kind": "folder",
+        "phrasings": [
+          "delete the Taxes folder",
+          "remove the Receipts folder",
+          "trash the empty Travel folder"
+        ],
+        "sealed": [],
+        "verb": "delete"
+      },
+      {
+        "action": "record-days",
+        "also": [],
+        "app": "health",
+        "chat": "card",
+        "command": "measurement.record",
+        "inverse": null,
+        "kind": "daily_figure",
+        "phrasings": [
+          "log 8000 steps for today",
+          "record last night's sleep as seven hours",
+          "note my weight as 70 kilos this morning"
+        ],
+        "sealed": [],
+        "verb": "log"
+      },
+      {
+        "action": "follow-workouts",
+        "also": [],
+        "app": "health",
+        "chat": "card",
+        "command": "follow.health",
+        "inverse": null,
+        "kind": "workout",
+        "phrasings": [
+          "pull in my latest workouts",
+          "sync workouts from the health store",
+          "import this week's runs"
+        ],
+        "sealed": [],
+        "verb": "import"
+      },
+      {
+        "action": "delete-workout",
+        "also": [],
+        "app": "health",
+        "chat": "direct",
+        "command": "entity.trash",
+        "inverse": null,
+        "kind": "workout",
+        "phrasings": [
+          "delete this morning's run",
+          "remove the duplicate workout",
+          "trash yesterday's swim"
+        ],
+        "sealed": [],
+        "verb": "delete"
+      },
+      {
+        "action": "add-item",
+        "also": [],
+        "app": "locker",
+        "chat": "direct",
+        "command": "locker.add_item",
+        "inverse": "trash-item",
+        "kind": "locker_item",
+        "phrasings": [
+          "save my Netflix login",
+          "add a new card item for my Visa",
+          "store the wifi password for home"
+        ],
+        "sealed": [
+          "password",
+          "otp_seed",
+          "card_number",
+          "cvv",
+          "content"
+        ],
+        "verb": "create"
+      },
+      {
+        "action": "edit-item",
+        "also": [],
+        "app": "locker",
+        "chat": "direct",
+        "command": "locker.edit_item",
+        "inverse": null,
+        "kind": "locker_item",
+        "phrasings": [
+          "change my Netflix username",
+          "update the URL on my bank login",
+          "fix the cardholder name on my Visa"
+        ],
+        "sealed": [
+          "password",
+          "otp_seed",
+          "card_number",
+          "cvv",
+          "content"
+        ],
+        "verb": "edit"
+      },
+      {
+        "action": "trash-item",
+        "also": [],
+        "app": "locker",
+        "chat": "direct",
+        "command": "entity.trash",
+        "inverse": "restore-item",
+        "kind": "locker_item",
+        "phrasings": [
+          "delete my old Netflix login",
+          "trash the expired card",
+          "remove the guest wifi item"
+        ],
+        "sealed": [],
+        "verb": "delete"
+      },
+      {
+        "action": "restore-item",
+        "also": [],
+        "app": "locker",
+        "chat": "direct",
+        "command": "entity.restore",
+        "inverse": "trash-item",
+        "kind": "locker_item",
+        "phrasings": [
+          "bring back my Netflix login",
+          "restore the card I just deleted",
+          "undelete the guest wifi item"
+        ],
+        "sealed": [],
+        "verb": "restore"
+      },
+      {
+        "action": "purge-item",
+        "also": [],
+        "app": "locker",
+        "chat": "card",
+        "command": "entity.purge",
+        "inverse": null,
+        "kind": "locker_item",
+        "phrasings": [
+          "erase the old Netflix login forever",
+          "permanently delete the expired card",
+          "purge that trashed item"
+        ],
+        "sealed": [],
+        "verb": "purge"
+      },
+      {
+        "action": "star-item",
+        "also": [],
+        "app": "locker",
+        "chat": "direct",
+        "command": "flag.set",
+        "inverse": "unstar-item",
+        "kind": "locker_item",
+        "phrasings": [
+          "star my bank login",
+          "favorite the home wifi",
+          "mark my passport as a favorite"
+        ],
+        "sealed": [],
+        "verb": "star"
+      },
+      {
+        "action": "unstar-item",
+        "also": [],
+        "app": "locker",
+        "chat": "direct",
+        "command": "flag.clear",
+        "inverse": "star-item",
+        "kind": "locker_item",
+        "phrasings": [
+          "unstar my bank login",
+          "remove the star from the home wifi",
+          "unfavorite my passport"
+        ],
+        "sealed": [],
+        "verb": "unstar"
+      },
+      {
+        "action": "archive-item",
+        "also": [],
+        "app": "locker",
+        "chat": "direct",
+        "command": "flag.set",
+        "inverse": "unarchive-item",
+        "kind": "locker_item",
+        "phrasings": [
+          "archive my old Netflix login",
+          "keep the expired card but hide it",
+          "archive the guest wifi item"
+        ],
+        "sealed": [],
+        "verb": "archive"
+      },
+      {
+        "action": "unarchive-item",
+        "also": [],
+        "app": "locker",
+        "chat": "direct",
+        "command": "flag.clear",
+        "inverse": "archive-item",
+        "kind": "locker_item",
+        "phrasings": [
+          "unarchive my old Netflix login",
+          "bring the expired card back into the list",
+          "unarchive the guest wifi item"
+        ],
+        "sealed": [],
+        "verb": "unarchive"
+      },
+      {
+        "action": "add-tag",
+        "also": [],
+        "app": "locker",
+        "chat": "direct",
+        "command": "tag.add",
+        "inverse": "remove-tag",
+        "kind": "locker_item",
+        "phrasings": [
+          "tag my bank login as finance",
+          "label the home wifi household",
+          "add the tag travel to my passport"
+        ],
+        "sealed": [],
+        "verb": "tag"
+      },
+      {
+        "action": "remove-tag",
+        "also": [],
+        "app": "locker",
+        "chat": "direct",
+        "command": "tag.remove",
+        "inverse": "add-tag",
+        "kind": "locker_item",
+        "phrasings": [
+          "remove the finance tag from my bank login",
+          "untag the home wifi",
+          "take the travel label off my passport"
+        ],
+        "sealed": [],
+        "verb": "untag"
+      },
+      {
+        "action": "duplicate-item",
+        "also": [],
+        "app": "locker",
+        "chat": "card",
+        "command": "locker.duplicate_item",
+        "inverse": null,
+        "kind": "locker_item",
+        "phrasings": [
+          "clone my Netflix login for my sister's account",
+          "duplicate my Visa item",
+          "copy the bank login as a template"
+        ],
+        "sealed": [],
+        "verb": "duplicate"
+      },
+      {
+        "action": "set-field",
+        "also": [],
+        "app": "locker",
+        "chat": "card",
+        "command": "locker.set_field",
+        "inverse": null,
+        "kind": "locker_field",
+        "phrasings": [
+          "add a security question field to my bank login",
+          "set the PIN field on my card",
+          "add a recovery email field"
+        ],
+        "sealed": [
+          "value"
+        ],
+        "verb": "edit"
+      },
+      {
+        "action": "remove-field",
+        "also": [],
+        "app": "locker",
+        "chat": "card",
+        "command": "locker.remove_field",
+        "inverse": null,
+        "kind": "locker_field",
+        "phrasings": [
+          "remove the security question from my bank login",
+          "delete the PIN field on my card",
+          "drop the recovery email field"
+        ],
+        "sealed": [],
+        "verb": "delete"
+      },
+      {
+        "action": "set-addresses",
+        "also": [],
+        "app": "locker",
+        "chat": "card",
+        "command": "locker.set_addresses",
+        "inverse": null,
+        "kind": "locker_item",
+        "phrasings": [
+          "add a second website to my Google login",
+          "set the extra addresses on my bank login",
+          "replace the other URLs on my Netflix login"
+        ],
+        "sealed": [],
+        "verb": "edit"
+      },
+      {
+        "action": "set-passkey",
+        "also": [],
+        "app": "locker",
+        "chat": "card",
+        "command": "locker.set_passkey",
+        "inverse": null,
+        "kind": "locker_passkey",
+        "phrasings": [
+          "save a passkey on my GitHub login",
+          "replace the passkey on my bank login",
+          "restate the passkey for my Google account"
+        ],
+        "sealed": [
+          "private_key"
+        ],
+        "verb": "edit"
+      },
+      {
+        "action": "clear-passkey",
+        "also": [],
+        "app": "locker",
+        "chat": "card",
+        "command": "locker.clear_passkey",
+        "inverse": null,
+        "kind": "locker_passkey",
+        "phrasings": [
+          "remove the passkey from my GitHub login",
+          "clear the passkey on my bank login",
+          "delete the Google passkey"
+        ],
+        "sealed": [],
+        "verb": "delete"
+      },
+      {
+        "action": "set-memo",
+        "also": [],
+        "app": "locker",
+        "chat": "card",
+        "command": "locker.set_memo",
+        "inverse": null,
+        "kind": "locker_item",
+        "phrasings": [
+          "write a memo on my bank login",
+          "clear the memo on my Netflix item",
+          "note that the wifi router is in the hall"
+        ],
+        "sealed": [],
+        "verb": "edit"
+      },
+      {
+        "action": "export",
+        "also": [],
+        "app": "locker",
+        "chat": "card",
+        "command": "locker.export",
+        "inverse": null,
+        "kind": "locker_item",
+        "phrasings": [
+          "export my whole locker",
+          "download every item with its secrets",
+          "export the locker including the trash"
+        ],
+        "sealed": [],
+        "verb": "reveal"
+      },
+      {
+        "action": "add-account",
+        "also": [],
+        "app": "money",
+        "chat": "direct",
+        "command": "account.add",
+        "inverse": "close-account",
+        "kind": "account",
+        "phrasings": [
+          "add a savings account in euros",
+          "create a checking account called Everyday",
+          "open a cash account"
+        ],
+        "sealed": [],
+        "verb": "create"
+      },
+      {
+        "action": "edit-account",
+        "also": [],
+        "app": "money",
+        "chat": "direct",
+        "command": "account.edit",
+        "inverse": null,
+        "kind": "account",
+        "phrasings": [
+          "rename my savings account to Rainy Day",
+          "change Everyday to a savings account",
+          "take my cash account off budget"
+        ],
+        "sealed": [],
+        "verb": "edit"
+      },
+      {
+        "action": "close-account",
+        "also": [],
+        "app": "money",
+        "chat": "direct",
+        "command": "flag.set",
+        "inverse": "reopen-account",
+        "kind": "account",
+        "phrasings": [
+          "close my old checking account",
+          "archive the Visa account",
+          "close the cash account"
+        ],
+        "sealed": [],
+        "verb": "archive"
+      },
+      {
+        "action": "reopen-account",
+        "also": [],
+        "app": "money",
+        "chat": "direct",
+        "command": "flag.clear",
+        "inverse": "close-account",
+        "kind": "account",
+        "phrasings": [
+          "reopen my old checking account",
+          "bring the Visa account back",
+          "reopen the cash account"
+        ],
+        "sealed": [],
+        "verb": "unarchive"
+      },
+      {
+        "action": "set-opening-balance",
+        "also": [],
+        "app": "money",
+        "chat": "card",
+        "command": "account.set_opening",
+        "inverse": null,
+        "kind": "account",
+        "phrasings": [
+          "set the opening balance of Everyday to 500",
+          "this account started with 1200 euros",
+          "correct the starting balance on savings"
+        ],
+        "sealed": [],
+        "verb": "edit"
+      },
+      {
+        "action": "import-transactions",
+        "also": [],
+        "app": "money",
+        "chat": "card",
+        "command": "follow.statement",
+        "inverse": null,
+        "kind": "transaction",
+        "phrasings": [
+          "import this bank statement",
+          "load the CSV from my checking account",
+          "add the lines from last month's statement"
+        ],
+        "sealed": [],
+        "verb": "import"
+      },
+      {
+        "action": "record-checkpoint",
+        "also": [],
+        "app": "money",
+        "chat": "direct",
+        "command": "checkpoint.record",
+        "inverse": null,
+        "kind": "account",
+        "phrasings": [
+          "my checking account had 1520 on the first",
+          "record a balance of 300 on savings today",
+          "the bank says Everyday was 842 yesterday"
+        ],
+        "sealed": [],
+        "verb": "log"
+      },
+      {
+        "action": "save-import-profile",
+        "also": [],
+        "app": "money",
+        "chat": "card",
+        "command": "account.remember_layout",
+        "inverse": null,
+        "kind": "account",
+        "phrasings": [
+          "remember how this bank's CSV is laid out",
+          "save the column layout for Everyday",
+          "use this layout for future statements"
+        ],
+        "sealed": [],
+        "verb": "edit"
+      },
+      {
+        "action": "categorize",
+        "also": [],
+        "app": "money",
+        "chat": "direct",
+        "command": "txn.categorize",
+        "inverse": null,
+        "kind": "transaction",
+        "phrasings": [
+          "file that Starbucks charge under coffee",
+          "put yesterday's Uber in transport",
+          "clear the category on the Amazon line"
+        ],
+        "sealed": [],
+        "verb": "categorize"
+      },
+      {
+        "action": "void-transaction",
+        "also": [],
+        "app": "money",
+        "chat": "card",
+        "command": "txn.void",
+        "inverse": null,
+        "kind": "transaction",
+        "phrasings": [
+          "void the duplicate Netflix charge",
+          "remove that charge from my figures",
+          "void the Amazon line from Tuesday"
+        ],
+        "sealed": [],
+        "verb": "void"
+      },
+      {
+        "action": "set-display-name",
+        "also": [],
+        "app": "money",
+        "chat": "direct",
+        "command": "entity.retitle",
+        "inverse": null,
+        "kind": "transaction",
+        "phrasings": [
+          "call the SQ *BLUE BOTTLE line Blue Bottle",
+          "rename that charge to Rent",
+          "set the name of the Amazon line to Books"
+        ],
+        "sealed": [],
+        "verb": "edit"
+      },
+      {
+        "action": "link-transfer",
+        "also": [],
+        "app": "money",
+        "chat": "direct",
+        "command": "txn.link_transfer",
+        "inverse": "unlink-transfer",
+        "kind": "transaction",
+        "phrasings": [
+          "those two lines are a transfer between my accounts",
+          "link the 500 out of checking with the 500 into savings",
+          "treat these two transactions as one transfer"
+        ],
+        "sealed": [],
+        "verb": "link"
+      },
+      {
+        "action": "unlink-transfer",
+        "also": [],
+        "app": "money",
+        "chat": "direct",
+        "command": "txn.unlink_transfer",
+        "inverse": "link-transfer",
+        "kind": "transaction",
+        "phrasings": [
+          "that wasn't a transfer, unlink it",
+          "undo the transfer between checking and savings",
+          "split those two lines apart"
+        ],
+        "sealed": [],
+        "verb": "unlink"
+      },
+      {
+        "action": "set-target",
+        "also": [],
+        "app": "money",
+        "chat": "direct",
+        "command": "budget.set",
+        "inverse": null,
+        "kind": "budget",
+        "phrasings": [
+          "plan 400 for groceries in November",
+          "budget 120 for coffee this month",
+          "remove my dining out plan for October"
+        ],
+        "sealed": [],
+        "verb": "edit"
+      },
+      {
+        "action": "set-carry",
+        "also": [],
+        "app": "money",
+        "chat": "card",
+        "command": "budget.set_carry",
+        "inverse": null,
+        "kind": "budget",
+        "phrasings": [
+          "carry what's left of groceries into next month",
+          "stop carrying over the coffee budget",
+          "let the dining plan roll over"
+        ],
+        "sealed": [],
+        "verb": "edit"
+      },
+      {
+        "action": "add-rule",
+        "also": [],
+        "app": "money",
+        "chat": "direct",
+        "command": "rule.add",
+        "inverse": "delete-rule",
+        "kind": "rule",
+        "phrasings": [
+          "always file Starbucks under coffee",
+          "put anything with Uber in transport",
+          "make a rule for Netflix as subscriptions"
+        ],
+        "sealed": [],
+        "verb": "create"
+      },
+      {
+        "action": "edit-rule",
+        "also": [],
+        "app": "money",
+        "chat": "direct",
+        "command": "rule.edit",
+        "inverse": null,
+        "kind": "rule",
+        "phrasings": [
+          "change the Starbucks rule to dining",
+          "make the Uber rule match Uber Eats too",
+          "move the Netflix rule to entertainment"
+        ],
+        "sealed": [],
+        "verb": "edit"
+      },
+      {
+        "action": "delete-rule",
+        "also": [],
+        "app": "money",
+        "chat": "card",
+        "command": "rule.delete",
+        "inverse": null,
+        "kind": "rule",
+        "phrasings": [
+          "delete the Starbucks rule",
+          "remove the Uber rule",
+          "get rid of the Netflix rule"
+        ],
+        "sealed": [],
+        "verb": "delete"
+      },
+      {
+        "action": "apply-rule-to-history",
+        "also": [],
+        "app": "money",
+        "chat": "card",
+        "command": "rule.apply",
+        "inverse": null,
+        "kind": "rule",
+        "phrasings": [
+          "apply my rules to everything already imported",
+          "run the Starbucks rule on old transactions",
+          "file past lines by my rules"
+        ],
+        "sealed": [],
+        "verb": "apply"
+      },
+      {
+        "action": "add-category",
+        "also": [],
+        "app": "money",
+        "chat": "direct",
+        "command": "category.add",
+        "inverse": "archive-category",
+        "kind": "category",
+        "phrasings": [
+          "add a category called Pets under Living",
+          "create a Gifts category",
+          "make a new category for Subscriptions"
+        ],
+        "sealed": [],
+        "verb": "create"
+      },
+      {
+        "action": "merge-category",
+        "also": [],
+        "app": "money",
+        "chat": "card",
+        "command": "category.merge",
+        "inverse": null,
+        "kind": "category",
+        "phrasings": [
+          "fold Eating Out into Dining",
+          "merge Coffee into Food",
+          "combine Gas and Transport"
+        ],
+        "sealed": [],
+        "verb": "merge"
+      },
+      {
+        "action": "archive-category",
+        "also": [],
+        "app": "money",
+        "chat": "direct",
+        "command": "flag.set",
+        "inverse": null,
+        "kind": "category",
+        "phrasings": [
+          "archive the Pets category",
+          "retire the Gifts category",
+          "archive Subscriptions"
+        ],
+        "sealed": [],
+        "verb": "archive"
+      },
+      {
+        "action": "create-note",
+        "also": [],
+        "app": "notes",
+        "chat": "direct",
+        "command": "note.create",
+        "inverse": "delete-note",
+        "kind": "note",
+        "phrasings": [
+          "jot down that I need to call the plumber",
+          "start a note called book ideas",
+          "write a note about the trip itinerary"
+        ],
+        "sealed": [],
+        "verb": "create"
+      },
+      {
+        "action": "edit-note",
+        "also": [],
+        "app": "notes",
+        "chat": "direct",
+        "command": "note.edit",
+        "inverse": null,
+        "kind": "note",
+        "phrasings": [
+          "add oat milk to my shopping note",
+          "retitle the book ideas note",
+          "fix the first line of the trip itinerary"
+        ],
+        "sealed": [],
+        "verb": "edit"
+      },
+      {
+        "action": "move-note",
+        "also": [
+          "remove_from"
+        ],
+        "app": "notes",
+        "chat": "direct",
+        "command": "note.move",
+        "inverse": null,
+        "kind": "note",
+        "phrasings": [
+          "put the trip itinerary in the Travel notebook",
+          "file my book ideas under Reading",
+          "move the plumber note to Home"
+        ],
+        "sealed": [],
+        "verb": "add_to"
+      },
+      {
+        "action": "create-notebook",
+        "also": [],
+        "app": "notes",
+        "chat": "direct",
+        "command": "container.create",
+        "inverse": "delete-notebook",
+        "kind": "notebook",
+        "phrasings": [
+          "make a notebook called Travel",
+          "create a Reading notebook",
+          "start a notebook for work"
+        ],
+        "sealed": [],
+        "verb": "create"
+      },
+      {
+        "action": "rename-notebook",
+        "also": [],
+        "app": "notes",
+        "chat": "direct",
+        "command": "entity.retitle",
+        "inverse": null,
+        "kind": "notebook",
+        "phrasings": [
+          "rename the Travel notebook to Trips",
+          "call my Reading notebook Books",
+          "retitle Work to Office"
+        ],
+        "sealed": [],
+        "verb": "edit"
+      },
+      {
+        "action": "delete-notebook",
+        "also": [],
+        "app": "notes",
+        "chat": "direct",
+        "command": "entity.trash",
+        "inverse": null,
+        "kind": "notebook",
+        "phrasings": [
+          "delete the Travel notebook",
+          "remove my Reading notebook",
+          "trash the Work notebook"
+        ],
+        "sealed": [],
+        "verb": "delete"
+      },
+      {
+        "action": "delete-note",
+        "also": [],
+        "app": "notes",
+        "chat": "direct",
+        "command": "entity.trash",
+        "inverse": "restore-note",
+        "kind": "note",
+        "phrasings": [
+          "delete the plumber note",
+          "trash my book ideas",
+          "remove the old trip itinerary"
+        ],
+        "sealed": [],
+        "verb": "delete"
+      },
+      {
+        "action": "restore-note",
+        "also": [],
+        "app": "notes",
+        "chat": "direct",
+        "command": "entity.restore",
+        "inverse": "delete-note",
+        "kind": "note",
+        "phrasings": [
+          "bring back the plumber note",
+          "restore the note I deleted",
+          "undelete my book ideas"
+        ],
+        "sealed": [],
+        "verb": "restore"
+      },
+      {
+        "action": "restore-note-version",
+        "also": [],
+        "app": "notes",
+        "chat": "card",
+        "command": "note.restore_version",
+        "inverse": null,
+        "kind": "note",
+        "phrasings": [
+          "go back to the earlier version of my trip note",
+          "restore yesterday's text of book ideas",
+          "undo my last edit to the plumber note"
+        ],
+        "sealed": [],
+        "verb": "restore"
+      },
+      {
+        "action": "flag-note",
+        "also": [],
+        "app": "notes",
+        "chat": "card",
+        "command": "flag.set",
+        "inverse": "unflag-note",
+        "kind": "note",
+        "phrasings": [
+          "pin the trip itinerary",
+          "star my book ideas",
+          "pin the plumber note to the top"
+        ],
+        "sealed": [],
+        "verb": "star"
+      },
+      {
+        "action": "unflag-note",
+        "also": [],
+        "app": "notes",
+        "chat": "card",
+        "command": "flag.clear",
+        "inverse": "flag-note",
+        "kind": "note",
+        "phrasings": [
+          "unpin the trip itinerary",
+          "unstar my book ideas",
+          "take the plumber note off the top"
+        ],
+        "sealed": [],
+        "verb": "unstar"
+      },
+      {
+        "action": "link",
+        "also": [],
+        "app": "notes",
+        "chat": "card",
+        "command": "edge.add",
+        "inverse": null,
+        "kind": "note",
+        "phrasings": [
+          "link my trip note to Sam",
+          "connect the book ideas note to the reading list task",
+          "link the plumber note to Friday's event"
+        ],
+        "sealed": [],
+        "verb": "link"
+      },
+      {
+        "action": "send-to-tasks",
+        "also": [],
+        "app": "notes",
+        "chat": "card",
+        "command": "task.add",
+        "inverse": null,
+        "kind": "task",
+        "phrasings": [
+          "turn this checklist line into a task",
+          "send 'call the plumber' to Tasks",
+          "make the first checklist item a task"
+        ],
+        "sealed": [],
+        "verb": "create"
+      },
+      {
+        "action": "attach",
+        "also": [],
+        "app": "notes",
+        "chat": "card",
+        "command": "edge.add",
+        "inverse": "detach",
+        "kind": "note",
+        "phrasings": [
+          "attach the itinerary PDF to my trip note",
+          "add the photo to the plumber note",
+          "attach the receipt to my book ideas"
+        ],
+        "sealed": [],
+        "verb": "attach"
+      },
+      {
+        "action": "detach",
+        "also": [],
+        "app": "notes",
+        "chat": "card",
+        "command": "edge.remove",
+        "inverse": "attach",
+        "kind": "note",
+        "phrasings": [
+          "detach the itinerary PDF from my trip note",
+          "remove the photo from the plumber note",
+          "take the receipt off my book ideas"
+        ],
+        "sealed": [],
+        "verb": "detach"
+      },
+      {
+        "action": "add-tag",
+        "also": [],
+        "app": "notes",
+        "chat": "direct",
+        "command": "tag.add",
+        "inverse": "remove-tag",
+        "kind": "note",
+        "phrasings": [
+          "tag the trip note as travel",
+          "label my book ideas reading",
+          "add the tag home to the plumber note"
+        ],
+        "sealed": [],
+        "verb": "tag"
+      },
+      {
+        "action": "remove-tag",
+        "also": [],
+        "app": "notes",
+        "chat": "direct",
+        "command": "tag.remove",
+        "inverse": "add-tag",
+        "kind": "note",
+        "phrasings": [
+          "remove the travel tag from the trip note",
+          "untag my book ideas",
+          "take the home label off the plumber note"
+        ],
+        "sealed": [],
+        "verb": "untag"
+      },
+      {
+        "action": "add-person",
+        "also": [],
+        "app": "people",
+        "chat": "direct",
+        "command": "person.add",
+        "inverse": "trash-person",
+        "kind": "person",
+        "phrasings": [
+          "add Sam Lee to my people",
+          "save a contact called Maria, my dentist",
+          "add my cousin Priya and remind me to call monthly"
+        ],
+        "sealed": [],
+        "verb": "create"
+      },
+      {
+        "action": "edit-person",
+        "also": [],
+        "app": "people",
+        "chat": "direct",
+        "command": "person.edit",
+        "inverse": null,
+        "kind": "person",
+        "phrasings": [
+          "change Sam's role to manager",
+          "set Maria's birthday to March 3",
+          "note that I met Priya at a wedding"
+        ],
+        "sealed": [],
+        "verb": "edit"
+      },
+      {
+        "action": "set-cadence",
+        "also": [],
+        "app": "people",
+        "chat": "card",
+        "command": "person.edit",
+        "inverse": null,
+        "kind": "person",
+        "phrasings": [
+          "remind me to reach out to Sam every month",
+          "call Priya every two weeks",
+          "stop reminding me about Maria"
+        ],
+        "sealed": [],
+        "verb": "edit"
+      },
+      {
+        "action": "trash-person",
+        "also": [],
+        "app": "people",
+        "chat": "direct",
+        "command": "entity.trash",
+        "inverse": "restore-person",
+        "kind": "person",
+        "phrasings": [
+          "delete Sam Lee",
+          "remove Maria from my people",
+          "trash the duplicate Priya"
+        ],
+        "sealed": [],
+        "verb": "delete"
+      },
+      {
+        "action": "restore-person",
+        "also": [],
+        "app": "people",
+        "chat": "direct",
+        "command": "entity.restore",
+        "inverse": "trash-person",
+        "kind": "person",
+        "phrasings": [
+          "bring Sam Lee back",
+          "restore Maria",
+          "undelete Priya"
+        ],
+        "sealed": [],
+        "verb": "restore"
+      },
+      {
+        "action": "purge-person",
+        "also": [],
+        "app": "people",
+        "chat": "card",
+        "command": "entity.purge",
+        "inverse": null,
+        "kind": "person",
+        "phrasings": [
+          "erase Sam Lee forever",
+          "permanently delete Maria",
+          "purge the trashed Priya"
+        ],
+        "sealed": [],
+        "verb": "purge"
+      },
+      {
+        "action": "log-interaction",
+        "also": [],
+        "app": "people",
+        "chat": "direct",
+        "command": "person.log_interaction",
+        "inverse": null,
+        "kind": "person",
+        "phrasings": [
+          "I called Sam today",
+          "log a coffee with Maria yesterday",
+          "I messaged Priya this morning"
+        ],
+        "sealed": [],
+        "verb": "log"
+      },
+      {
+        "action": "star-person",
+        "also": [],
+        "app": "people",
+        "chat": "direct",
+        "command": "flag.set",
+        "inverse": "unstar-person",
+        "kind": "person",
+        "phrasings": [
+          "favorite Sam",
+          "star Maria",
+          "mark Priya as a favorite"
+        ],
+        "sealed": [],
+        "verb": "star"
+      },
+      {
+        "action": "unstar-person",
+        "also": [],
+        "app": "people",
+        "chat": "direct",
+        "command": "flag.clear",
+        "inverse": "star-person",
+        "kind": "person",
+        "phrasings": [
+          "unfavorite Sam",
+          "remove Maria's star",
+          "unstar Priya"
+        ],
+        "sealed": [],
+        "verb": "unstar"
+      },
+      {
+        "action": "move-person",
+        "also": [
+          "remove_from"
+        ],
+        "app": "people",
+        "chat": "card",
+        "command": "person.move",
+        "inverse": null,
+        "kind": "person",
+        "phrasings": [
+          "put Sam in my Family list",
+          "move Maria to Work",
+          "take Priya out of her list"
+        ],
+        "sealed": [],
+        "verb": "add_to"
+      },
+      {
+        "action": "add-note",
+        "also": [],
+        "app": "people",
+        "chat": "card",
+        "command": "person.add_note",
+        "inverse": null,
+        "kind": "note",
+        "phrasings": [
+          "add a note about Sam: loves hiking",
+          "note that Maria moved to Lisbon",
+          "write down Priya's gift preferences"
+        ],
+        "sealed": [],
+        "verb": "create"
+      },
+      {
+        "action": "add-task",
+        "also": [],
+        "app": "people",
+        "chat": "card",
+        "command": "person.add_task",
+        "inverse": null,
+        "kind": "task",
+        "phrasings": [
+          "remind me to send Sam the photos",
+          "add a follow-up for Maria",
+          "task: ask Priya about the move"
+        ],
+        "sealed": [],
+        "verb": "create"
+      },
+      {
+        "action": "complete-task",
+        "also": [],
+        "app": "people",
+        "chat": "card",
+        "command": "task.complete",
+        "inverse": null,
+        "kind": "task",
+        "phrasings": [
+          "mark the follow-up with Sam done",
+          "I sent Maria the invoice, finish that task",
+          "complete the Priya gift task"
+        ],
+        "sealed": [],
+        "verb": "complete"
+      },
+      {
+        "action": "reopen-task",
+        "also": [],
+        "app": "people",
+        "chat": "card",
+        "command": "task.reopen",
+        "inverse": null,
+        "kind": "task",
+        "phrasings": [
+          "reopen the follow-up with Sam",
+          "the invoice task for Maria isn't done",
+          "reopen the gift for Priya"
+        ],
+        "sealed": [],
+        "verb": "reopen"
+      },
+      {
+        "action": "add-important-date",
+        "also": [],
+        "app": "people",
+        "chat": "card",
+        "command": "person.add_date",
+        "inverse": null,
+        "kind": "important_date",
+        "phrasings": [
+          "add Sam's anniversary on June 5",
+          "Maria's graduation is May 20",
+          "remember Priya's naming day"
+        ],
+        "sealed": [],
+        "verb": "create"
+      },
+      {
+        "action": "set-reminder",
+        "also": [],
+        "app": "people",
+        "chat": "card",
+        "command": "event.edit",
+        "inverse": null,
+        "kind": "important_date",
+        "phrasings": [
+          "remind me a week before Sam's anniversary",
+          "turn off the reminder for Maria's graduation",
+          "remind me the day of Priya's birthday"
+        ],
+        "sealed": [],
+        "verb": "edit"
+      },
+      {
+        "action": "add-relationship",
+        "also": [],
+        "app": "people",
+        "chat": "card",
+        "command": "person.add_relationship",
+        "inverse": null,
+        "kind": "person",
+        "phrasings": [
+          "Sam is Maria's brother",
+          "Priya is my cousin",
+          "link Sam as Maria's manager"
+        ],
+        "sealed": [],
+        "verb": "link"
+      },
+      {
+        "action": "add-gift",
+        "also": [],
+        "app": "people",
+        "chat": "card",
+        "command": "person.add_gift",
+        "inverse": null,
+        "kind": "gift",
+        "phrasings": [
+          "gift idea for Sam: a hiking book",
+          "Maria would like a scarf",
+          "add a gift for Priya: tea set"
+        ],
+        "sealed": [],
+        "verb": "create"
+      },
+      {
+        "action": "create-list",
+        "also": [],
+        "app": "people",
+        "chat": "card",
+        "command": "container.create",
+        "inverse": null,
+        "kind": "people_list",
+        "phrasings": [
+          "make a list called Family",
+          "create a Work list for people",
+          "start a list for college friends"
+        ],
+        "sealed": [],
+        "verb": "create"
+      },
+      {
+        "action": "rename-list",
+        "also": [],
+        "app": "people",
+        "chat": "card",
+        "command": "entity.retitle",
+        "inverse": null,
+        "kind": "people_list",
+        "phrasings": [
+          "rename Family to Relatives",
+          "call the Work list Colleagues",
+          "retitle college friends to Alumni"
+        ],
+        "sealed": [],
+        "verb": "edit"
+      },
+      {
+        "action": "delete-list",
+        "also": [],
+        "app": "people",
+        "chat": "card",
+        "command": "entity.trash",
+        "inverse": null,
+        "kind": "people_list",
+        "phrasings": [
+          "delete the Family list",
+          "remove the Work list",
+          "trash the college friends list"
+        ],
+        "sealed": [],
+        "verb": "delete"
+      },
+      {
+        "action": "add-journal-entry",
+        "also": [],
+        "app": "people",
+        "chat": "card",
+        "command": "person.add_journal_entry",
+        "inverse": null,
+        "kind": "journal_entry",
+        "phrasings": [
+          "journal: today was a good day",
+          "write a journal entry, feeling tired",
+          "log my mood as happy with a note about the park"
+        ],
+        "sealed": [],
+        "verb": "create"
+      },
+      {
+        "action": "save-contact-channel",
+        "also": [],
+        "app": "people",
+        "chat": "card",
+        "command": "person.save_contact_point",
+        "inverse": null,
+        "kind": "contact_point",
+        "phrasings": [
+          "add Sam's phone number",
+          "set Maria's email",
+          "update Priya's address"
+        ],
+        "sealed": [],
+        "verb": "edit"
+      },
+      {
+        "action": "delete-contact-channel",
+        "also": [],
+        "app": "people",
+        "chat": "card",
+        "command": "person.remove_contact_point",
+        "inverse": null,
+        "kind": "contact_point",
+        "phrasings": [
+          "remove Sam's old phone number",
+          "delete Maria's work email",
+          "drop Priya's old address"
+        ],
+        "sealed": [],
+        "verb": "delete"
+      },
+      {
+        "action": "merge-people",
+        "also": [],
+        "app": "people",
+        "chat": "card",
+        "command": "person.merge",
+        "inverse": null,
+        "kind": "person",
+        "phrasings": [
+          "Sam Lee and S. Lee are the same person",
+          "merge the two Priyas",
+          "fold the duplicate Maria into the real one"
+        ],
+        "sealed": [],
+        "verb": "merge"
+      },
+      {
+        "action": "upload",
+        "also": [],
+        "app": "photos",
+        "chat": "card",
+        "command": "photo.add",
+        "inverse": "delete-photo",
+        "kind": "photo",
+        "phrasings": [
+          "add this photo to my library",
+          "upload these pictures",
+          "save this image"
+        ],
+        "sealed": [],
+        "verb": "import"
+      },
+      {
+        "action": "edit-photo",
+        "also": [],
+        "app": "photos",
+        "chat": "card",
+        "command": "photo.edit",
+        "inverse": null,
+        "kind": "photo",
+        "phrasings": [
+          "fix the date on this photo",
+          "this was taken on the 5th, not the 6th",
+          "correct the time offset on the beach photo"
+        ],
+        "sealed": [],
+        "verb": "edit"
+      },
+      {
+        "action": "retitle-photo",
+        "also": [],
+        "app": "photos",
+        "chat": "direct",
+        "command": "entity.retitle",
+        "inverse": null,
+        "kind": "photo",
+        "phrasings": [
+          "caption this photo sunset at the pier",
+          "rename the beach photo to Day one",
+          "call this picture Grandma's garden"
+        ],
+        "sealed": [],
+        "verb": "edit"
+      },
+      {
+        "action": "flag-photo",
+        "also": [],
+        "app": "photos",
+        "chat": "direct",
+        "command": "flag.set",
+        "inverse": "unflag-photo",
+        "kind": "photo",
+        "phrasings": [
+          "heart the beach photo",
+          "favorite this picture",
+          "archive the blurry photo"
+        ],
+        "sealed": [],
+        "verb": "star"
+      },
+      {
+        "action": "unflag-photo",
+        "also": [],
+        "app": "photos",
+        "chat": "direct",
+        "command": "flag.clear",
+        "inverse": "flag-photo",
+        "kind": "photo",
+        "phrasings": [
+          "unheart the beach photo",
+          "remove the favorite from this picture",
+          "bring the blurry photo back from the archive"
+        ],
+        "sealed": [],
+        "verb": "unstar"
+      },
+      {
+        "action": "delete-photo",
+        "also": [],
+        "app": "photos",
+        "chat": "direct",
+        "command": "entity.trash",
+        "inverse": "restore-photo",
+        "kind": "photo",
+        "phrasings": [
+          "delete the blurry photo",
+          "trash this picture",
+          "remove the duplicate beach shot"
+        ],
+        "sealed": [],
+        "verb": "delete"
+      },
+      {
+        "action": "restore-photo",
+        "also": [],
+        "app": "photos",
+        "chat": "direct",
+        "command": "entity.restore",
+        "inverse": "delete-photo",
+        "kind": "photo",
+        "phrasings": [
+          "bring back the blurry photo",
+          "restore the picture I deleted",
+          "undelete the beach shot"
+        ],
+        "sealed": [],
+        "verb": "restore"
+      },
+      {
+        "action": "purge-photo",
+        "also": [],
+        "app": "photos",
+        "chat": "card",
+        "command": "entity.purge",
+        "inverse": null,
+        "kind": "photo",
+        "phrasings": [
+          "erase the blurry photo forever",
+          "permanently delete this picture",
+          "purge the trashed beach shot"
+        ],
+        "sealed": [],
+        "verb": "purge"
+      },
+      {
+        "action": "create-album",
+        "also": [],
+        "app": "photos",
+        "chat": "direct",
+        "command": "container.create",
+        "inverse": "delete-album",
+        "kind": "album",
+        "phrasings": [
+          "make an album called Italy 2026",
+          "create a Family album",
+          "start an album for the wedding"
+        ],
+        "sealed": [],
+        "verb": "create"
+      },
+      {
+        "action": "rename-album",
+        "also": [],
+        "app": "photos",
+        "chat": "direct",
+        "command": "entity.retitle",
+        "inverse": null,
+        "kind": "album",
+        "phrasings": [
+          "rename Italy 2026 to Summer in Italy",
+          "call the Family album Relatives",
+          "retitle the wedding album"
+        ],
+        "sealed": [],
+        "verb": "edit"
+      },
+      {
+        "action": "set-album-cover",
+        "also": [],
+        "app": "photos",
+        "chat": "card",
+        "command": "album.set_cover",
+        "inverse": null,
+        "kind": "album",
+        "phrasings": [
+          "use the beach photo as the Italy cover",
+          "make this picture the cover of Family",
+          "clear the wedding album's cover"
+        ],
+        "sealed": [],
+        "verb": "edit"
+      },
+      {
+        "action": "delete-album",
+        "also": [],
+        "app": "photos",
+        "chat": "direct",
+        "command": "entity.trash",
+        "inverse": "restore-album",
+        "kind": "album",
+        "phrasings": [
+          "delete the Italy 2026 album",
+          "remove the Family album",
+          "trash the wedding album"
+        ],
+        "sealed": [],
+        "verb": "delete"
+      },
+      {
+        "action": "restore-album",
+        "also": [],
+        "app": "photos",
+        "chat": "card",
+        "command": "entity.restore",
+        "inverse": "delete-album",
+        "kind": "album",
+        "phrasings": [
+          "bring back the Italy 2026 album",
+          "restore the Family album",
+          "undelete the wedding album"
+        ],
+        "sealed": [],
+        "verb": "restore"
+      },
+      {
+        "action": "add-to-album",
+        "also": [],
+        "app": "photos",
+        "chat": "direct",
+        "command": "edge.add",
+        "inverse": "remove-from-album",
+        "kind": "photo",
+        "phrasings": [
+          "add the beach photo to Italy 2026",
+          "put this picture in the Family album",
+          "file these in the wedding album"
+        ],
+        "sealed": [],
+        "verb": "add_to"
+      },
+      {
+        "action": "remove-from-album",
+        "also": [],
+        "app": "photos",
+        "chat": "direct",
+        "command": "edge.remove",
+        "inverse": "add-to-album",
+        "kind": "photo",
+        "phrasings": [
+          "take the beach photo out of Italy 2026",
+          "remove this picture from the Family album",
+          "pull it out of the wedding album"
+        ],
+        "sealed": [],
+        "verb": "remove_from"
+      },
+      {
+        "action": "set-place",
+        "also": [],
+        "app": "photos",
+        "chat": "card",
+        "command": "photo.set_place",
+        "inverse": null,
+        "kind": "place",
+        "phrasings": [
+          "this photo was taken in Lisbon",
+          "clear the place on the beach photo",
+          "set the place of these pictures to home"
+        ],
+        "sealed": [],
+        "verb": "edit"
+      },
+      {
+        "action": "name-place",
+        "also": [],
+        "app": "photos",
+        "chat": "card",
+        "command": "entity.retitle",
+        "inverse": null,
+        "kind": "place",
+        "phrasings": [
+          "call this place Grandma's house",
+          "name that spot The Lake",
+          "rename the Lisbon place to Alfama"
+        ],
+        "sealed": [],
+        "verb": "edit"
+      },
+      {
+        "action": "tag-photo",
+        "also": [],
+        "app": "photos",
+        "chat": "direct",
+        "command": "tag.add",
+        "inverse": "untag-photo",
+        "kind": "photo",
+        "phrasings": [
+          "tag the beach photo as summer",
+          "label this picture family",
+          "add the tag wedding to these photos"
+        ],
+        "sealed": [],
+        "verb": "tag"
+      },
+      {
+        "action": "untag-photo",
+        "also": [],
+        "app": "photos",
+        "chat": "direct",
+        "command": "tag.remove",
+        "inverse": "tag-photo",
+        "kind": "photo",
+        "phrasings": [
+          "remove the summer tag from the beach photo",
+          "untag this picture",
+          "take the wedding label off these photos"
+        ],
+        "sealed": [],
+        "verb": "untag"
+      },
+      {
+        "action": "add",
+        "also": [],
+        "app": "tasks",
+        "chat": "direct",
+        "command": "task.add",
+        "inverse": "delete",
+        "kind": "task",
+        "phrasings": [
+          "remind me to call the plumber tomorrow",
+          "add a task to buy milk",
+          "put 'file taxes' on my list for April 15"
+        ],
+        "sealed": [],
+        "verb": "create"
+      },
+      {
+        "action": "edit",
+        "also": [
+          "reschedule"
+        ],
+        "app": "tasks",
+        "chat": "direct",
+        "command": "task.edit",
+        "inverse": null,
+        "kind": "task",
+        "phrasings": [
+          "rename the plumber task",
+          "make buying milk high priority",
+          "add a note to the taxes task"
+        ],
+        "sealed": [],
+        "verb": "edit"
+      },
+      {
+        "action": "complete",
+        "also": [],
+        "app": "tasks",
+        "chat": "direct",
+        "command": "task.complete",
+        "inverse": "reopen",
+        "kind": "task",
+        "phrasings": [
+          "mark call the plumber done",
+          "I finished the taxes",
+          "check off buy milk"
+        ],
+        "sealed": [],
+        "verb": "complete"
+      },
+      {
+        "action": "reopen",
+        "also": [],
+        "app": "tasks",
+        "chat": "direct",
+        "command": "task.reopen",
+        "inverse": "complete",
+        "kind": "task",
+        "phrasings": [
+          "reopen call the plumber",
+          "the taxes aren't done after all",
+          "uncheck buy milk"
+        ],
+        "sealed": [],
+        "verb": "reopen"
+      },
+      {
+        "action": "cancel",
+        "also": [],
+        "app": "tasks",
+        "chat": "card",
+        "command": "task.cancel",
+        "inverse": null,
+        "kind": "task",
+        "phrasings": [
+          "cancel the plumber task",
+          "I'm not buying milk anymore, drop it",
+          "cancel this week's repeat of the laundry task"
+        ],
+        "sealed": [],
+        "verb": "cancel"
+      },
+      {
+        "action": "organize-task",
+        "also": [
+          "remove_from"
+        ],
+        "app": "tasks",
+        "chat": "direct",
+        "command": "task.organize",
+        "inverse": null,
+        "kind": "task",
+        "phrasings": [
+          "put the plumber task in the Home project",
+          "file buy milk under Errands",
+          "move the taxes task to the Finance project"
+        ],
+        "sealed": [],
+        "verb": "add_to"
+      },
+      {
+        "action": "delete",
+        "also": [],
+        "app": "tasks",
+        "chat": "direct",
+        "command": "entity.trash",
+        "inverse": "restore",
+        "kind": "task",
+        "phrasings": [
+          "delete the plumber task",
+          "trash buy milk",
+          "remove the old taxes task"
+        ],
+        "sealed": [],
+        "verb": "delete"
+      },
+      {
+        "action": "purge",
+        "also": [],
+        "app": "tasks",
+        "chat": "card",
+        "command": "entity.purge",
+        "inverse": null,
+        "kind": "task",
+        "phrasings": [
+          "erase the plumber task forever",
+          "permanently delete the trashed milk task",
+          "purge the old taxes task"
+        ],
+        "sealed": [],
+        "verb": "purge"
+      },
+      {
+        "action": "restore",
+        "also": [],
+        "app": "tasks",
+        "chat": "direct",
+        "command": "entity.restore",
+        "inverse": "delete",
+        "kind": "task",
+        "phrasings": [
+          "bring back the plumber task",
+          "restore the task I deleted",
+          "undelete buy milk"
+        ],
+        "sealed": [],
+        "verb": "restore"
+      },
+      {
+        "action": "create-project",
+        "also": [],
+        "app": "tasks",
+        "chat": "direct",
+        "command": "container.create",
+        "inverse": null,
+        "kind": "list",
+        "phrasings": [
+          "make a project called Home renovation",
+          "create a list named Errands",
+          "start a Finance project in the Personal area"
+        ],
+        "sealed": [],
+        "verb": "create"
+      },
+      {
+        "action": "create-section",
+        "also": [],
+        "app": "tasks",
+        "chat": "card",
+        "command": "container.create",
+        "inverse": null,
+        "kind": "section",
+        "phrasings": [
+          "add a section called Kitchen to Home renovation",
+          "create a Waiting section in Errands",
+          "add a Q4 section to Finance"
+        ],
+        "sealed": [],
+        "verb": "create"
+      },
+      {
+        "action": "attach",
+        "also": [],
+        "app": "tasks",
+        "chat": "card",
+        "command": "edge.add",
+        "inverse": "detach",
+        "kind": "task",
+        "phrasings": [
+          "attach the quote PDF to the plumber task",
+          "add the receipt to buy milk",
+          "attach the form to the taxes task"
+        ],
+        "sealed": [],
+        "verb": "attach"
+      },
+      {
+        "action": "detach",
+        "also": [],
+        "app": "tasks",
+        "chat": "card",
+        "command": "edge.remove",
+        "inverse": "attach",
+        "kind": "task",
+        "phrasings": [
+          "detach the quote PDF from the plumber task",
+          "remove the receipt from buy milk",
+          "take the form off the taxes task"
+        ],
+        "sealed": [],
+        "verb": "detach"
+      },
+      {
+        "action": "add-tag",
+        "also": [],
+        "app": "tasks",
+        "chat": "direct",
+        "command": "tag.add",
+        "inverse": "remove-tag",
+        "kind": "task",
+        "phrasings": [
+          "tag the plumber task as home",
+          "label buy milk errands",
+          "add the tag urgent to the taxes task"
+        ],
+        "sealed": [],
+        "verb": "tag"
+      },
+      {
+        "action": "remove-tag",
+        "also": [],
+        "app": "tasks",
+        "chat": "direct",
+        "command": "tag.remove",
+        "inverse": "add-tag",
+        "kind": "task",
+        "phrasings": [
+          "remove the home tag from the plumber task",
+          "untag buy milk",
+          "take the urgent label off the taxes task"
+        ],
+        "sealed": [],
+        "verb": "untag"
+      }
+    ],
+    "queries": [
+      {
+        "app": "agenda",
+        "figures": [
+          "events",
+          "calendars",
+          "occurrences",
+          "guests",
+          "reminders"
+        ],
+        "kind": "event",
+        "query": "upcoming"
+      },
+      {
+        "app": "agenda",
+        "figures": [
+          "matches"
+        ],
+        "kind": "event",
+        "query": "search"
+      },
+      {
+        "app": "agenda",
+        "figures": [
+          "birthdays",
+          "holidays"
+        ],
+        "kind": "event",
+        "query": "day-context"
+      },
+      {
+        "app": "agenda",
+        "figures": [
+          "parties"
+        ],
+        "kind": "person",
+        "query": "parties"
+      },
+      {
+        "app": "docs",
+        "figures": [
+          "folders",
+          "documents",
+          "root_folder"
+        ],
+        "kind": "document",
+        "query": "drive"
+      },
+      {
+        "app": "docs",
+        "figures": [
+          "matches"
+        ],
+        "kind": "document",
+        "query": "search"
+      },
+      {
+        "app": "docs",
+        "figures": [
+          "versions"
+        ],
+        "kind": "document",
+        "query": "history"
+      },
+      {
+        "app": "docs",
+        "figures": [
+          "events"
+        ],
+        "kind": "document",
+        "query": "activity"
+      },
+      {
+        "app": "health",
+        "figures": [
+          "figure",
+          "typical",
+          "usual_range",
+          "workouts_today",
+          "connected_store"
+        ],
+        "kind": "daily_figure",
+        "query": "today"
+      },
+      {
+        "app": "health",
+        "figures": [
+          "buckets",
+          "average",
+          "previous_average",
+          "typical",
+          "best",
+          "total",
+          "days_above_typical"
+        ],
+        "kind": "daily_figure",
+        "query": "series"
+      },
+      {
+        "app": "health",
+        "figures": [
+          "average",
+          "previous_average",
+          "buckets"
+        ],
+        "kind": "daily_figure",
+        "query": "trends"
+      },
+      {
+        "app": "health",
+        "figures": [
+          "workouts",
+          "count_by_kind"
+        ],
+        "kind": "workout",
+        "query": "workouts"
+      },
+      {
+        "app": "health",
+        "figures": [
+          "kind",
+          "span",
+          "measures"
+        ],
+        "kind": "workout",
+        "query": "workout"
+      },
+      {
+        "app": "health",
+        "figures": [
+          "newest_day",
+          "newest_workout",
+          "daily_totals"
+        ],
+        "kind": "daily_figure",
+        "query": "follow-view"
+      },
+      {
+        "app": "locker",
+        "figures": [
+          "items",
+          "total",
+          "by_type",
+          "archived_count",
+          "trashed_count"
+        ],
+        "kind": "locker_item",
+        "query": "items"
+      },
+      {
+        "app": "locker",
+        "figures": [
+          "item",
+          "alias",
+          "memo"
+        ],
+        "kind": "locker_item",
+        "query": "item"
+      },
+      {
+        "app": "locker",
+        "figures": [
+          "matches"
+        ],
+        "kind": "locker_item",
+        "query": "search"
+      },
+      {
+        "app": "locker",
+        "figures": [
+          "items",
+          "purge_dates"
+        ],
+        "kind": "locker_item",
+        "query": "trash"
+      },
+      {
+        "app": "locker",
+        "figures": [
+          "entries"
+        ],
+        "kind": "locker_item",
+        "query": "access"
+      },
+      {
+        "app": "money",
+        "figures": [
+          "spent",
+          "planned",
+          "carried_in",
+          "left",
+          "uncategorised",
+          "in",
+          "out",
+          "net",
+          "forecast"
+        ],
+        "kind": "transaction",
+        "query": "spending"
+      },
+      {
+        "app": "money",
+        "figures": [
+          "transactions",
+          "needs_category"
+        ],
+        "kind": "transaction",
+        "query": "activity"
+      },
+      {
+        "app": "money",
+        "figures": [
+          "flags",
+          "transfer",
+          "proposed_rule",
+          "merchant_count",
+          "recurring_series"
+        ],
+        "kind": "transaction",
+        "query": "transaction"
+      },
+      {
+        "app": "money",
+        "figures": [
+          "money_in",
+          "money_out",
+          "net",
+          "savings_rate"
+        ],
+        "kind": "transaction",
+        "query": "cashflow"
+      },
+      {
+        "app": "money",
+        "figures": [
+          "balances",
+          "checkpoint",
+          "net_worth"
+        ],
+        "kind": "account",
+        "query": "accounts"
+      },
+      {
+        "app": "money",
+        "figures": [
+          "rules",
+          "specificity"
+        ],
+        "kind": "rule",
+        "query": "rules"
+      },
+      {
+        "app": "money",
+        "figures": [
+          "groups",
+          "categories",
+          "archived"
+        ],
+        "kind": "category",
+        "query": "categories"
+      },
+      {
+        "app": "money",
+        "figures": [
+          "plan",
+          "carried_in",
+          "six_month_average",
+          "next_month_preview"
+        ],
+        "kind": "budget",
+        "query": "target-sheet"
+      },
+      {
+        "app": "money",
+        "figures": [
+          "cadence",
+          "amount",
+          "next_due",
+          "status"
+        ],
+        "kind": "transaction",
+        "query": "recurring"
+      },
+      {
+        "app": "money",
+        "figures": [
+          "spent"
+        ],
+        "kind": "transaction",
+        "query": "home-tile"
+      },
+      {
+        "app": "money",
+        "figures": [
+          "matches"
+        ],
+        "kind": "transaction",
+        "query": "search"
+      },
+      {
+        "app": "notes",
+        "figures": [
+          "targets"
+        ],
+        "kind": "note",
+        "query": "link-targets"
+      },
+      {
+        "app": "notes",
+        "figures": [
+          "notes",
+          "notebooks",
+          "tags",
+          "trash"
+        ],
+        "kind": "note",
+        "query": "library"
+      },
+      {
+        "app": "notes",
+        "figures": [
+          "body",
+          "format"
+        ],
+        "kind": "note",
+        "query": "note"
+      },
+      {
+        "app": "notes",
+        "figures": [
+          "matches"
+        ],
+        "kind": "note",
+        "query": "search"
+      },
+      {
+        "app": "notes",
+        "figures": [
+          "versions"
+        ],
+        "kind": "note",
+        "query": "history"
+      },
+      {
+        "app": "notes",
+        "figures": [
+          "entries"
+        ],
+        "kind": "note",
+        "query": "journal"
+      },
+      {
+        "app": "people",
+        "figures": [
+          "people",
+          "lists"
+        ],
+        "kind": "person",
+        "query": "people"
+      },
+      {
+        "app": "people",
+        "figures": [
+          "sheet",
+          "contact_points",
+          "touches",
+          "dates"
+        ],
+        "kind": "person",
+        "query": "person"
+      },
+      {
+        "app": "people",
+        "figures": [
+          "reconnect",
+          "upcoming",
+          "recent",
+          "counts"
+        ],
+        "kind": "person",
+        "query": "dashboard"
+      },
+      {
+        "app": "people",
+        "figures": [
+          "matches"
+        ],
+        "kind": "person",
+        "query": "search"
+      },
+      {
+        "app": "people",
+        "figures": [
+          "people",
+          "purge_dates"
+        ],
+        "kind": "person",
+        "query": "trash"
+      },
+      {
+        "app": "photos",
+        "figures": [
+          "photos",
+          "albums",
+          "places",
+          "trash"
+        ],
+        "kind": "photo",
+        "query": "library"
+      },
+      {
+        "app": "photos",
+        "figures": [
+          "matches"
+        ],
+        "kind": "photo",
+        "query": "search"
+      },
+      {
+        "app": "photos",
+        "figures": [
+          "clusters"
+        ],
+        "kind": "photo",
+        "query": "duplicates"
+      },
+      {
+        "app": "tasks",
+        "figures": [
+          "open",
+          "logbook",
+          "tags",
+          "counts"
+        ],
+        "kind": "task",
+        "query": "board"
+      },
+      {
+        "app": "tasks",
+        "figures": [
+          "matches"
+        ],
+        "kind": "task",
+        "query": "search"
+      }
+    ]
+  },
   "constants": {
     "DIRECTORY_CAP": 8,
     "OPEN_LINK_CAP": 8,
@@ -59,6 +2857,624 @@
     "week",
     "month",
     "year"
+  ],
+  "declared_kinds": [
+    {
+      "app": "health",
+      "container": false,
+      "date": {
+        "label": "day",
+        "source": {
+          "column": "day",
+          "table": "measurement"
+        }
+      },
+      "entity": "measurement",
+      "fields": [
+        {
+          "create": false,
+          "edit": null,
+          "name": "metric",
+          "source": {
+            "column": "metric",
+            "table": "measurement"
+          },
+          "type": "enum",
+          "unit": null,
+          "values": [
+            [
+              "steps",
+              "steps"
+            ],
+            [
+              "active_energy_kcal",
+              "active_energy_kcal"
+            ],
+            [
+              "exercise_min",
+              "exercise_min"
+            ],
+            [
+              "sleep_min",
+              "sleep_min"
+            ],
+            [
+              "resting_hr_bpm",
+              "resting_hr_bpm"
+            ],
+            [
+              "weight_kg",
+              "weight_kg"
+            ]
+          ]
+        },
+        {
+          "create": false,
+          "edit": null,
+          "name": "value",
+          "source": {
+            "column": "value",
+            "table": "measurement"
+          },
+          "type": "number",
+          "unit": null,
+          "values": []
+        }
+      ],
+      "id": "daily_figure",
+      "name": "daily figure",
+      "name_source": {
+        "column": "metric",
+        "table": "measurement"
+      },
+      "pk": "day",
+      "plural": "daily figures",
+      "table": "measurement",
+      "trash": false
+    },
+    {
+      "app": "health",
+      "container": false,
+      "date": {
+        "label": "start",
+        "source": {
+          "column": "starts",
+          "table": "activity"
+        }
+      },
+      "entity": "activity",
+      "fields": [
+        {
+          "create": false,
+          "edit": null,
+          "name": "moving",
+          "source": {
+            "column": "moving_s",
+            "table": "workout"
+          },
+          "type": "number",
+          "unit": "s",
+          "values": []
+        },
+        {
+          "create": false,
+          "edit": null,
+          "name": "distance",
+          "source": {
+            "column": "distance_m",
+            "table": "workout"
+          },
+          "type": "number",
+          "unit": "m",
+          "values": []
+        },
+        {
+          "create": false,
+          "edit": null,
+          "name": "energy",
+          "source": {
+            "column": "energy_kcal",
+            "table": "workout"
+          },
+          "type": "number",
+          "unit": "kcal",
+          "values": []
+        },
+        {
+          "create": false,
+          "edit": null,
+          "name": "heart_rate",
+          "source": {
+            "column": "heart_bpm",
+            "table": "workout"
+          },
+          "type": "number",
+          "unit": "bpm",
+          "values": []
+        },
+        {
+          "create": false,
+          "edit": null,
+          "name": "climb",
+          "source": {
+            "column": "climb_m",
+            "table": "workout"
+          },
+          "type": "number",
+          "unit": "m",
+          "values": []
+        }
+      ],
+      "id": "workout",
+      "name": "workout",
+      "name_source": {
+        "column": "title",
+        "table": "entity"
+      },
+      "pk": "id",
+      "plural": "workouts",
+      "table": "workout",
+      "trash": true
+    },
+    {
+      "app": "money",
+      "container": false,
+      "date": null,
+      "entity": "account",
+      "fields": [
+        {
+          "create": true,
+          "edit": "account.edit",
+          "name": "type",
+          "source": {
+            "column": "type",
+            "table": "account"
+          },
+          "type": "enum",
+          "unit": null,
+          "values": [
+            [
+              "checking",
+              "checking"
+            ],
+            [
+              "savings",
+              "savings"
+            ],
+            [
+              "credit_card",
+              "credit_card"
+            ],
+            [
+              "cash",
+              "cash"
+            ]
+          ]
+        },
+        {
+          "create": true,
+          "edit": null,
+          "name": "currency",
+          "source": {
+            "column": "currency",
+            "table": "account"
+          },
+          "type": "text",
+          "unit": null,
+          "values": []
+        },
+        {
+          "create": false,
+          "edit": "account.set_opening",
+          "name": "opening",
+          "source": {
+            "column": "opening_minor",
+            "table": "account"
+          },
+          "type": "money",
+          "unit": null,
+          "values": []
+        },
+        {
+          "create": true,
+          "edit": "account.edit",
+          "name": "on_budget",
+          "source": {
+            "column": "on_budget",
+            "table": "account"
+          },
+          "type": "bool",
+          "unit": null,
+          "values": []
+        }
+      ],
+      "id": "account",
+      "name": "account",
+      "name_source": {
+        "column": "title",
+        "table": "entity"
+      },
+      "pk": "id",
+      "plural": "accounts",
+      "table": "account",
+      "trash": false
+    },
+    {
+      "app": "money",
+      "container": false,
+      "date": null,
+      "entity": "category",
+      "fields": [
+        {
+          "create": true,
+          "edit": null,
+          "name": "key",
+          "source": {
+            "column": "key",
+            "table": "concept"
+          },
+          "type": "text",
+          "unit": null,
+          "values": []
+        },
+        {
+          "create": true,
+          "edit": null,
+          "name": "group",
+          "source": {
+            "column": "parent_id",
+            "table": "concept"
+          },
+          "type": "text",
+          "unit": null,
+          "values": []
+        }
+      ],
+      "id": "category",
+      "name": "category",
+      "name_source": {
+        "column": "title",
+        "table": "entity"
+      },
+      "pk": "id",
+      "plural": "categories",
+      "table": "concept",
+      "trash": false
+    },
+    {
+      "app": "money",
+      "container": false,
+      "date": {
+        "label": "month",
+        "source": {
+          "column": "month",
+          "table": "budget"
+        }
+      },
+      "entity": "budget",
+      "fields": [
+        {
+          "create": true,
+          "edit": "budget.set",
+          "name": "amount",
+          "source": {
+            "column": "amount_minor",
+            "table": "budget"
+          },
+          "type": "money",
+          "unit": null,
+          "values": []
+        },
+        {
+          "create": false,
+          "edit": null,
+          "name": "currency",
+          "source": {
+            "column": "currency",
+            "table": "budget"
+          },
+          "type": "text",
+          "unit": null,
+          "values": []
+        },
+        {
+          "create": false,
+          "edit": "budget.set_carry",
+          "name": "carry",
+          "source": {
+            "column": "carry",
+            "table": "budget"
+          },
+          "type": "bool",
+          "unit": null,
+          "values": []
+        }
+      ],
+      "id": "budget",
+      "name": "budget",
+      "name_source": {
+        "column": "category_id",
+        "table": "budget"
+      },
+      "pk": "category_id",
+      "plural": "budgets",
+      "table": "budget",
+      "trash": false
+    },
+    {
+      "app": "money",
+      "container": false,
+      "date": {
+        "label": "created",
+        "source": {
+          "column": "created_at",
+          "table": "rule"
+        }
+      },
+      "entity": "rule",
+      "fields": [
+        {
+          "create": true,
+          "edit": "rule.edit",
+          "name": "category",
+          "source": {
+            "column": "category_id",
+            "table": "rule"
+          },
+          "type": "text",
+          "unit": null,
+          "values": []
+        },
+        {
+          "create": false,
+          "edit": null,
+          "name": "position",
+          "source": {
+            "column": "position",
+            "table": "rule"
+          },
+          "type": "number",
+          "unit": null,
+          "values": []
+        }
+      ],
+      "id": "rule",
+      "name": "rule",
+      "name_source": {
+        "column": "pattern",
+        "table": "rule"
+      },
+      "pk": "id",
+      "plural": "rules",
+      "table": "rule",
+      "trash": false
+    }
+  ],
+  "declared_verbs": [
+    {
+      "action": "rsvp",
+      "app": "agenda",
+      "command": "event.respond",
+      "kind": "event",
+      "reason": "the assistant's runtime does not run this verb yet",
+      "verb": "respond"
+    },
+    {
+      "action": "tag",
+      "app": "docs",
+      "command": "tag.add",
+      "kind": "document",
+      "reason": "the assistant's runtime does not run this verb yet",
+      "verb": "tag"
+    },
+    {
+      "action": "untag",
+      "app": "docs",
+      "command": "tag.remove",
+      "kind": "document",
+      "reason": "the assistant's runtime does not run this verb yet",
+      "verb": "untag"
+    },
+    {
+      "action": "delete-workout",
+      "app": "health",
+      "command": "entity.trash",
+      "kind": "workout",
+      "reason": "the assistant's runtime does not write this kind yet",
+      "verb": "delete"
+    },
+    {
+      "action": "archive-item",
+      "app": "locker",
+      "command": "flag.set",
+      "kind": "locker_item",
+      "reason": "the assistant's runtime does not run this verb yet",
+      "verb": "archive"
+    },
+    {
+      "action": "unarchive-item",
+      "app": "locker",
+      "command": "flag.clear",
+      "kind": "locker_item",
+      "reason": "the assistant's runtime does not run this verb yet",
+      "verb": "unarchive"
+    },
+    {
+      "action": "add-tag",
+      "app": "locker",
+      "command": "tag.add",
+      "kind": "locker_item",
+      "reason": "the assistant's runtime does not run this verb yet",
+      "verb": "tag"
+    },
+    {
+      "action": "remove-tag",
+      "app": "locker",
+      "command": "tag.remove",
+      "kind": "locker_item",
+      "reason": "the assistant's runtime does not run this verb yet",
+      "verb": "untag"
+    },
+    {
+      "action": "add-account",
+      "app": "money",
+      "command": "account.add",
+      "kind": "account",
+      "reason": "the assistant's runtime does not write this kind yet",
+      "verb": "create"
+    },
+    {
+      "action": "edit-account",
+      "app": "money",
+      "command": "account.edit",
+      "kind": "account",
+      "reason": "the assistant's runtime does not write this kind yet",
+      "verb": "edit"
+    },
+    {
+      "action": "close-account",
+      "app": "money",
+      "command": "flag.set",
+      "kind": "account",
+      "reason": "the assistant's runtime does not run this verb yet",
+      "verb": "archive"
+    },
+    {
+      "action": "reopen-account",
+      "app": "money",
+      "command": "flag.clear",
+      "kind": "account",
+      "reason": "the assistant's runtime does not run this verb yet",
+      "verb": "unarchive"
+    },
+    {
+      "action": "record-checkpoint",
+      "app": "money",
+      "command": "checkpoint.record",
+      "kind": "account",
+      "reason": "the assistant's runtime does not write this kind yet",
+      "verb": "log"
+    },
+    {
+      "action": "categorize",
+      "app": "money",
+      "command": "txn.categorize",
+      "kind": "transaction",
+      "reason": "the assistant's runtime does not run this verb yet",
+      "verb": "categorize"
+    },
+    {
+      "action": "set-display-name",
+      "app": "money",
+      "command": "entity.retitle",
+      "kind": "transaction",
+      "reason": "the assistant's runtime does not write this kind yet",
+      "verb": "edit"
+    },
+    {
+      "action": "link-transfer",
+      "app": "money",
+      "command": "txn.link_transfer",
+      "kind": "transaction",
+      "reason": "the assistant's runtime does not run this verb yet",
+      "verb": "link"
+    },
+    {
+      "action": "unlink-transfer",
+      "app": "money",
+      "command": "txn.unlink_transfer",
+      "kind": "transaction",
+      "reason": "the assistant's runtime does not run this verb yet",
+      "verb": "unlink"
+    },
+    {
+      "action": "set-target",
+      "app": "money",
+      "command": "budget.set",
+      "kind": "budget",
+      "reason": "the assistant's runtime does not write this kind yet",
+      "verb": "edit"
+    },
+    {
+      "action": "add-rule",
+      "app": "money",
+      "command": "rule.add",
+      "kind": "rule",
+      "reason": "the assistant's runtime does not write this kind yet",
+      "verb": "create"
+    },
+    {
+      "action": "edit-rule",
+      "app": "money",
+      "command": "rule.edit",
+      "kind": "rule",
+      "reason": "the assistant's runtime does not write this kind yet",
+      "verb": "edit"
+    },
+    {
+      "action": "add-category",
+      "app": "money",
+      "command": "category.add",
+      "kind": "category",
+      "reason": "the assistant's runtime does not write this kind yet",
+      "verb": "create"
+    },
+    {
+      "action": "archive-category",
+      "app": "money",
+      "command": "flag.set",
+      "kind": "category",
+      "reason": "the assistant's runtime does not run this verb yet",
+      "verb": "archive"
+    },
+    {
+      "action": "add-tag",
+      "app": "notes",
+      "command": "tag.add",
+      "kind": "note",
+      "reason": "the assistant's runtime does not run this verb yet",
+      "verb": "tag"
+    },
+    {
+      "action": "remove-tag",
+      "app": "notes",
+      "command": "tag.remove",
+      "kind": "note",
+      "reason": "the assistant's runtime does not run this verb yet",
+      "verb": "untag"
+    },
+    {
+      "action": "tag-photo",
+      "app": "photos",
+      "command": "tag.add",
+      "kind": "photo",
+      "reason": "the assistant's runtime does not run this verb yet",
+      "verb": "tag"
+    },
+    {
+      "action": "untag-photo",
+      "app": "photos",
+      "command": "tag.remove",
+      "kind": "photo",
+      "reason": "the assistant's runtime does not run this verb yet",
+      "verb": "untag"
+    },
+    {
+      "action": "add-tag",
+      "app": "tasks",
+      "command": "tag.add",
+      "kind": "task",
+      "reason": "the assistant's runtime does not run this verb yet",
+      "verb": "tag"
+    },
+    {
+      "action": "remove-tag",
+      "app": "tasks",
+      "command": "tag.remove",
+      "kind": "task",
+      "reason": "the assistant's runtime does not run this verb yet",
+      "verb": "untag"
+    }
   ],
   "decline_reasons": [
     "out_of_scope",
@@ -980,7 +4396,20 @@
     "coffee"
   ],
   "mapped_columns": [
+    "account.currency",
+    "account.id",
+    "account.on_budget",
+    "account.opening_minor",
+    "account.type",
     "activity.starts",
+    "budget.amount_minor",
+    "budget.carry",
+    "budget.category_id",
+    "budget.currency",
+    "budget.month",
+    "concept.id",
+    "concept.key",
+    "concept.parent_id",
     "container.id",
     "container.parent_id",
     "document.id",
@@ -997,6 +4426,9 @@
     "locker_item.type",
     "locker_item.url",
     "locker_item.username",
+    "measurement.day",
+    "measurement.metric",
+    "measurement.value",
     "note.body",
     "note.id",
     "person.cadence_days",
@@ -1006,6 +4438,11 @@
     "person.role",
     "photo.id",
     "photo.taken_at",
+    "rule.category_id",
+    "rule.created_at",
+    "rule.id",
+    "rule.pattern",
+    "rule.position",
     "task.description",
     "task.done_at",
     "task.due",
@@ -1018,9 +4455,22 @@
     "txn.category_id",
     "txn.id",
     "txn.posted_on",
-    "txn.status"
+    "txn.status",
+    "workout.climb_m",
+    "workout.distance_m",
+    "workout.energy_kcal",
+    "workout.heart_bpm",
+    "workout.id",
+    "workout.moving_s"
   ],
   "mapped_commands": [
+    "account.add",
+    "account.edit",
+    "account.set_opening",
+    "budget.set",
+    "budget.set_carry",
+    "category.add",
+    "checkpoint.record",
     "container.create",
     "container.move",
     "document.create_text",
@@ -1033,6 +4483,7 @@
     "event.cancel",
     "event.edit",
     "event.propose",
+    "event.respond",
     "flag.clear",
     "flag.set",
     "locker.add_item",
@@ -1044,12 +4495,19 @@
     "person.add",
     "person.edit",
     "person.log_interaction",
+    "rule.add",
+    "rule.edit",
+    "tag.add",
+    "tag.remove",
     "task.add",
     "task.cancel",
     "task.complete",
     "task.edit",
     "task.organize",
-    "task.reopen"
+    "task.reopen",
+    "txn.categorize",
+    "txn.link_transfer",
+    "txn.unlink_transfer"
   ],
   "multi_kind_params": [
     "kind",
@@ -1110,6 +4568,32 @@
     "answer",
     "ask",
     "decline"
+  ],
+  "unbacked_verbs": [
+    {
+      "command": "locker.reveal_receipt",
+      "kind": "locker_item",
+      "verb": "reveal",
+      "why": "Locker declares no action that opens one sealed field: its `export` receipts a mass reveal, and the single reveal is a phone-side command the app table does not carry"
+    },
+    {
+      "command": "entity.trash",
+      "kind": "event",
+      "verb": "delete",
+      "why": "Agenda declares `cancel-event` and no action that moves an event to the trash"
+    },
+    {
+      "command": "entity.restore",
+      "kind": "event",
+      "verb": "restore",
+      "why": "Agenda declares no action that brings a trashed event back"
+    },
+    {
+      "command": "entity.retitle",
+      "kind": "list",
+      "verb": "edit",
+      "why": "Tasks declares no action that renames a project"
+    }
   ],
   "verbs": [
     {
