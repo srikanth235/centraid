@@ -1691,12 +1691,11 @@ message HomeSearchGroup {
 message HomeSearchData {
   // In Home's tile order (`SpringboardPolicy.SPRINGBOARD_ORDER`).
   repeated HomeSearchGroup groups = 1;
-  // Set when nothing matched the term: the one sentence, and one action that
-  // asks the assistant about the term (`empty.action_label`, #1097).
+  // Set when nothing matched the term: the one sentence. The way on is the Ask
+  // row, `HomeSearchState.field.ask_row`, drawn under the groups or this sentence.
   EmptyState empty = 2;
-  // THE QUESTION the shell sends to Chat when that action is pressed; set with
-  // `empty`, EMPTY otherwise. Finished here so a shell sends the machine's words.
-  string ask_question = 3;
+  reserved 3;
+  reserved "ask_question";
 }
 
 message HomeSearchState {
@@ -1740,9 +1739,8 @@ message HomeSearchEvent {
     // Another vault came to the front: its recent searches and results go
     // with the vault they were typed in.
     VaultChanged vault_changed = 12;
-    // INTENT: the empty state's "Ask about" action. The shell switches to the
-    // Chat tab and sends `data.ask_question`; the machine records the term as a
-    // recent search.
+    // INTENT: the Ask row. The shell switches to the Chat tab and sends
+    // `field.ask_row`; the machine records the term as a recent search.
     Asked asked = 13;
     // INTENT: the shell opens `container.target` in its app (#1097); the
     // machine records the term as a recent search, as it does for a row.
@@ -3765,11 +3763,12 @@ message AgendaHomeState {
   // screen and not a `SearchField`, so the correction sits beside the term.
   // A new term, closing search, and a refusal clear it.
   string search_corrected = 19;
-  // THE QUESTION THE NO-MATCH STATE OFFERS TO SEND TO THE ASSISTANT (#1097,
-  // R-1097-28), the twin of `SearchField.ask` on Agenda's flat fields: set
-  // when the hits for the current term come back wholly empty, cleared by a
-  // new term, closing search and a refusal.
-  string search_ask = 20;
+  // THE ASK ROW OF AGENDA'S SEARCH (#1097, R-1097-28, #1135), the twin of
+  // `SearchField.ask_row` on Agenda's flat fields: set by the hits for the current
+  // term, matched or not, cleared by a new term, closing search and a refusal.
+  reserved 20;
+  reserved "search_ask";
+  SearchAsk search_ask_row = 29;
   // THE TASK WRITE'S STATUS LINE (#1128): "Task done" with Undo, a filing's
   // "Filed in …", or the vault's own refusal. Empty when nothing was written.
   StatusLine status = 21;
@@ -4894,22 +4893,35 @@ enum ImportSource {
 // answer that is still the current one for a term that is not blank, and
 // cleared by a new term and a close; a stale answer never sets them.
 //
-// `ask` is THE QUESTION THE NO-MATCH STATE OFFERS TO SEND TO THE ASSISTANT
-// (#1097, R-1097-28): "Find <term>", finished by `SearchLaw`, set by an answer
-// that is still the current one, not denied and wholly empty (rows plus
-// containers), and ONLY for an app that offers Ask. EMPTY means no Ask: a new
-// term, a close, a denial, a stale answer and any answer with something in it
-// clear it. Locker never sets it (R-1097-29): its search term can be a secret,
-// and Ask would write it into a chat thread and the chat index. The shell
-// draws the action only where it has a Chat tab (R-1097-30) and sends this
-// string through its router, never a string the view built.
+// `ask_row` is THE ASK ROW AT THE FOOT OF THE ANSWER (#1097, R-1097-28, #1135):
+// set by an answer that is still the current one for a term that is not blank,
+// whether or not anything matched, and ONLY for an app that offers Ask (the
+// chat drawer's search and Locker's do not). Absent means no Ask: a new term, a
+// close, a denial and a stale answer clear it. Locker never sets it (R-1097-29):
+// its search term can be a secret, and Ask would write it into a chat thread
+// and the chat index. The shell draws the row only where it has a Chat tab
+// (R-1097-30) and hands the whole `SearchAsk` to its router, never a string the
+// view built.
 message SearchField {
+  reserved 6;
+  reserved "ask";
   bool open = 1;
   string term = 2;
   string answered_term = 3;
   string corrected = 4;
   repeated SearchContainer containers = 5;
-  string ask = 6;
+  SearchAsk ask_row = 7;
+}
+
+// THE ONE ASK A SEARCH OFFERS (#1135), finished by `SearchLaw` so every app reads
+// it the same way: `label` is the row's words ("Ask about “x”"), `question` is
+// what the chat is sent ("Find x"), and `scope` is the chat scope to open it in,
+// the id of the app the member searched from (`agenda`, `notes`, ...), or EMPTY
+// for Home's, which asks the assistant across every app.
+message SearchAsk {
+  string label = 1;
+  string question = 2;
+  string scope = 3;
 }
 
 // A CONTAINER AS A SEARCH RESULT (#1097, R-1097-19..21): one notebook, album,

@@ -50,8 +50,8 @@ enum ChatRouting {
     }
 
     /// The scope a visit to `app` gives the chat, or "" for none: the machine's
-    /// `scopeOf` — a task page scopes to Agenda (R-1128-F2), and Locker, which the
-    /// assistant cannot read, scopes nothing.
+    /// `scopeOf` — a task page scopes to Agenda (R-1128-F2); every other app scopes
+    /// to itself.
     static func scope(of app: String) -> String {
         ChatMachine.shared.scopeOf(appId: app)
     }
