@@ -349,11 +349,7 @@ impl SqliteDoor<'_> {
                     }
                 })?);
             }
-            let held = || {
-                list.as_deref()
-                    .into_iter()
-                    .flat_map(WordList::iter)
-            };
+            let held = || list.as_deref().into_iter().flat_map(WordList::iter);
             if is_known(folded, held()) {
                 if !filling {
                     return Ok(None);
