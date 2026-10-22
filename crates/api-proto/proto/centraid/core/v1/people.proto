@@ -254,15 +254,12 @@ message PeopleSheet {
   repeated PeopleDate dates = 5;
   // Newest first.
   repeated PeopleNote notes = 6;
-  // FALSE when the activity plane was refused: `touches` is then unknown, not
-  // empty, and the rest of the sheet stands.
-  bool touches_known = 7;
+  // `touches_known` (7) and `channels_known` (9): nothing grants a scope any more,
+  // so no read of the sheet is refused apart from the rest of it (#1135).
+  reserved 7, 9;
+  reserved "touches_known", "channels_known";
   // The touch log, newest first.
   repeated PeopleTouchEntry touches = 8;
-  // FALSE when `social.contact_channel` was refused (P1): `channels` is then
-  // unknown, not empty — a member who revoked the messaging app still sees the
-  // person — and the rest of the sheet stands.
-  bool channels_known = 9;
 }
 
 message PeoplePerson {

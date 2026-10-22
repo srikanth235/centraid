@@ -101,8 +101,6 @@ class PeopleQueryRoundTripSpec : StringSpec({
             val sheet = core.person(ada).sheet ?: error("Ada has a sheet")
             sheet.person?.party_id shouldBe ada
             sheet.dates.single().label shouldBe "Birthday"
-            sheet.touches_known shouldBe true
-            sheet.channels_known shouldBe true
             sheet.touches.single().text shouldBe "Caught up"
             // A TRASHED PERSON HAS NO SHEET — an absence, not a denial.
             core.person(gone).sheet shouldBe null

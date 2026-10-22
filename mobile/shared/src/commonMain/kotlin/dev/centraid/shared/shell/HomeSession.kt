@@ -445,7 +445,7 @@ public class HomeSession private constructor(
      *
      * **The read door has no join clause**, and two screens need one. A place
      * card is `place`'s pin and zone and `entity`'s name beside `photo`'s count
-     * and cover; a person row is `core_party`'s display name beside
+     * and cover; a person row is an `entity` title beside
      * `media_face_region`'s count. Neither is answerable in one statement, so
      * those screens run two passes and merge the answers into one state.
      *
@@ -483,7 +483,7 @@ public class HomeSession private constructor(
      *   `PlacementArrived`, `ThumbnailsArrived`), because a reducer that cannot
      *   tell a merge from a replace paints one subject's data onto another.
      * - **It is not** when the data case cannot be CONSTRUCTED until both reads
-     *   land — a person row is a `core_party` name and a `media_face_region`
+     *   land — a person row is a `entity` name and a `media_face_region`
      *   count, and neither half is a row. Then the fan-out belongs in the
      *   bridge, which folds both answers and sends ONE event, exactly as
      *   `HomeRuntime` fans out seven reads per app. There is no third option:
@@ -585,7 +585,7 @@ public class HomeSession private constructor(
                         "Couldn't make a vault on this phone."
                     // THE SENTENCE NO LONGER NAMES A MISSING DOOR (#1029 W5).
                     // It said "this build cannot make a new vault yet", which
-                    // was true while nothing over the ABI wrote `core_vault`
+                    // was true while nothing over the ABI wrote `vault`
                     // and is a lie now that `FoundRequest` does. What reaches
                     // this arm today is a found the CORE refused, and the
                     // remedy a member has is to try again — the shelf picks a
@@ -838,7 +838,7 @@ public class HomeSession private constructor(
      * The foreground vault's lockup, and it is the SHELF's row.
      *
      * The name and the colour come from the holding — which read them out of
-     * the replica's own `core_vault` row — and the state is derived by
+     * the replica's own `vault` row — and the state is derived by
      * [Shelf.Holding.state] from what the last pass actually did. Nothing here
      * decides either, which is the point: the header's second line and the
      * switcher row for the same vault are one value rendered twice, and cannot

@@ -1,28 +1,14 @@
 package dev.centraid.android.screens.people
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.role
-import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.unit.dp
 import centraid.screen.v1.Autosave
 import centraid.screen.v1.PeopleEditorEvent
@@ -30,15 +16,12 @@ import centraid.screen.v1.PeopleEditorState
 import dev.centraid.android.kit.EditableFieldRow
 import dev.centraid.android.kit.EditorRoom
 import dev.centraid.android.kit.EmptyStateView
-import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.KitWords
 import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.RowSkeleton
 import dev.centraid.android.kit.SheetRow
 import dev.centraid.android.kit.StatusLine
-import dev.centraid.android.kit.hueColor
 import dev.centraid.android.kit.screenContentOf
-import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 
 /**
@@ -109,36 +92,6 @@ public fun PeopleEditorScreen(
                     testTag = "people-editor-met",
                     onEdit = { onEvent(PeopleEditorEvent(met = PeopleEditorEvent.MetChanged(it))) },
                 )
-                if (state.hues.isNotEmpty()) {
-                    Label(chrome?.colour_field.orEmpty())
-                    Row(
-                        Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        state.hues.forEach { hue ->
-                            Box(
-                                Modifier
-                                    .size(36.dp)
-                                    .clip(CircleShape)
-                                    .border(
-                                        if (hue.selected) 2.dp else 0.dp,
-                                        centraidColor(if (hue.selected) "text" else "bg"),
-                                        CircleShape,
-                                    )
-                                    .padding(4.dp)
-                                    .clip(CircleShape)
-                                    .background(hueColor(hue.hue_key))
-                                    .clickable { onEvent(PeopleEditorEvent(hue = PeopleEditorEvent.HuePicked(hue.hue_key))) }
-                                    .testTag("people-hue-${hue.hue_key}")
-                                    .clearAndSetSemantics {
-                                        contentDescription = hue.accessibility_label
-                                        role = Role.Button
-                                        selected = hue.selected
-                                    },
-                            )
-                        }
-                    }
-                }
                 if (state.cadences.isNotEmpty()) {
                     Label(chrome?.cadence_field.orEmpty())
                     state.cadences.forEach { cadence ->

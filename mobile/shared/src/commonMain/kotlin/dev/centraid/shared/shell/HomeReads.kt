@@ -425,7 +425,7 @@ public object HomeReads {
                             // the message and a view's whole job is a lookup.
                             //
                             // `null` for the stored colour, and NOT a column
-                            // this read forgot: `core_party` has no
+                            // this read forgot: `entity` has no
                             // `avatar_color`. It carries `avatar_content_id` —
                             // a PHOTOGRAPH — and the only `avatar_color` this
                             // repository ever had was a v0 friend row's (gone with Tally,

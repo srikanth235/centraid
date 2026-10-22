@@ -1426,3 +1426,29 @@ fn a_row_the_member_trashed_stays_trashed_and_a_statement_line_is_never_removed(
             .is_err()
     );
 }
+
+#[test]
+fn the_vault_is_renamed_by_its_own_command_and_never_to_nothing() {
+    let w = World::new();
+    let named = |w: &World| -> String { w.one("SELECT name FROM vault", &[]) };
+    let out = w.ok("vault.rename", json!({"name": "  Family  "}));
+    assert_eq!(out["name"], "Family");
+    assert_eq!(named(&w), "Family");
+    assert_eq!(
+        w.ok("vault.rename", json!({"name": "Family"}))["changed"],
+        false
+    );
+    assert!(
+        w.refused("vault.rename", json!({"name": "   "}))
+            .contains("something in it")
+    );
+    assert!(
+        w.refused("vault.rename", json!({"name": "x".repeat(61)}))
+            .contains("at most 60")
+    );
+    assert_eq!(
+        named(&w),
+        "Family",
+        "a refused rename leaves the name alone"
+    );
+}

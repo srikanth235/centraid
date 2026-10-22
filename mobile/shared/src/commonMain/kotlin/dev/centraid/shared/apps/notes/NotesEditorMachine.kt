@@ -245,11 +245,6 @@ public object NotesEditorMachine : ScreenMachine<NotesEditorState, NotesEditorEv
         // phase its saves have reached since.
         val untouched = (autosave?.edit_seq ?: 0L) <= state.opened_seq
         return state.copy(
-            // A note's body is its own column on the phone that is the vault: it is
-            // always here, so it is editable once the draft is. The two fields stay
-            // for the views that still read them.
-            body_editable = draft != null,
-            body_notice = "",
             chrome = NotesEditorChrome(
                 // #1015 D3: "Cancel" only before the first keystroke; after
                 // it, close = done, and an autosave does not undo that.

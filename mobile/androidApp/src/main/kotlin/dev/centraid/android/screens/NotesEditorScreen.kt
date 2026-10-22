@@ -21,7 +21,6 @@ import centraid.screen.v1.NotesEditorEvent
 import centraid.screen.v1.NotesEditorState
 import dev.centraid.android.kit.EditableFieldRow
 import dev.centraid.android.kit.EditorRoom
-import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.KitWords
 import dev.centraid.android.kit.OptionSheet
 import dev.centraid.android.kit.ReadStateView
@@ -30,8 +29,6 @@ import dev.centraid.android.kit.RowSkeleton
 import dev.centraid.android.kit.SheetOption
 import dev.centraid.android.kit.StatusLine
 import dev.centraid.android.kit.screenContentOf
-import dev.centraid.android.theme.centraidColor
-import dev.centraid.android.theme.centraidType
 
 /**
  * The Notes editor (#1020, D-1020-E3; #1029 port), in the kit's `EditorRoom`.
@@ -42,8 +39,7 @@ import dev.centraid.android.theme.centraidType
  * unsaved. The close key's word ("Cancel" before a keystroke, "Done" after)
  * and the status line are the machine's `chrome`.
  *
- * A NEW NOTE (`is_new`) opens empty and is created on its first save. A body
- * that is not on this device is read-only under `body_notice`. Pin, Link,
+ * A NEW NOTE (`is_new`) opens empty and is created on its first save. Pin, Link,
  * History and Send to Tasks sit behind the one menu key (`menu_label`), as on
  * iOS; History and Send to Tasks are intents for the route. `[[` typed in the
  * body opens the link sheet on the machine's own say (`link_sheet_open`).
@@ -110,41 +106,24 @@ public fun NotesEditorScreen(
                     testTag = "notes-title",
                     onEdit = { value -> onEvent(NotesEditorEvent(title = NotesEditorEvent.TitleEdited(value))) },
                 )
-                if (state.body_notice.isNotEmpty()) {
-                    Text(
-                        state.body_notice,
-                        style = centraidType("annotLabel"),
-                        color = centraidColor("textSoft"),
-                        modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp).testTag("notes-body-notice"),
-                    )
-                }
-                if (state.body_editable) {
-                    EditableFieldRow(
-                        key = "",
-                        value = note.body,
-                        reload = bodyReload,
-                        placeholder = chrome?.body_placeholder.orEmpty(),
-                        style = "reading",
-                        singleLine = false,
-                        testTag = "notes-body",
-                        modifier = Modifier.padding(top = 4.dp),
-                        onEdit = { value -> onEvent(NotesEditorEvent(body = NotesEditorEvent.BodyEdited(value))) },
-                    )
-                } else if (note.body.isNotEmpty()) {
-                    Text(
-                        note.body,
-                        style = centraidType("reading"),
-                        color = centraidColor("textSoft"),
-                        modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 6.dp).testTag("notes-body"),
-                    )
-                }
+                EditableFieldRow(
+                    key = "",
+                    value = note.body,
+                    reload = bodyReload,
+                    placeholder = chrome?.body_placeholder.orEmpty(),
+                    style = "reading",
+                    singleLine = false,
+                    testTag = "notes-body",
+                    modifier = Modifier.padding(top = 4.dp),
+                    onEdit = { value -> onEvent(NotesEditorEvent(body = NotesEditorEvent.BodyEdited(value))) },
+                )
             }
         }
     }
     if (menuOpen && chrome != null && draft != null) {
         val options = buildList {
             add(SheetOption(key = MENU_PIN, label = chrome.pin_label))
-            if (state.body_editable) add(SheetOption(key = MENU_LINK, label = chrome.link_label))
+            add(SheetOption(key = MENU_LINK, label = chrome.link_label))
             if (chrome.history_enabled) add(SheetOption(key = MENU_HISTORY, label = chrome.history_label))
             if (chrome.send_to_tasks_label.isNotEmpty()) {
                 add(SheetOption(key = MENU_SEND, label = chrome.send_to_tasks_label))

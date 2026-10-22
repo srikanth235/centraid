@@ -12,8 +12,7 @@ import SwiftUI
 ///
 /// **EVERY WORD IS THE MACHINE'S** — the close verb, the placeholders, the
 /// pin/link/history/send-to-Tasks labels and the status (`NotesEditorChrome`).
-/// A body the phone does not hold is read-only (`body_editable`) with the
-/// machine's `body_notice` over it. The powerbox (the link picker) is a sheet
+/// The powerbox (the link picker) is a sheet
 /// the machine opens (`link_sheet_open`, also on a typed `[[`); a pick is the
 /// editor's `LinkPicked`, and the spliced body is re-seeded when it closes.
 struct NotesEditorView: View {
@@ -68,13 +67,11 @@ struct NotesEditorView: View {
             if draft != nil {
                 Menu {
                     Button(chrome.pinLabel) { send(NotesEditorEvents.make { $0.pin = .init() }) }
-                    if state.bodyEditable {
-                        Button(chrome.linkLabel) {
-                            send(NotesEditorEvents.make {
-                                // THE MACHINE PLACES IT (at the end of the note): no caret is sent.
-                                $0.linkRequested = .init()
-                            })
-                        }
+                    Button(chrome.linkLabel) {
+                        send(NotesEditorEvents.make {
+                            // THE MACHINE PLACES IT (at the end of the note): no caret is sent.
+                            $0.linkRequested = .init()
+                        })
                     }
                     if chrome.historyEnabled {
                         Button(chrome.historyLabel) { send(NotesEditorEvents.make { $0.history = .init() }) }
@@ -113,14 +110,8 @@ struct NotesEditorView: View {
                             guard typed != draft.title else { return }
                             send(NotesEditorEvents.make { $0.title = .with { $0.title = typed } })
                         }
-                    if !state.bodyNotice.isEmpty {
-                        Text(state.bodyNotice)
-                            .centraidType("small")
-                            .foregroundStyle(Theme.color("textSoft", scheme))
-                            .accessibilityIdentifier("note-body-notice")
-                    }
                     ZStack(alignment: .topLeading) {
-                        if typedBody.isEmpty, state.bodyEditable {
+                        if typedBody.isEmpty {
                             Text(chrome.bodyPlaceholder)
                                 .centraidType("reading")
                                 .foregroundStyle(Theme.color("textFaint", scheme))
@@ -130,12 +121,11 @@ struct NotesEditorView: View {
                         }
                         TextEditor(text: $typedBody)
                             .centraidType("reading")
-                            .foregroundStyle(Theme.color(state.bodyEditable ? "text" : "textSoft", scheme))
+                            .foregroundStyle(Theme.color("text", scheme))
                             .scrollContentBackground(.hidden)
-                            .disabled(!state.bodyEditable)
                             .accessibilityIdentifier("note-body-field")
                             .onChange(of: typedBody) { _, typed in
-                                guard state.bodyEditable, typed != draft.body else { return }
+                                guard typed != draft.body else { return }
                                 send(NotesEditorEvents.make { $0.body = .with { $0.body = typed } })
                             }
                     }

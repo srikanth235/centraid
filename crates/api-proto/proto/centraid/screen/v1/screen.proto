@@ -823,10 +823,11 @@ message NotesEditorState {
   // yet. The first save is `note.create` under that id; every later one is
   // `note.edit`. Cleared when the create commits.
   bool is_new = 10;
-  // True once the draft is: a note's body is its own column on the phone that is
-  // the vault, so it is never "not on this device" (#1135). Kept for the views.
-  bool body_editable = 11;
-  string body_notice = 12;
+  // `body_editable` (11) and `body_notice` (12): a note's body is its own column on
+  // the phone that is the vault, so it is never "not on this device" and the editor
+  // is editable once the draft is (#1135).
+  reserved 11, 12;
+  reserved "body_editable", "body_notice";
   // THE POWERBOX IS OPEN: the shell presents `notes.link_targets` over the
   // editor and forwards its pick as `LinkPicked`.
   bool link_sheet_open = 13;
@@ -6792,16 +6793,11 @@ message PeopleProfileDraft {
   string role = 2;
   string nickname = 3;
   string met = 4;
-  // A `PartyHueWheel` key; empty is the id's own hue.
-  string hue_key = 5;
+  // `hue_key` (5): a person's hue is drawn from their id and nothing stores one (#1135).
+  reserved 5;
+  reserved "hue_key";
   // 0 is no cadence.
   int64 cadence_days = 6;
-}
-
-message PeopleHueChoice {
-  string hue_key = 1;
-  bool selected = 2;
-  string accessibility_label = 3;
 }
 
 message PeopleCadenceChoice {
@@ -6819,7 +6815,8 @@ message PeopleEditorChrome {
   string role_placeholder = 4;
   string nickname_field = 5;
   string met_field = 6;
-  string colour_field = 7;
+  reserved 7;
+  reserved "colour_field";
   string cadence_field = 8;
   // "Cancel" before the first keystroke of a new person, else "Done".
   string close_label = 9;
@@ -6848,7 +6845,8 @@ message PeopleEditorState {
   optional PeopleProfileDraft baseline = 11;
   optional PeopleProfileDraft sending = 12;
   PeopleEditorChrome chrome = 13;
-  repeated PeopleHueChoice hues = 14;
+  reserved 14;
+  reserved "hues";
   repeated PeopleCadenceChoice cadences = 15;
   // "Saving…" / "Saved" / the refusal's sentence; empty when clean.
   string save_label = 16;
@@ -6872,11 +6870,14 @@ message PeopleEditorEvent {
     RoleChanged role = 10;
     NicknameChanged nickname = 11;
     MetChanged met = 12;
-    HuePicked hue = 13;
     CadencePicked cadence = 14;
     Tick tick = 15;
     Left left = 16;
   }
+
+  // `hue` (13): a person's hue is drawn from their id and no picker offers one (#1135).
+  reserved 13;
+  reserved "hue";
 
   // An existing person, or a new one under `minted_party_id`.
   message Opened {
@@ -6918,10 +6919,6 @@ message PeopleEditorEvent {
 
   message MetChanged {
     string text = 1;
-  }
-
-  message HuePicked {
-    string hue_key = 1;
   }
 
   message CadencePicked {

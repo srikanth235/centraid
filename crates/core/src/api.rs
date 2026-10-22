@@ -85,7 +85,7 @@ pub const MAX_CONTENT_URLS: usize = 100;
 /// a table in `from`, and a door that reads any table by name is wider than any
 /// screen needs: it would page the receipts, the provenance log, the Locker's
 /// fields and passkeys, the money ledger and every revision snapshot for a
-/// shell that asked. So it reads these fifteen and refuses the rest as an
+/// shell that asked. So it reads these fourteen and refuses the rest as an
 /// invalid request, before the vault is asked.
 ///
 /// The set is every `from` a shell sends today, read off `mobile/shared`'s
@@ -93,7 +93,7 @@ pub const MAX_CONTENT_URLS: usize = 100;
 ///
 /// | Screens | Tables |
 /// |---|---|
-/// | The vault roster | `core_vault` |
+/// | The vault roster | `vault` |
 /// | People (Home's tile counts the circle; its trash shelf pages the trashed) | `entity`, `person`, `vault` |
 /// | Home's tiles | `entity`, `document`, `person`, `vault`, `locker_item` |
 /// | Trash (Docs, Photos, Tasks, People, Locker) | `entity`, `locker_item` |
@@ -118,15 +118,14 @@ pub const MAX_CONTENT_URLS: usize = 100;
 ///
 /// The `where` is held to the same list: it is predicate text and could name
 /// a subquery on any table, so the vault prepares it under an authorizer that
-/// refuses a read outside these fifteen
+/// refuses a read outside these fourteen
 /// ([`Vault::keyset_page_reading_only`]). The vault's test
 /// `a_predicate_that_reads_a_table_outside_the_list_is_refused` is where that
 /// is read: the predicates it tries are SQL, which lives in that crate.
-pub const PAGE_TABLES: [&str; 15] = [
+pub const PAGE_TABLES: [&str; 14] = [
     "account",
     "blob",
     "container",
-    "core_vault",
     "derivative",
     "document",
     "edge",
@@ -504,17 +503,16 @@ pub fn resolve(_handle: &str) -> Result<serde_json::Value> {
 ///
 /// The door `Core::open` with `create` left missing. `Vault::create` lays the
 /// migrations down; `Vault::found` writes the two rows that make those tables a
-/// vault — `core_vault` and the owner's `core_party` — inside one commit, and
+/// vault — the `vault` row and its owner's person — inside one commit, and
 /// until this function existed nothing over the C ABI could reach it. A phone
 /// could create a file that could never say which vault it was, which is
 /// exactly what `Shelf.FoundRefusal.NOT_FOUNDED` was refusing honestly.
 ///
 /// **A SECOND FOUND IS REFUSED, AND THE VAULT THAT IS HERE IS LEFT ALONE.**
 /// `Vault::found` mints a fresh id and inserts unconditionally, so running it
-/// twice would leave two `core_vault` rows in one file — and `Vault::vault_id`
-/// reads `ORDER BY vault_id LIMIT 1`, so the file would answer whichever id
-/// sorted first. That is a vault whose identity depends on a random draw. The
-/// refusal carries `ERROR_CODE_VAULT_ALREADY_HELD` and names the id already
+/// twice would write a second self person beside the first — and `vault` holds
+/// one row (`CHECK (id = 1)`), so the insert would fail half-way into a file
+/// the shell took for founded. The refusal carries `ERROR_CODE_VAULT_ALREADY_HELD` and names the id already
 /// here, so a shell that raced itself can tell "I founded it" from "something
 /// is wrong".
 ///
@@ -537,6 +535,14 @@ pub fn found(
                 request.content
             ),
         })?;
+    // A vault has a name (`vault.name` is `CHECK (length(trim(name)) > 0)`), so a
+    // blank one is refused here, before the file is touched. The shells found
+    // with `Shelf.DEFAULT_VAULT_NAME` and the member renames it afterwards.
+    if request.display_name.trim().is_empty() {
+        return Err(CoreError::InvalidRequest {
+            detail: "a vault needs a name".to_owned(),
+        });
+    }
     if let Some(vault_id) = vault.self_id()? {
         return Err(CoreError::VaultAlreadyHeld { vault_id });
     }
@@ -792,11 +798,10 @@ mod tests {
     /// Every table a screen pages, with a column that can key its cursor. Spelled
     /// here, not derived from the allowlist, so the allowlist cannot grow without
     /// this list (and the paragraph above it) being read.
-    const PAGED_BY_A_SCREEN: [(&str, &str); 15] = [
+    const PAGED_BY_A_SCREEN: [(&str, &str); 14] = [
         ("account", "id"),
         ("blob", "hash"),
         ("container", "id"),
-        ("core_vault", "vault_id"),
         ("derivative", "blob"),
         ("document", "id"),
         ("edge", "from_id"),
@@ -974,16 +979,25 @@ mod tests {
         let _ = std::fs::remove_dir_all(&scratch);
     }
 
-    /// An empty name is a REAL STATE, not a validation failure: the shell draws
-    /// "No vault yet" over it and the member renames the vault from inside it.
+    /// A vault has a name: a blank one is refused before the file is touched,
+    /// and the file stays unfounded so the shell can found it again.
     #[test]
-    fn an_empty_display_name_founds_a_vault_that_is_simply_unnamed() {
+    fn a_blank_display_name_is_refused_and_founds_nothing() {
         let scratch = centraid_ontology::scratch::scratch_dir();
         std::fs::create_dir_all(&scratch).expect("the directory is made");
         let vault = Vault::create(scratch.join("v.db")).expect("a vault file");
-        let answer = found_here(&vault, &wire::FoundRequest::default()).expect("founded");
-        assert!(!answer.vault_id.is_empty());
-        assert_eq!(vault.display_name().expect("read").as_deref(), Some(""));
+        for blank in ["", "  \t"] {
+            let refused = found_here(
+                &vault,
+                &wire::FoundRequest {
+                    display_name: blank.to_owned(),
+                    ..wire::FoundRequest::default()
+                },
+            )
+            .expect_err("a blank name is refused");
+            assert_eq!(refused.code(), wire::ErrorCode::InvalidRequest, "{refused}");
+        }
+        assert_eq!(vault.self_id().expect("read"), None);
         let _ = std::fs::remove_dir_all(&scratch);
     }
 

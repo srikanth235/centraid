@@ -438,9 +438,6 @@ fn sheet_to_wire(person: people::person::Person, clock: &Clock) -> wire::PeopleS
         )),
         nickname: person.nickname,
         met: person.met,
-        // Both readings are the sheet's own tables now (#1135): they are
-        // always known, and the fields stay for the shells that read them.
-        channels_known: true,
         channels: person
             .contact
             .into_iter()
@@ -464,7 +461,6 @@ fn sheet_to_wire(person: people::person::Person, clock: &Clock) -> wire::PeopleS
                 created_at: note.created_at,
             })
             .collect(),
-        touches_known: true,
         touches: person
             .touches
             .into_iter()
@@ -851,8 +847,6 @@ mod tests {
         assert_eq!(touch.recent[0].party_id, weekly);
         assert_eq!(touch.recent[0].name, "Weekly");
         let sheet = scratch.person(&weekly).sheet.expect("a live person");
-        assert!(sheet.touches_known);
-        assert!(sheet.channels_known);
         assert_eq!(sheet.touches.len(), 1);
         assert_eq!(sheet.touches[0].text, "Caught up");
         assert!(!sheet.person.expect("a header").due);

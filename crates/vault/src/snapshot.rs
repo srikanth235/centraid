@@ -243,11 +243,7 @@ fn build_into(vault: &Vault, working: &Path, working_gz: &Path) -> Result<(Snaps
 /// The vault's own id, read from the copy.
 fn vault_id_from(copy: &Connection) -> Result<String> {
     Ok(copy
-        .query_row(
-            "SELECT vault_id FROM core_vault ORDER BY vault_id LIMIT 1",
-            [],
-            |row| row.get(0),
-        )
+        .query_row("SELECT self_id FROM vault", [], |row| row.get(0))
         .unwrap_or_default())
 }
 

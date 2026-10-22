@@ -155,7 +155,7 @@ fn the_seeded_file_carries_its_rows_without_its_sidecars() {
     let id = vault
         .vault_id()
         .expect("it reads")
-        .expect("a copy of a seeded vault still holds its `core_vault` row");
+        .expect("a copy of a seeded vault still holds its `vault` row");
     assert!(!id.is_empty(), "the copied vault has no id");
     vault.close().expect("it closes");
 }

@@ -329,12 +329,12 @@ class AppReadsSpec : StringSpec({
         Triple("tasks.detail", TasksDetailReads, TasksDetailMachine),
         Triple("tasks.catch_up", TasksCatchUpReads, TasksCatchUpMachine),
         // LOCKER (#1047). Every read screen shares one table set — the item,
-        // its sidecars, the tag plane and the memo; the generator reads none.
+        // its sidecars and its tags; the generator reads none.
         Triple("locker.home", LockerHomeReads, LockerHomeMachine),
         Triple("locker.item", LockerItemReads, LockerItemMachine),
         Triple("locker.editor", LockerEditorReads, LockerEditorMachine),
         Triple("locker.generator", LockerGeneratorReads, LockerGeneratorMachine),
-        // #1047 T2: the item page reads its access history (`access_receipt`);
+        // #1047 T2: the item page reads its access history (`receipt`);
         // export and import read the shelf's counts.
         Triple("locker.export", LockerExportReads, LockerExportMachine),
         Triple("locker.import", LockerImportReads, LockerImportMachine),

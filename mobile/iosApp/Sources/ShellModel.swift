@@ -1100,7 +1100,7 @@ final class ShellModel: ObservableObject {
     }
 
     /// RENAME A VAULT from the switcher: written into the vault's own file
-    /// (`core.rename_vault`), and the header and the roster follow the shelf.
+    /// (`vault.rename`), and the header and the roster follow the shelf.
     /// A name that did not take says so on the switcher's status line.
     func renameVault(vaultID: String, name: String) {
         home.renameVault(vaultId: vaultID, name: name) { [weak self] renamed in

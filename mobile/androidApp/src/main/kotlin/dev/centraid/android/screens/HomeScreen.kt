@@ -100,7 +100,7 @@ public fun HomeScreen(
     state: HomeState,
     onEvent: (HomeEvent) -> Unit,
     onForget: (String) -> Unit,
-    /** Rename a vault (`core.rename_vault`): its id and the name typed. */
+    /** Rename a vault (`vault.rename`): its id and the name typed. */
     onRename: (vaultId: String, name: String) -> Unit = { _, _ -> },
     /**
      * Open the transfer-rules sheet (#1025 S4). Defaulted so a preview renders

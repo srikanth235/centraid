@@ -870,8 +870,8 @@ class LockerSpec : StringSpec({
     "every Locker table is a table in the vault, and a change on one re-reads" {
         LOCKER_TABLES shouldContain "locker_item"
         withClue("a change on a Locker table re-reads the screen that shows it") {
-            LockerHomeMachine.rowsChanged("core_tag", emptyList()).shouldBeInstanceOf<LockerInput.Changed>()
-            LockerHomeMachine.rowsChanged("media_asset", emptyList()).shouldBeNull()
+            LockerHomeMachine.rowsChanged("locker_tag", emptyList()).shouldBeInstanceOf<LockerInput.Changed>()
+            LockerHomeMachine.rowsChanged("photo", emptyList()).shouldBeNull()
         }
         TrashListEvent.Refreshed() shouldNotBe null
     }

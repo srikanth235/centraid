@@ -1004,9 +1004,9 @@ public object LockerItemMachine :
 
 /**
  * An item's page reads its access history too (#1047 T2), so a receipt the
- * page's own reveal wrote re-reads it: `access_receipt` is on its table set.
+ * page's own reveal wrote re-reads it: `receipt` is on its table set.
  */
-public val LOCKER_ITEM_TABLES: Set<String> = LOCKER_TABLES + "access_receipt"
+public val LOCKER_ITEM_TABLES: Set<String> = LOCKER_TABLES + "receipt"
 
 /** The most receipts the item page draws. */
 public const val ACCESS_WINDOW: Int = 50

@@ -91,7 +91,6 @@ struct PeopleEditorView: View {
                                 guard typed != draft.met else { return }
                                 send(PeopleEvents.editor { $0.met = .with { $0.text = typed } })
                             }
-                            hues(chrome)
                             cadences(chrome)
                         }
                     }
@@ -109,40 +108,6 @@ struct PeopleEditorView: View {
                 }
             }
         }
-    }
-
-    private func hues(_ chrome: Centraid_Screen_V1_PeopleEditorChrome) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(chrome.colourField)
-                .centraidType("annotLabel")
-                .foregroundStyle(Theme.color("textSoft", scheme))
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(state.hues, id: \.hueKey) { hue in
-                        Button {
-                            send(PeopleEvents.editor { $0.hue = .with { $0.hueKey = hue.hueKey } })
-                        } label: {
-                            Circle()
-                                .fill(Theme.color(peopleHue(hue.hueKey, else: "bgSunken"), scheme))
-                                .frame(width: 28, height: 28)
-                                .overlay(
-                                    Circle()
-                                        .strokeBorder(Theme.color("text", scheme), lineWidth: hue.selected ? 2 : 0)
-                                        .padding(-4)
-                                )
-                                .frame(width: CentraidGeometry.targetMinCoarse, height: CentraidGeometry.targetMinCoarse)
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel(hue.accessibilityLabel)
-                        .accessibilityAddTraits(hue.selected ? .isSelected : [])
-                        .accessibilityIdentifier("people-editor-hue-\(hue.hueKey)")
-                    }
-                }
-            }
-        }
-        .padding(.horizontal, CentraidGeometry.pageMargin)
-        .padding(.vertical, 8)
     }
 
     private func cadences(_ chrome: Centraid_Screen_V1_PeopleEditorChrome) -> some View {

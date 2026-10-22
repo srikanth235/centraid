@@ -406,11 +406,14 @@ fn item_type_of(ctx: &CommandCtx<'_, '_>, item_id: &str) -> Result<String> {
 
 /// A STAR IS A COLUMN OF LOCKER'S OWN ROW. A Locker item is not an entity, so
 /// the vault's `flag:starred` edge cannot reach it, and nothing outside Locker
-/// reads it.
+/// reads it. The stamp is the command's clock, and the version moves with it:
+/// left to the table's trigger the stamp would be the host's.
 fn set_starred(ctx: &CommandCtx<'_, '_>, item_id: &str, on: bool) -> Result<()> {
     ctx.connection().execute(
-        "UPDATE locker_item SET starred = ?2 WHERE item_id = ?1",
-        rusqlite::params![item_id, i64::from(on)],
+        "UPDATE locker_item
+            SET starred = ?2, updated_at = ?3, row_version = row_version + 1
+          WHERE item_id = ?1",
+        rusqlite::params![item_id, i64::from(on), ctx.now],
     )?;
     Ok(())
 }
@@ -2330,9 +2333,9 @@ fn reveal_receipt() -> CommandDefinition {
             // exactly why this door has to exist: the record of *who looked* is
             // the one thing that must stay readable now that the command plane
             // cannot decrypt, and a revealer that wrote its own receipts outside
-            // the gate would be a revealer auditing itself. `access_receipt` is append-only by trigger and
-            // hash-chained by `seq`, so this is a receipt a member can read
-            // and nobody can quietly remove.
+            // the gate would be a revealer auditing itself. Locker's `receipt` is append-only by trigger
+            // (`receipt_is_evidence`) and ordered by `seq`, so this is a receipt a
+            // member can read and nobody can quietly remove.
             //
             // It carries COLUMN NAMES, never values — `columns: ["password"]`
             // is what the access history shows.

@@ -328,7 +328,6 @@ class HomeMachineSpec : StringSpec({
             listOf("notes", "money"),
             listOf("health", "people"),
             listOf("locker"),
-            listOf("people", "locker"),
         )
     }
 

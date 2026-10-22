@@ -6,7 +6,6 @@ import centraid.screen.v1.PeopleCadenceChoice
 import centraid.screen.v1.PeopleEditorChrome
 import centraid.screen.v1.PeopleEditorEvent
 import centraid.screen.v1.PeopleEditorState
-import centraid.screen.v1.PeopleHueChoice
 import centraid.screen.v1.PeopleProfileDraft
 import centraid.screen.v1.ReadFailure
 import centraid.screen.v1.SeatState
@@ -109,8 +108,6 @@ public object PeopleEditorMachine : ScreenMachine<PeopleEditorState, PeopleEdito
         event.role != null -> edited(state) { it.copy(role = event.role.text) }
         event.nickname != null -> edited(state) { it.copy(nickname = event.nickname.text) }
         event.met != null -> edited(state) { it.copy(met = event.met.text) }
-        // A person's hue is drawn from their id (#1135): there is nothing to store, and no picker offers one.
-        event.hue != null -> Step(state)
         event.cadence != null -> cadence(state, event.cadence.days)
         event.tick != null -> AutosaveLaw.tick(lens(state), state, event.tick.token)
         event.left != null -> AutosaveLaw.flush(lens(state), state)
@@ -218,13 +215,11 @@ public object PeopleEditorMachine : ScreenMachine<PeopleEditorState, PeopleEdito
                 role_placeholder = PeopleCopy.FIELD_ROLE_PLACEHOLDER,
                 nickname_field = PeopleCopy.FIELD_NICKNAME,
                 met_field = PeopleCopy.FIELD_MET,
-                colour_field = PeopleCopy.FIELD_COLOUR,
                 cadence_field = PeopleCopy.FIELD_CADENCE,
                 close_label = if (state.is_new && !state.touched) PeopleCopy.CANCEL else PeopleCopy.DONE,
                 retry = PeopleCopy.RETRY,
                 loading = PeopleCopy.LOADING,
             ),
-            hues = emptyList(),
             cadences = if (draft == null) {
                 emptyList()
             } else {

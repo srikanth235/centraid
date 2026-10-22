@@ -353,8 +353,8 @@ public object LockerHomeMachine :
 }
 
 /**
- * EVERY TABLE LOCKER'S QUERIES READ: the item, its sidecars, the tag plane
- * the star and the tags ride, and the memo's annotation. `AppReadsSpec`
+ * EVERY TABLE LOCKER'S QUERIES READ: the item (its star and its memo are columns of
+ * it), its sidecars and its own tags. `AppReadsSpec`
  * holds this to the machine's `rowsChanged`.
  */
 public val LOCKER_TABLES: Set<String> = setOf(
@@ -363,10 +363,7 @@ public val LOCKER_TABLES: Set<String> = setOf(
     "locker_item_address",
     "locker_item_passkey",
     "locker_item_alias",
-    "core_tag",
-    "core_concept",
-    "core_concept_scheme",
-    "knowledge_annotation",
+    "locker_tag",
 )
 
 /** What home asks: the surface on screen — and nothing while locked (`LockerQueries`). */

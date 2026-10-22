@@ -834,8 +834,6 @@ class NotesAppSpec : StringSpec({
 
     "editor: the body is always here, so it is editable once the draft is, and the title still saves alone" {
         val state = loadedEditor(body = "")
-        state.body_editable shouldBe true
-        state.body_notice shouldBe ""
         val titled = NotesEditorMachine.run(
             state,
             NotesEditorEvent(title = NotesEditorEvent.TitleEdited(title = "New")),

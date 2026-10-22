@@ -1249,7 +1249,7 @@ fn an_items_access_history_is_its_receipts_as_metadata() {
 /// nothing, and not one value anywhere in the bytes.
 ///
 /// It is also the answer to L1 (v1-handoffs): the phone's page door has no
-/// entity catalog to widen, so `access_receipt` is readable here today, and
+/// entity catalog to widen, so Locker's `receipt` is readable here today, and
 /// what keeps another surface's receipts out is the statement's own
 /// `object_type` wall, which this test counts exactly.
 #[test]

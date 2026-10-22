@@ -20,8 +20,8 @@ import kotlinx.coroutines.test.runTest
  * THE DOOR THE PHONE WAS MISSING (#1029 W5, hand-off 1).
  *
  * `Core::open` with `create` lays the migrations down and stops there. The two
- * rows that make those tables a vault — `core_vault` and the owner's
- * `core_party` — are `centraid_vault::Vault::found`'s, and until W5 nothing
+ * rows that make those tables a vault — `vault` and the owner's
+ * `entity` — are `centraid_vault::Vault::found`'s, and until W5 nothing
  * over the C ABI could reach it: there was no `Request` arm in
  * `envelope.proto`. `Shelf.found` was written correct against a door that did
  * not exist and deleted the file it made, every time, honestly.
@@ -61,7 +61,7 @@ class FoundDoorSpec : StringSpec({
             found.owner_name shouldBe "Me"
             // AND IT IS A FOUND AND NOT A COMMAND. Founding cannot be a
             // registered command: the registry's gate order evaluates a
-            // principal against `core_vault.self_party_id` and writes a receipt
+            // principal against `vault.self_id` and writes a receipt
             // naming the vault — both of them rows this act is what WRITES.
             request.command shouldBe null
             request.page shouldBe null
@@ -102,7 +102,7 @@ class FoundDoorSpec : StringSpec({
     "the defaults a shell founds with are a name a member could live with" {
         // The make-vault sheet on both shells is a button and no text field, so
         // the found has to carry a string. It is written to
-        // `core_vault.display_name` — the one place a vault's name lives — and
+        // `vault.name` — the one place a vault's name lives — and
         // a member who never renames it reads it on the header every day.
         Shelf.DEFAULT_VAULT_NAME shouldBe "My vault"
         Shelf.DEFAULT_OWNER_NAME shouldBe "Me"

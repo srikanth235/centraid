@@ -44,8 +44,8 @@
 //! **THROUGH THE REAL COMMAND PLANE, never SQL.** `sql-confinement` refuses SQL
 //! outside `crates/{ontology,vault,seat,search}` and `crates/apps/kit`, and the
 //! refusal is what makes this fixture worth anything: rows written by
-//! `Vault::execute` carry the `core_entity` siblings, the `row_version` and the
-//! ledger entries a real write produces, so a tile reading them reads the shape
+//! `Vault::execute` carry the `entity` row, the `version` and the
+//! journal entry a real write produces, so a tile reading them reads the shape
 //! the product actually stores.
 //!
 //! **It is a DEV binary and it is not the product.** v0 kept the same
@@ -64,7 +64,7 @@
 //! gone 1101 → 146. Two scenario runs were spent looking for a sync bug that
 //! was not there.
 //!
-//! So a file that already holds a `core_vault` row is REFUSED by name, and
+//! So a file that already holds a `vault` row is REFUSED by name, and
 //! `--force` is the only way past. "It is a dev binary" is the argument for the
 //! guard and not against it: a dev binary that can silently destroy a gateway's
 //! vault is the one class worth guarding, and the cost is one read.
@@ -314,18 +314,39 @@ fn main() {
 
 /// Each app, the table its Home tile pages, that table's primary key and the
 /// tile's filter — the `from`, the `pk_column` and the `where` of
-/// `HomeReads.READS`, in its order. People pages `core_party` for the parties
-/// with a live `people_profile` (#1047), so its mirror counts the profiles —
-/// this seeder trashes none, so every profile is live. Locker counts live,
-/// unarchived items, as its tile does; the trashed demo item is not one.
+/// `HomeReads.READS`, in its order. Every kind that is an entity is counted
+/// off `entity` by its `kind`, live (no `deleted_at`); People's circle is the
+/// persons that are not the vault's own self, as its tile counts them. Locker
+/// counts live, unarchived items, as its tile does; the trashed demo item is
+/// not one.
 const SEEDED_TABLES: [(&str, &str, &str, Option<&str>); 8] = [
     ("photos", "photo", "id", None),
     ("docs", "document", "id", None),
-    ("notes", "knowledge_note", "note_id", None),
-    ("agenda", "core_event", "event_id", None),
-    ("tasks", "schedule_task", "task_id", None),
-    ("people", "people_profile", "profile_id", None),
-    ("money", "core_transaction", "txn_id", None),
+    (
+        "notes",
+        "entity",
+        "id",
+        Some("kind = 'note' AND deleted_at IS NULL"),
+    ),
+    (
+        "agenda",
+        "entity",
+        "id",
+        Some("kind = 'event' AND deleted_at IS NULL"),
+    ),
+    (
+        "tasks",
+        "entity",
+        "id",
+        Some("kind = 'task' AND deleted_at IS NULL"),
+    ),
+    (
+        "people",
+        "entity",
+        "id",
+        Some("kind = 'person' AND deleted_at IS NULL AND id <> (SELECT self_id FROM vault)"),
+    ),
+    ("money", "txn", "id", None),
     (
         "locker",
         "locker_item",
@@ -340,7 +361,7 @@ const SEEDED_TABLES: [(&str, &str, &str, Option<&str>); 8] = [
 /// (see [`first_row`]), so the count is the rows the pages hand back. It goes
 /// through `Vault::keyset_page` and not the wire's `Request::Page`, because the
 /// wire door pages only the tables a screen pages (`centraid_core::api::PAGE_TABLES`)
-/// and this mirror also counts `core_event` and `core_transaction`, whose Home
+/// and this mirror also counts `entity` and `txn`, whose Home
 /// tiles ride their own arms.
 fn count_rows(
     handle: &centraid_core::Handle,

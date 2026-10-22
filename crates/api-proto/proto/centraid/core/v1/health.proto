@@ -24,7 +24,7 @@
 // (agenda.proto's rule, #1046).
 //
 // THE ZONE RULE is agenda.proto's: an IANA name; EMPTY is the vault's zone
-// (`core_vault.settings_json`'s `timeZone`), and a vault that names none either
+// (`vault.zone`), and a vault that names none either
 // is `ERROR_CODE_INVALID_REQUEST`, as is a name the bundled database does not
 // know. Never UTC by default.
 //

@@ -132,11 +132,12 @@ fn the_registry_carries_the_shared_verbs_and_lockers_and_nothing_else() {
         "thread.settle_proposal",
         "thread.rename",
         "thread.clear",
+        "vault.rename",
     ] {
         assert!(names.contains(&expected), "`{expected}` is not registered");
     }
     // A per-kind verb belongs to its app's lane; a lane's schema joins this list
-    // when its commands land (`note` is lane 2's, `event` and `task` lane 4's, `document`, `photo`, `album` and `place` lane 5's, `account`, `txn`, `budget`, `checkpoint`, `category`, `rule` and `measurement` lane 6's, `thread` lane 7's).
+    // when its commands land (`note` is lane 2's, `event` and `task` lane 4's, `document`, `photo`, `album` and `place` lane 5's, `account`, `txn`, `budget`, `checkpoint`, `category`, `rule` and `measurement` lane 6's, `thread` lane 7's; `vault` is the singleton's own).
     for name in &names {
         let schema = name.split('.').next().unwrap_or_default();
         assert!(
@@ -151,6 +152,7 @@ fn the_registry_carries_the_shared_verbs_and_lockers_and_nothing_else() {
                 "person",
                 "follow",
                 "locker",
+                "vault",
                 "note",
                 "event",
                 "task",
