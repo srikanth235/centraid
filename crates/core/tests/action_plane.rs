@@ -377,7 +377,14 @@ fn an_id_the_manifest_marks_minted_is_the_cores_when_the_caller_states_none() {
 fn the_same_invoke_key_runs_once() {
     let sample = sample();
     let ask = |key: &str, title: &str| {
-        act_with(&sample, "agenda", "add-task", key, &[("title", text(title))]).expect("an act")
+        act_with(
+            &sample,
+            "agenda",
+            "add-task",
+            key,
+            &[("title", text(title))],
+        )
+        .expect("an act")
     };
     let first = ask("tap-1", "Dedupe me");
     assert_eq!(first.status, wire::ActStatus::Executed as i32);
@@ -528,8 +535,14 @@ fn a_frozen_vault_refuses_every_write_and_names_the_check() {
 #[test]
 fn an_executed_act_carries_the_action_that_takes_it_back() {
     let sample = sample();
-    let added =
-        act_with(&sample, "agenda", "add-task", "u1", &[("title", text("Undo me"))]).expect("an act");
+    let added = act_with(
+        &sample,
+        "agenda",
+        "add-task",
+        "u1",
+        &[("title", text("Undo me"))],
+    )
+    .expect("an act");
     let inverse = added.inverse.expect("an add can be taken back");
     assert_eq!(inverse.action, "delete-task");
     let Some(wire::value::Kind::Text(id)) = inverse.input.get("id").and_then(|id| id.kind.clone())

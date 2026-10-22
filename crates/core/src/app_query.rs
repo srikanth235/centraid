@@ -155,6 +155,7 @@ pub(crate) fn answer_recording(
         Q::VaultSearch(asked) => vault::search(vault, &door, asked)?,
         Q::PhotosSearch(asked) => photos::search(vault, &door, asked)?,
         Q::PhotosDuplicates(_) => photos::duplicates(&door)?,
+        Q::PhotosLibrary(asked) => photos::library(&door, &now, asked)?,
         Q::MoneySpending(asked) => money::spending(vault, &door, &now, asked)?,
         Q::MoneyActivity(asked) => money::activity(vault, &door, &now, asked)?,
         Q::MoneyTransaction(asked) => money::transaction(vault, &door, &now, asked)?,
@@ -165,6 +166,7 @@ pub(crate) fn answer_recording(
         Q::MoneyTargetSheet(asked) => money::target_sheet(vault, &door, &now, asked)?,
         Q::MoneyRecurring(asked) => money::recurring(vault, &door, &now, asked)?,
         Q::MoneySearch(asked) => money::search(vault, &door, &now, asked)?,
+        Q::MoneyHomeTile(asked) => Answer::MoneyHomeTile(money::home_tile(vault, asked)?),
         // Health (#1129): no zone and no clock; the request states its day.
         Q::HealthToday(asked) => health::today(vault, &door, &now, asked)?,
         Q::HealthSeries(asked) => health::series(vault, &door, &now, asked)?,

@@ -32,22 +32,6 @@ use crate::error::{CoreError, Result};
 /// unit separator, cannot occur in either (both are ids or ISO text).
 const CURSOR_SEPARATOR: char = '\u{1f}';
 
-/// The manifest queries whose answer `AppQueryResponse` has no message for: the
-/// screens read them through their own typed requests. A load of one is refused
-/// with the reason, never answered with something else.
-const UNANSWERED: &[(&str, &str, &str)] = &[
-    (
-        "photos",
-        "library",
-        "the library's answer is a typed Photos request, and `AppQueryResponse` carries no message for it",
-    ),
-    (
-        "money",
-        "home-tile",
-        "the tile's answer is a typed Money request, and `AppQueryResponse` carries no message for it",
-    ),
-];
-
 /// Run one query against the open vault.
 ///
 /// # Errors
@@ -62,17 +46,6 @@ pub fn load(vault: &Vault, request: &wire::LoadRequest) -> Result<wire::LoadResp
         return Err(CoreError::InvalidRequest {
             detail: format!(
                 "app `{}` declares no query `{}`",
-                request.app, request.query
-            ),
-        });
-    }
-    if let Some((_, _, why)) = UNANSWERED
-        .iter()
-        .find(|(app, query, _)| *app == request.app && *query == request.query)
-    {
-        return Err(CoreError::InvalidRequest {
-            detail: format!(
-                "app `{}` declares the query `{}` and this core cannot answer it through `load`: {why}",
                 request.app, request.query
             ),
         });
@@ -591,6 +564,14 @@ fn read(
             },
         )?,
         ("photos", "duplicates") => app_query::photos::duplicates(door)?,
+        ("photos", "library") => app_query::photos::library(
+            door,
+            now,
+            &wire::PhotosLibraryRequest {
+                limit: p.limit(0),
+                before: p.opt_text("before")?.unwrap_or_default(),
+            },
+        )?,
 
         ("money", "spending") => app_query::money::spending(
             vault,
@@ -658,6 +639,15 @@ fn read(
                 typing_carry: p.flag("typing_carry")?,
             },
         )?,
+        ("money", "home-tile") => {
+            wire::app_query_response::Answer::MoneyHomeTile(app_query::money::home_tile(
+                vault,
+                &wire::MoneyHomeTileRequest {
+                    tz,
+                    month: p.text("month")?,
+                },
+            )?)
+        }
         ("money", "recurring") => {
             app_query::money::recurring(vault, door, now, &wire::MoneyRecurringRequest { tz })?
         }
@@ -777,38 +767,19 @@ mod tests {
     }
 
     /// THE MANIFEST NAME IS THE ONLY NAME: every query a manifest declares has a
-    /// reader (or is named in [`UNANSWERED`] with why), and no reader answers a
-    /// name no manifest declares.
+    /// reader, and no reader answers a name no manifest declares.
     #[test]
     fn every_manifest_query_has_a_reader_and_no_reader_lacks_a_manifest_query() {
         let (dir, vault) = founded();
         for app in catalog::APPS {
             for query in &app.manifest().queries {
-                let unanswered = UNANSWERED
-                    .iter()
-                    .any(|(a, q, _)| *a == app.id && *q == query.name);
                 let (_, _, _, has_reader) = asked_of(&vault, &ask(app.id, &query.name));
-                assert_eq!(
+                assert!(
                     has_reader,
-                    !unanswered,
-                    "{}.{} {}",
-                    app.id,
-                    query.name,
-                    if unanswered {
-                        "is listed as unanswered and has a reader"
-                    } else {
-                        "is declared by its manifest and has no reader"
-                    }
+                    "{}.{} is declared by its manifest and has no reader",
+                    app.id, query.name
                 );
             }
-        }
-        for (app, query, _) in UNANSWERED {
-            assert!(
-                catalog::app(app)
-                    .and_then(|app| app.manifest().query(query).map(|_| ()))
-                    .is_some(),
-                "{app}.{query} is listed as unanswered and no manifest declares it"
-            );
         }
         // The names no manifest declares answer nothing.
         let mut params_request = ask("agenda", "no-such");
@@ -827,12 +798,6 @@ mod tests {
         let mut wrong = Vec::new();
         for app in catalog::APPS {
             for query in &app.manifest().queries {
-                if UNANSWERED
-                    .iter()
-                    .any(|(a, q, _)| *a == app.id && *q == query.name)
-                {
-                    continue;
-                }
                 let (names, limit, after, _) = asked_of(&vault, &ask(app.id, &query.name));
                 let mut declared: BTreeSet<String> = query.input["properties"]
                     .as_object()
@@ -899,20 +864,6 @@ mod tests {
             },
         );
         assert!(load(&vault, &request).is_err());
-        let _ = std::fs::remove_dir_all(dir);
-    }
-
-    #[test]
-    fn a_query_the_core_cannot_answer_is_refused_with_why() {
-        let (dir, vault) = founded();
-        let Err(CoreError::InvalidRequest { detail }) = load(&vault, &ask("photos", "library"))
-        else {
-            panic!("refused");
-        };
-        assert!(
-            detail.contains("`AppQueryResponse` carries no message"),
-            "{detail}"
-        );
         let _ = std::fs::remove_dir_all(dir);
     }
 }

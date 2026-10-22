@@ -94,7 +94,6 @@ mod tests {
     /// `edit-occurrence` DO carry the command-level gate, which parks a
     /// NON-OWNER invocation regardless of risk; what is absent here is the
     /// owner-facing prompt on the member's own gesture.
-    #[test]
     ///
     /// The one exception is `purge-task` (#1015 D1), which is not v0's and is the one
     /// irreversible act: it confirms, as every other app's destroy does. `delete-task` trashes a

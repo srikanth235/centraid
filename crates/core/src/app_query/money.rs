@@ -646,7 +646,11 @@ pub(crate) fn home_tile(
     let now = vault.clock().now_text();
     let door = VaultDoor::new(vault);
     let today = today_of(vault, &asked.tz, &now)?;
-    let month = civil::month_of(&today).to_owned();
+    let month = if asked.month.is_empty() {
+        civil::month_of(&today).to_owned()
+    } else {
+        asked.month.clone()
+    };
     let loaded = phone::home_tile(&door, &month, &today);
     if let Some(failure) = door.take_failure() {
         return Err(failure);

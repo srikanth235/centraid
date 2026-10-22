@@ -111,7 +111,10 @@ impl Scratch {
     fn tile(&self) -> wire::MoneyHomeTile {
         match self
             .try_money(wire::money_request::Kind::HomeTile(
-                wire::MoneyHomeTileRequest { tz: TZ.to_owned() },
+                wire::MoneyHomeTileRequest {
+                    tz: TZ.to_owned(),
+                    month: String::new(),
+                },
             ))
             .expect("the tile answers")
             .kind

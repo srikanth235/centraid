@@ -88,6 +88,93 @@ pub(crate) fn search(
     })
 }
 
+/// `photos.library`: a bounded recent window of live photographs with their albums, places and
+/// the trash. `now` is the vault clock's text, read once by the caller.
+pub(crate) fn library(
+    door: &VaultDoor<'_>,
+    now: &str,
+    asked: &wire::PhotosLibraryRequest,
+) -> Result<Answer> {
+    let now_ms = centraid_vault::time::recurrence::parse_instant_ms(now).ok_or_else(|| {
+        CoreError::Invariant {
+            context: format!("the vault clock did not read as an instant: {now}"),
+        }
+    })?;
+    let input = photos::queries::LibraryInput {
+        limit: (asked.limit > 0).then(|| usize::try_from(asked.limit).unwrap_or(usize::MAX)),
+        before: (!asked.before.is_empty()).then(|| asked.before.clone()),
+    };
+    let loaded = photos::queries::load_library(door, &input, now_ms).map(|data| (data, None));
+    settle(door, loaded, |data| {
+        Answer::PhotosLibrary(wire::PhotosLibrary {
+            photos: data.photos.iter().map(grid_photo).collect(),
+            albums: data.albums.iter().map(album).collect(),
+            places: data.places.iter().map(place).collect(),
+            trash: data.trash.iter().map(grid_photo).collect(),
+            truncated: data.truncated,
+            window: u32::try_from(data.window).unwrap_or(u32::MAX),
+            tail: data.tail.unwrap_or_default(),
+        })
+    })
+}
+
+fn grid_photo(grid: &photos::queries::GridPhoto) -> wire::PhotosGridPhoto {
+    let photo = &grid.photo;
+    wire::PhotosGridPhoto {
+        photo_id: photo.photo_id.clone(),
+        content_id: photo.content_id.clone(),
+        media_type: photo.media_type.clone(),
+        form: photo.form.clone(),
+        title: photo.title.clone(),
+        taken_at: grid.taken_at.clone(),
+        offset_min: photo.offset_min,
+        burst: photo.burst.clone(),
+        place_id: photo.place_id.clone(),
+        width: photo.width,
+        height: photo.height,
+        duration_s: photo.duration_s,
+        edited_from: photo.edited_from.clone(),
+        created_at: photo.created_at.clone(),
+        updated_at: photo.updated_at.clone(),
+        deleted_at: photo.deleted_at.clone(),
+        purge_at: grid.purge_at.clone(),
+        favorite: grid.favorite,
+        byte_size: grid.byte_size,
+        album_ids: grid.album_ids.clone(),
+        album_titles: grid.album_titles.clone(),
+        place: grid.place.as_ref().map(place),
+        tags: grid
+            .tags
+            .iter()
+            .map(|tag| wire::PhotosTag {
+                tag_id: tag.tag_id.clone(),
+                label: tag.label.clone(),
+            })
+            .collect(),
+        purge_in_days: grid.purge_in_days,
+    }
+}
+
+fn album(row: &photos::queries::AlbumRow) -> wire::PhotosAlbum {
+    wire::PhotosAlbum {
+        album_id: row.album_id.clone(),
+        title: row.title.clone(),
+        cover_content_id: row.cover_content_id.clone(),
+        photo_count: u32::try_from(row.photo_count).unwrap_or(u32::MAX),
+    }
+}
+
+fn place(row: &photos::places::PlaceRow) -> wire::PhotosPlace {
+    wire::PhotosPlace {
+        place_id: row.place_id.clone(),
+        name: row.name.clone(),
+        lat: row.lat,
+        lng: row.lng,
+        gazetteer: row.gazetteer.clone(),
+        time_zone: row.time_zone.clone(),
+    }
+}
+
 /// The exact term; and, when the shell allows it and the core's legs found a
 /// thin answer and nothing was denied, the corrected words' rows after it.
 fn answer(
