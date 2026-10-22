@@ -120,6 +120,17 @@
   "actions": [
     {
       "name": "add",
+      "verb": "create",
+      "kind": "task",
+      "inverse": "delete",
+      "sealed": [],
+      "chat": "direct",
+      "command": "task.add",
+      "phrasings": [
+        "remind me to call the plumber tomorrow",
+        "add a task to buy milk",
+        "put 'file taxes' on my list for April 15"
+      ],
       "description": "Add a task through task.add: dated, prioritized, estimated, repeating, reminded, filed in a project and section, or as a subtask of an open top-level task.",
       "confirmation": "none",
       "input": {
@@ -198,6 +209,18 @@
     },
     {
       "name": "edit",
+      "verb": "edit",
+      "kind": "task",
+      "also": ["reschedule"],
+      "inverse": null,
+      "sealed": [],
+      "chat": "direct",
+      "command": "task.edit",
+      "phrasings": [
+        "rename the plumber task",
+        "make buying milk high priority",
+        "add a note to the taxes task"
+      ],
       "description": "Edit a task's title, note, due date, priority, effort, reminder lead time or repeat rule through task.edit. A key that is present is set (null clears it); a key that is absent is left alone.",
       "confirmation": "none",
       "input": {
@@ -256,6 +279,17 @@
     },
     {
       "name": "complete",
+      "verb": "complete",
+      "kind": "task",
+      "inverse": "reopen",
+      "sealed": [],
+      "chat": "direct",
+      "command": "task.complete",
+      "phrasings": [
+        "mark call the plumber done",
+        "I finished the taxes",
+        "check off buy milk"
+      ],
       "description": "Complete a task through task.complete: the one completion operation Tasks, People and automations share. A repeating task gets its next occurrence, carrying its project, tags and what it is about; completing a completed task changes nothing.",
       "confirmation": "none",
       "input": {
@@ -286,6 +320,17 @@
     },
     {
       "name": "reopen",
+      "verb": "reopen",
+      "kind": "task",
+      "inverse": "complete",
+      "sealed": [],
+      "chat": "direct",
+      "command": "task.reopen",
+      "phrasings": [
+        "reopen call the plumber",
+        "the taxes aren't done after all",
+        "uncheck buy milk"
+      ],
       "description": "Reopen a completed or cancelled task through task.reopen; it spawns nothing.",
       "confirmation": "none",
       "input": {
@@ -316,6 +361,17 @@
     },
     {
       "name": "cancel",
+      "verb": "cancel",
+      "kind": "task",
+      "inverse": null,
+      "sealed": [],
+      "chat": "card",
+      "command": "task.cancel",
+      "phrasings": [
+        "cancel the plumber task",
+        "I'm not buying milk anymore, drop it",
+        "cancel this week's repeat of the laundry task"
+      ],
       "description": "Cancel a task through task.cancel: it ends this occurrence with no successor (the Logbook's Won't do).",
       "confirmation": "none",
       "input": {
@@ -346,6 +402,18 @@
     },
     {
       "name": "organize-task",
+      "verb": "add_to",
+      "kind": "task",
+      "also": ["remove_from"],
+      "inverse": null,
+      "sealed": [],
+      "chat": "direct",
+      "command": "task.organize",
+      "phrasings": [
+        "put the plumber task in the Home project",
+        "file buy milk under Errands",
+        "move the taxes task to the Finance project"
+      ],
       "description": "File a task through task.organize: its project and section (null is the Inbox), its place in the list, and what a repeat counts from. Moving to another project leaves the section behind unless one is named.",
       "confirmation": "none",
       "input": {
@@ -392,6 +460,17 @@
     },
     {
       "name": "delete",
+      "verb": "delete",
+      "kind": "task",
+      "inverse": "restore",
+      "sealed": [],
+      "chat": "direct",
+      "command": "entity.trash",
+      "phrasings": [
+        "delete the plumber task",
+        "trash buy milk",
+        "remove the old taxes task"
+      ],
       "description": "Move a task and its subtasks to the 30-day trash through entity.trash; the Logbook keeps nothing.",
       "confirmation": "none",
       "input": {
@@ -422,6 +501,17 @@
     },
     {
       "name": "purge",
+      "verb": "purge",
+      "kind": "task",
+      "inverse": null,
+      "sealed": [],
+      "chat": "card",
+      "command": "entity.purge",
+      "phrasings": [
+        "erase the plumber task forever",
+        "permanently delete the trashed milk task",
+        "purge the old taxes task"
+      ],
       "description": "Delete a trashed task and the subtasks trashed with it forever through entity.purge (#1015 D1); a subtask restored on its own is promoted to a top-level task first.",
       "confirmation": "required",
       "input": {
@@ -452,6 +542,17 @@
     },
     {
       "name": "restore",
+      "verb": "restore",
+      "kind": "task",
+      "inverse": "delete",
+      "sealed": [],
+      "chat": "direct",
+      "command": "entity.restore",
+      "phrasings": [
+        "bring back the plumber task",
+        "restore the task I deleted",
+        "undelete buy milk"
+      ],
       "description": "Bring a trashed task back through entity.restore, with the subtasks trashed with it; a subtask trashed on its own stays where it was.",
       "confirmation": "none",
       "input": {
@@ -482,6 +583,17 @@
     },
     {
       "name": "create-project",
+      "verb": "create",
+      "kind": "list",
+      "inverse": null,
+      "sealed": [],
+      "chat": "direct",
+      "command": "container.create",
+      "phrasings": [
+        "make a project called Home renovation",
+        "create a list named Errands",
+        "start a Finance project in the Personal area"
+      ],
       "description": "Create a project or an area through container.create. A project may sit in an area (its `parent`), and has a color and a place in the list.",
       "confirmation": "none",
       "input": {
@@ -529,6 +641,17 @@
     },
     {
       "name": "create-section",
+      "verb": "create",
+      "kind": "section",
+      "inverse": null,
+      "sealed": [],
+      "chat": "card",
+      "command": "container.create",
+      "phrasings": [
+        "add a section called Kitchen to Home renovation",
+        "create a Waiting section in Errands",
+        "add a Q4 section to Finance"
+      ],
       "description": "Create a section within a task project through container.create (the project is its `parent`).",
       "confirmation": "none",
       "input": {
@@ -574,6 +697,17 @@
     },
     {
       "name": "attach",
+      "verb": "attach",
+      "kind": "task",
+      "inverse": "detach",
+      "sealed": [],
+      "chat": "card",
+      "command": "edge.add",
+      "phrasings": [
+        "attach the quote PDF to the plumber task",
+        "add the receipt to buy milk",
+        "attach the form to the taxes task"
+      ],
       "description": "Attach a document or photo to a task through edge.add (rel attached); the bytes are the document's or photo's own.",
       "confirmation": "none",
       "input": {
@@ -612,6 +746,17 @@
     },
     {
       "name": "detach",
+      "verb": "detach",
+      "kind": "task",
+      "inverse": "attach",
+      "sealed": [],
+      "chat": "card",
+      "command": "edge.remove",
+      "phrasings": [
+        "detach the quote PDF from the plumber task",
+        "remove the receipt from buy milk",
+        "take the form off the taxes task"
+      ],
       "description": "Detach a document or photo from a task through edge.remove; the document or photo is kept.",
       "confirmation": "none",
       "input": {
@@ -650,6 +795,17 @@
     },
     {
       "name": "add-tag",
+      "verb": "tag",
+      "kind": "task",
+      "inverse": "remove-tag",
+      "sealed": [],
+      "chat": "direct",
+      "command": "tag.add",
+      "phrasings": [
+        "tag the plumber task as home",
+        "label buy milk errands",
+        "add the tag urgent to the taxes task"
+      ],
       "description": "Tag a task through tag.add: a free-form label shared with every other app that tags; minted on first use. Idempotent.",
       "confirmation": "none",
       "input": {
@@ -684,6 +840,17 @@
     },
     {
       "name": "remove-tag",
+      "verb": "untag",
+      "kind": "task",
+      "inverse": "add-tag",
+      "sealed": [],
+      "chat": "direct",
+      "command": "tag.remove",
+      "phrasings": [
+        "remove the home tag from the plumber task",
+        "untag buy milk",
+        "take the urgent label off the taxes task"
+      ],
       "description": "Remove one tag from a task through tag.remove; the tag survives for other things.",
       "confirmation": "none",
       "input": {
@@ -720,6 +887,8 @@
   "queries": [
     {
       "name": "board",
+      "kind": "task",
+      "figures": ["open", "logbook", "tags", "counts"],
       "description": "The task board as a bounded window (newest open tasks by creation, caller-sized, families kept whole; the logbook read is capped at its visible 50 most recently closed), each row carrying its tags (`[{concept_id, label}]`) and what it is about, plus the distinct tag list (`[{concept_id, label}]`) seen within the window — never a whole-table pull; `truncated` is the open walk's own cursor — it exists or it does not — rather than a guess from the row count.",
       "input": {
         "type": "object",
@@ -761,6 +930,8 @@
     },
     {
       "name": "search",
+      "kind": "task",
+      "figures": ["matches"],
       "description": "Full-text task search through the vault's one index (title, description and project) — returns only the ranked matches in the board's per-task row shape plus a hit snippet, never a whole-table pull.",
       "input": {
         "type": "object",
@@ -783,6 +954,106 @@
           }
         }
       }
+    }
+  ],
+  "kinds": [
+    {
+      "id": "task",
+      "name": "task",
+      "plural": "tasks",
+      "order": 2,
+      "live": "write",
+      "entity": "task",
+      "table": "task",
+      "pk": "id",
+      "nameSource": ["entity", "title"],
+      "date": {
+        "label": "due",
+        "source": ["task", "due"]
+      },
+      "fields": [
+        {
+          "name": "status",
+          "type": "enum",
+          "source": ["task", "status"],
+          "values": [
+            ["open", "open"],
+            ["completed", "done"],
+            ["cancelled", "cancelled"]
+          ],
+          "edit": "task.complete"
+        },
+        {
+          "name": "effort",
+          "type": "number",
+          "source": ["task", "effort_min"],
+          "unit": "min",
+          "edit": "task.edit",
+          "create": true
+        },
+        {
+          "name": "priority",
+          "type": "number",
+          "source": ["task", "priority"],
+          "unit": "$priority_scale",
+          "edit": "task.edit",
+          "create": true
+        },
+        {
+          "name": "completed",
+          "type": "date",
+          "source": ["task", "done_at"]
+        },
+        {
+          "name": "description",
+          "type": "text",
+          "source": ["task", "description"],
+          "edit": "task.edit",
+          "create": true
+        }
+      ],
+      "links": [
+        {
+          "kind": "task",
+          "label": "subtasks",
+          "via": "subtask"
+        },
+        {
+          "kind": "person",
+          "label": "people",
+          "via": "about"
+        },
+        {
+          "kind": "list",
+          "label": "list",
+          "via": "list_column"
+        }
+      ],
+      "trash": true,
+      "container": false
+    },
+    {
+      "id": "list",
+      "name": "list",
+      "plural": "lists",
+      "order": 10,
+      "live": "write",
+      "entity": "project",
+      "table": "container",
+      "pk": "id",
+      "nameSource": ["entity", "title"],
+      "fields": [
+        {
+          "name": "area",
+          "type": "text",
+          "source": ["container", "parent_id"],
+          "edit": "container.move",
+          "create": true
+        }
+      ],
+      "links": [{"kind": "task", "label": "tasks", "via": "list_column"}],
+      "trash": false,
+      "container": true
     }
   ],
   "knobs": [

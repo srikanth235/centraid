@@ -1,0 +1,146 @@
+app,action,verb,kind,chat_surface,reachable_from_screen_today,reachable_from_chat_today
+agenda,propose,create,event,direct,yes: apps/agenda/AgendaWrites.kt,yes
+agenda,rsvp,respond,event,direct,yes: apps/agenda/AgendaWrites.kt,no
+agenda,edit-event,edit,event,direct,yes: apps/agenda/AgendaWrites.kt,yes
+agenda,edit-occurrence,reschedule,event,card,yes: apps/agenda/AgendaWrites.kt,no
+agenda,cancel-event,cancel,event,direct,yes: apps/agenda/AgendaWrites.kt,yes
+agenda,attach,attach,event,card,no,no
+agenda,detach,detach,event,card,no,no
+docs,upload,import,document,card,yes: apps/docs/DocsFold.kt; apps/docs/DocsWrites.kt,no
+docs,create-text,create,document,direct,yes: apps/docs/DocsFold.kt; apps/docs/DocsWrites.kt,yes
+docs,rename,edit,document,direct,yes: apps/docs/DocsFold.kt; apps/docs/DocsWrites.kt,yes
+docs,move,add_to,document,direct,yes: apps/docs/DocsFold.kt; apps/docs/DocsWrites.kt,yes
+docs,trash,delete,document,direct,yes: apps/docs/DocsFold.kt; apps/docs/DocsWrites.kt,yes
+docs,restore,restore,document,direct,yes: apps/docs/DocsFold.kt; apps/docs/DocsWrites.kt,yes
+docs,purge,purge,document,card,yes: apps/docs/DocsWrites.kt,no
+docs,empty-trash,purge,document,card,yes: apps/docs/DocsFold.kt; apps/docs/DocsWrites.kt,no
+docs,star,star,document,direct,yes: apps/docs/DocsFold.kt; apps/docs/DocsWrites.kt,yes
+docs,unstar,unstar,document,direct,yes: apps/docs/DocsFold.kt; apps/docs/DocsWrites.kt,yes
+docs,tag,tag,document,direct,yes: apps/docs/DocsFold.kt; apps/docs/DocsWrites.kt,no
+docs,untag,untag,document,direct,yes: apps/docs/DocsFold.kt; apps/docs/DocsWrites.kt,no
+docs,edit,edit,document,card,yes: apps/docs/DocsFold.kt; apps/docs/DocsWrites.kt,no
+docs,replace,edit,document,card,yes: apps/docs/DocsFold.kt; apps/docs/DocsWrites.kt,no
+docs,restore-version,restore,document,card,yes: apps/docs/DocsFold.kt; apps/docs/DocsWrites.kt,no
+docs,create-folder,create,folder,direct,yes: apps/docs/DocsWrites.kt; apps/docs/FilesImport.kt,yes
+docs,rename-folder,edit,folder,direct,yes: apps/docs/DocsFold.kt; apps/docs/DocsWrites.kt,yes
+docs,delete-folder,delete,folder,direct,yes: apps/docs/DocsFold.kt; apps/docs/DocsWrites.kt,yes
+health,record-days,log,daily_figure,card,yes: apps/health/HealthImport.kt,no
+health,follow-workouts,import,workout,card,yes: apps/health/HealthImport.kt,no
+health,delete-workout,delete,workout,direct,no,no
+locker,add-item,create,locker_item,direct,yes: apps/locker/LockerEditor.kt,yes
+locker,edit-item,edit,locker_item,direct,yes: apps/locker/LockerEditor.kt,yes
+locker,trash-item,delete,locker_item,direct,yes: apps/locker/LockerItem.kt,yes
+locker,restore-item,restore,locker_item,direct,yes: apps/locker/LockerBridges.kt; apps/locker/LockerItem.kt,yes
+locker,purge-item,purge,locker_item,card,yes: apps/locker/LockerBridges.kt; apps/locker/LockerItem.kt,no
+locker,star-item,star,locker_item,direct,yes: apps/locker/LockerItem.kt,yes
+locker,unstar-item,unstar,locker_item,direct,yes: apps/locker/LockerItem.kt,yes
+locker,archive-item,archive,locker_item,direct,yes: apps/locker/LockerItem.kt,yes
+locker,unarchive-item,unarchive,locker_item,direct,yes: apps/locker/LockerItem.kt,yes
+locker,add-tag,tag,locker_item,direct,yes: apps/locker/LockerEditor.kt,no
+locker,remove-tag,untag,locker_item,direct,yes: apps/locker/LockerEditor.kt,no
+locker,duplicate-item,duplicate,locker_item,card,no,no
+locker,set-field,edit,locker_field,card,yes: apps/locker/LockerItem.kt,no
+locker,remove-field,delete,locker_field,card,yes: apps/locker/LockerItem.kt,no
+locker,set-addresses,edit,locker_item,card,no,no
+locker,set-passkey,edit,locker_passkey,card,yes: apps/locker/LockerItem.kt,no
+locker,clear-passkey,delete,locker_passkey,card,yes: apps/locker/LockerItem.kt,no
+locker,set-memo,edit,locker_item,card,yes: apps/locker/LockerItem.kt,no
+locker,export,reveal,locker_item,card,no,no
+money,add-account,create,account,direct,yes: apps/money/MoneyAccounts.kt,no
+money,edit-account,edit,account,direct,yes: apps/money/MoneyAccounts.kt,no
+money,close-account,archive,account,direct,yes: apps/money/MoneyAccounts.kt; apps/money/MoneyCategories.kt,no
+money,reopen-account,unarchive,account,direct,yes: apps/money/MoneyAccounts.kt; apps/money/MoneyCategories.kt,no
+money,set-opening-balance,edit,account,card,no,no
+money,import-transactions,import,transaction,card,yes: apps/money/MoneyImport.kt,no
+money,record-checkpoint,log,account,direct,yes: apps/money/MoneyImport.kt,no
+money,save-import-profile,edit,account,card,yes: apps/money/MoneyImport.kt,no
+money,categorize,categorize,transaction,direct,yes: apps/money/MoneyTransaction.kt,no
+money,void-transaction,void,transaction,card,yes: apps/money/MoneyTransaction.kt,no
+money,set-display-name,edit,transaction,direct,yes: apps/money/MoneyTransaction.kt,no
+money,link-transfer,link,transaction,direct,yes: apps/money/MoneyTransaction.kt,no
+money,unlink-transfer,unlink,transaction,direct,yes: apps/money/MoneyTransaction.kt,no
+money,set-target,edit,budget,direct,yes: apps/money/MoneyTarget.kt,no
+money,set-carry,edit,budget,card,no,no
+money,add-rule,create,rule,direct,yes: apps/money/MoneyRules.kt; apps/money/MoneyTransaction.kt,no
+money,edit-rule,edit,rule,direct,yes: apps/money/MoneyRules.kt,no
+money,delete-rule,delete,rule,card,yes: apps/money/MoneyRules.kt,no
+money,apply-rule-to-history,apply,rule,card,yes: apps/money/MoneyRules.kt,no
+money,add-category,create,category,direct,yes: apps/money/MoneyCategories.kt,no
+money,merge-category,merge,category,card,yes: apps/money/MoneyCategories.kt,no
+money,archive-category,archive,category,direct,yes: apps/money/MoneyAccounts.kt; apps/money/MoneyCategories.kt,no
+notes,create-note,create,note,direct,yes: apps/notes/NotesEditorMachine.kt,yes
+notes,edit-note,edit,note,direct,yes: apps/notes/NotesEditorMachine.kt,yes
+notes,move-note,add_to,note,direct,yes: apps/notes/NotesLibraryMachine.kt,yes
+notes,create-notebook,create,notebook,direct,yes: apps/notes/NotesNotebooks.kt,yes
+notes,rename-notebook,edit,notebook,direct,no,yes
+notes,delete-notebook,delete,notebook,direct,yes: apps/notes/NotesLibraryMachine.kt,yes
+notes,delete-note,delete,note,direct,yes: apps/notes/NotesLibraryMachine.kt,yes
+notes,restore-note,restore,note,direct,yes: apps/notes/NotesTrash.kt,yes
+notes,restore-note-version,restore,note,card,yes: apps/notes/NotesHistory.kt,no
+notes,flag-note,star,note,card,yes: apps/notes/NotesTables.kt,yes
+notes,unflag-note,unstar,note,card,yes: apps/notes/NotesTables.kt,no
+notes,link,link,note,card,no,no
+notes,send-to-tasks,create,task,card,yes: kit/tasks/TasksOps.kt,yes
+notes,attach,attach,note,card,no,no
+notes,detach,detach,note,card,no,no
+notes,add-tag,tag,note,direct,no,no
+notes,remove-tag,untag,note,direct,no,no
+people,add-person,create,person,direct,yes: apps/people/PeopleEditorMachine.kt,yes
+people,edit-person,edit,person,direct,yes: apps/people/PeopleEditorMachine.kt,yes
+people,set-cadence,edit,person,card,yes: apps/people/PeopleEditorMachine.kt,yes
+people,trash-person,delete,person,direct,yes: apps/people/PeoplePersonMachine.kt,yes
+people,restore-person,restore,person,direct,yes: apps/people/PeopleTrash.kt,yes
+people,purge-person,purge,person,card,yes: apps/people/PeopleTrash.kt,no
+people,log-interaction,log,person,direct,yes: apps/people/PeoplePersonMachine.kt,yes
+people,star-person,star,person,direct,yes: apps/people/PeopleHomeMachine.kt,yes
+people,unstar-person,unstar,person,direct,yes: apps/people/PeopleHomeMachine.kt,yes
+people,move-person,add_to,person,card,no,no
+people,add-note,create,note,card,yes: apps/people/PeoplePersonMachine.kt,no
+people,add-task,create,task,card,no,no
+people,complete-task,complete,task,card,yes: kit/tasks/TasksOps.kt,yes
+people,reopen-task,reopen,task,card,yes: kit/tasks/TasksOps.kt,yes
+people,add-important-date,create,important_date,card,yes: apps/people/PeoplePersonMachine.kt,no
+people,set-reminder,edit,important_date,card,yes: apps/people/PeoplePersonMachine.kt,no
+people,add-relationship,link,person,card,no,no
+people,add-gift,create,gift,card,no,no
+people,create-list,create,people_list,card,no,no
+people,rename-list,edit,people_list,card,no,no
+people,delete-list,delete,people_list,card,yes: apps/people/PeoplePersonMachine.kt,no
+people,add-journal-entry,create,journal_entry,card,no,no
+people,save-contact-channel,edit,contact_point,card,yes: apps/people/PeoplePersonMachine.kt,no
+people,delete-contact-channel,delete,contact_point,card,yes: apps/people/PeoplePersonMachine.kt,no
+people,merge-people,merge,person,card,yes: apps/people/PeoplePersonMachine.kt,no
+photos,upload,import,photo,card,yes: apps/photos/PhotoWrites.kt,no
+photos,edit-photo,edit,photo,card,yes: apps/photos/PhotoWrites.kt,no
+photos,retitle-photo,edit,photo,direct,yes: apps/photos/PhotoWrites.kt,yes
+photos,flag-photo,star,photo,direct,yes: apps/photos/PhotoWrites.kt,yes
+photos,unflag-photo,unstar,photo,direct,yes: apps/photos/PhotoWrites.kt,yes
+photos,delete-photo,delete,photo,direct,yes: apps/photos/PhotoWrites.kt,yes
+photos,restore-photo,restore,photo,direct,yes: apps/photos/PhotoWrites.kt,yes
+photos,purge-photo,purge,photo,card,yes: apps/photos/PhotoWrites.kt,no
+photos,create-album,create,album,direct,yes: apps/photos/PhotoWrites.kt,yes
+photos,rename-album,edit,album,direct,yes: apps/photos/PhotoWrites.kt,yes
+photos,set-album-cover,edit,album,card,yes: apps/photos/PhotoWrites.kt,no
+photos,delete-album,delete,album,direct,yes: apps/photos/PhotoWrites.kt,yes
+photos,restore-album,restore,album,card,yes: apps/photos/PhotoWrites.kt,no
+photos,add-to-album,add_to,photo,direct,yes: apps/photos/PhotoWrites.kt,yes
+photos,remove-from-album,remove_from,photo,direct,yes: apps/photos/PhotoWrites.kt,yes
+photos,set-place,edit,place,card,yes: apps/photos/PhotoWrites.kt,no
+photos,name-place,edit,place,card,yes: apps/photos/PhotoWrites.kt,no
+photos,tag-photo,tag,photo,direct,yes: apps/photos/PhotoWrites.kt,no
+photos,untag-photo,untag,photo,direct,yes: apps/photos/PhotoWrites.kt,no
+tasks,add,create,task,direct,yes: apps/tasks/RemindersImport.kt; kit/tasks/TasksOps.kt,yes
+tasks,edit,edit,task,direct,yes: apps/tasks/TasksDetail.kt,yes
+tasks,complete,complete,task,direct,yes: kit/tasks/TasksOps.kt,yes
+tasks,reopen,reopen,task,direct,yes: kit/tasks/TasksOps.kt,yes
+tasks,cancel,cancel,task,card,yes: kit/tasks/TasksOps.kt,yes
+tasks,organize-task,add_to,task,direct,yes: kit/tasks/TasksOps.kt,yes
+tasks,delete,delete,task,direct,yes: apps/tasks/TasksDetail.kt,yes
+tasks,purge,purge,task,card,yes: apps/tasks/TasksTrash.kt,no
+tasks,restore,restore,task,direct,yes: apps/tasks/TasksTrash.kt,yes
+tasks,create-project,create,list,direct,yes: kit/tasks/TasksOps.kt,yes
+tasks,create-section,create,section,card,yes: kit/tasks/TasksOps.kt,no
+tasks,attach,attach,task,card,no,no
+tasks,detach,detach,task,card,no,no
+tasks,add-tag,tag,task,direct,yes: apps/tasks/TasksDetail.kt,no
+tasks,remove-tag,untag,task,direct,yes: apps/tasks/TasksDetail.kt,no

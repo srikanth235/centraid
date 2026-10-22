@@ -1,5 +1,10 @@
 //! THE METADATA TABLE — the one source of truth (SPEC §1.7).
 //!
+//! Its kind and verb rows are not written here: `crates/assist/build.rs` generates `Kind`, `Verb`,
+//! `KINDS` and `VERBS` (and the declared-only `DECLARED_KINDS`, `DECLARED_VERBS`) from the app
+//! manifests and `contracts/assist/verbs.json` ([#1135](https://github.com/srikanth235/centraid/issues/1135)).
+//! What is written here is the behaviour that reads them.
+//!
 //! Model-facing kinds, fields, enums, units, links and verbs, each mapped to
 //! the vault table, column and typed command it stands for (the kind tables of
 //! [#1135](https://github.com/srikanth235/centraid/issues/1135): an entity row
@@ -42,41 +47,7 @@ pub const PREGROUND_CAP: usize = 8;
 /// Linked rows `open` names per linked kind.
 pub const OPEN_LINK_CAP: usize = 8;
 
-/// The model-facing kinds (SPEC §14: member folded into person).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum Kind {
-    Person,
-    Event,
-    Task,
-    Note,
-    Document,
-    Photo,
-    Album,
-    LockerItem,
-    Notebook,
-    Folder,
-    List,
-    /// A Money transaction (#1099, R-1099-8): read-only in v0.
-    Transaction,
-}
-
 impl Kind {
-    pub const ALL: [Self; 12] = [
-        Self::Person,
-        Self::Event,
-        Self::Task,
-        Self::Note,
-        Self::Document,
-        Self::Photo,
-        Self::Album,
-        Self::LockerItem,
-        Self::Notebook,
-        Self::Folder,
-        Self::List,
-        Self::Transaction,
-    ];
-
     #[must_use]
     pub fn spec(self) -> &'static KindSpec {
         KINDS
@@ -271,27 +242,6 @@ pub enum Via {
     FolderColumn,
 }
 
-/// What an `act` can do.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum Verb {
-    Create,
-    Edit,
-    Reschedule,
-    Complete,
-    Reopen,
-    Cancel,
-    Delete,
-    Restore,
-    Star,
-    Unstar,
-    AddTo,
-    RemoveFrom,
-    Log,
-    Reveal,
-    Undo,
-}
-
 /// One verb's row.
 #[derive(Debug, Clone, Copy, Serialize)]
 pub struct VerbSpec {
@@ -355,18 +305,6 @@ impl KindSpec {
     }
 }
 
-const TASK_STATUS: &[(&str, &str)] = &[
-    ("open", "open"),
-    ("completed", "done"),
-    ("cancelled", "cancelled"),
-];
-const EVENT_STATUS: &[(&str, &str)] = &[
-    ("confirmed", "confirmed"),
-    ("tentative", "tentative"),
-    ("cancelled", "cancelled"),
-];
-/// A transaction's status. `pending` is the one CHECK value left out (`UNEXPOSED`).
-const TXN_STATUS: &[(&str, &str)] = &[("posted", "posted"), ("void", "void")];
 /// Locker item types: the vault's own list, derived from
 /// `centraid_vault::commands::locker::ITEM_TYPES` and spelled identically.
 static LOCKER_TYPES: [(&str, &str); ITEM_TYPES.len()] = {
@@ -402,519 +340,42 @@ pub const UNEXPOSED: &[Unexposed] = &[Unexposed {
 /// `log kind:` values, stored as the activity kind notation.
 pub const LOG_KINDS: &[&str] = &["call", "message", "visit", "coffee"];
 
-/// A flag (starred, pinned) is a `tagged` edge to a `flag` entity, for every kind that takes one.
-const STAR: Source = at("edge", "to_id");
+/// A kind the catalog declares and the runtime does not read or write yet (`live: declared` in its
+/// app's manifest): the row exists so the catalog is whole and its columns are checked against the
+/// vault, and a lane that wires the kind flips the manifest and gets a `Kind` variant.
+#[derive(Debug, Clone, Copy, Serialize)]
+pub struct DeclaredKind {
+    pub app: &'static str,
+    pub id: &'static str,
+    pub name: &'static str,
+    pub plural: &'static str,
+    pub entity: &'static str,
+    pub table: &'static str,
+    pub pk: &'static str,
+    pub name_source: Source,
+    pub date: Option<DateSpec>,
+    pub fields: &'static [Field],
+    pub trash: bool,
+    pub container: bool,
+}
 
-use FieldType::{Bool, Date, Enum, Money, Number, Text};
+/// A direct chat action the runtime cannot run yet: its verb is not live, or its kind is not
+/// writable. The catalog says what chat should do; this says what is still to wire.
+#[derive(Debug, Clone, Copy, Serialize)]
+pub struct DeclaredVerb {
+    pub app: &'static str,
+    pub action: &'static str,
+    pub verb: &'static str,
+    pub kind: &'static str,
+    pub command: &'static str,
+    pub reason: &'static str,
+}
 
-pub static KINDS: &[KindSpec] = &[
-    KindSpec {
-        kind: Kind::Person,
-        name: "person",
-        plural: "people",
-        entity: "person",
-        table: "person",
-        pk: "id",
-        name_source: at("entity", "title"),
-        // Computed at read: the latest touch (`activity` of an activity kind, `with` the person).
-        date: Some(DateSpec {
-            label: "last contacted",
-            source: at("activity", "starts"),
-        }),
-        fields: &[
-            field("role", Text, at("person", "role"))
-                .edit("person.edit")
-                .create(),
-            field("nickname", Text, at("person", "nickname"))
-                .edit("person.edit")
-                .create(),
-            field("met", Text, at("person", "met")).edit("person.edit"),
-            field("cadence", Number, at("person", "cadence_days"))
-                .unit("days")
-                .edit("person.edit")
-                .create(),
-            field("starred", Bool, STAR),
-        ],
-        links: &[
-            Link {
-                kind: Kind::Event,
-                label: "events",
-                via: Via::Attendee,
-            },
-            Link {
-                kind: Kind::Task,
-                label: "tasks",
-                via: Via::About,
-            },
-            Link {
-                kind: Kind::Note,
-                label: "notes",
-                via: Via::About,
-            },
-        ],
-        trash: true,
-        container: false,
-    },
-    KindSpec {
-        kind: Kind::Event,
-        name: "event",
-        plural: "events",
-        entity: "event",
-        table: "event",
-        pk: "id",
-        name_source: at("entity", "title"),
-        date: Some(DateSpec {
-            label: "start",
-            source: at("event", "starts"),
-        }),
-        fields: &[
-            field("status", Enum, at("event", "status")).values(EVENT_STATUS),
-            field("duration", Number, at("event", "ends"))
-                .unit("min")
-                .edit("event.edit")
-                .create(),
-            field("description", Text, at("event", "description"))
-                .edit("event.edit")
-                .create(),
-        ],
-        links: &[Link {
-            kind: Kind::Person,
-            label: "people",
-            via: Via::Attendee,
-        }],
-        trash: true,
-        container: false,
-    },
-    KindSpec {
-        kind: Kind::Task,
-        name: "task",
-        plural: "tasks",
-        entity: "task",
-        table: "task",
-        pk: "id",
-        name_source: at("entity", "title"),
-        date: Some(DateSpec {
-            label: "due",
-            source: at("task", "due"),
-        }),
-        fields: &[
-            // A status is three commands, one per word (`task_status_command`).
-            field("status", Enum, at("task", "status"))
-                .values(TASK_STATUS)
-                .edit("task.complete"),
-            field("effort", Number, at("task", "effort_min"))
-                .unit("min")
-                .edit("task.edit")
-                .create(),
-            field("priority", Number, at("task", "priority"))
-                .unit(PRIORITY_SCALE)
-                .edit("task.edit")
-                .create(),
-            field("completed", Date, at("task", "done_at")),
-            field("description", Text, at("task", "description"))
-                .edit("task.edit")
-                .create(),
-        ],
-        links: &[
-            Link {
-                kind: Kind::Task,
-                label: "subtasks",
-                via: Via::Subtask,
-            },
-            Link {
-                kind: Kind::Person,
-                label: "people",
-                via: Via::About,
-            },
-            Link {
-                kind: Kind::List,
-                label: "list",
-                via: Via::ListColumn,
-            },
-        ],
-        trash: true,
-        container: false,
-    },
-    KindSpec {
-        kind: Kind::Note,
-        name: "note",
-        plural: "notes",
-        entity: "note",
-        table: "note",
-        pk: "id",
-        name_source: at("entity", "title"),
-        date: Some(DateSpec {
-            label: "created",
-            source: at("entity", "created_at"),
-        }),
-        fields: &[
-            field("body", Text, at("note", "body"))
-                .edit("note.edit")
-                .create(),
-            // Pinned is a flag: `flag.set` / `flag.clear` by value.
-            field("pinned", Bool, STAR).edit("flag.set"),
-        ],
-        links: &[
-            Link {
-                kind: Kind::Notebook,
-                label: "notebook",
-                via: Via::Entry,
-            },
-            Link {
-                kind: Kind::Person,
-                label: "people",
-                via: Via::About,
-            },
-        ],
-        trash: true,
-        container: false,
-    },
-    KindSpec {
-        kind: Kind::Document,
-        name: "document",
-        plural: "documents",
-        entity: "document",
-        table: "document",
-        pk: "id",
-        name_source: at("entity", "title"),
-        date: Some(DateSpec {
-            label: "created",
-            source: at("entity", "created_at"),
-        }),
-        fields: &[field("starred", Bool, STAR)],
-        links: &[Link {
-            kind: Kind::Folder,
-            label: "folder",
-            via: Via::FolderColumn,
-        }],
-        trash: true,
-        container: false,
-    },
-    KindSpec {
-        kind: Kind::Photo,
-        name: "photo",
-        plural: "photos",
-        entity: "photo",
-        table: "photo",
-        pk: "id",
-        name_source: at("entity", "title"),
-        date: Some(DateSpec {
-            label: "taken",
-            source: at("photo", "taken_at"),
-        }),
-        fields: &[field("starred", Bool, STAR)],
-        links: &[Link {
-            kind: Kind::Album,
-            label: "albums",
-            via: Via::Entry,
-        }],
-        trash: true,
-        container: false,
-    },
-    KindSpec {
-        kind: Kind::Album,
-        name: "album",
-        plural: "albums",
-        entity: "album",
-        table: "container",
-        pk: "id",
-        name_source: at("entity", "title"),
-        date: None,
-        fields: &[],
-        links: &[Link {
-            kind: Kind::Photo,
-            label: "photos",
-            via: Via::Entry,
-        }],
-        trash: false,
-        container: true,
-    },
-    KindSpec {
-        kind: Kind::LockerItem,
-        name: "locker item",
-        plural: "locker items",
-        entity: "locker_item",
-        table: "locker_item",
-        pk: "id",
-        name_source: at("entity", "title"),
-        date: None,
-        fields: &[
-            field("type", Enum, at("locker_item", "type"))
-                .values(&LOCKER_TYPES)
-                .create(),
-            field("username", Text, at("locker_item", "username"))
-                .edit("locker.edit_item")
-                .create(),
-            field("url", Text, at("locker_item", "url"))
-                .edit("locker.edit_item")
-                .create(),
-            field("notes", Text, at("locker_item", "notes"))
-                .edit("locker.edit_item")
-                .create(),
-            field("starred", Bool, STAR),
-        ],
-        links: &[],
-        trash: true,
-        container: false,
-    },
-    KindSpec {
-        kind: Kind::Notebook,
-        name: "notebook",
-        plural: "notebooks",
-        entity: "notebook",
-        table: "container",
-        pk: "id",
-        name_source: at("entity", "title"),
-        date: None,
-        fields: &[],
-        links: &[Link {
-            kind: Kind::Note,
-            label: "notes",
-            via: Via::Entry,
-        }],
-        trash: false,
-        container: true,
-    },
-    KindSpec {
-        kind: Kind::Folder,
-        name: "folder",
-        plural: "folders",
-        entity: "folder",
-        table: "container",
-        pk: "id",
-        name_source: at("entity", "title"),
-        date: None,
-        fields: &[],
-        links: &[Link {
-            kind: Kind::Document,
-            label: "documents",
-            via: Via::FolderColumn,
-        }],
-        trash: false,
-        container: true,
-    },
-    KindSpec {
-        kind: Kind::List,
-        name: "list",
-        plural: "lists",
-        // Agenda's project; the vault's own `list` kind is a People list, which the model has no
-        // word for.
-        entity: "project",
-        table: "container",
-        pk: "id",
-        name_source: at("entity", "title"),
-        date: None,
-        // The area is the title of the `area` container the project sits in.
-        fields: &[field("area", Text, at("container", "parent_id"))
-            .edit("container.move")
-            .create()],
-        links: &[Link {
-            kind: Kind::Task,
-            label: "tasks",
-            via: Via::ListColumn,
-        }],
-        trash: false,
-        container: true,
-    },
-    KindSpec {
-        kind: Kind::Transaction,
-        name: "transaction",
-        plural: "transactions",
-        entity: "txn",
-        table: "txn",
-        pk: "id",
-        // The name the member sees: Money's display name, which is the transaction's own title.
-        name_source: at("entity", "title"),
-        date: Some(DateSpec {
-            label: "posted",
-            source: at("txn", "posted_on"),
-        }),
-        // READS ONLY (#1099, R-1099-8): `amount` is signed (money out is negative) in the
-        // account's currency; `account` and `category` are the titles of the entities the
-        // transaction points at. `txn.categorize` takes an id in an array, which the
-        // one-scalar-per-field `edit` path cannot carry, so no field is editable.
-        fields: &[
-            field("amount", Money, at("txn", "amount_minor")),
-            field("account", Text, at("txn", "account_id")),
-            field("category", Text, at("txn", "category_id")),
-            field("status", Enum, at("txn", "status")).values(TXN_STATUS),
-        ],
-        links: &[],
-        trash: false,
-        container: false,
-    },
-];
-
-/// The act verbs, one per effect (SPEC §4.2).
-pub static VERBS: &[VerbSpec] = &[
-    VerbSpec {
-        verb: Verb::Create,
-        name: "create",
-        args: "kind: <kind>, name: <text>, then that kind's fields (dates as date expressions)",
-        done: "created",
-        commands: &[
-            (Kind::Person, "person.add"),
-            (Kind::Event, "event.propose"),
-            (Kind::Task, "task.add"),
-            (Kind::Note, "note.create"),
-            (Kind::Document, "document.create_text"),
-            (Kind::Album, "container.create"),
-            (Kind::LockerItem, "locker.add_item"),
-            (Kind::Notebook, "container.create"),
-            (Kind::Folder, "container.create"),
-            (Kind::List, "container.create"),
-        ],
-    },
-    VerbSpec {
-        verb: Verb::Edit,
-        name: "edit",
-        args: "field: value lines (name, or any editable field; body+: or description+: adds text)",
-        done: "edited",
-        commands: &[
-            (Kind::Person, "person.edit"),
-            (Kind::Event, "event.edit"),
-            (Kind::Task, "task.edit"),
-            (Kind::Note, "note.edit"),
-            (Kind::Document, "entity.retitle"),
-            (Kind::Photo, "entity.retitle"),
-            (Kind::Album, "entity.retitle"),
-            (Kind::LockerItem, "locker.edit_item"),
-            (Kind::Notebook, "entity.retitle"),
-            (Kind::Folder, "entity.retitle"),
-            (Kind::List, "entity.retitle"),
-        ],
-    },
-    VerbSpec {
-        verb: Verb::Reschedule,
-        name: "reschedule",
-        args: "to: <date expression>",
-        done: "rescheduled",
-        commands: &[(Kind::Task, "task.edit"), (Kind::Event, "event.edit")],
-    },
-    VerbSpec {
-        verb: Verb::Complete,
-        name: "complete",
-        args: "",
-        done: "completed",
-        commands: &[(Kind::Task, "task.complete")],
-    },
-    VerbSpec {
-        verb: Verb::Reopen,
-        name: "reopen",
-        args: "",
-        done: "reopened",
-        commands: &[(Kind::Task, "task.reopen")],
-    },
-    VerbSpec {
-        verb: Verb::Cancel,
-        name: "cancel",
-        args: "",
-        done: "cancelled",
-        commands: &[(Kind::Event, "event.cancel")],
-    },
-    VerbSpec {
-        verb: Verb::Delete,
-        name: "delete",
-        args: "",
-        done: "deleted",
-        commands: &[
-            (Kind::Person, "entity.trash"),
-            (Kind::Event, "entity.trash"),
-            (Kind::Task, "entity.trash"),
-            (Kind::Note, "entity.trash"),
-            (Kind::Document, "entity.trash"),
-            (Kind::Photo, "entity.trash"),
-            (Kind::Album, "entity.trash"),
-            (Kind::LockerItem, "entity.trash"),
-            (Kind::Notebook, "entity.trash"),
-            (Kind::Folder, "entity.trash"),
-        ],
-    },
-    VerbSpec {
-        verb: Verb::Restore,
-        name: "restore",
-        args: "",
-        done: "restored",
-        commands: &[
-            (Kind::Person, "entity.restore"),
-            (Kind::Event, "entity.restore"),
-            (Kind::Task, "entity.restore"),
-            (Kind::Note, "entity.restore"),
-            (Kind::Document, "entity.restore"),
-            (Kind::Photo, "entity.restore"),
-            (Kind::LockerItem, "entity.restore"),
-        ],
-    },
-    VerbSpec {
-        verb: Verb::Star,
-        name: "star",
-        args: "",
-        done: "starred",
-        commands: &[
-            (Kind::Person, "flag.set"),
-            (Kind::Document, "flag.set"),
-            (Kind::Photo, "flag.set"),
-            (Kind::LockerItem, "flag.set"),
-        ],
-    },
-    VerbSpec {
-        verb: Verb::Unstar,
-        name: "unstar",
-        args: "",
-        done: "unstarred",
-        commands: &[
-            (Kind::Person, "flag.clear"),
-            (Kind::Document, "flag.clear"),
-            (Kind::Photo, "flag.clear"),
-            (Kind::LockerItem, "flag.clear"),
-        ],
-    },
-    VerbSpec {
-        verb: Verb::AddTo,
-        name: "add_to",
-        args: "to: #n (the album, notebook, folder or list)",
-        done: "added",
-        commands: &[
-            (Kind::Photo, "edge.add"),
-            (Kind::Note, "note.move"),
-            (Kind::Document, "document.move"),
-            (Kind::Task, "task.organize"),
-        ],
-    },
-    VerbSpec {
-        verb: Verb::RemoveFrom,
-        name: "remove_from",
-        args: "from: #n",
-        done: "removed",
-        commands: &[
-            (Kind::Photo, "edge.remove"),
-            (Kind::Note, "note.move"),
-            (Kind::Document, "document.move"),
-            (Kind::Task, "task.organize"),
-        ],
-    },
-    VerbSpec {
-        verb: Verb::Log,
-        name: "log",
-        args: "kind: call|message|visit|coffee",
-        done: "logged",
-        commands: &[(Kind::Person, "person.log_interaction")],
-    },
-    VerbSpec {
-        verb: Verb::Reveal,
-        name: "reveal",
-        args: "field: password|code|card_number|cvv|content",
-        done: "revealed",
-        commands: &[(Kind::LockerItem, "locker.reveal_receipt")],
-    },
-    VerbSpec {
-        verb: Verb::Undo,
-        name: "undo",
-        args: "",
-        done: "undone",
-        commands: &[],
-    },
-];
+// THE TABLES ARE THE MANIFESTS' (`crates/assist/build.rs`): `Kind`, `Kind::ALL`, `KINDS`, `Verb`,
+// `VERBS`, `DECLARED_KINDS` and `DECLARED_VERBS` are generated from each app's `kinds` and its
+// actions' `verb`/`kind`/`chat`/`command`, and from `contracts/assist/verbs.json`. Nothing about a
+// kind or a verb row is written here; what stays here is the behaviour that reads them.
+include!(concat!(env!("OUT_DIR"), "/catalog.rs"));
 
 impl Verb {
     #[must_use]
@@ -1175,12 +636,24 @@ pub fn mapped_columns() -> Vec<(&'static str, &'static str)> {
             out.push((field.source.table, field.source.column));
         }
     }
+    // The declared kinds are checked against the vault too: a catalog row with a column the vault
+    // lacks is wrong before any lane wires it.
+    for spec in DECLARED_KINDS {
+        out.push((spec.table, spec.pk));
+        out.push((spec.name_source.table, spec.name_source.column));
+        if let Some(date) = spec.date {
+            out.push((date.source.table, date.source.column));
+        }
+        for field in spec.fields {
+            out.push((field.source.table, field.source.column));
+        }
+    }
     out.sort_unstable();
     out.dedup();
     out
 }
 
-/// Every typed command the table names.
+/// Every typed command the table names, declared rows included.
 #[must_use]
 pub fn mapped_commands() -> Vec<&'static str> {
     let mut out: Vec<&'static str> = VERBS
@@ -1194,6 +667,10 @@ pub fn mapped_commands() -> Vec<&'static str> {
             }
         }
     }
+    for spec in DECLARED_KINDS {
+        out.extend(spec.fields.iter().filter_map(|field| field.edit));
+    }
+    out.extend(DECLARED_VERBS.iter().map(|row| row.command));
     out.extend([
         "edge.add",
         "edge.remove",

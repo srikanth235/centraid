@@ -135,6 +135,17 @@
   "actions": [
     {
       "name": "upload",
+      "verb": "import",
+      "kind": "document",
+      "inverse": "trash",
+      "sealed": [],
+      "chat": "card",
+      "command": "document.add",
+      "phrasings": [
+        "upload this PDF to my drive",
+        "add the scanned receipt to documents",
+        "save this file in Docs"
+      ],
       "description": "Add a file through document.add: the bytes (already staged, so identical bytes are one blob) become a document, filed into a folder or left at the top level. The words the phone read out of them, when it sent them, are what search finds.",
       "confirmation": "none",
       "input": {
@@ -188,6 +199,17 @@
     },
     {
       "name": "create-text",
+      "verb": "create",
+      "kind": "document",
+      "inverse": "trash",
+      "sealed": [],
+      "chat": "direct",
+      "command": "document.create_text",
+      "phrasings": [
+        "write a doc called meeting notes",
+        "start a new text document named packing list",
+        "create a document titled budget ideas"
+      ],
       "description": "Write a new text document through document.create_text — the Add sheet's Text. The words become the bytes, so no caller spells a data URI.",
       "confirmation": "none",
       "input": {
@@ -234,6 +256,17 @@
     },
     {
       "name": "rename",
+      "verb": "edit",
+      "kind": "document",
+      "inverse": null,
+      "sealed": [],
+      "chat": "direct",
+      "command": "entity.retitle",
+      "phrasings": [
+        "rename the lease doc to apartment lease",
+        "call the scan tax return 2025",
+        "retitle my notes doc to ideas"
+      ],
       "description": "Rename a document through entity.retitle (refuses a trashed document). Renames the title only — bytes and version history are untouched.",
       "confirmation": "none",
       "input": {
@@ -268,6 +301,18 @@
     },
     {
       "name": "move",
+      "verb": "add_to",
+      "kind": "document",
+      "also": ["remove_from"],
+      "inverse": null,
+      "sealed": [],
+      "chat": "direct",
+      "command": "document.move",
+      "phrasings": [
+        "put the lease in the Home folder",
+        "move the tax return to Finance",
+        "file this doc under Travel"
+      ],
       "description": "Refile a document into a folder through document.move — omit folder_id to move it to the drive's top level.",
       "confirmation": "none",
       "input": {
@@ -302,6 +347,17 @@
     },
     {
       "name": "trash",
+      "verb": "delete",
+      "kind": "document",
+      "inverse": "restore",
+      "sealed": [],
+      "chat": "direct",
+      "command": "entity.trash",
+      "phrasings": [
+        "delete the old lease doc",
+        "trash the scan from last week",
+        "remove the draft document"
+      ],
       "description": "Move a document to the trash through entity.trash; it keeps its folder, its star and every version, and is purged about 30 days later.",
       "confirmation": "none",
       "input": {
@@ -332,6 +388,17 @@
     },
     {
       "name": "restore",
+      "verb": "restore",
+      "kind": "document",
+      "inverse": "trash",
+      "sealed": [],
+      "chat": "direct",
+      "command": "entity.restore",
+      "phrasings": [
+        "bring back the lease doc",
+        "restore the document I just deleted",
+        "undelete the tax return"
+      ],
       "description": "Bring a document back from the trash through entity.restore; it returns to the folder it was filed in.",
       "confirmation": "none",
       "input": {
@@ -362,6 +429,17 @@
     },
     {
       "name": "purge",
+      "verb": "purge",
+      "kind": "document",
+      "inverse": null,
+      "sealed": [],
+      "chat": "card",
+      "command": "entity.purge",
+      "phrasings": [
+        "delete the old lease forever",
+        "permanently erase the scan in the trash",
+        "purge that trashed document"
+      ],
       "description": "Delete one ALREADY-TRASHED document forever through entity.purge — the path Photos' purge takes. Irreversible: the document, its versions, its star and labels go now, and its bytes go once nothing else holds them.",
       "confirmation": "required",
       "input": {
@@ -392,6 +470,17 @@
     },
     {
       "name": "empty-trash",
+      "verb": "purge",
+      "kind": "document",
+      "inverse": null,
+      "sealed": [],
+      "chat": "card",
+      "command": "entity.empty_trash",
+      "phrasings": [
+        "empty the document trash",
+        "clear out the Docs trash for good",
+        "permanently delete everything in the trash"
+      ],
       "description": "Empty the document trash through entity.empty_trash with kind document. Irreversible and takes no id: every document in the trash is destroyed now, as purge destroys one.",
       "confirmation": "required",
       "input": {
@@ -425,6 +514,17 @@
     },
     {
       "name": "star",
+      "verb": "star",
+      "kind": "document",
+      "inverse": "unstar",
+      "sealed": [],
+      "chat": "direct",
+      "command": "flag.set",
+      "phrasings": [
+        "star the lease",
+        "favorite the tax return",
+        "mark the travel doc as a favorite"
+      ],
       "description": "Star a document through flag.set — one `tagged` edge to the starred flag, the same star every other surface reads. Idempotent; refuses trashed documents.",
       "confirmation": "none",
       "input": {
@@ -459,6 +559,17 @@
     },
     {
       "name": "unstar",
+      "verb": "unstar",
+      "kind": "document",
+      "inverse": "star",
+      "sealed": [],
+      "chat": "direct",
+      "command": "flag.clear",
+      "phrasings": [
+        "unstar the lease",
+        "remove the star from the tax return",
+        "unfavorite the travel doc"
+      ],
       "description": "Remove a document's star through flag.clear. Idempotent; refuses trashed documents (a trashed document keeps its star through restore).",
       "confirmation": "none",
       "input": {
@@ -493,6 +604,17 @@
     },
     {
       "name": "tag",
+      "verb": "tag",
+      "kind": "document",
+      "inverse": "untag",
+      "sealed": [],
+      "chat": "direct",
+      "command": "tag.add",
+      "phrasings": [
+        "tag the lease as home",
+        "label the tax return finance",
+        "add the tag travel to my itinerary doc"
+      ],
       "description": "Add a free-form label to a document through tag.add — additive and idempotent; the label is minted once and shared by everything wearing it.",
       "confirmation": "none",
       "input": {
@@ -527,6 +649,17 @@
     },
     {
       "name": "untag",
+      "verb": "untag",
+      "kind": "document",
+      "inverse": "tag",
+      "sealed": [],
+      "chat": "direct",
+      "command": "tag.remove",
+      "phrasings": [
+        "remove the home tag from the lease",
+        "untag the tax return",
+        "take the travel label off my itinerary"
+      ],
       "description": "Remove one free-form label from a document through tag.remove — the other half of tag's additive gesture. Removes by label, the one edge.",
       "confirmation": "none",
       "input": {
@@ -561,6 +694,17 @@
     },
     {
       "name": "edit",
+      "verb": "edit",
+      "kind": "document",
+      "inverse": null,
+      "sealed": [],
+      "chat": "card",
+      "command": "document.edit",
+      "phrasings": [
+        "change the second line of my packing list",
+        "add milk to the grocery doc",
+        "fix the typo in the meeting notes"
+      ],
       "description": "Edit a text document's body in place through document.edit (media_type text/* only — anything else refuses; use replace instead). The words it replaced become a version.",
       "confirmation": "none",
       "input": {
@@ -598,6 +742,17 @@
     },
     {
       "name": "replace",
+      "verb": "edit",
+      "kind": "document",
+      "inverse": null,
+      "sealed": [],
+      "chat": "card",
+      "command": "document.replace",
+      "phrasings": [
+        "replace the lease with the new scan",
+        "swap in the corrected PDF",
+        "update the tax return file with this version"
+      ],
       "description": "Replace a document's bytes (any media type) through document.replace — the door for scanned PDFs, images and anything else edit cannot touch. The bytes it replaced become a version.",
       "confirmation": "none",
       "input": {
@@ -646,6 +801,17 @@
     },
     {
       "name": "restore-version",
+      "verb": "restore",
+      "kind": "document",
+      "inverse": null,
+      "sealed": [],
+      "chat": "card",
+      "command": "document.restore_version",
+      "phrasings": [
+        "go back to yesterday's version of the lease",
+        "restore the previous version of my notes doc",
+        "undo the last change to the budget doc"
+      ],
       "description": "Restore an older version through document.restore_version — history never rewrites: the bytes it replaces become a version of their own and the chosen version becomes current, so a restore can itself be undone.",
       "confirmation": "none",
       "input": {
@@ -680,6 +846,17 @@
     },
     {
       "name": "create-folder",
+      "verb": "create",
+      "kind": "folder",
+      "inverse": "delete-folder",
+      "sealed": [],
+      "chat": "direct",
+      "command": "container.create",
+      "phrasings": [
+        "make a folder called Taxes",
+        "create a Travel folder inside Home",
+        "add a new folder named Receipts"
+      ],
       "description": "Create a folder through container.create with kind folder, at the top level or inside another folder.",
       "confirmation": "none",
       "input": {
@@ -723,6 +900,17 @@
     },
     {
       "name": "rename-folder",
+      "verb": "edit",
+      "kind": "folder",
+      "inverse": null,
+      "sealed": [],
+      "chat": "direct",
+      "command": "entity.retitle",
+      "phrasings": [
+        "rename the Taxes folder to Finance",
+        "call the Travel folder Trips",
+        "retitle Receipts to Expenses"
+      ],
       "description": "Rename a folder through entity.retitle.",
       "confirmation": "none",
       "input": {
@@ -757,6 +945,17 @@
     },
     {
       "name": "delete-folder",
+      "verb": "delete",
+      "kind": "folder",
+      "inverse": null,
+      "sealed": [],
+      "chat": "direct",
+      "command": "entity.trash",
+      "phrasings": [
+        "delete the Taxes folder",
+        "remove the Receipts folder",
+        "trash the empty Travel folder"
+      ],
       "description": "Move a folder to the trash through entity.trash — the documents and folders filed in it go with it and come back with it on restore.",
       "confirmation": "none",
       "input": {
@@ -789,6 +988,8 @@
   "queries": [
     {
       "name": "drive",
+      "kind": "document",
+      "figures": ["folders", "documents", "root_folder"],
       "description": "The drive as a bounded recent window: every folder, plus the most recently changed documents newest first — caller-sized via limit, default 200 — trashed ones included with their purge dates, each row decorated with starred, its free-form labels, and the current bytes' media_type and size. A document attached to something and filed in no folder is not listed. truncated=true means older documents exist beyond the window; the shelves Trash, Starred and Recent are read for themselves.",
       "input": {
         "type": "object",
@@ -827,6 +1028,8 @@
     },
     {
       "name": "search",
+      "kind": "document",
+      "figures": ["matches"],
       "description": "Full-text document search through the vault's one search index (title + the words extracted from the current bytes) — returns only the ranked matches in the drive's document row shape plus a hit snippet, never a whole-table pull. Trashed documents never match.",
       "input": {
         "type": "object",
@@ -852,6 +1055,8 @@
     },
     {
       "name": "history",
+      "kind": "document",
+      "figures": ["versions"],
       "description": "A document's versions, newest first: the current bytes, then each revision a replace put down. A version's instant is when it became current — when the one before it was replaced, or the document was made for the oldest — so restoring an old version reads as the newest entry even though its bytes are old. A revision's seq is the version's number.",
       "input": {
         "type": "object",
@@ -878,6 +1083,8 @@
     },
     {
       "name": "activity",
+      "kind": "document",
+      "figures": ["events"],
       "description": "What was done to a document: the journal's executed commands that name it, newest first (the journal is the vault's evidence of every command). An empty list is honest: nothing has been done to it yet.",
       "input": {
         "type": "object",
@@ -901,6 +1108,54 @@
           }
         }
       }
+    }
+  ],
+  "kinds": [
+    {
+      "id": "document",
+      "name": "document",
+      "plural": "documents",
+      "order": 4,
+      "live": "write",
+      "entity": "document",
+      "table": "document",
+      "pk": "id",
+      "nameSource": ["entity", "title"],
+      "date": {
+        "label": "created",
+        "source": ["entity", "created_at"]
+      },
+      "fields": [
+        {
+          "name": "starred",
+          "type": "bool",
+          "source": ["edge", "to_id"]
+        }
+      ],
+      "links": [{"kind": "folder", "label": "folder", "via": "folder_column"}],
+      "trash": true,
+      "container": false
+    },
+    {
+      "id": "folder",
+      "name": "folder",
+      "plural": "folders",
+      "order": 9,
+      "live": "write",
+      "entity": "folder",
+      "table": "container",
+      "pk": "id",
+      "nameSource": ["entity", "title"],
+      "fields": [],
+      "links": [
+        {
+          "kind": "document",
+          "label": "documents",
+          "via": "folder_column"
+        }
+      ],
+      "trash": false,
+      "container": true
     }
   ],
   "knobs": [

@@ -4,10 +4,11 @@
 
 use std::path::Path;
 
+use centraid_apps_kit::manifest::{CHAT_VERBS_JSON, ChatSurface, Manifest, parse_manifest};
 use serde_json::{Value, json};
 
 use crate::dates::{EXAMPLES, Unit};
-use crate::meta::{self, KINDS, VERBS};
+use crate::meta::{self, DECLARED_KINDS, DECLARED_VERBS, KINDS, VERBS};
 use crate::phrases::PHRASES;
 use crate::prompt;
 use crate::render;
@@ -78,6 +79,74 @@ pub fn phrases() -> Value {
     )
 }
 
+/// The nine app manifests, embedded: the catalog the chat tables are generated from.
+const MANIFESTS: [(&str, &str); 9] = [
+    ("agenda", include_str!("../../apps/agenda/manifest.json")),
+    ("docs", include_str!("../../apps/docs/manifest.json")),
+    ("health", include_str!("../../apps/health/manifest.json")),
+    ("locker", include_str!("../../apps/locker/manifest.json")),
+    ("money", include_str!("../../apps/money/manifest.json")),
+    ("notes", include_str!("../../apps/notes/manifest.json")),
+    ("people", include_str!("../../apps/people/manifest.json")),
+    ("photos", include_str!("../../apps/photos/manifest.json")),
+    ("tasks", include_str!("../../apps/tasks/manifest.json")),
+];
+
+/// Every bundled manifest, parsed, in `MANIFESTS` order.
+///
+/// # Panics
+///
+/// If a committed manifest does not parse, which each app's own test keeps unreachable.
+#[must_use]
+pub fn manifests() -> Vec<(&'static str, Manifest)> {
+    MANIFESTS
+        .iter()
+        .map(|(app, text)| {
+            let manifest = parse_manifest(text)
+                .unwrap_or_else(|error| panic!("{app}/manifest.json must parse: {error}"));
+            (*app, manifest)
+        })
+        .collect()
+}
+
+/// The catalog as the training harness reads it: every action with the verb, kind, inverse,
+/// sealed fields, chat surface and phrasings its manifest declares, and every query with the kind
+/// and figures. The same fields the chat tables are generated from, so the generator and the
+/// runtime can not disagree about what an app can do.
+#[must_use]
+pub fn catalog() -> Value {
+    let mut actions = Vec::new();
+    let mut queries = Vec::new();
+    for (app, manifest) in manifests() {
+        for action in &manifest.actions {
+            actions.push(json!({
+                "app": app,
+                "action": action.name,
+                "verb": action.verb,
+                "also": action.also,
+                "kind": action.kind,
+                "inverse": action.inverse,
+                "sealed": action.sealed,
+                "chat": match action.chat {
+                    ChatSurface::Direct => "direct",
+                    ChatSurface::Card => "card",
+                },
+                "command": action.command,
+                "phrasings": action.phrasings,
+            }));
+        }
+        for query in &manifest.queries {
+            queries.push(json!({
+                "app": app,
+                "query": query.name,
+                "kind": query.kind,
+                "figures": query.figures,
+            }));
+        }
+    }
+    json!({"actions": actions, "queries": queries})
+}
+
 /// The metadata table as JSON.
 #[must_use]
 pub fn metadata() -> Value {
@@ -109,6 +178,10 @@ pub fn metadata() -> Value {
         "reveal_fields": meta::REVEAL_FIELDS.iter().map(|(name, column)| json!({"name": name, "column": column})).collect::<Vec<_>>(),
         "kinds": kinds,
         "verbs": VERBS,
+        "unbacked_verbs": serde_json::from_str::<Value>(CHAT_VERBS_JSON).map_or(Value::Null, |verbs| verbs["unbacked"].clone()),
+        "declared_kinds": DECLARED_KINDS,
+        "declared_verbs": DECLARED_VERBS,
+        "catalog": catalog(),
         "date_units": Unit::NAMES,
         "date_examples": EXAMPLES.iter().map(|(expr, gloss)| json!({"expr": expr, "reads": gloss})).collect::<Vec<_>>(),
         "mapped_columns": meta::mapped_columns().iter().map(|(t, c)| format!("{t}.{c}")).collect::<Vec<_>>(),

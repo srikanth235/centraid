@@ -100,6 +100,17 @@
   "actions": [
     {
       "name": "propose",
+      "verb": "create",
+      "kind": "event",
+      "inverse": "cancel-event",
+      "sealed": [],
+      "chat": "direct",
+      "command": "event.propose",
+      "phrasings": [
+        "put lunch with Sam on Friday at noon",
+        "add a dentist appointment next Tuesday at 3pm",
+        "schedule a team sync every Monday morning"
+      ],
       "description": "Propose an event through event.propose: its title, when (an instant, or a wall clock in a zone), an optional repeat rule, guests, place, link and reminders. Refused when a busy event would land on another busy one; a free event blocks nothing.",
       "confirmation": "none",
       "input": {
@@ -193,6 +204,17 @@
     },
     {
       "name": "rsvp",
+      "verb": "respond",
+      "kind": "event",
+      "inverse": null,
+      "sealed": [],
+      "chat": "direct",
+      "command": "event.respond",
+      "phrasings": [
+        "accept the Friday dinner invite",
+        "decline Sam's party",
+        "mark me tentative for the offsite"
+      ],
       "description": "Record one guest's answer to an event through event.respond: accepted, declined or tentative.",
       "confirmation": "none",
       "input": {
@@ -231,6 +253,18 @@
     },
     {
       "name": "edit-event",
+      "verb": "edit",
+      "kind": "event",
+      "also": ["reschedule"],
+      "inverse": null,
+      "sealed": [],
+      "chat": "direct",
+      "command": "event.edit",
+      "phrasings": [
+        "rename the dentist event to checkup",
+        "move the team sync to 4pm",
+        "add a note to Friday's dinner that it's at Luigi's"
+      ],
       "description": "Revise an event through event.edit. A key that is present is set (null clears it); a key that is absent is left alone. A change to the series that would leave a skipped or moved day matching nothing is refused.",
       "confirmation": "none",
       "input": {
@@ -323,6 +357,17 @@
     },
     {
       "name": "edit-occurrence",
+      "verb": "reschedule",
+      "kind": "event",
+      "inverse": null,
+      "sealed": [],
+      "chat": "card",
+      "command": "event.edit_occurrence",
+      "phrasings": [
+        "skip this week's standup",
+        "move Thursday's yoga to Friday",
+        "rename tomorrow's call to planning"
+      ],
       "description": "Skip, move, rename or put back one day of a repeating event through event.edit_occurrence, keyed by the series-local wall clock the rule produced (`original_start`). Scope `occurrence` is that day, `future` is that day and every one after it, `series` is the whole event.",
       "confirmation": "none",
       "input": {
@@ -389,6 +434,17 @@
     },
     {
       "name": "cancel-event",
+      "verb": "cancel",
+      "kind": "event",
+      "inverse": null,
+      "sealed": [],
+      "chat": "direct",
+      "command": "event.cancel",
+      "phrasings": [
+        "cancel the dentist appointment",
+        "call off Friday's dinner",
+        "cancel my 3pm meeting"
+      ],
       "description": "Cancel an event through event.cancel: a status its guests see, not a deletion (the trash is entity.trash).",
       "confirmation": "none",
       "input": {
@@ -419,6 +475,17 @@
     },
     {
       "name": "attach",
+      "verb": "attach",
+      "kind": "event",
+      "inverse": "detach",
+      "sealed": [],
+      "chat": "card",
+      "command": "edge.add",
+      "phrasings": [
+        "attach the menu to Friday's dinner",
+        "add the boarding pass to my flight event",
+        "attach the agenda doc to the team sync"
+      ],
       "description": "Attach a document or photo to an event through edge.add (rel attached); the bytes are the document's or photo's own.",
       "confirmation": "none",
       "input": {
@@ -457,6 +524,17 @@
     },
     {
       "name": "detach",
+      "verb": "detach",
+      "kind": "event",
+      "inverse": "attach",
+      "sealed": [],
+      "chat": "card",
+      "command": "edge.remove",
+      "phrasings": [
+        "detach the menu from Friday's dinner",
+        "remove the boarding pass from my flight event",
+        "take the agenda doc off the team sync"
+      ],
       "description": "Detach a document or photo from an event through edge.remove; the document or photo is kept.",
       "confirmation": "none",
       "input": {
@@ -497,6 +575,8 @@
   "queries": [
     {
       "name": "upcoming",
+      "kind": "event",
+      "figures": ["events", "calendars", "occurrences", "guests", "reminders"],
       "description": "Non-cancelled events, soonest first, with the calendars they could land on, each event's calendar_id, link, reminders, its attachments and its guest list (each `{party_id, name, partstat, is_you}`, read from the event's attendee edges). Defaults to today forward; pass ISO `from`/`to` instants to read any visible range (month and week views do), including still-running multi-day events that began before `from`. A repeating event (rule set) is materialized into one row per occurrence inside the visible range, each carrying the series' real event_id, an `instance_key` for list render and the `original_start_local` an occurrence edit is keyed on; a skipped day is left out and a moved one is where it moved to. Every occurrence also carries where it falls in the request's `tz`.",
       "input": {
         "type": "object",
@@ -527,6 +607,8 @@
     },
     {
       "name": "search",
+      "kind": "event",
+      "figures": ["matches"],
       "description": "Full-text event search through the vault's one index (title, description and place) — returns only the ranked non-cancelled matches in the upcoming row shape plus a hit snippet, never a whole-table pull.",
       "input": {
         "type": "object",
@@ -552,6 +634,8 @@
     },
     {
       "name": "day-context",
+      "kind": "event",
+      "figures": ["birthdays", "holidays"],
       "description": "The cross-app facts that decorate a calendar day, as one read-only projection: birthdays recurring inside the window (each `{party_id, name, month, day, tier}`, where `tier` is `inner` when the owner starred that person and `outer` otherwise), and holidays. Holidays are always `[]` today — the vault has no holiday source. It reads no task: a dated task is a row in its day, read from `tasks.board`. `from`/`to` are inclusive `YYYY-MM-DD` days, defaulting to today plus 45 days and capped at a 400-day span.",
       "input": {
         "type": "object",
@@ -582,6 +666,8 @@
     },
     {
       "name": "parties",
+      "kind": "person",
+      "figures": ["parties"],
       "description": "Pickable people for the invite picker — each `{party_id, name, is_you}`, you sorted first. `me` is the owner's person id. No event data; just the directory the create-event attendee multi-select draws from.",
       "input": {
         "type": "object",
@@ -602,6 +688,53 @@
           }
         }
       }
+    }
+  ],
+  "kinds": [
+    {
+      "id": "event",
+      "name": "event",
+      "plural": "events",
+      "order": 1,
+      "live": "write",
+      "entity": "event",
+      "table": "event",
+      "pk": "id",
+      "nameSource": ["entity", "title"],
+      "date": {
+        "label": "start",
+        "source": ["event", "starts"]
+      },
+      "fields": [
+        {
+          "name": "status",
+          "type": "enum",
+          "source": ["event", "status"],
+          "values": [
+            ["confirmed", "confirmed"],
+            ["tentative", "tentative"],
+            ["cancelled", "cancelled"]
+          ]
+        },
+        {
+          "name": "duration",
+          "type": "number",
+          "source": ["event", "ends"],
+          "unit": "min",
+          "edit": "event.edit",
+          "create": true
+        },
+        {
+          "name": "description",
+          "type": "text",
+          "source": ["event", "description"],
+          "edit": "event.edit",
+          "create": true
+        }
+      ],
+      "links": [{"kind": "person", "label": "people", "via": "attendee"}],
+      "trash": true,
+      "container": false
     }
   ],
   "knobs": [

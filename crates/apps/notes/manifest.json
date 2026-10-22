@@ -150,6 +150,17 @@
   "actions": [
     {
       "name": "create-note",
+      "verb": "create",
+      "kind": "note",
+      "inverse": "delete-note",
+      "sealed": [],
+      "chat": "direct",
+      "command": "note.create",
+      "phrasings": [
+        "jot down that I need to call the plumber",
+        "start a note called book ideas",
+        "write a note about the trip itinerary"
+      ],
       "description": "Create a note (optionally filed into a notebook) through note.create; the body is the note's own column and any [[wikilink]] in it compiles to a link edge.",
       "confirmation": "none",
       "input": {
@@ -197,6 +208,17 @@
     },
     {
       "name": "edit-note",
+      "verb": "edit",
+      "kind": "note",
+      "inverse": null,
+      "sealed": [],
+      "chat": "direct",
+      "command": "note.edit",
+      "phrasings": [
+        "add oat milk to my shopping note",
+        "retitle the book ideas note",
+        "fix the first line of the trip itinerary"
+      ],
       "description": "Edit a note's title, body or format through note.edit — partial update, only the fields sent change; the body it replaces is kept as a revision.",
       "confirmation": "none",
       "input": {
@@ -239,6 +261,18 @@
     },
     {
       "name": "move-note",
+      "verb": "add_to",
+      "kind": "note",
+      "also": ["remove_from"],
+      "inverse": null,
+      "sealed": [],
+      "chat": "direct",
+      "command": "note.move",
+      "phrasings": [
+        "put the trip itinerary in the Travel notebook",
+        "file my book ideas under Reading",
+        "move the plumber note to Home"
+      ],
       "description": "Refile a note into a notebook (or unfile it by sending no notebook_id) through note.move — one notebook per note.",
       "confirmation": "none",
       "input": {
@@ -273,6 +307,17 @@
     },
     {
       "name": "create-notebook",
+      "verb": "create",
+      "kind": "notebook",
+      "inverse": "delete-notebook",
+      "sealed": [],
+      "chat": "direct",
+      "command": "container.create",
+      "phrasings": [
+        "make a notebook called Travel",
+        "create a Reading notebook",
+        "start a notebook for work"
+      ],
       "description": "Create a notebook through container.create (kind notebook); the vault assigns sibling order.",
       "confirmation": "none",
       "input": {
@@ -316,6 +361,17 @@
     },
     {
       "name": "rename-notebook",
+      "verb": "edit",
+      "kind": "notebook",
+      "inverse": null,
+      "sealed": [],
+      "chat": "direct",
+      "command": "entity.retitle",
+      "phrasings": [
+        "rename the Travel notebook to Trips",
+        "call my Reading notebook Books",
+        "retitle Work to Office"
+      ],
       "description": "Rename a notebook through entity.retitle; the one verb that renames every kind of thing.",
       "confirmation": "none",
       "input": {
@@ -350,6 +406,17 @@
     },
     {
       "name": "delete-notebook",
+      "verb": "delete",
+      "kind": "notebook",
+      "inverse": null,
+      "sealed": [],
+      "chat": "direct",
+      "command": "entity.trash",
+      "phrasings": [
+        "delete the Travel notebook",
+        "remove my Reading notebook",
+        "trash the Work notebook"
+      ],
       "description": "Move a notebook to the 30-day trash through entity.trash — the notes filed in it go with it and come back with it on restore.",
       "confirmation": "required",
       "input": {
@@ -380,6 +447,17 @@
     },
     {
       "name": "delete-note",
+      "verb": "delete",
+      "kind": "note",
+      "inverse": "restore-note",
+      "sealed": [],
+      "chat": "direct",
+      "command": "entity.trash",
+      "phrasings": [
+        "delete the plumber note",
+        "trash my book ideas",
+        "remove the old trip itinerary"
+      ],
       "description": "Move a note to the 30-day trash through entity.trash; its links, tags and attachments stay.",
       "confirmation": "required",
       "input": {
@@ -410,6 +488,17 @@
     },
     {
       "name": "restore-note",
+      "verb": "restore",
+      "kind": "note",
+      "inverse": "delete-note",
+      "sealed": [],
+      "chat": "direct",
+      "command": "entity.restore",
+      "phrasings": [
+        "bring back the plumber note",
+        "restore the note I deleted",
+        "undelete my book ideas"
+      ],
       "description": "Restore a trashed note in place through entity.restore.",
       "confirmation": "none",
       "input": {
@@ -440,6 +529,17 @@
     },
     {
       "name": "restore-note-version",
+      "verb": "restore",
+      "kind": "note",
+      "inverse": null,
+      "sealed": [],
+      "chat": "card",
+      "command": "note.restore_version",
+      "phrasings": [
+        "go back to the earlier version of my trip note",
+        "restore yesterday's text of book ideas",
+        "undo my last edit to the plumber note"
+      ],
       "description": "Restore one prior body from this note's history through note.restore_version; the words it replaces are kept as the newest version.",
       "confirmation": "none",
       "input": {
@@ -474,6 +574,17 @@
     },
     {
       "name": "flag-note",
+      "verb": "star",
+      "kind": "note",
+      "inverse": "unflag-note",
+      "sealed": [],
+      "chat": "card",
+      "command": "flag.set",
+      "phrasings": [
+        "pin the trip itinerary",
+        "star my book ideas",
+        "pin the plumber note to the top"
+      ],
       "confirmation": "none",
       "description": "Pin or star a note through flag.set — a tagged edge to the flag, shared with every app that flags.",
       "input": {
@@ -508,6 +619,17 @@
     },
     {
       "name": "unflag-note",
+      "verb": "unstar",
+      "kind": "note",
+      "inverse": "flag-note",
+      "sealed": [],
+      "chat": "card",
+      "command": "flag.clear",
+      "phrasings": [
+        "unpin the trip itinerary",
+        "unstar my book ideas",
+        "take the plumber note off the top"
+      ],
       "confirmation": "none",
       "description": "Unpin or unstar a note through flag.clear.",
       "input": {
@@ -542,6 +664,17 @@
     },
     {
       "name": "link",
+      "verb": "link",
+      "kind": "note",
+      "inverse": null,
+      "sealed": [],
+      "chat": "card",
+      "command": "edge.add",
+      "phrasings": [
+        "link my trip note to Sam",
+        "connect the book ideas note to the reading list task",
+        "link the plumber note to Friday's event"
+      ],
       "description": "Link a note to anything it names through edge.add (rel links), with an optional anchor naming the text range the link points at.",
       "confirmation": "none",
       "input": {
@@ -583,6 +716,17 @@
     },
     {
       "name": "send-to-tasks",
+      "verb": "create",
+      "kind": "task",
+      "inverse": null,
+      "sealed": [],
+      "chat": "card",
+      "command": "task.add",
+      "phrasings": [
+        "turn this checklist line into a task",
+        "send 'call the plumber' to Tasks",
+        "make the first checklist item a task"
+      ],
       "description": "Hand one checklist line to Tasks: mints the task through task.add (undated unless the line carried a date) and joins it back to the note with an about edge through edge.add. Notes keeps no copy of the task.",
       "confirmation": "none",
       "input": {
@@ -624,6 +768,17 @@
     },
     {
       "name": "attach",
+      "verb": "attach",
+      "kind": "note",
+      "inverse": "detach",
+      "sealed": [],
+      "chat": "card",
+      "command": "edge.add",
+      "phrasings": [
+        "attach the itinerary PDF to my trip note",
+        "add the photo to the plumber note",
+        "attach the receipt to my book ideas"
+      ],
       "description": "Attach a document or photo to a note through edge.add (rel attached); the bytes are the document's or photo's own, found by hash.",
       "confirmation": "none",
       "input": {
@@ -662,6 +817,17 @@
     },
     {
       "name": "detach",
+      "verb": "detach",
+      "kind": "note",
+      "inverse": "attach",
+      "sealed": [],
+      "chat": "card",
+      "command": "edge.remove",
+      "phrasings": [
+        "detach the itinerary PDF from my trip note",
+        "remove the photo from the plumber note",
+        "take the receipt off my book ideas"
+      ],
       "description": "Detach a document or photo from a note through edge.remove; the document or photo is kept.",
       "confirmation": "none",
       "input": {
@@ -700,6 +866,17 @@
     },
     {
       "name": "add-tag",
+      "verb": "tag",
+      "kind": "note",
+      "inverse": "remove-tag",
+      "sealed": [],
+      "chat": "direct",
+      "command": "tag.add",
+      "phrasings": [
+        "tag the trip note as travel",
+        "label my book ideas reading",
+        "add the tag home to the plumber note"
+      ],
       "description": "Tag a note through tag.add — a free-form label shared with every other app that tags; minted on first use. Idempotent.",
       "confirmation": "none",
       "input": {
@@ -734,6 +911,17 @@
     },
     {
       "name": "remove-tag",
+      "verb": "untag",
+      "kind": "note",
+      "inverse": "add-tag",
+      "sealed": [],
+      "chat": "direct",
+      "command": "tag.remove",
+      "phrasings": [
+        "remove the travel tag from the trip note",
+        "untag my book ideas",
+        "take the home label off the plumber note"
+      ],
       "description": "Remove one tag from a note through tag.remove; the tag survives for other things.",
       "confirmation": "none",
       "input": {
@@ -770,6 +958,8 @@
   "queries": [
     {
       "name": "link-targets",
+      "kind": "note",
+      "figures": ["targets"],
       "description": "FTS5 powerbox search across notes, people, events, tasks, documents and photos; returns secret-free entity-aware link targets.",
       "input": {
         "type": "object",
@@ -793,6 +983,8 @@
     },
     {
       "name": "library",
+      "kind": "note",
+      "figures": ["notes", "notebooks", "tags", "trash"],
       "description": "A bounded recent window of notes (newest by updated_at, pinned always included) with their notebook names, a short body preview (`preview`) and checklist tally (`check`), and tags (`[{concept_id, label}]`), plus the notebooks for filtering and the distinct tag list (`[{concept_id, label}]`) seen within the window — never a whole-table pull, and never full bodies (the editor pulls those via `note`); `truncated` says older notes exist beyond the window.",
       "input": {
         "type": "object",
@@ -834,6 +1026,8 @@
     },
     {
       "name": "note",
+      "kind": "note",
+      "figures": ["body", "format"],
       "description": "One note's body — the editor's on-open pull. The library/search projections ship only a preview, so the full text is fetched lazily here when a note is opened.",
       "input": {
         "type": "object",
@@ -866,6 +1060,8 @@
     },
     {
       "name": "search",
+      "kind": "note",
+      "figures": ["matches"],
       "description": "Full-text note search through the vault's FTS5 index (title + body) — returns only the ranked matches in the library row shape (preview + checklist tally, not full bodies) plus a hit snippet, never a whole-table pull.",
       "input": {
         "type": "object",
@@ -891,6 +1087,8 @@
     },
     {
       "name": "history",
+      "kind": "note",
+      "figures": ["versions"],
       "description": "The selected note's body versions, newest first: the current words, then each version they replaced (newest 200; `truncated` says more exist).",
       "input": {
         "type": "object",
@@ -920,6 +1118,8 @@
     },
     {
       "name": "journal",
+      "kind": "note",
+      "figures": ["entries"],
       "description": "The Journal place: a bounded, read-only window over the memos this vault holds (notes that are about a person or a thing) — the set the library, search and link-target projections exclude, read the other way round. Live entries only, newest by updated_at, with a short preview and checklist tally and never a full body; `truncated` says older entries exist beyond the window.",
       "input": {
         "type": "object",
@@ -949,6 +1149,67 @@
           }
         }
       }
+    }
+  ],
+  "kinds": [
+    {
+      "id": "note",
+      "name": "note",
+      "plural": "notes",
+      "order": 3,
+      "live": "write",
+      "entity": "note",
+      "table": "note",
+      "pk": "id",
+      "nameSource": ["entity", "title"],
+      "date": {
+        "label": "created",
+        "source": ["entity", "created_at"]
+      },
+      "fields": [
+        {
+          "name": "body",
+          "type": "text",
+          "source": ["note", "body"],
+          "edit": "note.edit",
+          "create": true
+        },
+        {
+          "name": "pinned",
+          "type": "bool",
+          "source": ["edge", "to_id"],
+          "edit": "flag.set"
+        }
+      ],
+      "links": [
+        {
+          "kind": "notebook",
+          "label": "notebook",
+          "via": "entry"
+        },
+        {
+          "kind": "person",
+          "label": "people",
+          "via": "about"
+        }
+      ],
+      "trash": true,
+      "container": false
+    },
+    {
+      "id": "notebook",
+      "name": "notebook",
+      "plural": "notebooks",
+      "order": 8,
+      "live": "write",
+      "entity": "notebook",
+      "table": "container",
+      "pk": "id",
+      "nameSource": ["entity", "title"],
+      "fields": [],
+      "links": [{"kind": "note", "label": "notes", "via": "entry"}],
+      "trash": false,
+      "container": true
     }
   ],
   "knobs": [
