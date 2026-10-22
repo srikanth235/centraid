@@ -34,6 +34,8 @@ centraid-apps-health = { path = "../apps/health" }
 # over a seed opened under `K` after the code's receipt lands; see the
 # workspace manifest's note beside `sha1`.
 hmac.workspace = true
+# The manifest's input schemas, which `act` validates an input against (#1135).
+jsonschema.workspace = true
 sha1.workspace = true
 # THE APP QUERIES THE PHONE ASKS FOR BY NAME (#1046). Agenda's `upcoming` joins
 # six-plus tables and expands every series through the one recurrence engine,

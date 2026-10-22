@@ -34,12 +34,14 @@
 //! from here. A second reader would be the drift this module exists to
 //! prevent.
 
+pub mod civil;
 pub mod occurrence;
 pub mod recurrence;
 pub mod rrule;
 pub mod temporal;
 pub mod zone;
 
+pub use civil::{has_zone_designator, parse_civil_ms};
 pub use occurrence::{
     OCCURRENCE_LOCAL_START_COLUMN, OCCURRENCE_LOCAL_START_KEY, OccurrenceException, OccurrenceKey,
     SeriesType, StoredExceptionRow, exceptions_of, override_at, read_exception,

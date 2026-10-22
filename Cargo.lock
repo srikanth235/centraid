@@ -488,6 +488,7 @@ version = "1.0.0-alpha.0"
 dependencies = [
  "blake3",
  "centraid-ontology",
+ "centraid-vault",
  "hex",
  "proptest",
  "rusqlite",
@@ -643,6 +644,7 @@ dependencies = [
  "hex",
  "hmac",
  "image",
+ "jsonschema",
  "prost",
  "rustix",
  "serde",

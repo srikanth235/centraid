@@ -19,6 +19,7 @@ syntax = "proto3";
 package centraid.core.v1;
 
 import "centraid/core/v1/app_query.proto";
+import "centraid/core/v1/action.proto";
 import "centraid/core/v1/assist.proto";
 import "centraid/core/v1/change.proto";
 import "centraid/core/v1/command.proto";
@@ -128,6 +129,9 @@ message Request {
     // WHICH ASSET A LIBRARY ITEM WAS BACKED UP AS (#1127, A20): how an edit made
     // in place finds the photograph it is an edit of. See `phone.proto`.
     LibraryAssetsRequest library_assets = 34;
+    // THE ONE READ AND THE ONE WRITE (#1135). See `action.proto`.
+    LoadRequest load = 35;
+    ActRequest act = 36;
   }
 }
 
@@ -168,6 +172,8 @@ message Response {
     MoneyResponse money = 32;
     RefreshDestinationResponse refresh_destination = 33;
     LibraryAssetsResponse library_assets = 34;
+    LoadResponse load = 35;
+    ActResponse act = 36;
   }
 }
 

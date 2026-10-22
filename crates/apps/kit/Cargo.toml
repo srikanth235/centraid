@@ -17,6 +17,9 @@ path = "src/lib.rs"
 # dedupe key is worse than a dependency.
 blake3.workspace = true
 centraid-ontology = { path = "../../ontology" }
+# THE SHARED RULES (#1135): the trash window is the vault's `TRASH_DAYS` and civil
+# time is the vault's one reader, so `rules` re-states neither.
+centraid-vault = { path = "../../vault" }
 hex.workspace = true
 rusqlite.workspace = true
 serde.workspace = true

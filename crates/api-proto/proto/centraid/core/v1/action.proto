@@ -1,0 +1,123 @@
+// THE ONE READ AND THE ONE WRITE (#1135).
+//
+// Every app is a manifest (`crates/apps/<app>/manifest.json`): the catalogue of
+// the queries it answers and the actions it takes. `LoadRequest` and
+// `ActRequest` are the two doors that catalogue is spoken through, for an app
+// screen, for the chat and for the training harness alike. A new query or
+// action is a manifest entry and a Rust function, and no new message here.
+//
+// ## LOAD: the name finds the query, the core decodes the arguments
+//
+// A shell names `(app, query)` and states its arguments as `params`. The core
+// finds the query in the app's manifest, decodes `params` into the query's
+// typed input in Rust, runs the app's own query and answers with the app's own
+// typed answer — an `AppQueryResponse`, the message `app_query.proto` states.
+// The answer stays typed: a shell never walks a JSON tree. What `params` cannot
+// say natively travels as text: an enum by its proto name (or its number), a
+// list as a JSON array.
+//
+// ## ACT: the name finds the command, the core runs every rule that is not the
+// ## app's
+//
+// A shell names `(app, action)` and states `input`. The core resolves the
+// action in the manifest and in the app's Rust action table, validates `input`
+// against the manifest's JSON schema, and runs the vault command the way every
+// write is run. Four rules every surface used to carry for itself are the
+// core's here:
+//
+//   * THE SAME `invoke_key` RUNS ONCE. A second tap answers the first's answer
+//     with `replayed` set.
+//   * A FROZEN VAULT WRITES NOTHING. A vault another phone has taken over is
+//     refused with the check `vault_moved`, whoever asks.
+//   * A REFUSAL CARRIES THE FAILING CHECK — `ActRefusal.check`, not only a
+//     sentence a shell would have to parse.
+//   * THE ANSWER CARRIES ITS UNDO where the action has one.
+
+syntax = "proto3";
+
+package centraid.core.v1;
+
+import "centraid/core/v1/app_query.proto";
+import "centraid/core/v1/value.proto";
+
+message LoadRequest {
+  // The app's id, as its manifest states it.
+  string app = 1;
+  // The query's name in the app's manifest.
+  string query = 2;
+  // The IANA zone the answer's civil readings are drawn in. Empty means the
+  // vault's own, and a vault that names none refuses (`app_query.proto`).
+  string zone = 3;
+  // The cursor of the page to continue from, when the query pages. The answer
+  // names the next one in its own message.
+  string after = 4;
+  // How many rows, when the query takes a window; 0 leaves the query's default.
+  uint32 limit = 5;
+  // The query's other arguments by name, as the manifest's `input` schema
+  // names them.
+  map<string, Value> params = 6;
+}
+
+message LoadResponse {
+  // The query's own typed answer.
+  AppQueryResponse answer = 1;
+  // The tables the answer was read from, sorted. A change event that names
+  // one of them is a reason to load again.
+  repeated string tables = 2;
+}
+
+message ActRequest {
+  // The app's id, as its manifest states it.
+  string app = 1;
+  // The action's name in the app's manifest.
+  string action = 2;
+  // The action's input by name, as the manifest's `input` schema names it. A
+  // property the schema types as an array or an object travels as text holding
+  // its JSON; a boolean as 0 or 1.
+  map<string, Value> input = 3;
+  // THE DUPLICATE-TAP KEY. The same key twice runs the action once. Required.
+  string invoke_key = 4;
+}
+
+enum ActStatus {
+  ACT_STATUS_UNSPECIFIED = 0;
+  // The command ran and its effect is committed.
+  ACT_STATUS_EXECUTED = 1;
+  // Nothing was written. `refusal` says which check stopped it.
+  ACT_STATUS_REFUSED = 2;
+}
+
+message ActResponse {
+  ActStatus status = 1;
+  // The command's output, canonical JSON in bytes. Empty on a refusal.
+  bytes output = 2;
+  // A sentence for the member. Empty when executed.
+  string reason = 3;
+  // The check that refused, when `status` is refused.
+  optional ActRefusal refusal = 4;
+  // The audit-band id of the invocation, when one ran.
+  string invocation_id = 5;
+  // How to take it back, when the action has an inverse.
+  optional ActInverse inverse = 6;
+  // This is the answer to the first run of this `invoke_key`; nothing ran now.
+  bool replayed = 7;
+  // The tables the commit wrote, sorted.
+  repeated string tables = 8;
+}
+
+// WHICH CHECK STOPPED A WRITE, as a value a caller can branch on.
+message ActRefusal {
+  // A stable id: `vault_moved`, `input_schema`, or the name of the command
+  // precondition that failed (the vault's own predicate id).
+  string check = 1;
+  // What the check found: the epoch a vault moved to, the schema path and
+  // message, the precondition's text.
+  string detail = 2;
+}
+
+// THE ACTION AND INPUT THAT TAKE AN EXECUTED ACT BACK. Send it as an
+// `ActRequest` with a fresh `invoke_key`.
+message ActInverse {
+  string action = 1;
+  map<string, Value> input = 2;
+}

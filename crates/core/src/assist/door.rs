@@ -85,6 +85,8 @@ pub struct CoreDoor {
     owner: Principal,
     /// The Locker session the handle holds: a typed secret is sealed under its key.
     locker: Arc<crate::locker::phone::Cell>,
+    /// The backup plane beside the vault file, which remembers a vault that moved.
+    plane: crate::phone::Plane,
     /// What each key has already run, so a step confirmed twice runs once.
     done: Mutex<BTreeMap<String, Ran>>,
     calls: AtomicU64,
@@ -97,6 +99,7 @@ impl CoreDoor {
         events: Arc<EventQueue>,
         owner: Principal,
         locker: Arc<crate::locker::phone::Cell>,
+        plane: crate::phone::Plane,
     ) -> Self {
         Self {
             vault,
@@ -104,6 +107,7 @@ impl CoreDoor {
             events,
             owner,
             locker,
+            plane,
             done: Mutex::new(BTreeMap::new()),
             calls: AtomicU64::new(0),
         }
@@ -206,6 +210,18 @@ impl Door for CoreDoor {
         let mut done = self.done.lock().unwrap_or_else(PoisonError::into_inner);
         if let Some(earlier) = done.get(key) {
             return Ok(earlier.clone());
+        }
+        // A VAULT ANOTHER PHONE HAS TAKEN WRITES NOTHING, whoever asks (#1135): the
+        // same check the `act` path makes, so the chat cannot write where a screen cannot.
+        if let Some(epoch) =
+            crate::act::moved_epoch(&self.plane).map_err(|error| error.to_string())?
+        {
+            return Ok(Ran {
+                ok: false,
+                output: Value::Null,
+                reason: Some(crate::act::MOVED_SENTENCE.to_owned()),
+                predicate: Some(crate::act::vault_moved(epoch).check),
+            });
         }
         let request = wire::Command {
             name: command.to_owned(),
