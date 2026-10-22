@@ -5116,16 +5116,47 @@ pub mod load {
         use super::*;
         pub const APP: &str = "tasks";
 
+        #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+        pub enum BoardView {
+            #[default]
+            Today,
+            Upcoming,
+            Inbox,
+            Anytime,
+            All,
+            Logbook,
+            Reminders,
+            Project,
+        }
+        impl BoardView {
+            fn wire(self) -> &'static str {
+                match self {
+                    Self::Today => "today",
+                    Self::Upcoming => "upcoming",
+                    Self::Inbox => "inbox",
+                    Self::Anytime => "anytime",
+                    Self::All => "all",
+                    Self::Logbook => "logbook",
+                    Self::Reminders => "reminders",
+                    Self::Project => "project",
+                }
+            }
+        }
+
         /// The task board as a bounded window (newest open tasks by creation, caller-sized, families kept whole; the logbook read is capped at its visible 50 most recently closed), each row carrying its tags (`[{concept_id, label}]`) and what it is about, plus the distinct tag list (`[{concept_id, label}]`) seen within the window — never a whole-table pull; `truncated` is the open walk's own cursor — it exists or it does not — rather than a guess from the row count.
         #[derive(Clone, Debug, Default)]
         pub struct Board {
             pub limit: u32,
+            pub project_id: Option<String>,
+            pub view: Option<BoardView>,
         }
         impl Board {
             pub const NAME: &str = "board";
             pub fn request(self) -> wire::LoadRequest {
                 #[allow(unused_mut)]
                 let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                if let Some(it) = self.project_id { map.insert("project_id".to_owned(), text(it)); }
+                if let Some(it) = self.view { map.insert("view".to_owned(), text(it.wire())); }
                 wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), limit: self.limit, params: map, ..Default::default() }
             }
         }
@@ -5151,6 +5182,80 @@ pub mod load {
         }
         impl From<Search> for wire::LoadRequest {
             fn from(value: Search) -> Self {
+                value.request()
+            }
+        }
+
+        /// One task by id, whether or not any board window holds it: the task with its subtasks, tags, project and section, and its parent when it is a subtask.
+        #[derive(Clone, Debug, Default)]
+        pub struct Task {
+            pub task_id: String,
+        }
+        impl Task {
+            pub const NAME: &str = "task";
+            pub fn request(self) -> wire::LoadRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("task_id".to_owned(), text(self.task_id));
+                wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), params: map, ..Default::default() }
+            }
+        }
+        impl From<Task> for wire::LoadRequest {
+            fn from(value: Task) -> Self {
+                value.request()
+            }
+        }
+
+        /// The live projects and their sections, with open counts, in their order.
+        #[derive(Clone, Debug, Default)]
+        pub struct Projects {
+        }
+        impl Projects {
+            pub const NAME: &str = "projects";
+            pub fn request(self) -> wire::LoadRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), params: map, ..Default::default() }
+            }
+        }
+        impl From<Projects> for wire::LoadRequest {
+            fn from(value: Projects) -> Self {
+                value.request()
+            }
+        }
+
+        /// What fell behind while the member was away: dated work past due, repeating work that missed occurrences, and undated work sitting too long, each as a pile.
+        #[derive(Clone, Debug, Default)]
+        pub struct CatchUp {
+        }
+        impl CatchUp {
+            pub const NAME: &str = "catch-up";
+            pub fn request(self) -> wire::LoadRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), params: map, ..Default::default() }
+            }
+        }
+        impl From<CatchUp> for wire::LoadRequest {
+            fn from(value: CatchUp) -> Self {
+                value.request()
+            }
+        }
+
+        /// The tasks in the 30-day trash, most recently trashed first, each with when it was deleted and when it is erased.
+        #[derive(Clone, Debug, Default)]
+        pub struct Trash {
+        }
+        impl Trash {
+            pub const NAME: &str = "trash";
+            pub fn request(self) -> wire::LoadRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), params: map, ..Default::default() }
+            }
+        }
+        impl From<Trash> for wire::LoadRequest {
+            fn from(value: Trash) -> Self {
                 value.request()
             }
         }
