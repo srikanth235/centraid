@@ -124,6 +124,44 @@ fn pairs(connection: &Connection, sql: &str) -> Vec<(String, String)> {
         .unwrap_or_default()
 }
 
+/// EVERY ROW OF THE TABLES `include` NAMES, AS TEXT, one line a row: `table|cell|cell|…`. Blobs are
+/// read as lossy text. The question a test asks to prove a value is in no stored place (a planted
+/// secret in the thread, the journal or the index, #1135): search the answer for it.
+///
+/// # Errors
+/// The connection's.
+pub fn text_of_tables(
+    connection: &Connection,
+    include: &dyn Fn(&str) -> bool,
+) -> rusqlite::Result<String> {
+    use rusqlite::types::ValueRef;
+    let mut names =
+        connection.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")?;
+    let names: Vec<String> = names
+        .query_map([], |row| row.get(0))?
+        .collect::<rusqlite::Result<_>>()?;
+    let mut out = String::new();
+    for name in names.iter().filter(|name| include(name)) {
+        let mut statement = connection.prepare(&format!("SELECT * FROM \"{name}\""))?;
+        let columns = statement.column_count();
+        let mut rows = statement.query([])?;
+        while let Some(row) = rows.next()? {
+            out.push_str(name);
+            for index in 0..columns {
+                out.push('|');
+                match row.get_ref(index)? {
+                    ValueRef::Text(text) | ValueRef::Blob(text) => {
+                        out.push_str(&String::from_utf8_lossy(text));
+                    }
+                    other => out.push_str(&format!("{other:?}")),
+                }
+            }
+            out.push('\n');
+        }
+    }
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

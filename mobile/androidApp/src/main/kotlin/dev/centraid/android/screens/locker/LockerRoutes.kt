@@ -262,7 +262,7 @@ public class LockerRoutes(
         when (destination) {
             is Destination.LockerHome -> HomeRoute(nav, state, unlock, words)
             is Destination.LockerItem -> {
-                LaunchedEffect(destination) { item.open(destination.itemId, destination.parent) }
+                LaunchedEffect(destination) { item.open(destination.itemId, destination.parent, destination.follow) }
                 // LEAVING CONCEALS: whatever was revealed goes with the page.
                 DisposableEffect(destination) { onDispose { item.departed() } }
                 val held by item.host.state.collectAsStateWithLifecycle()

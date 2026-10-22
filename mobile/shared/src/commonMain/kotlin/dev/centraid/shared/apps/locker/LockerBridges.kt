@@ -68,9 +68,16 @@ public class LockerItemBridge : LockerScreenBridge<LockerItemState, LockerItemEv
     LockerItemReads,
     entropy = ENTROPY_BYTES,
 ) {
-    /** [parent] is the pushing page's title, which the back control says. */
+    /**
+     * [parent] is the pushing page's title, which the back control says. [follow] is a chat
+     * card's member action (`reveal:password`) the page runs once it has loaded (#1135).
+     */
+    public fun open(itemId: String, parent: String, follow: String) {
+        forward(LockerItemEvent(opened = LockerItemEvent.Opened(item_id = itemId, parent = parent, follow = follow)))
+    }
+
     public fun open(itemId: String, parent: String) {
-        forward(LockerItemEvent(opened = LockerItemEvent.Opened(item_id = itemId, parent = parent)))
+        open(itemId, parent, "")
     }
 
     public fun open(itemId: String) {

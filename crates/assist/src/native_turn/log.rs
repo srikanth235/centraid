@@ -78,6 +78,24 @@ impl Log {
         });
     }
 
+    /// Replace each typed secret by the placeholder everywhere the conversation holds it: the
+    /// member's words, the call the model wrote from them and the observations (#1135).
+    pub fn redact(&mut self, secrets: &[String]) {
+        let redact = |text: &mut String| *text = crate::native::member::redact(text, secrets);
+        for entry in &mut self.entries {
+            match entry {
+                Entry::User { text, block } => {
+                    redact(text);
+                    if let Some(block) = block {
+                        redact(block);
+                    }
+                }
+                Entry::Assistant(said) => redact(said),
+                Entry::Tool { text, .. } => redact(text),
+            }
+        }
+    }
+
     /// Replace the observations the runtime compacted (`Session::user`'s `compacted`, a list of
     /// `{obs, text}`), in place.
     pub fn compact(&mut self, notices: &serde_json::Value) {

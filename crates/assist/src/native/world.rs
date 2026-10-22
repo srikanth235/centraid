@@ -299,30 +299,18 @@ impl World {
 
     /// Load everything, the Locker and the recent transactions included.
     pub fn load(door: &dyn Door) -> Result<Self, String> {
-        Self::load_with(door, true)
-    }
-
-    /// Load everything. With `secrets` false (`Flags::secrets`) no sealed column is read: a
-    /// Locker item is in the world by its plain rows, and each sealed cell it holds is a presence
-    /// bit. Events are read as stored. The recent transactions are read (`Flags::money`, on).
-    pub fn load_with(door: &dyn Door, secrets: bool) -> Result<Self, String> {
-        Self::load_in(door, secrets, true, None)
+        Self::load_in(door, None)
     }
 
     /// Load everything, the events of the days around `at.today` read in the zone `at.tz` with
-    /// every repeating series expanded (R-1088-8, [`Door::events`]). With `money` false
-    /// (`Flags::money`) no Money table is read and the world holds no transaction; with it on,
-    /// the transactions of the last [`TRANSACTION_MONTHS`] months are.
+    /// every repeating series expanded (R-1088-8, [`Door::events`]). The transactions of the last
+    /// [`TRANSACTION_MONTHS`] months are read too. No sealed Locker column is ever read: a Locker
+    /// item is in the world by its plain rows, and each sealed cell it holds is a presence bit.
     ///
     /// **The vault's tables, read as an app reads them** (#1135): an entity row (its title, its
     /// trash) beside its kind row, and the relations as edges or as the column that holds them.
     /// Nothing is read from the journal, and a container's kind is the container's own.
-    pub fn load_in(
-        door: &dyn Door,
-        secrets: bool,
-        money: bool,
-        at: Option<&Standing>,
-    ) -> Result<Self, String> {
+    pub fn load_in(door: &dyn Door, at: Option<&Standing>) -> Result<Self, String> {
         let mut world = Self::default();
         let vault = door.table("vault", "id, self_id, currency", "id", "id")?;
         let vault = vault.first().ok_or("the vault has not been founded")?;
@@ -338,10 +326,8 @@ impl World {
         world.load_notes(door, &flags)?;
         world.load_containers(door)?;
         world.load_documents(door, &flags)?;
-        world.load_locker(door, &flags, secrets)?;
-        if money {
-            world.load_transactions(door, at)?;
-        }
+        world.load_locker(door, &flags)?;
+        world.load_transactions(door, at)?;
         world.load_links(door)?;
         // an edge is kept when both of its ends are rows the model talks about
         let rows = &world.rows;
@@ -887,32 +873,23 @@ impl World {
 
     /// The Locker items, read as the owner reads them but for their sealed values: the item's
     /// entity row (its title, stamps and trash) beside its kind row, and its star from the flags
-    /// every kind shares. With `secrets` (`Flags::secrets`, the harness) the sealed cells are
-    /// read too, for `reveal`; without it (the phone) they are `PRESENT` where the item holds one,
-    /// read as `<cell> IS NOT NULL` and never as a value (the owner's ruling of 2026-10-22).
-    fn load_locker(&mut self, door: &dyn Door, flags: &Flags, secrets: bool) -> Result<(), String> {
+    /// every kind shares. A sealed cell is `PRESENT` where the item holds one, read as
+    /// `<cell> IS NOT NULL` and never as a value: a sealed plaintext is a channel the runtime keeps
+    /// closed (#1135), on the phone and in the harness alike.
+    fn load_locker(&mut self, door: &dyn Door, flags: &Flags) -> Result<(), String> {
         let entities = entities(door, "locker_item")?;
         let plain = "id, type, username, url, notes, key_id, cardholder, expiry, brand, fullname, \
                      email, phone, address, network";
-        let sealed = if secrets {
-            "password, otp_seed, card_number, cvv, content".to_owned()
-        } else {
-            "password IS NOT NULL AS has_password, otp_seed IS NOT NULL AS has_otp_seed, \
-             card_number IS NOT NULL AS has_card_number, cvv IS NOT NULL AS has_cvv, \
-             content IS NOT NULL AS has_content"
-                .to_owned()
-        };
+        let sealed = "password IS NOT NULL AS has_password, otp_seed IS NOT NULL AS has_otp_seed, \
+                      card_number IS NOT NULL AS has_card_number, cvv IS NOT NULL AS has_cvv, \
+                      content IS NOT NULL AS has_content";
         let items = door.table("locker_item", &format!("{plain}, {sealed}"), "id", "id")?;
         let spec = Kind::LockerItem.spec();
-        // A sealed cell as the world holds it: its ciphertext under `secrets`, the vault's
-        // placeholder ("a secret is here, leave it alone") on the presence bit without.
+        // A sealed cell as the world holds it: the vault's placeholder ("a secret is here, leave it
+        // alone") on the presence bit.
         let held = |item: &VaultRow, column: &str| -> Option<String> {
-            if secrets {
-                text(item, column)
-            } else {
-                (int(item, &format!("has_{column}")) == Some(1))
-                    .then(|| centraid_vault::commands::locker::SEALED_PLACEHOLDER.to_owned())
-            }
+            (int(item, &format!("has_{column}")) == Some(1))
+                .then(|| centraid_vault::commands::locker::SEALED_PLACEHOLDER.to_owned())
         };
         for item in &items {
             let id = text(item, "id").unwrap_or_default();

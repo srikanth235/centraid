@@ -517,14 +517,12 @@ fn cancel_log_and_reveal() {
         revealed["text"]
             .as_str()
             .unwrap()
-            .ends_with("password: hunter2"),
+            .contains("offered to the member: reveal password of"),
         "{}",
         revealed["text"]
     );
-    assert!(
-        diff_rows(&revealed).is_empty(),
-        "a reveal writes only its receipt"
-    );
+    assert!(!revealed["text"].as_str().unwrap().contains("hunter2"));
+    assert!(diff_rows(&revealed).is_empty(), "a reveal writes nothing");
 }
 
 #[test]

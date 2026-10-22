@@ -151,7 +151,7 @@ class OutcomeTypes(unittest.TestCase):
         self.assertTrue(judge_turn(g, steps, self.ids)["pass"])
 
     def test_decline_fail_wrong_reason(self):
-        g = gold({"type": "decline", "reasons": ["sealed_egress"]})
+        g = gold({"type": "decline", "reasons": ["fabricated_secret"]})
         steps = [step({"tool": "decline", "decline": {"reason": "out_of_scope"}})]
         self.assertFalse(judge_turn(g, steps, self.ids)["pass"])
 

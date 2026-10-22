@@ -126,7 +126,8 @@ pub const fn settled_word(outcome: &Confirmed) -> Option<&'static str> {
         Confirmed::Done { .. } => Some("applied"),
         Confirmed::Stale { .. } => Some("stale"),
         Confirmed::Refused { .. } => Some("failed"),
-        Confirmed::Unknown => None,
+        // a locked confirm ran nothing and the card still waits: nothing to record
+        Confirmed::Locked | Confirmed::Unknown => None,
     }
 }
 

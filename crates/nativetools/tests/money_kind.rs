@@ -1,13 +1,12 @@
 //! Money in the assistant (#1099, R-1099-8): the read-only `transaction` kind, the months the
-//! world holds, the signed amount, and `Flags::money` off, where the world holds no transaction,
-//! reads no Money table and the kind card is the one the shipped model was trained on.
+//! world holds and the signed amount. Money is on in every session (#1135 retired `Flags::money`).
 
 mod common;
 
 use std::sync::{Arc, Mutex};
 
 use centraid_nativetools::vaultio::{Door, Handle, Ran, SetClock};
-use centraid_nativetools::{Flags, Session, dates, prompt, vaultio};
+use centraid_nativetools::{Flags, Session, dates, vaultio};
 use common::{TODAY, World, call, ids, seeded_with, text};
 use serde_json::{Value, json};
 
@@ -41,13 +40,6 @@ fn world_json() -> Value {
 fn find(session: &mut Session, args: Value) -> Value {
     session.user("");
     call(session, "find", args)
-}
-
-fn money_off() -> Flags {
-    Flags {
-        money: false,
-        ..Flags::default()
-    }
 }
 
 #[test]
@@ -182,30 +174,6 @@ fn nothing_can_write_a_transaction() {
     }
 }
 
-#[test]
-fn with_money_off_the_world_holds_no_transaction_and_the_card_is_the_trained_one() {
-    let world = seeded_with(&world_json());
-    let mut off = world.session_with(TODAY, money_off());
-    let out = find(&mut off, json!({"kind": "transaction"}));
-    assert!(ids(&out["effect"]["rows"]).is_empty(), "{out}");
-    let card = prompt::kind_card_in("USD", false);
-    assert_eq!(card.len(), 11);
-    assert!(card.iter().all(|line| !line.starts_with("transaction:")));
-    let system = off.prompt()["system"]
-        .as_str()
-        .unwrap_or_default()
-        .to_owned();
-    assert!(!system.contains("transaction:"), "{system}");
-    let on = world.session().prompt()["system"]
-        .as_str()
-        .unwrap_or_default()
-        .to_owned();
-    assert!(
-        on.contains("transaction: name, date (posted), amount (USD), account, category, status (posted|void)"),
-        "{on}"
-    );
-}
-
 /// What the runtime asked a door for.
 struct Recording {
     inner: Handle,
@@ -261,14 +229,6 @@ impl Door for Recording {
     fn mint_id(&self) -> String {
         Door::mint_id(&self.inner)
     }
-
-    fn seal(&self, item_id: &str, value: &str) -> Result<(String, String), String> {
-        Door::seal(&self.inner, item_id, value)
-    }
-
-    fn unseal(&self, key_id: &str, item_id: &str, sealed: &str) -> Result<String, String> {
-        Door::unseal(&self.inner, key_id, item_id, sealed)
-    }
 }
 
 fn tables_read(world: &World, flags: Flags) -> Vec<String> {
@@ -288,13 +248,8 @@ fn tables_read(world: &World, flags: Flags) -> Vec<String> {
 }
 
 #[test]
-fn money_off_reads_no_money_table_and_money_on_reads_only_the_window() {
+fn money_reads_only_the_window() {
     let world = seeded_with(&world_json());
-    let off = tables_read(&world, money_off());
-    assert!(
-        off.iter().all(|table| table != "txn" && table != "account"),
-        "{off:?}"
-    );
     let on = tables_read(&world, Flags::default());
     for table in ["txn", "entity"] {
         assert!(on.iter().any(|read| read == table), "{table} in {on:?}");

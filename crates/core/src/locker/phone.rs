@@ -419,6 +419,28 @@ fn totp(
     Ok(answer)
 }
 
+/// Whether `name` with `input` would seal a secret the member typed while the session is shut: a
+/// confirm of a chat write answers "Locker is locked" before it runs a step (#1135).
+#[must_use]
+pub fn locked_for(vault: &Vault, cell: &Cell, name: &str, input: &serde_json::Value) -> bool {
+    if !SEALING_COMMANDS.contains(&name) {
+        return false;
+    }
+    let typed = |value: &serde_json::Value| {
+        value
+            .as_str()
+            .is_some_and(|text| !text.is_empty() && text != SEALED_PLACEHOLDER)
+    };
+    let carries = if name == "locker.set_field" {
+        input["kind"].as_str() == Some("sealed") && typed(&input["value"])
+    } else {
+        SEALED_ITEM_CELLS
+            .iter()
+            .any(|column| typed(&input[*column]))
+    };
+    carries && open_key(cell, vault.clock().now_ms()).is_none()
+}
+
 /// SEAL WHAT THE MEMBER TYPED, BEFORE THE VAULT SEES IT.
 ///
 /// `locker.add_item` and `locker.edit_item` refuse a plaintext secret

@@ -300,7 +300,7 @@ pub fn suggest(door: &dyn Door, tz: &str, scope: Option<App>) -> Vec<Suggestion>
     };
     // Sealed values are out of reach on the phone (R-1088-3): the world holds Locker items by
     // their plain rows, and no suggestion names one.
-    let world = World::load_in(door, false, false, Some(&standing)).unwrap_or_default();
+    let world = World::load_in(door, Some(&standing)).unwrap_or_default();
     suggest_in(&world, today, scope)
 }
 

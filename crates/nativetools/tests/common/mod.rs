@@ -255,3 +255,42 @@ impl World {
         vaultio::text(&rows[0], "id").expect("a calendar")
     }
 }
+
+/// What a Locker item's sealed `column` opens to under the harness key, read straight from the
+/// vault file the way the member's Locker would: the control that a typed secret was sealed and
+/// is the text the member typed.
+#[must_use]
+pub fn opened(world: &World, item_id: &str, column: &str) -> String {
+    use centraid_apps_kit::row::Cell;
+    let now = dates::parse_now(TODAY).expect("a date");
+    let owner = vaultio::Handle::open(
+        world.path(),
+        vaultio::SetClock::at(vaultio::millis_of(now)),
+        "opened",
+    )
+    .expect("the vault opens");
+    let rows = owner
+        .table_where(
+            "locker_item",
+            &format!("id, key_id, {column}"),
+            "id",
+            "id",
+            "id = ?",
+            &[item_id.to_owned()],
+        )
+        .expect("the owner reads");
+    let [row] = rows.as_slice() else {
+        panic!("the item {item_id}: {rows:?}");
+    };
+    let (Some(Cell::Text(key_id)), Some(Cell::Text(sealed))) = (row.get("key_id"), row.get(column))
+    else {
+        panic!("the item holds no {column}: {row:?}");
+    };
+    centraid_vault::custody::locker_key::decrypt_under_locker_key(
+        vaultio::HARNESS_LOCKER_KEY,
+        key_id,
+        item_id,
+        sealed,
+    )
+    .expect("it opens under the harness key")
+}

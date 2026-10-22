@@ -23,9 +23,14 @@ use common::drive::drive;
 use common::{World, call, seeded};
 use serde_json::Value;
 
-/// Pairs the fixture world cannot drive: `(verb, kind, reason)`. Empty: every
-/// pair of the table is driven below.
-const UNDRIVEN: &[(&str, &str, &str)] = &[];
+/// Pairs the fixture world cannot drive: `(verb, kind, reason)`. Every other pair of the table is
+/// driven below.
+const UNDRIVEN: &[(&str, &str, &str)] = &[(
+    "reveal",
+    "locker item",
+    "a reveal runs no command: it ends the turn in a member action the member completes in \
+     Locker, whose own flow writes the receipt (#1135); tests/locker_parity.rs drives it",
+)];
 
 /// Executed commands in the vault's journal, counted per command id.
 fn executed(world: &World) -> BTreeMap<String, usize> {

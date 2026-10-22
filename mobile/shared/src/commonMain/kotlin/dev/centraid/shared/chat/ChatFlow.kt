@@ -37,6 +37,7 @@ import centraid.screen.v1.ChatEvent
 import centraid.screen.v1.ChatState
 import dev.centraid.core.CentraidCore
 import dev.centraid.core.CoreOutcome
+import dev.centraid.shared.apps.locker.LockerGate
 import dev.centraid.shared.kit.InvokeKeys
 import dev.centraid.shared.kit.jsonString
 import okio.ByteString.Companion.encodeUtf8
@@ -110,6 +111,13 @@ public interface ChatDoor {
      * (nothing ran).
      */
     public suspend fun confirm(session: Long, pendingId: String): AssistSettled?
+
+    /**
+     * Open Locker for a confirm that answered LOCKER_LOCKED (#1135): the biometric gate, the same
+     * one Locker's own wall raises. True once the session is open; false when the member declined
+     * or it could not open.
+     */
+    public suspend fun unlockLocker(): Boolean = false
 
     /** The member tapped Cancel: the core drops the parked write and writes nothing. Null when the call failed. */
     public suspend fun dismiss(session: Long, pendingId: String): AssistSettled?
@@ -248,6 +256,8 @@ public class CoreChatDoor(
             AssistRequest(confirm = AssistConfirmRequest(session_id = session, pending_id = pendingId)),
             sessionCore,
         )?.settled
+
+    override suspend fun unlockLocker(): Boolean = LockerGate.shared.unlockAndWait()
 
     override suspend fun dismiss(session: Long, pendingId: String): AssistSettled? =
         ask(
@@ -473,6 +483,7 @@ public class ChatFlow(
             is ChatEffect.Cancel -> door.cancel(effect.session)
             is ChatEffect.Confirm ->
                 reduce(ChatInput.Confirmed(effect.pendingId, door.confirm(effect.session, effect.pendingId)))
+            is ChatEffect.UnlockLocker -> reduce(ChatInput.Unlocked(effect.pendingId, door.unlockLocker()))
             // The card settled when Cancel was tapped; the core's answer changes nothing on screen.
             is ChatEffect.Dismiss -> {
                 door.dismiss(effect.session, effect.pendingId)

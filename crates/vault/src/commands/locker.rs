@@ -101,9 +101,10 @@
 //! - **No entity-wide reader carries a sealed cell**: the journal tokenises the
 //!   five cells (and a duplicate's `fields[].value`), a Locker item has no
 //!   revision, `text_of` indexes the plain fields only, a page over `entity`
-//!   or `edge` serves the item's plain rows and no sealed column, and under the
-//!   assistant's principal a command that reveals or sets a sealed value is
-//!   refused ([`crate::commands::ASSISTANT_CLOSED_OUT`]).
+//!   or `edge` serves the item's plain rows and no sealed column. The chat's
+//!   assistant is the member's principal and meets the same wall: a sealed
+//!   value is a channel its door and runtime keep closed, not an authority
+//!   the vault withholds.
 
 use std::collections::BTreeSet;
 

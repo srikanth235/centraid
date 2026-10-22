@@ -595,6 +595,37 @@ class LockerSpec : StringSpec({
         done.screen.encode().decodeToString() shouldNotContain password
     }
 
+    "a page opened for a chat card's member action runs Locker's own flow once it has loaded, once" {
+        fun openFor(follow: String, secrets: List<LockerSecret>) = item.run(
+            itemView(LockerItemEvent(opened = LockerItemEvent.Opened(item_id = "item-bank", parent = "Chat", follow = follow))),
+            LockerInput.Lock(open = true),
+            LockerInput.Answered(listOf(itemAnswer(bank.copy(secrets = secrets)))),
+        ).first
+        val both = listOf(LockerSecret(column = "password", present = true), LockerSecret(column = "otp_seed", present = true))
+
+        val reveal = openFor("reveal:password", both)
+        reveal.asking.shouldNotBeNull().column shouldBe "password"
+        reveal.follow shouldBe ""
+        reveal.shown.shouldBeNull()
+
+        val code = openFor("code:otp_seed", both)
+        code.asking.shouldNotBeNull().code.shouldBeTrue()
+
+        // the same read again asks for nothing more: the follow ran once
+        item.reduce(reveal.copy(asking = null), LockerInput.Answered(listOf(itemAnswer(bank.copy(secrets = both))))).state.asking.shouldBeNull()
+        // a plain open, an unknown action, or a field the item does not hold asks for nothing
+        openFor("", both).asking.shouldBeNull()
+        openFor("wipe:password", both).asking.shouldBeNull()
+        openFor("reveal:cvv", both).asking.shouldBeNull()
+        // locked at open: the follow waits for the gate, and a relock drops it
+        val waiting = item.run(
+            itemView(LockerItemEvent(opened = LockerItemEvent.Opened(item_id = "item-bank", follow = "reveal:password"))),
+        ).first
+        waiting.asking.shouldBeNull()
+        waiting.follow shouldBe "reveal:password"
+        item.reduce(waiting, LockerInput.Lock(open = false)).state.follow shouldBe ""
+    }
+
     // --- one-time codes (Q-1047-16) ------------------------------------------
 
     fun openSeeded(): LockerHeld<LockerItemState> = item.run(

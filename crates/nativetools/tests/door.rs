@@ -42,17 +42,45 @@ fn ids_come_from_the_seeded_sequence() {
 }
 
 #[test]
-fn a_sealed_cell_opens_under_the_key_it_was_sealed_with() {
+fn a_typed_secret_is_sealed_by_the_door_under_the_key_and_bound_to_its_item() {
     let world = seeded();
     let door = handle(&world, "door:seal");
-    let (key_id, sealed) = door.seal("item-1", "hunter2").expect("it seals");
+    let ran = door
+        .run(
+            "locker.add_item",
+            serde_json::json!({
+                "item_id": "item-sealed", "type": "login", "title": "Gym", "password": "hunter2"
+            }),
+        )
+        .expect("the door answers");
+    assert!(ran.ok, "{:?}", ran.reason);
+    let rows = door
+        .table_where(
+            "locker_item",
+            "id, key_id, password",
+            "id",
+            "id",
+            "id = ?",
+            &["item-sealed".to_owned()],
+        )
+        .expect("the owner reads");
+    let [row] = rows.as_slice() else {
+        panic!("the item: {rows:?}");
+    };
+    let text = |column: &str| match row.get(column) {
+        Some(centraid_apps_kit::row::Cell::Text(text)) => text.clone(),
+        other => panic!("{column}: {other:?}"),
+    };
+    let (key_id, sealed) = (text("key_id"), text("password"));
     assert_ne!(sealed, "hunter2");
-    assert_eq!(
-        door.unseal(&key_id, "item-1", &sealed).as_deref(),
-        Ok("hunter2")
-    );
-    assert!(
-        door.unseal(&key_id, "item-2", &sealed).is_err(),
-        "bound to its item"
-    );
+    let open = |item: &str| {
+        centraid_vault::custody::locker_key::decrypt_under_locker_key(
+            centraid_nativetools::vaultio::HARNESS_LOCKER_KEY,
+            &key_id,
+            item,
+            &sealed,
+        )
+    };
+    assert_eq!(open("item-sealed").ok().as_deref(), Some("hunter2"));
+    assert!(open("item-2").is_err(), "bound to its item");
 }

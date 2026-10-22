@@ -25,7 +25,6 @@ pub enum Say {
     DeclineFabricatedSecret,
     DeclineNeverMind,
     DeclineOutOfScope,
-    DeclineSealedEgress,
     DeclineUnboundedDestruction,
     /// `Found {what}.`
     Found,
@@ -41,6 +40,14 @@ pub enum Say {
     Total,
     /// `Proposed: {what}.`: a write waiting for the member's tap.
     Proposed,
+    /// `Locker is locked. Unlock it, then confirm.`: a confirm that seals a typed secret.
+    LockerLocked,
+    /// `Tap to show the code for "{title}".`: a member action (#1135).
+    OfferCode,
+    /// `Tap to set the {field} of "{title}".`
+    OfferEditSecret,
+    /// `Tap to show the {field} of "{title}".`
+    OfferReveal,
     /// A confirmed card ran.
     Applied,
     /// A confirmed card's rows changed since it was planned.
@@ -89,13 +96,12 @@ pub enum Say {
 
 impl Say {
     /// Every sentence, for the test that holds them against the copy file.
-    pub const ALL: [Self; 36] = [
+    pub const ALL: [Self; 39] = [
         Self::Cap,
         Self::Count,
         Self::DeclineFabricatedSecret,
         Self::DeclineNeverMind,
         Self::DeclineOutOfScope,
-        Self::DeclineSealedEgress,
         Self::DeclineUnboundedDestruction,
         Self::Found,
         Self::FoundSome,
@@ -104,6 +110,10 @@ impl Say {
         Self::Nothing,
         Self::Total,
         Self::Proposed,
+        Self::LockerLocked,
+        Self::OfferCode,
+        Self::OfferEditSecret,
+        Self::OfferReveal,
         Self::Applied,
         Self::Stale,
         Self::NotDone,
@@ -137,7 +147,6 @@ impl Say {
             Self::DeclineFabricatedSecret => "SAID_DECLINE_FABRICATED_SECRET",
             Self::DeclineNeverMind => "SAID_DECLINE_NEVER_MIND",
             Self::DeclineOutOfScope => "SAID_DECLINE_OUT_OF_SCOPE",
-            Self::DeclineSealedEgress => "SAID_DECLINE_SEALED_EGRESS",
             Self::DeclineUnboundedDestruction => "SAID_DECLINE_UNBOUNDED_DESTRUCTION",
             Self::Found => "SAID_FOUND",
             Self::FoundSome => "SAID_FOUND_SOME",
@@ -146,6 +155,10 @@ impl Say {
             Self::Nothing => "SAID_NOTHING",
             Self::Total => "SAID_TOTAL",
             Self::Proposed => "SAID_PROPOSED",
+            Self::LockerLocked => "SAID_LOCKER_LOCKED",
+            Self::OfferCode => "SAID_OFFER_CODE",
+            Self::OfferEditSecret => "SAID_OFFER_EDIT_SECRET",
+            Self::OfferReveal => "SAID_OFFER_REVEAL",
             Self::Applied => "SAID_APPLIED",
             Self::Stale => "SAID_STALE",
             Self::NotDone => "SAID_NOT_DONE",
@@ -177,7 +190,6 @@ impl Say {
     pub fn of_decline(reason: &str) -> Self {
         match reason {
             "unbounded_destruction" => Self::DeclineUnboundedDestruction,
-            "sealed_egress" => Self::DeclineSealedEgress,
             "fabricated_secret" => Self::DeclineFabricatedSecret,
             "never_mind" => Self::DeclineNeverMind,
             "not_found" => Self::Nothing,
@@ -256,6 +268,9 @@ mod tests {
             (Say::Total, vec!["field", "value"]),
             (Say::Proposed, vec!["what"]),
             (Say::NotDone, vec!["reason"]),
+            (Say::OfferCode, vec!["title"]),
+            (Say::OfferEditSecret, vec!["field", "title"]),
+            (Say::OfferReveal, vec!["field", "title"]),
             (Say::StepAddTo, vec!["kind", "title", "container"]),
             (Say::StepCancel, vec!["kind", "title"]),
             (Say::StepComplete, vec!["kind", "title"]),
