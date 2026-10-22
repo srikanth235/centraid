@@ -116,6 +116,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .boxed(".centraid.screen.v1.DocsDocumentState.content.data")
         .boxed(".centraid.screen.v1.DocsDocumentEvent.kind.data")
         .boxed(".centraid.core.v1.Response.kind.app_query")
+        // The one read and the one write (#1135): a request carries a map, and
+        // an answer the app's whole typed answer.
+        .boxed(".centraid.core.v1.Request.kind.load")
+        .boxed(".centraid.core.v1.Request.kind.act")
+        .boxed(".centraid.core.v1.Response.kind.load")
+        .boxed(".centraid.core.v1.Response.kind.act")
         .boxed(".centraid.core.v1.AppQueryResponse.answer.tasks_task")
         // The event detail carries its calendar row since #1047.
         .boxed(".centraid.core.v1.AppQueryResponse.answer.agenda_event")

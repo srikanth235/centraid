@@ -948,16 +948,16 @@ impl Handle {
             )))),
             // THE ONE READ (#1135): the app's manifest names the query, the core
             // reads its arguments by name and runs the app's own query.
-            K::Load(request) => Ok(response(wire::response::Kind::Load(
+            K::Load(request) => Ok(response(wire::response::Kind::Load(Box::new(
                 self.with_vault(|vault| crate::load::load(vault, request))?,
-            ))),
+            )))),
             // THE ONE WRITE (#1135): the app's manifest names the action; the
             // core runs the duplicate-tap, frozen-vault and schema rules.
             K::Act(request) => {
                 let changes = crate::events::ChangeFeed::new(self.events());
                 let owner = self.owner();
-                Ok(response(wire::response::Kind::Act(self.with_vault(
-                    |vault| {
+                Ok(response(wire::response::Kind::Act(Box::new(
+                    self.with_vault(|vault| {
                         crate::act::act(
                             &crate::act::Ctx {
                                 vault,
@@ -970,8 +970,8 @@ impl Handle {
                             },
                             request,
                         )
-                    },
-                )?)))
+                    })?,
+                ))))
             }
             // MONEY'S IMPORT PLAN AND HOME'S TILE (#1099). See `money.proto`;
             // `with_vault` like an app query, because they ARE page reads. The

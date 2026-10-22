@@ -292,12 +292,13 @@ fn mint_missing_id(
         .get("properties")
         .and_then(|properties| properties.get("item_id"))
         .is_some();
-    if requires_item_id && !statable {
-        if let Value::Object(object) = &mut input {
-            object
-                .entry("item_id")
-                .or_insert_with(|| Value::String(ctx.vault.ids().next()));
-        }
+    if requires_item_id
+        && !statable
+        && let Value::Object(object) = &mut input
+    {
+        object
+            .entry("item_id")
+            .or_insert_with(|| Value::String(ctx.vault.ids().next()));
     }
     input
 }

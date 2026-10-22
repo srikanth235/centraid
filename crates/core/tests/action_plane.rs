@@ -22,6 +22,9 @@ use centraid_core::CoreError;
 use centraid_vault::backup::ledger::{Destination, Ledger};
 use common::chat::{Sample, sample};
 
+/// Arguments by name.
+type Pairs = Vec<(&'static str, wire::Value)>;
+
 fn text(value: &str) -> wire::Value {
     wire::Value {
         kind: Some(wire::value::Kind::Text(value.to_owned())),
@@ -48,16 +51,16 @@ fn load(
     pairs: &[(&str, wire::Value)],
 ) -> Result<wire::LoadResponse, CoreError> {
     let answer = sample.handle.call(&wire::Request {
-        kind: Some(wire::request::Kind::Load(wire::LoadRequest {
+        kind: Some(wire::request::Kind::Load(Box::new(wire::LoadRequest {
             app: app.to_owned(),
             query: query.to_owned(),
             zone: "UTC".to_owned(),
             params: params(pairs),
             ..wire::LoadRequest::default()
-        })),
+        }))),
     })?;
     match answer.kind {
-        Some(wire::response::Kind::Load(loaded)) => Ok(loaded),
+        Some(wire::response::Kind::Load(loaded)) => Ok(*loaded),
         other => panic!("a load answered {other:?}"),
     }
 }
@@ -70,35 +73,55 @@ fn act_with(
     pairs: &[(&str, wire::Value)],
 ) -> Result<wire::ActResponse, CoreError> {
     let answer = sample.handle.call(&wire::Request {
-        kind: Some(wire::request::Kind::Act(wire::ActRequest {
+        kind: Some(wire::request::Kind::Act(Box::new(wire::ActRequest {
             app: app.to_owned(),
             action: action.to_owned(),
             input: params(pairs),
             invoke_key: key.to_owned(),
-        })),
+        }))),
     })?;
     match answer.kind {
-        Some(wire::response::Kind::Act(done)) => Ok(done),
+        Some(wire::response::Kind::Act(done)) => Ok(*done),
         other => panic!("an act answered {other:?}"),
     }
 }
 
-fn count(sample: &Sample, sql: &str, bind: &str) -> i64 {
-    sample
+/// How many entities satisfy a predicate with one text bind, read through the page door
+/// a shell reads through.
+fn count(sample: &Sample, predicate: &str, bind: &str) -> i64 {
+    let answer = sample
         .handle
-        .with_vault(|vault| {
-            Ok(vault.read(|connection| {
-                Ok(connection.query_row(sql, [bind], |row| row.get::<_, i64>(0))?)
-            })?)
+        .call(&wire::Request {
+            kind: Some(wire::request::Kind::Page(wire::PageRequest {
+                query: Some(wire::PageQuery {
+                    name: "action_plane.count".to_owned(),
+                    select: vec!["id".to_owned()],
+                    from: "entity".to_owned(),
+                    r#where: Some(predicate.to_owned()),
+                    bind: vec![text(bind)],
+                    order: Some(wire::PageOrder {
+                        sort_column: "id".to_owned(),
+                        pk_column: "id".to_owned(),
+                        descending: false,
+                    }),
+                    ..wire::PageQuery::default()
+                }),
+                limit: 500,
+                after: None,
+            })),
         })
-        .expect("a count")
+        .expect("a page");
+    match answer.kind {
+        Some(wire::response::Kind::Page(page)) => i64::try_from(page.rows.len()).expect("a count"),
+        other => panic!("a page answered {other:?}"),
+    }
 }
 
 #[test]
 fn every_app_answers_a_load_by_the_name_its_manifest_declares() {
     use wire::app_query_response::Answer as A;
     let sample = sample();
-    let cases: [(&str, &str, Vec<(&str, wire::Value)>); 9] = [
+    let cases: [(&str, &str, Pairs); 9] = [
         ("agenda", "upcoming", vec![]),
         ("docs", "drive", vec![("shelf", text("all"))]),
         ("health", "today", vec![]),
@@ -175,12 +198,7 @@ fn a_load_the_manifest_does_not_declare_or_the_query_does_not_take_is_refused() 
 fn every_app_takes_an_act_and_refuses_a_bad_input_with_its_check() {
     let sample = sample();
     // (app, action, a good input, a bad input)
-    let cases: [(
-        &str,
-        &str,
-        Vec<(&str, wire::Value)>,
-        Vec<(&str, wire::Value)>,
-    ); 9] = [
+    let cases: [(&str, &str, Pairs, Pairs); 9] = [
         (
             "agenda",
             "propose",
@@ -321,25 +339,14 @@ fn the_same_invoke_key_runs_once() {
     assert_eq!(second.invocation_id, first.invocation_id);
     assert_eq!(second.output, first.output);
     assert_eq!(
-        count(
-            &sample,
-            "SELECT count(*) FROM entity WHERE title = ?1",
-            "Dedupe me"
-        ),
+        count(&sample, "title = ?", "Dedupe me"),
         1,
         "the second tap wrote nothing"
     );
 
     // A fresh key is a fresh act; the same key for a different act is a mistake.
     ask("tap-2", "Dedupe me");
-    assert_eq!(
-        count(
-            &sample,
-            "SELECT count(*) FROM entity WHERE title = ?1",
-            "Dedupe me"
-        ),
-        2
-    );
+    assert_eq!(count(&sample, "title = ?", "Dedupe me"), 2);
     assert!(matches!(
         act_with(&sample, "tasks", "add", "tap-1", &[("title", text("Something else"))]),
         Err(CoreError::InvalidRequest { detail }) if detail.contains("different act")
@@ -397,11 +404,7 @@ fn a_frozen_vault_refuses_every_write_and_names_the_check() {
     assert!(check.detail.contains("epoch 2"), "{}", check.detail);
     assert!(refused.reason.contains("moved to another phone"));
     assert_eq!(
-        count(
-            &sample,
-            "SELECT count(*) FROM entity WHERE title = ?1",
-            "After"
-        ),
+        count(&sample, "title = ?", "After"),
         0,
         "a frozen vault writes nothing"
     );
@@ -430,14 +433,7 @@ fn a_frozen_vault_refuses_every_write_and_names_the_check() {
         .expect("a refusal is an answer");
     assert!(!ran.ok);
     assert_eq!(ran.predicate.as_deref(), Some("vault_moved"));
-    assert_eq!(
-        count(
-            &sample,
-            "SELECT count(*) FROM entity WHERE title = ?1",
-            "Through the chat"
-        ),
-        0
-    );
+    assert_eq!(count(&sample, "title = ?", "Through the chat"), 0);
 }
 
 #[test]
@@ -451,14 +447,7 @@ fn an_executed_act_carries_the_action_that_takes_it_back() {
     else {
         panic!("the inverse names what was created: {inverse:?}");
     };
-    assert_eq!(
-        count(
-            &sample,
-            "SELECT count(*) FROM entity WHERE id = ?1 AND deleted_at IS NULL",
-            &id
-        ),
-        1
-    );
+    assert_eq!(count(&sample, "id = ? AND deleted_at IS NULL", &id), 1);
     let undone = act_with(
         &sample,
         "tasks",
@@ -477,11 +466,7 @@ fn an_executed_act_carries_the_action_that_takes_it_back() {
         "{undone:?}"
     );
     assert_eq!(
-        count(
-            &sample,
-            "SELECT count(*) FROM entity WHERE id = ?1 AND deleted_at IS NULL",
-            &id
-        ),
+        count(&sample, "id = ? AND deleted_at IS NULL", &id),
         0,
         "the task is in the trash"
     );
