@@ -72,7 +72,17 @@ fn act_with(
     key: &str,
     pairs: &[(&str, wire::Value)],
 ) -> Result<wire::ActResponse, CoreError> {
-    let answer = sample.handle.call(&wire::Request {
+    act_on(&sample.handle, app, action, key, pairs)
+}
+
+fn act_on(
+    handle: &centraid_core::Handle,
+    app: &str,
+    action: &str,
+    key: &str,
+    pairs: &[(&str, wire::Value)],
+) -> Result<wire::ActResponse, CoreError> {
+    let answer = handle.call(&wire::Request {
         kind: Some(wire::request::Kind::Act(Box::new(wire::ActRequest {
             app: app.to_owned(),
             action: action.to_owned(),
@@ -358,6 +368,34 @@ fn the_same_invoke_key_runs_once() {
     let retried = ask("tap-3", "Now it has a title");
     assert_eq!(retried.status, wire::ActStatus::Executed as i32);
     assert!(!retried.replayed);
+}
+
+/// THE KEY SURVIVES A RESTART: the commit records it in the vault, so a tap
+/// the phone re-delivers after the app was killed is `replayed` and writes
+/// nothing. A key kept in memory forgot it.
+#[test]
+fn the_same_invoke_key_runs_once_across_a_restart() {
+    let sample = sample();
+    let first = act_with(&sample, "tasks", "add", "tap-restart", &[("title", text("Once"))])
+        .expect("an act");
+    assert_eq!(first.status, wire::ActStatus::Executed as i32);
+    assert!(!first.replayed);
+
+    sample.handle.close();
+    let reopened = centraid_core::Core::open(centraid_core::CoreConfig::new(sample.vault_path()))
+        .expect("the vault opens again");
+    let second = act_on(&reopened, "tasks", "add", "tap-restart", &[("title", text("Once"))])
+        .expect("an act");
+    assert!(second.replayed, "the restarted core remembers the key");
+    assert_eq!(second.status, wire::ActStatus::Executed as i32);
+    assert_eq!(second.invocation_id, first.invocation_id);
+    assert_eq!(second.output, first.output);
+    assert_eq!(second.inverse, first.inverse, "and what takes it back");
+    assert!(matches!(
+        act_on(&reopened, "tasks", "add", "tap-restart", &[("title", text("Another"))]),
+        Err(CoreError::InvalidRequest { detail }) if detail.contains("different act")
+    ));
+    reopened.close();
 }
 
 #[test]

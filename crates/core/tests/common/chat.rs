@@ -19,6 +19,13 @@ pub struct Sample {
     pub handle: Handle,
 }
 
+impl Sample {
+    /// Where the vault file is, so a test can close the core and open it again.
+    pub fn vault_path(&self) -> std::path::PathBuf {
+        self.dir.join("vault.db")
+    }
+}
+
 impl Drop for Sample {
     fn drop(&mut self) {
         self.handle.close();
