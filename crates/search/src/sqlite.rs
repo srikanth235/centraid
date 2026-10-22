@@ -137,22 +137,34 @@ impl<'connection> SqliteDoor<'connection> {
     }
 }
 
-/// The kinds a request names, each held to the searchable list.
-fn kinds_of(request_kinds: &[String]) -> Result<Vec<Kind>, SearchError> {
+/// The kinds `principal` may search: every searchable kind, but for a caller
+/// that cannot reach Locker ([`Principal::may_search_locker`]) not Locker's.
+fn searchable_by(principal: &Principal) -> Vec<Kind> {
+    SEARCHABLE
+        .iter()
+        .copied()
+        .filter(|kind| *kind != Kind::LockerItem || principal.may_search_locker())
+        .collect()
+}
+
+/// The kinds a request names, each held to the list `principal` may search. No
+/// kind named is every kind it may search.
+fn kinds_of(principal: &Principal, request_kinds: &[String]) -> Result<Vec<Kind>, SearchError> {
+    let allowed = searchable_by(principal);
     let mut kinds = Vec::new();
     for word in request_kinds {
         let kind = Kind::parse(word)
-            .filter(|kind| SEARCHABLE.contains(kind))
+            .filter(|kind| allowed.contains(kind))
             .ok_or_else(|| SearchError::NotSearchable {
                 kind: word.clone(),
-                count: SEARCHABLE.len(),
+                count: allowed.len(),
             })?;
         if !kinds.contains(&kind) {
             kinds.push(kind);
         }
     }
     if kinds.is_empty() {
-        kinds.extend(SEARCHABLE);
+        kinds = allowed;
     }
     Ok(kinds)
 }
@@ -422,8 +434,7 @@ fn each_statement(request: &EachRequest, kinds: &[Kind]) -> Result<(String, Bind
 
 impl Search for SqliteDoor<'_> {
     fn query(&self, principal: &Principal, request: &SearchRequest) -> Result<Answer, SearchError> {
-        let _ = principal;
-        let kinds = kinds_of(&request.kinds)?;
+        let kinds = kinds_of(principal, &request.kinds)?;
         // Compiled before the window is read, so a query with nothing to search
         // is refused whatever its window.
         match_expression(&request.query)?;
@@ -498,8 +509,7 @@ impl Search for SqliteDoor<'_> {
         principal: &Principal,
         request: &EachRequest,
     ) -> Result<Vec<Target>, SearchError> {
-        let _ = principal;
-        let kinds = kinds_of(&request.kinds)?;
+        let kinds = kinds_of(principal, &request.kinds)?;
         match_expression(&request.query)?;
         let (sql, binds) = each_statement(request, &kinds)?;
         let hits = self.hits(&sql, binds)?;
@@ -527,12 +537,12 @@ impl Search for SqliteDoor<'_> {
         query: &str,
     ) -> Result<Option<String>, SearchError> {
         kinds_of(
+            principal,
             &entities
                 .iter()
                 .map(|word| (*word).to_owned())
                 .collect::<Vec<_>>(),
         )?;
-        let _ = principal;
         self.corrected(query, false)
     }
 
@@ -543,12 +553,12 @@ impl Search for SqliteDoor<'_> {
         query: &str,
     ) -> Result<Option<String>, SearchError> {
         kinds_of(
+            principal,
             &entities
                 .iter()
                 .map(|word| (*word).to_owned())
                 .collect::<Vec<_>>(),
         )?;
-        let _ = principal;
         self.corrected(query, true)
     }
 }
@@ -562,17 +572,41 @@ mod tests {
         for word in ["locker.item", "flag", "account", "calendar", "nonsense"] {
             assert!(
                 matches!(
-                    kinds_of(&[word.to_owned()]),
+                    kinds_of(&Principal::Owner, &[word.to_owned()]),
                     Err(SearchError::NotSearchable { .. })
                 ),
                 "{word}"
             );
         }
-        assert_eq!(kinds_of(&[]).expect("all").len(), SEARCHABLE.len());
         assert_eq!(
-            kinds_of(&["note".to_owned(), "note".to_owned()]).expect("one"),
+            kinds_of(&Principal::Owner, &[]).expect("all").len(),
+            SEARCHABLE.len()
+        );
+        assert_eq!(
+            kinds_of(&Principal::Owner, &["note".to_owned(), "note".to_owned()]).expect("one"),
             vec![Kind::Note]
         );
+    }
+
+    #[test]
+    fn the_assistant_is_never_offered_nor_answered_a_locker_item() {
+        let assistant = Principal::Assistant;
+        for word in ["locker_item", "locker.item"] {
+            assert!(
+                matches!(
+                    kinds_of(&assistant, &[word.to_owned()]),
+                    Err(SearchError::NotSearchable { .. })
+                ),
+                "{word}"
+            );
+        }
+        // Naming Locker beside another kind is refused whole, not trimmed.
+        assert!(kinds_of(&assistant, &["note".to_owned(), "locker_item".to_owned()]).is_err());
+        let all = kinds_of(&assistant, &[]).expect("all");
+        assert_eq!(all.len(), SEARCHABLE.len() - 1);
+        assert!(!all.contains(&Kind::LockerItem));
+        // The owner and Locker's own search still name it.
+        assert!(kinds_of(&Principal::Owner, &["locker_item".to_owned()]).is_ok());
     }
 
     /// THE CAP IS NOT COSMETIC: the tail leg is walked by FTS5 in rowid

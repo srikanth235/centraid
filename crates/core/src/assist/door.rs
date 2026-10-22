@@ -162,7 +162,7 @@ impl Door for CoreDoor {
                         centraid_search::SqliteDoor::open(connection, vault.words()).and_then(
                             |door| {
                                 door.query(
-                                    &centraid_search::Principal::Owner,
+                                    &centraid_search::Principal::Assistant,
                                     &centraid_search::SearchRequest::new(entity, text, limit),
                                 )
                             },

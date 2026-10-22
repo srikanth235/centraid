@@ -439,3 +439,139 @@ fn with_the_locker_off_no_response_names_an_item_its_tag_its_star_or_its_edges()
     }
     assert_eq!(locker_reads(&log.lock().unwrap()), Vec::<String>::new());
 }
+
+// ---------------------------------------------------------------------------
+// The search door the assistant reads through never answers a Locker item (#1135).
+//
+// The vault's one index holds a Locker item by its plain text, so an owner's
+// search finds `Home wifi`; the assistant's principal is refused the kind by name
+// and its unnamed-kind searches leave it out, whether the policy is on or off.
+// ---------------------------------------------------------------------------
+
+fn handle_of(world: &World) -> Handle {
+    let now = dates::parse_now(TODAY).expect("a date");
+    Handle::open(
+        world.path(),
+        SetClock::at(vaultio::millis_of(now)),
+        "locker-search",
+    )
+    .expect("the vault opens")
+}
+
+#[test]
+fn the_assistants_door_never_returns_a_locker_item_from_search_or_query_each() {
+    use centraid_search::{EachRequest, Principal, Search as _, SearchRequest, SqliteDoor};
+    let world = seeded();
+    let handle = handle_of(&world);
+
+    // THE CONTROL: the owner's door finds the item by its plain title, by name and
+    // by asking for every kind, so the silence below is the principal's.
+    let owner_sees = |kinds: Vec<String>| -> Vec<String> {
+        handle
+            .vault
+            .read(|connection| {
+                let door = SqliteDoor::open(connection, handle.vault.words()).expect("a door");
+                Ok(door
+                    .query_each(&Principal::Owner, &EachRequest::new(kinds, "wifi", 8))
+                    .expect("answers")
+                    .into_iter()
+                    .map(|target| target.entity)
+                    .collect())
+            })
+            .expect("reads")
+    };
+    assert!(
+        owner_sees(vec!["locker_item".to_owned()]).contains(&"locker_item".to_owned()),
+        "the owner's door does not find the Locker item, so this test proves nothing"
+    );
+    assert!(owner_sees(Vec::new()).contains(&"locker_item".to_owned()));
+
+    // THE ASSISTANT'S DOOR (`Door::search`, as the `search` tool asks it): the kind
+    // is refused by name, whatever the text.
+    for text in ["wifi", "Home wifi", "home"] {
+        assert!(
+            handle.search("locker_item", text, 50).is_err(),
+            "a Locker kind was searched for `{text}`"
+        );
+    }
+    // Every kind it may name answers, and no answer holds a Locker item.
+    for entity in ["person", "note", "event", "task", "document"] {
+        let found = handle.search(entity, "wifi", 50).expect("answers");
+        assert!(found.iter().all(|target| target.entity != "locker_item"));
+    }
+
+    // `query_each` and `query`, under the assistant's principal: naming Locker is
+    // refused (alone or beside another kind), naming nothing leaves it out.
+    handle
+        .vault
+        .read(|connection| {
+            let door = SqliteDoor::open(connection, handle.vault.words()).expect("a door");
+            for kinds in [
+                vec!["locker_item".to_owned()],
+                vec!["note".to_owned(), "locker_item".to_owned()],
+            ] {
+                assert!(
+                    door.query_each(
+                        &Principal::Assistant,
+                        &EachRequest::new(kinds.clone(), "wifi", 8)
+                    )
+                    .is_err(),
+                    "query_each named Locker: {kinds:?}"
+                );
+                let request = SearchRequest::across(kinds, "wifi", 8);
+                assert!(door.query(&Principal::Assistant, &request).is_err());
+            }
+            let each = door
+                .query_each(
+                    &Principal::Assistant,
+                    &EachRequest::new(Vec::new(), "wifi", 8),
+                )
+                .expect("answers");
+            assert!(
+                each.iter().all(|target| target.entity != "locker_item"),
+                "{each:?}"
+            );
+            let any = door
+                .query(
+                    &Principal::Assistant,
+                    &SearchRequest::across(Vec::<String>::new(), "wifi", 8),
+                )
+                .expect("answers");
+            assert!(
+                any.targets()
+                    .unwrap_or_default()
+                    .iter()
+                    .all(|target| target.entity != "locker_item")
+            );
+            // The correction offers the assistant nothing for a Locker kind either.
+            assert!(
+                door.correct(&Principal::Assistant, &["locker_item"], "wifj")
+                    .is_err()
+            );
+            Ok(())
+        })
+        .expect("reads");
+}
+
+#[test]
+fn a_search_tool_call_asks_no_locker_kind_and_returns_no_locker_row_from_the_index() {
+    // The policy is on or off: the `search` tool's full-text leg asks the door
+    // for the kinds it lists, and never a Locker one (the recording door sees it).
+    for locker in [false, true] {
+        let world = seeded();
+        let (mut session, log) = recorded(&world, locker);
+        session.user("anything about the wifi");
+        call(&mut session, "search", json!({"text": "wifi"}));
+        call(&mut session, "search", json!({"text": "home"}));
+        let log = log.lock().unwrap();
+        assert!(
+            !log.searches.is_empty(),
+            "the full-text leg was never asked"
+        );
+        assert!(
+            log.searches.iter().all(|entity| !entity.contains("locker")),
+            "locker={locker}: {:?}",
+            log.searches
+        );
+    }
+}

@@ -68,6 +68,10 @@ pub enum Principal {
     Owner,
     /// A blueprint app, under its grant.
     App { app_id: String },
+    /// The chat's assistant, riding the owner's device. It reads as the owner
+    /// does, minus Locker: a Locker item is not a kind it can name, and no
+    /// answer it gets, from `query` or `query_each`, holds one (#1135).
+    Assistant,
 }
 
 impl Principal {
@@ -75,9 +79,16 @@ impl Principal {
     #[must_use]
     pub fn app_id(&self) -> Option<&str> {
         match self {
-            Self::Owner => None,
+            Self::Owner | Self::Assistant => None,
             Self::App { app_id } => Some(app_id),
         }
+    }
+
+    /// Whether this caller may search Locker's items: only the owner. The
+    /// assistant never reaches Locker, and an app holds no grant to it.
+    #[must_use]
+    pub const fn may_search_locker(&self) -> bool {
+        matches!(self, Self::Owner)
     }
 }
 
@@ -269,6 +280,10 @@ pub trait Search {
         let kinds: Vec<String> = if request.kinds.is_empty() {
             centraid_vault::index::SEARCHABLE
                 .iter()
+                .filter(|kind| {
+                    **kind != centraid_vault::model::Kind::LockerItem
+                        || principal.may_search_locker()
+                })
                 .map(|kind| kind.as_str().to_owned())
                 .collect()
         } else {
@@ -393,6 +408,9 @@ mod tests {
     #[test]
     fn a_principal_never_reports_an_unknown_app() {
         assert_eq!(Principal::Owner.app_id(), None);
+        assert_eq!(Principal::Assistant.app_id(), None);
+        assert!(Principal::Owner.may_search_locker());
+        assert!(!Principal::Assistant.may_search_locker());
         assert_eq!(
             Principal::App {
                 app_id: "notes".to_owned()
