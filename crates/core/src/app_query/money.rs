@@ -171,7 +171,7 @@ fn done<T>(loaded: KitResult<T>) -> KitResult<(T, Option<centraid_apps_kit::Deni
 // The ten arms (100-109).
 // ---------------------------------------------------------------------------
 
-pub(super) fn spending(
+pub(crate) fn spending(
     vault: &Vault,
     door: &VaultDoor<'_>,
     now: &str,
@@ -260,7 +260,7 @@ pub(super) fn spending(
     })
 }
 
-pub(super) fn activity(
+pub(crate) fn activity(
     vault: &Vault,
     door: &VaultDoor<'_>,
     now: &str,
@@ -319,7 +319,7 @@ pub(super) fn activity(
     )
 }
 
-pub(super) fn transaction(
+pub(crate) fn transaction(
     vault: &Vault,
     door: &VaultDoor<'_>,
     now: &str,
@@ -380,7 +380,7 @@ pub(super) fn transaction(
     )
 }
 
-pub(super) fn cashflow(
+pub(crate) fn cashflow(
     vault: &Vault,
     door: &VaultDoor<'_>,
     now: &str,
@@ -442,7 +442,7 @@ fn account_line(line: &phone::AccountLine) -> wire::money_accounts::AccountLine 
     }
 }
 
-pub(super) fn accounts(
+pub(crate) fn accounts(
     vault: &Vault,
     door: &VaultDoor<'_>,
     now: &str,
@@ -467,7 +467,7 @@ pub(super) fn accounts(
     })
 }
 
-pub(super) fn rules(door: &VaultDoor<'_>) -> Result<Answer> {
+pub(crate) fn rules(door: &VaultDoor<'_>) -> Result<Answer> {
     settle(door, done(phone::rules(door)), |data| {
         Answer::MoneyRules(wire::MoneyRules {
             rules: data
@@ -490,7 +490,7 @@ pub(super) fn rules(door: &VaultDoor<'_>) -> Result<Answer> {
     })
 }
 
-pub(super) fn categories(door: &VaultDoor<'_>) -> Result<Answer> {
+pub(crate) fn categories(door: &VaultDoor<'_>) -> Result<Answer> {
     settle(door, done(phone::categories(door)), |data| {
         Answer::MoneyCategories(wire::MoneyCategories {
             groups: data
@@ -514,7 +514,7 @@ pub(super) fn categories(door: &VaultDoor<'_>) -> Result<Answer> {
     })
 }
 
-pub(super) fn target_sheet(
+pub(crate) fn target_sheet(
     vault: &Vault,
     door: &VaultDoor<'_>,
     now: &str,
@@ -557,7 +557,7 @@ pub(super) fn target_sheet(
     )
 }
 
-pub(super) fn recurring(
+pub(crate) fn recurring(
     vault: &Vault,
     door: &VaultDoor<'_>,
     now: &str,
@@ -588,7 +588,7 @@ pub(super) fn recurring(
     })
 }
 
-pub(super) fn search(
+pub(crate) fn search(
     vault: &Vault,
     door: &VaultDoor<'_>,
     now: &str,

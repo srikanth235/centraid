@@ -92,29 +92,8 @@ pub struct CommandsUnavailable {
     pub command: &'static str,
 }
 
-/// Whether the **dispatching surface** asks before dispatching. The manifest's
-/// `confirmation`, not the command definition's `confirm` — two gates.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Confirm {
-    None,
-    Required,
-}
-
-/// One row of the action table.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ActionRow {
-    pub action: &'static str,
-    pub command: &'static str,
-    pub confirm: Confirm,
-}
-
-const fn act(action: &'static str, command: &'static str) -> ActionRow {
-    ActionRow {
-        action,
-        command,
-        confirm: Confirm::None,
-    }
-}
+pub use centraid_apps_kit::actions::{ActionRow, Confirm};
+use centraid_apps_kit::actions::{act, confirmed};
 
 /// The thirteen, in the manifest's own order.
 pub const ACTIONS: &[ActionRow] = &[
@@ -131,10 +110,7 @@ pub const ACTIONS: &[ActionRow] = &[
     act("organize-task", "task.organize"),
     act("delete", "entity.trash"),
     // EMPTYING THE TRASH (#1015 D1), behind the manifest's confirmation.
-    ActionRow {
-        confirm: Confirm::Required,
-        ..act("purge", "entity.purge")
-    },
+    confirmed("purge", "entity.purge"),
     // RESTORE UNDOES THE DELETE GESTURE (the trash's one verb every app has).
     act("restore", "entity.restore"),
     // A project, an area and a section are containers: the shared verb.
@@ -150,7 +126,7 @@ pub const ACTIONS: &[ActionRow] = &[
 /// The row for an action, by name.
 #[must_use]
 pub fn action_row(action: &str) -> Option<&'static ActionRow> {
-    ACTIONS.iter().find(|row| row.action == action)
+    centraid_apps_kit::actions::find(&ACTIONS, action)
 }
 
 /// The `act` scopes Tasks declares, derived from the action table: one per

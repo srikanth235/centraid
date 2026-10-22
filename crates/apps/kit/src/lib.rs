@@ -33,6 +33,7 @@
 //! | Invoke a command without an `invoke_key` | the key is a required field on the invocation, not an option (D-1020-D3-5): v0's fallback is the call's ordinal, which is stable only for a handler that makes the same call sequence every time |
 //! | Turn a denial into an error | a denial is a value in the app's own payload; the kit's [`error::KitError`] has no denial variant |
 
+pub mod actions;
 pub mod attached;
 pub mod canonical;
 pub mod changes;

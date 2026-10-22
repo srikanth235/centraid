@@ -994,6 +994,29 @@
       "input": {
         "type": "object",
         "properties": {
+          "shelf": {
+            "type": ["string", "integer"]
+          },
+          "folder_id": {
+            "type": "string"
+          },
+          "type": {
+            "type": ["string", "integer"]
+          },
+          "modified": {
+            "type": ["string", "integer"]
+          },
+          "label": {
+            "type": "string"
+          },
+          "sort": {
+            "type": ["string", "integer"]
+          },
+          "ascending": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1
+          },
           "limit": {
             "type": "integer",
             "minimum": 20,

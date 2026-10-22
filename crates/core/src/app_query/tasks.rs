@@ -63,7 +63,7 @@ fn view_of(asked: &wire::TasksBoardRequest) -> Result<Option<View>> {
     ))
 }
 
-pub(super) fn board(
+pub(crate) fn board(
     vault: &Vault,
     door: &VaultDoor<'_>,
     now: &str,
@@ -123,7 +123,7 @@ pub(super) fn board(
     )
 }
 
-pub(super) fn task(
+pub(crate) fn task(
     vault: &Vault,
     door: &VaultDoor<'_>,
     now: &str,
@@ -170,7 +170,7 @@ pub(super) fn task(
     })
 }
 
-pub(super) fn projects(
+pub(crate) fn projects(
     vault: &Vault,
     door: &VaultDoor<'_>,
     now: &str,
@@ -198,7 +198,7 @@ pub(super) fn projects(
 
 /// `tasks.trash`: the trashed tasks, each day read in the request's zone (none
 /// when no zone resolved).
-pub(super) fn trash(
+pub(crate) fn trash(
     vault: &Vault,
     door: &VaultDoor<'_>,
     asked: &wire::TasksTrashRequest,
@@ -230,7 +230,7 @@ pub(super) fn trash(
     })
 }
 
-pub(super) fn search(
+pub(crate) fn search(
     vault: &Vault,
     door: &VaultDoor<'_>,
     now: &str,
@@ -312,7 +312,7 @@ pub(super) fn search(
     })
 }
 
-pub(super) fn catch_up(
+pub(crate) fn catch_up(
     vault: &Vault,
     door: &VaultDoor<'_>,
     now: &str,

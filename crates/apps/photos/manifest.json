@@ -1106,6 +1106,11 @@
         "properties": {
           "term": {
             "type": "string"
+          },
+          "correct": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1
           }
         },
         "additionalProperties": false

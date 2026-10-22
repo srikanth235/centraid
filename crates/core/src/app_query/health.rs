@@ -134,7 +134,7 @@ fn workout_row(workout: Workout, zone: Option<&FireZone>) -> wire::HealthWorkout
 // The six arms (120-125).
 // ---------------------------------------------------------------------------
 
-pub(super) fn today(
+pub(crate) fn today(
     vault: &Vault,
     door: &VaultDoor<'_>,
     now: &str,
@@ -184,7 +184,7 @@ pub(super) fn today(
     )
 }
 
-pub(super) fn series(
+pub(crate) fn series(
     vault: &Vault,
     door: &VaultDoor<'_>,
     now: &str,
@@ -224,7 +224,7 @@ pub(super) fn series(
     )
 }
 
-pub(super) fn trends(
+pub(crate) fn trends(
     vault: &Vault,
     door: &VaultDoor<'_>,
     now: &str,
@@ -260,7 +260,7 @@ pub(super) fn trends(
     })
 }
 
-pub(super) fn workouts(
+pub(crate) fn workouts(
     vault: &Vault,
     door: &VaultDoor<'_>,
     asked: &wire::HealthWorkoutsRequest,
@@ -318,7 +318,7 @@ pub(super) fn workouts(
     )
 }
 
-pub(super) fn workout(
+pub(crate) fn workout(
     vault: &Vault,
     door: &VaultDoor<'_>,
     asked: &wire::HealthWorkoutRequest,
@@ -337,7 +337,7 @@ pub(super) fn workout(
     })
 }
 
-pub(super) fn follow_view(
+pub(crate) fn follow_view(
     vault: &Vault,
     door: &VaultDoor<'_>,
     now: &str,

@@ -1396,19 +1396,19 @@
           "account_id": {
             "type": "string"
           },
-          "category": {
-            "type": "string"
-          },
-          "uncategorised": {
-            "type": "boolean"
-          },
-          "cursor": {
-            "type": "object"
-          },
           "limit": {
             "type": "integer",
             "minimum": 1,
             "maximum": 500
+          },
+          "category_filter": {
+            "type": ["string", "integer"]
+          },
+          "category_id": {
+            "type": "string"
+          },
+          "after": {
+            "type": "string"
           }
         },
         "additionalProperties": false,
@@ -1534,12 +1534,14 @@
           "currency": {
             "type": "string"
           },
-          "amount_minor": {
+          "typing_amount_minor": {
             "type": "integer",
             "minimum": 0
           },
-          "carry": {
-            "type": "boolean"
+          "typing_carry": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1
           }
         },
         "additionalProperties": false,

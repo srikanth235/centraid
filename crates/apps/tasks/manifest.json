@@ -893,6 +893,12 @@
       "input": {
         "type": "object",
         "properties": {
+          "view": {
+            "type": ["string", "integer"]
+          },
+          "project_id": {
+            "type": "string"
+          },
           "limit": {
             "type": "integer",
             "minimum": 20,

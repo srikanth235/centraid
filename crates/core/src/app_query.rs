@@ -74,20 +74,20 @@ mod chat;
 mod named;
 // People's arm (#1046): its conversions and tests, beside this one.
 // Docs' arm (#1046): its conversions and tests, beside this one.
-mod docs;
+pub(crate) mod docs;
 // Health's arm (#1129): six answers, every figure the app crate's (R-1129-12).
-mod health;
+pub(crate) mod health;
 // Locker's arm (#1047): metadata only; a secret is the session's.
-mod locker;
+pub(crate) mod locker;
 // Money's arm (#1099): ten answers, the import plan and Home's tile.
 pub(crate) mod money;
-mod notes;
-mod people;
+pub(crate) mod notes;
+pub(crate) mod people;
 // Photos' own search (#1097, R-1097-25..27): the text and album legs, the live rule
 // and the correction.
-mod photos;
+pub(crate) mod photos;
 // Tasks' arm (#1046): its conversions and tests, beside this one.
-mod tasks;
+pub(crate) mod tasks;
 // Home's arm (R-CHROME-6): every app's search domain, Locker's included.
 mod vault;
 
@@ -108,7 +108,6 @@ pub(crate) fn answer_recording(
     tables: &mut BTreeSet<String>,
 ) -> Result<wire::AppQueryResponse> {
     use wire::app_query_request::Query as Q;
-    use wire::app_query_response::Answer as A;
     let Some(query) = &request.query else {
         return Err(CoreError::InvalidRequest {
             detail: "an app query names no query".to_owned(),
@@ -117,87 +116,11 @@ pub(crate) fn answer_recording(
     let now = vault.clock().now_text();
     let door = VaultDoor::new(vault);
     let answer = match query {
-        Q::AgendaUpcoming(asked) => {
-            let zone = zone_of(vault, &asked.tz)?;
-            settle(
-                &door,
-                agenda::load_upcoming(
-                    &door,
-                    non_empty(&asked.from),
-                    non_empty(&asked.to),
-                    &now,
-                    &zone,
-                ),
-                |data| A::AgendaUpcoming(upcoming_to_wire(data, &zone, &now)),
-            )?
-        }
-        Q::AgendaDayContext(asked) => {
-            let zone = zone_of(vault, &asked.tz)?;
-            settle(
-                &door,
-                agenda::load_day_context(
-                    &door,
-                    non_empty(&asked.from),
-                    non_empty(&asked.to),
-                    &now,
-                    &zone,
-                ),
-                |data| A::AgendaDayContext(day_context_to_wire(data, &zone, &now)),
-            )?
-        }
-        Q::AgendaParties(_) => settle(&door, agenda::load_parties(&door), |data| {
-            A::AgendaParties(parties_to_wire(data))
-        })?,
-        Q::AgendaEvent(asked) => {
-            let zone = zone_of(vault, &asked.tz)?;
-            settle(
-                &door,
-                centraid_apps_agenda::load_event(
-                    &door,
-                    &asked.event_id,
-                    non_empty(&asked.instance_key),
-                    non_empty(&asked.original_start_local),
-                ),
-                |data| {
-                    A::AgendaEvent(Box::new(wire::AgendaEventDetail {
-                        today: local::today(&zone, &now).unwrap_or_default(),
-                        now_local: local::now_local(&zone, &now).unwrap_or_default(),
-                        event: data.event.map(|event| event_to_wire(event, &zone)),
-                        calendar: data.calendar.map(calendar_to_wire),
-                    }))
-                },
-            )?
-        }
-        Q::AgendaSearch(asked) => {
-            if asked.limit == 0 {
-                // REQUIRED AND VALIDATED, not defaulted: proto3 cannot say
-                // "required", so the refusal is the contract.
-                return Err(CoreError::InvalidRequest {
-                    detail: "an agenda search carries no limit; a default is how an unbounded \
-                             read gets written by accident"
-                        .to_owned(),
-                });
-            }
-            let zone = zone_of(vault, &asked.tz)?;
-            // WHERE A REPEATING HIT OPENS (#1047): the occurrence it means,
-            // asked of the same door after the hits are folded.
-            let loaded = search_events(vault, &door, &asked.term, asked.limit)?.and_then(
-                |((data, corrected), denial)| {
-                    let next = if denial.is_none() {
-                        data.events
-                            .iter()
-                            .map(|event| centraid_apps_agenda::next_occurrence(&door, event, &now))
-                            .collect::<KitResult<Vec<_>>>()?
-                    } else {
-                        Vec::new()
-                    };
-                    Ok(((data, next, corrected), denial))
-                },
-            );
-            settle(&door, loaded, |(data, next, corrected)| {
-                A::AgendaSearch(search_to_wire(data, next, corrected, &zone))
-            })?
-        }
+        Q::AgendaUpcoming(asked) => agenda_upcoming(vault, &door, &now, asked)?,
+        Q::AgendaDayContext(asked) => agenda_day_context(vault, &door, &now, asked)?,
+        Q::AgendaParties(_) => agenda_parties(&door)?,
+        Q::AgendaEvent(asked) => agenda_event(vault, &door, &now, asked)?,
+        Q::AgendaSearch(asked) => agenda_search(vault, &door, &now, asked)?,
         Q::DocsDrive(asked) => docs::drive(vault, &door, &now, asked)?,
         Q::DocsSearch(asked) => docs::search(vault, &door, &now, asked)?,
         Q::DocsDocument(asked) => docs::document(vault, &door, &now, asked)?,
@@ -253,6 +176,126 @@ pub(crate) fn answer_recording(
     *tables = door.take_tables();
     Ok(wire::AppQueryResponse {
         answer: Some(answer),
+    })
+}
+
+type Answer = wire::app_query_response::Answer;
+
+/// `agenda.upcoming`: the window's events, placed on the member's calendar.
+pub(crate) fn agenda_upcoming(
+    vault: &Vault,
+    door: &VaultDoor<'_>,
+    now: &str,
+    asked: &wire::AgendaUpcomingRequest,
+) -> Result<Answer> {
+    use wire::app_query_response::Answer as A;
+    let zone = zone_of(vault, &asked.tz)?;
+    settle(
+        door,
+        agenda::load_upcoming(
+            door,
+            non_empty(&asked.from),
+            non_empty(&asked.to),
+            now,
+            &zone,
+        ),
+        |data| A::AgendaUpcoming(upcoming_to_wire(data, &zone, now)),
+    )
+}
+
+/// `agenda.day-context`: the facts that decorate a calendar day.
+pub(crate) fn agenda_day_context(
+    vault: &Vault,
+    door: &VaultDoor<'_>,
+    now: &str,
+    asked: &wire::AgendaDayContextRequest,
+) -> Result<Answer> {
+    use wire::app_query_response::Answer as A;
+    let zone = zone_of(vault, &asked.tz)?;
+    settle(
+        door,
+        agenda::load_day_context(
+            door,
+            non_empty(&asked.from),
+            non_empty(&asked.to),
+            now,
+            &zone,
+        ),
+        |data| A::AgendaDayContext(day_context_to_wire(data, &zone, now)),
+    )
+}
+
+/// `agenda.parties`: the pickable people of the invite picker.
+pub(crate) fn agenda_parties(door: &VaultDoor<'_>) -> Result<Answer> {
+    use wire::app_query_response::Answer as A;
+    settle(door, agenda::load_parties(door), |data| {
+        A::AgendaParties(parties_to_wire(data))
+    })
+}
+
+/// One event, or one occurrence of a repeating one (the screens' detail read).
+pub(crate) fn agenda_event(
+    vault: &Vault,
+    door: &VaultDoor<'_>,
+    now: &str,
+    asked: &wire::AgendaEventRequest,
+) -> Result<Answer> {
+    use wire::app_query_response::Answer as A;
+    let zone = zone_of(vault, &asked.tz)?;
+    settle(
+        door,
+        centraid_apps_agenda::load_event(
+            door,
+            &asked.event_id,
+            non_empty(&asked.instance_key),
+            non_empty(&asked.original_start_local),
+        ),
+        |data| {
+            A::AgendaEvent(Box::new(wire::AgendaEventDetail {
+                today: local::today(&zone, now).unwrap_or_default(),
+                now_local: local::now_local(&zone, now).unwrap_or_default(),
+                event: data.event.map(|event| event_to_wire(event, &zone)),
+                calendar: data.calendar.map(calendar_to_wire),
+            }))
+        },
+    )
+}
+
+/// `agenda.search`: events by their words, with the occurrence a hit opens.
+pub(crate) fn agenda_search(
+    vault: &Vault,
+    door: &VaultDoor<'_>,
+    now: &str,
+    asked: &wire::AgendaSearchRequest,
+) -> Result<Answer> {
+    use wire::app_query_response::Answer as A;
+    if asked.limit == 0 {
+        // REQUIRED AND VALIDATED, not defaulted: proto3 cannot say
+        // "required", so the refusal is the contract.
+        return Err(CoreError::InvalidRequest {
+            detail: "an agenda search carries no limit; a default is how an unbounded \
+                     read gets written by accident"
+                .to_owned(),
+        });
+    }
+    let zone = zone_of(vault, &asked.tz)?;
+    // WHERE A REPEATING HIT OPENS (#1047): the occurrence it means,
+    // asked of the same door after the hits are folded.
+    let loaded = search_events(vault, door, &asked.term, asked.limit)?.and_then(
+        |((data, corrected), denial)| {
+            let next = if denial.is_none() {
+                data.events
+                    .iter()
+                    .map(|event| centraid_apps_agenda::next_occurrence(door, event, now))
+                    .collect::<KitResult<Vec<_>>>()?
+            } else {
+                Vec::new()
+            };
+            Ok(((data, next, corrected), denial))
+        },
+    );
+    settle(door, loaded, |(data, next, corrected)| {
+        A::AgendaSearch(search_to_wire(data, next, corrected, &zone))
     })
 }
 

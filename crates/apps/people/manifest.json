@@ -1365,6 +1365,12 @@
       "input": {
         "type": "object",
         "properties": {
+          "filter": {
+            "type": ["string", "integer"]
+          },
+          "sort": {
+            "type": ["string", "integer"]
+          },
           "limit": {
             "type": "integer",
             "minimum": 20,

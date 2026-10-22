@@ -8,6 +8,7 @@
 //!
 //! An app is added here and in `Cargo.toml`, and nowhere else in the dispatch.
 
+use centraid_apps_kit::actions::ActionRow;
 use centraid_apps_kit::manifest::Manifest;
 
 /// One app's catalogue.
@@ -15,7 +16,7 @@ use centraid_apps_kit::manifest::Manifest;
 pub(crate) struct App {
     pub id: &'static str,
     manifest: fn() -> &'static Manifest,
-    command_of: fn(&str) -> Option<&'static str>,
+    actions: &'static [ActionRow],
 }
 
 impl App {
@@ -26,7 +27,7 @@ impl App {
 
     /// The vault command an action runs, from the app's Rust action table.
     pub fn command_of(&self, action: &str) -> Option<&'static str> {
-        (self.command_of)(action)
+        centraid_apps_kit::actions::find(self.actions, action).map(|row| row.command)
     }
 }
 
@@ -35,12 +36,7 @@ macro_rules! app {
         App {
             id: $id,
             manifest: $krate::manifest::manifest,
-            command_of: |action| {
-                $rows
-                    .iter()
-                    .find(|row| row.action == action)
-                    .map(|row| row.command)
-            },
+            actions: &$rows,
         }
     };
 }
@@ -53,16 +49,11 @@ pub(crate) const APPS: [App; 9] = [
         centraid_apps_agenda::ACTIONS
     ),
     app!("docs", centraid_apps_docs, centraid_apps_docs::ACTIONS),
-    App {
-        id: "health",
-        manifest: centraid_apps_health::manifest::manifest,
-        command_of: |action| {
-            centraid_apps_health::manifest::ACTIONS
-                .iter()
-                .find(|(name, _)| *name == action)
-                .map(|(_, command)| *command)
-        },
-    },
+    app!(
+        "health",
+        centraid_apps_health,
+        centraid_apps_health::manifest::ACTIONS
+    ),
     app!(
         "locker",
         centraid_apps_locker,

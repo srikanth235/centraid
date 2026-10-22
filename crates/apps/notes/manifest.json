@@ -989,6 +989,26 @@
       "input": {
         "type": "object",
         "properties": {
+          "sort": {
+            "type": ["string", "integer"]
+          },
+          "pinned_only": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "notebook_id": {
+            "type": "string"
+          },
+          "unfiled_only": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "tag_concept_ids": {
+            "type": "string",
+            "description": "a JSON array of concept ids"
+          },
           "limit": {
             "type": "integer",
             "minimum": 20,

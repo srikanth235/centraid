@@ -112,30 +112,8 @@ pub struct CommandsUnavailable {
     pub command: &'static str,
 }
 
-/// Whether the **dispatching surface** asks before dispatching. This is the
-/// manifest's `confirmation`, not the command definition's `confirm` — two
-/// different gates (census §A0).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Confirm {
-    None,
-    Required,
-}
-
-/// One row of the action table.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ActionRow {
-    pub action: &'static str,
-    pub command: &'static str,
-    pub confirm: Confirm,
-}
-
-const fn act(action: &'static str, command: &'static str) -> ActionRow {
-    ActionRow {
-        action,
-        command,
-        confirm: Confirm::None,
-    }
-}
+use centraid_apps_kit::actions::act;
+pub use centraid_apps_kit::actions::{ActionRow, Confirm};
 
 /// The seven, in the manifest's own order.
 pub const ACTIONS: &[ActionRow] = &[
@@ -151,7 +129,7 @@ pub const ACTIONS: &[ActionRow] = &[
 /// The row for an action, by name.
 #[must_use]
 pub fn action_row(action: &str) -> Option<&'static ActionRow> {
-    ACTIONS.iter().find(|row| row.action == action)
+    centraid_apps_kit::actions::find(&ACTIONS, action)
 }
 
 /// The `act` scopes Agenda declares, derived from the action table: one per

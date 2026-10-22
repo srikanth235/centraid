@@ -50,7 +50,7 @@ const APP: &str = "photos";
 /// What the core's legs answer for one term.
 type Found = (photos::queries::SearchData, Vec<centraid_search::Target>);
 
-pub(super) fn search(
+pub(crate) fn search(
     vault: &Vault,
     door: &VaultDoor<'_>,
     asked: &wire::PhotosSearchRequest,
@@ -136,7 +136,7 @@ fn run(
 }
 
 /// `photos.duplicates`: the live library's near-duplicate clusters.
-pub(super) fn duplicates(door: &VaultDoor<'_>) -> Result<Answer> {
+pub(crate) fn duplicates(door: &VaultDoor<'_>) -> Result<Answer> {
     use centraid_media::duplicates::{DUPLICATE_HAMMING_THRESHOLD, Fingerprint, cluster};
 
     let loaded = photos::duplicate_clusters(door, |prints| {
