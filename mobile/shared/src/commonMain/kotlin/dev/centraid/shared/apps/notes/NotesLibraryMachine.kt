@@ -300,7 +300,6 @@ public object NotesLibraryMachine : ScreenMachine<NotesLibraryState, NotesLibrar
                     term,
                     event.search_arrived.corrected,
                     event.search_arrived.containers,
-                    rows = rows.size,
                 )
                 Step(
                     answered.copy(
@@ -308,14 +307,10 @@ public object NotesLibraryMachine : ScreenMachine<NotesLibraryState, NotesLibrar
                             term = term,
                             rows = rows,
                             // A NOTEBOOK THAT MATCHED IS AN ANSWER: no "nothing found" over it.
-                            // The one action is Ask, when the law offered it (#1097).
                             empty = if (rows.isEmpty() && event.search_arrived.containers.isEmpty()) {
-                                SearchLaw.asking(
-                                    EmptyState(
-                                        headline = NotesCopy.SEARCH_NO_MATCH_HEADLINE,
-                                        body = NotesCopy.SEARCH_NO_MATCH_BODY,
-                                    ),
-                                    answered.search ?: SearchField(),
+                                EmptyState(
+                                    headline = NotesCopy.SEARCH_NO_MATCH_HEADLINE,
+                                    body = NotesCopy.SEARCH_NO_MATCH_BODY,
                                 )
                             } else {
                                 null
@@ -574,7 +569,7 @@ public object NotesLibraryMachine : ScreenMachine<NotesLibraryState, NotesLibrar
 
     private object Search : SearchLens<NotesLibraryState> {
         override val screenId: String = SCREEN_ID
-        override val asks: Boolean = true
+        override val askScope: String = "notes"
 
         override fun field(state: NotesLibraryState): SearchField = state.search ?: SearchField()
 

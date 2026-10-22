@@ -26,7 +26,7 @@ pub(super) const CONTAINER_ROWS: usize = 8;
 /// containers and the chat threads.
 const NAMED: &[&str] = &["notebook", "album", "project", "folder", "thread"];
 
-/// The app a Locker item opens in: a roster card domain and no chat scope.
+/// The app a Locker item opens in: a roster app, a card domain and a chat scope.
 const LOCKER: &str = "locker";
 
 /// The app id a Home hit for a thread is answered under: the Chat tab is no app (it is not on
@@ -126,11 +126,10 @@ mod tests {
                 "{kind:?} opens in `{app}`, which the roster does not know"
             );
         }
-        // Locker is a card domain (the owner's ruling of 2026-10-22), and no chat scope.
+        // Locker is a card domain and a chat scope (the owner's ruling of 2026-10-22).
         assert!(
-            centraid_vault::roster::is_card_app(LOCKER)
-                && !centraid_vault::roster::is_scope(LOCKER),
-            "Locker is an app a card names and no scope"
+            centraid_vault::roster::is_card_app(LOCKER) && centraid_vault::roster::is_scope(LOCKER),
+            "Locker is an app a card names and a scope"
         );
         assert!(
             !centraid_vault::roster::is_card_app(CHAT),

@@ -87,8 +87,8 @@ class ChatScopeSpec : StringSpec({
         source("crates/assist/src/app.rs").contains("Health") shouldBe false
     }
 
-    "Locker is not among them, and the list is in the order the menu draws it" {
-        ChatMachine.SCOPABLE_APPS.contains("locker") shouldBe false
+    "Locker is among them, and the list is in the order the menu draws it" {
+        ChatMachine.SCOPABLE_APPS.contains("locker") shouldBe true
         ChatMachine.SCOPABLE_APPS shouldBe ChatMachine.SCOPABLE_APPS.sorted()
     }
 
@@ -97,7 +97,7 @@ class ChatScopeSpec : StringSpec({
         ChatMachine.SCOPABLE_APPS.all { SpringboardPolicy.SPRINGBOARD_ORDER.contains(it) } shouldBe true
         ChatMachine.scopeOf("tasks") shouldBe "agenda"
         ChatMachine.scopeOf("agenda") shouldBe "agenda"
-        ChatMachine.scopeOf("locker") shouldBe ""
+        ChatMachine.scopeOf("locker") shouldBe "locker"
         ChatMachine.scopeOf("") shouldBe ""
     }
 })

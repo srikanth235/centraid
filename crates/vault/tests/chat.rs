@@ -318,12 +318,12 @@ fn the_roster_is_the_schemas_not_a_check() {
         w.run("thread.save_turn", input).status
     };
     assert_eq!(attempt(json!(null), "tasks"), CommandStatus::Executed);
-    // Health is never named; Locker is a card domain and no scope (the owner's ruling of
+    // Health is never named; Locker is a card domain and a scope (the owner's ruling of
     // 2026-10-22); `tasks` is a domain that is no scope (R-1128-F2).
     assert_eq!(attempt(json!(null), "locker"), CommandStatus::Executed);
     assert_ne!(attempt(json!(null), "health"), CommandStatus::Executed);
     assert_ne!(attempt(json!("tasks"), "notes"), CommandStatus::Executed);
-    assert_ne!(attempt(json!("locker"), "notes"), CommandStatus::Executed);
+    assert_eq!(attempt(json!("locker"), "notes"), CommandStatus::Executed);
     assert_eq!(attempt(json!("photos"), "notes"), CommandStatus::Executed);
 }
 

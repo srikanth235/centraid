@@ -3,6 +3,7 @@ package dev.centraid.shared
 import centraid.core.v1.CommandStatus
 import centraid.core.v1.Row
 import centraid.core.v1.Value
+import centraid.screen.v1.SearchAsk
 import centraid.screen.v1.Autosave
 import centraid.screen.v1.NoteDraft
 import centraid.screen.v1.NotesEditorEvent
@@ -164,7 +165,7 @@ class KitLawsSpec : StringSpec({
         var field = SearchField()
         val lens = object : SearchLens<SearchField> {
             override val screenId: String = "probe.search"
-            override val asks: Boolean = true
+            override val askScope: String = "notes"
             override fun field(state: SearchField): SearchField = state
             override fun with(state: SearchField, field: SearchField): SearchField = field
         }
@@ -181,7 +182,7 @@ class KitLawsSpec : StringSpec({
     "search: an answer for a term the member has since changed is stale" {
         val lens = object : SearchLens<SearchField> {
             override val screenId: String = "probe.search"
-            override val asks: Boolean = true
+            override val askScope: String = "notes"
             override fun field(state: SearchField): SearchField = state
             override fun with(state: SearchField, field: SearchField): SearchField = field
         }
@@ -194,7 +195,7 @@ class KitLawsSpec : StringSpec({
     "search: the words corrected are kept for the current answer, cleared by a new term or a close, and never set for a stale or blank one (#1097)" {
         val lens = object : SearchLens<SearchField> {
             override val screenId: String = "probe.search"
-            override val asks: Boolean = true
+            override val askScope: String = "notes"
             override fun field(state: SearchField): SearchField = state
             override fun with(state: SearchField, field: SearchField): SearchField = field
         }
@@ -215,34 +216,32 @@ class KitLawsSpec : StringSpec({
         SearchLaw.answered(lens, SearchLaw.term(lens, typed, "dinnre ").state, "dinnre", "dinner").corrected shouldBe "dinner"
     }
 
-    "search: Ask is the question of a wholly empty current answer for a lens that asks, and nothing else sets it (#1097, R-1097-28)" {
-        fun lens(asks: Boolean) = object : SearchLens<SearchField> {
+    "search: Ask is one row, with its label, question and scope, on every current answer of a lens that asks, matched or not (#1097, #1135)" {
+        fun lens(scope: String?) = object : SearchLens<SearchField> {
             override val screenId: String = "probe.search"
-            override val asks: Boolean = asks
+            override val askScope: String? = scope
             override fun field(state: SearchField): SearchField = state
             override fun with(state: SearchField, field: SearchField): SearchField = field
         }
-        val lens = lens(true)
+        val lens = lens("notes")
         val typed = SearchLaw.term(lens, SearchLaw.opened(lens, SearchField()).state, "zzqx ").state
         val found = centraid.screen.v1.SearchContainer(entity = "core.collection", id = "c", kind_label = "Notebook")
-        val asking = SearchLaw.answered(lens, typed, "zzqx", rows = 0)
-        asking.ask shouldBe "Find zzqx"
-        SearchLaw.asking(centraid.screen.v1.EmptyState(headline = "Nothing."), asking).action_label shouldBe "Ask about “zzqx”"
-        SearchLaw.asking(centraid.screen.v1.EmptyState(headline = "Nothing."), SearchField()).action_label shouldBe ""
-        // Anything found, or no count to speak of, is no Ask.
-        SearchLaw.answered(lens, typed, "zzqx", rows = 1).ask shouldBe ""
-        SearchLaw.answered(lens, typed, "zzqx", containers = listOf(found), rows = 0).ask shouldBe ""
-        SearchLaw.answered(lens, typed, "zzqx").ask shouldBe ""
+        val asking = SearchLaw.answered(lens, typed, "zzqx")
+        asking.ask_row shouldBe SearchAsk(label = "Ask about “zzqx”", question = "Find zzqx", scope = "notes")
+        // Something found is still an answer the member may ask the assistant about.
+        SearchLaw.answered(lens, typed, "zzqx", containers = listOf(found)).ask_row shouldBe asking.ask_row
+        // Home's is unscoped.
+        SearchLaw.answered(lens(""), typed, "zzqx").ask_row?.scope shouldBe ""
         // A stale answer, a closed field and a blank term set none.
-        SearchLaw.answered(lens, typed, "zzq", rows = 0).ask shouldBe ""
-        SearchLaw.answered(lens, SearchLaw.closed(lens, asking).state, "zzqx", rows = 0).ask shouldBe ""
-        SearchLaw.answered(lens, SearchLaw.term(lens, typed, " ").state, " ", rows = 0).ask shouldBe ""
+        SearchLaw.answered(lens, typed, "zzq").ask_row shouldBe null
+        SearchLaw.answered(lens, SearchLaw.closed(lens, asking).state, "zzqx").ask_row shouldBe null
+        SearchLaw.answered(lens, SearchLaw.term(lens, typed, " ").state, " ").ask_row shouldBe null
         // A lens that does not ask never sets it.
-        SearchLaw.answered(lens(false), typed, "zzqx", rows = 0).ask shouldBe ""
+        SearchLaw.answered(lens(null), typed, "zzqx").ask_row shouldBe null
         // A new term, a close and a denial clear it.
-        SearchLaw.term(lens, asking, "zzq").state.ask shouldBe ""
-        SearchLaw.closed(lens, asking).state.ask shouldBe ""
-        SearchLaw.unasked(lens, asking).ask shouldBe ""
+        SearchLaw.term(lens, asking, "zzq").state.ask_row shouldBe null
+        SearchLaw.closed(lens, asking).state.ask_row shouldBe null
+        SearchLaw.unasked(lens, asking).ask_row shouldBe null
         SearchLaw.unasked(lens, SearchField()) shouldBe SearchField()
     }
 

@@ -124,11 +124,12 @@ fn the_model_is_absent_then_without_an_engine_then_present_then_ready() {
 }
 
 #[test]
-fn a_chat_is_scoped_to_an_app_the_assistant_reads_and_never_to_locker() {
+fn a_chat_is_scoped_to_an_app_the_assistant_reads() {
     let sample = common::chat::sample();
     let first = sample.start("");
     assert_eq!(sample.start("notes"), first + 1);
-    for bad in ["locker", "nope", "NOTES"] {
+    assert_eq!(sample.start("locker"), first + 2);
+    for bad in ["tasks", "nope", "NOTES"] {
         let refused = sample.assist(Ask::Start(wire::AssistStartRequest {
             app: bad.to_owned(),
             ..wire::AssistStartRequest::default()
@@ -504,9 +505,11 @@ fn suggestions_name_things_from_this_vault() {
         }
         other => panic!("the task domain was taken as a scope: {other:?}"),
     }
+    // LOCKER IS A SCOPE: its three questions read plain fields and never a sealed value.
+    assert_eq!(prompts("locker").len(), 3);
     assert!(matches!(
         sample.assist(Ask::Suggest(wire::AssistSuggestRequest {
-            app: "locker".to_owned(),
+            app: "nope".to_owned(),
             tz: String::new()
         })),
         Err(CoreError::InvalidRequest { .. })

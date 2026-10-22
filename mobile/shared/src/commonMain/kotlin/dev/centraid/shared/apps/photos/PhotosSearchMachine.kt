@@ -132,8 +132,6 @@ public object PhotosSearchMachine : ScreenMachine<PhotosSearchState, PhotosSearc
                     state.copy(loading = null, failure = null, resting = null, hits = hits),
                     state.query,
                     event.data_.corrected,
-                    // ASK (#1097, R-1097-28): rows are the photographs and the doors, the screen's only results.
-                    rows = hits?.let { it.cells.size + it.top_hits.size },
                 )
                 Step(answered.copy(hits = hits?.let { noMatch(it, answered) }))
             }
@@ -213,19 +211,15 @@ public object PhotosSearchMachine : ScreenMachine<PhotosSearchState, PhotosSearc
     /**
      * THE NO-MATCH STATE of an answer that holds no photograph and no door
      * (#1097, R-1097-30): the query quoted back and the line saying everywhere
-     * search looked (v0's `SEARCH_COPY.miss`), with Ask as its one action when the
-     * field offers it ([SearchLaw.asking]). An answer with anything in it carries none.
+     * search looked (v0's `SEARCH_COPY.miss`). An answer with anything in it carries none.
      */
     private fun noMatch(hits: SearchHits, state: PhotosSearchState): SearchHits {
         if (hits.cells.isNotEmpty() || hits.top_hits.isNotEmpty()) return hits.copy(empty = null)
         val sentence = PhotosCopy.PHOTOS_SEARCH_NO_MATCH_QUERY.replace("{query}", state.query)
         return hits.copy(
-            empty = SearchLaw.asking(
-                EmptyState(
-                    headline = PhotosCopy.PHOTOS_SEARCH_NO_RESULTS,
-                    body = "$sentence ${PhotosCopy.PHOTOS_SEARCH_NO_MATCH_SCOPE}",
-                ),
-                state.search ?: SearchField(),
+            empty = EmptyState(
+                headline = PhotosCopy.PHOTOS_SEARCH_NO_RESULTS,
+                body = "$sentence ${PhotosCopy.PHOTOS_SEARCH_NO_MATCH_SCOPE}",
             ),
         )
     }
@@ -297,7 +291,7 @@ public object PhotosSearchMachine : ScreenMachine<PhotosSearchState, PhotosSearc
     /** Where this screen keeps the shared field. */
     private object Search : SearchLens<PhotosSearchState> {
         override val screenId: String = SCREEN_ID
-        override val asks: Boolean = true
+        override val askScope: String = "photos"
 
         override fun field(state: PhotosSearchState): SearchField = state.search ?: SearchField()
 

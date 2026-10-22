@@ -198,8 +198,13 @@ fn candidates(app: App, world: &World, today: Date) -> Candidates {
             dataless.push(say(app, "What was my biggest expense this month?"));
             dataless.push(say(app, "What came in this month?"));
         }
-        // A Locker item's title is a chip a member did not ask to see: Locker offers no opener.
-        App::Locker => {}
+        // A Locker item's title is a chip a member did not ask to see, so none is backed; each
+        // question reads plain fields (`type`, `starred`) and never a sealed value (R-1088-3).
+        App::Locker => {
+            dataless.push(say(app, "What is in my Locker?"));
+            dataless.push(say(app, "Which logins do I have saved?"));
+            dataless.push(say(app, "Which Locker items are starred?"));
+        }
         App::Docs => {
             if let Some(doc) = first_by(live(world, Kind::Document), newest) {
                 backed.push(say(app, format!("Find the {}", lead_words(&doc.name, 3))));

@@ -176,7 +176,6 @@ public object MoneySearchMachine :
             held,
             held.answers.search?.term ?: "",
             held.answers.search?.corrected.orEmpty(),
-            rows = held.answers.search?.rows?.size,
         )
 
     override fun unanswered(held: MoneyHeld<MoneySearchState>): MoneyHeld<MoneySearchState> =
@@ -195,10 +194,7 @@ public object MoneySearchMachine :
                 else -> MoneyFold.count(total, MoneyCopy.MATCH_ONE, MoneyCopy.MATCH_MANY)
             },
             empty = if (rows.isEmpty()) {
-                SearchLaw.asking(
-                    EmptyState(headline = MoneyFold.fill(MoneyCopy.NOTHING_MATCHES, "term" to shown), body = MoneyCopy.SEARCH_NOT_SEARCHED),
-                    held.screen.field_ ?: SearchField(),
-                )
+                EmptyState(headline = MoneyFold.fill(MoneyCopy.NOTHING_MATCHES, "term" to shown), body = MoneyCopy.SEARCH_NOT_SEARCHED)
             } else {
                 null
             },
@@ -213,7 +209,7 @@ public object MoneySearchMachine :
 
     private object Field : SearchLens<MoneyHeld<MoneySearchState>> {
         override val screenId: String = SCREEN_ID
-        override val asks: Boolean = true
+        override val askScope: String = "money"
 
         override fun field(state: MoneyHeld<MoneySearchState>): SearchField = state.screen.field_ ?: SearchField()
 

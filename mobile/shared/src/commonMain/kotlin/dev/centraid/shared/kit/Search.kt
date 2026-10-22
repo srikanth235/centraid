@@ -1,6 +1,6 @@
 package dev.centraid.shared.kit
 
-import centraid.screen.v1.EmptyState
+import centraid.screen.v1.SearchAsk
 import centraid.screen.v1.SearchContainer
 import centraid.screen.v1.SearchField
 import dev.centraid.design.copy.SharedCopy
@@ -16,12 +16,13 @@ public interface SearchLens<S> {
     public fun with(state: S, field: SearchField): S
 
     /**
-     * DOES THIS SEARCH OFFER ASK (#1097, R-1097-28)? Every searching app does
-     * except Locker (R-1097-29), which never reaches the law. A lens states it
-     * and has no default, so a new search cannot offer Ask by forgetting to say.
-     * Home answers `false`: it keeps its own `ask_question` on its data.
+     * THE CHAT SCOPE THIS SEARCH'S ASK OPENS IN (#1135), or `null` when the
+     * search offers none. Every searching app offers Ask, scoped to itself, and
+     * Home offers it unscoped (""); Locker (R-1097-29) never reaches the law, and
+     * the chat drawer's search finds chats, so neither asks. A lens states it and
+     * has no default, so a new search cannot offer Ask by forgetting to say.
      */
-    public val asks: Boolean
+    public val askScope: String?
 }
 
 /**
@@ -40,7 +41,7 @@ public object SearchLaw {
     public fun <S> term(l: SearchLens<S>, s: S, term: String): Step<S> {
         val next = l.with(
             s,
-            l.field(s).copy(open_ = true, term = term, corrected = "", containers = emptyList(), ask = ""),
+            l.field(s).copy(open_ = true, term = term, corrected = "", containers = emptyList(), ask_row = null),
         )
         return if (term.isBlank()) {
             Step(next)
@@ -79,12 +80,11 @@ public object SearchLaw {
      * for a current answer to a term that is not blank, else cleared, so a
      * stale answer never sets them.
      *
-     * ASK (#1097, R-1097-28): [rows] is how many result rows the answer holds;
-     * `null` says the caller has no answer to speak of. The question to send
-     * ("Find <term>") is set when the answer is the current one, the lens
-     * [SearchLens.asks], and it is WHOLLY EMPTY: no rows and no containers. A
-     * stale answer, an answer with anything in it and a lens that does not ask
-     * clear it. The EMPTY state it belongs to takes its action from [asking].
+     * ASK (#1097, R-1097-28, #1135): the one [SearchAsk] row at the foot of
+     * the answer is set when the answer is the current one and the lens has an
+     * [SearchLens.askScope], WHETHER OR NOT ANYTHING MATCHED: a member who found
+     * rows may still want the assistant. A stale answer and a lens that does not
+     * ask clear it.
      */
     public fun <S> answered(
         l: SearchLens<S>,
@@ -92,17 +92,16 @@ public object SearchLaw {
         answeredTerm: String,
         corrected: String = "",
         containers: List<SearchContainer> = emptyList(),
-        rows: Int? = null,
     ): S {
         val current = answeredTerm.isNotBlank() && answerIsCurrent(l, s, answeredTerm)
-        val asks = current && l.asks && rows == 0 && containers.isEmpty()
+        val scope = l.askScope
         return l.with(
             s,
             l.field(s).copy(
                 answered_term = answeredTerm,
                 corrected = if (current) corrected else "",
                 containers = if (current) containers else emptyList(),
-                ask = if (asks) question(answeredTerm) else "",
+                ask_row = if (current && scope != null) offer(answeredTerm, scope) else null,
             ),
         )
     }
@@ -113,20 +112,21 @@ public object SearchLaw {
      * screen's own state.
      */
     public fun <S> unasked(l: SearchLens<S>, s: S): S =
-        if (l.field(s).ask.isEmpty()) s else l.with(s, l.field(s).copy(ask = ""))
+        if (l.field(s).ask_row == null) s else l.with(s, l.field(s).copy(ask_row = null))
 
     /** The question Ask sends for [term]: the words are copy, the term is trimmed. */
     public fun question(term: String): String = SharedCopy.SEARCH_ASK_QUESTION.replace("{term}", term.trim())
 
-    /** The no-match action's label for [term] (`SEARCH_ASK_ABOUT`). */
+    /** The Ask row's label for [term] (`SEARCH_ASK_ABOUT`). */
     public fun askLabel(term: String): String = SharedCopy.SEARCH_ASK_ABOUT.replace("{term}", term.trim())
 
     /**
-     * A NO-MATCH EMPTY STATE WITH ITS ONE ACTION (#1097, R-1097-30): [empty]
-     * as is when the field offers no Ask, else with the action label the shell
-     * draws where it has a Chat tab. The tap goes to the shell with
-     * [SearchField.ask]; no machine event answers it.
+     * THE ASK ROW FOR [term], opening the chat in [scope] (#1135): the one place
+     * its label, its question and its scope are put together, so every app's
+     * search reads them the same way and a shell only draws the row and hands it
+     * to its router. [scope] is a chat scope (`ChatMachine.SCOPABLE_APPS`) or
+     * "" for every app.
      */
-    public fun asking(empty: EmptyState, field: SearchField): EmptyState =
-        if (field.ask.isEmpty()) empty else empty.copy(action_label = askLabel(field.answered_term))
+    public fun offer(term: String, scope: String): SearchAsk =
+        SearchAsk(label = askLabel(term), question = question(term), scope = scope)
 }

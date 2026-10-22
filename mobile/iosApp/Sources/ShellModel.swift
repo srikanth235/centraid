@@ -709,14 +709,20 @@ final class ShellModel: ObservableObject {
         (try? Centraid_Screen_V1_HomeState(serializedBytes: homeState))?.vault.vaultName ?? ""
     }
 
-    /// ASK THE ASSISTANT, from a screen that found nothing (search's "Ask
-    /// about", #1097): back to Home's root, the Chat tab, and the question sent
-    /// when the chat is ready. The router's act and not a view's: the view only
-    /// reports the intent, and the words are the machine's.
-    func askChat(_ question: String) {
+    /// ASK THE ASSISTANT, from a search's Ask row (#1097, #1135): back to Home's
+    /// root, the Chat tab scoped to the app the member searched from (`scope`,
+    /// the machine's; empty is every app), and the question sent when the chat
+    /// is ready. The router's act and not a view's: the view only reports the
+    /// intent, and the words are the machine's. The scope is the member's explicit
+    /// choice, as the composer's menu is (`setChatScope`): it replaces the one
+    /// the chat had, and the machine's `Opened` rule starts a new thread when it
+    /// differs.
+    func askChat(_ question: String, scope: String) {
         let line = question.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !line.isEmpty else { return }
         path.removeAll()
+        chatScope = scope
+        lastVisitedApp = ""
         openChatTab(asking: line)
     }
 

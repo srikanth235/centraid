@@ -193,7 +193,6 @@ public object DocsDriveMachine : ScreenMachine<DocsDriveState, DocsDriveEvent> {
                     s.search?.term ?: "",
                     event.data_.corrected,
                     event.data_.containers,
-                    rows = arrived.rows.size,
                 )
             } else {
                 s
@@ -749,12 +748,8 @@ public object DocsDriveMachine : ScreenMachine<DocsDriveState, DocsDriveEvent> {
         search: Boolean,
         filtersActive: Boolean,
     ): Pair<EmptyState, DocsDriveData.EmptyAction> = when {
-        // THE ONE ACTION of a search that found nothing is Ask, when the law offered it (#1097);
-        // the shell draws and sends it, so the data's own action stays none.
-        search -> SearchLaw.asking(
-            EmptyState(headline = DocsCopy.EMPTY_SEARCH, body = DocsCopy.EMPTY_SEARCH_BODY),
-            state.search ?: SearchField(),
-        ) to DocsDriveData.EmptyAction.EMPTY_ACTION_NONE
+        search -> EmptyState(headline = DocsCopy.EMPTY_SEARCH, body = DocsCopy.EMPTY_SEARCH_BODY) to
+            DocsDriveData.EmptyAction.EMPTY_ACTION_NONE
         filtersActive -> EmptyState(headline = DocsCopy.EMPTY_FILTERED, action_label = DocsCopy.CLEAR_FILTERS) to
             DocsDriveData.EmptyAction.EMPTY_ACTION_CLEAR_FILTERS
         else -> when (state.destination) {
@@ -990,7 +985,7 @@ public object DocsDriveMachine : ScreenMachine<DocsDriveState, DocsDriveEvent> {
 
     private object Search : SearchLens<DocsDriveState> {
         override val screenId: String = SCREEN_ID
-        override val asks: Boolean = true
+        override val askScope: String = "docs"
 
         override fun field(state: DocsDriveState): SearchField = state.search ?: SearchField()
 

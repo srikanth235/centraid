@@ -214,8 +214,7 @@ fn invalid(detail: impl Into<String>) -> CoreError {
 }
 
 /// The app a request names: empty is every app, and anything that is not a
-/// chat scope is the request's fault — Locker, a card domain and no scope, and
-/// `tasks`, a domain read through Agenda's scope (R-1128-F2, #1128):
+/// chat scope is the request's fault — `tasks`, a domain read through Agenda's scope (R-1128-F2, #1128):
 /// accepting it as an alias would give a thread two names for one app, and the
 /// vault's `chat_thread` CHECK refuses it anyway.
 fn scope_of(app: &str) -> Result<Option<App>> {
@@ -1057,7 +1056,7 @@ mod tests {
     }
 
     #[test]
-    fn locker_and_unknown_apps_are_the_requests_fault() {
+    fn a_domain_and_an_unknown_app_are_the_requests_fault() {
         assert_eq!(scope_of("").unwrap(), None);
         assert_eq!(scope_of("agenda").unwrap(), Some(App::Agenda));
         // TASKS IS A DOMAIN, NOT A SCOPE (R-1128-F2): the refusal names the scope that covers it.
@@ -1067,10 +1066,7 @@ mod tests {
             }
             other => panic!("`tasks` was accepted as a scope: {other:?}"),
         }
-        assert!(matches!(
-            scope_of("locker"),
-            Err(CoreError::InvalidRequest { .. })
-        ));
+        assert_eq!(scope_of("locker").unwrap(), Some(App::Locker));
         assert!(matches!(
             scope_of("nope"),
             Err(CoreError::InvalidRequest { .. })

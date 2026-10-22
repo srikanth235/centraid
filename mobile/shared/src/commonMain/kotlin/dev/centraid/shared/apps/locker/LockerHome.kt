@@ -296,7 +296,7 @@ public object LockerHomeMachine :
             // LOCKER NEVER OFFERS ASK (#1097, R-1097-29): a search term here can itself be a secret, and
             // Ask would write it into a chat thread, the chat index and the model's context. This
             // machine does not go through `SearchLaw.answered`, so the guard is stated, not inherited.
-            ask = "",
+            ask_row = null,
         )
 
     private fun band(current: LockerHomeState.Destination): List<LockerBandTab> = listOf(
