@@ -292,8 +292,12 @@ public sealed interface Destination {
             centraid.screen.v1.LockerHomeState.Destination.DESTINATION_ITEMS,
     ) : Destination
 
-    /** One item. `parent` is the pushing page's title, the back control's word. */
-    public data class LockerItem(val itemId: String, val parent: String = "") : Destination
+    /**
+     * One item. `parent` is the pushing page's title, the back control's word. [follow] is a
+     * [MemberAction] qualifier (`reveal:password`, `code:otp_seed`): once the page has loaded under
+     * an open gate it runs Locker's own flow for that field (#1135).
+     */
+    public data class LockerItem(val itemId: String, val parent: String = "", val follow: String = "") : Destination
 
     /**
      * Add ([itemId] empty — the bridge mints one) or edit. [fromGenerator]

@@ -9398,6 +9398,10 @@ message LockerItemEvent {
   message Opened {
     string item_id = 1;
     string parent = 2;
+    // A member action a chat card offered (`reveal:password`, `code:otp_seed`):
+    // once the page has loaded under an open gate it runs Locker's own flow for
+    // that field. Empty for a plain open.
+    string follow = 3;
   }
 
   message Refreshed {}

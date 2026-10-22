@@ -17,6 +17,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -346,6 +348,27 @@ public class LockerGate(
         input(GateInput.View(event))
     }
 
+    /**
+     * OPEN THE LOCKER FOR A CALLER THAT IS NOT A LOCKER SCREEN (a chat confirm that seals a typed
+     * secret, #1135): ask the wall to unlock and wait for its answer. The shell's seam raises the
+     * OS prompt wherever the member is, so this only asks. True once the session is open; false
+     * when the prompt was cancelled or failed, or none answered in [UNLOCK_WAIT_MS].
+     */
+    public suspend fun unlockAndWait(): Boolean {
+        if (open.value) return true
+        send(LockerLockEvent(unlock = LockerLockEvent.UnlockTapped()))
+        var passed = false
+        return withTimeoutOrNull(UNLOCK_WAIT_MS) {
+            state.first { wall ->
+                when (wall.phase) {
+                    LockerLockState.Phase.PHASE_UNLOCKED -> true
+                    LockerLockState.Phase.PHASE_UNLOCKING -> false.also { passed = true }
+                    else -> passed || wall.phase == LockerLockState.Phase.PHASE_UNAVAILABLE
+                }
+            }.phase == LockerLockState.Phase.PHASE_UNLOCKED
+        } ?: false
+    }
+
     /** A screen's reveal answered LOCKED. */
     public fun expired() {
         input(GateInput.Expired)
@@ -403,6 +426,8 @@ public class LockerGate(
          * screen is drawn under its `LockerLockState`.
          */
         public const val SCREEN_ID: String = "locker.lock"
+
+        private const val UNLOCK_WAIT_MS: Long = 120_000L
 
         private var bound: HomeSession? = null
 

@@ -858,6 +858,32 @@ class ChatMachineSpec : StringSpec({
         gone.settled_line shouldBe "Nothing is waiting on that."
     }
 
+    "a confirm that needs Locker open keeps the card, asks the shell to open Locker, and confirms again once it is" {
+        val working = reduce(waitingCard(), confirmTap()).chat
+        val locked = reduce(working, confirmedAs(AssistSettleOutcome.ASSIST_SETTLE_OUTCOME_LOCKER_LOCKED, "Locker is locked."))
+        locked.effects shouldBe listOf(ChatEffect.UnlockLocker("p1"))
+        // not settled: still in flight, so a second tap finds nothing waiting
+        cardOf(locked.chat).state shouldBe ChatPending.State.STATE_WORKING
+        reduce(locked.chat, confirmTap()).effects.shouldBeEmpty()
+
+        val opened = reduce(locked.chat, ChatInput.Unlocked("p1", opened = true))
+        opened.effects shouldBe listOf(ChatEffect.Confirm(7L, "p1"))
+        cardOf(opened.chat).state shouldBe ChatPending.State.STATE_WORKING
+        cardOf(reduce(opened.chat, confirmedAs(AssistSettleOutcome.ASSIST_SETTLE_OUTCOME_APPLIED, "Done.")).chat).state shouldBe
+            ChatPending.State.STATE_APPLIED
+    }
+
+    "a Locker that is not opened leaves the card waiting to be tapped again" {
+        val working = reduce(waitingCard(), confirmTap()).chat
+        val locked = reduce(working, confirmedAs(AssistSettleOutcome.ASSIST_SETTLE_OUTCOME_LOCKER_LOCKED, "Locker is locked.")).chat
+        val declined = reduce(locked, ChatInput.Unlocked("p1", opened = false))
+        declined.effects.shouldBeEmpty()
+        cardOf(declined.chat).state shouldBe ChatPending.State.STATE_WAITING
+        reduce(declined.chat, confirmTap()).effects shouldBe listOf(ChatEffect.Confirm(7L, "p1"))
+        // an answer for a card that is not in flight does nothing
+        reduce(waitingCard(), ChatInput.Unlocked("p1", opened = true)).effects.shouldBeEmpty()
+    }
+
     "Cancel settles the card to not done at once and tells the core, which writes nothing" {
         val step = reduce(waitingCard(), cancelTap())
         step.effects shouldBe listOf(ChatEffect.Dismiss(7L, "p1"))

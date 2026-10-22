@@ -70,6 +70,11 @@ public data class LockerHeld<S>(
     /** Which confirm is up, when a screen has more than one (#1047 T2). */
     public val confirming: String? = null,
     /**
+     * What the opener asked the page to do once it has loaded (#1135): a chat card's member
+     * action, `reveal:password`. Run once, by [LockerQueries]'s machine, and dropped by a relock.
+     */
+    public val follow: String = "",
+    /**
      * What a screen's sheet is editing (#1047 T2): the item page's custom
      * field — its id, or "" for a new one.
      */
@@ -248,6 +253,9 @@ public abstract class LockerQueryMachine<S, E, D>(
 
     protected open fun absorb(held: LockerHeld<S>): LockerHeld<S> = held
 
+    /** The screen has its content under an open gate: run what the opener asked ([LockerHeld.follow]). */
+    protected open fun loaded(held: LockerHeld<S>): Step<LockerHeld<S>> = Step(held)
+
     protected open fun settled(held: LockerHeld<S>, settled: WriteSettled): Step<LockerHeld<S>> = Step(held)
 
     protected open fun revealed(held: LockerHeld<S>, input: LockerInput.Revealed): Step<LockerHeld<S>> = Step(held)
@@ -351,7 +359,7 @@ public abstract class LockerQueryMachine<S, E, D>(
         val next = absorb(held.copy(answers = held.answers.with(responses), reading = false))
         val data = fold(next)
             ?: return Step(next.copy(screen = lens.with(next.screen, ReadContent.Failed(incomplete()))))
-        return Step(next.copy(screen = lens.with(next.screen, ReadContent.Data(data))))
+        return loaded(next.copy(screen = lens.with(next.screen, ReadContent.Data(data))))
     }
 
     private fun ended(held: LockerHeld<S>, content: ReadContent<D>): Step<LockerHeld<S>> {

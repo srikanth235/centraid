@@ -69,6 +69,8 @@ internal class ScriptedChatDoor : ChatDoor {
 
     // The member's taps on a parked write's card, and what the core answers to them.
     val confirms = mutableListOf<Pair<Long, String>>()
+    var unlockAnswer: Boolean = true
+    var unlocks = 0
     val dismisses = mutableListOf<Pair<Long, String>>()
     var confirmAnswer: (String) -> AssistSettled? = { id ->
         AssistSettled(
@@ -111,6 +113,11 @@ internal class ScriptedChatDoor : ChatDoor {
     override suspend fun clear(session: Long) {
         clears += session
         calls += "clear"
+    }
+
+    override suspend fun unlockLocker(): Boolean {
+        unlocks++
+        return unlockAnswer
     }
 
     override suspend fun confirm(session: Long, pendingId: String): AssistSettled? {
@@ -575,6 +582,48 @@ class ChatFlowSpec : StringSpec({
         val card = rig.state.messages.last().pending!!
         card.state shouldBe ChatPending.State.STATE_NOT_DONE
         card.settled_line shouldBe "Not done."
+    }
+
+    "a confirm that needs Locker open unlocks and confirms again, and a declined unlock leaves the card to tap" {
+        val rig = Rig()
+        rig.proposeAWrite()
+        var locked = true
+        rig.door.confirmAnswer = { id ->
+            AssistSettled(
+                session_id = 7,
+                pending_id = id,
+                outcome = if (locked) {
+                    AssistSettleOutcome.ASSIST_SETTLE_OUTCOME_LOCKER_LOCKED
+                } else {
+                    AssistSettleOutcome.ASSIST_SETTLE_OUTCOME_APPLIED
+                },
+                line = if (locked) "Locker is locked." else "Done.",
+            )
+        }
+        rig.door.unlockAnswer = false
+        rig.flow.send(ChatEvent(pending_confirmed = ChatEvent.PendingConfirmed(pending_id = "p1")))
+        rig.door.unlocks shouldBe 1
+        rig.door.confirms shouldHaveSize 1
+        rig.state.messages.last().pending!!.state shouldBe ChatPending.State.STATE_WAITING
+
+        rig.door.unlockAnswer = true
+        locked = false
+        rig.flow.send(ChatEvent(pending_confirmed = ChatEvent.PendingConfirmed(pending_id = "p1")))
+        rig.door.confirms shouldHaveSize 2
+        rig.state.messages.last().pending!!.state shouldBe ChatPending.State.STATE_APPLIED
+
+        val unlocking = Rig()
+        unlocking.proposeAWrite()
+        var first = true
+        unlocking.door.confirmAnswer = { id ->
+            val outcome = if (first) AssistSettleOutcome.ASSIST_SETTLE_OUTCOME_LOCKER_LOCKED else AssistSettleOutcome.ASSIST_SETTLE_OUTCOME_APPLIED
+            first = false
+            AssistSettled(session_id = 7, pending_id = id, outcome = outcome, line = "Done.")
+        }
+        unlocking.flow.send(ChatEvent(pending_confirmed = ChatEvent.PendingConfirmed(pending_id = "p1")))
+        unlocking.door.unlocks shouldBe 1
+        unlocking.door.confirms shouldHaveSize 2
+        unlocking.state.messages.last().pending!!.state shouldBe ChatPending.State.STATE_APPLIED
     }
 
     "a stale card says so, and a core that did not answer leaves the card to tap again" {

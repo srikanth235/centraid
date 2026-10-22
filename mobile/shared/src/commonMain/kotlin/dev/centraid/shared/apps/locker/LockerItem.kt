@@ -97,6 +97,7 @@ public object LockerItemMachine :
                     screen = blank().copy(item_id = event.opened.item_id, parent = event.opened.parent, seat = held.screen.seat),
                     open = held.open,
                     tokens = held.tokens,
+                    follow = event.opened.follow,
                 ),
             )
             event.refreshed != null -> read(overRows(held))
@@ -623,6 +624,20 @@ public object LockerItemMachine :
         if (lens.content(screen) !is ReadContent.Data) return this
         val data = fold(this) ?: return this
         return copy(screen = lens.with(screen, ReadContent.Data(data)))
+    }
+
+    // A CHAT CARD'S MEMBER ACTION (#1135) is Locker's own flow, tapped for the member once the
+    // page is loaded under an open gate: the same verb a Reveal or Code tap sends, so the receipt,
+    // the concealing tick and the refusals are the page's.
+    override fun loaded(held: LockerHeld<LockerItemState>): Step<LockerHeld<LockerItemState>> {
+        if (held.follow.isEmpty()) return Step(held)
+        val (action, column) = held.follow.split(':', limit = 2).let { it[0] to it.getOrElse(1) { "" } }
+        val asked = held.copy(follow = "")
+        return when (action) {
+            "reveal" -> verb(asked, column, "reveal")
+            "code" -> verb(asked, SEED, "code")
+            else -> Step(asked)
+        }
     }
 
     // THE ITEM MOVED UNDER A REVEAL (an edit, a trash): the revealed value is

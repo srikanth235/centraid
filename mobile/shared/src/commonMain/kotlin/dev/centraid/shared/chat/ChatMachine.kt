@@ -167,6 +167,7 @@ public object ChatMachine {
         is ChatInput.Core -> core(chat, input.event)
         is ChatInput.Settled -> settled(chat, input)
         is ChatInput.Confirmed -> confirmed(chat, input)
+        is ChatInput.Unlocked -> unlocked(chat, input)
         is ChatInput.VisionStatus -> visionStatus(chat, input.state, input.bytes)
         is ChatInput.VisionLoaded -> visionLoaded(chat, input.state)
         is ChatInput.Threads -> threadsRead(chat, input)
@@ -612,6 +613,12 @@ public object ChatMachine {
             } ?: return ChatStep(chat)
             return ChatStep(render(offered.copy(error = ChatCopy.ERROR_GENERIC)))
         }
+        // A SECRET THE MEMBER TYPED IS SEALED ONLY WHILE LOCKER IS OPEN (#1135): nothing ran and
+        // the card is still waiting in the core. It stays WORKING while the shell opens Locker,
+        // then the same confirm is sent again ([unlocked]).
+        if (settled.outcome == AssistSettleOutcome.ASSIST_SETTLE_OUTCOME_LOCKER_LOCKED) {
+            return ChatStep(render(chat.copy(error = "")), listOf(ChatEffect.UnlockLocker(input.pendingId)))
+        }
         val next = chat.changingProposal(input.pendingId, ProposalPhase.WORKING) { held ->
             val phase = when (settled.outcome) {
                 AssistSettleOutcome.ASSIST_SETTLE_OUTCOME_APPLIED -> ProposalPhase.APPLIED
@@ -622,6 +629,20 @@ public object ChatMachine {
             held.copy(phase = phase, line = settled.line.ifEmpty { notDoneLine() })
         } ?: return ChatStep(chat)
         return ChatStep(render(next))
+    }
+
+    /**
+     * Locker opened (or the member declined to open it) for the card [ChatInput.Unlocked] names:
+     * opened, the same confirm goes again; not, the card is waiting as it was.
+     */
+    private fun unlocked(chat: Chat, input: ChatInput.Unlocked): ChatStep {
+        if (!input.opened) {
+            val waiting = chat.changingProposal(input.pendingId, ProposalPhase.WORKING) { it.copy(phase = ProposalPhase.WAITING) }
+                ?: return ChatStep(chat)
+            return ChatStep(render(waiting))
+        }
+        if (chat.messages.none { held -> held.proposal?.let { it.id == input.pendingId && it.phase == ProposalPhase.WORKING } == true }) return ChatStep(chat)
+        return ChatStep(render(chat), listOf(ChatEffect.Confirm(chat.session, input.pendingId)))
     }
 
     /** `Not done.`: the copy's sentence with no reason to give. */
@@ -1502,6 +1523,9 @@ public sealed interface ChatInput {
     /** The core's answer to a confirm tap on card [pendingId]; null when the call itself failed. */
     public data class Confirmed(public val pendingId: String, public val settled: AssistSettled?) : ChatInput
 
+    /** Locker was opened for card [pendingId] ([opened]), or the member did not open it (#1135). */
+    public data class Unlocked(public val pendingId: String, public val opened: Boolean) : ChatInput
+
     /** The drawer's list, read; null rows when the core would not answer. [nowMs] is the device clock. */
     public data class Threads(public val rows: List<ThreadRow>?, public val nowMs: Long) : ChatInput
 
@@ -1564,6 +1588,12 @@ public sealed interface ChatEffect {
 
     /** Ask the core to run the parked write [pendingId] names. Its answer returns as [ChatInput.Confirmed]. */
     public data class Confirm(public val session: Long, public val pendingId: String) : ChatEffect
+
+    /**
+     * Open Locker (the biometric gate) so card [pendingId], which seals a secret the member typed,
+     * can be confirmed again. Its answer returns as [ChatInput.Unlocked] (#1135).
+     */
+    public data class UnlockLocker(public val pendingId: String) : ChatEffect
 
     /** Tell the core the member cancelled [pendingId]. Nothing is written and nothing comes back. */
     public data class Dismiss(public val session: Long, public val pendingId: String) : ChatEffect
