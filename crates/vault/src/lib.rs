@@ -39,6 +39,7 @@ pub mod journal;
 pub mod log;
 pub mod migrations;
 pub mod model;
+pub mod ontology_doc;
 pub mod originals;
 pub mod page;
 pub mod roster;

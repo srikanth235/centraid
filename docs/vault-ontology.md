@@ -1,6 +1,6 @@
 # The vault ontology
 
-The ontology is the crux of Centraid: one person-owned model of a life, over which every app is a projection and through which every agent acts. This document is its **current state**: what the model is, which commitments the code enforces, and how a table is added. The published design is [centraid.dev/docs/ontology](https://centraid.dev/docs/ontology/); vocabulary is [glossary.md](glossary.md); rulings are [decisions.md](decisions.md) ("The vault model from first principles (#1135)"). The model was rebuilt whole in [#1135](https://github.com/srikanth235/centraid/issues/1135) and carries no compatibility with the one before it (R-FP-10). History lives in receipts, not here.
+The ontology is the crux of Centraid: one person-owned model of a life, over which every app is a projection and through which every agent acts. This document is its **current state**: what the model is, which commitments the code enforces, and how a table is added. The published design is [centraid.dev/docs/ontology](https://centraid.dev/docs/ontology/) (`scripts/docs-site/src/content/ontology-body.html`, whose schema section is generated); vocabulary is [glossary.md](glossary.md); rulings are [decisions.md](decisions.md) ("The vault model from first principles (#1135)"). The model was rebuilt whole in [#1135](https://github.com/srikanth235/centraid/issues/1135) and carries no compatibility with the one before it (R-FP-10). History lives in receipts, not here.
 
 The schema is one file, `contracts/migrations/001_baseline.sql`, rendered for review as `contracts/schema/vault-ddl.sql` by `export-ladder-ddl`. The Rust that reads it is `crates/vault/src/model.rs` (`Kind`, `Rel`, `Flag`, `fold_label`).
 
@@ -51,7 +51,7 @@ Each is a test in `crates/vault/tests/commitments.rs` that asks the founded file
 | 7 | Concept and container CHECK lists equal `Kind::CONCEPTS` and `Kind::CONTAINERS`; seed keys are folded | `concept_and_container_check_lists_...` |
 | 8 | No table outside the spec is founded | `the_founded_file_holds_...` |
 
-`crates/ontology`'s doctor checks the file's integrity; `crates/vault/tests/ladder_ddl.rs` holds `contracts/schema/vault-ddl.sql` equal to what the ladder builds.
+`crates/ontology`'s doctor checks the file's integrity; `crates/vault/tests/ladder_ddl.rs` holds `contracts/schema/vault-ddl.sql` equal to what the ladder builds; `crates/vault/tests/command_list.rs` holds `contracts/schema/vault-commands.txt` equal to the registry; `crates/vault/tests/ontology_page.rs` holds the published page equal to the file.
 
 ## Adding or changing a table
 
@@ -60,7 +60,11 @@ In the same PR:
 - edit `contracts/migrations/001_baseline.sql` (the one rung, until the first release that must migrate), regenerate `contracts/schema/vault-ddl.sql` with `export-ladder-ddl`, and add the table to the list in commitment 8;
 - decide its place in the model first: a new kind is a row in `entity.kind`'s CHECK, in `Kind`, with a host, and nothing else; a new relation is a CHECK value, a `Rel`, and `edge_shape` rows; a table that is none of these is a child row of one kind and cascades from it;
 - a hash column is a foreign key into `blob(hash)`; text a member searches goes in `text_of` and the command calls `ctx.touch`;
-- the typed commands in `crates/vault/src/commands` and the app manifest's scopes, then this document if a commitment changes.
+- the typed commands in `crates/vault/src/commands` (regenerate `contracts/schema/vault-commands.txt` with `export-commands`) and the app manifest's scopes, then the page: a sentence for the table in `ontology_doc::TABLES` and `cargo run -p centraid-vault --bin export-ontology-page`; and this document if a commitment changes.
+
+## Drift register
+
+Retired. The register audited the model before [#1135](https://github.com/srikanth235/centraid/issues/1135) (its `ONT-nn` rows are cited from [decisions.md](decisions.md) as history), and the model it audited is gone. A finding against this model gets a commitment test above, or is deferred in its issue and says so; it does not get a row here. The one standing gap the old register named, that nothing compared the published design with the schema (ONT-01), is closed: `crates/vault/tests/ontology_page.rs` re-renders [the page's schema section](https://centraid.dev/docs/ontology/#schema) from a founded vault and fails when they differ, when a table has no sentence on the page, and when its entity map names a kind or a relation the code does not.
 
 ## How this model is reviewed
 

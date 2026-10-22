@@ -5,6 +5,8 @@ Everything durable a Centraid phone knows about a vault is in one SQLite file, a
 ```sh
 cargo test -p centraid-vault
 cargo run -p centraid-vault --bin export-ladder-ddl > contracts/schema/vault-ddl.sql
+cargo run -p centraid-vault --bin export-commands > contracts/schema/vault-commands.txt
+cargo run -p centraid-vault --bin export-ontology-page   # the published page's schema section
 ```
 
 ## The map
@@ -18,6 +20,7 @@ cargo run -p centraid-vault --bin export-ladder-ddl > contracts/schema/vault-ddl
 | `access` | `Principal`, `Verb`, `evaluate_access` — a deny is a value. |
 | `commands`, `journal`, `model`, `index` | `CommandDefinition`, `Registry`, the gate order and the shared verbs (`entity`, `tag`, `flag`, `edge`, `container`, `blob`, `person`, `follow`) and Locker's; the journal row every command leaves; `Kind`, `Rel`, `Flag` and `fold_label`; the re-index at commit into the one `search` table. See [docs/vault-ontology.md](../../docs/vault-ontology.md). |
 | `bootstrap` | `Vault::found`: the vault row and its owner. |
+| `ontology_doc` | The published ontology page's schema section, rendered from a founded vault (`export-ontology-page`), and the sentence each table has on it; `tests/ontology_page.rs` holds the page to it. |
 | `page`, `testdoor` | The paged door's vault-side hook (`page_raw`, the row-filter AND, the field mask); the questions a test asks of a copy. |
 | `bytes`, `blob`, `originals` | The byte door (`BlobStore`, `Located`, and `FsBlobStore` over a plain directory); claiming bytes (`blob`, `derivative`), where they are, and garbage collection from `PRAGMA foreign_key_list`; the originals this device holds and the albums whose originals stay. |
 | `custody` | The one sealed-value format (the Locker `lk1:` cell) and the phone's two Locker doors; no key material — see [`src/custody/README.md`](src/custody/README.md). |

@@ -69,7 +69,7 @@ Scan the QR from a phone build, then compare the safety number the phone shows w
 | Path | What it is |
 | --- | --- |
 | `crates/` | The Rust core: the identity model, the vault and its backup plane, the ontology, the gateway protocol and its one deployment, the byte plane, one crate per app, the five-symbol C ABI, the protobuf schema workspace and the `xtask` gate. A line per crate is in [ARCHITECTURE.md](ARCHITECTURE.md#the-crates). |
-| `contracts/` | The layer every language reads: the frozen golden vault, the DDL, the schema registries, the migration ladder, one frozen parity bundle per app, the screen fixtures, the crypto vectors and the down-only ledgers. |
+| `contracts/` | The layer every language reads: the DDL of a new vault and the list of its commands, the migration ladder, the screen fixtures, the crypto vectors and the down-only ledgers. |
 | `mobile/` | The KMP shared module over the C ABI, the Jetpack Compose shell, the SwiftUI shell, and the Maestro flows. **The only shell.** |
 | `packages/design`, `packages/test-kit` | The design tokens every surface lowers, and shared TypeScript test helpers. |
 | `design/`, `copy/` | Emitted artifacts — the native theme and one copy leaf per app — written by one command and gated against drift. |

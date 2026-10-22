@@ -8,18 +8,11 @@ const base = import.meta.env.BASE_URL.endsWith('/')
   : `${import.meta.env.BASE_URL}/`;
 
 const rail = [
-  { href: '#hero', no: '§01', label: 'System map', current: true },
-  { href: '#map', no: '§02', label: 'Unified entity map', current: false },
-  { href: '#schema', no: '§03', label: 'Detailed schema', current: false },
-  { href: '#principles', no: '§04', label: 'Modeling principles', current: false },
-  { href: '#layers', no: '§05', label: 'Ontology layer stack', current: false },
-  { href: '#core', no: '§06', label: 'Canonical core', current: false },
-  { href: '#domains', no: '§07', label: 'Domain explorer', current: false },
-  { href: '#matrix', no: '§08', label: 'Ownership matrix', current: false },
-  { href: '#flow', no: '§09', label: 'Cross-app agent flow', current: false },
-  { href: '#gateway', no: '§10', label: 'The gateway', current: false },
-  { href: '#rules', no: '§11', label: 'Implementation rules', current: false },
-  { href: '#centraid', no: '§12', label: 'Inside the runtime', current: false },
+  { href: '#hero', no: '§01', label: 'Thesis', current: true },
+  { href: '#map', no: '§02', label: 'Entity map', current: false },
+  { href: '#schema', no: '§03', label: 'Schema', current: false },
+  { href: '#principles', no: '§04', label: 'Principles', current: false },
+  { href: '#rules', no: '§05', label: 'The rules', current: false },
 ];
 const footer = {
   manifesto:
@@ -41,11 +34,11 @@ const ontologyBody = ontologyBodyRaw
 
 <DocsLayout
   title="Centraid Ontology: Personal Data Model and Schema"
-  description="Study Centraid's personal ontology: canonical entities, schemas, ownership matrix, consent rules, typed commands, and the gateway contract behind every app."
+  description="Centraid's personal ontology: an entity for everything with a title, a kind for what it is, typed edges, the schema of a new vault, and the rules that keep it one model."
   current="ontology"
   canonicalPath="ontology/"
   searchLabel="Ontology"
-  searchKeywords="personal ontology canonical entities schemas ownership matrix consent rules typed commands gateway contract data model"
+  searchKeywords="personal ontology entity kinds edges blobs origin source journal schema commitments typed commands data model"
   bodyClass="has-rail ontology-page"
   rail={rail}
   footer={footer}
