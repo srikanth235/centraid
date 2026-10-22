@@ -41,8 +41,9 @@ use centraid_core::api_proto as wire;
 use wire::app_query_request::Query as Q;
 use wire::app_query_response::Answer;
 
-/// The ceiling, in milliseconds, on `ci-linux-x64-4c`.
-const SEARCH_BUDGET_MS: f64 = 50.0;
+/// The ceiling, in milliseconds, on `ci-linux-x64-4c`: 64, by the owner's ruling of
+/// 2026-10-22 (#1135), after the search-speed pass left two cells between 50 and 64.
+const SEARCH_BUDGET_MS: f64 = 64.0;
 /// How many calls each percentile is taken over.
 const SAMPLES: usize = 100;
 /// Unmeasured calls first: the statement compiles, the pages fault in, the

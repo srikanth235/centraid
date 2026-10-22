@@ -8,13 +8,13 @@
     "samples": 100,
     "warmup": 10,
     "statistic": "p95, nearest-rank, per (surface, query)",
-    "seededFrom": "the 50 ms call promise of call-budget.json, applied to every search call. The ceiling is the promise rather than the observation, so it is not ratcheted down to what the first run measured: a ceiling set to the current measurement would fail on the next runner that is one percent slower, which teaches the team to raise budgets.",
+    "seededFrom": "Set to 64 ms by the owner's ruling of 2026-10-22 (#1135): the 50 ms call promise was the first ceiling, and after the search-speed pass two cells stayed over it (Docs' two-letter prefix about 61 ms, Notes' in-word fragment about 52 ms). The owner ruled a p95 up to 64 ms acceptable for a search call. The ceiling is the promise rather than the observation, so it is not ratcheted down to what a run measured: a ceiling set to the current measurement would fail on the next runner that is one percent slower, which teaches the team to raise budgets.",
     "knownFloor": "The corpus is a test-build-sized year-3 vault, not the largest one: a member with ten times the photographs has ten times the caption rows. The search door bounds its work by construction (title matches, then the newest 500 others; the correction reads the word list from a cache), and this measures that the bound holds over a vocabulary of 100,000+ words rather than that it is the best any index could do. The numbers are a RELEASE build's (`cargo test --release`), the build the phone runs; a debug build runs the correction pass three to five times slower and is not what the promise is about."
   },
   "profiles": {
     "pr": {
       "ci-linux-x64-4c": {
-        "p95Ms": 50
+        "p95Ms": 64
       }
     }
   }
