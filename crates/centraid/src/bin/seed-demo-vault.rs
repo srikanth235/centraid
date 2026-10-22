@@ -265,8 +265,11 @@ fn main() {
     // WHAT HOME WILL DRAW, READ BACK BEFORE THE HANDLE CLOSES. Each number is
     // the row count of the table that app's Home tile pages (`HomeReads.READS`
     // in `mobile/shared`).
-    let seeded =
-        SEEDED_TABLES.map(|(app, table, pk, filter)| (app, count_rows(&handle, table, pk, filter)));
+    let self_id = handle
+        .with_vault(|vault| Ok(vault.self_id()?.unwrap_or_default()))
+        .expect("the self person reads");
+    let seeded = SEEDED_TABLES
+        .map(|(app, table, pk, filter)| (app, count_rows(&handle, table, pk, filter, &self_id)));
     handle.close();
     // AND THE FILE IS FINISHED BEFORE THIS PROCESS GOES (#1020 wave A).
     // `close` leaves the connection to teardown, which is right for a phone
@@ -316,7 +319,8 @@ fn main() {
 /// tile's filter — the `from`, the `pk_column` and the `where` of
 /// `HomeReads.READS`, in its order. Every kind that is an entity is counted
 /// off `entity` by its `kind`, live (no `deleted_at`); People's circle is the
-/// persons that are not the vault's own self, as its tile counts them. Locker
+/// persons that are not the vault's own self, as its tile counts them (the
+/// self id is the predicate's one bind). Locker
 /// counts live, unarchived items, as its tile does; the trashed demo item is
 /// not one.
 const SEEDED_TABLES: [(&str, &str, &str, Option<&str>); 8] = [
@@ -344,7 +348,7 @@ const SEEDED_TABLES: [(&str, &str, &str, Option<&str>); 8] = [
         "people",
         "entity",
         "id",
-        Some("kind = 'person' AND deleted_at IS NULL AND id <> (SELECT self_id FROM vault)"),
+        Some("kind = 'person' AND deleted_at IS NULL AND id <> ?1"),
     ),
     ("money", "txn", "id", None),
     (
@@ -368,6 +372,7 @@ fn count_rows(
     table: &str,
     pk: &str,
     filter: Option<&str>,
+    self_id: &str,
 ) -> usize {
     handle
         .with_vault(|vault| {
@@ -379,7 +384,10 @@ fn count_rows(
                     select: vec![pk.to_owned()],
                     from: table.to_owned(),
                     predicate: filter.map(str::to_owned),
-                    binds: Vec::new(),
+                    binds: filter
+                        .filter(|text| text.contains("?1"))
+                        .map(|_| vec![centraid_vault::value::Value::Text(self_id.to_owned())])
+                        .unwrap_or_default(),
                     sort_column: pk.to_owned(),
                     pk_column: pk.to_owned(),
                     descending: false,
