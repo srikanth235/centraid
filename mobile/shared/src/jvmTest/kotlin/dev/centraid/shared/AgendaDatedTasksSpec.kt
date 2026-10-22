@@ -4,6 +4,7 @@ import centraid.core.v1.AgendaSearch
 import centraid.core.v1.TasksCatchUp
 import centraid.core.v1.TasksSearch
 import centraid.core.v1.TasksView
+import centraid.screen.v1.SearchAsk
 import centraid.screen.v1.AgendaEmpty
 import centraid.screen.v1.AgendaHomeEvent
 import centraid.screen.v1.AgendaHomeState
@@ -293,14 +294,14 @@ class AgendaDatedTasksSpec : StringSpec({
             it.days.shouldBeEmpty()
             it.task_hits.single().rows.size shouldBe 1
         }
-        tasksOnly.screen.search_ask shouldBe ""
-        // NEITHER: no-match, and Ask is offered.
+        tasksOnly.screen.search_ask_row shouldBe SearchAsk(label = "Ask about “dentist”", question = "Find dentist", scope = "agenda")
+        // NEITHER: no-match, and the same Ask.
         val none = drive(typed, AgendaInput.Answered(null, context(), AgendaSearch(), TasksAnswers(search = TasksSearch(today = TODAY)))).state
         none.screen.data_.shouldNotBeNull().let {
             it.empty shouldBe AgendaEmpty.AGENDA_EMPTY_NO_MATCH
             it.task_hits.shouldBeEmpty()
         }
-        none.screen.search_ask shouldBe "Find dentist"
+        none.screen.search_ask_row shouldBe SearchAsk(label = "Ask about “dentist”", question = "Find dentist", scope = "agenda")
         // Closing search CLEARS the hits and re-folds the held days and boards without a read.
         val closed = drive(both, view(AgendaHomeEvent(search_closed = AgendaHomeEvent.SearchClosed())))
         closed.effects.shouldBeEmpty()

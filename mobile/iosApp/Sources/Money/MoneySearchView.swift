@@ -67,6 +67,8 @@ struct MoneySearchView: View {
     private func results(_ search: Centraid_Screen_V1_MoneySearchData, state: Centraid_Screen_V1_MoneySearchState) -> some View {
         if search.rows.isEmpty, search.hasEmpty {
             EmptyStateView(search.empty)
+            if state.field.hasAskRow { SearchAskRow(ask: state.field.askRow) }
+            Spacer(minLength: 0)
         } else {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
@@ -81,6 +83,8 @@ struct MoneySearchView: View {
                             }
                         }
                     }
+                    // THE ASK ROW closes the answer (#1135).
+                    if state.field.hasAskRow { SearchAskRow(ask: state.field.askRow) }
                 }
                 .padding(.bottom, 16)
             }

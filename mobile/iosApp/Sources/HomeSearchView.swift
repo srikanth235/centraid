@@ -57,7 +57,6 @@ enum HomeSearchScreens {
                         shell.send(screen: screen, event: event { $0.container = .with { $0.container = container } })
                         shell.openRow(container.target, parent: parent)
                     },
-                    ask: { [weak shell] question in shell?.askChat(question) },
                     onCancel: { [weak shell] in
                         guard let shell, !shell.path.isEmpty else { return }
                         shell.path.removeLast()
@@ -80,8 +79,6 @@ struct HomeSearchView: View {
     let open: (Centraid_Screen_V1_ChatCard, [Centraid_Screen_V1_ChatCard], String) -> Void
     /// Open a container found by name (#1097) through the same router.
     let openContainer: (Centraid_Screen_V1_SearchContainer, String) -> Void
-    /// Ask the assistant a question: the shell's router switches to Chat and sends it.
-    let ask: (String) -> Void
     let onCancel: () -> Void
 
     @Environment(\.colorScheme) private var scheme
@@ -144,14 +141,11 @@ struct HomeSearchView: View {
                     }
                 case let .results(results):
                     if results.hasEmpty {
-                        // NOTHING MATCHED: the one action asks the assistant
-                        // about the term. The words are the machine's.
-                        EmptyStateView(results.empty, actionIdentifier: "search-ask-about") {
-                            send(HomeSearchScreens.event { $0.asked = .init() })
-                            ask(results.askQuestion)
-                        }
+                        // NOTHING MATCHED: the sentence, and the Ask row under it.
+                        EmptyStateView(results.empty)
+                        askRow(state)
                     } else {
-                        groups(results, parent: state.chrome.title)
+                        groups(results, parent: state.chrome.title, ask: askRow(state))
                     }
                 }
             }
@@ -162,7 +156,15 @@ struct HomeSearchView: View {
         .toolbar(.hidden, for: .navigationBar)
     }
 
-    private func groups(_ results: Centraid_Screen_V1_HomeSearchData, parent: String) -> some View {
+    /// THE ASK ROW closes the answer, matched or not (#1135); pressing it records the search.
+    @ViewBuilder
+    private func askRow(_ state: Centraid_Screen_V1_HomeSearchState) -> some View {
+        if state.field.hasAskRow {
+            SearchAskRow(ask: state.field.askRow) { send(HomeSearchScreens.event { $0.asked = .init() }) }
+        }
+    }
+
+    private func groups(_ results: Centraid_Screen_V1_HomeSearchData, parent: String, ask: some View) -> some View {
         let targets = results.groups.flatMap { $0.rows.map(\.target) }
         return ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
@@ -179,6 +181,7 @@ struct HomeSearchView: View {
                         }
                     }
                 }
+                ask
             }
             .padding(.bottom, 16)
         }

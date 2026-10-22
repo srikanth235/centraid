@@ -5,6 +5,7 @@ import centraid.core.v1.AppQueryResponse
 import centraid.core.v1.VaultSearch
 import centraid.core.v1.VaultSearchHit
 import centraid.core.v1.VaultSearchRequest
+import centraid.screen.v1.SearchAsk
 import centraid.screen.v1.ChatCard
 import centraid.screen.v1.HomeSearchEvent
 import centraid.screen.v1.HomeSearchState
@@ -70,18 +71,19 @@ class HomeSearchSpec : StringSpec({
         step(slipped, answered("sun", "sunscreen")).state.field_!!.corrected shouldBe ""
     }
 
-    "nothing matching offers one action, which asks the assistant about the term, and asking records the search (#1097)" {
+    "every answer offers one Ask row, unscoped, which asks the assistant about the term, and asking records the search (#1097, #1135)" {
         val nothing = step(typed(opened, "zzqx").state, answer("zzqx")).state
         val empty = nothing.data_!!.empty.shouldNotBeNull()
         empty.headline shouldBe SharedCopy.HOME_SEARCH_NO_MATCH_HEADLINE
-        empty.action_label shouldBe "Ask about “zzqx”"
-        nothing.data_.ask_question shouldBe "Find zzqx"
+        empty.action_label shouldBe ""
+        nothing.field_!!.ask_row shouldBe SearchAsk(label = "Ask about “zzqx”", question = "Find zzqx", scope = "")
+
         // The shell carries the action out; the machine remembers the term.
         step(nothing, HomeSearchEvent(asked = HomeSearchEvent.Asked())).state.recent shouldBe listOf("zzqx")
-        // Rows found: no empty state, no question.
+        // Rows found: no empty state, and the same row at the foot.
         val found = step(typed(opened, "cab").state, answer("cab", hit("notes", "note", "n1", "Cabin"))).state
         found.data_!!.empty.shouldBeNull()
-        found.data_.ask_question shouldBe ""
+        found.field_!!.ask_row shouldBe SearchAsk(label = "Ask about “cab”", question = "Find cab", scope = "")
     }
 
     "the hits are grouped by app in Home's tile order, each counted, each row named by its kind" {
@@ -277,7 +279,7 @@ class HomeSearchSpec : StringSpec({
         val off = step(typed(opened, "marmalade").state, answer("marmalade", chatThread)).state
         off.data_!!.groups.shouldBeEmpty()
         off.data_.empty.shouldNotBeNull()
-        off.data_.ask_question shouldBe "Find marmalade"
+        off.field_!!.ask_row?.question shouldBe "Find marmalade"
         val on = step(typed(withChatTab, "marmalade").state, answer("marmalade", chatThread)).state
         on.data_!!.empty.shouldBeNull()
         on.data_.groups.single().app_id shouldBe "chat"

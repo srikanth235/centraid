@@ -345,7 +345,8 @@ private struct PeopleSearchResults: View {
         if state.hasSearchData {
             let results = state.searchData
             if results.hasEmpty {
-                SearchEmptyView(results.empty, ask: state.search.ask)
+                EmptyStateView(results.empty)
+                if state.search.hasAskRow { SearchAskRow(ask: state.search.askRow) }
                 Spacer(minLength: 0)
             } else {
                 ScrollView {
@@ -353,6 +354,7 @@ private struct PeopleSearchResults: View {
                         ForEach(results.rows, id: \.partyID) { row in
                             PeopleRosterRow(row: row, send: send)
                         }
+                        if state.search.hasAskRow { SearchAskRow(ask: state.search.askRow) }
                     }
                 }
                 .accessibilityIdentifier("people-search-results")

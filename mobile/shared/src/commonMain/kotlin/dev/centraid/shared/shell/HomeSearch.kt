@@ -110,8 +110,8 @@ public object HomeSearchMachine : ScreenMachine<HomeSearchState, HomeSearchEvent
     private fun term(state: HomeSearchState, term: String): Step<HomeSearchState> {
         val field = state.field_ ?: SearchField()
         if (field.open_ && field.term == term && state.resting == null) return Step(state)
-        // A NEW TERM clears the words the last one was corrected to.
-        val next = state.copy(field_ = field.copy(open_ = true, term = term, corrected = ""))
+        // A NEW TERM clears the words the last one was corrected to, and the Ask it offered.
+        val next = state.copy(field_ = field.copy(open_ = true, term = term, corrected = "", ask_row = null))
         if (term.isBlank()) return Step(rest(next.copy(field_ = next.field_?.copy(answered_term = ""))))
         return Step(loading(next), listOf(read()))
     }
@@ -135,20 +135,17 @@ public object HomeSearchMachine : ScreenMachine<HomeSearchState, HomeSearchEvent
         // only a conversation holds is the no-match state, not a row that goes nowhere.
         val kept = if (state.chat_tab) data else data.copy(groups = data.groups.filterNot { it.app_id == CHAT })
         val shown = if (kept.groups.isEmpty()) {
-            // NOTHING MATCHED: one sentence and one action, which asks the
-            // assistant about the term (the shell sends `ask_question` to Chat).
+            // NOTHING MATCHED: one sentence; the Ask row under it is the law's, as it is under rows.
             kept.copy(
                 empty = EmptyState(
                     headline = SharedCopy.HOME_SEARCH_NO_MATCH_HEADLINE,
                     body = SharedCopy.HOME_SEARCH_NO_MATCH_BODY.replace("{term}", answered.trim()),
-                    action_label = SharedCopy.SEARCH_ASK_ABOUT.replace("{term}", answered.trim()),
                 ),
-                ask_question = SharedCopy.SEARCH_ASK_QUESTION.replace("{term}", answered.trim()),
             )
         } else {
-            kept.copy(empty = null, ask_question = "")
+            kept.copy(empty = null)
         }
-        // The words the rows answer are kept by the law, for an answer still current.
+        // The words the rows answer and the Ask row are kept by the law, for an answer still current.
         return SearchLaw.answered(Field, state, answered.trim(), corrected).copy(
             resting = null,
             loading = null,
@@ -168,8 +165,8 @@ public object HomeSearchMachine : ScreenMachine<HomeSearchState, HomeSearchEvent
 
     private object Field : SearchLens<HomeSearchState> {
         override val screenId: String = SCREEN_ID
-        // Home keeps its own `ask_question` on its data (#1097, R-1097-28).
-        override val asks: Boolean = false
+        // Home asks across every app: the chat it opens is unscoped (#1135).
+        override val askScope: String = ""
 
         override fun field(state: HomeSearchState): SearchField = state.field_ ?: SearchField()
 

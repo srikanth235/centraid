@@ -204,8 +204,8 @@ struct DocsDriveView: View {
                         }
                         if drive.hasEmpty {
                             if drive.mode == .search {
-                                // A SEARCH THAT FOUND NOTHING: the kit's one no-match state, with Ask (#1097).
-                                SearchEmptyView(drive.empty, ask: state.search.ask)
+                                // A SEARCH THAT FOUND NOTHING: the kit's one no-match state.
+                                EmptyStateView(drive.empty)
                             } else {
                                 EmptyStateView(drive.empty, onAction: emptyAction(drive.emptyAction))
                             }
@@ -225,6 +225,8 @@ struct DocsDriveView: View {
                         note(drive.shelfNote)
                         note(drive.truncatedNote)
                     }
+                    // THE ASK ROW closes a search's answer, matched or not (#1135).
+                    if state.search.hasAskRow { SearchAskRow(ask: state.search.askRow) }
                   }
                   .padding(.bottom, 16)
                 }

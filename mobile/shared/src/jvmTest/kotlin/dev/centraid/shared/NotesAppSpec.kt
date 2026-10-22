@@ -18,6 +18,7 @@ import centraid.core.v1.NotesSort
 import centraid.core.v1.NotesTagFacet
 import centraid.core.v1.NotesTrash
 import centraid.core.v1.NotesVersion
+import centraid.screen.v1.SearchAsk
 import centraid.screen.v1.HomeTile
 import centraid.screen.v1.NoteDraft
 import centraid.screen.v1.NotesEditorEvent
@@ -378,27 +379,27 @@ class NotesAppSpec : StringSpec({
         NotesLibraryMachine.reduce(closed, answer).state.search!!.containers.shouldBeEmpty()
     }
 
-    "library: Ask is the no-match question: set by a wholly empty current answer, cleared by a new term, a close, a denial or a stale answer, and never set when anything was found (#1097, R-1097-28)" {
+    "library: Ask is the row at the foot of a current answer, matched or not, cleared by a new term, a close, a denial or a stale answer (#1097, R-1097-28, #1135)" {
         val state = loadedLibrary(row("n-1", "A"))
         val open = NotesLibraryMachine.reduce(state, NotesLibraryEvent(search_opened = NotesLibraryEvent.SearchOpened()))
         val typed = NotesLibraryMachine.reduce(open.state, NotesLibraryEvent(search_term = NotesLibraryEvent.SearchTermChanged(term = "zzqx"))).state
         fun answer(search: NotesSearch) = NotesLibraryReads.arrived(listOf(AppQueryResponse(notes_search = search)))
         val none = NotesLibraryMachine.reduce(typed, answer(NotesSearch())).state
-        none.search!!.ask shouldBe "Find zzqx"
-        none.results!!.empty!!.action_label shouldBe "Ask about “zzqx”"
-        // Anything found is no Ask: a note, or a notebook.
+        none.search!!.ask_row shouldBe SearchAsk(label = "Ask about “zzqx”", question = "Find zzqx", scope = "notes")
+        none.results!!.empty!!.action_label shouldBe ""
+        // Anything found still has Ask at its foot: a note, or a notebook.
         val hit = NotesSearchHit(note_id = "n-1", title = "A", preview = "p", snippet = "p")
-        NotesLibraryMachine.reduce(typed, answer(NotesSearch(hits = listOf(hit)))).state.search!!.ask shouldBe ""
+        NotesLibraryMachine.reduce(typed, answer(NotesSearch(hits = listOf(hit)))).state.search!!.ask_row shouldBe none.search!!.ask_row
         val notebook = centraid.core.v1.ContainerHit(entity = "notebook", id = "nb-1", title = "Cabin", app_id = "notes")
-        NotesLibraryMachine.reduce(typed, answer(NotesSearch(containers = listOf(notebook)))).state.search!!.ask shouldBe ""
+        NotesLibraryMachine.reduce(typed, answer(NotesSearch(containers = listOf(notebook)))).state.search!!.ask_row shouldBe none.search!!.ask_row
         // A new term, a close and a denial clear it; an answer for a closed search sets none.
         NotesLibraryMachine.reduce(none, NotesLibraryEvent(search_term = NotesLibraryEvent.SearchTermChanged(term = "zzq")))
-            .state.search!!.ask shouldBe ""
+            .state.search!!.ask_row shouldBe null
         NotesLibraryMachine.reduce(none, NotesLibraryEvent(search_closed = NotesLibraryEvent.SearchClosed()))
-            .state.search!!.ask shouldBe ""
-        NotesLibraryMachine.reduce(none, NotesLibraryReads.denied(AppQueryDenial(message = "revoked"))).state.search!!.ask shouldBe ""
+            .state.search!!.ask_row shouldBe null
+        NotesLibraryMachine.reduce(none, NotesLibraryReads.denied(AppQueryDenial(message = "revoked"))).state.search!!.ask_row shouldBe null
         val closed = NotesLibraryMachine.reduce(typed, NotesLibraryEvent(search_closed = NotesLibraryEvent.SearchClosed())).state
-        NotesLibraryMachine.reduce(closed, answer(NotesSearch())).state.search!!.ask shouldBe ""
+        NotesLibraryMachine.reduce(closed, answer(NotesSearch())).state.search!!.ask_row shouldBe null
     }
 
     "library: a change while searching re-reads the search, and the library on close" {

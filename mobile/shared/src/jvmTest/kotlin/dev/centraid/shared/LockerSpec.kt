@@ -500,7 +500,7 @@ class LockerSpec : StringSpec({
         ).state
         // The answer is wholly empty and current, and still no Ask: not the question, not the label.
         none.screen.data_!!.search_empty.shouldNotBeNull().headline shouldBe "Nothing matches “hunter2”"
-        none.screen.search!!.ask shouldBe ""
+        none.screen.search!!.ask_row shouldBe null
         none.screen.data_.search_empty.shouldNotBeNull().action_label shouldBe ""
     }
 

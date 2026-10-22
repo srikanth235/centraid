@@ -3,6 +3,7 @@ package dev.centraid.shared
 import centraid.core.v1.ContainerHit
 import centraid.core.v1.Row
 import centraid.core.v1.Value
+import centraid.screen.v1.SearchAsk
 import centraid.screen.v1.PhotoCell
 import centraid.screen.v1.PhotosSearchEvent
 import centraid.screen.v1.SearchMatch
@@ -442,33 +443,33 @@ class PhotosSearchSpec : StringSpec({
         cleared.search.shouldNotBeNull().term shouldBe ""
     }
 
-    "Ask is the no-match question: a wholly empty current answer sets it and carries the action, and anything found, a new term, a denial or a clear takes it away (#1097, R-1097-28, R-1097-30)" {
+    "Ask is the row at the foot of a current answer, matched or not, and a new term, a denial or a clear takes it away (#1097, R-1097-28, #1135)" {
         val typing = machine.reduce(machine.initial(), typed("zzqx")).state
         val none = machine.reduce(typing, hits("zzqx", emptyList())).state
-        none.search.shouldNotBeNull().ask shouldBe "Find zzqx"
-        // The no-match state is the machine's: the sentence and everywhere search looked, with Ask as its action.
+        none.search.shouldNotBeNull().ask_row shouldBe SearchAsk(label = "Ask about “zzqx”", question = "Find zzqx", scope = "photos")
+        // The no-match state is the machine's: the sentence and everywhere search looked. Ask is the row under it.
         val empty = none.hits.shouldNotBeNull().empty.shouldNotBeNull()
         empty.headline shouldBe "No results"
         empty.body shouldBe "Nothing matches “zzqx”. Search covers captions, text in photos, places, labels and albums."
-        empty.action_label shouldBe "Ask about “zzqx”"
+        empty.action_label shouldBe ""
 
-        // A photograph is a result: no Ask, no no-match state.
+        // A photograph is a result: no no-match state, and Ask still at the foot.
         val found = machine.reduce(
             typing,
             hits("zzqx", listOf(assetRow("a-1", "2026-02-03T10:00:00Z"))),
         ).state
-        found.search.shouldNotBeNull().ask shouldBe ""
+        found.search.shouldNotBeNull().ask_row shouldBe SearchAsk(label = "Ask about “zzqx”", question = "Find zzqx", scope = "photos")
         found.hits.shouldNotBeNull().empty shouldBe null
         // A new term, a clear and a refusal take the question away.
-        machine.reduce(none, typed("zzq")).state.search.shouldNotBeNull().ask shouldBe ""
-        machine.reduce(none, typed("")).state.search.shouldNotBeNull().ask shouldBe ""
+        machine.reduce(none, typed("zzq")).state.search.shouldNotBeNull().ask_row shouldBe null
+        machine.reduce(none, typed("")).state.search.shouldNotBeNull().ask_row shouldBe null
         machine.reduce(
             none,
             PhotosSearchReads.refused(Reads.refused("The access plane said no.")),
-        ).state.search.shouldNotBeNull().ask shouldBe ""
+        ).state.search.shouldNotBeNull().ask_row shouldBe null
         // A late answer for a term the field has left sets none.
         val moved = machine.reduce(none, typed("zzqy")).state
-        machine.reduce(moved, hits("zzqx", emptyList())).state.search.shouldNotBeNull().ask shouldBe ""
+        machine.reduce(moved, hits("zzqx", emptyList())).state.search.shouldNotBeNull().ask_row shouldBe null
     }
 
     "a late corrected answer sets no correction, and a second page keeps it" {

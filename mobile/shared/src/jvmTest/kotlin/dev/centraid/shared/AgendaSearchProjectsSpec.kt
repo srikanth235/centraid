@@ -3,6 +3,7 @@ package dev.centraid.shared
 import centraid.core.v1.AgendaSearch
 import centraid.core.v1.ContainerHit
 import centraid.core.v1.TasksSearch
+import centraid.screen.v1.SearchAsk
 import centraid.screen.v1.AgendaEmpty
 import centraid.screen.v1.AgendaHomeEvent
 import centraid.screen.v1.AgendaHomeState
@@ -76,10 +77,10 @@ class AgendaSearchProjectsSpec : StringSpec({
             it.containers.shouldBeEmpty()
             it.empty shouldBe AgendaEmpty.AGENDA_EMPTY_NO_MATCH
         }
-        stray.screen.search_ask shouldBe "Find garden"
+        stray.screen.search_ask_row shouldBe SearchAsk(label = "Ask about “garden”", question = "Find garden", scope = "agenda")
     }
 
-    "only a project matched: no 'nothing matches' sentence and no Ask" {
+    "only a project matched: no 'nothing matches' sentence, and Ask still at the foot" {
         val typed = drive(landed(schedule), searchOpened(), term("garden")).state
         val only = answered(typed, TasksSearch(today = TODAY, containers = listOf(garden())))
         only.screen.data_.shouldNotBeNull().let {
@@ -89,14 +90,14 @@ class AgendaSearchProjectsSpec : StringSpec({
             it.task_hits.shouldBeEmpty()
             it.containers.single().title shouldBe "Garden"
         }
-        only.screen.search_ask shouldBe ""
-        // NOTHING AT ALL is still no-match, with Ask.
+        only.screen.search_ask_row shouldBe SearchAsk(label = "Ask about “garden”", question = "Find garden", scope = "agenda")
+        // NOTHING AT ALL is no-match, with the same Ask.
         val none = answered(typed, TasksSearch(today = TODAY))
         none.screen.data_.shouldNotBeNull().let {
             it.empty shouldBe AgendaEmpty.AGENDA_EMPTY_NO_MATCH
             it.containers.shouldBeEmpty()
         }
-        none.screen.search_ask shouldBe "Find garden"
+        none.screen.search_ask_row shouldBe SearchAsk(label = "Ask about “garden”", question = "Find garden", scope = "agenda")
     }
 
     "closing search clears the containers, and a new term's answer replaces them" {
