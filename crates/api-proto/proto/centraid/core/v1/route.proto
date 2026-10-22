@@ -30,6 +30,11 @@ message Route {
     TodoProjectRoute todo_project = 104;
     TodoDetailRoute todo_detail = 105;
     TodoCatchUpRoute todo_catch_up = 106;
+    // ---- docs (200-299) ----
+    DocsDriveRoute docs_drive = 200;
+    DocsDocumentRoute docs_document = 201;
+    DocsEditorRoute docs_editor = 202;
+    DocsVersionsRoute docs_versions = 203;
     // ---- the kit (900-999) ----
     TrashRoute trash = 900;
   }
@@ -114,6 +119,50 @@ message TodoDetailRoute {
 
 // `agenda.catch_up`: the Overdue work, piled.
 message TodoCatchUpRoute {}
+
+// ---------------------------------------------------------------------------
+// Docs
+// ---------------------------------------------------------------------------
+
+// Which shelf the drive page shows.
+enum DocsDestination {
+  DOCS_DESTINATION_UNSPECIFIED = 0;
+  DOCS_DESTINATION_ALL = 1;
+  DOCS_DESTINATION_FOLDERS = 2;
+  DOCS_DESTINATION_STARRED = 3;
+  // Chosen from the More sheet; not a band tab.
+  DOCS_DESTINATION_RECENT = 4;
+}
+
+// `docs.drive`: lands on `destination` (All when unspecified); FOLDERS with a
+// `folder_id` is that folder's page. `parent` is the pushing page's own title,
+// which the page's back control says (#1047); empty is "Docs".
+message DocsDriveRoute {
+  DocsDestination destination = 1;
+  string folder_id = 2;
+  string folder_name = 3;
+  string parent = 4;
+}
+
+// `docs.document`: one document. The title rides along so the head has words
+// before the read lands; `parent` is the pushing page's title.
+message DocsDocumentRoute {
+  string document_id = 1;
+  string title = 2;
+  string parent = 3;
+}
+
+// `docs.editor`: a text document's editor.
+message DocsEditorRoute {
+  string document_id = 1;
+  string title = 2;
+}
+
+// `docs.versions`: one document's version history.
+message DocsVersionsRoute {
+  string document_id = 1;
+  string title = 2;
+}
 
 // ---------------------------------------------------------------------------
 // The kit

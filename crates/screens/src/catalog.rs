@@ -855,6 +855,7 @@ pub mod act {
             pub title: String,
             pub folder_id: Option<String>,
             pub document_id: Option<String>,
+            pub size: Option<i64>,
             pub text: Option<String>,
         }
         impl Upload {
@@ -867,6 +868,7 @@ pub mod act {
                 map.insert("title".to_owned(), text(self.title));
                 if let Some(it) = self.folder_id { map.insert("folder_id".to_owned(), text(it)); }
                 if let Some(it) = self.document_id { map.insert("id".to_owned(), text(it)); }
+                if let Some(it) = self.size { map.insert("size".to_owned(), whole(it)); }
                 if let Some(it) = self.text { map.insert("text".to_owned(), text(it)); }
                 wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
             }
