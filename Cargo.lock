@@ -501,6 +501,7 @@ name = "centraid-apps-locker"
 version = "1.0.0-alpha.0"
 dependencies = [
  "centraid-apps-kit",
+ "centraid-search",
  "rusqlite",
  "serde_json",
  "thiserror",

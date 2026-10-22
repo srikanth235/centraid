@@ -14,11 +14,12 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use centraid_apps_kit::Denial;
 use centraid_apps_kit::error::KitResult;
 use centraid_apps_kit::reads::{PageDoor, Read, in_list, read_by_id, read_window};
 use centraid_apps_kit::row::{Cell, Row, text_of};
-use centraid_apps_kit::spelling::WalkedWords;
 use centraid_apps_kit::statement::{PageBindValue, PageOrder, PageQuery};
+use centraid_search::{Answer, Principal, Search, SearchError, SearchRequest};
 
 use crate::queries::{
     AccessAnswer, ENTITY_COLUMNS, ITEMS_MAX, ItemRow, KIND_COLUMNS, SEALED_ITEM_COLUMNS,
@@ -106,6 +107,15 @@ const KIND_ROWS: Read = Read {
     name: "locker.phone.rows",
     table: "locker_item",
     select: KIND_COLUMNS,
+    order: ("id", "id"),
+    column: "id",
+};
+
+/// The entity rows of a set of items: the ranked hits of a search, read back by id.
+const ENTITY_ROWS: Read = Read {
+    name: "locker.phone.entities",
+    table: "entity",
+    select: ENTITY_COLUMNS,
     order: ("id", "id"),
     column: "id",
 };
@@ -309,14 +319,10 @@ pub struct PhoneField {
 }
 
 /// `locker.search`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct SearchData {
     pub items: Vec<Listed>,
     pub truncated: bool,
-    /// The words the rows answer, when the typed term found nothing and a
-    /// correction against the walked rows' own words did (#1097, R4, R6).
-    /// `None` for an exact answer, and when the correction found nothing.
-    pub corrected: Option<String>,
 }
 
 /// `locker.review`: the metadata verdicts.
@@ -460,80 +466,106 @@ pub fn load_item(door: &dyn PageDoor, item_id: &str) -> KitResult<Option<ItemDat
     }))
 }
 
-/// The search: title, username and address (v0's three) and, since #1097 (R6),
-/// the note, full name, email, phone and card brand, the memo and the aliases —
-/// case-insensitively, over every item not in the trash. **Nothing sealed is
-/// read**: the walk projects [`ITEM_COLUMNS`], and the memo and aliases are
-/// plaintext rows of their own.
-///
-/// When the exact walk finds nothing, the typed words are corrected against the
-/// words of the very rows just walked ([`WalkedWords`]) and the walk is run
-/// again with the corrected words; `corrected` says so only if that run found
-/// something. Locker is not a search domain, so no index or vocabulary is
-/// asked.
-pub fn load_search(door: &dyn PageDoor, term: &str, limit: usize) -> KitResult<SearchData> {
-    let limit = if limit == 0 {
+/// The rows a search answers for the caller's `limit`: a zero is
+/// [`SEARCH_DEFAULT`], and nothing exceeds [`SEARCH_ROWS`].
+#[must_use]
+pub fn search_window(limit: usize) -> usize {
+    if limit == 0 {
         SEARCH_DEFAULT
     } else {
         limit.min(SEARCH_ROWS)
-    };
-    let needle = term.trim().to_lowercase();
-    if needle.is_empty() {
-        return Ok(SearchData {
-            items: Vec::new(),
-            truncated: false,
-            corrected: None,
-        });
     }
-    let walked = read_shelf(door, SEARCH_ROWS)?;
-    let rows: Vec<ItemRow> = walked.rows.clone();
-    let decorations = walked.decorations.clone();
-    let texts = |row: &ItemRow| -> Vec<String> {
-        let mut texts: Vec<String> = row.searchable().map(str::to_lowercase).collect();
-        texts.extend(
-            decorations
-                .aliases
-                .get(&row.item_id)
+}
+
+/// The search: the vault's one full-text index asked for Locker's items, read
+/// back as shelf rows in the order the index ranked them. The index holds an
+/// item by its **plain** text only (title, username, address, notes, name,
+/// email, phone, brand, memo, aliases, addresses and tags), whether or not Locker
+/// is locked; a sealed secret is in no index, so **nothing sealed is read**:
+/// the rows are projected through [`ITEM_COLUMNS`] and a hit's text is the
+/// door's. A match is a word (or the start of one), not a substring.
+///
+/// A zero `limit` is the default; the window is clamped to [`SEARCH_ROWS`]. The
+/// door is asked for one row more than the window, to say whether it truncated.
+/// The correction is the caller's (`corrected_search` in `crates/core`).
+///
+/// # Errors
+///
+/// The kit's own refusals. A term with no searchable word answers the empty
+/// shape, and a door that refuses is the payload's denial.
+pub fn load_search(
+    door: &dyn PageDoor,
+    search: &dyn Search,
+    principal: &Principal,
+    term: &str,
+    limit: usize,
+) -> KitResult<(SearchData, Option<Denial>)> {
+    let window = search_window(limit);
+    let term = term.trim();
+    if term.is_empty() {
+        return Ok((SearchData::default(), None));
+    }
+    let request = SearchRequest::new(KIND, term, window + 1);
+    let page = match search.query(principal, &request) {
+        Ok(Answer::Data { page, .. }) => page,
+        Ok(Answer::Denied(denied)) => {
+            return Ok((
+                SearchData::default(),
+                Some(Denial {
+                    code: denied.code,
+                    message: denied.message,
+                    revoked_at: denied.revoked_at,
+                }),
+            ));
+        }
+        // A term of punctuation is not a refusal: the member typed `---`.
+        Err(SearchError::NoSearchableWords { .. }) => return Ok((SearchData::default(), None)),
+        Err(other) => {
+            return Ok((
+                SearchData::default(),
+                Some(Denial {
+                    code: None,
+                    message: Some(other.to_string()),
+                    revoked_at: None,
+                }),
+            ));
+        }
+    };
+    let truncated = page.rows.len() > window;
+    // VAULT ORDER IS RANK ORDER (best match first) — keep it.
+    let ranked: Vec<String> = page
+        .rows
+        .iter()
+        .take(window)
+        .map(|target| target.id.clone())
+        .collect();
+    if ranked.is_empty() {
+        return Ok((SearchData::default(), None));
+    }
+    let mut found: BTreeMap<String, Row> = read_chunked(
+        &ENTITY_ROWS,
+        door,
+        &ranked,
+        Some((
+            "kind = ? AND deleted_at IS NULL",
+            vec![PageBindValue::Text(KIND.to_owned())],
+        )),
+    )?
+    .into_iter()
+    .filter_map(|row| text_of(&row, "id").map(|id| (id, row)))
+    .collect();
+    let entities: Vec<Row> = ranked.iter().filter_map(|id| found.remove(id)).collect();
+    let (rows, decorations) = fold_items(door, entities)?;
+    Ok((
+        SearchData {
+            items: rows
                 .into_iter()
-                .flatten()
-                .map(|alias| alias.to_lowercase()),
-        );
-        texts.extend(row.memo.as_ref().map(|memo| memo.to_lowercase()));
-        texts
-    };
-    let haystacks: Vec<Vec<String>> = rows.iter().map(texts).collect();
-    let find = |needle: &str| -> Vec<usize> {
-        haystacks
-            .iter()
-            .enumerate()
-            .filter(|(_, texts)| texts.iter().any(|text| text.contains(needle)))
-            .map(|(at, _)| at)
-            .collect()
-    };
-    let mut matched = find(&needle);
-    let mut corrected = None;
-    if matched.is_empty() {
-        let mut words = WalkedWords::new();
-        for texts in &haystacks {
-            words.add_row(texts.iter().map(String::as_str));
-        }
-        if let Some(words) = words.correct(term) {
-            let again = find(&words.to_lowercase());
-            if !again.is_empty() {
-                matched = again;
-                corrected = Some(words);
-            }
-        }
-    }
-    Ok(SearchData {
-        truncated: matched.len() > limit || walked.filled,
-        items: matched
-            .into_iter()
-            .take(limit)
-            .map(|at| decorations.listed(rows[at].clone()))
-            .collect(),
-        corrected,
-    })
+                .map(|row| decorations.listed(row))
+                .collect(),
+            truncated,
+        },
+        None,
+    ))
 }
 
 /// The metadata review, against `today` (`YYYY-MM-DD` in the member's zone).

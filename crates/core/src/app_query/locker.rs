@@ -16,7 +16,7 @@ use centraid_apps_locker::queries::AccessKind;
 use centraid_vault::Vault;
 use centraid_vault::time::zone::FireZone;
 
-use super::{VaultDoor, settle, zone_of};
+use super::{VaultDoor, corrected_search, filled, settle, with_search, zone_of};
 use crate::error::{CoreError, Result};
 
 type Answer = wire::app_query_response::Answer;
@@ -219,7 +219,36 @@ pub(super) fn search(
 ) -> Result<Answer> {
     let zone = zone_of(vault, &asked.tz)?;
     let limit = usize::try_from(asked.limit).unwrap_or(usize::MAX);
-    answered(door, phone::load_search(door, &asked.term, limit), |data| {
+    // THE VAULT'S ONE INDEX, asked for Locker's items (#1135): it holds an item by
+    // its plain text whether or not Locker is locked, and a sealed secret not at
+    // all. The correction is the shared pass, over the one word list.
+    let loaded = with_search(vault, door, |search| {
+        corrected_search(
+            search,
+            &["locker_item"],
+            &asked.term,
+            |data: &phone::SearchData| data.items.len(),
+            |exact, again| phone::SearchData {
+                truncated: exact.truncated || again.truncated,
+                items: filled(
+                    exact.items,
+                    again.items,
+                    phone::search_window(limit),
+                    |listed| listed.row.item_id.clone(),
+                ),
+            },
+            |term| {
+                phone::load_search(
+                    door,
+                    search,
+                    &centraid_search::Principal::Owner,
+                    term,
+                    limit,
+                )
+            },
+        )
+    })?;
+    settle(door, loaded, |(data, corrected)| {
         Answer::LockerSearch(wire::LockerSearch {
             term: asked.term.clone(),
             items: data
@@ -228,7 +257,7 @@ pub(super) fn search(
                 .map(|listed| row(listed, &zone))
                 .collect(),
             truncated: data.truncated,
-            corrected: data.corrected.unwrap_or_default(),
+            corrected,
         })
     })
 }

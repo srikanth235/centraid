@@ -416,7 +416,12 @@ fn search_is_the_typed_text_of_a_live_item_and_never_a_secret() {
             .collect()
     };
     assert_eq!(hits("bank"), vec!["item-bank".to_owned()]);
-    assert_eq!(hits("MAYA@"), vec!["item-bank".to_owned()]);
+    // A match is a word of the index, not a substring: `MAYA@` is the word `maya`,
+    // which the forum's username holds too, and the whole address is the bank's alone.
+    let mut maya = hits("MAYA@");
+    maya.sort();
+    assert_eq!(maya, vec!["item-bank".to_owned(), "item-forum".to_owned()]);
+    assert_eq!(hits("maya@example.com"), vec!["item-bank".to_owned()]);
     assert_eq!(hits("forum.example"), vec!["item-forum".to_owned()]);
     // The note is typed text and is searched since #1097 (R6).
     assert_eq!(hits("recovery"), vec!["item-bank".to_owned()]);

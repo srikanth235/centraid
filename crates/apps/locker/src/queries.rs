@@ -173,39 +173,6 @@ impl ItemRow {
             purge_at: text_of(row, "purge_at"),
         }
     }
-
-    /// The plain texts a search reads on this row: title, username and address
-    /// (v0's three) and, since #1097 (R6), the note, the full name, the email,
-    /// the phone and the card brand a member typed.
-    ///
-    /// **Never a sealed cell**: this reads the browsable half only, so
-    /// `password`, `otp_seed`, `card_number`, `cvv` and `content` cannot be
-    /// matched or offered as a correction — they are not on [`ITEM_COLUMNS`].
-    /// `cardholder`, `address`, `network` and `expiry` are not searched.
-    /// The memo and the aliases are other tables' rows and are the walker's.
-    pub fn searchable(&self) -> impl Iterator<Item = &str> {
-        std::iter::once(self.title.as_str()).chain(
-            [
-                &self.username,
-                &self.url,
-                &self.notes,
-                &self.fullname,
-                &self.email,
-                &self.phone,
-                &self.brand,
-            ]
-            .into_iter()
-            .filter_map(|value| value.as_deref()),
-        )
-    }
-
-    /// Whether the term (already lowercased) matches this row's
-    /// [`searchable`](Self::searchable) texts, case-insensitively.
-    #[must_use]
-    pub fn matches(&self, term: &str) -> bool {
-        self.searchable()
-            .any(|value| value.to_lowercase().contains(term))
-    }
 }
 
 fn truthy(row: &Row, column: &str) -> bool {
@@ -463,51 +430,14 @@ mod tests {
         assert_eq!(subtitle_of(&login), "—");
     }
 
+    /// THE ROW LEVEL, where a planted plaintext sealed value is visible. A row
+    /// that carries all five sealed cells as readable words, read the way a shelf
+    /// reads a row, must hold none of them in any field: `ItemRow::of` reads no
+    /// sealed key into the row. (The core test of the same property sees
+    /// ciphertext after the relock, so it cannot notice a sealed cell joining a
+    /// row; this one can. The index's side of it is the vault's plaintext gate.)
     #[test]
-    fn the_search_fold_matches_what_a_member_typed_and_nothing_else() {
-        let row = ItemRow {
-            item_id: "i1".to_owned(),
-            title: "Bank".to_owned(),
-            username: Some("ada@example.com".to_owned()),
-            url: Some("https://bank.example".to_owned()),
-            notes: Some("a memorable note".to_owned()),
-            fullname: Some("Ada Lovelace".to_owned()),
-            email: Some("ada.l@mail.test".to_owned()),
-            phone: Some("555-0100".to_owned()),
-            brand: Some("Visa".to_owned()),
-            cardholder: Some("Cardholder Name".to_owned()),
-            address: Some("12 Analytical Way".to_owned()),
-            network: Some("HomeNet".to_owned()),
-            expiry: Some("04/27".to_owned()),
-            ..ItemRow::default()
-        };
-        // v0's three, and (#1097, R6) the note, name, email, phone and brand.
-        for found in [
-            "bank",
-            "ada@",
-            "bank.example",
-            "memorable",
-            "lovelace",
-            "mail.test",
-            "555-01",
-            "visa",
-        ] {
-            assert!(row.matches(found), "{found} is typed text of the item");
-        }
-        // The columns a search does not read.
-        for not in ["cardholder", "analytical", "homenet", "04/27"] {
-            assert!(!row.matches(not), "{not} is not searched");
-        }
-    }
-
-    /// THE WALKER LEVEL, where a planted plaintext sealed value is visible. A
-    /// row that carries all five sealed cells as readable words, read the way the
-    /// walker reads a row, must put none of them in the texts a search matches or
-    /// offers as a correction: `ItemRow::of` reads no sealed key into any field.
-    /// (The core test of the same property sees ciphertext after the relock, so
-    /// it cannot notice a sealed cell joining the walk; this one can.)
-    #[test]
-    fn a_planted_sealed_value_joins_no_searched_text() {
+    fn a_planted_sealed_value_joins_no_field_of_the_row() {
         let planted: Vec<(String, String)> = SEALED_ITEM_COLUMNS
             .iter()
             .map(|column| ((*column).to_owned(), format!("plaintext-of-{column}")))
@@ -526,18 +456,15 @@ mod tests {
         ];
         pairs.extend(planted.iter().map(|(k, v)| (k.as_str(), v.as_str())));
         let item = ItemRow::of(&row(&pairs));
+        let shown = format!("{item:?}");
         for (column, value) in &planted {
             assert!(
-                item.searchable().all(|text| !text.contains(value.as_str())),
-                "the sealed {column} is in a text a search reads"
-            );
-            assert!(
-                !item.matches(&value.to_lowercase()),
-                "the sealed {column} is matched"
+                !shown.contains(value.as_str()),
+                "the sealed {column} is in a field of the row"
             );
         }
         // The control: the typed texts of the same row are all read.
-        assert_eq!(item.searchable().count(), 8);
+        assert!(shown.contains("Lovelace") && shown.contains("mail.test"));
     }
 
     #[test]
