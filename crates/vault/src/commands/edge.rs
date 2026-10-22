@@ -129,7 +129,22 @@ pub(crate) fn put(
         ctx.touch(from)?;
         ctx.mark_for_index(to);
     }
+    mark_labelled(ctx, from, rel, to);
     Ok(())
+}
+
+/// A list or an album is part of the text of what it holds, and a relation's
+/// label of both people it joins ([`crate::index::text_of`]): putting such an
+/// edge in place or taking it away changes their text without changing them.
+fn mark_labelled(ctx: &CommandCtx<'_, '_>, from: &str, rel: Rel, to: &str) {
+    match rel {
+        Rel::Contains => ctx.mark_for_index(to),
+        Rel::Related => {
+            ctx.mark_for_index(from);
+            ctx.mark_for_index(to);
+        }
+        _ => {}
+    }
 }
 
 fn add(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
@@ -189,6 +204,9 @@ fn remove(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     if removed > 0 && rel.belongs_to_note() {
         ctx.touch(from)?;
         ctx.mark_for_index(to);
+    }
+    if removed > 0 {
+        mark_labelled(ctx, from, rel, to);
     }
     Ok(serde_json::json!({ "removed": removed > 0 }))
 }

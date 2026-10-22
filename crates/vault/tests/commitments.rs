@@ -1185,3 +1185,538 @@ fn no_column_stores_a_rollup_except_the_stated_figures_the_spec_names() {
         Ok(())
     });
 }
+
+// ---------------------------------------------------------------------------
+// 9. Every text column is findable, folded into what it labels, or argued out
+// ---------------------------------------------------------------------------
+
+/// How a text column reaches the index.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Reach {
+    /// In the text of its own entity (`text_of`: its row and its children), or
+    /// its title. A title also folds into the text of what it labels, and a
+    /// note's body into what it is about; section 10 asks those.
+    Own,
+    /// Not indexed, and why.
+    Not(&'static str),
+}
+
+/// The text columns a member types or a title names a group by, each with its
+/// reach. Every other `TEXT` column of the file is structural (an id, an enum, a
+/// date, a hash, JSON, a Locker cell) and the test below recognises it by its
+/// declaration, so adding a text column fails here until it is placed.
+const CENSUS: &[(&str, &str, Reach)] = &[
+    ("entity", "title", Reach::Own),
+    ("person", "nickname", Reach::Own),
+    ("person", "role", Reach::Own),
+    ("person", "met", Reach::Own),
+    (
+        "person",
+        "sort_name",
+        Reach::Not("derived from the title for ordering"),
+    ),
+    ("contact_point", "value", Reach::Own),
+    ("contact_point", "label", Reach::Own),
+    (
+        "contact_point",
+        "normalized",
+        Reach::Not("the value, normalised for matching a duplicate"),
+    ),
+    ("place", "address", Reach::Own),
+    ("place", "locality", Reach::Own),
+    ("place", "zone", Reach::Not("a time zone name, not prose")),
+    ("event", "description", Reach::Own),
+    ("event", "zone", Reach::Not("a time zone name, not prose")),
+    ("event", "rule", Reach::Not("an RFC 5545 rule")),
+    ("event", "url", Reach::Not("a link, not prose")),
+    ("occurrence", "title", Reach::Own),
+    ("occurrence", "description", Reach::Own),
+    ("task", "description", Reach::Own),
+    ("task", "rule", Reach::Not("an RFC 5545 rule")),
+    ("task", "zone", Reach::Not("a time zone name, not prose")),
+    ("note", "body", Reach::Own),
+    (
+        "document",
+        "media_type",
+        Reach::Not("a MIME type, not prose"),
+    ),
+    ("photo", "media_type", Reach::Not("a MIME type, not prose")),
+    (
+        "photo",
+        "burst",
+        Reach::Not("a group key the camera minted"),
+    ),
+    (
+        "derivative",
+        "media_type",
+        Reach::Not("a MIME type, not prose"),
+    ),
+    ("derivative", "text", Reach::Own),
+    (
+        "revision",
+        "body",
+        Reach::Not("history: the note's current body is indexed, not its past"),
+    ),
+    (
+        "revision",
+        "media_type",
+        Reach::Not("a MIME type, not prose"),
+    ),
+    (
+        "thread",
+        "scope",
+        Reach::Not("the key of the screen a chat belongs to"),
+    ),
+    ("message", "text", Reach::Own),
+    (
+        "message_attachment",
+        "label",
+        Reach::Not("a copy of the attached thing's title, or a pasted image's name"),
+    ),
+    (
+        "workout",
+        "recorded_by",
+        Reach::Not("the name of the device that recorded it"),
+    ),
+    (
+        "origin",
+        "label",
+        Reach::Not("the name of an import source, not something a member wrote about a thing"),
+    ),
+    ("origin", "ref", Reach::Not("the source's own key")),
+    (
+        "concept",
+        "key",
+        Reach::Not("the folded form of the title, which is indexed in what it labels"),
+    ),
+    ("container", "color", Reach::Not("a colour token")),
+    (
+        "vault",
+        "name",
+        Reach::Not("the vault's own name, one per file and not an entity"),
+    ),
+    ("vault", "zone", Reach::Not("a time zone name, not prose")),
+    ("journal", "command", Reach::Not("a command name")),
+    (
+        "journal",
+        "detail",
+        Reach::Not("a refusal's sentence, evidence rather than content"),
+    ),
+    ("account", "currency", Reach::Not("an ISO code")),
+    ("txn", "currency", Reach::Not("an ISO code")),
+    ("budget", "currency", Reach::Not("an ISO code")),
+    ("budget", "month", Reach::Not("a month")),
+    ("vault", "currency", Reach::Not("an ISO code")),
+    ("activity", "starts", Reach::Not("an instant")),
+    ("activity", "ends", Reach::Not("an instant")),
+    ("event", "starts", Reach::Not("an instant")),
+    ("event", "ends", Reach::Not("an instant")),
+    ("occurrence", "original_start", Reach::Not("an instant")),
+    ("occurrence", "starts", Reach::Not("an instant")),
+    ("occurrence", "ends", Reach::Not("an instant")),
+    ("journal", "at", Reach::Not("an instant")),
+    ("revision", "at", Reach::Not("an instant")),
+    ("edge_shape", "rel", Reach::Not("a closed vocabulary")),
+    ("source", "system", Reach::Not("a closed vocabulary")),
+];
+
+/// The text of one column's own definition inside a `CREATE TABLE`: the piece
+/// between two commas at the top level of the parentheses.
+fn column_definition(sql: &str, column: &str) -> String {
+    let body = &sql[sql.find('(').map_or(0, |at| at + 1)..];
+    let mut depth = 0_i32;
+    let mut start = 0;
+    let mut pieces = Vec::new();
+    for (at, letter) in body.char_indices() {
+        match letter {
+            '(' => depth += 1,
+            ')' => depth -= 1,
+            ',' if depth == 0 => {
+                pieces.push(&body[start..at]);
+                start = at + 1;
+            }
+            _ => {}
+        }
+    }
+    pieces.push(&body[start..]);
+    pieces
+        .into_iter()
+        .map(|piece| piece.split_whitespace().collect::<Vec<_>>().join(" "))
+        .find(|piece| piece.starts_with(&format!("{column} ")))
+        .unwrap_or_default()
+}
+
+/// A `TEXT` column the declaration alone shows is not prose: an id or a hash
+/// (named by a key), an enum, JSON, a date, a generated constant. Locker's
+/// tables are never indexed.
+fn is_structural(connection: &Connection, table: &str, column: &str) -> bool {
+    if table.starts_with("locker_") || table == "receipt" {
+        return true;
+    }
+    if column == "id"
+        || column == "kind"
+        || column.ends_with("_id")
+        || column.ends_with("_kind")
+        || column.ends_with("_at")
+    {
+        return true;
+    }
+    let sql = table_sql(connection, table)
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    let own = column_definition(&sql, column);
+    own.contains("REFERENCES")
+        || own.contains("GENERATED")
+        || own.contains(&format!("{column} IN ("))
+        || sql.contains(&format!("{column} IN ("))
+        || sql.contains(&format!("json_valid({column})"))
+        || sql.contains(&format!("date({column})"))
+        || sql.contains(&format!("datetime({column})"))
+        || sql.contains(&format!("length({column}) = 64"))
+}
+
+#[test]
+fn every_text_column_is_findable_folded_into_what_it_labels_or_argued_out() {
+    let scratch = founded("c9");
+    read(&scratch.vault, |connection| {
+        let mut unplaced = Vec::new();
+        let mut redundant = Vec::new();
+        let mut seen = BTreeSet::new();
+        for table in tables(connection) {
+            let mut columns = connection.prepare(&format!("PRAGMA table_xinfo({table})"))?;
+            let rows = columns
+                .query_map([], |row| {
+                    Ok((row.get::<_, String>(1)?, row.get::<_, String>(2)?))
+                })?
+                .collect::<rusqlite::Result<Vec<_>>>()?;
+            for (column, declared) in rows {
+                if !declared.eq_ignore_ascii_case("TEXT") {
+                    continue;
+                }
+                seen.insert((table.clone(), column.clone()));
+                let placed = CENSUS.iter().any(|(t, c, _)| *t == table && *c == column);
+                if !placed && !is_structural(connection, &table, &column) {
+                    unplaced.push(format!("{table}.{column}"));
+                }
+            }
+        }
+        assert_eq!(
+            unplaced,
+            Vec::<String>::new(),
+            "a text column is neither structural nor placed in CENSUS: index it, fold it into what it labels, or argue it out"
+        );
+        for (table, column, _) in CENSUS {
+            assert!(
+                seen.contains(&((*table).to_owned(), (*column).to_owned())),
+                "{table}.{column} is in CENSUS and is not a TEXT column of the file"
+            );
+            if is_structural(connection, table, column) {
+                redundant.push(format!("{table}.{column}"));
+            }
+        }
+        assert_eq!(
+            redundant,
+            Vec::<String>::new(),
+            "structural by their declarations: they need no line in CENSUS"
+        );
+        Ok(())
+    });
+}
+
+// ---------------------------------------------------------------------------
+// 10. A label reaches what it labels, and leaves it again
+// ---------------------------------------------------------------------------
+
+/// Whether the index finds this entity by this word, asked of the index itself.
+fn finds(vault: &Vault, id: &str, word: &str) -> bool {
+    read(vault, |connection| {
+        Ok(connection.query_row(
+            "SELECT EXISTS (SELECT 1 FROM search
+                             WHERE search MATCH ?2
+                               AND rowid = (SELECT n FROM entity WHERE id = ?1))",
+            [id, &format!("\"{word}\"")],
+            |row| row.get(0),
+        )?)
+    })
+}
+
+/// The incremental index is the rebuilt one, asked after every step so that the
+/// step that forgot to re-index is the one that fails.
+fn in_step(vault: &Vault, step: &str) {
+    let incremental = index_dump(vault);
+    assert_eq!(incremental, rebuilt(vault), "{step}: the index is stale");
+}
+
+fn is_found(vault: &Vault, id: &str, word: &str, step: &str) {
+    assert!(
+        finds(vault, id, word),
+        "{step}: `{id}` is not found by `{word}`"
+    );
+    in_step(vault, step);
+}
+
+fn is_not_found(vault: &Vault, id: &str, word: &str, step: &str) {
+    assert!(
+        !finds(vault, id, word),
+        "{step}: `{id}` is still found by `{word}`"
+    );
+    in_step(vault, step);
+}
+
+#[test]
+fn a_title_that_labels_is_part_of_the_text_of_what_it_labels() {
+    let scratch = founded("c10");
+    let vault = &scratch.vault;
+    let registry = Registry::with_system_commands().expect("a registry");
+    let go = |name: &str, input: serde_json::Value| run(vault, &registry, name, input);
+
+    // A transaction is found by its category and by its account.
+    go(
+        "account.add",
+        json!({"id": "acct", "title": "Everyday Checking", "type": "checking"}),
+    );
+    vault
+        .commit(|tx| {
+            tx.insert_entity("tx1", Kind::Txn, "Corner shop", AT)?;
+            tx.connection().execute(
+                "INSERT INTO txn (id, account_id, currency, posted_on, amount_minor, category_id)
+                 VALUES ('tx1', 'acct', (SELECT currency FROM account WHERE id = 'acct'),
+                         '2026-03-01', -450, 'category:food.groceries')",
+                [],
+            )?;
+            Ok(())
+        })
+        .expect("a line");
+    is_found(vault, "tx1", "corner", "a line's own title");
+    is_found(vault, "tx1", "groceries", "a line's category");
+    is_found(vault, "tx1", "everyday", "a line's account");
+    go(
+        "entity.retitle",
+        json!({"id": "acct", "title": "Joint Account"}),
+    );
+    is_found(vault, "tx1", "joint", "an account renamed");
+    is_not_found(vault, "tx1", "everyday", "an account renamed");
+    go(
+        "txn.categorize",
+        json!({"ids": ["tx1"], "category_id": "category:food.dining"}),
+    );
+    is_found(vault, "tx1", "dining", "a line re-categorised");
+    is_not_found(vault, "tx1", "groceries", "a line re-categorised");
+    go("category.add", json!({"title": "Treats"}));
+    let treats: String = read(vault, |c| {
+        Ok(
+            c.query_row("SELECT id FROM entity WHERE title = 'Treats'", [], |r| {
+                r.get(0)
+            })?,
+        )
+    });
+    go(
+        "txn.categorize",
+        json!({"ids": ["tx1"], "category_id": treats}),
+    );
+    go("entity.retitle", json!({"id": treats, "title": "Sweets"}));
+    is_found(vault, "tx1", "sweets", "a category renamed");
+    go("entity.purge", json!({"id": treats}));
+    is_not_found(vault, "tx1", "sweets", "a category purged");
+
+    // A tag or a flag is part of the text of what carries it.
+    go(
+        "note.create",
+        json!({"id": "nt", "title": "Packing", "body": "socks"}),
+    );
+    let tag = go("tag.add", json!({"id": "nt", "label": "Road Trip"}))["tag"]
+        .as_str()
+        .expect("the tag's id")
+        .to_owned();
+    is_found(vault, "nt", "road", "a tag put on");
+    go("tag.add", json!({"id": "tx1", "label": "Road Trip"}));
+    is_found(vault, "tx1", "trip", "a tag on a line");
+    go("entity.retitle", json!({"id": tag, "title": "Holiday"}));
+    is_found(vault, "nt", "holiday", "a tag renamed");
+    is_found(vault, "tx1", "holiday", "a tag renamed");
+    is_not_found(vault, "nt", "road", "a tag renamed");
+    go("tag.remove", json!({"id": "nt", "label": "Road Trip"}));
+    is_not_found(vault, "nt", "holiday", "a tag taken off");
+    go("flag.set", json!({"id": "nt", "flag": "starred"}));
+    is_found(vault, "nt", "starred", "a flag set");
+    go("flag.clear", json!({"id": "nt", "flag": "starred"}));
+    is_not_found(vault, "nt", "starred", "a flag cleared");
+    go("entity.purge", json!({"id": tag}));
+    is_not_found(vault, "tx1", "holiday", "a tag purged");
+
+    // A calendar is part of the text of its events; so is a day's own title.
+    go(
+        "container.create",
+        json!({"id": "cal", "kind": "calendar", "title": "Work"}),
+    );
+    go(
+        "event.propose",
+        json!({"id": "ev", "title": "Standup", "starts": "2026-03-10T09:00",
+        "rule": "FREQ=DAILY;COUNT=5", "calendar_id": "cal"}),
+    );
+    is_found(vault, "ev", "work", "an event on a calendar");
+    go("entity.retitle", json!({"id": "cal", "title": "Office"}));
+    is_found(vault, "ev", "office", "a calendar renamed");
+    is_not_found(vault, "ev", "work", "a calendar renamed");
+    go(
+        "event.edit_occurrence",
+        json!({"id": "ev", "original_start": "2026-03-11T09:00:00",
+        "scope": "occurrence", "action": "override", "title": "Retro", "description": "bring snacks"}),
+    );
+    is_found(vault, "ev", "retro", "an occurrence's own title");
+    is_found(vault, "ev", "snacks", "an occurrence's own description");
+    go(
+        "event.edit_occurrence",
+        json!({"id": "ev", "original_start": "2026-03-11T09:00:00",
+        "scope": "occurrence", "action": "restore"}),
+    );
+    is_not_found(vault, "ev", "retro", "an occurrence restored");
+
+    // A list is part of the text of the people in it.
+    go("person.add", json!({"id": "ada", "title": "Ada Lovelace"}));
+    go(
+        "container.create",
+        json!({"id": "club", "kind": "list", "title": "Book Club"}),
+    );
+    go("person.move", json!({"id": "ada", "list_id": "club"}));
+    is_found(vault, "ada", "club", "a person filed in a list");
+    go(
+        "entity.retitle",
+        json!({"id": "club", "title": "Reading Circle"}),
+    );
+    is_found(vault, "ada", "circle", "a list renamed");
+    go("person.move", json!({"id": "ada", "list_id": null}));
+    is_not_found(vault, "ada", "circle", "a person taken out of a list");
+    go(
+        "edge.add",
+        json!({"from": "club", "rel": "contains", "to": "ada"}),
+    );
+    is_found(vault, "ada", "circle", "a list that holds a person");
+    go(
+        "edge.remove",
+        json!({"from": "club", "rel": "contains", "to": "ada"}),
+    );
+    is_not_found(vault, "ada", "circle", "a list that lets a person go");
+    go(
+        "edge.add",
+        json!({"from": "club", "rel": "contains", "to": "ada"}),
+    );
+    go("entity.trash", json!({"id": "club"}));
+    go("entity.purge", json!({"id": "club"}));
+    is_not_found(vault, "ada", "circle", "a list purged");
+
+    // A relation's word is part of the text of both people it joins.
+    go(
+        "person.add_relationship",
+        json!({"id": "ada", "name": "Annabella", "kind": "mother"}),
+    );
+    is_found(vault, "ada", "mother", "a relation");
+    go(
+        "entity.retitle",
+        json!({"id": "relation:mother", "title": "Parent"}),
+    );
+    is_found(vault, "ada", "parent", "a relation renamed");
+
+    // An album is part of the text of its photographs.
+    vault
+        .commit(|tx| {
+            tx.connection().execute(
+                "INSERT INTO blob (hash, size) VALUES (?1, 1)",
+                [&"ab".repeat(32)],
+            )?;
+            tx.insert_entity("ph", Kind::Photo, "Shore", AT)?;
+            tx.connection().execute(
+                "INSERT INTO photo (id, blob, media_type, form) VALUES ('ph', ?1, 'image/jpeg', 'photo')",
+                [&"ab".repeat(32)],
+            )?;
+            Ok(())
+        })
+        .expect("a photograph");
+    go(
+        "container.create",
+        json!({"id": "alb", "kind": "album", "title": "Summer"}),
+    );
+    go(
+        "edge.add",
+        json!({"from": "alb", "rel": "contains", "to": "ph"}),
+    );
+    is_found(vault, "ph", "summer", "a photograph in an album");
+    go("entity.retitle", json!({"id": "alb", "title": "Autumn"}));
+    is_found(vault, "ph", "autumn", "an album renamed");
+    go(
+        "edge.remove",
+        json!({"from": "alb", "rel": "contains", "to": "ph"}),
+    );
+    is_not_found(vault, "ph", "autumn", "a photograph taken out of an album");
+
+    // A notebook, a folder and a project are part of the text of what is filed in them.
+    go(
+        "container.create",
+        json!({"id": "book", "kind": "notebook", "title": "Recipes"}),
+    );
+    go("note.move", json!({"id": "nt", "notebook_id": "book"}));
+    is_found(vault, "nt", "recipes", "a note in a notebook");
+    go("entity.retitle", json!({"id": "book", "title": "Cooking"}));
+    is_found(vault, "nt", "cooking", "a notebook renamed");
+    go("note.move", json!({"id": "nt", "notebook_id": null}));
+    is_not_found(vault, "nt", "cooking", "a note taken out of a notebook");
+    vault
+        .commit(|tx| {
+            tx.connection().execute(
+                "INSERT INTO blob (hash, size) VALUES (?1, 1)",
+                [&"cd".repeat(32)],
+            )?;
+            tx.insert_entity("doc", Kind::Document, "Return", AT)?;
+            tx.connection().execute(
+                "INSERT INTO document (id, blob, media_type) VALUES ('doc', ?1, 'application/pdf')",
+                [&"cd".repeat(32)],
+            )?;
+            Ok(())
+        })
+        .expect("a document");
+    go(
+        "container.create",
+        json!({"id": "fold", "kind": "folder", "title": "Taxes"}),
+    );
+    go("document.move", json!({"id": "doc", "folder_id": "fold"}));
+    is_found(vault, "doc", "taxes", "a document in a folder");
+    go("entity.retitle", json!({"id": "fold", "title": "Filing"}));
+    is_found(vault, "doc", "filing", "a folder renamed");
+
+    go(
+        "container.create",
+        json!({"id": "area", "kind": "area", "title": "Home"}),
+    );
+    go(
+        "container.create",
+        json!({"id": "proj", "kind": "project", "title": "Garden", "parent": "area"}),
+    );
+    go(
+        "container.create",
+        json!({"id": "sec", "kind": "section", "title": "Planning", "parent": "proj"}),
+    );
+    go(
+        "task.add",
+        json!({"id": "tk", "title": "Order seeds", "project_id": "proj", "section_id": "sec"}),
+    );
+    is_found(vault, "proj", "home", "a project in an area");
+    is_found(vault, "tk", "planning", "a task in a section");
+    go("entity.retitle", json!({"id": "sec", "title": "Buying"}));
+    is_found(vault, "tk", "buying", "a section renamed");
+    go("entity.retitle", json!({"id": "area", "title": "House"}));
+    is_found(vault, "proj", "house", "an area renamed");
+    go("entity.trash", json!({"id": "area"}));
+    go("entity.purge", json!({"id": "area"}));
+    is_not_found(vault, "proj", "house", "an area purged");
+
+    // An activity is found by the kind of thing it was and by where.
+    go(
+        "person.log_interaction",
+        json!({"id": "ada", "kind": "call", "text": "about the engine"}),
+    );
+    let call: String = read(vault, |c| {
+        Ok(c.query_row("SELECT id FROM activity LIMIT 1", [], |r| r.get(0))?)
+    });
+    is_found(vault, &call, "call", "an activity's kind");
+}

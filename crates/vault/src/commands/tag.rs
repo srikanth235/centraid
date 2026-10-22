@@ -2,7 +2,8 @@
 //!
 //! A tag is a `concept` of kind `tag`, minted by its label the first time it is
 //! used (`tag:<folded label>`), and a tagging is a `tagged` edge. Putting a word
-//! on an entity is not a change to the entity: nothing is touched.
+//! on an entity is not a change to the entity: nothing is touched, but the word
+//! is part of the entity's search text, so it is re-indexed.
 
 use crate::commands::entity::{lookup_live, require};
 use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency};
@@ -84,6 +85,9 @@ pub(crate) fn set_tagged(
             [id, concept],
         )?
     };
+    if changed > 0 {
+        ctx.mark_for_index(id);
+    }
     Ok(changed > 0)
 }
 

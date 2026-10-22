@@ -416,7 +416,7 @@ mod tests {
 
     #[test]
     fn a_kind_nobody_searches_is_refused_by_name_and_none_means_all() {
-        for word in ["locker.item", "flag", "txn", "calendar", "nonsense"] {
+        for word in ["locker.item", "flag", "account", "calendar", "nonsense"] {
             assert!(
                 matches!(
                     kinds_of(&[word.to_owned()]),

@@ -7,10 +7,12 @@
 //! A live entity whose kind has a search text gets its row replaced; anything
 //! else (trashed, a kind nobody searches, nothing to say) has its row deleted.
 //! The search text is [`text_of`], one function over the entity's own row and
-//! children, plus the bodies of the live notes `about` it, so a person is found
-//! by what you wrote about them, and by what you wrote about a touch that was
-//! `with` them (an interaction's note). A read joins `entity` on `n` for the kind and
-//! the trash filter; Locker is not in the index at all.
+//! children, the titles of what labels it (its tags and flags, the lists and
+//! albums that hold it, the notebook, folder, project, calendar, category or
+//! account it is filed under), and the bodies of the live notes `about` it, so a
+//! person is found by what you wrote about them, and by what you wrote about a
+//! touch that was `with` them (an interaction's note). A read joins `entity` on
+//! `n` for the kind and the trash filter; Locker is not in the index at all.
 //!
 //! `tests/commitments.rs` rebuilds the index from scratch after a scripted run
 //! of every command and compares it with the incremental one, so a command
@@ -23,11 +25,17 @@ use rusqlite::{Connection, OptionalExtension};
 use crate::error::Result;
 use crate::model::Kind;
 
+mod text;
+
+pub use text::{SEARCHABLE, text_of};
+
 /// Re-index the touched ids, and whatever their text feeds.
 ///
 /// A note's body is part of the text of everything it is `about`, so a touched
 /// note brings its targets with it; and of the people a touch it is about was
-/// `with`, so it brings those too.
+/// `with`, so it brings those too. A title is part of the text of everything it
+/// labels ([`DEPENDENTS`]), so a touched tag, list, project or account brings
+/// what it labels.
 pub fn reindex(connection: &Connection, touched: &BTreeSet<String>) -> Result<()> {
     let mut work = touched.clone();
     let mut about = connection.prepare_cached(
@@ -36,13 +44,7 @@ pub fn reindex(connection: &Connection, touched: &BTreeSet<String>) -> Result<()
     )?;
     let mut with = connection
         .prepare_cached("SELECT w.to_id FROM edge w WHERE w.from_id = ?1 AND w.rel = 'with'")?;
-    // The words of a task's project and of an event's or a photograph's place
-    // are part of its own text: renaming either brings what is filed under it.
-    let mut dependents = connection.prepare_cached(
-        "SELECT id FROM task WHERE project_id = ?1
-         UNION ALL SELECT id FROM event WHERE place_id = ?1
-         UNION ALL SELECT id FROM photo WHERE place_id = ?1",
-    )?;
+    let mut dependents = connection.prepare_cached(DEPENDENTS)?;
     for id in touched {
         work.extend(
             dependents
@@ -65,6 +67,32 @@ pub fn reindex(connection: &Connection, touched: &BTreeSet<String>) -> Result<()
     }
     Ok(())
 }
+
+/// Whatever a touched entity's title is part of the text of: one parameter, the
+/// touched id, and one arm per way a thing is labelled. Each arm is an indexed
+/// lookup and answers nothing for an entity that labels nothing, so asking it of
+/// every touched id costs a handful of probes.
+///
+/// A link added or removed (a tag put on a note, a photograph put in an album)
+/// is not a touch of the label, so the command that writes the link marks the
+/// labelled end for the index itself.
+const DEPENDENTS: &str = "\
+    SELECT id FROM task WHERE project_id = ?1
+    UNION ALL SELECT id FROM task WHERE section_id = ?1
+    UNION ALL SELECT id FROM event WHERE place_id = ?1
+    UNION ALL SELECT id FROM event WHERE calendar_id = ?1
+    UNION ALL SELECT id FROM photo WHERE place_id = ?1
+    UNION ALL SELECT id FROM activity WHERE place_id = ?1
+    UNION ALL SELECT id FROM activity WHERE type_id = ?1
+    UNION ALL SELECT id FROM note WHERE notebook_id = ?1
+    UNION ALL SELECT id FROM document WHERE folder_id = ?1
+    UNION ALL SELECT id FROM container WHERE parent_id = ?1
+    UNION ALL SELECT id FROM txn WHERE category_id = ?1
+    UNION ALL SELECT id FROM txn WHERE account_id = ?1
+    UNION ALL SELECT from_id FROM edge WHERE to_id = ?1 AND rel = 'tagged'
+    UNION ALL SELECT to_id FROM edge WHERE from_id = ?1 AND rel = 'contains'
+    UNION ALL SELECT from_id FROM edge WHERE label_id = ?1
+    UNION ALL SELECT to_id FROM edge WHERE label_id = ?1";
 
 /// Throw the index away and write it again from the rows.
 ///
@@ -119,136 +147,6 @@ fn reindex_one(connection: &Connection, id: &str) -> Result<()> {
         rusqlite::params![n, title, body],
     )?;
     Ok(())
-}
-
-/// The kinds a member searches for: every kind [`text_of`] has an answer for.
-/// A flag, a calendar, a category or a transaction is not in the index, and
-/// Locker is not even an entity.
-pub const SEARCHABLE: [Kind; 13] = [
-    Kind::Person,
-    Kind::Place,
-    Kind::Event,
-    Kind::Task,
-    Kind::Activity,
-    Kind::Note,
-    Kind::Document,
-    Kind::Photo,
-    Kind::Thread,
-    Kind::Notebook,
-    Kind::Folder,
-    Kind::Album,
-    Kind::Project,
-];
-
-/// The text a kind is found by, beside its title: its own row and children, and
-/// the live notes `about` it. `None` is a kind nobody searches. The title is the
-/// entity's own and is indexed beside this, never in it.
-///
-/// Public so a reader that wants a snippet can ask the same question the index
-/// was written from: the index is contentless and cannot say which words matched.
-pub fn text_of(connection: &Connection, id: &str, kind: Kind) -> Result<Option<String>> {
-    let own = match kind {
-        Kind::Person => joined(
-            connection,
-            "SELECT nickname FROM person WHERE id = ?1
-             UNION ALL SELECT role FROM person WHERE id = ?1
-             UNION ALL SELECT met FROM person WHERE id = ?1
-             UNION ALL SELECT value FROM contact_point WHERE person_id = ?1
-             UNION ALL SELECT label FROM contact_point WHERE person_id = ?1",
-            id,
-        )?,
-        Kind::Place => joined(
-            connection,
-            "SELECT address FROM place WHERE id = ?1
-             UNION ALL SELECT locality FROM place WHERE id = ?1",
-            id,
-        )?,
-        Kind::Event => joined(
-            connection,
-            "SELECT description FROM event WHERE id = ?1
-             UNION ALL SELECT p.title FROM event v JOIN entity p ON p.id = v.place_id WHERE v.id = ?1
-             UNION ALL SELECT pl.address FROM event v JOIN place pl ON pl.id = v.place_id WHERE v.id = ?1",
-            id,
-        )?,
-        Kind::Task => joined(
-            connection,
-            "SELECT description FROM task WHERE id = ?1
-             UNION ALL SELECT p.title FROM task t JOIN entity p ON p.id = t.project_id WHERE t.id = ?1",
-            id,
-        )?,
-        Kind::Note => joined(connection, "SELECT body FROM note WHERE id = ?1", id)?,
-        Kind::Document => joined(
-            connection,
-            "SELECT d.text FROM document c JOIN derivative d ON d.blob = c.blob
-              WHERE c.id = ?1 AND d.variant = 'text'",
-            id,
-        )?,
-        Kind::Photo => joined(
-            connection,
-            "SELECT d.text FROM photo c JOIN derivative d ON d.blob = c.blob
-              WHERE c.id = ?1 AND d.variant = 'caption'
-             UNION ALL SELECT p.title FROM photo v JOIN entity p ON p.id = v.place_id WHERE v.id = ?1
-             UNION ALL SELECT pl.address FROM photo v JOIN place pl ON pl.id = v.place_id WHERE v.id = ?1
-             UNION ALL SELECT pl.locality FROM photo v JOIN place pl ON pl.id = v.place_id WHERE v.id = ?1",
-            id,
-        )?,
-        Kind::Thread => joined(
-            connection,
-            "SELECT text FROM message WHERE thread_id = ?1 AND role = 'user' ORDER BY ordinal",
-            id,
-        )?,
-        Kind::Activity | Kind::Notebook | Kind::Folder | Kind::Album | Kind::Project => String::new(),
-        _ => return Ok(None),
-    };
-    let notes = if kind == Kind::Note {
-        String::new()
-    } else {
-        joined(
-            connection,
-            "SELECT n.body FROM edge e
-               JOIN entity ne ON ne.id = e.from_id AND ne.deleted_at IS NULL
-               JOIN note n ON n.id = e.from_id
-              WHERE e.rel = 'about' AND e.to_id = ?1
-              ORDER BY ne.created_at, ne.id",
-            id,
-        )?
-    };
-    // A person is also found by what was written about a touch that was with them.
-    let touches = if kind == Kind::Person {
-        joined(
-            connection,
-            "SELECT n.body FROM edge w
-               JOIN edge e ON e.to_id = w.from_id AND e.rel = 'about'
-               JOIN entity ne ON ne.id = e.from_id AND ne.deleted_at IS NULL
-               JOIN note n ON n.id = e.from_id
-              WHERE w.rel = 'with' AND w.to_id = ?1
-              ORDER BY ne.created_at, ne.id",
-            id,
-        )?
-    } else {
-        String::new()
-    };
-    Ok(Some(
-        [own, notes, touches]
-            .into_iter()
-            .filter(|part| !part.is_empty())
-            .collect::<Vec<_>>()
-            .join("\n"),
-    ))
-}
-
-/// The non-empty text cells of a one-parameter query, one per line.
-fn joined(connection: &Connection, sql: &str, id: &str) -> Result<String> {
-    let mut statement = connection.prepare_cached(sql)?;
-    let cells = statement
-        .query_map([id], |row| row.get::<_, Option<String>>(0))?
-        .collect::<rusqlite::Result<Vec<_>>>()?;
-    Ok(cells
-        .into_iter()
-        .flatten()
-        .filter(|cell| !cell.trim().is_empty())
-        .collect::<Vec<_>>()
-        .join("\n"))
 }
 
 #[cfg(test)]

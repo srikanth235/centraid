@@ -368,6 +368,8 @@ fn move_person(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
             AND from_id IN (SELECT id FROM container WHERE kind = 'list')",
         [id],
     )?;
+    // The list's title is part of the person's search text.
+    ctx.mark_for_index(id);
     if let Some(list) = ctx.optional_str("list_id") {
         edge::put(ctx, list, Rel::Contains, id, None, &Extras::default())?;
     }

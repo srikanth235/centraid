@@ -816,3 +816,27 @@ The vault's own row is a singleton that is not an entity, so no shared verb reac
 #### Left for the owner
 
 The hand-offs above. Inside the repository: the other twenty-three dead `package.json` scripts (a law-estate commit for their rows). `ontology-style.css` was pruned by class name against the page, the Astro files and the layout, so a class added later needs its rule added back.
+
+## Search rework, lane A
+
+The index's text, its word list and its cost, in four slices, each one commit. The baseline is edited in place (one baseline, no new rungs). The earlier ruling in [#1097](https://github.com/srikanth235/centraid/issues/1097) that limited what the index covers is not binding on this work (owner's instruction); where a doc or comment cited it for a limit changed here, it is rewritten to the current state.
+
+### A1 — coverage: every member-typed or labelling text column is findable
+
+**The census.** 259 `TEXT` columns in the baseline; 61 are Locker's (never indexed) and 198 are the vault's. `every_text_column_is_findable_folded_into_what_it_labels_or_argued_out` in `crates/vault/tests/commitments.rs` reads them from the founded file: a column is structural when its own declaration says so (an id or a hash, an enum, JSON, a date, a generated constant; 142 columns), otherwise it must have a row in `CENSUS` with its reach, so a text column added later fails until it is placed.
+
+| Reach | Columns | Which |
+| --- | --- | --- |
+| Indexed in its own entity's text | 15 | `entity.title`; `person.nickname`, `role`, `met`; `contact_point.value`, `label`; `place.address`, `locality`; `event.description`; `occurrence.title`, `description`; `task.description`; `note.body`; `derivative.text` (a document's text, a photograph's caption); `message.text` (a chat's user turns) |
+| Folded into the text of what it labels | one column, 14 kinds | `entity.title` of a tag, flag, list, album, notebook, folder, project, section, area, calendar, category, account, activity kind or workout kind, and relation, into the text of whatever it labels (below); `note.body` also into what the note is `about`, and a place's words into the events, photographs and activities there |
+| Not indexed, with a reason in `CENSUS` | 41 | time zones, RFC 5545 rules, URLs, MIME types, derived sort and match keys, device and source keys, an import source's label, a chat's scope key, history (`revision.body`: the current body is indexed, not its past), a pasted attachment's label (a copy of a title), the vault's own name, journal evidence, ISO codes, instants, closed vocabularies |
+| Structural | 142 | recognised by declaration |
+| Locker | 61 | never indexed |
+
+**The folds** (`crates/vault/src/index/text.rs`): a transaction by its category and its account; every searchable entity by the tags and flags on it, and by the lists and albums that hold it (a person by the list it is filed in, a photograph by its albums); a person by the relation words on its `related` edges; an event by its calendar and by the title and description of its overridden days; a task by its section as well as its project; an activity by its kind and its place; a note by its notebook; a document by its folder; a project, folder or notebook by the container above it. `Kind::Txn` joins `SEARCHABLE` (14 kinds); an account, category and calendar stay unsearchable as themselves because their titles reach what they label.
+
+**Dependents.** `DEPENDENTS` in `crates/vault/src/index.rs` is the one statement that answers, for a touched entity, which others carry its title: a rename, a trash or a restore of a tag, list, album, notebook, folder, project, section, area, calendar, category, account, place, activity kind or relation re-indexes them. A link written without touching either end marks the labelled end itself: `tag.add`, `tag.remove`, `flag.set`, `flag.clear` (`crates/vault/src/commands/tag.rs`), a `contains` or `related` edge added or removed (`crates/vault/src/commands/edge.rs`), `person.move` out of a list (`crates/vault/src/commands/person.rs`), and a purge of anything that labelled something (`crates/vault/src/commands/entity.rs`).
+
+**Scripted coverage.** `a_title_that_labels_is_part_of_the_text_of_what_it_labels` in `crates/vault/tests/commitments.rs` drives each fold through the real commands (add, rename, remove, trash, purge) and, after every step, compares the incremental index with a rebuild; the seeded red (the purge marking taken out) fails at "a tag purged".
+
+Files: `crates/vault/src/index.rs`, `crates/vault/src/index/text.rs` (new; `SEARCHABLE` and `text_of` moved here), `crates/vault/src/commands/edge.rs`, `crates/vault/src/commands/tag.rs`, `crates/vault/src/commands/entity.rs`, `crates/vault/src/commands/person.rs`, `crates/vault/tests/commitments.rs`, `crates/search/src/sqlite.rs` and `crates/search/tests/door.rs` (a transaction is searchable now; the "kind nobody searches" examples name an account), `docs/vault-ontology.md`, `receipts/issue-1135-vault-model.md`.

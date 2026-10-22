@@ -266,7 +266,7 @@ fn a_snippet_marks_the_words_that_matched() {
 #[test]
 fn locker_and_every_kind_nobody_searches_is_refused_by_name() {
     let world = World::new();
-    for kind in ["locker.item", "locker_item", "flag", "txn", "calendar"] {
+    for kind in ["locker.item", "locker_item", "flag", "account", "calendar"] {
         let refused = world
             .vault
             .read(|connection| {

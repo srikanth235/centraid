@@ -334,6 +334,19 @@ pub(crate) fn purge_one(
     )? {
         ctx.mark_for_index(&target);
     }
+    // What the purged entity labelled (a tag on things, a list or album that
+    // held them, a relation between people) loses its title from their text;
+    // the edges go with the entity, so they are named before it goes.
+    for labelled in ids(
+        connection,
+        "SELECT from_id FROM edge WHERE to_id = ?1 AND rel = 'tagged'
+         UNION SELECT to_id FROM edge WHERE from_id = ?1 AND rel = 'contains'
+         UNION SELECT from_id FROM edge WHERE label_id = ?1
+         UNION SELECT to_id FROM edge WHERE label_id = ?1",
+        id,
+    )? {
+        ctx.mark_for_index(&labelled);
+    }
     let n: i64 =
         connection.query_row("SELECT n FROM entity WHERE id = ?1", [id], |row| row.get(0))?;
     crate::index::forget(connection, n)?;
