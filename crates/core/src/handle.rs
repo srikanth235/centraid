@@ -840,19 +840,17 @@ impl Handle {
                 let changes = crate::events::ChangeFeed::new(self.events());
                 Ok(response(wire::response::Kind::Command(self.with_vault(
                     |vault| {
-                        // A LOCKER SECRET IS SEALED HERE, before the vault
-                        // sees it (#1047, D-5): the command plane refuses
-                        // plaintext, and the core is the one holder of `K`.
-                        let sealed =
-                            crate::locker::phone::seal_command(vault, &self.locker, command)?;
-                        let command = match sealed {
-                            Some(input) => &wire::Command {
-                                input,
-                                ..command.clone()
-                            },
-                            None => command,
-                        };
-                        crate::api::invoke(vault, &self.registry, &self.owner(), command, &changes)
+                        // A LOCKER SECRET IS SEALED in the one write path the chat's
+                        // confirmed card shares (#1047, D-5, #1135): `api::command`.
+                        crate::api::command(
+                            vault,
+                            &self.locker,
+                            &self.registry,
+                            &self.owner(),
+                            command,
+                            &changes,
+                        )
+                        .and_then(crate::api::wire_outcome)
                     },
                 )?)))
             }

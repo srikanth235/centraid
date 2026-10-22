@@ -10,9 +10,9 @@
 //! |---|---|
 //! | `table` | [`VaultDoor`], the page door every app query reads through (`Vault::keyset_page`) |
 //! | `search` | the FTS door over the vault's read connection, as a screen's search does |
-//! | `run` | [`api::invoke_raw`](crate::api), the gate order and change feed a screen's write goes through, with an `invoke_key` |
+//! | `run` | refused: a write is a confirmed card's, keyed (below) |
 //! | `mint_id`, `now_ms` | the vault's own id source and clock |
-//! | a typed Locker secret in `run_keyed` | `locker::phone::seal_command`, the seal the member's own `Command` plane takes, under the open Locker session (#1135) |
+//! | `run_keyed` | `api::command`, the write path the shell's own `Command` request takes: a typed Locker secret is sealed under the open Locker session, then `invoke_raw` runs it (#1135) |
 //!
 //! # A SEALED VALUE IS A CHANNEL THIS DOOR KEEPS CLOSED (#1135)
 //!
@@ -20,8 +20,8 @@
 //! vault withholds nothing from it. What it never does is let a sealed plaintext reach the
 //! runtime. A sealed column is read as a presence bit (the runtime's world asks for `IS NOT NULL`),
 //! no door method returns a sealed cell, and a secret the member typed in chat arrives in the input
-//! of `locker.add_item` / `locker.edit_item` and is sealed here, in [`Door::run_keyed`], before the
-//! vault sees it. A shut Locker answers [`Door::locked_for`] first, so a confirm stops before it
+//! of `locker.add_item` / `locker.edit_item` and is sealed in [`crate::api::command`], the one write
+//! path the shell's own `Command` request takes too, before the vault sees it. A shut Locker answers [`Door::locked_for`] first, so a confirm stops before it
 //! runs a step and the card waits for the unlock.
 //!
 //! # THE DOOR OUTLIVES A CALL, THE LOCK DOES NOT
@@ -207,7 +207,7 @@ impl Door for CoreDoor {
         if let Some(earlier) = done.get(key) {
             return Ok(earlier.clone());
         }
-        let mut request = wire::Command {
+        let request = wire::Command {
             name: command.to_owned(),
             input: serde_json::to_vec(&input)
                 .map_err(|error| format!("{command}: the input is not JSON: {error}"))?,
@@ -216,14 +216,15 @@ impl Door for CoreDoor {
         };
         let changes = ChangeFeed::new(Arc::clone(&self.events));
         let outcome = self.with(|vault| {
-            // A SECRET THE MEMBER TYPED IS SEALED HERE, before the vault sees it (#1135).
-            if let Some(sealed) = crate::locker::phone::seal_command(vault, &self.locker, &request)
-                .map_err(|error| format!("{command}: {error}"))?
-            {
-                request.input = sealed;
-            }
-            crate::api::invoke_raw(vault, &self.registry, &self.owner, &request, &changes)
-                .map_err(|error| format!("{command}: {error}"))
+            crate::api::command(
+                vault,
+                &self.locker,
+                &self.registry,
+                &self.owner,
+                &request,
+                &changes,
+            )
+            .map_err(|error| format!("{command}: {error}"))
         })?;
         let ran = Ran {
             ok: outcome.status == CommandStatus::Executed,

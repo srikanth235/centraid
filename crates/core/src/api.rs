@@ -402,7 +402,42 @@ pub fn invoke(
     request: &wire::Command,
     changes: &crate::events::ChangeFeed,
 ) -> Result<wire::CommandOutcome> {
-    let outcome = invoke_raw(vault, registry, principal, request, changes)?;
+    wire_outcome(invoke_raw(vault, registry, principal, request, changes)?)
+}
+
+/// THE ONE WRITE PATH OF A COMMAND THE MEMBER OR THE CHAT MAKES (#1135): a secret typed into the
+/// input is sealed under the open Locker session
+/// ([`crate::locker::phone::seal_command`], which refuses while the session is shut), then
+/// [`invoke_raw`] runs it. The shell's `Command` request and the chat's confirmed card
+/// (`assist::door`) both come through here, so a secret is sealed the same way whoever typed it
+/// and the chat holds no second sealing call.
+pub(crate) fn command(
+    vault: &Vault,
+    locker: &crate::locker::phone::Cell,
+    registry: &Registry,
+    principal: &centraid_vault::Principal,
+    request: &wire::Command,
+    changes: &crate::events::ChangeFeed,
+) -> Result<centraid_vault::commands::CommandOutcome> {
+    match crate::locker::phone::seal_command(vault, locker, request)? {
+        Some(input) => invoke_raw(
+            vault,
+            registry,
+            principal,
+            &wire::Command {
+                input,
+                ..request.clone()
+            },
+            changes,
+        ),
+        None => invoke_raw(vault, registry, principal, request, changes),
+    }
+}
+
+/// A vault outcome as the wire carries it.
+pub(crate) fn wire_outcome(
+    outcome: centraid_vault::commands::CommandOutcome,
+) -> Result<wire::CommandOutcome> {
     Ok(wire::CommandOutcome {
         status: match outcome.status {
             CommandStatus::Executed => wire::CommandStatus::Executed,
