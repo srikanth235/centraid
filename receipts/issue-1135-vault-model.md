@@ -610,3 +610,75 @@ Commit `dc3cb1e22`'s subject is 109 characters, over the limit, and was pushed b
 
 Lane 7 owns `chat.*`, `schedule.*` and the `ChatScopeSpec`. The two native Money files want a device build. `bun run format` and `cargo xtask doc-links` were not run whole.
 
+
+### Lane 7 — Chat and the assistant
+
+Commits (all pushed): `6a99b38e1` thread.* commands, the roster and the readers; `8ea8df0a5` the core saves, settles, reopens and lists; `ddacbc8c5` the assistant's world, verbs and parked writes, nativetools follows; `cd0389b62` core, ffi and Kotlin tests; `13acaa7f6` refreeze readiness; the docs commit that carries this section.
+
+#### What changed
+
+- **Chat storage.** `thread.save_turn` writes a turn in one commit (messages, cards, attachments with their thumbnail blobs, the waiting proposal dismissed); `thread.settle_proposal` settles once (trigger `message_outcome_settles_once` and a precondition); `thread.rename` and `thread.clear`; a chat is deleted by `entity.purge`. `turn`, `text` and `title` are sealed in the journal (R-CHAT-6). `crates/vault/src/chat.rs` reads threads, history, the last question, attachable documents and attachment sources. Thread search text is the title and the member's own messages.
+- **One roster.** `crates/vault/src/roster.rs` (`APPS`, `ids()`, `scopes()`, `is_card_app()`, `is_scope()`) feeds the schemas in `commands/thread.rs`, `centraid_assist::App` (`app.rs`, tested equal in order) and `ChatMachine` (`ChatScopeSpec` reads the file). No app word is in a CHECK. Health and Locker are out.
+- **Assistant.** `World` is loaded from the kind tables, edges and flags through the Vault door (`native/world.rs`), no journal read for facts; album and notebook are answered by container kind; `meta.rs` names the new commands and columns (`KINDS`, `VERBS`, `Via`); `act.rs` plans `task.*`, `event.*`, `note.*`, `document.*`, `person.add`, `container.*`, `entity.*`, `flag.*`, `edge.*`; `park.rs` applies every mapped write to the patched world and a shadow-mode oracle test holds it equal to the vault after each. The tool export under `contracts/assist/export/` is regenerated (equal to a fresh `nativetools export`, README aside).
+- **nativetools.** `seed.rs` rebuilt on the new commands; 831 tests green, none deleted. Cases converted: the container delete and album-revision cases (members go to the trash with the container), the `linked_to` cases (moved to tasks), `phase2_status` (no started state), the `issue_26` fix test (renamed).
+- **Refreeze readiness in this repo.** The 35 public world builders (`experiments/toolchat/native/authored/worlds/T*_build.py`) no longer say `in_progress` (RNG draws kept, so every other byte is unchanged); all 35 rebuild byte for byte (`artefacts.py verify-rebuild --public-only`), are rehashed in `experiments/toolchat/native/artefacts.json`, and seed with the new seeder (`nativetools seed`).
+
+#### Files
+
+Rust: `crates/vault/src/{roster,chat,index,lib,model}.rs`, `crates/vault/src/commands/{thread,entity,event,mod}.rs`, `crates/vault/tests/{chat,commands}.rs`; `crates/assist/src/{app,suggest}.rs`, `crates/assist/src/native/{act,compose,meta,park,search,world}.rs`; `crates/core/src/assist/{store,attach,mod}.rs`, `crates/core/src/app_query/{chat,chat_tests,named,vault}.rs`, `crates/core/tests/{assist_door,assist_native,assist_history}.rs`, `crates/core-ffi/tests/assist.rs`; `crates/nativetools/src/{seed,vaultio}.rs`, `crates/nativetools/src/error_examples.json` and 17 files under `crates/nativetools/tests/`. Kotlin (6): `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/chat/{ChatFlow,ChatMachine}.kt`, `.../shell/HomeSearch.kt`, `mobile/shared/src/jvmTest/kotlin/dev/centraid/shared/{ChatScopeSpec,HomeSearchSpec,ShellCommandsExistSpec}.kt`. Other: `contracts/assist/export/*`, `experiments/toolchat/native/{artefacts.json,authored/worlds/T*_build.py}`, `docs/decisions.md`.
+
+#### Rulings
+
+R-1135-7-1 to R-1135-7-7 in [docs/decisions.md](../docs/decisions.md): the roster constant; chat delete is `entity.purge` and rename is sealed; cards are snapshots; thread search text; no started task; a cancelled event is refused; the seeder reports `dropped`.
+
+#### Observation-text changes (7 groups, listed so the owner can retrain)
+
+1. Delete of a container or record reads "moved to the trash" (was "no longer in …"); its undo reads "back from the trash" (was "now in …"); a deleted container's undo reads "created: #… folder".
+2. A folder or notebook delete no longer asks "still holds …; take them out first": it acts, members go with it.
+3. Task status enum text is "open, completed, cancelled"; `status = in_progress` fails with `status has no value "in_progress".`; edits show `["open","cancelled"]`, not `["in_progress", …]`.
+4. A cancelled event's reschedule is refused: predicate `event_exists_not_cancelled`, "That event is not here to change." (was a "no command" sentence).
+5. A photograph's people and a document's links are not rows; album revisions have no link-change line.
+6. Command names in pending steps, parked plans and the journal view are the new ones (`task.add`, `task.complete`, `entity.trash`, `person.add`, …); the journal view columns are `command` and `outcome`.
+7. `act.x_name_said` carries `why_none` in `error_examples.json`.
+
+#### The owner's refreeze, re-score and retrain (outside this container)
+
+Nothing was uploaded or fetched. The tree holds no Hugging Face token and the training scripts are not in the repo.
+
+1. `HF_TOKEN` (read) for `python3 artefacts.py fetch`: brings the held-out worlds (T03, T12, T23, G) and sessions. Their builders and sessions are Hub-only.
+2. Rebuild the held-out worlds with the same edit as the public builders (drop `in_progress`, `status="in_progress"` and the tuple slot `"in_progress"` -> `"open"`), then `artefacts.py rehash` and `verify-rebuild`.
+3. Sessions and generators still saying `in_progress` (not touched: they are training data and the scorer, the owner retrains from them): `authored/sessions/*.py` (41 files), `eval/regen.py` (D-1044-7 selection rule, `in_progress()` helper), `eval/fixture_world.py`, `authored/gen/{drills,recover}.py`, `authored/trace.py`, `authored/test_cells_h.py`, `authored/gen/test_drills.py`. Run `eval/regen.py refreeze` after editing them, then the CPU tests (`run_cpu_tests.py`).
+4. `artefacts.py version` (assembles the tree; it computes `vault_ddl_sha256` over `contracts/migrations/*.sql` and `registry_sha256` over `contracts/assist/export/metadata.json`, both of which changed this wave), then `publish` (`HF_TOKEN` with write on `srikanth235/centraid-native-data`) and `pin` (no credential, edits `artefacts.json`).
+5. Re-score and retrain: GPU and the GCS bucket of the training run; `train/` is the entry. Observation text changes above change the prompts the model is trained on.
+
+#### Falsification
+
+1. **"`turn` is sealed in the journal."** Check: `sealed_input` of `thread.save_turn` emptied (throwaway, restored). Red: `the_journal_keeps_a_token_never_what_was_said` (`crates/vault/tests/chat.rs:195`).
+2. **"The patched world equals the vault after every mapped write."** Check: `task.complete` in `park.rs` stops stamping `completed` (throwaway, restored). Red: `the_patched_world_is_the_vaults_after_every_mapped_write` and `a_parked_write_answers_what_a_run_answers_and_writes_nothing` (`crates/nativetools/tests/park.rs`). A first attempt (changing only the status text the write returns) stayed green: the oracle compares worlds, not answer text, and the text is covered by the observation tests.
+
+#### Verification
+
+| Command | Result |
+| --- | --- |
+| `cargo build --workspace --all-targets --locked` | clean |
+| `cargo test -p centraid-vault -p centraid-assist -p centraid-nativetools -p centraid-core-ffi` | pass (nativetools 831) |
+| `cargo test -p centraid-core --no-fail-fast` | only the 3 named reds below; every `assist_*`, `send` and chat test passes, none hangs |
+| `cargo clippy -p centraid-vault -p centraid-assist -p centraid-nativetools -p centraid-core --all-targets -- -D warnings` | clean |
+| `cargo xtask rules` | clean |
+| `export-ladder-ddl` against `contracts/schema/vault-ddl.sql` | identical (`ladder_ddl`) |
+| `./gradlew -p mobile :shared:jvmTest` | 1,545 run, 4 red, none a chat spec (`ChatScopeSpec` green) |
+| `./gradlew -p mobile :core:jvmTest` | pass |
+| `artefacts.py verify-rebuild --public-only` | 35 of 35 rebuild byte for byte |
+| `python3 -m unittest test_artefacts` | 122 of 123 (`huggingface_hub` is not installed here) |
+
+#### Inherited red this lane leaves
+
+| Crate / target | Red | Owner |
+| --- | --- | --- |
+| `crates/core` | lib `api` 2 (`a_table_no_screen_pages...`, `an_empty_display_name_founds...`), Locker 1 (`the_shelf_is_metadata_with_the_vaults_own_counts`) | lane 8 |
+| `mobile/shared` `:jvmTest` | `ShellCommandsExistSpec` 2 (`core.rename_vault` at `Shelf.kt:847`; 86 distinct command ids against the scan's floor), `AppReadsSpec` 1 (`locker.home` names the old tables), `HomeMachineSpec` 1 (stale expected row `["people","locker"]`; red before this lane) | lane 8 |
+| `docs` | `cargo xtask doc-links` 8 findings, none in lane 7 text | whoever owns `vault-ontology.md` and `glossary.md` |
+
+#### Left for later
+
+`native/whr.rs` still carries the generic `in_progress` rule for any status that has the value; no kind has it now. `eval/regen.py` and `authored/gen/drills.py` encode D-1044-7 on it and are the owner's to rewrite with the retrain.
