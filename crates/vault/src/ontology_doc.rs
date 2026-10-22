@@ -51,7 +51,7 @@ pub const GROUPS: [(&str, &str, &str); 6] = [
     (
         "locker",
         "Locker",
-        "Not an entity kind: sealed items, their rows, their own tags and their own receipts. Nothing outside Locker names an item.",
+        "An entity kind whose secrets stay in sealed cells nothing entity-wide reads: items, their custom fields, passkeys, aliases and addresses, and Locker's own receipts. Its tags, star and archive are the vault's; the assistant and every generic page read pass it by.",
     ),
 ];
 
@@ -59,7 +59,7 @@ pub const GROUPS: [(&str, &str, &str); 6] = [
 ///
 /// The FTS5 shadow tables of `search` are not here (they are an implementation
 /// of it); every other table must be.
-pub const TABLES: [(&str, &str, &str); 43] = [
+pub const TABLES: [(&str, &str, &str); 42] = [
     (
         "kernel",
         "entity",
@@ -238,7 +238,7 @@ pub const TABLES: [(&str, &str, &str); 43] = [
     (
         "locker",
         "locker_item",
-        "A sealed item: a login, card, note, wifi network or other type, with its star, memo and trash.",
+        "A sealed item: a login, card, note, wifi network or other type. Its title, stamps and trash are its entity's; its secrets are sealed cells.",
     ),
     (
         "locker",
@@ -256,11 +256,6 @@ pub const TABLES: [(&str, &str, &str); 43] = [
         "A web address an item answers to.",
     ),
     ("locker", "locker_item_passkey", "A passkey an item holds."),
-    (
-        "locker",
-        "locker_tag",
-        "A word on a Locker item: Locker's own, never in another app's tag rail.",
-    ),
     (
         "locker",
         "locker_key",

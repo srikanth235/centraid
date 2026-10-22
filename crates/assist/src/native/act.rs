@@ -86,13 +86,15 @@ pub(crate) fn create_arg_alias(kind: Kind, key: &str) -> Option<&'static str> {
         .map(|_| "date")
 }
 
-/// The input key that names a row of each kind in its commands: `id` for every entity of the
-/// vault, and a Locker item's own `item_id`.
+/// The input key that names a row in a command: `id` for every command on an entity of the vault
+/// (a Locker item's `entity.trash` and `flag.set` included), and `item_id` for a `locker.*`
+/// command, which keeps its own spelling.
 #[must_use]
-pub fn id_param(kind: Kind) -> &'static str {
-    match kind {
-        Kind::LockerItem => "item_id",
-        _ => "id",
+pub fn id_param(command: &str) -> &'static str {
+    if command.starts_with("locker.") {
+        "item_id"
+    } else {
+        "id"
     }
 }
 
@@ -1950,8 +1952,8 @@ impl Session {
     fn plan(&mut self, verb: Verb, row: &Row, args: &Map<String, Value>) -> Result<Plan, String> {
         let kind = row.kind;
         let id = row.id.clone();
-        let target = || json!({ id_param(kind): id.clone() });
         let command = verb.command(kind).unwrap_or_default();
+        let target = || json!({ id_param(command): id.clone() });
         let check_args = |allowed: &[&str]| -> Result<(), String> {
             for key in args.keys() {
                 if !allowed.contains(&key.as_str()) {
@@ -2082,14 +2084,8 @@ impl Session {
                     ));
                 }
                 let other = if want { Verb::Unstar } else { Verb::Star };
-                // a flag is named by the verb; a Locker item has its own star
-                let input = |_: bool| {
-                    if kind == Kind::LockerItem {
-                        target()
-                    } else {
-                        json!({"id": id, "flag": "starred"})
-                    }
-                };
+                // a flag is named by the verb
+                let input = |_: bool| json!({"id": id, "flag": "starred"});
                 run(
                     vec![Step {
                         command,
@@ -2786,7 +2782,6 @@ impl Session {
         // THE APPEND FORM (nt15 R2b): `body+: oat milk` adds to the text the row has
         let appended = Self::append_args(row, args)?;
         let args = &appended;
-        let id_key = id_param(kind);
         // command → (input, inverse input)
         let mut forward: BTreeMap<&'static str, Map<String, Value>> = BTreeMap::new();
         let mut backward: BTreeMap<&'static str, Map<String, Value>> = BTreeMap::new();
@@ -2885,11 +2880,11 @@ impl Session {
                 let new_vault = new_json.as_str().unwrap_or("open");
                 apart.push(Step {
                     command: meta::task_status_command(new_vault).unwrap_or("task.reopen"),
-                    input: json!({ id_key: row.id }),
+                    input: json!({ "id": row.id }),
                 });
                 apart_back.push(Step {
                     command: meta::task_status_command(old_vault).unwrap_or("task.reopen"),
-                    input: json!({ id_key: row.id }),
+                    input: json!({ "id": row.id }),
                 });
                 continue;
             }
@@ -2897,7 +2892,7 @@ impl Session {
             if (kind, field) == (Kind::Note, "pinned") {
                 let flag = |on: bool| Step {
                     command: if on { "flag.set" } else { "flag.clear" },
-                    input: json!({ id_key: row.id, "flag": "pinned" }),
+                    input: json!({ "id": row.id, "flag": "pinned" }),
                 };
                 apart.push(flag(new_val == Some(Val::Bool(true))));
                 apart_back.push(flag(old == Some(Val::Bool(true))));
@@ -2986,7 +2981,7 @@ impl Session {
             map.into_iter()
                 .filter(|(_, input)| !input.is_empty())
                 .map(|(command, mut input)| {
-                    input.insert(id_key.to_owned(), json!(row.id));
+                    input.insert(id_param(command).to_owned(), json!(row.id));
                     Step {
                         command,
                         input: Value::Object(input),
@@ -3463,7 +3458,7 @@ impl Session {
                 // Take the half-made row back out, so no later diff finds it.
                 if let Some(delete) = Verb::Delete.command(kind) {
                     self.door.advance();
-                    let _ = self.write_step(delete, &json!({ id_param(kind): id }));
+                    let _ = self.write_step(delete, &json!({ id_param(delete): id }));
                 }
                 self.settle()?;
                 return Err(error);
@@ -3472,7 +3467,7 @@ impl Session {
         let inverse = match (kind, Verb::Delete.command(kind)) {
             (_, Some(delete)) => vec![Inverse {
                 command: delete.to_owned(),
-                input: json!({ id_param(kind): id }),
+                input: json!({ id_param(delete): id }),
                 key: key.clone(),
             }],
             _ => Vec::new(),

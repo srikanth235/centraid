@@ -340,7 +340,14 @@ public object LockerEditorMachine :
             ",${jsonString(row.key)}:${jsonString(value)}"
         }
         val tags = data.tags_text.split(',').map { it.trim() }.filter { it.isNotEmpty() }.distinct()
-        val tagJson = ",\"tags\":[${tags.joinToString(",") { jsonString(it) }}]"
+        // THE TAGS ARE THE VAULT'S (#1135): the words that changed are `tag.add` and `tag.remove`, run
+        // after the item itself commits, never a field of the item's command.
+        val itemId = held.screen.item_id
+        val had = if (edit) held.answers.item?.item?.tags.orEmpty() else emptyList()
+        val kept = tags.map { it.lowercase() }.toSet()
+        val before = had.map { it.lowercase() }.toSet()
+        val owed = had.filter { it.lowercase() !in kept }.map { "tag.remove" to tagInput(itemId, it) } +
+            tags.filter { it.lowercase() !in before }.map { "tag.add" to tagInput(itemId, it) }
         // SENT ONLY WHEN CHANGED: restating a held flag would pin it over the
         // vault's rule that a new password clears it (R-1047-F7).
         val flagJson = if (data.compromised != storedFlag(held)) ",\"compromised\":${data.compromised}" else ""
@@ -353,14 +360,31 @@ public object LockerEditorMachine :
         // THE KEY NAMES THE SITTING AND THE ATTEMPT, NEVER THE CONTENT: an
         // invoke key is logged, and this draft carries a secret.
         val token = held.tokens + 1
-        val step = WriteLaw.submit(Writes, held.screen, command, "{$head$fields$tagJson$flagJson}", InvokeKeys.of(command, held.screen.item_id, token.toString()))
-        return Step(held.copy(screen = step.state, tokens = token), step.effects)
+        val step = WriteLaw.submit(Writes, held.screen, command, "{$head$fields$flagJson}", InvokeKeys.of(command, held.screen.item_id, token.toString()))
+        return Step(held.copy(screen = step.state, tokens = token, owed = owed), step.effects)
     }
+
+    private fun tagInput(itemId: String, label: String): String =
+        "{\"id\":${jsonString(itemId)},\"label\":${jsonString(label)}}"
 
     override fun settled(held: LockerHeld<LockerEditorState>, settled: WriteSettled): Step<LockerHeld<LockerEditorState>> {
         val step = WriteLaw.settled(Writes, held.screen, settled)
         val committed = step.state.write?.phase == WriteState.Phase.PHASE_COMMITTED
-        return Step(if (committed) closed(held.copy(screen = step.state)) else held.copy(screen = step.state), step.effects)
+        if (committed && held.owed.isNotEmpty()) {
+            // THE ITEM IS SAVED; ITS TAGS FOLLOW, one write at a time, the editor open until the last.
+            val (command, input) = held.owed.first()
+            val token = held.tokens + 1
+            val label = held.owed.size.toString()
+            val next = WriteLaw.submit(Writes, step.state, command, input, InvokeKeys.of(command, held.screen.item_id, label, token.toString()))
+            return Step(
+                held.copy(screen = next.state, tokens = token, owed = held.owed.drop(1)),
+                step.effects + next.effects,
+            )
+        }
+        return Step(
+            if (committed) closed(held.copy(screen = step.state, owed = emptyList())) else held.copy(screen = step.state, owed = emptyList()),
+            step.effects,
+        )
     }
 
     override fun decorate(held: LockerHeld<LockerEditorState>): LockerEditorState = held.screen.copy(

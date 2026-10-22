@@ -1,5 +1,5 @@
-//! The `locker.*` commands — v0's twenty, plus the reveal receipt (#1020,
-//! D-1020-L1…L7; #1047).
+//! The `locker.*` commands — what involves a secret or Locker's own structure,
+//! plus the reveal receipt (#1020, D-1020-L1…L7; #1047).
 //!
 //! ## The one sentence this whole file follows from
 //!
@@ -49,7 +49,7 @@
 //!   Adopted. `seal_command` refuses a secret with no `item_id` to seal
 //!   against, and [`assert_fresh_id`] refuses one that is taken or malformed —
 //!   so the vault keeps the property that matters (no id collision, no id reuse
-//!   across kinds, which `locker_item_entity_insert` also enforces).
+//!   across kinds: the id is an `entity` id, and `entity.id` is unique).
 //!
 //! ### 3. A derivation over secrets leaves the command plane; its RECEIPT does not
 //!
@@ -76,32 +76,46 @@
 //! D-1020-L4), is deleted (#1047 slice D1): `K` is the seed's single leaf, so
 //! there is no `K′` for a rotation to move to.
 //!
-//! ## What did NOT change, and is worth saying
+//! ## A Locker item is an entity of its own kind (#1135)
 //!
-//! Every plain column, every lifecycle rule, every precondition. Trash is
-//! reversible with a 30-day `purge_at` and `restore_item` refuses a **lapsed**
-//! window (#916 review 1.5). Archive is *keep forever, hide from lists* and the
-//! schema's CHECK makes archived-and-trashed unrepresentable. A star is a
-//! flags-scheme tag and not a column (#274). `purge_item` deletes the sidecars
-//! **explicitly** rather than trusting `ON DELETE CASCADE`, because a cascade
-//! fires no `AFTER DELETE` trigger unless `recursive_triggers` is on — so an
-//! offline phone would keep rows whose item is gone. A Locker tag lives in
-//! Locker's **own** SKOS scheme (#310): labels are as private as the item, and
-//! they never appear in another app's tag rail.
+//! `entity.id` is the item's id; its title, stamps and trash window are the
+//! entity's, and its kind row `locker_item` holds the typed columns and the
+//! five sealed cells. So the lifecycle is the vault's, one implementation for
+//! every kind: **trash, restore, purge, empty trash** are `entity.*`, the
+//! **star and the archive** are `flag.*`, and an item's **tags** are vault
+//! tags (`tag.*`, `tagged` edges). This file keeps only what involves a secret
+//! or Locker's own structure: the item's fields, sealed fields, passkeys,
+//! aliases, addresses, one-time codes, import, export, duplicate, counts and
+//! the reveal receipt.
+//!
+//! What follows from that, and is worth saying:
+//!
+//! - Trash wins over archive, as for every kind. An archived item can be
+//!   trashed, and a restore returns it to the archive.
+//! - A restore refuses a **lapsed** window (#916 review 1.5), in `entity.restore`.
+//! - `entity.purge` deletes an item's sidecars **explicitly** rather than
+//!   trusting `ON DELETE CASCADE`, because a cascade fires no `AFTER DELETE`
+//!   trigger unless `recursive_triggers` is on, so an offline phone would keep
+//!   rows whose item is gone. A purge confirms and presents the same for every
+//!   kind (`Risk::Medium`, `confirm`).
+//! - **No entity-wide reader carries a sealed cell**: the journal tokenises the
+//!   five cells (and a duplicate's `fields[].value`), a Locker item has no
+//!   revision, `text_of` answers nothing for its kind, a page over `entity` or
+//!   `edge` does not serve it unless the read is Locker's own
+//!   ([`crate::page::reaches_locker`]), and under the assistant's principal any
+//!   command that names an item is refused ([`crate::commands::ASSISTANT_CLOSED_OUT`]).
 
 use std::collections::BTreeSet;
 
 use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency, Risk};
 use crate::custody::locker_key::{assert_live_locker_key_id, is_locker_ciphertext};
 use crate::error::{Result, VaultError};
+use crate::model::Kind;
 
 /// What a reveal receipt's input names its subject as: a locker item, or the
 /// unlock itself. The words the core sends; they decide which `act` is written.
 const ITEM_OBJECT: &str = "locker.item";
 const AUTH_OBJECT: &str = "locker.auth";
-
-/// ~30 days of trash before the sweep purges — mirrors Docs and People.
-const PURGE_WINDOW_DAYS: i64 = 30;
 
 /// The five `locker_item` cells that hold ciphertext under `K`.
 pub const SEALED_ITEM_CELLS: [&str; 5] = ["password", "otp_seed", "card_number", "cvv", "content"];
@@ -358,7 +372,7 @@ fn assert_fresh_id(ctx: &CommandCtx<'_, '_>, name: &str, id: &str) -> Result<()>
         ));
     }
     let taken: i64 = ctx.connection().query_row(
-        "SELECT (SELECT COUNT(*) FROM locker_item WHERE item_id = ?1)
+        "SELECT (SELECT COUNT(*) FROM entity WHERE id = ?1)
               + (SELECT COUNT(*) FROM locker_item_field WHERE field_id = ?1)
               + (SELECT COUNT(*) FROM locker_item_address WHERE address_id = ?1)",
         [id],
@@ -377,13 +391,6 @@ fn assert_fresh_id(ctx: &CommandCtx<'_, '_>, name: &str, id: &str) -> Result<()>
 // Small helpers over the file.
 // ---------------------------------------------------------------------------
 
-fn plus_days(iso: &str, days: i64) -> Result<String> {
-    let millis = crate::clock::parse_iso_ms(iso).ok_or_else(|| VaultError::Invariant {
-        context: format!("`{iso}` is not an instant this vault writes"),
-    })?;
-    Ok(crate::clock::format_iso_ms(millis + days * 86_400_000))
-}
-
 fn count(ctx: &CommandCtx<'_, '_>, sql: &str, params: &[&str]) -> Result<i64> {
     let values: Vec<&dyn rusqlite::ToSql> = params
         .iter()
@@ -397,53 +404,11 @@ fn count(ctx: &CommandCtx<'_, '_>, sql: &str, params: &[&str]) -> Result<i64> {
 fn item_type_of(ctx: &CommandCtx<'_, '_>, item_id: &str) -> Result<String> {
     ctx.connection()
         .query_row(
-            "SELECT type FROM locker_item WHERE item_id = ?1",
+            "SELECT type FROM locker_item WHERE id = ?1",
             [item_id],
             |row| row.get(0),
         )
         .map_err(|_| invalid("item_id", "there is no locker item with that id"))
-}
-
-/// A STAR IS A COLUMN OF LOCKER'S OWN ROW. A Locker item is not an entity, so
-/// the vault's `flag:starred` edge cannot reach it, and nothing outside Locker
-/// reads it. The stamp is the command's clock, and the version moves with it:
-/// left to the table's trigger the stamp would be the host's.
-fn set_starred(ctx: &CommandCtx<'_, '_>, item_id: &str, on: bool) -> Result<()> {
-    ctx.connection().execute(
-        "UPDATE locker_item
-            SET starred = ?2, updated_at = ?3, row_version = row_version + 1
-          WHERE item_id = ?1",
-        rusqlite::params![item_id, i64::from(on), ctx.now],
-    )?;
-    Ok(())
-}
-
-/// Replace the item's Locker tags. **Locker's own table**, so a label here is
-/// as private as the item and never appears in another app's tag rail.
-fn set_tags(ctx: &CommandCtx<'_, '_>, item_id: &str, tags: &[String]) -> Result<()> {
-    ctx.connection()
-        .execute("DELETE FROM locker_tag WHERE item_id = ?1", [item_id])?;
-    let mut seen: BTreeSet<String> = BTreeSet::new();
-    for raw in tags {
-        let tag = raw.trim();
-        if tag.is_empty() || !seen.insert(tag.to_owned()) {
-            continue;
-        }
-        ctx.connection().execute(
-            "INSERT INTO locker_tag (item_id, label) VALUES (?1, ?2)",
-            [item_id, tag],
-        )?;
-    }
-    Ok(())
-}
-
-/// Every Locker tag label on an item, sorted — what a duplicate copies.
-fn tag_labels(ctx: &CommandCtx<'_, '_>, item_id: &str) -> Result<Vec<String>> {
-    let mut statement = ctx
-        .connection()
-        .prepare("SELECT label FROM locker_tag WHERE item_id = ?1 ORDER BY label")?;
-    let rows = statement.query_map([item_id], |row| row.get::<_, String>(0))?;
-    Ok(rows.collect::<rusqlite::Result<Vec<String>>>()?)
 }
 
 /// Set or clear (`''`) the connector alias (#298).
@@ -462,7 +427,7 @@ fn set_alias(ctx: &CommandCtx<'_, '_>, item_id: &str, alias: &str) -> Result<()>
     let clash = count(
         ctx,
         "SELECT COUNT(*) FROM locker_item_alias a
-           JOIN locker_item i ON i.item_id = a.item_id
+           JOIN entity i ON i.id = a.item_id
           WHERE a.alias = ?1 AND i.deleted_at IS NULL AND a.item_id <> ?2",
         &[trimmed, item_id],
     )?;
@@ -635,7 +600,7 @@ fn set_addresses(ctx: &CommandCtx<'_, '_>, item_id: &str, addresses: &[String]) 
 fn replace_memo(ctx: &CommandCtx<'_, '_>, item_id: &str, note: &str) -> Result<()> {
     let body = note.trim();
     ctx.connection().execute(
-        "UPDATE locker_item SET memo = ?2 WHERE item_id = ?1",
+        "UPDATE locker_item SET memo = ?2 WHERE id = ?1",
         rusqlite::params![item_id, (!body.is_empty()).then_some(body)],
     )?;
     Ok(())
@@ -645,9 +610,11 @@ fn replace_memo(ctx: &CommandCtx<'_, '_>, item_id: &str, note: &str) -> Result<(
 // The preconditions, shared.
 // ---------------------------------------------------------------------------
 
-const ITEM_EXISTS_SQL: &str = "SELECT COUNT(*) FROM locker_item WHERE item_id = ?1";
-const ITEM_LIVE_SQL: &str =
-    "SELECT COUNT(*) FROM locker_item WHERE item_id = ?1 AND deleted_at IS NULL";
+const ITEM_EXISTS_SQL: &str = "SELECT COUNT(*) FROM locker_item WHERE id = ?1";
+/// Live is the ENTITY's word: a Locker item's trash window is on its `entity`
+/// row, like every kind's.
+const ITEM_LIVE_SQL: &str = "SELECT COUNT(*) FROM locker_item i JOIN entity e ON e.id = i.id
+      WHERE i.id = ?1 AND e.deleted_at IS NULL";
 
 const ITEM_LIVE_CHECK: CommandCondition = CommandCondition {
     predicate: "item_live",
@@ -659,33 +626,6 @@ const ITEM_LIVE_CHECK: CommandCondition = CommandCondition {
 };
 
 static ITEM_LIVE: &[CommandCondition] = &[ITEM_LIVE_CHECK];
-
-static ITEM_EXISTS: &[CommandCondition] = &[CommandCondition {
-    predicate: "item_exists",
-    check: |ctx| {
-        let item_id = ctx.required_str("item_id")?;
-        let found = count(ctx, ITEM_EXISTS_SQL, &[item_id])?;
-        Ok((found != 1).then(|| "that item is not in your locker".to_owned()))
-    },
-}];
-
-/// RESTORE REFUSES A LAPSED WINDOW (#916, review 1.5): a restore past `purge_at`
-/// resurrects what the member was told had been deleted.
-static ITEM_TRASHED: &[CommandCondition] = &[CommandCondition {
-    predicate: "item_trashed_within_window",
-    check: |ctx| {
-        let item_id = ctx.required_str("item_id")?;
-        let found = count(
-            ctx,
-            "SELECT COUNT(*) FROM locker_item
-              WHERE item_id = ?1 AND deleted_at IS NOT NULL
-                AND (purge_at IS NULL OR purge_at > ?2)",
-            &[item_id, &ctx.now],
-        )?;
-        Ok((found != 1)
-            .then(|| "that item is not in the trash, or its 30 days have run out".to_owned()))
-    },
-}];
 
 static NONE: &[CommandCondition] = &[];
 // ---------------------------------------------------------------------------
@@ -768,7 +708,7 @@ const ALIAS_IS_FREE: CommandCondition = CommandCondition {
         let clash = count(
             ctx,
             "SELECT COUNT(*) FROM locker_item_alias a
-               JOIN locker_item i ON i.item_id = a.item_id
+               JOIN entity i ON i.id = a.item_id
               WHERE a.alias = ?1 AND i.deleted_at IS NULL AND a.item_id <> ?2",
             &[trimmed, item_id],
         )?;
@@ -939,22 +879,17 @@ static REVEAL_RECEIPT_PRE: &[CommandCondition] = &[RECEIPT_IS_WELL_FORMED];
 // The catalogue.
 // ---------------------------------------------------------------------------
 
-/// Every `locker.*` command this build carries: v0's twenty, plus the reveal
-/// receipt the core's reveal writes.
+/// Every `locker.*` command this build carries: what involves a secret or
+/// Locker's own structure, plus the reveal receipt the core's reveal writes.
+/// Trash, restore, purge, star, archive and tags are the vault's shared verbs
+/// (`entity.*`, `flag.*`, `tag.*`).
 #[must_use]
 pub fn definitions() -> Vec<CommandDefinition> {
     vec![
         add_item(),
         edit_item(),
-        trash_item(),
-        restore_item(),
-        purge_item(),
-        star_item(),
-        unstar_item(),
         totp_code(),
         set_memo(),
-        archive_item(),
-        unarchive_item(),
         duplicate_item(),
         set_field(),
         remove_field(),
@@ -1116,7 +1051,6 @@ fn add_item() -> CommandDefinition {
             type_enum!(),
             r#"
             "title": { "type": "string", "minLength": 1 },
-            "tags": { "type": "array", "items": { "type": "string" } },
             "compromised": { "type": "boolean" },
             "alias": { "type": "string", "pattern": "^[A-Za-z0-9._-]{1,64}$" },
             "#,
@@ -1147,12 +1081,13 @@ fn add_item() -> CommandDefinition {
             // Only the type's own columns are written; everything else stays
             // NULL, so a member who filled a login and switched to Wi-Fi never
             // stores the login's fields.
-            let mut columns: Vec<&str> = vec!["item_id", "type", "title"];
-            let mut binds: Vec<Box<dyn rusqlite::ToSql>> = vec![
-                Box::new(item_id.clone()),
-                Box::new(item_type.clone()),
-                Box::new(title),
-            ];
+            // THE ENTITY FIRST, under the caller's id (D-1020-L9): the kind row
+            // joins it by `(id, kind)`, and the title, the stamps and the trash
+            // window are the entity's, like every kind's.
+            ctx.insert_entity_as(&item_id, Kind::LockerItem, &title)?;
+            let mut columns: Vec<&str> = vec!["id", "type"];
+            let mut binds: Vec<Box<dyn rusqlite::ToSql>> =
+                vec![Box::new(item_id.clone()), Box::new(item_type.clone())];
             for (column, value) in &values {
                 columns.push(column);
                 binds.push(Box::new(value.clone()));
@@ -1170,10 +1105,6 @@ fn add_item() -> CommandDefinition {
             binds.push(Box::new(password.as_ref().map(|_| ctx.now.clone())));
             columns.push("key_id");
             binds.push(Box::new(key_id));
-            columns.push("created_at");
-            binds.push(Box::new(ctx.now.clone()));
-            columns.push("updated_at");
-            binds.push(Box::new(ctx.now.clone()));
 
             let placeholders: Vec<String> = (1..=columns.len())
                 .map(|index| format!("?{index}"))
@@ -1190,9 +1121,6 @@ fn add_item() -> CommandDefinition {
             if let Some(alias) = ctx.optional_str("alias") {
                 set_alias(ctx, &item_id, alias)?;
             }
-            if let Some(tags) = tag_list(ctx) {
-                set_tags(ctx, &item_id, &tags)?;
-            }
             // A type is a set of sections and fields: the nine expansion types
             // arrive as EMPTY template rows the member fills in, which is also
             // what lets an unknown type degrade to a note that still carries
@@ -1206,32 +1134,18 @@ fn add_item() -> CommandDefinition {
     definition
 }
 
-/// The `tags` array, when the caller sent one. `None` means *leave the tags
-/// alone*, which is not the same as `[]` — that clears them.
-fn tag_list(ctx: &CommandCtx<'_, '_>) -> Option<Vec<String>> {
-    Some(
-        ctx.input
-            .get("tags")?
-            .as_array()?
-            .iter()
-            .filter_map(|tag| tag.as_str().map(str::to_owned))
-            .collect(),
-    )
-}
-
 fn edit_item() -> CommandDefinition {
     let mut definition = definition(
         "locker.edit_item",
         concat!(
             r#"{
           "type": "object",
-          "description": "REPLACES, does not patch. Every field of the item's type (username, url, password, one-time-code seed, notes, and the rest of its type's columns) is rewritten from this input, and each one the input leaves out or leaves empty is CLEARED: an edit carrying only a password erases the username, address, seed and notes. Send the whole draft; a sealed secret you are keeping goes as the placeholder «sealed». Only the title, the tags (an empty list clears them), the alias (an empty one clears it) and the compromised flag (a changed password clears it) are left alone when omitted. Custom fields, addresses, the passkey and the memo are their own commands and are never touched here.",
+          "description": "REPLACES, does not patch. Every field of the item's type (username, url, password, one-time-code seed, notes, and the rest of its type's columns) is rewritten from this input, and each one the input leaves out or leaves empty is CLEARED: an edit carrying only a password erases the username, address, seed and notes. Send the whole draft; a sealed secret you are keeping goes as the placeholder «sealed». Only the title, the alias (an empty one clears it) and the compromised flag (a changed password clears it) are left alone when omitted. Tags, the star and the archive are the vault's own (`tag.add`, `flag.set`); custom fields, addresses, the passkey and the memo are their own commands. None is touched here.",
           "required": ["item_id"],
           "additionalProperties": false,
           "properties": {
             "item_id": { "type": "string", "minLength": 1 },
             "title": { "type": "string", "minLength": 1 },
-            "tags": { "type": "array", "items": { "type": "string" } },
             "compromised": { "type": "boolean" },
             "alias": { "type": "string", "pattern": "^[A-Za-z0-9._-]{0,64}$" },
             "#,
@@ -1251,8 +1165,8 @@ fn edit_item() -> CommandDefinition {
             assert_key_generation(ctx, secret)?;
             let rotated = password_rotated(ctx)?;
 
-            let mut sets: Vec<String> = vec!["updated_at = ?1".to_owned()];
-            let mut binds: Vec<Box<dyn rusqlite::ToSql>> = vec![Box::new(ctx.now.clone())];
+            let mut sets: Vec<String> = Vec::new();
+            let mut binds: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
             let push = |sets: &mut Vec<String>,
                         binds: &mut Vec<Box<dyn rusqlite::ToSql>>,
                         column: &str,
@@ -1262,7 +1176,10 @@ fn edit_item() -> CommandDefinition {
             };
 
             if let Some(title) = ctx.optional_str("title") {
-                push(&mut sets, &mut binds, "title", Box::new(title.to_owned()));
+                ctx.connection().execute(
+                    "UPDATE entity SET title = ?2 WHERE id = ?1",
+                    [item_id.as_str(), title],
+                )?;
             }
             // THE COMPROMISED FLAG (#1047, R-1047-F7): the member's, set and
             // cleared by hand — nothing produces it automatically. A ROTATION
@@ -1299,7 +1216,7 @@ fn edit_item() -> CommandDefinition {
             // `edit-item` description, the editor's proto comment and the
             // Locker README. A patch, if it is ever wanted, is a new command
             // and a proposal (#1047), not a quiet change to this one. The
-            // title, the tags, the alias and the compromised flag are the
+            // title, the alias and the compromised flag are the
             // exceptions: omitted, they are left alone.
             // `an_edit_rewrites_the_types_fields_rather_than_patching_them`
             // pins it.
@@ -1330,24 +1247,24 @@ fn edit_item() -> CommandDefinition {
                 push(&mut sets, &mut binds, "key_id", Box::new(key_id));
             }
 
-            binds.push(Box::new(item_id.clone()));
-            let sql = format!(
-                "UPDATE locker_item SET {} WHERE item_id = ?{}",
-                sets.join(", "),
-                binds.len()
-            );
-            let params: Vec<&dyn rusqlite::ToSql> =
-                binds.iter().map(std::convert::AsRef::as_ref).collect();
-            ctx.connection().execute(&sql, params.as_slice())?;
+            if !sets.is_empty() {
+                binds.push(Box::new(item_id.clone()));
+                let sql = format!(
+                    "UPDATE locker_item SET {} WHERE id = ?{}",
+                    sets.join(", "),
+                    binds.len()
+                );
+                let params: Vec<&dyn rusqlite::ToSql> =
+                    binds.iter().map(std::convert::AsRef::as_ref).collect();
+                ctx.connection().execute(&sql, params.as_slice())?;
+            }
+            ctx.touch(&item_id)?;
 
             if let Some(alias) = ctx.optional_str("alias") {
                 // An EMPTY alias clears the binding, which is the paper cut
                 // README-Locker §8 names: a member could set one and never
                 // take it back.
                 set_alias(ctx, &item_id, alias)?;
-            }
-            if let Some(tags) = tag_list(ctx) {
-                set_tags(ctx, &item_id, &tags)?;
             }
             Ok(serde_json::json!({
                 "item_id": item_id,
@@ -1358,210 +1275,6 @@ fn edit_item() -> CommandDefinition {
     );
     definition.sealed_input = &SEALED_ITEM_CELLS;
     definition
-}
-
-fn trash_item() -> CommandDefinition {
-    static POST: &[CommandCondition] = &[CommandCondition {
-        predicate: "item_trashed",
-        check: |ctx| {
-            let item_id = ctx.required_str("item_id")?;
-            let found = count(
-                ctx,
-                "SELECT COUNT(*) FROM locker_item
-                  WHERE item_id = ?1 AND deleted_at IS NOT NULL AND purge_at IS NOT NULL",
-                &[item_id],
-            )?;
-            Ok((found != 1).then(|| "the item was not moved to the trash".to_owned()))
-        },
-    }];
-    definition(
-        "locker.trash_item",
-        item_id_only!(),
-        Idempotency::Idempotent,
-        ITEM_LIVE,
-        POST,
-        |ctx| {
-            let item_id = ctx.required_str("item_id")?.to_owned();
-            let purge_at = plus_days(&ctx.now, PURGE_WINDOW_DAYS)?;
-            ctx.connection().execute(
-                "UPDATE locker_item
-                    SET deleted_at = ?1, purge_at = ?2, updated_at = ?1, row_version = row_version + 1
-                  WHERE item_id = ?3",
-                rusqlite::params![ctx.now, purge_at, item_id],
-            )?;
-            Ok(item_id_output(&item_id))
-        },
-    )
-}
-
-fn restore_item() -> CommandDefinition {
-    static POST: &[CommandCondition] = &[CommandCondition {
-        predicate: "item_live",
-        check: |ctx| {
-            let item_id = ctx.required_str("item_id")?;
-            let found = count(ctx, ITEM_LIVE_SQL, &[item_id])?;
-            Ok((found != 1).then(|| "the item was not restored".to_owned()))
-        },
-    }];
-    definition(
-        "locker.restore_item",
-        item_id_only!(),
-        Idempotency::Idempotent,
-        ITEM_TRASHED,
-        POST,
-        |ctx| {
-            let item_id = ctx.required_str("item_id")?.to_owned();
-            ctx.connection().execute(
-                "UPDATE locker_item
-                    SET deleted_at = NULL, purge_at = NULL, updated_at = ?1, row_version = row_version + 1
-                  WHERE item_id = ?2",
-                rusqlite::params![ctx.now, item_id],
-            )?;
-            Ok(item_id_output(&item_id))
-        },
-    )
-}
-
-fn purge_item() -> CommandDefinition {
-    static POST: &[CommandCondition] = &[CommandCondition {
-        predicate: "item_gone",
-        check: |ctx| {
-            let item_id = ctx.required_str("item_id")?;
-            let found = count(ctx, ITEM_EXISTS_SQL, &[item_id])?;
-            Ok((found != 0).then(|| "the item is still in the locker".to_owned()))
-        },
-    }];
-    let mut definition = definition(
-        "locker.purge_item",
-        item_id_only!(),
-        Idempotency::Once,
-        ITEM_EXISTS,
-        POST,
-        |ctx| {
-            let item_id = ctx.required_str("item_id")?.to_owned();
-            // The sidecars declare ON DELETE CASCADE; deleted explicitly all
-            // the same, in the same transaction, so the commit's census names
-            // every table whose rows went. The item's receipts stay: they are
-            // evidence, and name the item by value.
-            for table in [
-                "locker_tag",
-                "locker_item_field",
-                "locker_item_address",
-                "locker_item_passkey",
-                "locker_item_alias",
-            ] {
-                ctx.connection().execute(
-                    &format!("DELETE FROM {table} WHERE item_id = ?1"),
-                    [&item_id],
-                )?;
-            }
-            ctx.connection()
-                .execute("DELETE FROM locker_item WHERE item_id = ?1", [&item_id])?;
-            Ok(item_id_output(&item_id))
-        },
-    );
-    definition.risk = Risk::Medium;
-    // Destructive (#306 d2): park for owner confirm on every non-owner-device
-    // invocation. Without this the manifest's `confirmation: "required"` is
-    // cosmetic.
-    definition.confirm = true;
-    definition
-}
-
-fn star_item() -> CommandDefinition {
-    definition(
-        "locker.star_item",
-        item_id_only!(),
-        Idempotency::Idempotent,
-        ITEM_LIVE,
-        NONE,
-        |ctx| {
-            let item_id = ctx.required_str("item_id")?.to_owned();
-            set_starred(ctx, &item_id, true)?;
-            Ok(item_id_output(&item_id))
-        },
-    )
-}
-
-fn unstar_item() -> CommandDefinition {
-    definition(
-        "locker.unstar_item",
-        item_id_only!(),
-        Idempotency::Idempotent,
-        ITEM_LIVE,
-        NONE,
-        |ctx| {
-            let item_id = ctx.required_str("item_id")?.to_owned();
-            set_starred(ctx, &item_id, false)?;
-            Ok(item_id_output(&item_id))
-        },
-    )
-}
-
-fn archive_item() -> CommandDefinition {
-    static POST: &[CommandCondition] = &[CommandCondition {
-        predicate: "item_archived",
-        check: |ctx| {
-            let item_id = ctx.required_str("item_id")?;
-            let found = count(
-                ctx,
-                "SELECT COUNT(*) FROM locker_item
-                  WHERE item_id = ?1 AND deleted_at IS NULL AND archived_at IS NOT NULL",
-                &[item_id],
-            )?;
-            Ok((found != 1).then(|| "the item was not archived".to_owned()))
-        },
-    }];
-    definition(
-        "locker.archive_item",
-        item_id_only!(),
-        Idempotency::Idempotent,
-        ITEM_LIVE,
-        POST,
-        |ctx| {
-            let item_id = ctx.required_str("item_id")?.to_owned();
-            // Archive is "keep forever, hide from lists". NOT trash: no purge
-            // date is set and none is ever set, which is the whole
-            // distinction, and the schema's CHECK makes archived-and-trashed
-            // unrepresentable.
-            ctx.connection().execute(
-                "UPDATE locker_item SET archived_at = ?1, updated_at = ?1 WHERE item_id = ?2",
-                rusqlite::params![ctx.now, item_id],
-            )?;
-            Ok(item_id_output(&item_id))
-        },
-    )
-}
-
-fn unarchive_item() -> CommandDefinition {
-    static POST: &[CommandCondition] = &[CommandCondition {
-        predicate: "item_unarchived",
-        check: |ctx| {
-            let item_id = ctx.required_str("item_id")?;
-            let found = count(
-                ctx,
-                "SELECT COUNT(*) FROM locker_item
-                  WHERE item_id = ?1 AND deleted_at IS NULL AND archived_at IS NULL",
-                &[item_id],
-            )?;
-            Ok((found != 1).then(|| "the item was not taken out of the archive".to_owned()))
-        },
-    }];
-    definition(
-        "locker.unarchive_item",
-        item_id_only!(),
-        Idempotency::Idempotent,
-        ITEM_LIVE,
-        POST,
-        |ctx| {
-            let item_id = ctx.required_str("item_id")?.to_owned();
-            ctx.connection().execute(
-                "UPDATE locker_item SET archived_at = NULL, updated_at = ?1 WHERE item_id = ?2",
-                rusqlite::params![ctx.now, item_id],
-            )?;
-            Ok(item_id_output(&item_id))
-        },
-    )
 }
 
 /// Every column a duplicate copies verbatim, minus the sealed ones.
@@ -1634,15 +1347,15 @@ fn duplicate_item() -> CommandDefinition {
             // is "no secret round-trips through the client"; the promise that
             // survives, and is the stronger one, is that no secret is ever
             // readable by the command plane or anything it writes.
-            let mut columns: Vec<String> = vec!["item_id".to_owned(), "title".to_owned()];
+            let mut columns: Vec<String> = vec!["id".to_owned()];
             let source_title: String = ctx.connection().query_row(
-                "SELECT title FROM locker_item WHERE item_id = ?1",
+                "SELECT title FROM entity WHERE id = ?1",
                 [&source_id],
                 |row| row.get(0),
             )?;
             let title = format!("{source_title} copy");
-            let mut binds: Vec<Box<dyn rusqlite::ToSql>> =
-                vec![Box::new(item_id.clone()), Box::new(title.clone())];
+            ctx.insert_entity_as(&item_id, Kind::LockerItem, &title)?;
+            let mut binds: Vec<Box<dyn rusqlite::ToSql>> = vec![Box::new(item_id.clone())];
             for column in PLAIN_COPY_COLUMNS {
                 // AS A VALUE, NOT AS A STRING. `compromised` is an INTEGER and
                 // `NOT NULL`; reading it into an `Option<String>` fails, and a
@@ -1650,7 +1363,7 @@ fn duplicate_item() -> CommandDefinition {
                 // NULL the column's own constraint then refuses. Found by
                 // `a_duplicate_takes_the_re_sealed_cells_and_leaves_the_alias_behind`.
                 let value: rusqlite::types::Value = ctx.connection().query_row(
-                    &format!("SELECT {column} FROM locker_item WHERE item_id = ?1"),
+                    &format!("SELECT {column} FROM locker_item WHERE id = ?1"),
                     [&source_id],
                     |row| row.get(0),
                 )?;
@@ -1666,7 +1379,7 @@ fn duplicate_item() -> CommandDefinition {
                 binds.push(Box::new(value));
             }
             let password_set_at: Option<String> = ctx.connection().query_row(
-                "SELECT password_set_at FROM locker_item WHERE item_id = ?1",
+                "SELECT password_set_at FROM locker_item WHERE id = ?1",
                 [&source_id],
                 |row| row.get(0),
             )?;
@@ -1674,10 +1387,6 @@ fn duplicate_item() -> CommandDefinition {
             binds.push(Box::new(password_set_at));
             columns.push("key_id".to_owned());
             binds.push(Box::new(ctx.optional_str("key_id").map(str::to_owned)));
-            columns.push("created_at".to_owned());
-            binds.push(Box::new(ctx.now.clone()));
-            columns.push("updated_at".to_owned());
-            binds.push(Box::new(ctx.now.clone()));
 
             let placeholders: Vec<String> = (1..=columns.len())
                 .map(|index| format!("?{index}"))
@@ -1750,7 +1459,15 @@ fn duplicate_item() -> CommandDefinition {
                 rows.collect::<rusqlite::Result<Vec<_>>>()?
             };
             set_addresses(ctx, &item_id, &addresses)?;
-            set_tags(ctx, &item_id, &tag_labels(ctx, &source_id)?)?;
+            // The source's TAGS come along (`tagged` edges to tags); its star
+            // and archive are flags and do not. The copy is a new thing.
+            ctx.connection().execute(
+                "INSERT INTO edge (from_id, rel, to_id, created_at)
+                 SELECT ?2, 'tagged', e.to_id, ?3
+                   FROM edge e JOIN entity t ON t.id = e.to_id
+                  WHERE e.from_id = ?1 AND e.rel = 'tagged' AND t.kind = 'tag'",
+                rusqlite::params![source_id, item_id, ctx.now],
+            )?;
             // NOT starred, NOT archived, and the alias is NOT copied: an alias
             // is unique among live items, so a copy carrying it would steal
             // the connector binding.
@@ -1761,7 +1478,16 @@ fn duplicate_item() -> CommandDefinition {
             }))
         },
     );
-    definition.sealed_input = &SEALED_ITEM_CELLS;
+    // The five cells, and the custom fields the copy re-sealed: a nested
+    // ciphertext is tokenised in the journal like a top-level one.
+    definition.sealed_input = &[
+        "password",
+        "otp_seed",
+        "card_number",
+        "cvv",
+        "content",
+        "fields[].value",
+    ];
     definition
 }
 
@@ -1833,10 +1559,7 @@ fn set_field() -> CommandDefinition {
                     rusqlite::params![ctx.optional_str("key_id"), written],
                 )?;
             }
-            ctx.connection().execute(
-                "UPDATE locker_item SET updated_at = ?1 WHERE item_id = ?2",
-                rusqlite::params![ctx.now, item_id],
-            )?;
+            ctx.touch(&item_id)?;
             Ok(serde_json::json!({ "field_id": written, "item_id": item_id }))
         },
     );
@@ -1866,10 +1589,7 @@ fn remove_field() -> CommandDefinition {
                 "DELETE FROM locker_item_field WHERE field_id = ?1 AND item_id = ?2",
                 rusqlite::params![field_id, item_id],
             )?;
-            ctx.connection().execute(
-                "UPDATE locker_item SET updated_at = ?1 WHERE item_id = ?2",
-                rusqlite::params![ctx.now, item_id],
-            )?;
+            ctx.touch(&item_id)?;
             Ok(serde_json::json!({ "field_id": field_id, "item_id": item_id }))
         },
     )
@@ -1913,10 +1633,7 @@ fn set_addresses_command() -> CommandDefinition {
             // and Review's unsecured-address check keep working. No secret is involved, which is why this one takes the
             // whole list.
             let written = set_addresses(ctx, &item_id, &addresses)?;
-            ctx.connection().execute(
-                "UPDATE locker_item SET updated_at = ?1 WHERE item_id = ?2",
-                rusqlite::params![ctx.now, item_id],
-            )?;
+            ctx.touch(&item_id)?;
             Ok(serde_json::json!({ "item_id": item_id, "count": written }))
         },
     )
@@ -2010,10 +1727,7 @@ fn set_passkey() -> CommandDefinition {
                     ctx.now
                 ],
             )?;
-            ctx.connection().execute(
-                "UPDATE locker_item SET updated_at = ?1 WHERE item_id = ?2",
-                rusqlite::params![ctx.now, item_id],
-            )?;
+            ctx.touch(&item_id)?;
             Ok(item_id_output(&item_id))
         },
     );
@@ -2034,10 +1748,7 @@ fn clear_passkey() -> CommandDefinition {
                 "DELETE FROM locker_item_passkey WHERE item_id = ?1",
                 [&item_id],
             )?;
-            ctx.connection().execute(
-                "UPDATE locker_item SET updated_at = ?1 WHERE item_id = ?2",
-                rusqlite::params![ctx.now, item_id],
-            )?;
+            ctx.touch(&item_id)?;
             Ok(item_id_output(&item_id))
         },
     )
@@ -2065,10 +1776,7 @@ fn set_memo() -> CommandDefinition {
             // index; a memo is in none either, because Locker is not a search
             // domain (#1097, R1c). An empty note clears it.
             replace_memo(ctx, &item_id, ctx.required_str("note")?)?;
-            ctx.connection().execute(
-                "UPDATE locker_item SET updated_at = ?1 WHERE item_id = ?2",
-                rusqlite::params![ctx.now, item_id],
-            )?;
+            ctx.touch(&item_id)?;
             Ok(item_id_output(&item_id))
         },
     )
@@ -2089,11 +1797,16 @@ fn counts() -> CommandDefinition {
             let one = |sql: &str| -> Result<i64> {
                 Ok(ctx.connection().query_row(sql, [], |row| row.get(0))?)
             };
-            let mut statement = ctx.connection().prepare(
-                "SELECT type, COUNT(*) FROM locker_item
-                  WHERE deleted_at IS NULL AND archived_at IS NULL
-                  GROUP BY type ORDER BY type",
-            )?;
+            // Archived is the vault's flag: a `tagged` edge to `flag:archived`.
+            // Trash wins over it, as for every kind: a trashed item is counted
+            // as trashed whether or not it is also archived.
+            const ARCHIVED: &str = "EXISTS (SELECT 1 FROM edge a WHERE a.from_id = i.id
+                    AND a.rel = 'tagged' AND a.to_id = 'flag:archived')";
+            let mut statement = ctx.connection().prepare(&format!(
+                "SELECT i.type, COUNT(*) FROM locker_item i JOIN entity e ON e.id = i.id
+                  WHERE e.deleted_at IS NULL AND NOT {ARCHIVED}
+                  GROUP BY i.type ORDER BY i.type"
+            ))?;
             let by_type: Vec<serde_json::Value> = statement
                 .query_map([], |row| {
                     Ok(serde_json::json!({
@@ -2103,16 +1816,17 @@ fn counts() -> CommandDefinition {
                 })?
                 .collect::<rusqlite::Result<Vec<_>>>()?;
             Ok(serde_json::json!({
-                "live": one(
-                    "SELECT COUNT(*) FROM locker_item
-                      WHERE deleted_at IS NULL AND archived_at IS NULL",
-                )?,
-                "archived": one(
-                    "SELECT COUNT(*) FROM locker_item
-                      WHERE deleted_at IS NULL AND archived_at IS NOT NULL",
-                )?,
+                "live": one(&format!(
+                    "SELECT COUNT(*) FROM locker_item i JOIN entity e ON e.id = i.id
+                      WHERE e.deleted_at IS NULL AND NOT {ARCHIVED}"
+                ))?,
+                "archived": one(&format!(
+                    "SELECT COUNT(*) FROM locker_item i JOIN entity e ON e.id = i.id
+                      WHERE e.deleted_at IS NULL AND {ARCHIVED}"
+                ))?,
                 "trashed": one(
-                    "SELECT COUNT(*) FROM locker_item WHERE deleted_at IS NOT NULL",
+                    "SELECT COUNT(*) FROM locker_item i JOIN entity e ON e.id = i.id
+                      WHERE e.deleted_at IS NOT NULL",
                 )?,
                 "by_type": by_type,
             }))
@@ -2135,8 +1849,8 @@ fn totp_code() -> CommandDefinition {
             // plane serves ciphertext and knows it is there.
             let found = count(
                 ctx,
-                "SELECT COUNT(*) FROM locker_item
-                  WHERE item_id = ?1 AND deleted_at IS NULL AND otp_seed IS NOT NULL",
+                "SELECT COUNT(*) FROM locker_item i JOIN entity e ON e.id = i.id
+                  WHERE i.id = ?1 AND e.deleted_at IS NULL AND i.otp_seed IS NOT NULL",
                 &[item_id],
             )?;
             Ok((found != 1).then(|| "that item carries no one-time-code seed".to_owned()))
@@ -2246,15 +1960,28 @@ fn export() -> CommandDefinition {
             // the `high` risk stay exactly where they were, because what is
             // being authorised is unchanged: every secret the locker holds,
             // in the clear, in a file.
-            let projection = PLAIN_EXPORT_COLUMNS.join(", ");
+            // The title, the stamps and the trash window are the entity's; the
+            // archive is the vault's flag, stated as the day it was set.
+            let projection = PLAIN_EXPORT_COLUMNS
+                .iter()
+                .map(|column| match *column {
+                    "title" | "created_at" | "updated_at" | "deleted_at" => format!("e.{column}"),
+                    "archived_at" => "(SELECT a.created_at FROM edge a WHERE a.from_id = i.id
+                          AND a.rel = 'tagged' AND a.to_id = 'flag:archived')"
+                        .to_owned(),
+                    other => format!("i.{other}"),
+                })
+                .collect::<Vec<_>>()
+                .join(", ");
             let predicate = if include_trashed {
                 ""
             } else {
-                "WHERE deleted_at IS NULL"
+                "WHERE e.deleted_at IS NULL"
             };
             let mut statement = ctx.connection().prepare(&format!(
-                "SELECT item_id, key_id, {projection} FROM locker_item
-                 {predicate} ORDER BY created_at, item_id"
+                "SELECT i.id, i.key_id, {projection}
+                   FROM locker_item i JOIN entity e ON e.id = i.id
+                 {predicate} ORDER BY e.created_at, i.id"
             ))?;
             let items: Vec<serde_json::Value> = statement
                 .query_map([], |row| {

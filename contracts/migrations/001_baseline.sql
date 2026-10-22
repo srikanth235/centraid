@@ -31,7 +31,8 @@ CREATE TABLE entity (
                'person','place','event','task','activity','note','document','photo',
                'account','txn','thread',
                'tag','flag','category','workout_kind','activity_kind','relation',
-               'notebook','folder','album','list','project','section','area','calendar')),
+               'notebook','folder','album','list','project','section','area','calendar',
+               'locker_item')),
   title      TEXT NOT NULL,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
@@ -570,17 +571,20 @@ CREATE INDEX message_attachment_by_entity ON message_attachment(entity_id) WHERE
 CREATE INDEX message_attachment_by_thumb  ON message_attachment(thumb) WHERE thumb IS NOT NULL;
 
 -- ---------------------------------------------------------------------------------------------
--- Locker: its own tables, its own sealed cells, and nothing above. A Locker item is not an
--- entity: it is not searched, not tagged through `edge`, not attached to, not followed.
+-- Locker: an entity of its own kind, whose secrets stay in sealed cells nothing entity-wide
+-- reads. An item's title, stamps and trash window live on its `entity` row like every kind's;
+-- its tags, star and archive are the vault's (`edge tagged`), and a note may link it. What this
+-- section keeps is what only Locker has: the typed columns, the five sealed cells (`lk1:`
+-- ciphertext), custom fields, addresses, aliases and passkeys.
 -- ---------------------------------------------------------------------------------------------
 
 CREATE TABLE locker_item (
-  item_id      TEXT PRIMARY KEY,
+  id           TEXT PRIMARY KEY,
+  kind         TEXT GENERATED ALWAYS AS ('locker_item') VIRTUAL,
   type         TEXT NOT NULL CHECK (type IN (
     'login','card','note','identity','wifi','password',
     'ssh_key','api_credential','passport','bank_account','driving_licence',
     'software_licence','crypto_wallet','membership','document')),
-  title        TEXT NOT NULL,
   username     TEXT,
   password     TEXT,
   url          TEXT,
@@ -599,43 +603,15 @@ CREATE TABLE locker_item (
   network      TEXT,
   compromised  INTEGER NOT NULL DEFAULT 0 CHECK (compromised IN (0,1)),
   password_set_at TEXT,
-  starred      INTEGER NOT NULL DEFAULT 0 CHECK (starred IN (0,1)),
   memo         TEXT,
-  created_at   TEXT NOT NULL,
-  updated_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
-  archived_at  TEXT,
-  deleted_at   TEXT,
-  purge_at     TEXT CHECK (purge_at IS NULL OR deleted_at IS NOT NULL), key_id TEXT,
-  CHECK (archived_at IS NULL OR deleted_at IS NULL)
+  key_id       TEXT,
+  FOREIGN KEY (id, kind) REFERENCES entity(id, kind) ON DELETE CASCADE
 ) STRICT;
-CREATE INDEX locker_item_archived_idx ON locker_item(archived_at);
-CREATE INDEX locker_item_purge_idx ON locker_item(purge_at) WHERE purge_at IS NOT NULL;
 CREATE INDEX locker_item_type_idx ON locker_item(type);
-CREATE INDEX locker_item_type_updated_page_idx ON locker_item(type, deleted_at, updated_at, item_id);
-CREATE INDEX locker_item_updated_page_idx ON locker_item(updated_at, item_id);
-CREATE TRIGGER locker_item_touch_updated_at
-AFTER UPDATE ON locker_item
-WHEN NEW.row_version = OLD.row_version
-BEGIN
-  UPDATE locker_item
-     SET updated_at = CASE WHEN NEW.updated_at = OLD.updated_at
-                           THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-                           ELSE NEW.updated_at END,
-         row_version = OLD.row_version + 1
-   WHERE item_id = NEW.item_id;
-END;
-
-CREATE TABLE locker_tag (
-  item_id TEXT NOT NULL REFERENCES locker_item(item_id) ON DELETE CASCADE,
-  label   TEXT NOT NULL CHECK (length(trim(label)) > 0),
-  PRIMARY KEY (item_id, label)
-) STRICT, WITHOUT ROWID;
-CREATE INDEX locker_tag_by_label ON locker_tag(label, item_id);
 
 CREATE TABLE locker_item_address (
   address_id   TEXT PRIMARY KEY,
-  item_id      TEXT NOT NULL REFERENCES locker_item(item_id) ON DELETE CASCADE,
+  item_id      TEXT NOT NULL REFERENCES locker_item(id) ON DELETE CASCADE,
   url          TEXT NOT NULL,
   position     INTEGER NOT NULL DEFAULT 0,
   created_at   TEXT NOT NULL
@@ -644,14 +620,14 @@ CREATE INDEX locker_item_address_item_idx ON locker_item_address(item_id, positi
 
 CREATE TABLE locker_item_alias (
   alias      TEXT PRIMARY KEY,
-  item_id    TEXT NOT NULL REFERENCES locker_item(item_id) ON DELETE CASCADE,
+  item_id    TEXT NOT NULL REFERENCES locker_item(id) ON DELETE CASCADE,
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 ) STRICT;
 CREATE INDEX locker_item_alias_item_idx ON locker_item_alias(item_id);
 
 CREATE TABLE locker_item_field (
   field_id     TEXT PRIMARY KEY,
-  item_id      TEXT NOT NULL REFERENCES locker_item(item_id) ON DELETE CASCADE,
+  item_id      TEXT NOT NULL REFERENCES locker_item(id) ON DELETE CASCADE,
   section      TEXT NOT NULL DEFAULT '',
   label        TEXT NOT NULL,
   kind         TEXT NOT NULL CHECK (kind IN ('text','sealed','url','date','otp')),
@@ -678,7 +654,7 @@ BEGIN
 END;
 
 CREATE TABLE locker_item_passkey (
-  item_id       TEXT PRIMARY KEY REFERENCES locker_item(item_id) ON DELETE CASCADE,
+  item_id       TEXT PRIMARY KEY REFERENCES locker_item(id) ON DELETE CASCADE,
   rp_id         TEXT NOT NULL,
   user_handle   TEXT,
   display_name  TEXT,

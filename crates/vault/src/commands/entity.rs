@@ -29,7 +29,7 @@
 
 use rusqlite::{Connection, OptionalExtension};
 
-use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency};
+use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency, Risk};
 use crate::error::{Result, VaultError};
 use crate::model::Kind;
 
@@ -347,6 +347,21 @@ pub(crate) fn purge_one(
     )? {
         ctx.mark_for_index(&labelled);
     }
+    // A Locker item's sidecars are deleted explicitly, in this commit, though
+    // they declare ON DELETE CASCADE: a cascade fires no `AFTER DELETE`
+    // trigger unless `recursive_triggers` is on, and the commit's census names
+    // the tables whose rows went. Its receipts stay: they name it by value.
+    if found.kind == Kind::LockerItem {
+        for table in [
+            "locker_item_field",
+            "locker_item_address",
+            "locker_item_passkey",
+            "locker_item_alias",
+        ] {
+            connection.execute(&format!("DELETE FROM {table} WHERE item_id = ?1"), [id])?;
+        }
+        connection.execute("DELETE FROM locker_item WHERE id = ?1", [id])?;
+    }
     crate::index::purge(connection, id)?;
     connection.execute("DELETE FROM entity WHERE id = ?1", [id])?;
     purged.push(id.to_owned());
@@ -522,10 +537,17 @@ fn empty_trash(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
               WHERE deleted_at IS NOT NULL
                 AND (?1 IS NULL OR kind = ?1)
                 AND (?2 = 0 OR purge_at <= ?3)
+                AND (?4 = 0 OR kind <> 'locker_item')
               ORDER BY deleted_at, n",
         )?
         .query_map(
-            rusqlite::params![kind, i64::from(due_only), ctx.now],
+            rusqlite::params![
+                kind,
+                i64::from(due_only),
+                ctx.now,
+                // The assistant's empty-trash never reaches Locker's.
+                i64::from(ctx.principal.is_assistant())
+            ],
             |row| row.get::<_, String>(0),
         )?
         .collect::<rusqlite::Result<Vec<_>>>()?;
@@ -584,7 +606,7 @@ pub fn definitions() -> Vec<CommandDefinition> {
             }],
             restore,
         ),
-        CommandDefinition::plain(
+        permanent(CommandDefinition::plain(
             "entity.purge",
             "entity",
             BY_ID,
@@ -594,8 +616,8 @@ pub fn definitions() -> Vec<CommandDefinition> {
                 check: pre_purge,
             }],
             purge,
-        ),
-        CommandDefinition::plain(
+        )),
+        permanent(CommandDefinition::plain(
             "entity.empty_trash",
             "entity",
             r#"{
@@ -612,6 +634,16 @@ pub fn definitions() -> Vec<CommandDefinition> {
                 check: pre_empty,
             }],
             empty_trash,
-        ),
+        )),
     ]
+}
+
+/// A permanent delete is presented the same for every kind: medium risk, and
+/// parked for the owner's confirmation on every non-owner-device invocation
+/// (#306 d2). It is what Locker's own purge carried; it is now the one level
+/// for `entity.purge` and `entity.empty_trash` whatever they remove.
+fn permanent(mut definition: CommandDefinition) -> CommandDefinition {
+    definition.risk = Risk::Medium;
+    definition.confirm = true;
+    definition
 }

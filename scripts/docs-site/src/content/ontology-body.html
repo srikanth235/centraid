@@ -28,9 +28,9 @@
     <h1>One life. One model. <em>Apps become projections.</em></h1>
     <p class="lede">Your life is usually modelled by whoever shipped the app: your heart rate belongs to a watch vendor, your invoices to an accounting service, your relationships to a contacts silo. Centraid inverts the ownership. A single, person-owned SQLite file on the member's phone holds the canonical record, and every app is a screen over it. The model is small on purpose: <strong>an entity for everything with a title and a trash, a kind row for what it is, typed edges between them, blobs for bytes, and an origin and a source for whatever is followed.</strong> Everything else is computed when it is read.</p>
     <div class="hero-kv">
-      <div><b data-count="kinds">25</b>kinds</div>
+      <div><b data-count="kinds">26</b>kinds</div>
       <div><b data-count="relations">8</b>edge relations</div>
-      <div><b data-count="tables">43</b>tables</div>
+      <div><b data-count="tables">42</b>tables</div>
       <div><b>1</b>file, on the phone</div>
       <div><b>0</b>silos</div>
     </div>
@@ -90,10 +90,10 @@
 <section id="map" class="dark">
   <div class="wrap">
     <p class="eyebrow">§02 · Entity map</p>
-    <h2>Twenty-five kinds, three hosts, eight relations</h2>
+    <h2>Twenty-six kinds, three hosts, eight relations</h2>
     <p class="lede">Every kind is a row in <span class="k">entity</span>, and each has exactly one <strong>host</strong>: the table that holds the columns only that kind has. Eleven kinds have a table of their own. The six kinds that are <em>words the member names</em> share <span class="k">concept</span>; the eight that are <em>things that hold things</em> share <span class="k">container</span>. A kind table carries its kind as a generated constant and a composite key into <span class="k">entity</span>, so the engine, not a trigger, refuses a task filed under a notebook.</p>
     <div class="kindgrid">
-<div class="zone"><h3>Own table<span class="zk">11 kinds</span></h3><ul><li class="rel-own" data-kind="person"><span class="cn">person</span><span>a person, the owner included · <em>People</em></span></li><li class="rel-own" data-kind="place"><span class="cn">place</span><span>where something was or happened · <em>Photos</em></span></li><li class="rel-own" data-kind="event"><span class="cn">event</span><span>something at a time · <em>Agenda</em></span></li><li class="rel-own" data-kind="task"><span class="cn">task</span><span>something to do · <em>Agenda</em></span></li><li class="rel-own" data-kind="activity"><span class="cn">activity</span><span>something done: a call, a run · <em>People, Health</em></span></li><li class="rel-own" data-kind="note"><span class="cn">note</span><span>words with a title; a memo when it is about something · <em>Notes</em></span></li><li class="rel-own" data-kind="document"><span class="cn">document</span><span>a file · <em>Docs</em></span></li><li class="rel-own" data-kind="photo"><span class="cn">photo</span><span>a photograph or video · <em>Photos</em></span></li><li class="rel-own" data-kind="account"><span class="cn">account</span><span>where money is held · <em>Money</em></span></li><li class="rel-own" data-kind="txn"><span class="cn">txn</span><span>a statement line · <em>Money</em></span></li><li class="rel-own" data-kind="thread"><span class="cn">thread</span><span>a conversation with the assistant · <em>Chat</em></span></li></ul></div>
+<div class="zone"><h3>Own table<span class="zk">12 kinds</span></h3><ul><li class="rel-own" data-kind="person"><span class="cn">person</span><span>a person, the owner included · <em>People</em></span></li><li class="rel-own" data-kind="place"><span class="cn">place</span><span>where something was or happened · <em>Photos</em></span></li><li class="rel-own" data-kind="event"><span class="cn">event</span><span>something at a time · <em>Agenda</em></span></li><li class="rel-own" data-kind="task"><span class="cn">task</span><span>something to do · <em>Agenda</em></span></li><li class="rel-own" data-kind="activity"><span class="cn">activity</span><span>something done: a call, a run · <em>People, Health</em></span></li><li class="rel-own" data-kind="note"><span class="cn">note</span><span>words with a title; a memo when it is about something · <em>Notes</em></span></li><li class="rel-own" data-kind="document"><span class="cn">document</span><span>a file · <em>Docs</em></span></li><li class="rel-own" data-kind="photo"><span class="cn">photo</span><span>a photograph or video · <em>Photos</em></span></li><li class="rel-own" data-kind="account"><span class="cn">account</span><span>where money is held · <em>Money</em></span></li><li class="rel-own" data-kind="txn"><span class="cn">txn</span><span>a statement line · <em>Money</em></span></li><li class="rel-own" data-kind="thread"><span class="cn">thread</span><span>a conversation with the assistant · <em>Chat</em></span></li><li class="rel-own" data-kind="locker_item"><span class="cn">locker_item</span><span>a sealed login, card, note or other secret · <em>Locker</em></span></li></ul></div>
 <div class="zone"><h3>concept<span class="zk">6 kinds · words</span></h3><ul><li class="rel-ref" data-kind="tag"><span class="cn">tag</span><span>a word on anything · <em>every app</em></span></li><li class="rel-ref" data-kind="flag"><span class="cn">flag</span><span>starred, pinned, archived · <em>every app</em></span></li><li class="rel-ref" data-kind="category"><span class="cn">category</span><span>what a line was for · <em>Money</em></span></li><li class="rel-ref" data-kind="workout_kind"><span class="cn">workout_kind</span><span>run, ride, swim · <em>Health</em></span></li><li class="rel-ref" data-kind="activity_kind"><span class="cn">activity_kind</span><span>call, message, met up · <em>People</em></span></li><li class="rel-ref" data-kind="relation"><span class="cn">relation</span><span>mother, colleague · <em>People</em></span></li></ul></div>
 <div class="zone"><h3>container<span class="zk">8 kinds · holders</span></h3><ul><li class="rel-ref" data-kind="notebook"><span class="cn">notebook</span><span>holds notes · <em>Notes</em></span></li><li class="rel-ref" data-kind="folder"><span class="cn">folder</span><span>holds documents · <em>Docs</em></span></li><li class="rel-ref" data-kind="album"><span class="cn">album</span><span>holds photographs, in order · <em>Photos</em></span></li><li class="rel-ref" data-kind="list"><span class="cn">list</span><span>holds people, in order · <em>People</em></span></li><li class="rel-ref" data-kind="project"><span class="cn">project</span><span>holds tasks · <em>Agenda</em></span></li><li class="rel-ref" data-kind="section"><span class="cn">section</span><span>a part of a project · <em>Agenda</em></span></li><li class="rel-ref" data-kind="area"><span class="cn">area</span><span>holds projects · <em>Agenda</em></span></li><li class="rel-ref" data-kind="calendar"><span class="cn">calendar</span><span>holds events · <em>Agenda</em></span></li></ul></div>
     </div>
@@ -469,12 +469,12 @@
 <div class="colrow"><span class="cn">stated</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">seen_at</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
 </div></div>
-<div class="schemahdr" data-group="locker"><span class="sid">locker</span><h3>Locker</h3><p class="sdesc">Not an entity kind: sealed items, their rows, their own tags and their own receipts. Nothing outside Locker names an item.</p></div>
-<div class="tbl rv in" data-group="locker" data-table="locker_item"><header><h4>locker_item</h4><p class="tp">A sealed item: a login, card, note, wifi network or other type, with its star, memo and trash.</p></header>
+<div class="schemahdr" data-group="locker"><span class="sid">locker</span><h3>Locker</h3><p class="sdesc">An entity kind whose secrets stay in sealed cells nothing entity-wide reads: items, their custom fields, passkeys, aliases and addresses, and Locker's own receipts. Its tags, star and archive are the vault's; the assistant and every generic page read pass it by.</p></div>
+<div class="tbl rv in" data-group="locker" data-table="locker_item"><header><h4>locker_item</h4><p class="tp">A sealed item: a login, card, note, wifi network or other type. Its title, stamps and trash are its entity's; its secrets are sealed cells.</p></header>
 <div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
-<div class="colrow"><span class="cn">item_id</span><span class="ct">text</span><span><span class="badge b-PK">PK</span></span><span class="cref"></span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">id</span><span class="ct">text</span><span><span class="badge b-PK">PK</span><span class="badge b-FK">FK</span></span><span class="cref">→ entity.id</span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">kind</span><span class="ct">text</span><span><span class="badge b-FK">FK</span><span class="badge b-CK">GEN</span></span><span class="cref">→ entity.kind</span><span class="cnote">generated</span></div>
 <div class="colrow"><span class="cn">type</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
-<div class="colrow"><span class="cn">title</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">username</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">password</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">url</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
@@ -493,20 +493,13 @@
 <div class="colrow"><span class="cn">network</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">compromised</span><span class="ct">integer</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote">default 0</span></div>
 <div class="colrow"><span class="cn">password_set_at</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
-<div class="colrow"><span class="cn">starred</span><span class="ct">integer</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote">default 0</span></div>
 <div class="colrow"><span class="cn">memo</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
-<div class="colrow"><span class="cn">created_at</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
-<div class="colrow"><span class="cn">updated_at</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote">default strftime('%Y-%m-%dT%H:%M:%fZ', 'now')</span></div>
-<div class="colrow"><span class="cn">row_version</span><span class="ct">integer</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote">default 1</span></div>
-<div class="colrow"><span class="cn">archived_at</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
-<div class="colrow"><span class="cn">deleted_at</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
-<div class="colrow"><span class="cn">purge_at</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">key_id</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 </div></div>
 <div class="tbl rv in" data-group="locker" data-table="locker_item_field"><header><h4>locker_item_field</h4><p class="tp">A custom field of an item, sealed when it is secret.</p></header>
 <div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
 <div class="colrow"><span class="cn">field_id</span><span class="ct">text</span><span><span class="badge b-PK">PK</span></span><span class="cref"></span><span class="cnote"></span></div>
-<div class="colrow"><span class="cn">item_id</span><span class="ct">text</span><span><span class="badge b-FK">FK</span><span class="badge b-NN">NN</span></span><span class="cref">→ locker_item.item_id</span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">item_id</span><span class="ct">text</span><span><span class="badge b-FK">FK</span><span class="badge b-NN">NN</span></span><span class="cref">→ locker_item.id</span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">section</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote">default ''</span></div>
 <div class="colrow"><span class="cn">label</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">kind</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
@@ -521,20 +514,20 @@
 <div class="tbl rv in" data-group="locker" data-table="locker_item_alias"><header><h4>locker_item_alias</h4><p class="tp">An email alias an item uses.</p></header>
 <div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
 <div class="colrow"><span class="cn">alias</span><span class="ct">text</span><span><span class="badge b-PK">PK</span></span><span class="cref"></span><span class="cnote"></span></div>
-<div class="colrow"><span class="cn">item_id</span><span class="ct">text</span><span><span class="badge b-FK">FK</span><span class="badge b-NN">NN</span></span><span class="cref">→ locker_item.item_id</span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">item_id</span><span class="ct">text</span><span><span class="badge b-FK">FK</span><span class="badge b-NN">NN</span></span><span class="cref">→ locker_item.id</span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">created_at</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote">default strftime('%Y-%m-%dT%H:%M:%fZ', 'now')</span></div>
 </div></div>
 <div class="tbl rv in" data-group="locker" data-table="locker_item_address"><header><h4>locker_item_address</h4><p class="tp">A web address an item answers to.</p></header>
 <div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
 <div class="colrow"><span class="cn">address_id</span><span class="ct">text</span><span><span class="badge b-PK">PK</span></span><span class="cref"></span><span class="cnote"></span></div>
-<div class="colrow"><span class="cn">item_id</span><span class="ct">text</span><span><span class="badge b-FK">FK</span><span class="badge b-NN">NN</span></span><span class="cref">→ locker_item.item_id</span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">item_id</span><span class="ct">text</span><span><span class="badge b-FK">FK</span><span class="badge b-NN">NN</span></span><span class="cref">→ locker_item.id</span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">url</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">position</span><span class="ct">integer</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote">default 0</span></div>
 <div class="colrow"><span class="cn">created_at</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
 </div></div>
 <div class="tbl rv in" data-group="locker" data-table="locker_item_passkey"><header><h4>locker_item_passkey</h4><p class="tp">A passkey an item holds.</p></header>
 <div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
-<div class="colrow"><span class="cn">item_id</span><span class="ct">text</span><span><span class="badge b-PK">PK</span><span class="badge b-FK">FK</span></span><span class="cref">→ locker_item.item_id</span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">item_id</span><span class="ct">text</span><span><span class="badge b-PK">PK</span><span class="badge b-FK">FK</span></span><span class="cref">→ locker_item.id</span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">rp_id</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">user_handle</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">display_name</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
@@ -545,11 +538,6 @@
 <div class="colrow"><span class="cn">updated_at</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote">default strftime('%Y-%m-%dT%H:%M:%fZ', 'now')</span></div>
 <div class="colrow"><span class="cn">row_version</span><span class="ct">integer</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote">default 1</span></div>
 <div class="colrow"><span class="cn">key_id</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
-</div></div>
-<div class="tbl rv in" data-group="locker" data-table="locker_tag"><header><h4>locker_tag</h4><p class="tp">A word on a Locker item: Locker's own, never in another app's tag rail.</p></header>
-<div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
-<div class="colrow"><span class="cn">item_id</span><span class="ct">text</span><span><span class="badge b-PK">PK</span><span class="badge b-FK">FK</span></span><span class="cref">→ locker_item.item_id</span><span class="cnote"></span></div>
-<div class="colrow"><span class="cn">label</span><span class="ct">text</span><span><span class="badge b-PK">PK</span></span><span class="cref"></span><span class="cnote"></span></div>
 </div></div>
 <div class="tbl rv in" data-group="locker" data-table="locker_key"><header><h4>locker_key</h4><p class="tp">The one key generation Locker's items are sealed under.</p></header>
 <div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
@@ -564,7 +552,7 @@
 <div class="colrow"><span class="cn">act</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">journal_seq</span><span class="ct">integer</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
 </div></div>
-<p class="note" data-tables="43" data-columns="317">43 tables and 317 columns, read off a vault this build founded.</p>
+<p class="note" data-tables="42" data-columns="308">42 tables and 308 columns, read off a vault this build founded.</p>
 <!-- schema:end -->
     </div>
     <div class="physcard rv">
@@ -598,7 +586,7 @@
     <p class="lede">The stance in §01 survives contact with engineering only if these are enforced, not hoped for. The numbers are the rows of <span class="k">docs/vault-ontology.md</span>, each tied to a test.</p>
     <div class="rules">
       <article class="rule rv"><h3>Every kind has exactly one host</h3><p>The tables with an <span class="k">(id, kind)</span> cascade are exactly the kinds' hosts, and a kind table's generated constant equals its name.</p></article>
-      <article class="rule rv"><h3>The trash pair lives on <span class="k">entity</span></h3><p><span class="k">deleted_at</span> and <span class="k">purge_at</span> are on no other table, except Locker's own item, which is not an entity.</p></article>
+      <article class="rule rv"><h3>The trash pair lives on <span class="k">entity</span></h3><p><span class="k">deleted_at</span> and <span class="k">purge_at</span> are on no other table: a Locker item is an entity, and its trash is its entity's.</p></article>
       <article class="rule rv"><h3>A hash is a foreign key into <span class="k">blob</span></h3><p>Every column holding one is declared, so the byte plane finds every reference from <span class="k">foreign_key_list</span> alone.</p></article>
       <article class="rule rv"><h3>Delete rules are chosen, not defaulted</h3><p>Kind rows, child rows, edges, revisions and a category's budgets and rules cascade; only <span class="k">source.entity_id</span> and <span class="k">message_attachment.entity_id</span> null; every other pointer has no action.</p></article>
       <article class="rule rv"><h3>An edge joins only what <span class="k">edge_shape</span> allows</h3><p>Checked exhaustively over relation × kind × kind, and the relation list equals the <span class="k">CHECK</span>.</p></article>

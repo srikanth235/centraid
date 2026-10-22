@@ -1,8 +1,10 @@
 //! # Locker — the password manager, and the one app with sealed cells
 //!
-//! 15,908 lines of v0 TypeScript, 8 queries, 17 actions, **38 scopes including
-//! the only three `reveal` verbs in the product** (#1020, wave 4 census §A8,
-//! §F). Everything else in this crate follows from one sentence: **the phone
+//! 5 queries, 19 actions, **28 scopes including the only three `reveal` verbs
+//! in the product** (#1020, wave 4 census §A8, §F; #1135). A Locker item is an
+//! entity of kind `locker_item`: its trash, star, archive and tags are the
+//! vault's shared verbs, and this crate folds an item from its entity row, its
+//! kind row and its `tagged` edges. Everything else in this crate follows from one sentence: **the phone
 //! is the vault, and `K` never leaves its core** (#1029, #1047 D-5, D-6). `K`
 //! is derived from the seed when the core opens, held only behind the
 //! member's biometric presence gate, and nothing in this crate ever sees it.

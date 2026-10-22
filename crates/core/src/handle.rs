@@ -738,6 +738,15 @@ impl Handle {
         centraid_vault::Principal::owner(OWNER_DEVICE)
     }
 
+    /// The chat's assistant, riding this device: the owner's own, with Locker
+    /// closed to it. The vault refuses any command run under this principal
+    /// that is a `locker.*` command or names a Locker item, through whatever
+    /// verb (R-1088-3, #1135).
+    #[must_use]
+    pub fn assistant(&self) -> centraid_vault::Principal {
+        centraid_vault::Principal::assistant(OWNER_DEVICE)
+    }
+
     /// THE DOOR A CHAT'S NATIVE SESSION READS AND WRITES THROUGH (#1088).
     ///
     /// It holds clones of this handle's own lock, registry and event queue, so
@@ -749,7 +758,7 @@ impl Handle {
             Arc::clone(&self.vault),
             Arc::clone(&self.registry),
             self.events(),
-            self.owner(),
+            self.assistant(),
         )
     }
 

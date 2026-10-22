@@ -423,7 +423,7 @@ class LockerTransferSpec : StringSpec({
 
     "the history re-reads when a receipt, an item or a field changes, and on nothing else" {
         LockerAccessMachine.tables shouldBe LOCKER_ACCESS_TABLES
-        LOCKER_ACCESS_TABLES shouldBe setOf("receipt", "locker_item", "locker_item_field")
+        LOCKER_ACCESS_TABLES shouldBe setOf("receipt", "entity", "locker_item_field")
         access.rowsChanged("receipt", listOf("k")).shouldNotBeNull()
         access.rowsChanged("core_tag", listOf("k")).shouldBeNull()
     }

@@ -194,7 +194,7 @@ fn every_kind_has_exactly_one_host_and_the_hosts_are_exactly_the_composite_casca
 // ---------------------------------------------------------------------------
 
 #[test]
-fn the_trash_pair_lives_on_entity_and_on_the_lockers_own_item_only() {
+fn the_trash_pair_lives_on_entity_only() {
     let scratch = founded("c2");
     read(&scratch.vault, |connection| {
         let mut holders = BTreeSet::new();
@@ -213,9 +213,9 @@ fn the_trash_pair_lives_on_entity_and_on_the_lockers_own_item_only() {
                 holders.insert(table);
             }
         }
-        // R-1135-1-8: Locker's items are not entities and keep their own pair
-        // (`locker_item`), because nothing outside Locker may name them.
-        assert_eq!(holders, ["entity", "locker_item"].map(str::to_owned).into());
+        // A Locker item is an entity of its own kind (#1135, the Locker lane):
+        // its trash pair is its entity's, like every kind's.
+        assert_eq!(holders, ["entity"].map(str::to_owned).into());
         Ok(())
     });
 }
@@ -369,7 +369,6 @@ fn delete_rules_cascade_only_where_a_row_cannot_outlive_its_parent() {
             ("locker_item_alias", "locker_item"),
             ("locker_item_field", "locker_item"),
             ("locker_item_passkey", "locker_item"),
-            ("locker_tag", "locker_item"),
             ("measurement", "person"),
             ("message", "thread"),
             ("message_attachment", "message"),
@@ -527,7 +526,7 @@ fn an_edge_joins_exactly_the_kinds_edge_shape_names_for_every_relation_and_pair_
                     }
                 }
             }
-            assert_eq!(tried, 8 * 25 * 25);
+            assert_eq!(tried, 8 * Kind::ALL.len() * Kind::ALL.len());
             // A label names a relation, and only `related` has one.
             let bad_label = c.execute(
                 "INSERT INTO edge (from_id, rel, to_id, label_id, created_at) VALUES ('from:person', 'related', 'to:person', 'to:tag', ?1)",
@@ -835,6 +834,47 @@ fn script_every_search_relevant_command(scratch: &common::Scratch, registry: &Re
         "entity.retitle",
         json!({"id": "pr", "title": "Allotment"}),
     );
+    // A LOCKER ITEM IS AN ENTITY AND IS NEVER INDEXED: scripting its commands
+    // here is what holds "incremental equals rebuilt" over a kind whose text is
+    // nothing, and a note's link to it must not carry its title into the note.
+    run(
+        vault,
+        registry,
+        "locker.add_item",
+        json!({"item_id": "lk1", "type": "login", "title": "Vaultbank", "username": "sealedname"}),
+    );
+    run(
+        vault,
+        registry,
+        "tag.add",
+        json!({"id": "lk1", "label": "Vaulttag"}),
+    );
+    run(
+        vault,
+        registry,
+        "flag.set",
+        json!({"id": "lk1", "flag": "starred"}),
+    );
+    run(
+        vault,
+        registry,
+        "edge.add",
+        json!({"from": "n3", "rel": "links", "to": "lk1"}),
+    );
+    run(
+        vault,
+        registry,
+        "entity.retitle",
+        json!({"id": "lk1", "title": "Vaultbank Savings"}),
+    );
+    run(
+        vault,
+        registry,
+        "locker.edit_item",
+        json!({"item_id": "lk1", "username": "other"}),
+    );
+    run(vault, registry, "entity.trash", json!({"id": "lk1"}));
+    run(vault, registry, "entity.restore", json!({"id": "lk1"}));
     // Last, so no later command re-indexes it and hides a missing touch.
     run(
         vault,
@@ -858,6 +898,13 @@ fn the_incremental_index_equals_a_rebuild_after_every_search_relevant_command() 
     script_every_search_relevant_command(&scratch, &registry);
     let incremental = index_dump(&scratch.vault);
     assert!(!incremental.is_empty(), "the script left something to find");
+    let held = vocabulary(&scratch.vault);
+    assert!(
+        !held
+            .iter()
+            .any(|term| term.starts_with("vaultbank") || term == "vaulttag"),
+        "a Locker item's title or tag reached the index: {held:?}"
+    );
     // The word list holds every word the index does, and may hold more: a word
     // an edit dropped stays until a purge of something that held it or a rebuild.
     let (terms, words) = (vocabulary(&scratch.vault), word_list(&scratch.vault));
@@ -1068,7 +1115,6 @@ fn the_founded_file_holds_the_spec_s_tables_and_nothing_else() {
         "message_attachment",
         // Locker, which is not an entity kind
         "locker_item",
-        "locker_tag",
         "locker_item_address",
         "locker_item_alias",
         "locker_item_field",
@@ -1439,7 +1485,9 @@ fn column_definition(sql: &str, column: &str) -> String {
 
 /// A `TEXT` column the declaration alone shows is not prose: an id or a hash
 /// (named by a key), an enum, JSON, a date, a generated constant. Locker's
-/// tables are never indexed.
+/// tables are exempt as a whole: a Locker item is an entity, but `text_of`
+/// answers `None` for its kind, so no column of it is ever indexed (the
+/// title included).
 fn is_structural(connection: &Connection, table: &str, column: &str) -> bool {
     if table.starts_with("locker_") || table == "receipt" {
         return true;

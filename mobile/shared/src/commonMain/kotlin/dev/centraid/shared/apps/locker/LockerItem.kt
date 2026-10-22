@@ -333,11 +333,20 @@ public object LockerItemMachine :
     private fun action(held: LockerHeld<LockerItemState>, key: String): Step<LockerHeld<LockerItemState>> {
         val item = item(held) ?: return Step(held)
         val id = item.item_id
+        // TRASH, RESTORE, THE STAR AND THE ARCHIVE ARE THE VAULT'S (#1135): a Locker item is an
+        // entity, so these are `entity.*` and `flag.*`, keyed by `id`, like every kind's.
+        var input = "{\"id\":${jsonString(id)}}"
         val command = when (key) {
-            "star" -> if (item.starred) "locker.unstar_item" else "locker.star_item"
-            "archive" -> if (item.archived) "locker.unarchive_item" else "locker.archive_item"
-            "trash" -> "locker.trash_item"
-            "restore" -> "locker.restore_item"
+            "star" -> {
+                input = "{\"id\":${jsonString(id)},\"flag\":\"starred\"}"
+                if (item.starred) "flag.clear" else "flag.set"
+            }
+            "archive" -> {
+                input = "{\"id\":${jsonString(id)},\"flag\":\"archived\"}"
+                if (item.archived) "flag.clear" else "flag.set"
+            }
+            "trash" -> "entity.trash"
+            "restore" -> "entity.restore"
             "add_field" -> return if (item.trashed) Step(held) else Step(openField(held, item, ""))
             "remove_passkey" -> return if (item.passkey == null) {
                 Step(held)
@@ -371,7 +380,7 @@ public object LockerItemMachine :
             )
             else -> return Step(held)
         }
-        return submit(held, command, "{\"item_id\":${jsonString(id)}}", InvokeKeys.of(command, id, held.tokens.toString()))
+        return submit(held, command, input, InvokeKeys.of(command, id, key, held.tokens.toString()))
     }
 
     private fun confirmed(held: LockerHeld<LockerItemState>): Step<LockerHeld<LockerItemState>> {
@@ -394,7 +403,7 @@ public object LockerItemMachine :
                 "{\"item_id\":$id}",
                 InvokeKeys.of("locker.clear_passkey", item.item_id, held.tokens.toString()),
             )
-            else -> submit(cleared, "locker.purge_item", "{\"item_id\":$id}", InvokeKeys.of("locker.purge_item", item.item_id))
+            else -> submit(cleared, "entity.purge", "{\"id\":$id}", InvokeKeys.of("entity.purge", item.item_id))
         }
     }
 
@@ -544,9 +553,9 @@ public object LockerItemMachine :
         val cleared = held.copy(screen = held.screen.copy(status = null))
         return submit(
             cleared,
-            "locker.restore_item",
-            "{\"item_id\":${jsonString(item.item_id)}}",
-            InvokeKeys.of("locker.restore_item", item.item_id, held.tokens.toString()),
+            "entity.restore",
+            "{\"id\":${jsonString(item.item_id)}}",
+            InvokeKeys.of("entity.restore", item.item_id, held.tokens.toString()),
         )
     }
 
@@ -564,9 +573,9 @@ public object LockerItemMachine :
                 !settled.committed -> screen.copy(
                     status = StatusLine(sentence = settled.failure?.sentence ?: LockerCopy.WRITE_REFUSED, refused = true),
                 )
-                submitted.startsWith("locker.trash_item") -> screen.copy(status = StatusLine(sentence = LockerCopy.TRASHED, action_label = LockerCopy.UNDO))
-                submitted.startsWith("locker.restore_item") -> screen.copy(status = StatusLine(sentence = LockerCopy.RESTORED))
-                submitted.startsWith("locker.purge_item") -> screen.copy(status = StatusLine(sentence = LockerCopy.PURGED))
+                submitted.startsWith("entity.trash") -> screen.copy(status = StatusLine(sentence = LockerCopy.TRASHED, action_label = LockerCopy.UNDO))
+                submitted.startsWith("entity.restore") -> screen.copy(status = StatusLine(sentence = LockerCopy.RESTORED))
+                submitted.startsWith("entity.purge") -> screen.copy(status = StatusLine(sentence = LockerCopy.PURGED))
                 submitted.startsWith("locker.set_memo") -> screen.copy(memo = null, status = StatusLine(sentence = LockerCopy.MEMO_SAVED))
                 submitted.startsWith("locker.set_field") -> screen.copy(field_sheet = null, status = StatusLine(sentence = LockerCopy.FIELD_SAVED))
                 submitted.startsWith("locker.remove_field") -> screen.copy(field_sheet = null, status = StatusLine(sentence = LockerCopy.FIELD_REMOVED))

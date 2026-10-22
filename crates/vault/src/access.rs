@@ -134,6 +134,13 @@ pub enum Principal {
         may_act: bool,
         scope_clamp: Option<ScopeClamp>,
     },
+    /// The chat's assistant, riding the owner's device. It acts as the owner
+    /// does and is refused one thing: anything in Locker. A command run under
+    /// this principal that names a Locker item, or is a `locker.*` command at
+    /// all, is refused before its preconditions run (`commands::execute`), so
+    /// no shared verb (`entity.*`, `tag.*`, `flag.*`, `edge.*`) is a way round
+    /// the assistant's absence from Locker (R-1088-3, #1135).
+    Assistant { device_id: String },
     // TWO VARIANTS LEFT WITH THEIR CALLERS (#1029 §1). `Agent` was the
     // assistant and any ACP harness riding an owner, and `Automation` was a
     // compiled manifest running on a schedule. `crates/assist` and
@@ -159,10 +166,25 @@ impl Principal {
         }
     }
 
+    /// The assistant on this owner device: acts as the owner, minus Locker.
+    #[must_use]
+    pub fn assistant(device_id: impl Into<String>) -> Self {
+        Self::Assistant {
+            device_id: device_id.into(),
+        }
+    }
+
+    /// Whether this is the assistant, which Locker is closed to.
+    #[must_use]
+    pub const fn is_assistant(&self) -> bool {
+        matches!(self, Self::Assistant { .. })
+    }
+
     #[must_use]
     pub fn may_act(&self) -> bool {
         match self {
             Self::OwnerDevice { may_act, .. } => *may_act,
+            Self::Assistant { .. } => true,
         }
     }
 
@@ -170,6 +192,7 @@ impl Principal {
     pub const fn scope_clamp(&self) -> Option<&ScopeClamp> {
         match self {
             Self::OwnerDevice { scope_clamp, .. } => scope_clamp.as_ref(),
+            Self::Assistant { .. } => None,
         }
     }
 
@@ -177,7 +200,7 @@ impl Principal {
     #[must_use]
     pub fn caller_id(&self) -> &str {
         match self {
-            Self::OwnerDevice { device_id, .. } => device_id,
+            Self::OwnerDevice { device_id, .. } | Self::Assistant { device_id } => device_id,
         }
     }
 }

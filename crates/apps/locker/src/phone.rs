@@ -15,14 +15,15 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use centraid_apps_kit::error::KitResult;
-use centraid_apps_kit::reads::{PageDoor, in_list, read_by_id, read_window};
+use centraid_apps_kit::reads::{PageDoor, Read, in_list, read_by_id, read_window};
 use centraid_apps_kit::row::{Cell, Row, text_of};
 use centraid_apps_kit::spelling::WalkedWords;
 use centraid_apps_kit::statement::{PageBindValue, PageOrder, PageQuery};
 
 use crate::queries::{
-    AccessAnswer, ITEM_COLUMNS, ITEMS_MAX, ItemRow, SEALED_ITEM_COLUMNS, SEARCH_ROWS, TRASH_ROWS,
-    access_answer, access_statement, access_window, items_window, subtitle_of,
+    AccessAnswer, ENTITY_COLUMNS, ITEMS_MAX, ItemRow, KIND_COLUMNS, SEALED_ITEM_COLUMNS,
+    SEARCH_ROWS, TRASH_ROWS, access_answer, access_statement, access_window, items_window,
+    subtitle_of,
 };
 use crate::transfer::{Entry, EntryField, EntryPasskey, Existing, type_columns};
 use crate::types::{ITEM_TYPES, degrade_type, degraded_from};
@@ -53,7 +54,7 @@ pub fn secret_cells(item_type: &str) -> &'static [&'static str] {
 }
 
 /// Every sealed item cell, as the presence projection names it.
-const PRESENCE_COLUMNS: &str = "item_id, password IS NOT NULL AS has_password, \
+const PRESENCE_COLUMNS: &str = "id, password IS NOT NULL AS has_password, \
      otp_seed IS NOT NULL AS has_otp_seed, card_number IS NOT NULL AS has_card_number, \
      cvv IS NOT NULL AS has_cvv, content IS NOT NULL AS has_content";
 
@@ -61,16 +62,21 @@ const PRESENCE_COLUMNS: &str = "item_id, password IS NOT NULL AS has_password, \
 // Statements.
 // ---------------------------------------------------------------------------
 
-/// Every item that is not in the trash — live and archived — newest first.
+/// Every item that is not in the trash — live and archived — newest first: its
+/// ENTITY rows. The kind rows and the flags are read for these ids by
+/// [`read_shelf`].
 #[must_use]
 pub fn shelves_statement() -> PageQuery {
     PageQuery::new(
         "locker.phone.shelves",
-        ITEM_COLUMNS,
-        "locker_item",
-        PageOrder::desc("updated_at", "item_id"),
+        ENTITY_COLUMNS,
+        "entity",
+        PageOrder::desc("updated_at", "id"),
     )
-    .filter("deleted_at IS NULL", Vec::new())
+    .filter(
+        "kind = ? AND deleted_at IS NULL",
+        vec![PageBindValue::Text(KIND.to_owned())],
+    )
 }
 
 /// The trash, for its count only.
@@ -78,23 +84,67 @@ pub fn shelves_statement() -> PageQuery {
 pub fn trashed_statement() -> PageQuery {
     PageQuery::new(
         "locker.phone.trashed",
-        "item_id, updated_at",
-        "locker_item",
-        PageOrder::desc("updated_at", "item_id"),
+        "id, updated_at",
+        "entity",
+        PageOrder::desc("updated_at", "id"),
     )
-    .filter("deleted_at IS NOT NULL", Vec::new())
+    .filter(
+        "kind = ? AND deleted_at IS NOT NULL",
+        vec![PageBindValue::Text(KIND.to_owned())],
+    )
 }
 
-/// Every label on a Locker item: Locker's own `locker_tag` rows, in no other
-/// app's vocabulary. The star is a column of the item, not a row here.
-#[must_use]
-pub fn tag_rows_statement() -> PageQuery {
-    PageQuery::new(
-        "locker.phone.tags",
-        "item_id, label",
-        "locker_tag",
-        PageOrder::asc("item_id", "label"),
-    )
+/// The entity kind this app's items are.
+const KIND: &str = "locker_item";
+
+/// The vault's two flags Locker draws, by their seeded ids.
+const STARRED: &str = "flag:starred";
+const ARCHIVED: &str = "flag:archived";
+
+/// The kind rows of a set of items (their typed columns and the memo).
+const KIND_ROWS: Read = Read {
+    name: "locker.phone.rows",
+    table: "locker_item",
+    select: KIND_COLUMNS,
+    order: ("id", "id"),
+    column: "id",
+};
+
+/// The vault's `tagged` edges out of a set of items: their tags and their two
+/// flags. A Locker tag is a vault tag, and the star and the archive are flags.
+const TAGGED_EDGES: Read = Read {
+    name: "locker.phone.tags",
+    table: "edge",
+    select: "from_id, to_id, created_at",
+    order: ("from_id", "to_id"),
+    column: "from_id",
+};
+
+/// The words the tags are: the `tag` concepts' titles.
+const TAG_WORDS: Read = Read {
+    name: "locker.phone.labels",
+    table: "entity",
+    select: "id, title",
+    order: ("id", "id"),
+    column: "id",
+};
+
+/// Items per `IN` list. A keyset page re-binds its whole list on every page,
+/// so a window of two thousand items is read in lists of this many.
+const CHUNK: usize = centraid_apps_kit::reads::AMONG_LIMIT;
+
+/// Read `read` for every id, in lists of [`CHUNK`].
+fn read_chunked(
+    read: &Read,
+    door: &dyn PageDoor,
+    ids: &[String],
+    extra: Option<(&str, Vec<PageBindValue>)>,
+) -> KitResult<Vec<Row>> {
+    let mut rows = Vec::new();
+    for chunk in ids.chunks(CHUNK) {
+        rows.extend(read.of(door, chunk, extra.clone())?);
+    }
+    Ok(rows)
 }
 
 /// Every connector alias.
@@ -111,13 +161,13 @@ pub fn aliases_statement() -> PageQuery {
 /// One item's secrets, as presence.
 #[must_use]
 pub fn presence_statement(item_id: &str) -> PageQuery {
-    by_item(
+    PageQuery::new(
         "locker.phone.presence",
         PRESENCE_COLUMNS,
         "locker_item",
-        "item_id",
-        item_id,
+        PageOrder::asc("id", "id"),
     )
+    .filter("id = ?", vec![PageBindValue::Text(item_id.to_owned())])
 }
 
 /// One item's custom fields, a sealed value as its presence.
@@ -156,19 +206,6 @@ pub fn passkey_statement(item_id: &str) -> PageQuery {
         "item_id",
         item_id,
     )
-}
-
-/// Every item not in the trash, each sealed cell as its presence — what an
-/// import's plan compares a file against (#1047 T2).
-#[must_use]
-pub fn presence_all_statement() -> PageQuery {
-    PageQuery::new(
-        "locker.phone.presence_all",
-        PRESENCE_COLUMNS,
-        "locker_item",
-        PageOrder::asc("item_id", "item_id"),
-    )
-    .filter("deleted_at IS NULL", Vec::new())
 }
 
 fn by_item(name: &str, select: &str, from: &str, pk: &str, item_id: &str) -> PageQuery {
@@ -300,9 +337,10 @@ pub struct ReviewData {
 /// The shelf, its counts, and the tags in use.
 pub fn load_items(door: &dyn PageDoor, archived: bool, limit: Option<i64>) -> KitResult<ItemsData> {
     let window = items_window(limit);
-    let walked = read_window(door, &shelves_statement(), ITEMS_MAX)?;
-    let rows: Vec<ItemRow> = walked.rows.iter().map(ItemRow::of).collect();
-    let decorations = decorations(door)?;
+    let shelf = read_shelf(door, ITEMS_MAX)?;
+    let walked = &shelf;
+    let rows = &shelf.rows;
+    let decorations = &shelf.decorations;
     let (live, archived_rows): (Vec<&ItemRow>, Vec<&ItemRow>) =
         rows.iter().partition(|row| row.archived_at.is_none());
     let shelf = if archived { &archived_rows } else { &live };
@@ -345,19 +383,22 @@ pub fn load_items(door: &dyn PageDoor, archived: bool, limit: Option<i64>) -> Ki
 
 /// One item, trashed or not; `None` when no item has the id.
 pub fn load_item(door: &dyn PageDoor, item_id: &str) -> KitResult<Option<ItemData>> {
-    let Some(found) = read_by_id(
+    let Some(entity) = read_by_id(
         door,
         "locker.phone.item",
-        ITEM_COLUMNS,
-        "locker_item",
-        "item_id",
+        ENTITY_COLUMNS,
+        "entity",
+        "id",
         item_id,
     )?
     else {
         return Ok(None);
     };
-    let row = ItemRow::of(&found);
-    let decorations = decorations(door)?;
+    let (mut rows, decorations) = fold_items(door, vec![entity])?;
+    // An entity that is not a Locker item has no kind row, and is not found.
+    let Some(row) = rows.pop() else {
+        return Ok(None);
+    };
     let presence = door
         .page(&presence_statement(item_id), &first(1))?
         .rows
@@ -444,9 +485,9 @@ pub fn load_search(door: &dyn PageDoor, term: &str, limit: usize) -> KitResult<S
             corrected: None,
         });
     }
-    let walked = read_window(door, &shelves_statement(), SEARCH_ROWS)?;
-    let rows: Vec<ItemRow> = walked.rows.iter().map(ItemRow::of).collect();
-    let decorations = decorations(door)?;
+    let walked = read_shelf(door, SEARCH_ROWS)?;
+    let rows: Vec<ItemRow> = walked.rows.clone();
+    let decorations = walked.decorations.clone();
     let texts = |row: &ItemRow| -> Vec<String> {
         let mut texts: Vec<String> = row.searchable().map(str::to_lowercase).collect();
         texts.extend(
@@ -497,15 +538,15 @@ pub fn load_search(door: &dyn PageDoor, term: &str, limit: usize) -> KitResult<S
 
 /// The metadata review, against `today` (`YYYY-MM-DD` in the member's zone).
 pub fn load_review(door: &dyn PageDoor, today: &str) -> KitResult<ReviewData> {
-    let walked = read_window(door, &shelves_statement(), REVIEW_ROWS)?;
-    let decorations = decorations(door)?;
+    let walked = read_shelf(door, REVIEW_ROWS)?;
+    let decorations = &walked.decorations;
     let this_month = month_of_day(today);
     let mut review = ReviewData {
         reviewed: walked.rows.len(),
         truncated: walked.filled,
         ..ReviewData::default()
     };
-    for row in walked.rows.iter().map(ItemRow::of) {
+    for row in walked.rows.iter().cloned() {
         let listed = decorations.listed(row);
         let row = &listed.row;
         if row.compromised {
@@ -567,14 +608,18 @@ pub fn load_access(
 /// the browsable half of an item, and a trashed item is still the one a
 /// receipt is about. An item the vault no longer holds has no row.
 pub fn access_titles_statement(item_ids: &[String]) -> KitResult<PageQuery> {
-    let ids = in_list("item_id", item_ids)?;
+    let ids = in_list("id", item_ids)?;
+    // A receipt names an item by value and may name anything: only a Locker
+    // item's title is read, whatever the id.
+    let mut bind = vec![PageBindValue::Text(KIND.to_owned())];
+    bind.extend(ids.bind);
     Ok(PageQuery::new(
         "locker.phone.access_titles",
-        "item_id, title",
-        "locker_item",
-        PageOrder::asc("item_id", "item_id"),
+        "id, title",
+        "entity",
+        PageOrder::asc("id", "id"),
     )
-    .filter(&ids.sql, ids.bind))
+    .filter(&format!("kind = ? AND {}", ids.sql), bind))
 }
 
 /// The labels of the custom fields a history names. A sealed field's VALUE is
@@ -609,7 +654,7 @@ fn name_access(door: &dyn PageDoor, answer: &mut AccessAnswer) -> KitResult<()> 
         .collect::<BTreeSet<_>>()
         .into_iter()
         .collect();
-    let titles = named(door, &item_ids, access_titles_statement, "item_id", "title")?;
+    let titles = named(door, &item_ids, access_titles_statement, "id", "title")?;
     let labels = named(
         door,
         &field_ids,
@@ -654,15 +699,26 @@ fn named(
 /// Every item an import could land on: live and archived, with which of its
 /// sealed cells hold a value (#1047 T2). The window is the shelves' ceiling.
 pub fn load_import_targets(door: &dyn PageDoor) -> KitResult<Vec<Existing>> {
-    let rows = read_window(door, &shelves_statement(), ITEMS_MAX)?.rows;
-    let presence: BTreeMap<String, Row> = read_window(door, &presence_all_statement(), ITEMS_MAX)?
+    let shelf = read_shelf(door, ITEMS_MAX)?;
+    let ids: Vec<String> = shelf.rows.iter().map(|row| row.item_id.clone()).collect();
+    let presence: BTreeMap<String, Row> = read_chunked(
+        &Read {
+            name: "locker.phone.presence_all",
+            table: "locker_item",
+            select: PRESENCE_COLUMNS,
+            order: ("id", "id"),
+            column: "id",
+        },
+        door,
+        &ids,
+        None,
+    )?
+    .into_iter()
+    .filter_map(|row| text_of(&row, "id").map(|id| (id, row)))
+    .collect();
+    Ok(shelf
         .rows
         .into_iter()
-        .filter_map(|row| text_of(&row, "item_id").map(|id| (id, row)))
-        .collect();
-    Ok(rows
-        .iter()
-        .map(ItemRow::of)
         .map(|row| {
             let item_type = degrade_type(&row.item_type).to_owned();
             let sealed = presence
@@ -704,17 +760,14 @@ pub struct ExportSource {
 /// with its tags, star, memo, fields, addresses and passkey metadata. The
 /// trash is not exported. Nothing sealed is read: the core opens those.
 pub fn load_export(door: &dyn PageDoor) -> KitResult<Vec<ExportSource>> {
-    let mut rows: Vec<ItemRow> = read_window(door, &shelves_statement(), ITEMS_MAX)?
-        .rows
-        .iter()
-        .map(ItemRow::of)
-        .collect();
+    let shelf = read_shelf(door, ITEMS_MAX)?;
+    let mut rows: Vec<ItemRow> = shelf.rows;
     rows.sort_by(|left, right| {
         left.created_at
             .cmp(&right.created_at)
             .then_with(|| left.item_id.cmp(&right.item_id))
     });
-    let decorations = decorations(door)?;
+    let decorations = shelf.decorations;
     let mut sources = Vec::with_capacity(rows.len());
     for row in rows {
         let item_id = row.item_id.clone();
@@ -855,12 +908,86 @@ impl PhoneDecorations {
     }
 }
 
-/// Read the tag rows and the aliases.
-pub fn decorations(door: &dyn PageDoor) -> KitResult<PhoneDecorations> {
+/// The shelf: every item not in the trash, folded from its three places, with
+/// the tags and aliases, and whether the walk reached its window.
+#[derive(Debug, Clone)]
+pub struct Shelf {
+    pub rows: Vec<ItemRow>,
+    pub decorations: PhoneDecorations,
+    pub filled: bool,
+}
+
+/// Walk the shelf's entity rows and fold them ([`fold_items`]).
+pub fn read_shelf(door: &dyn PageDoor, window: usize) -> KitResult<Shelf> {
+    let walked = read_window(door, &shelves_statement(), window)?;
+    let (rows, decorations) = fold_items(door, walked.rows)?;
+    Ok(Shelf {
+        rows,
+        decorations,
+        filled: walked.filled,
+    })
+}
+
+/// Fold item ENTITY rows with their kind rows and their `tagged` edges.
+///
+/// A Locker item is read from three places and the answer is one row: the
+/// entity (title, stamps, trash), the kind row (typed columns, memo) and the
+/// vault's flags and tags. An entity with no kind row is not a Locker item and
+/// is dropped, so the order of `entities` is the order of the rows.
+fn fold_items(
+    door: &dyn PageDoor,
+    entities: Vec<Row>,
+) -> KitResult<(Vec<ItemRow>, PhoneDecorations)> {
+    let ids: Vec<String> = entities
+        .iter()
+        .filter_map(|row| text_of(row, "id"))
+        .collect();
+    let kind_rows: BTreeMap<String, Row> = read_chunked(&KIND_ROWS, door, &ids, None)?
+        .into_iter()
+        .filter_map(|row| text_of(&row, "id").map(|id| (id, row)))
+        .collect();
+    let edges = read_chunked(
+        &TAGGED_EDGES,
+        door,
+        &ids,
+        Some(("rel = ?", vec![PageBindValue::Text("tagged".to_owned())])),
+    )?;
+    // Which concept each item carries: the two flags by their seeded ids, and
+    // every other `to_id` is a tag whose word is read below.
+    let mut starred: BTreeSet<String> = BTreeSet::new();
+    let mut archived: BTreeMap<String, String> = BTreeMap::new();
+    let mut tag_ids: BTreeSet<String> = BTreeSet::new();
+    let mut tagged: Vec<(String, String)> = Vec::new();
+    for edge in &edges {
+        let (Some(item), Some(concept)) = (text_of(edge, "from_id"), text_of(edge, "to_id")) else {
+            continue;
+        };
+        match concept.as_str() {
+            STARRED => {
+                starred.insert(item);
+            }
+            ARCHIVED => {
+                archived.insert(item, text_of(edge, "created_at").unwrap_or_default());
+            }
+            _ => {
+                tag_ids.insert(concept.clone());
+                tagged.push((item, concept));
+            }
+        }
+    }
+    let words: BTreeMap<String, String> = read_chunked(
+        &TAG_WORDS,
+        door,
+        &tag_ids.into_iter().collect::<Vec<_>>(),
+        Some(("kind = ?", vec![PageBindValue::Text("tag".to_owned())])),
+    )?
+    .into_iter()
+    .filter_map(|row| Some((text_of(&row, "id")?, text_of(&row, "title")?)))
+    .collect();
     let mut decorations = PhoneDecorations::default();
-    for row in read_window(door, &tag_rows_statement(), DECORATION_ROWS)?.rows {
-        if let (Some(item), Some(label)) = (text_of(&row, "item_id"), text_of(&row, "label")) {
-            decorations.tags.entry(item).or_default().push(label);
+    for (item, concept) in tagged {
+        if let Some(word) = words.get(&concept) {
+            decorations.tags.entry(item).or_default().push(word.clone());
         }
     }
     for labels in decorations.tags.values_mut() {
@@ -877,7 +1004,37 @@ pub fn decorations(door: &dyn PageDoor) -> KitResult<PhoneDecorations> {
             decorations.alias.insert(item, alias);
         }
     }
-    Ok(decorations)
+    let rows = entities
+        .iter()
+        .filter_map(|entity| {
+            let id = text_of(entity, "id")?;
+            let kind = kind_rows.get(&id)?;
+            // One folded row, in the names `ItemRow::of` reads.
+            let mut folded: Row = kind.clone();
+            folded.remove("id");
+            folded.insert("item_id".to_owned(), Cell::Text(id.clone()));
+            for column in [
+                "title",
+                "created_at",
+                "updated_at",
+                "deleted_at",
+                "purge_at",
+            ] {
+                if let Some(cell) = entity.get(column) {
+                    folded.insert(column.to_owned(), cell.clone());
+                }
+            }
+            folded.insert(
+                "starred".to_owned(),
+                Cell::Integer(i64::from(starred.contains(&id))),
+            );
+            if let Some(since) = archived.get(&id) {
+                folded.insert("archived_at".to_owned(), Cell::Text(since.clone()));
+            }
+            Some(ItemRow::of(&folded))
+        })
+        .collect();
+    Ok((rows, decorations))
 }
 
 // ---------------------------------------------------------------------------
@@ -983,7 +1140,6 @@ mod tests {
             shelves_statement(),
             trashed_statement(),
             presence_statement("x"),
-            presence_all_statement(),
             fields_statement("x"),
             passkey_statement("x"),
             // THE WHOLE-LOCKER HISTORY'S NAMES (Q-1047-21): a title and a

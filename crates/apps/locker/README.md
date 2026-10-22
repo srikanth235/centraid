@@ -1,6 +1,6 @@
 # `crates/apps/locker` — Locker, and the app that holds no key
 
-Locker is 8 v0 queries, 17 actions and 38 scopes over three schemas, holds **the only three `reveal` verbs in the product**, and answers the phone's five app queries and its import and export ([#1047](https://github.com/srikanth235/centraid/issues/1047)). This crate is its read side and its action table. Almost everything here follows from one sentence: **the list is metadata; the secret is not.**
+Locker is 5 queries, 19 actions and 28 scopes over five schemas (its own, and the shared `entity`, `flag` and `tag` verbs it wraps, and the `vault` reads), holds **the only three `reveal` verbs in the product**, and answers the phone's five app queries and its import and export ([#1047](https://github.com/srikanth235/centraid/issues/1047)). This crate is its read side and its action table. Almost everything here follows from one sentence: **the list is metadata; the secret is not.**
 
 ## On the phone (#1047, D-5)
 
@@ -8,7 +8,7 @@ The phone is the vault ([#1029](https://github.com/srikanth235/centraid/issues/1
 
 | Loader | What it answers |
 | --- | --- |
-| `load_items` | one shelf (live or archived), newest first, with stars, tags, the vault's own counts and whether the window filled |
+| `load_items` | one shelf (live or archived), newest first, with stars, tags, the vault's own counts and whether the window filled. A Locker item is an entity ([#1135](https://github.com/srikanth235/centraid/issues/1135)): a row is folded from the item's `entity` row (title, stamps, trash), its `locker_item` kind row and the vault's `tagged` edges (the star and the archive are flags, the tags are vault tags), in three reads named `locker.phone.*`, which is what the page door serves a Locker item to |
 | `load_item` | one item — trashed too — with its sidecars and, for each sealed cell its type carries, **whether it holds a value** |
 | `load_search` | title, username, address, note, full name, email, phone, card brand, aliases and the memo, case-insensitively, over every item not in the trash; never a sealed cell (the walk projects none). When the exact walk is empty, a typo is corrected against the words of the very rows walked (`spelling::WalkedWords`; Locker has no index and no vocabulary) and walked again, and `SearchData::corrected` says so ([#1097](https://github.com/srikanth235/centraid/issues/1097), R4, R6) |
 | `load_review` | what metadata can show: compromised, `http://` addresses, expired and expiring cards against the device's day |
@@ -32,14 +32,14 @@ The secret is not this crate's. `K` is derived from the member's 24 words (`seed
 
 ## The facts every query is written around
 
-1. **`ITEM_COLUMNS` is the browsable half, and no sealed cell is on it.** `password`, `otp_seed`, `card_number`, `cvv`, `content`, `value_sealed` and `private_key` are absent **by construction rather than stripped afterwards**.
+1. **`ITEM_COLUMNS` is the browsable half, and no sealed cell is on it** (nor on `ENTITY_COLUMNS` or `KIND_COLUMNS`, the two statements it is folded from). `password`, `otp_seed`, `card_number`, `cvv`, `content`, `value_sealed` and `private_key` are absent **by construction rather than stripped afterwards**.
 2. **Listing is not unlocking — in the vault.** Title, url and username are plaintext at rest so the list and search work. On the phone the shared machine still reads nothing while Locker is locked ([R-1047-L2](../../../docs/decisions.md#locker-on-the-phone-1047-d-5)); the core refuses only what needs `K`.
 3. **A stated window is walked, not clamped.** `MAX_PAGE_ROWS` clamps a page at 500, so every shelf walks with `read_window` and reports whether the window filled; a count that reached its ceiling is answered as unknown, never as the ceiling.
 4. **The audit band is Locker's own table.** Every Locker act writes a row of `receipt` (`seq`, `at`, `item_id` as a value, `act`, `journal_seq`; [R-1135-1-2](../../../docs/decisions.md)), and the statement `locker.access.receipts` reads that table and no other, so no predicate has to keep another surface's receipts out. The phone's page door has no entity catalog and evaluates no grant: the phone is the owner. `the_whole_lockers_access_history_names_every_receipt_and_carries_no_value` (`crates/core`) is the check that the whole-Locker read names every receipt a command wrote.
 
 ## The manifest
 
-`manifest.json`'s descriptions say what the phone does (#1047 T2). `manifest::tests` asserts the properties that matter: no permit-era `auth_session` on `items`, `seats.disabledOn` empty, the two confirmed actions (`purge-item`, `export`), and one command per action. `set-memo` (#1047) exposes `locker.set_memo`, the memo command no action reached (the handoff's README §8 paper cut).
+`manifest.json`'s descriptions say what the phone does (#1047 T2). `manifest::tests` asserts the properties that matter: no permit-era `auth_session` on `items`, `seats.disabledOn` empty, the two confirmed actions (`purge-item`, `export`), and one command per action — Locker's own for what involves a secret, and the vault's shared `entity.trash`, `entity.restore`, `entity.purge`, `flag.set`, `flag.clear`, `tag.add` and `tag.remove` for the lifecycle, the star, the archive and the tags, which several actions may share. `set-memo` (#1047) exposes `locker.set_memo`, the memo command no action reached (the handoff's README §8 paper cut).
 
 ## An edit replaces; it does not patch
 

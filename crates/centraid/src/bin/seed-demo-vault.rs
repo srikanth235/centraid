@@ -268,8 +268,22 @@ fn main() {
     let self_id = handle
         .with_vault(|vault| Ok(vault.self_id()?.unwrap_or_default()))
         .expect("the self person reads");
-    let seeded = SEEDED_TABLES
-        .map(|(app, table, pk, filter)| (app, count_rows(&handle, table, pk, filter, &self_id)));
+    let seeded = SEEDED_TABLES.map(|(app, table, pk, filter)| {
+        let mut rows = read_all(&handle, table, pk, filter, &self_id);
+        // Locker's tile leaves out what is archived, and the archive is a flag
+        // (a `tagged` edge to `flag:archived`) and not a column.
+        if app == "locker" {
+            let archived = read_all(
+                &handle,
+                "edge",
+                "from_id",
+                Some("rel = 'tagged' AND to_id = 'flag:archived'"),
+                &self_id,
+            );
+            rows.retain(|id| !archived.contains(id));
+        }
+        (app, rows.len())
+    });
     handle.close();
     // AND THE FILE IS FINISHED BEFORE THIS PROCESS GOES (#1020 wave A).
     // `close` leaves the connection to teardown, which is right for a phone
@@ -353,34 +367,42 @@ const SEEDED_TABLES: [(&str, &str, &str, Option<&str>); 8] = [
     ("money", "txn", "id", None),
     (
         "locker",
-        "locker_item",
-        "item_id",
-        Some("deleted_at IS NULL AND archived_at IS NULL"),
+        "entity",
+        "id",
+        Some("kind = 'locker_item' AND deleted_at IS NULL"),
     ),
 ];
 
-/// Every row of a table, counted by paging it through the vault's keyset door to the end.
+/// The `pk` of every row of a table, read by paging it through the vault's keyset door to the end.
 ///
 /// There is no `COUNT(*)` on the door and `sql-confinement` refuses SQL here
-/// (see [`first_row`]), so the count is the rows the pages hand back. It goes
+/// (see [`first_row`]), so a count is the rows the pages hand back. It goes
 /// through `Vault::keyset_page` and not the wire's `Request::Page`, because the
 /// wire door pages only the tables a screen pages (`centraid_core::api::PAGE_TABLES`)
 /// and this mirror also counts `entity` and `txn`, whose Home
 /// tiles ride their own arms.
-fn count_rows(
+fn read_all(
     handle: &centraid_core::Handle,
     table: &str,
     pk: &str,
     filter: Option<&str>,
     self_id: &str,
-) -> usize {
+) -> Vec<String> {
     handle
         .with_vault(|vault| {
-            let mut rows = 0;
+            let mut rows = Vec::new();
             let mut after = None;
             loop {
                 let answer = vault.keyset_page(&centraid_vault::page::KeysetPage {
-                    name: "seed.count".to_owned(),
+                    // Home's Locker tile is a read the vault serves Locker's
+                    // rows to, by name; the mirror asks as Home does.
+                    name: if filter.is_some_and(|text| {
+                        text.contains("locker_item") || text.contains("flag:archived")
+                    }) {
+                        "home.locker".to_owned()
+                    } else {
+                        "seed.count".to_owned()
+                    },
                     select: vec![pk.to_owned()],
                     from: table.to_owned(),
                     predicate: filter.map(str::to_owned),
@@ -396,14 +418,17 @@ fn count_rows(
                     held_thumbnail: false,
                     document_size: false,
                 })?;
-                rows += answer.rows.len();
+                rows.extend(answer.rows.iter().filter_map(|row| match row.get(pk) {
+                    Some(centraid_vault::value::Value::Text(text)) => Some(text.clone()),
+                    _ => None,
+                }));
                 match answer.next {
                     Some(next) => after = Some(next),
                     None => return Ok(rows),
                 }
             }
         })
-        .unwrap_or_else(|refusal| panic!("counting {table} was refused: {refusal:?}"))
+        .unwrap_or_else(|refusal| panic!("reading {table} was refused: {refusal:?}"))
 }
 
 // ---------------------------------------------------------------------------
@@ -439,7 +464,7 @@ fn locker_items() -> Vec<(&'static str, Value)> {
             json!({
                 "item_id": "demo-locker-bank", "type": "login", "title": "Sierra Credit Union",
                 "username": "owner@example.com", "password": "Granite-Lake-47-Pine",
-                "url": "https://sierracu.example.com", "tags": ["finance"],
+                "url": "https://sierracu.example.com",
                 "notes": "Joint account for the cabin fund.",
                 // RFC 6238 Appendix B's own seed, as the QR code a bank shows
                 // would carry it, so the item page's code can be checked
@@ -484,11 +509,17 @@ fn locker_items() -> Vec<(&'static str, Value)> {
                 "password": "admin1234"
             }),
         ),
+        // Trash, star and tags are the vault's shared verbs: a Locker item is an
+        // entity (#1135).
+        ("entity.trash", json!({ "id": "demo-locker-gone" })),
         (
-            "locker.trash_item",
-            json!({ "item_id": "demo-locker-gone" }),
+            "flag.set",
+            json!({ "id": "demo-locker-bank", "flag": "starred" }),
         ),
-        ("locker.star_item", json!({ "item_id": "demo-locker-bank" })),
+        (
+            "tag.add",
+            json!({ "id": "demo-locker-bank", "label": "finance" }),
+        ),
         // CUSTOM FIELDS (#1047 T2): a sealed one the core seals against its
         // own id, and a plain one, so the item page shows both kinds.
         (

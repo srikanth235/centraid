@@ -80,6 +80,10 @@ class ScreenOpeningsSpec : StringSpec({
 
         RowRoutes.route(row("people", "person", "pe1", "Ada"))!!.screenId shouldBe PeoplePersonMachine.SCREEN_ID
         RowRoutes.route(row("money", "transaction", "tx1"))!!.screenId shouldBe MoneyTransactionMachine.SCREEN_ID
+        // A NOTE MAY LINK A LOCKER ITEM (#1135), and opening the link is Locker's page, which the
+        // lock wall covers like every Locker destination.
+        RowRoutes.route(row("locker", "locker_item", "lk1", "Bank"))!!.screenId shouldBe
+            dev.centraid.shared.nav.ScreenIds.LOCKER_ITEM
 
         val event = RowRoutes.route(row("agenda", "event", "e1", qualifier = "2026-10-17"))!!
         event.screenId shouldBe AgendaEventMachine.SCREEN_ID

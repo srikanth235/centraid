@@ -85,7 +85,7 @@ pub const MAX_CONTENT_URLS: usize = 100;
 /// a table in `from`, and a door that reads any table by name is wider than any
 /// screen needs: it would page the receipts, the provenance log, the Locker's
 /// fields and passkeys, the money ledger and every revision snapshot for a
-/// shell that asked. So it reads these fourteen and refuses the rest as an
+/// shell that asked. So it reads these thirteen and refuses the rest as an
 /// invalid request, before the vault is asked.
 ///
 /// The set is every `from` a shell sends today, read off `mobile/shared`'s
@@ -95,8 +95,8 @@ pub const MAX_CONTENT_URLS: usize = 100;
 /// |---|---|
 /// | The vault roster | `vault` |
 /// | People (Home's tile counts the circle; its trash shelf pages the trashed) | `entity`, `person`, `vault` |
-/// | Home's tiles | `entity`, `document`, `person`, `vault`, `locker_item` |
-/// | Trash (Docs, Photos, Tasks, People, Locker) | `entity`, `locker_item` |
+/// | Home's tiles | `entity`, `document`, `person`, `vault` |
+/// | Trash (Docs, Photos, Tasks, People, Locker) | `entity` |
 /// | Photos (grid, shelves, lightbox, collections, search, picker, places, album choice, editor) | `photo`, `entity`, `edge`, `container`, `place`, `derivative`, `blob` |
 /// | Phone sync (Docs follows the phone through `follow.files`, #1127; whether a source was imported is its `origin`, and what a followed file last stated is its `source`) | `origin`, `source` |
 /// | `with_minor_units` | `account` |
@@ -105,9 +105,15 @@ pub const MAX_CONTENT_URLS: usize = 100;
 /// the `with_minor_units` arm is specified over, so the arm stays reachable
 /// and tested; Home's money tile rides its own arm (`Request.money`).
 ///
-/// NOT HERE, ON PURPOSE: every other Locker table (`locker_item_field`,
-/// `locker_item_passkey`, `locker_item_address`, `locker_item_alias`), the
-/// the journal and Locker's receipts, the `revision` snapshots, the money
+/// A Locker item is an entity (#1135), so Home's count of Locker's items and
+/// Locker's trash page `entity` like every kind's, as reads named for Locker
+/// (`home.locker`, `locker.*`), which is what the vault serves a Locker item's
+/// row to ([`centraid_vault::page::reaches_locker`]): any other page over
+/// `entity` or `edge` is given the page without Locker's rows.
+///
+/// NOT HERE, ON PURPOSE: every Locker table (`locker_item`,
+/// `locker_item_field`, `locker_item_passkey`, `locker_item_address`,
+/// `locker_item_alias`), the journal and Locker's receipts, the `revision` snapshots, the money
 /// tables (`txn`, `budget`, `checkpoint`, `rule`) and Health's (`measurement`,
 /// `activity`, `workout`). The apps that read
 /// those do it in the core (`Request.app_query`, `Request.money`), through
@@ -118,11 +124,11 @@ pub const MAX_CONTENT_URLS: usize = 100;
 ///
 /// The `where` is held to the same list: it is predicate text and could name
 /// a subquery on any table, so the vault prepares it under an authorizer that
-/// refuses a read outside these fourteen
+/// refuses a read outside these thirteen
 /// ([`Vault::keyset_page_reading_only`]). The vault's test
 /// `a_predicate_that_reads_a_table_outside_the_list_is_refused` is where that
 /// is read: the predicates it tries are SQL, which lives in that crate.
-pub const PAGE_TABLES: [&str; 14] = [
+pub const PAGE_TABLES: [&str; 13] = [
     "account",
     "blob",
     "container",
@@ -130,7 +136,6 @@ pub const PAGE_TABLES: [&str; 14] = [
     "document",
     "edge",
     "entity",
-    "locker_item",
     "origin",
     "person",
     "photo",
@@ -798,7 +803,7 @@ mod tests {
     /// Every table a screen pages, with a column that can key its cursor. Spelled
     /// here, not derived from the allowlist, so the allowlist cannot grow without
     /// this list (and the paragraph above it) being read.
-    const PAGED_BY_A_SCREEN: [(&str, &str); 14] = [
+    const PAGED_BY_A_SCREEN: [(&str, &str); 13] = [
         ("account", "id"),
         ("blob", "hash"),
         ("container", "id"),
@@ -806,7 +811,6 @@ mod tests {
         ("document", "id"),
         ("edge", "from_id"),
         ("entity", "id"),
-        ("locker_item", "item_id"),
         ("origin", "id"),
         ("person", "id"),
         ("photo", "id"),
@@ -824,6 +828,7 @@ mod tests {
         for (table, pk) in [
             ("journal", "seq"),
             ("receipt", "seq"),
+            ("locker_item", "id"),
             ("locker_item_field", "field_id"),
             ("locker_item_passkey", "item_id"),
             ("locker_item_address", "address_id"),
@@ -998,6 +1003,95 @@ mod tests {
             assert_eq!(refused.code(), wire::ErrorCode::InvalidRequest, "{refused}");
         }
         assert_eq!(vault.self_id().expect("read"), None);
+        let _ = std::fs::remove_dir_all(&scratch);
+    }
+
+    /// A LOCKER ITEM IS AN ENTITY, AND THE WIRE'S PAGE SERVES IT ONLY TO A READ
+    /// NAMED FOR LOCKER (#1135, L4). A page over `entity` or `edge` under any
+    /// other name is given the page without the item's row or its edges; the
+    /// kind's own tables are not tables a screen pages at all.
+    #[test]
+    fn a_page_serves_a_locker_item_only_to_a_read_named_for_locker() {
+        let scratch = centraid_ontology::scratch::scratch_dir();
+        std::fs::create_dir_all(&scratch).expect("made");
+        let vault = Vault::create(scratch.join("v.db")).expect("a vault");
+        vault.found("T", "O").expect("founded");
+        let registry = Registry::with_system_commands().expect("the registry builds");
+        let owner = Principal::owner("test-device");
+        for (name, input) in [
+            (
+                "locker.add_item",
+                serde_json::json!({"item_id": "lk1", "type": "login", "title": "Bank login"}),
+            ),
+            (
+                "flag.set",
+                serde_json::json!({"id": "lk1", "flag": "starred"}),
+            ),
+        ] {
+            let ran = vault
+                .execute(
+                    &registry,
+                    &owner,
+                    &centraid_vault::commands::Command::new(name, input),
+                )
+                .expect("the command is answered");
+            assert_eq!(
+                ran.status,
+                centraid_vault::CommandStatus::Executed,
+                "{name}: {:?}",
+                ran.reason
+            );
+        }
+        let ask = |name: &str, from: &str, select: &[&str], sort: &str, pk: &str| {
+            let mut asked = query(select, sort, pk);
+            asked.name = name.to_owned();
+            asked.from = from.to_owned();
+            page(
+                &vault,
+                &wire::PageRequest {
+                    query: Some(asked),
+                    limit: 100,
+                    after: None,
+                },
+            )
+        };
+        let titles = |answer: &wire::Page| -> Vec<String> {
+            answer
+                .rows
+                .iter()
+                .filter_map(|row| match &row.values[1].kind {
+                    Some(wire::value::Kind::Text(text)) => Some(text.clone()),
+                    _ => None,
+                })
+                .collect()
+        };
+        for name in ["test", "home.people", "tasks.trash", "assist.native.entity"] {
+            let answer = ask(name, "entity", &["id", "title"], "id", "id").expect("a page");
+            assert!(
+                !titles(&answer).contains(&"Bank login".to_owned()),
+                "{name}"
+            );
+            let edges =
+                ask(name, "edge", &["from_id", "to_id"], "from_id", "to_id").expect("a page");
+            assert!(edges.rows.is_empty(), "{name} saw a Locker edge");
+        }
+        for name in ["home.locker", "locker.trash", "locker.phone.shelves"] {
+            let answer = ask(name, "entity", &["id", "title"], "id", "id").expect("a page");
+            assert!(titles(&answer).contains(&"Bank login".to_owned()), "{name}");
+        }
+        let edges = ask(
+            "locker.phone.tags",
+            "edge",
+            &["from_id", "to_id"],
+            "from_id",
+            "to_id",
+        )
+        .expect("a page");
+        assert_eq!(edges.rows.len(), 1);
+        // The kind's own table is not a table any screen pages.
+        let refused = ask("locker.phone.rows", "locker_item", &["id"], "id", "id")
+            .expect_err("`locker_item` is not a paged table");
+        assert_eq!(refused.code(), wire::ErrorCode::InvalidRequest);
         let _ = std::fs::remove_dir_all(&scratch);
     }
 

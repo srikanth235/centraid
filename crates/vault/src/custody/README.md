@@ -27,7 +27,7 @@ The phone's two doors are `Vault::locker_generation` (names the generation, writ
 
 `locker_key(key_id, created_at)` holds **at most one row**: `locker_key_one_generation` is a unique index on a constant, so a second generation is refused by the file (in `contracts/migrations/001_baseline.sql`). `K` is the seed's single leaf, so nothing ever retires a generation; `retired_at` and the predicate index that let one live row stand beside retired ones are gone ([R-1047-D2](../../../../docs/decisions.md#the-sealedv1-cell-layer-and-the-retired-locker-generation-deleted-1047)).
 
-Only secret **values** are encrypted. Title, url and username stay plaintext, so a locked Locker can list and search — which is the whole reason Locker is usable on a phone in airplane mode.
+Only secret **values** are encrypted. Title, url and username stay plaintext, so a locked Locker can list and search — which is the whole reason Locker is usable on a phone in airplane mode. A Locker item is an entity of kind `locker_item`, so its title is its entity's; no entity-wide reader serves it or any cell (the journal tokenises the five cells and a duplicate's `fields[].value`, a Locker item has no revision, `text_of` answers nothing for the kind, a page over `entity` or `edge` serves one only to a read `page::reaches_locker` names, and the assistant's principal is refused any command that names one).
 
 **The reveal door is absent from the access plane**, not refused: `crates/vault::access::Verb` is `read` and `act`, and there is no reveal judgement at all. A Locker write that carries plaintext is a receipted refusal (`assert_sealed_cell` in `commands/locker.rs`).
 

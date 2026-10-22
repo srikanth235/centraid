@@ -54,12 +54,14 @@ import io.kotest.matchers.booleans.shouldBeFalse
 import io.kotest.matchers.booleans.shouldBeTrue
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContain
+import io.kotest.matchers.collections.shouldNotContain
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
+import io.kotest.matchers.string.shouldStartWith
 import io.kotest.matchers.types.shouldBeInstanceOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
@@ -366,7 +368,11 @@ class LockerSpec : StringSpec({
             gate.reduce(answered(gate.state.value.prompt!!.token, LockerLockEvent.PromptAnswered.Outcome.OUTCOME_SUCCEEDED))
         }
         val query = reads.query(TrashListState(), null, "UTC").shouldNotBeNull()
-        query.from shouldBe "locker_item"
+        // A LOCKER ITEM IS AN ENTITY (#1135): the trash is the kit's, over `entity` and the kind
+        // `locker_item`, in a read named `locker.trash.rows`, which the vault serves Locker's rows to.
+        query.from shouldBe "entity"
+        query.where_!! shouldContain "kind = 'locker_item'"
+        query.name shouldStartWith "locker."
         query.select shouldContain "title"
         query.select.none { it in setOf("password", "otp_seed", "card_number", "cvv", "content") }.shouldBeTrue()
     }
@@ -679,11 +685,12 @@ class LockerSpec : StringSpec({
     "trashing offers Undo, which restores" {
         val trashed = item.reduce(openItem(), itemView(LockerItemEvent(action = LockerItemEvent.ActionTapped(key = "trash"))))
         val write = trashed.effects.filterIsInstance<ScreenEffect.SubmitWrite>().single()
-        write.command shouldBe "locker.trash_item"
+        write.command shouldBe "entity.trash"
+        write.inputJson shouldBe "{\"id\":\"item-bank\"}"
         val settled = item.reduce(trashed.state, LockerInput.Settled(WriteSettled(invoke_key = write.invokeKey, committed = true))).state
         settled.screen.status!!.action_label shouldBe LockerCopy.UNDO
         item.reduce(settled, itemView(LockerItemEvent(status_acted = LockerItemEvent.StatusActed())))
-            .effects.filterIsInstance<ScreenEffect.SubmitWrite>().single().command shouldBe "locker.restore_item"
+            .effects.filterIsInstance<ScreenEffect.SubmitWrite>().single().command shouldBe "entity.restore"
     }
 
     // --- the editor ---------------------------------------------------------
@@ -765,6 +772,62 @@ class LockerSpec : StringSpec({
         write.inputJson shouldContain "\"password\":\"${LockerEditorMachine.PLACEHOLDER}\""
         write.inputJson shouldContain "\"username\":\"maya@example.com\""
         write.inputJson shouldNotContain "\"type\""
+    }
+
+    "the editor's tags are the vault's: a save files the item, then tag.remove and tag.add one at a time" {
+        val tagged = bank.copy(tags = listOf("finance", "joint"))
+        val opened = editor.run(
+            LockerInput.Lock(open = true),
+            editorView(LockerEditorEvent(opened = LockerEditorEvent.Opened(mode = LockerEditorState.Mode.MODE_EDIT, item_id = "item-bank"))),
+            LockerInput.Answered(listOf(itemAnswer(tagged))),
+        ).first
+        opened.screen.data_!!.tags_text shouldBe "finance, joint"
+        // "Finance" is the same word as "finance"; "joint" goes; "travel" and "cabin" are new.
+        val retagged = editor.reduce(
+            opened,
+            editorView(LockerEditorEvent(tags = LockerEditorEvent.TagsTyped(text = "Finance, travel, cabin"))),
+        ).state
+        val save = editor.reduce(retagged, editorView(LockerEditorEvent(save = LockerEditorEvent.SaveTapped())))
+        val first = save.effects.filterIsInstance<ScreenEffect.SubmitWrite>().single()
+        // The item's own command carries no tags: they are not a field of it.
+        first.command shouldBe "locker.edit_item"
+        first.inputJson shouldNotContain "tags"
+        var step = editor.reduce(save.state, LockerInput.Settled(WriteSettled(invoke_key = first.invokeKey, committed = true)))
+        // THE EDITOR STAYS OPEN while the words follow, one write at a time, in this order.
+        val seen = mutableListOf<Pair<String, String>>()
+        while (true) {
+            step.state.screen.done.shouldBeFalse()
+            val write = step.effects.filterIsInstance<ScreenEffect.SubmitWrite>().singleOrNull() ?: break
+            seen += write.command to write.inputJson
+            step = editor.reduce(step.state, LockerInput.Settled(WriteSettled(invoke_key = write.invokeKey, committed = true)))
+            if (step.state.screen.done) break
+        }
+        seen shouldBe listOf(
+            "tag.remove" to "{\"id\":\"item-bank\",\"label\":\"joint\"}",
+            "tag.add" to "{\"id\":\"item-bank\",\"label\":\"travel\"}",
+            "tag.add" to "{\"id\":\"item-bank\",\"label\":\"cabin\"}",
+        )
+        step.state.screen.done.shouldBeTrue()
+    }
+
+    "a refused tag leaves the editor open and owes nothing more" {
+        val opened = editor.run(
+            LockerInput.Lock(open = true),
+            editorView(LockerEditorEvent(opened = LockerEditorEvent.Opened(mode = LockerEditorState.Mode.MODE_EDIT, item_id = "item-bank"))),
+            LockerInput.Answered(listOf(itemAnswer())),
+        ).first
+        val typed = editor.reduce(opened, editorView(LockerEditorEvent(tags = LockerEditorEvent.TagsTyped(text = "a, b")))).state
+        val save = editor.reduce(typed, editorView(LockerEditorEvent(save = LockerEditorEvent.SaveTapped())))
+        val item = save.effects.filterIsInstance<ScreenEffect.SubmitWrite>().single()
+        val next = editor.reduce(save.state, LockerInput.Settled(WriteSettled(invoke_key = item.invokeKey, committed = true)))
+        val tag = next.effects.filterIsInstance<ScreenEffect.SubmitWrite>().single()
+        val refused = editor.reduce(
+            next.state,
+            LockerInput.Settled(WriteSettled(invoke_key = tag.invokeKey, committed = false)),
+        )
+        refused.state.screen.done.shouldBeFalse()
+        refused.effects.filterIsInstance<ScreenEffect.SubmitWrite>().shouldBeEmpty()
+        refused.state.owed.shouldBeEmpty()
     }
 
     "the member marks a leaked item compromised, and the flag is sent only when it changed (R-1047-F7)" {
@@ -852,9 +915,15 @@ class LockerSpec : StringSpec({
 
     "the Home tile counts items, shows none of them, and says whether Locker is open" {
         val read = HomeReads.READS.first { it.appId == "locker" }
-        read.query.select shouldBe listOf("item_id", "updated_at")
+        read.query.select shouldBe listOf("id", "updated_at")
+        read.query.from shouldBe "entity"
+        read.query.name shouldBe "home.locker"
+        read.query.where_!! shouldContain "kind = 'locker_item'"
         read.query.where_!! shouldContain "deleted_at IS NULL"
-        HomeReads.TABLES shouldContain "locker_item"
+        // The archive is a flag, not a column: the tile leaves out what is `tagged` to `flag:archived`.
+        read.query.where_!! shouldContain "flag:archived"
+        HomeReads.TABLES shouldContain "entity"
+        HomeReads.TABLES shouldContain "edge"
         val rows = listOf(Row(values = listOf(centraid.core.v1.Value(text = "a"), centraid.core.v1.Value(text = "t"))))
         HomeReads.lockerOpen = { false }
         val locked = HomeReads.arrived("locker", rows, capped = false).tile.shouldNotBeNull()
@@ -869,8 +938,13 @@ class LockerSpec : StringSpec({
 
     "every Locker table is a table in the vault, and a change on one re-reads" {
         LOCKER_TABLES shouldContain "locker_item"
+        // A Locker item is an entity: its title, trash, tags, star and archive are the vault's rows.
+        LOCKER_TABLES shouldContain "entity"
+        LOCKER_TABLES shouldContain "edge"
+        LOCKER_TABLES shouldNotContain "locker_tag"
         withClue("a change on a Locker table re-reads the screen that shows it") {
-            LockerHomeMachine.rowsChanged("locker_tag", emptyList()).shouldBeInstanceOf<LockerInput.Changed>()
+            LockerHomeMachine.rowsChanged("edge", emptyList()).shouldBeInstanceOf<LockerInput.Changed>()
+            LockerHomeMachine.rowsChanged("entity", emptyList()).shouldBeInstanceOf<LockerInput.Changed>()
             LockerHomeMachine.rowsChanged("photo", emptyList()).shouldBeNull()
         }
         TrashListEvent.Refreshed() shouldNotBe null

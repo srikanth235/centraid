@@ -462,31 +462,6 @@ pub(crate) fn apply(
         "edge.add" | "edge.remove" => edge_entity(world, input, command == "edge.add"),
         "locker.add_item" => locker_add(world, cx, input),
         "locker.edit_item" => locker_edit(world, cx, input),
-        "locker.trash_item" => trash_row(
-            world,
-            cx,
-            input,
-            Kind::LockerItem,
-            "item_id",
-            "item_live",
-            "that item is not in your locker",
-        ),
-        "locker.restore_item" => restore_row(
-            world,
-            cx,
-            input,
-            Kind::LockerItem,
-            "item_id",
-            "item_trashed_within_window",
-            "that item is not in the trash, or its 30 days have run out",
-        ),
-        "locker.star_item" | "locker.unstar_item" => star(
-            world,
-            input,
-            Kind::LockerItem,
-            "item_id",
-            command == "locker.star_item",
-        ),
         "locker.reveal_receipt" => Ok(ok(json!({"receipt_id": cx.id("receipt_id")}))),
         other => Err(format!(
             "error: park has no patch for {other}; the write cannot be shown before it is made."
@@ -508,61 +483,6 @@ fn gone(world: &World, id: &str) -> String {
     match key_of(world, id).and_then(|key| world.rows.get(&key)) {
         Some(row) if row.trashed => format!("“{}” is in the trash; restore it first", row.name),
         _ => format!("there is nothing with the id `{id}`"),
-    }
-}
-
-fn trash_row(
-    world: &mut World,
-    cx: &Cx,
-    input: &Value,
-    kind: Kind,
-    param: &str,
-    predicate: &str,
-    sentence: &str,
-) -> Result<Ran, String> {
-    let id = text(input, param).unwrap_or_default();
-    match world.rows.get_mut(&(kind, id.to_owned())) {
-        Some(row) if !row.trashed => {
-            trash(row, cx);
-            Ok(ok(json!({ param: id })))
-        }
-        _ => Ok(refused(predicate, sentence)),
-    }
-}
-
-fn restore_row(
-    world: &mut World,
-    cx: &Cx,
-    input: &Value,
-    kind: Kind,
-    param: &str,
-    predicate: &str,
-    sentence: &str,
-) -> Result<Ran, String> {
-    let id = text(input, param).unwrap_or_default();
-    match world.rows.get_mut(&(kind, id.to_owned())) {
-        Some(row) if row.trashed && window_open(row, &cx.now) => {
-            untrash(row, cx);
-            Ok(ok(json!({ param: id })))
-        }
-        _ => Ok(refused(predicate, sentence)),
-    }
-}
-
-fn star(
-    world: &mut World,
-    input: &Value,
-    kind: Kind,
-    param: &str,
-    on: bool,
-) -> Result<Ran, String> {
-    let id = text(input, param).unwrap_or_default();
-    match world.rows.get_mut(&(kind, id.to_owned())) {
-        Some(row) if !row.trashed => {
-            row.fields.insert("starred", Val::Bool(on));
-            Ok(ok(json!({ param: id })))
-        }
-        _ => Ok(refused("live", "That row is not here.")),
     }
 }
 

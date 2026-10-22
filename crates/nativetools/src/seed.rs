@@ -658,16 +658,12 @@ fn states(seeder: &mut Seeder, world: &Value) -> Result<(), String> {
     for (section, kind) in sections {
         for row in rows(world, section) {
             let id = seeder.id(str_of(row, "key").unwrap_or_default(), kind)?;
-            let target = json!({ crate::act::id_param(kind): id });
+            let target = json!({ "id": id });
             if row.get("starred").and_then(Value::as_bool) == Some(true) {
                 let command = crate::meta::Verb::Star
                     .command(kind)
                     .ok_or_else(|| format!("a {} cannot be starred", kind.name()))?;
-                let input = if kind == Kind::LockerItem {
-                    target.clone()
-                } else {
-                    json!({"id": id, "flag": "starred"})
-                };
+                let input = json!({"id": id, "flag": "starred"});
                 seeder.at_then(row, "starred_at", command, input)?;
             }
             if kind == Kind::Person
@@ -711,8 +707,7 @@ fn states(seeder: &mut Seeder, world: &Value) -> Result<(), String> {
                     Kind::Event => "event.edit",
                     Kind::Task => "task.edit",
                     Kind::Note => "note.edit",
-                    Kind::Document | Kind::Photo => "entity.retitle",
-                    Kind::LockerItem => "locker.edit_item",
+                    Kind::Document | Kind::Photo | Kind::LockerItem => "entity.retitle",
                     _ => return Err(format!("modified is not supported on a {}", kind.name())),
                 };
                 let mut input = target.clone();

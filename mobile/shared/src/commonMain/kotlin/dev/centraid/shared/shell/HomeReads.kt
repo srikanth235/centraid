@@ -227,13 +227,18 @@ public object HomeReads {
             appId = "locker",
             query = PageQuery(
                 name = "home.locker",
-                select = listOf("item_id", "updated_at"),
-                from = "locker_item",
-                where_ = "$NOT_TRASHED AND archived_at IS NULL",
-                order = order("updated_at", "item_id"),
+                select = listOf("id", "updated_at"),
+                // A Locker item is an entity (#1135), so its count is the live items of
+                // that kind that are not archived (the archive is a `tagged` edge to
+                // `flag:archived`). `home.locker` is a read the vault serves Locker's rows to.
+                from = "entity",
+                where_ = "kind = 'locker_item' AND $NOT_TRASHED AND " +
+                    "id NOT IN (SELECT from_id FROM edge WHERE rel = 'tagged' AND to_id = 'flag:archived')",
+                order = order("updated_at", "id"),
             ),
             countOne = LockerCopy.TILE_COUNT_ONE,
             countMany = LockerCopy.TILE_COUNT_MANY,
+            alsoReads = setOf("edge"),
         ),
     )
 

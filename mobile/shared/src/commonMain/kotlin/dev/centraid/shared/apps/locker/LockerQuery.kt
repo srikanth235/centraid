@@ -76,6 +76,13 @@ public data class LockerHeld<S>(
     public val editing: String? = null,
     /** An import's plan, as the core answered it (#1047 T2). No row carries a secret. */
     public val plan: centraid.core.v1.LockerImportPlan? = null,
+    /**
+     * The writes an editor's save still owes once its first one commits (#1135): the vault's
+     * `tag.add` and `tag.remove` that make the item's tags the typed ones. A Locker item's tags
+     * are vault tags, so they are the shared verbs and not a field of `locker.edit_item`.
+     * Dropped by a relock like everything else here, and on the first refusal.
+     */
+    public val owed: List<Pair<String, String>> = emptyList(),
 )
 
 /**
