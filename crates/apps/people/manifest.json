@@ -180,6 +180,17 @@
   "actions": [
     {
       "name": "add-person",
+      "verb": "create",
+      "kind": "person",
+      "inverse": "trash-person",
+      "sealed": [],
+      "chat": "direct",
+      "command": "person.add",
+      "phrasings": [
+        "add Sam Lee to my people",
+        "save a contact called Maria, my dentist",
+        "add my cousin Priya and remind me to call monthly"
+      ],
       "description": "Add a person to your circle through person.add, optionally filed into a list. A cadence of 0 is no cadence.",
       "confirmation": "none",
       "input": {
@@ -236,6 +247,17 @@
     },
     {
       "name": "edit-person",
+      "verb": "edit",
+      "kind": "person",
+      "inverse": null,
+      "sealed": [],
+      "chat": "direct",
+      "command": "person.edit",
+      "phrasings": [
+        "change Sam's role to manager",
+        "set Maria's birthday to March 3",
+        "note that I met Priya at a wedding"
+      ],
       "description": "Revise a person's name, role line, nickname, birthday, sort name, how-you-met note or cadence through person.edit. A key that is present is set (null clears it); a key that is absent is left alone.",
       "confirmation": "none",
       "input": {
@@ -289,6 +311,17 @@
     },
     {
       "name": "set-cadence",
+      "verb": "edit",
+      "kind": "person",
+      "inverse": null,
+      "sealed": [],
+      "chat": "card",
+      "command": "person.edit",
+      "phrasings": [
+        "remind me to reach out to Sam every month",
+        "call Priya every two weeks",
+        "stop reminding me about Maria"
+      ],
       "description": "Set how often you want to reach out to a person through person.edit; 0 is no cadence.",
       "confirmation": "none",
       "input": {
@@ -323,6 +356,17 @@
     },
     {
       "name": "trash-person",
+      "verb": "delete",
+      "kind": "person",
+      "inverse": "restore-person",
+      "sealed": [],
+      "chat": "direct",
+      "command": "entity.trash",
+      "phrasings": [
+        "delete Sam Lee",
+        "remove Maria from my people",
+        "trash the duplicate Priya"
+      ],
       "description": "Move a person to the 30-day trash through entity.trash; the notes, touches and yearly dates written about them alone go with them and come back with them, and a task about them stays.",
       "confirmation": "required",
       "input": {
@@ -353,6 +397,13 @@
     },
     {
       "name": "restore-person",
+      "verb": "restore",
+      "kind": "person",
+      "inverse": "trash-person",
+      "sealed": [],
+      "chat": "direct",
+      "command": "entity.restore",
+      "phrasings": ["bring Sam Lee back", "restore Maria", "undelete Priya"],
       "description": "Restore a trashed person, and what went with them, through entity.restore.",
       "confirmation": "none",
       "input": {
@@ -383,6 +434,17 @@
     },
     {
       "name": "purge-person",
+      "verb": "purge",
+      "kind": "person",
+      "inverse": null,
+      "sealed": [],
+      "chat": "card",
+      "command": "entity.purge",
+      "phrasings": [
+        "erase Sam Lee forever",
+        "permanently delete Maria",
+        "purge the trashed Priya"
+      ],
       "description": "Delete a trashed person forever through entity.purge: what went to the trash with them goes too; a task about them stays as the member's.",
       "confirmation": "required",
       "input": {
@@ -413,6 +475,17 @@
     },
     {
       "name": "log-interaction",
+      "verb": "log",
+      "kind": "person",
+      "inverse": null,
+      "sealed": [],
+      "chat": "direct",
+      "command": "person.log_interaction",
+      "phrasings": [
+        "I called Sam today",
+        "log a coffee with Maria yesterday",
+        "I messaged Priya this morning"
+      ],
       "description": "Log a touch (message, call, met up, note) through person.log_interaction: an activity with the person, and a note about it when you wrote something. It stamps last-contacted, which is computed from these.",
       "confirmation": "none",
       "input": {
@@ -450,6 +523,13 @@
     },
     {
       "name": "star-person",
+      "verb": "star",
+      "kind": "person",
+      "inverse": "unstar-person",
+      "sealed": [],
+      "chat": "direct",
+      "command": "flag.set",
+      "phrasings": ["favorite Sam", "star Maria", "mark Priya as a favorite"],
       "description": "Favorite a person through flag.set: the one canonical star, shared across your vault.",
       "confirmation": "none",
       "input": {
@@ -484,6 +564,13 @@
     },
     {
       "name": "unstar-person",
+      "verb": "unstar",
+      "kind": "person",
+      "inverse": "star-person",
+      "sealed": [],
+      "chat": "direct",
+      "command": "flag.clear",
+      "phrasings": ["unfavorite Sam", "remove Maria's star", "unstar Priya"],
       "description": "Remove a person's favorite star through flag.clear.",
       "confirmation": "none",
       "input": {
@@ -518,6 +605,18 @@
     },
     {
       "name": "move-person",
+      "verb": "add_to",
+      "kind": "person",
+      "also": ["remove_from"],
+      "inverse": null,
+      "sealed": [],
+      "chat": "card",
+      "command": "person.move",
+      "phrasings": [
+        "put Sam in my Family list",
+        "move Maria to Work",
+        "take Priya out of her list"
+      ],
       "description": "Move a person into a list through person.move; omit list_id to un-list them. A person is in one list at a time.",
       "confirmation": "none",
       "input": {
@@ -552,6 +651,17 @@
     },
     {
       "name": "add-note",
+      "verb": "create",
+      "kind": "note",
+      "inverse": null,
+      "sealed": [],
+      "chat": "card",
+      "command": "person.add_note",
+      "phrasings": [
+        "add a note about Sam: loves hiking",
+        "note that Maria moved to Lisbon",
+        "write down Priya's gift preferences"
+      ],
       "description": "Add a note about a person through person.add_note: a note with an about edge, found with them in search.",
       "confirmation": "none",
       "input": {
@@ -586,6 +696,17 @@
     },
     {
       "name": "add-task",
+      "verb": "create",
+      "kind": "task",
+      "inverse": null,
+      "sealed": [],
+      "chat": "card",
+      "command": "person.add_task",
+      "phrasings": [
+        "remind me to send Sam the photos",
+        "add a follow-up for Maria",
+        "task: ask Priya about the move"
+      ],
       "description": "Add a follow-up task about a person through person.add_task.",
       "confirmation": "none",
       "input": {
@@ -620,6 +741,17 @@
     },
     {
       "name": "complete-task",
+      "verb": "complete",
+      "kind": "task",
+      "inverse": null,
+      "sealed": [],
+      "chat": "card",
+      "command": "task.complete",
+      "phrasings": [
+        "mark the follow-up with Sam done",
+        "I sent Maria the invoice, finish that task",
+        "complete the Priya gift task"
+      ],
       "description": "Complete a task about a person through task.complete, the one completion operation Tasks and automations also call; a gift idea is such a task.",
       "confirmation": "none",
       "input": {
@@ -650,6 +782,17 @@
     },
     {
       "name": "reopen-task",
+      "verb": "reopen",
+      "kind": "task",
+      "inverse": null,
+      "sealed": [],
+      "chat": "card",
+      "command": "task.reopen",
+      "phrasings": [
+        "reopen the follow-up with Sam",
+        "the invoice task for Maria isn't done",
+        "reopen the gift for Priya"
+      ],
       "description": "Reopen a completed task about a person through task.reopen; a gift idea given is such a task.",
       "confirmation": "none",
       "input": {
@@ -680,6 +823,17 @@
     },
     {
       "name": "add-important-date",
+      "verb": "create",
+      "kind": "important_date",
+      "inverse": null,
+      "sealed": [],
+      "chat": "card",
+      "command": "person.add_date",
+      "phrasings": [
+        "add Sam's anniversary on June 5",
+        "Maria's graduation is May 20",
+        "remember Priya's naming day"
+      ],
       "description": "Add an important date through person.add_date. A birthday is the person's own column; any other date is a yearly all-day event about them. month_day is MM-DD.",
       "confirmation": "none",
       "input": {
@@ -721,6 +875,17 @@
     },
     {
       "name": "set-reminder",
+      "verb": "edit",
+      "kind": "important_date",
+      "inverse": null,
+      "sealed": [],
+      "chat": "card",
+      "command": "event.edit",
+      "phrasings": [
+        "remind me a week before Sam's anniversary",
+        "turn off the reminder for Maria's graduation",
+        "remind me the day of Priya's birthday"
+      ],
       "description": "Turn a date's reminder on or off through event.edit: the reminders are the event's, in minutes before it starts.",
       "confirmation": "none",
       "input": {
@@ -758,6 +923,17 @@
     },
     {
       "name": "add-relationship",
+      "verb": "link",
+      "kind": "person",
+      "inverse": null,
+      "sealed": [],
+      "chat": "card",
+      "command": "person.add_relationship",
+      "phrasings": [
+        "Sam is Maria's brother",
+        "Priya is my cousin",
+        "link Sam as Maria's manager"
+      ],
       "description": "Record a related edge to another person through person.add_relationship, labelled by how they are related; related_id reuses a person, else one of that name is reused or founded (a pet is a person of form pet whose role is its species).",
       "confirmation": "none",
       "input": {
@@ -803,6 +979,17 @@
     },
     {
       "name": "add-gift",
+      "verb": "create",
+      "kind": "gift",
+      "inverse": null,
+      "sealed": [],
+      "chat": "card",
+      "command": "person.add_gift",
+      "phrasings": [
+        "gift idea for Sam: a hiking book",
+        "Maria would like a scarf",
+        "add a gift for Priya: tea set"
+      ],
       "description": "Add a gift idea for a person through person.add_gift: a task about them tagged gift.",
       "confirmation": "none",
       "input": {
@@ -837,6 +1024,17 @@
     },
     {
       "name": "create-list",
+      "verb": "create",
+      "kind": "people_list",
+      "inverse": null,
+      "sealed": [],
+      "chat": "card",
+      "command": "container.create",
+      "phrasings": [
+        "make a list called Family",
+        "create a Work list for people",
+        "start a list for college friends"
+      ],
       "description": "Create a list through container.create (kind list), like a Docs folder.",
       "confirmation": "none",
       "input": {
@@ -876,6 +1074,17 @@
     },
     {
       "name": "rename-list",
+      "verb": "edit",
+      "kind": "people_list",
+      "inverse": null,
+      "sealed": [],
+      "chat": "card",
+      "command": "entity.retitle",
+      "phrasings": [
+        "rename Family to Relatives",
+        "call the Work list Colleagues",
+        "retitle college friends to Alumni"
+      ],
       "description": "Rename a list through entity.retitle.",
       "confirmation": "none",
       "input": {
@@ -910,6 +1119,17 @@
     },
     {
       "name": "delete-list",
+      "verb": "delete",
+      "kind": "people_list",
+      "inverse": null,
+      "sealed": [],
+      "chat": "card",
+      "command": "entity.trash",
+      "phrasings": [
+        "delete the Family list",
+        "remove the Work list",
+        "trash the college friends list"
+      ],
       "description": "Move a list to the trash through entity.trash; the people in it are not touched and are in it again if it is restored.",
       "confirmation": "none",
       "input": {
@@ -940,6 +1160,17 @@
     },
     {
       "name": "add-journal-entry",
+      "verb": "create",
+      "kind": "journal_entry",
+      "inverse": null,
+      "sealed": [],
+      "chat": "card",
+      "command": "person.add_journal_entry",
+      "phrasings": [
+        "journal: today was a good day",
+        "write a journal entry, feeling tired",
+        "log my mood as happy with a note about the park"
+      ],
       "description": "Add an owner-level journal entry with a mood and a line about your day through person.add_journal_entry: a note about you, titled by the mood, filed on its own day.",
       "confirmation": "none",
       "input": {
@@ -981,6 +1212,17 @@
     },
     {
       "name": "save-contact-channel",
+      "verb": "edit",
+      "kind": "contact_point",
+      "inverse": null,
+      "sealed": [],
+      "chat": "card",
+      "command": "person.save_contact_point",
+      "phrasings": [
+        "add Sam's phone number",
+        "set Maria's email",
+        "update Priya's address"
+      ],
       "description": "Create or edit a phone, email, address, link or handle through person.save_contact_point, with label and preferred status (one preferred per kind). The same value in another spelling is the same point.",
       "confirmation": "none",
       "input": {
@@ -1029,6 +1271,17 @@
     },
     {
       "name": "delete-contact-channel",
+      "verb": "delete",
+      "kind": "contact_point",
+      "inverse": null,
+      "sealed": [],
+      "chat": "card",
+      "command": "person.remove_contact_point",
+      "phrasings": [
+        "remove Sam's old phone number",
+        "delete Maria's work email",
+        "drop Priya's old address"
+      ],
       "description": "Delete one contact point through person.remove_contact_point.",
       "confirmation": "required",
       "input": {
@@ -1059,6 +1312,17 @@
     },
     {
       "name": "merge-people",
+      "verb": "merge",
+      "kind": "person",
+      "inverse": null,
+      "sealed": [],
+      "chat": "card",
+      "command": "person.merge",
+      "phrasings": [
+        "Sam Lee and S. Lee are the same person",
+        "merge the two Priyas",
+        "fold the duplicate Maria into the real one"
+      ],
       "description": "Fold a duplicate person into a survivor through person.merge: every reference re-points and the merged person is purged. Irreversible.",
       "confirmation": "required",
       "input": {
@@ -1095,6 +1359,8 @@
   "queries": [
     {
       "name": "people",
+      "kind": "person",
+      "figures": ["people", "lists"],
       "description": "The people window as a bounded recent view, newest first, decorated with the star, the list, the reminders that are on and when they were last touched (computed from the touches); the owner and pets are not in it.",
       "input": {
         "type": "object",
@@ -1130,6 +1396,8 @@
     },
     {
       "name": "person",
+      "kind": "person",
+      "figures": ["sheet", "contact_points", "touches", "dates"],
       "description": "One person's sheet: the roster row, nickname, how you met, contact points with who else holds the same value, dates, notes and the touch log.",
       "input": {
         "type": "object",
@@ -1156,6 +1424,8 @@
     },
     {
       "name": "dashboard",
+      "kind": "person",
+      "figures": ["reconnect", "upcoming", "recent", "counts"],
       "description": "The keep-in-touch summary: who is overdue to reconnect with (people with no cadence never are), upcoming reminders (nearest first), recent logged touches, and the headline counts (all / reconnect / upcoming / favorites, plus linked / to_link — null when the sharing reads are denied).",
       "input": {
         "type": "object",
@@ -1185,6 +1455,8 @@
     },
     {
       "name": "search",
+      "kind": "person",
+      "figures": ["matches"],
       "description": "Full-text people search over the one vault index — name, nickname, role, how you met, contact points and the notes about them — ranked, with a snippet.",
       "input": {
         "type": "object",
@@ -1210,6 +1482,8 @@
     },
     {
       "name": "trash",
+      "kind": "person",
+      "figures": ["people", "purge_dates"],
       "description": "People profiles in reversible trash, with purge dates and safe display metadata.",
       "input": {
         "type": "object",
@@ -1227,6 +1501,77 @@
           }
         }
       }
+    }
+  ],
+  "kinds": [
+    {
+      "id": "person",
+      "name": "person",
+      "plural": "people",
+      "order": 0,
+      "live": "write",
+      "entity": "person",
+      "table": "person",
+      "pk": "id",
+      "nameSource": ["entity", "title"],
+      "date": {
+        "label": "last contacted",
+        "source": ["activity", "starts"]
+      },
+      "fields": [
+        {
+          "name": "role",
+          "type": "text",
+          "source": ["person", "role"],
+          "edit": "person.edit",
+          "create": true
+        },
+        {
+          "name": "nickname",
+          "type": "text",
+          "source": ["person", "nickname"],
+          "edit": "person.edit",
+          "create": true
+        },
+        {
+          "name": "met",
+          "type": "text",
+          "source": ["person", "met"],
+          "edit": "person.edit"
+        },
+        {
+          "name": "cadence",
+          "type": "number",
+          "source": ["person", "cadence_days"],
+          "unit": "days",
+          "edit": "person.edit",
+          "create": true
+        },
+        {
+          "name": "starred",
+          "type": "bool",
+          "source": ["edge", "to_id"]
+        }
+      ],
+      "links": [
+        {
+          "kind": "event",
+          "label": "events",
+          "via": "attendee"
+        },
+        {
+          "kind": "task",
+          "label": "tasks",
+          "via": "about"
+        },
+        {
+          "kind": "note",
+          "label": "notes",
+          "via": "about"
+        }
+      ],
+      "trash": true,
+      "container": false
     }
   ],
   "knobs": [

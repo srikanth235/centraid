@@ -370,4 +370,15 @@ mod tests {
             Vec::<String>::new()
         );
     }
+
+    /// THE CATALOG NAMES THE COMMAND EACH ACTION RUNS, and it is the command
+    /// the action table runs: chat's verb rows are generated from the first and
+    /// executed through the second.
+    #[test]
+    fn every_action_declares_the_command_its_row_invokes() {
+        for row in crate::commands::ACTIONS {
+            let declared = manifest().action(row.action).expect("a declared action");
+            assert_eq!(declared.command, row.command, "{}", row.action);
+        }
+    }
 }

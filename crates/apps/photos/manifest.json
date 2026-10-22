@@ -125,6 +125,17 @@
   "actions": [
     {
       "name": "upload",
+      "verb": "import",
+      "kind": "photo",
+      "inverse": "delete-photo",
+      "sealed": [],
+      "chat": "card",
+      "command": "photo.add",
+      "phrasings": [
+        "add this photo to my library",
+        "upload these pictures",
+        "save this image"
+      ],
       "description": "Add one file to the library through photo.add; identical bytes are one photograph (the existing one is adopted), and re-uploading a deleted photograph brings it back. An edit names the photograph it was made from and keeps that one's date, place and caption.",
       "confirmation": "none",
       "input": {
@@ -222,6 +233,17 @@
     },
     {
       "name": "edit-photo",
+      "verb": "edit",
+      "kind": "photo",
+      "inverse": null,
+      "sealed": [],
+      "chat": "card",
+      "command": "photo.edit",
+      "phrasings": [
+        "fix the date on this photo",
+        "this was taken on the 5th, not the 6th",
+        "correct the time offset on the beach photo"
+      ],
       "description": "Fix a photograph's capture time or offset, or what it was edited from, through photo.edit; a field given as null is cleared.",
       "confirmation": "none",
       "input": {
@@ -263,6 +285,17 @@
     },
     {
       "name": "retitle-photo",
+      "verb": "edit",
+      "kind": "photo",
+      "inverse": null,
+      "sealed": [],
+      "chat": "direct",
+      "command": "entity.retitle",
+      "phrasings": [
+        "caption this photo sunset at the pier",
+        "rename the beach photo to Day one",
+        "call this picture Grandma's garden"
+      ],
       "description": "Recaption a photograph through entity.retitle; a photograph's caption may be empty.",
       "confirmation": "none",
       "input": {
@@ -296,6 +329,17 @@
     },
     {
       "name": "flag-photo",
+      "verb": "star",
+      "kind": "photo",
+      "inverse": "unflag-photo",
+      "sealed": [],
+      "chat": "direct",
+      "command": "flag.set",
+      "phrasings": [
+        "heart the beach photo",
+        "favorite this picture",
+        "archive the blurry photo"
+      ],
       "description": "Heart a photograph (starred) or put it in the archive (archived) through flag.set — one `tagged` edge to the flag; an archived photograph is in neither the library nor the trash.",
       "confirmation": "none",
       "input": {
@@ -330,6 +374,17 @@
     },
     {
       "name": "unflag-photo",
+      "verb": "unstar",
+      "kind": "photo",
+      "inverse": "flag-photo",
+      "sealed": [],
+      "chat": "direct",
+      "command": "flag.clear",
+      "phrasings": [
+        "unheart the beach photo",
+        "remove the favorite from this picture",
+        "bring the blurry photo back from the archive"
+      ],
       "description": "Take a photograph's heart or its archive flag away through flag.clear.",
       "confirmation": "none",
       "input": {
@@ -364,6 +419,17 @@
     },
     {
       "name": "delete-photo",
+      "verb": "delete",
+      "kind": "photo",
+      "inverse": "restore-photo",
+      "sealed": [],
+      "chat": "direct",
+      "command": "entity.trash",
+      "phrasings": [
+        "delete the blurry photo",
+        "trash this picture",
+        "remove the duplicate beach shot"
+      ],
       "description": "Move a photograph to the trash through entity.trash; it keeps its albums, its heart and its bytes until it is purged about 30 days later.",
       "confirmation": "none",
       "input": {
@@ -394,6 +460,17 @@
     },
     {
       "name": "restore-photo",
+      "verb": "restore",
+      "kind": "photo",
+      "inverse": "delete-photo",
+      "sealed": [],
+      "chat": "direct",
+      "command": "entity.restore",
+      "phrasings": [
+        "bring back the blurry photo",
+        "restore the picture I deleted",
+        "undelete the beach shot"
+      ],
       "description": "Bring a trashed photograph back through entity.restore; its albums and its heart come back with it. Restoring a live photograph fails with a sentence.",
       "confirmation": "none",
       "input": {
@@ -424,6 +501,17 @@
     },
     {
       "name": "purge-photo",
+      "verb": "purge",
+      "kind": "photo",
+      "inverse": null,
+      "sealed": [],
+      "chat": "card",
+      "command": "entity.purge",
+      "phrasings": [
+        "erase the blurry photo forever",
+        "permanently delete this picture",
+        "purge the trashed beach shot"
+      ],
       "description": "Delete one ALREADY-TRASHED photograph forever through entity.purge. Irreversible: the photograph, its albums' places for it, its heart and its labels go now, and its bytes go once nothing else holds them.",
       "confirmation": "required",
       "input": {
@@ -454,6 +542,17 @@
     },
     {
       "name": "create-album",
+      "verb": "create",
+      "kind": "album",
+      "inverse": "delete-album",
+      "sealed": [],
+      "chat": "direct",
+      "command": "container.create",
+      "phrasings": [
+        "make an album called Italy 2026",
+        "create a Family album",
+        "start an album for the wedding"
+      ],
       "description": "Start a new album through container.create with kind album.",
       "confirmation": "none",
       "input": {
@@ -493,6 +592,17 @@
     },
     {
       "name": "rename-album",
+      "verb": "edit",
+      "kind": "album",
+      "inverse": null,
+      "sealed": [],
+      "chat": "direct",
+      "command": "entity.retitle",
+      "phrasings": [
+        "rename Italy 2026 to Summer in Italy",
+        "call the Family album Relatives",
+        "retitle the wedding album"
+      ],
       "description": "Retitle an album through entity.retitle.",
       "confirmation": "none",
       "input": {
@@ -527,6 +637,17 @@
     },
     {
       "name": "set-album-cover",
+      "verb": "edit",
+      "kind": "album",
+      "inverse": null,
+      "sealed": [],
+      "chat": "card",
+      "command": "album.set_cover",
+      "phrasings": [
+        "use the beach photo as the Italy cover",
+        "make this picture the cover of Family",
+        "clear the wedding album's cover"
+      ],
       "description": "Choose one of an album's photographs as its cover through album.set_cover; omit photo_id to let the album show its first.",
       "confirmation": "none",
       "input": {
@@ -561,6 +682,17 @@
     },
     {
       "name": "delete-album",
+      "verb": "delete",
+      "kind": "album",
+      "inverse": "restore-album",
+      "sealed": [],
+      "chat": "direct",
+      "command": "entity.trash",
+      "phrasings": [
+        "delete the Italy 2026 album",
+        "remove the Family album",
+        "trash the wedding album"
+      ],
       "description": "Delete an album through entity.trash; its photographs stay in the library, and the album comes back with its ordered photographs through restore-album.",
       "confirmation": "required",
       "input": {
@@ -591,6 +723,17 @@
     },
     {
       "name": "restore-album",
+      "verb": "restore",
+      "kind": "album",
+      "inverse": "delete-album",
+      "sealed": [],
+      "chat": "card",
+      "command": "entity.restore",
+      "phrasings": [
+        "bring back the Italy 2026 album",
+        "restore the Family album",
+        "undelete the wedding album"
+      ],
       "description": "Restore a deleted album, with its ordered photographs, through entity.restore.",
       "confirmation": "none",
       "input": {
@@ -621,6 +764,17 @@
     },
     {
       "name": "add-to-album",
+      "verb": "add_to",
+      "kind": "photo",
+      "inverse": "remove-from-album",
+      "sealed": [],
+      "chat": "direct",
+      "command": "edge.add",
+      "phrasings": [
+        "add the beach photo to Italy 2026",
+        "put this picture in the Family album",
+        "file these in the wedding album"
+      ],
       "description": "Put a photograph in an album through edge.add (rel contains): it goes after the photographs the album has, and adding it twice changes nothing.",
       "confirmation": "none",
       "input": {
@@ -662,6 +816,17 @@
     },
     {
       "name": "remove-from-album",
+      "verb": "remove_from",
+      "kind": "photo",
+      "inverse": "add-to-album",
+      "sealed": [],
+      "chat": "direct",
+      "command": "edge.remove",
+      "phrasings": [
+        "take the beach photo out of Italy 2026",
+        "remove this picture from the Family album",
+        "pull it out of the wedding album"
+      ],
       "description": "Take a photograph out of an album through edge.remove; the photograph stays in the library.",
       "confirmation": "none",
       "input": {
@@ -700,6 +865,17 @@
     },
     {
       "name": "set-place",
+      "verb": "edit",
+      "kind": "place",
+      "inverse": null,
+      "sealed": [],
+      "chat": "card",
+      "command": "photo.set_place",
+      "phrasings": [
+        "this photo was taken in Lisbon",
+        "clear the place on the beach photo",
+        "set the place of these pictures to home"
+      ],
       "description": "Correct or clear a photograph's place through photo.set_place — points it at an existing place, or clears it back to unknown.",
       "confirmation": "none",
       "input": {
@@ -734,6 +910,17 @@
     },
     {
       "name": "name-place",
+      "verb": "edit",
+      "kind": "place",
+      "inverse": null,
+      "sealed": [],
+      "chat": "card",
+      "command": "entity.retitle",
+      "phrasings": [
+        "call this place Grandma's house",
+        "name that spot The Lake",
+        "rename the Lisbon place to Alfama"
+      ],
       "description": "Name a place through entity.retitle — the member's own name for somewhere the vault knows only as a coordinate. A rename never touches the gazetteer's locality.",
       "confirmation": "none",
       "input": {
@@ -769,6 +956,17 @@
     },
     {
       "name": "tag-photo",
+      "verb": "tag",
+      "kind": "photo",
+      "inverse": "untag-photo",
+      "sealed": [],
+      "chat": "direct",
+      "command": "tag.add",
+      "phrasings": [
+        "tag the beach photo as summer",
+        "label this picture family",
+        "add the tag wedding to these photos"
+      ],
       "description": "Add a free-form label to a photograph through tag.add — additive and idempotent; the label is minted once and shared by everything wearing it.",
       "confirmation": "none",
       "input": {
@@ -803,6 +1001,17 @@
     },
     {
       "name": "untag-photo",
+      "verb": "untag",
+      "kind": "photo",
+      "inverse": "tag-photo",
+      "sealed": [],
+      "chat": "direct",
+      "command": "tag.remove",
+      "phrasings": [
+        "remove the summer tag from the beach photo",
+        "untag this picture",
+        "take the wedding label off these photos"
+      ],
       "description": "Remove one free-form label from a photograph through tag.remove — by label, the one edge.",
       "confirmation": "none",
       "input": {
@@ -839,6 +1048,8 @@
   "queries": [
     {
       "name": "library",
+      "kind": "photo",
+      "figures": ["photos", "albums", "places", "trash"],
       "description": "A bounded recent window of live photographs (newest by taken_at, not archived, an edit folding the original it was made from) with their bytes' media type and size plus the albums they belong to — never a whole-table pull; trashed photographs ride separately (newest 200) with their days-until-purge, and `truncated` says older photographs exist beyond the window. Each photograph also carries `place` and `tags`; `places` is the full known place list. `before` is a keyset cursor (only photographs taken strictly earlier), and `tail` reports the oldest timestamp this page reached — pass it back as the next `before`.",
       "input": {
         "type": "object",
@@ -887,6 +1098,8 @@
     },
     {
       "name": "search",
+      "kind": "photo",
+      "figures": ["matches"],
       "description": "Caption and place search over the whole live library through the vault's one search index (the caption, the place's name and its locality) — not just the loaded window; returns the ranked photograph ids a grid reads, leaving out the archive.",
       "input": {
         "type": "object",
@@ -911,6 +1124,8 @@
     },
     {
       "name": "duplicates",
+      "kind": "photo",
+      "figures": ["clusters"],
       "description": "Near-duplicate clusters over the live library: groups the photographs whose perceptual hashes (a derivative of each blob) lie within a few bits of one another, recomputed at read — a true visual-similarity signal, not a coincidence-prone fingerprint, and nothing stored.",
       "input": {
         "type": "object",
@@ -927,6 +1142,48 @@
           }
         }
       }
+    }
+  ],
+  "kinds": [
+    {
+      "id": "photo",
+      "name": "photo",
+      "plural": "photos",
+      "order": 5,
+      "live": "write",
+      "entity": "photo",
+      "table": "photo",
+      "pk": "id",
+      "nameSource": ["entity", "title"],
+      "date": {
+        "label": "taken",
+        "source": ["photo", "taken_at"]
+      },
+      "fields": [
+        {
+          "name": "starred",
+          "type": "bool",
+          "source": ["edge", "to_id"]
+        }
+      ],
+      "links": [{"kind": "album", "label": "albums", "via": "entry"}],
+      "trash": true,
+      "container": false
+    },
+    {
+      "id": "album",
+      "name": "album",
+      "plural": "albums",
+      "order": 6,
+      "live": "write",
+      "entity": "album",
+      "table": "container",
+      "pk": "id",
+      "nameSource": ["entity", "title"],
+      "fields": [],
+      "links": [{"kind": "photo", "label": "photos", "via": "entry"}],
+      "trash": false,
+      "container": true
     }
   ],
   "knobs": [

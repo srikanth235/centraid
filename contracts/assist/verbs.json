@@ -1,0 +1,190 @@
+{
+  "verbs": [
+    {
+      "name": "create",
+      "live": true,
+      "args": "kind: <kind>, name: <text>, then that kind's fields (dates as date expressions)",
+      "done": "created"
+    },
+    {
+      "name": "edit",
+      "live": true,
+      "args": "field: value lines (name, or any editable field; body+: or description+: adds text)",
+      "done": "edited"
+    },
+    {
+      "name": "reschedule",
+      "live": true,
+      "args": "to: <date expression>",
+      "done": "rescheduled"
+    },
+    {
+      "name": "complete",
+      "live": true,
+      "args": "",
+      "done": "completed"
+    },
+    {
+      "name": "reopen",
+      "live": true,
+      "args": "",
+      "done": "reopened"
+    },
+    {
+      "name": "cancel",
+      "live": true,
+      "args": "",
+      "done": "cancelled"
+    },
+    {
+      "name": "delete",
+      "live": true,
+      "args": "",
+      "done": "deleted"
+    },
+    {
+      "name": "restore",
+      "live": true,
+      "args": "",
+      "done": "restored"
+    },
+    {
+      "name": "star",
+      "live": true,
+      "args": "",
+      "done": "starred"
+    },
+    {
+      "name": "unstar",
+      "live": true,
+      "args": "",
+      "done": "unstarred"
+    },
+    {
+      "name": "add_to",
+      "live": true,
+      "args": "to: #n (the album, notebook, folder or list)",
+      "done": "added"
+    },
+    {
+      "name": "remove_from",
+      "live": true,
+      "args": "from: #n",
+      "done": "removed"
+    },
+    {
+      "name": "log",
+      "live": true,
+      "args": "kind: call|message|visit|coffee",
+      "done": "logged"
+    },
+    {
+      "name": "reveal",
+      "live": true,
+      "args": "field: password|code|card_number|cvv|content",
+      "done": "revealed"
+    },
+    {
+      "name": "undo",
+      "live": true,
+      "args": "",
+      "done": "undone"
+    },
+    {
+      "name": "tag",
+      "live": false,
+      "args": "label: <text>",
+      "done": "tagged"
+    },
+    {
+      "name": "untag",
+      "live": false,
+      "args": "label: <text>",
+      "done": "untagged"
+    },
+    {
+      "name": "attach",
+      "live": false,
+      "args": "to: #n (the event, note or task)",
+      "done": "attached"
+    },
+    {
+      "name": "detach",
+      "live": false,
+      "args": "from: #n",
+      "done": "detached"
+    },
+    {
+      "name": "respond",
+      "live": false,
+      "args": "answer: accepted|declined|tentative",
+      "done": "answered"
+    },
+    {
+      "name": "categorize",
+      "live": false,
+      "args": "category: <text>",
+      "done": "filed"
+    },
+    {
+      "name": "void",
+      "live": false,
+      "args": "",
+      "done": "voided"
+    },
+    {
+      "name": "link",
+      "live": false,
+      "args": "to: #n",
+      "done": "linked"
+    },
+    {
+      "name": "unlink",
+      "live": false,
+      "args": "",
+      "done": "unlinked"
+    },
+    {
+      "name": "merge",
+      "live": false,
+      "args": "into: #n",
+      "done": "merged"
+    },
+    {
+      "name": "purge",
+      "live": false,
+      "args": "",
+      "done": "erased"
+    },
+    {
+      "name": "import",
+      "live": false,
+      "args": "",
+      "done": "imported"
+    },
+    {
+      "name": "duplicate",
+      "live": false,
+      "args": "",
+      "done": "duplicated"
+    },
+    {
+      "name": "archive",
+      "live": false,
+      "args": "",
+      "done": "archived"
+    },
+    {
+      "name": "unarchive",
+      "live": false,
+      "args": "",
+      "done": "unarchived"
+    },
+    {
+      "name": "apply",
+      "live": false,
+      "args": "",
+      "done": "applied"
+    }
+  ]
+}

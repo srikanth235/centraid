@@ -118,4 +118,14 @@ mod tests {
         assert!(states.excluded.is_empty());
         assert!(manifest().ext_tables.is_empty());
     }
+
+    /// THE CATALOG NAMES THE COMMAND EACH ACTION RUNS, and it is the command
+    /// the action table runs: chat's verb rows are generated from the first.
+    #[test]
+    fn every_action_declares_the_command_it_invokes() {
+        for (action, command) in super::ACTIONS {
+            let declared = manifest().action(action).expect("a declared action");
+            assert_eq!(declared.command, command, "{action}");
+        }
+    }
 }
