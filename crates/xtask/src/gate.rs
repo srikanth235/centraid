@@ -192,6 +192,10 @@ pub fn steps(profile: Profile) -> Vec<Step> {
         // converge (#1029 §1). D-1020-D2-6's responsiveness half is
         // `call-budget`, below.
         step("call-budget", run_call_budget),
+        // THE SEARCH HALF OF THE SAME PROMISE (#1135). `call-budget` is a floor
+        // over a few hundred rows; this is the core's own search answers over a
+        // year-3 vault, one p95 per (surface, query), against its own ledger.
+        step("search-budget", run_search_budget),
         // CLAUSE 9 AGAINST A REAL PANIC (#1020 wave 3, lane E finding 4). The
         // `debug-fault` feature is off in every other step and in every release
         // profile, so this is the one place the tree is compiled with it — and
@@ -1170,6 +1174,42 @@ fn run_call_budget(ctx: &Ctx) -> Result<Outcome> {
             "call_budget",
             "--",
             "--nocapture",
+        ],
+    )
+}
+
+/// The search budget — `call-budget`'s promise over the year-3 search vault
+/// (#1135): p95 of each of eleven queries on each of five surfaces, against
+/// `contracts/ledgers/search-budget.json`.
+///
+/// **A RELEASE build, and `--include-ignored`.** The promise is the shipped
+/// core's: the phone runs an optimised core, and a debug build runs the
+/// correction pass over the word list three to five times slower (measured on
+/// this corpus, `receipts/issue-1135-vault-model.md`), so a debug measurement
+/// would hold the product to a promise it was never going to be built under.
+/// The measurement is `#[ignore]`d so the `test` step does not run a minutes-long
+/// suite a second time in a profile it does not measure; this step is where it
+/// runs. `--release` reuses the artefacts `release-build` just built.
+///
+/// Built like [`run_call_budget`] otherwise, for the same reason: `--workspace
+/// --test search_budget` and not `-p`, and only `crates/core` has a
+/// `search_budget` target. `--nocapture` so the table of measured percentiles
+/// reaches the log; the target holds two tests (the measurement and the ledger's
+/// agreement with it) and both are the step.
+fn run_search_budget(ctx: &Ctx) -> Result<Outcome> {
+    process(
+        ctx,
+        "search-budget",
+        "cargo",
+        &[
+            "test",
+            "--release",
+            "--workspace",
+            "--test",
+            "search_budget",
+            "--",
+            "--nocapture",
+            "--include-ignored",
         ],
     )
 }
@@ -2339,6 +2379,20 @@ mod tests {
              exceeding it in `pr` fails the gate"
         );
         assert!(!names(Profile::Nightly).contains(&"sim-nightly"));
+    }
+
+    /// The search budget (#1135) is the same promise as the `call` budget, over
+    /// the year-3 search vault, and it is owed by the same profile.
+    #[test]
+    fn the_pr_profile_runs_the_search_budget() {
+        assert!(
+            names(Profile::Pr).contains(&"search-budget"),
+            "`pr` does not run the search budget"
+        );
+        assert!(
+            !names(Profile::Local).contains(&"search-budget"),
+            "the search budget founds a year-3 vault; it is `pr`'s, not the edit-run loop's"
+        );
     }
 
     #[test]

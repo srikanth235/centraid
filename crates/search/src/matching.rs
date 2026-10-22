@@ -26,8 +26,8 @@ pub const MAX_MATCH_TOKENS: usize = MAX_WORDS;
 
 /// The fewest characters a query's longest word must have to be a search.
 ///
-/// A one-letter prefix has no index of its own (the index keeps two-letter
-/// prefixes, `prefix = '2'`), so `a*` merges every term that begins with `a`:
+/// A one-letter prefix has no index of its own (the index keeps two- and
+/// three-letter prefixes, `prefix = '2 3'`), so `a*` merges every term that begins with `a`:
 /// seconds in a vault of years, to answer a question nobody has asked yet. A
 /// query whose words are ALL one character is therefore answered as the empty
 /// query is, [`SearchError::NoSearchableWords`], which every surface already

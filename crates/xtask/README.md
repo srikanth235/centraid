@@ -34,7 +34,7 @@ Each of `local`, `pr`, `nightly` and `release` is a **superset** of the one befo
 | Profile | Steps it adds | Budget | Where it runs |
 | --- | --- | --- | --- |
 | `local` | `fmt`, `clippy`, `test` (**only the crates the change touches, and their dependents** — see below), `restore-drill`, `rules`, `doc-links`, `ledgers` | < 120 s **warm**, < 3200 s **cold** | the pre-push loop, by hand |
-| `pr` | `buf`, `deny`, `ci-policy`, `secrets`, `osv`, `release-build`, `ts-static`, `emitters`, `advisory`, `lockfile`, `call-budget`, `fault-door` — and its `test` step runs the **whole** workspace | < 1500 s | `.github/workflows/gate.yml`, every PR and every push to `main` |
+| `pr` | `buf`, `deny`, `ci-policy`, `secrets`, `osv`, `release-build`, `ts-static`, `emitters`, `advisory`, `lockfile`, `call-budget`, `search-budget`, `fault-door` — and its `test` step runs the **whole** workspace | < 1500 s | `.github/workflows/gate.yml`, every PR and every push to `main` |
 | `nightly` | `device-lanes` | unbounded | `.github/workflows/gate-nightly.yml`, 05:30 UTC |
 | `release` | `artifact-identity`, `prebuilt-core-required` (and `restore-drill`, inherited from `local`) | unbounded | the release workflows |
 | `mobile-jvm` | `mobile-jvm` — one step, not a superset of anything | < 420 s | `.github/workflows/gate-nightly.yml`; on demand from `mobile/` |
@@ -64,6 +64,10 @@ The budgets live in [`contracts/ledgers/gate-budgets.json`](../../contracts/ledg
 **A missing mobile tree FAILS, it does not skip.** What the step does not do, it says rather than passing over: it does not compile Compose, does not link Kotlin/Native, does not run a simulator and does not touch a device. Those are `nightly`'s `device-lanes` — four lanes (`backup-measurement`, `android-macrobenchmark`, `ios-xctest-metrics`, `battery-per-background-pass`) that `gate-nightly.yml` runs only on a `[self-hosted, macos, devices]` runner when `vars.CENTRAID_DEVICE_RUNNER == 'true'`, and a loud `Skipped` otherwise — and the hand-off table in [`mobile/README.md`](../../mobile/README.md).
 
 `restore-drill` runs `cargo test --workspace --test restore_drill` — `centraid-vault`'s drill of the snapshot plane against the in-memory store, and `centraid`'s drill of the phone's core against the real gateway harness: back up a real library, lose the phone, restore from the 24 words at writer epoch 2, compare every row, and see the old phone refused `VAULT_MOVED` ([#1080](https://github.com/srikanth235/centraid/issues/1080)) — and records its wall clock as evidence under the step's artifact directory (no budget slot, by ruling). It is a `local` step, so every profile carries it.
+
+### The `search-budget` step
+
+`cargo test --release --workspace --test search_budget -- --nocapture --include-ignored`. The core's own search answers over the year-3 vault ([`centraid_apps_kit::search_corpus`](../apps/kit/src/search_corpus.rs): about 46,000 entities, four million words of Zipf text over 188,000 distinct words, the index built by the vault's own `rebuild`), eleven queries on each of Home, Notes, Docs, Money and Locker, a hundred samples each after ten warm-up calls, the p95 of each pair against `contracts/ledgers/search-budget.json`. **`--release`**, because the promise is the shipped core's and a debug build runs the correction pass three to five times slower; it reuses what `release-build` built. **`--include-ignored`**, because the measurement is `#[ignore]`d from the `test` step, which would otherwise run a minutes-long suite a second time in a profile that does not measure it. It is `--workspace --test` rather than `-p` for the reason `call-budget` is.
 
 ### The `fault-door` step
 

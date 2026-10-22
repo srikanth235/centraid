@@ -1,0 +1,21 @@
+{
+  "_comment": "THE SEARCH BUDGET (#1135, after the `call` budget, D-1020-D2-6). Down-only: every number here is a ceiling on how long one search call may take, and it may only fall. The promise is the call promise: a member who types into a search box sees an answer inside a frame budget that the typing did not make late, so every search call, whatever its query, is held to the one ceiling. `cargo xtask gate --profile pr`'s `search-budget` step is the gate. The measurement is `cargo test --release --workspace --test search_budget -- --include-ignored`: p95 over 100 calls of each of eleven queries on each of five surfaces, after 10 unmeasured warm-up calls. p95 and not the mean, because a mean hides the case a member notices.",
+  "_provenance": {
+    "measuredBy": "cargo test --release --workspace --test search_budget -- --nocapture --include-ignored",
+    "hardware": "ci-linux-x64-4c",
+    "hardwareDetail": "4 vCPU / 15 GB, the hosted Linux runner this repository's gate budgets are stated against",
+    "shape": "Handle::call with an AppQuery over the year-3 search vault (centraid_apps_kit::search_corpus::YEAR3_SEARCH: about 45,000 entities, about two million words of Zipf text over 200,000 distinct words, the index built by the vault's own rebuild): Home's vault search and Notes', Docs', Money's and Locker's (unlocked) own, for 2 letters, 3 letters, a common word, a mid word, a rare word, two words, a one-letter word beside a word, a typo, a rare word typed right (the filled pass), an in-word fragment and a word nothing holds",
+    "samples": 100,
+    "warmup": 10,
+    "statistic": "p95, nearest-rank, per (surface, query)",
+    "seededFrom": "Set to 64 ms by the owner's ruling of 2026-10-22 (#1135): the 50 ms call promise was the first ceiling, and after the search-speed pass two cells stayed over it (Docs' two-letter prefix about 61 ms, Notes' in-word fragment about 52 ms). The owner ruled a p95 up to 64 ms acceptable for a search call. The ceiling is the promise rather than the observation, so it is not ratcheted down to what a run measured: a ceiling set to the current measurement would fail on the next runner that is one percent slower, which teaches the team to raise budgets.",
+    "knownFloor": "The corpus is a test-build-sized year-3 vault, not the largest one: a member with ten times the photographs has ten times the caption rows. The search door bounds its work by construction (title matches, then the newest 500 others; the correction reads the word list from a cache), and this measures that the bound holds over a vocabulary of 100,000+ words rather than that it is the best any index could do. The numbers are a RELEASE build's (`cargo test --release`), the build the phone runs; a debug build runs the correction pass three to five times slower and is not what the promise is about."
+  },
+  "profiles": {
+    "pr": {
+      "ci-linux-x64-4c": {
+        "p95Ms": 64
+      }
+    }
+  }
+}

@@ -2018,22 +2018,23 @@ fn the_prefix_index_is_not_in_the_vocabulary() {
         json!({"id": "n", "title": "Zeppelin", "body": "alphabet soup"}),
     );
     let terms = vocabulary(vault);
-    // `prefix = '2'` stores `al`, `so` and `ze` as index entries; the vocabulary
-    // is the words, and a correction that scanned a prefix of it would otherwise
-    // be offered `al`.
+    // `prefix = '2 3'` stores `al`, `alp`, `so`, `sou`, `ze` and `zep` as index
+    // entries; the vocabulary is the words, and a correction that scanned a prefix
+    // of it would otherwise be offered `al`.
     for word in ["alphabet", "soup", "zeppelin"] {
         assert!(terms.contains(word), "{word}");
     }
-    for prefix in ["al", "so", "ze", "a", "z"] {
+    for prefix in ["al", "alp", "so", "sou", "ze", "zep", "a", "z"] {
         assert!(
             !terms.contains(prefix),
             "the vocabulary lists the prefix `{prefix}`"
         );
     }
     assert_eq!(terms, word_list(vault));
-    // And the prefix is served: a two-letter start finds the note.
+    // And the prefix is served: a two- and a three-letter start find the note.
     assert!(finds_prefix(vault, "n", "al"));
     assert!(finds_prefix(vault, "n", "zep"));
+    assert!(finds_prefix(vault, "n", "sou"));
     assert!(!finds_prefix(vault, "n", "qu"));
 }
 

@@ -44,7 +44,16 @@ CREATE TABLE entity (
 ) STRICT;
 CREATE INDEX entity_by_title   ON entity(kind, deleted_at, title, id);
 CREATE INDEX entity_by_updated ON entity(kind, deleted_at, updated_at, id);
+-- A window of one kind, newest made first (the People roster, the Docs drive and
+-- its recent shelf, the Tasks board): `kind = ? [AND deleted_at IS NULL] ORDER BY
+-- created_at DESC, id DESC` streams from here and stops at its limit, where the
+-- indexes above would read every entity of the kind and sort them (#1135).
+CREATE INDEX entity_by_created ON entity(kind, created_at, id);
 CREATE INDEX entity_purge      ON entity(purge_at) WHERE purge_at IS NOT NULL;
+-- The trash, oldest first (`WHERE deleted_at IS NOT NULL ORDER BY deleted_at, n`):
+-- an index of the trashed rows only, so listing or emptying the trash reads the
+-- trash and not every entity the vault holds (#1135).
+CREATE INDEX entity_trashed    ON entity(deleted_at, n) WHERE deleted_at IS NOT NULL;
 CREATE TRIGGER entity_kind_is_fixed BEFORE UPDATE OF id, kind ON entity
   BEGIN SELECT RAISE(ABORT, 'an entity''s id and kind never change'); END;
 
@@ -216,11 +225,14 @@ CREATE TRIGGER journal_is_evidence BEFORE UPDATE ON journal
 -- Search: one index, kept by the writer. The FTS rowid is entity.n.
 -- ---------------------------------------------------------------------------------------------
 
--- `prefix = '2'` keeps an index of every two-letter start of a word, so the first keystrokes of a
--- query (`ca*`) read one short list instead of every term that begins that way. `search_vocab`
--- lists the words only, never these entries (`the_prefix_index_is_not_in_the_vocabulary`).
+-- `prefix = '2 3'` keeps an index of every two- and three-letter start of a word, so the first
+-- keystrokes of a query (`ca*`, `cab*`) read one short list instead of every term that begins that
+-- way: a three-letter prefix merged a thousand terms, once for the matches and once more for the
+-- idf of the rank, and that was 25 of a 30 ms call over the year-3 vault. The index is a third
+-- larger for it. `search_vocab` lists the words only, never these entries
+-- (`the_prefix_index_is_not_in_the_vocabulary`).
 CREATE VIRTUAL TABLE search USING fts5(
-  title, body, content = '', contentless_delete = 1, prefix = '2',
+  title, body, content = '', contentless_delete = 1, prefix = '2 3',
   tokenize = "unicode61 remove_diacritics 2");
 CREATE VIRTUAL TABLE search_vocab USING fts5vocab(search, row);
 
@@ -691,7 +703,9 @@ CREATE TABLE receipt (
   act         TEXT NOT NULL,
   journal_seq INTEGER NOT NULL
 ) STRICT;
-CREATE INDEX receipt_by_item ON receipt(item_id, seq) WHERE item_id IS NOT NULL;
+CREATE INDEX receipt_by_item ON receipt(item_id, at, seq) WHERE item_id IS NOT NULL;
+-- The whole Locker's access history, newest first, streams from here (#1135).
+CREATE INDEX receipt_by_at ON receipt(at, seq);
 CREATE TRIGGER receipt_is_evidence BEFORE UPDATE ON receipt
   BEGIN SELECT RAISE(ABORT, 'a receipt is evidence'); END;
 
