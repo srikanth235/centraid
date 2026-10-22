@@ -264,4 +264,25 @@ mod tests {
         );
         assert_eq!(remind_at("2099-06-10", 30, &new_york), None);
     }
+
+    /// A DUE THE MEMBER TYPED HAS NO ZONE, AND IT IS THEIR WALL CLOCK (#1135).
+    /// Tasks writes `2026-10-22T09:00`; reading that as UTC showed 09:00 in New
+    /// York as 05:00.
+    #[test]
+    fn a_zoneless_due_is_the_members_own_wall_clock() {
+        let new_york = zone("America/New_York");
+        let civil = read("2026-10-22T09:00", &new_york).expect("a wall time");
+        assert_eq!(civil.local_text(), "2026-10-22T09:00");
+        assert_eq!(civil.time_text(), "09:00");
+        assert_eq!(
+            remind_at("2026-10-22T09:00", 30, &new_york).as_deref(),
+            Some("2026-10-22T08:30")
+        );
+        // The same text in another zone is that zone's 09:00, not a shared instant.
+        let tokyo = read("2026-10-22T09:00", &zone("Asia/Tokyo")).expect("a wall time");
+        assert_eq!(tokyo.time_text(), "09:00");
+        // A designator still names an instant.
+        let utc = read("2026-10-22T09:00:00.000Z", &new_york).expect("an instant");
+        assert_eq!(utc.time_text(), "05:00");
+    }
 }
