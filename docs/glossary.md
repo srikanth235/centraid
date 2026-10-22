@@ -76,7 +76,7 @@ Schema names follow the same one-axis rule: **a table never repeats its schema n
 | **egress class** | **Retired.** Every engine v0 ships is `on-device`; there is no provider to egress to. | — |
 | **policy cascade** | The scoped enrichment rules — vault, domain, collection, item — stating per capability whether it is enabled and its trigger. `NULL` inherits and most specific wins. | `enrich_policy_rule` |
 | **design tokens** | Shared colors, type, spacing and icons across desktop and mobile. The TypeScript source is lowered into Rust and the native shells by generators. | `packages/design`; [`crates/design`](../crates/design/README.md) |
-| **receipt** | (1) Locker's own `receipt` table: one row for every reveal, append-only by trigger, naming the item by value (the vault's other evidence is the **journal**); (2) repo `receipts/issue-N-*.md` for issue work. | context-dependent |
+| **receipt** | (1) Locker's own `receipt` table: one row for every reveal, append-only by trigger, naming the item by value, with no foreign key, so it outlives the item's purge (the vault's other evidence is the **journal**); (2) repo `receipts/issue-N-*.md` for issue work. | context-dependent |
 
 ## The vault model ([#1135](https://github.com/srikanth235/centraid/issues/1135))
 
