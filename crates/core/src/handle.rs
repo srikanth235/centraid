@@ -165,6 +165,9 @@ pub struct Handle {
     /// only; see [`crate::assist`]. `pub(crate)` because that module is where
     /// `Request::Assist` is answered.
     pub(crate) assist: crate::assist::Hub,
+    /// THE ACTS THAT HAVE RUN, by `invoke_key` (#1135): a second tap of one key
+    /// answers the first's answer. In memory, like the chat's sessions.
+    acts: crate::act::Settled,
 }
 
 /// THE CLOCK AND ID SOURCE A CORE WAS OPENED WITH, kept for the life of the
@@ -282,6 +285,7 @@ impl Core {
             owned_bytes: Mutex::new(None),
             locker: Arc::new(Mutex::new(None)),
             assist: crate::assist::Hub::new(),
+            acts: crate::act::Settled::default(),
         })
     }
 
@@ -751,6 +755,7 @@ impl Handle {
             self.events(),
             self.owner(),
             Arc::clone(&self.locker),
+            crate::phone::Plane::of(&self.path),
         )
     }
 
@@ -941,6 +946,33 @@ impl Handle {
             K::AppQuery(request) => Ok(response(wire::response::Kind::AppQuery(Box::new(
                 self.with_vault(|vault| crate::app_query::answer(vault, request))?,
             )))),
+            // THE ONE READ (#1135): the app's manifest names the query, the core
+            // reads its arguments by name and runs the app's own query.
+            K::Load(request) => Ok(response(wire::response::Kind::Load(
+                self.with_vault(|vault| crate::load::load(vault, request))?,
+            ))),
+            // THE ONE WRITE (#1135): the app's manifest names the action; the
+            // core runs the duplicate-tap, frozen-vault and schema rules.
+            K::Act(request) => {
+                let changes = crate::events::ChangeFeed::new(self.events());
+                let owner = self.owner();
+                Ok(response(wire::response::Kind::Act(self.with_vault(
+                    |vault| {
+                        crate::act::act(
+                            &crate::act::Ctx {
+                                vault,
+                                locker: &self.locker,
+                                registry: &self.registry,
+                                owner: &owner,
+                                changes: &changes,
+                                plane: &self.plane,
+                                settled: &self.acts,
+                            },
+                            request,
+                        )
+                    },
+                )?)))
+            }
             // MONEY'S IMPORT PLAN AND HOME'S TILE (#1099). See `money.proto`;
             // `with_vault` like an app query, because they ARE page reads. The
             // statement's bytes are read once and dropped with the request.
@@ -1340,6 +1372,10 @@ fn request_kind(request: &wire::Request) -> RequestKind {
             // walks a declared fan-out and every expansion a declared instance
             // cap, and reaching one is `ReadBoundReached`, not a longer read.
             | K::AppQuery(_)
+            // `load` IS AN APP QUERY BY THE MANIFEST'S NAME, with the same
+            // ceilings; `act` IS ONE COMMAND, as `Command` is.
+            | K::Load(_)
+            | K::Act(_)
             // MONEY'S PLAN IS BOUNDED: one file of at most 8 MiB and 20,000
             // rows read once, and the same declared fan-outs an app query has.
             | K::Money(_)

@@ -644,6 +644,7 @@ dependencies = [
  "hex",
  "hmac",
  "image",
+ "jsonschema",
  "prost",
  "rustix",
  "serde",

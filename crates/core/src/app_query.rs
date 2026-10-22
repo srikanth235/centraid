@@ -49,6 +49,7 @@
 //! statement is the app crate breaking its own contract, and is an invariant.
 
 use std::cell::RefCell;
+use std::collections::BTreeSet;
 
 use centraid_api_proto::core_v1 as wire;
 use centraid_apps_agenda::local;
@@ -95,6 +96,17 @@ mod vault;
 /// `now` is the vault's own clock, never the host's: a loader reads it only to
 /// default an empty range to "today".
 pub fn answer(vault: &Vault, request: &wire::AppQueryRequest) -> Result<wire::AppQueryResponse> {
+    answer_recording(vault, request, &mut BTreeSet::new())
+}
+
+/// [`answer`], and the tables the door read for it, handed back in `tables`
+/// when the answer is whole: `load` says what an answer was drawn from so a
+/// screen knows which change events redraw it.
+pub(crate) fn answer_recording(
+    vault: &Vault,
+    request: &wire::AppQueryRequest,
+    tables: &mut BTreeSet<String>,
+) -> Result<wire::AppQueryResponse> {
     use wire::app_query_request::Query as Q;
     use wire::app_query_response::Answer as A;
     let Some(query) = &request.query else {
@@ -238,6 +250,7 @@ pub fn answer(vault: &Vault, request: &wire::AppQueryRequest) -> Result<wire::Ap
         Q::HealthWorkout(asked) => health::workout(vault, &door, asked)?,
         Q::HealthFollowView(asked) => health::follow_view(vault, &door, &now, asked)?,
     };
+    *tables = door.take_tables();
     Ok(wire::AppQueryResponse {
         answer: Some(answer),
     })
@@ -576,6 +589,8 @@ pub struct VaultDoor<'v> {
     /// The FIRST failure the vault reported, kept so it is answered as itself
     /// and not as the denial a loader makes of [`KitError::Door`].
     failure: RefCell<Option<CoreError>>,
+    /// The physical tables every statement this door ran named in its `FROM`.
+    tables: RefCell<BTreeSet<String>>,
 }
 
 impl<'v> VaultDoor<'v> {
@@ -584,7 +599,13 @@ impl<'v> VaultDoor<'v> {
         Self {
             vault,
             failure: RefCell::new(None),
+            tables: RefCell::new(BTreeSet::new()),
         }
+    }
+
+    /// The tables this door has read so far, taken.
+    pub(crate) fn take_tables(&self) -> BTreeSet<String> {
+        std::mem::take(&mut self.tables.borrow_mut())
     }
 
     /// The first failure the vault reported to this door, taken. For a caller
@@ -607,7 +628,10 @@ impl<'v> VaultDoor<'v> {
 
 impl PageDoor for VaultDoor<'_> {
     fn page(&self, query: &PageQuery, request: &PageRequest) -> KitResult<Page<Row>> {
-        centraid_apps_kit::grammar::parse(query)?;
+        let shape = centraid_apps_kit::grammar::parse(query)?;
+        self.tables
+            .borrow_mut()
+            .extend(shape.tables.into_iter().map(|part| part.physical));
         let select: Vec<String> = query
             .select
             .split(',')

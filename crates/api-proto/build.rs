@@ -16,7 +16,7 @@ use std::path::PathBuf;
 /// Every file in the tree, named rather than globbed: a `.proto` that is not on
 /// this list is a file nothing generates from, and a glob would hide that.
 /// `tests/tree.rs` asserts the list and the directory agree.
-const PROTOS: [&str; 27] = [
+const PROTOS: [&str; 28] = [
     "proto/centraid/core/v1/value.proto",
     "proto/centraid/core/v1/row.proto",
     "proto/centraid/core/v1/command.proto",
@@ -74,6 +74,9 @@ const PROTOS: [&str; 27] = [
     // and one workout, and the follower engine's view of what the vault holds.
     "proto/centraid/core/v1/health.proto",
     "proto/centraid/core/v1/app_query.proto",
+    // THE ONE READ AND THE ONE WRITE (#1135): `load(app, query, params)` and
+    // `act(app, action, input)`, spoken through each app's manifest.
+    "proto/centraid/core/v1/action.proto",
     // The on-device chat: a session, a question and a stream of events, over
     // reads an app already answers. Its own file because a turn is neither a
     // command nor a page read.
