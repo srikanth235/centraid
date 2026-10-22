@@ -858,11 +858,96 @@ fn the_incremental_index_equals_a_rebuild_after_every_search_relevant_command() 
     script_every_search_relevant_command(&scratch, &registry);
     let incremental = index_dump(&scratch.vault);
     assert!(!incremental.is_empty(), "the script left something to find");
+    // The word list holds every word the index does, and may hold more: a word
+    // an edit dropped stays until a purge of something that held it or a rebuild.
+    let (terms, words) = (vocabulary(&scratch.vault), word_list(&scratch.vault));
+    assert_eq!(
+        terms.difference(&words).collect::<Vec<_>>(),
+        Vec::<&String>::new(),
+        "the index holds a word the word list does not"
+    );
     let rebuilt = rebuilt(&scratch.vault);
     assert_eq!(
         incremental, rebuilt,
         "a command changed searchable text and did not touch"
     );
+    // A rebuild rewrites the list from the rows: it is exactly the index's
+    // vocabulary, and no word the incremental list did not have.
+    let again = word_list(&scratch.vault);
+    assert_eq!(again, vocabulary(&scratch.vault));
+    assert_eq!(
+        again.difference(&words).collect::<Vec<_>>(),
+        Vec::<&String>::new(),
+        "a rebuilt list is a subset of the incremental one"
+    );
+}
+
+/// Every term of the index's vocabulary.
+fn vocabulary(vault: &Vault) -> BTreeSet<String> {
+    read(vault, |connection| {
+        Ok(connection
+            .prepare("SELECT term FROM search_vocab")?
+            .query_map([], |row| row.get(0))?
+            .collect::<rusqlite::Result<_>>()?)
+    })
+}
+
+/// Every word of the word list.
+fn word_list(vault: &Vault) -> BTreeSet<String> {
+    read(vault, |connection| {
+        Ok(connection
+            .prepare("SELECT word FROM search_word")?
+            .query_map([], |row| row.get(0))?
+            .collect::<rusqlite::Result<_>>()?)
+    })
+}
+
+#[test]
+fn the_word_list_gains_a_word_on_index_and_loses_it_on_a_purge_or_a_rebuild() {
+    let scratch = founded("c6-words");
+    let vault = &scratch.vault;
+    let registry = Registry::with_system_commands().expect("a registry");
+    let go = |name: &str, input: serde_json::Value| run(vault, &registry, name, input);
+    let has = |word: &str| word_list(vault).contains(word);
+
+    go(
+        "note.create",
+        json!({"id": "a", "title": "Zeppelin", "body": "Café au lait, o'brien 3.14"}),
+    );
+    go(
+        "note.create",
+        json!({"id": "b", "title": "Blimp", "body": "au lait only"}),
+    );
+    for word in [
+        "zeppelin", "cafe", "au", "lait", "o", "brien", "3", "14", "blimp", "only",
+    ] {
+        assert!(has(word), "{word} is indexed and in the list");
+    }
+    assert_eq!(word_list(vault), vocabulary(vault));
+
+    // An edit that drops a word leaves it in the list: it still costs nothing to
+    // offer a word the index no longer holds, and finding out is not free.
+    go("note.edit", json!({"id": "a", "body": "au lait"}));
+    assert!(!vocabulary(vault).contains("cafe"));
+    assert!(has("cafe"), "an edit leaves the dropped word in the list");
+
+    // A purge takes the words the entity holds that no other row holds, and keeps
+    // those another row does. It cannot name a word an edit dropped earlier.
+    go("entity.trash", json!({"id": "a"}));
+    go("entity.purge", json!({"id": "a"}));
+    assert!(!has("zeppelin"), "its own title goes");
+    assert!(has("au") && has("lait"), "a word another note holds stays");
+    assert!(
+        has("cafe"),
+        "a word an edit dropped is not the purge's to name"
+    );
+
+    // Only a rebuild rewrites the list from the rows.
+    go("note.edit", json!({"id": "b", "body": "au only"}));
+    assert!(has("lait"));
+    rebuilt(vault);
+    assert!(!has("lait") && !has("cafe"));
+    assert_eq!(word_list(vault), vocabulary(vault));
 }
 
 #[test]
@@ -959,6 +1044,7 @@ fn the_founded_file_holds_the_spec_s_tables_and_nothing_else() {
         "journal",
         "search",
         "search_vocab",
+        "search_word",
         // the kinds' own rows and their children
         "person",
         "contact_point",
@@ -1207,6 +1293,11 @@ enum Reach {
 /// declaration, so adding a text column fails here until it is placed.
 const CENSUS: &[(&str, &str, Reach)] = &[
     ("entity", "title", Reach::Own),
+    (
+        "search_word",
+        "word",
+        Reach::Not("the index's own vocabulary, kept as a list"),
+    ),
     ("person", "nickname", Reach::Own),
     ("person", "role", Reach::Own),
     ("person", "met", Reach::Own),

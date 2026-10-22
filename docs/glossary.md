@@ -99,7 +99,7 @@ The model is rebuilt whole and carries no compatibility with the one before it; 
 | **revision** | The words or bytes an edit replaced, `seq` counted up from one per entity: a note's replaced body, a document's replaced file. | `revision` |
 | **journal** | One row for every command the gate was asked to run, written in the command's own transaction (`refused` for a refusal, `failed` after a rollback). Evidence: it cannot be updated and nothing reads it to learn a fact. | `journal`; [`crates/vault/src/journal.rs`](../crates/vault/src/journal.rs) |
 | **touch** | `ctx.touch(id)`: the one helper that changes an entity. It stamps `updated_at`, bumps `version` once per commit and marks the entity for re-indexing. | `CommitTx::touch` |
-| **search** | The one contentless FTS5 table, keyed by `entity.n`, kept by the writer inside the commit. A trashed entity is not in it. | `search`, `search_vocab`; [`crates/search`](../crates/search/README.md) |
+| **search** | The one contentless FTS5 table, keyed by `entity.n`, kept by the writer inside the commit. A trashed entity is not in it. | `search`, `search_vocab`, `search_word`; [`crates/search`](../crates/search/README.md) |
 
 ## Hosts and clients
 

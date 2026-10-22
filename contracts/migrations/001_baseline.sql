@@ -220,6 +220,17 @@ CREATE VIRTUAL TABLE search USING fts5(
   tokenize = "unicode61 remove_diacritics 2");
 CREATE VIRTUAL TABLE search_vocab USING fts5vocab(search, row);
 
+-- The words the index holds, in the order they first arrived: a list a correction reads whole
+-- and keeps in memory, where `search_vocab` can only be scanned a prefix at a time. The writer
+-- adds a word when it indexes a text and removes the words of a purged entity that no other text
+-- holds; an edit that drops a word leaves it until a rebuild. `n` only ever grows
+-- except when a rollback gives a number back, so a reader that keeps the list asks the table
+-- whether it is still the same one (`crates/vault/src/words.rs`).
+CREATE TABLE search_word (
+  n    INTEGER PRIMARY KEY,
+  word TEXT NOT NULL UNIQUE
+) STRICT;
+
 -- ---------------------------------------------------------------------------------------------
 -- The kinds. Every kind row is its entity's own: kind is a generated constant, and the
 -- composite foreign key is what keeps a person row from naming a note.

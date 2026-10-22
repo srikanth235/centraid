@@ -347,9 +347,7 @@ pub(crate) fn purge_one(
     )? {
         ctx.mark_for_index(&labelled);
     }
-    let n: i64 =
-        connection.query_row("SELECT n FROM entity WHERE id = ?1", [id], |row| row.get(0))?;
-    crate::index::forget(connection, n)?;
+    crate::index::purge(connection, id)?;
     connection.execute("DELETE FROM entity WHERE id = ?1", [id])?;
     purged.push(id.to_owned());
     Ok(())

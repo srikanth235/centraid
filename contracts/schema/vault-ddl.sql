@@ -629,6 +629,12 @@ CREATE TABLE 'search_idx'(segid, term, pgno, PRIMARY KEY(segid, term)) WITHOUT R
 -- table search_vocab on search_vocab
 CREATE VIRTUAL TABLE search_vocab USING fts5vocab(search, row);
 
+-- table search_word on search_word
+CREATE TABLE search_word (
+  n    INTEGER PRIMARY KEY,
+  word TEXT NOT NULL UNIQUE
+) STRICT;
+
 -- table source on source
 CREATE TABLE source (
   id          TEXT PRIMARY KEY,

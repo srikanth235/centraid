@@ -18,7 +18,9 @@
 //! of every command and compares it with the incremental one, so a command
 //! that forgot to touch is red.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashSet};
+
+use centraid_ontology::text::index_words;
 
 use rusqlite::{Connection, OptionalExtension};
 
@@ -100,6 +102,9 @@ const DEPENDENTS: &str = "\
 /// restored vault with a damaged index would run.
 pub fn rebuild(connection: &Connection) -> Result<()> {
     connection.execute("DELETE FROM search", [])?;
+    // The word list is rewritten from the rows too: this is where a word an edit
+    // dropped finally goes.
+    connection.execute("DELETE FROM search_word", [])?;
     let ids = connection
         .prepare("SELECT id FROM entity ORDER BY n")?
         .query_map([], |row| row.get::<_, String>(0))?
@@ -110,10 +115,74 @@ pub fn rebuild(connection: &Connection) -> Result<()> {
     Ok(())
 }
 
-/// Drop one entity's row from the index by its `n`: what a purge does before
-/// it deletes the entity, because after it the `n` is not findable.
-pub fn forget(connection: &Connection, n: i64) -> Result<()> {
+/// Drop one entity's row from the index by its `n`.
+fn forget(connection: &Connection, n: i64) -> Result<()> {
     connection.execute("DELETE FROM search WHERE rowid = ?1", [n])?;
+    Ok(())
+}
+
+/// What a purge does before it deletes the entity, because after it the `n` is
+/// not findable: drop its row from the index, and its words from the word list
+/// unless some other row still holds them.
+///
+/// **This is the only place a word leaves the list while the vault runs, and it
+/// can only name the words the entity holds now.** The index is contentless, so
+/// an edit that drops a word cannot say which word it dropped: the word stays in
+/// the list, through a later purge of the entity too, until a [`rebuild`]
+/// rewrites the list from the rows. The list is therefore always a superset of
+/// the index's own vocabulary and never misses a word the index can find. What a
+/// purge asks of the index is its vocabulary after the row is gone
+/// (`search_vocab` reflects a delete at once), so a word another row holds is
+/// kept.
+pub fn purge(connection: &Connection, id: &str) -> Result<()> {
+    let row: Option<(i64, String, String)> = connection
+        .query_row(
+            "SELECT n, kind, title FROM entity WHERE id = ?1",
+            [id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .optional()?;
+    let Some((n, kind, title)) = row else {
+        return Ok(());
+    };
+    let body = match Kind::parse(&kind) {
+        Some(kind) => text_of(connection, id, kind)?.unwrap_or_default(),
+        None => String::new(),
+    };
+    forget(connection, n)?;
+    let mut held = connection.prepare_cached("SELECT 1 FROM search_vocab WHERE term = ?1")?;
+    let mut drop = connection.prepare_cached("DELETE FROM search_word WHERE word = ?1")?;
+    for word in distinct_words(&[&title, &body]) {
+        if !held.exists([&word])? {
+            drop.execute([&word])?;
+        }
+    }
+    Ok(())
+}
+
+/// The words of some texts, in the order they first appear, each once.
+fn distinct_words(texts: &[&str]) -> Vec<String> {
+    let mut seen = HashSet::new();
+    let mut words = Vec::new();
+    for text in texts {
+        for word in index_words(text) {
+            if !seen.contains(&word) {
+                seen.insert(word.clone());
+                words.push(word);
+            }
+        }
+    }
+    words
+}
+
+/// Add the words of a text just indexed to the list. A word already in the list
+/// keeps its number.
+fn remember(connection: &Connection, title: &str, body: &str) -> Result<()> {
+    let mut add =
+        connection.prepare_cached("INSERT OR IGNORE INTO search_word (word) VALUES (?1)")?;
+    for word in distinct_words(&[title, body]) {
+        add.execute([&word])?;
+    }
     Ok(())
 }
 
@@ -146,6 +215,7 @@ fn reindex_one(connection: &Connection, id: &str) -> Result<()> {
         "INSERT INTO search (rowid, title, body) VALUES (?1, ?2, ?3)",
         rusqlite::params![n, title, body],
     )?;
+    remember(connection, &title, &body)?;
     Ok(())
 }
 

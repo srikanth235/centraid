@@ -287,10 +287,12 @@ impl Vault {
 /// is not rows a screen reads: it follows the entities the census already names.
 const FTS_SHADOW_SUFFIXES: [&str; 5] = ["_content", "_data", "_docsize", "_idx", "_config"];
 
-/// Whether a table is the search index or one of FTS5's shadows of it: rows a
-/// restore rebuilds rather than counts.
+/// Whether a table is the search index, one of FTS5's shadows of it, or the
+/// list of its words: derived rows the writer keeps and a rebuild rewrites,
+/// not rows a member made.
 pub(crate) fn is_index(table: &str) -> bool {
     table == "search"
+        || table == "search_word"
         || (table.starts_with("search_")
             && FTS_SHADOW_SUFFIXES
                 .iter()
@@ -354,6 +356,7 @@ mod tests {
             "search_docsize",
             "search_idx",
             "search_config",
+            "search_word",
             "journal",
             "sqlite_sequence",
         ] {

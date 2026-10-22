@@ -59,7 +59,7 @@ pub const GROUPS: [(&str, &str, &str); 6] = [
 ///
 /// The FTS5 shadow tables of `search` are not here (they are an implementation
 /// of it); every other table must be.
-pub const TABLES: [(&str, &str, &str); 42] = [
+pub const TABLES: [(&str, &str, &str); 43] = [
     (
         "kernel",
         "entity",
@@ -99,6 +99,11 @@ pub const TABLES: [(&str, &str, &str); 42] = [
         "kernel",
         "search_vocab",
         "The index's own vocabulary, which serves fuzzy correction of a typed word.",
+    ),
+    (
+        "kernel",
+        "search_word",
+        "The words the index holds, numbered in the order they arrived: the list a correction reads whole.",
     ),
     (
         "words",
