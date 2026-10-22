@@ -193,24 +193,18 @@ pub const PLANTED_SECRETS: [&str; 2] = [
 pub fn with_a_locker_item(sample: &Sample) -> String {
     use centraid_vault::custody::locker_key::encrypt_under_locker_key;
     let owner = sample.handle.owner();
-    sample
+    let key = sample
         .handle
         .with_vault(|vault| {
             vault
-                .commit(|tx| {
-                    tx.set_producer("test.fixture");
-                    tx.connection().execute(
-                        "INSERT INTO locker_key (key_id, created_at)
-                         VALUES ('key-1', '2026-01-01T00:00:00.000Z')",
-                        [],
-                    )?;
-                    Ok(())
+                .locker_generation()
+                .map_err(|error| centraid_core::CoreError::InvalidRequest {
+                    detail: error.to_string(),
                 })
-                .map_err(centraid_core::CoreError::from)
         })
         .expect("the key plane lands");
     let seal = |plaintext: &str| {
-        encrypt_under_locker_key(&[0x5a_u8; 32], "key-1", "lk-vaultbank", plaintext)
+        encrypt_under_locker_key(&[0x5a_u8; 32], &key, "lk-vaultbank", plaintext)
             .expect("the cell seals")
     };
     let ran = sample
@@ -228,7 +222,7 @@ pub fn with_a_locker_item(sample: &Sample) -> String {
                             "url": "https://vaultbank.example",
                             "password": seal(PLANTED_SECRETS[0]),
                             "otp_seed": seal(PLANTED_SECRETS[1]),
-                            "password_rotated": true, "key_id": "key-1"
+                            "password_rotated": true, "key_id": key
                         }),
                     ),
                 )

@@ -412,10 +412,10 @@ const PLANTED: [&str; 4] = [
 ];
 
 /// A sealed cell as the core would have sealed it, under a key written nowhere.
-fn sealed(row_id: &str, plaintext: &str) -> String {
+fn sealed(key_id: &str, row_id: &str, plaintext: &str) -> String {
     centraid_vault::custody::locker_key::encrypt_under_locker_key(
         &[0x5a_u8; 32],
-        "key-1",
+        key_id,
         row_id,
         plaintext,
     )
@@ -424,20 +424,16 @@ fn sealed(row_id: &str, plaintext: &str) -> String {
 
 /// A Locker item with every kind of sealed value, tagged, starred and linked by a note, through
 /// the owner's own door.
-fn with_a_locker_item(pair: &Pair) -> (String, String) {
-    pair.core
+/// Returns the item's id, the note's, and the key generation the cells are sealed under.
+fn with_a_locker_item(pair: &Pair) -> (String, String, String) {
+    let key = pair
+        .core
         .with_vault(|vault| {
             vault
-                .commit(|tx| {
-                    tx.set_producer("test.fixture");
-                    tx.connection().execute(
-                        "INSERT INTO locker_key (key_id, created_at)
-                         VALUES ('key-1', '2026-01-01T00:00:00.000Z')",
-                        [],
-                    )?;
-                    Ok(())
+                .locker_generation()
+                .map_err(|error| centraid_core::CoreError::InvalidRequest {
+                    detail: error.to_string(),
                 })
-                .map_err(centraid_core::CoreError::from)
         })
         .expect("the key plane lands");
     let owner = pair.core.owner();
@@ -467,9 +463,9 @@ fn with_a_locker_item(pair: &Pair) -> (String, String) {
         serde_json::json!({
             "item_id": "lk-bank", "type": "login", "title": "Hidden Vaultbank login",
             "username": "plainname", "url": "https://vaultbank.example",
-            "password": sealed("lk-bank", PLANTED[0]),
-            "otp_seed": sealed("lk-bank", PLANTED[1]),
-            "password_rotated": true, "key_id": "key-1"
+            "password": sealed(&key, "lk-bank", PLANTED[0]),
+            "otp_seed": sealed(&key, "lk-bank", PLANTED[1]),
+            "password_rotated": true, "key_id": key
         }),
     );
     executed(&added, "add_item");
@@ -478,7 +474,7 @@ fn with_a_locker_item(pair: &Pair) -> (String, String) {
             "locker.set_field",
             serde_json::json!({
                 "item_id": "lk-bank", "field_id": "field-1", "label": "Recovery", "kind": "sealed",
-                "value": sealed("field-1", PLANTED[2]), "key_id": "key-1"
+                "value": sealed(&key, "field-1", PLANTED[2]), "key_id": key
             }),
         ),
         "set_field",
@@ -489,7 +485,7 @@ fn with_a_locker_item(pair: &Pair) -> (String, String) {
             serde_json::json!({
                 "item_id": "lk-bank", "rp_id": "vaultbank.example", "user_handle": "ada",
                 "display_name": "Ada", "credential_id": "cred-1", "algorithm": "ES256",
-                "private_key": sealed("lk-bank", PLANTED[3]), "key_id": "key-1"
+                "private_key": sealed(&key, "lk-bank", PLANTED[3]), "key_id": key
             }),
         ),
         "set_passkey",
@@ -518,7 +514,7 @@ fn with_a_locker_item(pair: &Pair) -> (String, String) {
         ),
         "edge.add",
     );
-    ("lk-bank".to_owned(), note_id)
+    ("lk-bank".to_owned(), note_id, key)
 }
 
 /// Every planted plaintext, and the `lk1:` ciphertext it is stored as, is absent from `bytes`.
@@ -532,7 +528,7 @@ fn assert_no_secret(what: &str, bytes: &str) {
 #[test]
 fn the_core_door_serves_a_locker_items_plain_rows_edges_and_tags_and_no_sealed_cell() {
     let pair = pair();
-    let (item, note) = with_a_locker_item(&pair);
+    let (item, note, _key) = with_a_locker_item(&pair);
     let door = pair.core.assist_door();
 
     // Its entity row: the title, the kind.
@@ -661,7 +657,7 @@ fn the_core_door_serves_a_locker_items_plain_rows_edges_and_tags_and_no_sealed_c
 #[test]
 fn a_shared_verb_on_a_locker_item_runs_under_the_assistants_principal() {
     let pair = pair();
-    let (item, note) = with_a_locker_item(&pair);
+    let (item, note, _key) = with_a_locker_item(&pair);
     let door = pair.core.assist_door();
     for (key, command, input) in [
         (
@@ -779,7 +775,7 @@ fn a_shared_verb_on_a_locker_item_runs_under_the_assistants_principal() {
 #[test]
 fn a_purge_asks_the_assistant_the_confirmation_it_asks_the_member() {
     let pair = pair();
-    let (item, note) = with_a_locker_item(&pair);
+    let (item, note, _key) = with_a_locker_item(&pair);
     let door = pair.core.assist_door();
     let ask = |key: &str, id: &str| {
         door.run_keyed(key, "entity.purge", serde_json::json!({"id": id}))
@@ -793,9 +789,9 @@ fn a_purge_asks_the_assistant_the_confirmation_it_asks_the_member() {
 #[test]
 fn every_secret_touching_command_is_refused_through_the_core_door() {
     let pair = pair();
-    let (item, _note) = with_a_locker_item(&pair);
+    let (item, _note, key) = with_a_locker_item(&pair);
     let door = pair.core.assist_door();
-    let new_cipher = sealed("lk-bank", "a new password");
+    let new_cipher = sealed(&key, "lk-bank", "a new password");
     for (key, command, input) in [
         (
             "s1:0",
@@ -817,7 +813,7 @@ fn every_secret_touching_command_is_refused_through_the_core_door() {
         (
             "s4:0",
             "locker.edit_item",
-            serde_json::json!({"item_id": item, "password": new_cipher, "key_id": "key-1"}),
+            serde_json::json!({"item_id": item, "password": new_cipher, "key_id": key}),
         ),
         // An edit that leaves a held secret out clears it.
         (
@@ -830,7 +826,7 @@ fn every_secret_touching_command_is_refused_through_the_core_door() {
             "locker.add_item",
             serde_json::json!({
                 "item_id": "lk-new", "type": "login", "title": "New", "password": new_cipher,
-                "key_id": "key-1"
+                "key_id": key
             }),
         ),
         (
@@ -838,7 +834,7 @@ fn every_secret_touching_command_is_refused_through_the_core_door() {
             "locker.set_field",
             serde_json::json!({
                 "item_id": item, "field_id": "field-1", "label": "Recovery", "kind": "sealed",
-                "value": new_cipher, "key_id": "key-1"
+                "value": new_cipher, "key_id": key
             }),
         ),
         (
@@ -847,7 +843,7 @@ fn every_secret_touching_command_is_refused_through_the_core_door() {
             serde_json::json!({
                 "item_id": item, "rp_id": "vaultbank.example", "user_handle": "ada",
                 "display_name": "Ada", "credential_id": "cred-1", "algorithm": "ES256",
-                "private_key": new_cipher, "key_id": "key-1"
+                "private_key": new_cipher, "key_id": key
             }),
         ),
         (
