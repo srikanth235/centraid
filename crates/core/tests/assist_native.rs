@@ -335,10 +335,9 @@ fn a_question_for_the_vault_that_finds_nothing_says_so() {
 }
 
 #[test]
-fn an_ask_for_a_secret_is_declined_sealed_egress_and_reads_no_locker() {
-    // Two ways the model can reach for the Locker: look at its kind, or reveal a field.
+fn an_ask_to_reveal_or_set_a_secret_is_declined_sealed_egress() {
+    // Two ways the model can reach for a secret: reveal a field, or create an item with one.
     for (tool, args) in [
-        ("find", vec![("kind", "locker_item")]),
         (
             "act",
             vec![
@@ -347,9 +346,21 @@ fn an_ask_for_a_secret_is_declined_sealed_egress_and_reads_no_locker() {
                 ("args", "field: password"),
             ],
         ),
+        (
+            "act",
+            vec![
+                ("verb", "create"),
+                ("kind", "locker_item"),
+                (
+                    "args",
+                    "name: Gym\ntype: login\npassword: PLANTED-NEW-PASSWORD",
+                ),
+            ],
+        ),
     ] {
         let model = script(&[step("plan: secret", tool, &args)]);
         let sample = native_sample(model.clone());
+        common::chat::with_a_locker_item(&sample);
         let session = sample.start("");
         let sent = sample.send(session, 1, "what is my wifi password?");
         let answer = answered(&sent);
@@ -358,12 +369,70 @@ fn an_ask_for_a_secret_is_declined_sealed_egress_and_reads_no_locker() {
             "{tool}"
         );
         assert!(answer.cards.is_empty());
-        // the Locker is the true reason, not "writes are off": no Activity either
-        assert_eq!(story(&sample.drain_assist_events()), ["answer"], "{tool}");
-        // and no item of the Locker was in front of the model: the world holds none
-        let prompt = &model.prompts()[0];
-        assert!(!prompt.contains("locker items:"), "{tool}");
+        // the secret is the true reason, not "writes are off": the turn parks nothing
+        let story = story(&sample.drain_assist_events());
+        assert_eq!(story.last().map(String::as_str), Some("answer"), "{tool}");
+        assert!(
+            story.iter().all(|word| !word.starts_with("pending")),
+            "{tool}"
+        );
+        if tool == "act" && args.iter().any(|(_, value)| *value == "reveal") {
+            assert_eq!(story, ["answer"], "a reveal announces no look: {tool}");
+        }
+        // and no sealed value, plaintext or ciphertext, was in front of the model
+        for prompt in model.prompts() {
+            for planted in common::chat::PLANTED_SECRETS {
+                assert!(!prompt.contains(planted), "{tool}: {planted}");
+            }
+            assert!(!prompt.contains("lk1:"), "{tool}");
+        }
     }
+}
+
+#[test]
+fn a_locker_item_is_found_and_drawn_like_any_row_and_its_secrets_reach_no_byte() {
+    let model = script(&[
+        step(
+            "plan: look",
+            "find",
+            &[("kind", "locker_item"), ("name", "vaultbank")],
+        ),
+        step("plan: answer", "answer", &[("rows", "@1")]),
+    ]);
+    let sample = native_sample(model.clone());
+    let item = common::chat::with_a_locker_item(&sample);
+    let session = sample.start("");
+    let sent = sample.send(session, 1, "which login is the vaultbank?");
+    let answer = answered(&sent);
+    assert_eq!(answer.cards.len(), 1, "{answer:?}");
+    let card = &answer.cards[0];
+    assert_eq!(
+        (
+            card.app.as_str(),
+            card.entity.as_str(),
+            card.id.as_str(),
+            card.title.as_str()
+        ),
+        ("locker", "locker_item", item.as_str(), "Vaultbank login")
+    );
+    // the story is a read, and every byte the model and the member received is free of the secrets
+    let story = story(&sample.drain_assist_events());
+    assert!(
+        story.iter().any(|word| word.starts_with("activity:")),
+        "{story:?}"
+    );
+    let mut received = format!("{answer:?}");
+    for prompt in model.prompts() {
+        received.push_str(&prompt);
+    }
+    assert!(received.contains("Vaultbank login"));
+    for planted in common::chat::PLANTED_SECRETS {
+        assert!(!received.contains(planted), "{planted}");
+    }
+    assert!(!received.contains("lk1:"));
+    // the card is stored with the answer, and live while its item is
+    let thread = thread(&sample, &sent.thread_id);
+    assert_eq!(thread.messages[1].cards[0].app, "locker");
 }
 
 const DRY_CLEANING: &str = "Pick up the dry cleaning";

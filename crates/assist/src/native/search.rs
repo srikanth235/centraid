@@ -7,7 +7,7 @@
 //! `search` ranks by retrieval, not interpretation: the vault's FTS door
 //! (`crates/search`, prefix phrases over each domain's label and indexed
 //! text) plus a whole-word / prefix / one-edit match over every model row's
-//! name, so kinds the FTS door does not index (groups, albums, locker items)
+//! name, so kinds the FTS door does not index (groups, albums)
 //! are found the same way. The pre-grounding block reads the name index
 //! alone: a word or the start of a word of a row's name or a person's nickname.
 
@@ -27,6 +27,7 @@ const FTS: &[(&str, Kind)] = &[
     ("event", Kind::Event),
     ("task", Kind::Task),
     ("document", Kind::Document),
+    ("locker_item", Kind::LockerItem),
 ];
 
 /// Words a message token must not be matched on.

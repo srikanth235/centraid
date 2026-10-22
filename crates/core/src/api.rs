@@ -109,7 +109,10 @@ pub const MAX_CONTENT_URLS: usize = 100;
 /// Locker's trash page `entity` like every kind's, as reads named for Locker
 /// (`home.locker`, `locker.*`), which is what the vault serves a Locker item's
 /// row to ([`centraid_vault::page::reaches_locker`]): any other page over
-/// `entity` or `edge` is given the page without Locker's rows.
+/// `entity` or `edge` is given the page without Locker's rows. The assistant's reads
+/// (`assist.native.*`) are the one other exception: they reach a Locker item's plain rows as the
+/// owner does, and `page::withholds_sealed_value` keeps a sealed column out of them. This list
+/// governs the wire door, which the assistant does not use.
 ///
 /// NOT HERE, ON PURPOSE: every Locker table (`locker_item`,
 /// `locker_item_field`, `locker_item_passkey`, `locker_item_address`,
@@ -1065,7 +1068,7 @@ mod tests {
                 })
                 .collect()
         };
-        for name in ["test", "home.people", "tasks.trash", "assist.native.entity"] {
+        for name in ["test", "home.people", "tasks.trash", "assist.native"] {
             let answer = ask(name, "entity", &["id", "title"], "id", "id").expect("a page");
             assert!(
                 !titles(&answer).contains(&"Bank login".to_owned()),
@@ -1075,7 +1078,12 @@ mod tests {
                 ask(name, "edge", &["from_id", "to_id"], "from_id", "to_id").expect("a page");
             assert!(edges.rows.is_empty(), "{name} saw a Locker edge");
         }
-        for name in ["home.locker", "locker.trash", "locker.phone.shelves"] {
+        for name in [
+            "home.locker",
+            "locker.trash",
+            "locker.phone.shelves",
+            "assist.native.entity",
+        ] {
             let answer = ask(name, "entity", &["id", "title"], "id", "id").expect("a page");
             assert!(titles(&answer).contains(&"Bank login".to_owned()), "{name}");
         }

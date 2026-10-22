@@ -214,8 +214,8 @@ fn invalid(detail: impl Into<String>) -> CoreError {
 }
 
 /// The app a request names: empty is every app, and anything that is not a
-/// chat scope is the request's fault — Locker, which the assistant does not
-/// read, and `tasks`, a domain read through Agenda's scope (R-1128-F2, #1128):
+/// chat scope is the request's fault — Locker, a card domain and no scope, and
+/// `tasks`, a domain read through Agenda's scope (R-1128-F2, #1128):
 /// accepting it as an alias would give a thread two names for one app, and the
 /// vault's `chat_thread` CHECK refuses it anyway.
 fn scope_of(app: &str) -> Result<Option<App>> {
@@ -224,6 +224,9 @@ fn scope_of(app: &str) -> Result<Option<App>> {
     }
     App::scope_from_id(app).map(Some).ok_or_else(|| {
         invalid(match App::from_id(app) {
+            Some(domain) if domain.opens_in() == domain => {
+                format!("`{app}` is a card domain and not a chat scope")
+            }
             Some(domain) => format!(
                 "`{app}` is not a chat scope: `{}` covers it",
                 domain.opens_in().id()

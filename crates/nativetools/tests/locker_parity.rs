@@ -1,6 +1,14 @@
-//! The Locker policy (`Flags::locker`, #1088 R-1088-3 and R-1088-10): with it off, the runtime
-//! reads no Locker table and no sealed column, a call that names a Locker kind or the `reveal`
-//! verb ends in the typed decline `sealed_egress`, and nothing else changes.
+//! The assistant has the owner's access to Locker items, except to a sealed value (the owner's
+//! ruling of 2026-10-22, #1135; `Flags::secrets`, #1088 R-1088-3 and R-1088-10).
+//!
+//! PARITY: with the secrets off, as on the phone, the runtime finds a Locker item by its title and
+//! its username, reads its plain fields, stars it, retitles it, trashes it and restores it, as it
+//! does any other kind.
+//!
+//! THE BOUNDARY: it reads no sealed column (a sealed cell is a presence bit and nothing else),
+//! a call that reveals or sets a sealed value ends in the typed decline `sealed_egress`, and a
+//! planted sealed plaintext, or the ciphertext it is stored as, is in no byte the model receives:
+//! no tool result, no pre-grounded block, no prompt, no directory.
 
 mod common;
 
@@ -99,24 +107,24 @@ impl Door for Recording {
     }
 }
 
-fn flags(locker: bool) -> Flags {
+fn flags(secrets: bool) -> Flags {
     Flags {
-        locker,
+        secrets,
         ..Flags::default()
     }
 }
 
 /// A session over the world through a recording door.
-fn recorded(world: &World, locker: bool) -> (Session, Arc<Mutex<Log>>) {
+fn recorded(world: &World, secrets: bool) -> (Session, Arc<Mutex<Log>>) {
     let now = dates::parse_now(TODAY).expect("a date");
     let clock = SetClock::at(vaultio::millis_of(now));
-    let inner = Handle::open(world.path(), clock, "locker-off").expect("the vault opens");
+    let inner = Handle::open(world.path(), clock, "locker-parity").expect("the vault opens");
     let log = Arc::new(Mutex::new(Log::default()));
     let door = Recording {
         inner,
         log: Arc::clone(&log),
     };
-    let session = Session::with_door(Box::new(door), now, "", flags(locker)).expect("it opens");
+    let session = Session::with_door(Box::new(door), now, "", flags(secrets)).expect("it opens");
     (session, log)
 }
 
@@ -124,23 +132,41 @@ fn sealed_columns() -> Vec<&'static str> {
     centraid_vault::commands::locker::SEALED_ITEM_CELLS.to_vec()
 }
 
-/// Whether any recorded read touched a Locker table or named a sealed column.
-fn locker_reads(log: &Log) -> Vec<String> {
+/// Every recorded read that named a sealed column as a value. The presence test
+/// (`<cell> IS NOT NULL AS has_<cell>`) names it as a bit and is not one.
+fn sealed_reads(log: &Log) -> Vec<String> {
     let sealed = sealed_columns();
     log.tables
         .iter()
-        .filter(|(table, columns)| {
-            table.starts_with("locker")
-                || columns
-                    .split(',')
-                    .map(str::trim)
-                    .any(|column| sealed.contains(&column))
+        .filter(|(_, columns)| {
+            columns
+                .split(',')
+                .map(str::trim)
+                .any(|column| sealed.contains(&column))
         })
         .map(|(table, columns)| format!("{table}: {columns}"))
         .collect()
 }
 
-/// A script of ordinary calls that touch no Locker row.
+/// The fixture's planted plaintexts: what `locker.password` seals under the harness key.
+const PLANTED: [&str; 2] = ["hunter2", "s3cret"];
+
+/// The bytes a model would receive, searched for a planted secret and for the `lk1:` ciphertext
+/// it is stored as.
+fn assert_no_secret(what: &str, bytes: &str) {
+    for planted in PLANTED {
+        assert!(
+            !bytes.contains(planted),
+            "{what} carried `{planted}`: {bytes}"
+        );
+    }
+    assert!(
+        !bytes.contains("lk1:"),
+        "{what} carried a ciphertext: {bytes}"
+    );
+}
+
+/// A script of ordinary calls, a Locker item among them.
 fn script(session: &mut Session) -> Vec<Value> {
     let mut out = Vec::new();
     session.user("what is on my plate");
@@ -172,36 +198,240 @@ fn without_locker() -> World {
     seeded_with(&world)
 }
 
+// ---------------------------------------------------------------------------
+// PARITY
+// ---------------------------------------------------------------------------
+
 #[test]
-fn with_the_locker_off_no_locker_table_and_no_sealed_column_is_read() {
+fn the_assistant_finds_a_locker_item_by_its_title_and_by_its_username() {
     let world = seeded();
     let (mut session, log) = recorded(&world, false);
-    // everything a session reads: opening, a read of each shape, a write and its reload
+
+    // by its title, by kind and by name
+    session.user("find my wifi login");
+    let by_name = call(
+        &mut session,
+        "find",
+        json!({"kind": "locker item", "name": "wifi"}),
+    );
+    assert!(
+        by_name["text"].as_str().unwrap().contains("Home wifi"),
+        "{by_name}"
+    );
+    let all = call(&mut session, "find", json!({"kind": "locker items"}));
+    let text = all["text"].as_str().unwrap();
+    assert!(
+        text.contains("Home wifi") && text.contains("Bank login"),
+        "{text}"
+    );
+
+    // by a word of its title, through search
+    session.user("anything about the bank");
+    let by_title = call(&mut session, "search", json!({"text": "bank"}));
+    assert!(
+        by_title["text"].as_str().unwrap().contains("Bank login"),
+        "{by_title}"
+    );
+
+    // by its USERNAME, which the title does not hold: the vault's index does
+    session.user("which login is sam");
+    let by_username = call(&mut session, "search", json!({"text": "sam"}));
+    assert!(
+        by_username["text"].as_str().unwrap().contains("Bank login"),
+        "a Locker item is found by its username: {by_username}"
+    );
+    // A sealed value is no word of the index: searching for the planted secrets finds no item.
+    for planted in PLANTED {
+        session.user("search the planted secret");
+        let found = call(&mut session, "search", json!({"text": planted}));
+        assert_eq!(
+            found["effect"]["rows"],
+            json!([]),
+            "a sealed value is findable: {found}"
+        );
+    }
+    let log = log.lock().unwrap();
+    assert!(
+        log.searches.iter().any(|entity| entity == "locker_item"),
+        "the full-text leg asked the door for Locker items: {:?}",
+        log.searches
+    );
+}
+
+#[test]
+fn the_assistant_reads_a_locker_items_plain_fields_and_sees_its_secrets_as_a_bit() {
+    let world = seeded();
+    let mut session = world.session_with(TODAY, flags(false));
+    let n = common::number(&mut session, "locker item", "bank");
+    let opened = call(&mut session, "open", json!({"row": n}));
+    let text = opened["text"].as_str().unwrap();
+    assert!(text.contains("Bank login"), "{text}");
+    assert!(text.contains("sam"), "the username: {text}");
+    assert!(text.contains("https://bank.example"), "the url: {text}");
+    assert!(
+        text.contains("sealed: password") && text.contains("reveals it in Locker"),
+        "the secret is a presence bit and says where the member opens it: {text}"
+    );
+    assert_no_secret("open", &opened.to_string());
+    // its fields are queryable like any kind's
+    session.user("which logins are on a bank site");
+    let found = call(
+        &mut session,
+        "find",
+        json!({"kind": "locker item", "where": "username = sam"}),
+    );
+    assert!(
+        found["text"].as_str().unwrap().contains("Bank login"),
+        "{found}"
+    );
+}
+
+#[test]
+fn the_assistant_stars_retitles_trashes_and_restores_a_locker_item() {
+    let world = seeded();
+    let mut session = world.session_with(TODAY, flags(false));
+
+    let n = common::number(&mut session, "locker item", "bank");
+    let starred = call(&mut session, "act", json!({"verb": "star", "rows": n}));
+    assert!(
+        starred["text"].as_str().unwrap().contains("starred"),
+        "{starred}"
+    );
+
+    session.user("rename the bank login");
+    let n = common::find_in_turn(&mut session, "locker item", "bank");
+    let renamed = call(
+        &mut session,
+        "act",
+        json!({"verb": "edit", "rows": n, "args": "name: Savings bank"}),
+    );
+    assert!(
+        renamed["effect"]["refusal"].is_null(),
+        "a rename runs on a Locker item: {renamed}"
+    );
+    session.user("and its username");
+    let n = common::find_in_turn(&mut session, "locker item", "savings");
+    let edited = call(
+        &mut session,
+        "act",
+        json!({"verb": "edit", "rows": n, "args": "username: sam2"}),
+    );
+    assert!(edited["effect"]["refusal"].is_null(), "{edited}");
+
+    // The edit rewrote the plain fields and LEFT THE SEALED CELL ALONE: the owner's door still
+    // unseals the password the fixture planted.
+    let now = dates::parse_now(TODAY).expect("a date");
+    let owner = Handle::open(world.path(), SetClock::at(vaultio::millis_of(now)), "owner")
+        .expect("the vault opens");
+    let rows = owner
+        .table_where(
+            "locker_item",
+            "id, username, key_id, password",
+            "id",
+            "id",
+            "username = ?",
+            &["sam2".to_owned()],
+        )
+        .expect("the owner reads");
+    let [row] = rows.as_slice() else {
+        panic!("the edited item: {rows:?}");
+    };
+    let Some(centraid_apps_kit::row::Cell::Text(sealed)) = row.get("password") else {
+        panic!("the password cell is gone: {row:?}");
+    };
+    let Some(centraid_apps_kit::row::Cell::Text(key_id)) = row.get("key_id") else {
+        panic!("no key id");
+    };
+    let Some(centraid_apps_kit::row::Cell::Text(id)) = row.get("id") else {
+        panic!("no id");
+    };
+    assert_eq!(
+        Door::unseal(&owner, key_id, id, sealed).as_deref(),
+        Ok("s3cret"),
+        "an edit by the assistant kept the password"
+    );
+
+    session.user("bin it");
+    let n = common::find_in_turn(&mut session, "locker item", "savings");
+    let deleted = call(&mut session, "act", json!({"verb": "delete", "rows": n}));
+    assert!(deleted["effect"]["refusal"].is_null(), "{deleted}");
+    session.user("put it back");
+    let n = common::trashed_number(&mut session, "locker item", "savings");
+    let restored = call(&mut session, "act", json!({"verb": "restore", "rows": n}));
+    assert!(restored["effect"]["refusal"].is_null(), "{restored}");
+}
+
+#[test]
+fn a_world_without_a_locker_behaves_the_same_with_the_secrets_on_or_off() {
+    let on_world = without_locker();
+    let off_world = without_locker();
+    let on = script(&mut on_world.session_with(TODAY, flags(true)));
+    let off = script(&mut off_world.session_with(TODAY, flags(false)));
+    assert_eq!(on.len(), off.len());
+    for (index, (on, off)) in on.iter().zip(&off).enumerate() {
+        assert_eq!(on, off, "call {index} differs");
+    }
+}
+
+#[test]
+fn the_locker_items_of_a_world_are_in_it_with_the_secrets_on_or_off() {
+    let (off_world, on_world) = (seeded(), seeded());
+    let mut off = off_world.session_with(TODAY, flags(false));
+    let mut on = on_world.session_with(TODAY, flags(true));
+    for session in [&mut off, &mut on] {
+        session.user("the logins");
+    }
+    let listed = |session: &mut Session| -> String {
+        call(session, "find", json!({"kind": "locker items"}))["text"]
+            .as_str()
+            .expect("a text")
+            .to_owned()
+    };
+    let (with, without) = (listed(&mut on), listed(&mut off));
+    assert_eq!(with, without);
+    assert!(
+        with.contains("Home wifi") && with.contains("Bank login"),
+        "{with}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// THE SECRET BOUNDARY
+// ---------------------------------------------------------------------------
+
+#[test]
+fn with_the_secrets_off_no_sealed_column_is_read_as_a_value() {
+    let world = seeded();
+    let (mut session, log) = recorded(&world, false);
     script(&mut session);
     session.user("anything about the wifi");
     call(&mut session, "search", json!({"text": "wifi"}));
-    call(&mut session, "find", json!({"kind": "note"}));
+    call(&mut session, "find", json!({"kind": "locker item"}));
     let log = log.lock().unwrap();
     assert!(
-        !log.tables.is_empty(),
-        "the world was read through the door"
+        log.tables.iter().any(|(table, _)| table == "locker_item"),
+        "the Locker items were read through the door"
     );
-    assert_eq!(locker_reads(&log), Vec::<String>::new());
+    assert_eq!(sealed_reads(&log), Vec::<String>::new());
     assert!(
-        log.searches.iter().all(|entity| !entity.contains("locker")),
-        "{:?}",
-        log.searches
+        log.tables
+            .iter()
+            .any(|(table, columns)| table == "locker_item"
+                && columns.contains("password IS NOT NULL AS has_password")),
+        "a sealed cell is read as its presence"
     );
     assert!(
         log.commands
             .iter()
-            .all(|command| !command.starts_with("locker."))
+            .all(|command| !command.starts_with("locker.")),
+        "{:?}",
+        log.commands
     );
     assert_eq!((log.seals, log.unseals), (0, 0));
 }
 
 #[test]
-fn the_recording_door_does_see_the_locker_when_the_policy_is_on() {
+fn the_recording_door_does_read_the_sealed_cells_when_the_secrets_are_on() {
     let world = seeded();
     let (mut session, log) = recorded(&world, true);
     let n = common::number(&mut session, "locker item", "wifi");
@@ -216,10 +446,8 @@ fn the_recording_door_does_see_the_locker_when_the_policy_is_on() {
     );
     let log = log.lock().unwrap();
     assert!(
-        locker_reads(&log)
-            .iter()
-            .any(|read| read.starts_with("locker_item")),
-        "{:?}",
+        !sealed_reads(&log).is_empty(),
+        "the control reads sealed columns, so the silence above is the policy's: {:?}",
         log.tables
     );
     assert_eq!(log.unseals, 1);
@@ -235,11 +463,11 @@ fn assert_sealed_egress(response: &Value, what: &str) {
         response["effect"]["decline"]["reason"], "sealed_egress",
         "{what}"
     );
-    assert_eq!(response["effect"]["locker_off"], true, "{what}");
+    assert_eq!(response["effect"]["secrets_off"], true, "{what}");
 }
 
 #[test]
-fn reveal_and_a_locker_kind_decline_sealed_egress() {
+fn a_reveal_and_a_create_that_sets_a_secret_decline_sealed_egress() {
     let world = seeded();
     let (mut session, log) = recorded(&world, false);
     let calls = [
@@ -253,42 +481,46 @@ fn reveal_and_a_locker_kind_decline_sealed_egress() {
             "act",
             json!({"verb": "reveal", "rows": "#1", "args": "field: password"}),
         ),
-        ("find a locker kind", "find", json!({"kind": "locker item"})),
         (
-            "find the plural",
-            "find",
-            json!({"kind": "locker items", "name": "wifi"}),
-        ),
-        (
-            "a list of kinds that names it",
-            "find",
-            json!({"kind": "note, locker item"}),
-        ),
-        (
-            "search a locker kind",
-            "search",
-            json!({"text": "wifi", "kind": "locker item"}),
-        ),
-        (
-            "count a locker kind",
-            "compute",
-            json!({"kind": "locker item", "op": "count"}),
-        ),
-        (
-            "create a locker item",
+            "create a login with a password",
             "act",
-            json!({"verb": "create", "kind": "locker item", "args": "name: Gym combo\ntype: note\nnotes: 12-34-56"}),
+            json!({"verb": "create", "kind": "locker item", "args": "name: Gym\ntype: login\npassword: PLANTED-NEW-PASSWORD"}),
+        ),
+        (
+            "create a card with a number",
+            "act",
+            json!({"verb": "create", "kind": "locker item", "args": "name: Visa\ntype: card\ncard_number: PLANTED-4111"}),
         ),
     ];
     for (what, tool, args) in calls {
         session.user("show me the wifi password");
         let response = call(&mut session, tool, args);
         assert_sealed_egress(&response, what);
+        assert_no_secret(what, &response.to_string());
     }
     let log = log.lock().unwrap();
-    assert_eq!(locker_reads(&log), Vec::<String>::new());
+    assert_eq!(sealed_reads(&log), Vec::<String>::new());
     assert!(log.commands.is_empty(), "nothing ran: {:?}", log.commands);
     assert_eq!((log.seals, log.unseals), (0, 0));
+}
+
+#[test]
+fn a_note_items_notes_are_sealed_and_the_assistant_cannot_set_them() {
+    let world = seeded();
+    let (mut session, log) = recorded(&world, false);
+    session.user("add a gym combo note");
+    let created = call(
+        &mut session,
+        "act",
+        json!({"verb": "create", "kind": "locker item", "args": "name: Gym combo\ntype: note\nnotes: 12-34-56"}),
+    );
+    assert!(
+        created["text"].as_str().unwrap().contains("sealed"),
+        "the refusal says the notes are sealed: {created}"
+    );
+    let log = log.lock().unwrap();
+    assert!(log.commands.is_empty(), "nothing ran: {:?}", log.commands);
+    assert_eq!(log.seals, 0);
 }
 
 #[test]
@@ -312,266 +544,48 @@ fn the_decline_is_the_models_own_decline_observation() {
     );
 }
 
+/// Every byte the model receives about the Locker, searched for a planted secret and for its
+/// ciphertext: the pre-grounded block of a turn, every tool result, the prompt and its directory.
 #[test]
-fn with_the_locker_off_a_world_without_one_behaves_exactly_as_with_it_on() {
-    let on_world = without_locker();
-    let off_world = without_locker();
-    let on = script(&mut on_world.session_with(TODAY, flags(true)));
-    let off = script(&mut off_world.session_with(TODAY, flags(false)));
-    assert_eq!(on.len(), off.len());
-    for (index, (on, off)) in on.iter().zip(&off).enumerate() {
-        assert_eq!(on, off, "call {index} differs");
-    }
-    assert!(
-        on.iter()
-            .any(|response| response["effect"]["diff"].is_array()
-                || response["effect"].get("rows").is_some()),
-        "the script reads and writes"
-    );
-}
-
-#[test]
-fn the_locker_policy_hides_only_the_locker_rows_of_a_world_that_has_them() {
-    // one world each: the script writes
-    let (off_world, on_world) = (seeded(), seeded());
-    let off = script(&mut off_world.session_with(TODAY, flags(false)));
-    let on = script(&mut on_world.session_with(TODAY, flags(true)));
-    // the ordinary reads see the same tasks and notes either way (the `#n` shift is the Locker
-    // rows the policy leaves out of the numbering)
-    let ids = |response: &Value| -> Vec<(String, String)> {
-        response["effect"]["rows"]
-            .as_array()
-            .expect("rows")
-            .iter()
-            .map(|row| {
-                (
-                    row["kind"].as_str().unwrap_or_default().to_owned(),
-                    row["id"].as_str().unwrap_or_default().to_owned(),
-                )
-            })
-            .collect()
-    };
-    for index in [0, 6] {
-        assert_eq!(ids(&on[index]), ids(&off[index]), "call {index}");
-    }
-}
-
-/// A LOCKER ITEM IS AN ENTITY, AND THE SESSION NEVER SEES ONE (the Locker lane, L4): with the
-/// policy off, no response names an item, its title, the tag the owner put on it, the star it
-/// carries or the note that links it, however the model asks. The owner's own commands put those
-/// rows in the vault; the runtime's world holds none of them, and the numbering it hands the model
-/// has no gap where an item would have been.
-#[test]
-fn with_the_locker_off_no_response_names_an_item_its_tag_its_star_or_its_edges() {
+fn no_sealed_plaintext_or_ciphertext_reaches_the_model_in_any_byte() {
     let world = seeded();
-    let ids = {
-        let now = dates::parse_now(TODAY).expect("a date");
-        let owner = Handle::open(
-            world.path(),
-            SetClock::at(vaultio::millis_of(now)),
-            "locker-off-owner",
-        )
-        .expect("the vault opens");
-        let item = owner
-            .table_where(
-                "entity",
-                "id, title",
-                "id",
-                "id",
-                "kind = ?",
-                &["locker_item".to_owned()],
-            )
-            .expect("the owner reads")
-            .into_iter()
-            .filter_map(|row| match row.get("id") {
-                Some(centraid_apps_kit::row::Cell::Text(id)) => Some(id.clone()),
-                _ => None,
-            })
-            .collect::<Vec<_>>();
-        assert_eq!(item.len(), 2, "the fixture holds two Locker items");
-        let note = owner
-            .table_where("entity", "id", "id", "id", "kind = ?", &["note".to_owned()])
-            .expect("the owner reads")
-            .first()
-            .and_then(|row| match row.get("id") {
-                Some(centraid_apps_kit::row::Cell::Text(id)) => Some(id.clone()),
-                _ => None,
-            })
-            .expect("the fixture holds a note");
-        for id in &item {
-            owner
-                .must("tag.add", json!({"id": id, "label": "vaultonlytag"}))
-                .expect("tagged");
-        }
-        owner
-            .must(
-                "edge.add",
-                json!({"from": note, "rel": "links", "to": item[0]}),
-            )
-            .expect("linked");
-        item
-    };
-
-    let (mut session, log) = recorded(&world, false);
-    let mut seen = String::new();
-    for (tool, args) in [
-        ("find", json!({"kind": "note"})),
-        ("find", json!({"kind": "task"})),
-        ("find", json!({"kind": "person"})),
-        ("search", json!({"text": "wifi"})),
-        ("search", json!({"text": "bank"})),
-        ("compute", json!({"kind": "note", "op": "count"})),
+    let mut session = world.session_with(TODAY, flags(false));
+    let mut received = String::new();
+    for message in [
+        "what is the password for the wifi",
+        "show me the bank login and its password",
     ] {
-        session.user("what do I have about the bank and the wifi");
-        seen.push_str(&call(&mut session, tool, args).to_string());
-    }
-    for hidden in ["Home wifi", "Bank login", "vaultonlytag", "locker_item"] {
-        assert!(
-            !seen.contains(hidden),
-            "a response carried `{hidden}`: {seen}"
+        received.push_str(&session.user(message).to_string());
+        for (tool, args) in [
+            ("find", json!({"kind": "locker item"})),
+            ("find", json!({"kind": "locker item", "name": "bank"})),
+            ("search", json!({"text": "bank"})),
+            ("search", json!({"text": "wifi"})),
+            ("compute", json!({"kind": "locker item", "op": "count"})),
+        ] {
+            received.push_str(&call(&mut session, tool, args).to_string());
+        }
+        let n = common::find_in_turn(&mut session, "locker item", "bank");
+        received.push_str(&call(&mut session, "open", json!({"row": n})).to_string());
+        received.push_str(
+            &call(
+                &mut session,
+                "act",
+                json!({"verb": "reveal", "rows": n, "args": "field: password"}),
+            )
+            .to_string(),
         );
     }
-    for id in &ids {
-        assert!(
-            !seen.contains(id.as_str()),
-            "a response carried the id {id}"
-        );
-    }
-    assert_eq!(locker_reads(&log.lock().unwrap()), Vec::<String>::new());
-}
-
-// ---------------------------------------------------------------------------
-// The search door the assistant reads through never answers a Locker item (#1135).
-//
-// The vault's one index holds a Locker item by its plain text, so an owner's
-// search finds `Home wifi`; the assistant's principal is refused the kind by name
-// and its unnamed-kind searches leave it out, whether the policy is on or off.
-// ---------------------------------------------------------------------------
-
-fn handle_of(world: &World) -> Handle {
-    let now = dates::parse_now(TODAY).expect("a date");
-    Handle::open(
-        world.path(),
-        SetClock::at(vaultio::millis_of(now)),
-        "locker-search",
-    )
-    .expect("the vault opens")
-}
-
-#[test]
-fn the_assistants_door_never_returns_a_locker_item_from_search_or_query_each() {
-    use centraid_search::{EachRequest, Principal, Search as _, SearchRequest, SqliteDoor};
-    let world = seeded();
-    let handle = handle_of(&world);
-
-    // THE CONTROL: the owner's door finds the item by its plain title, by name and
-    // by asking for every kind, so the silence below is the principal's.
-    let owner_sees = |kinds: Vec<String>| -> Vec<String> {
-        handle
-            .vault
-            .read(|connection| {
-                let door = SqliteDoor::open(connection, handle.vault.words()).expect("a door");
-                Ok(door
-                    .query_each(&Principal::Owner, &EachRequest::new(kinds, "wifi", 8))
-                    .expect("answers")
-                    .into_iter()
-                    .map(|target| target.entity)
-                    .collect())
-            })
-            .expect("reads")
-    };
+    received.push_str(&session.prompt().to_string());
     assert!(
-        owner_sees(vec!["locker_item".to_owned()]).contains(&"locker_item".to_owned()),
-        "the owner's door does not find the Locker item, so this test proves nothing"
+        received.contains("Bank login"),
+        "the items are in what the model receives"
     );
-    assert!(owner_sees(Vec::new()).contains(&"locker_item".to_owned()));
-
-    // THE ASSISTANT'S DOOR (`Door::search`, as the `search` tool asks it): the kind
-    // is refused by name, whatever the text.
-    for text in ["wifi", "Home wifi", "home"] {
+    for planted in PLANTED {
         assert!(
-            handle.search("locker_item", text, 50).is_err(),
-            "a Locker kind was searched for `{text}`"
+            !received.contains(planted),
+            "a planted sealed value reached the model: `{planted}`"
         );
     }
-    // Every kind it may name answers, and no answer holds a Locker item.
-    for entity in ["person", "note", "event", "task", "document"] {
-        let found = handle.search(entity, "wifi", 50).expect("answers");
-        assert!(found.iter().all(|target| target.entity != "locker_item"));
-    }
-
-    // `query_each` and `query`, under the assistant's principal: naming Locker is
-    // refused (alone or beside another kind), naming nothing leaves it out.
-    handle
-        .vault
-        .read(|connection| {
-            let door = SqliteDoor::open(connection, handle.vault.words()).expect("a door");
-            for kinds in [
-                vec!["locker_item".to_owned()],
-                vec!["note".to_owned(), "locker_item".to_owned()],
-            ] {
-                assert!(
-                    door.query_each(
-                        &Principal::Assistant,
-                        &EachRequest::new(kinds.clone(), "wifi", 8)
-                    )
-                    .is_err(),
-                    "query_each named Locker: {kinds:?}"
-                );
-                let request = SearchRequest::across(kinds, "wifi", 8);
-                assert!(door.query(&Principal::Assistant, &request).is_err());
-            }
-            let each = door
-                .query_each(
-                    &Principal::Assistant,
-                    &EachRequest::new(Vec::new(), "wifi", 8),
-                )
-                .expect("answers");
-            assert!(
-                each.iter().all(|target| target.entity != "locker_item"),
-                "{each:?}"
-            );
-            let any = door
-                .query(
-                    &Principal::Assistant,
-                    &SearchRequest::across(Vec::<String>::new(), "wifi", 8),
-                )
-                .expect("answers");
-            assert!(
-                any.targets()
-                    .unwrap_or_default()
-                    .iter()
-                    .all(|target| target.entity != "locker_item")
-            );
-            // The correction offers the assistant nothing for a Locker kind either.
-            assert!(
-                door.correct(&Principal::Assistant, &["locker_item"], "wifj")
-                    .is_err()
-            );
-            Ok(())
-        })
-        .expect("reads");
-}
-
-#[test]
-fn a_search_tool_call_asks_no_locker_kind_and_returns_no_locker_row_from_the_index() {
-    // The policy is on or off: the `search` tool's full-text leg asks the door
-    // for the kinds it lists, and never a Locker one (the recording door sees it).
-    for locker in [false, true] {
-        let world = seeded();
-        let (mut session, log) = recorded(&world, locker);
-        session.user("anything about the wifi");
-        call(&mut session, "search", json!({"text": "wifi"}));
-        call(&mut session, "search", json!({"text": "home"}));
-        let log = log.lock().unwrap();
-        assert!(
-            !log.searches.is_empty(),
-            "the full-text leg was never asked"
-        );
-        assert!(
-            log.searches.iter().all(|entity| !entity.contains("locker")),
-            "locker={locker}: {:?}",
-            log.searches
-        );
-    }
+    assert!(!received.contains("lk1:"), "a ciphertext reached the model");
 }

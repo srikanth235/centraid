@@ -1801,5 +1801,10 @@
     "tool": "act",
     "argument": "rows",
     "why_none": "needs an event the vault repeats (a series read as its occurrences, World::read_event_window); the fixture world has none and no call makes one, so tests/events_local.rs drives it"
+  },
+  "act.field_is_a_sealed_value_which": {
+    "tool": "act",
+    "argument": "args",
+    "why_none": "needs a session with the secrets off (Flags::secrets, the phone); every example runs the harness session, which holds the key, so tests/locker_parity.rs drives it"
   }
 }

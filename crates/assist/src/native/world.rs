@@ -302,11 +302,11 @@ impl World {
         Self::load_with(door, true)
     }
 
-    /// Load everything. With `locker` false (`Flags::locker`) no Locker table and no sealed
-    /// column is read, and the world holds no Locker item. Events are read as stored. The recent
-    /// transactions are read (`Flags::money`, on).
-    pub fn load_with(door: &dyn Door, locker: bool) -> Result<Self, String> {
-        Self::load_in(door, locker, true, None)
+    /// Load everything. With `secrets` false (`Flags::secrets`) no sealed column is read: a
+    /// Locker item is in the world by its plain rows, and each sealed cell it holds is a presence
+    /// bit. Events are read as stored. The recent transactions are read (`Flags::money`, on).
+    pub fn load_with(door: &dyn Door, secrets: bool) -> Result<Self, String> {
+        Self::load_in(door, secrets, true, None)
     }
 
     /// Load everything, the events of the days around `at.today` read in the zone `at.tz` with
@@ -319,7 +319,7 @@ impl World {
     /// Nothing is read from the journal, and a container's kind is the container's own.
     pub fn load_in(
         door: &dyn Door,
-        locker: bool,
+        secrets: bool,
         money: bool,
         at: Option<&Standing>,
     ) -> Result<Self, String> {
@@ -338,9 +338,7 @@ impl World {
         world.load_notes(door, &flags)?;
         world.load_containers(door)?;
         world.load_documents(door, &flags)?;
-        if locker {
-            world.load_locker(door, &flags)?;
-        }
+        world.load_locker(door, &flags, secrets)?;
         if money {
             world.load_transactions(door, at)?;
         }
@@ -887,20 +885,35 @@ impl World {
         Ok(())
     }
 
-    /// The Locker items, read as the harness's Locker-on mode reads them (`Flags::locker`; the
-    /// chat on the phone holds no Locker, R-1088-3): the item's entity row (its title, stamps and
-    /// trash) beside its kind row, with its sealed cells for `reveal`, and its star from the
-    /// flags every kind shares.
-    fn load_locker(&mut self, door: &dyn Door, flags: &Flags) -> Result<(), String> {
+    /// The Locker items, read as the owner reads them but for their sealed values: the item's
+    /// entity row (its title, stamps and trash) beside its kind row, and its star from the flags
+    /// every kind shares. With `secrets` (`Flags::secrets`, the harness) the sealed cells are
+    /// read too, for `reveal`; without it (the phone) they are `PRESENT` where the item holds one,
+    /// read as `<cell> IS NOT NULL` and never as a value (the owner's ruling of 2026-10-22).
+    fn load_locker(&mut self, door: &dyn Door, flags: &Flags, secrets: bool) -> Result<(), String> {
         let entities = entities(door, "locker_item")?;
-        let items = door.table(
-            "locker_item",
-            "id, type, username, url, notes, key_id, password, otp_seed, card_number, cvv, \
-             content, cardholder, expiry, brand, fullname, email, phone, address, network",
-            "id",
-            "id",
-        )?;
+        let plain = "id, type, username, url, notes, key_id, cardholder, expiry, brand, fullname, \
+                     email, phone, address, network";
+        let sealed = if secrets {
+            "password, otp_seed, card_number, cvv, content".to_owned()
+        } else {
+            "password IS NOT NULL AS has_password, otp_seed IS NOT NULL AS has_otp_seed, \
+             card_number IS NOT NULL AS has_card_number, cvv IS NOT NULL AS has_cvv, \
+             content IS NOT NULL AS has_content"
+                .to_owned()
+        };
+        let items = door.table("locker_item", &format!("{plain}, {sealed}"), "id", "id")?;
         let spec = Kind::LockerItem.spec();
+        // A sealed cell as the world holds it: its ciphertext under `secrets`, the vault's
+        // placeholder ("a secret is here, leave it alone") on the presence bit without.
+        let held = |item: &VaultRow, column: &str| -> Option<String> {
+            if secrets {
+                text(item, column)
+            } else {
+                (int(item, &format!("has_{column}")) == Some(1))
+                    .then(|| centraid_vault::commands::locker::SEALED_PLACEHOLDER.to_owned())
+            }
+        };
         for item in &items {
             let id = text(item, "id").unwrap_or_default();
             let Some(entity) = entities.get(&id) else {
@@ -919,7 +932,7 @@ impl World {
             put(&mut fields, "notes", nonempty(text(item, "notes")));
             // A NOTE ITEM'S NOTES ARE ITS SEALED `content`: the row says it
             // has them, and `reveal field: notes` opens them.
-            if kind == "note" && nonempty(text(item, "content")).is_some() {
+            if kind == "note" && nonempty(held(item, "content")).is_some() {
                 fields.insert("notes", Val::Text(SEALED.to_owned()));
             }
             fields.insert("starred", Val::Bool(flags.starred.contains(&id)));
@@ -931,7 +944,7 @@ impl World {
                 extra.insert("purge_at", purge);
             }
             for (_, column) in crate::native::meta::REVEAL_FIELDS {
-                if let Some(sealed) = text(item, column) {
+                if let Some(sealed) = held(item, column) {
                     extra.insert(column, sealed);
                 }
             }

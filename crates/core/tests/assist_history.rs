@@ -675,9 +675,14 @@ fn a_card_whose_row_is_gone_says_so_at_the_tap() {
     };
     assert!(ask(&card.app, &card.entity, &card.id), "the row is there");
     assert!(!ask(&card.app, &card.entity, "a-row-that-was-deleted"));
+    // A Locker item's card is live while the item is, and a card cannot name Health.
     assert!(
-        !ask("locker", "item", &card.id),
-        "locker is never a card's app"
+        !ask("locker", "locker_item", "a-row-that-was-deleted"),
+        "a Locker card is live only while its item is"
+    );
+    assert!(
+        !ask("health", &card.entity, &card.id),
+        "health is never a card's app"
     );
 }
 

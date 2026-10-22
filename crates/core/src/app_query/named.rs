@@ -26,8 +26,7 @@ pub(super) const CONTAINER_ROWS: usize = 8;
 /// containers and the chat threads.
 const NAMED: &[&str] = &["notebook", "album", "project", "folder", "thread"];
 
-/// The app a Locker item opens in: on no roster (the assistant's cards never name it), so it is
-/// spelled here and the test below holds the exception.
+/// The app a Locker item opens in: a roster card domain and no chat scope.
 const LOCKER: &str = "locker";
 
 /// The app id a Home hit for a thread is answered under: the Chat tab is no app (it is not on
@@ -119,22 +118,19 @@ mod tests {
     use super::*;
 
     #[test]
-    fn every_app_a_kind_opens_in_is_on_the_roster_but_the_chat_tab_and_locker() {
+    fn every_app_a_kind_opens_in_is_on_the_roster_but_the_chat_tab() {
         for kind in centraid_vault::model::Kind::ALL {
             let app = app_of(kind.as_str());
             assert!(
-                app.is_empty()
-                    || app == CHAT
-                    || app == LOCKER
-                    || centraid_vault::roster::is_card_app(app),
+                app.is_empty() || app == CHAT || centraid_vault::roster::is_card_app(app),
                 "{kind:?} opens in `{app}`, which the roster does not know"
             );
         }
-        // Locker is on no roster by design (a secret is never in a prompt), yet its
-        // items are a hit Home draws and opens in Locker (#1135).
+        // Locker is a card domain (the owner's ruling of 2026-10-22), and no chat scope.
         assert!(
-            !centraid_vault::roster::is_card_app(LOCKER),
-            "Locker is no app a card names"
+            centraid_vault::roster::is_card_app(LOCKER)
+                && !centraid_vault::roster::is_scope(LOCKER),
+            "Locker is an app a card names and no scope"
         );
         assert!(
             !centraid_vault::roster::is_card_app(CHAT),
