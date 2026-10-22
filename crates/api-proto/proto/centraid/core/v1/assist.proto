@@ -535,6 +535,10 @@ enum AssistSettleOutcome {
   // No such card is waiting: it was answered, dismissed, replaced by a new
   // message, or never made.
   ASSIST_SETTLE_OUTCOME_NOTHING_WAITING = 5;
+  // The write seals a secret the member typed and Locker is locked: nothing
+  // ran and the card is still waiting. The shell opens Locker's unlock and
+  // sends the same confirm again.
+  ASSIST_SETTLE_OUTCOME_LOCKER_LOCKED = 6;
 }
 
 message AssistSettled {
