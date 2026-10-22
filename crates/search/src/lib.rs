@@ -11,10 +11,13 @@
 //!
 //! A read joins `entity` on `n` for the kind and the trash filter, so a result
 //! is an entity's id, kind and title and nothing else: **a result can carry no
-//! secret** because the index holds none. Locker is not an entity and is not in
-//! the index, so asking for it is a typed [`SearchError::NotSearchable`], never
-//! an empty page (an empty page reads as "no matches", which is a different
-//! claim about the vault).
+//! secret** because the index holds none: a Locker item is in it by its plain
+//! text only (never a sealed cell, a sealed field's value or a passkey's key),
+//! whether or not Locker is locked, and the word list is one list for every
+//! reader. The assistant's principal ([`Principal::Assistant`]) is refused the
+//! kind by name, so asking for it is a typed [`SearchError::NotSearchable`],
+//! never an empty page (an empty page reads as "no matches", which is a
+//! different claim about the vault).
 //!
 //! | Promise | What enforces it |
 //! |---|---|
@@ -25,6 +28,7 @@
 //! | One letter is not a search | A query whose words are all one character is [`SearchError::NoSearchableWords`], the empty term's answer on every surface ([`matching`]) |
 //! | A denial is a VALUE | [`Answer`] is `Denied` or `Data`, never an `Err` |
 //! | A bound reports the size it reaches | [`SearchRequest::page`] is clamped by [`MAX_MATCH_ROWS`] and [`Answer::window`] says what it actually was |
+//! | The assistant never reaches Locker | [`Principal::may_search_locker`]: `kinds_of` refuses `locker_item` by name to any caller but the owner and leaves it out of an unnamed kind list (`query` and `query_each`); `crates/nativetools/tests/locker_off.rs` |
 //! | A correction is a lookup, not a guess | [`Search::correct`] replaces a word by one whole word of the vault's word list, ranked by the documents that hold it |
 //!
 //! ## What this crate is NOT

@@ -203,9 +203,11 @@ message LockerPasskey {
   string created_local_day = 7;
 }
 
-// `locker.search` (62): title, username and address (the handoff's three) and,
-// since #1097, the note, full name, email, phone, card brand, aliases and memo.
-// Never a sealed cell. Live and archived items; trashed ones are not found.
+// `locker.search` (62): the vault's one full-text index asked for Locker's items
+// (#1135), by word, whether or not Locker is locked. It matches the title,
+// username, addresses, note, full name, email, phone, card brand, aliases, memo
+// and tags — never a sealed cell, a sealed field's value or a passkey's key.
+// Live and archived items, best match first; trashed ones are not found.
 message LockerSearchRequest {
   string term = 1;
   // At most this many rows; 0 is 50.
