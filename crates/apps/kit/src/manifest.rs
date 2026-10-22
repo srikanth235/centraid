@@ -81,8 +81,8 @@ pub enum Confirmation {
 }
 
 /// The chat verbs, committed as data: each verb's argument line and past
-/// tense, and whether the assistant's runtime executes it yet (`live`). The
-/// assistant's `build.rs` reads the same file.
+/// tense. Whether the runtime executes a verb is not written here: a verb is
+/// live when an action backs it. The assistant's `build.rs` reads the same file.
 pub const CHAT_VERBS_JSON: &str = include_str!("../../../../contracts/assist/verbs.json");
 
 /// The names in [`CHAT_VERBS_JSON`], in its order.
