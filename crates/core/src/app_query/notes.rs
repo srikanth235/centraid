@@ -822,6 +822,81 @@ mod tests {
         assert!(nothing.hits.is_empty() && nothing.corrected.is_empty());
     }
 
+    /// A TYPO THAT IS IN THE VAULT TOO: one note says `budegt` and five say
+    /// `budget`. The exact words find the one note; because that is a thin
+    /// answer and `budegt` is a whole word held by one document where `budget`
+    /// holds five, the five follow it, and the words are reported. A word still
+    /// being typed (`budg`) is held only as the start of `budget`: it is never
+    /// corrected, however few rows it found.
+    #[test]
+    fn a_rare_word_is_followed_by_the_neighbour_that_most_notes_say() {
+        let scratch = Scratch::founded();
+        let note = |title: &str, body: &str| {
+            scratch.run(
+                "note.create",
+                serde_json::json!({ "title": title, "body": body }),
+            )["id"]
+                .as_str()
+                .expect("a note id")
+                .to_owned()
+        };
+        let own = note("Odd one", "the budegt is late");
+        let others: Vec<String> = (0..5)
+            .map(|index| note(&format!("Plan {index}"), "the budget is fine"))
+            .collect();
+        let search = |term: &str| {
+            let Ok(Answer::NotesSearch(found)) =
+                scratch.ask(Q::NotesSearch(wire::NotesSearchRequest {
+                    term: term.to_owned(),
+                    tz: TZ.to_owned(),
+                }))
+            else {
+                panic!("search answers");
+            };
+            found
+        };
+        let found = search("budegt");
+        let hits: Vec<&str> = found.hits.iter().map(|hit| hit.note_id.as_str()).collect();
+        assert_eq!(hits.len(), 6, "{hits:?}");
+        assert_eq!(hits[0], own, "the exact row is first");
+        for other in &others {
+            assert!(hits.contains(&other.as_str()));
+        }
+        assert_eq!(found.corrected, "budget");
+        // Five notes hold `budget`: a full answer, never corrected, and a prefix.
+        let exact = search("budget");
+        assert_eq!(exact.hits.len(), 5);
+        assert!(exact.corrected.is_empty());
+        let typing = search("budg");
+        assert_eq!(typing.hits.len(), 5);
+        assert!(typing.corrected.is_empty());
+    }
+
+    #[test]
+    fn a_word_still_being_typed_is_not_corrected_on_a_thin_answer() {
+        let scratch = Scratch::founded();
+        for index in 0..2 {
+            scratch.run(
+                "note.create",
+                serde_json::json!({ "title": format!("Plan {index}"), "body": "the budget is fine" }),
+            );
+        }
+        scratch.run(
+            "note.create",
+            serde_json::json!({ "title": "Other", "body": "a budgie sings" }),
+        );
+        let Ok(Answer::NotesSearch(found)) =
+            scratch.ask(Q::NotesSearch(wire::NotesSearchRequest {
+                term: "budg".to_owned(),
+                tz: TZ.to_owned(),
+            }))
+        else {
+            panic!("search answers");
+        };
+        assert_eq!(found.hits.len(), 3);
+        assert!(found.corrected.is_empty());
+    }
+
     /// TRASH IS ITS OWN SHELF: a deleted note leaves the library and the search
     /// and lands on `trash` with its purge date; the notebook spine counts only
     /// the live one.

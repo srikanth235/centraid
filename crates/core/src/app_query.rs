@@ -396,6 +396,19 @@ impl centraid_search::Search for RecordingSearch<'_, '_> {
             .inspect_err(|error| self.keep(error))
     }
 
+    /// **FORWARDED, because the trait's default is `correct`, which a door that
+    /// wraps another cannot reach.**
+    fn correct_thin(
+        &self,
+        principal: &centraid_search::Principal,
+        entities: &[&str],
+        query: &str,
+    ) -> std::result::Result<Option<String>, centraid_search::SearchError> {
+        self.inner
+            .correct_thin(principal, entities, query)
+            .inspect_err(|error| self.keep(error))
+    }
+
     /// **FORWARDED, because the trait's default is `Ok(None)`.** A recorder that
     /// only wrapped `query` would silently correct nothing for every caller in
     /// this crate; the failure is kept the way `query`'s is.
@@ -459,7 +472,7 @@ type Corrected<T> = ((T, String), Option<centraid_apps_kit::Denial>);
 /// that note and by the others the slip would have found; a member who has none
 /// is served by the others alone. Three is the least that reads as a list rather
 /// than as the one thing that happened to match.
-const FILL_BELOW: usize = 3;
+const FILL_BELOW: usize = centraid_search::THIN_ANSWER;
 
 /// THE CORRECTION PASS, once for every surface the full-text door answers.
 ///
@@ -467,7 +480,11 @@ const FILL_BELOW: usize = 3;
 /// answer holds; `fill` joins the exact answer and the corrected one. The exact
 /// term runs first. **Only when that answer is thin (fewer than [`FILL_BELOW`]
 /// rows) and carries no denial** does the door correct the term against the
-/// vocabulary of `entities` (the domains the surface is about to search again).
+/// vocabulary of `entities` (the domains the surface is about to search again):
+/// for an empty answer a word the vault holds is kept; for one or two rows
+/// the door's filled pass also corrects a typed word that is a whole word held by
+/// fewer than three documents when a neighbour holds more
+/// ([`centraid_search::Search::correct_thin`]).
 /// With a correction the surface runs again, and `fill(exact, corrected)` answers
 /// the exact rows FIRST and then the corrected rows that are not among them, up
 /// to the surface's window. The corrected words are reported **only if they added
@@ -494,7 +511,15 @@ fn corrected_search<T>(
     if denial.is_some() || rows(&exact) >= FILL_BELOW || term.trim().is_empty() {
         return Ok(((exact, String::new()), denial));
     }
-    let Ok(Some(words)) = search.correct(&centraid_search::Principal::Owner, entities, term) else {
+    // An empty answer is corrected as ever: a word the vault holds is kept. A thin
+    // one found its words, so only the door's filled pass may correct a rare one.
+    let principal = centraid_search::Principal::Owner;
+    let corrected = if rows(&exact) == 0 {
+        search.correct(&principal, entities, term)
+    } else {
+        search.correct_thin(&principal, entities, term)
+    };
+    let Ok(Some(words)) = corrected else {
         return Ok(((exact, String::new()), None));
     };
     let (again, denial) = run(&words)?;

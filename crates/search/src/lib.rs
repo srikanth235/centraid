@@ -52,6 +52,11 @@ use centraid_apps_kit::page::{Page, PageRequest};
 /// than a smaller bound (D-1020-D3-12).
 pub const MAX_MATCH_ROWS: usize = 1_000;
 
+/// An answer with fewer rows than this is thin: a caller fills it from the
+/// corrected words ([`Search::correct_thin`]), and a word held by fewer documents
+/// than this is a rare one that a filled pass may correct.
+pub const THIN_ANSWER: usize = 3;
+
 /// WHO IS ASKING. The door does not invent one.
 ///
 /// A search is a read, and a read is authorised against a caller. `Owner` is the
@@ -283,10 +288,10 @@ pub trait Search {
     /// The query with its mistyped words replaced by the words the vault holds,
     /// or `None` when no word changed.
     ///
-    /// **A caller runs this only when its exact answer was thin** (fewer than
-    /// three rows, `corrected_search` in `crates/core`), then runs
-    /// [`Search::query`] again with the words it returned and says what it
-    /// included. It is a correction and never a wider match: a word some word of
+    /// **A caller runs this when its exact answer was empty** (`corrected_search`
+    /// in `crates/core`; for one or two rows it runs [`Search::correct_thin`]),
+    /// then runs [`Search::query`] again with the words it returned and says what
+    /// it included. It is a correction and never a wider match: a word some word of
     /// the vault starts with is kept, a word of fewer than four letters or with a
     /// digit is kept, and the replacement is always one whole word of the vault's
     /// word list, chosen by [`centraid_apps_kit::spelling::near_words`] (one edit
@@ -315,6 +320,31 @@ pub trait Search {
     ) -> Result<Option<String>, SearchError> {
         let _ = (principal, entities, query);
         Ok(None)
+    }
+
+    /// The correction for a THIN, NON-EMPTY exact answer (one or two rows), where
+    /// [`Search::correct`] would keep every word because the answer found it.
+    ///
+    /// A typed word that is a whole word of the vault held by fewer than
+    /// [`THIN_ANSWER`] documents is corrected when a candidate holds more
+    /// documents than it does: a typo that is itself in one note (`budegt`) is
+    /// followed by the five notes that say `budget`. A word held only as the start
+    /// of longer words, one still being typed (`budg`), is never corrected here.
+    /// Words the vault does not hold are corrected as `correct` does.
+    ///
+    /// The default is `correct`, so a door that wraps another or a test double
+    /// answers as it did; a door that wraps another has to forward this too.
+    ///
+    /// # Errors
+    ///
+    /// As `correct`.
+    fn correct_thin(
+        &self,
+        principal: &Principal,
+        entities: &[&str],
+        query: &str,
+    ) -> Result<Option<String>, SearchError> {
+        self.correct(principal, entities, query)
     }
 }
 

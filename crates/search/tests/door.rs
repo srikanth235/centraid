@@ -734,3 +734,56 @@ fn a_word_no_document_holds_any_more_is_not_a_correction() {
     // The word list keeps `budget` after its only document left the index.
     assert_eq!(world.correct("budegt"), None);
 }
+
+// -- the filled pass ---------------------------------------------------------------
+
+impl World {
+    fn correct_thin(&self, query: &str) -> Option<String> {
+        self.vault
+            .read(|connection| {
+                Ok(SqliteDoor::open(connection, self.vault.words())
+                    .and_then(|door| door.correct_thin(&Principal::Owner, &[], query))
+                    .expect("corrects"))
+            })
+            .expect("reads")
+    }
+}
+
+#[test]
+fn a_rare_whole_word_is_corrected_on_a_filled_pass_when_a_neighbour_holds_more() {
+    let world = World::new();
+    world.note("own", "Odd", "the budegt is late");
+    world.notes("n", 5, "Plan", "the budget is fine");
+    assert_eq!(
+        world.correct("budegt"),
+        None,
+        "the empty pass keeps a held word"
+    );
+    assert_eq!(world.correct_thin("budegt").as_deref(), Some("budget"));
+    // The word that most documents hold is never the one corrected.
+    assert_eq!(world.correct_thin("budget"), None);
+    // Still being typed: held only as the start of `budget`.
+    assert_eq!(world.correct_thin("budg"), None);
+}
+
+#[test]
+fn a_filled_pass_needs_fewer_than_three_documents_and_a_neighbour_with_more() {
+    let world = World::new();
+    world.notes("a", 3, "One", "budegt");
+    world.notes("b", 5, "Two", "budget");
+    assert_eq!(
+        world.correct_thin("budegt"),
+        None,
+        "three documents is not rare"
+    );
+    let even = World::new();
+    even.note("c1", "One", "budegt");
+    even.note("c2", "Two", "budget");
+    assert_eq!(
+        even.correct_thin("budegt"),
+        None,
+        "one is not more than one"
+    );
+    // A word the vault does not hold is corrected as on any pass.
+    assert_eq!(even.correct_thin("bidget").as_deref(), Some("budget"));
+}

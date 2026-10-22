@@ -82,7 +82,8 @@ use rusqlite::{Connection, OptionalExtension};
 use crate::matching::{match_expression, title_expression};
 use crate::snippet::snippet_of;
 use crate::{
-    Answer, EachRequest, MAX_MATCH_ROWS, Principal, Search, SearchError, SearchRequest, Target,
+    Answer, EachRequest, MAX_MATCH_ROWS, Principal, Search, SearchError, SearchRequest,
+    THIN_ANSWER, Target,
 };
 
 /// The rank function the query carries: a word in a title weighs twice a word
@@ -320,10 +321,17 @@ impl SqliteDoor<'_> {
     /// word list; a caller that must not offer a word from somewhere (a secret
     /// store whose words are not for every surface) passes the filter that
     /// keeps the words it may. [`Search::correct`] keeps them all.
+    ///
+    /// `filling` is the pass over a thin, non-empty exact answer ([`Search::correct_thin`]):
+    /// there a word the vault holds as a whole word in fewer than [`THIN_ANSWER`]
+    /// documents is corrected too, when a candidate holds more documents than it.
+    /// A word held only as the start of longer words (still being typed) is never
+    /// corrected on that pass.
     fn corrected(
         &self,
         query: &str,
         in_realm: &dyn Fn(&str) -> bool,
+        filling: bool,
     ) -> Result<Option<String>, SearchError> {
         // Read on the first word that needs it: a query of words that cannot be
         // corrected never asks for the list.
@@ -344,16 +352,39 @@ impl SqliteDoor<'_> {
                     .filter(|word| in_realm(word))
             };
             if is_known(folded, held()) {
-                return Ok(None);
+                if !filling {
+                    return Ok(None);
+                }
+                // A whole word of the vault with few documents: the exact rows
+                // are what the typed word found, and a neighbour with more may
+                // be the word that was meant. Zero documents is not a whole word.
+                let own = self.docs_of(folded)?;
+                if own == 0 || own >= THIN_ANSWER as u64 {
+                    return Ok(None);
+                }
+                return self.best_of(near_words(folded, held()), own);
             }
-            self.best_of(near_words(folded, held()))
+            self.best_of(near_words(folded, held()), 0)
         })
+    }
+
+    /// The documents that hold the whole word `term`; 0 when it is none.
+    fn docs_of(&self, term: &str) -> Result<u64, SearchError> {
+        let docs: Option<i64> = self
+            .connection
+            .prepare_cached("SELECT doc FROM search_vocab WHERE term = ?1")
+            .map_err(|error| unusable(&error))?
+            .query_row([term], |row| row.get(0))
+            .optional()
+            .map_err(|error| SearchError::Sqlite(error.to_string()))?;
+        Ok(u64::try_from(docs.unwrap_or(0)).unwrap_or(0))
     }
 
     /// The candidate the most documents hold, then the shorter, then the one
     /// that sorts first ([`rank_order`]). A word the index lists but no document
-    /// holds any more is not a correction: searching it finds nothing.
-    fn best_of(&self, candidates: Vec<&str>) -> Result<Option<String>, SearchError> {
+    /// holds any more is not a correction: searching it finds nothing. Only a
+    /// candidate with more than `beat` documents counts.
+    fn best_of(&self, candidates: Vec<&str>, beat: u64) -> Result<Option<String>, SearchError> {
         if candidates.is_empty() {
             return Ok(None);
         }
@@ -368,7 +399,7 @@ impl SqliteDoor<'_> {
                 .optional()
                 .map_err(|error| SearchError::Sqlite(error.to_string()))?;
             let docs = u64::try_from(docs.unwrap_or(0)).unwrap_or(0);
-            if docs > 0
+            if docs > beat
                 && best.is_none_or(|held| {
                     rank_order((candidate, docs), held) == std::cmp::Ordering::Less
                 })
@@ -513,7 +544,23 @@ impl Search for SqliteDoor<'_> {
                 .collect::<Vec<_>>(),
         )?;
         let _ = principal;
-        self.corrected(query, &|_| true)
+        self.corrected(query, &|_| true, false)
+    }
+
+    fn correct_thin(
+        &self,
+        principal: &Principal,
+        entities: &[&str],
+        query: &str,
+    ) -> Result<Option<String>, SearchError> {
+        kinds_of(
+            &entities
+                .iter()
+                .map(|word| (*word).to_owned())
+                .collect::<Vec<_>>(),
+        )?;
+        let _ = principal;
+        self.corrected(query, &|_| true, true)
     }
 }
 
