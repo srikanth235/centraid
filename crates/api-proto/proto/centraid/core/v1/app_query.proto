@@ -96,7 +96,7 @@ message AppQueryRequest {
     ChatThreadsRequest chat_threads = 70;
     ChatThreadRequest chat_thread = 71;
     ChatCardRequest chat_card = 72;
-    // Home (R-CHROME-6): 80. Every app's search domain but Locker's.
+    // Home (R-CHROME-6): 80. Every app's search domain, Locker's included.
     VaultSearchRequest vault_search = 80;
     // Photos' own search (#1097, R-1097-25..27): 90.
     PhotosSearchRequest photos_search = 90;

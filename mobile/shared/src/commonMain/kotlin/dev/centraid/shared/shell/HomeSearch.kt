@@ -37,12 +37,14 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 /**
- * HOME'S SEARCH (R-CHROME-6): one field over every app but Locker, the answer
+ * HOME'S SEARCH (R-CHROME-6): one field over every app, the answer
  * grouped by the app each row opens in.
  *
  * The read is `vault_search`, which is Notes' powerbox loader asked from Home
- * (D-1020-N1) — one probe per search domain, Locker never one of them. This
- * machine groups the hits in Home's tile order, names each row's kind, and
+ * (D-1020-N1) — one probe per search domain, and a Locker item is a hit like the
+ * rest (#1135): the index holds its plain text whether or not Locker is locked, a
+ * sealed secret never, and a tap on the row passes through Locker's own lock wall
+ * like any Locker destination. This machine groups the hits in Home's tile order, names each row's kind, and
  * says where a tap goes ([HomeSearchRow.target], the reference a chat card
  * carries, so the shell's one router opens it).
  *
@@ -202,9 +204,9 @@ public object HomeSearchMachine : ScreenMachine<HomeSearchState, HomeSearchEvent
     )
 
     /**
-     * THE CORE'S HITS, GROUPED BY APP IN HOME'S TILE ORDER. A Locker hit
-     * cannot exist (Locker is not a search domain); one is dropped here all
-     * the same, so a domain added by mistake still never draws a secret's row.
+     * THE CORE'S HITS, GROUPED BY APP IN HOME'S TILE ORDER. A Locker hit is
+     * the item's plain title and kind, never a secret (the index holds none);
+     * it sits in Locker's group and opens through Locker's lock wall.
      *
      * A HIT IS GROUPED UNDER THE APP A MEMBER OPENS IT IN (#1128, R-1128-7): a
      * task hit sits in Agenda's group, among its events, and the group's header,
@@ -215,7 +217,7 @@ public object HomeSearchMachine : ScreenMachine<HomeSearchState, HomeSearchEvent
     public fun fold(hits: List<VaultSearchHit>): HomeSearchData {
         val order = SpringboardPolicy.SPRINGBOARD_ORDER
         val groups = hits
-            .filter { it.app_id != LOCKER && it.app_id.isNotBlank() }
+            .filter { it.app_id.isNotBlank() }
             .groupBy { AppHomes.appOf(it.app_id) }
             .entries
             .sortedBy { (app, _) -> order.indexOf(app).let { if (it < 0) order.size else it } }
@@ -267,6 +269,7 @@ public object HomeSearchMachine : ScreenMachine<HomeSearchState, HomeSearchEvent
         "task" -> SharedCopy.SEARCH_KIND_TASK
         "photo" -> SharedCopy.SEARCH_KIND_PHOTO
         "document" -> SharedCopy.SEARCH_KIND_DOCUMENT
+        LOCKER_ITEM -> SharedCopy.SEARCH_KIND_LOCKER_ITEM
         CHAT_THREAD -> SharedCopy.SEARCH_KIND_CHAT
         else -> ""
     }
@@ -283,11 +286,13 @@ public object HomeSearchMachine : ScreenMachine<HomeSearchState, HomeSearchEvent
         "task" -> "task"
         "photo" -> "photo"
         "document" -> "document"
+        LOCKER_ITEM -> LOCKER_ITEM
         CHAT_THREAD -> CHAT_THREAD_NOUN
         else -> ""
     }
 
-    private const val LOCKER: String = "locker"
+    /** A Locker item (#1135): the index's entity and the router's noun are the same word. */
+    private const val LOCKER_ITEM: String = "locker_item"
 
     /** The member's conversations (R-1097-22): the app id the core answers them under, the index's entity, and the router's noun. */
     public const val CHAT: String = "chat"

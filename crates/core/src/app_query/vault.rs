@@ -1,5 +1,5 @@
-//! HOME'S ARM OF THE APP QUERY: `vault.search`, every app's kinds but Locker's,
-//! for Home's search bar.
+//! HOME'S ARM OF THE APP QUERY: `vault.search`, every app's kinds, Locker's
+//! included, for Home's search bar.
 //!
 //! **ONE QUESTION PER KEYSTROKE.** The rows are the kinds Notes' powerbox can
 //! link ([`queries::load_link_targets`] asks them one probe each, a sheet of six
@@ -9,7 +9,10 @@
 //! ([`queries::load_targets_each`], `Search::query_each`) for at most eight
 //! rows of each kind: eleven statements per keystroke were seconds on a vault of
 //! years, and one is milliseconds. The owner is the principal, People's journal
-//! notes are left out, Locker is not a kind the index holds.
+//! notes are left out. A Locker item is a kind the index holds by its plain text,
+//! so it is a row whether or not Locker is locked; a sealed secret is never in
+//! the index, and opening the row passes through Locker's own gate, on the shell
+//! side.
 //!
 //! The linkable rows come first and the containers after them, each with the app
 //! it opens in; every one opens by its `id`. A shell with no Chat tab draws no
@@ -61,7 +64,6 @@ pub(super) fn search(
         });
         let entities: Vec<&str> = centraid_vault::index::SEARCHABLE
             .iter()
-            .filter(|kind| **kind != centraid_vault::model::Kind::LockerItem)
             .map(|kind| kind.as_str())
             .collect();
         Ok(index.map(|index| {
@@ -72,19 +74,17 @@ pub(super) fn search(
                 |(targets, found): &Opened| targets.len() + found.len(),
                 |(exact, exact_found), (again, again_found)| {
                     (
-                        filled_each_kind(exact, again, &linkable_kinds()),
+                        filled_each_kind(exact, again, &row_kinds()),
                         filled_each_kind(exact_found, again_found, named::all()),
                     )
                 },
                 |term| {
-                    // ONE STATEMENT for the six domains and the named kinds.
-                    let (all, denial) = queries::load_targets_each(
-                        door,
-                        &index,
-                        &Principal::Owner,
-                        term,
-                        named::all(),
-                    )?;
+                    // ONE STATEMENT for the linkable kinds, Locker's and the named kinds.
+                    let also: Vec<&str> = std::iter::once(LOCKER_ITEM)
+                        .chain(named::all().iter().copied())
+                        .collect();
+                    let (all, denial) =
+                        queries::load_targets_each(door, &index, &Principal::Owner, term, &also)?;
                     if denial.is_some() {
                         return Ok(((Vec::new(), Vec::new()), denial));
                     }
@@ -168,11 +168,16 @@ fn filled_each_kind(exact: Vec<Target>, extra: Vec<Target>, kinds: &[&str]) -> V
     hits
 }
 
-/// The kinds Home lists as rows, in the order it lists them.
-fn linkable_kinds() -> Vec<&'static str> {
+/// A Locker item: an entity of the index by its plain text, opened in Locker.
+const LOCKER_ITEM: &str = "locker_item";
+
+/// The kinds Home lists as rows, in the order it lists them: the linkable kinds,
+/// then Locker's.
+fn row_kinds() -> Vec<&'static str> {
     centraid_vault::commands::note::LINKABLE
         .iter()
         .map(|kind| kind.as_str())
+        .chain(std::iter::once(LOCKER_ITEM))
         .collect()
 }
 
@@ -286,10 +291,10 @@ mod tests {
 
     /// ONE TERM, EVERY APP THAT HOLDS IT: a note and a task that share a word
     /// both answer, each naming the app it opens in; a blank term answers
-    /// nothing rather than every row; and Locker is never asked — it is not a
-    /// domain, so no hit can name it.
+    /// nothing rather than every row; and a Locker item answers by its plain
+    /// text, never by a sealed cell.
     #[test]
-    fn one_term_answers_every_app_but_locker() {
+    fn one_term_answers_every_app_locker_included() {
         let scratch = Scratch::founded();
         let note = scratch.run(
             "note.create",
@@ -302,6 +307,12 @@ mod tests {
             .as_str()
             .expect("a task id")
             .to_owned();
+        let item = "cabin-keys".to_owned();
+        scratch.run(
+            "locker.add_item",
+            serde_json::json!({"item_id": item, "type": "login", "title": "Cabin keys",
+                               "username": "cabinwarden"}),
+        );
         let found = scratch.search("cabin");
         let hits: Vec<(&str, &str, &str)> = found
             .hits
@@ -311,8 +322,18 @@ mod tests {
         assert!(hits.contains(&("notes", "note", note.as_str())), "{hits:?}");
         assert!(hits.contains(&("tasks", "task", task.as_str())), "{hits:?}");
         assert!(
-            found.hits.iter().all(|hit| hit.app_id != "locker"),
-            "Locker is never searched: {hits:?}"
+            hits.contains(&("locker", "locker_item", item.as_str())),
+            "{hits:?}"
+        );
+        // Found by a plain cell too, though the title does not hold the word.
+        let by_cell = scratch.search("cabinwarden");
+        assert!(
+            by_cell
+                .hits
+                .iter()
+                .any(|hit| hit.app_id == "locker" && hit.id == item),
+            "{:?}",
+            by_cell.hits
         );
         assert!(
             found.hits.iter().all(|hit| hit.open_id.is_empty()),

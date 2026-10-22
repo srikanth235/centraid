@@ -23,8 +23,8 @@ import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 
 /**
- * HOME'S SEARCH (R-CHROME-6): grouped by app in Home's tile order, Locker
- * never on it, a blank term reading nothing, the latest term winning, this
+ * HOME'S SEARCH (R-CHROME-6): grouped by app in Home's tile order, Locker's
+ * items among them (#1135), a blank term reading nothing, the latest term winning, this
  * session's searches remembered, and a row opening where its app opens it.
  */
 class HomeSearchSpec : StringSpec({
@@ -110,14 +110,21 @@ class HomeSearchSpec : StringSpec({
         data.groups[2].rows[0].accessibility_label shouldBe "Note, Cabin packing"
     }
 
-    "Locker never appears, even if a hit names it" {
+    "a Locker item is a hit in Locker's group, named by its kind and opening the item (#1135)" {
         val data = HomeSearchMachine.fold(
             listOf(
-                hit("locker", "locker.item", "l1", "Cabin door code"),
+                hit("locker", "locker_item", "l1", "Cabin door code"),
                 hit("notes", "note", "n1", "Cabin packing"),
             ),
         )
-        data.groups.map { it.app_id } shouldContainExactly listOf("notes")
+        data.groups.map { it.app_id }.toSet() shouldBe setOf("notes", "locker")
+        val row = data.groups.first { it.app_id == "locker" }.rows.single()
+        row.kind_label shouldBe SharedCopy.SEARCH_KIND_LOCKER_ITEM
+        row.title shouldBe "Cabin door code"
+        // The row opens through the router a chat card uses: Locker's item page, behind its lock wall.
+        row.target!!.app shouldBe "locker"
+        row.target.entity shouldBe "locker_item"
+        row.target.id shouldBe "l1"
     }
 
     "a blank term reads nothing and rests on the recent searches" {

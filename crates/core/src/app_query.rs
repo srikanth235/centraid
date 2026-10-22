@@ -87,7 +87,7 @@ mod people;
 mod photos;
 // Tasks' arm (#1046): its conversions and tests, beside this one.
 mod tasks;
-// Home's arm (R-CHROME-6): every app's search domain but Locker's.
+// Home's arm (R-CHROME-6): every app's search domain, Locker's included.
 mod vault;
 
 /// Answer one app query against the open vault.

@@ -1,4 +1,4 @@
-// HOME'S SEARCH: EVERY APP BUT LOCKER, IN ONE ANSWER (R-CHROME-6).
+// HOME'S SEARCH: EVERY APP, LOCKER INCLUDED, IN ONE ANSWER (R-CHROME-6).
 //
 // Home's search bar asks the vault once and draws the answer grouped by the app
 // each row opens in. It is the SAME search Notes' powerbox runs
@@ -11,9 +11,11 @@
 // also at most eight. There is no second search engine behind it
 // (R-1046-1, D-1020-S1); this arm is that loader asked from Home.
 //
-// **LOCKER IS NEVER A DOMAIN.** Its items sit behind the owner check, and the
-// absence is structural: `crates/search` refuses `locker.item` as a typed
-// error rather than answering nothing, so no probe added here could reach one.
+// **A LOCKER ITEM IS A HIT WHETHER OR NOT LOCKER IS LOCKED** (#1135). The index
+// holds it by its plain text (title, username, address, notes ...) and never by
+// a sealed secret, so a row names the item and nothing to reveal; the hit's
+// `app_id` is `locker`, and opening it passes through Locker's own lock wall on
+// the shell side, as any Locker destination does.
 //
 // A probe that refuses drops its own app's rows and never the answer, so a
 // shell cannot tell "no Docs matched" from "Docs could not be searched" — the

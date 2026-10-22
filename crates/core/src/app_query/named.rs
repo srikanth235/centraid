@@ -26,6 +26,10 @@ pub(super) const CONTAINER_ROWS: usize = 8;
 /// containers and the chat threads.
 const NAMED: &[&str] = &["notebook", "album", "project", "folder", "thread"];
 
+/// The app a Locker item opens in: on no roster (the assistant's cards never name it), so it is
+/// spelled here and the test below holds the exception.
+const LOCKER: &str = "locker";
+
 /// The app id a Home hit for a thread is answered under: the Chat tab is no app (it is not on
 /// `centraid_vault::roster`), but a conversation is a hit like the rest, and the shell draws it
 /// only if it has a Chat tab (R-1097-24).
@@ -43,6 +47,7 @@ pub(super) fn app_of(kind: &str) -> &'static str {
         "photo" | "album" => "photos",
         "document" | "folder" => "docs",
         "thread" => CHAT,
+        "locker_item" => LOCKER,
         _ => "",
     }
 }
@@ -114,14 +119,23 @@ mod tests {
     use super::*;
 
     #[test]
-    fn every_app_a_kind_opens_in_is_on_the_roster_but_the_chat_tab() {
+    fn every_app_a_kind_opens_in_is_on_the_roster_but_the_chat_tab_and_locker() {
         for kind in centraid_vault::model::Kind::ALL {
             let app = app_of(kind.as_str());
             assert!(
-                app.is_empty() || app == CHAT || centraid_vault::roster::is_card_app(app),
+                app.is_empty()
+                    || app == CHAT
+                    || app == LOCKER
+                    || centraid_vault::roster::is_card_app(app),
                 "{kind:?} opens in `{app}`, which the roster does not know"
             );
         }
+        // Locker is on no roster by design (a secret is never in a prompt), yet its
+        // items are a hit Home draws and opens in Locker (#1135).
+        assert!(
+            !centraid_vault::roster::is_card_app(LOCKER),
+            "Locker is no app a card names"
+        );
         assert!(
             !centraid_vault::roster::is_card_app(CHAT),
             "the Chat tab is no app a card names"

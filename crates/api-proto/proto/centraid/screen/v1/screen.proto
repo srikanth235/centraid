@@ -1623,7 +1623,7 @@ message HomeEvent {
 // ---------------------------------------------------------------------------
 //
 // `home.search`: the full screen Home's search bar pushes. One field over
-// every app but Locker (`vault_search`, the powerbox's loader asked from
+// every app, Locker included (`vault_search`, the powerbox's loader asked from
 // Home), the answer GROUPED BY THE APP each row opens in, the groups in
 // Home's tile order. A tap opens the row in its own app, through the router a
 // chat card already uses (`target`); Cancel pops back to Home and clears.

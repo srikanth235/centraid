@@ -513,7 +513,7 @@ A mobile screen is one of seven rooms, and nothing else. The recipes above say w
 
 | Room | Anatomy | Examples |
 | --- | --- | --- |
-| `HomeRoom` | the vault lockup with a framed search key at its trailing edge (every app but Locker, [R-CHROME-6](docs/decisions.md#app-chrome-one-grammar-for-every-app-root)) and, right of it, the appearance key ([R-CHROME-7](docs/decisions.md#app-chrome-one-grammar-for-every-app-root)), cover grid of app marks, one status line, no floating key, one trailing verb (Settings) | Home |
+| `HomeRoom` | the vault lockup with a framed search key at its trailing edge (every app, [R-CHROME-6](docs/decisions.md#app-chrome-one-grammar-for-every-app-root)) and, right of it, the appearance key ([R-CHROME-7](docs/decisions.md#app-chrome-one-grammar-for-every-app-root)), cover grid of app marks, one status line, no floating key, one trailing verb (Settings) | Home |
 | `AppPlace` | the platform navigation bar (back to Home, the app's name, ≤1 trailing action: the app's create verb as `Plus` — glass on iOS, so every app's header is Photos' and Agenda's), the search bar under it, one chip row of filters then sort, app band (places, then More) as a render prop | Photos grid, Tasks list |
 | `PushedPage` | `PlaceHeader`, back to the **named parent** (a computed `PlaceRef`, never a string), ≤1 trailing action | album, contact, document, settings sub-page |
 | `EditorRoom` | full screen, autosave, close = done, band hidden, status line hosted inside | note, document, expense, event |

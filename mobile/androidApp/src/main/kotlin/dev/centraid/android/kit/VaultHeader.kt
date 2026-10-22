@@ -120,7 +120,7 @@ public fun VaultHeader(
     onOpenBackup: () -> Unit = {},
     /**
      * HOME'S SEARCH (R-CHROME-6): a framed key at the lockup's trailing edge,
-     * the one way into search over every app but Locker. Null draws none.
+     * the one way into search over every app. Null draws none.
      */
     onSearch: (() -> Unit)? = null,
     searchLabel: String = "",
