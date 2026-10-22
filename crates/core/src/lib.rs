@@ -57,6 +57,7 @@ pub(crate) mod catalog;
 pub mod config;
 pub mod convert;
 pub mod error;
+pub mod screens;
 pub mod events;
 /// THE DEMO SCENARIO: one weekend at Tahoe across seven apps, seeded through
 /// the command plane into a dev fixture vault (`seed-demo-vault`) or a test's

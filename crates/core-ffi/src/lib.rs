@@ -146,6 +146,10 @@ pub unsafe extern "C" fn centraid_open(
         // their camera roll.
         let path = config.path.clone();
         let handle = Core::open(config)?;
+        // THE SCREEN RUNTIME RIDES THE SAME FIVE SYMBOLS (#1135, lane C2):
+        // events go in through `centraid_call`, view states come out of
+        // `centraid_next_event`. Attaching adds no export.
+        centraid_screens::attach(&handle);
         // ONE MODEL SLOT PER PROCESS, WITH THE ENGINE IN IT. A phone holds
         // several vault handles and one half-gigabyte model, so every handle
         // shares the host `centraid-assist-llama` built (and registered its

@@ -1,0 +1,20 @@
+[package]
+name = "centraid-screens"
+description = "The screen runtime: every decision a person sees is made here, in Rust (#1135)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[lib]
+name = "centraid_screens"
+path = "src/lib.rs"
+
+[dependencies]
+centraid-api-proto = { path = "../api-proto" }
+centraid-core = { path = "../core" }
+prost.workspace = true
+# The headless driver founds and seeds a scratch vault (`testing`).
+centraid-ontology = { path = "../ontology" }
