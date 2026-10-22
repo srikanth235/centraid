@@ -15,7 +15,7 @@
 //! | Stored | What it is | Its local day | Its local time |
 //! |---|---|---|---|
 //! | `YYYY-MM-DD` | a CIVIL DATE — the same day in every zone | the date as stored | none |
-//! | `YYYY-MM-DDTHH:MM…` | an INSTANT (`parse_instant_ms`: no designator reads as UTC) | the instant's day in the request zone | the instant's wall clock there |
+//! | `YYYY-MM-DDTHH:MM…` | an INSTANT, or the member's WALL CLOCK when it names no zone (`parse_civil_ms`) | the instant's day in the request zone | the instant's wall clock there |
 //!
 //! **The task's own `tz` is not the display zone.** It is the zone the
 //! recurrence expands in ([`crate::queries`]' `recurrence_of`); a due instant
@@ -29,7 +29,7 @@
 //! `next_due ?? due_at` did — so a daily task that was due last Tuesday reads
 //! as due today with its missed periods counted, never as a week overdue.
 
-use centraid_vault::time::recurrence::parse_instant_ms;
+use centraid_vault::time::civil::parse_civil_ms;
 use centraid_vault::time::zone::{FireZone, WallTime, parse_wall_iso, wall_epoch, wall_iso};
 
 /// One civil day, in milliseconds.
@@ -90,7 +90,7 @@ pub fn read(value: &str, zone: &FireZone) -> Option<Civil> {
             time: None,
         });
     }
-    let millis = parse_instant_ms(value)?;
+    let millis = parse_civil_ms(value, zone)?;
     let wall = zone.zoned_parts(millis);
     Some(Civil {
         day: midnight(wall),
@@ -101,7 +101,7 @@ pub fn read(value: &str, zone: &FireZone) -> Option<Civil> {
 /// The civil day `now` is in `zone`.
 #[must_use]
 pub fn today(zone: &FireZone, now: &str) -> Option<Civil> {
-    parse_instant_ms(now).map(|millis| {
+    parse_civil_ms(now, zone).map(|millis| {
         let wall = zone.zoned_parts(millis);
         Civil {
             day: midnight(wall),
@@ -178,7 +178,7 @@ pub fn remind_at(due: &str, lead_minutes: i64, zone: &FireZone) -> Option<String
     if due.len() == 10 {
         return None;
     }
-    let millis = parse_instant_ms(due)? - lead_minutes.checked_mul(60_000)?;
+    let millis = parse_civil_ms(due, zone)? - lead_minutes.checked_mul(60_000)?;
     let wall = zone.zoned_parts(millis);
     Some(format!(
         "{}T{:02}:{:02}",
