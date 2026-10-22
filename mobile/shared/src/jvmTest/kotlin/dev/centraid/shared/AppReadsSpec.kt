@@ -18,12 +18,6 @@ import dev.centraid.shared.apps.docs.DocsEditorMachine
 import dev.centraid.shared.apps.docs.DocsEditorReads
 import dev.centraid.shared.apps.docs.DocsTrashMachine
 import dev.centraid.shared.apps.docs.DocsTrashReads
-import dev.centraid.shared.apps.agenda.AgendaEditorMachine
-import dev.centraid.shared.apps.agenda.AgendaEditorReads
-import dev.centraid.shared.apps.agenda.AgendaEventMachine
-import dev.centraid.shared.apps.agenda.AgendaEventReads
-import dev.centraid.shared.apps.agenda.AgendaHomeMachine
-import dev.centraid.shared.apps.agenda.AgendaReads
 import dev.centraid.shared.apps.health.HealthHomeMachine
 import dev.centraid.shared.apps.health.HealthHomeReads
 import dev.centraid.shared.apps.health.HealthMetricMachine
@@ -112,15 +106,6 @@ import dev.centraid.shared.shell.HomeMachine
 import dev.centraid.shared.shell.HomeReads
 import dev.centraid.shared.shell.HomeSearchMachine
 import dev.centraid.shared.shell.HomeSearchReads
-import dev.centraid.shared.apps.tasks.TasksCatchUpMachine
-import dev.centraid.shared.apps.tasks.TasksCatchUpReads
-import dev.centraid.shared.apps.tasks.TasksDetailMachine
-import dev.centraid.shared.apps.tasks.TasksDetailReads
-import dev.centraid.shared.apps.tasks.TasksListMachine
-import dev.centraid.shared.apps.tasks.TasksListReads
-import dev.centraid.shared.apps.tasks.TasksProjectMachine
-import dev.centraid.shared.apps.tasks.TasksProjectReads
-import dev.centraid.shared.apps.tasks.TasksTrashMachine
 import dev.centraid.shared.sync.ScreenQueries
 import dev.centraid.shared.sync.ScreenReads
 import dev.centraid.shared.sync.ScreenRuntime
@@ -296,14 +281,10 @@ class AppReadsSpec : StringSpec({
     /**
      * THE APP-QUERY SCREENS (#1046), beside their machines. An app query names
      * no table the runtime can see, so each declares `tables` — and the law
-     * is that the declaration and the machine agree EXACTLY. Agenda's screens
-     * join this list as they land.
+     * is that the declaration and the machine agree EXACTLY.
      */
     val queryScreens: List<Triple<String, ScreenQueries<*, *>, ScreenMachine<*, *>>> = listOf(
         Triple("notes.editor", NotesReads, NotesEditorMachine),
-        Triple("agenda.home", AgendaReads, AgendaHomeMachine),
-        Triple("agenda.event", AgendaEventReads(), AgendaEventMachine),
-        Triple("agenda.editor", AgendaEditorReads(), AgendaEditorMachine),
         Triple("people.home", PeopleHomeReads, PeopleHomeMachine),
         Triple("people.person", PeoplePersonReads, PeoplePersonMachine),
         Triple("people.editor", PeopleEditorReads, PeopleEditorMachine),
@@ -322,12 +303,6 @@ class AppReadsSpec : StringSpec({
         Triple("docs.editor", DocsEditorReads, DocsEditorMachine),
         // PHOTOS' DUPLICATES (#1135): the core's clustering, asked as an app query.
         Triple("photos.duplicates", DuplicatesReads, DuplicatesMachine),
-        // TASKS (#1029 port). The trash is `tasks.trash`, an app query: the trash is the entity's.
-        Triple("tasks.trash", TasksTrashMachine.reads, TasksTrashMachine.machine),
-        Triple("tasks.list", TasksListReads, TasksListMachine),
-        Triple("tasks.project", TasksProjectReads, TasksProjectMachine),
-        Triple("tasks.detail", TasksDetailReads, TasksDetailMachine),
-        Triple("tasks.catch_up", TasksCatchUpReads, TasksCatchUpMachine),
         // LOCKER (#1047). Every read screen shares one table set — the item,
         // its sidecars and its tags; the generator reads none.
         Triple("locker.home", LockerHomeReads, LockerHomeMachine),

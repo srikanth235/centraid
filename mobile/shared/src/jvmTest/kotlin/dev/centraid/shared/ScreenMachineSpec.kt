@@ -19,8 +19,8 @@ import centraid.screen.v1.PhotosGridState
 import centraid.screen.v1.TileCount
 import centraid.screen.v1.TileStatus
 import dev.centraid.shared.apps.notes.NotesEditorMachine
+import dev.centraid.shared.apps.notes.NotesTrashMachine
 import dev.centraid.shared.apps.photos.PhotosGridMachine
-import dev.centraid.shared.apps.tasks.TasksTrashMachine
 import dev.centraid.shared.kit.TrashMachine
 import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.screen.ScreenEffect
@@ -355,8 +355,8 @@ class ScreenMachineSpec : StringSpec({
     }
 }) {
     companion object {
-        /** A paged list: Tasks' trash, the kit's machine. */
-        val list: TrashMachine get() = TasksTrashMachine.machine
+        /** A paged list: Notes' trash, the kit's machine. */
+        val list: TrashMachine get() = NotesTrashMachine
 
         fun row(id: String): TrashRow = TrashRow(id = id, title = id)
 

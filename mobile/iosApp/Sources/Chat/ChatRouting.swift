@@ -36,13 +36,15 @@ enum ChatRouting {
         RowRoutes.shared.isThread(row: card.row)
     }
 
-    /// The app id an opened route names (`tasks.detail` names the `tasks` domain), or nil. The
+    /// The app id an opened route names, or nil. The
     /// Chat tab scopes itself to the app the member last had open ([scope(of:)]).
     static func app(of route: ShellModel.Route) -> String? {
         switch route {
         case let .screen(identifier, _):
             let app = identifier.split(separator: ".").first.map(String.init) ?? ""
             return app.isEmpty ? nil : app
+        case .rust:
+            return RustScreens.tab
         case .photos, .photoShelf, .photoLightbox, .photoPicker, .places,
              .photoDuplicates, .photoDuplicateReview, .photoEditor:
             return AppIds.shared.PHOTOS

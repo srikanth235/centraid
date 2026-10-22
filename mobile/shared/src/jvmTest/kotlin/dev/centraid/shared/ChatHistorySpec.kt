@@ -57,7 +57,7 @@ class ChatHistorySpec : StringSpec({
     fun withThreads(chat: Chat, nowMs: Long = 1_000_000_000L): Chat =
         reduce(chat, ChatInput.Threads(rows, nowMs)).chat
 
-    fun card(id: String) = ChatStoredCard(app = "tasks", entity = "task", id = id, title = "Pay rent", subtitle = "2026-10-01")
+    fun card(id: String) = ChatStoredCard(app = "agenda", entity = "task", id = id, title = "Pay rent", subtitle = "2026-10-01")
 
     fun stored(
         scope: String = "agenda",

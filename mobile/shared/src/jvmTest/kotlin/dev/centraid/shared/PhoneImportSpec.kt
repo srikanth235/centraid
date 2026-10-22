@@ -2,7 +2,6 @@ package dev.centraid.shared
 
 import dev.centraid.design.copy.AgendaCopy
 import dev.centraid.design.copy.PeopleCopy
-import dev.centraid.design.copy.TasksCopy
 import dev.centraid.shared.kit.PhoneImport
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
@@ -11,11 +10,9 @@ import io.kotest.matchers.shouldBe
 class PhoneImportSpec : StringSpec({
     val people = PeopleCopy.IMPORT_CONTACTS_DONE.replace("{count}", "6")
     val event = AgendaCopy.IMPORT_CALENDAR_ONE
-    val tasks = TasksCopy.IMPORT_REMINDERS_DONE.replace("{count}", "3")
 
     "the shared verb closes the list once: one fragment, not a clause per app" {
         PhoneImport.madeSummary(listOf(people, event)) shouldBe "6 people, 1 event imported"
-        PhoneImport.madeSummary(listOf(people, event, tasks)) shouldBe "6 people, 1 event, 3 tasks imported"
     }
 
     "one outcome is said as it is, and an import with nothing to bring says nothing" {
@@ -30,7 +27,6 @@ class PhoneImportSpec : StringSpec({
         PhoneImport.madeOpens(listOf("people"), listOf(PeopleCopy.IMPORT_CONTACTS_NONE)) shouldBe ""
         PhoneImport.openLabel("people") shouldBe "Open People"
         PhoneImport.openLabel("") shouldBe ""
-        // Reminders land in the tasks domain, which opens in Agenda (#1128, R-1128-7).
-        PhoneImport.openLabel("tasks") shouldBe "Open Agenda"
+        PhoneImport.openLabel("agenda") shouldBe "Open Agenda"
     }
 })

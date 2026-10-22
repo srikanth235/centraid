@@ -141,6 +141,60 @@ impl Driver {
         }))
     }
 
+    /// Push `route` onto `tab` as a tapped row would, and return the instance
+    /// it opened.
+    ///
+    /// # Panics
+    /// When the runtime refuses the route.
+    pub fn push(&mut self, tab: &str, route: wire::Route) -> u64 {
+        let update = self.nav(wire::nav_event::Kind::Push(wire::NavPush {
+            tab: tab.to_owned(),
+            route: Some(route),
+        }));
+        update
+            .navigation
+            .as_ref()
+            .and_then(|nav| nav.tabs.iter().find(|stack| stack.tab == tab))
+            .and_then(|stack| stack.entries.last())
+            .map(|entry| entry.instance)
+            .expect("a push moves the stack")
+    }
+
+    /// A shell's back-swipe: pop `instance` off `tab`.
+    pub fn pop(&mut self, tab: &str, instance: u64) -> wire::ScreenUpdate {
+        self.nav(wire::nav_event::Kind::Popped(wire::NavPopped {
+            tab: tab.to_owned(),
+            instance,
+        }))
+    }
+
+    /// The latest view of `instance`.
+    ///
+    /// # Panics
+    /// When the instance is not open.
+    #[must_use]
+    pub fn view(&self, instance: u64) -> &wire::ViewState {
+        &self.views[&instance]
+    }
+
+    /// Write straight to the vault as another surface (chat, an import) would,
+    /// so a test can arrange data a screen then reads.
+    ///
+    /// # Panics
+    /// When the core refuses the call itself; a vault refusal is in the answer.
+    pub fn act(&self, request: impl Into<wire::ActRequest>) -> wire::ActResponse {
+        let answer = self
+            .handle
+            .call(&wire::Request {
+                kind: Some(wire::request::Kind::Act(Box::new(request.into()))),
+            })
+            .expect("the act door answers");
+        match answer.kind {
+            Some(wire::response::Kind::Act(response)) => *response,
+            other => panic!("an act answered {other:?}"),
+        }
+    }
+
     /// Answer the oldest pending effect.
     ///
     /// # Panics

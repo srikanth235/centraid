@@ -785,8 +785,10 @@ version = "1.0.0-alpha.0"
 dependencies = [
  "centraid-api-proto",
  "centraid-core",
+ "centraid-design",
  "centraid-ontology",
  "prost",
+ "serde_json",
 ]
 
 [[package]]

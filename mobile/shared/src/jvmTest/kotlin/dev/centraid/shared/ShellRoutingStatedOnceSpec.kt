@@ -19,7 +19,7 @@ import java.io.File
  * `commonMain` is a string no Swift source may spell as a literal outside a
  * comment, and neither is a routing key (`MORE_*`, `BAND_*`, `VERB_*`,
  * `ACTION_*`, `PLACE_*`) as the pattern of a `case` or a comparison. Swift
- * reads `AgendaHomeMachine.shared.SCREEN_ID`, `AgendaHomeMachine.shared.MORE_TRASH`
+ * reads `NotesEditorMachine.shared.SCREEN_ID`, `MoneyTransactionMachine.shared.ACTION_CATEGORY`
  * and so on, and the build breaks when one is renamed.
  */
 class ShellRoutingStatedOnceSpec : StringSpec({
@@ -59,8 +59,8 @@ class ShellRoutingStatedOnceSpec : StringSpec({
     "the scan sees the constants it polices" {
         screenIds.shouldNotBeEmpty()
         keys.shouldNotBeEmpty()
-        screenIds.contains("agenda.home") shouldBe true
-        keys.contains("catch_up") shouldBe true
+        screenIds.contains("notes.editor") shouldBe true
+        keys.contains("backup") shouldBe true
     }
 
     "no Swift source spells a screen id as a literal" {

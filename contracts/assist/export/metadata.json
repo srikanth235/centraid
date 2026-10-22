@@ -1340,6 +1340,24 @@
         "verb": "untag"
       },
       {
+        "action": "follow-calendar",
+        "also": [],
+        "app": "agenda",
+        "bulk": true,
+        "chat": "card",
+        "command": "follow.calendar",
+        "inverse": null,
+        "kind": "event",
+        "phrasings": [
+          "import my phone's calendar",
+          "sync events from the calendar on this phone",
+          "pull in this week's events from my calendars"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "import"
+      },
+      {
         "action": "upload",
         "also": [],
         "app": "docs",

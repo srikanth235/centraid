@@ -14,11 +14,22 @@
 // and its messages in its own file (`<app>_screens.proto`) imported here.
 // Reserved arm ranges: 10-19 proof, 100-199 agenda, 200-299 docs, 300-399
 // health, 400-499 locker, 500-599 money, 600-699 notes, 700-799 people, 800-899
-// photos, 1000-1999 the shell (Home, search, chat, onboarding, backup).
+// photos, 900-999 the kit (trash), 1000-1999 the shell (Home, search, chat,
+// onboarding, backup).
+//
+// WHERE THE MESSAGES LIVE: the `Route` and its argument messages in
+// `route.proto`, the shared view vocabulary (`Failure`, `Loading`, `Denied`,
+// `EmptyState`, `StatusLine`, ...) in `kit_screens.proto`, an app's own in
+// `<app>_screens.proto`. All three are leaves that this file imports, so a view
+// can name a `Route` without a cycle.
 
 syntax = "proto3";
 
 package centraid.core.v1;
+
+import "centraid/core/v1/agenda_screens.proto";
+import "centraid/core/v1/kit_screens.proto";
+import "centraid/core/v1/route.proto";
 
 // ---------------------------------------------------------------------------
 // The door
@@ -75,16 +86,6 @@ message ScreenResponse {
 // ---------------------------------------------------------------------------
 // Navigation: a route stack per tab, owned by Rust
 // ---------------------------------------------------------------------------
-
-// Where a screen is, as a value. A shell draws the stack it is given and never
-// builds a route of its own: it sends the `Route` a Rust view state handed it.
-message Route {
-  // The screen's registered name, e.g. `proof.counter`.
-  string screen = 1;
-  oneof args {
-    CounterRoute counter = 10;
-  }
-}
 
 message Navigation {
   string selected_tab = 1;
@@ -158,7 +159,21 @@ message ScreenEvent {
     DataChanged data_changed = 4;
     // RUNTIME-ORIGINATED: the locale or zone changed.
     EnvironmentChanged environment_changed = 5;
+    // RUNTIME-ORIGINATED: the screen is being popped. Its last chance to write
+    // what the member typed (an autosave's pending edit); a shell never sends
+    // it, and only its `act`s survive: the view is no longer drawn.
+    Left left = 6;
     CounterEvent counter = 10;
+    // ---- agenda (100-199) ----
+    AgendaHomeEvent agenda_home = 100;
+    AgendaEventEvent agenda_event = 101;
+    AgendaEditorEvent agenda_editor = 102;
+    TodoListEvent todo_list = 103;
+    TodoProjectEvent todo_project = 104;
+    TodoDetailEvent todo_detail = 105;
+    TodoCatchUpEvent todo_catch_up = 106;
+    // ---- the kit (900-999) ----
+    TrashEvent trash = 900;
   }
 }
 
@@ -170,6 +185,8 @@ message TimerFired {
 }
 
 message EnvironmentChanged {}
+
+message Left {}
 
 message DataChanged {
   repeated string tables = 1;
@@ -184,16 +201,17 @@ message ViewState {
   uint64 revision = 2;
   oneof kind {
     CounterView counter = 10;
+    // ---- agenda (100-199) ----
+    AgendaHomeState agenda_home = 100;
+    AgendaEventState agenda_event = 101;
+    AgendaEditorState agenda_editor = 102;
+    TodoListState todo_list = 103;
+    TodoProjectState todo_project = 104;
+    TodoDetailState todo_detail = 105;
+    TodoCatchUpState todo_catch_up = 106;
+    // ---- the kit (900-999) ----
+    TrashView trash = 900;
   }
-}
-
-// THE READ LAW, kept from the KMP package: a failed read is not an empty list.
-// Three states, never two.
-message Failure {
-  // A finished sentence for the member.
-  string sentence = 1;
-  // Something the member can do about it; empty when nothing.
-  string remedy = 2;
 }
 
 // ---------------------------------------------------------------------------
@@ -221,6 +239,8 @@ message Effect {
     KeychainOp keychain = 9;
     ScreenshotShield screenshot_shield = 10;
     ScheduleNotification schedule_notification = 11;
+    CalendarRead calendar_read = 12;
+    PhoneWatch phone_watch = 13;
   }
 }
 
@@ -298,6 +318,24 @@ message ScheduleNotification {
   int64 at_ms = 4;
 }
 
+// Read the phone's calendars over a window around the shell's clock. A shell
+// that is denied (or has no calendar) answers `EffectFailed{denied}`.
+message CalendarRead {
+  // The member's Import tap lets the OS ask for permission; a following pass
+  // never does.
+  bool ask_permission = 1;
+  uint32 days_back = 2;
+  uint32 days_on = 3;
+}
+
+// Start (`on`) or stop watching a phone store; while it is on, the shell
+// answers this effect with a `PhoneChanged` each time the store changes, under
+// the effect's one `effect_id`.
+message PhoneWatch {
+  ImportSource source = 1;
+  bool on = 2;
+}
+
 message EffectResult {
   uint64 effect_id = 1;
   oneof outcome {
@@ -306,6 +344,8 @@ message EffectResult {
     PhotosPicked photos = 4;
     HealthSamples health = 5;
     KeychainValue keychain = 6;
+    CalendarSnapshot calendar = 7;
+    PhoneChanged phone_changed = 8;
   }
 }
 
@@ -339,14 +379,70 @@ message KeychainValue {
   bytes value = 2;
 }
 
+// The phone's calendars as the OS holds them, every occurrence in the window
+// its own event; Rust folds a series back into one and makes every record.
+message CalendarSnapshot {
+  // The shell's clock when it read, epoch milliseconds, and its zone.
+  int64 now_ms = 1;
+  string device_zone = 2;
+  // False when the read may have missed events: nothing is then trashed.
+  bool complete = 3;
+  // Every visible calendar the member writes to, an empty one included.
+  repeated PhoneCalendar calendars = 4;
+  repeated PhoneCalendarEvent events = 5;
+  // This install's id, minted once and kept off the vault: an id that means
+  // something on this phone only is followed under it (R-1127-10).
+  string device_id = 6;
+}
+
+message PhoneCalendar {
+  // The platform's own id for the calendar, not yet prefixed.
+  string key = 1;
+  string source_title = 2;
+  string title = 3;
+}
+
+// One occurrence. An all-day `start`/`end` is `YYYY-MM-DD` with `end` the LAST
+// day, inclusive; a timed one is `YYYY-MM-DDTHH:MM:SS` in `tz`, `end` exclusive.
+message PhoneCalendarEvent {
+  string title = 1;
+  string notes = 2;
+  bool all_day = 3;
+  string start = 4;
+  string end = 5;
+  // The event's IANA zone; empty is the device's.
+  string tz = 6;
+  // The calendar holds it as not blocking its time.
+  bool free = 7;
+  optional PhoneCalendarSeries series = 8;
+  // Where the series' rule puts this occurrence, when the member moved it.
+  string original_start = 9;
+  bool moved = 10;
+  // The phone's most durable id, kind-prefixed (`uid:`, `lookup:`, `local:`).
+  string phone_id = 11;
+  string calendar_key = 12;
+}
+
+// A repeating series as the phone holds it; `start`/`end` are the series' OWN
+// first occurrence, in the form of the occurrences'.
+message PhoneCalendarSeries {
+  string id = 1;
+  string rrule = 2;
+  string start = 3;
+  string end = 4;
+}
+
+// A watched store changed.
+message PhoneChanged {
+  ImportSource source = 1;
+}
+
 // ---------------------------------------------------------------------------
 // The proof screen (`proof.counter`): how many events are upcoming, one `load`
 // over `agenda.upcoming`. Exists to prove the runtime end to end — load, a
 // re-render on a change, an effect and a timer — and is deleted when the first
 // real screen is ported.
 // ---------------------------------------------------------------------------
-
-message CounterRoute {}
 
 message CounterEvent {
   oneof kind {

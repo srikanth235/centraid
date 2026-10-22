@@ -1,9 +1,5 @@
 package dev.centraid.shared.nav
 
-import centraid.screen.v1.AgendaEditorEvent
-import centraid.screen.v1.AgendaEditorState
-import centraid.screen.v1.AgendaEventEvent
-import centraid.screen.v1.AgendaHomeEvent
 import centraid.screen.v1.DocsDocumentEvent
 import centraid.screen.v1.DocsDriveEvent
 import centraid.screen.v1.DocsDriveState
@@ -36,10 +32,6 @@ import centraid.screen.v1.NotesNotebooksEvent
 import centraid.screen.v1.PeopleEditorEvent
 import centraid.screen.v1.PeopleHomeEvent
 import centraid.screen.v1.PeoplePersonEvent
-import centraid.screen.v1.TasksCatchUpEvent
-import centraid.screen.v1.TasksDetailEvent
-import centraid.screen.v1.TasksListEvent
-import centraid.screen.v1.TasksProjectEvent
 import centraid.screen.v1.TrashListEvent
 
 /**
@@ -71,28 +63,6 @@ public object ScreenOpenings {
      * spells (a shell-owned page, or one the callers have not needed yet).
      */
     public fun of(destination: Destination): ScreenOpening? = when (destination) {
-        is Destination.TasksList -> screen(
-            ScreenIds.TASKS_LIST,
-            TasksListEvent(opened = TasksListEvent.Opened(view = destination.view)).encode(),
-        )
-        is Destination.TasksProject -> screen(
-            ScreenIds.TASKS_PROJECT,
-            TasksProjectEvent(
-                opened = TasksProjectEvent.Opened(project_id = destination.projectId, title = destination.name),
-            ).encode(),
-        )
-        is Destination.TasksDetail -> screen(
-            ScreenIds.TASKS_DETAIL,
-            TasksDetailEvent(opened = TasksDetailEvent.Opened(task_id = destination.taskId)).encode(),
-        )
-        Destination.TasksCatchUp -> screen(
-            ScreenIds.TASKS_CATCH_UP,
-            TasksCatchUpEvent(opened = TasksCatchUpEvent.Opened()).encode(),
-        )
-        Destination.TasksTrash -> screen(
-            ScreenIds.TASKS_TRASH,
-            TrashListEvent(opened = TrashListEvent.Opened()).encode(),
-        )
         is Destination.NotesEditor -> screen(
             ScreenIds.NOTES_EDITOR,
             NotesEditorEvent(opened = NotesEditorEvent.Opened(note_id = destination.noteId, is_new = destination.isNew)).encode(),
@@ -143,26 +113,6 @@ public object ScreenOpenings {
                     party_id = destination.partyId,
                     name = destination.name,
                     log_touch = destination.logTouch,
-                ),
-            ).encode(),
-        )
-        is Destination.AgendaHome -> screen(
-            ScreenIds.AGENDA_HOME,
-            AgendaHomeEvent(
-                opened = AgendaHomeEvent.Opened(
-                    destination = destination.destination,
-                    quick_add_title = destination.quickAdd,
-                ),
-            ).encode(),
-        )
-        is Destination.AgendaEvent -> screen(
-            ScreenIds.AGENDA_EVENT,
-            AgendaEventEvent(
-                opened = AgendaEventEvent.Opened(
-                    event_id = destination.eventId,
-                    instance_key = destination.instanceKey,
-                    original_start_local = destination.originalStartLocal,
-                    day = destination.day,
                 ),
             ).encode(),
         )
@@ -251,18 +201,6 @@ public object ScreenOpenings {
             ).encode(),
         )
         Destination.PeopleTrash -> screen(ScreenIds.PEOPLE_TRASH, TrashListEvent(opened = TrashListEvent.Opened()).encode())
-        is Destination.AgendaEditor -> screen(
-            ScreenIds.AGENDA_EDITOR,
-            AgendaEditorEvent(
-                opened = AgendaEditorEvent.Opened(
-                    mode = if (destination.eventId == null) AgendaEditorState.Mode.MODE_CREATE else AgendaEditorState.Mode.MODE_EDIT,
-                    event_id = destination.eventId.orEmpty(),
-                    instance_key = destination.instanceKey,
-                    original_start_local = destination.originalStartLocal,
-                    day = destination.day,
-                ),
-            ).encode(),
-        )
         // LOCKER: every page's bridge opens itself on arrival, so the event is
         // what names the page. The generator's candidate never rides here
         // (`Destination.LockerEditor`), and neither does `fromGenerator`: that
@@ -301,6 +239,8 @@ public object ScreenOpenings {
             neighbours = destination.neighbours,
         )
         is Destination.PhotosHome -> ScreenOpening(ScreenIds.PHOTOS_GRID)
+        // A SCREEN RUST OWNS: the event is the `Route` Rust built, which the shell pushes as it stands.
+        is Destination.RustScreen -> screen(ScreenIds.RUST_SCREEN, destination.route.encode())
         else -> null
     }
 

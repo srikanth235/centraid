@@ -10,7 +10,7 @@ import io.kotest.matchers.shouldBe
 
 /**
  * What a shell's read of the address book becomes for the vault (#1127, lane B). Ids and origins
- * are the shell's; the add-your-account line is this. The calendar's is `CalendarFollowSpec`.
+ * are the shell's; the add-your-account line is this.
  */
 class PhoneSnapshotSpec : StringSpec({
 

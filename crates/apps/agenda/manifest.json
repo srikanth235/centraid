@@ -85,6 +85,11 @@
         "verbs": "act"
       },
       {
+        "schema": "follow",
+        "table": "calendar",
+        "verbs": "act"
+      },
+      {
         "schema": "edge",
         "table": "add",
         "verbs": "act"
@@ -1423,6 +1428,90 @@
         },
         "required": ["id", "label"],
         "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "follow-calendar",
+      "verb": "import",
+      "kind": "event",
+      "inverse": null,
+      "sealed": [],
+      "bulk": true,
+      "command": "follow.calendar",
+      "phrasings": [
+        "import my phone's calendar",
+        "sync events from the calendar on this phone",
+        "pull in this week's events from my calendars"
+      ],
+      "description": "Follow the phone's calendars through follow.calendar, one calendar at a time: a field the member never changed follows the phone, one they changed stands, an event the vault does not know is matched by title and start before one is added, a repeating series is one event with its rule and the days the phone skipped or moved, and one gone from a complete read goes to the trash if the member never edited it.",
+      "confirmation": "none",
+      "input": {
+        "additionalProperties": false,
+        "properties": {
+          "complete": {
+            "type": "boolean"
+          },
+          "origin": {
+            "additionalProperties": false,
+            "properties": {
+              "config": {
+                "type": ["object", "null"]
+              },
+              "device_id": {
+                "type": ["string", "null"]
+              },
+              "fills": {
+                "type": ["string", "null"]
+              },
+              "label": {
+                "type": "string"
+              },
+              "ref": {
+                "type": "string"
+              }
+            },
+            "required": ["ref", "label"],
+            "type": "object"
+          },
+          "records": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "device_id": {
+                  "type": ["string", "null"]
+                },
+                "external_id": {
+                  "type": "string"
+                },
+                "fields": {
+                  "type": "object"
+                }
+              },
+              "required": ["external_id", "fields"],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "since": {
+            "type": "string"
+          }
+        },
+        "required": ["origin", "records"],
+        "type": "object"
       },
       "output": {
         "type": "object",

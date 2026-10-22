@@ -33,9 +33,10 @@ import okio.ByteString.Companion.encodeUtf8
  * The phone had no Tasks screen: the board nests families, applies the
  * promotion rule and collapses a repeating task's missed periods, and v0 did
  * the civil arithmetic — "today", "overdue", Upcoming's days — on the phone in
- * the host zone. The `tasks_*` arms of `app_query` run `crates/apps/tasks` in
- * the core and answer every civil reading in the zone the request states, so
- * `commonMain` draws strings.
+ * the host zone. The `tasks_*` arms of `app_query` run Agenda's task loaders
+ * (`crates/apps/agenda`, since the tasks are Agenda's, #1128) in the core and
+ * answer every civil reading in the zone the request states, so `commonMain`
+ * draws strings.
  *
  * Over JNA, against the real `libcentraid_core_ffi` and the vault
  * `spike-fixture` founded — nothing faked. The writes go through `Command`

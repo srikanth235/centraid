@@ -31,7 +31,7 @@ import dev.centraid.shared.sync.ScreenWrites
  * and says nothing it cannot do. [emptyCommand] null is the same for emptying.
  */
 public data class TrashSpec(
-    /** `tasks` — also the screen id's prefix: `tasks.trash`. */
+    /** `notes` — also the screen id's prefix: `notes.trash`. */
     val appId: String,
     /** The table the deleted rows live on, `deleted_at` set. */
     val table: String,

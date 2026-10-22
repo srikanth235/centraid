@@ -195,7 +195,7 @@ fn the_census_lists_every_action_as_its_manifest_classifies_it() {
         }
     }
     let rows: Vec<Vec<&str>> = lines.map(|line| line.split(',').collect()).collect();
-    assert_eq!(rows.len(), 146);
+    assert_eq!(rows.len(), 147);
     assert_eq!(rows.len(), expected.len());
     for (row, want) in rows.iter().zip(&expected) {
         assert_eq!(row.len(), 7, "{row:?}");
@@ -217,9 +217,15 @@ fn the_census_lists_every_action_as_its_manifest_classifies_it() {
         // a screen claim cites files that exist
         if let Some(files) = row[5].strip_prefix("yes: ") {
             for file in files.split("; ") {
-                let path = repo()
-                    .join("mobile/shared/src/commonMain/kotlin/dev/centraid/shared")
-                    .join(file);
+                // A Rust screen is cited from the repository root; a KMP file
+                // (the apps not yet ported) from the shared module.
+                let path = if file.starts_with("crates/") {
+                    repo().join(file)
+                } else {
+                    repo()
+                        .join("mobile/shared/src/commonMain/kotlin/dev/centraid/shared")
+                        .join(file)
+                };
                 assert!(
                     path.is_file(),
                     "{} cites {file}, which does not exist",
@@ -233,7 +239,7 @@ fn the_census_lists_every_action_as_its_manifest_classifies_it() {
 #[test]
 fn the_exported_catalog_is_the_manifests() {
     let exported = catalog();
-    assert_eq!(exported["actions"].as_array().unwrap().len(), 146);
+    assert_eq!(exported["actions"].as_array().unwrap().len(), 147);
     // every query a manifest declares, however many that is: the core's `load` is held to the
     // same list both ways (`crates/core/src/load.rs`)
     let declared: usize = manifests().iter().map(|(_, m)| m.queries.len()).sum();

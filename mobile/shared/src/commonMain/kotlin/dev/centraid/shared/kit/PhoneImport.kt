@@ -10,7 +10,6 @@ import dev.centraid.design.CentraidCatalog
 import dev.centraid.design.copy.AgendaCopy
 import dev.centraid.design.copy.PeopleCopy
 import dev.centraid.design.copy.SharedCopy
-import dev.centraid.design.copy.TasksCopy
 import dev.centraid.shared.nav.AppHomes
 import okio.ByteString.Companion.encodeUtf8
 import kotlin.uuid.ExperimentalUuidApi
@@ -22,8 +21,7 @@ import kotlin.uuid.Uuid
  * JSON string a hand-built input needs. An import writes the member's own rows
  * the way a screen does, so a row it makes is a row like any other.
  *
- * The apps' importers — Contacts → People, Calendar → Agenda, Reminders →
- * Tasks — each live in their app and call these.
+ * The apps' importers — Contacts → People — live in their app and call these (Agenda's calendar import is Rust's, #1135).
  */
 public object PhoneImport {
     /** What one import did: rows written, and sources the core refused. */
@@ -93,9 +91,7 @@ public object PhoneImport {
         apps.zip(outcomes).firstOrNull { (_, said) -> said.isNotBlank() && said !in quiet }?.first.orEmpty()
 
     /**
-     * "Open People": the line's one action, for the app [madeOpens] named. A
-     * domain names the app it opens in (#1128, R-1128-7): reminders, written to
-     * `tasks`, read "Open Agenda".
+     * "Open People": the line's one action, for the app [madeOpens] named.
      */
     public fun openLabel(app: String): String =
         CentraidCatalog.byId[AppHomes.appOf(app)]?.name?.let { SharedCopy.OPEN_APP.replace("{name}", it) }.orEmpty()
@@ -103,7 +99,6 @@ public object PhoneImport {
     private val quiet: Set<String> = setOf(
         PeopleCopy.IMPORT_CONTACTS_NONE,
         AgendaCopy.IMPORT_CALENDAR_NONE,
-        TasksCopy.IMPORT_REMINDERS_NONE,
     )
 
     /** A JSON string literal. `commonMain` carries no JSON dependency. */

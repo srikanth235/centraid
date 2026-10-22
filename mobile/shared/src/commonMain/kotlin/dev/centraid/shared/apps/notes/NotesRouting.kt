@@ -1,13 +1,14 @@
 package dev.centraid.shared.apps.notes
 
+import centraid.core.v1.AgendaDestination
 import centraid.screen.v1.HomeTile
 import centraid.screen.v1.NotesEditorEvent
 import centraid.screen.v1.NotesEditorState
 import centraid.screen.v1.NotesJournalEvent
 import centraid.screen.v1.NotesLibraryEvent
 import centraid.screen.v1.NotesNotebooksEvent
-import centraid.screen.v1.AgendaHomeState
 import centraid.screen.v1.TileStatus
+import dev.centraid.shared.nav.AgendaEntry
 import dev.centraid.shared.nav.AppIds
 import dev.centraid.shared.nav.Destination
 import dev.centraid.shared.nav.NavMove
@@ -124,7 +125,7 @@ public object NotesRouting {
             // SEND TO AGENDA: To-do, the words waiting in a focused quick add
             // (the Inbox is where it lands). Nothing is written until the member adds them.
             sent != null && sent.text.isNotBlank() -> NavMove.push(
-                Destination.AgendaHome(AgendaHomeState.Destination.DESTINATION_TODO, quickAdd = sent.text),
+                AgendaEntry.home(AgendaDestination.AGENDA_DESTINATION_TODO, quickAdd = sent.text),
             )
             else -> null
         }

@@ -33,8 +33,7 @@ protocol AppScreens {
     /// presents. `nil` for an app with nothing there.
     @MainActor static func global(_ shell: ShellModel) -> AnyView?
     /// THE SCREEN-ID PREFIXES THIS APP HOSTS. An app's own screens carry its id
-    /// (`agenda.event`); Agenda also hosts the task pages (`tasks.detail`,
-    /// #1128, R-1128-5), which keep their `tasks.` ids.
+    /// (`notes.editor`).
     static var screenPrefixes: [String] { get }
     /// HOW A SCREEN THE SHARED SIDE NAMED IS PUSHED (`ScreenOpening`): the id and
     /// the event that screen opens by. Nearly always the event is the route's
@@ -65,9 +64,13 @@ enum AppRegistry {
         apps.first { $0.appID == tile.appID }?.tileRoute(tile)
     }
 
-    /// A screen id's app is the one hosting its prefix (`tasks.detail` is
-    /// Agenda's); a screen no app claims is pushed as it stands.
+    /// A screen id's app is the one hosting its prefix; a screen no app claims
+    /// is pushed as it stands.
     static func present(_ screen: String, _ opened: Data) -> ShellModel.Route {
+        // A ROUTE RUST BUILT (#1135): the event is the encoded `Route`, whichever app it opens.
+        if screen == RustScreens.id, let route = try? Centraid_Core_V1_Route(serializedBytes: opened) {
+            return .rust(RustEntry.make(route))
+        }
         guard let app = apps.first(where: { app in app.screenPrefixes.contains { screen.hasPrefix($0) } }) else {
             return .screen(screen, opened)
         }
@@ -88,7 +91,7 @@ struct ScreenRoute {
 /// ONE BRIDGE, AS THE SHELL SEES IT: bytes in, bytes out, attach, departed.
 ///
 /// Closures rather than the Kotlin class, so a bridge that predates the kit
-/// (`AgendaBridge`, the Photos ones) registers exactly like a
+/// (the Photos ones) registers exactly like a
 /// `ScreenBridge` subclass does.
 struct ScreenPort {
     let id: String

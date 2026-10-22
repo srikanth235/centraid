@@ -174,6 +174,22 @@ impl Runtime {
         state.timers.retain(|(owner, _), _| *owner != id);
     }
 
+    /// Tell a screen it is being popped: its last chance to write what the
+    /// member typed. Only the writes it makes survive; the view and any effect
+    /// it asks for are dropped with the screen.
+    fn leave(state: &mut State, core: &dyn ScreenCtx, id: u64) {
+        let mut discarded = wire::ScreenUpdate::default();
+        Self::dispatch(
+            state,
+            core,
+            id,
+            wire::ScreenEvent {
+                kind: Some(wire::screen_event::Kind::Left(wire::Left {})),
+            },
+            &mut discarded,
+        );
+    }
+
     /// Run one event through one screen and collect everything that came of it.
     fn dispatch(
         state: &mut State,
@@ -293,6 +309,7 @@ impl Runtime {
                 };
                 let gone = stack.split_off(at);
                 for id in gone {
+                    Self::leave(state, core, id);
                     Self::close(state, id, out);
                 }
             }
@@ -304,6 +321,7 @@ impl Runtime {
                 let index = tab_index(state, &pop.tab)?;
                 let gone = state.tabs[index].stack.split_off(1);
                 for id in gone {
+                    Self::leave(state, core, id);
                     Self::close(state, id, out);
                 }
             }

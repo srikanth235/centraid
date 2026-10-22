@@ -14,8 +14,9 @@ import dev.centraid.shared.sync.phone.PhoneIds
  * - **An event** is `uid:` plus its iCal UID (`uid2445`, the same on every device Google syncs
  *   to), else `local:` plus the event row id.
  * - **An account** is keyed `<type>/<name>` (a raw contact with no account is `local`), and
- *   **a calendar** `<type>/<name>/<key>`; the readers hand the key to `ContactsImport.container`
- *   and `CalendarImport.calendar`, which make the origin both platforms share. The calendar
+ *   **a calendar** `<type>/<name>/<key>`; the contacts reader hands the key to
+ *   `ContactsImport.container` and the calendar reader answers it as `PhoneCalendar.key`, from
+ *   which each makes the origin both platforms share (the calendar's is Rust's). The calendar
  *   key is the sync adapter's `_sync_id` (the server's calendar id, so it survives a re-sync and a re-added account) and
  *   the calendar row id when the adapter writes none (a local calendar never re-syncs).
  *   `CAL_SYNC1` is not used: its meaning belongs to each adapter.

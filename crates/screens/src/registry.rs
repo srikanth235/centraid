@@ -35,6 +35,23 @@ impl Registry {
         self
     }
 
+    /// Every screen of `other` as well. A name both registries hold is a bug in
+    /// the composing code.
+    ///
+    /// # Panics
+    /// When a name is registered in both.
+    #[must_use]
+    pub fn merge(mut self, other: Self) -> Self {
+        for (name, factory) in other.screens {
+            assert!(
+                !self.screens.iter().any(|(taken, _)| *taken == name),
+                "screen `{name}` is registered twice"
+            );
+            self.screens.push((name, factory));
+        }
+        self
+    }
+
     pub(crate) fn build(&self, route: &wire::Route) -> Option<Box<dyn Screen>> {
         let (_, factory) = self
             .screens

@@ -370,9 +370,9 @@ class KitLawsSpec : StringSpec({
             override fun write(state: WriteState): WriteState = state
             override fun with(state: WriteState, write: WriteState): WriteState = write
         }
-        val sent = WriteLaw.submit(lens, WriteState(), "tasks.complete_task", "{}", "k1")
+        val sent = WriteLaw.submit(lens, WriteState(), "agenda.complete_task", "{}", "k1")
         sent.state.phase shouldBe WriteState.Phase.PHASE_IN_FLIGHT
-        WriteLaw.submit(lens, sent.state, "tasks.complete_task", "{}", "k1").effects.shouldBeEmpty()
+        WriteLaw.submit(lens, sent.state, "agenda.complete_task", "{}", "k1").effects.shouldBeEmpty()
         WriteLaw.settled(lens, sent.state, WriteSettled(invoke_key = "k0", committed = true)).state shouldBe sent.state
         val refused = WriteLaw.settled(
             lens,
@@ -392,7 +392,7 @@ class KitLawsSpec : StringSpec({
         sent.state.refusal shouldBe ""
         WriteLaw.settled(lens, refused, WriteSettled(invoke_key = "k1", committed = true)).state.refusal shouldBe ""
         // A NEW ATTEMPT CLEARS THE OLD SENTENCE.
-        WriteLaw.submit(lens, refused, "tasks.complete_task", "{}", "k2").state.refusal shouldBe ""
+        WriteLaw.submit(lens, refused, "agenda.complete_task", "{}", "k2").state.refusal shouldBe ""
         // AND "REFUSED" IS SAID ONCE TOO — a silent refusal is still one, so the
         // sentence cannot say it alone; nothing else is.
         refused.refused shouldBe true
@@ -403,7 +403,7 @@ class KitLawsSpec : StringSpec({
         ).state.refused shouldBe true
         sent.state.refused shouldBe false
         WriteLaw.settled(lens, refused, WriteSettled(invoke_key = "k1", committed = true)).state.refused shouldBe false
-        WriteLaw.submit(lens, refused, "tasks.complete_task", "{}", "k2").state.refused shouldBe false
+        WriteLaw.submit(lens, refused, "agenda.complete_task", "{}", "k2").state.refused shouldBe false
     }
 
     // --- Trash ------------------------------------------------------------
@@ -416,9 +416,9 @@ class KitLawsSpec : StringSpec({
 
         val restore = machine.reduce(shown, TrashListEvent(restore = TrashListEvent.RestoreTapped(id = "t1")))
         restore.effects.single() shouldBe ScreenEffect.SubmitWrite(
-            "tasks.restore_task",
+            "agenda.restore_task",
             "{\"task_id\":\"t1\"}",
-            "tasks.restore_task:t1",
+            "agenda.restore_task:t1",
         )
 
         val asked = machine.reduce(shown, TrashListEvent(purge = TrashListEvent.PurgeTapped(id = "t1")))
@@ -429,13 +429,13 @@ class KitLawsSpec : StringSpec({
         dismissed.state.confirm.shouldBeNull()
         dismissed.effects.shouldBeEmpty()
         val purged = machine.reduce(asked.state, TrashListEvent(confirmed = TrashListEvent.Confirmed()))
-        (purged.effects.single() as ScreenEffect.SubmitWrite).command shouldBe "tasks.purge_task"
+        (purged.effects.single() as ScreenEffect.SubmitWrite).command shouldBe "agenda.purge_task"
         purged.state.confirm.shouldBeNull()
 
         val emptying = machine.reduce(shown, TrashListEvent(empty = TrashListEvent.EmptyTapped()))
         emptying.state.empty_all shouldBe true
         val emptied = machine.reduce(emptying.state, TrashListEvent(confirmed = TrashListEvent.Confirmed()))
-        (emptied.effects.single() as ScreenEffect.SubmitWrite).command shouldBe "tasks.empty_trash"
+        (emptied.effects.single() as ScreenEffect.SubmitWrite).command shouldBe "agenda.empty_trash"
     }
 
     "trash: an app with no destroy path offers restore only" {
@@ -454,7 +454,7 @@ class KitLawsSpec : StringSpec({
         val restoring = machine.reduce(shown, TrashListEvent(restore = TrashListEvent.RestoreTapped(id = "t1"))).state
         val refused = machine.reduce(
             restoring,
-            TrashListEvent(write_settled = WriteSettled(invoke_key = "tasks.restore_task:t1", committed = false)),
+            TrashListEvent(write_settled = WriteSettled(invoke_key = "agenda.restore_task:t1", committed = false)),
         ).state
         refused.data_.shouldNotBeNull().rows.single().id shouldBe "t1"
         refused.write.shouldNotBeNull().phase shouldBe WriteState.Phase.PHASE_REFUSED
@@ -551,11 +551,11 @@ class KitLawsSpec : StringSpec({
 }) {
     private companion object {
         val tasksTrash = TrashSpec(
-            appId = "tasks",
+            appId = "agenda",
             table = "task",
-            restoreCommand = "tasks.restore_task",
-            purgeCommand = "tasks.purge_task",
-            emptyCommand = "tasks.empty_trash",
+            restoreCommand = "agenda.restore_task",
+            purgeCommand = "agenda.purge_task",
+            emptyCommand = "agenda.empty_trash",
             idColumn = "task_id",
             titleColumn = "title",
             purgeWindowDays = 30,

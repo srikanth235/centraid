@@ -4,8 +4,10 @@ import centraid.core.v1.CounterCopyTapped
 import centraid.core.v1.CounterEvent
 import centraid.core.v1.NavEvent
 import centraid.core.v1.NavPush
+import centraid.core.v1.Navigation
 import centraid.core.v1.Route
 import centraid.core.v1.ScreenEvent
+import centraid.core.v1.TabStack
 import dev.centraid.core.AbiRoundTripSpec.Companion.openRealCore
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
@@ -28,6 +30,24 @@ import kotlinx.coroutines.withTimeout
  */
 class ScreensRoundTripSpec : StringSpec({
 
+    "the runtime opens both of its tabs, proof and agenda, each with its root" {
+        val core = openRealCore()
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        try {
+            core.startReader()
+            val screens = Screens(core, scope)
+            screens.attach()
+            screens.start()
+            val navigation = screens.navigation.value!!
+            navigation.tabs.map { it.tab } shouldBe listOf("proof", "agenda")
+            navigation.tabs.forEach { it.entries.size shouldBe 1 }
+            navigation.tab("agenda").entries.single().route!!.screen shouldBe "agenda.home"
+        } finally {
+            scope.coroutineContext[kotlinx.coroutines.Job]?.cancel()
+            core.close()
+        }
+    }
+
     "start opens the root and a finished count comes back from Rust" {
         val core = openRealCore()
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -37,7 +57,7 @@ class ScreensRoundTripSpec : StringSpec({
             screens.attach()
             (screens.start() as CoreOutcome.Answered)
 
-            val stack = screens.navigation.value!!.tabs.single().entries
+            val stack = screens.navigation.value!!.tab("proof").entries
             val view = screens.views.value[stack.single().instance]!!.counter!!
             view.title shouldBe "Upcoming"
             val data = view.data_!!
@@ -57,13 +77,13 @@ class ScreensRoundTripSpec : StringSpec({
             val screens = Screens(core, scope)
             screens.attach()
             screens.start()
-            val root = screens.navigation.value!!.tabs.single().entries.single().instance
+            val root = screens.navigation.value!!.tab("proof").entries.single().instance
 
             screens.send(
                 root,
                 ScreenEvent(counter = CounterEvent(copy_tapped = CounterCopyTapped())),
             )
-            val first = withTimeout(5_000) { screens.effects.first() }
+            val first = withTimeout(5_000) { screens.effects.first { it.instance == root } }
             first.effect?.clipboard_set shouldNotBe null
             screens.views.value[root]!!.counter!!.data_!!.notice shouldContain "Copied"
         } finally {
@@ -82,10 +102,14 @@ class ScreensRoundTripSpec : StringSpec({
             screens.navigate(
                 NavEvent(push = NavPush(tab = "proof", route = Route(screen = "proof.counter"))),
             )
-            screens.navigation.value!!.tabs.single().entries.size shouldBe 2
+            screens.navigation.value!!.tab("proof").entries.size shouldBe 2
         } finally {
             scope.coroutineContext[kotlinx.coroutines.Job]?.cancel()
             core.close()
         }
     }
-})
+}) {
+    private companion object {
+        fun Navigation.tab(name: String): TabStack = tabs.single { it.tab == name }
+    }
+}

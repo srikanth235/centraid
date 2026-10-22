@@ -104,6 +104,14 @@ impl<'a> Ctx<'a> {
         self.env.locale
     }
 
+    /// The device's IANA zone, as the shell last reported it. A screen that
+    /// SENDS a wall clock (an event's start) names this zone beside it; every
+    /// reading the core answers is already placed in it.
+    #[must_use]
+    pub fn zone(&self) -> &str {
+        &self.env.zone
+    }
+
     /// Start (or restart) the named timer. When it elapses the screen gets
     /// [`wire::TimerFired`]. Timers die with their screen.
     pub fn start_timer(&self, name: &str, after: Duration) {

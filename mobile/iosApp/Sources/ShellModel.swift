@@ -37,6 +37,11 @@ final class ShellModel: ObservableObject {
         /// port after them — so a new app adds no case to this enum, no branch
         /// to `CentraidApp`'s destination switch and none to `opened`.
         case screen(String, Data)
+        /// A SCREEN RUST OWNS (#1135), drawn from the view state Rust sends
+        /// (`RustScreenHost`). Pushing it opens the route on Rust's stack;
+        /// popping it reports the pop. INTERIM HOSTING: this path still holds
+        /// the back stack until the shell lane replaces it.
+        case rust(RustEntry)
         case photos
 
         // THE PHOTOS MINIAPP'S OTHER NINE SCREENS (#1029, photos port).
@@ -69,8 +74,20 @@ final class ShellModel: ObservableObject {
     @Published var path: [Route] = [] {
         // A SETTLED IMPORT LINE GOES WITH THE NEXT MOVE (DESIGN.md: the line
         // never clears on a timer; the member's own next step puts it away).
-        didSet { if path != oldValue { importLineMoved() } }
+        didSet {
+            if path != oldValue {
+                importLineMoved()
+                rustPopped(from: oldValue)
+            }
+        }
     }
+
+    /// THE SCREEN RUNTIME'S STORE (#1135), once a transport to the core is
+    /// attached (`attachScreens`). The views of Rust-owned screens draw from it.
+    @Published private(set) var screens: ScreenStore?
+    /// The instance Rust opened for each Rust entry on `path`, by entry token.
+    @Published private(set) var rustInstances: [Int: UInt64] = [:]
+    private var rustOpening: Set<Int> = []
     @Published var masked = false
 
     /// WHICH PLACE THE BAND'S ROOT IS SHOWING: Home's springboard, or the Chat
@@ -142,7 +159,6 @@ final class ShellModel: ObservableObject {
     /// delivery is a later wave — and a pass never asks HealthKit for access.
     func followPhone() {
         follow.requested(source: .contacts)
-        follow.requested(source: .calendar)
         follow.requested(source: .files)
         follow.requested(source: .health)
     }
@@ -318,7 +334,6 @@ final class ShellModel: ObservableObject {
     /// `mobile/README.md` carries that hand-off.
     private let home = HomeBridge()
     private let contacts = ContactsImportBridge()
-    private let calendar = CalendarImportBridge()
     /// THE PHONE FOLLOWED (#1127): People, Agenda and Docs keep following what the
     /// phone holds after the member imported it. One bridge for both; the gate,
     /// the passes and the question are in `CentraidShared`.
@@ -332,7 +347,6 @@ final class ShellModel: ObservableObject {
         reader: healthReader,
         clock: PlatformServices_iosKt.platformServices().clock
     )
-    private let reminders = RemindersImportBridge()
 
     /// The three app screens' bridges (#1025 S5, lane L5).
     ///
@@ -384,6 +398,51 @@ final class ShellModel: ObservableObject {
     private let duplicateReview = DuplicateReviewBridge()
     private let photoEditor = PhotoEditorBridge()
 
+    /// ATTACH THE SCREEN RUNTIME: the store that draws Rust-owned screens, over
+    /// the core the session holds. Called once the transport exists.
+    func attachScreens(core: any ScreenCore) {
+        let store = ScreenStore(core: core)
+        screens = store
+        Task {
+            await store.start()
+            store.reportEnvironment()
+        }
+    }
+
+    /// Push a route Rust built onto the shell's stack (a row's `route`).
+    func open(_ route: Centraid_Core_V1_Route) {
+        path.append(.rust(RustEntry.make(route)))
+    }
+
+    /// Open a Rust entry's route on Rust's stack, once, and remember its instance.
+    func openRust(_ entry: RustEntry) async {
+        guard let screens, rustInstances[entry.token] == nil, !rustOpening.contains(entry.token) else { return }
+        rustOpening.insert(entry.token)
+        defer { rustOpening.remove(entry.token) }
+        guard let instance = await screens.open(tab: RustScreens.tab, route: entry.route) else { return }
+        // Popped while the push was in flight: Rust is told at once.
+        guard path.contains(.rust(entry)) else {
+            screens.popped(tab: RustScreens.tab, instance: instance)
+            return
+        }
+        rustInstances[entry.token] = instance
+    }
+
+    /// A Rust entry left `path` (a back control, a swipe, Home): Rust drops its
+    /// instance and everything above it. The lowest one removed is enough.
+    private func rustPopped(from old: [Route]) {
+        guard let screens else { return }
+        let removed = old.compactMap { route -> RustEntry? in
+            if case let .rust(entry) = route, !path.contains(route) { return entry }
+            return nil
+        }
+        guard let lowest = removed.first else { return }
+        for entry in removed { rustOpening.remove(entry.token) }
+        guard let instance = rustInstances[lowest.token] else { return }
+        for entry in removed { rustInstances[entry.token] = nil }
+        screens.popped(tab: RustScreens.tab, instance: instance)
+    }
+
     init() {
         home.observe { [weak self] bytes in
             self?.homeState = bytes.data
@@ -394,11 +453,6 @@ final class ShellModel: ObservableObject {
         NotificationCenter.default.addObserver(forName: .CNContactStoreDidChange, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.follow.requested(source: .contacts) }
         }
-        NotificationCenter.default.addObserver(forName: .EKEventStoreChanged, object: nil, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.follow.requested(source: .calendar) }
-        }
-        // EventKit posts only for a store that is alive.
-        _ = PhoneCalendar.watcher
         // THE PHONE'S HEALTH FACTS (#1129): the store, the units and the chosen
         // set, stated before any Health screen opens and again whenever the
         // member changes the region's measurement system.
@@ -413,7 +467,7 @@ final class ShellModel: ObservableObject {
         // A VAULT WAS MADE (`VaultWordsBridge.made`, once per make): its
         // sentence stays on the vault sheet, as `found`'s did, and what the
         // phone already holds is asked for once and brought in (R-ONBOARD-8):
-        // the photos, then the contacts, the calendar and the reminders, each
+        // the photos, then the contacts, each
         // prompt after the last one was answered — nobody is sent to an empty
         // app to find its import.
         vaultWords.observeMade { [weak self] sentence in
@@ -467,6 +521,7 @@ final class ShellModel: ObservableObject {
         home.onSession { [weak self] session in
             guard let self else { return }
             self.session = session
+            self.attachScreens(core: SessionScreenCore(transport: session.screenTransport))
             for port in self.ports.values { port.attach(session) }
             self.photos.attach(session: session)
             self.vaultWords.attach(session: session)
@@ -474,18 +529,15 @@ final class ShellModel: ObservableObject {
             self.wordsShow.attach(session: session)
             self.pairLaptop.attach(session: session)
             self.contacts.attach(session: session)
-            self.calendar.attach(session: session)
             self.follow.attach(
                 session: session,
                 sources: [
                     ContactsFollow(reader: ContactsFollowReader()),
-                    CalendarFollow(reader: CalendarFollowReader()),
                     FilesFollow(reader: FolderFollowReader()),
                     HealthFollow(reader: self.healthReader, clock: PlatformServices_iosKt.platformServices().clock),
                 ],
                 ask: { [weak self] question in DispatchQueue.main.async { self?.followQuestion = question } }
             )
-            self.reminders.attach(session: session)
             self.healthConnect.attach(session: session)
             self.backup.attach(session: session)
             self.photoShelf.attach(session: session)
@@ -1120,7 +1172,8 @@ final class ShellModel: ObservableObject {
 
     /// IMPORT FROM WHERE THE PHONE ALREADY HOLDS THE DATA, asked at the point
     /// of use: the OS asks its own permission now, and never at launch.
-    /// Contacts → People, Calendar → Agenda, Reminders → Tasks.
+    /// Contacts → People. The calendar is Agenda's own (its screens ask the OS
+    /// through the `CalendarRead` effect); the reminders have no door yet.
     func importFromPhone(_ source: Centraid_Screen_V1_ImportSource) {
         guard !importing, let words = Self.importWords(source) else { return }
         // CONTACTS SHARED IN PART (iOS 18's limited access): a second ask
@@ -1143,8 +1196,7 @@ final class ShellModel: ObservableObject {
         }
     }
 
-    /// A VAULT WAS JUST MADE: contacts, calendar and reminders, one after
-    /// another, after the photos (R-ONBOARD-8). One banner says what came in
+    /// A VAULT WAS JUST MADE: the contacts, after the photos (R-ONBOARD-8). One banner says what came in
     /// (`PhoneImport.madeSummary`); a store the member refused, or one with
     /// nothing in it, says nothing.
     private func importEverythingFromPhone() {
@@ -1153,7 +1205,7 @@ final class ShellModel: ObservableObject {
         Task { @MainActor in
             var apps: [String] = []
             var outcomes: [String] = []
-            for source in [Centraid_Screen_V1_ImportSource.contacts, .calendar, .reminders] {
+            for source in [Centraid_Screen_V1_ImportSource.contacts] {
                 self.importNotice = Self.importWords(source)?.running ?? ""
                 if let sentence = await self.imported(source) {
                     apps.append(Self.importApp(source))
@@ -1168,14 +1220,10 @@ final class ShellModel: ObservableObject {
         }
     }
 
-    /// The app an import writes to: Contacts → People, Calendar → Agenda, Reminders → Tasks.
-    /// Reminders land in the tasks domain, which opens in Agenda's To-do (#1128, R-1128-7):
-    /// the id stays the write app's, and `openImported` routes it through `appHomeRoute`.
+    /// The app an import writes to: Contacts → People.
     private static func importApp(_ source: Centraid_Screen_V1_ImportSource) -> String {
         switch source {
         case .contacts: return "people"
-        case .calendar: return "agenda"
-        case .reminders: return "tasks"
         default: return ""
         }
     }
@@ -1183,8 +1231,6 @@ final class ShellModel: ObservableObject {
     private static func importWords(_ source: Centraid_Screen_V1_ImportSource) -> (running: String, denied: String)? {
         switch source {
         case .contacts: return (PeopleCopy.shared.IMPORT_CONTACTS_RUNNING, PeopleCopy.shared.IMPORT_CONTACTS_DENIED)
-        case .calendar: return (AgendaCopy.shared.IMPORT_CALENDAR_RUNNING, AgendaCopy.shared.IMPORT_CALENDAR_DENIED)
-        case .reminders: return (TasksCopy.shared.IMPORT_REMINDERS_RUNNING, TasksCopy.shared.IMPORT_REMINDERS_DENIED)
         default: return nil
         }
     }
@@ -1205,32 +1251,6 @@ final class ShellModel: ObservableObject {
                 // What an import leaves held (an account that left the phone) is asked by the follower.
                 follow.requested(source: .contacts)
                 return sentence
-            }
-        case .calendar:
-            switch await PhoneCalendar.read() {
-            case .denied: return nil
-            case let .read(read):
-                let sentence: String = await withCheckedContinuation { done in
-                    calendar.sync(
-                        events: read.events,
-                        origins: read.origins,
-                        complete: read.complete,
-                        deviceTz: read.deviceTz,
-                        now: read.now
-                    ) { outcome in
-                        done.resume(returning: CalendarImport.shared.sentence(outcome: outcome))
-                    }
-                }
-                follow.requested(source: .calendar)
-                return sentence
-            }
-        case .reminders:
-            switch await PhoneReminders.read() {
-            case .denied: return nil
-            case let .read(found):
-                return await withCheckedContinuation { done in
-                    reminders.run(reminders: found) { done.resume(returning: $0) }
-                }
             }
         default: return ""
         }
@@ -1536,6 +1556,9 @@ final class ShellModel: ObservableObject {
         switch route {
         case let .screen(identifier, parameter):
             routes[identifier]?.open(parameter)
+        case .rust:
+            // Opened on Rust's stack by its host (`openRust`), once per push.
+            break
         case .photos:
             // Re-read the OS grant, then open (R-PHOTOS-1). Sending `Opened`
             // alone left a post-attach grant as NOT_ASKED on first paint.

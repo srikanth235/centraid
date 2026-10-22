@@ -11,6 +11,7 @@ import centraid.screen.v1.HomeSearchEvent
 import centraid.screen.v1.PhotoShelf
 import dev.centraid.design.copy.SharedCopy
 import dev.centraid.shared.kit.SearchContainers
+import dev.centraid.shared.nav.AgendaEntry
 import dev.centraid.shared.nav.Destination
 import dev.centraid.shared.nav.RowRoutes
 import dev.centraid.shared.shell.HomeSearchMachine
@@ -34,7 +35,7 @@ class SearchContainersSpec : StringSpec({
         val hits = listOf(
             ContainerHit(entity = "notebook", id = "nb", title = "Cabin", app_id = "notes"),
             ContainerHit(entity = "album", id = "al", title = "Summer", app_id = "photos"),
-            ContainerHit(entity = "project", id = "pr", title = "Garden", app_id = "tasks"),
+            ContainerHit(entity = "project", id = "pr", title = "Garden", app_id = "agenda"),
             ContainerHit(entity = "folder", id = "fo", title = "Taxes", app_id = "docs"),
         )
         val rows = SearchContainers.fold(hits)
@@ -51,7 +52,7 @@ class SearchContainersSpec : StringSpec({
         rows.map { it.id } shouldContainExactly listOf("nb", "al", "pr", "fo")
         rows[0].accessibility_label shouldBe "Notebook, Cabin"
         // An entity this table does not name is no container.
-        SearchContainers.fold(listOf(ContainerHit(entity = "album", id = "x", title = "X", app_id = "agenda"))).shouldBeEmpty()
+        SearchContainers.fold(listOf(ContainerHit(entity = "album", id = "x", title = "X", app_id = "agenda"), ContainerHit(entity = "project", id = "y", title = "Y", app_id = "tasks"))).shouldBeEmpty()
     }
 
     "Home puts an app's containers before its rows, counts both, and a container-only app still has its group" {
@@ -100,7 +101,7 @@ class SearchContainersSpec : StringSpec({
             Destination.NotesLibrary(notebookId = "nb", notebookName = "Cabin", unfiledOnly = false)
         open("photos", "album", "al", "Summer") shouldBe
             Destination.PhotoShelfRoute(PhotoShelf(album = PhotoShelf.Album(collection_id = "al", name = "Summer")))
-        open("tasks", "project", "pr", "Garden") shouldBe Destination.TasksProject("pr", "Garden")
+        open("agenda", "project", "pr", "Garden") shouldBe AgendaEntry.project("pr", "Garden")
         open("docs", "folder", "fo", "Taxes") shouldBe Destination.DocsFolder("fo", "Taxes", parent = "Search")
         // A noun the table does not name still opens the app's home.
         open("notes", "shelf", "x", "X") shouldBe Destination.NotesLibrary()

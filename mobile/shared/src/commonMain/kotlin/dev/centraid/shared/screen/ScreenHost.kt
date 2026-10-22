@@ -44,7 +44,7 @@ public class ScreenHost<S, E>(public val machine: ScreenMachine<S, E>) {
      *
      * It was invisible on a single-threaded dispatcher and appeared the moment
      * a real core answered from a pool: Docs and People sat loading on a
-     * simulator while Notes, Agenda and Tasks drew their rows, every run.
+     * simulator while Notes and Agenda drew their rows, every run.
      *
      * A `Mutex` and not a single-threaded dispatcher, because which dispatcher
      * a shell owns is the shell's decision — the same reason `start_endpoint`

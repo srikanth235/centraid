@@ -16,5 +16,8 @@ path = "src/lib.rs"
 centraid-api-proto = { path = "../api-proto" }
 centraid-core = { path = "../core" }
 prost.workspace = true
+serde_json.workspace = true
+# THE ONE PARTY HUE WHEEL: a project and a calendar are drawn in the hue their id lands on.
+centraid-design = { path = "../design" }
 # The headless driver founds and seeds a scratch vault (`testing`).
 centraid-ontology = { path = "../ontology" }

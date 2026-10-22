@@ -114,7 +114,7 @@ class WriteRunnerSpec : StringSpec({
             SeatState.Durability.DURABILITY_AUTHORITATIVE,
         )
         NotesEditorMachine.seatChanged(reachable).seat_changed?.seat shouldBe reachable
-        dev.centraid.shared.apps.tasks.TasksTrashMachine.machine.seatChanged(reachable)
+        dev.centraid.shared.apps.notes.NotesTrashMachine.seatChanged(reachable)
             .seat_changed?.seat shouldBe reachable
         dev.centraid.shared.apps.photos.PhotosGridMachine.seatChanged(reachable)
             .seat_changed?.seat shouldBe reachable

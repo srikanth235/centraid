@@ -16,7 +16,7 @@ use std::path::PathBuf;
 /// Every file in the tree, named rather than globbed: a `.proto` that is not on
 /// this list is a file nothing generates from, and a glob would hide that.
 /// `tests/tree.rs` asserts the list and the directory agree.
-const PROTOS: [&str; 29] = [
+const PROTOS: [&str; 32] = [
     "proto/centraid/core/v1/value.proto",
     "proto/centraid/core/v1/row.proto",
     "proto/centraid/core/v1/command.proto",
@@ -79,6 +79,11 @@ const PROTOS: [&str; 29] = [
     "proto/centraid/core/v1/action.proto",
     // THE SCREEN RUNTIME'S WIRE (#1135, lane C2): route stacks, events, view
     // states and effects, spoken through three arms of the one `Envelope`.
+    // The route (a leaf, so a view can name one), the shared view vocabulary
+    // (a leaf), Agenda's screens, and the runtime's own wire that imports them.
+    "proto/centraid/core/v1/route.proto",
+    "proto/centraid/core/v1/kit_screens.proto",
+    "proto/centraid/core/v1/agenda_screens.proto",
     "proto/centraid/core/v1/screens.proto",
     // The on-device chat: a session, a question and a stream of events, over
     // reads an app already answers. Its own file because a turn is neither a
@@ -106,15 +111,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .boxed(".centraid.screen.v1.PhotoLightboxEvent.kind.data")
         // Every app screen's `data` arm: the answer is the whole screen, and
         // its siblings (loading, empty, refused) are a line or two each.
-        .boxed(".centraid.screen.v1.AgendaHomeState.content.data")
-        .boxed(".centraid.screen.v1.AgendaEventState.content.data")
-        .boxed(".centraid.screen.v1.AgendaEditorState.content.data")
+        .boxed(".centraid.core.v1.AgendaHomeState.content.data")
+        .boxed(".centraid.core.v1.AgendaEventState.content.data")
+        .boxed(".centraid.core.v1.AgendaEditorState.content.data")
+        .boxed(".centraid.core.v1.TodoDetailState.content.data")
+        .boxed(".centraid.core.v1.TodoProjectState.content.data")
+        // Home is by far the largest view state.
+        .boxed(".centraid.core.v1.ViewState.kind.agenda_home")
         .boxed(".centraid.screen.v1.PeopleHomeData.surface.touch")
         .boxed(".centraid.screen.v1.PeopleHomeState.content.data")
         .boxed(".centraid.screen.v1.PeopleHomeEvent.kind.data")
         .boxed(".centraid.screen.v1.PeoplePersonState.content.data")
         .boxed(".centraid.screen.v1.PeoplePersonEvent.kind.data")
-        .boxed(".centraid.screen.v1.TasksDetailState.content.data")
         .boxed(".centraid.screen.v1.DocsDriveEvent.kind.data")
         .boxed(".centraid.screen.v1.DocsDocumentState.content.data")
         .boxed(".centraid.screen.v1.DocsDocumentEvent.kind.data")

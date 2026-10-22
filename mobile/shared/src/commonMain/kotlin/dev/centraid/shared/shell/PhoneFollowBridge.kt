@@ -11,8 +11,8 @@ import kotlin.time.Clock
 /**
  * HOW A SHELL FOLLOWS THE PHONE (#1127). Both shells do the same four things:
  *
- * - build a reader for each source it can read (`ContactsReader`, `CalendarReader`) and wrap it in
- *   the app's `ContactsFollow` / `CalendarFollow`;
+ * - build a reader for each source it can read (`ContactsReader`, …) and wrap it in
+ *   the app's follow (`ContactsFollow`, …);
  * - [attach] once, with the session, those sources, and the function that draws a question;
  * - call [requested] when the phone may have changed: the app came to the front, or the OS
  *   announced a change in the address book or the calendars. It is cheap and never blocks; the

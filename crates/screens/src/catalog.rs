@@ -815,6 +815,32 @@ pub mod act {
                 value.request()
             }
         }
+
+        /// Follow the phone's calendars through follow.calendar, one calendar at a time: a field the member never changed follows the phone, one they changed stands, an event the vault does not know is matched by title and start before one is added, a repeating series is one event with its rule and the days the phone skipped or moved, and one gone from a complete read goes to the trash if the member never edited it.
+        #[derive(Clone, Debug, Default)]
+        pub struct FollowCalendar {
+            pub origin: String,
+            pub records: String,
+            pub complete: Option<bool>,
+            pub since: Option<String>,
+        }
+        impl FollowCalendar {
+            pub const NAME: &str = "follow-calendar";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("origin".to_owned(), text(self.origin));
+                map.insert("records".to_owned(), text(self.records));
+                if let Some(it) = self.complete { map.insert("complete".to_owned(), flag(it)); }
+                if let Some(it) = self.since { map.insert("since".to_owned(), text(it)); }
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<FollowCalendar> for wire::ActRequest {
+            fn from(value: FollowCalendar) -> Self {
+                value.request()
+            }
+        }
     }
 
     pub mod docs {

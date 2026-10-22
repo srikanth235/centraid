@@ -226,7 +226,7 @@ internal class Rig(val door: ScriptedChatDoor = ScriptedChatDoor()) {
  */
 class ChatFlowSpec : StringSpec({
 
-    fun card(id: String, title: String) = AssistCard(app = "tasks", entity = "task", id = id, title = title)
+    fun card(id: String, title: String) = AssistCard(app = "agenda", entity = "task", id = id, title = title)
 
     "opening a ready model starts a session and shows three suggestions" {
         val rig = Rig()
@@ -310,7 +310,7 @@ class ChatFlowSpec : StringSpec({
         rig.state.streaming shouldBe true
         rig.state.messages shouldHaveSize 2
 
-        rig.door.bus.tryEmit(AssistEvent(session_id = 7, turn_id = 1, activity = AssistActivity(app = "tasks", tool = "tasks.list")))
+        rig.door.bus.tryEmit(AssistEvent(session_id = 7, turn_id = 1, activity = AssistActivity(app = "agenda", tool = "agenda.list")))
         rig.state.activity shouldBe "Looking in Agenda"
         rig.door.bus.tryEmit(AssistEvent(session_id = 7, turn_id = 1, cards = AssistCards(cards = listOf(card("t1", "Pick up the dry cleaning")))))
         rig.state.messages.last().cards shouldHaveSize 1

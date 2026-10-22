@@ -1,0 +1,123 @@
+// WHERE A SCREEN IS, AS A VALUE (#1135). A `Route` names a registered screen and
+// carries its arguments; Rust builds every one and hands it to a shell inside a
+// view state (a row's `route`), and the shell sends the same value back as a
+// push. A shell never builds a route of its own.
+//
+// ITS OWN FILE, LEAF, because a view state names a `Route` (a row opens a
+// page) and `Route` names every app's arguments: `screens.proto` imports each
+// app's view file for its `ViewState` arms, so a `Route` defined there would
+// make a cycle. The arguments' enums (`AgendaDestination`) live here for the
+// same reason.
+//
+// HOW AN APP LANE ADDS A ROUTE: one arm in `Route.args`, in the app's reserved
+// range (listed in `screens.proto`), and its small argument message in the
+// app's section below.
+
+syntax = "proto3";
+
+package centraid.core.v1;
+
+message Route {
+  // The screen's registered name, e.g. `proof.counter`, `agenda.event`.
+  string screen = 1;
+  oneof args {
+    CounterRoute counter = 10;
+    // ---- agenda (100-199) ----
+    AgendaHomeRoute agenda_home = 100;
+    AgendaEventRoute agenda_event = 101;
+    AgendaEditorRoute agenda_editor = 102;
+    TodoListRoute todo_list = 103;
+    TodoProjectRoute todo_project = 104;
+    TodoDetailRoute todo_detail = 105;
+    TodoCatchUpRoute todo_catch_up = 106;
+    // ---- the kit (900-999) ----
+    TrashRoute trash = 900;
+  }
+}
+
+// The proof screen's route: no arguments.
+message CounterRoute {}
+
+// ---------------------------------------------------------------------------
+// Agenda
+// ---------------------------------------------------------------------------
+
+enum AgendaDestination {
+  AGENDA_DESTINATION_UNSPECIFIED = 0;
+  AGENDA_DESTINATION_DAY = 1;
+  AGENDA_DESTINATION_SCHEDULE = 2;
+  AGENDA_DESTINATION_WAITING = 3;
+  // The Inbox, then the projects by area (R-1128-1).
+  AGENDA_DESTINATION_TODO = 4;
+}
+
+// What the add sheet adds: an event, or a to-do.
+enum AgendaEditorKind {
+  AGENDA_EDITOR_KIND_UNSPECIFIED = 0;
+  AGENDA_EDITOR_KIND_EVENT = 1;
+  AGENDA_EDITOR_KIND_TASK = 2;
+}
+
+// Which list the to-do list page shows.
+enum TodoView {
+  TODO_VIEW_UNSPECIFIED = 0;
+  TODO_VIEW_ANYTIME = 1;
+  TODO_VIEW_ALL = 2;
+  TODO_VIEW_LOGBOOK = 3;
+  TODO_VIEW_REMINDERS = 4;
+}
+
+// `agenda.home`: lands on `destination` at today, or on Day when unspecified.
+message AgendaHomeRoute {
+  AgendaDestination destination = 1;
+  // Words waiting in To-do's quick add, focused (Notes' "Send to Agenda");
+  // empty is an empty bar. Naming words also names To-do as the place.
+  string quick_add_title = 2;
+}
+
+// `agenda.event`: one occurrence of an event.
+message AgendaEventRoute {
+  string event_id = 1;
+  string instance_key = 2;
+  optional string original_start_local = 3;
+  // The civil day the row was drawn under: the read's window.
+  string day = 4;
+}
+
+// `agenda.editor`: an empty `event_id` creates (on `day`, as `kind`); a named
+// one edits that occurrence.
+message AgendaEditorRoute {
+  string event_id = 1;
+  string instance_key = 2;
+  optional string original_start_local = 3;
+  string day = 4;
+  // A create's kind; UNSPECIFIED is the kind this device last added.
+  AgendaEditorKind kind = 5;
+}
+
+// `agenda.todo_list`: the Anytime, All, Logbook or Reminders page.
+message TodoListRoute {
+  TodoView view = 1;
+}
+
+// `agenda.project`: one project's page. The name rides along so the head has
+// words before the read lands.
+message TodoProjectRoute {
+  string project_id = 1;
+  string name = 2;
+}
+
+// `agenda.task`: one task's page.
+message TodoDetailRoute {
+  string task_id = 1;
+}
+
+// `agenda.catch_up`: the Overdue work, piled.
+message TodoCatchUpRoute {}
+
+// ---------------------------------------------------------------------------
+// The kit
+// ---------------------------------------------------------------------------
+
+// `<app>.trash`: the kit's one trash screen; the screen name says which app.
+message TrashRoute {}

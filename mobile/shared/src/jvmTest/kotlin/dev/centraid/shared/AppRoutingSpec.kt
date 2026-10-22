@@ -1,11 +1,7 @@
 package dev.centraid.shared
 
-import centraid.screen.v1.AgendaEditorEvent
-import centraid.screen.v1.AgendaEditorState
-import centraid.screen.v1.AgendaEventEvent
-import centraid.screen.v1.AgendaEventState
-import centraid.screen.v1.AgendaHomeEvent
-import centraid.screen.v1.AgendaHomeState
+import centraid.core.v1.AgendaDestination
+import centraid.core.v1.Route
 import centraid.screen.v1.DocsDocumentEvent
 import centraid.screen.v1.DocsDocumentState
 import centraid.screen.v1.DocsDriveChrome
@@ -45,10 +41,6 @@ import centraid.screen.v1.PeoplePersonData
 import centraid.screen.v1.PeoplePersonEvent
 import centraid.screen.v1.PeoplePersonState
 import centraid.screen.v1.TileStatus
-import dev.centraid.shared.apps.agenda.AgendaEditorMachine
-import dev.centraid.shared.apps.agenda.AgendaEventMachine
-import dev.centraid.shared.apps.agenda.AgendaHomeMachine
-import dev.centraid.shared.apps.agenda.AgendaRouting
 import dev.centraid.shared.apps.docs.DocsDocumentMachine
 import dev.centraid.shared.apps.docs.DocsDriveMachine
 import dev.centraid.shared.apps.docs.DocsEditorMachine
@@ -89,11 +81,13 @@ import dev.centraid.shared.apps.people.PeopleHomeMachine
 import dev.centraid.shared.apps.people.PeoplePersonMachine
 import dev.centraid.shared.apps.people.PeopleRouting
 import dev.centraid.shared.apps.people.PeopleTrashMachine
+import dev.centraid.shared.nav.AgendaEntry
 import dev.centraid.shared.nav.AppIds
 import dev.centraid.shared.nav.Destination
 import dev.centraid.shared.nav.MemberAction
 import dev.centraid.shared.nav.RowRef
 import dev.centraid.shared.nav.RowRoutes
+import dev.centraid.shared.nav.ScreenIds
 import dev.centraid.shared.nav.NavMove
 import dev.centraid.shared.nav.NavStack
 import dev.centraid.shared.nav.ScreenMoves
@@ -147,7 +141,6 @@ class AppRoutingSpec : StringSpec({
             Destination.DocsTrash to DocsTrashMachine.screenId,
             Destination.PeopleEditor("p") to PeopleEditorMachine.SCREEN_ID,
             Destination.PeopleTrash to PeopleTrashMachine.screenId,
-            Destination.AgendaEditor(day = "2026-10-17") to AgendaEditorMachine.SCREEN_ID,
             Destination.MoneyTarget("2026-10", "c", "EUR") to MoneyTargetMachine.SCREEN_ID,
             Destination.MoneyRecurring() to MoneyRecurringMachine.SCREEN_ID,
             Destination.MoneyImport() to MoneyImportMachine.SCREEN_ID,
@@ -178,13 +171,6 @@ class AppRoutingSpec : StringSpec({
             party_id shouldBe ""
         }
         PeopleEditorEvent.ADAPTER.decode(ScreenOpenings.of(Destination.PeopleEditor("p9"))!!.event).opened!!.party_id shouldBe "p9"
-        AgendaEditorEvent.ADAPTER.decode(ScreenOpenings.of(Destination.AgendaEditor(day = "2026-10-17"))!!.event).opened!!.run {
-            mode shouldBe AgendaEditorState.Mode.MODE_CREATE
-            day shouldBe "2026-10-17"
-        }
-        AgendaEditorEvent.ADAPTER.decode(
-            ScreenOpenings.of(Destination.AgendaEditor("e1", "k1", null, "2026-10-17"))!!.event,
-        ).opened!!.mode shouldBe AgendaEditorState.Mode.MODE_EDIT
         LockerEditorEvent.ADAPTER.decode(ScreenOpenings.of(Destination.LockerEditor(itemId = "i2"))!!.event).opened!!.run {
             mode shouldBe LockerEditorState.Mode.MODE_EDIT
             item_id shouldBe "i2"
@@ -239,20 +225,17 @@ class AppRoutingSpec : StringSpec({
         )
         NotesRouting.editor(NotesEditorEvent(send_to_tasks = NotesEditorEvent.SendToTasks(text = "  ")), ready).shouldBeNull()
         val sent = NotesRouting.editor(NotesEditorEvent(send_to_tasks = NotesEditorEvent.SendToTasks(text = "Buy milk")), ready)
-        sent shouldBe NavMove.push(Destination.AgendaHome(AgendaHomeState.Destination.DESTINATION_TODO, quickAdd = "Buy milk"))
-        // Spelled, the words ride the home's `Opened`.
+        sent shouldBe NavMove.push(AgendaEntry.home(AgendaDestination.AGENDA_DESTINATION_TODO, quickAdd = "Buy milk"))
+        // Spelled, the home is the Rust screen id and the encoded route (#1135), which a shell that keys by id pushes.
         val opening = ScreenMoves.of(sent)!!.openings.single()
-        opening.screenId shouldBe AgendaHomeMachine.SCREEN_ID
-        AgendaHomeEvent.ADAPTER.decode(opening.event).opened!!.let {
-            it.destination shouldBe AgendaHomeState.Destination.DESTINATION_TODO
-            it.quick_add_title shouldBe "Buy milk"
-        }
+        opening.screenId shouldBe ScreenIds.RUST_SCREEN
+        Route.ADAPTER.decode(opening.event).agenda_home!!.quick_add_title shouldBe "Buy milk"
     }
 
     "Notes: Done pops onto a Notes screen, else swaps in the library; the tile opens its shelf's place" {
         NotesRouting.close(NotesLibraryMachine.SCREEN_ID) shouldBe NavMove.Pop
         NotesRouting.close("") shouldBe NavMove.swap(Destination.NotesLibrary())
-        NotesRouting.close(AgendaHomeMachine.SCREEN_ID) shouldBe NavMove.swap(Destination.NotesLibrary())
+        NotesRouting.close("people.home") shouldBe NavMove.swap(Destination.NotesLibrary())
 
         val tile = HomeTile(app_id = "notes", status = TileStatus.TILE_STATUS_EMPTY)
         (NotesRouting.tile(tile) as Destination.NotesEditor).isNew shouldBe true
@@ -359,24 +342,6 @@ class AppRoutingSpec : StringSpec({
             PeopleEditorMachine.SCREEN_ID
     }
 
-    // --- Agenda ----------------------------------------------------------
-
-    "Agenda: an occurrence opens its detail; New event the editor on the anchor day; Edit the editor on the occurrence" {
-        val picked = AgendaHomeEvent(
-            event_picked = AgendaHomeEvent.EventPicked(event_id = "e1", instance_key = "k1", day = "2026-10-17"),
-        )
-        AgendaRouting.home(picked, AgendaHomeState()) shouldBe Destination.AgendaEvent("e1", "k1", null, "2026-10-17")
-        AgendaRouting.home(AgendaHomeEvent(new_event = AgendaHomeEvent.NewEventRequested()), AgendaHomeState(anchor_day = "2026-10-20")) shouldBe
-            Destination.AgendaEditor(day = "2026-10-20")
-        val edit = AgendaEventEvent(action = AgendaEventEvent.ActionPicked(key = AgendaEventMachine.ACTION_EDIT))
-        AgendaRouting.event(edit, AgendaEventState()).shouldBeNull()
-        AgendaRouting.event(edit, AgendaEventState(event_id = "e1", instance_key = "k1", day = "2026-10-17")) shouldBe
-            Destination.AgendaEditor("e1", "k1", null, "2026-10-17")
-        AgendaRouting.event(AgendaEventEvent(action = AgendaEventEvent.ActionPicked(key = "cancel")), AgendaEventState(event_id = "e1")).shouldBeNull()
-        AgendaRouting.route(AgendaHomeMachine.SCREEN_ID, picked.encode(), AgendaHomeState().encode())!!.openings.single().screenId shouldBe
-            AgendaEventMachine.SCREEN_ID
-    }
-
     // --- Docs ------------------------------------------------------------
 
     "Docs: a folder, a document and the trash push with the drive's title; a folder with no id is not a page" {
@@ -449,7 +414,7 @@ class AppRoutingSpec : StringSpec({
         MemberAction.parse(AppIds.LOCKER, "locker_item", "i1", "edit_secret:password")!!.kind shouldBe MemberAction.Kind.EditSecret
         MemberAction.parse(AppIds.LOCKER, "locker_item", "", "export:")!!.kind shouldBe MemberAction.Kind.Export
         MemberAction.parse(AppIds.LOCKER, "locker_item", "", "reveal:password").shouldBeNull()
-        MemberAction.parse(AppIds.TASKS, "task", "t1", "reveal:password").shouldBeNull()
+        MemberAction.parse(AppIds.AGENDA, "task", "t1", "reveal:password").shouldBeNull()
         MemberAction.parse(AppIds.LOCKER, "locker_item", "i1", "").shouldBeNull()
     }
 

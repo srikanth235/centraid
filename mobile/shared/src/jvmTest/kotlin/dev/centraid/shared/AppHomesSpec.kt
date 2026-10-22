@@ -8,29 +8,26 @@ import io.kotest.matchers.shouldBe
 /**
  * THE ONE MAP FROM A DOMAIN TO THE APP A MEMBER OPENS IT IN (#1128, R-1128-7).
  *
- * `tasks` is a vault domain and a write app id, not an app a member launches;
- * every place that names or marks an app from an id asks [AppHomes], so a
- * folded domain never prints raw, never draws no mark and never sorts last.
+ * No domain is folded into another app any more: the tasks are Agenda's and the
+ * `tasks` id is gone. Every place that names or marks an app from an id still
+ * asks [AppHomes], so an id never prints raw and never draws no mark.
  */
 class AppHomesSpec : StringSpec({
 
-    "tasks opens in Agenda and every launchable app opens in itself" {
-        AppHomes.appOf("tasks") shouldBe "agenda"
+    "every launchable app opens in itself, and an id that is no app in itself too" {
         CentraidCatalog.apps.forEach { AppHomes.appOf(it.id) shouldBe it.id }
+        AppHomes.appOf("tasks") shouldBe "tasks"
         AppHomes.appOf("") shouldBe ""
     }
 
-    "a domain reads as its app's name, and an id the catalogue lacks as itself capitalised" {
-        AppHomes.nameOf("tasks") shouldBe "Agenda"
+    "an app reads as its catalogue name, and an id the catalogue lacks as itself capitalised" {
         AppHomes.nameOf("agenda") shouldBe "Agenda"
         AppHomes.nameOf("weather") shouldBe "Weather"
         AppHomes.nameOf("") shouldBe ""
     }
 
-    "the app a domain opens in is catalogued, so its name and mark exist" {
-        CentraidCatalog.byId[AppHomes.appOf("tasks")]?.name shouldBe "Agenda"
+    "the catalogue has no `tasks` app" {
         CentraidCatalog.byId.containsKey("tasks") shouldBe false
-        AppHomes.isLaunchable("tasks") shouldBe false
         AppHomes.isLaunchable("agenda") shouldBe true
     }
 })

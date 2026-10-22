@@ -1,9 +1,21 @@
+import Combine
+import Contacts
+import EventKit
 import Foundation
+import Security
 import SwiftProtobuf
 
 #if os(iOS)
 import UIKit
 #endif
+
+/// WHAT THE STORE TALKS TO: the core, or whatever carries its bytes (`Core`).
+protocol ScreenCore: Sendable {
+    func call(_ request: Centraid_Core_V1_Request) async throws -> Centraid_Core_V1_Response
+    var updates: AsyncStream<Centraid_Core_V1_ScreenUpdate> { get }
+}
+
+extension Core: ScreenCore {}
 
 /// WHAT SWIFTUI DRAWS FROM (#1135, lane C2): the latest navigation and the
 /// latest view state of every open screen, exactly as Rust made them.
@@ -18,10 +30,15 @@ final class ScreenStore: ObservableObject {
     @Published private(set) var navigation: Centraid_Core_V1_Navigation?
     @Published private(set) var views: [UInt64: Centraid_Core_V1_ViewState] = [:]
 
-    private let core: Core
+    private let core: any ScreenCore
     private var closed: Set<UInt64> = []
+    /// Instances this shell opened with `open`, so two opens never claim one entry.
+    private var claimed: Set<UInt64> = []
+    /// The phone stores being watched (`PhoneWatch`), each under the effect that asked.
+    private var watches: [UInt64: (instance: UInt64, source: Centraid_Core_V1_ImportSource)] = [:]
+    private var storeObservers: [NSObjectProtocol] = []
 
-    init(core: Core) {
+    init(core: any ScreenCore) {
         self.core = core
     }
 
@@ -59,6 +76,31 @@ final class ScreenStore: ObservableObject {
         Task { await request(.environment(environment)) }
     }
 
+    /// Push a route onto a tab and answer the instance Rust opened for it, or
+    /// nil when the push was not answered. The shell remembers the instance:
+    /// it draws that instance's view and reports its pop (`popped`).
+    func open(tab: String, route: Centraid_Core_V1_Route) async -> UInt64? {
+        let before = Set(entries(of: tab).map(\.instance))
+        var push = Centraid_Core_V1_NavPush()
+        push.tab = tab
+        push.route = route
+        var nav = Centraid_Core_V1_NavEvent()
+        nav.kind = .push(push)
+        await request(.nav(nav))
+        let opened = entries(of: tab).last { !before.contains($0.instance) && !claimed.contains($0.instance) }?.instance
+        if let opened { claimed.insert(opened) }
+        return opened
+    }
+
+    /// The shell popped a screen it opened (a back control or a swipe); Rust drops it.
+    func popped(tab: String, instance: UInt64) {
+        claimed.remove(instance)
+        var popped = Centraid_Core_V1_NavPopped()
+        popped.tab = tab
+        popped.instance = instance
+        navigate(.popped(popped))
+    }
+
     /// A tab's stack, root first, as Rust holds it.
     func entries(of tab: String) -> [Centraid_Core_V1_StackEntry] {
         navigation?.tabs.first { $0.tab == tab }?.entries ?? []
@@ -92,29 +134,137 @@ final class ScreenStore: ObservableObject {
 
     // MARK: - effects
 
+    /// Perform what Rust asked and answer it by `effect_id`. An answer may come
+    /// later (a calendar read); a screen popped meanwhile tolerates it.
     private func perform(_ request: Centraid_Core_V1_EffectRequest) {
-        var result = Centraid_Core_V1_EffectResult()
-        result.effectID = request.effectID
         switch request.effect.kind {
         #if os(iOS)
         case .clipboardSet(let set)?:
             UIPasteboard.general.string = set.text
-            result.outcome = .done(Centraid_Core_V1_EffectDone())
+            answer(request, .done(Centraid_Core_V1_EffectDone()))
         case .clipboardClear(let clear)?:
             // Only what the core put there: never clear something the member copied since.
             if UIPasteboard.general.string == clear.expectedText { UIPasteboard.general.string = "" }
-            result.outcome = .done(Centraid_Core_V1_EffectDone())
+            answer(request, .done(Centraid_Core_V1_EffectDone()))
         case .haptic(let haptic)?:
             Self.play(haptic.kind)
-            result.outcome = .done(Centraid_Core_V1_EffectDone())
+            answer(request, .done(Centraid_Core_V1_EffectDone()))
+        case .share(let share)?:
+            Self.present(share)
+            answer(request, .done(Centraid_Core_V1_EffectDone()))
+        case .openURL(let link)?:
+            if let url = URL(string: link.url) {
+                UIApplication.shared.open(url)
+                answer(request, .done(Centraid_Core_V1_EffectDone()))
+            } else {
+                answer(request, .failed(Self.failure("not a URL")))
+            }
         #endif
+        case .keychain(let operation)?:
+            answer(request, Self.keychain(operation))
+        case .calendarRead(let read)?:
+            Task {
+                let outcome = await PhoneCalendar.snapshot(read)
+                answer(request, outcome)
+            }
+        case .phoneWatch(let watch)?:
+            self.watch(request, watch)
         default:
             // Platform work this build does not perform yet: say so, by value.
-            var failed = Centraid_Core_V1_EffectFailed()
-            failed.reason = "not performed by this shell"
-            result.outcome = .failed(failed)
+            answer(request, .failed(Self.failure("not performed by this shell")))
         }
+    }
+
+    private func answer(_ request: Centraid_Core_V1_EffectRequest, _ outcome: Centraid_Core_V1_EffectResult.OneOf_Outcome) {
+        var result = Centraid_Core_V1_EffectResult()
+        result.effectID = request.effectID
+        result.outcome = outcome
         send(request.instance, .effectResult(result))
+    }
+
+    private static func failure(_ reason: String, denied: Bool = false) -> Centraid_Core_V1_EffectFailed {
+        var failed = Centraid_Core_V1_EffectFailed()
+        failed.reason = reason
+        failed.denied = denied
+        return failed
+    }
+
+    /// START OR STOP WATCHING A PHONE STORE. While on, each change of the store
+    /// is answered under the one `effect_id` that asked, as `PhoneChanged`.
+    private func watch(_ request: Centraid_Core_V1_EffectRequest, _ watch: Centraid_Core_V1_PhoneWatch) {
+        if watch.on {
+            watches[request.effectID] = (request.instance, watch.source)
+            observeStores()
+        } else {
+            watches = watches.filter { $0.value.instance != request.instance || $0.value.source != watch.source }
+            answer(request, .done(Centraid_Core_V1_EffectDone()))
+        }
+    }
+
+    /// One observer per store the OS announces changes of, installed on the first watch.
+    private func observeStores() {
+        guard storeObservers.isEmpty else { return }
+        // EventKit posts only for a store that is alive.
+        _ = PhoneCalendar.watcher
+        let center = NotificationCenter.default
+        storeObservers = [
+            center.addObserver(forName: .EKEventStoreChanged, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    self?.storeChanged(.calendar)
+                    self?.storeChanged(.reminders)
+                }
+            },
+            center.addObserver(forName: .CNContactStoreDidChange, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.storeChanged(.contacts) }
+            },
+        ]
+    }
+
+    private func storeChanged(_ source: Centraid_Core_V1_ImportSource) {
+        for (effectID, watch) in watches where watch.source == source {
+            var changed = Centraid_Core_V1_PhoneChanged()
+            changed.source = source
+            var result = Centraid_Core_V1_EffectResult()
+            result.effectID = effectID
+            result.outcome = .phoneChanged(changed)
+            send(watch.instance, .effectResult(result))
+        }
+    }
+
+    /// THE KEYCHAIN, for per-device habits that must stay off the vault. One
+    /// generic-password item per key, readable after first unlock, never synced.
+    private static func keychain(_ operation: Centraid_Core_V1_KeychainOp) -> Centraid_Core_V1_EffectResult.OneOf_Outcome {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: "dev.centraid.screens",
+            kSecAttrAccount as String: operation.key,
+        ]
+        switch operation.op {
+        case .get:
+            var read = query
+            read[kSecReturnData as String] = true
+            read[kSecMatchLimit as String] = kSecMatchLimitOne
+            var item: CFTypeRef?
+            let status = SecItemCopyMatching(read as CFDictionary, &item)
+            var value = Centraid_Core_V1_KeychainValue()
+            if status == errSecSuccess, let data = item as? Data {
+                value.found = true
+                value.value = data
+            }
+            return .keychain(value)
+        case .set:
+            SecItemDelete(query as CFDictionary)
+            var add = query
+            add[kSecValueData as String] = operation.value
+            add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+            let status = SecItemAdd(add as CFDictionary, nil)
+            return status == errSecSuccess ? .done(Centraid_Core_V1_EffectDone()) : .failed(failure("keychain \(status)"))
+        case .delete:
+            SecItemDelete(query as CFDictionary)
+            return .done(Centraid_Core_V1_EffectDone())
+        default:
+            return .failed(failure("unknown keychain operation"))
+        }
     }
 
     #if os(iOS)
@@ -125,6 +275,22 @@ final class ScreenStore: ObservableObject {
         case .error: UINotificationFeedbackGenerator().notificationOccurred(.error)
         default: UISelectionFeedbackGenerator().selectionChanged()
         }
+    }
+
+    /// The OS share sheet over the frontmost screen: the text, then the link.
+    private static func present(_ share: Centraid_Core_V1_Share) {
+        var items: [Any] = []
+        if !share.text.isEmpty { items.append(share.text) }
+        if let url = URL(string: share.url), !share.url.isEmpty { items.append(url) }
+        guard !items.isEmpty,
+            let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first,
+            var top = scene.windows.first(where: \.isKeyWindow)?.rootViewController
+        else { return }
+        while let next = top.presentedViewController { top = next }
+        let sheet = UIActivityViewController(activityItems: items, applicationActivities: nil)
+        if !share.subject.isEmpty { sheet.setValue(share.subject, forKey: "subject") }
+        sheet.popoverPresentationController?.sourceView = top.view
+        top.present(sheet, animated: true)
     }
     #endif
 }

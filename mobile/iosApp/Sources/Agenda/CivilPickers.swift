@@ -3,7 +3,7 @@ import SwiftUI
 /// THE PLATFORM'S DATE AND TIME PICKERS, BOUND TO CIVIL STRINGS (#1046 wave 5;
 /// #1029 Tasks port).
 ///
-/// A machine never reads a zone: it holds `YYYY-MM-DD` and `HH:MM` on the
+/// A screen never reads a zone: it holds `YYYY-MM-DD` and `HH:MM` on the
 /// device's wall clock, and a view's picker wants a `Date`. This is the one
 /// conversion between the two — Gregorian, the device's current zone, no
 /// rounding — so a picked value crosses back as exactly the civil string the
@@ -96,7 +96,7 @@ struct CivilPick: Identifiable {
 }
 
 /// The platform's picker in a sheet — the calendar for a day, the wheel for a
-/// time — titled with the machine's words. Every change is a pick; Done only
+/// time — titled with Rust's words. Every change is a pick; Done only
 /// closes. The wheel's position is the sheet's own state, seeded once from
 /// the draft, so a pick in flight never snaps it back.
 struct CivilPickSheet: View {

@@ -78,6 +78,9 @@ struct CentraidApp: App {
                             // is the one its `AppScreens.register` handed over.
                             case let .screen(identifier, parameter):
                                 RegisteredScreen(shell: shell, identifier: identifier, parameter: parameter)
+                            // A SCREEN RUST OWNS, drawn from its view state.
+                            case let .rust(entry):
+                                RustScreenHost(shell: shell, entry: entry)
                             case .photos:
                                 PhotosGridView(shell: shell)
 

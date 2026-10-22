@@ -85,7 +85,7 @@ class ChatMachineSpec : StringSpec({
     fun settledRefused(turn: Long, reason: AssistRefusalReason) =
         ChatInput.Settled(turn, AssistSent(session_id = 7, turn_id = turn, refused = refusal(reason)))
 
-    fun card(id: String, title: String) = AssistCard(app = "tasks", entity = "task", id = id, title = title)
+    fun card(id: String, title: String) = AssistCard(app = "agenda", entity = "task", id = id, title = title)
 
     fun asked(text: String = "What is due today?"): Chat = reduce(ready(), sent(text)).chat
 
@@ -131,8 +131,8 @@ class ChatMachineSpec : StringSpec({
     }
 
     "a model on the phone is loaded, then a session is started, then suggestions are asked for" {
-        // Opened from a task page: the `tasks` domain is read through Agenda's scope (R-1128-F2).
-        val begun = reduce(ChatMachine.initial(), opened("tasks")).chat
+        // Opened from a task page: Agenda's scope (R-1128-F2).
+        val begun = reduce(ChatMachine.initial(), opened("agenda")).chat
         val loadStep = reduce(begun, status(present))
         loadStep.chat.state.phase shouldBe ChatState.Phase.PHASE_LOADING
         loadStep.chat.state.model_step!!.status_line shouldBe "Loading model"
@@ -281,7 +281,7 @@ class ChatMachineSpec : StringSpec({
 
     "a turn draws its activity, then its cards, then its sentence as it comes, then the answer" {
         var chat = asked()
-        chat = reduce(chat, coreEvent(1) { it.copy(activity = AssistActivity(app = "tasks", tool = "tasks.list")) }).chat
+        chat = reduce(chat, coreEvent(1) { it.copy(activity = AssistActivity(app = "agenda", tool = "agenda.list")) }).chat
         chat.state.activity shouldBe "Looking in Agenda"
 
         chat = reduce(
@@ -320,7 +320,7 @@ class ChatMachineSpec : StringSpec({
     "the tool activity names the app the core named" {
         val chat = reduce(
             asked(),
-            coreEvent(1) { it.copy(activity = AssistActivity(app = "tasks", tool = "tasks.find")) },
+            coreEvent(1) { it.copy(activity = AssistActivity(app = "agenda", tool = "agenda.find")) },
         ).chat
         chat.state.activity shouldBe "Looking in Agenda"
     }
@@ -516,8 +516,7 @@ class ChatMachineSpec : StringSpec({
 
     "an app id reads as its name" {
         ChatMachine.appName("money") shouldBe "Money"
-        // A domain reads as the app it opens in (#1128, R-1128-7).
-        ChatMachine.appName("tasks") shouldBe "Agenda"
+        ChatMachine.appName("agenda") shouldBe "Agenda"
         ChatMachine.appName("") shouldBe ""
     }
 

@@ -20,7 +20,7 @@ import dev.centraid.shared.screen.Step
  * would draw the old shelf's rows under the new one's head when the older
  * answer lands last. A read asked while another is out is QUEUED; the answer to
  * the older one is dropped and the queued read goes out instead
- * (`AgendaHome.reading`'s rule, and `PhotosGridState.reading`'s before it).
+ * (`PhotosGridState.reading`'s rule).
  */
 internal interface ReadGateLens<S> {
     val screenId: String

@@ -1,13 +1,12 @@
 package dev.centraid.shared.nav
 
-import centraid.screen.v1.AgendaHomeState
+import centraid.core.v1.Route
 import centraid.screen.v1.DocsDriveState
 import centraid.screen.v1.PeopleHomeState
 import centraid.screen.v1.PhotoShelf
 import centraid.screen.v1.PhotoStateView
 import centraid.screen.v1.PhotosGridState
 import centraid.screen.v1.PlacesState
-import centraid.screen.v1.TasksListState
 
 /**
  * The navigation model (#1020, D-1020-E1, D-1020-E3).
@@ -60,42 +59,14 @@ public sealed interface Destination {
     public data object Copies : Destination
 
     /**
-     * AGENDA'S HOME (#1046, #1128). Day, Schedule, Waiting or To-do, as a
-     * parameter; Search is a mode over it and More a sheet, so neither is a
-     * value here. A shell pushes this and calls `AgendaBridge.open(destination)`
-     * — or, with [quickAdd] (Notes' "Send to Agenda"), `open(destination,
-     * quickAdd)`, which lands on To-do with those words in the quick add.
+     * A SCREEN RUST OWNS (#1135), drawn by the shell from the view state Rust
+     * sends: [route] is the registered screen and its arguments, built by Rust
+     * (a row's `route`) or, at an app's front door, by [AgendaEntry]. INTERIM
+     * HOSTING: this stack still holds the back stack until the shell lane
+     * replaces it; pushing an entry sends `NavPush(tab, route)` and popping it
+     * sends `NavPopped`.
      */
-    public data class AgendaHome(
-        val destination: AgendaHomeState.Destination =
-            AgendaHomeState.Destination.DESTINATION_DAY,
-        /** Words waiting in To-do's quick add, focused (Notes' "Send to Agenda"); empty is none. */
-        val quickAdd: String = "",
-    ) : Destination
-
-    /**
-     * ONE AGENDA OCCURRENCE (#1046 wave 4) — `AgendaHomeEvent.EventPicked`'s
-     * fields. A shell pushes this and calls `AgendaEventBridge.open`.
-     */
-    public data class AgendaEvent(
-        val eventId: String,
-        val instanceKey: String,
-        val originalStartLocal: String? = null,
-        val day: String,
-    ) : Destination
-
-    /**
-     * AGENDA'S EDITOR (#1046 wave 5): a new event on [day] when [eventId] is
-     * null (`AgendaEditorBridge.openNew`), else that occurrence
-     * (`AgendaEditorBridge.openEdit`). Popped only on
-     * `AgendaEditorState.dismissed`.
-     */
-    public data class AgendaEditor(
-        val eventId: String? = null,
-        val instanceKey: String = "",
-        val originalStartLocal: String? = null,
-        val day: String = "",
-    ) : Destination
+    public data class RustScreen(val route: Route) : Destination
 
     public data class PhotosHome(
         /**
@@ -260,21 +231,6 @@ public sealed interface Destination {
 
     public data object PeopleTrash : Destination
 
-    // --- Tasks (#1029 port) ---
-
-    /** Anytime, All, Logbook or Reminders — one screen, the view a parameter. */
-    public data class TasksList(val view: TasksListState.View) : Destination
-
-    /** One project; the name rides along for the head. */
-    public data class TasksProject(val projectId: String, val name: String = "") : Destination
-
-    /** The task editor: autosave, close = done, no band. */
-    public data class TasksDetail(val taskId: String) : Destination
-
-    public data object TasksCatchUp : Destination
-
-    /** Tasks' trash: restore, and delete forever behind a confirm. */
-    public data object TasksTrash : Destination
     // --- Locker (#1047, D-5) ---
     //
     // EVERY LOCKER DESTINATION IS DRAWN UNDER THE LOCK WALL while
@@ -425,16 +381,6 @@ public data class NavStack(val entries: List<Destination> = listOf(Destination.H
             NavStack(entries.dropLast(1) + top.copy(presentation = presentation))
         } else {
             push(Destination.Places(presentation))
-        }
-    }
-
-    /** The same in-place swap for Agenda's band. */
-    public fun withAgendaDestination(destination: AgendaHomeState.Destination): NavStack {
-        val top = current
-        return if (top is Destination.AgendaHome) {
-            NavStack(entries.dropLast(1) + top.copy(destination = destination, quickAdd = ""))
-        } else {
-            push(Destination.AgendaHome(destination))
         }
     }
 
