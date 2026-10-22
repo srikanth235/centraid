@@ -595,8 +595,8 @@ fn set_addresses(ctx: &CommandCtx<'_, '_>, item_id: &str, addresses: &[String]) 
 /// Replace the owner's plaintext memo, a column of the item.
 ///
 /// Plaintext on purpose: a secret goes in a **sealed field**. A memo is the
-/// thing a member wants to read back and find, and it is in no search index:
-/// Locker is not in the index.
+/// thing a member wants to read back and find, and it is part of the item's
+/// search text (`index::text_of`), which holds no sealed cell.
 fn replace_memo(ctx: &CommandCtx<'_, '_>, item_id: &str, note: &str) -> Result<()> {
     let body = note.trim();
     ctx.connection().execute(
@@ -1773,8 +1773,8 @@ fn set_memo() -> CommandDefinition {
             let item_id = ctx.required_str("item_id")?.to_owned();
             // An owner remark is a `knowledge.annotation` (#310) and is
             // PLAINTEXT. Secrets go in sealed fields, which stay out of every
-            // index; a memo is in none either, because Locker is not a search
-            // domain (#1097, R1c). An empty note clears it.
+            // index; a memo is plain and is part of the item's search text
+            // (`index::text_of`). An empty note clears it.
             replace_memo(ctx, &item_id, ctx.required_str("note")?)?;
             ctx.touch(&item_id)?;
             Ok(item_id_output(&item_id))

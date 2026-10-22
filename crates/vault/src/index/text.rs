@@ -26,9 +26,9 @@ use crate::model::Kind;
 /// The kinds a member searches for: every kind [`text_of`] has an answer for.
 /// A flag, a calendar, a category or an account is not in the index as itself:
 /// its title is part of the text of what it labels, so a member finds a
-/// transaction by its category and an event by its calendar. Locker is not even
-/// an entity.
-pub const SEARCHABLE: [Kind; 14] = [
+/// transaction by its category and an event by its calendar. A Locker item is
+/// found by its plain fields only ([`text_of`]); a sealed cell is never text.
+pub const SEARCHABLE: [Kind; 15] = [
     Kind::Person,
     Kind::Place,
     Kind::Event,
@@ -43,6 +43,7 @@ pub const SEARCHABLE: [Kind; 14] = [
     Kind::Folder,
     Kind::Album,
     Kind::Project,
+    Kind::LockerItem,
 ];
 
 /// The text a kind is found by, beside its title: its own row and children, the
@@ -147,6 +148,29 @@ pub fn text_of(connection: &Connection, id: &str, kind: Kind) -> Result<Option<S
             id,
         )?,
         Kind::Album => String::new(),
+        // A Locker item is found by what it shows in the clear: its title (the
+        // index's own column), the plain cells below, its aliases and extra
+        // addresses, then the tags and notes folded in below like any other
+        // kind. **Never a sealed cell** (`SEALED_ITEM_CELLS`), a sealed custom
+        // field's `value_sealed`, or a passkey's key: the plaintext gate hunts
+        // for each in the index and its word list.
+        Kind::LockerItem => joined(
+            connection,
+            "SELECT username FROM locker_item WHERE id = ?1
+             UNION ALL SELECT url FROM locker_item WHERE id = ?1
+             UNION ALL SELECT notes FROM locker_item WHERE id = ?1
+             UNION ALL SELECT fullname FROM locker_item WHERE id = ?1
+             UNION ALL SELECT email FROM locker_item WHERE id = ?1
+             UNION ALL SELECT phone FROM locker_item WHERE id = ?1
+             UNION ALL SELECT brand FROM locker_item WHERE id = ?1
+             UNION ALL SELECT memo FROM locker_item WHERE id = ?1
+             UNION ALL SELECT alias FROM (
+                 SELECT alias FROM locker_item_alias WHERE item_id = ?1 ORDER BY alias)
+             UNION ALL SELECT url FROM (
+                 SELECT url FROM locker_item_address WHERE item_id = ?1
+                  ORDER BY position, address_id)",
+            id,
+        )?,
         _ => return Ok(None),
     };
     // Held by a list or an album, and tagged or flagged: the words of the

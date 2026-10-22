@@ -12,7 +12,14 @@
 //! account it is filed under), and the bodies of the live notes `about` it, so a
 //! person is found by what you wrote about them, and by what you wrote about a
 //! touch that was `with` them (an interaction's note). A read joins `entity` on
-//! `n` for the kind and the trash filter; Locker is not in the index at all.
+//! `n` for the kind and the trash filter.
+//!
+//! A Locker item is in the index by its **plain** text only ([`text_of`]: never
+//! a sealed cell, a sealed field's value or a passkey key), and its words are
+//! filed in `search_word` under the `locker` realm, everything else under
+//! `vault` ([`crate::words::Realm`]). Which surface may read a Locker row is a
+//! question for the readers (the search door names the kind; the core holds the
+//! lock), not for the index.
 //!
 //! `tests/commitments.rs` rebuilds the index from scratch after a scripted run
 //! of every command and compares it with the incremental one, so a command
@@ -26,6 +33,7 @@ use rusqlite::{Connection, OptionalExtension};
 
 use crate::error::Result;
 use crate::model::Kind;
+use crate::words::Realm;
 
 mod text;
 
@@ -158,16 +166,34 @@ pub fn purge(connection: &Connection, id: &str) -> Result<()> {
     let Some((n, kind, title)) = row else {
         return Ok(());
     };
-    let body = match Kind::parse(&kind) {
+    let kind = Kind::parse(&kind);
+    let body = match kind {
         Some(kind) => text_of(connection, id, kind)?.unwrap_or_default(),
         None => String::new(),
     };
     forget(connection, n)?;
+    let realm = kind.map_or(Realm::Vault, Realm::of);
     let mut held = connection.prepare_cached("SELECT 1 FROM search_vocab WHERE term = ?1")?;
-    let mut drop = connection.prepare_cached("DELETE FROM search_word WHERE word = ?1")?;
+    // Whether a row of this realm still holds the whole word. The vocabulary
+    // cannot say whose row it is, so this asks the index itself: the other
+    // realm's row holding the word must not keep it in this one, or a word only
+    // Locker holds would stay known to a reader that cannot open Locker.
+    let mut held_in_realm = connection.prepare_cached(
+        "SELECT 1 FROM search JOIN entity e ON e.n = search.rowid
+          WHERE search MATCH ?1 AND (e.kind = 'locker_item') = ?2 LIMIT 1",
+    )?;
+    let mut drop_all = connection.prepare_cached("DELETE FROM search_word WHERE word = ?1")?;
+    let mut drop_here =
+        connection.prepare_cached("DELETE FROM search_word WHERE word = ?1 AND realm = ?2")?;
     for word in distinct_words(&[&title, &body]) {
         if !held.exists([&word])? {
-            drop.execute([&word])?;
+            drop_all.execute([&word])?;
+            continue;
+        }
+        let phrase = format!("\"{}\"", word.replace('"', "\"\""));
+        let locker = realm == Realm::Locker;
+        if !held_in_realm.exists(rusqlite::params![phrase, locker])? {
+            drop_here.execute([word.as_str(), realm.as_str()])?;
         }
     }
     Ok(())
@@ -188,13 +214,13 @@ fn distinct_words(texts: &[&str]) -> Vec<String> {
     words
 }
 
-/// Add the words of a text just indexed to the list. A word already in the list
-/// keeps its number.
-fn remember(connection: &Connection, title: &str, body: &str) -> Result<()> {
-    let mut add =
-        connection.prepare_cached("INSERT OR IGNORE INTO search_word (word) VALUES (?1)")?;
+/// Add the words of a text just indexed to the list, under the realm of the kind
+/// that holds them. A word already in the list under that realm keeps its number.
+fn remember(connection: &Connection, realm: Realm, title: &str, body: &str) -> Result<()> {
+    let mut add = connection
+        .prepare_cached("INSERT OR IGNORE INTO search_word (word, realm) VALUES (?1, ?2)")?;
     for word in distinct_words(&[title, body]) {
-        add.execute([&word])?;
+        add.execute([word.as_str(), realm.as_str()])?;
     }
     Ok(())
 }
@@ -228,7 +254,7 @@ fn reindex_one(connection: &Connection, id: &str) -> Result<()> {
         "INSERT INTO search (rowid, title, body) VALUES (?1, ?2, ?3)",
         rusqlite::params![n, title, body],
     )?;
-    remember(connection, &title, &body)?;
+    remember(connection, Realm::of(kind), &title, &body)?;
     Ok(())
 }
 

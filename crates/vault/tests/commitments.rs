@@ -834,14 +834,15 @@ fn script_every_search_relevant_command(scratch: &common::Scratch, registry: &Re
         "entity.retitle",
         json!({"id": "pr", "title": "Allotment"}),
     );
-    // A LOCKER ITEM IS AN ENTITY AND IS NEVER INDEXED: scripting its commands
-    // here is what holds "incremental equals rebuilt" over a kind whose text is
-    // nothing, and a note's link to it must not carry its title into the note.
+    // A LOCKER ITEM IS AN ENTITY AND IS INDEXED BY ITS PLAIN TEXT ONLY: scripting
+    // its commands here is what holds "incremental equals rebuilt" over a kind
+    // whose text is its title, plain cells, aliases, addresses, tags and notes.
     run(
         vault,
         registry,
         "locker.add_item",
-        json!({"item_id": "lk1", "type": "login", "title": "Vaultbank", "username": "sealedname"}),
+        json!({"item_id": "lk1", "type": "login", "title": "Vaultbank", "username": "sealedname",
+               "alias": "vb-main", "notes": "ask for Wilhelmina"}),
     );
     run(
         vault,
@@ -854,6 +855,30 @@ fn script_every_search_relevant_command(scratch: &common::Scratch, registry: &Re
         registry,
         "flag.set",
         json!({"id": "lk1", "flag": "starred"}),
+    );
+    run(
+        vault,
+        registry,
+        "locker.set_addresses",
+        json!({"item_id": "lk1", "addresses": [{"url": "https://vaultbank.example/login"}]}),
+    );
+    run(
+        vault,
+        registry,
+        "locker.set_memo",
+        json!({"item_id": "lk1", "note": "branch closes early on fridays"}),
+    );
+    run(
+        vault,
+        registry,
+        "note.create",
+        json!({"id": "lkn", "title": "Teller", "body": "the teller is called Ottoline"}),
+    );
+    run(
+        vault,
+        registry,
+        "edge.add",
+        json!({"from": "lkn", "rel": "about", "to": "lk1"}),
     );
     run(
         vault,
@@ -871,8 +896,17 @@ fn script_every_search_relevant_command(scratch: &common::Scratch, registry: &Re
         vault,
         registry,
         "locker.edit_item",
-        json!({"item_id": "lk1", "username": "other"}),
+        json!({"item_id": "lk1", "username": "other", "notes": "ask for Wilhelmina"}),
     );
+    // A purged item takes its words with it, and only its own realm's.
+    run(
+        vault,
+        registry,
+        "locker.add_item",
+        json!({"item_id": "lk2", "type": "login", "title": "Doomedsafe", "username": "gonename"}),
+    );
+    run(vault, registry, "entity.trash", json!({"id": "lk2"}));
+    run(vault, registry, "entity.purge", json!({"id": "lk2"}));
     run(vault, registry, "entity.trash", json!({"id": "lk1"}));
     run(vault, registry, "entity.restore", json!({"id": "lk1"}));
     // Last, so no later command re-indexes it and hides a missing touch.
@@ -898,12 +932,28 @@ fn the_incremental_index_equals_a_rebuild_after_every_search_relevant_command() 
     script_every_search_relevant_command(&scratch, &registry);
     let incremental = index_dump(&scratch.vault);
     assert!(!incremental.is_empty(), "the script left something to find");
+    // The positive control: a Locker item's plain text IS findable, so the
+    // equality below compares an index that holds it.
     let held = vocabulary(&scratch.vault);
+    for word in [
+        "vaultbank",
+        "savings",
+        "vaulttag",
+        "other",
+        "wilhelmina",
+        "vb",
+        "ottoline",
+        "fridays",
+        "https",
+    ] {
+        assert!(
+            held.contains(word),
+            "`{word}` of a Locker item is not in the index: {held:?}"
+        );
+    }
     assert!(
-        !held
-            .iter()
-            .any(|term| term.starts_with("vaultbank") || term == "vaulttag"),
-        "a Locker item's title or tag reached the index: {held:?}"
+        !held.contains("doomedsafe") && !held.contains("gonename"),
+        "a purged Locker item's words are still in the index"
     );
     // The word list holds every word the index does, and may hold more: a word
     // an edit dropped stays until a purge of something that held it or a rebuild.
@@ -995,6 +1045,72 @@ fn the_word_list_gains_a_word_on_index_and_loses_it_on_a_purge_or_a_rebuild() {
     rebuilt(vault);
     assert!(!has("lait") && !has("cafe"));
     assert_eq!(word_list(vault), vocabulary(vault));
+}
+
+/// The words filed under one realm.
+fn realm_words(vault: &Vault, realm: &str) -> BTreeSet<String> {
+    read(vault, |connection| {
+        Ok(connection
+            .prepare("SELECT word FROM search_word WHERE realm = ?1")?
+            .query_map([realm], |row| row.get(0))?
+            .collect::<rusqlite::Result<_>>()?)
+    })
+}
+
+#[test]
+fn a_word_is_filed_under_the_realm_of_the_kind_that_holds_it_and_a_purge_keeps_the_other() {
+    let scratch = founded("c6-realms");
+    let vault = &scratch.vault;
+    let registry = Registry::with_system_commands().expect("a registry");
+    let go = |name: &str, input: serde_json::Value| run(vault, &registry, name, input);
+    let vault_has = |word: &str| realm_words(vault, "vault").contains(word);
+    let locker_has = |word: &str| realm_words(vault, "locker").contains(word);
+
+    go(
+        "note.create",
+        json!({"id": "rn", "title": "Hangar", "body": "sharedword vaultonlyword"}),
+    );
+    go(
+        "locker.add_item",
+        json!({"item_id": "rl", "type": "login", "title": "Lockeronlyword",
+               "username": "sharedword"}),
+    );
+    assert!(vault_has("sharedword") && vault_has("vaultonlyword") && vault_has("hangar"));
+    assert!(locker_has("sharedword") && locker_has("lockeronlyword"));
+    assert!(
+        !vault_has("lockeronlyword"),
+        "a word only Locker holds is not a word of the vault realm"
+    );
+    assert!(
+        !locker_has("vaultonlyword"),
+        "a word only the vault holds is not a word of the locker realm"
+    );
+
+    // Purging the note takes the vault realm's words and leaves Locker's own.
+    go("entity.trash", json!({"id": "rn"}));
+    go("entity.purge", json!({"id": "rn"}));
+    assert!(!vault_has("sharedword"), "no vault row holds it any more");
+    assert!(!vault_has("vaultonlyword"));
+    assert!(locker_has("sharedword"), "the Locker item still holds it");
+
+    // And the other way: a vault note that holds a word keeps it in its realm
+    // when the Locker item that held it goes.
+    go(
+        "note.create",
+        json!({"id": "rn2", "title": "Again", "body": "sharedword"}),
+    );
+    assert!(vault_has("sharedword"));
+    go("entity.trash", json!({"id": "rl"}));
+    go("entity.purge", json!({"id": "rl"}));
+    assert!(!locker_has("sharedword") && !locker_has("lockeronlyword"));
+    assert!(vault_has("sharedword"), "the note still holds it");
+    assert_eq!(
+        word_list(vault),
+        vocabulary(vault)
+            .union(&word_list(vault))
+            .cloned()
+            .collect()
+    );
 }
 
 #[test]
@@ -1453,6 +1569,99 @@ const CENSUS: &[(&str, &str, Reach)] = &[
     ("occurrence", "ends", Reach::Not("an instant")),
     ("journal", "at", Reach::Not("an instant")),
     ("revision", "at", Reach::Not("an instant")),
+    // Locker: the plain cells a member sees in the list are found by; every
+    // sealed cell is `lk1:` ciphertext and is never text (`SEALED_ITEM_CELLS`).
+    ("locker_item", "username", Reach::Own),
+    ("locker_item", "url", Reach::Own),
+    ("locker_item", "notes", Reach::Own),
+    ("locker_item", "fullname", Reach::Own),
+    ("locker_item", "email", Reach::Own),
+    ("locker_item", "phone", Reach::Own),
+    ("locker_item", "brand", Reach::Own),
+    ("locker_item", "memo", Reach::Own),
+    ("locker_item_address", "url", Reach::Own),
+    ("locker_item_alias", "alias", Reach::Own),
+    (
+        "locker_item",
+        "password",
+        Reach::Not("a sealed cell: ciphertext"),
+    ),
+    (
+        "locker_item",
+        "otp_seed",
+        Reach::Not("a sealed cell: ciphertext"),
+    ),
+    (
+        "locker_item",
+        "card_number",
+        Reach::Not("a sealed cell: ciphertext"),
+    ),
+    (
+        "locker_item",
+        "cvv",
+        Reach::Not("a sealed cell: ciphertext"),
+    ),
+    (
+        "locker_item",
+        "content",
+        Reach::Not("a sealed cell: ciphertext"),
+    ),
+    (
+        "locker_item_field",
+        "value_sealed",
+        Reach::Not("a sealed custom field's value: ciphertext"),
+    ),
+    (
+        "locker_item_passkey",
+        "private_key",
+        Reach::Not("a passkey's private key: ciphertext"),
+    ),
+    (
+        "locker_item",
+        "cardholder",
+        Reach::Not("argued out: a card's face is read in the item, not searched for"),
+    ),
+    (
+        "locker_item",
+        "expiry",
+        Reach::Not("a date on a card, not prose"),
+    ),
+    (
+        "locker_item",
+        "address",
+        Reach::Not("a postal address of an identity; an owner question whether it is searched"),
+    ),
+    ("locker_item", "network", Reach::Not("a wifi network type")),
+    (
+        "locker_item_field",
+        "section",
+        Reach::Not("a custom field's group name; an owner question whether it is searched"),
+    ),
+    (
+        "locker_item_field",
+        "label",
+        Reach::Not("a custom field's name; an owner question whether it is searched"),
+    ),
+    (
+        "locker_item_field",
+        "value_text",
+        Reach::Not("a custom field's plain value; an owner question whether it is searched"),
+    ),
+    (
+        "locker_item_passkey",
+        "user_handle",
+        Reach::Not("a relying party's opaque handle"),
+    ),
+    (
+        "locker_item_passkey",
+        "display_name",
+        Reach::Not("the relying party's account label, shown on the item"),
+    ),
+    (
+        "locker_item_passkey",
+        "algorithm",
+        Reach::Not("a signature algorithm name"),
+    ),
     ("edge_shape", "rel", Reach::Not("a closed vocabulary")),
     ("source", "system", Reach::Not("a closed vocabulary")),
 ];
@@ -1485,11 +1694,10 @@ fn column_definition(sql: &str, column: &str) -> String {
 
 /// A `TEXT` column the declaration alone shows is not prose: an id or a hash
 /// (named by a key), an enum, JSON, a date, a generated constant. Locker's
-/// tables are exempt as a whole: a Locker item is an entity, but `text_of`
-/// answers `None` for its kind, so no column of it is ever indexed (the
-/// title included).
+/// tables are NOT exempt: its plain cells are findable and its sealed ones are
+/// argued out by name, in [`CENSUS`].
 fn is_structural(connection: &Connection, table: &str, column: &str) -> bool {
-    if table.starts_with("locker_") || table == "receipt" {
+    if table == "receipt" {
         return true;
     }
     if column == "id"

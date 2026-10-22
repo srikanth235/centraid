@@ -230,9 +230,16 @@ CREATE VIRTUAL TABLE search_vocab USING fts5vocab(search, row);
 -- holds; an edit that drops a word leaves it until a rebuild. `n` only ever grows
 -- except when a rollback gives a number back, so a reader that keeps the list asks the table
 -- whether it is still the same one (`crates/vault/src/words.rs`).
+--
+-- `realm` says whose words they are: a word held by a Locker item is filed under 'locker', every
+-- other under 'vault', and a word two realms hold is two rows. A reader asks for the realms it may
+-- see, so a word only Locker holds is never offered to, nor known by, a reader that cannot open
+-- Locker (the assistant; Home while Locker is locked).
 CREATE TABLE search_word (
-  n    INTEGER PRIMARY KEY,
-  word TEXT NOT NULL UNIQUE
+  n     INTEGER PRIMARY KEY,
+  word  TEXT NOT NULL,
+  realm TEXT NOT NULL CHECK (realm IN ('vault','locker')),
+  UNIQUE (word, realm)
 ) STRICT;
 
 -- ---------------------------------------------------------------------------------------------

@@ -347,6 +347,9 @@ pub(crate) fn purge_one(
     )? {
         ctx.mark_for_index(&labelled);
     }
+    // The index forgets the entity FIRST: a purge names the words the entity holds
+    // now (`index::purge`), and a Locker item's plain text is its sidecars' rows.
+    crate::index::purge(connection, id)?;
     // A Locker item's sidecars are deleted explicitly, in this commit, though
     // they declare ON DELETE CASCADE: a cascade fires no `AFTER DELETE`
     // trigger unless `recursive_triggers` is on, and the commit's census names
@@ -362,7 +365,6 @@ pub(crate) fn purge_one(
         }
         connection.execute("DELETE FROM locker_item WHERE id = ?1", [id])?;
     }
-    crate::index::purge(connection, id)?;
     connection.execute("DELETE FROM entity WHERE id = ?1", [id])?;
     purged.push(id.to_owned());
     Ok(())

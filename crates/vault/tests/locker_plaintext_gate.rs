@@ -26,6 +26,15 @@
 //! multi-seat file custody they policed (#1047 slice D1): there is no key file
 //! for a reader to open.
 //!
+//! ## The search index
+//!
+//! A Locker item is indexed by its plain fields (its title, username, address,
+//! aliases, notes ...), so the gate is not "the index holds nothing of Locker"
+//! but "the index holds nothing SEALED": no word of a planted sealed cell is in
+//! `search_vocab`, `search_word`, the FTS5 shadow tables' bytes or `text_of`,
+//! while the planted plain fields are (a positive control, so the scan cannot be
+//! passing by looking nowhere).
+//!
 //! ## The falsification
 //!
 //! A search that finds nothing is the same output as a search that looks
@@ -113,14 +122,28 @@ impl Sealed {
                      VALUES ('key-1', '2026-01-01T00:00:00.000Z')",
                     [],
                 )?;
-                for (item_id, title) in [("item-1", "The bank"), ("item-2", "The card")] {
+                for (item_id, title, username, brand) in [
+                    ("item-1", "The bank", "plainuser-xylophone9", None),
+                    (
+                        "item-2",
+                        "The card",
+                        "plainname-quokka7",
+                        Some("plainbrand-zeppelin3"),
+                    ),
+                ] {
                     // A Locker item is an entity first; its kind row joins it.
                     tx.insert_entity(item_id, Kind::LockerItem, title, "2026-01-01T00:00:00.000Z")?;
                     connection.execute(
-                        "INSERT INTO locker_item (id, type, key_id) VALUES (?1, 'login', 'key-1')",
-                        rusqlite::params![item_id],
+                        "INSERT INTO locker_item (id, type, username, brand, key_id)
+                         VALUES (?1, 'login', ?2, ?3, 'key-1')",
+                        rusqlite::params![item_id, username, brand],
                     )?;
                 }
+                connection.execute(
+                    "INSERT INTO locker_item_alias (alias, item_id, created_at)
+                     VALUES ('plainalias-narwhal5', 'item-1', '2026-01-01T00:00:00.000Z')",
+                    [],
+                )?;
                 connection.execute(
                     "INSERT INTO locker_item_field
                        (field_id, item_id, section, label, kind, created_at, updated_at, key_id)
@@ -184,6 +207,30 @@ fn needles() -> Vec<&'static str> {
         .iter()
         .map(|(_, _, _, plaintext)| *plaintext)
         .collect()
+}
+
+/// The digit-bearing words of each planted secret (`zq7xk4`, `mv9wr2`, ...): the
+/// tokenizer splits `PLANTED-PASSWORD-zq7xk4-...` at its hyphens, so a scan for
+/// the whole string cannot see a secret indexed as words. These are what the
+/// index would actually hold.
+fn secret_tokens() -> Vec<String> {
+    needles()
+        .iter()
+        .flat_map(|needle| needle.split('-'))
+        .filter(|token| token.chars().any(|letter| letter.is_ascii_digit()))
+        .map(str::to_lowercase)
+        .collect()
+}
+
+/// Assert no word of any planted secret appears in the bytes.
+fn carries_no_secret_token(what: &str, answer: &[u8]) {
+    let lower = answer.to_ascii_lowercase();
+    for token in secret_tokens() {
+        assert!(
+            !contains(&lower, token.as_bytes()),
+            "{what} holds `{token}`, a word of a sealed cell's plaintext"
+        );
+    }
 }
 
 /// Assert a door's answer carries no planted secret, as text AND as bytes.
@@ -372,38 +419,82 @@ fn nothing_the_vault_serves_or_backs_up_carries_locker_plaintext() {
             let refused = page_of("generic.peek", table, &[pk], pk, pk);
             assert!(refused.is_err(), "a generic read of {table} was served");
         }
-        // The search index holds no word of a Locker item, nor its row.
+        // THE SEARCH INDEX holds a Locker item by its PLAIN text and by nothing
+        // sealed. The scan is of the index's vocabulary, its word list (every
+        // realm), `text_of`, and the raw bytes of the FTS5 shadow tables.
         vault
             .read(|connection| {
-                let index_text: String = connection
+                let words: Vec<String> = connection
                     .prepare(
                         "SELECT term FROM search_vocab UNION ALL SELECT word FROM search_word",
                     )?
                     .query_map([], |row| row.get::<_, String>(0))?
-                    .collect::<rusqlite::Result<Vec<_>>>()?
-                    .join(" ");
+                    .collect::<rusqlite::Result<Vec<_>>>()?;
+                let index_text = words.join(" ");
                 carries_no_secret("the search index's words", index_text.as_bytes());
-                for title_word in ["bank", "card"] {
+                carries_no_secret_token("the search index's words", index_text.as_bytes());
+                // The shadow tables, as bytes: leaf blocks, the segment index,
+                // the doc sizes and the config.
+                let mut shadow = Vec::new();
+                for (table, column) in [
+                    ("search_data", "block"),
+                    ("search_docsize", "sz"),
+                    ("search_idx", "term"),
+                    ("search_config", "v"),
+                ] {
+                    for cell in connection
+                        .prepare(&format!("SELECT {column} FROM {table}"))?
+                        .query_map([], |row| row.get::<_, rusqlite::types::Value>(0))?
+                    {
+                        match cell? {
+                            rusqlite::types::Value::Blob(bytes) => shadow.extend(bytes),
+                            rusqlite::types::Value::Text(text) => shadow.extend(text.into_bytes()),
+                            other => shadow.extend(format!("{other:?}").into_bytes()),
+                        }
+                    }
+                }
+                carries_no_secret("the search shadow tables", &shadow);
+                carries_no_secret_token("the search shadow tables", &shadow);
+                // POSITIVE CONTROLS: the planted PLAIN fields are findable, and
+                // the scan above can see a word in these very bytes — so its
+                // silence about the secrets is not a scan that looks nowhere.
+                for plain in ["bank", "card", "quokka7", "zeppelin3", "narwhal5"] {
                     assert!(
-                        !index_text.split(' ').any(|word| word == title_word),
-                        "the search index holds the title of a Locker item (`{title_word}`)"
+                        words.iter().any(|word| word == plain),
+                        "the plain word `{plain}` of a Locker item is not in the index"
                     );
                 }
-                let indexed: i64 = connection.query_row(
-                    "SELECT COUNT(*) FROM search WHERE rowid IN
-                       (SELECT n FROM entity WHERE kind = 'locker_item')",
+                assert!(
+                    contains(&shadow, b"zeppelin3"),
+                    "the byte scan cannot see a plain word in the shadow tables, so it proves nothing"
+                );
+                // text_of answers with the plain fields and nothing sealed.
+                for item in ["item-1", "item-2"] {
+                    let text = centraid_vault::index::text_of(connection, item, Kind::LockerItem)?
+                        .expect("text_of answered for a Locker item");
+                    carries_no_secret("text_of", text.as_bytes());
+                    carries_no_secret_token("text_of", text.as_bytes());
+                }
+                // (`locker.edit_item` above REPLACED item-1's cells, so the plain
+                // cells that are still there are item-1's alias and item-2's two.)
+                for (item, plain) in [
+                    ("item-1", "narwhal5"),
+                    ("item-2", "quokka7"),
+                    ("item-2", "zeppelin3"),
+                ] {
+                    let text = centraid_vault::index::text_of(connection, item, Kind::LockerItem)?
+                        .unwrap_or_default();
+                    assert!(text.contains(plain), "text_of lost `{plain}`: {text}");
+                }
+                // Every Locker word is filed under the locker realm, and a word
+                // only Locker holds is not in the vault's.
+                let in_vault: i64 = connection.query_row(
+                    "SELECT COUNT(*) FROM search_word WHERE realm = 'vault'
+                       AND word IN ('quokka7', 'zeppelin3', 'narwhal5')",
                     [],
                     |row| row.get(0),
                 )?;
-                assert_eq!(indexed, 0, "a Locker item has a row in the search index");
-                // text_of answers nothing for the kind, whatever its row holds.
-                for item in ["item-1", "item-2"] {
-                    assert!(
-                        centraid_vault::index::text_of(connection, item, Kind::LockerItem)?
-                            .is_none(),
-                        "text_of answered for a Locker item"
-                    );
-                }
+                assert_eq!(in_vault, 0, "a Locker word was filed under the vault realm");
                 // The journal carried no cell (every command above ran), and a
                 // Locker item has no revision to carry one.
                 let journal: String = connection

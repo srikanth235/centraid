@@ -25,6 +25,13 @@
 //! accept it can close by reading through a fresh [`Vault`](crate::Vault).
 //! [`Words::loads`] says how often each kind of read happened.
 //!
+//! **Realms.** Each row is a word *and* the realm that holds it ([`Realm`]): a
+//! Locker item's words are filed under `locker`, everything else under `vault`.
+//! The cache keeps every row and a reader filters to the realms it may see
+//! ([`Word::in_realms`]), so there is one cache and one check however many realms
+//! a caller reads. A word two realms hold is two rows, and a reader of both sees
+//! it twice, which no reader here minds (a membership test and a best-of choice).
+//!
 //! **Outside a commit only.** Inside one the table holds rows that may be rolled
 //! back, and a cache that kept them would hold words nothing indexed.
 
@@ -33,6 +40,69 @@ use std::cell::{Ref, RefCell};
 use rusqlite::Connection;
 
 use crate::error::{Result, VaultError};
+use crate::model::Kind;
+
+/// Whose word it is: the vault's, or Locker's alone.
+///
+/// A reader that cannot open Locker reads the `vault` realm only, so a word that
+/// only Locker holds is neither offered to it as a correction nor known to it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Realm {
+    /// Every word of every kind but Locker's.
+    Vault,
+    /// A word of a Locker item (its title, plain fields, aliases, addresses, and
+    /// what is folded into it).
+    Locker,
+}
+
+impl Realm {
+    /// Both realms: what Locker's own search and an unlocked Home read.
+    pub const ALL: [Self; 2] = [Self::Vault, Self::Locker];
+    /// The vault's realm alone: what the assistant and a locked Home read.
+    pub const VAULT_ONLY: [Self; 1] = [Self::Vault];
+
+    /// The word the table spells it with.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Vault => "vault",
+            Self::Locker => "locker",
+        }
+    }
+
+    /// The realm a kind's words are filed under.
+    #[must_use]
+    pub fn of(kind: Kind) -> Self {
+        if kind == Kind::LockerItem {
+            Self::Locker
+        } else {
+            Self::Vault
+        }
+    }
+
+    fn parse(text: &str) -> Option<Self> {
+        match text {
+            "vault" => Some(Self::Vault),
+            "locker" => Some(Self::Locker),
+            _ => None,
+        }
+    }
+}
+
+/// One row of the list.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Word {
+    pub word: String,
+    pub realm: Realm,
+}
+
+impl Word {
+    /// Whether a reader of `realms` may see this word.
+    #[must_use]
+    pub fn in_realms(&self, realms: &[Realm]) -> bool {
+        realms.contains(&self.realm)
+    }
+}
 
 /// What the cache holds: the words in the order they arrived, and the two
 /// numbers it checks them by.
@@ -41,7 +111,7 @@ struct Cache {
     /// Whether anything has been read: an empty table and a cache that has
     /// never looked are different states.
     loaded: bool,
-    words: Vec<String>,
+    words: Vec<Word>,
     /// The highest `n` read, `0` for none. The words are in `n` order, so the
     /// word at this `n` is the last.
     last: i64,
@@ -78,7 +148,7 @@ impl Words {
     /// # Errors
     /// Called inside a commit; called while a slice from an earlier call is
     /// still held and the table has changed since; SQLite's refusal.
-    pub fn current(&self, connection: &Connection) -> Result<Ref<'_, [String]>> {
+    pub fn current(&self, connection: &Connection) -> Result<Ref<'_, [Word]>> {
         if !connection.is_autocommit() {
             return Err(VaultError::Invariant {
                 context: "the word list is read outside a commit: inside one it holds rows \
@@ -121,14 +191,25 @@ impl Words {
         let mut ask = connection.prepare_cached(
             "SELECT (SELECT max(n) FROM search_word),
                     (SELECT count(*) FROM search_word),
-                    (SELECT word FROM search_word WHERE n = ?1)",
+                    (SELECT word FROM search_word WHERE n = ?1),
+                    (SELECT realm FROM search_word WHERE n = ?1)",
         )?;
-        let (highest, count, at_last): (Option<i64>, i64, Option<String>) = ask
-            .query_row([cache.last], |row| {
-                Ok((row.get(0)?, row.get(1)?, row.get(2)?))
-            })?;
+        let (highest, count, at_last, realm_at_last): (
+            Option<i64>,
+            i64,
+            Option<String>,
+            Option<String>,
+        ) = ask.query_row([cache.last], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+        })?;
         let highest = highest.unwrap_or(0);
-        let same_last = at_last.as_deref() == cache.words.last().map(String::as_str);
+        let same_last = cache.words.last().map_or_else(
+            || at_last.is_none(),
+            |last| {
+                at_last.as_deref() == Some(last.word.as_str())
+                    && realm_at_last.as_deref() == Some(last.realm.as_str())
+            },
+        );
         Ok(if !same_last {
             Verdict::Whole
         } else if highest == cache.last && count == cache.count {
@@ -179,13 +260,27 @@ impl Cache {
     }
 
     /// The rows after `n`, in `n` order.
-    fn read_after(&self, connection: &Connection, n: i64) -> Result<Vec<(i64, String)>> {
-        let mut statement =
-            connection.prepare_cached("SELECT n, word FROM search_word WHERE n > ?1 ORDER BY n")?;
+    fn read_after(&self, connection: &Connection, n: i64) -> Result<Vec<(i64, Word)>> {
+        let mut statement = connection
+            .prepare_cached("SELECT n, word, realm FROM search_word WHERE n > ?1 ORDER BY n")?;
         let rows = statement
-            .query_map([n], |row| Ok((row.get(0)?, row.get(1)?)))?
+            .query_map([n], |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                ))
+            })?
             .collect::<rusqlite::Result<Vec<_>>>()?;
-        Ok(rows)
+        rows.into_iter()
+            .map(|(n, word, realm)| {
+                Realm::parse(&realm)
+                    .map(|realm| (n, Word { word, realm }))
+                    .ok_or_else(|| VaultError::Invariant {
+                        context: format!("`search_word` holds the realm `{realm}`"),
+                    })
+            })
+            .collect()
     }
 }
 
@@ -209,7 +304,8 @@ mod tests {
         let connection = Connection::open_in_memory().expect("a connection");
         connection
             .execute_batch(
-                "CREATE TABLE search_word (n INTEGER PRIMARY KEY, word TEXT NOT NULL UNIQUE) STRICT;",
+                "CREATE TABLE search_word (n INTEGER PRIMARY KEY, word TEXT NOT NULL,
+                 realm TEXT NOT NULL CHECK (realm IN ('vault','locker')), UNIQUE (word, realm)) STRICT;",
             )
             .expect("the table");
         connection
@@ -219,7 +315,7 @@ mod tests {
         for word in words {
             connection
                 .execute(
-                    "INSERT OR IGNORE INTO search_word (word) VALUES (?1)",
+                    "INSERT OR IGNORE INTO search_word (word, realm) VALUES (?1, 'vault')",
                     [word],
                 )
                 .expect("a word");
@@ -227,7 +323,61 @@ mod tests {
     }
 
     fn held(words: &Words, connection: &Connection) -> Vec<String> {
-        words.current(connection).expect("reads").to_vec()
+        words
+            .current(connection)
+            .expect("reads")
+            .iter()
+            .map(|held| held.word.clone())
+            .collect()
+    }
+
+    fn add_in(connection: &Connection, realm: &str, words: &[&str]) {
+        for word in words {
+            connection
+                .execute(
+                    "INSERT OR IGNORE INTO search_word (word, realm) VALUES (?1, ?2)",
+                    [word, &realm],
+                )
+                .expect("a word");
+        }
+    }
+
+    /// The words a reader of `realms` sees.
+    fn seen(words: &Words, connection: &Connection, realms: &[Realm]) -> Vec<String> {
+        words
+            .current(connection)
+            .expect("reads")
+            .iter()
+            .filter(|held| held.in_realms(realms))
+            .map(|held| held.word.clone())
+            .collect()
+    }
+
+    #[test]
+    fn a_reader_sees_only_the_realms_it_asks_for() {
+        let connection = table();
+        add_in(&connection, "vault", &["alpha", "shared"]);
+        add_in(&connection, "locker", &["bravo", "shared"]);
+        let words = Words::default();
+        assert_eq!(
+            seen(&words, &connection, &Realm::VAULT_ONLY),
+            ["alpha", "shared"]
+        );
+        assert_eq!(
+            seen(&words, &connection, &[Realm::Locker]),
+            ["bravo", "shared"]
+        );
+        assert_eq!(
+            seen(&words, &connection, &Realm::ALL),
+            ["alpha", "shared", "bravo", "shared"]
+        );
+        // The same word in the other realm is a row of its own, so it is a tail.
+        add_in(&connection, "locker", &["alpha"]);
+        assert_eq!(
+            seen(&words, &connection, &Realm::VAULT_ONLY),
+            ["alpha", "shared"]
+        );
+        assert_eq!(loads(&words), (1, 1));
     }
 
     fn loads(words: &Words) -> (u64, u64) {
@@ -428,7 +578,14 @@ mod tests {
         vault.found("Test", "Test Owner").expect("founded");
         let held = |vault: &crate::Vault| -> Vec<String> {
             vault
-                .read(|connection| Ok(vault.words().current(connection)?.to_vec()))
+                .read(|connection| {
+                    Ok(vault
+                        .words()
+                        .current(connection)?
+                        .iter()
+                        .map(|held| held.word.clone())
+                        .collect())
+                })
                 .expect("reads")
         };
         let before = held(&vault);
@@ -470,7 +627,8 @@ mod tests {
         let connection = Connection::open(dir.join("words.db")).expect("a file");
         connection
             .execute_batch(
-                "CREATE TABLE search_word (n INTEGER PRIMARY KEY, word TEXT NOT NULL UNIQUE) STRICT;",
+                "CREATE TABLE search_word (n INTEGER PRIMARY KEY, word TEXT NOT NULL,
+                 realm TEXT NOT NULL CHECK (realm IN ('vault','locker')), UNIQUE (word, realm)) STRICT;",
             )
             .expect("the table");
         measure(&connection);
@@ -483,7 +641,7 @@ mod tests {
         connection.execute_batch("BEGIN").expect("begins");
         {
             let mut insert = connection
-                .prepare("INSERT INTO search_word (word) VALUES (?1)")
+                .prepare("INSERT INTO search_word (word, realm) VALUES (?1, 'vault')")
                 .expect("prepares");
             for n in 0..150_000_u32 {
                 // Words of a natural length: 4 to 11 letters, all different.

@@ -61,6 +61,7 @@ pub(super) fn search(
         });
         let entities: Vec<&str> = centraid_vault::index::SEARCHABLE
             .iter()
+            .filter(|kind| **kind != centraid_vault::model::Kind::LockerItem)
             .map(|kind| kind.as_str())
             .collect();
         Ok(index.map(|index| {
