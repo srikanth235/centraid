@@ -40,12 +40,14 @@
 //! Photos send" is how the two answers drift, so the action table
 //! ([`commands::ACTIONS`]) is compared with it by a test.
 
+pub mod cells;
 pub mod commands;
 pub mod duplicates;
 pub mod manifest;
 pub mod overview;
 pub mod places;
 pub mod queries;
+pub mod shelf;
 
 pub use commands::{ACTIONS, Commands, Invocation, Outcome};
 pub use duplicates::{DuplicateCluster, Fingerprint, duplicate_clusters};

@@ -367,6 +367,41 @@ mod tests {
         assert_eq!(row.get("original_held"), Some(&Cell::Integer(0)));
     }
 
+    /// THE DATED WALK OVER A NULLABLE KEY LOSES NOTHING: the continuation is a
+    /// predicate on a first page, ties on the sort key cross a boundary, and the
+    /// rows with no key are the caller's second walk.
+    #[test]
+    fn a_walk_by_predicate_crosses_ties_over_a_nullable_sort_key() {
+        use crate::reads::read_pages_by_predicate;
+        let connection = Connection::open_in_memory().expect("a connection");
+        connection
+            .execute_batch(
+                "CREATE TABLE shot (id TEXT PRIMARY KEY, taken_at TEXT);
+                 INSERT INTO shot VALUES
+                   ('s1','2026-01-01'),('s2','2026-01-01'),('s3','2026-01-01'),
+                   ('s4','2026-01-02'),('s5',NULL),('s6','2025-12-31'),('s7',NULL);",
+            )
+            .expect("seeded");
+        let door = TestDoor::new(&connection);
+        let dated = PageQuery::new(
+            "kit.testdoor.dated",
+            "id, taken_at",
+            "shot",
+            PageOrder::desc("taken_at", "id"),
+        )
+        .filter("taken_at IS NOT NULL", Vec::new());
+        let rows = read_pages_by_predicate(&door, &dated, FanOutBound::new(2, 10)).unwrap();
+        let ids: Vec<&str> = rows
+            .iter()
+            .map(|row| row.get("id").and_then(Cell::text).unwrap())
+            .collect();
+        assert_eq!(ids, ["s4", "s3", "s2", "s1", "s6"]);
+        // The door itself refuses the same walk as a continued page.
+        let first = door.page(&dated, &PageRequest::first(2)).unwrap();
+        let continued = door.page(&dated, &PageRequest::after(2, first.next.unwrap()));
+        assert!(matches!(continued, Err(KitError::NullableSortKey { .. })));
+    }
+
     #[test]
     fn the_door_refuses_what_the_grammar_refuses() {
         let connection = ledger();

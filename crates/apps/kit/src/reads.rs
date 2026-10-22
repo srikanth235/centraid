@@ -19,9 +19,9 @@
 //! short answer that looks whole (`paged-reads.ts:21-24`).
 
 use crate::error::{KitError, KitResult};
-use crate::page::{MAX_PAGE_ROWS, Page, PageRequest};
+use crate::page::{MAX_PAGE_ROWS, Page, PageCursor, PageRequest};
 use crate::row::Row;
-use crate::statement::{PageBindValue, PageQuery};
+use crate::statement::{PageBindValue, PageOrder, PageQuery};
 
 /// The one door an app reads through.
 ///
@@ -333,6 +333,79 @@ pub fn read_window(door: &dyn PageDoor, query: &PageQuery, rows: usize) -> KitRe
     Ok(Window {
         rows: collected,
         filled: true,
+    })
+}
+
+/// ONE PAGE AFTER A CURSOR THE DOOR NEVER SEES: the walk over a NULLABLE sort key
+/// (D-1020-P11).
+///
+/// The door refuses a continued page whose sort column can be NULL, because
+/// SQLite's row-value comparison puts every NULL on one side of the keyset and
+/// the walk silently drops them. A statement that EXCLUDES the NULLs (`taken_at IS
+/// NOT NULL` in its own predicate) has no NULL to drop, so its continuation is
+/// exact when it is spelled as a predicate on the first page:
+/// `(sort < ? OR (sort = ? AND pk < ?))` (`>` when ascending). The door then sees
+/// a first page every time. The rows with a NULL key are the caller's second walk,
+/// keyed on the primary key alone.
+///
+/// The sort key is compared as TEXT, so the column must be text (a timestamp).
+///
+/// # Errors
+/// The door's refusal.
+pub fn page_by_predicate(
+    door: &dyn PageDoor,
+    query: &PageQuery,
+    after: Option<&PageCursor>,
+    limit: usize,
+) -> KitResult<Page<Row>> {
+    let Some(cursor) = after else {
+        return door.page(query, &PageRequest::first(limit));
+    };
+    let PageOrder {
+        sort_column,
+        pk_column,
+        descending,
+    } = &query.order;
+    let comparison = if *descending { "<" } else { ">" };
+    let clause = format!(
+        "({sort_column} {comparison} ? OR ({sort_column} = ? AND {pk_column} {comparison} ?))"
+    );
+    let mut next = query.clone();
+    next.r#where = Some(
+        match query.r#where.as_deref().filter(|own| !own.is_empty()) {
+            Some(own) => format!("({own}) AND {clause}"),
+            None => clause,
+        },
+    );
+    next.bind.push(PageBindValue::Text(cursor.sort_key.clone()));
+    next.bind.push(PageBindValue::Text(cursor.sort_key.clone()));
+    next.bind.push(PageBindValue::Text(cursor.pk.clone()));
+    door.page(&next, &PageRequest::first(limit))
+}
+
+/// [`read_pages`] for a statement over a NULLABLE sort key that excludes its NULLs:
+/// every page is [`page_by_predicate`]'s, and the cap errors like [`read_pages`]'s.
+///
+/// # Errors
+/// The door's refusal, or [`KitError::FanOutExceeded`].
+pub fn read_pages_by_predicate(
+    door: &dyn PageDoor,
+    query: &PageQuery,
+    bound: FanOutBound,
+) -> KitResult<Vec<Row>> {
+    let mut rows = Vec::new();
+    let mut after: Option<PageCursor> = None;
+    for _ in 0..bound.fan_out_pages {
+        let page = page_by_predicate(door, query, after.as_ref(), bound.page_size)?;
+        rows.extend(page.rows);
+        match page.next {
+            None => return Ok(rows),
+            Some(next) => after = Some(next),
+        }
+    }
+    Err(KitError::FanOutExceeded {
+        query: query.name.clone(),
+        cap: bound.cap(),
     })
 }
 

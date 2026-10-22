@@ -26,7 +26,7 @@ use centraid_vault::time::zone::FireZone;
 pub use centraid_vault::commands::entity::TRASH_DAYS;
 
 use crate::error::KitResult;
-use crate::reads::{FanOutBound, PageDoor, Read, read_pages};
+use crate::reads::{FanOutBound, PageDoor, Read, read_pages, read_pages_by_predicate};
 use crate::row::{Row, text_of};
 use crate::statement::{PageBindValue, PageOrder, PageQuery};
 
@@ -161,10 +161,10 @@ pub fn folded_by_edits(all: &[Grouped], superseding: impl Fn(&str) -> bool) -> B
             continue;
         };
         bursts.entry(burst).or_default().push(photo);
-        if superseding(&photo.id) {
-            if let Some(origin) = photo.edited_from.as_deref() {
-                out.insert(origin.to_owned());
-            }
+        if superseding(&photo.id)
+            && let Some(origin) = photo.edited_from.as_deref()
+        {
+            out.insert(origin.to_owned());
         }
     }
     for group in bursts.values() {
@@ -209,8 +209,8 @@ pub fn folded_by_edits(all: &[Grouped], superseding: impl Fn(&str) -> bool) -> B
 ///   an edit's original is a member they chose.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Standing {
-    /// Photographs whose entity is in the trash.
-    pub trashed: BTreeSet<String>,
+    /// Photographs whose entity is in the trash, and when each was put there.
+    pub trashed: BTreeMap<String, String>,
     /// Entities tagged `flag:archived`: any kind, so ask about a photograph id.
     pub archived: BTreeSet<String>,
     /// Photographs an edit hides.
@@ -223,7 +223,7 @@ impl Standing {
     /// # Errors
     /// The door's refusal, or a walk past [`LIBRARY_WALK`].
     pub fn read(door: &dyn PageDoor) -> KitResult<Self> {
-        let trashed = ids_of(&read_pages(
+        let trashed: BTreeMap<String, String> = read_pages_by_predicate(
             door,
             &PageQuery::new(
                 "kit.rules.photos.trashed",
@@ -236,7 +236,10 @@ impl Standing {
                 vec![PageBindValue::Text(PHOTO_KIND.to_owned())],
             ),
             LIBRARY_WALK,
-        )?);
+        )?
+        .iter()
+        .filter_map(|row| Some((text_of(row, "id")?, text_of(row, "deleted_at")?)))
+        .collect();
         let archived = ids_of(&read_pages(
             door,
             &PageQuery::new(
@@ -256,7 +259,7 @@ impl Standing {
         )?);
         let grouped = grouped_photos(door)?;
         let folded = folded_by_edits(&grouped, |id| {
-            !trashed.contains(id) && !archived.contains(id)
+            !trashed.contains_key(id) && !archived.contains(id)
         });
         Ok(Self {
             trashed,
@@ -268,7 +271,7 @@ impl Standing {
     /// In the trash: the trash shelf, archived or not.
     #[must_use]
     pub fn is_trashed(&self, id: &str) -> bool {
-        self.trashed.contains(id)
+        self.trashed.contains_key(id)
     }
 
     /// Put away with the archive flag, trashed or not.
@@ -280,19 +283,19 @@ impl Standing {
     /// On the library's shelves: not trashed, not archived, not folded.
     #[must_use]
     pub fn is_live(&self, id: &str) -> bool {
-        !self.trashed.contains(id) && !self.archived.contains(id) && !self.folded.contains(id)
+        !self.trashed.contains_key(id) && !self.archived.contains(id) && !self.folded.contains(id)
     }
 
     /// On the archive shelf: archived and not trashed.
     #[must_use]
     pub fn on_archive_shelf(&self, id: &str) -> bool {
-        self.archived.contains(id) && !self.trashed.contains(id)
+        self.archived.contains(id) && !self.trashed.contains_key(id)
     }
 
     /// Whether an album draws this member: anything that is not trashed.
     #[must_use]
     pub fn in_album_view(&self, id: &str) -> bool {
-        !self.trashed.contains(id)
+        !self.trashed.contains_key(id)
     }
 }
 
@@ -311,9 +314,9 @@ pub fn grouped_photos(door: &dyn PageDoor) -> KitResult<Vec<Grouped>> {
         door,
         &PageQuery::new(
             "kit.rules.photos.grouped",
-            "id, form, burst, edited_from",
+            "id, blob, form, burst, edited_from",
             "photo",
-            PageOrder::asc("id", "id"),
+            PageOrder::asc("blob", "id"),
         )
         .filter("burst IS NOT NULL", Vec::new()),
         LIBRARY_WALK,
@@ -339,9 +342,9 @@ pub fn photo_ids(door: &dyn PageDoor) -> KitResult<Vec<String>> {
         door,
         &PageQuery::new(
             "kit.rules.photos.ids",
-            "id",
+            "id, blob",
             "photo",
-            PageOrder::asc("id", "id"),
+            PageOrder::asc("blob", "id"),
         ),
         LIBRARY_WALK,
     )?

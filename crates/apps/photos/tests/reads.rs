@@ -3,103 +3,14 @@
 //! applied to it), the albums and their covers, the places, the search and the
 //! duplicates, each asked through the paged door a phone's core asks through.
 
-use std::sync::Arc;
+mod common;
 
 use centraid_apps_kit::testdoor::TestDoor;
 use centraid_apps_photos::duplicates::{Fingerprint, duplicate_clusters};
 use centraid_apps_photos::overview::live_photo_count;
-use centraid_apps_photos::queries::{LibraryInput, load_library, load_search_term};
-use centraid_vault::clock::{FixedClock, SeededIds};
-use centraid_vault::commands::Registry;
-use centraid_vault::{Command, CommandStatus, Principal, Vault};
+use centraid_apps_photos::queries::load_search_term;
+use common::World;
 use serde_json::json;
-
-struct World {
-    dir: std::path::PathBuf,
-    vault: Vault,
-    clock: Arc<FixedClock>,
-    registry: Registry,
-}
-
-impl Drop for World {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.dir);
-    }
-}
-
-impl World {
-    fn new() -> Self {
-        let dir = centraid_ontology::scratch::scratch_dir();
-        std::fs::create_dir_all(&dir).expect("a scratch directory");
-        let clock = Arc::new(FixedClock::frozen());
-        let vault = Vault::create_with(
-            dir.join("vault.db"),
-            Box::new(Arc::clone(&clock)),
-            Box::new(SeededIds::new("photos")),
-        )
-        .expect("a vault");
-        vault.found("Home", "Owner").expect("founded");
-        Self {
-            dir,
-            vault,
-            clock,
-            registry: Registry::with_system_commands().expect("a registry"),
-        }
-    }
-
-    fn ok(&self, name: &str, input: serde_json::Value) -> serde_json::Value {
-        let outcome = self
-            .vault
-            .execute(
-                &self.registry,
-                &Principal::owner("phone"),
-                &Command::new(name, input),
-            )
-            .expect("runs");
-        assert_eq!(
-            outcome.status,
-            CommandStatus::Executed,
-            "{name}: {:?}",
-            outcome.reason
-        );
-        outcome.output
-    }
-
-    fn photo(&self, seed: &str, extra: serde_json::Value) -> String {
-        let hash = centraid_vault::blob::content_digest(seed.as_bytes());
-        self.ok("blob.stage", json!({ "hash": hash, "size": seed.len() }));
-        let mut input = json!({ "blob": hash, "media_type": "image/jpeg", "form": "photo" });
-        for (key, value) in extra.as_object().expect("an object") {
-            input[key] = value.clone();
-        }
-        self.ok("photo.add", input)["id"]
-            .as_str()
-            .expect("an id")
-            .to_owned()
-    }
-
-    fn album(&self, title: &str) -> String {
-        self.ok(
-            "container.create",
-            json!({ "kind": "album", "title": title }),
-        )["id"]
-            .as_str()
-            .expect("an id")
-            .to_owned()
-    }
-
-    fn read<T>(&self, body: impl FnOnce(&TestDoor<'_>) -> T) -> T {
-        self.vault
-            .read(|c| Ok(body(&TestDoor::new(c))))
-            .expect("a read")
-    }
-
-    fn library(&self) -> centraid_apps_photos::LibraryData {
-        let now = centraid_vault::time::recurrence::parse_instant_ms("2026-01-02T00:00:00.000Z")
-            .expect("an instant");
-        self.read(|door| load_library(door, &LibraryInput::default(), now).expect("reads"))
-    }
-}
 
 fn ids(library: &centraid_apps_photos::LibraryData) -> Vec<&str> {
     library
