@@ -339,7 +339,7 @@ impl World {
         world.load_containers(door)?;
         world.load_documents(door, &flags)?;
         if locker {
-            world.load_locker(door)?;
+            world.load_locker(door, &flags)?;
         }
         if money {
             world.load_transactions(door, at)?;
@@ -887,18 +887,25 @@ impl World {
         Ok(())
     }
 
-    fn load_locker(&mut self, door: &dyn Door) -> Result<(), String> {
+    /// The Locker items, read as the harness's Locker-on mode reads them (`Flags::locker`; the
+    /// chat on the phone holds no Locker, R-1088-3): the item's entity row (its title, stamps and
+    /// trash) beside its kind row, with its sealed cells for `reveal`, and its star from the
+    /// flags every kind shares.
+    fn load_locker(&mut self, door: &dyn Door, flags: &Flags) -> Result<(), String> {
+        let entities = entities(door, "locker_item")?;
         let items = door.table(
             "locker_item",
-            "item_id, type, title, username, url, notes, starred, created_at, updated_at, \
-             deleted_at, purge_at, key_id, password, otp_seed, card_number, cvv, content, \
-             cardholder, expiry, brand, fullname, email, phone, address, network",
-            "created_at",
-            "item_id",
+            "id, type, username, url, notes, key_id, password, otp_seed, card_number, cvv, \
+             content, cardholder, expiry, brand, fullname, email, phone, address, network",
+            "id",
+            "id",
         )?;
         let spec = Kind::LockerItem.spec();
         for item in &items {
-            let id = text(item, "item_id").unwrap_or_default();
+            let id = text(item, "id").unwrap_or_default();
+            let Some(entity) = entities.get(&id) else {
+                continue;
+            };
             let mut fields = BTreeMap::new();
             let kind = text(item, "type").unwrap_or_default();
             if let Some(value) = spec
@@ -915,12 +922,12 @@ impl World {
             if kind == "note" && nonempty(text(item, "content")).is_some() {
                 fields.insert("notes", Val::Text(SEALED.to_owned()));
             }
-            fields.insert("starred", Val::Bool(int(item, "starred") == Some(1)));
+            fields.insert("starred", Val::Bool(flags.starred.contains(&id)));
             let mut extra = BTreeMap::new();
             if let Some(key) = text(item, "key_id") {
                 extra.insert("key_id", key);
             }
-            if let Some(purge) = text(item, "purge_at") {
+            if let Some(purge) = text(entity, "purge_at") {
                 extra.insert("purge_at", purge);
             }
             for (_, column) in crate::native::meta::REVEAL_FIELDS {
@@ -937,13 +944,13 @@ impl World {
             }
             self.insert(Row {
                 kind: Kind::LockerItem,
-                name: text(item, "title").unwrap_or_default(),
+                name: text(entity, "title").unwrap_or_default(),
                 id,
                 date: None,
                 fields,
-                trashed: text(item, "deleted_at").is_some(),
-                created: text(item, "created_at").unwrap_or_default(),
-                updated: text(item, "updated_at").unwrap_or_default(),
+                trashed: text(entity, "deleted_at").is_some(),
+                created: text(entity, "created_at").unwrap_or_default(),
+                updated: text(entity, "updated_at").unwrap_or_default(),
                 extra,
             });
         }

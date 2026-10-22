@@ -635,8 +635,8 @@ pub static KINDS: &[KindSpec] = &[
         plural: "locker items",
         entity: "locker_item",
         table: "locker_item",
-        pk: "item_id",
-        name_source: at("locker_item", "title"),
+        pk: "id",
+        name_source: at("entity", "title"),
         date: None,
         fields: &[
             field("type", Enum, at("locker_item", "type"))
@@ -651,7 +651,7 @@ pub static KINDS: &[KindSpec] = &[
             field("notes", Text, at("locker_item", "notes"))
                 .edit("locker.edit_item")
                 .create(),
-            field("starred", Bool, at("locker_item", "starred")),
+            field("starred", Bool, STAR),
         ],
         links: &[],
         trash: true,
@@ -825,7 +825,7 @@ pub static VERBS: &[VerbSpec] = &[
             (Kind::Document, "entity.trash"),
             (Kind::Photo, "entity.trash"),
             (Kind::Album, "entity.trash"),
-            (Kind::LockerItem, "locker.trash_item"),
+            (Kind::LockerItem, "entity.trash"),
             (Kind::Notebook, "entity.trash"),
             (Kind::Folder, "entity.trash"),
         ],
@@ -842,7 +842,7 @@ pub static VERBS: &[VerbSpec] = &[
             (Kind::Note, "entity.restore"),
             (Kind::Document, "entity.restore"),
             (Kind::Photo, "entity.restore"),
-            (Kind::LockerItem, "locker.restore_item"),
+            (Kind::LockerItem, "entity.restore"),
         ],
     },
     VerbSpec {
@@ -854,7 +854,7 @@ pub static VERBS: &[VerbSpec] = &[
             (Kind::Person, "flag.set"),
             (Kind::Document, "flag.set"),
             (Kind::Photo, "flag.set"),
-            (Kind::LockerItem, "locker.star_item"),
+            (Kind::LockerItem, "flag.set"),
         ],
     },
     VerbSpec {
@@ -866,7 +866,7 @@ pub static VERBS: &[VerbSpec] = &[
             (Kind::Person, "flag.clear"),
             (Kind::Document, "flag.clear"),
             (Kind::Photo, "flag.clear"),
-            (Kind::LockerItem, "locker.unstar_item"),
+            (Kind::LockerItem, "flag.clear"),
         ],
     },
     VerbSpec {

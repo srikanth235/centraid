@@ -744,8 +744,8 @@
           "edit": null,
           "name": "starred",
           "source": {
-            "column": "starred",
-            "table": "locker_item"
+            "column": "to_id",
+            "table": "edge"
           },
           "type": "bool",
           "unit": null,
@@ -757,9 +757,9 @@
       "name": "locker item",
       "name_source": {
         "column": "title",
-        "table": "locker_item"
+        "table": "entity"
       },
-      "pk": "item_id",
+      "pk": "id",
       "plural": "locker items",
       "table": "locker_item",
       "trash": true,
@@ -993,10 +993,8 @@
     "event.id",
     "event.starts",
     "event.status",
-    "locker_item.item_id",
+    "locker_item.id",
     "locker_item.notes",
-    "locker_item.starred",
-    "locker_item.title",
     "locker_item.type",
     "locker_item.url",
     "locker_item.username",
@@ -1040,11 +1038,7 @@
     "flag.set",
     "locker.add_item",
     "locker.edit_item",
-    "locker.restore_item",
     "locker.reveal_receipt",
-    "locker.star_item",
-    "locker.trash_item",
-    "locker.unstar_item",
     "note.create",
     "note.edit",
     "note.move",
@@ -1304,7 +1298,7 @@
         ],
         [
           "locker_item",
-          "locker.trash_item"
+          "entity.trash"
         ],
         [
           "notebook",
@@ -1348,7 +1342,7 @@
         ],
         [
           "locker_item",
-          "locker.restore_item"
+          "entity.restore"
         ]
       ],
       "done": "restored",
@@ -1372,7 +1366,7 @@
         ],
         [
           "locker_item",
-          "locker.star_item"
+          "flag.set"
         ]
       ],
       "done": "starred",
@@ -1396,7 +1390,7 @@
         ],
         [
           "locker_item",
-          "locker.unstar_item"
+          "flag.clear"
         ]
       ],
       "done": "unstarred",

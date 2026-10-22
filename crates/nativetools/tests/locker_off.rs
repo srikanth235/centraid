@@ -355,3 +355,87 @@ fn the_locker_policy_hides_only_the_locker_rows_of_a_world_that_has_them() {
         assert_eq!(ids(&on[index]), ids(&off[index]), "call {index}");
     }
 }
+
+/// A LOCKER ITEM IS AN ENTITY, AND THE SESSION NEVER SEES ONE (the Locker lane, L4): with the
+/// policy off, no response names an item, its title, the tag the owner put on it, the star it
+/// carries or the note that links it, however the model asks. The owner's own commands put those
+/// rows in the vault; the runtime's world holds none of them, and the numbering it hands the model
+/// has no gap where an item would have been.
+#[test]
+fn with_the_locker_off_no_response_names_an_item_its_tag_its_star_or_its_edges() {
+    let world = seeded();
+    let ids = {
+        let now = dates::parse_now(TODAY).expect("a date");
+        let owner = Handle::open(
+            world.path(),
+            SetClock::at(vaultio::millis_of(now)),
+            "locker-off-owner",
+        )
+        .expect("the vault opens");
+        let item = owner
+            .table_where(
+                "entity",
+                "id, title",
+                "id",
+                "id",
+                "kind = ?",
+                &["locker_item".to_owned()],
+            )
+            .expect("the owner reads")
+            .into_iter()
+            .filter_map(|row| match row.get("id") {
+                Some(centraid_apps_kit::row::Cell::Text(id)) => Some(id.clone()),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(item.len(), 2, "the fixture holds two Locker items");
+        let note = owner
+            .table_where("entity", "id", "id", "id", "kind = ?", &["note".to_owned()])
+            .expect("the owner reads")
+            .first()
+            .and_then(|row| match row.get("id") {
+                Some(centraid_apps_kit::row::Cell::Text(id)) => Some(id.clone()),
+                _ => None,
+            })
+            .expect("the fixture holds a note");
+        for id in &item {
+            owner
+                .must("tag.add", json!({"id": id, "label": "vaultonlytag"}))
+                .expect("tagged");
+        }
+        owner
+            .must(
+                "edge.add",
+                json!({"from": note, "rel": "links", "to": item[0]}),
+            )
+            .expect("linked");
+        item
+    };
+
+    let (mut session, log) = recorded(&world, false);
+    let mut seen = String::new();
+    for (tool, args) in [
+        ("find", json!({"kind": "note"})),
+        ("find", json!({"kind": "task"})),
+        ("find", json!({"kind": "person"})),
+        ("search", json!({"text": "wifi"})),
+        ("search", json!({"text": "bank"})),
+        ("compute", json!({"kind": "note", "op": "count"})),
+    ] {
+        session.user("what do I have about the bank and the wifi");
+        seen.push_str(&call(&mut session, tool, args).to_string());
+    }
+    for hidden in ["Home wifi", "Bank login", "vaultonlytag", "locker_item"] {
+        assert!(
+            !seen.contains(hidden),
+            "a response carried `{hidden}`: {seen}"
+        );
+    }
+    for id in &ids {
+        assert!(
+            !seen.contains(id.as_str()),
+            "a response carried the id {id}"
+        );
+    }
+    assert_eq!(locker_reads(&log.lock().unwrap()), Vec::<String>::new());
+}

@@ -391,3 +391,271 @@ fn money_reaches_the_world_through_the_core_door_as_signed_rows_inside_the_windo
     let without = World::load_in(&door, false, false, None).expect("a world loads");
     assert_eq!(without.of_kind(Kind::Transaction).count(), 0);
 }
+
+// ---------------------------------------------------------------------------
+// THE ASSISTANT NEVER REACHES LOCKER (R-1088-3, the Locker lane's L4 and L5).
+//
+// A Locker item is an entity, so the rows the door reads and the verbs it runs
+// are the same ones that serve every other kind. These hold the refusals at
+// the door the phone actually uses: no row, no title, no edge, no tag on an
+// item; no Locker table; and no command that names an item, through any verb.
+// ---------------------------------------------------------------------------
+
+/// A Locker item tagged, starred and linked by a note, through the owner's own door.
+fn with_a_locker_item(pair: &Pair) -> (String, String) {
+    let owner = pair.core.owner();
+    let run = |name: &str, input: serde_json::Value| {
+        pair.core
+            .with_vault(|vault| {
+                vault
+                    .execute(
+                        pair.core.registry(),
+                        &owner,
+                        &centraid_vault::commands::Command::new(name, input),
+                    )
+                    .map_err(centraid_core::CoreError::from)
+            })
+            .expect("the owner's command answers")
+    };
+    let added = run(
+        "locker.add_item",
+        serde_json::json!({
+            "item_id": "lk-bank", "type": "login", "title": "Hidden Vaultbank login",
+            "username": "plainname"
+        }),
+    );
+    assert_eq!(
+        added.status,
+        centraid_vault::CommandStatus::Executed,
+        "{:?}",
+        added.reason
+    );
+    for (name, input) in [
+        (
+            "tag.add",
+            serde_json::json!({"id": "lk-bank", "label": "vaultonly"}),
+        ),
+        (
+            "flag.set",
+            serde_json::json!({"id": "lk-bank", "flag": "starred"}),
+        ),
+    ] {
+        let ran = run(name, input);
+        assert_eq!(
+            ran.status,
+            centraid_vault::CommandStatus::Executed,
+            "{name}: {:?}",
+            ran.reason
+        );
+    }
+    let note = run(
+        "note.create",
+        serde_json::json!({"title": "Links the bank", "body": "see the login"}),
+    );
+    let note_id = note.output["id"].as_str().expect("a note id").to_owned();
+    let linked = run(
+        "edge.add",
+        serde_json::json!({"from": note_id, "rel": "links", "to": "lk-bank"}),
+    );
+    assert_eq!(
+        linked.status,
+        centraid_vault::CommandStatus::Executed,
+        "{:?}",
+        linked.reason
+    );
+    ("lk-bank".to_owned(), note_id)
+}
+
+#[test]
+fn the_core_door_serves_no_row_title_edge_or_tag_of_a_locker_item() {
+    let pair = pair();
+    let (item, note) = with_a_locker_item(&pair);
+    let door = pair.core.assist_door();
+
+    // Rows and titles: the entity table has the note and not the item.
+    let entities = door
+        .table("entity", "id, title, kind", "id", "id")
+        .expect("the door reads entity");
+    let seen = format!("{entities:?}");
+    assert!(seen.contains(&note), "the door reads the other kinds");
+    assert!(
+        !seen.contains(&item)
+            && !seen.contains("Hidden Vaultbank")
+            && !seen.contains("locker_item"),
+        "the door served a Locker item: {seen}"
+    );
+    let by_kind = door
+        .table_where(
+            "entity",
+            "id, title",
+            "id",
+            "id",
+            "kind = ?",
+            &["locker_item".to_owned()],
+        )
+        .expect("the door answers");
+    assert!(by_kind.is_empty(), "{by_kind:?}");
+
+    // Edges and tags: nothing that touches the item, the note's link and the item's tag and star
+    // included. The tag's own word is the vault's (L6), and no edge says which item carries it.
+    let edges = door
+        .table("edge", "from_id, rel, to_id", "from_id", "to_id")
+        .expect("the door reads edge");
+    let seen = format!("{edges:?}");
+    assert!(
+        !seen.contains(&item),
+        "the door served an edge of a Locker item: {seen}"
+    );
+    let tagged = door
+        .table_where(
+            "edge",
+            "from_id, to_id",
+            "from_id",
+            "to_id",
+            "rel = ?",
+            &["tagged".to_owned()],
+        )
+        .expect("the door answers");
+    assert!(!format!("{tagged:?}").contains(&item), "{tagged:?}");
+
+    // Locker's own tables are not read at all, by any name.
+    for table in [
+        "locker_item",
+        "locker_item_field",
+        "locker_item_passkey",
+        "locker_item_alias",
+    ] {
+        let sort = if table == "locker_item" {
+            "id"
+        } else {
+            "item_id"
+        };
+        assert!(
+            door.table(table, sort, sort, sort).is_err(),
+            "the door read {table}"
+        );
+    }
+
+    // And the world the runtime builds, Locker off, holds none of it.
+    let world = world_of(&door);
+    assert!(
+        !world.contains("Hidden Vaultbank")
+            && !world.contains("lk-bank")
+            && !world.contains("plainname"),
+        "the world holds a Locker item"
+    );
+    // The search index has none either: Locker is not indexed.
+    assert!(
+        door.search("note", "Vaultbank", 20)
+            .expect("a search")
+            .is_empty()
+    );
+}
+
+#[test]
+fn a_command_that_names_a_locker_item_is_refused_under_the_assistants_principal_through_any_verb() {
+    let pair = pair();
+    let (item, note) = with_a_locker_item(&pair);
+    let door = pair.core.assist_door();
+    for (key, command, input) in [
+        (
+            "l1:0",
+            "entity.retitle",
+            serde_json::json!({"id": item, "title": "renamed"}),
+        ),
+        ("l2:0", "entity.trash", serde_json::json!({"id": item})),
+        ("l3:0", "entity.restore", serde_json::json!({"id": item})),
+        ("l4:0", "entity.purge", serde_json::json!({"id": item})),
+        (
+            "l5:0",
+            "entity.empty_trash",
+            serde_json::json!({"kind": "locker_item"}),
+        ),
+        (
+            "l6:0",
+            "tag.add",
+            serde_json::json!({"id": item, "label": "spy"}),
+        ),
+        (
+            "l7:0",
+            "tag.remove",
+            serde_json::json!({"id": item, "label": "vaultonly"}),
+        ),
+        (
+            "l8:0",
+            "flag.clear",
+            serde_json::json!({"id": item, "flag": "starred"}),
+        ),
+        (
+            "l9:0",
+            "flag.set",
+            serde_json::json!({"id": item, "flag": "archived"}),
+        ),
+        (
+            "l10:0",
+            "edge.add",
+            serde_json::json!({"from": note, "rel": "about", "to": item}),
+        ),
+        (
+            "l11:0",
+            "edge.remove",
+            serde_json::json!({"from": note, "rel": "links", "to": item}),
+        ),
+        ("l12:0", "locker.counts", serde_json::json!({})),
+        (
+            "l13:0",
+            "locker.edit_item",
+            serde_json::json!({"item_id": item, "title": "x"}),
+        ),
+        (
+            "l14:0",
+            "locker.export",
+            serde_json::json!({"confirm": true}),
+        ),
+    ] {
+        let ran = door
+            .run_keyed(key, command, input)
+            .expect("the door answers");
+        assert!(!ran.ok, "{command} reached Locker: {:?}", ran.output);
+        assert_eq!(
+            ran.predicate.as_deref(),
+            Some(centraid_vault::commands::ASSISTANT_CLOSED_OUT),
+            "{command}: {:?}",
+            ran.reason
+        );
+        let said = ran.reason.unwrap_or_default();
+        assert!(
+            !said.contains("Hidden Vaultbank") && !said.contains("lk-bank"),
+            "{said}"
+        );
+    }
+    // Nothing moved: the owner still sees the item whole, live, titled, tagged and linked.
+    let owner = pair.core.owner();
+    let still = pair
+        .core
+        .with_vault(|vault| {
+            vault
+                .read(|connection| {
+                    Ok(connection.query_row(
+                        "SELECT (SELECT COUNT(*) FROM entity WHERE id = ?1 AND deleted_at IS NULL
+                                   AND title = 'Hidden Vaultbank login'),
+                                (SELECT COUNT(*) FROM edge WHERE from_id = ?1 OR to_id = ?1)",
+                        [&item],
+                        |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?)),
+                    )?)
+                })
+                .map_err(centraid_core::CoreError::from)
+        })
+        .expect("the owner reads");
+    assert_eq!(still, (1, 3), "the item was touched: {owner:?}");
+
+    // The assistant keeps every other kind: the same verb on the note runs.
+    let ran = door
+        .run_keyed(
+            "n1:0",
+            "entity.retitle",
+            serde_json::json!({"id": note, "title": "Renamed note"}),
+        )
+        .expect("the door answers");
+    assert!(ran.ok, "{:?}", ran.reason);
+}
