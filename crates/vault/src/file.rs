@@ -69,6 +69,10 @@ pub struct Vault {
     /// The index's words, read through a cache that checks itself against the
     /// table ([`crate::words`]).
     words: crate::words::Words,
+    /// The statements of the page reads since [`Vault::tap_pages`], while a test
+    /// is asking what they plan to do ([`crate::plans`]); `None` otherwise, which
+    /// is every run that is not a plan test.
+    pub(crate) page_tap: RefCell<Option<Vec<crate::plans::TappedPage>>>,
     /// A fault to inject, for the snapshot builder's interrupted-build test.
     pub(crate) fault: Cell<Option<crate::snapshot::Fault>>,
     /// THE LOCAL CONTENT STORE, where bytes that are not text go.
@@ -277,6 +281,7 @@ impl Vault {
             pending: RefCell::default(),
             read_depth: Cell::new(0),
             words: crate::words::Words::default(),
+            page_tap: RefCell::new(None),
             fault: Cell::new(None),
             blobs: None,
         })

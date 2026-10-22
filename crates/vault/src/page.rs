@@ -53,6 +53,7 @@ impl Vault {
     /// which means a grammar bug that let a write through is caught by SQLite
     /// rather than by a reviewer.
     pub fn page_raw(&self, page: &RawPage) -> Result<Vec<RowImage>> {
+        self.tapped("(raw)", page);
         self.page_clamped(page, MAX_PAGE_ROWS)
     }
 
@@ -831,14 +832,13 @@ impl Vault {
             probe = limit + 1,
         );
 
-        let mut rows = self.page_clamped(
-            &RawPage {
-                sql,
-                binds,
-                limit: limit + 1,
-            },
-            MAX_PAGE_ROWS + 1,
-        )?;
+        let composed = RawPage {
+            sql,
+            binds,
+            limit: limit + 1,
+        };
+        self.tapped(&page.name, &composed);
+        let mut rows = self.page_clamped(&composed, MAX_PAGE_ROWS + 1)?;
         let filled = i64::try_from(rows.len()).unwrap_or(i64::MAX) > limit;
         rows.truncate(usize::try_from(limit).unwrap_or(0));
         if page.held_thumbnail {

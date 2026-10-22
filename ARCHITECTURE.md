@@ -102,7 +102,7 @@ An app is a crate under [`crates/apps`](crates/apps): a read plane (queries as p
 
 ## Responsiveness and the byte plane
 
-A `call` has a budget: the `pr` profile's `call-budget` step fails the gate on a bounded read over its ceiling, and the down-only ledgers in [`contracts/ledgers`](contracts/ledgers) hold the compile-time and library-size ceilings. Bytes never ride inside a row: [`crates/blobs`](crates/blobs) is the content store, files named by their BLAKE3, and [`crates/media`](crates/media/README.md) owns the sealed part format. A file is hashed and sealed in the same stream, so the phone reads a camera-roll original once, and a snapshot costs hashing the file plus sealing the ranges that changed — off the request path, never under a commit.
+A `call` has a budget: the `pr` profile's `call-budget` step fails the gate on a bounded read over its ceiling, its `search-budget` step does the same for every search query on every surface over a year-3 vault, `crates/core/tests/query_plans.rs` fails on a read that plans as a scan or a sort over one, and the down-only ledgers in [`contracts/ledgers`](contracts/ledgers) hold the compile-time and library-size ceilings. Bytes never ride inside a row: [`crates/blobs`](crates/blobs) is the content store, files named by their BLAKE3, and [`crates/media`](crates/media/README.md) owns the sealed part format. A file is hashed and sealed in the same stream, so the phone reads a camera-roll original once, and a snapshot costs hashing the file plus sealing the ranges that changed — off the request path, never under a commit.
 
 ## Repository layout
 

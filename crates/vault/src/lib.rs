@@ -42,6 +42,7 @@ pub mod model;
 pub mod ontology_doc;
 pub mod originals;
 pub mod page;
+pub mod plans;
 pub mod roster;
 pub mod snapshot;
 pub mod testdoor;

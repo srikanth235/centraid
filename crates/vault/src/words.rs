@@ -34,6 +34,97 @@ use rusqlite::Connection;
 
 use crate::error::{Result, VaultError};
 
+/// THE WORDS, PACKED: every word end to end in one buffer, with where each ends.
+///
+/// A correction reads the whole list (a hundred thousand words and more) for every
+/// misspelt query. As a `Vec<String>` each word is a heap allocation of its own, and
+/// walking the list is a cache miss per word: 10 ms of the correction at 200,000
+/// words went to chasing pointers, not to the comparing. Packed, the walk is one
+/// sequential read of about two megabytes.
+#[derive(Default)]
+pub struct WordList {
+    text: String,
+    /// `ends[i]` is where word `i` stops in `text`; it starts where the one
+    /// before stopped.
+    ends: Vec<usize>,
+}
+
+impl WordList {
+    fn push(&mut self, word: &str) {
+        self.text.push_str(word);
+        self.ends.push(self.text.len());
+    }
+
+    /// How many words.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.ends.len()
+    }
+
+    /// Whether there are none.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.ends.is_empty()
+    }
+
+    /// The last word, the one with the highest number.
+    #[must_use]
+    pub fn last(&self) -> Option<&str> {
+        let end = *self.ends.last()?;
+        let start = self.ends.iter().rev().nth(1).copied().unwrap_or(0);
+        Some(&self.text[start..end])
+    }
+
+    /// The words, in the order they arrived.
+    pub fn iter(&self) -> impl Iterator<Item = &str> + Clone {
+        let mut start = 0;
+        self.ends.iter().map(move |&end| {
+            let word = &self.text[start..end];
+            start = end;
+            word
+        })
+    }
+
+    /// The words that contain `fragment`, are longer than it and do not start with it,
+    /// in the order they arrived: the same words as filtering [`Self::iter`] by
+    /// `contains`, found by searching the packed text once and not by asking each word.
+    #[must_use]
+    pub fn containing(&self, fragment: &str) -> Vec<&str> {
+        let mut found = Vec::new();
+        if fragment.is_empty() {
+            return found;
+        }
+        let mut from = 0;
+        while let Some(at) = self.text[from..].find(fragment) {
+            let at = from + at;
+            let index = self.ends.partition_point(|&end| end <= at);
+            let Some(&end) = self.ends.get(index) else {
+                break;
+            };
+            let start = if index == 0 { 0 } else { self.ends[index - 1] };
+            if at + fragment.len() <= end {
+                let word = &self.text[start..end];
+                if word.len() > fragment.len() && !word.starts_with(fragment) {
+                    found.push(word);
+                }
+                // One hit is enough for this word.
+                from = end;
+            } else {
+                // The match runs over the end of a word into the next: no word has
+                // it, and a later one in this word may.
+                from = at + fragment[..].chars().next().map_or(1, char::len_utf8);
+            }
+        }
+        found
+    }
+
+    /// The words as owned strings, for a caller that keeps them.
+    #[must_use]
+    pub fn to_vec(&self) -> Vec<String> {
+        self.iter().map(str::to_owned).collect()
+    }
+}
+
 /// What the cache holds: the words in the order they arrived, and the two
 /// numbers it checks them by.
 #[derive(Default)]
@@ -41,7 +132,7 @@ struct Cache {
     /// Whether anything has been read: an empty table and a cache that has
     /// never looked are different states.
     loaded: bool,
-    words: Vec<String>,
+    words: WordList,
     /// The highest `n` read, `0` for none. The words are in `n` order, so the
     /// word at this `n` is the last.
     last: i64,
@@ -71,14 +162,14 @@ impl Words {
     /// call. Cheap when nothing was written (one statement), cheaper than a
     /// reload when words were appended.
     ///
-    /// The slice is borrowed from the cache: it must be dropped before the next
+    /// The list is borrowed from the cache: it must be dropped before the next
     /// call that finds the table changed, which is refused rather than
     /// panicked on.
     ///
     /// # Errors
     /// Called inside a commit; called while a slice from an earlier call is
     /// still held and the table has changed since; SQLite's refusal.
-    pub fn current(&self, connection: &Connection) -> Result<Ref<'_, [String]>> {
+    pub fn current(&self, connection: &Connection) -> Result<Ref<'_, WordList>> {
         if !connection.is_autocommit() {
             return Err(VaultError::Invariant {
                 context: "the word list is read outside a commit: inside one it holds rows \
@@ -97,9 +188,7 @@ impl Words {
                 })?;
             cache.refresh(connection, verdict)?;
         }
-        Ok(Ref::map(self.cache.borrow(), |cache| {
-            cache.words.as_slice()
-        }))
+        Ok(Ref::map(self.cache.borrow(), |cache| &cache.words))
     }
 
     /// How often the table was read whole and how often only its tail.
@@ -128,7 +217,7 @@ impl Words {
                 Ok((row.get(0)?, row.get(1)?, row.get(2)?))
             })?;
         let highest = highest.unwrap_or(0);
-        let same_last = at_last.as_deref() == cache.words.last().map(String::as_str);
+        let same_last = at_last.as_deref() == cache.words.last();
         Ok(if !same_last {
             Verdict::Whole
         } else if highest == cache.last && count == cache.count {
@@ -161,8 +250,9 @@ impl Cache {
             // The tail has to be exactly what the check said it was; if the
             // table moved between the two statements, start again from the top.
             if i64::try_from(appended.len()).ok() == Some(count - self.count) {
-                self.words
-                    .extend(appended.into_iter().map(|(_, word)| word));
+                for (_, word) in &appended {
+                    self.words.push(word);
+                }
                 self.last = highest.unwrap_or(0);
                 self.count = count;
                 self.tail_loads += 1;
@@ -172,7 +262,10 @@ impl Cache {
         let all = self.read_after(connection, 0)?;
         self.last = all.last().map_or(0, |&(n, _)| n);
         self.count = i64::try_from(all.len()).unwrap_or(i64::MAX);
-        self.words = all.into_iter().map(|(_, word)| word).collect();
+        self.words = WordList::default();
+        for (_, word) in &all {
+            self.words.push(word);
+        }
         self.loaded = true;
         self.full_loads += 1;
         Ok(())
@@ -248,6 +341,47 @@ mod tests {
             (1, 0),
             "nothing was written, nothing was read"
         );
+    }
+
+    /// `containing` is the filter it replaces, over words that run into each other in
+    /// the packed text (`ab` + `cd` holds `bc`, and no word does).
+    #[test]
+    fn the_words_containing_a_fragment_are_the_words_that_contain_it() {
+        let words = [
+            "ab",
+            "cd",
+            "abcd",
+            "bcd",
+            "xbcx",
+            "bc",
+            "cbcbc",
+            "sunscreen",
+            "screen",
+            "éclair",
+            "relé",
+            "eclair",
+            "screens",
+            "abab",
+            "ba",
+        ];
+        let mut list = WordList::default();
+        for word in words {
+            list.push(word);
+        }
+        for fragment in [
+            "bc", "cb", "screen", "abc", "ab", "ba", "cl", "é", "lé", "xyz", "cdx",
+        ] {
+            let expected: Vec<&str> = list
+                .iter()
+                .filter(|held| {
+                    held.len() > fragment.len()
+                        && held.contains(fragment)
+                        && !held.starts_with(fragment)
+                })
+                .collect();
+            assert_eq!(list.containing(fragment), expected, "`{fragment}`");
+        }
+        assert!(list.containing("").is_empty());
     }
 
     #[test]
