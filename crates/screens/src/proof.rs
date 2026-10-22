@@ -9,6 +9,7 @@ use std::time::Duration;
 use centraid_api_proto::core_v1 as wire;
 use wire::screen_event::Kind as E;
 
+use crate::catalog::load;
 use crate::screen::{Ctx, Screen};
 use crate::strings;
 
@@ -62,11 +63,7 @@ struct Counter {
 
 impl Counter {
     fn reload(&mut self, ctx: &Ctx) {
-        let request = wire::LoadRequest {
-            app: "agenda".to_owned(),
-            query: "upcoming".to_owned(),
-            ..wire::LoadRequest::default()
-        };
+        let request = load::agenda::Upcoming::default().into();
         self.phase = match ctx.load(request) {
             Ok(loaded) => match loaded.answer.and_then(|answer| answer.answer) {
                 Some(wire::app_query_response::Answer::AgendaUpcoming(upcoming)) => {
