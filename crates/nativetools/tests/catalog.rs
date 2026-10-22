@@ -62,7 +62,7 @@ fn every_live_verb_row_is_a_direct_action_or_an_unbacked_row() {
             let kind = serde_json::to_value(kind).unwrap();
             let kind = kind.as_str().unwrap();
             let by_action = all.iter().flat_map(|(_, m)| &m.actions).any(|action| {
-                action.chat == ChatSurface::Direct
+                action.surface() == ChatSurface::Direct
                     && action.kind == kind
                     && action.command == *command
                     && (action.verb == spec.name || action.also.iter().any(|v| v == spec.name))
@@ -120,15 +120,14 @@ fn a_declared_kind_has_no_variant_and_a_declared_verb_names_a_catalog_action() {
             row.app, row.action
         );
     }
-    // Transaction is writable in the table, and not yet by the runtime.
+    // An account is writable in the catalog, and not yet by the runtime: its direct actions are
+    // declared and named, not run.
     let writes: BTreeSet<&str> = DECLARED_VERBS
         .iter()
-        .filter(|row| row.kind == "transaction")
+        .filter(|row| row.kind == "account")
         .map(|row| row.verb)
         .collect();
-    for verb in ["edit", "categorize", "link", "unlink"] {
-        assert!(writes.contains(verb), "no declared `{verb} transaction`");
-    }
+    assert!(writes.contains("edit"), "no declared `edit account`");
 }
 
 /// The values of `column`'s `CHECK (column IN (...))` in `table`'s block of the rendered DDL.
@@ -183,9 +182,12 @@ fn the_census_lists_every_action_as_its_manifest_classifies_it() {
             expected.push((
                 app.to_owned(),
                 action.name.clone(),
-                action.verb.clone(),
+                match &action.qualifier {
+                    Some(qualifier) => format!("{}:{qualifier}", action.verb),
+                    None => action.verb.clone(),
+                },
                 action.kind.clone(),
-                match action.chat {
+                match action.surface() {
                     ChatSurface::Direct => "direct",
                     ChatSurface::Card => "card",
                 },
@@ -193,7 +195,7 @@ fn the_census_lists_every_action_as_its_manifest_classifies_it() {
         }
     }
     let rows: Vec<Vec<&str>> = lines.map(|line| line.split(',').collect()).collect();
-    assert_eq!(rows.len(), 145);
+    assert_eq!(rows.len(), 146);
     assert_eq!(rows.len(), expected.len());
     for (row, want) in rows.iter().zip(&expected) {
         assert_eq!(row.len(), 7, "{row:?}");
@@ -231,6 +233,6 @@ fn the_census_lists_every_action_as_its_manifest_classifies_it() {
 #[test]
 fn the_exported_catalog_is_the_manifests() {
     let exported = catalog();
-    assert_eq!(exported["actions"].as_array().unwrap().len(), 145);
+    assert_eq!(exported["actions"].as_array().unwrap().len(), 146);
     assert_eq!(exported["queries"].as_array().unwrap().len(), 46);
 }

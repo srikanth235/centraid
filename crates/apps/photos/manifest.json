@@ -129,7 +129,6 @@
       "kind": "photo",
       "inverse": "delete-photo",
       "sealed": [],
-      "chat": "card",
       "command": "photo.add",
       "phrasings": [
         "add this photo to my library",
@@ -237,7 +236,6 @@
       "kind": "photo",
       "inverse": null,
       "sealed": [],
-      "chat": "card",
       "command": "photo.edit",
       "phrasings": [
         "fix the date on this photo",
@@ -287,9 +285,8 @@
       "name": "retitle-photo",
       "verb": "edit",
       "kind": "photo",
-      "inverse": null,
+      "inverse": "retitle-photo",
       "sealed": [],
-      "chat": "direct",
       "command": "entity.retitle",
       "phrasings": [
         "caption this photo sunset at the pier",
@@ -306,7 +303,8 @@
             "minLength": 1
           },
           "title": {
-            "type": "string"
+            "type": "string",
+            "aliases": ["name"]
           }
         },
         "required": ["id", "title"],
@@ -333,7 +331,6 @@
       "kind": "photo",
       "inverse": "unflag-photo",
       "sealed": [],
-      "chat": "direct",
       "command": "flag.set",
       "phrasings": [
         "heart the beach photo",
@@ -378,7 +375,6 @@
       "kind": "photo",
       "inverse": "flag-photo",
       "sealed": [],
-      "chat": "direct",
       "command": "flag.clear",
       "phrasings": [
         "unheart the beach photo",
@@ -423,7 +419,6 @@
       "kind": "photo",
       "inverse": "restore-photo",
       "sealed": [],
-      "chat": "direct",
       "command": "entity.trash",
       "phrasings": [
         "delete the blurry photo",
@@ -464,7 +459,6 @@
       "kind": "photo",
       "inverse": "delete-photo",
       "sealed": [],
-      "chat": "direct",
       "command": "entity.restore",
       "phrasings": [
         "bring back the blurry photo",
@@ -505,7 +499,6 @@
       "kind": "photo",
       "inverse": null,
       "sealed": [],
-      "chat": "card",
       "command": "entity.purge",
       "phrasings": [
         "erase the blurry photo forever",
@@ -546,7 +539,6 @@
       "kind": "album",
       "inverse": "delete-album",
       "sealed": [],
-      "chat": "direct",
       "command": "container.create",
       "phrasings": [
         "make an album called Italy 2026",
@@ -569,7 +561,8 @@
           },
           "title": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["name"]
           }
         },
         "required": ["kind", "title"],
@@ -594,9 +587,8 @@
       "name": "rename-album",
       "verb": "edit",
       "kind": "album",
-      "inverse": null,
+      "inverse": "rename-album",
       "sealed": [],
-      "chat": "direct",
       "command": "entity.retitle",
       "phrasings": [
         "rename Italy 2026 to Summer in Italy",
@@ -614,7 +606,8 @@
           },
           "title": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["name"]
           }
         },
         "required": ["id", "title"],
@@ -641,7 +634,6 @@
       "kind": "album",
       "inverse": null,
       "sealed": [],
-      "chat": "card",
       "command": "album.set_cover",
       "phrasings": [
         "use the beach photo as the Italy cover",
@@ -686,7 +678,6 @@
       "kind": "album",
       "inverse": "restore-album",
       "sealed": [],
-      "chat": "direct",
       "command": "entity.trash",
       "phrasings": [
         "delete the Italy 2026 album",
@@ -727,7 +718,6 @@
       "kind": "album",
       "inverse": "delete-album",
       "sealed": [],
-      "chat": "card",
       "command": "entity.restore",
       "phrasings": [
         "bring back the Italy 2026 album",
@@ -768,7 +758,6 @@
       "kind": "photo",
       "inverse": "remove-from-album",
       "sealed": [],
-      "chat": "direct",
       "command": "edge.add",
       "phrasings": [
         "add the beach photo to Italy 2026",
@@ -782,7 +771,8 @@
         "properties": {
           "from": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["to"]
           },
           "rel": {
             "type": "string",
@@ -790,7 +780,8 @@
           },
           "to": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "x-target": true
           },
           "position": {
             "type": ["number", "null"]
@@ -820,7 +811,6 @@
       "kind": "photo",
       "inverse": "add-to-album",
       "sealed": [],
-      "chat": "direct",
       "command": "edge.remove",
       "phrasings": [
         "take the beach photo out of Italy 2026",
@@ -834,7 +824,8 @@
         "properties": {
           "from": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["from"]
           },
           "rel": {
             "type": "string",
@@ -842,7 +833,8 @@
           },
           "to": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "x-target": true
           }
         },
         "required": ["from", "rel", "to"],
@@ -869,7 +861,6 @@
       "kind": "place",
       "inverse": null,
       "sealed": [],
-      "chat": "card",
       "command": "photo.set_place",
       "phrasings": [
         "this photo was taken in Lisbon",
@@ -914,7 +905,6 @@
       "kind": "place",
       "inverse": null,
       "sealed": [],
-      "chat": "card",
       "command": "entity.retitle",
       "phrasings": [
         "call this place Grandma's house",
@@ -960,7 +950,6 @@
       "kind": "photo",
       "inverse": "untag-photo",
       "sealed": [],
-      "chat": "direct",
       "command": "tag.add",
       "phrasings": [
         "tag the beach photo as summer",
@@ -978,7 +967,8 @@
           },
           "label": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["label"]
           }
         },
         "required": ["id", "label"],
@@ -1005,7 +995,6 @@
       "kind": "photo",
       "inverse": "tag-photo",
       "sealed": [],
-      "chat": "direct",
       "command": "tag.remove",
       "phrasings": [
         "remove the summer tag from the beach photo",
@@ -1023,7 +1012,8 @@
           },
           "label": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["label"]
           }
         },
         "required": ["id", "label"],
@@ -1106,6 +1096,11 @@
         "properties": {
           "term": {
             "type": "string"
+          },
+          "correct": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1
           }
         },
         "additionalProperties": false

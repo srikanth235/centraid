@@ -69,7 +69,7 @@ fn count(value: usize) -> u32 {
     u32::try_from(value).unwrap_or(u32::MAX)
 }
 
-pub(super) fn library(
+pub(crate) fn library(
     vault: &Vault,
     door: &VaultDoor<'_>,
     asked: &wire::NotesLibraryRequest,
@@ -122,7 +122,7 @@ pub(super) fn library(
     )
 }
 
-pub(super) fn notebooks(door: &VaultDoor<'_>) -> Result<Answer> {
+pub(crate) fn notebooks(door: &VaultDoor<'_>) -> Result<Answer> {
     settle(door, notes::load_notebooks(door), |data| {
         Answer::NotesNotebooks(wire::NotesNotebooks {
             unfiled_count: count(data.unfiled_count),
@@ -142,7 +142,7 @@ pub(super) fn notebooks(door: &VaultDoor<'_>) -> Result<Answer> {
     })
 }
 
-pub(super) fn journal(
+pub(crate) fn journal(
     vault: &Vault,
     door: &VaultDoor<'_>,
     now: &str,
@@ -187,7 +187,7 @@ pub(super) fn journal(
     )
 }
 
-pub(super) fn search(
+pub(crate) fn search(
     vault: &Vault,
     door: &VaultDoor<'_>,
     asked: &wire::NotesSearchRequest,
@@ -238,7 +238,7 @@ pub(super) fn search(
     })
 }
 
-pub(super) fn link_targets(
+pub(crate) fn link_targets(
     vault: &Vault,
     door: &VaultDoor<'_>,
     asked: &wire::NotesLinkTargetsRequest,
@@ -281,7 +281,7 @@ pub(super) fn link_targets(
 /// `dtstart`) or a floating wall clock is already civil, so its date part IS
 /// the day; an instant — a `Z` or an offset after the date — is read in the
 /// zone, and with no zone it has no day. Anything else is not a when: EMPTY.
-pub(super) fn subtitle_day(zone: Option<&FireZone>, subtitle: &str) -> String {
+pub(crate) fn subtitle_day(zone: Option<&FireZone>, subtitle: &str) -> String {
     let text = subtitle.trim();
     let bytes = text.as_bytes();
     let dated = bytes.len() >= 10
@@ -321,7 +321,7 @@ pub(super) fn subtitle_day(zone: Option<&FireZone>, subtitle: &str) -> String {
     day_if(zone, Some(&format!("{}T{time}", &text[..10])))
 }
 
-pub(super) fn trash(
+pub(crate) fn trash(
     vault: &Vault,
     door: &VaultDoor<'_>,
     asked: &wire::NotesTrashRequest,
@@ -337,7 +337,7 @@ pub(super) fn trash(
     })
 }
 
-pub(super) fn history(
+pub(crate) fn history(
     vault: &Vault,
     door: &VaultDoor<'_>,
     asked: &wire::NotesHistoryRequest,
@@ -366,7 +366,7 @@ pub(super) fn history(
     )
 }
 
-pub(super) fn note(
+pub(crate) fn note(
     vault: &Vault,
     door: &VaultDoor<'_>,
     asked: &wire::NotesNoteRequest,

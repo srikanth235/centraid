@@ -90,6 +90,11 @@
         "verbs": "act"
       },
       {
+        "schema": "entity",
+        "table": "retitle",
+        "verbs": "act"
+      },
+      {
         "schema": "container",
         "table": "create",
         "verbs": "act"
@@ -124,7 +129,6 @@
       "kind": "task",
       "inverse": "delete",
       "sealed": [],
-      "chat": "direct",
       "command": "task.add",
       "phrasings": [
         "remind me to call the plumber tomorrow",
@@ -143,18 +147,22 @@
           },
           "title": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["name"]
           },
           "description": {
-            "type": ["string", "null"]
+            "type": ["string", "null"],
+            "aliases": ["description"]
           },
           "due": {
             "type": ["string", "null"],
-            "description": "A day, a wall clock or an instant."
+            "description": "A day, a wall clock or an instant.",
+            "aliases": ["date", "due"]
           },
           "effort_min": {
             "type": ["integer", "null"],
-            "minimum": 1
+            "minimum": 1,
+            "aliases": ["effort"]
           },
           "remind_before_min": {
             "type": ["integer", "null"],
@@ -167,13 +175,16 @@
           "priority": {
             "type": "integer",
             "minimum": 0,
-            "maximum": 9
+            "maximum": 9,
+            "aliases": ["priority"]
           },
           "parent_id": {
-            "type": ["string", "null"]
+            "type": ["string", "null"],
+            "aliases": ["parent"]
           },
           "project_id": {
-            "type": ["string", "null"]
+            "type": ["string", "null"],
+            "aliases": ["list"]
           },
           "section_id": {
             "type": ["string", "null"]
@@ -212,9 +223,8 @@
       "verb": "edit",
       "kind": "task",
       "also": ["reschedule"],
-      "inverse": null,
+      "inverse": "edit",
       "sealed": [],
-      "chat": "direct",
       "command": "task.edit",
       "phrasings": [
         "rename the plumber task",
@@ -232,18 +242,22 @@
           },
           "title": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["name"]
           },
           "description": {
-            "type": ["string", "null"]
+            "type": ["string", "null"],
+            "aliases": ["description"]
           },
           "due": {
             "type": ["string", "null"],
-            "description": "A day, a wall clock or an instant."
+            "description": "A day, a wall clock or an instant.",
+            "aliases": ["date"]
           },
           "effort_min": {
             "type": ["integer", "null"],
-            "minimum": 1
+            "minimum": 1,
+            "aliases": ["effort"]
           },
           "remind_before_min": {
             "type": ["integer", "null"],
@@ -256,7 +270,8 @@
           "priority": {
             "type": "integer",
             "minimum": 0,
-            "maximum": 9
+            "maximum": 9,
+            "aliases": ["priority"]
           }
         },
         "required": ["id"],
@@ -283,7 +298,6 @@
       "kind": "task",
       "inverse": "reopen",
       "sealed": [],
-      "chat": "direct",
       "command": "task.complete",
       "phrasings": [
         "mark call the plumber done",
@@ -324,7 +338,6 @@
       "kind": "task",
       "inverse": "complete",
       "sealed": [],
-      "chat": "direct",
       "command": "task.reopen",
       "phrasings": [
         "reopen call the plumber",
@@ -363,9 +376,8 @@
       "name": "cancel",
       "verb": "cancel",
       "kind": "task",
-      "inverse": null,
+      "inverse": "reopen",
       "sealed": [],
-      "chat": "card",
       "command": "task.cancel",
       "phrasings": [
         "cancel the plumber task",
@@ -405,9 +417,8 @@
       "verb": "add_to",
       "kind": "task",
       "also": ["remove_from"],
-      "inverse": null,
+      "inverse": "organize-task",
       "sealed": [],
-      "chat": "direct",
       "command": "task.organize",
       "phrasings": [
         "put the plumber task in the Home project",
@@ -424,7 +435,8 @@
             "minLength": 1
           },
           "project_id": {
-            "type": ["string", "null"]
+            "type": ["string", "null"],
+            "aliases": ["to", "from"]
           },
           "section_id": {
             "type": ["string", "null"]
@@ -464,7 +476,6 @@
       "kind": "task",
       "inverse": "restore",
       "sealed": [],
-      "chat": "direct",
       "command": "entity.trash",
       "phrasings": [
         "delete the plumber task",
@@ -505,7 +516,6 @@
       "kind": "task",
       "inverse": null,
       "sealed": [],
-      "chat": "card",
       "command": "entity.purge",
       "phrasings": [
         "erase the plumber task forever",
@@ -546,7 +556,6 @@
       "kind": "task",
       "inverse": "delete",
       "sealed": [],
-      "chat": "direct",
       "command": "entity.restore",
       "phrasings": [
         "bring back the plumber task",
@@ -585,9 +594,8 @@
       "name": "create-project",
       "verb": "create",
       "kind": "list",
-      "inverse": null,
+      "inverse": "delete",
       "sealed": [],
-      "chat": "direct",
       "command": "container.create",
       "phrasings": [
         "make a project called Home renovation",
@@ -605,14 +613,17 @@
           },
           "kind": {
             "type": "string",
-            "enum": ["project", "area"]
+            "enum": ["project", "area"],
+            "default": "project"
           },
           "title": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["name"]
           },
           "parent": {
-            "type": ["string", "null"]
+            "type": ["string", "null"],
+            "aliases": ["area"]
           },
           "color": {
             "type": ["string", "null"]
@@ -640,12 +651,56 @@
       }
     },
     {
+      "name": "rename-list",
+      "verb": "edit",
+      "kind": "list",
+      "inverse": "rename-list",
+      "sealed": [],
+      "command": "entity.retitle",
+      "phrasings": [
+        "rename the Home renovation project to House projects",
+        "call the Errands list Chores",
+        "retitle the Finance project"
+      ],
+      "description": "Retitle a project or an area through entity.retitle.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "aliases": ["name"]
+          }
+        },
+        "required": ["id", "title"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
       "name": "create-section",
       "verb": "create",
       "kind": "section",
       "inverse": null,
       "sealed": [],
-      "chat": "card",
       "command": "container.create",
       "phrasings": [
         "add a section called Kitchen to Home renovation",
@@ -701,7 +756,6 @@
       "kind": "task",
       "inverse": "detach",
       "sealed": [],
-      "chat": "card",
       "command": "edge.add",
       "phrasings": [
         "attach the quote PDF to the plumber task",
@@ -750,7 +804,6 @@
       "kind": "task",
       "inverse": "attach",
       "sealed": [],
-      "chat": "card",
       "command": "edge.remove",
       "phrasings": [
         "detach the quote PDF from the plumber task",
@@ -799,7 +852,6 @@
       "kind": "task",
       "inverse": "remove-tag",
       "sealed": [],
-      "chat": "direct",
       "command": "tag.add",
       "phrasings": [
         "tag the plumber task as home",
@@ -817,7 +869,8 @@
           },
           "label": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["label"]
           }
         },
         "required": ["id", "label"],
@@ -844,7 +897,6 @@
       "kind": "task",
       "inverse": "add-tag",
       "sealed": [],
-      "chat": "direct",
       "command": "tag.remove",
       "phrasings": [
         "remove the home tag from the plumber task",
@@ -862,7 +914,8 @@
           },
           "label": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["label"]
           }
         },
         "required": ["id", "label"],
@@ -893,6 +946,12 @@
       "input": {
         "type": "object",
         "properties": {
+          "view": {
+            "type": ["string", "integer"]
+          },
+          "project_id": {
+            "type": "string"
+          },
           "limit": {
             "type": "integer",
             "minimum": 20,
@@ -1021,24 +1080,19 @@
             ["open", "open"],
             ["completed", "done"],
             ["cancelled", "cancelled"]
-          ],
-          "edit": "task.complete"
+          ]
         },
         {
           "name": "effort",
           "type": "number",
           "source": ["task", "effort_min"],
-          "unit": "min",
-          "edit": "task.edit",
-          "create": true
+          "unit": "min"
         },
         {
           "name": "priority",
           "type": "number",
           "source": ["task", "priority"],
-          "unit": "$priority_scale",
-          "edit": "task.edit",
-          "create": true
+          "unit": "$priority_scale"
         },
         {
           "name": "completed",
@@ -1048,9 +1102,7 @@
         {
           "name": "description",
           "type": "text",
-          "source": ["task", "description"],
-          "edit": "task.edit",
-          "create": true
+          "source": ["task", "description"]
         }
       ],
       "links": [
@@ -1087,9 +1139,7 @@
         {
           "name": "area",
           "type": "text",
-          "source": ["container", "parent_id"],
-          "edit": "container.move",
-          "create": true
+          "source": ["container", "parent_id"]
         }
       ],
       "links": [{"kind": "task", "label": "tasks", "via": "list_column"}],

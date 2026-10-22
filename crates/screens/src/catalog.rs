@@ -957,6 +957,7 @@ pub mod act {
             pub email: Option<String>,
             pub expiry: Option<String>,
             pub fullname: Option<String>,
+            pub item_id: Option<String>,
             pub network: Option<String>,
             pub notes: Option<String>,
             pub otp_seed: Option<String>,
@@ -983,6 +984,7 @@ pub mod act {
                 if let Some(it) = self.email { map.insert("email".to_owned(), text(it)); }
                 if let Some(it) = self.expiry { map.insert("expiry".to_owned(), text(it)); }
                 if let Some(it) = self.fullname { map.insert("fullname".to_owned(), text(it)); }
+                if let Some(it) = self.item_id { map.insert("item_id".to_owned(), text(it)); }
                 if let Some(it) = self.network { map.insert("network".to_owned(), text(it)); }
                 if let Some(it) = self.notes { map.insert("notes".to_owned(), text(it)); }
                 if let Some(it) = self.otp_seed { map.insert("otp_seed".to_owned(), text(it)); }
@@ -3995,6 +3997,28 @@ pub mod act {
             }
         }
 
+        /// Retitle a project or an area through entity.retitle.
+        #[derive(Clone, Debug, Default)]
+        pub struct RenameList {
+            pub list_id: String,
+            pub title: String,
+        }
+        impl RenameList {
+            pub const NAME: &str = "rename-list";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("id".to_owned(), text(self.list_id));
+                map.insert("title".to_owned(), text(self.title));
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<RenameList> for wire::ActRequest {
+            fn from(value: RenameList) -> Self {
+                value.request()
+            }
+        }
+
         /// Create a section within a task project through container.create (the project is its `parent`).
         #[derive(Clone, Debug, Default)]
         pub struct CreateSection {
@@ -4211,13 +4235,27 @@ pub mod load {
         /// The drive as a bounded recent window: every folder, plus the most recently changed documents newest first — caller-sized via limit, default 200 — trashed ones included with their purge dates, each row decorated with starred, its free-form labels, and the current bytes' media_type and size. A document attached to something and filed in no folder is not listed. truncated=true means older documents exist beyond the window; the shelves Trash, Starred and Recent are read for themselves.
         #[derive(Clone, Debug, Default)]
         pub struct Drive {
+            pub ascending: Option<i64>,
+            pub folder_id: Option<String>,
+            pub label: Option<String>,
             pub limit: u32,
+            pub modified: Option<String>,
+            pub shelf: Option<String>,
+            pub sort: Option<String>,
+            pub r#type: Option<String>,
         }
         impl Drive {
             pub const NAME: &str = "drive";
             pub fn request(self) -> wire::LoadRequest {
                 #[allow(unused_mut)]
                 let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                if let Some(it) = self.ascending { map.insert("ascending".to_owned(), whole(it)); }
+                if let Some(it) = self.folder_id { map.insert("folder_id".to_owned(), text(it)); }
+                if let Some(it) = self.label { map.insert("label".to_owned(), text(it)); }
+                if let Some(it) = self.modified { map.insert("modified".to_owned(), text(it)); }
+                if let Some(it) = self.shelf { map.insert("shelf".to_owned(), text(it)); }
+                if let Some(it) = self.sort { map.insert("sort".to_owned(), text(it)); }
+                if let Some(it) = self.r#type { map.insert("type".to_owned(), text(it)); }
                 wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), limit: self.limit, params: map, ..Default::default() }
             }
         }
@@ -4295,18 +4333,12 @@ pub mod load {
         /// Today: each metric's figure against your own typical (the median of the 30 whole days before today) and its usual range, today's workouts, whether a store is connected and which metrics have any data.
         #[derive(Clone, Debug, Default)]
         pub struct Today {
-            pub day_end: String,
-            pub day_start: String,
-            pub today: String,
         }
         impl Today {
             pub const NAME: &str = "today";
             pub fn request(self) -> wire::LoadRequest {
                 #[allow(unused_mut)]
                 let mut map = std::collections::HashMap::<String, wire::Value>::new();
-                map.insert("day_end".to_owned(), text(self.day_end));
-                map.insert("day_start".to_owned(), text(self.day_start));
-                map.insert("today".to_owned(), text(self.today));
                 wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), params: map, ..Default::default() }
             }
         }
@@ -4361,7 +4393,6 @@ pub mod load {
         pub struct Series {
             pub metric: SeriesMetric,
             pub range: SeriesRange,
-            pub today: String,
         }
         impl Series {
             pub const NAME: &str = "series";
@@ -4370,7 +4401,6 @@ pub mod load {
                 let mut map = std::collections::HashMap::<String, wire::Value>::new();
                 map.insert("metric".to_owned(), text(self.metric.wire()));
                 map.insert("range".to_owned(), text(self.range.wire()));
-                map.insert("today".to_owned(), text(self.today));
                 wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), params: map, ..Default::default() }
             }
         }
@@ -4401,7 +4431,6 @@ pub mod load {
         #[derive(Clone, Debug, Default)]
         pub struct Trends {
             pub range: TrendsRange,
-            pub today: String,
         }
         impl Trends {
             pub const NAME: &str = "trends";
@@ -4409,7 +4438,6 @@ pub mod load {
                 #[allow(unused_mut)]
                 let mut map = std::collections::HashMap::<String, wire::Value>::new();
                 map.insert("range".to_owned(), text(self.range.wire()));
-                map.insert("today".to_owned(), text(self.today));
                 wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), params: map, ..Default::default() }
             }
         }
@@ -4423,7 +4451,7 @@ pub mod load {
         #[derive(Clone, Debug, Default)]
         pub struct Workouts {
             pub limit: u32,
-            pub cursor: Option<String>,
+            pub after: Option<String>,
             pub kind_concept_id: Option<String>,
         }
         impl Workouts {
@@ -4431,7 +4459,7 @@ pub mod load {
             pub fn request(self) -> wire::LoadRequest {
                 #[allow(unused_mut)]
                 let mut map = std::collections::HashMap::<String, wire::Value>::new();
-                if let Some(it) = self.cursor { map.insert("cursor".to_owned(), text(it)); }
+                if let Some(it) = self.after { map.insert("after".to_owned(), text(it)); }
                 if let Some(it) = self.kind_concept_id { map.insert("kind_concept_id".to_owned(), text(it)); }
                 wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), limit: self.limit, params: map, ..Default::default() }
             }
@@ -4465,14 +4493,12 @@ pub mod load {
         /// What the follower reads before a pass: the newest day and the newest workout the vault holds, and every daily total since a day, so it sends only what moved.
         #[derive(Clone, Debug, Default)]
         pub struct FollowView {
-            pub since: String,
         }
         impl FollowView {
             pub const NAME: &str = "follow-view";
             pub fn request(self) -> wire::LoadRequest {
                 #[allow(unused_mut)]
                 let mut map = std::collections::HashMap::<String, wire::Value>::new();
-                map.insert("since".to_owned(), text(self.since));
                 wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), params: map, ..Default::default() }
             }
         }
@@ -4617,10 +4643,10 @@ pub mod load {
         pub struct Activity {
             pub month: String,
             pub account_id: Option<String>,
-            pub category: Option<String>,
-            pub cursor: Option<String>,
+            pub after: Option<String>,
+            pub category_filter: Option<String>,
+            pub category_id: Option<String>,
             pub limit: u32,
-            pub uncategorised: Option<bool>,
         }
         impl Activity {
             pub const NAME: &str = "activity";
@@ -4629,9 +4655,9 @@ pub mod load {
                 let mut map = std::collections::HashMap::<String, wire::Value>::new();
                 map.insert("month".to_owned(), text(self.month));
                 if let Some(it) = self.account_id { map.insert("account_id".to_owned(), text(it)); }
-                if let Some(it) = self.category { map.insert("category".to_owned(), text(it)); }
-                if let Some(it) = self.cursor { map.insert("cursor".to_owned(), text(it)); }
-                if let Some(it) = self.uncategorised { map.insert("uncategorised".to_owned(), flag(it)); }
+                if let Some(it) = self.after { map.insert("after".to_owned(), text(it)); }
+                if let Some(it) = self.category_filter { map.insert("category_filter".to_owned(), text(it)); }
+                if let Some(it) = self.category_id { map.insert("category_id".to_owned(), text(it)); }
                 wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), limit: self.limit, params: map, ..Default::default() }
             }
         }
@@ -4741,8 +4767,8 @@ pub mod load {
             pub category_id: String,
             pub currency: String,
             pub month: String,
-            pub amount_minor: Option<i64>,
-            pub carry: Option<bool>,
+            pub typing_amount_minor: Option<i64>,
+            pub typing_carry: Option<i64>,
         }
         impl TargetSheet {
             pub const NAME: &str = "target-sheet";
@@ -4752,8 +4778,8 @@ pub mod load {
                 map.insert("category_id".to_owned(), text(self.category_id));
                 map.insert("currency".to_owned(), text(self.currency));
                 map.insert("month".to_owned(), text(self.month));
-                if let Some(it) = self.amount_minor { map.insert("amount_minor".to_owned(), whole(it)); }
-                if let Some(it) = self.carry { map.insert("carry".to_owned(), flag(it)); }
+                if let Some(it) = self.typing_amount_minor { map.insert("typing_amount_minor".to_owned(), whole(it)); }
+                if let Some(it) = self.typing_carry { map.insert("typing_carry".to_owned(), whole(it)); }
                 wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), params: map, ..Default::default() }
             }
         }
@@ -4853,12 +4879,22 @@ pub mod load {
         #[derive(Clone, Debug, Default)]
         pub struct Library {
             pub limit: u32,
+            pub notebook_id: Option<String>,
+            pub pinned_only: Option<i64>,
+            pub sort: Option<String>,
+            pub tag_concept_ids: Option<String>,
+            pub unfiled_only: Option<i64>,
         }
         impl Library {
             pub const NAME: &str = "library";
             pub fn request(self) -> wire::LoadRequest {
                 #[allow(unused_mut)]
                 let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                if let Some(it) = self.notebook_id { map.insert("notebook_id".to_owned(), text(it)); }
+                if let Some(it) = self.pinned_only { map.insert("pinned_only".to_owned(), whole(it)); }
+                if let Some(it) = self.sort { map.insert("sort".to_owned(), text(it)); }
+                if let Some(it) = self.tag_concept_ids { map.insert("tag_concept_ids".to_owned(), text(it)); }
+                if let Some(it) = self.unfiled_only { map.insert("unfiled_only".to_owned(), whole(it)); }
                 wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), limit: self.limit, params: map, ..Default::default() }
             }
         }
@@ -4955,13 +4991,17 @@ pub mod load {
         /// The people window as a bounded recent view, newest first, decorated with the star, the list, the reminders that are on and when they were last touched (computed from the touches); the owner and pets are not in it.
         #[derive(Clone, Debug, Default)]
         pub struct People {
+            pub filter: Option<String>,
             pub limit: u32,
+            pub sort: Option<String>,
         }
         impl People {
             pub const NAME: &str = "people";
             pub fn request(self) -> wire::LoadRequest {
                 #[allow(unused_mut)]
                 let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                if let Some(it) = self.filter { map.insert("filter".to_owned(), text(it)); }
+                if let Some(it) = self.sort { map.insert("sort".to_owned(), text(it)); }
                 wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), limit: self.limit, params: map, ..Default::default() }
             }
         }
@@ -5076,6 +5116,7 @@ pub mod load {
         /// Caption and place search over the whole live library through the vault's one search index (the caption, the place's name and its locality) — not just the loaded window; returns the ranked photograph ids a grid reads, leaving out the archive.
         #[derive(Clone, Debug, Default)]
         pub struct Search {
+            pub correct: Option<i64>,
             pub term: Option<String>,
         }
         impl Search {
@@ -5083,6 +5124,7 @@ pub mod load {
             pub fn request(self) -> wire::LoadRequest {
                 #[allow(unused_mut)]
                 let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                if let Some(it) = self.correct { map.insert("correct".to_owned(), whole(it)); }
                 if let Some(it) = self.term { map.insert("term".to_owned(), text(it)); }
                 wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), params: map, ..Default::default() }
             }

@@ -328,6 +328,20 @@
       }
     ]
   },
+  "act.x_needs_name_text": {
+    "tool": "act",
+    "argument": "args",
+    "calls": [
+      {
+        "tool": "act",
+        "args": {
+          "verb": "tag",
+          "kind": "task",
+          "name": "Book the cabin"
+        }
+      }
+    ]
+  },
   "act.slot_is_exactly_one_n": {
     "tool": "act",
     "argument": "args",

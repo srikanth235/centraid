@@ -394,6 +394,27 @@
       "example": [
         {
           "args": {
+            "kind": "task",
+            "name": "Book the cabin",
+            "verb": "tag"
+          },
+          "think": null,
+          "tool": "act",
+          "user": null
+        }
+      ],
+      "family": "value",
+      "id": "act.x_needs_name_text",
+      "source": "act.rs",
+      "template": "error: {} needs {name}: <text>.",
+      "tool": "act",
+      "why_no_example": ""
+    },
+    {
+      "argument": "args",
+      "example": [
+        {
+          "args": {
             "args": "foo: bar",
             "kind": "task",
             "name": "Book the cabin",

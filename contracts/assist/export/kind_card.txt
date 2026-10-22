@@ -1,11 +1,11 @@
 person: name, date (last contacted), role, nickname, met, cadence (days), starred (yes|no) · links: events, tasks, notes · verbs: create edit delete restore star unstar log
 event: name, date (start), status (confirmed|tentative|cancelled), duration (min), description · links: people · verbs: create edit reschedule cancel delete restore
-task: name, date (due), status (open|completed|cancelled), effort (min), priority (9 highest..1 lowest, 0 none), completed (date), description · links: subtasks, people, list · verbs: create edit reschedule complete reopen delete restore add_to remove_from
-note: name, date (created), body, pinned (yes|no) · links: notebook, people · verbs: create edit delete restore add_to remove_from
-document: name, date (created), starred (yes|no) · links: folder · verbs: create edit delete restore star unstar add_to remove_from
-photo: name, date (taken), starred (yes|no) · links: albums · verbs: edit delete restore star unstar add_to remove_from
-album: name · links: photos · verbs: create edit delete
-locker item: name, type (login|card|note|identity|wifi|password|ssh_key|api_credential|passport|bank_account|driving_licence|software_licence|crypto_wallet|membership|document), username, url, notes, starred (yes|no) · verbs: create edit delete restore star unstar reveal
+task: name, date (due), status (open|completed|cancelled), effort (min), priority (9 highest..1 lowest, 0 none), completed (date), description · links: subtasks, people, list · verbs: create edit reschedule complete reopen cancel delete restore add_to remove_from tag untag
+note: name, date (created), body, pinned (yes|no), starred (yes|no) · links: notebook, people · verbs: create edit delete restore star unstar add_to remove_from tag untag
+document: name, date (created), starred (yes|no) · links: folder · verbs: create edit delete restore star unstar add_to remove_from tag untag
+photo: name, date (taken), starred (yes|no) · links: albums · verbs: edit delete restore star unstar add_to remove_from tag untag
+album: name · links: photos · verbs: create edit delete restore
+locker item: name, type (login|card|note|identity|wifi|password|ssh_key|api_credential|passport|bank_account|driving_licence|software_licence|crypto_wallet|membership|document), username, url, notes, starred (yes|no) · verbs: create edit delete restore star unstar reveal tag untag archive unarchive
 notebook: name · links: notes · verbs: create edit delete
 folder: name · links: documents · verbs: create edit delete
 list: name, area · links: tasks · verbs: create edit

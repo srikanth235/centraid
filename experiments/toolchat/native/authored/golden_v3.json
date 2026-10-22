@@ -1380,7 +1380,7 @@
       }
     },
     "dates": "dates: the twenty-ninth = 2026-09-29 (past) / 2026-10-29 (upcoming)",
-    "think4": "intent: write \"cancel\"\nverb: cancel\nname: Darkroom night\nwhen: \"twenty-ninth\" = dates[0] upcoming"
+    "think4": "intent: write \"cancel\"\nverb: cancel\nkind: event\nname: Darkroom night\nwhen: \"twenty-ninth\" = dates[0] upcoming"
   },
   {
     "shape": "act ('verb', 'kind', 'name', 'when') |  | day+9 | n,o,n,e",
@@ -1408,7 +1408,7 @@
         "when": "{\"from\":{\"unit\":\"day\",\"rel\":0}}"
       }
     },
-    "think4": "intent: write \"cancel\"\nverb: cancel\nname: Night shift\nwhen: now = from day+0"
+    "think4": "intent: write \"cancel\"\nverb: cancel\nkind: event\nname: Night shift\nwhen: now = from day+0"
   },
   {
     "shape": "act ('verb', 'kind', 'name', 'when') |  | from week+9 wd9 to week+9 wd9 | n,o,n,e",
@@ -1436,7 +1436,7 @@
         "when": "{\"unit\":\"month\",\"rel\":0,\"name\":7}"
       }
     },
-    "think4": "intent: write \"cancel\"\nverb: cancel\nname: Pottery class\nwhen: \"july\" = month+0 m7"
+    "think4": "intent: write \"cancel\"\nverb: cancel\nkind: event\nname: Pottery class\nwhen: \"july\" = month+0 m7"
   },
   {
     "shape": "act ('verb', 'kind', 'name', 'when') |  | week+9 wd9 | n,o,n,e",
@@ -1450,7 +1450,7 @@
         "when": "{\"unit\":\"week\",\"rel\":1,\"weekday\":5}"
       }
     },
-    "think4": "intent: write \"cancel\"\nverb: cancel\nname: Night shift\nwhen: \"friday\" = week+1 wd5"
+    "think4": "intent: write \"cancel\"\nverb: cancel\nkind: event\nname: Night shift\nwhen: \"friday\" = week+1 wd5"
   },
   {
     "shape": "act ('verb', 'kind', 'name', 'when', 'args') | date | 9-9-9;day+9 row t | n,o,n,e",
@@ -1788,7 +1788,7 @@
         "args": "status: cancelled"
       }
     },
-    "think4": "intent: write \"cancel\"\nverb: cancel\nname: On-call shift\nwhen: \"this friday\" = week+0 wd5\nset: status = cancelled"
+    "think4": "intent: write \"cancel\"\nverb: cancel\nkind: event\nname: On-call shift\nwhen: \"this friday\" = week+0 wd5\nset: status = cancelled"
   },
   {
     "shape": "act ('verb', 'kind', 'name', 'when', 'more') |  | dates[i] | n,o,n,e",
@@ -1804,7 +1804,7 @@
       }
     },
     "dates": "dates: the nineteenth = 2027-05-19 (past) / 2027-06-19 (upcoming)",
-    "think4": "intent: write \"cancel\"\nverb: cancel\nname: Squamish climbing day\nwhen: \"nineteenth\" = dates[0] upcoming\nmore: true"
+    "think4": "intent: write \"cancel\"\nverb: cancel\nkind: event\nname: Squamish climbing day\nwhen: \"nineteenth\" = dates[0] upcoming\nmore: true"
   },
   {
     "shape": "act ('verb', 'kind', 'name', 'when', 'more') |  | from week+9 wd9 to week+9 wd9 | n,o,n,e",
@@ -1819,7 +1819,7 @@
         "more": "true"
       }
     },
-    "think4": "intent: write \"cancel\"\nverb: cancel\nname: Ada swimming lesson\nwhen: earlier \"sunday\" = from week+0 wd6 to week+0 wd7\nmore: true"
+    "think4": "intent: write \"cancel\"\nverb: cancel\nkind: event\nname: Ada swimming lesson\nwhen: earlier \"sunday\" = from week+0 wd6 to week+0 wd7\nmore: true"
   },
   {
     "shape": "act ('verb', 'kind', 'name', 'when', 'more') |  | week+9 wd9 | n,o,n,e",
@@ -1834,7 +1834,7 @@
         "more": "true"
       }
     },
-    "think4": "intent: write \"cancel\"\nverb: cancel\nname: Badminton at the Armitage\nwhen: \"friday\" = week+1 wd5\nmore: true"
+    "think4": "intent: write \"cancel\"\nverb: cancel\nkind: event\nname: Badminton at the Armitage\nwhen: \"friday\" = week+1 wd5\nmore: true"
   },
   {
     "shape": "act ('verb', 'kind', 'name', 'when', 'order', 'limit', 'args') | date | from day+9;day+9 row t | n,o,n,e",

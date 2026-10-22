@@ -6,7 +6,7 @@
 //! the phone and the fine-tuning loop run one runtime over two worlds.
 
 use centraid_assist::native::world::World;
-use centraid_assist::native::{Door, meta::Kind};
+use centraid_assist::native::{Call, Door, meta::Kind};
 use centraid_core::api_proto as wire;
 use centraid_core::assist::door::WRITES_OFF_PREDICATE;
 use centraid_core::{Core, CoreConfig};
@@ -179,15 +179,22 @@ fn a_bare_run_is_refused_and_a_keyed_run_writes_once_through_the_change_feed() {
 
     // A BARE RUN IS REFUSED, as a value, and the vault is untouched: a card's confirm is the only
     // way the phone's chat writes.
-    let ran = door.run("container.create", input.clone()).unwrap();
+    let ran = door
+        .act(&Call::bare("container.create"), input.clone())
+        .unwrap();
     assert!(!ran.ok);
     assert_eq!(ran.predicate.as_deref(), Some(WRITES_OFF_PREDICATE));
     assert_eq!(project_names(&door).len(), before);
     assert!(change_tables(&pair).is_empty());
 
-    // A KEYED RUN goes through `api::invoke`: the row lands and the feed names its table.
+    // A KEYED RUN of a bare command goes through the one write path: the row lands and the feed
+    // names its table.
     let ran = door
-        .run_keyed("pending-1:0", "container.create", input.clone())
+        .act_keyed(
+            "pending-1:0",
+            &Call::bare("container.create"),
+            input.clone(),
+        )
         .unwrap();
     assert!(ran.ok, "{:?}", ran.reason);
     assert_eq!(project_names(&door).len(), before + 1);
@@ -199,16 +206,21 @@ fn a_bare_run_is_refused_and_a_keyed_run_writes_once_through_the_change_feed() {
 
     // THE SAME KEY AGAIN writes nothing and answers what it answered; a new key writes.
     let again = door
-        .run_keyed("pending-1:0", "container.create", input.clone())
+        .act_keyed(
+            "pending-1:0",
+            &Call::bare("container.create"),
+            input.clone(),
+        )
         .unwrap();
     assert!(again.ok);
-    assert_eq!(again.output, ran.output);
+    // the vault holds the key with the commit, and the journal keeps evidence and not answers
+    assert!(again.output.is_null());
     assert_eq!(project_names(&door).len(), before + 1);
     assert!(
         change_tables(&pair).is_empty(),
         "a replay announces nothing"
     );
-    door.run_keyed("pending-1:1", "container.create", input)
+    door.act_keyed("pending-1:1", &Call::bare("container.create"), input)
         .unwrap();
     assert_eq!(project_names(&door).len(), before + 2);
 
@@ -216,15 +228,58 @@ fn a_bare_run_is_refused_and_a_keyed_run_writes_once_through_the_change_feed() {
     // remembered: the same key may be asked again.
     let bad = serde_json::json!({"nope": 1});
     let ran = door
-        .run_keyed("pending-2:0", "container.create", bad.clone())
+        .act_keyed("pending-2:0", &Call::bare("container.create"), bad.clone())
         .unwrap();
     assert!(!ran.ok);
     assert_eq!(ran.predicate.as_deref(), Some("schema"));
     assert!(
         !door
-            .run_keyed("pending-2:0", "container.create", bad)
+            .act_keyed("pending-2:0", &Call::bare("container.create"), bad)
             .unwrap()
             .ok
+    );
+}
+
+/// THE DOOR WRITES THROUGH `act`, the write a screen takes: the manifest's input schema refuses what
+/// a screen's `Act` would, and the key is the vault's, so a step confirmed twice writes once.
+#[test]
+fn a_keyed_action_goes_through_act_and_its_key_is_the_vaults() {
+    let pair = pair();
+    let door = pair.core.assist_door();
+    let add = Call {
+        app: "tasks",
+        action: "add",
+        command: "task.add",
+    };
+    let ran = door
+        .act_keyed(
+            "card-1:0",
+            &add,
+            serde_json::json!({"title": "Through act"}),
+        )
+        .unwrap();
+    assert!(ran.ok, "{:?}", ran.reason);
+    assert!(ran.output.get("id").is_some(), "{:?}", ran.output);
+
+    let again = door
+        .act_keyed(
+            "card-1:0",
+            &add,
+            serde_json::json!({"title": "Through act"}),
+        )
+        .unwrap();
+    assert!(again.ok, "a replay is the first answer");
+
+    // the manifest's schema refuses what the command's own would not name the same way
+    let bad = door
+        .act_keyed("card-2:0", &add, serde_json::json!({"title": ""}))
+        .unwrap();
+    assert!(!bad.ok);
+    assert_eq!(bad.predicate.as_deref(), Some("schema"));
+    // a key reused for another act is a mistake the door reports, not a second write
+    assert!(
+        door.act_keyed("card-1:0", &add, serde_json::json!({"title": "Another"}))
+            .is_err()
     );
 }
 
@@ -272,8 +327,8 @@ fn money_reaches_the_world_through_the_core_door_as_signed_rows_inside_the_windo
     let today = door.now_ms().div_euclid(86_400_000);
     let day = |back: i64| ymd(today - back);
     let account = door.mint_id();
-    let run = |key: &str, command: &str, input: serde_json::Value| {
-        let ran = door.run_keyed(key, command, input).unwrap();
+    let run = |key: &str, command: &'static str, input: serde_json::Value| {
+        let ran = door.act_keyed(key, &Call::bare(command), input).unwrap();
         assert!(ran.ok, "{command}: {:?}", ran.reason);
     };
     run(
@@ -690,15 +745,15 @@ fn a_shared_verb_on_a_locker_item_runs_through_the_core_door() {
         ("l10:0", "entity.restore", serde_json::json!({"id": item})),
     ] {
         let ran = door
-            .run_keyed(key, command, input)
+            .act_keyed(key, &Call::bare(command), input)
             .expect("the door answers");
         assert!(ran.ok, "{command}: {:?}", ran.reason);
     }
     // An edit that keeps every sealed cell (the placeholder) is the plain edit the model makes.
     let ran = door
-        .run_keyed(
+        .act_keyed(
             "l11:0",
-            "locker.edit_item",
+            &Call::bare("locker.edit_item"),
             serde_json::json!({
                 "item_id": item, "title": "Bank", "username": "ada@new.example",
                 "url": "https://vaultbank.example", "password": "«sealed»",
@@ -768,8 +823,12 @@ fn a_purge_asks_the_assistant_the_confirmation_it_asks_the_member() {
     let (item, note, _key) = with_a_locker_item(&pair);
     let door = pair.core.assist_door();
     let ask = |key: &str, id: &str| {
-        door.run_keyed(key, "entity.purge", serde_json::json!({"id": id}))
-            .expect("the door answers")
+        door.act_keyed(
+            key,
+            &Call::bare("entity.purge"),
+            serde_json::json!({"id": id}),
+        )
+        .expect("the door answers")
     };
     let (on_item, on_note) = (ask("p1:0", &item), ask("p2:0", &note));
     assert_eq!(on_item.ok, on_note.ok, "{on_item:?} / {on_note:?}");

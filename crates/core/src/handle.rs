@@ -165,9 +165,6 @@ pub struct Handle {
     /// only; see [`crate::assist`]. `pub(crate)` because that module is where
     /// `Request::Assist` is answered.
     pub(crate) assist: crate::assist::Hub,
-    /// THE ACTS THAT HAVE RUN, by `invoke_key` (#1135): a second tap of one key
-    /// answers the first's answer. In memory, like the chat's sessions.
-    acts: crate::act::Settled,
     /// THE SCREEN RUNTIME, once a shell-facing library has attached one
     /// (#1135, lane C2): see [`crate::screens`].
     screens: std::sync::OnceLock<Arc<dyn crate::screens::ScreenHost>>,
@@ -288,7 +285,6 @@ impl Core {
             owned_bytes: Mutex::new(None),
             locker: Arc::new(Mutex::new(None)),
             assist: crate::assist::Hub::new(),
-            acts: crate::act::Settled::default(),
             screens: std::sync::OnceLock::new(),
         })
     }
@@ -573,7 +569,6 @@ impl Handle {
                     owner: &owner,
                     changes: &changes,
                     plane: &self.plane,
-                    settled: &self.acts,
                 },
                 request,
             )
@@ -921,6 +916,7 @@ impl Handle {
                             &self.owner(),
                             command,
                             &changes,
+                            None,
                         )
                         .and_then(crate::api::wire_outcome)
                     },

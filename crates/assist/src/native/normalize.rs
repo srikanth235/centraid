@@ -55,9 +55,10 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::{Map, Value, json};
 
-use crate::native::act::{arg_lines, arg_value, create_allowed, create_arg_alias};
+use crate::native::act::{arg_lines, arg_value};
 use crate::native::dates;
 use crate::native::meta::{self, Kind};
+use crate::native::meta::{create_arg_canonical, create_args};
 use crate::native::session::{Session, arg_str, canonical_json};
 use crate::native::whr;
 
@@ -770,12 +771,12 @@ impl Session {
         else {
             return;
         };
-        let allowed = create_allowed(kind);
+        let allowed = create_args(kind);
         let mut changed = false;
 
         // an arg under another spelling of a field is that field, as `create` reads it
         for key in args.keys() {
-            let Some(field) = create_arg_alias(kind, &key) else {
+            let Some(field) = create_arg_canonical(kind, &key) else {
                 continue;
             };
             if !args.has(field) {

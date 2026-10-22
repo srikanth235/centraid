@@ -174,7 +174,6 @@
       "kind": "account",
       "inverse": "close-account",
       "sealed": [],
-      "chat": "direct",
       "command": "account.add",
       "phrasings": [
         "add a savings account in euros",
@@ -237,9 +236,8 @@
       "name": "edit-account",
       "verb": "edit",
       "kind": "account",
-      "inverse": null,
+      "inverse": "edit-account",
       "sealed": [],
-      "chat": "direct",
       "command": "account.edit",
       "phrasings": [
         "rename my savings account to Rainy Day",
@@ -296,7 +294,6 @@
       "kind": "account",
       "inverse": "reopen-account",
       "sealed": [],
-      "chat": "direct",
       "command": "flag.set",
       "phrasings": [
         "close my old checking account",
@@ -341,7 +338,6 @@
       "kind": "account",
       "inverse": "close-account",
       "sealed": [],
-      "chat": "direct",
       "command": "flag.clear",
       "phrasings": [
         "reopen my old checking account",
@@ -386,7 +382,6 @@
       "kind": "account",
       "inverse": null,
       "sealed": [],
-      "chat": "card",
       "command": "account.set_opening",
       "phrasings": [
         "set the opening balance of Everyday to 500",
@@ -430,7 +425,7 @@
       "kind": "transaction",
       "inverse": null,
       "sealed": [],
-      "chat": "card",
+      "bulk": true,
       "command": "follow.statement",
       "phrasings": [
         "import this bank statement",
@@ -514,7 +509,6 @@
       "kind": "account",
       "inverse": null,
       "sealed": [],
-      "chat": "direct",
       "command": "checkpoint.record",
       "phrasings": [
         "my checking account had 1520 on the first",
@@ -562,7 +556,6 @@
       "kind": "account",
       "inverse": null,
       "sealed": [],
-      "chat": "card",
       "command": "account.remember_layout",
       "phrasings": [
         "remember how this bank's CSV is laid out",
@@ -669,7 +662,7 @@
       "kind": "transaction",
       "inverse": null,
       "sealed": [],
-      "chat": "direct",
+      "bulk": true,
       "command": "txn.categorize",
       "phrasings": [
         "file that Starbucks charge under coffee",
@@ -719,7 +712,6 @@
       "kind": "transaction",
       "inverse": null,
       "sealed": [],
-      "chat": "card",
       "command": "txn.void",
       "phrasings": [
         "void the duplicate Netflix charge",
@@ -758,9 +750,8 @@
       "name": "set-display-name",
       "verb": "edit",
       "kind": "transaction",
-      "inverse": null,
+      "inverse": "set-display-name",
       "sealed": [],
-      "chat": "direct",
       "command": "entity.retitle",
       "phrasings": [
         "call the SQ *BLUE BOTTLE line Blue Bottle",
@@ -805,7 +796,6 @@
       "kind": "transaction",
       "inverse": "unlink-transfer",
       "sealed": [],
-      "chat": "direct",
       "command": "txn.link_transfer",
       "phrasings": [
         "those two lines are a transfer between my accounts",
@@ -850,7 +840,6 @@
       "kind": "transaction",
       "inverse": "link-transfer",
       "sealed": [],
-      "chat": "direct",
       "command": "txn.unlink_transfer",
       "phrasings": [
         "that wasn't a transfer, unlink it",
@@ -889,9 +878,8 @@
       "name": "set-target",
       "verb": "edit",
       "kind": "budget",
-      "inverse": null,
+      "inverse": "set-target",
       "sealed": [],
-      "chat": "direct",
       "command": "budget.set",
       "phrasings": [
         "plan 400 for groceries in November",
@@ -944,11 +932,10 @@
     },
     {
       "name": "set-carry",
-      "verb": "edit",
+      "verb": "edit:carry",
       "kind": "budget",
-      "inverse": null,
+      "inverse": "set-carry",
       "sealed": [],
-      "chat": "card",
       "command": "budget.set_carry",
       "phrasings": [
         "carry what's left of groceries into next month",
@@ -996,7 +983,6 @@
       "kind": "rule",
       "inverse": "delete-rule",
       "sealed": [],
-      "chat": "direct",
       "command": "rule.add",
       "phrasings": [
         "always file Starbucks under coffee",
@@ -1063,9 +1049,8 @@
       "name": "edit-rule",
       "verb": "edit",
       "kind": "rule",
-      "inverse": null,
+      "inverse": "edit-rule",
       "sealed": [],
-      "chat": "direct",
       "command": "rule.edit",
       "phrasings": [
         "change the Starbucks rule to dining",
@@ -1134,7 +1119,6 @@
       "kind": "rule",
       "inverse": null,
       "sealed": [],
-      "chat": "card",
       "command": "rule.delete",
       "phrasings": [
         "delete the Starbucks rule",
@@ -1175,7 +1159,7 @@
       "kind": "rule",
       "inverse": null,
       "sealed": [],
-      "chat": "card",
+      "bulk": true,
       "command": "rule.apply",
       "phrasings": [
         "apply my rules to everything already imported",
@@ -1218,7 +1202,6 @@
       "kind": "category",
       "inverse": "archive-category",
       "sealed": [],
-      "chat": "direct",
       "command": "category.add",
       "phrasings": [
         "add a category called Pets under Living",
@@ -1264,7 +1247,7 @@
       "kind": "category",
       "inverse": null,
       "sealed": [],
-      "chat": "card",
+      "bulk": true,
       "command": "category.merge",
       "phrasings": [
         "fold Eating Out into Dining",
@@ -1309,7 +1292,6 @@
       "kind": "category",
       "inverse": null,
       "sealed": [],
-      "chat": "direct",
       "command": "flag.set",
       "phrasings": [
         "archive the Pets category",
@@ -1396,19 +1378,19 @@
           "account_id": {
             "type": "string"
           },
-          "category": {
-            "type": "string"
-          },
-          "uncategorised": {
-            "type": "boolean"
-          },
-          "cursor": {
-            "type": "object"
-          },
           "limit": {
             "type": "integer",
             "minimum": 1,
             "maximum": 500
+          },
+          "category_filter": {
+            "type": ["string", "integer"]
+          },
+          "category_id": {
+            "type": "string"
+          },
+          "after": {
+            "type": "string"
           }
         },
         "additionalProperties": false,
@@ -1534,12 +1516,14 @@
           "currency": {
             "type": "string"
           },
-          "amount_minor": {
+          "typing_amount_minor": {
             "type": "integer",
             "minimum": 0
           },
-          "carry": {
-            "type": "boolean"
+          "typing_carry": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1
           }
         },
         "additionalProperties": false,
@@ -1678,28 +1662,22 @@
             ["savings", "savings"],
             ["credit_card", "credit_card"],
             ["cash", "cash"]
-          ],
-          "edit": "account.edit",
-          "create": true
+          ]
         },
         {
           "name": "currency",
           "type": "text",
-          "source": ["account", "currency"],
-          "create": true
+          "source": ["account", "currency"]
         },
         {
           "name": "opening",
           "type": "money",
-          "source": ["account", "opening_minor"],
-          "edit": "account.set_opening"
+          "source": ["account", "opening_minor"]
         },
         {
           "name": "on_budget",
           "type": "bool",
-          "source": ["account", "on_budget"],
-          "edit": "account.edit",
-          "create": true
+          "source": ["account", "on_budget"]
         }
       ],
       "links": [],
@@ -1720,14 +1698,12 @@
         {
           "name": "key",
           "type": "text",
-          "source": ["concept", "key"],
-          "create": true
+          "source": ["concept", "key"]
         },
         {
           "name": "group",
           "type": "text",
-          "source": ["concept", "parent_id"],
-          "create": true
+          "source": ["concept", "parent_id"]
         }
       ],
       "links": [],
@@ -1752,9 +1728,7 @@
         {
           "name": "amount",
           "type": "money",
-          "source": ["budget", "amount_minor"],
-          "edit": "budget.set",
-          "create": true
+          "source": ["budget", "amount_minor"]
         },
         {
           "name": "currency",
@@ -1764,8 +1738,7 @@
         {
           "name": "carry",
           "type": "bool",
-          "source": ["budget", "carry"],
-          "edit": "budget.set_carry"
+          "source": ["budget", "carry"]
         }
       ],
       "links": [],
@@ -1790,9 +1763,7 @@
         {
           "name": "category",
           "type": "text",
-          "source": ["rule", "category_id"],
-          "edit": "rule.edit",
-          "create": true
+          "source": ["rule", "category_id"]
         },
         {
           "name": "position",

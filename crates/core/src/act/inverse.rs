@@ -207,6 +207,41 @@ mod tests {
         }
     }
 
+    /// THE MANIFEST AND THE TABLE SAY ONE THING: an action chat runs and the table reverses is the
+    /// action its manifest names as its inverse, and every inverse a manifest names is an action of
+    /// it. The chat's undo reads the manifest's; a screen's toast reads this table's. A card is the
+    /// member's to finish and chat never takes it back, so the table may reverse what the manifest
+    /// names no inverse for (a section made on a screen).
+    #[test]
+    fn the_table_reverses_by_the_action_the_manifest_names() {
+        use centraid_apps_kit::manifest::ChatSurface;
+        for app in APPS {
+            let manifest = app.manifest();
+            for (action, inverse, _) in rows(app.id) {
+                let entry = manifest
+                    .action(action)
+                    .unwrap_or_else(|| panic!("{}.{action} is not in its manifest", app.id));
+                let declared = entry.inverse.as_deref();
+                assert!(
+                    declared == Some(*inverse)
+                        || (declared.is_none() && entry.surface() == ChatSurface::Card),
+                    "{}.{action}: the table reverses it with `{inverse}`, its manifest names {declared:?}",
+                    app.id
+                );
+            }
+            for entry in &manifest.actions {
+                if let Some(inverse) = &entry.inverse {
+                    assert!(
+                        manifest.action(inverse).is_some(),
+                        "{}.{}",
+                        app.id,
+                        entry.name
+                    );
+                }
+            }
+        }
+    }
+
     #[test]
     fn the_input_comes_from_the_shell_or_the_commands_output() {
         let minted: Map<String, Value> =

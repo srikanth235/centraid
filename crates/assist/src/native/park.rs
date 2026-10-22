@@ -14,7 +14,7 @@
 //! The steps themselves are kept, in order, as [`ParkedStep`]s. The step that ends the turn carries
 //! them as `effect.pending` ([`PendingWrite`]): one per session, in memory, dismissed by a new
 //! message and inert in a reopened thread. [`Session::confirm`] checks that the rows the steps
-//! address still read as they did, runs the steps through [`crate::native::door::Door::run_keyed`] call by call and
+//! address still read as they did, runs the steps through [`crate::native::door::Door::act_keyed`] call by call and
 //! reads the vault after each, so the after-write text is the vault's own; [`Session::dismiss`]
 //! puts the session back as the turn found it. `Door` documents what the core owes both.
 //!
@@ -43,7 +43,7 @@ use std::collections::BTreeMap;
 use serde_json::{Value, json};
 
 use crate::native::dates::Stamp;
-use crate::native::door::Ran;
+use crate::native::door::{Call, Ran};
 use crate::native::meta::{Kind, Verb, Via};
 use crate::native::world::{Edge, Key, Row, Val, World};
 
@@ -79,7 +79,8 @@ impl Writes {
 pub struct ParkedStep {
     /// The write call of the turn that made the step (an index into its calls, in order).
     pub call: usize,
-    pub command: String,
+    /// What the step runs: the manifest action, with its command.
+    pub act: Call,
     pub input: Value,
     /// The patched world's answer: an id the vault mints inside a command (a `revision_id`, the
     /// successor of a repeating task) is a placeholder the real run replaces. A created row's id is
@@ -232,7 +233,7 @@ impl PendingWrite {
             "turn": self.turn,
             "verbs": self.verbs,
             "preview": self.preview,
-            "steps": self.steps.iter().map(|step| json!({"command": step.command, "input": crate::native::member::masked(&step.input)})).collect::<Vec<_>>(),
+            "steps": self.steps.iter().map(|step| json!({"command": step.act.command, "input": crate::native::member::masked(&step.input)})).collect::<Vec<_>>(),
             "destructive": self.destructive(),
             "not_undoable": self.not_undoable,
         })
@@ -473,6 +474,7 @@ pub(crate) fn apply(
         "entity.restore" => restore_entity(world, bin, cx, input),
         "entity.purge" => purge_entity(world, input),
         "flag.set" | "flag.clear" => flag_entity(world, input, command == "flag.set"),
+        "tag.add" | "tag.remove" => tag_entity(world, input),
         "edge.add" | "edge.remove" => edge_entity(world, input, command == "edge.add"),
         "locker.add_item" => locker_add(world, cx, input),
         "locker.edit_item" => locker_edit(world, cx, input),
@@ -751,6 +753,22 @@ fn flag_entity(world: &mut World, input: &Value, on: bool) -> Result<Ran, String
             },
             Val::Bool(on),
         );
+    }
+    Ok(ok(json!({"changed": true})))
+}
+
+/// A tag: a word the member puts on a row. The world does not read tags, so the patch is the
+/// vault's refusals and nothing else: the row is there and live, and the label is a word.
+fn tag_entity(world: &mut World, input: &Value) -> Result<Ran, String> {
+    let id = text(input, "id").unwrap_or_default();
+    if key_of(world, id).is_none_or(|key| world.rows[&key].trashed) {
+        return Ok(refused("entity_takes_a_tag", &gone(world, id)));
+    }
+    if text(input, "label").is_none_or(|label| label.trim().is_empty()) {
+        return Ok(refused(
+            "label_is_a_word",
+            "a label needs at least one character",
+        ));
     }
     Ok(ok(json!({"changed": true})))
 }
@@ -1250,6 +1268,7 @@ fn note_create(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String>
         nonempty(text(input, "body").unwrap_or_default()),
     );
     row.fields.insert("pinned", Val::Bool(false));
+    row.fields.insert("starred", Val::Bool(false));
     world.rows.insert(row.key(), row);
     if let Some(notebook) = text(input, "notebook_id") {
         edge(
@@ -1486,10 +1505,11 @@ impl Session {
     /// Run one write step: the vault runs it ([`Writes::Run`]), or the patched world takes it
     /// and the step is parked ([`Writes::Park`]), or both ([`Writes::Shadow`]). The clock moves
     /// on first in every mode, so a session's writes land in the order they were made.
-    pub(crate) fn write_step(&mut self, command: &str, input: &Value) -> Result<Ran, String> {
+    pub(crate) fn write_step(&mut self, call: &Call, input: &Value) -> Result<Ran, String> {
+        let command = call.command;
         self.note_sealed_moves(command, input);
         match self.flags.writes {
-            Writes::Run => self.door.step(command, input.clone()),
+            Writes::Run => self.door.step(call, input.clone()),
             Writes::Park => {
                 self.park_first();
                 self.door.advance();
@@ -1497,7 +1517,7 @@ impl Session {
                 if ran.ok {
                     self.park.steps.push(ParkedStep {
                         call: self.park.calls.len(),
-                        command: command.to_owned(),
+                        act: *call,
                         input: input.clone(),
                         output: ran.output.clone(),
                     });
@@ -1505,7 +1525,7 @@ impl Session {
                 Ok(ran)
             }
             Writes::Shadow => {
-                let real = self.door.step(command, input.clone())?;
+                let real = self.door.step(call, input.clone())?;
                 if real.ok {
                     match self.patch(command, input, Some(&real.output)) {
                         Ok(ran) if ran.ok => {}
@@ -1535,13 +1555,14 @@ impl Session {
     }
 
     /// A write that must succeed (a follow-up of a create).
-    pub(crate) fn write_must(&mut self, command: &str, input: Value) -> Result<Value, String> {
-        let ran = self.write_step(command, &input)?;
+    pub(crate) fn write_must(&mut self, call: &Call, input: Value) -> Result<Value, String> {
+        let ran = self.write_step(call, &input)?;
         if ran.ok {
             Ok(ran.output)
         } else {
             Err(format!(
-                "{command} refused {input}: {}",
+                "{} refused {input}: {}",
+                call.command,
                 ran.reason.unwrap_or_default()
             ))
         }
@@ -1922,21 +1943,20 @@ impl Session {
             .unwrap_or_else(|| self.world.clone());
         let steps = self.park.steps.clone();
         let calls = self.park.calls.clone();
-        let (inverses, not_undoable) = self
-            .writes
-            .iter()
-            .filter(|(turn, ..)| *turn == self.turn)
-            .fold(
-                (Vec::new(), Vec::new()),
-                |(mut inverses, mut notes), (_, list, more)| {
-                    inverses.extend(
-                        list.iter()
-                            .map(|inverse| (inverse.command.clone(), inverse.input.clone())),
-                    );
-                    notes.extend(more.iter().cloned());
-                    (inverses, notes)
-                },
-            );
+        let (inverses, not_undoable) =
+            self.writes
+                .iter()
+                .filter(|(turn, ..)| *turn == self.turn)
+                .fold(
+                    (Vec::new(), Vec::new()),
+                    |(mut inverses, mut notes), (_, list, more)| {
+                        inverses.extend(list.iter().map(|inverse| {
+                            (inverse.act.command.to_owned(), inverse.input.clone())
+                        }));
+                        notes.extend(more.iter().cloned());
+                        (inverses, notes)
+                    },
+                );
         let mut ids = Vec::new();
         for step in &steps {
             strings(&step.input, &mut ids);
@@ -2050,7 +2070,7 @@ impl Session {
         if pending
             .steps
             .iter()
-            .any(|step| self.door.locked_for(&step.command, &step.input))
+            .any(|step| self.door.locked_for(step.act.command, &step.input))
         {
             return Confirmed::Locked;
         }
@@ -2081,7 +2101,7 @@ impl Session {
     fn run_pending(&mut self, pending: &PendingWrite) -> Confirmed {
         self.sealed_moves.clear();
         for step in &pending.steps {
-            self.note_sealed_moves(&step.command, &step.input);
+            self.note_sealed_moves(step.act.command, &step.input);
         }
         let Ok(fresh) = self.load_world() else {
             return Confirmed::Refused {
@@ -2127,12 +2147,12 @@ impl Session {
                 let key = format!("{}:{index}", pending.id);
                 let refusal = |predicate: String, reason: String| Confirmed::Refused {
                     step: index,
-                    command: step.command.clone(),
+                    command: step.act.command.to_owned(),
                     predicate,
                     reason,
                     landed,
                 };
-                match self.door.run_keyed(&key, &step.command, input) {
+                match self.door.act_keyed(&key, &step.act, input) {
                     Ok(ran) if ran.ok => {
                         // an id the patch made up for a row the vault names itself is the vault's now
                         if let (Some(parked), Some(real)) =

@@ -115,6 +115,8 @@ pub fn drive(session: &mut Session, verb: &str, kind: Kind, measure: Measure<'_>
             let row = number(session, name, target);
             measure(session, json!({"verb": "delete", "rows": row}))
         }
+        // a trashed album leaves the model with what it held, so no selector reaches it
+        "restore" if kind == Kind::Album => return None,
         "restore" => {
             // The fixture's own trashed task where it has one (its trashed person is past the restore window); otherwise
             // delete one first.
@@ -143,7 +145,18 @@ pub fn drive(session: &mut Session, verb: &str, kind: Kind, measure: Measure<'_>
             measure(session, json!({"verb": "restore", "rows": row}))
         }
         "star" | "unstar" => {
+            // the fixture's notes are pinned, not starred: star one first to have one to unstar
+            if kind == Kind::Note && verb == "unstar" {
+                let row = number(session, name, "Dal");
+                let starred = settled(session, "act", json!({"verb": "star", "rows": row}));
+                assert!(
+                    starred["text"].as_str().unwrap().starts_with("starred"),
+                    "{}",
+                    starred["text"]
+                );
+            }
             let row_name = match (kind, verb) {
+                (Kind::Note, _) => "Dal",
                 (Kind::Person, "star") => "Benedikt",
                 (Kind::Person, _) => "Neha Rao",
                 (Kind::Document, "star") => "Lease",
@@ -177,6 +190,18 @@ pub fn drive(session: &mut Session, verb: &str, kind: Kind, measure: Measure<'_>
                 session,
                 json!({"verb": verb, "rows": found[0], "args": args}),
             )
+        }
+        // THE CATALOG'S OWN VERBS: a label on a row, and the archive flag of a Locker item
+        "tag" | "untag" => {
+            let row = number(session, name, subject);
+            measure(
+                session,
+                json!({"verb": verb, "rows": row, "args": "label: urgent"}),
+            )
+        }
+        "archive" | "unarchive" => {
+            let row = number(session, name, "Bank");
+            measure(session, json!({"verb": verb, "rows": row}))
         }
         "log" => {
             let row = number(session, name, subject);

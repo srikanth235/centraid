@@ -2,22 +2,22 @@
 //!
 //! The runtime holds no `Vault`, no connection and no file path. It reads the world
 //! through [`Door::table`] (every row of one table, in the kit's paged shape) and
-//! [`Door::search`]; it writes through [`Door::run`], one typed command at a time; and it
+//! [`Door::search`]; it writes through [`Door::act`], one manifest action at a time; and it
 //! asks the door for the three things only a vault can say: the next id ([`Door::mint_id`]),
 //! and the clock ([`Door::now_ms`], [`Door::advance`]).
 //!
 //! # What an implementation must do
 //!
 //! * **The harness** (`centraid_nativetools::vaultio::Handle`) opens a vault file as the owner
-//!   principal `nativetools`, over a settable clock and a seeded id sequence, executes commands
-//!   with `Vault::execute` and seals a typed Locker secret under the fixed harness key inside
-//!   `run`. It fires no change feed, because nothing there listens.
-//! * **The core** (`crates/core`, the phone) must write through `api::invoke` with an
-//!   `invoke_key`, so a write the runtime makes fires the same `ChangeFeed` events as a write a
-//!   screen makes; and it must read through `VaultDoor` (`app_query.rs`), the query path a screen
-//!   uses, so the runtime sees what the person sees. It must not hand the runtime a connection.
-//!   It seals a typed Locker secret inside `run_keyed` (`crate::locker::phone::seal_command`),
-//!   and answers [`Door::locked_for`] when that needs a Locker that is shut.
+//!   principal `nativetools`, over a settable clock and a seeded id sequence, runs the command an
+//!   action names with `Vault::execute` and seals a typed Locker secret under the fixed harness
+//!   key inside `act`. It fires no change feed, because nothing there listens.
+//! * **The core** (`crates/core`, the phone) must write through `crate::act::act`, THE ONE WRITE
+//!   a screen takes too, with an `invoke_key`: the manifest's input schema, the frozen-vault
+//!   check, the change feed and the durable key all happen there, so a write the runtime makes
+//!   is the write a screen makes. It must read through `VaultDoor` (`app_query.rs`), the query
+//!   path a screen uses, so the runtime sees what the person sees. It must not hand the runtime
+//!   a connection. It answers [`Door::locked_for`] when a write needs a Locker that is shut.
 //!
 //! # A SEALED VALUE IS A CHANNEL THE DOOR KEEPS CLOSED (#1135)
 //!
@@ -34,15 +34,13 @@
 //! never [`Door::run`]: **nothing a card shows has touched the vault.** The writes happen only in
 //! `Session::confirm`, and the core's door must make them like this:
 //!
-//! * [`Door::run_keyed`] is `api::invoke` with `invoke_key` = the key it is given,
+//! * [`Door::act_keyed`] is `act` with `invoke_key` = the key it is given,
 //!   `<PendingWrite::id>:<step index>`. The key is derived from the pending write and the step's
 //!   place in it, so a confirm that is delivered twice (a retry after a dropped reply, a replayed
-//!   request) finds its steps already RUN in the door's own memory of keys and writes nothing more.
-//!   **The vault keeps no ledger of `invoke_key`s** (#1029 §1, R-1088-12): `api::invoke` requires
-//!   one and runs the command, so the door is the only thing that stops a second run, and it
-//!   remembers a key only while it lives, which is as long as the session that holds it; the
-//!   session answers the second confirm from memory as well. The door must NOT mint a fresh key
-//!   per call.
+//!   request) finds its steps already RUN and writes nothing more. **The core's `act` records the
+//!   key in the vault's journal, in the commit it names**, so that holds across a restart and the
+//!   door keeps no memory of its own; the session answers the second confirm from memory as
+//!   well. The door must NOT mint a fresh key per call.
 //! * The change feed fires as it does for a screen's write (`ChangeFeed::tables_changed`), once per
 //!   step that ran, so every screen that reads those tables refreshes. The harness has no feed and
 //!   fires none.
@@ -81,6 +79,29 @@ pub struct Ran {
     pub output: Value,
     pub reason: Option<String>,
     pub predicate: Option<String>,
+}
+
+/// WHAT A WRITE IS: the manifest action chat runs, with the command it invokes. `action` is empty
+/// for the rows of `contracts/assist/verbs.json` no app declares an action for yet (`unbacked`) and
+/// for the few writes the runtime makes that no action names (a list's area); those run as their
+/// bare command.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Call {
+    pub app: &'static str,
+    pub action: &'static str,
+    pub command: &'static str,
+}
+
+impl Call {
+    /// A write no manifest action names, run as its bare vault command.
+    #[must_use]
+    pub const fn bare(command: &'static str) -> Self {
+        Self {
+            app: "",
+            action: "",
+            command,
+        }
+    }
 }
 
 /// A live vault, as the runtime sees it. See the module docs for what each implementation
@@ -126,8 +147,8 @@ pub trait Door: Send {
     /// with no searchable word finds nothing and is not an error.
     fn search(&self, entity: &str, text: &str, limit: usize) -> Result<Vec<Target>, String>;
 
-    /// Run one typed command as the owner at the clock's current instant. A refusal is a value.
-    fn run(&self, command: &str, input: Value) -> Result<Ran, String>;
+    /// Run one action as the owner at the clock's current instant. A refusal is a value.
+    fn act(&self, call: &Call, input: Value) -> Result<Ran, String>;
 
     /// Move the clock on, so the next write gets an instant of its own and a session's writes
     /// land in the order they were made.
@@ -148,32 +169,31 @@ pub trait Door: Send {
         false
     }
 
-    /// Run one command of a confirmed pending write: [`run`](Self::run) under a key that names
-    /// the step (`<pending id>:<step index>`), so a confirm sent twice cannot write twice. The
-    /// vault keeps no ledger of keys (#1029 §1, R-1088-12), so an implementation that must hold
-    /// that line remembers them itself. The harness does not and just runs it; the core passes
-    /// the key to `api::invoke` as the `invoke_key` and keeps its own memory of the keys that
-    /// ran (`crates/core/src/assist/door.rs`; see the module docs, "park and confirm").
-    fn run_keyed(&self, key: &str, command: &str, input: Value) -> Result<Ran, String> {
+    /// Run one action of a confirmed pending write: [`act`](Self::act) under a key that names the
+    /// step (`<pending id>:<step index>`), so a confirm sent twice cannot write twice. The core
+    /// hands the key to `act`, which records it in the vault with the commit; the harness does not
+    /// and just runs it (see the module docs, "park and confirm").
+    fn act_keyed(&self, key: &str, call: &Call, input: Value) -> Result<Ran, String> {
         let _ = key;
-        self.run(command, input)
+        self.act(call, input)
     }
 
-    /// Run one command a second after the last: [`advance`](Self::advance), then
-    /// [`run`](Self::run).
-    fn step(&self, command: &str, input: Value) -> Result<Ran, String> {
+    /// Run one action a second after the last: [`advance`](Self::advance), then
+    /// [`act`](Self::act).
+    fn step(&self, call: &Call, input: Value) -> Result<Ran, String> {
         self.advance();
-        self.run(command, input)
+        self.act(call, input)
     }
 
-    /// Run a command that must succeed.
-    fn must(&self, command: &str, input: Value) -> Result<Value, String> {
-        let ran = self.run(command, input.clone())?;
+    /// Run an action that must succeed.
+    fn must(&self, call: &Call, input: Value) -> Result<Value, String> {
+        let ran = self.act(call, input.clone())?;
         if ran.ok {
             Ok(ran.output)
         } else {
             Err(format!(
-                "{command} refused {input}: {}",
+                "{} refused {input}: {}",
+                call.command,
                 ran.reason.unwrap_or_default()
             ))
         }

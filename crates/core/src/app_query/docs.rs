@@ -150,7 +150,7 @@ fn read_arms(
 
 /// `docs.drive`: one shelf. All and Folders are cut from the one window; Trash,
 /// Starred and Recent read for themselves once the window is truncated.
-pub(super) fn drive(
+pub(crate) fn drive(
     vault: &Vault,
     door: &VaultDoor<'_>,
     now: &str,
@@ -206,7 +206,7 @@ pub(super) fn drive(
 
 /// `docs.search`: the FTS door's hits over the same read connection the page
 /// door uses, folded by the app — [`super::search_events`]'s construction.
-pub(super) fn search(
+pub(crate) fn search(
     vault: &Vault,
     door: &VaultDoor<'_>,
     now: &str,
@@ -288,7 +288,7 @@ pub(super) fn search(
 
 /// `docs.document`: the row, its folder path, its version chain, its text and
 /// whether its bytes are here.
-pub(super) fn document(
+pub(crate) fn document(
     vault: &Vault,
     door: &VaultDoor<'_>,
     now: &str,
@@ -350,7 +350,7 @@ pub(super) fn document(
 }
 
 /// `docs.activity`: the audit trail, newest first.
-pub(super) fn activity(
+pub(crate) fn activity(
     vault: &Vault,
     door: &VaultDoor<'_>,
     asked: &wire::DocsActivityRequest,

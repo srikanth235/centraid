@@ -29,36 +29,8 @@
 //! gates are on `locker.purge_item` and `locker.export`. Same count, different
 //! gates, and collapsing them loses the non-owner park (census §A0).
 
-/// Whether the **dispatching surface** asks before dispatching.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Confirm {
-    None,
-    Required,
-}
-
-/// One row of the action table.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ActionRow {
-    pub action: &'static str,
-    pub command: &'static str,
-    pub confirm: Confirm,
-}
-
-const fn act(action: &'static str, command: &'static str) -> ActionRow {
-    ActionRow {
-        action,
-        command,
-        confirm: Confirm::None,
-    }
-}
-
-const fn confirmed(action: &'static str, command: &'static str) -> ActionRow {
-    ActionRow {
-        action,
-        command,
-        confirm: Confirm::Required,
-    }
-}
+pub use centraid_apps_kit::actions::{ActionRow, Confirm};
+use centraid_apps_kit::actions::{act, confirmed};
 
 /// THE TABLE. Nineteen actions, in the manifest's own order. `set-memo` is the
 /// seventeenth of v0's (#1047): the memo command existed and no action exposed
@@ -89,7 +61,7 @@ pub const ACTIONS: [ActionRow; 19] = [
 /// The row for an action name.
 #[must_use]
 pub fn action_row(action: &str) -> Option<&'static ActionRow> {
-    ACTIONS.iter().find(|row| row.action == action)
+    centraid_apps_kit::actions::find(&ACTIONS, action)
 }
 
 #[cfg(test)]

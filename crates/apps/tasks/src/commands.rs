@@ -92,31 +92,10 @@ pub struct CommandsUnavailable {
     pub command: &'static str,
 }
 
-/// Whether the **dispatching surface** asks before dispatching. The manifest's
-/// `confirmation`, not the command definition's `confirm` — two gates.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Confirm {
-    None,
-    Required,
-}
+pub use centraid_apps_kit::actions::{ActionRow, Confirm};
+use centraid_apps_kit::actions::{act, confirmed};
 
-/// One row of the action table.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ActionRow {
-    pub action: &'static str,
-    pub command: &'static str,
-    pub confirm: Confirm,
-}
-
-const fn act(action: &'static str, command: &'static str) -> ActionRow {
-    ActionRow {
-        action,
-        command,
-        confirm: Confirm::None,
-    }
-}
-
-/// The thirteen, in the manifest's own order.
+/// The sixteen, in the manifest's own order.
 pub const ACTIONS: &[ActionRow] = &[
     act("add", "task.add"),
     act("edit", "task.edit"),
@@ -131,14 +110,13 @@ pub const ACTIONS: &[ActionRow] = &[
     act("organize-task", "task.organize"),
     act("delete", "entity.trash"),
     // EMPTYING THE TRASH (#1015 D1), behind the manifest's confirmation.
-    ActionRow {
-        confirm: Confirm::Required,
-        ..act("purge", "entity.purge")
-    },
+    confirmed("purge", "entity.purge"),
     // RESTORE UNDOES THE DELETE GESTURE (the trash's one verb every app has).
     act("restore", "entity.restore"),
     // A project, an area and a section are containers: the shared verb.
     act("create-project", "container.create"),
+    // A project or an area is renamed through the shared retitle verb.
+    act("rename-list", "entity.retitle"),
     act("create-section", "container.create"),
     // An attachment is an `attached` edge, a tag a `tagged` one: the shared verbs.
     act("attach", "edge.add"),
@@ -150,7 +128,7 @@ pub const ACTIONS: &[ActionRow] = &[
 /// The row for an action, by name.
 #[must_use]
 pub fn action_row(action: &str) -> Option<&'static ActionRow> {
-    ACTIONS.iter().find(|row| row.action == action)
+    centraid_apps_kit::actions::find(ACTIONS, action)
 }
 
 /// The `act` scopes Tasks declares, derived from the action table: one per
@@ -176,7 +154,7 @@ mod tests {
 
     #[test]
     fn every_action_names_one_command_and_the_task_verbs_are_the_tasks_own() {
-        assert_eq!(ACTIONS.len(), 15);
+        assert_eq!(ACTIONS.len(), 16);
         let own: Vec<&str> = ACTIONS
             .iter()
             .map(|row| row.command)
@@ -201,7 +179,7 @@ mod tests {
             .map(|row| row.action)
             .collect();
         assert_eq!(creates, ["create-project", "create-section"]);
-        assert_eq!(act_scope_tables().len(), 14);
+        assert_eq!(act_scope_tables().len(), 15);
     }
 
     /// EVERY command this app names is in the vault's own catalogue. A button

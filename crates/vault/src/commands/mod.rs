@@ -443,6 +443,10 @@ pub struct CommandOutcome {
     pub reason: Option<String>,
     /// The raw predicate that refused, for the journal.
     pub predicate: Option<String>,
+    /// Whether this is the answer to a run an earlier delivery of the same
+    /// `act` key already made: nothing was run, and `output` and `tables` are
+    /// empty because the journal keeps evidence and not answers.
+    pub replayed: bool,
 }
 
 impl Vault {
@@ -452,6 +456,30 @@ impl Vault {
         registry: &Registry,
         principal: &Principal,
         command: &Command,
+    ) -> Result<CommandOutcome> {
+        self.execute_keyed(registry, principal, command, None)
+    }
+
+    /// The run an `act` key already names, if the journal holds one: what a
+    /// caller asks before it runs anything, so a delivery repeated after a
+    /// restart is answered and not run again (#1135).
+    ///
+    /// # Errors
+    /// The read's own.
+    pub fn recall_key(&self, key: &str) -> Result<Option<journal::Recalled>> {
+        self.read(|connection| journal::recall(connection, key))
+    }
+
+    /// [`execute`](Self::execute), recording `keyed` with the commit when it
+    /// executes. A key the journal already holds is answered inside the commit
+    /// (`replayed`) and nothing runs, so two deliveries racing for the write
+    /// lock still run once.
+    pub fn execute_keyed(
+        &self,
+        registry: &Registry,
+        principal: &Principal,
+        command: &Command,
+        keyed: Option<&journal::KeyMark<'_>>,
     ) -> Result<CommandOutcome> {
         // Gate 3, first in the code because it is what the rest is about: the
         // LIVE definition.
@@ -490,6 +518,16 @@ impl Vault {
         let ran = self.commit(|tx| {
             tx.set_producer(&command.name);
             let connection = tx.connection();
+            if let Some(mark) = keyed
+                && let Some(earlier) = journal::recall(connection, mark.key)?
+            {
+                return Ok(Ran {
+                    seq: earlier.seq,
+                    refusal: None,
+                    output: serde_json::Value::Null,
+                    replayed: true,
+                });
+            }
             let seq = journal::next_seq(connection)?;
             let at = self.clock().now_text();
             let record = |outcome: Outcome, detail: Option<&str>| {
@@ -503,6 +541,11 @@ impl Vault {
                         sealed_keys: definition.sealed_input,
                         outcome,
                         detail,
+                        keyed: if outcome == Outcome::Executed {
+                            keyed
+                        } else {
+                            None
+                        },
                     },
                 )
             };
@@ -512,6 +555,7 @@ impl Vault {
                     seq,
                     refusal: Some((sentence, predicate.to_owned())),
                     output: serde_json::Value::Null,
+                    replayed: false,
                 })
             };
 
@@ -564,6 +608,7 @@ impl Vault {
                 seq,
                 refusal: None,
                 output,
+                replayed: false,
             })
         });
 
@@ -589,6 +634,7 @@ impl Vault {
                                 definition.sealed_input,
                                 &command.input,
                             )),
+                            keyed: None,
                         },
                     )
                 });
@@ -600,6 +646,7 @@ impl Vault {
             seq,
             refusal,
             output,
+            replayed,
         } = result.value;
         let (status, reason, predicate) = match refusal {
             Some((sentence, predicate)) => (CommandStatus::Failed, Some(sentence), Some(predicate)),
@@ -626,12 +673,14 @@ impl Vault {
             output,
             reason,
             predicate,
+            replayed,
         })
     }
 }
 
 /// What the gate's transaction produced.
 struct Ran {
+    replayed: bool,
     seq: i64,
     /// The sentence and the raw predicate, when the gate refused.
     refusal: Option<(String, String)>,

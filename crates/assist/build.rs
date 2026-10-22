@@ -4,9 +4,11 @@
 //! rows that drifted from the apps. They are now derived here, at build time,
 //! from the one catalog there is (#1135): each `crates/apps/<app>/manifest.json`
 //! declares the model-facing `kinds` the app owns and classifies every action
-//! (`verb`, `kind`, `also`, `chat`, `command`), and `contracts/assist/verbs.json`
-//! is the verb vocabulary (its argument line, its past tense, whether the
-//! runtime executes it yet) plus the few `unbacked` rows no app action backs.
+//! (`verb`, `kind`, `also`, `inverse`, `sealed`, `bulk`, `command`, and the
+//! `aliases` its input properties are said under), and `contracts/assist/verbs.json`
+//! is the verb vocabulary (its argument line, its past tense) plus the few `unbacked`
+//! rows no app action backs yet. Whether chat runs an action itself is not written
+//! anywhere: the kit derives it (`ActionEntry::surface`) and this reads it.
 //!
 //! What this writes to `$OUT_DIR/catalog.rs` (included by `native/meta.rs`):
 //!
@@ -14,22 +16,29 @@
 //!   their `order`. A kind that is `declared` has no variant, so no runtime
 //!   code can reach it by accident; the app lane that makes it live flips the
 //!   manifest and gets a compile error at every `match` that must learn it.
-//! * `Verb`: the verbs of `verbs.json` marked `live`.
-//! * `KINDS` and `VERBS`: the rows of the live kinds and verbs. A verb row is
-//!   a `direct` action of a kind whose `live` is `write`, by its `verb` and
-//!   each verb in its `also`; one (verb, kind) is one command.
+//! * `Verb`: A VERB IS LIVE WHEN AN ACTION BACKS IT: a direct action of a writable
+//!   kind serves it, or an `unbacked` row does, or the runtime owns it (`builtin`:
+//!   `undo`). Nothing is flagged live by hand.
+//! * `ACTIONS`: ONE LOOKUP, `(verb, kind, qualifier)` to the manifest action chat
+//!   runs: its app, its name, its command, the property that names the row, the
+//!   names its input properties are said under. A direct action is one row per verb
+//!   it serves (`verb` and each `also`).
+//! * `KINDS` and `VERBS`: the rows of the live kinds and verbs. A verb row lists
+//!   the kinds an unqualified action serves it on.
 //! * `DECLARED_KINDS` and `DECLARED_VERBS`: everything the catalog declares
 //!   that the runtime does not run yet, so the export shows the whole catalog
 //!   and a lane can see exactly what it has left to wire.
 //!
 //! A catalog that contradicts itself fails the build with the sentence that
 //! names the manifest: an `unbacked` row an action now backs (delete the row),
-//! two actions that are one (verb, kind), a link to a kind that is not live.
+//! two direct actions that are one (verb, kind, qualifier), a link to a kind that
+//! is not live.
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
+use centraid_apps_kit::manifest::{ActionEntry, ChatSurface, Manifest, parse_manifest};
 use serde_json::Value;
 
 fn camel(snake: &str) -> String {
@@ -83,7 +92,7 @@ fn via(name: &str) -> &'static str {
     }
 }
 
-/// `field(…).unit(…).values(…).edit(…).create()` for one declared field.
+/// `field(…).unit(…).values(…)` for one declared field.
 fn field_expr(field: &Value) -> String {
     let mut out = format!(
         "field({:?}, {}, {})",
@@ -119,12 +128,6 @@ fn field_expr(field: &Value) -> String {
         }
         other => panic!("catalog: values is {other}"),
     }
-    if let Some(command) = field["edit"].as_str() {
-        let _ = write!(out, ".edit({command:?})");
-    }
-    if field["create"].as_bool().unwrap_or(false) {
-        out.push_str(".create()");
-    }
     out
 }
 
@@ -152,12 +155,11 @@ fn text_of(value: &Value, key: &str) -> String {
     text(value, key).to_owned()
 }
 
-struct Row {
+/// One direct action as one verb it serves.
+struct Row<'a> {
     app: String,
-    action: String,
     verb: String,
-    kind: String,
-    command: String,
+    action: &'a ActionEntry,
 }
 
 fn main() {
@@ -168,6 +170,16 @@ fn main() {
         serde_json::from_str(&std::fs::read_to_string(&verbs_path).expect("verbs.json"))
             .expect("verbs.json is JSON");
     let manifests = manifests(&root);
+    // The typed read, the one the core and the apps use: what chat does with an action is
+    // derived there (`ActionEntry::surface`), so it is read here and not restated.
+    let parsed: Vec<(String, Manifest)> = manifests
+        .iter()
+        .map(|(app, raw)| {
+            let manifest = parse_manifest(&raw.to_string())
+                .unwrap_or_else(|error| panic!("{app}'s manifest does not parse: {error}"));
+            (app.clone(), manifest)
+        })
+        .collect();
 
     // ---- kinds ----------------------------------------------------------------------------
     let mut kinds: Vec<(&str, &Value)> = manifests
@@ -305,13 +317,43 @@ fn main() {
 
     // ---- verbs ----------------------------------------------------------------------------
     let vocabulary = verbs["verbs"].as_array().expect("verbs");
+    let unbacked_rows = verbs["unbacked"].as_array().expect("unbacked");
+
+    // every direct action, once per verb it serves
+    let mut rows: Vec<Row> = Vec::new();
+    for (app, manifest) in &parsed {
+        for action in &manifest.actions {
+            if action.surface() != ChatSurface::Direct {
+                continue;
+            }
+            for verb in std::iter::once(&action.verb).chain(&action.also) {
+                rows.push(Row {
+                    app: app.clone(),
+                    verb: verb.clone(),
+                    action,
+                });
+            }
+        }
+    }
+
+    // A VERB IS LIVE WHEN AN ACTION BACKS IT (a direct action of a writable kind, or an unbacked
+    // row), or when the runtime owns it (`builtin`).
+    let backs = |name: &str| {
+        rows.iter()
+            .any(|row| row.verb == name && writable.contains(&row.action.kind.as_str()))
+            || unbacked_rows
+                .iter()
+                .any(|row| text(row, "verb") == name && writable.contains(&text(row, "kind")))
+    };
     let live_verbs: Vec<&Value> = vocabulary
         .iter()
-        .filter(|verb| verb["live"].as_bool().unwrap_or(false))
+        .filter(|verb| verb["builtin"].as_bool().unwrap_or(false) || backs(text(verb, "name")))
         .collect();
     let live_verb_names: Vec<&str> = live_verbs.iter().map(|verb| text(verb, "name")).collect();
 
-    out.push_str("/// What an `act` can do: the `live` verbs of `contracts/assist/verbs.json`.\n");
+    out.push_str(
+        "/// What an `act` can do: the verbs of `contracts/assist/verbs.json` some action backs.\n",
+    );
     out.push_str(
         "#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]\n",
     );
@@ -321,32 +363,6 @@ fn main() {
     }
     out.push_str("}\n\n");
 
-    // every direct action, once per verb it serves
-    let mut rows: Vec<Row> = Vec::new();
-    for (app, manifest) in &manifests {
-        for action in manifest["actions"].as_array().expect("actions") {
-            if text(action, "chat") != "direct" {
-                continue;
-            }
-            let verbs_served = std::iter::once(text(action, "verb")).chain(
-                action["also"]
-                    .as_array()
-                    .map(Vec::as_slice)
-                    .unwrap_or_default()
-                    .iter()
-                    .map(|verb| verb.as_str().expect("also verb")),
-            );
-            for verb in verbs_served {
-                rows.push(Row {
-                    app: app.clone(),
-                    action: text_of(action, "name"),
-                    verb: verb.to_owned(),
-                    kind: text_of(action, "kind"),
-                    command: text_of(action, "command"),
-                });
-            }
-        }
-    }
     let kind_order = |id: &str| {
         kinds
             .iter()
@@ -355,35 +371,50 @@ fn main() {
     };
     let mut commands: BTreeMap<&str, Vec<(usize, &str, String)>> = BTreeMap::new();
     let mut declared_verbs = Vec::new();
+    let mut runnable: Vec<&Row> = Vec::new();
+    let mut seen: Vec<(&str, &str, Option<&str>)> = Vec::new();
     for row in &rows {
         let reason = if !live_verb_names.contains(&row.verb.as_str()) {
             Some("the assistant's runtime does not run this verb yet")
-        } else if !writable.contains(&row.kind.as_str()) {
+        } else if !writable.contains(&row.action.kind.as_str()) {
             Some("the assistant's runtime does not write this kind yet")
         } else {
             None
         };
         match reason {
             None => {
-                let entry = commands.entry(row.verb.as_str()).or_default();
-                assert!(
-                    entry.iter().all(|(_, kind, _)| *kind != row.kind),
-                    "catalog: `{} {}` is backed twice (second: {}/{})",
-                    row.verb,
-                    row.kind,
-                    row.app,
-                    row.action
+                let key = (
+                    row.verb.as_str(),
+                    row.action.kind.as_str(),
+                    row.action.qualifier.as_deref(),
                 );
-                entry.push((
-                    kind_order(&row.kind),
-                    row.kind.as_str(),
-                    row.command.clone(),
-                ));
+                assert!(
+                    !seen.contains(&key),
+                    "catalog: `{} {}{}` is backed twice (second: {}/{})",
+                    row.verb,
+                    row.action.kind,
+                    row.action
+                        .qualifier
+                        .as_ref()
+                        .map(|q| format!(":{q}"))
+                        .unwrap_or_default(),
+                    row.app,
+                    row.action.name
+                );
+                seen.push(key);
+                runnable.push(row);
+                if row.action.qualifier.is_none() {
+                    commands.entry(row.verb.as_str()).or_default().push((
+                        kind_order(&row.action.kind),
+                        row.action.kind.as_str(),
+                        row.action.command.clone(),
+                    ));
+                }
             }
             Some(reason) => declared_verbs.push((row, reason)),
         }
     }
-    for unbacked in verbs["unbacked"].as_array().expect("unbacked") {
+    for unbacked in unbacked_rows {
         let (verb, kind) = (text(unbacked, "verb"), text(unbacked, "kind"));
         assert!(
             live_verb_names.contains(&verb) && writable.contains(&kind),
@@ -396,6 +427,134 @@ fn main() {
         );
         entry.push((kind_order(kind), kind, text_of(unbacked, "command")));
     }
+
+    // ---- the one lookup: (verb, kind, qualifier) -> action ---------------------------------
+    out.push_str("/// THE ONE LOOKUP: `(verb, kind, qualifier)` to the manifest action chat runs. A direct action\n/// is a row per verb it serves; an `unbacked` row has no action (`action` is empty) and runs\n/// as its bare command until an app declares one.\n");
+    out.push_str("pub static ACTIONS: &[ActionSpec] = &[\n");
+    let list = |names: Vec<String>| {
+        format!(
+            "&[{}]",
+            names
+                .iter()
+                .map(|name| format!("{name:?}"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        )
+    };
+    for row in &runnable {
+        let action = row.action;
+        let properties: Vec<String> = action
+            .input
+            .get("properties")
+            .and_then(Value::as_object)
+            .map(|properties| properties.keys().cloned().collect())
+            .unwrap_or_default();
+        let required: Vec<String> = action
+            .input
+            .get("required")
+            .and_then(Value::as_array)
+            .map(|names| {
+                names
+                    .iter()
+                    .filter_map(|name| name.as_str().map(str::to_owned))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let aliases: Vec<String> = properties
+            .iter()
+            .filter(|property| !action.aliases_of(property).is_empty())
+            .map(|property| {
+                format!(
+                    "({property:?}, {})",
+                    list(
+                        action
+                            .aliases_of(property)
+                            .into_iter()
+                            .map(str::to_owned)
+                            .collect()
+                    )
+                )
+            })
+            .collect();
+        let consts: Vec<String> = properties
+            .iter()
+            .filter_map(|property| {
+                action
+                    .constant_of(property)
+                    .map(|value| format!("({property:?}, {:?})", value.to_string()))
+            })
+            .collect();
+        let defaults: Vec<String> = properties
+            .iter()
+            .filter_map(|property| {
+                action
+                    .default_of(property)
+                    .map(|value| format!("({property:?}, {:?})", value.to_string()))
+            })
+            .collect();
+        // the action that takes it back: the manifest's `inverse`, with the command it runs and the
+        // property that names the row for it
+        let inverse = action
+            .inverse
+            .as_ref()
+            .and_then(|name| {
+                parsed
+                    .iter()
+                    .find(|(app, _)| *app == row.app)
+                    .and_then(|(_, manifest)| manifest.action(name))
+            })
+            .map_or("None".to_owned(), |back| {
+                format!(
+                    "Some(InverseSpec {{ app: {:?}, action: {:?}, command: {:?}, id_param: {:?} }})",
+                    row.app,
+                    back.name,
+                    back.command,
+                    back.id_property().unwrap_or("id")
+                )
+            });
+        let _ = writeln!(
+            out,
+            "    ActionSpec {{ app: {:?}, action: {:?}, command: {:?}, verb: Verb::{}, qualifier: {}, kind: Kind::{}, id_param: {:?}, inverse: {inverse}, properties: {}, required: {}, aliases: &[{}], consts: &[{}], defaults: &[{}], minted: {} }},",
+            row.app,
+            action.name,
+            action.command,
+            camel(&row.verb),
+            action
+                .qualifier
+                .as_ref()
+                .map_or("None".to_owned(), |q| format!("Some({q:?})")),
+            camel(&action.kind),
+            action.id_property().unwrap_or("id"),
+            list(properties.clone()),
+            list(required),
+            aliases.join(", "),
+            consts.join(", "),
+            defaults.join(", "),
+            list(action.minted.clone()),
+        );
+    }
+    for unbacked in unbacked_rows {
+        let command = text(unbacked, "command");
+        let id_param = if command.starts_with("locker.") {
+            "item_id"
+        } else {
+            "id"
+        };
+        let inverse = unbacked["inverse"].as_str().map_or("None".to_owned(), |back| {
+            format!(
+                "Some(InverseSpec {{ app: {:?}, action: \"\", command: {back:?}, id_param: \"id\" }})",
+                text(unbacked, "app")
+            )
+        });
+        let _ = writeln!(
+            out,
+            "    ActionSpec {{ app: {:?}, action: \"\", command: {command:?}, verb: Verb::{}, qualifier: None, kind: Kind::{}, id_param: {id_param:?}, inverse: {inverse}, properties: &[], required: &[], aliases: &[], consts: &[], defaults: &[], minted: &[] }},",
+            text(unbacked, "app"),
+            camel(text(unbacked, "verb")),
+            camel(text(unbacked, "kind")),
+        );
+    }
+    out.push_str("];\n\n");
 
     out.push_str("pub static VERBS: &[VerbSpec] = &[\n");
     for verb in &live_verbs {
@@ -425,6 +584,13 @@ fn main() {
         let _ = writeln!(out, "        name: {name:?},");
         let _ = writeln!(out, "        args: {:?},", text(verb, "args"));
         let _ = writeln!(out, "        done: {:?},", text(verb, "done"));
+        let _ = writeln!(
+            out,
+            "        flag: {},",
+            verb["flag"]
+                .as_str()
+                .map_or("None".to_owned(), |flag| format!("Some({flag:?})"))
+        );
         out.push_str("        commands: &[\n");
         for (_, kind, command) in rows {
             let _ = writeln!(out, "            (Kind::{}, {command:?}),", camel(kind));
@@ -438,7 +604,7 @@ fn main() {
         let _ = writeln!(
             out,
             "    DeclaredVerb {{ app: {:?}, action: {:?}, verb: {:?}, kind: {:?}, command: {:?}, reason: {:?} }},",
-            row.app, row.action, row.verb, row.kind, row.command, reason
+            row.app, row.action.name, row.verb, row.action.kind, row.action.command, reason
         );
     }
     out.push_str("];\n");

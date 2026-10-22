@@ -104,7 +104,6 @@
       "kind": "event",
       "inverse": "cancel-event",
       "sealed": [],
-      "chat": "direct",
       "command": "event.propose",
       "phrasings": [
         "put lunch with Sam on Friday at noon",
@@ -123,10 +122,12 @@
           },
           "title": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["name"]
           },
           "description": {
-            "type": ["string", "null"]
+            "type": ["string", "null"],
+            "aliases": ["description"]
           },
           "rule": {
             "type": ["string", "null"],
@@ -169,11 +170,13 @@
           "starts": {
             "type": "string",
             "minLength": 1,
-            "description": "An instant (...Z), a wall clock in `zone`, a floating wall clock, or a date for an all-day event."
+            "description": "An instant (...Z), a wall clock in `zone`, a floating wall clock, or a date for an all-day event.",
+            "aliases": ["date", "start"]
           },
           "ends": {
             "type": ["string", "null"],
-            "description": "Exclusive for a timed event; the LAST day, inclusive, for an all-day one."
+            "description": "Exclusive for a timed event; the LAST day, inclusive, for an all-day one.",
+            "aliases": ["duration"]
           },
           "timing": {
             "type": "string",
@@ -206,9 +209,8 @@
       "name": "rsvp",
       "verb": "respond",
       "kind": "event",
-      "inverse": null,
+      "inverse": "rsvp",
       "sealed": [],
-      "chat": "direct",
       "command": "event.respond",
       "phrasings": [
         "accept the Friday dinner invite",
@@ -230,7 +232,8 @@
           },
           "state": {
             "type": "string",
-            "enum": ["accepted", "declined", "tentative"]
+            "enum": ["accepted", "declined", "tentative"],
+            "aliases": ["answer"]
           }
         },
         "required": ["id", "person_id", "state"],
@@ -256,9 +259,8 @@
       "verb": "edit",
       "kind": "event",
       "also": ["reschedule"],
-      "inverse": null,
+      "inverse": "edit-event",
       "sealed": [],
-      "chat": "direct",
       "command": "event.edit",
       "phrasings": [
         "rename the dentist event to checkup",
@@ -276,10 +278,12 @@
           },
           "title": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["name"]
           },
           "description": {
-            "type": ["string", "null"]
+            "type": ["string", "null"],
+            "aliases": ["description"]
           },
           "rule": {
             "type": ["string", "null"],
@@ -326,7 +330,8 @@
           },
           "ends": {
             "type": ["string", "null"],
-            "description": "Exclusive for a timed event; the LAST day, inclusive, for an all-day one."
+            "description": "Exclusive for a timed event; the LAST day, inclusive, for an all-day one.",
+            "aliases": ["duration"]
           },
           "timing": {
             "type": "string",
@@ -361,7 +366,6 @@
       "kind": "event",
       "inverse": null,
       "sealed": [],
-      "chat": "card",
       "command": "event.edit_occurrence",
       "phrasings": [
         "skip this week's standup",
@@ -436,9 +440,8 @@
       "name": "cancel-event",
       "verb": "cancel",
       "kind": "event",
-      "inverse": null,
+      "inverse": "edit-event",
       "sealed": [],
-      "chat": "direct",
       "command": "event.cancel",
       "phrasings": [
         "cancel the dentist appointment",
@@ -479,7 +482,6 @@
       "kind": "event",
       "inverse": "detach",
       "sealed": [],
-      "chat": "card",
       "command": "edge.add",
       "phrasings": [
         "attach the menu to Friday's dinner",
@@ -528,7 +530,6 @@
       "kind": "event",
       "inverse": "attach",
       "sealed": [],
-      "chat": "card",
       "command": "edge.remove",
       "phrasings": [
         "detach the menu from Friday's dinner",
@@ -720,16 +721,12 @@
           "name": "duration",
           "type": "number",
           "source": ["event", "ends"],
-          "unit": "min",
-          "edit": "event.edit",
-          "create": true
+          "unit": "min"
         },
         {
           "name": "description",
           "type": "text",
-          "source": ["event", "description"],
-          "edit": "event.edit",
-          "create": true
+          "source": ["event", "description"]
         }
       ],
       "links": [{"kind": "person", "label": "people", "via": "attendee"}],

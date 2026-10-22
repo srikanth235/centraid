@@ -42,10 +42,10 @@ mod tests {
     }
 
     #[test]
-    fn it_declares_six_queries_and_fifteen_actions() {
+    fn it_declares_six_queries_and_sixteen_actions() {
         let manifest = manifest();
         assert_eq!(manifest.queries.len(), 6);
-        assert_eq!(manifest.actions.len(), 15);
+        assert_eq!(manifest.actions.len(), 16);
         for name in ["board", "search", "task", "projects", "catch-up", "trash"] {
             assert!(manifest.query(name).is_some(), "no query {name}");
         }
@@ -100,7 +100,7 @@ mod tests {
     fn it_declares_seven_reads_and_one_act_scope_per_command() {
         let manifest = manifest();
         let vault = manifest.vault.as_ref().expect("Tasks declares its reach");
-        assert_eq!(vault.scopes.len(), 21);
+        assert_eq!(vault.scopes.len(), 22);
         let mut declared: Vec<(&str, &str)> = vault
             .scopes
             .iter()
@@ -117,7 +117,7 @@ mod tests {
             .collect();
         declared.sort_unstable();
         assert_eq!(declared, act_scope_tables());
-        assert_eq!(declared.len(), 14);
+        assert_eq!(declared.len(), 15);
         let reads: Vec<&str> = vault
             .scopes
             .iter()
