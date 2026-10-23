@@ -127,6 +127,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .boxed(".centraid.screen.v1.DocsDocumentState.content.data")
         .boxed(".centraid.screen.v1.DocsDocumentEvent.kind.data")
         .boxed(".centraid.core.v1.Response.kind.app_query")
+        // Photos' collections overview holds a cover cell for each shelf and album.
+        .boxed(".centraid.core.v1.AppQueryResponse.answer.photos_albums")
+        .boxed(".centraid.core.v1.AppQueryResponse.answer.photos_photo")
+        .boxed(".centraid.core.v1.AppQueryResponse.answer.photos_shelf")
         // The one read and the one write (#1135): a request carries a map, and
         // an answer the app's whole typed answer.
         .boxed(".centraid.core.v1.Request.kind.load")

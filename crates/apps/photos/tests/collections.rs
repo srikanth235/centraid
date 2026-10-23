@@ -170,7 +170,7 @@ fn one_photograph_carries_its_albums_labels_place_and_lineage() {
             .expect("reads")
             .expect("there")
     });
-    assert_eq!(original.edits, [l.edit.clone()]);
+    assert_eq!(original.edits, std::slice::from_ref(&l.edit));
     assert_eq!(
         l.w.read(|door| load_photo(door, &l.edit, NOW)
             .expect("reads")

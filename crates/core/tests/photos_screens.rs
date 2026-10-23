@@ -149,7 +149,7 @@ impl World {
             pairs.push(("id", text(id)));
         }
         match self.answer("shelf", limit, after, &pairs) {
-            Answer::PhotosShelf(shelf) => shelf,
+            Answer::PhotosShelf(shelf) => *shelf,
             other => panic!("a shelf answered {other:?}"),
         }
     }
@@ -323,7 +323,7 @@ fn every_write_a_photos_screen_sends_is_an_action_with_the_input_it_sends() {
         &[("id", text(&album)), ("title", text("Trip 2"))],
     );
     let overview = match w.answer("albums", 0, "", &[]) {
-        Answer::PhotosAlbums(albums) => albums,
+        Answer::PhotosAlbums(albums) => *albums,
         other => panic!("{other:?}"),
     };
     assert_eq!(overview.albums.len(), 1);
@@ -372,7 +372,7 @@ fn every_write_a_photos_screen_sends_is_an_action_with_the_input_it_sends() {
     // An album goes to the trash overview and comes back with the restore.
     w.done("delete-album", &[("id", text(&album))]);
     let trashed = match w.answer("albums", 0, "", &[]) {
-        Answer::PhotosAlbums(albums) => albums,
+        Answer::PhotosAlbums(albums) => *albums,
         other => panic!("{other:?}"),
     };
     assert_eq!(trashed.trashed_albums.len(), 1);
@@ -436,7 +436,7 @@ fn the_places_the_search_and_the_duplicates_answer_what_the_screens_draw() {
             .any(|member| member.photo_id == a)
     );
     let overview = match w.answer("albums", 0, "", &[]) {
-        Answer::PhotosAlbums(albums) => albums,
+        Answer::PhotosAlbums(albums) => *albums,
         other => panic!("{other:?}"),
     };
     assert_eq!(overview.duplicate_clusters, 1);

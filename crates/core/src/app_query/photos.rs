@@ -302,7 +302,7 @@ pub(crate) fn shelf(
     };
     let loaded = photos::shelf::load_shelf(door, &input, now_ms(now)?).map(|data| (data, None));
     settle(door, loaded, |data| {
-        Answer::PhotosShelf(wire::PhotosShelf {
+        Answer::PhotosShelf(Box::new(wire::PhotosShelf {
             cells: data.cells.iter().map(cell).collect(),
             next: data.next.as_ref().map(cursor),
             total: data.total.map(count),
@@ -314,7 +314,7 @@ pub(crate) fn shelf(
                 purge_in_days: head.purge_in_days,
             }),
             place: data.place.as_ref().map(card),
-        })
+        }))
     })
 }
 
@@ -326,7 +326,7 @@ pub(crate) fn photo(
 ) -> Result<Answer> {
     let loaded = photos::detail::load_photo(door, &asked.id, now_ms(now)?).map(|data| (data, None));
     settle(door, loaded, |detail| {
-        Answer::PhotosPhoto(wire::PhotosPhoto {
+        Answer::PhotosPhoto(Box::new(wire::PhotosPhoto {
             photo: detail.map(|detail| wire::PhotosPhotoDetail {
                 cell: Some(cell(&detail.cell)),
                 trashed: detail.trashed,
@@ -351,7 +351,7 @@ pub(crate) fn photo(
                 }),
                 edits: detail.edits,
             }),
-        })
+        }))
     })
 }
 
@@ -388,7 +388,7 @@ pub(crate) fn albums(door: &VaultDoor<'_>, now: &str) -> Result<Answer> {
         })
         .map(|data| (data, None));
     settle(door, loaded, |(data, duplicates)| {
-        Answer::PhotosAlbums(wire::PhotosAlbums {
+        Answer::PhotosAlbums(Box::new(wire::PhotosAlbums {
             albums: data
                 .albums
                 .iter()
@@ -418,7 +418,7 @@ pub(crate) fn albums(door: &VaultDoor<'_>, now: &str) -> Result<Answer> {
             places: count(data.places),
             unplaced: count(data.unplaced),
             duplicate_clusters: count(duplicates),
-        })
+        }))
     })
 }
 
