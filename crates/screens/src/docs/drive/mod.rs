@@ -119,9 +119,21 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
     let folder = destination == wire::DocsDestination::Folders && !args.folder_id.is_empty();
     Some(Box::new(Drive {
         destination,
-        folder_id: if folder { args.folder_id.clone() } else { String::new() },
-        folder_name: if folder { args.folder_name.clone() } else { String::new() },
-        parent: if folder { args.parent.clone() } else { String::new() },
+        folder_id: if folder {
+            args.folder_id.clone()
+        } else {
+            String::new()
+        },
+        folder_name: if folder {
+            args.folder_name.clone()
+        } else {
+            String::new()
+        },
+        parent: if folder {
+            args.parent.clone()
+        } else {
+            String::new()
+        },
         query: Query::default(),
         grid: false,
         search: Search::default(),
@@ -261,7 +273,9 @@ impl Drive {
     }
 
     fn row(&self, document_id: &str) -> Option<&wire::DocsDocumentRow> {
-        self.rows().iter().find(|row| row.document_id == document_id)
+        self.rows()
+            .iter()
+            .find(|row| row.document_id == document_id)
     }
 
     /// The title this page says, which is a pushed page's back word.
@@ -344,7 +358,13 @@ impl Drive {
             Some(D::FolderCreated(_)) => self.folder_created(ctx),
             Some(D::Confirmed(_)) => {
                 if let Some(id) = self.asking.take() {
-                    self.write(ctx, act::docs::Trash { document_id: id.clone() }, &id);
+                    self.write(
+                        ctx,
+                        act::docs::Trash {
+                            document_id: id.clone(),
+                        },
+                        &id,
+                    );
                 }
             }
             Some(D::Dismissed(_)) => self.asking = None,
@@ -420,15 +440,21 @@ impl Drive {
         let sheet = std::mem::replace(&mut self.sheet, Sheet::None);
         match sheet {
             Sheet::Type => {
-                self.query.pick_type(if key == query::ANY { "" } else { key });
+                self.query
+                    .pick_type(if key == query::ANY { "" } else { key });
                 self.reload(ctx);
             }
             Sheet::Modified => {
-                self.query.pick_modified(if key == query::ANY { "" } else { key });
+                self.query
+                    .pick_modified(if key == query::ANY { "" } else { key });
                 self.reload(ctx);
             }
             Sheet::Label => {
-                self.query.label = if key == query::ANY { String::new() } else { key.to_owned() };
+                self.query.label = if key == query::ANY {
+                    String::new()
+                } else {
+                    key.to_owned()
+                };
                 self.reload(ctx);
             }
             Sheet::Sort => {
@@ -537,7 +563,9 @@ impl Drive {
                 self.sheet = Sheet::None;
                 self.write(
                     ctx,
-                    act::docs::Star { document_id: document_id.to_owned() },
+                    act::docs::Star {
+                        document_id: document_id.to_owned(),
+                    },
                     document_id,
                 );
             }
@@ -545,7 +573,9 @@ impl Drive {
                 self.sheet = Sheet::None;
                 self.write(
                     ctx,
-                    act::docs::Unstar { document_id: document_id.to_owned() },
+                    act::docs::Unstar {
+                        document_id: document_id.to_owned(),
+                    },
                     document_id,
                 );
             }
@@ -593,7 +623,10 @@ impl Drive {
         }
         self.write(
             ctx,
-            act::docs::Tag { document_id: document_id.clone(), label: label.clone() },
+            act::docs::Tag {
+                document_id: document_id.clone(),
+                label: label.clone(),
+            },
             &format!("{document_id}:{label}"),
         );
     }
@@ -612,7 +645,10 @@ impl Drive {
         };
         self.write(
             ctx,
-            act::docs::Untag { document_id: document_id.clone(), label: label.clone() },
+            act::docs::Untag {
+                document_id: document_id.clone(),
+                label: label.clone(),
+            },
             &format!("{document_id}:{label}"),
         );
     }
@@ -629,7 +665,11 @@ impl Drive {
         let parent = Some(self.new_item_folder()).filter(|parent| !parent.is_empty());
         self.write(
             ctx,
-            act::docs::CreateFolder { title: name.clone(), parent, ..Default::default() },
+            act::docs::CreateFolder {
+                title: name.clone(),
+                parent,
+                ..Default::default()
+            },
             &name,
         );
     }

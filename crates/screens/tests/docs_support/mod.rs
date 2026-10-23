@@ -192,10 +192,7 @@ pub fn trash_view(v: &wire::ViewState) -> &wire::TrashView {
 // ---------------------------------------------------------------------------
 
 pub fn drive_send(d: &mut Driver, i: u64, kind: wire::docs_drive_event::Kind) {
-    d.send(
-        i,
-        E::DocsDrive(wire::DocsDriveEvent { kind: Some(kind) }),
-    );
+    d.send(i, E::DocsDrive(wire::DocsDriveEvent { kind: Some(kind) }));
 }
 
 pub fn document_send(d: &mut Driver, i: u64, kind: wire::docs_document_event::Kind) {

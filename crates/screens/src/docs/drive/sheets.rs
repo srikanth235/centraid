@@ -29,7 +29,13 @@ pub(super) enum Sheet {
     Followed,
 }
 
-fn sheet(kind: Kind, title: String, document_id: &str, locale: Locale, body: Body) -> wire::DocsSheet {
+fn sheet(
+    kind: Kind,
+    title: String,
+    document_id: &str,
+    locale: Locale,
+    body: Body,
+) -> wire::DocsSheet {
     wire::DocsSheet {
         kind: kind as i32,
         title,
@@ -74,9 +80,17 @@ pub(super) fn view(drive: &Drive, locale: Locale) -> wire::DocsSheet {
     match &drive.sheet {
         Sheet::None => none(),
         Sheet::More => {
-            let mut rows = vec![fold::action(KEY_RECENT, words::more_recent(locale), "Clock")];
+            let mut rows = vec![fold::action(
+                KEY_RECENT,
+                words::more_recent(locale),
+                "Clock",
+            )];
             if !drive.followed.is_empty() {
-                rows.push(fold::action(KEY_FOLLOWED, words::more_followed(locale), "Folder"));
+                rows.push(fold::action(
+                    KEY_FOLLOWED,
+                    words::more_followed(locale),
+                    "Folder",
+                ));
             }
             rows.push(wire::DocsAction {
                 detail: if rail.trash_count > 0 {
@@ -87,14 +101,23 @@ pub(super) fn view(drive: &Drive, locale: Locale) -> wire::DocsSheet {
                 route: Some(routes::trash()),
                 ..fold::action(KEY_TRASH_SHELF, words::more_trash(locale), TRASH_ICON)
             });
-            sheet(Kind::More, words::more_title(locale), "", locale, actions(rows))
+            sheet(
+                Kind::More,
+                words::more_title(locale),
+                "",
+                locale,
+                actions(rows),
+            )
         }
         Sheet::Followed => {
             let rows = drive
                 .followed
                 .iter()
                 .map(|folder| wire::DocsAction {
-                    detail: words::followed_detail(locale, u64::try_from(folder.documents).unwrap_or(0)),
+                    detail: words::followed_detail(
+                        locale,
+                        u64::try_from(folder.documents).unwrap_or(0),
+                    ),
                     ..fold::action(
                         &format!("{KEY_STOP_PREFIX}{}", folder.origin_id),
                         fill(&words::followed_stop(locale), &[("name", &folder.name)]),
@@ -126,12 +149,16 @@ pub(super) fn view(drive: &Drive, locale: Locale) -> wire::DocsSheet {
                 words::type_any(locale),
                 query.type_filter == wire::docs_query::TypeFilter::Unspecified,
             )];
-            rows.extend(
-                TYPES
-                    .iter()
-                    .map(|(key, filter, label)| choice(key, label(locale), query.type_filter == *filter)),
-            );
-            sheet(Kind::Type, words::filter_type(locale), "", locale, choices(rows))
+            rows.extend(TYPES.iter().map(|(key, filter, label)| {
+                choice(key, label(locale), query.type_filter == *filter)
+            }));
+            sheet(
+                Kind::Type,
+                words::filter_type(locale),
+                "",
+                locale,
+                choices(rows),
+            )
         }
         Sheet::Modified => {
             let mut rows = vec![choice(
@@ -139,21 +166,35 @@ pub(super) fn view(drive: &Drive, locale: Locale) -> wire::DocsSheet {
                 words::modified_any(locale),
                 query.modified == wire::docs_query::Modified::Unspecified,
             )];
-            rows.extend(
-                MODIFIED
-                    .iter()
-                    .map(|(key, filter, _, label)| choice(key, label(locale), query.modified == *filter)),
-            );
-            sheet(Kind::Modified, words::filter_modified(locale), "", locale, choices(rows))
+            rows.extend(MODIFIED.iter().map(|(key, filter, _, label)| {
+                choice(key, label(locale), query.modified == *filter)
+            }));
+            sheet(
+                Kind::Modified,
+                words::filter_modified(locale),
+                "",
+                locale,
+                choices(rows),
+            )
         }
         Sheet::Label => {
-            let mut rows = vec![choice(ANY, words::label_any(locale), query.label.is_empty())];
+            let mut rows = vec![choice(
+                ANY,
+                words::label_any(locale),
+                query.label.is_empty(),
+            )];
             rows.extend(
                 rail.labels
                     .iter()
                     .map(|label| choice(label, label.clone(), query.label == *label)),
             );
-            sheet(Kind::Label, words::filter_label(locale), "", locale, choices(rows))
+            sheet(
+                Kind::Label,
+                words::filter_label(locale),
+                "",
+                locale,
+                choices(rows),
+            )
         }
         Sheet::Sort => {
             let rows = SORTS
@@ -237,7 +278,12 @@ pub(super) fn view(drive: &Drive, locale: Locale) -> wire::DocsSheet {
 /// The Add sheet: what the OS lets the shell offer (law 4), and a folder.
 fn add_rows(drive: &Drive, locale: Locale) -> Vec<wire::DocsAction> {
     use wire::DocsPermission as P;
-    let gated = |key: &str, label: String, icon: &str, permission: P, denied: String, restricted: String| {
+    let gated = |key: &str,
+                 label: String,
+                 icon: &str,
+                 permission: P,
+                 denied: String,
+                 restricted: String| {
         match permission {
             P::Unavailable => None,
             P::Denied => Some(wire::DocsAction {
@@ -262,7 +308,11 @@ fn add_rows(drive: &Drive, locale: Locale) -> Vec<wire::DocsAction> {
             words::files_denied(locale),
             words::files_restricted(locale),
         ),
-        Some(fold::action(KEY_FOLLOW_FOLDER, words::add_follow(locale), "Folder")),
+        Some(fold::action(
+            KEY_FOLLOW_FOLDER,
+            words::add_follow(locale),
+            "Folder",
+        )),
         gated(
             KEY_SCAN,
             words::add_scan(locale),
@@ -272,7 +322,11 @@ fn add_rows(drive: &Drive, locale: Locale) -> Vec<wire::DocsAction> {
             words::camera_restricted(locale),
         ),
         Some(fold::action(KEY_TEXT, words::add_text(locale), "FileText")),
-        Some(fold::action(KEY_NEW_FOLDER, words::add_folder(locale), "FolderPlus")),
+        Some(fold::action(
+            KEY_NEW_FOLDER,
+            words::add_folder(locale),
+            "FolderPlus",
+        )),
     ]
     .into_iter()
     .flatten()

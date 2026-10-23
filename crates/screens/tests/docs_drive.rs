@@ -40,7 +40,11 @@ fn the_drive_opens_on_all_with_the_band_and_the_count() {
         ]
     );
     // The seeded vault holds four documents.
-    assert!(drive.head_meta.ends_with("documents"), "{}", drive.head_meta);
+    assert!(
+        drive.head_meta.ends_with("documents"),
+        "{}",
+        drive.head_meta
+    );
     assert!(titles(d.view(i)).contains(&"Tahoe packing list".to_owned()));
 }
 
@@ -52,7 +56,11 @@ fn the_band_moves_in_place_and_the_tab_you_are_on_is_nothing() {
     let drive = state(&d, i);
     assert_eq!(drive.destination, wire::DocsDestination::Starred as i32);
     assert_eq!(titles(d.view(i)), ["Tahoe packing list"]);
-    assert!(drive.head_meta.starts_with("1 document"), "{}", drive.head_meta);
+    assert!(
+        drive.head_meta.starts_with("1 document"),
+        "{}",
+        drive.head_meta
+    );
     // The same tab again changes nothing and reads nothing new.
     band(&mut d, i, "starred");
     assert_eq!(titles(d.view(i)), ["Tahoe packing list"]);
@@ -119,9 +127,15 @@ fn filters_are_the_requests_and_the_chip_row_follows_them() {
     open_sheet(&mut d, i, Sheet::Type);
     choose(&mut d, i, "video");
     let data = drive_data(d.view(i));
-    assert_eq!(data.empty.as_ref().unwrap().headline, "Nothing matches these filters.");
+    assert_eq!(
+        data.empty.as_ref().unwrap().headline,
+        "Nothing matches these filters."
+    );
     assert_eq!(data.empty.as_ref().unwrap().action_label, "Clear filters");
-    assert_eq!(data.empty_action, wire::docs_drive_data::EmptyAction::ClearFilters as i32);
+    assert_eq!(
+        data.empty_action,
+        wire::docs_drive_data::EmptyAction::ClearFilters as i32
+    );
 }
 
 #[test]
@@ -134,16 +148,19 @@ fn the_sort_chip_is_named_for_the_order_in_force_and_follows_it() {
     let mut sorted = titles_now.clone();
     sorted.sort_by_key(|title| title.to_lowercase());
     assert_eq!(titles_now, sorted);
-    assert_eq!(
-        state(&d, i).pills.last().unwrap().label,
-        "Name · A to Z"
-    );
+    assert_eq!(state(&d, i).pills.last().unwrap().label, "Name · A to Z");
     open_sheet(&mut d, i, Sheet::Sort);
     let sheet = state(&d, i).sheet.as_ref().unwrap();
     let Some(wire::docs_sheet::Body::Choices(list)) = &sheet.body else {
         panic!("the sort sheet lists choices");
     };
-    assert!(list.choices.iter().find(|c| c.key == "name_asc").unwrap().selected);
+    assert!(
+        list.choices
+            .iter()
+            .find(|c| c.key == "name_asc")
+            .unwrap()
+            .selected
+    );
 }
 
 #[test]
@@ -159,7 +176,10 @@ fn recently_added_is_a_window_with_no_filters_and_its_rule_said_once() {
     assert_eq!(drive.chrome.as_ref().unwrap().title, "Recently added");
     assert!(drive.pills.is_empty());
     assert!(!drive.filters_active);
-    assert_eq!(drive_data(d.view(i)).shelf_note, "Most recently added documents.");
+    assert_eq!(
+        drive_data(d.view(i)).shelf_note,
+        "Most recently added documents."
+    );
     assert!(!titles(d.view(i)).is_empty(), "the filter did not apply");
 }
 
@@ -173,10 +193,20 @@ fn search_is_a_field_a_term_reads_search_and_closing_reads_the_shelf_back() {
     search(&mut d, i, "tahoe");
     let data = drive_data(d.view(i));
     assert_eq!(data.mode, wire::docs_drive_data::Mode::Search as i32);
-    assert!(data.rows.iter().any(|row| row.title == "Tahoe packing list"));
+    assert!(
+        data.rows
+            .iter()
+            .any(|row| row.title == "Tahoe packing list")
+    );
     assert!(data.rows.iter().all(|row| !row.snippet.is_empty()));
     // The Ask row for the answered term, scoped to Docs, matched or not.
-    let ask = state(&d, i).search.as_ref().unwrap().ask_row.as_ref().unwrap();
+    let ask = state(&d, i)
+        .search
+        .as_ref()
+        .unwrap()
+        .ask_row
+        .as_ref()
+        .unwrap();
     assert_eq!(ask.label, "Ask about “tahoe”");
     assert_eq!(ask.question, "Find tahoe");
     assert_eq!(ask.scope, "docs");
@@ -184,7 +214,10 @@ fn search_is_a_field_a_term_reads_search_and_closing_reads_the_shelf_back() {
     assert!(state(&d, i).pills.is_empty());
     // A term cleared to nothing reads the shelf back under the field.
     search(&mut d, i, "  ");
-    assert_eq!(drive_data(d.view(i)).mode, wire::docs_drive_data::Mode::Shelf as i32);
+    assert_eq!(
+        drive_data(d.view(i)).mode,
+        wire::docs_drive_data::Mode::Shelf as i32
+    );
     search(&mut d, i, "tahoe");
     drive_send(&mut d, i, D::SearchClosed(de::SearchClosed {}));
     assert_eq!(titles(d.view(i)), shelf);
@@ -198,7 +231,10 @@ fn a_search_that_finds_nothing_says_so_and_still_offers_ask() {
     search(&mut d, i, "zzzqqq");
     let data = drive_data(d.view(i));
     assert!(data.rows.is_empty());
-    assert_eq!(data.empty.as_ref().unwrap().headline, "Nothing matches that.");
+    assert_eq!(
+        data.empty.as_ref().unwrap().headline,
+        "Nothing matches that."
+    );
     assert_eq!(data.empty.as_ref().unwrap().body, "Try fewer words.");
     assert!(state(&d, i).search.as_ref().unwrap().ask_row.is_some());
 }
@@ -234,7 +270,10 @@ fn every_shelf_has_its_own_empty_sentence_and_at_most_one_action() {
     let empty = data.empty.as_ref().expect("an empty state");
     assert_eq!(empty.headline, "Nothing starred yet.");
     assert_eq!(empty.body, "Star a document to keep it here.");
-    assert_eq!(data.empty_action, wire::docs_drive_data::EmptyAction::None as i32);
+    assert_eq!(
+        data.empty_action,
+        wire::docs_drive_data::EmptyAction::None as i32
+    );
 }
 
 #[test]
@@ -252,7 +291,10 @@ fn the_row_menu_stars_once_per_intent_and_a_refusal_keeps_the_rows() {
     );
     pick(&mut d, i, "star");
     assert!(row(d.view(i), "Notes").starred);
-    assert!(matches!(state(&d, i).sheet.as_ref().unwrap().kind(), Sheet::None));
+    assert!(matches!(
+        state(&d, i).sheet.as_ref().unwrap().kind(),
+        Sheet::None
+    ));
     row_menu(&mut d, i, &id);
     assert_eq!(sheet_keys(state(&d, i))[0], "unstar");
     pick(&mut d, i, "unstar");
@@ -260,10 +302,18 @@ fn the_row_menu_stars_once_per_intent_and_a_refusal_keeps_the_rows() {
     // A document trashed under the page: the write is refused, the rows stay,
     // and the sentence is over them.
     row_menu(&mut d, i, &id);
-    arrange(&d, act::docs::Trash { document_id: id.clone() });
+    arrange(
+        &d,
+        act::docs::Trash {
+            document_id: id.clone(),
+        },
+    );
     // The sheet follows the re-read: its row is gone, so is the sheet.
     d.pump(std::time::Duration::from_millis(200));
-    assert!(matches!(state(&d, i).sheet.as_ref().unwrap().kind(), Sheet::None));
+    assert!(matches!(
+        state(&d, i).sheet.as_ref().unwrap().kind(),
+        Sheet::None
+    ));
     assert!(state(&d, i).status.is_none());
 }
 
@@ -311,21 +361,42 @@ fn labels_add_tags_a_label_it_has_is_nothing_and_remove_untags() {
     assert_eq!(labels.current.len(), 1);
     assert_eq!(labels.current[0].label, "tahoe");
     assert!(!labels.can_add);
-    drive_send(&mut d, i, D::LabelDraft(de::LabelDraftEdited { text: "trip".to_owned() }));
+    drive_send(
+        &mut d,
+        i,
+        D::LabelDraft(de::LabelDraftEdited {
+            text: "trip".to_owned(),
+        }),
+    );
     let sheet = state(&d, i).sheet.as_ref().unwrap();
     let Some(wire::docs_sheet::Body::Labels(labels)) = &sheet.body else {
         panic!();
     };
     assert!(labels.can_add);
-    drive_send(&mut d, i, D::LabelAdded(de::LabelAdded { label: " trip ".to_owned() }));
+    drive_send(
+        &mut d,
+        i,
+        D::LabelAdded(de::LabelAdded {
+            label: " trip ".to_owned(),
+        }),
+    );
     let chips: Vec<&str> = row(d.view(i), "Tahoe packing list")
         .labels
         .iter()
         .map(|chip| chip.label.as_str())
         .collect();
-    assert!(chips.contains(&"trip") && chips.contains(&"tahoe"), "{chips:?}");
+    assert!(
+        chips.contains(&"trip") && chips.contains(&"tahoe"),
+        "{chips:?}"
+    );
     // A label it has is nothing.
-    drive_send(&mut d, i, D::LabelAdded(de::LabelAdded { label: "tahoe".to_owned() }));
+    drive_send(
+        &mut d,
+        i,
+        D::LabelAdded(de::LabelAdded {
+            label: "tahoe".to_owned(),
+        }),
+    );
     assert!(state(&d, i).status.is_none());
     let tag = row(d.view(i), "Tahoe packing list")
         .labels
@@ -353,7 +424,10 @@ fn trash_asks_first_says_it_can_be_restored_and_dismissing_writes_nothing() {
     pick(&mut d, i, "trash");
     let confirm_now = state(&d, i).confirm.as_ref().expect("a confirm");
     assert_eq!(confirm_now.title, "Move to trash?");
-    assert_eq!(confirm_now.body, "It can be restored from trash for 30 days.");
+    assert_eq!(
+        confirm_now.body,
+        "It can be restored from trash for 30 days."
+    );
     assert_eq!(confirm_now.confirm_label, "Move to trash");
     assert!(confirm_now.destructive);
     drive_send(&mut d, i, D::Dismissed(de::Dismissed {}));
@@ -379,7 +453,13 @@ fn rename_is_inline_and_autosaves_debounced_blank_refused_close_saves() {
     assert_eq!(rename.title, "Draft");
     // Typing is not a write: the title is the member's on the row, and the
     // vault still holds the old one until the debounce.
-    drive_send(&mut d, i, D::RenameEdited(de::RenameEdited { title: "Final".to_owned() }));
+    drive_send(
+        &mut d,
+        i,
+        D::RenameEdited(de::RenameEdited {
+            title: "Final".to_owned(),
+        }),
+    );
     assert_eq!(row(d.view(i), "Final").document_id, id);
     assert_eq!(state(&d, i).rename.as_ref().unwrap().status_label, "Edited");
     assert_eq!(document(&d, &id).document.unwrap().title, "Draft");
@@ -387,7 +467,13 @@ fn rename_is_inline_and_autosaves_debounced_blank_refused_close_saves() {
     d.pump(std::time::Duration::from_millis(1300));
     assert_eq!(document(&d, &id).document.unwrap().title, "Final");
     // A blank name is refused with a sentence and the words stay.
-    drive_send(&mut d, i, D::RenameEdited(de::RenameEdited { title: "  ".to_owned() }));
+    drive_send(
+        &mut d,
+        i,
+        D::RenameEdited(de::RenameEdited {
+            title: "  ".to_owned(),
+        }),
+    );
     d.pump(std::time::Duration::from_millis(1300));
     assert_eq!(document(&d, &id).document.unwrap().title, "Final");
     assert_eq!(
@@ -395,7 +481,13 @@ fn rename_is_inline_and_autosaves_debounced_blank_refused_close_saves() {
         "A document needs a name."
     );
     // Close = done: what is unsaved is saved on the way out.
-    drive_send(&mut d, i, D::RenameEdited(de::RenameEdited { title: "Closed".to_owned() }));
+    drive_send(
+        &mut d,
+        i,
+        D::RenameEdited(de::RenameEdited {
+            title: "Closed".to_owned(),
+        }),
+    );
     drive_send(&mut d, i, D::RenameClosed(de::RenameClosed {}));
     assert!(state(&d, i).rename.is_none());
     assert_eq!(document(&d, &id).document.unwrap().title, "Closed");
@@ -433,8 +525,17 @@ fn a_folder_page_shows_its_children_its_crumbs_and_makes_a_folder_inside_it() {
     assert_eq!(data.folders.len(), 1);
     assert_eq!(data.folders[0].name, "2026");
     assert_eq!(data.folders[0].count_label, "Empty");
-    assert_eq!(data.crumbs.iter().map(|c| c.name.as_str()).collect::<Vec<_>>(), ["Taxes"]);
-    assert_eq!(data.empty, None, "a folder with a child folder is not empty");
+    assert_eq!(
+        data.crumbs
+            .iter()
+            .map(|c| c.name.as_str())
+            .collect::<Vec<_>>(),
+        ["Taxes"]
+    );
+    assert_eq!(
+        data.empty, None,
+        "a folder with a child folder is not empty"
+    );
     // A new folder lands inside the folder open.
     open_sheet(&mut d, page, Sheet::Add);
     pick(&mut d, page, "new_folder");
@@ -444,7 +545,13 @@ fn a_folder_page_shows_its_children_its_crumbs_and_makes_a_folder_inside_it() {
     };
     assert_eq!(new.where_label, "In Taxes");
     assert!(!new.can_create);
-    drive_send(&mut d, page, D::FolderName(de::FolderNameEdited { name: "2027".to_owned() }));
+    drive_send(
+        &mut d,
+        page,
+        D::FolderName(de::FolderNameEdited {
+            name: "2027".to_owned(),
+        }),
+    );
     drive_send(&mut d, page, D::FolderCreated(de::FolderCreated {}));
     let names: Vec<String> = drive_data(d.view(page))
         .folders
@@ -455,7 +562,11 @@ fn a_folder_page_shows_its_children_its_crumbs_and_makes_a_folder_inside_it() {
     // The deeper page names this page as its parent.
     let deeper = d.push(
         docs::TAB,
-        routes::folder(&inner, "2026", &state(&d, page).chrome.as_ref().unwrap().title),
+        routes::folder(
+            &inner,
+            "2026",
+            &state(&d, page).chrome.as_ref().unwrap().title,
+        ),
     );
     assert_eq!(state(&d, deeper).chrome.as_ref().unwrap().back, "Taxes");
     let crumbs: Vec<&str> = drive_data(d.view(deeper))
@@ -563,7 +674,10 @@ fn a_followed_folder_is_a_stop_row_and_stopping_asks_the_shell_to_forget_it() {
         ),
         "{asked:?}"
     );
-    assert!(matches!(state(&d, i).sheet.as_ref().unwrap().kind(), Sheet::None));
+    assert!(matches!(
+        state(&d, i).sheet.as_ref().unwrap().kind(),
+        Sheet::None
+    ));
 }
 
 #[test]
@@ -578,7 +692,11 @@ fn the_trash_row_of_more_is_a_route_with_the_count_beside_it() {
     let Some(wire::docs_sheet::Body::Actions(list)) = &sheet.body else {
         panic!();
     };
-    let trash = list.actions.iter().find(|a| a.key == "trash_shelf").unwrap();
+    let trash = list
+        .actions
+        .iter()
+        .find(|a| a.key == "trash_shelf")
+        .unwrap();
     assert_eq!(trash.label, "Trash");
     assert_eq!(trash.detail, "1 document");
     assert_eq!(trash.route.as_ref().unwrap().screen, docs::TRASH);

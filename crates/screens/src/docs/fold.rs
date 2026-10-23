@@ -166,9 +166,7 @@ pub fn surface_of(surface: wire::DocsSurface) -> wire::DocsSurfaceKind {
     match surface {
         wire::DocsSurface::Reading => wire::DocsSurfaceKind::Reading,
         wire::DocsSurface::Stage => wire::DocsSurfaceKind::Stage,
-        wire::DocsSurface::Facts | wire::DocsSurface::Unspecified => {
-            wire::DocsSurfaceKind::Facts
-        }
+        wire::DocsSurface::Facts | wire::DocsSurface::Unspecified => wire::DocsSurfaceKind::Facts,
     }
 }
 
@@ -322,9 +320,7 @@ pub fn document(
     let events = activity.map(|a| a.events.as_slice()).unwrap_or_default();
     let surface = match found.surface() {
         wire::DocsSurface::Reading => Surface::Reading(reader(locale, found, answer)),
-        wire::DocsSurface::Stage => {
-            Surface::Stage(stage(locale, found, answer, &view.title))
-        }
+        wire::DocsSurface::Stage => Surface::Stage(stage(locale, found, answer, &view.title)),
         _ => Surface::FactsOnly(wire::DocsFactsOnly {
             sentence: words::facts_only(locale),
         }),

@@ -8,8 +8,8 @@ use wire::docs_sheet::Kind;
 use super::query::{MODIFIED, SORTS, TYPES};
 use super::{BAND_ALL, BAND_FOLDERS, BAND_MORE, BAND_STARRED, Drive, Held, sheets};
 use crate::docs::{Phase, denied, fold, folders};
-use crate::screen::Ctx;
 use crate::kit::{read, search as kit_search};
+use crate::screen::Ctx;
 use crate::strings::{Locale, docs as words, shared};
 
 /// The page's title: the folder open, "Recently added", else the app. A pushed
@@ -42,43 +42,49 @@ pub(super) fn state(drive: &Drive, ctx: &Ctx) -> wire::ViewState {
         Phase::Ready(held) => Content::Data(Box::new(data(drive, locale, held))),
     };
     wire::ViewState {
-        kind: Some(wire::view_state::Kind::DocsDrive(Box::new(wire::DocsDriveState {
-            destination: drive.destination as i32,
-            folder_id: drive.folder_id.clone(),
-            folder_name: drive.folder_name.clone(),
-            query: Some(drive.query.wire()),
-            layout: if drive.grid {
-                wire::docs_drive_state::Layout::Grid
-            } else {
-                wire::docs_drive_state::Layout::List
-            } as i32,
-            search: Some(search_field(drive, locale)),
-            content: Some(content),
-            sheet: Some(if is_denied {
-                sheets::none()
-            } else {
-                sheets::view(drive, locale)
-            }),
-            status: drive.status.clone(),
-            confirm: drive.asking.as_ref().map(|_| wire::Confirm {
-                title: words::trash_confirm_title(locale),
-                body: words::trash_confirm_body(locale),
-                confirm_label: words::trash_confirm(locale),
-                destructive: true,
-            }),
-            confirm_document_id: drive.asking.clone().unwrap_or_default(),
-            rename: drive.rename.as_ref().map(|rename| rename.view(locale)),
-            band: if is_denied { Vec::new() } else { band(drive, locale) },
-            pills: if is_denied || searching || !drive.filtering() {
-                Vec::new()
-            } else {
-                pills(drive, locale)
+        kind: Some(wire::view_state::Kind::DocsDrive(Box::new(
+            wire::DocsDriveState {
+                destination: drive.destination as i32,
+                folder_id: drive.folder_id.clone(),
+                folder_name: drive.folder_name.clone(),
+                query: Some(drive.query.wire()),
+                layout: if drive.grid {
+                    wire::docs_drive_state::Layout::Grid
+                } else {
+                    wire::docs_drive_state::Layout::List
+                } as i32,
+                search: Some(search_field(drive, locale)),
+                content: Some(content),
+                sheet: Some(if is_denied {
+                    sheets::none()
+                } else {
+                    sheets::view(drive, locale)
+                }),
+                status: drive.status.clone(),
+                confirm: drive.asking.as_ref().map(|_| wire::Confirm {
+                    title: words::trash_confirm_title(locale),
+                    body: words::trash_confirm_body(locale),
+                    confirm_label: words::trash_confirm(locale),
+                    destructive: true,
+                }),
+                confirm_document_id: drive.asking.clone().unwrap_or_default(),
+                rename: drive.rename.as_ref().map(|rename| rename.view(locale)),
+                band: if is_denied {
+                    Vec::new()
+                } else {
+                    band(drive, locale)
+                },
+                pills: if is_denied || searching || !drive.filtering() {
+                    Vec::new()
+                } else {
+                    pills(drive, locale)
+                },
+                filters_active: filters_active && !searching && !is_denied,
+                chrome: Some(chrome(drive, locale)),
+                head_meta: head_meta(drive, locale),
+                ingest: Some(drive.ingest.view(locale)),
             },
-            filters_active: filters_active && !searching && !is_denied,
-            chrome: Some(chrome(drive, locale)),
-            head_meta: head_meta(drive, locale),
-            ingest: Some(drive.ingest.view(locale)),
-        }))),
+        ))),
         ..wire::ViewState::default()
     }
 }
@@ -112,8 +118,18 @@ fn band(drive: &Drive, locale: Locale) -> Vec<wire::DocsBandTab> {
     };
     vec![
         tab(BAND_ALL, words::band_all(locale), "FileText", Dest::All),
-        tab(BAND_FOLDERS, words::band_folders(locale), "Folder", Dest::Folders),
-        tab(BAND_STARRED, words::band_starred(locale), "Star", Dest::Starred),
+        tab(
+            BAND_FOLDERS,
+            words::band_folders(locale),
+            "Folder",
+            Dest::Folders,
+        ),
+        tab(
+            BAND_STARRED,
+            words::band_starred(locale),
+            "Star",
+            Dest::Starred,
+        ),
         wire::DocsBandTab {
             key: BAND_MORE.to_owned(),
             label: words::band_more(locale),
@@ -149,14 +165,25 @@ fn pills(drive: &Drive, locale: Locale) -> Vec<wire::DocsPill> {
         chevron: true,
         clears: false,
     };
-    let any_labels = drive.rail.as_ref().is_some_and(|rail| !rail.labels.is_empty());
+    let any_labels = drive
+        .rail
+        .as_ref()
+        .is_some_and(|rail| !rail.labels.is_empty());
     let mut pills = vec![
         pill(Kind::Type, words::filter_type(locale), type_label.clone()),
-        pill(Kind::Modified, words::filter_modified(locale), modified_label.clone()),
+        pill(
+            Kind::Modified,
+            words::filter_modified(locale),
+            modified_label.clone(),
+        ),
     ];
     // No label in the drive: no Label chip to open an empty sheet.
     if any_labels || label.is_some() {
-        pills.push(pill(Kind::Label, words::filter_label(locale), label.clone()));
+        pills.push(pill(
+            Kind::Label,
+            words::filter_label(locale),
+            label.clone(),
+        ));
     }
     if type_label.is_some() || modified_label.is_some() || label.is_some() {
         pills.push(wire::DocsPill {
@@ -240,16 +267,23 @@ fn data(drive: &Drive, locale: Locale, held: &Held) -> wire::DocsDriveData {
         .iter()
         .map(|row| {
             let mut view = fold::row(locale, row, &held.today, &page);
-            if let Some(rename) = drive.rename.as_ref().filter(|r| r.document_id() == view.document_id) {
+            if let Some(rename) = drive
+                .rename
+                .as_ref()
+                .filter(|r| r.document_id() == view.document_id)
+            {
                 view.title = rename.title().to_owned();
             }
             view
         })
         .collect();
-    let containers = if held.search { containers(locale, held, &page) } else { Vec::new() };
+    let containers = if held.search {
+        containers(locale, held, &page)
+    } else {
+        Vec::new()
+    };
     // A FOLDER THAT MATCHED THE NAME IS AN ANSWER: no "nothing found" over it.
-    let nothing =
-        rows.is_empty() && children.is_empty() && (!held.search || containers.is_empty());
+    let nothing = rows.is_empty() && children.is_empty() && (!held.search || containers.is_empty());
     let (empty, action) = if nothing {
         let (empty, action) = empty_of(drive, locale, held.search);
         (Some(empty), action)
@@ -257,7 +291,11 @@ fn data(drive: &Drive, locale: Locale, held: &Held) -> wire::DocsDriveData {
         (None, EmptyAction::None)
     };
     wire::DocsDriveData {
-        mode: if held.search { Mode::Search } else { Mode::Shelf } as i32,
+        mode: if held.search {
+            Mode::Search
+        } else {
+            Mode::Shelf
+        } as i32,
         rows,
         folders: folders::nodes(locale, &children, &page),
         crumbs: if in_folders {
@@ -315,36 +353,64 @@ fn empty_of(drive: &Drive, locale: Locale, search: bool) -> (wire::EmptyState, E
     let none = String::new();
     if search {
         return (
-            say(words::empty_search(locale), words::empty_search_body(locale), none),
+            say(
+                words::empty_search(locale),
+                words::empty_search_body(locale),
+                none,
+            ),
             EmptyAction::None,
         );
     }
     if drive.query.filtering() && drive.filtering() {
         return (
-            say(words::empty_filtered(locale), none, words::clear_filters(locale)),
+            say(
+                words::empty_filtered(locale),
+                none,
+                words::clear_filters(locale),
+            ),
             EmptyAction::ClearFilters,
         );
     }
     match drive.destination {
         Dest::Starred => (
-            say(words::empty_starred(locale), words::empty_starred_body(locale), none),
+            say(
+                words::empty_starred(locale),
+                words::empty_starred_body(locale),
+                none,
+            ),
             EmptyAction::None,
         ),
         Dest::Recent => (
-            say(words::empty_recent(locale), none, words::empty_all_action(locale)),
+            say(
+                words::empty_recent(locale),
+                none,
+                words::empty_all_action(locale),
+            ),
             EmptyAction::Add,
         ),
         Dest::Folders if drive.folder_id.is_empty() => (
-            say(words::empty_folders(locale), none, words::empty_folders_action(locale)),
+            say(
+                words::empty_folders(locale),
+                none,
+                words::empty_folders_action(locale),
+            ),
             EmptyAction::NewFolder,
         ),
         Dest::Folders => (
-            say(words::empty_folder(locale), none, words::empty_all_action(locale)),
+            say(
+                words::empty_folder(locale),
+                none,
+                words::empty_all_action(locale),
+            ),
             EmptyAction::Add,
         ),
         // THE WHOLE DRIVE IS EMPTY: Docs' day one.
         _ => (
-            say(words::empty_all(locale), none, words::empty_all_action(locale)),
+            say(
+                words::empty_all(locale),
+                none,
+                words::empty_all_action(locale),
+            ),
             EmptyAction::Add,
         ),
     }

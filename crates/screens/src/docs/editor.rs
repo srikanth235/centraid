@@ -102,7 +102,9 @@ impl Editor {
     fn reload(&mut self, ctx: &Ctx) {
         let reading = read::read(
             ctx,
-            load::docs::History { document_id: self.document_id.clone() },
+            load::docs::History {
+                document_id: self.document_id.clone(),
+            },
             |answer| match answer {
                 Answer::DocsDocument(document) => Some(document),
                 _ => None,

@@ -90,7 +90,9 @@ impl Document {
     fn reload(&mut self, ctx: &Ctx) {
         let document = read::read(
             ctx,
-            load::docs::History { document_id: self.document_id.clone() },
+            load::docs::History {
+                document_id: self.document_id.clone(),
+            },
             |answer| match answer {
                 Answer::DocsDocument(document) => Some(document),
                 _ => None,
@@ -100,7 +102,9 @@ impl Document {
         // its part out (an empty activity rail, no folders to move to).
         let activity = read::read(
             ctx,
-            load::docs::Activity { document_id: self.document_id.clone() },
+            load::docs::Activity {
+                document_id: self.document_id.clone(),
+            },
             |answer| match answer {
                 Answer::DocsActivity(activity) => Some(activity),
                 _ => None,
@@ -224,7 +228,13 @@ impl Document {
         if label.is_empty() || row.labels.iter().any(|chip| chip.label == label) {
             return;
         }
-        self.write(ctx, act::docs::Tag { document_id: row.document_id, label });
+        self.write(
+            ctx,
+            act::docs::Tag {
+                document_id: row.document_id,
+                label,
+            },
+        );
     }
 
     fn label_removed(&mut self, ctx: &Ctx, tag_id: &str) {
@@ -240,7 +250,13 @@ impl Document {
         else {
             return;
         };
-        self.write(ctx, act::docs::Untag { document_id: row.document_id, label });
+        self.write(
+            ctx,
+            act::docs::Untag {
+                document_id: row.document_id,
+                label,
+            },
+        );
     }
 
     fn confirmed(&mut self, ctx: &Ctx) {
@@ -428,10 +444,7 @@ impl Screen for Document {
         use wire::docs_document_state::Content;
         let locale = ctx.locale();
         let (content, sheet) = match &self.phase {
-            Phase::Loading => (
-                Content::Loading(wire::Loading { first_load: true }),
-                None,
-            ),
+            Phase::Loading => (Content::Loading(wire::Loading { first_load: true }), None),
             Phase::Failed => (Content::Failure(read::failure(locale)), None),
             Phase::Denied(denial) => (Content::Denied(denied(locale, denial)), None),
             Phase::Ready(answered) => {
@@ -454,18 +467,20 @@ impl Screen for Document {
             }
         };
         wire::ViewState {
-            kind: Some(wire::view_state::Kind::DocsDocument(wire::DocsDocumentState {
-                document_id: self.document_id.clone(),
-                title_hint: self.title_hint.clone(),
-                content: Some(content),
-                status: self.status.clone(),
-                confirm: self.confirm(locale),
-                rename: self.rename.as_ref().map(|rename| rename.view(locale)),
-                sheet,
-                chrome: Some(self.chrome(locale)),
-                asking: self.asking as i32,
-                dismissed: self.dismissed,
-            })),
+            kind: Some(wire::view_state::Kind::DocsDocument(
+                wire::DocsDocumentState {
+                    document_id: self.document_id.clone(),
+                    title_hint: self.title_hint.clone(),
+                    content: Some(content),
+                    status: self.status.clone(),
+                    confirm: self.confirm(locale),
+                    rename: self.rename.as_ref().map(|rename| rename.view(locale)),
+                    sheet,
+                    chrome: Some(self.chrome(locale)),
+                    asking: self.asking as i32,
+                    dismissed: self.dismissed,
+                },
+            )),
             ..wire::ViewState::default()
         }
     }

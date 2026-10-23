@@ -18,7 +18,11 @@ pub const TYPES: [(&str, TypeFilter, Words); 8] = [
     ("pdf", TypeFilter::Pdf, words::type_pdf),
     ("image", TypeFilter::Image, words::type_image),
     ("word", TypeFilter::Word, words::type_word),
-    ("spreadsheet", TypeFilter::Spreadsheet, words::type_spreadsheet),
+    (
+        "spreadsheet",
+        TypeFilter::Spreadsheet,
+        words::type_spreadsheet,
+    ),
     ("markdown", TypeFilter::Markdown, words::type_markdown),
     ("text", TypeFilter::Text, words::type_text),
     ("audio", TypeFilter::Audio, words::type_audio),
@@ -28,9 +32,24 @@ pub const TYPES: [(&str, TypeFilter, Words); 8] = [
 /// The Modified sheet: its key, the filter, the core's name for it and the words.
 pub const MODIFIED: [(&str, Modified, &str, Words); 4] = [
     ("today", Modified::Today, "today", words::modified_today),
-    ("7d", Modified::Last7Days, "last_7_days", words::modified_last_7_days),
-    ("30d", Modified::Last30Days, "last_30_days", words::modified_last_30_days),
-    ("year", Modified::ThisYear, "this_year", words::modified_this_year),
+    (
+        "7d",
+        Modified::Last7Days,
+        "last_7_days",
+        words::modified_last_7_days,
+    ),
+    (
+        "30d",
+        Modified::Last30Days,
+        "last_30_days",
+        words::modified_last_30_days,
+    ),
+    (
+        "year",
+        Modified::ThisYear,
+        "this_year",
+        words::modified_this_year,
+    ),
 ];
 
 /// The sort sheet: its key, the sort and its direction, and the two words
@@ -50,9 +69,27 @@ pub const SORTS: [(&str, Sort, bool, Words, Words); 6] = [
         words::sort_changed,
         words::sort_oldest,
     ),
-    ("name_asc", Sort::Name, true, words::sort_name, words::sort_a_to_z),
-    ("name_desc", Sort::Name, false, words::sort_name, words::sort_z_to_a),
-    ("kind_asc", Sort::Kind, true, words::sort_kind, words::sort_a_to_z),
+    (
+        "name_asc",
+        Sort::Name,
+        true,
+        words::sort_name,
+        words::sort_a_to_z,
+    ),
+    (
+        "name_desc",
+        Sort::Name,
+        false,
+        words::sort_name,
+        words::sort_z_to_a,
+    ),
+    (
+        "kind_asc",
+        Sort::Kind,
+        true,
+        words::sort_kind,
+        words::sort_a_to_z,
+    ),
     (
         "size_desc",
         Sort::Size,

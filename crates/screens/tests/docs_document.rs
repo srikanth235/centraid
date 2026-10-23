@@ -46,9 +46,15 @@ fn a_documents_back_names_the_page_it_was_pushed_from_else_docs() {
     let mut d = driver();
     let id = text(&d, "Notes", "words");
     let a = open(&mut d, &id, "Notes", "Taxes");
-    assert_eq!(document_state(d.view(a)).chrome.as_ref().unwrap().back, "Taxes");
+    assert_eq!(
+        document_state(d.view(a)).chrome.as_ref().unwrap().back,
+        "Taxes"
+    );
     let b = open(&mut d, &id, "Notes", "");
-    assert_eq!(document_state(d.view(b)).chrome.as_ref().unwrap().back, "Docs");
+    assert_eq!(
+        document_state(d.view(b)).chrome.as_ref().unwrap().back,
+        "Docs"
+    );
     assert_eq!(document_state(d.view(b)).title_hint, "Notes");
 }
 
@@ -87,7 +93,10 @@ fn the_reader_draws_the_text_with_the_facts_the_path_and_the_activity() {
     assert!(facts.contains(&("Kind", "Document")), "{facts:?}");
     assert!(facts.contains(&("Folder", "Taxes")), "{facts:?}");
     assert!(facts.iter().any(|(label, _)| *label == "Added"));
-    assert_eq!(keys(d.view(i)), ["edit", "star", "rename", "move", "labels", "trash"]);
+    assert_eq!(
+        keys(d.view(i)),
+        ["edit", "star", "rename", "move", "labels", "trash"]
+    );
     // Edit is a route the shell pushes.
     let edit = &data.actions[0];
     assert_eq!(edit.route.as_ref().unwrap().screen, docs::EDITOR);
@@ -172,7 +181,10 @@ fn the_heads_writes_star_rename_move_and_labels() {
             title: "Return 2026".to_owned(),
         }),
     );
-    assert_eq!(document_data(d.view(i)).row.as_ref().unwrap().title, "Return 2026");
+    assert_eq!(
+        document_data(d.view(i)).row.as_ref().unwrap().title,
+        "Return 2026"
+    );
     document_send(&mut d, i, DD::RenameClosed(dd::RenameClosed {}));
     assert!(document_state(d.view(i)).rename.is_none());
     assert_eq!(document(&d, &id).document.unwrap().title, "Return 2026");
@@ -218,14 +230,22 @@ fn trashing_asks_first_and_a_trashed_document_offers_restore_and_delete_forever(
 fn delete_forever_on_a_trashed_document_asks_first_purges_it_and_the_page_leaves() {
     let mut d = driver();
     let id = text(&d, "Return", "x");
-    arrange(&d, act::docs::Trash { document_id: id.clone() });
+    arrange(
+        &d,
+        act::docs::Trash {
+            document_id: id.clone(),
+        },
+    );
     let i = open(&mut d, &id, "Return", "Docs");
     pick_doc(&mut d, i, "purge");
     let state = document_state(d.view(i));
     assert_eq!(state.asking, Asking::Purge as i32);
     let confirm = state.confirm.as_ref().unwrap();
     assert_eq!(confirm.title, "Delete this forever?");
-    assert_eq!(confirm.body, "It leaves this vault for good. This cannot be undone.");
+    assert_eq!(
+        confirm.body,
+        "It leaves this vault for good. This cannot be undone."
+    );
     assert_eq!(confirm.confirm_label, "Delete forever");
     assert!(confirm.destructive);
     assert!(!document_state(d.view(i)).dismissed);
@@ -247,7 +267,10 @@ fn version_history_is_a_page_and_an_earlier_version_is_made_current_by_a_restore
         },
     );
     let i = open(&mut d, &id, "Letter", "Docs");
-    let link = document_data(d.view(i)).versions.as_ref().expect("a versions row");
+    let link = document_data(d.view(i))
+        .versions
+        .as_ref()
+        .expect("a versions row");
     assert_eq!(link.label, "Versions");
     assert_eq!(link.count_label, "2 versions");
     let route = link.route.clone().unwrap();
@@ -261,7 +284,11 @@ fn version_history_is_a_page_and_an_earlier_version_is_made_current_by_a_restore
     assert_eq!(data.versions.len(), 2);
     assert_eq!(data.versions[0].label, "Version 2");
     assert!(data.versions[0].current);
-    assert!(data.versions[0].meta.starts_with("Current"), "{}", data.versions[0].meta);
+    assert!(
+        data.versions[0].meta.starts_with("Current"),
+        "{}",
+        data.versions[0].meta
+    );
     assert_eq!(data.versions[0].restore_label, "");
     assert_eq!(data.versions[1].label, "Version 1");
     assert_eq!(data.versions[1].restore_label, "Restore");
@@ -309,7 +336,12 @@ fn a_trashed_documents_versions_offer_no_restore() {
             title: None,
         },
     );
-    arrange(&d, act::docs::Trash { document_id: id.clone() });
+    arrange(
+        &d,
+        act::docs::Trash {
+            document_id: id.clone(),
+        },
+    );
     let page = d.push(docs::TAB, routes::versions(&id, "Letter"));
     let state = versions_state(d.view(page));
     let Some(wire::docs_versions_state::Content::Data(data)) = &state.content else {
@@ -347,7 +379,11 @@ fn the_editor_autosaves_one_edit_per_settled_edit_and_the_version_follows() {
         }),
     );
     assert_eq!(editor_state(d.view(i)).status_label, "Edited");
-    assert_eq!(document(&d, &id).body.as_deref(), Some("first"), "typing is not a write");
+    assert_eq!(
+        document(&d, &id).body.as_deref(),
+        Some("first"),
+        "typing is not a write"
+    );
     d.pump(Duration::from_millis(1300));
     assert_eq!(document(&d, &id).body.as_deref(), Some("first and more"));
     assert_eq!(editor_state(d.view(i)).version_label, "Version 2");
@@ -370,7 +406,13 @@ fn closing_the_editor_saves_what_is_unsaved_and_a_refused_save_keeps_the_words()
     let mut d = driver();
     let id = text(&d, "Letter", "first");
     let i = editor(&mut d, &id);
-    editor_send(&mut d, i, EE::Title(ee::TitleEdited { title: " ".to_owned() }));
+    editor_send(
+        &mut d,
+        i,
+        EE::Title(ee::TitleEdited {
+            title: " ".to_owned(),
+        }),
+    );
     d.pump(Duration::from_millis(1300));
     let state = editor_state(d.view(i));
     assert_eq!(state.status_label, "A document needs a name.");
@@ -402,7 +444,13 @@ fn a_vault_change_never_replaces_words_being_typed() {
     let mut d = driver();
     let id = text(&d, "Letter", "first");
     let i = editor(&mut d, &id);
-    editor_send(&mut d, i, EE::Body(ee::BodyEdited { body: "mine".to_owned() }));
+    editor_send(
+        &mut d,
+        i,
+        EE::Body(ee::BodyEdited {
+            body: "mine".to_owned(),
+        }),
+    );
     arrange(
         &d,
         act::docs::Edit {
@@ -431,7 +479,12 @@ fn only_a_live_text_document_with_text_opens_in_the_editor() {
     let i = editor(&mut d, &binary);
     assert_eq!(sentence(&d, i), "This document has no text to edit.");
     let trashed = text(&d, "Old", "x");
-    arrange(&d, act::docs::Trash { document_id: trashed.clone() });
+    arrange(
+        &d,
+        act::docs::Trash {
+            document_id: trashed.clone(),
+        },
+    );
     let j = editor(&mut d, &trashed);
     assert_eq!(sentence(&d, j), "Restore this document to edit it.");
     let k = editor(&mut d, "nope");
@@ -463,8 +516,18 @@ fn the_trash_destroys_on_photos_path_delete_forever_and_empty_trash_each_behind_
     let mut d = driver();
     let a = text(&d, "A", "x");
     let b = text(&d, "B", "y");
-    arrange(&d, act::docs::Trash { document_id: a.clone() });
-    arrange(&d, act::docs::Trash { document_id: b.clone() });
+    arrange(
+        &d,
+        act::docs::Trash {
+            document_id: a.clone(),
+        },
+    );
+    arrange(
+        &d,
+        act::docs::Trash {
+            document_id: b.clone(),
+        },
+    );
     let i = d.push(docs::TAB, routes::trash());
     let view = trash_view(d.view(i));
     assert_eq!(view.app_id, "docs");
@@ -476,7 +539,10 @@ fn the_trash_destroys_on_photos_path_delete_forever_and_empty_trash_each_behind_
     };
     let row = data.rows.iter().find(|row| row.id == a).unwrap();
     assert!(row.meta.starts_with("Deleted "), "{}", row.meta);
-    assert!(!row.meta.contains("Erased"), "no row says when it will be erased");
+    assert!(
+        !row.meta.contains("Erased"),
+        "no row says when it will be erased"
+    );
     assert_eq!(row.purge_label, "Delete forever");
     assert_eq!(data.empty_label, "Empty trash");
     // Delete forever: the kit's confirm, then the bytes go.
@@ -515,7 +581,12 @@ fn restore_asks_nothing_and_brings_the_document_back_where_it_was() {
             folder_id: Some(taxes.clone()),
         },
     );
-    arrange(&d, act::docs::Trash { document_id: id.clone() });
+    arrange(
+        &d,
+        act::docs::Trash {
+            document_id: id.clone(),
+        },
+    );
     let i = d.push(docs::TAB, routes::trash());
     trash_send(&mut d, i, T::Restore(te::RestoreTapped { id: id.clone() }));
     assert!(trash_view(d.view(i)).confirm.is_none());

@@ -18,7 +18,10 @@ use wire::effect::Kind as Fx;
 use wire::effect_result::Outcome as O;
 
 fn ingest(d: &Driver, i: u64) -> &wire::DocsIngestView {
-    drive_state(d.view(i)).ingest.as_ref().expect("an ingest line")
+    drive_state(d.view(i))
+        .ingest
+        .as_ref()
+        .expect("an ingest line")
 }
 
 fn add(d: &mut Driver, i: u64, key: &str) {
@@ -37,12 +40,13 @@ fn picked(blob: &str, size: u64, name: &str, media_type: &str) -> O {
 
 /// The route the last `OpenRoute` effect asked the shell to open.
 fn opened(d: &Driver) -> Option<wire::Route> {
-    d.effects.iter().rev().find_map(|request| {
-        match request.effect.as_ref()?.kind.as_ref()? {
+    d.effects
+        .iter()
+        .rev()
+        .find_map(|request| match request.effect.as_ref()?.kind.as_ref()? {
             Fx::OpenRoute(open) => open.route.clone(),
             _ => None,
-        }
-    })
+        })
 }
 
 #[test]
@@ -132,7 +136,11 @@ fn an_add_into_a_folder_lands_in_it_and_names_the_folder_as_the_back_word() {
     // An upload names the page it came from.
     d.effects.clear();
     add(&mut d, page, "upload");
-    result(&mut d, page, picked(&"c".repeat(64), 10, "Scan.pdf", "application/pdf"));
+    result(
+        &mut d,
+        page,
+        picked(&"c".repeat(64), 10, "Scan.pdf", "application/pdf"),
+    );
     let route = opened(&d).expect("the page opens");
     let Some(wire::route::Args::DocsDocument(args)) = route.args else {
         panic!("a document route");
@@ -153,7 +161,11 @@ fn scan_with_no_name_is_a_scanned_document_and_a_closed_picker_says_nothing() {
     assert_eq!(ingest(&d, i).phase, Phase::Idle as i32);
     assert_eq!(ingest(&d, i).status_label, "");
     add(&mut d, i, "scan");
-    result(&mut d, i, picked(&"d".repeat(64), 100, "", "application/pdf"));
+    result(
+        &mut d,
+        i,
+        picked(&"d".repeat(64), 100, "", "application/pdf"),
+    );
     assert_eq!(ingest(&d, i).status_label, "Scanned document added");
     assert!(titles(d.view(i)).contains(&"Scanned document".to_owned()));
 }
@@ -184,9 +196,9 @@ fn a_refusal_is_a_failure_with_try_again_a_held_file_refiles_none_repicks() {
         &mut d,
         i,
         O::Failed(wire::EffectFailed {
-        reason: "boom".to_owned(),
-        denied: false,
-    }),
+            reason: "boom".to_owned(),
+            denied: false,
+        }),
     );
     assert_eq!(
         ingest(&d, i).status_label,
@@ -209,9 +221,9 @@ fn a_scanner_refused_the_camera_says_where_to_turn_it_on_not_that_a_file_failed(
         &mut d,
         i,
         O::Failed(wire::EffectFailed {
-        reason: "camera".to_owned(),
-        denied: true,
-    }),
+            reason: "camera".to_owned(),
+            denied: true,
+        }),
     );
     assert_eq!(
         ingest(&d, i).status_label,
@@ -223,9 +235,9 @@ fn a_scanner_refused_the_camera_says_where_to_turn_it_on_not_that_a_file_failed(
         &mut d,
         i,
         O::Failed(wire::EffectFailed {
-        reason: docs::drive::UNAVAILABLE.to_owned(),
-        denied: false,
-    }),
+            reason: docs::drive::UNAVAILABLE.to_owned(),
+            denied: false,
+        }),
     );
     assert_eq!(
         ingest(&d, i).status_label,
@@ -271,9 +283,9 @@ fn following_a_folder_asks_the_shell_and_lists_the_answer() {
         &mut d,
         i,
         O::Failed(wire::EffectFailed {
-        reason: "no access".to_owned(),
-        denied: false,
-    }),
+            reason: "no access".to_owned(),
+            denied: false,
+        }),
     );
     assert_eq!(
         drive_state(d.view(i)).status.as_ref().unwrap().sentence,

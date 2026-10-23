@@ -339,7 +339,10 @@ pub fn media_type_of(name: &str, stated: &str) -> String {
     if !stated.trim().is_empty() {
         return stated.trim().to_owned();
     }
-    let extension = name.rsplit_once('.').map_or("", |(_, ext)| ext).to_lowercase();
+    let extension = name
+        .rsplit_once('.')
+        .map_or("", |(_, ext)| ext)
+        .to_lowercase();
     match extension.as_str() {
         "pdf" => "application/pdf",
         "png" => "image/png",

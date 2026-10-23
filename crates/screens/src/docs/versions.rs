@@ -47,7 +47,9 @@ impl Versions {
     fn reload(&mut self, ctx: &Ctx) {
         self.phase = Phase::of(read::read(
             ctx,
-            load::docs::History { document_id: self.document_id.clone() },
+            load::docs::History {
+                document_id: self.document_id.clone(),
+            },
             |answer| match answer {
                 Answer::DocsDocument(document) => Some(document),
                 _ => None,
@@ -116,31 +118,34 @@ impl Screen for Versions {
                         .iter()
                         .map(|version| fold::version(locale, version, trashed))
                         .collect(),
-                    empty: (document.document.is_none() || document.versions.is_empty())
-                        .then(|| wire::EmptyState {
+                    empty: (document.document.is_none() || document.versions.is_empty()).then(
+                        || wire::EmptyState {
                             headline: words::gone(locale),
                             ..wire::EmptyState::default()
-                        }),
+                        },
+                    ),
                 })
             }
         };
         wire::ViewState {
-            kind: Some(wire::view_state::Kind::DocsVersions(wire::DocsVersionsState {
-                document_id: self.document_id.clone(),
-                title: self.title.clone(),
-                content: Some(content),
-                status: self.status.clone(),
-                chrome: Some(wire::DocsVersionsChrome {
-                    back: if self.title.trim().is_empty() {
-                        words::app_title(locale)
-                    } else {
-                        self.title.clone()
-                    },
-                    heading: words::versions_heading(locale),
-                    retry: words::retry(locale),
-                    loading: words::loading(locale),
-                }),
-            })),
+            kind: Some(wire::view_state::Kind::DocsVersions(
+                wire::DocsVersionsState {
+                    document_id: self.document_id.clone(),
+                    title: self.title.clone(),
+                    content: Some(content),
+                    status: self.status.clone(),
+                    chrome: Some(wire::DocsVersionsChrome {
+                        back: if self.title.trim().is_empty() {
+                            words::app_title(locale)
+                        } else {
+                            self.title.clone()
+                        },
+                        heading: words::versions_heading(locale),
+                        retry: words::retry(locale),
+                        loading: words::loading(locale),
+                    }),
+                },
+            )),
             ..wire::ViewState::default()
         }
     }
