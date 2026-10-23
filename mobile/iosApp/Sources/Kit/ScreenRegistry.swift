@@ -102,7 +102,7 @@ struct ScreenPort {
     /// sends the machine's `Left`, which is the autosave flush).
     var departed: () -> Void = {}
 
-    /// A kit `ScreenBridge` subclass — `NotesBridge`, `PeopleHomeBridge`, and
+    /// A kit `ScreenBridge` subclass — `PeopleHomeBridge`, and
     /// every port's bridge.
     static func of<S: AnyObject, E: AnyObject>(_ id: String, _ bridge: ScreenBridge<S, E>) -> ScreenPort {
         ScreenPort(

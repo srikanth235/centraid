@@ -521,6 +521,7 @@ impl Home {
             notebook_menu_title: words::notebook_menu(locale),
             cancel: words::cancel(locale),
             close: words::close(locale),
+            new_note: words::new_note(locale),
         }
     }
 

@@ -25,6 +25,9 @@ import dev.centraid.android.kit.TrashScreen
 import dev.centraid.android.screens.AgendaHomeScreen
 import dev.centraid.android.screens.AppRoutes
 import dev.centraid.android.screens.RouteNav
+import dev.centraid.android.screens.notes.NotesEditorScreen
+import dev.centraid.android.screens.notes.NotesHistoryScreen
+import dev.centraid.android.screens.notes.NotesHomeScreen
 import dev.centraid.core.CentraidCore
 import dev.centraid.core.Screens
 import dev.centraid.shared.nav.AgendaEntry
@@ -79,7 +82,7 @@ internal class AgendaRoutes(private val phone: AndroidPhoneFollow) : AppRoutes {
     private class Opened(val entry: Destination.RustScreen, val instance: Long)
 
     override fun handles(destination: Destination): Boolean =
-        destination is Destination.RustScreen && destination.route.screen.startsWith(SCREEN_PREFIX)
+        destination is Destination.RustScreen && SCREEN_PREFIXES.any { destination.route.screen.startsWith(it) }
 
     // ENTERING AGENDA FROM HOME: its home route, on today (`AgendaEntry`, which the shell lane removes).
     override fun opens(moveId: String): Destination? = if (moveId == AppIds.AGENDA) {
@@ -148,7 +151,7 @@ internal class AgendaRoutes(private val phone: AndroidPhoneFollow) : AppRoutes {
     private suspend fun reconcile(runtime: Screens, stack: NavStack) {
         val wanted = stack.entries
             .filterIsInstance<Destination.RustScreen>()
-            .filter { it.route.screen.startsWith(SCREEN_PREFIX) }
+            .filter { entry -> SCREEN_PREFIXES.any { entry.route.screen.startsWith(it) } }
         var kept = 0
         while (kept < opened.size && kept < wanted.size && opened[kept].entry === wanted[kept]) kept++
         if (opened.size > kept) {
@@ -183,6 +186,9 @@ internal class AgendaRoutes(private val phone: AndroidPhoneFollow) : AppRoutes {
         val detail = view.todo_detail
         val catchUp = view.todo_catch_up
         val trash = view.trash
+        val notesHome = view.notes_home
+        val notesEditor = view.notes_editor
+        val notesHistory = view.notes_history
 
         // THE SCREEN IS DONE (a cancel committed, the editor saved or left, the task deleted): its page goes.
         val done = event?.dismissed == true || editor?.dismissed == true || detail?.finished == true
@@ -233,6 +239,24 @@ internal class AgendaRoutes(private val phone: AndroidPhoneFollow) : AppRoutes {
                 onOpen = open,
                 onBack = back,
             )
+            notesHome != null -> NotesHomeScreen(
+                state = notesHome,
+                onEvent = { send(ScreenEvent(notes_home = it)) },
+                onOpen = open,
+                onHome = { nav.home() },
+            )
+            // CLOSE = DONE: the pop; Rust flushes the autosave when it sees the page leave.
+            notesEditor != null -> NotesEditorScreen(
+                state = notesEditor,
+                onEvent = { send(ScreenEvent(notes_editor = it)) },
+                onOpen = open,
+                onClose = back,
+            )
+            notesHistory != null -> NotesHistoryScreen(
+                state = notesHistory,
+                onEvent = { send(ScreenEvent(notes_history = it)) },
+                onBack = back,
+            )
             trash != null -> TrashScreen(
                 view = trash,
                 onEvent = { send(ScreenEvent(trash = it)) },
@@ -242,9 +266,13 @@ internal class AgendaRoutes(private val phone: AndroidPhoneFollow) : AppRoutes {
     }
 
     private companion object {
-        /** Rust's tab for Agenda's pages, and the prefix every one of its screens' names carries. */
+        /**
+         * Rust's one tab for the pages this host draws, and the prefixes their screen names carry:
+         * Agenda's and Notes' (#1135). Every Rust-owned app's pages ride this stack until the shell
+         * lane replaces the KMP one.
+         */
         const val TAB = "agenda"
-        const val SCREEN_PREFIX = "agenda."
+        val SCREEN_PREFIXES = listOf("agenda.", "notes.")
     }
 }
 

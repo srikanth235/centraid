@@ -509,7 +509,7 @@ private struct TileCard: View {
     /// blank cover would be worse than a tap that stays put.
     ///
     /// Notes leads to the Notes place once its shelf is drawn, and to a new
-    /// note on an empty vault (`NotesRouting.tile`).
+    /// note on an empty vault (`NotesEntry.tile`).
     static func route(for tile: Centraid_Screen_V1_HomeTile) -> ShellModel.Route? {
         // Photos is the one app still routed by its own case; every other
         // app's tile route is its `AppScreens.tileRoute` (K5).

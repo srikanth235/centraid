@@ -102,6 +102,8 @@ message NotesHomeChrome {
   string notebook_menu_title = 15;
   string cancel = 16;
   string close = 17;
+  // The header's one action in the Notes place.
+  string new_note = 18;
 }
 
 message NotesChip {
