@@ -29,7 +29,7 @@ use crate::Registry;
 
 pub mod access;
 pub mod editor;
-mod generator;
+pub mod generator;
 mod handoff;
 pub mod home;
 pub mod item;

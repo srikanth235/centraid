@@ -40,11 +40,18 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
 
 /// A factory whose generator draws from `entropy`; tests inject a fixed stream.
 #[must_use]
-pub(crate) fn build_with(
+pub fn build_with(
     entropy: impl Fn() -> super::generator::Entropy + Send + Sync + 'static,
 ) -> impl Fn(&wire::Route) -> Option<Box<dyn Screen>> + Send + Sync + 'static {
-    move |_| {
-        Some(Box::new(Home::new(wire::LockerDestination::Items, entropy())) as Box<dyn Screen>)
+    move |route| {
+        let destination = match &route.args {
+            Some(wire::route::Args::LockerHome(args)) => {
+                wire::LockerDestination::try_from(args.destination)
+                    .unwrap_or(wire::LockerDestination::Items)
+            }
+            _ => return None,
+        };
+        Some(Box::new(Home::new(destination, entropy())) as Box<dyn Screen>)
     }
 }
 

@@ -27,11 +27,11 @@ const SYMBOLS: &str = "!#$%&*+-=?@^_~";
 const PIN_DIGITS: &str = "0123456789";
 
 /// Where randomness comes from. A test injects a fixed stream.
-pub(crate) type Entropy = Box<dyn Fn(usize) -> Vec<u8> + Send>;
+pub type Entropy = Box<dyn Fn(usize) -> Vec<u8> + Send>;
 
 /// The operating system's CSPRNG.
 #[must_use]
-pub(crate) fn system_entropy() -> Entropy {
+pub fn system_entropy() -> Entropy {
     Box::new(|count| {
         use rand::TryRngCore as _;
         let mut bytes = vec![0_u8; count];
