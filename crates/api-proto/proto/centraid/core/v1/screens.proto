@@ -29,6 +29,7 @@ package centraid.core.v1;
 
 import "centraid/core/v1/agenda_screens.proto";
 import "centraid/core/v1/kit_screens.proto";
+import "centraid/core/v1/money_screens.proto";
 import "centraid/core/v1/route.proto";
 
 // ---------------------------------------------------------------------------
@@ -172,6 +173,16 @@ message ScreenEvent {
     TodoProjectEvent todo_project = 104;
     TodoDetailEvent todo_detail = 105;
     TodoCatchUpEvent todo_catch_up = 106;
+    // ---- money (500-599) ----
+    MoneyHomeEvent money_home = 500;
+    MoneyTransactionEvent money_transaction = 501;
+    MoneyTargetEvent money_target = 502;
+    MoneySearchEvent money_search = 503;
+    MoneyRecurringEvent money_recurring = 504;
+    MoneyAccountsEvent money_accounts = 505;
+    MoneyCategoriesEvent money_categories = 506;
+    MoneyRulesEvent money_rules = 507;
+    MoneyImportEvent money_import = 508;
     // ---- the kit (900-999) ----
     TrashEvent trash = 900;
   }
@@ -209,6 +220,16 @@ message ViewState {
     TodoProjectState todo_project = 104;
     TodoDetailState todo_detail = 105;
     TodoCatchUpState todo_catch_up = 106;
+    // ---- money (500-599) ----
+    MoneyHomeState money_home = 500;
+    MoneyTransactionState money_transaction = 501;
+    MoneyTargetState money_target = 502;
+    MoneySearchState money_search = 503;
+    MoneyRecurringState money_recurring = 504;
+    MoneyAccountsState money_accounts = 505;
+    MoneyCategoriesState money_categories = 506;
+    MoneyRulesState money_rules = 507;
+    MoneyImportState money_import = 508;
     // ---- the kit (900-999) ----
     TrashView trash = 900;
   }
@@ -241,6 +262,7 @@ message Effect {
     ScheduleNotification schedule_notification = 11;
     CalendarRead calendar_read = 12;
     PhoneWatch phone_watch = 13;
+    PickFile pick_file = 14;
   }
 }
 
@@ -336,6 +358,13 @@ message PhoneWatch {
   bool on = 2;
 }
 
+// Ask the member for one file (a bank statement). The shell answers with
+// `FilePicked`, or `EffectFailed` when the member cancelled.
+message PickFile {
+  // File extensions the picker offers, lower case, without the dot.
+  repeated string extensions = 1;
+}
+
 message EffectResult {
   uint64 effect_id = 1;
   oneof outcome {
@@ -346,6 +375,7 @@ message EffectResult {
     KeychainValue keychain = 6;
     CalendarSnapshot calendar = 7;
     PhoneChanged phone_changed = 8;
+    FilePicked file = 9;
   }
 }
 
@@ -356,6 +386,13 @@ message EffectFailed {
   // member reads.
   string reason = 1;
   bool denied = 2;
+}
+
+// The file the member picked, read whole. Rust holds it only as long as the
+// screen that asked, and never stores it.
+message FilePicked {
+  string name = 1;
+  bytes content = 2;
 }
 
 message PhotosPicked {

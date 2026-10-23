@@ -156,31 +156,67 @@ pub fn format_signed(amount: &Amount, locale: &str) -> String {
     }
 }
 
-/// Parse what a member typed (`12.34`, `-5`, `1,234.5`) into minor units at
-/// `exponent`; `None` when it is not an amount or has more places than the
-/// currency keeps.
+/// Parse what a member typed into minor units at `exponent`: digits with at
+/// most `exponent` decimals, a `.` or `,` as the point (the last one is the
+/// point when it leaves no more places than the currency keeps, the others are
+/// grouping), no sign, never a float. `None` when it is not an amount.
 #[must_use]
 pub fn parse(text: &str, exponent: u32) -> Option<i64> {
-    let trimmed = text.trim().replace([',', ' ', '\u{a0}'], "");
-    let (negative, unsigned) = match trimmed.strip_prefix('-') {
-        Some(rest) => (true, rest.to_owned()),
-        None => (false, trimmed.trim_start_matches('+').to_owned()),
+    let cleaned: String = text
+        .trim()
+        .chars()
+        .filter(|c| !matches!(c, ' ' | '\u{a0}'))
+        .collect();
+    if cleaned.is_empty() {
+        return None;
+    }
+    let digits = |s: &str| s.chars().all(|c| c.is_ascii_digit());
+    let point = cleaned.rfind(['.', ',']);
+    let (whole, fraction) = match point {
+        Some(at) if exponent > 0 && cleaned.len() - at - 1 <= exponent as usize => {
+            let whole: String = cleaned[..at]
+                .chars()
+                .filter(|c| !matches!(c, '.' | ','))
+                .collect();
+            (whole, cleaned[at + 1..].to_owned())
+        }
+        Some(_) if exponent == 0 => (
+            cleaned
+                .chars()
+                .filter(|c| !matches!(c, '.' | ','))
+                .collect(),
+            String::new(),
+        ),
+        Some(_) => return None,
+        None => (cleaned, String::new()),
     };
-    let (whole, fraction) = unsigned.split_once('.').unwrap_or((&unsigned, ""));
-    if whole.is_empty() && fraction.is_empty() {
-        return None;
-    }
-    if !whole.chars().all(|c| c.is_ascii_digit()) || !fraction.chars().all(|c| c.is_ascii_digit()) {
-        return None;
-    }
-    if fraction.len() > exponent as usize {
+    if (whole.is_empty() && fraction.is_empty()) || !digits(&whole) || !digits(&fraction) {
         return None;
     }
     let padded = format!("{fraction:0<width$}", width = exponent as usize);
-    let minor: i64 = format!("{}{padded}", if whole.is_empty() { "0" } else { whole })
-        .parse()
-        .ok()?;
-    Some(if negative { -minor } else { minor })
+    let whole = if whole.is_empty() {
+        "0"
+    } else {
+        whole.as_str()
+    };
+    format!("{whole}{padded}").parse().ok()
+}
+
+/// A minor amount as a member types it: `231.40`, `4250` for a currency with no
+/// decimals.
+#[must_use]
+pub fn amount_text(minor: i64, exponent: u32) -> String {
+    if exponent == 0 {
+        return minor.to_string();
+    }
+    let sign = if minor < 0 { "-" } else { "" };
+    let digits = format!(
+        "{:0>width$}",
+        minor.unsigned_abs(),
+        width = exponent as usize + 1
+    );
+    let (whole, fraction) = digits.split_at(digits.len() - exponent as usize);
+    format!("{sign}{whole}.{fraction}")
 }
 
 #[cfg(test)]
@@ -228,12 +264,24 @@ mod tests {
     #[test]
     fn parsing_keeps_the_exponent() {
         assert_eq!(parse("12.34", 2), Some(1234));
-        assert_eq!(parse("-5", 2), Some(-500));
+        assert_eq!(parse("12,34", 2), Some(1234));
         assert_eq!(parse("1,234.5", 2), Some(123_450));
+        assert_eq!(parse("1.234,50", 2), Some(123_450));
         assert_eq!(parse("12.345", 2), None);
         assert_eq!(parse("500", 0), Some(500));
+        assert_eq!(parse("1,500", 0), Some(1500));
+        assert_eq!(parse("-5", 2), None);
         assert_eq!(parse("abc", 2), None);
         assert_eq!(parse("", 2), None);
+        assert_eq!(parse(".5", 2), Some(50));
+    }
+
+    #[test]
+    fn a_stored_amount_is_typed_back_as_it_was() {
+        assert_eq!(amount_text(23_140, 2), "231.40");
+        assert_eq!(amount_text(5, 2), "0.05");
+        assert_eq!(amount_text(4250, 0), "4250");
+        assert_eq!(parse(&amount_text(123_456, 2), 2), Some(123_456));
     }
 
     #[test]
