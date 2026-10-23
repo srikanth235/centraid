@@ -1295,7 +1295,7 @@
       "name": "archive-category",
       "verb": "archive",
       "kind": "category",
-      "inverse": null,
+      "inverse": "unarchive-category",
       "sealed": [],
       "command": "flag.set",
       "phrasings": [
@@ -1304,6 +1304,50 @@
         "archive Subscriptions"
       ],
       "description": "Archive a category: it stays on the lines it holds and cannot be chosen again. Send flag `archived`.",
+      "confirmation": "none",
+      "input": {
+        "additionalProperties": false,
+        "properties": {
+          "flag": {
+            "enum": ["starred", "pinned", "archived"],
+            "type": "string"
+          },
+          "id": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": ["id", "flag"],
+        "type": "object"
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "unarchive-category",
+      "verb": "unarchive",
+      "kind": "category",
+      "inverse": "archive-category",
+      "sealed": [],
+      "command": "flag.clear",
+      "phrasings": [
+        "bring the Pets category back",
+        "unarchive the Gifts category",
+        "restore the Subscriptions category"
+      ],
+      "description": "Bring an archived category back: it can be chosen again. Send flag `archived`.",
       "confirmation": "none",
       "input": {
         "additionalProperties": false,

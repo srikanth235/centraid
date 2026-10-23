@@ -214,6 +214,7 @@
     }
   ],
   "transfers": [{ "a": "to_savings", "b": "from_checking" }],
+  "categories": [{ "key": "pets_fund", "name": "Pets fund" }],
   "rules": [
     { "key": "coffee_rule", "match": "contains", "text": "BLUE BOTTLE", "category": "food.dining" }
   ],

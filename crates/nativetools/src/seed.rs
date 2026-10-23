@@ -29,6 +29,7 @@
 //!                  "name":"Blue Bottle","description":"BLUE BOTTLE #12","category":"food.dining",
 //!                  "void":true}],
 //!   "transfers": [{"a":"out","b":"in"}],
+//!   "categories": [{"key":"pets","name":"Pets fund"}],
 //!   "rules":     [{"key":"coffee_rule","match":"contains","text":"BLUE BOTTLE","category":"food.dining"}],
 //!   "links":     [{"from":"cabin","to":"neha"}]
 //! }
@@ -191,6 +192,7 @@ const SECTIONS: &[&str] = &[
     "accounts",
     "transactions",
     "transfers",
+    "categories",
     "rules",
     "links",
 ];
@@ -602,6 +604,16 @@ pub fn seed_report(world: &Value, path: &Path) -> Result<(Value, Vec<String>), S
             seeder.id(b, Kind::Transaction)?,
         );
         seeder.run("txn.link_transfer", json!({"id": a, "other_id": b}))?;
+    }
+    for row in rows(world, "categories") {
+        seeder.clock_for(row, "created")?;
+        let name = str_of(row, "name").ok_or("a category needs a name")?;
+        let made = seeder.run("category.add", json!({"title": name}))?;
+        let id = made["id"]
+            .as_str()
+            .ok_or("category.add answered no id")?
+            .to_owned();
+        seeder.key(row, Kind::Category, id)?;
     }
     for row in rows(world, "rules") {
         seeder.clock_for(row, "created")?;

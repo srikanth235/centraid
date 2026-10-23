@@ -607,6 +607,26 @@
       "verb": "create"
     },
     {
+      "action": "archive-category",
+      "app": "money",
+      "command": "flag.set",
+      "id_param": "id",
+      "kind": "category",
+      "names": [],
+      "qualifier": null,
+      "verb": "archive"
+    },
+    {
+      "action": "unarchive-category",
+      "app": "money",
+      "command": "flag.clear",
+      "id_param": "id",
+      "kind": "category",
+      "names": [],
+      "qualifier": null,
+      "verb": "unarchive"
+    },
+    {
       "action": "create-note",
       "app": "notes",
       "command": "note.create",
@@ -2567,9 +2587,9 @@
         "also": [],
         "app": "money",
         "bulk": false,
-        "chat": "card",
+        "chat": "direct",
         "command": "flag.set",
-        "inverse": null,
+        "inverse": "unarchive-category",
         "kind": "category",
         "phrasings": [
           "archive the Pets category",
@@ -2579,6 +2599,24 @@
         "qualifier": null,
         "sealed": [],
         "verb": "archive"
+      },
+      {
+        "action": "unarchive-category",
+        "also": [],
+        "app": "money",
+        "bulk": false,
+        "chat": "direct",
+        "command": "flag.clear",
+        "inverse": "archive-category",
+        "kind": "category",
+        "phrasings": [
+          "bring the Pets category back",
+          "unarchive the Gifts category",
+          "restore the Subscriptions category"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "unarchive"
       },
       {
         "action": "create-note",
@@ -5380,7 +5418,7 @@
       ]
     },
     {
-      "card": "category: name, key, group · verbs: create",
+      "card": "category: name, key, group · verbs: create archive unarchive",
       "container": false,
       "date": null,
       "entity": "category",
@@ -5418,7 +5456,9 @@
       "table": "concept",
       "trash": false,
       "verbs": [
-        "create"
+        "create",
+        "archive",
+        "unarchive"
       ],
       "where_fields": [
         "key",
@@ -6216,6 +6256,10 @@
         [
           "account",
           "flag.set"
+        ],
+        [
+          "category",
+          "flag.set"
         ]
       ],
       "done": "archived",
@@ -6232,6 +6276,10 @@
         ],
         [
           "account",
+          "flag.clear"
+        ],
+        [
+          "category",
           "flag.clear"
         ]
       ],

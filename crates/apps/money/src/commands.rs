@@ -94,7 +94,7 @@ use centraid_apps_kit::actions::{act, confirmed};
 /// and a name for a line are the shared verbs (`flag.set`, `flag.clear`,
 /// `entity.retitle`): Money wraps none of them, so two actions may name one command.
 /// Confirmation is asked for what cannot be taken back or touches many rows.
-pub const ACTIONS: [ActionRow; 22] = [
+pub const ACTIONS: [ActionRow; 23] = [
     act("add-account", "account.add"),
     act("edit-account", "account.edit"),
     act("close-account", "flag.set"),
@@ -117,6 +117,7 @@ pub const ACTIONS: [ActionRow; 22] = [
     act("add-category", "category.add"),
     confirmed("merge-category", "category.merge"),
     act("archive-category", "flag.set"),
+    act("unarchive-category", "flag.clear"),
 ];
 
 /// The `act` scopes Money declares, derived from the action table: one per

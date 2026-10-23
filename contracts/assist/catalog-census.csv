@@ -84,7 +84,8 @@ money,delete-rule,delete,rule,card,yes: apps/money/MoneyRules.kt,no
 money,apply-rule-to-history,apply,rule,card,yes: apps/money/MoneyRules.kt,no
 money,add-category,create,category,direct,yes: apps/money/MoneyCategories.kt,no
 money,merge-category,merge,category,card,yes: apps/money/MoneyCategories.kt,no
-money,archive-category,archive,category,card,yes: apps/money/MoneyAccounts.kt; apps/money/MoneyCategories.kt,no
+money,archive-category,archive,category,direct,yes: apps/money/MoneyAccounts.kt; apps/money/MoneyCategories.kt,no
+money,unarchive-category,unarchive,category,direct,yes: apps/money/MoneyCategories.kt,no
 notes,create-note,create,note,direct,yes: apps/notes/NotesEditorMachine.kt,yes
 notes,edit-note,edit,note,direct,yes: apps/notes/NotesEditorMachine.kt,yes
 notes,move-note,add_to,note,direct,yes: apps/notes/NotesLibraryMachine.kt,yes

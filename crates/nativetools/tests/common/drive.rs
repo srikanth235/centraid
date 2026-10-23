@@ -33,7 +33,7 @@ pub fn drive(session: &mut Session, verb: &str, kind: Kind, measure: Measure<'_>
         Kind::Transaction => "To savings",
         Kind::Account => "Everyday",
         Kind::Rule => "BLUE BOTTLE",
-        Kind::Category => "Pets",
+        Kind::Category => "Pets fund",
         Kind::Budget => return None,
     };
     Some(match verb {
@@ -212,7 +212,7 @@ pub fn drive(session: &mut Session, verb: &str, kind: Kind, measure: Measure<'_>
             measure(session, json!({"verb": "unlink", "rows": row}))
         }
         "archive" | "unarchive" => {
-            let row_name = if kind == Kind::Account {
+            let row_name = if matches!(kind, Kind::Account | Kind::Category) {
                 subject
             } else {
                 "Bank"
