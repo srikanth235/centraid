@@ -36,6 +36,9 @@ import dev.centraid.android.screens.docs.DocsVersionsScreen
 import dev.centraid.android.screens.docs.rememberDocsPickers
 import dev.centraid.shared.nav.DocsEntry
 import dev.centraid.android.screens.RouteNav
+import dev.centraid.android.screens.notes.NotesEditorScreen
+import dev.centraid.android.screens.notes.NotesHistoryScreen
+import dev.centraid.android.screens.notes.NotesHomeScreen
 import dev.centraid.core.CentraidCore
 import dev.centraid.core.Screens
 import dev.centraid.shared.nav.AgendaEntry
@@ -205,6 +208,9 @@ internal class AgendaRoutes(private val phone: AndroidPhoneFollow) : AppRoutes {
         val doc = view.docs_document
         val versions = view.docs_versions
         val docEditor = view.docs_editor
+        val notesHome = view.notes_home
+        val notesEditor = view.notes_editor
+        val notesHistory = view.notes_history
 
         // THE SCREEN IS DONE (a cancel committed, the editor saved or left, the task deleted): its page goes.
         val done = event?.dismissed == true || editor?.dismissed == true || detail?.finished == true ||
@@ -283,6 +289,24 @@ internal class AgendaRoutes(private val phone: AndroidPhoneFollow) : AppRoutes {
                 onEvent = { send(ScreenEvent(docs_editor = it)) },
                 onClose = back,
             )
+            notesHome != null -> NotesHomeScreen(
+                state = notesHome,
+                onEvent = { send(ScreenEvent(notes_home = it)) },
+                onOpen = open,
+                onHome = { nav.home() },
+            )
+            // CLOSE = DONE: the pop; Rust flushes the autosave when it sees the page leave.
+            notesEditor != null -> NotesEditorScreen(
+                state = notesEditor,
+                onEvent = { send(ScreenEvent(notes_editor = it)) },
+                onOpen = open,
+                onClose = back,
+            )
+            notesHistory != null -> NotesHistoryScreen(
+                state = notesHistory,
+                onEvent = { send(ScreenEvent(notes_history = it)) },
+                onBack = back,
+            )
             trash != null -> TrashScreen(
                 view = trash,
                 onEvent = { send(ScreenEvent(trash = it)) },
@@ -317,9 +341,13 @@ internal class AgendaRoutes(private val phone: AndroidPhoneFollow) : AppRoutes {
     }
 
     private companion object {
-        /** Rust's tab for Agenda's and Docs' pages, and the prefixes their screens' names carry. */
+        /**
+         * Rust's one tab for the pages this host draws, and the prefixes their screen names carry:
+         * Agenda's, Docs' and Notes' (#1135). Every Rust-owned app's pages ride this stack until the
+         * shell lane replaces the KMP one.
+         */
         const val TAB = "agenda"
-        val PREFIXES = listOf("agenda.", "docs.")
+        val PREFIXES = listOf("agenda.", "docs.", "notes.")
     }
 }
 

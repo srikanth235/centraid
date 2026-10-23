@@ -30,6 +30,7 @@ package centraid.core.v1;
 import "centraid/core/v1/agenda_screens.proto";
 import "centraid/core/v1/docs_screens.proto";
 import "centraid/core/v1/kit_screens.proto";
+import "centraid/core/v1/notes_screens.proto";
 import "centraid/core/v1/route.proto";
 
 // ---------------------------------------------------------------------------
@@ -178,6 +179,10 @@ message ScreenEvent {
     DocsDocumentEvent docs_document = 201;
     DocsEditorEvent docs_editor = 202;
     DocsVersionsEvent docs_versions = 203;
+    // ---- notes (600-699) ----
+    NotesHomeEvent notes_home = 600;
+    NotesEditorEvent notes_editor = 601;
+    NotesHistoryEvent notes_history = 602;
     // ---- the kit (900-999) ----
     TrashEvent trash = 900;
   }
@@ -220,6 +225,10 @@ message ViewState {
     DocsDocumentState docs_document = 201;
     DocsEditorState docs_editor = 202;
     DocsVersionsState docs_versions = 203;
+    // ---- notes (600-699) ----
+    NotesHomeState notes_home = 600;
+    NotesEditorState notes_editor = 601;
+    NotesHistoryState notes_history = 602;
     // ---- the kit (900-999) ----
     TrashView trash = 900;
   }

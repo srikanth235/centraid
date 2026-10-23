@@ -11,8 +11,8 @@ import java.io.File
  *
  * ## The defect this is a gate against
  *
- * `NotesEditorMachine.SAVE_COMMAND` was `"knowledge.save_note"` and **there is
- * no such command.** The registry has `create_note`, `edit_note`, `move_note`,
+ * Notes' save command was `"knowledge.save_note"` and **there is no such
+ * command.** The registry has `create_note`, `edit_note`, `move_note`,
  * `delete_note`, `restore_note` and the notebook verbs. `Vault::execute`
  * answered `UnknownCommand`, `crates/core` mapped that to
  * `ERROR_CODE_INVALID_REQUEST`, and a member on a real device read *"That
@@ -124,7 +124,7 @@ class ShellCommandsExistSpec : StringSpec({
             .toSet()
         val registered = registeredCommands(repositoryRoot)
         listOf(
-            "note.edit", // a `const val SAVE_COMMAND`
+            "person.edit", // a `const val EDIT_COMMAND`
             "locker.add_item", // a bare `const val COMMAND`
             "entity.purge", // an argument to a trash spec
             "locker.edit_item", // an `if` branch
@@ -350,8 +350,8 @@ private fun unknownIds(
 /**
  * THE `ScreenIds` CONSTANTS SOME SCREEN IS BOUND TO. `nav/ScreenIds.kt` states
  * the ids cross-app routes open screens by, and each machine aliases its own
- * (`SCREEN_ID = ScreenIds.NOTES_EDITOR`) or `ScreenOpenings` opens it
- * (`screen(ScreenIds.NOTES_TRASH, …)`); a constant no binding reads is NOT
+ * (`SCREEN_ID = ScreenIds.PEOPLE_HOME`) or `ScreenOpenings` opens it
+ * (`screen(ScreenIds.PEOPLE_TRASH, …)`); a constant no binding reads is NOT
  * exempt, so a command parked in that file is still a finding.
  */
 private fun registeredScreenIds(sources: List<Pair<String, String>>): Set<String> =

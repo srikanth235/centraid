@@ -85,23 +85,23 @@ money,apply-rule-to-history,apply,rule,card,yes: apps/money/MoneyRules.kt,no
 money,add-category,create,category,card,yes: apps/money/MoneyCategories.kt,no
 money,merge-category,merge,category,card,yes: apps/money/MoneyCategories.kt,no
 money,archive-category,archive,category,card,yes: apps/money/MoneyAccounts.kt; apps/money/MoneyCategories.kt,no
-notes,create-note,create,note,direct,yes: apps/notes/NotesEditorMachine.kt,yes
-notes,edit-note,edit,note,direct,yes: apps/notes/NotesEditorMachine.kt,yes
-notes,move-note,add_to,note,direct,yes: apps/notes/NotesLibraryMachine.kt,yes
-notes,create-notebook,create,notebook,direct,yes: apps/notes/NotesNotebooks.kt,yes
-notes,rename-notebook,edit,notebook,direct,no,yes
-notes,delete-notebook,delete,notebook,direct,yes: apps/notes/NotesLibraryMachine.kt,yes
-notes,delete-note,delete,note,direct,yes: apps/notes/NotesLibraryMachine.kt,yes
-notes,restore-note,restore,note,direct,yes: apps/notes/NotesTrash.kt,yes
-notes,restore-note-version,restore,note,card,yes: apps/notes/NotesHistory.kt,no
-notes,flag-note,star,note,direct,yes: apps/notes/NotesTables.kt,yes
-notes,unflag-note,unstar,note,direct,yes: apps/notes/NotesTables.kt,no
+notes,create-note,create,note,direct,yes: crates/screens/src/notes/editor.rs,yes
+notes,edit-note,edit,note,direct,yes: crates/screens/src/notes/editor.rs,yes
+notes,move-note,add_to,note,direct,yes: crates/screens/src/notes/home/mod.rs,yes
+notes,create-notebook,create,notebook,direct,yes: crates/screens/src/notes/home/mod.rs,yes
+notes,rename-notebook,edit,notebook,direct,yes: crates/screens/src/notes/home/mod.rs,yes
+notes,delete-notebook,delete,notebook,direct,yes: crates/screens/src/notes/home/mod.rs,yes
+notes,delete-note,delete,note,direct,yes: crates/screens/src/notes/home/mod.rs,yes
+notes,restore-note,restore,note,direct,yes: crates/screens/src/notes/trash.rs,yes
+notes,restore-note-version,restore,note,card,yes: crates/screens/src/notes/history.rs,no
+notes,flag-note,star,note,direct,yes: crates/screens/src/notes/home/mod.rs; crates/screens/src/notes/editor.rs,yes
+notes,unflag-note,unstar,note,direct,yes: crates/screens/src/notes/home/mod.rs; crates/screens/src/notes/editor.rs,no
 notes,link,link,note,card,no,no
 notes,send-to-tasks,create,task,card,yes: crates/screens/src/agenda/todo/ops.rs,yes
 notes,attach,attach,note,card,no,no
 notes,detach,detach,note,card,no,no
-notes,add-tag,tag,note,direct,no,no
-notes,remove-tag,untag,note,direct,no,no
+notes,add-tag,tag,note,direct,yes: crates/screens/src/notes/editor.rs,no
+notes,remove-tag,untag,note,direct,yes: crates/screens/src/notes/editor.rs,no
 people,add-person,create,person,direct,yes: apps/people/PeopleEditorMachine.kt,yes
 people,edit-person,edit,person,direct,yes: apps/people/PeopleEditorMachine.kt,yes
 people,set-cadence,edit:cadence,person,direct,yes: apps/people/PeopleEditorMachine.kt,yes

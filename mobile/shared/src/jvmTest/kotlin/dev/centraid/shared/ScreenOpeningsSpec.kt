@@ -7,8 +7,6 @@ import centraid.screen.v1.PhotoShelf
 import dev.centraid.shared.apps.health.HealthHomeMachine
 import dev.centraid.shared.apps.money.MoneyHomeMachine
 import dev.centraid.shared.apps.money.MoneyTransactionMachine
-import dev.centraid.shared.apps.notes.NotesEditorMachine
-import dev.centraid.shared.apps.notes.NotesLibraryMachine
 import dev.centraid.shared.apps.people.PeopleHomeMachine
 import dev.centraid.shared.apps.people.PeoplePersonMachine
 import dev.centraid.shared.apps.photos.PhotoLightboxMachine
@@ -37,11 +35,14 @@ class ScreenOpeningsSpec : StringSpec({
         RowRef(app, entity, id, title, qualifier)
 
     "every row the table names opens the screen its machine owns, on the event that screen opens by" {
+        // Notes' pages are Rust's (#1135): the opening is the Rust screen id and the encoded route.
         val note = RowRoutes.route(row("notes", "note", "n1"))!!
-        note.screenId shouldBe NotesEditorMachine.SCREEN_ID
+        note.screenId shouldBe ScreenIds.RUST_SCREEN
+        Route.ADAPTER.decode(note.event).notes_editor!!.note_id shouldBe "n1"
 
         val notebook = RowRoutes.route(row("notes", "notebook", "nb", "Cabin"))!!
-        notebook.screenId shouldBe NotesLibraryMachine.SCREEN_ID
+        notebook.screenId shouldBe ScreenIds.RUST_SCREEN
+        Route.ADAPTER.decode(notebook.event).notes_home!!.notebook_id shouldBe "nb"
 
         // DOCS' SCREENS ARE RUST'S (#1135): a document and a folder open as the Route Rust's registry
         // names, carrying the pushing page's title as their back word.

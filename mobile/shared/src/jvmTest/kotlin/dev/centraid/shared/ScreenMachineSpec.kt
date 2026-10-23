@@ -5,23 +5,18 @@ import centraid.screen.v1.BackupState
 import centraid.screen.v1.HomeEvent
 import centraid.screen.v1.Loading
 import centraid.screen.v1.MediaPermission
-import centraid.screen.v1.NoteDraft
-import centraid.screen.v1.NotesEditorEvent
-import centraid.screen.v1.NotesEditorState
 import centraid.screen.v1.TrashListData
 import centraid.screen.v1.TrashListEvent
 import centraid.screen.v1.TrashRow
-import centraid.screen.v1.WriteSettled
 import centraid.screen.v1.PhotoCell
 import centraid.screen.v1.PhotosGridData
 import centraid.screen.v1.PhotosGridEvent
 import centraid.screen.v1.PhotosGridState
 import centraid.screen.v1.TileCount
 import centraid.screen.v1.TileStatus
-import dev.centraid.shared.apps.notes.NotesEditorMachine
-import dev.centraid.shared.apps.notes.NotesTrashMachine
 import dev.centraid.shared.apps.photos.PhotosGridMachine
 import dev.centraid.shared.kit.TrashMachine
+import dev.centraid.shared.kit.TrashSpec
 import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.ScreenHost
@@ -222,81 +217,6 @@ class ScreenMachineSpec : StringSpec({
         limited.backup.shouldNotBeNull().paused_reason.shouldNotContain("needs access")
     }
 
-    // --- Notes ------------------------------------------------------------
-
-    "notes: an edit marks the draft dirty and writes nothing — it schedules the save" {
-        val step = NotesEditorMachine.reduce(loadedNote(), NotesEditorEvent(
-            body = NotesEditorEvent.BodyEdited("Book the cabin."),
-        ))
-        step.state.save shouldBe NotesEditorState.SaveState.SAVE_STATE_DIRTY
-        step.effects shouldBe listOf(
-            ScreenEffect.Schedule(NotesEditorMachine.SCREEN_ID, "save:1", 900),
-        )
-    }
-
-    "notes: a save submits once, under one key per edit" {
-        val dirty = NotesEditorMachine.reduce(
-            loadedNote(),
-            NotesEditorEvent(body = NotesEditorEvent.BodyEdited("Book the cabin.")),
-        ).state
-        val saving = NotesEditorMachine.reduce(
-            dirty,
-            NotesEditorEvent(save = NotesEditorEvent.SaveRequested()),
-        )
-        saving.state.save shouldBe NotesEditorState.SaveState.SAVE_STATE_SAVING
-        val write = saving.effects.single() as ScreenEffect.SubmitWrite
-        write.command shouldBe NotesEditorMachine.SAVE_COMMAND
-        write.invokeKey shouldBe "note.edit:note-0001:seq=1"
-        // THE BASE REVISION IS NOT AN INPUT: `note.edit`'s schema is
-        // `additionalProperties: false`, and there is no vault-side revision
-        // check — the last save on this phone wins.
-        write.inputJson.contains("base_revision_id").shouldBeFalse()
-        write.inputJson.contains("\"body\":\"Book the cabin.\"").shouldBeTrue()
-        // ONLY WHAT CHANGED: the pin did not, so it is not sent.
-        write.inputJson.contains("pinned").shouldBeFalse()
-
-        // A SECOND SAVE WHILE ONE IS IN FLIGHT IS NOT A SECOND COMMAND.
-        NotesEditorMachine.reduce(
-            saving.state,
-            NotesEditorEvent(save = NotesEditorEvent.SaveRequested()),
-        ).effects.shouldBeEmpty()
-    }
-
-    "notes: a refused SAVE keeps the words; a refused READ does not" {
-        val dirty = NotesEditorMachine.reduce(
-            loadedNote(),
-            NotesEditorEvent(body = NotesEditorEvent.BodyEdited("Book the cabin.")),
-        ).state
-        val saving = NotesEditorMachine.reduce(dirty, NotesEditorEvent(save = NotesEditorEvent.SaveRequested()))
-        val key = (saving.effects.single() as ScreenEffect.SubmitWrite).invokeKey
-        val refusedSave = NotesEditorMachine.reduce(
-            saving.state,
-            NotesEditorEvent(
-                write_settled = WriteSettled(
-                    invoke_key = key,
-                    committed = false,
-                    failure = Reads.unavailable("Can't reach your backup device."),
-                ),
-            ),
-        ).state
-        refusedSave.draft.shouldNotBeNull().body shouldBe "Book the cabin."
-        refusedSave.failure.shouldBeNull()
-        refusedSave.save shouldBe NotesEditorState.SaveState.SAVE_STATE_REFUSED
-        refusedSave.draft.save_failure.shouldNotBeNull()
-
-        val refusedRead = NotesEditorMachine.reduce(
-            dirty,
-            NotesEditorEvent(refused = NotesEditorEvent.ReadRefused(Reads.refused("no"))),
-        ).state
-        refusedRead.draft.shouldBeNull()
-        refusedRead.failure.shouldNotBeNull()
-    }
-
-    "notes: the save input escapes what JSON has to escape" {
-        val quoted = NotesEditorMachine.jsonString("a \"quote\"\nand a \\ and a \u0001")
-        quoted shouldBe "\"a \\\"quote\\\"\\nand a \\\\ and a \\u0001\""
-    }
-
     // --- The host ---------------------------------------------------------
 
     "the host publishes a finished state before it emits the effect that asked for it" {
@@ -312,9 +232,9 @@ class ScreenMachineSpec : StringSpec({
     }
 
     "the host's revision is monotonic per instance" {
-        val host = ScreenHost(NotesEditorMachine)
-        host.send(NotesEditorEvent(opened = NotesEditorEvent.Opened("note-1")))
-        host.send(NotesEditorEvent(pin = NotesEditorEvent.PinToggled()))
+        val host = ScreenHost(list)
+        host.send(TrashListEvent(opened = TrashListEvent.Opened()))
+        host.send(TrashListEvent(data_ = TrashListEvent.DataArrived(data_ = TrashListData(rows = twoRows()), answered_cursor = "")))
         host.revision shouldBe 2uL
     }
 
@@ -355,28 +275,22 @@ class ScreenMachineSpec : StringSpec({
     }
 }) {
     companion object {
-        /** A paged list: Notes' trash, the kit's machine. */
-        val list: TrashMachine get() = NotesTrashMachine
+        /** A paged list: the kit's trash machine, as every app's trash draws it. */
+        val list: TrashMachine = TrashMachine(
+            TrashSpec(
+                appId = "kit",
+                table = "entity",
+                restoreCommand = "entity.restore",
+                purgeCommand = null,
+                emptyCommand = null,
+                idColumn = "id",
+                titleColumn = "title",
+                purgeWindowDays = 30,
+            ),
+        )
 
         fun row(id: String): TrashRow = TrashRow(id = id, title = id)
 
         fun twoRows(): List<TrashRow> = listOf(row("t-0001"), row("t-0002"))
-
-        fun loadedNote(): NotesEditorState = NotesEditorMachine.reduce(
-            NotesEditorMachine.reduce(
-                NotesEditorMachine.initial(),
-                NotesEditorEvent(opened = NotesEditorEvent.Opened("note-0001")),
-            ).state,
-            NotesEditorEvent(
-                data_ = NotesEditorEvent.DataArrived(
-                    NoteDraft(
-                        title = "Winter plans",
-                        body = "",
-                        format = NoteDraft.Format.FORMAT_MARKDOWN,
-                        base_revision_id = "rev-0007",
-                    ),
-                ),
-            ),
-        ).state
     }
 }
