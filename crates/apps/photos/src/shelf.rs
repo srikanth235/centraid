@@ -312,7 +312,7 @@ fn members(door: &dyn PageDoor, shelf: &Shelf, standing: &Standing) -> KitResult
             door.page(
                 &PageQuery::new(
                     "photos.shelf.members",
-                    "id, taken_at",
+                    "id, blob, taken_at",
                     "photo",
                     PageOrder::asc("blob", "id"),
                 )

@@ -113,6 +113,17 @@ impl PageDoor for TestDoor<'_> {
         // The grammar first, so a statement this door would happily run and the
         // real door would refuse never passes a test.
         let shape = grammar::parse(query)?;
+        // The vault's own door refuses a projection that lacks an order column, because
+        // the cursor is read off the row by those two columns; so does this one.
+        let projected: Vec<&str> = query.select.split(',').map(str::trim).collect();
+        for column in [&query.order.sort_column, &query.order.pk_column] {
+            if !projected.iter().any(|held| held == column) {
+                return Err(KitError::CursorColumnMissing {
+                    query: query.name.clone(),
+                    column: column.clone(),
+                });
+            }
+        }
         // Then the one check only a door with the schema in reach can make: a
         // CONTINUED page must order by a NOT NULL column, or it silently drops
         // rows (see `KitError::NullableSortKey`). The first page of a nullable
@@ -400,6 +411,24 @@ mod tests {
         let first = door.page(&dated, &PageRequest::first(2)).unwrap();
         let continued = door.page(&dated, &PageRequest::after(2, first.next.unwrap()));
         assert!(matches!(continued, Err(KitError::NullableSortKey { .. })));
+    }
+
+    /// A projection that lacks an order column is refused, as the vault's door
+    /// refuses it: the cursor is read off the row by those two columns.
+    #[test]
+    fn a_projection_without_its_order_column_is_refused() {
+        let connection = ledger();
+        let door = TestDoor::new(&connection);
+        let query = PageQuery::new(
+            "kit.testdoor.unprojected",
+            "expense_id",
+            "sample_entry",
+            PageOrder::asc("spent_on", "expense_id"),
+        );
+        assert!(matches!(
+            door.page(&query, &PageRequest::first(2)),
+            Err(KitError::CursorColumnMissing { ref column, .. }) if column == "spent_on"
+        ));
     }
 
     #[test]
