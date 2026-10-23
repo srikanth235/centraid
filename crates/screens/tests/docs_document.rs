@@ -109,7 +109,7 @@ fn the_reader_draws_the_text_with_the_facts_the_path_and_the_activity() {
 #[test]
 fn a_document_over_bytes_this_device_does_not_hold_says_why() {
     let mut d = driver();
-    let id = pdf(&mut d, "Lease.pdf", 'e');
+    let id = pdf(&d, "Lease.pdf", 'e');
     let i = open(&mut d, &id, "Lease.pdf", "Docs");
     let data = document_data(d.view(i));
     let Some(wire::docs_document_data::Surface::Stage(stage)) = &data.surface else {
@@ -416,7 +416,7 @@ fn closing_the_editor_saves_what_is_unsaved_and_a_refused_save_keeps_the_words()
     d.pump(Duration::from_millis(1300));
     let state = editor_state(d.view(i));
     assert_eq!(state.status_label, "A document needs a name.");
-    assert_eq!(state.autosave.as_ref().unwrap().refused, true);
+    assert!(state.autosave.as_ref().unwrap().refused);
     assert_eq!(document(&d, &id).document.unwrap().title, "Letter");
     editor_send(
         &mut d,
@@ -551,7 +551,7 @@ fn the_trash_destroys_on_photos_path_delete_forever_and_empty_trash_each_behind_
     assert_eq!(confirm.title, "Delete this forever?");
     assert!(confirm.destructive);
     trash_send(&mut d, i, T::Confirmed(te::Confirmed {}));
-    assert_eq!(trash_ids(d.view(i)), [b.clone()]);
+    assert_eq!(trash_ids(d.view(i)), std::slice::from_ref(&b));
     assert!(document(&d, &a).document.is_none());
     // Empty trash.
     trash_send(&mut d, i, T::Empty(te::EmptyTapped {}));
