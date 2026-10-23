@@ -344,7 +344,7 @@ pub fn read_window(door: &dyn PageDoor, query: &PageQuery, rows: usize) -> KitRe
 /// the walk silently drops them. A statement that EXCLUDES the NULLs (`taken_at IS
 /// NOT NULL` in its own predicate) has no NULL to drop, so its continuation is
 /// exact when it is spelled as a predicate on the first page:
-/// `(sort < ? OR (sort = ? AND pk < ?))` (`>` when ascending). The door then sees
+/// `(sort, pk) < (?, ?)` (`>` when ascending). The door then sees
 /// a first page every time. The rows with a NULL key are the caller's second walk,
 /// keyed on the primary key alone.
 ///
@@ -367,9 +367,9 @@ pub fn page_by_predicate(
         descending,
     } = &query.order;
     let comparison = if *descending { "<" } else { ">" };
-    let clause = format!(
-        "({sort_column} {comparison} ? OR ({sort_column} = ? AND {pk_column} {comparison} ?))"
-    );
+    // A ROW VALUE, as the door's own keyset: SQLite turns it into one range seek on
+    // an index over (sort, pk), where the disjunction plans as two seeks and a sort.
+    let clause = format!("({sort_column}, {pk_column}) {comparison} (?, ?)");
     let mut next = query.clone();
     next.r#where = Some(
         match query.r#where.as_deref().filter(|own| !own.is_empty()) {
@@ -377,7 +377,6 @@ pub fn page_by_predicate(
             None => clause,
         },
     );
-    next.bind.push(PageBindValue::Text(cursor.sort_key.clone()));
     next.bind.push(PageBindValue::Text(cursor.sort_key.clone()));
     next.bind.push(PageBindValue::Text(cursor.pk.clone()));
     door.page(&next, &PageRequest::first(limit))

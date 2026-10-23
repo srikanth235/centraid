@@ -112,7 +112,7 @@ fn read_of(
     let order = match (table, column) {
         ("edge", "from_id") => ("from_id", "to_id"),
         ("edge", "to_id") => ("to_id", "from_id"),
-        ("photo", "burst") => ("blob", "id"),
+        ("photo", "burst") => ("burst", "id"),
         _ => (column, column),
     };
     Read {

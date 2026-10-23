@@ -690,6 +690,7 @@ pub struct SearchData {
 /// A reached bound, as [`load_library`].
 pub fn load_search_term(
     door: &dyn PageDoor,
+    standing: &Standing,
     search: &dyn centraid_search::Search,
     principal: &centraid_search::Principal,
     term: &str,
@@ -721,7 +722,7 @@ pub fn load_search_term(
     if ids.is_empty() {
         return Ok((SearchData::default(), None));
     }
-    let standing = Standing::read(door)?;
+    let _ = door;
     Ok((
         SearchData {
             photo_ids: ids.into_iter().filter(|id| standing.is_live(id)).collect(),

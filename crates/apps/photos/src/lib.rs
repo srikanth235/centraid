@@ -1,4 +1,4 @@
-//! # Photos — a manifest, three queries, pure folds, nineteen actions
+//! # Photos — a manifest, seven queries, one verdict on what is live, twenty-one actions
 //!
 //! Its doctrine, from the manifest's own description (`manifest.json`):
 //!
@@ -52,7 +52,7 @@ pub mod search;
 pub mod shelf;
 
 pub use commands::{ACTIONS, Commands, Invocation, Outcome};
-pub use duplicates::{DuplicateCluster, Fingerprint, duplicate_clusters};
+pub use duplicates::{DuplicateCluster, Fingerprint, duplicate_cluster_count, duplicate_clusters};
 pub use manifest::{APP_ID, manifest};
 pub use places::{PlacePhrase, PlacePhraseSource, PlaceRow, place_phrase};
 pub use queries::{LibraryData, LibraryInput, SearchData, load_library, load_search_term};

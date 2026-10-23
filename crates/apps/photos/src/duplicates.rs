@@ -165,6 +165,24 @@ pub fn fingerprints(door: &dyn PageDoor, standing: &Standing) -> KitResult<Vec<F
         .collect())
 }
 
+/// How many clusters of look-alikes there are: the groups of two or more among the
+/// live photographs' fingerprints. A count, so no member is read.
+///
+/// # Errors
+/// The door's refusal, or a walk past its bound.
+pub fn duplicate_cluster_count(
+    door: &dyn PageDoor,
+    cluster: impl Fn(&[Fingerprint]) -> BTreeMap<String, String>,
+) -> KitResult<usize> {
+    let standing = Standing::read(door)?;
+    let cluster_of = cluster(&fingerprints(door, &standing)?);
+    let mut sizes: BTreeMap<&str, usize> = BTreeMap::new();
+    for key in cluster_of.values() {
+        *sizes.entry(key.as_str()).or_default() += 1;
+    }
+    Ok(sizes.values().filter(|size| **size >= 2).count())
+}
+
 /// Read and fold `duplicates`: `cluster` maps each fingerprinted photograph that is
 /// in a group of two or more to its cluster id (`centraid_media::duplicates::cluster`).
 pub fn duplicate_clusters(

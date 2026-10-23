@@ -139,8 +139,8 @@ pub fn load_photo(door: &dyn PageDoor, id: &str, now_ms: i64) -> KitResult<Optio
     let edits = Read {
         name: "photos.detail.edits",
         table: "photo",
-        select: "id, edited_from, blob",
-        order: ("blob", "id"),
+        select: "id, edited_from",
+        order: ("edited_from", "id"),
         column: "edited_from",
     }
     .of(door, &ids, None)?

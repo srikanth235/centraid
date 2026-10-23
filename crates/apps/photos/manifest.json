@@ -335,9 +335,9 @@
       "phrasings": [
         "heart the beach photo",
         "favorite this picture",
-        "archive the blurry photo"
+        "star the sunset photo"
       ],
-      "description": "Heart a photograph (starred) or put it in the archive (archived) through flag.set — one `tagged` edge to the flag; an archived photograph is in neither the library nor the trash.",
+      "description": "Heart a photograph through flag.set — one `tagged` edge to the starred flag. The archive is its own action, archive-photo.",
       "confirmation": "none",
       "input": {
         "type": "object",
@@ -348,7 +348,7 @@
           },
           "flag": {
             "type": "string",
-            "enum": ["starred", "archived"]
+            "enum": ["starred"]
           }
         },
         "required": ["id", "flag"],
@@ -379,9 +379,9 @@
       "phrasings": [
         "unheart the beach photo",
         "remove the favorite from this picture",
-        "bring the blurry photo back from the archive"
+        "unstar the sunset photo"
       ],
-      "description": "Take a photograph's heart or its archive flag away through flag.clear.",
+      "description": "Take a photograph's heart away through flag.clear.",
       "confirmation": "none",
       "input": {
         "type": "object",
@@ -392,7 +392,95 @@
           },
           "flag": {
             "type": "string",
-            "enum": ["starred", "archived"]
+            "enum": ["starred"]
+          }
+        },
+        "required": ["id", "flag"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "archive-photo",
+      "verb": "archive",
+      "kind": "photo",
+      "inverse": "unarchive-photo",
+      "sealed": [],
+      "command": "flag.set",
+      "phrasings": [
+        "archive the blurry photo",
+        "put this picture away from my library",
+        "archive the duplicate screenshot"
+      ],
+      "description": "Put a photograph in the archive through flag.set — out of the library and the lists, kept forever. Not the trash: no purge date is set and nothing expires. Trash wins: an archived photograph can still be deleted, and it is then in the trash only. An album that holds it still shows it.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "flag": {
+            "type": "string",
+            "enum": ["archived"]
+          }
+        },
+        "required": ["id", "flag"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "unarchive-photo",
+      "verb": "unarchive",
+      "kind": "photo",
+      "inverse": "archive-photo",
+      "sealed": [],
+      "command": "flag.clear",
+      "phrasings": [
+        "bring the blurry photo back from the archive",
+        "unarchive this picture",
+        "take the duplicate screenshot out of the archive"
+      ],
+      "description": "Bring an archived photograph back into the library through flag.clear.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "flag": {
+            "type": "string",
+            "enum": ["archived"]
           }
         },
         "required": ["id", "flag"],
@@ -1089,13 +1177,18 @@
     {
       "name": "search",
       "kind": "photo",
-      "figures": ["matches"],
-      "description": "Caption and place search over the whole live library through the vault's one search index (the caption, the place's name and its locality) — not just the loaded window; returns the ranked photograph ids a grid reads, leaving out the archive.",
+      "figures": ["matches", "top_hits", "total"],
+      "description": "Search the whole live library: the vault's one search index (the caption, the place's name and its locality, the text recognised in the picture) plus the places a word names, `no location` for the photographs that have none, and the labels a word names — all folded into one answer. `photos` are the index's ranked photograph ids; `cells` are every live photograph any leg reaches, newest taken first then the undated, at most `limit` of them, with `total` the exact number; `top_hits` are the places (three at most, then the no-location bucket) and albums (three at most) the words name, each with the size of the shelf it opens; `labels` are the labels the words name that are on a live photograph. The archive and an edited photograph's original are left out. An empty `term` answers the resting suggestions instead: the places that hold a live photograph and the labels on one. `correct` allows a typo to be corrected when nothing was found as typed.",
       "input": {
         "type": "object",
         "properties": {
           "term": {
             "type": "string"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 500
           },
           "correct": {
             "type": "integer",
@@ -1111,6 +1204,33 @@
           "photos": {
             "type": "array"
           },
+          "albums": {
+            "type": "array"
+          },
+          "corrected": {
+            "type": "string"
+          },
+          "cells": {
+            "type": "array"
+          },
+          "total": {
+            "type": "integer"
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "top_hits": {
+            "type": "array"
+          },
+          "labels": {
+            "type": "array"
+          },
+          "resting_places": {
+            "type": "array"
+          },
+          "resting_labels": {
+            "type": "array"
+          },
           "vaultDenied": {
             "type": "object"
           }
@@ -1120,8 +1240,8 @@
     {
       "name": "duplicates",
       "kind": "photo",
-      "figures": ["clusters"],
-      "description": "Near-duplicate clusters over the live library: groups the photographs whose perceptual hashes (a derivative of each blob) lie within a few bits of one another, recomputed at read — a true visual-similarity signal, not a coincidence-prone fingerprint, and nothing stored.",
+      "figures": ["clusters", "members"],
+      "description": "Near-duplicate clusters over the live library: groups the photographs whose perceptual hashes (a derivative of each blob) lie within a few bits of one another, recomputed at read — a true visual-similarity signal, not a coincidence-prone fingerprint, and nothing stored. Each cluster lists its members as cells (pixel box, size, form, capture time, heart, the albums that hold it, held thumbnail path) so a review can show which copy to keep and which are placed in an album or hearted. The archive, the trash and an edited photograph's original are never members.",
       "input": {
         "type": "object",
         "additionalProperties": false
@@ -1131,6 +1251,180 @@
         "properties": {
           "clusters": {
             "type": "array"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "name": "shelf",
+      "kind": "photo",
+      "figures": ["cells", "total"],
+      "description": "One page of one photo shelf, newest taken first and then the photographs with no capture time. `view` is `live` (the library: not in the trash, not archived, and an edited photograph's original folded under its edit), `favorites`, `videos`, `archive` (archived and not in the trash), `trash` (every deleted photograph, archived or not, newest deleted first, each with its days until purge), `album` (its members that are not in the trash, an archived one included; needs `id`), `place` (needs `id`) or `unplaced` (no location yet). A cell carries what a grid draws: the bytes' hash, form, capture time and offset, pixel box, duration, caption, heart, the albums that hold it, the held thumbnail path and whether the original is on this device, and its Live Photo pairing. `total` is the shelf's exact size and comes with the first page only; pass `next` back as `after` for the next page.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "view": {
+            "type": "string",
+            "enum": [
+              "live",
+              "favorites",
+              "videos",
+              "archive",
+              "trash",
+              "album",
+              "place",
+              "unplaced"
+            ]
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The album's or the place's id; required for those two views."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200
+          },
+          "after": {
+            "type": "string",
+            "description": "The previous page's `next`, as `<sort key>\u001f<id>`."
+          }
+        },
+        "required": ["view", "limit"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "cells": {
+            "type": "array"
+          },
+          "next": {
+            "type": "object"
+          },
+          "total": {
+            "type": ["integer", "null"]
+          },
+          "album": {
+            "type": ["object", "null"]
+          },
+          "place": {
+            "type": ["object", "null"]
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "name": "photo",
+      "kind": "photo",
+      "figures": ["photo"],
+      "description": "Everything one photograph's screens show: its cell (bytes' hash, form, capture time, pixel box, duration, caption, heart, archive flag, size, held thumbnail path, Live Photo pairing), whether it is in the trash and when it purges, the albums that hold it by name, its labels, its place and how to say where it is (a name, `near <city>`, a bearing from the nearest named place — never coordinates), the photographs made from it, and what it was edited from. Answers nothing for an id that is no photograph.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "photo": {
+            "type": ["object", "null"]
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "name": "albums",
+      "kind": "album",
+      "figures": [
+        "albums",
+        "photos",
+        "favorites",
+        "videos",
+        "archive",
+        "trash",
+        "places",
+        "unplaced"
+      ],
+      "description": "The collections overview: every album with its exact count (members not in the trash) and cover, the albums in the trash waiting for a restore, and the standing shelves — the library, favorites, videos, archive and trash — each with its exact count and its newest photograph, plus how many places hold a live photograph and how many live photographs have no location. Every count is the size of the shelf it opens, so `photos` is the number of photographs in the library (an edit and the photograph it was made from count once).",
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "albums": {
+            "type": "array"
+          },
+          "trashed_albums": {
+            "type": "array"
+          },
+          "live": {
+            "type": "object"
+          },
+          "favorites": {
+            "type": "object"
+          },
+          "videos": {
+            "type": "object"
+          },
+          "archive": {
+            "type": "object"
+          },
+          "trash": {
+            "type": "object"
+          },
+          "places": {
+            "type": "integer"
+          },
+          "unplaced": {
+            "type": "integer"
+          },
+          "duplicate_clusters": {
+            "type": "integer"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "name": "places",
+      "kind": "place",
+      "figures": ["places", "unplaced"],
+      "description": "Every place that is not in the trash with the number of live photographs in it, its newest live photograph and how to say where it is (its name, `near <city>`, a bearing from the nearest named place — never coordinates), the places with photographs first; plus the number of live photographs with no location yet. A place with no live photograph is still listed, so it can be chosen.",
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "places": {
+            "type": "array"
+          },
+          "unplaced": {
+            "type": "integer"
           },
           "vaultDenied": {
             "type": "object"

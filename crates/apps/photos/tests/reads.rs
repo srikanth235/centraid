@@ -178,8 +178,11 @@ fn search_finds_a_caption_or_a_place_and_leaves_out_the_archive() {
             .read(|connection| {
                 let index = centraid_search::SqliteDoor::open(connection, w.vault.words())
                     .expect("the index opens");
+                let door = TestDoor::new(connection);
+                let standing = centraid_apps_kit::rules::Standing::read(&door).expect("standing");
                 Ok(load_search_term(
-                    &TestDoor::new(connection),
+                    &door,
+                    &standing,
                     &index,
                     &centraid_search::Principal::Owner,
                     term,

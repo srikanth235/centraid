@@ -93,6 +93,10 @@ fn covers(query: &Q) -> &'static str {
         Q::PhotosSearch(_) => "photos.search",
         Q::PhotosDuplicates(_) => "photos.duplicates",
         Q::PhotosLibrary(_) => "photos.library",
+        Q::PhotosShelf(_) => "photos.shelf",
+        Q::PhotosPhoto(_) => "photos.photo",
+        Q::PhotosAlbums(_) => "photos.albums",
+        Q::PhotosPlaces(_) => "photos.places",
         Q::MoneySpending(_) => "money.spending",
         Q::MoneyActivity(_) => "money.activity",
         Q::MoneyTransaction(_) => "money.transaction",
@@ -260,6 +264,19 @@ fn requests(word: &str) -> Vec<Q> {
             limit: 40,
             before: "2025-03-01T00:00:00Z".to_owned(),
         }),
+        Q::PhotosAlbums(wire::PhotosAlbumsRequest {}),
+        Q::PhotosPlaces(wire::PhotosPlacesRequest {}),
+        Q::PhotosPhoto(wire::PhotosPhotoRequest { id: some("photo") }),
+        Q::PhotosSearch(wire::PhotosSearchRequest {
+            term: String::new(),
+            limit: 50,
+            correct: false,
+        }),
+        Q::PhotosSearch(wire::PhotosSearchRequest {
+            term: "no location".to_owned(),
+            limit: 50,
+            correct: false,
+        }),
         Q::MoneySpending(wire::MoneySpendingRequest {
             tz: tz(),
             month: "2025-06".to_owned(),
@@ -313,6 +330,36 @@ fn requests(word: &str) -> Vec<Q> {
         }),
         Q::HealthFollowView(wire::HealthFollowViewRequest { tz: tz() }),
     ];
+    for view in [
+        wire::PhotosShelfView::Live,
+        wire::PhotosShelfView::Favorites,
+        wire::PhotosShelfView::Videos,
+        wire::PhotosShelfView::Archive,
+        wire::PhotosShelfView::Trash,
+        wire::PhotosShelfView::Album,
+        wire::PhotosShelfView::Place,
+        wire::PhotosShelfView::Unplaced,
+    ] {
+        // The first page, and one continued past a dated cursor and into the tail.
+        for after in [
+            None,
+            Some(wire::PhotosCursor {
+                sort_key: "2025-03-01T00:00:00.000Z".to_owned(),
+                id: some("photo"),
+            }),
+            Some(wire::PhotosCursor {
+                sort_key: String::new(),
+                id: some("photo"),
+            }),
+        ] {
+            asked.push(Q::PhotosShelf(wire::PhotosShelfRequest {
+                view: view as i32,
+                id: some("album"),
+                limit: 60,
+                after,
+            }));
+        }
+    }
     for view in [
         wire::TasksView::Today,
         wire::TasksView::Upcoming,
@@ -807,11 +854,11 @@ fn ask(handle: &centraid_core::Handle, query: Q) -> Result<(), String> {
 }
 
 /// Every wire query has an entry in [`requests`]: the names it asks are the names
-/// [`covers`] knows. The wire has 57 queries (`app_query.proto`'s `oneof query`);
+/// [`covers`] knows. The wire has 61 queries (`app_query.proto`'s `oneof query`);
 /// a new one is a compile error in [`covers`], and this count says it was also
 /// asked.
 #[test]
 fn the_sweep_asks_every_query_the_wire_has() {
     let asked: BTreeSet<&str> = requests("word").iter().map(covers).collect();
-    assert_eq!(asked.len(), 57, "{asked:?}");
+    assert_eq!(asked.len(), 61, "{asked:?}");
 }

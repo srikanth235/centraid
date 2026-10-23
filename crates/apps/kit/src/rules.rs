@@ -310,13 +310,14 @@ fn ids_of(rows: &[Row]) -> BTreeSet<String> {
 /// # Errors
 /// The door's refusal, or a walk past [`LIBRARY_WALK`].
 pub fn grouped_photos(door: &dyn PageDoor) -> KitResult<Vec<Grouped>> {
-    Ok(read_pages(
+    // Walked by `burst`, the column `photo_by_burst` indexes, so the read streams.
+    Ok(read_pages_by_predicate(
         door,
         &PageQuery::new(
             "kit.rules.photos.grouped",
-            "id, blob, form, burst, edited_from",
+            "id, form, burst, edited_from",
             "photo",
-            PageOrder::asc("blob", "id"),
+            PageOrder::asc("burst", "id"),
         )
         .filter("burst IS NOT NULL", Vec::new()),
         LIBRARY_WALK,

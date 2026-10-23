@@ -138,7 +138,10 @@ fn favorites_videos_place_and_unplaced_are_the_library_under_a_predicate() {
     assert_eq!(ids(&place), [l.new.as_str(), l.old.as_str()]);
     assert_eq!(place.total, Some(2));
     assert_eq!(
-        place.place.as_ref().map(|place| place.place_id.as_str()),
+        place
+            .place
+            .as_ref()
+            .map(|card| card.place.place_id.as_str()),
         Some(l.place_a.as_str())
     );
     let paris = shelf(&l.w, Shelf::Place(l.place_b.clone()), 50, None);

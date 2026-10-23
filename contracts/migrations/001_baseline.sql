@@ -467,6 +467,7 @@ CREATE TABLE photo (
 CREATE INDEX photo_by_taken       ON photo(taken_at, id);
 CREATE INDEX photo_by_place       ON photo(place_id) WHERE place_id IS NOT NULL;
 CREATE INDEX photo_by_edited_from ON photo(edited_from) WHERE edited_from IS NOT NULL;
+CREATE INDEX photo_by_burst       ON photo(burst) WHERE burst IS NOT NULL;
 
 CREATE TABLE account (
   id            TEXT PRIMARY KEY,

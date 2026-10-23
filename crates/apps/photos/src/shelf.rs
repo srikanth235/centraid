@@ -13,7 +13,7 @@
 //! | `archive` | archived and not trashed |
 //! | `trash` | every trashed photograph, archived or not; newest trashed first |
 //! | `album` | every member that is not trashed (an archived member is drawn: archiving puts a photograph away from the timeline, not out of a list the member curated) |
-//! | `place` | live and in the place |
+//! | `place` | live and in the place (read by the index on `place_id` and ordered here) |
 //! | `unplaced` | live and in no place |
 //!
 //! ## The order, and the walk over a nullable key (D-1020-P11)
@@ -38,13 +38,13 @@ use std::collections::BTreeMap;
 
 use centraid_apps_kit::error::KitResult;
 use centraid_apps_kit::page::{MAX_PAGE_ROWS, PageCursor};
-use centraid_apps_kit::reads::{PageDoor, page_by_predicate, read_pages};
+use centraid_apps_kit::reads::{PageDoor, page_by_predicate, read_pages, read_pages_by_predicate};
 use centraid_apps_kit::row::{Row, text_of};
 use centraid_apps_kit::rules::{LIBRARY_WALK, STARRED_FLAG, Standing, photo_ids};
 use centraid_apps_kit::statement::{PageBindValue, PageOrder, PageQuery};
 
 use crate::cells::{CHUNK, PhotoCell, read_cells};
-use crate::places::PlaceRow;
+use crate::places::{NamedPlace, PlaceCard, describe, read_places};
 
 /// The most cells one page of a shelf carries.
 pub const SHELF_MAX: usize = 200;
@@ -120,8 +120,10 @@ pub struct ShelfData {
     pub total: Option<usize>,
     /// The album, for an `album` shelf (`None` when no such album exists).
     pub album: Option<AlbumHead>,
-    /// The place, for a `place` shelf (`None` when no such place exists).
-    pub place: Option<PlaceRow>,
+    /// For a `place` shelf: the place and how to say where it is (its `count` is
+    /// the shelf's total on the first page and `0` after), absent when there is no
+    /// such place.
+    pub place: Option<PlaceCard>,
 }
 
 fn text(value: &str) -> PageBindValue {
@@ -134,7 +136,6 @@ type Candidate = (String, String);
 fn photo_filter(shelf: &Shelf) -> (String, Vec<PageBindValue>) {
     match shelf {
         Shelf::Videos => ("form = ?".to_owned(), vec![text("video")]),
-        Shelf::Place(id) => ("place_id = ?".to_owned(), vec![text(id)]),
         Shelf::Unplaced => ("place_id IS NULL".to_owned(), Vec::new()),
         _ => (String::new(), Vec::new()),
     }
@@ -290,6 +291,21 @@ fn members(door: &dyn PageDoor, shelf: &Shelf, standing: &Standing) -> KitResult
         _ => Vec::new(),
     };
     let mut rows: Vec<Row> = Vec::new();
+    if let Shelf::Place(place) = shelf {
+        // A place's photographs, by the index on `place_id`; the capture order is
+        // this function's, because no index serves a place and a capture time.
+        rows = read_pages_by_predicate(
+            door,
+            &PageQuery::new(
+                "photos.shelf.in_place",
+                "id, taken_at, place_id",
+                "photo",
+                PageOrder::asc("place_id", "id"),
+            )
+            .filter("place_id = ?", vec![text(place)]),
+            LIBRARY_WALK,
+        )?;
+    }
     for chunk in ids.chunks(CHUNK) {
         let fragment = centraid_apps_kit::reads::in_list("id", chunk)?;
         rows.extend(
@@ -413,7 +429,7 @@ pub fn shelf_page(
     let shelf = &input.shelf;
     let by_edge = matches!(
         shelf,
-        Shelf::Favorites | Shelf::Archive | Shelf::Trash | Shelf::Album(_)
+        Shelf::Favorites | Shelf::Archive | Shelf::Trash | Shelf::Album(_) | Shelf::Place(_)
     );
     let (page, more, total) = if by_edge {
         let all = members(door, shelf, standing)?;
@@ -444,12 +460,26 @@ pub fn shelf_page(
     };
     let (album, place) = match shelf {
         Shelf::Album(id) => (album_head(door, id, now_ms)?, None),
-        Shelf::Place(id) => (
-            None,
-            crate::places::read_places(door)?
-                .into_iter()
-                .find(|place| place.place_id == *id),
-        ),
+        Shelf::Place(id) => {
+            let places = read_places(door)?;
+            let anchors = NamedPlace::anchors(&places);
+            (
+                None,
+                places
+                    .into_iter()
+                    .find(|place| place.place_id == *id)
+                    .map(|place| {
+                        let (name, phrase) = describe(&place, &anchors);
+                        PlaceCard {
+                            place,
+                            name,
+                            phrase,
+                            count: total.unwrap_or(0),
+                            cover: None,
+                        }
+                    }),
+            )
+        }
         _ => (None, None),
     };
     Ok(ShelfData {

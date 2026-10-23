@@ -381,8 +381,8 @@ fn photos_in_places(
     let rows: Vec<Row> = Read {
         name: "photos.search.in_place",
         table: "photo",
-        select: "id, blob, place_id",
-        order: ("blob", "id"),
+        select: "id, place_id",
+        order: ("place_id", "id"),
         column: "place_id",
     }
     .among(LIBRARY_WALK, door, places, None)?;

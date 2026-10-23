@@ -14,7 +14,7 @@
 //! the schema lets be `null` is a `Field` (`Keep` leaves it out, `Clear` sends
 //! `null`, `Is(x)` sends it); any other is an `Option`. A property typed `array`
 //! or `object` travels as its JSON text (the core decodes it by the schema), a
-//! boolean as 0 or 1, and a query's `limit` rides the request's own `limit`.
+//! boolean as 0 or 1, and a query's `limit` and `after` ride the request's own.
 //! `id` is named for what it identifies (`task_id`) unless the action creates
 //! the row (then it is the optional id the phone mints). The core still
 //! validates the input against the schema: a required field left at its default
@@ -149,6 +149,8 @@ struct Param {
     entries: Vec<(String, String)>,
     /// The query's `limit`, which rides the request itself.
     is_limit: bool,
+    /// The query's `after` cursor, which rides the request itself.
+    is_after: bool,
     /// A required property whose schema allows exactly one value (`kind: "section"`):
     /// not a field, always sent.
     fixed: Option<String>,
@@ -235,7 +237,7 @@ fn emit_item(out: &mut String, item: &Value, side: Side) -> Result<()> {
         out,
         "                let mut map = std::collections::HashMap::<String, wire::Value>::new();"
     );
-    for p in params.iter().filter(|p| !p.is_limit) {
+    for p in params.iter().filter(|p| !p.is_limit && !p.is_after) {
         let _ = writeln!(out, "                {}", put(p));
     }
     if side == Side::Act {
@@ -247,9 +249,12 @@ fn emit_item(out: &mut String, item: &Value, side: Side) -> Result<()> {
             .iter()
             .find(|p| p.is_limit)
             .map_or_else(String::new, |p| format!(" limit: self.{},", p.name));
+        let after = params.iter().find(|p| p.is_after).map_or_else(String::new, |p| {
+            format!(" after: self.{}.unwrap_or_default(),", p.name)
+        });
         let _ = writeln!(
             out,
-            "                wire::LoadRequest {{ app: APP.to_owned(), query: Self::NAME.to_owned(),{limit} params: map, ..Default::default() }}"
+            "                wire::LoadRequest {{ app: APP.to_owned(), query: Self::NAME.to_owned(),{limit}{after} params: map, ..Default::default() }}"
         );
     }
     out.push_str("            }\n        }\n");
@@ -313,6 +318,7 @@ fn param(
         snake(wire)
     };
     let is_limit = side == Side::Load && wire == "limit";
+    let is_after = side == Side::Load && wire == "after";
     let fixed = (entries.len() == 1 && required.contains(&wire)).then(|| entries[0].1.clone());
     Param {
         fixed,
@@ -324,6 +330,7 @@ fn param(
         nullable,
         entries,
         is_limit,
+        is_after,
     }
 }
 
