@@ -18,13 +18,6 @@ pub enum Field<T> {
     Is(T),
 }
 
-/// The JSON null: a required value that is deliberately nothing.
-pub(crate) fn null() -> wire::Value {
-    wire::Value {
-        kind: Some(wire::value::Kind::Null(wire::NullValue {})),
-    }
-}
-
 pub(crate) fn text(value: impl Into<String>) -> wire::Value {
     wire::Value {
         kind: Some(wire::value::Kind::Text(value.into())),
