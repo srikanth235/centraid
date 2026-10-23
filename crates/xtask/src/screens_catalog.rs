@@ -249,9 +249,12 @@ fn emit_item(out: &mut String, item: &Value, side: Side) -> Result<()> {
             .iter()
             .find(|p| p.is_limit)
             .map_or_else(String::new, |p| format!(" limit: self.{},", p.name));
-        let after = params.iter().find(|p| p.is_after).map_or_else(String::new, |p| {
-            format!(" after: self.{}.unwrap_or_default(),", p.name)
-        });
+        let after = params
+            .iter()
+            .find(|p| p.is_after)
+            .map_or_else(String::new, |p| {
+                format!(" after: self.{}.unwrap_or_default(),", p.name)
+            });
         let _ = writeln!(
             out,
             "                wire::LoadRequest {{ app: APP.to_owned(), query: Self::NAME.to_owned(),{limit}{after} params: map, ..Default::default() }}"
