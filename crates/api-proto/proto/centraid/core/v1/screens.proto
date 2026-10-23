@@ -29,6 +29,9 @@ package centraid.core.v1;
 
 import "centraid/core/v1/agenda_screens.proto";
 import "centraid/core/v1/kit_screens.proto";
+import "centraid/core/v1/photos_home_screens.proto";
+import "centraid/core/v1/photos_lightbox_screens.proto";
+import "centraid/core/v1/photos_shelf_screens.proto";
 import "centraid/core/v1/route.proto";
 
 // ---------------------------------------------------------------------------
@@ -172,6 +175,15 @@ message ScreenEvent {
     TodoProjectEvent todo_project = 104;
     TodoDetailEvent todo_detail = 105;
     TodoCatchUpEvent todo_catch_up = 106;
+    // ---- photos (800-899) ----
+    PhotosHomeEvent photos_home = 800;
+    PhotosShelfEvent photos_shelf = 801;
+    PhotosPickerEvent photos_picker = 802;
+    PhotosPlacesEvent photos_places = 803;
+    PhotosLightboxEvent photos_lightbox = 804;
+    PhotosEditorEvent photos_editor = 805;
+    PhotosDuplicatesEvent photos_duplicates = 806;
+    PhotosDuplicateReviewEvent photos_duplicate_review = 807;
     // ---- the kit (900-999) ----
     TrashEvent trash = 900;
   }
@@ -209,6 +221,15 @@ message ViewState {
     TodoProjectState todo_project = 104;
     TodoDetailState todo_detail = 105;
     TodoCatchUpState todo_catch_up = 106;
+    // ---- photos (800-899) ----
+    PhotosHomeState photos_home = 800;
+    PhotosShelfState photos_shelf = 801;
+    PhotosPickerState photos_picker = 802;
+    PhotosPlacesState photos_places = 803;
+    PhotosLightboxState photos_lightbox = 804;
+    PhotosEditorState photos_editor = 805;
+    PhotosDuplicatesState photos_duplicates = 806;
+    PhotosDuplicateReviewState photos_duplicate_review = 807;
     // ---- the kit (900-999) ----
     TrashView trash = 900;
   }

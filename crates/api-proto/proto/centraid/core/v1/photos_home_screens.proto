@@ -1,0 +1,17 @@
+// PHOTOS' HOME (#1135, lane D, worker 1): the library grid, Collections, Search
+// and the More sheet in one screen, `photos.home`. Arms in `screens.proto`: 800.
+//
+// A SKELETON the home worker fills. Add fields; do not renumber the arms. The
+// cell, the selection bar and the album sheet are `photos_screens.proto`'s.
+
+syntax = "proto3";
+
+package centraid.core.v1;
+
+// IMPORTS: add `import "centraid/core/v1/photos_screens.proto";` (the cell, the
+// selection bar, the album sheet), `kit_screens.proto` and `route.proto` when a
+// field first needs one.
+
+message PhotosHomeState {}
+
+message PhotosHomeEvent {}

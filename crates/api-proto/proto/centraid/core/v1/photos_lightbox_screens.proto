@@ -1,0 +1,30 @@
+// PHOTOS' ONE-PHOTOGRAPH SCREENS (#1135, lane D, worker 3): `photos.lightbox`,
+// `photos.editor`, `photos.duplicates` and `photos.duplicate_review`. Arms in
+// `screens.proto`: 804, 805, 806, 807.
+//
+// A SKELETON the lightbox worker fills. Add fields; do not renumber the arms.
+// The cell, the selection bar and the album sheet are `photos_screens.proto`'s.
+
+syntax = "proto3";
+
+package centraid.core.v1;
+
+// IMPORTS: add `import "centraid/core/v1/photos_screens.proto";` (the cell, the
+// selection bar, the album sheet), `kit_screens.proto` and `route.proto` when a
+// field first needs one.
+
+message PhotosLightboxState {}
+
+message PhotosLightboxEvent {}
+
+message PhotosEditorState {}
+
+message PhotosEditorEvent {}
+
+message PhotosDuplicatesState {}
+
+message PhotosDuplicatesEvent {}
+
+message PhotosDuplicateReviewState {}
+
+message PhotosDuplicateReviewEvent {}

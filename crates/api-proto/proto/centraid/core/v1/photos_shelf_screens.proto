@@ -1,0 +1,27 @@
+// PHOTOS' SHELF FAMILY (#1135, lane D, worker 2): `photos.shelf` (favourites,
+// videos, archive, trash, an album, a place, the unplaced), `photos.picker`
+// (adding to an album) and `photos.places`. Arms in `screens.proto`: 801, 802,
+// 803.
+//
+// A SKELETON the shelf worker fills. Add fields; do not renumber the arms. The
+// cell, the selection bar and the album sheet are `photos_screens.proto`'s.
+
+syntax = "proto3";
+
+package centraid.core.v1;
+
+// IMPORTS: add `import "centraid/core/v1/photos_screens.proto";` (the cell, the
+// selection bar, the album sheet), `kit_screens.proto` and `route.proto` when a
+// field first needs one.
+
+message PhotosShelfState {}
+
+message PhotosShelfEvent {}
+
+message PhotosPickerState {}
+
+message PhotosPickerEvent {}
+
+message PhotosPlacesState {}
+
+message PhotosPlacesEvent {}

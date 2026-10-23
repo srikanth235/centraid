@@ -30,6 +30,15 @@ message Route {
     TodoProjectRoute todo_project = 104;
     TodoDetailRoute todo_detail = 105;
     TodoCatchUpRoute todo_catch_up = 106;
+    // ---- photos (800-899) ----
+    PhotosHomeRoute photos_home = 800;
+    PhotosShelfRoute photos_shelf = 801;
+    PhotosPickerRoute photos_picker = 802;
+    PhotosPlacesRoute photos_places = 803;
+    PhotosLightboxRoute photos_lightbox = 804;
+    PhotosEditorRoute photos_editor = 805;
+    PhotosDuplicatesRoute photos_duplicates = 806;
+    PhotosDuplicateReviewRoute photos_duplicate_review = 807;
     // ---- the kit (900-999) ----
     TrashRoute trash = 900;
   }
@@ -114,6 +123,92 @@ message TodoDetailRoute {
 
 // `agenda.catch_up`: the Overdue work, piled.
 message TodoCatchUpRoute {}
+
+// ---------------------------------------------------------------------------
+// Photos
+// ---------------------------------------------------------------------------
+
+// Where `photos.home` lands. Search is a mode the bar under the title opens,
+// never a band place.
+enum PhotosDestination {
+  PHOTOS_DESTINATION_UNSPECIFIED = 0;
+  PHOTOS_DESTINATION_LIBRARY = 1;
+  PHOTOS_DESTINATION_COLLECTIONS = 2;
+  PHOTOS_DESTINATION_SEARCH = 3;
+}
+
+// Which photographs a shelf page holds. The library is Home's, not a shelf.
+enum PhotosShelfKind {
+  PHOTOS_SHELF_KIND_UNSPECIFIED = 0;
+  PHOTOS_SHELF_KIND_FAVORITES = 1;
+  PHOTOS_SHELF_KIND_VIDEOS = 2;
+  PHOTOS_SHELF_KIND_ARCHIVE = 3;
+  PHOTOS_SHELF_KIND_TRASH = 4;
+  // An album's members; `id` names it.
+  PHOTOS_SHELF_KIND_ALBUM = 5;
+  // A place's live photographs; `id` names it.
+  PHOTOS_SHELF_KIND_PLACE = 6;
+  // Live photographs in no place; `id` is empty.
+  PHOTOS_SHELF_KIND_UNPLACED = 7;
+}
+
+// What the picker picks for.
+enum PhotosPickerPurpose {
+  PHOTOS_PICKER_PURPOSE_UNSPECIFIED = 0;
+  // Photographs to put into the album `album_id` names.
+  PHOTOS_PICKER_PURPOSE_ADD_TO_ALBUM = 1;
+}
+
+// `photos.home`: lands on `destination` (the library when unspecified); a
+// non-empty `query` opens Search on those words.
+message PhotosHomeRoute {
+  PhotosDestination destination = 1;
+  optional string query = 2;
+}
+
+// `photos.shelf`: one shelf. `id` names the album or the place; `title` rides
+// along so the head has words before the read lands.
+message PhotosShelfRoute {
+  PhotosShelfKind kind = 1;
+  string id = 2;
+  string title = 3;
+}
+
+// `photos.picker`: adding to an album. The name rides along so the head says
+// "Add to Portugal" before any read has landed.
+message PhotosPickerRoute {
+  PhotosPickerPurpose purpose = 1;
+  string album_id = 2;
+  string album_name = 3;
+}
+
+// `photos.places`: every place, as cards or a map.
+message PhotosPlacesRoute {}
+
+// `photos.lightbox`: one photograph, and what it browses.
+message PhotosLightboxRoute {
+  string photo_id = 1;
+  // The ids a swipe walks, in the order the opening surface drew them; empty
+  // is the one photograph alone.
+  repeated string neighbour_ids = 2;
+  // The album it was opened from, empty elsewhere: "Make key photo" is offered
+  // only here.
+  string album_id = 3;
+}
+
+// `photos.editor`: crop, rotate and straighten one photograph.
+message PhotosEditorRoute {
+  string photo_id = 1;
+}
+
+// `photos.duplicates`: the near-duplicate sets.
+message PhotosDuplicatesRoute {}
+
+// `photos.duplicate_review`: one set, and the decision about its copies.
+message PhotosDuplicateReviewRoute {
+  // The cluster's key (`PhotosDuplicateCluster.key`).
+  string cluster_key = 1;
+}
 
 // ---------------------------------------------------------------------------
 // The kit
