@@ -337,7 +337,13 @@ impl Item {
             .filter(|shown| shown.column == key && shown.code.is_some())
     }
 
-    fn reveal(&mut self, ctx: &Ctx, item: &wire::LockerItem, key: &str, copy: bool) -> Vec<wire::Effect> {
+    fn reveal(
+        &mut self,
+        ctx: &Ctx,
+        item: &wire::LockerItem,
+        key: &str,
+        copy: bool,
+    ) -> Vec<wire::Effect> {
         let locale = ctx.locale();
         let field_id = key.strip_prefix(FIELD).unwrap_or("");
         match shared::reveal(ctx, &item.item_id, key, field_id, copy) {
@@ -456,7 +462,11 @@ impl Item {
                 "unstar-item",
                 act::locker::UnstarItem { locker_item_id: id },
             ),
-            "star" => self.submit(ctx, "star-item", act::locker::StarItem { locker_item_id: id }),
+            "star" => self.submit(
+                ctx,
+                "star-item",
+                act::locker::StarItem { locker_item_id: id },
+            ),
             "archive" if item.archived => self.submit(
                 ctx,
                 "unarchive-item",
@@ -545,8 +555,11 @@ impl Item {
                 }
             }
             Confirming::Passkey => {
-                let settled =
-                    self.submit(ctx, "clear-passkey", act::locker::ClearPasskey { item_id: id });
+                let settled = self.submit(
+                    ctx,
+                    "clear-passkey",
+                    act::locker::ClearPasskey { item_id: id },
+                );
                 if settled.committed {
                     self.status = shared::status(words::passkey_removed(locale));
                 }
@@ -620,8 +633,12 @@ impl Item {
         }
         self.field = Some(FieldSheet {
             editing: field_id.to_owned(),
-            section: existing.map(|field| field.section.clone()).unwrap_or_default(),
-            label: existing.map(|field| field.label.clone()).unwrap_or_default(),
+            section: existing
+                .map(|field| field.section.clone())
+                .unwrap_or_default(),
+            label: existing
+                .map(|field| field.label.clone())
+                .unwrap_or_default(),
             // A SEALED VALUE IS NEVER SHOWN BACK: editing one starts empty.
             value: existing
                 .filter(|field| !field.sealed)
@@ -651,7 +668,9 @@ impl Item {
         else {
             return Vec::new();
         };
-        let value = if sheet.sealed && existing.is_some_and(|field| field.present) && sheet.value.is_empty()
+        let value = if sheet.sealed
+            && existing.is_some_and(|field| field.present)
+            && sheet.value.is_empty()
         {
             PLACEHOLDER.to_owned()
         } else {
@@ -780,7 +799,11 @@ impl Item {
             }
             Some(I::FieldSaved(_)) => self.field_saved(ctx),
             Some(I::FieldRemoved(_)) => {
-                if self.field.as_ref().is_some_and(|sheet| !sheet.editing.is_empty()) {
+                if self
+                    .field
+                    .as_ref()
+                    .is_some_and(|sheet| !sheet.editing.is_empty())
+                {
                     self.confirming = Some(Confirming::Field);
                 }
                 Vec::new()
@@ -824,13 +847,22 @@ impl Item {
         let kind = types::of(&item.r#type);
         let mut chips = Vec::new();
         if item.compromised {
-            chips.push(chip(words::chip_compromised(locale), wire::status_chip::Tone::Net));
+            chips.push(chip(
+                words::chip_compromised(locale),
+                wire::status_chip::Tone::Net,
+            ));
         }
         if item.archived {
-            chips.push(chip(words::chip_archived(locale), wire::status_chip::Tone::Seam));
+            chips.push(chip(
+                words::chip_archived(locale),
+                wire::status_chip::Tone::Seam,
+            ));
         }
         if item.trashed {
-            chips.push(chip(words::chip_trashed(locale), wire::status_chip::Tone::Seam));
+            chips.push(chip(
+                words::chip_trashed(locale),
+                wire::status_chip::Tone::Seam,
+            ));
         }
         let mut sections = vec![wire::LockerSection {
             title: (kind.label)(locale),
@@ -891,17 +923,29 @@ impl Item {
                 action("add_field", words::field_add(locale), false),
                 action(
                     "star",
-                    if item.starred { words::unstar(locale) } else { words::star(locale) },
+                    if item.starred {
+                        words::unstar(locale)
+                    } else {
+                        words::star(locale)
+                    },
                     false,
                 ),
                 action(
                     "archive",
-                    if item.archived { words::unarchive(locale) } else { words::archive(locale) },
+                    if item.archived {
+                        words::unarchive(locale)
+                    } else {
+                        words::archive(locale)
+                    },
                     false,
                 ),
             ];
             if item.passkey.is_some() {
-                actions.push(action("remove_passkey", words::passkey_remove(locale), true));
+                actions.push(action(
+                    "remove_passkey",
+                    words::passkey_remove(locale),
+                    true,
+                ));
             }
             actions.push(action("trash", words::trash(locale), true));
             actions
@@ -961,8 +1005,9 @@ impl Item {
                         self.sealed_row(locale, column, types::label(locale, column), &[])
                     }),
                     Some(_) => None,
-                    None => plain_value(item, column).filter(|value| !value.is_empty()).map(
-                        |value| {
+                    None => plain_value(item, column)
+                        .filter(|value| !value.is_empty())
+                        .map(|value| {
                             plain_row(
                                 column,
                                 types::label(locale, column),
@@ -973,8 +1018,7 @@ impl Item {
                                     copy_only(locale)
                                 },
                             )
-                        },
-                    ),
+                        }),
                 }
             })
             .collect()
@@ -1189,13 +1233,15 @@ impl Item {
     }
 
     fn passkey_sheet(&self, locale: Locale) -> Option<wire::LockerMemoSheet> {
-        self.passkey_name.as_ref().map(|text| wire::LockerMemoSheet {
-            title: words::passkey_rename_title(locale),
-            text: text.clone(),
-            hint: words::passkey_rename_hint(locale),
-            save_label: words::save(locale),
-            cancel_label: words::cancel(locale),
-        })
+        self.passkey_name
+            .as_ref()
+            .map(|text| wire::LockerMemoSheet {
+                title: words::passkey_rename_title(locale),
+                text: text.clone(),
+                hint: words::passkey_rename_hint(locale),
+                save_label: words::save(locale),
+                cancel_label: words::cancel(locale),
+            })
     }
 
     fn field_sheet(&self, locale: Locale) -> Option<wire::LockerFieldSheet> {
@@ -1204,7 +1250,11 @@ impl Item {
         let present = !new
             && self
                 .item()
-                .and_then(|item| item.fields.iter().find(|field| field.field_id == sheet.editing))
+                .and_then(|item| {
+                    item.fields
+                        .iter()
+                        .find(|field| field.field_id == sheet.editing)
+                })
                 .is_some_and(|field| field.present);
         let label = sheet.label.trim();
         Some(wire::LockerFieldSheet {
@@ -1219,7 +1269,11 @@ impl Item {
             label_label: words::field_label(locale),
             label: sheet.label.clone(),
             label_hint: words::field_label_hint(locale),
-            kind_label: if new { words::kind(locale) } else { String::new() },
+            kind_label: if new {
+                words::kind(locale)
+            } else {
+                String::new()
+            },
             kinds: if new {
                 vec![
                     choice("text", words::field_kind_text(locale), !sheet.sealed),
@@ -1245,7 +1299,11 @@ impl Item {
             },
             save_label: words::field_save(locale),
             cancel_label: words::cancel(locale),
-            remove_label: if new { String::new() } else { words::field_remove(locale) },
+            remove_label: if new {
+                String::new()
+            } else {
+                words::field_remove(locale)
+            },
             can_save: !label.is_empty(),
             blocked: if label.is_empty() {
                 words::field_label_missing(locale)
@@ -1343,9 +1401,24 @@ fn details(locale: Locale, item: &wire::LockerItem) -> Vec<wire::LockerFieldRow>
             value: item.alias.clone(),
             ..wire::LockerFieldRow::default()
         }),
-        day_row(locale, "password_set", words::password_set(locale), &item.password_set_local_day),
-        day_row(locale, "created", words::created(locale), &item.created_local_day),
-        day_row(locale, "updated", words::updated(locale), &item.updated_local_day),
+        day_row(
+            locale,
+            "password_set",
+            words::password_set(locale),
+            &item.password_set_local_day,
+        ),
+        day_row(
+            locale,
+            "created",
+            words::created(locale),
+            &item.created_local_day,
+        ),
+        day_row(
+            locale,
+            "updated",
+            words::updated(locale),
+            &item.updated_local_day,
+        ),
     ]
     .into_iter()
     .flatten()
@@ -1411,7 +1484,11 @@ fn passkey_section(
             words::passkey_no_key(locale)
         },
         note: words::passkey_note(locale),
-        accessibility_label: format!("{}, {}", words::passkey_key(locale), words::passkey_note(locale)),
+        accessibility_label: format!(
+            "{}, {}",
+            words::passkey_key(locale),
+            words::passkey_note(locale)
+        ),
         ..wire::LockerFieldRow::default()
     });
     wire::LockerSection {
@@ -1540,7 +1617,9 @@ impl Screen for Item {
             Some(E::TimerFired(fired)) if fired.timer == TICK => self.tick(ctx),
             Some(E::TimerFired(fired)) => {
                 let effects = self.secrets.fired(&fired.timer);
-                if self.shown.as_ref().is_some_and(|shown| self.secrets.value(&shown.column).is_none() && shown.code.is_none()) {
+                if self.shown.as_ref().is_some_and(|shown| {
+                    self.secrets.value(&shown.column).is_none() && shown.code.is_none()
+                }) {
                     self.shown = None;
                 }
                 effects
@@ -1564,14 +1643,16 @@ impl Screen for Item {
         let open = self.wall.is_open();
         let item = self.item();
         let content = open.then(|| match &self.loaded {
-            Phase::Loading => wire::locker_item_state::Content::Loading(wire::Loading {
-                first_load: true,
-            }),
+            Phase::Loading => {
+                wire::locker_item_state::Content::Loading(wire::Loading { first_load: true })
+            }
             Phase::Failed => wire::locker_item_state::Content::Failure(read::failure(locale)),
             Phase::Denied(denial) => {
                 wire::locker_item_state::Content::Denied(shared::denied(locale, denial))
             }
-            Phase::Ready(loaded) => wire::locker_item_state::Content::Data(Box::new(self.data(locale, loaded))),
+            Phase::Ready(loaded) => {
+                wire::locker_item_state::Content::Data(Box::new(self.data(locale, loaded)))
+            }
         });
         let status = self.status.clone().map(|mut status| {
             if status.action_label.is_empty() || self.undo.is_some() {

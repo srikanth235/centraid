@@ -72,10 +72,7 @@ pub fn registry() -> Registry {
 pub fn runtime() -> crate::Runtime {
     crate::Runtime::new(
         registry(),
-        vec![(
-            TAB.to_owned(),
-            routes::home(wire::LockerDestination::Items),
-        )],
+        vec![(TAB.to_owned(), routes::home(wire::LockerDestination::Items))],
     )
 }
 

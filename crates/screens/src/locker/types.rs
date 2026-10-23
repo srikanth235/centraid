@@ -71,10 +71,7 @@ pub static TYPES: [TypeInfo; 15] = [
 /// core degrades it the same way, so the id is normally known).
 #[must_use]
 pub fn of(id: &str) -> &'static TypeInfo {
-    TYPES
-        .iter()
-        .find(|info| info.id == id)
-        .unwrap_or(&TYPES[2])
+    TYPES.iter().find(|info| info.id == id).unwrap_or(&TYPES[2])
 }
 
 /// The six a phone creates, in picker order.

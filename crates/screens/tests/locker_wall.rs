@@ -49,9 +49,10 @@ fn the_os_saying_yes_opens_the_locker_only_through_the_core() {
         Some(wire::locker_home_state::Content::Data(_))
     ));
     let out = effects_of(&d, 0);
-    assert!(out.iter().any(
-        |k| matches!(k, wire::effect::Kind::Announce(a) if a.topic == "locker.unlocked")
-    ));
+    assert!(
+        out.iter()
+            .any(|k| matches!(k, wire::effect::Kind::Announce(a) if a.topic == "locker.unlocked"))
+    );
 }
 
 #[test]
@@ -59,7 +60,10 @@ fn a_core_without_keys_says_so_before_any_prompt() {
     let mut d = Driver::with_runtime(locker::runtime());
     d.start();
     let id = home_instance(&d);
-    assert!(effects_of(&d, 0).is_empty(), "no prompt for a core that would refuse");
+    assert!(
+        effects_of(&d, 0).is_empty(),
+        "no prompt for a core that would refuse"
+    );
     let wall = wall_of(&d, id).unwrap();
     assert_eq!(wall.phase, wire::locker_wall::Phase::Unavailable as i32);
     assert_eq!(wall.title, "Locker needs your recovery key");
@@ -106,7 +110,10 @@ fn leaving_the_foreground_relocks_at_once_and_returning_does_not_prompt() {
     assert!(effects_of(&d, before).is_empty(), "returning asks nothing");
     assert!(wall_of(&d, id).is_some());
     // The core itself is locked, whether or not a screen heard.
-    let state = session(&d, wire::locker_session_request::Step::State(wire::LockerStateAsk {}));
+    let state = session(
+        &d,
+        wire::locker_session_request::Step::State(wire::LockerStateAsk {}),
+    );
     assert_eq!(state.state, wire::LockerSessionState::Locked as i32);
 }
 
@@ -173,12 +180,20 @@ fn the_band_is_places_then_more_and_search_is_the_bar() {
     let band = home(&d, id).band;
     let keys: Vec<&str> = band.iter().map(|t| t.key.as_str()).collect();
     assert_eq!(keys, ["items", "review", "generate", "more"]);
-    home_event(&mut d, id, H::SearchOpened(wire::locker_home_event::SearchOpened {}));
+    home_event(
+        &mut d,
+        id,
+        H::SearchOpened(wire::locker_home_event::SearchOpened {}),
+    );
     let state = home(&d, id);
     assert_eq!(state.destination, wire::LockerDestination::Search as i32);
     assert!(state.search.unwrap().open);
     assert!(state.band.iter().all(|t| !t.current), "no tab is lit");
-    home_event(&mut d, id, H::SearchClosed(wire::locker_home_event::SearchClosed {}));
+    home_event(
+        &mut d,
+        id,
+        H::SearchClosed(wire::locker_home_event::SearchClosed {}),
+    );
     let state = home(&d, id);
     assert_eq!(state.destination, wire::LockerDestination::Items as i32);
     assert!(!state.search.unwrap().open);
@@ -190,8 +205,14 @@ fn the_band_is_places_then_more_and_search_is_the_bar() {
             key: "more".to_owned(),
         }),
     );
-    assert_eq!(home(&d, id).sheet, wire::locker_home_state::Sheet::More as i32);
-    assert_eq!(home(&d, id).destination, wire::LockerDestination::Items as i32);
+    assert_eq!(
+        home(&d, id).sheet,
+        wire::locker_home_state::Sheet::More as i32
+    );
+    assert_eq!(
+        home(&d, id).destination,
+        wire::LockerDestination::Items as i32
+    );
 }
 
 #[test]
@@ -199,7 +220,11 @@ fn search_finds_by_title_and_never_offers_ask() {
     let mut d = driver();
     login(&d, "i1", "Bank");
     let id = open_home(&mut d);
-    home_event(&mut d, id, H::SearchOpened(wire::locker_home_event::SearchOpened {}));
+    home_event(
+        &mut d,
+        id,
+        H::SearchOpened(wire::locker_home_event::SearchOpened {}),
+    );
     home_event(
         &mut d,
         id,
@@ -252,7 +277,11 @@ fn a_relock_wipes_what_the_home_held() {
     let mut d = driver();
     login(&d, "i1", "Bank");
     let id = open_home(&mut d);
-    home_event(&mut d, id, H::SearchOpened(wire::locker_home_event::SearchOpened {}));
+    home_event(
+        &mut d,
+        id,
+        H::SearchOpened(wire::locker_home_event::SearchOpened {}),
+    );
     home_event(
         &mut d,
         id,
@@ -279,7 +308,10 @@ fn generate_draws_from_the_given_bytes_and_a_relock_drops_the_candidate() {
     let all: Vec<u8> = (0..=255).collect();
     let mut d = Driver::keyed(Runtime::new(
         Registry::default().with(locker::HOME, locker::home::build_with(fixed(all))),
-        vec![("locker".to_owned(), routes::home(wire::LockerDestination::Generate))],
+        vec![(
+            "locker".to_owned(),
+            routes::home(wire::LockerDestination::Generate),
+        )],
     ));
     d.start();
     let id = home_instance(&d);
@@ -296,10 +328,17 @@ fn generate_draws_from_the_given_bytes_and_a_relock_drops_the_candidate() {
     );
     let generator = home_data(&d, id).generator.unwrap();
     assert_eq!(generator.output.chars().count(), 6);
-    assert!(generator.use_label.is_empty(), "a PIN is not put on an item");
+    assert!(
+        generator.use_label.is_empty(),
+        "a PIN is not put on an item"
+    );
     // Copy is a sensitive clip with a deadline.
     let before = d.effects.len();
-    home_event(&mut d, id, H::GeneratorCopy(wire::locker_home_event::GeneratorCopy {}));
+    home_event(
+        &mut d,
+        id,
+        H::GeneratorCopy(wire::locker_home_event::GeneratorCopy {}),
+    );
     assert!(effects_of(&d, before).iter().any(|k| matches!(
         k,
         wire::effect::Kind::ClipboardSet(set) if set.sensitive && set.clear_after_ms == 30_000

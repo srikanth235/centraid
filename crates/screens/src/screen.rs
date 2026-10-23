@@ -103,7 +103,10 @@ impl<'a> Ctx<'a> {
     ///
     /// # Errors
     /// Whatever the session refuses with.
-    pub fn locker(&self, request: &wire::LockerSessionRequest) -> Result<wire::LockerSessionResponse> {
+    pub fn locker(
+        &self,
+        request: &wire::LockerSessionRequest,
+    ) -> Result<wire::LockerSessionResponse> {
         self.core.locker(request)
     }
 

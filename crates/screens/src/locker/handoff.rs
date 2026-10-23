@@ -9,7 +9,8 @@ use std::sync::Mutex;
 static SLOT: Mutex<Option<String>> = Mutex::new(None);
 
 fn slot() -> std::sync::MutexGuard<'static, Option<String>> {
-    SLOT.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+    SLOT.lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 /// Leave `candidate` for the next editor that opens from the generator.
