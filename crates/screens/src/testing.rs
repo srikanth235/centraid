@@ -12,6 +12,7 @@ use centraid_api_proto::core_v1 as wire;
 use centraid_core::{Core, CoreConfig, Handle};
 
 use crate::runtime::Runtime;
+use crate::screen::{Ctx, Environment};
 
 /// A core plus what a shell would have drawn from it.
 pub struct Driver {
@@ -193,6 +194,14 @@ impl Driver {
             Some(wire::response::Kind::Act(response)) => *response,
             other => panic!("an act answered {other:?}"),
         }
+    }
+
+    /// Run `body` with a screen [`Ctx`] over this driver's core and the default
+    /// environment: the door a helper (a screen's shared selection, an album
+    /// sheet) is tested through when no screen carries its events yet.
+    pub fn with_ctx<R>(&self, body: impl FnOnce(&Ctx) -> R) -> R {
+        let environment = Environment::default();
+        body(&Ctx::new(&self.handle, &environment))
     }
 
     /// Answer the oldest pending effect.
