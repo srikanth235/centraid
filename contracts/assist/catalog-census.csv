@@ -132,6 +132,8 @@ photos,edit-photo,edit,photo,card,yes: apps/photos/PhotoWrites.kt,no
 photos,retitle-photo,edit,photo,direct,yes: apps/photos/PhotoWrites.kt,yes
 photos,flag-photo,star,photo,direct,yes: apps/photos/PhotoWrites.kt,yes
 photos,unflag-photo,unstar,photo,direct,yes: apps/photos/PhotoWrites.kt,yes
+photos,archive-photo,archive,photo,direct,yes: apps/photos/PhotoWrites.kt,yes
+photos,unarchive-photo,unarchive,photo,direct,yes: apps/photos/PhotoWrites.kt,yes
 photos,delete-photo,delete,photo,direct,yes: apps/photos/PhotoWrites.kt,yes
 photos,restore-photo,restore,photo,direct,yes: apps/photos/PhotoWrites.kt,yes
 photos,purge-photo,purge,photo,card,yes: apps/photos/PhotoWrites.kt,no

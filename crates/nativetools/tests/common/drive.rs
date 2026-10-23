@@ -191,7 +191,7 @@ pub fn drive(session: &mut Session, verb: &str, kind: Kind, measure: Measure<'_>
                 json!({"verb": verb, "rows": found[0], "args": args}),
             )
         }
-        // THE CATALOG'S OWN VERBS: a label on a row, and the archive flag of a Locker item
+        // THE CATALOG'S OWN VERBS: a label on a row, and the archive flag of a Locker item or a photograph
         "tag" | "untag" => {
             let row = number(session, name, subject);
             measure(
@@ -200,7 +200,7 @@ pub fn drive(session: &mut Session, verb: &str, kind: Kind, measure: Measure<'_>
             )
         }
         "archive" | "unarchive" => {
-            let row = number(session, name, "Bank");
+            let row = number(session, name, subject);
             measure(session, json!({"verb": verb, "rows": row}))
         }
         "log" => {

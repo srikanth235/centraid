@@ -3,7 +3,7 @@ event: name, date (start), status (confirmed|tentative|cancelled), duration (min
 task: name, date (due), status (open|completed|cancelled), effort (min), priority (9 highest..1 lowest, 0 none), completed (date), description · links: subtasks, people, list · verbs: create edit reschedule complete reopen cancel delete restore add_to remove_from tag untag
 note: name, date (created), body, pinned (yes|no), starred (yes|no) · links: notebook, people · verbs: create edit delete restore star unstar add_to remove_from tag untag
 document: name, date (created), starred (yes|no) · links: folder · verbs: create edit delete restore star unstar add_to remove_from tag untag
-photo: name, date (taken), starred (yes|no) · links: albums · verbs: edit delete restore star unstar add_to remove_from tag untag
+photo: name, date (taken), starred (yes|no) · links: albums · verbs: edit delete restore star unstar add_to remove_from tag untag archive unarchive
 album: name · links: photos · verbs: create edit delete restore
 locker item: name, type (login|card|note|identity|wifi|password|ssh_key|api_credential|passport|bank_account|driving_licence|software_licence|crypto_wallet|membership|document), username, url, notes, starred (yes|no) · verbs: create edit delete restore star unstar reveal tag untag archive unarchive
 notebook: name · links: notes · verbs: create edit delete

@@ -795,6 +795,26 @@
       "verb": "unstar"
     },
     {
+      "action": "archive-photo",
+      "app": "photos",
+      "command": "flag.set",
+      "id_param": "id",
+      "kind": "photo",
+      "names": [],
+      "qualifier": null,
+      "verb": "archive"
+    },
+    {
+      "action": "unarchive-photo",
+      "app": "photos",
+      "command": "flag.clear",
+      "id_param": "id",
+      "kind": "photo",
+      "names": [],
+      "qualifier": null,
+      "verb": "unarchive"
+    },
+    {
       "action": "delete-photo",
       "app": "photos",
       "command": "entity.trash",
@@ -3317,7 +3337,7 @@
         "phrasings": [
           "heart the beach photo",
           "favorite this picture",
-          "archive the blurry photo"
+          "star the sunset photo"
         ],
         "qualifier": null,
         "sealed": [],
@@ -3335,11 +3355,47 @@
         "phrasings": [
           "unheart the beach photo",
           "remove the favorite from this picture",
-          "bring the blurry photo back from the archive"
+          "unstar the sunset photo"
         ],
         "qualifier": null,
         "sealed": [],
         "verb": "unstar"
+      },
+      {
+        "action": "archive-photo",
+        "also": [],
+        "app": "photos",
+        "bulk": false,
+        "chat": "direct",
+        "command": "flag.set",
+        "inverse": "unarchive-photo",
+        "kind": "photo",
+        "phrasings": [
+          "archive the blurry photo",
+          "put this picture away from my library",
+          "archive the duplicate screenshot"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "archive"
+      },
+      {
+        "action": "unarchive-photo",
+        "also": [],
+        "app": "photos",
+        "bulk": false,
+        "chat": "direct",
+        "command": "flag.clear",
+        "inverse": "archive-photo",
+        "kind": "photo",
+        "phrasings": [
+          "bring the blurry photo back from the archive",
+          "unarchive this picture",
+          "take the duplicate screenshot out of the archive"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "unarchive"
       },
       {
         "action": "delete-photo",
@@ -4081,7 +4137,9 @@
       {
         "app": "photos",
         "figures": [
-          "matches"
+          "matches",
+          "top_hits",
+          "total"
         ],
         "kind": "photo",
         "query": "search"
@@ -4089,10 +4147,52 @@
       {
         "app": "photos",
         "figures": [
-          "clusters"
+          "clusters",
+          "members"
         ],
         "kind": "photo",
         "query": "duplicates"
+      },
+      {
+        "app": "photos",
+        "figures": [
+          "cells",
+          "total"
+        ],
+        "kind": "photo",
+        "query": "shelf"
+      },
+      {
+        "app": "photos",
+        "figures": [
+          "photo"
+        ],
+        "kind": "photo",
+        "query": "photo"
+      },
+      {
+        "app": "photos",
+        "figures": [
+          "albums",
+          "photos",
+          "favorites",
+          "videos",
+          "archive",
+          "trash",
+          "places",
+          "unplaced"
+        ],
+        "kind": "album",
+        "query": "albums"
+      },
+      {
+        "app": "photos",
+        "figures": [
+          "places",
+          "unplaced"
+        ],
+        "kind": "place",
+        "query": "places"
       }
     ]
   },
@@ -5022,7 +5122,7 @@
       ]
     },
     {
-      "card": "photo: name, date (taken), starred (yes|no) · links: albums · verbs: edit delete restore star unstar add_to remove_from tag untag",
+      "card": "photo: name, date (taken), starred (yes|no) · links: albums · verbs: edit delete restore star unstar add_to remove_from tag untag archive unarchive",
       "container": false,
       "date": {
         "label": "taken",
@@ -5070,7 +5170,9 @@
         "add_to",
         "remove_from",
         "tag",
-        "untag"
+        "untag",
+        "archive",
+        "unarchive"
       ],
       "where_fields": [
         "starred"
@@ -6076,6 +6178,10 @@
       "args": "",
       "commands": [
         [
+          "photo",
+          "flag.set"
+        ],
+        [
           "locker_item",
           "flag.set"
         ]
@@ -6088,6 +6194,10 @@
     {
       "args": "",
       "commands": [
+        [
+          "photo",
+          "flag.clear"
+        ],
         [
           "locker_item",
           "flag.clear"
