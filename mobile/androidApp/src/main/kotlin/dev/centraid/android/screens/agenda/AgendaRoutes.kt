@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -12,7 +13,11 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import centraid.core.v1.AgendaDestination
+import centraid.core.v1.LockerWallEvent
 import centraid.core.v1.NavEvent
 import centraid.core.v1.NavPopToRoot
 import centraid.core.v1.NavPopped
@@ -25,11 +30,19 @@ import dev.centraid.android.kit.TrashScreen
 import dev.centraid.android.screens.AgendaHomeScreen
 import dev.centraid.android.screens.AppRoutes
 import dev.centraid.android.screens.RouteNav
+import dev.centraid.android.screens.locker.LockerAccessScreen
+import dev.centraid.android.screens.locker.LockerEditorScreen
+import dev.centraid.android.screens.locker.LockerExportScreen
+import dev.centraid.android.screens.locker.LockerHomeScreen
+import dev.centraid.android.screens.locker.LockerImportScreen
+import dev.centraid.android.screens.locker.LockerItemScreen
+import dev.centraid.android.screens.locker.LockerLockPage
 import dev.centraid.core.CentraidCore
 import dev.centraid.core.Screens
 import dev.centraid.shared.nav.AgendaEntry
 import dev.centraid.shared.nav.AppIds
 import dev.centraid.shared.nav.Destination
+import dev.centraid.shared.nav.LockerEntry
 import dev.centraid.shared.nav.NavStack
 import dev.centraid.shared.shell.HomeSession
 import kotlinx.coroutines.CoroutineScope
@@ -62,7 +75,7 @@ import java.util.TimeZone
  * [PerformScreenEffects], composed from [Global] so a late answer (a calendar
  * read that outlives its page) is still performed.
  */
-internal class AgendaRoutes(private val phone: AndroidPhoneFollow) : AppRoutes {
+internal class AgendaRoutes(private val phone: AndroidPhoneFollow, private val openWords: () -> Unit = {}) : AppRoutes {
     private var session: HomeSession? = null
     private var scope: CoroutineScope? = null
 
@@ -74,18 +87,20 @@ internal class AgendaRoutes(private val phone: AndroidPhoneFollow) : AppRoutes {
     /** Rust's agenda stack above its root, one per KMP entry, in order. Read by composition. */
     private val opened = mutableStateListOf<Opened>()
     private val gate = Mutex()
+    private var lockNav: RouteNav? = null
 
     /** A KMP entry and the screen instance Rust opened for it. */
     private class Opened(val entry: Destination.RustScreen, val instance: Long)
 
     override fun handles(destination: Destination): Boolean =
-        destination is Destination.RustScreen && destination.route.screen.startsWith(SCREEN_PREFIX)
+        destination is Destination.RustScreen && SCREEN_PREFIXES.any { destination.route.screen.startsWith(it) }
 
     // ENTERING AGENDA FROM HOME: its home route, on today (`AgendaEntry`, which the shell lane removes).
-    override fun opens(moveId: String): Destination? = if (moveId == AppIds.AGENDA) {
-        AgendaEntry.home(AgendaDestination.AGENDA_DESTINATION_DAY, "")
-    } else {
-        null
+    override fun opens(moveId: String): Destination? = when (moveId) {
+        AppIds.AGENDA -> AgendaEntry.home(AgendaDestination.AGENDA_DESTINATION_DAY, "")
+        // LOCKER'S TILE: its home, whose wall asks the owner check as it appears.
+        AppIds.LOCKER -> LockerEntry.home()
+        else -> null
     }
 
     override fun attach(session: HomeSession, scope: CoroutineScope) {
@@ -106,15 +121,44 @@ internal class AgendaRoutes(private val phone: AndroidPhoneFollow) : AppRoutes {
                 }
             }
         }
-        screens?.let { PerformScreenEffects(it, phone) }
+        val runtime = screens
+        if (runtime != null) {
+            // AN UNLOCK IS WHEN A VAULT'S OWN KEY CAN BE FILED, and when Home's tile learns the Locker is open.
+            PerformScreenEffects(runtime, phone, onAnnounce = { topic ->
+                if (topic == "locker.unlocked") session?.let { LockerEntry.unlocked(it) }
+            })
+            // THE APP LEAVING THE FOREGROUND RELOCKS THE LOCKER: the core does it, every open screen hears it.
+            val owner = LocalLifecycleOwner.current
+            DisposableEffect(owner, runtime) {
+                val observer = LifecycleEventObserver { _, event ->
+                    when (event) {
+                        Lifecycle.Event.ON_STOP -> {
+                            LockerEntry.setOpen(false)
+                            nav.scope.launch { runtime.lifecycle(foreground = false) }
+                        }
+                        Lifecycle.Event.ON_START -> nav.scope.launch { runtime.lifecycle(foreground = true) }
+                        else -> Unit
+                    }
+                }
+                owner.lifecycle.addObserver(observer)
+                onDispose { owner.lifecycle.removeObserver(observer) }
+            }
+        }
     }
 
     @Composable
     override fun Routes(destination: Destination, nav: RouteNav) {
+        lockNav = nav
         val entry = destination as? Destination.RustScreen ?: return
         val runtime = screens ?: return
         val instance = opened.firstOrNull { it.entry === entry }?.instance ?: return
         RustHost(runtime, instance, entry, nav)
+    }
+
+    /** The 24 words' sheet closed: every Locker wall re-reads whether this core holds keys (a re-key just landed). */
+    fun foregrounded() {
+        val runtime = screens ?: return
+        scope?.launch { runtime.lifecycle(foreground = true) }
     }
 
     /** The runtime for the foreground vault's core; a new one when the core changed. */
@@ -134,6 +178,9 @@ internal class AgendaRoutes(private val phone: AndroidPhoneFollow) : AppRoutes {
             next.environment(Locale.getDefault().toLanguageTag(), TimeZone.getDefault().id)
             next.start()
             next.navigate(NavEvent(pop_to_root = NavPopToRoot(tab = TAB)))
+            // ENTERING LOCKER FROM HOME'S TILE AND CHAT'S KEY SLOT: the one place a lock page is pushed.
+            LockerEntry.install()
+            LockerEntry.pushLock = { home.launch { lockNav?.push(LockerEntry.lock()) } }
         }
         return next
     }
@@ -148,7 +195,7 @@ internal class AgendaRoutes(private val phone: AndroidPhoneFollow) : AppRoutes {
     private suspend fun reconcile(runtime: Screens, stack: NavStack) {
         val wanted = stack.entries
             .filterIsInstance<Destination.RustScreen>()
-            .filter { it.route.screen.startsWith(SCREEN_PREFIX) }
+            .filter { entry -> SCREEN_PREFIXES.any { entry.route.screen.startsWith(it) } }
         var kept = 0
         while (kept < opened.size && kept < wanted.size && opened[kept].entry === wanted[kept]) kept++
         if (opened.size > kept) {
@@ -183,9 +230,18 @@ internal class AgendaRoutes(private val phone: AndroidPhoneFollow) : AppRoutes {
         val detail = view.todo_detail
         val catchUp = view.todo_catch_up
         val trash = view.trash
+        val lockerHome = view.locker_home
+        val lockerItem = view.locker_item
+        val lockerEditor = view.locker_editor
+        val lockerAccess = view.locker_access
+        val lockerExport = view.locker_export
+        val lockerImport = view.locker_import
+        val lockerLock = view.locker_lock
+        val sendWall: (LockerWallEvent) -> Unit = { event -> send(ScreenEvent(locker_wall = event)) }
 
         // THE SCREEN IS DONE (a cancel committed, the editor saved or left, the task deleted): its page goes.
-        val done = event?.dismissed == true || editor?.dismissed == true || detail?.finished == true
+        val done = event?.dismissed == true || editor?.dismissed == true || detail?.finished == true ||
+            lockerItem?.finished == true || lockerEditor?.finished == true || lockerLock?.finished == true
         LaunchedEffect(done) {
             if (done && nav.stack.current === entry) nav.pop()
         }
@@ -233,6 +289,56 @@ internal class AgendaRoutes(private val phone: AndroidPhoneFollow) : AppRoutes {
                 onOpen = open,
                 onBack = back,
             )
+            lockerHome != null -> LockerHomeScreen(
+                state = lockerHome,
+                onEvent = { send(ScreenEvent(locker_home = it)) },
+                sendWall = sendWall,
+                onOpen = open,
+                onWords = openWords,
+                onHome = { nav.home() },
+            )
+            lockerItem != null -> LockerItemScreen(
+                state = lockerItem,
+                onEvent = { send(ScreenEvent(locker_item = it)) },
+                sendWall = sendWall,
+                onOpen = open,
+                onWords = openWords,
+                onBack = back,
+            )
+            lockerEditor != null -> LockerEditorScreen(
+                state = lockerEditor,
+                onEvent = { send(ScreenEvent(locker_editor = it)) },
+                sendWall = sendWall,
+                onWords = openWords,
+                onClose = back,
+            )
+            lockerAccess != null -> LockerAccessScreen(
+                state = lockerAccess,
+                onEvent = { send(ScreenEvent(locker_access = it)) },
+                sendWall = sendWall,
+                onWords = openWords,
+                onBack = back,
+            )
+            lockerExport != null -> LockerExportScreen(
+                state = lockerExport,
+                onEvent = { send(ScreenEvent(locker_export = it)) },
+                sendWall = sendWall,
+                onWords = openWords,
+                onBack = back,
+            )
+            lockerImport != null -> LockerImportScreen(
+                state = lockerImport,
+                onEvent = { send(ScreenEvent(locker_import = it)) },
+                sendWall = sendWall,
+                onWords = openWords,
+                onBack = back,
+            )
+            lockerLock != null -> LockerLockPage(
+                state = lockerLock,
+                send = sendWall,
+                onWords = openWords,
+                onClose = back,
+            )
             trash != null -> TrashScreen(
                 view = trash,
                 onEvent = { send(ScreenEvent(trash = it)) },
@@ -245,6 +351,7 @@ internal class AgendaRoutes(private val phone: AndroidPhoneFollow) : AppRoutes {
         /** Rust's tab for Agenda's pages, and the prefix every one of its screens' names carries. */
         const val TAB = "agenda"
         const val SCREEN_PREFIX = "agenda."
+        val SCREEN_PREFIXES = listOf(SCREEN_PREFIX, "locker.")
     }
 }
 

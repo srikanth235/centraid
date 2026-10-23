@@ -50,13 +50,15 @@ internal fun centraid.core.v1.ListRow.toKit(): ListRow = ListRow(
     title = title,
     meta = meta,
     trailing = trailing,
-    chips = chips.map { StatusChip(label = it.label, tone = it.tone.toKit()) },
+    chips = chips.map { it.toKit() },
     hue_key = hue_key,
     accessibility_label = accessibility_label,
     dimmed = dimmed,
     pending = pending,
     trailing_tone = trailing_tone.toKit(),
 )
+
+internal fun centraid.core.v1.StatusChip.toKit(): StatusChip = StatusChip(label = label, tone = tone.toKit())
 
 private fun centraid.core.v1.StatusChip.Tone.toKit(): StatusChip.Tone =
     StatusChip.Tone.fromValue(value) ?: StatusChip.Tone.TONE_UNSPECIFIED

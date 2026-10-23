@@ -25,12 +25,14 @@ import centraid.core.v1.Effect
 import centraid.core.v1.EffectDone
 import centraid.core.v1.EffectFailed
 import centraid.core.v1.EffectResult
+import centraid.core.v1.FilePicked
 import centraid.core.v1.HapticKind
 import centraid.core.v1.ImportSource
 import centraid.core.v1.KeychainOp
 import centraid.core.v1.KeychainValue
 import centraid.core.v1.PhoneChanged
 import dev.centraid.android.screens.agenda.readCalendarSnapshot
+import android.provider.OpenableColumns
 import dev.centraid.core.Screens
 import dev.centraid.shared.platform.platformServices
 import dev.centraid.shared.sync.phone.PhoneDevice
@@ -57,20 +59,25 @@ import okio.ByteString
  * watcher is answered `failed`.
  */
 @Composable
-internal fun PerformScreenEffects(screens: Screens, phone: AndroidPhoneFollow?) {
+internal fun PerformScreenEffects(screens: Screens, phone: AndroidPhoneFollow?, onAnnounce: (String) -> Unit = {}) {
     val context = LocalContext.current
     val view = LocalView.current
     val asking = remember { CalendarPermission() }
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         asking.answer(granted)
     }
+    // THE FILE SHEETS (Locker's import and export): the system's pickers, one out at a time.
+    val files = remember { FileDoors() }
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> files.picked(uri) }
+    val saver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("*/*")) { uri -> files.saved(uri) }
     LaunchedEffect(screens) {
         screens.effects.collect { request ->
             // ONE COROUTINE PER EFFECT: a permission dialog waits for the member
             // without holding up the keychain read behind it.
             launch {
                 val effect = request.effect
-                val result = perform(effect, context, view, asking, { launcher.launch(it) }, phone) { changed ->
+                val doors = Doors(files, { picker.launch(arrayOf("*/*")) }, { saver.launch(it) }, onAnnounce)
+                val result = perform(effect, context, view, asking, { launcher.launch(it) }, phone, doors) { changed ->
                     launch { screens.answer(request, EffectResult(phone_changed = changed)) }
                 }
                 if (result != null) screens.answer(request, result)
@@ -104,6 +111,7 @@ private suspend fun perform(
     asking: CalendarPermission,
     launchPermission: (String) -> Unit,
     phone: AndroidPhoneFollow?,
+    doors: Doors,
     report: (PhoneChanged) -> Unit,
 ): EffectResult? {
     val done = EffectResult(done = EffectDone())
@@ -147,6 +155,13 @@ private suspend fun perform(
         effect.open_url != null ->
             start(context, Intent(Intent.ACTION_VIEW, Uri.parse(effect.open_url!!.url)), done)
         effect.keychain != null -> keychain(effect.keychain!!)
+        effect.owner_check != null -> OwnerPrompt.check(context, effect.owner_check!!)
+        effect.pick_file != null -> doors.files.pick(context, doors.launchPicker)
+        effect.save_file != null -> doors.files.save(context, effect.save_file!!, doors.launchSaver)
+        effect.announce != null -> {
+            doors.announce(effect.announce!!.topic)
+            done
+        }
         effect.calendar_read != null -> {
             val read = effect.calendar_read!!
             val allowed = granted(context) ||
@@ -235,5 +250,71 @@ private suspend fun keychain(op: KeychainOp): EffectResult {
             EffectResult(done = EffectDone())
         }
         else -> failed("unknown keychain operation")
+    }
+}
+
+/** The platform hands one effect may need, so [perform] keeps one parameter for them. */
+private class Doors(
+    val files: FileDoors,
+    val launchPicker: () -> Unit,
+    val launchSaver: (String) -> Unit,
+    val announce: (String) -> Unit,
+)
+
+/**
+ * THE SYSTEM'S FILE SHEETS, ONE OUT AT A TIME (#1135): `PickFile` reads the
+ * chosen document into bytes handed to Rust and kept nowhere here; `SaveFile`
+ * writes Rust's bytes to the document the member named and nowhere else. A
+ * dismissed sheet is a cancel, by value, never a failure the screen draws.
+ */
+private class FileDoors {
+    private var picking: CompletableDeferred<android.net.Uri?>? = null
+    private var saving: CompletableDeferred<android.net.Uri?>? = null
+
+    fun picked(uri: android.net.Uri?) {
+        picking?.complete(uri)
+        picking = null
+    }
+
+    fun saved(uri: android.net.Uri?) {
+        saving?.complete(uri)
+        saving = null
+    }
+
+    suspend fun pick(context: Context, launch: () -> Unit): EffectResult {
+        val answer = CompletableDeferred<android.net.Uri?>()
+        picking = answer
+        launch()
+        val uri = answer.await() ?: return EffectResult(file = FilePicked(cancelled = true))
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                val resolver = context.contentResolver
+                val name = resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+                    if (cursor.moveToFirst()) cursor.getString(0) else null
+                }.orEmpty()
+                val bytes = resolver.openInputStream(uri)?.use { it.readBytes() } ?: error("unreadable")
+                EffectResult(
+                    file = FilePicked(
+                        name = name,
+                        media_type = resolver.getType(uri).orEmpty(),
+                        content = ByteString.of(*bytes),
+                    ),
+                )
+            }.getOrElse { failed("the file could not be read") }
+        }
+    }
+
+    suspend fun save(context: Context, file: centraid.core.v1.SaveFile, launch: (String) -> Unit): EffectResult {
+        val answer = CompletableDeferred<android.net.Uri?>()
+        saving = answer
+        launch(file.name)
+        val uri = answer.await()
+            ?: return EffectResult(failed = EffectFailed(reason = "the save was cancelled", cancelled = true))
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                context.contentResolver.openOutputStream(uri)?.use { it.write(file.content.toByteArray()) } ?: error("unwritable")
+                EffectResult(done = EffectDone())
+            }.getOrElse { failed("the file could not be written") }
+        }
     }
 }
