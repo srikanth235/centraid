@@ -352,9 +352,9 @@ impl Screen for Export {
         let locale = ctx.locale();
         let open = self.wall.is_open();
         let content = open.then(|| match &self.count {
-            Phase::Loading => wire::locker_export_state::Content::Loading(wire::Loading {
-                first_load: true,
-            }),
+            Phase::Loading => {
+                wire::locker_export_state::Content::Loading(wire::Loading { first_load: true })
+            }
             Phase::Failed => wire::locker_export_state::Content::Failure(read::failure(locale)),
             Phase::Denied(denial) => {
                 wire::locker_export_state::Content::Denied(shared::denied(locale, denial))
@@ -365,29 +365,31 @@ impl Screen for Export {
             },
         });
         wire::ViewState {
-            kind: Some(wire::view_state::Kind::LockerExport(wire::LockerExportState {
-                wall: self.wall.view(locale),
-                secure: open,
-                content,
-                chrome: Some(wire::LockerExportChrome {
-                    title: words::export_title(locale),
-                    back_label: if self.parent.is_empty() {
-                        words::app_name(locale)
-                    } else {
-                        self.parent.clone()
-                    },
-                    retry: words::retry(locale),
-                }),
-                confirm: self.confirm.then(|| wire::Confirm {
-                    title: words::export_confirm_title(locale),
-                    body: words::export_confirm_body(locale),
-                    confirm_label: words::export_confirm(locale),
-                    destructive: true,
-                }),
-                phase: self.phase as i32,
-                status: self.status.clone(),
-                format: if self.json { "json" } else { "csv" }.to_owned(),
-            })),
+            kind: Some(wire::view_state::Kind::LockerExport(
+                wire::LockerExportState {
+                    wall: self.wall.view(locale),
+                    secure: open,
+                    content,
+                    chrome: Some(wire::LockerExportChrome {
+                        title: words::export_title(locale),
+                        back_label: if self.parent.is_empty() {
+                            words::app_name(locale)
+                        } else {
+                            self.parent.clone()
+                        },
+                        retry: words::retry(locale),
+                    }),
+                    confirm: self.confirm.then(|| wire::Confirm {
+                        title: words::export_confirm_title(locale),
+                        body: words::export_confirm_body(locale),
+                        confirm_label: words::export_confirm(locale),
+                        destructive: true,
+                    }),
+                    phase: self.phase as i32,
+                    status: self.status.clone(),
+                    format: if self.json { "json" } else { "csv" }.to_owned(),
+                },
+            )),
             ..wire::ViewState::default()
         }
     }
@@ -582,15 +584,28 @@ impl Import {
 
     fn data(&self, locale: Locale) -> wire::LockerImportData {
         use wire::locker_import_state::Phase as P;
-        let drawn = self.plan.as_ref().filter(|_| {
-            matches!(self.phase, P::Planned | P::Publishing | P::Published)
-        });
+        let drawn = self
+            .plan
+            .as_ref()
+            .filter(|_| matches!(self.phase, P::Planned | P::Publishing | P::Published));
         let busy = matches!(self.phase, P::Reading | P::Publishing);
         let verdicts = [
-            (words::import_chip_new(locale), words::import_verdict_new(locale)),
-            (words::import_chip_fill(locale), words::import_verdict_fill(locale)),
-            (words::import_chip_held(locale), words::import_verdict_held(locale)),
-            (words::import_chip_skipped(locale), words::import_verdict_skipped(locale)),
+            (
+                words::import_chip_new(locale),
+                words::import_verdict_new(locale),
+            ),
+            (
+                words::import_chip_fill(locale),
+                words::import_verdict_fill(locale),
+            ),
+            (
+                words::import_chip_held(locale),
+                words::import_verdict_held(locale),
+            ),
+            (
+                words::import_chip_skipped(locale),
+                words::import_verdict_skipped(locale),
+            ),
         ];
         let planned_writes = self.phase == P::Planned && self.writes() > 0;
         wire::LockerImportData {
@@ -705,11 +720,13 @@ impl Import {
             } else {
                 String::new()
             },
-            empty: drawn.filter(|plan| plan.rows.is_empty()).map(|_| wire::EmptyState {
-                headline: words::import_nothing(locale),
-                body: words::import_nothing_body(locale),
-                ..wire::EmptyState::default()
-            }),
+            empty: drawn
+                .filter(|plan| plan.rows.is_empty())
+                .map(|_| wire::EmptyState {
+                    headline: words::import_nothing(locale),
+                    body: words::import_nothing_body(locale),
+                    ..wire::EmptyState::default()
+                }),
         }
     }
 }
@@ -778,32 +795,36 @@ impl Screen for Import {
         let locale = ctx.locale();
         let open = self.wall.is_open();
         let content = open.then(|| match &self.count {
-            Phase::Loading => wire::locker_import_state::Content::Loading(wire::Loading {
-                first_load: true,
-            }),
+            Phase::Loading => {
+                wire::locker_import_state::Content::Loading(wire::Loading { first_load: true })
+            }
             Phase::Failed => wire::locker_import_state::Content::Failure(read::failure(locale)),
             Phase::Denied(denial) => {
                 wire::locker_import_state::Content::Denied(shared::denied(locale, denial))
             }
-            Phase::Ready(_) => wire::locker_import_state::Content::Data(Box::new(self.data(locale))),
+            Phase::Ready(_) => {
+                wire::locker_import_state::Content::Data(Box::new(self.data(locale)))
+            }
         });
         wire::ViewState {
-            kind: Some(wire::view_state::Kind::LockerImport(wire::LockerImportState {
-                wall: self.wall.view(locale),
-                secure: open,
-                content,
-                chrome: Some(wire::LockerImportChrome {
-                    title: words::import_title(locale),
-                    back_label: if self.parent.is_empty() {
-                        words::app_name(locale)
-                    } else {
-                        self.parent.clone()
-                    },
-                    retry: words::retry(locale),
-                }),
-                phase: self.phase as i32,
-                status: self.status.clone(),
-            })),
+            kind: Some(wire::view_state::Kind::LockerImport(
+                wire::LockerImportState {
+                    wall: self.wall.view(locale),
+                    secure: open,
+                    content,
+                    chrome: Some(wire::LockerImportChrome {
+                        title: words::import_title(locale),
+                        back_label: if self.parent.is_empty() {
+                            words::app_name(locale)
+                        } else {
+                            self.parent.clone()
+                        },
+                        retry: words::retry(locale),
+                    }),
+                    phase: self.phase as i32,
+                    status: self.status.clone(),
+                },
+            )),
             ..wire::ViewState::default()
         }
     }

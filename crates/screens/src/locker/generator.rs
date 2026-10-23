@@ -105,10 +105,16 @@ pub(crate) fn typed_bits(password: &str) -> u32 {
     if password.chars().any(|character| character.is_ascii_digit()) {
         pool += 10;
     }
-    if password.chars().any(|character| !character.is_alphanumeric()) {
+    if password
+        .chars()
+        .any(|character| !character.is_alphanumeric())
+    {
         pool += 20;
     }
-    bits(pool, u32::try_from(password.chars().count()).unwrap_or(u32::MAX))
+    bits(
+        pool,
+        u32::try_from(password.chars().count()).unwrap_or(u32::MAX),
+    )
 }
 
 /// "Strong · about 95 bits".
@@ -274,8 +280,7 @@ impl Generator {
             } else {
                 words::use_on_item(locale)
             },
-            use_route: (!pin && !self.output.is_empty())
-                .then(|| super::routes::add("login", true)),
+            use_route: (!pin && !self.output.is_empty()).then(|| super::routes::add("login", true)),
             accessibility_label: words::generator_a11y(locale),
         }
     }

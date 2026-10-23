@@ -175,6 +175,15 @@ impl<'a> Params<'a> {
         self.integer(name)
     }
 
+    /// Bytes, as a BLOB; absent is empty.
+    pub(crate) fn blob(&mut self, name: &'a str) -> Result<Vec<u8>> {
+        match self.value(name).map(|value| &value.kind) {
+            None => Ok(Vec::new()),
+            Some(Some(wire::value::Kind::Blob(bytes))) => Ok(bytes.clone()),
+            Some(_) => Err(self.bad(name, "bytes")),
+        }
+    }
+
     /// A boolean, as 0 or 1; absent is false.
     pub(crate) fn flag(&mut self, name: &'a str) -> Result<bool> {
         match self.integer(name)? {
@@ -642,6 +651,20 @@ fn read(
                 typing_carry: p.flag("typing_carry")?,
             },
         )?,
+        // The plan a statement would make: read once, dropped, nothing written.
+        ("money", "import-plan") => wire::app_query_response::Answer::MoneyImportPlan(
+            app_query::money::import_plan(
+                vault,
+                &wire::MoneyImportPlanRequest {
+                    tz,
+                    source: en!(p, "source", "MONEY_SOURCE_", wire::MoneySource),
+                    content: p.blob("content")?,
+                    account_id: p.opt_text("account_id")?,
+                    date_order: en!(p, "date_order", "MONEY_DATE_ORDER_", wire::MoneyDateOrder),
+                    sign: en!(p, "sign", "MONEY_SIGN_CHOICE_", wire::MoneySignChoice),
+                },
+            )?,
+        ),
         ("money", "home-tile") => {
             wire::app_query_response::Answer::MoneyHomeTile(app_query::money::home_tile(
                 vault,

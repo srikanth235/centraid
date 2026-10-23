@@ -1382,6 +1382,43 @@
   ],
   "queries": [
     {
+      "name": "import-plan",
+      "kind": "transaction",
+      "figures": ["new", "already_in"],
+      "description": "What a bank statement would do if it were imported: every row's verdict (new, already in, a possible duplicate, repeated in the file, unreadable), the totals, the balance it states and the command input that publishes it. The file is read once and dropped; nothing is written.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "string",
+            "enum": ["csv", "ofx"]
+          },
+          "content": {
+            "type": "string",
+            "format": "binary",
+            "description": "The statement as picked, byte for byte; at most 8 MiB."
+          },
+          "account_id": {
+            "type": "string"
+          },
+          "date_order": {
+            "type": "string",
+            "enum": ["mdy", "dmy", "ymd"]
+          },
+          "sign": {
+            "type": "string",
+            "enum": ["debits_negative", "debits_positive"]
+          }
+        },
+        "additionalProperties": false,
+        "required": ["source", "content"]
+      },
+      "output": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
       "name": "spending",
       "kind": "transaction",
       "figures": [

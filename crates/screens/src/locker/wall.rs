@@ -111,7 +111,10 @@ impl Wall {
         self.phase == Phase::Open
     }
 
-    fn session(ctx: &Ctx, step: wire::locker_session_request::Step) -> Result<wire::LockerSessionResponse, String> {
+    fn session(
+        ctx: &Ctx,
+        step: wire::locker_session_request::Step,
+    ) -> Result<wire::LockerSessionResponse, String> {
         ctx.locker(&wire::LockerSessionRequest { step: Some(step) })
             .map_err(|error| error.sentence())
     }
@@ -140,7 +143,11 @@ impl Wall {
         if Self::open_state(&answer) {
             let changed = self.phase != Phase::Open;
             self.phase = Phase::Open;
-            return Step::change(if changed { Change::Opened } else { Change::None });
+            return Step::change(if changed {
+                Change::Opened
+            } else {
+                Change::None
+            });
         }
         if !self.keyed {
             self.phase = Phase::Unavailable;
@@ -201,7 +208,11 @@ impl Wall {
                     self.phase = Phase::Locked;
                 }
                 self.notice.clear();
-                Step::change(if was_open { Change::Closed } else { Change::None })
+                Step::change(if was_open {
+                    Change::Closed
+                } else {
+                    Change::None
+                })
             }
             None => Step::default(),
         }
@@ -340,7 +351,11 @@ impl Wall {
         if self.phase != Phase::Unavailable {
             self.phase = Phase::Locked;
         }
-        Step::change(if was_open { Change::Closed } else { Change::None })
+        Step::change(if was_open {
+            Change::Closed
+        } else {
+            Change::None
+        })
     }
 
     /// A reveal (or any session step) answered LOCKED: idle ended the session
@@ -366,7 +381,9 @@ impl Wall {
     fn method(&self, locale: Locale) -> String {
         match self.biometry {
             wire::Biometry::Face => words::method_face(locale),
-            wire::Biometry::Fingerprint | wire::Biometry::Touch => words::method_fingerprint(locale),
+            wire::Biometry::Fingerprint | wire::Biometry::Touch => {
+                words::method_fingerprint(locale)
+            }
             wire::Biometry::Optic => words::method_optic(locale),
             _ => words::method_passcode(locale),
         }
@@ -374,7 +391,9 @@ impl Wall {
 
     fn failed_sentence(&self, locale: Locale) -> String {
         match self.biometry {
-            wire::Biometry::Passcode | wire::Biometry::Unspecified => words::lock_failed_passcode(locale),
+            wire::Biometry::Passcode | wire::Biometry::Unspecified => {
+                words::lock_failed_passcode(locale)
+            }
             _ => words::lock_failed(locale),
         }
     }

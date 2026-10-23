@@ -5,11 +5,11 @@
 // converts it into the request. A stale file fails `cargo xtask screens-catalog --check`.
 
 #![cfg_attr(rustfmt, rustfmt::skip)]
-#![allow(clippy::all, clippy::pedantic, missing_docs)]
+#![allow(clippy::all, clippy::pedantic, missing_docs, unused_imports)]
 
 use centraid_api_proto::core_v1 as wire;
 
-use crate::field::{Field, flag, put_field, real, text, whole};
+use crate::field::{Field, blob, flag, null, put_field, real, text, whole};
 
 pub mod act {
     use super::*;
@@ -2249,7 +2249,7 @@ pub mod act {
         /// File transactions under a category, or clear it.
         #[derive(Clone, Debug, Default)]
         pub struct Categorize {
-            pub category_id: String,
+            pub category_id: Option<String>,
             pub ids: String,
         }
         impl Categorize {
@@ -2257,7 +2257,7 @@ pub mod act {
             pub fn request(self) -> wire::ActRequest {
                 #[allow(unused_mut)]
                 let mut map = std::collections::HashMap::<String, wire::Value>::new();
-                map.insert("category_id".to_owned(), text(self.category_id));
+                map.insert("category_id".to_owned(), match self.category_id { Some(it) => text(it), None => null() });
                 map.insert("ids".to_owned(), text(self.ids));
                 wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
             }
@@ -2355,7 +2355,7 @@ pub mod act {
         /// Plan an amount for a category in a month; an amount of null removes the plan.
         #[derive(Clone, Debug, Default)]
         pub struct SetTarget {
-            pub amount_minor: i64,
+            pub amount_minor: Option<i64>,
             pub category_id: String,
             pub month: String,
             pub carry: Option<bool>,
@@ -2366,7 +2366,7 @@ pub mod act {
             pub fn request(self) -> wire::ActRequest {
                 #[allow(unused_mut)]
                 let mut map = std::collections::HashMap::<String, wire::Value>::new();
-                map.insert("amount_minor".to_owned(), whole(self.amount_minor));
+                map.insert("amount_minor".to_owned(), match self.amount_minor { Some(it) => whole(it), None => null() });
                 map.insert("category_id".to_owned(), text(self.category_id));
                 map.insert("month".to_owned(), text(self.month));
                 if let Some(it) = self.carry { map.insert("carry".to_owned(), flag(it)); }
@@ -3482,7 +3482,7 @@ pub mod act {
         #[derive(Clone, Debug, Default)]
         pub struct SetReminder {
             pub important_date_id: String,
-            pub reminders: String,
+            pub reminders: Option<String>,
         }
         impl SetReminder {
             pub const NAME: &str = "set-reminder";
@@ -3490,7 +3490,7 @@ pub mod act {
                 #[allow(unused_mut)]
                 let mut map = std::collections::HashMap::<String, wire::Value>::new();
                 map.insert("id".to_owned(), text(self.important_date_id));
-                map.insert("reminders".to_owned(), text(self.reminders));
+                map.insert("reminders".to_owned(), match self.reminders { Some(it) => text(it), None => null() });
                 wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
             }
         }
@@ -4882,6 +4882,81 @@ pub mod load {
     pub mod money {
         use super::*;
         pub const APP: &str = "money";
+
+        #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+        pub enum ImportPlanSource {
+            #[default]
+            Csv,
+            Ofx,
+        }
+        impl ImportPlanSource {
+            fn wire(self) -> &'static str {
+                match self {
+                    Self::Csv => "csv",
+                    Self::Ofx => "ofx",
+                }
+            }
+        }
+
+        #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+        pub enum ImportPlanDateOrder {
+            #[default]
+            Mdy,
+            Dmy,
+            Ymd,
+        }
+        impl ImportPlanDateOrder {
+            fn wire(self) -> &'static str {
+                match self {
+                    Self::Mdy => "mdy",
+                    Self::Dmy => "dmy",
+                    Self::Ymd => "ymd",
+                }
+            }
+        }
+
+        #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+        pub enum ImportPlanSign {
+            #[default]
+            DebitsNegative,
+            DebitsPositive,
+        }
+        impl ImportPlanSign {
+            fn wire(self) -> &'static str {
+                match self {
+                    Self::DebitsNegative => "debits_negative",
+                    Self::DebitsPositive => "debits_positive",
+                }
+            }
+        }
+
+        /// What a bank statement would do if it were imported: every row's verdict (new, already in, a possible duplicate, repeated in the file, unreadable), the totals, the balance it states and the command input that publishes it. The file is read once and dropped; nothing is written.
+        #[derive(Clone, Debug, Default)]
+        pub struct ImportPlan {
+            pub content: Vec<u8>,
+            pub source: ImportPlanSource,
+            pub account_id: Option<String>,
+            pub date_order: Option<ImportPlanDateOrder>,
+            pub sign: Option<ImportPlanSign>,
+        }
+        impl ImportPlan {
+            pub const NAME: &str = "import-plan";
+            pub fn request(self) -> wire::LoadRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("content".to_owned(), blob(self.content));
+                map.insert("source".to_owned(), text(self.source.wire()));
+                if let Some(it) = self.account_id { map.insert("account_id".to_owned(), text(it)); }
+                if let Some(it) = self.date_order { map.insert("date_order".to_owned(), text(it.wire())); }
+                if let Some(it) = self.sign { map.insert("sign".to_owned(), text(it.wire())); }
+                wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), params: map, ..Default::default() }
+            }
+        }
+        impl From<ImportPlan> for wire::LoadRequest {
+            fn from(value: ImportPlan) -> Self {
+                value.request()
+            }
+        }
 
         /// The Spending screen for a month: spent per currency against the plan, each category's planned, carried-in, spent and left, uncategorised rows, in/out/net, what was left out (transfers, rows dated after today) and the month-end forecast. Every figure is derived at read time and per currency.
         #[derive(Clone, Debug, Default)]

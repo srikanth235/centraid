@@ -185,10 +185,12 @@ fn a_shown_value_raises_the_screenshot_shield_and_the_timer_hides_it() {
     driver.start();
     let id = instance(&driver);
     let update = tap_show(&mut driver, id);
-    let shield = kinds(&update.effects).into_iter().find_map(|kind| match kind {
-        wire::effect::Kind::ScreenshotShield(shield) => Some(shield.on),
-        _ => None,
-    });
+    let shield = kinds(&update.effects)
+        .into_iter()
+        .find_map(|kind| match kind {
+            wire::effect::Kind::ScreenshotShield(shield) => Some(shield.on),
+            _ => None,
+        });
     assert_eq!(shield, Some(true));
     let shown = driver.views[&id].clone();
     let Some(wire::view_state::Kind::Counter(view)) = shown.kind else {
@@ -198,10 +200,12 @@ fn a_shown_value_raises_the_screenshot_shield_and_the_timer_hides_it() {
 
     let before = driver.effects.len();
     driver.pump(Duration::from_millis(400));
-    let dropped = kinds(&driver.effects[before..]).into_iter().find_map(|kind| match kind {
-        wire::effect::Kind::ScreenshotShield(shield) => Some(shield.on),
-        _ => None,
-    });
+    let dropped = kinds(&driver.effects[before..])
+        .into_iter()
+        .find_map(|kind| match kind {
+            wire::effect::Kind::ScreenshotShield(shield) => Some(shield.on),
+            _ => None,
+        });
     assert_eq!(dropped, Some(false), "the shield drops with the value");
     let Some(wire::view_state::Kind::Counter(view)) = driver.views[&id].kind.clone() else {
         panic!("the probe draws a counter");

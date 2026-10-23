@@ -81,7 +81,13 @@ impl Secrets {
 
     /// Show `value` under `key` for `after`, then hide it. Raises the shield
     /// when nothing was shown yet. Showing the same key again restarts its life.
-    pub fn show(&mut self, ctx: &Ctx, key: &str, value: &str, after: Duration) -> Vec<wire::Effect> {
+    pub fn show(
+        &mut self,
+        ctx: &Ctx,
+        key: &str,
+        value: &str,
+        after: Duration,
+    ) -> Vec<wire::Effect> {
         self.shown.insert(key.to_owned(), value.to_owned());
         ctx.start_timer(&format!("{HIDE_TIMER}{key}"), after);
         if self.shielded || self.view_shields {
@@ -123,11 +129,13 @@ impl Secrets {
     pub fn copy(&mut self, ctx: &Ctx, text: &str, after: Duration) -> Vec<wire::Effect> {
         self.copied = Some(text.to_owned());
         ctx.start_timer(CLIP_TIMER, after);
-        vec![effect(wire::effect::Kind::ClipboardSet(wire::ClipboardSet {
-            text: text.to_owned(),
-            sensitive: true,
-            clear_after_ms: millis(after),
-        }))]
+        vec![effect(wire::effect::Kind::ClipboardSet(
+            wire::ClipboardSet {
+                text: text.to_owned(),
+                sensitive: true,
+                clear_after_ms: millis(after),
+            },
+        ))]
     }
 
     /// Clear the clipboard now, if this screen put a secret there.
@@ -151,8 +159,10 @@ impl Secrets {
     /// clear (the answer does not say which effect, and a failed shield changes
     /// nothing a timer needs).
     pub fn answered(&mut self, ctx: &Ctx, result: &wire::EffectResult) {
-        if matches!(result.outcome, Some(wire::effect_result::Outcome::Failed(_)))
-            && self.copied.take().is_some()
+        if matches!(
+            result.outcome,
+            Some(wire::effect_result::Outcome::Failed(_))
+        ) && self.copied.take().is_some()
         {
             ctx.cancel_timer(CLIP_TIMER);
         }

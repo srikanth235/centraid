@@ -98,12 +98,14 @@ impl Home {
         use wire::LockerDestination as D;
         match self.destination {
             D::Review => {
-                self.review = Phase::of(read::read(ctx, load::locker::Review::default(), |a| {
-                    match a {
+                self.review = Phase::of(read::read(
+                    ctx,
+                    load::locker::Review::default(),
+                    |a| match a {
                         Answer::LockerReview(review) => Some(review),
                         _ => None,
-                    }
-                }));
+                    },
+                ));
             }
             D::Search if !self.term.trim().is_empty() => {
                 self.hits = Phase::of(read::read(
@@ -276,7 +278,11 @@ impl Home {
         let shown: Vec<&wire::LockerItemRow> = match filter {
             ALL | ARCHIVED => answer.items.iter().collect(),
             STARRED => answer.items.iter().filter(|row| row.starred).collect(),
-            kind => answer.items.iter().filter(|row| row.r#type == kind).collect(),
+            kind => answer
+                .items
+                .iter()
+                .filter(|row| row.r#type == kind)
+                .collect(),
         };
         let total = answer.total;
         let mut chips = vec![wire::LockerChoice {
@@ -512,24 +518,40 @@ impl Home {
             current,
         };
         vec![
-            tab("items", words::band_items(locale), "Key", self.destination == D::Items),
-            tab("review", words::band_review(locale), "Shield", self.destination == D::Review),
-            tab("generate", words::band_generate(locale), "Sparkle", self.destination == D::Generate),
+            tab(
+                "items",
+                words::band_items(locale),
+                "Key",
+                self.destination == D::Items,
+            ),
+            tab(
+                "review",
+                words::band_review(locale),
+                "Shield",
+                self.destination == D::Review,
+            ),
+            tab(
+                "generate",
+                words::band_generate(locale),
+                "Sparkle",
+                self.destination == D::Generate,
+            ),
             tab("more", words::band_more(locale), "MoreHoriz", false),
         ]
     }
 
     fn chrome(locale: Locale) -> wire::LockerHomeChrome {
         let parent = words::app_name(locale);
-        let more = |key: &str, label: String, meta: String, icon: &str, route: Option<wire::Route>| {
-            wire::LockerMoreRow {
-                key: key.to_owned(),
-                label,
-                meta,
-                icon_key: icon.to_owned(),
-                route,
-            }
-        };
+        let more =
+            |key: &str, label: String, meta: String, icon: &str, route: Option<wire::Route>| {
+                wire::LockerMoreRow {
+                    key: key.to_owned(),
+                    label,
+                    meta,
+                    icon_key: icon.to_owned(),
+                    route,
+                }
+            };
         wire::LockerHomeChrome {
             title: parent.clone(),
             add_label: words::add_item(locale),
@@ -540,12 +562,48 @@ impl Home {
             // them: Import, Trash, Export and the whole Locker's Access
             // history — then what the phone adds, the facts and the Lock.
             more_rows: vec![
-                more("import", words::more_import(locale), words::more_import_meta(locale), "Download", Some(routes::import(&parent))),
-                more("trash", words::more_trash(locale), words::more_trash_meta(locale), "Trash", Some(routes::trash())),
-                more("export", words::more_export(locale), words::more_export_meta(locale), "Share", Some(routes::export(&parent))),
-                more("access", words::more_access(locale), words::more_access_meta(locale), "History", Some(routes::access())),
-                more("facts", words::more_facts(locale), words::more_facts_meta(locale), "Info", None),
-                more("lock", words::lock_now(locale), words::more_lock_meta(locale), "Lock", None),
+                more(
+                    "import",
+                    words::more_import(locale),
+                    words::more_import_meta(locale),
+                    "Download",
+                    Some(routes::import(&parent)),
+                ),
+                more(
+                    "trash",
+                    words::more_trash(locale),
+                    words::more_trash_meta(locale),
+                    "Trash",
+                    Some(routes::trash()),
+                ),
+                more(
+                    "export",
+                    words::more_export(locale),
+                    words::more_export_meta(locale),
+                    "Share",
+                    Some(routes::export(&parent)),
+                ),
+                more(
+                    "access",
+                    words::more_access(locale),
+                    words::more_access_meta(locale),
+                    "History",
+                    Some(routes::access()),
+                ),
+                more(
+                    "facts",
+                    words::more_facts(locale),
+                    words::more_facts_meta(locale),
+                    "Info",
+                    None,
+                ),
+                more(
+                    "lock",
+                    words::lock_now(locale),
+                    words::more_lock_meta(locale),
+                    "Lock",
+                    None,
+                ),
             ],
             facts_title: words::more_facts(locale),
             facts: vec![

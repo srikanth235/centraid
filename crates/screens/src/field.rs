@@ -18,6 +18,12 @@ pub enum Field<T> {
     Is(T),
 }
 
+pub(crate) fn blob(value: impl Into<Vec<u8>>) -> wire::Value {
+    wire::Value {
+        kind: Some(wire::value::Kind::Blob(value.into())),
+    }
+}
+
 pub(crate) fn text(value: impl Into<String>) -> wire::Value {
     wire::Value {
         kind: Some(wire::value::Kind::Text(value.into())),

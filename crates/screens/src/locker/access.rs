@@ -32,7 +32,11 @@ const WINDOW: u32 = 200;
 
 /// What a reveal or a copy names: a custom field by its label, else the cell by
 /// its own name.
-pub(super) fn subject(locale: Locale, entry: &wire::LockerAccessEntry, field_label: &str) -> String {
+pub(super) fn subject(
+    locale: Locale,
+    entry: &wire::LockerAccessEntry,
+    field_label: &str,
+) -> String {
     if entry.field_id.is_empty() {
         types::label(locale, entry.columns.first().map_or("", String::as_str))
     } else if field_label.is_empty() {
@@ -263,16 +267,18 @@ impl Screen for Access {
             None
         };
         wire::ViewState {
-            kind: Some(wire::view_state::Kind::LockerAccess(wire::LockerAccessState {
-                wall: self.wall.view(locale),
-                secure: self.wall.is_open(),
-                content,
-                chrome: Some(wire::LockerAccessChrome {
-                    title: words::access_head(locale),
-                    back_label: words::app_name(locale),
-                    retry: words::retry(locale),
-                }),
-            })),
+            kind: Some(wire::view_state::Kind::LockerAccess(
+                wire::LockerAccessState {
+                    wall: self.wall.view(locale),
+                    secure: self.wall.is_open(),
+                    content,
+                    chrome: Some(wire::LockerAccessChrome {
+                        title: words::access_head(locale),
+                        back_label: words::app_name(locale),
+                        retry: words::retry(locale),
+                    }),
+                },
+            )),
             ..wire::ViewState::default()
         }
     }

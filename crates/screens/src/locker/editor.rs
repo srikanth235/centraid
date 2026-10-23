@@ -33,11 +33,11 @@ use wire::locker_editor_event::Kind as K;
 use wire::screen_event::Kind as E;
 
 use super::generator::{self, Entropy, system_entropy};
+use super::handoff;
 use super::item::PLACEHOLDER;
 use super::shared::{self, Phase};
 use super::types::{self, SEED};
 use super::wall::{Change, Wall};
-use super::handoff;
 use crate::catalog::{act, load};
 use crate::kit::act as kit_act;
 use crate::kit::read::{self, Reading};
@@ -386,9 +386,7 @@ impl Editor {
                 value.to_owned()
             }
         };
-        let some = |key: &str| -> Option<String> {
-            columns.contains(&key).then(|| sent(key))
-        };
+        let some = |key: &str| -> Option<String> { columns.contains(&key).then(|| sent(key)) };
         // SENT ONLY WHEN CHANGED: restating a held flag would pin it over the
         // vault's rule that a new password clears it (R-1047-F7).
         let compromised = (form.compromised != self.stored_flag()).then_some(form.compromised);
@@ -463,7 +461,9 @@ impl Editor {
         let had: Vec<String> = if self.adding {
             Vec::new()
         } else {
-            self.item().map(|item| item.tags.clone()).unwrap_or_default()
+            self.item()
+                .map(|item| item.tags.clone())
+                .unwrap_or_default()
         };
         let kept: BTreeSet<String> = typed.iter().map(|tag| tag.to_lowercase()).collect();
         let before: BTreeSet<String> = had.iter().map(|tag| tag.to_lowercase()).collect();
@@ -483,7 +483,10 @@ impl Editor {
                 return false;
             }
         }
-        for tag in typed.iter().filter(|tag| !before.contains(&tag.to_lowercase())) {
+        for tag in typed
+            .iter()
+            .filter(|tag| !before.contains(&tag.to_lowercase()))
+        {
             let key = kit_act::key(&["add-tag", &id, tag], kit_act::fresh());
             let settled = kit_act::act(
                 ctx,
@@ -562,7 +565,11 @@ impl Editor {
             } else {
                 Vec::new()
             },
-            types_label: if self.adding { words::item_type(locale) } else { String::new() },
+            types_label: if self.adding {
+                words::item_type(locale)
+            } else {
+                String::new()
+            },
             inputs,
             tags_label: words::tags(locale),
             tags_text: form.tags.clone(),
@@ -667,48 +674,52 @@ impl Screen for Editor {
         let locale = ctx.locale();
         let open = self.wall.is_open();
         let content = open.then(|| match (&self.form, &self.stored) {
-            (Some(form), _) => wire::locker_editor_state::Content::Data(Box::new(self.data(locale, form))),
+            (Some(form), _) => {
+                wire::locker_editor_state::Content::Data(Box::new(self.data(locale, form)))
+            }
             (None, Phase::Failed) => {
                 wire::locker_editor_state::Content::Failure(read::failure(locale))
             }
             (None, Phase::Denied(denial)) => {
                 wire::locker_editor_state::Content::Denied(shared::denied(locale, denial))
             }
-            (None, _) => wire::locker_editor_state::Content::Loading(wire::Loading {
-                first_load: true,
-            }),
+            (None, _) => {
+                wire::locker_editor_state::Content::Loading(wire::Loading { first_load: true })
+            }
         });
         wire::ViewState {
-            kind: Some(wire::view_state::Kind::LockerEditor(wire::LockerEditorState {
-                wall: self.wall.view(locale),
-                secure: open,
-                mode: if self.adding {
-                    wire::LockerEditorMode::Add as i32
-                } else {
-                    wire::LockerEditorMode::Edit as i32
-                },
-                item_id: self.item_id.clone(),
-                content,
-                confirm: self.confirm_discard.then(|| wire::Confirm {
-                    title: words::discard_title(locale),
-                    body: words::discard_body(locale),
-                    confirm_label: words::discard(locale),
-                    destructive: true,
-                }),
-                chrome: Some(wire::LockerEditorChrome {
-                    title: if self.adding {
-                        words::add_title(locale)
+            kind: Some(wire::view_state::Kind::LockerEditor(
+                wire::LockerEditorState {
+                    wall: self.wall.view(locale),
+                    secure: open,
+                    mode: if self.adding {
+                        wire::LockerEditorMode::Add as i32
                     } else {
-                        words::edit_title(locale)
+                        wire::LockerEditorMode::Edit as i32
                     },
-                    save_label: words::save(locale),
-                    cancel_label: words::cancel(locale),
-                    lede: words::editor_lede(locale),
-                    retry: words::retry(locale),
-                }),
-                finished: self.finished,
-                status: self.status.clone(),
-            })),
+                    item_id: self.item_id.clone(),
+                    content,
+                    confirm: self.confirm_discard.then(|| wire::Confirm {
+                        title: words::discard_title(locale),
+                        body: words::discard_body(locale),
+                        confirm_label: words::discard(locale),
+                        destructive: true,
+                    }),
+                    chrome: Some(wire::LockerEditorChrome {
+                        title: if self.adding {
+                            words::add_title(locale)
+                        } else {
+                            words::edit_title(locale)
+                        },
+                        save_label: words::save(locale),
+                        cancel_label: words::cancel(locale),
+                        lede: words::editor_lede(locale),
+                        retry: words::retry(locale),
+                    }),
+                    finished: self.finished,
+                    status: self.status.clone(),
+                },
+            )),
             ..wire::ViewState::default()
         }
     }

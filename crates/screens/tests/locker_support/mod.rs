@@ -19,19 +19,29 @@ pub fn driver() -> Driver {
 /// Write through the one write. A write that seals a secret needs the Locker
 /// open, so it is opened for the write and relocked after.
 pub fn arrange(d: &Driver, request: impl Into<wire::ActRequest>) -> wire::ActResponse {
-    let was_open = session(d, wire::locker_session_request::Step::State(wire::LockerStateAsk {}))
-        .state
+    let was_open = session(
+        d,
+        wire::locker_session_request::Step::State(wire::LockerStateAsk {}),
+    )
+    .state
         == wire::LockerSessionState::Unlocked as i32;
     unlock_core(d);
     let response = arrange_open(d, request);
     if !was_open {
-        session(d, wire::locker_session_request::Step::Relock(wire::LockerRelock {}));
+        session(
+            d,
+            wire::locker_session_request::Step::Relock(wire::LockerRelock {}),
+        );
     }
     response
 }
 
 fn arrange_open(d: &Driver, request: impl Into<wire::ActRequest>) -> wire::ActResponse {
-    let response = d.act(request.into().keyed(format!("arrange:{}", kit_act::fresh())));
+    let response = d.act(
+        request
+            .into()
+            .keyed(format!("arrange:{}", kit_act::fresh())),
+    );
     assert_eq!(
         response.status,
         wire::ActStatus::Executed as i32,
@@ -42,7 +52,10 @@ fn arrange_open(d: &Driver, request: impl Into<wire::ActRequest>) -> wire::ActRe
 }
 
 /// The vault's session: a shell asks the core directly, as chat's card does.
-pub fn session(d: &Driver, step: wire::locker_session_request::Step) -> wire::LockerSessionResponse {
+pub fn session(
+    d: &Driver,
+    step: wire::locker_session_request::Step,
+) -> wire::LockerSessionResponse {
     d.handle
         .locker_session(&wire::LockerSessionRequest { step: Some(step) })
         .expect("the session answers")

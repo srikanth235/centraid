@@ -208,11 +208,7 @@ pub(super) fn items(locale: Locale, count: u64) -> String {
 }
 
 /// One list row, secret-free, with its chips and its spoken label.
-pub(super) fn row(
-    locale: Locale,
-    item: &wire::LockerItemRow,
-    parent: &str,
-) -> wire::LockerRow {
+pub(super) fn row(locale: Locale, item: &wire::LockerItemRow, parent: &str) -> wire::LockerRow {
     let kind = types::of(&item.r#type);
     let mut chips = Vec::new();
     if item.compromised {
