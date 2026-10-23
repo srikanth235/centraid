@@ -24,22 +24,6 @@ import dev.centraid.shared.apps.health.HealthMetricMachine
 import dev.centraid.shared.apps.health.HealthMetricReads
 import dev.centraid.shared.apps.health.HealthWorkoutMachine
 import dev.centraid.shared.apps.health.HealthWorkoutReads
-import dev.centraid.shared.apps.locker.LOCKER_TRASH
-import dev.centraid.shared.apps.locker.LockerAccessMachine
-import dev.centraid.shared.apps.locker.LockerAccessReads
-import dev.centraid.shared.apps.locker.LockerEditorMachine
-import dev.centraid.shared.apps.locker.LockerEditorReads
-import dev.centraid.shared.apps.locker.LockerExportMachine
-import dev.centraid.shared.apps.locker.LockerExportReads
-import dev.centraid.shared.apps.locker.LockerGeneratorMachine
-import dev.centraid.shared.apps.locker.LockerGeneratorReads
-import dev.centraid.shared.apps.locker.LockerHomeMachine
-import dev.centraid.shared.apps.locker.LockerHomeReads
-import dev.centraid.shared.apps.locker.LockerImportMachine
-import dev.centraid.shared.apps.locker.LockerImportReads
-import dev.centraid.shared.apps.locker.LockerItemMachine
-import dev.centraid.shared.apps.locker.LockerItemReads
-import dev.centraid.shared.apps.locker.LockerTrashMachine
 import dev.centraid.shared.apps.money.MoneyAccountsMachine
 import dev.centraid.shared.apps.money.MoneyAccountsReads
 import dev.centraid.shared.apps.money.MoneyCategoriesMachine
@@ -154,10 +138,6 @@ class AppReadsSpec : StringSpec({
         // clustering), and is in `queryScreens`.
         Triple("photos.duplicate", DuplicateReviewReads, DuplicateReviewMachine),
         Triple("docs.trash", DocsTrashReads, DocsTrashMachine),
-        // LOCKER (#1047): the kit's trash over `entity`, kind `locker_item` (#1135). The statement is
-        // the kit's own; `LockerTrashReads` adds only the gate in front of it
-        // (`LockerSpec`).
-        Triple("locker.trash", TrashReads(LOCKER_TRASH), LockerTrashMachine),
     )
 
     /** The statement each screen makes when it is holding a state that can read. */
@@ -204,7 +184,6 @@ class AppReadsSpec : StringSpec({
         )
         "photos.places" -> PlacesReads.query(PlacesMachine.initial(), null)
         "docs.trash" -> DocsTrashReads.query(DocsTrashMachine.initial(), null)
-        "locker.trash" -> TrashReads(LOCKER_TRASH).query(LockerTrashMachine.initial(), null)
         else -> {
             // THE CLUSTER'S MEMBERS ARE THE CORE'S, asked as the screen opens; a
             // cluster the core did not answer has no members to read.
@@ -303,19 +282,6 @@ class AppReadsSpec : StringSpec({
         Triple("docs.editor", DocsEditorReads, DocsEditorMachine),
         // PHOTOS' DUPLICATES (#1135): the core's clustering, asked as an app query.
         Triple("photos.duplicates", DuplicatesReads, DuplicatesMachine),
-        // LOCKER (#1047). Every read screen shares one table set — the item,
-        // its sidecars and its tags; the generator reads none.
-        Triple("locker.home", LockerHomeReads, LockerHomeMachine),
-        Triple("locker.item", LockerItemReads, LockerItemMachine),
-        Triple("locker.editor", LockerEditorReads, LockerEditorMachine),
-        Triple("locker.generator", LockerGeneratorReads, LockerGeneratorMachine),
-        // #1047 T2: the item page reads its access history (`receipt`);
-        // export and import read the shelf's counts.
-        Triple("locker.export", LockerExportReads, LockerExportMachine),
-        Triple("locker.import", LockerImportReads, LockerImportMachine),
-        // Q-1047-21: the whole Locker's access history reads the receipts and
-        // the two tables a receipt's item and field are named from.
-        Triple("locker.access", LockerAccessReads, LockerAccessMachine),
         // MONEY (#1099). Every screen reads the same table set: one app query folds
         // accounts, lines, targets, rules, checkpoints, categories and transfer links.
         Triple("money.home", MoneyHomeReads, MoneyHomeMachine),

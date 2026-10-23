@@ -10,14 +10,6 @@ import centraid.screen.v1.DocsDriveState
 import centraid.screen.v1.DocsEditorEvent
 import centraid.screen.v1.DocsIngestState
 import centraid.screen.v1.HomeTile
-import centraid.screen.v1.LockerEditorEvent
-import centraid.screen.v1.LockerEditorState
-import centraid.screen.v1.LockerGeneratorEvent
-import centraid.screen.v1.LockerHomeChrome
-import centraid.screen.v1.LockerHomeEvent
-import centraid.screen.v1.LockerHomeState
-import centraid.screen.v1.LockerItemEvent
-import centraid.screen.v1.LockerItemState
 import centraid.screen.v1.MoneyHomeChrome
 import centraid.screen.v1.MoneyHomeEvent
 import centraid.screen.v1.MoneyHomeState
@@ -46,14 +38,6 @@ import dev.centraid.shared.apps.docs.DocsDriveMachine
 import dev.centraid.shared.apps.docs.DocsEditorMachine
 import dev.centraid.shared.apps.docs.DocsRouting
 import dev.centraid.shared.apps.docs.DocsTrashMachine
-import dev.centraid.shared.apps.locker.LockerAccessMachine
-import dev.centraid.shared.apps.locker.LockerEditorMachine
-import dev.centraid.shared.apps.locker.LockerExportMachine
-import dev.centraid.shared.apps.locker.LockerHomeMachine
-import dev.centraid.shared.apps.locker.LockerImportMachine
-import dev.centraid.shared.apps.locker.LockerItemMachine
-import dev.centraid.shared.apps.locker.LockerRouting
-import dev.centraid.shared.apps.locker.LockerTrashMachine
 import dev.centraid.shared.apps.health.HealthConnectMachine
 import dev.centraid.shared.apps.health.HealthHomeMachine
 import dev.centraid.shared.apps.health.HealthMetricMachine
@@ -84,6 +68,7 @@ import dev.centraid.shared.apps.people.PeopleTrashMachine
 import dev.centraid.shared.nav.AgendaEntry
 import dev.centraid.shared.nav.AppIds
 import dev.centraid.shared.nav.Destination
+import dev.centraid.shared.nav.LockerEntry
 import dev.centraid.shared.nav.MemberAction
 import dev.centraid.shared.nav.RowRef
 import dev.centraid.shared.nav.RowRoutes
@@ -152,17 +137,8 @@ class AppRoutingSpec : StringSpec({
             Destination.HealthMetric("steps") to HealthMetricMachine.SCREEN_ID,
             Destination.HealthWorkout("a") to HealthWorkoutMachine.SCREEN_ID,
             Destination.HealthConnect() to HealthConnectMachine.SCREEN_ID,
-            Destination.LockerHome() to LockerHomeMachine.SCREEN_ID,
-            Destination.LockerItem("i") to LockerItemMachine.SCREEN_ID,
-            Destination.LockerEditor() to LockerEditorMachine.SCREEN_ID,
-            Destination.LockerTrash to LockerTrashMachine.screenId,
-            Destination.LockerExport to LockerExportMachine.SCREEN_ID,
-            Destination.LockerImport to LockerImportMachine.SCREEN_ID,
-            Destination.LockerAccess to LockerAccessMachine.SCREEN_ID,
         )
         ids.forEach { (destination, id) -> ScreenOpenings.of(destination).shouldNotBeNull().screenId shouldBe id }
-        // The generator's candidate is never a route parameter, so its editor has no opening.
-        ScreenOpenings.of(Destination.LockerEditor(type = "login", fromGenerator = true)).shouldBeNull()
     }
 
     "the openings carry what the page opens on" {
@@ -171,11 +147,6 @@ class AppRoutingSpec : StringSpec({
             party_id shouldBe ""
         }
         PeopleEditorEvent.ADAPTER.decode(ScreenOpenings.of(Destination.PeopleEditor("p9"))!!.event).opened!!.party_id shouldBe "p9"
-        LockerEditorEvent.ADAPTER.decode(ScreenOpenings.of(Destination.LockerEditor(itemId = "i2"))!!.event).opened!!.run {
-            mode shouldBe LockerEditorState.Mode.MODE_EDIT
-            item_id shouldBe "i2"
-            password shouldBe ""
-        }
         DocsEditorEvent.ADAPTER.decode(ScreenOpenings.of(Destination.DocsEditor("d1", "Lease"))!!.event).opened!!.title shouldBe "Lease"
     }
 
@@ -376,35 +347,19 @@ class AppRoutingSpec : StringSpec({
 
     // --- Locker ----------------------------------------------------------
 
-    "Locker: Add, an item and More's pages push; Lock and Facts are not pages" {
-        val state = LockerHomeState(chrome = LockerHomeChrome(title = "Locker"))
-        LockerRouting.home(LockerHomeEvent(add = LockerHomeEvent.AddItem()), state) shouldBe Destination.LockerEditor()
-        LockerRouting.home(LockerHomeEvent(item = LockerHomeEvent.ItemPicked(item_id = "i1")), state) shouldBe
-            Destination.LockerItem("i1", parent = "Locker")
-        mapOf(
-            LockerHomeMachine.MORE_IMPORT to Destination.LockerImport,
-            LockerHomeMachine.MORE_EXPORT to Destination.LockerExport,
-            LockerHomeMachine.MORE_ACCESS to Destination.LockerAccess,
-            LockerHomeMachine.MORE_TRASH to Destination.LockerTrash,
-        ).forEach { (key, page) -> LockerRouting.home(LockerHomeEvent(more = LockerHomeEvent.MorePicked(key = key)), state) shouldBe page }
-        LockerRouting.home(LockerHomeEvent(more = LockerHomeEvent.MorePicked(key = LockerHomeMachine.MORE_LOCK)), state).shouldBeNull()
-        LockerRouting.home(LockerHomeEvent(more = LockerHomeEvent.MorePicked(key = LockerHomeMachine.MORE_FACTS)), state).shouldBeNull()
-    }
-
     "a Locker card offered by the assistant runs its action: reveal and code on the page, a secret to type in the editor, export in the export" {
         fun card(qualifier: String, id: String = "i1") = RowRef(AppIds.LOCKER, "locker_item", id, "Home Wi-Fi", qualifier)
         RowRoutes.destination(card("reveal:password"), parent = "Chat") shouldBe
-            Destination.LockerItem("i1", parent = "Chat", follow = "reveal:password")
-        RowRoutes.destination(card("code:otp_seed")) shouldBe Destination.LockerItem("i1", follow = "code:otp_seed")
-        RowRoutes.destination(card("edit_secret:cvv")) shouldBe Destination.LockerEditor(itemId = "i1")
-        RowRoutes.destination(card("export:", id = "")) shouldBe Destination.LockerExport
+            LockerEntry.item("i1", parent = "Chat", follow = "reveal:password")
+        RowRoutes.destination(card("code:otp_seed")) shouldBe LockerEntry.item("i1", follow = "code:otp_seed")
+        RowRoutes.destination(card("edit_secret:cvv")) shouldBe LockerEntry.editor("i1")
+        RowRoutes.destination(card("export:", id = "")) shouldBe LockerEntry.export()
         // no action, an unknown one, or one with no field: the plain card, never a crash
         for (plain in listOf("", "wipe:password", "reveal:", "reveal", ":password", "2026-10-08")) {
-            RowRoutes.destination(card(plain), parent = "Chat") shouldBe Destination.LockerItem("i1", parent = "Chat")
+            RowRoutes.destination(card(plain), parent = "Chat") shouldBe LockerEntry.item("i1", parent = "Chat")
         }
-        // spelled for a shell that sends bytes: the page's Opened event carries the action
-        val opening = RowRoutes.route(card("reveal:password"))!!
-        LockerItemEvent.ADAPTER.decode(opening.event).opened!!.follow shouldBe "reveal:password"
+        // every Locker destination is one Rust screen the shell hosts
+        ScreenOpenings.of(LockerEntry.item("i1")).shouldNotBeNull().screenId shouldBe ScreenIds.RUST_SCREEN
     }
 
     "MemberAction parses each action once and spells the qualifier back" {
@@ -416,16 +371,5 @@ class AppRoutingSpec : StringSpec({
         MemberAction.parse(AppIds.LOCKER, "locker_item", "", "reveal:password").shouldBeNull()
         MemberAction.parse(AppIds.AGENDA, "task", "t1", "reveal:password").shouldBeNull()
         MemberAction.parse(AppIds.LOCKER, "locker_item", "i1", "").shouldBeNull()
-    }
-
-    "Locker: Edit opens the item the page holds; the generator's Use is Android's hand-over, never a spelled route" {
-        val edit = LockerItemEvent(edit = LockerItemEvent.EditTapped())
-        LockerRouting.item(edit, LockerItemState()).shouldBeNull()
-        LockerRouting.item(edit, LockerItemState(item_id = "i1")) shouldBe Destination.LockerEditor(itemId = "i1")
-        LockerRouting.generator(LockerGeneratorEvent(use = LockerGeneratorEvent.UseTapped())) shouldBe
-            Destination.LockerEditor(type = "login", fromGenerator = true)
-        LockerRouting.route(LockerItemMachine.SCREEN_ID, edit.encode(), LockerItemState(item_id = "i1").encode())!!.openings.single().screenId shouldBe
-            LockerEditorMachine.SCREEN_ID
-        LockerRouting.route(LockerHomeMachine.SCREEN_ID, LockerHomeEvent(add = LockerHomeEvent.AddItem()).encode(), ByteArray(0)) shouldNotBe null
     }
 })
