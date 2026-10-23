@@ -96,11 +96,11 @@ const HEADER: &str = "\
 // converts it into the request. A stale file fails `cargo xtask screens-catalog --check`.
 
 #![cfg_attr(rustfmt, rustfmt::skip)]
-#![allow(clippy::all, clippy::pedantic, missing_docs)]
+#![allow(clippy::all, clippy::pedantic, missing_docs, unused_imports)]
 
 use centraid_api_proto::core_v1 as wire;
 
-use crate::field::{Field, flag, put_field, real, text, whole};
+use crate::field::{Field, flag, null, put_field, real, text, whole};
 ";
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -328,7 +328,11 @@ fn param(
 }
 
 fn field_type(p: &Param) -> String {
-    if p.is_limit || p.required {
+    if p.required && p.nullable && !p.is_limit {
+        // A value the action must carry and may carry as null (`categorize`'s category):
+        // `None` is the null, never a missing key.
+        format!("Option<{}>", p.ty)
+    } else if p.is_limit || p.required {
         p.ty.clone()
     } else if p.nullable {
         format!("Field<{}>", p.ty)
@@ -352,6 +356,13 @@ fn value_expr(p: &Param, arg: &str) -> String {
 fn put(p: &Param) -> String {
     if let Some(only) = &p.fixed {
         format!("map.insert(\"{}\".to_owned(), text(\"{only}\"));", p.wire)
+    } else if p.required && p.nullable {
+        format!(
+            "map.insert(\"{}\".to_owned(), match self.{} {{ Some(it) => {}, None => null() }});",
+            p.wire,
+            p.name,
+            value_expr(p, "it")
+        )
     } else if p.required {
         format!(
             "map.insert(\"{}\".to_owned(), {});",
