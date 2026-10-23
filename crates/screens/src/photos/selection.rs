@@ -38,7 +38,8 @@ pub use wire::photos_batch_action::Kind as Verb;
 /// Which verbs the bar offers: the set depends on where the photographs are.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Offer {
-    /// The library grid: favourite, add to album, trash.
+    /// The library grid: favourite or unfavourite (one value for the whole
+    /// selection), add to album, trash.
     Library,
     /// A shelf of live photographs (videos, a place, the unplaced): favourite and
     /// unfavourite, add to album, archive, trash.
@@ -58,7 +59,12 @@ impl Offer {
     #[must_use]
     pub fn verbs(&self) -> Vec<Verb> {
         match self {
-            Self::Library => vec![Verb::Favorite, Verb::AddToAlbum, Verb::Trash],
+            Self::Library => vec![
+                Verb::Favorite,
+                Verb::Unfavorite,
+                Verb::AddToAlbum,
+                Verb::Trash,
+            ],
             Self::Shelf => vec![
                 Verb::Favorite,
                 Verb::AddToAlbum,
@@ -362,6 +368,12 @@ impl Selection {
     }
 
     fn tapped(&mut self, verb: Verb, ctx: &Ctx) -> Outcome {
+        // The archive's way out is `unarchive`, however the screen spelt it.
+        let verb = if verb == Verb::Restore && self.offer.is_archive() {
+            Verb::Unarchive
+        } else {
+            verb
+        };
         if self.picked.is_empty() || !self.offer.verbs().contains(&verb) {
             return Outcome::Moved;
         }
