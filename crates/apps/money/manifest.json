@@ -206,11 +206,13 @@
             "type": "integer"
           },
           "title": {
+            "aliases": ["name"],
             "maxLength": 80,
             "minLength": 1,
             "type": "string"
           },
           "type": {
+            "aliases": ["type"],
             "enum": ["checking", "savings", "credit_card", "cash"]
           }
         },
@@ -262,6 +264,7 @@
             "type": "boolean"
           },
           "title": {
+            "aliases": ["name"],
             "maxLength": 80,
             "minLength": 1,
             "type": "string"
@@ -768,6 +771,7 @@
             "type": "string"
           },
           "title": {
+            "aliases": ["name"],
             "maxLength": 1000,
             "type": "string"
           }
@@ -1218,6 +1222,7 @@
             "type": "string"
           },
           "title": {
+            "aliases": ["name"],
             "maxLength": 60,
             "minLength": 1,
             "type": "string"
@@ -1606,7 +1611,7 @@
       "name": "transaction",
       "plural": "transactions",
       "order": 11,
-      "live": "read",
+      "live": "write",
       "entity": "txn",
       "table": "txn",
       "pk": "id",
@@ -1632,6 +1637,11 @@
           "source": ["txn", "category_id"]
         },
         {
+          "name": "transfer",
+          "type": "text",
+          "source": ["txn", "transfer_id"]
+        },
+        {
           "name": "status",
           "type": "enum",
           "source": ["txn", "status"],
@@ -1650,7 +1660,7 @@
       "name": "account",
       "plural": "accounts",
       "order": 14,
-      "live": "declared",
+      "live": "write",
       "entity": "account",
       "table": "account",
       "pk": "id",
@@ -1692,7 +1702,7 @@
       "name": "category",
       "plural": "categories",
       "order": 15,
-      "live": "declared",
+      "live": "write",
       "entity": "category",
       "table": "concept",
       "pk": "id",
@@ -1718,7 +1728,7 @@
       "name": "budget",
       "plural": "budgets",
       "order": 16,
-      "live": "declared",
+      "live": "write",
       "entity": "budget",
       "table": "budget",
       "pk": "category_id",
@@ -1753,7 +1763,7 @@
       "name": "rule",
       "plural": "rules",
       "order": 17,
-      "live": "declared",
+      "live": "write",
       "entity": "rule",
       "table": "rule",
       "pk": "id",

@@ -170,8 +170,7 @@ pub fn parse(text: &str, exponent: u32) -> Option<i64> {
     if whole.is_empty() && fraction.is_empty() {
         return None;
     }
-    if !whole.chars().all(|c| c.is_ascii_digit()) || !fraction.chars().all(|c| c.is_ascii_digit())
-    {
+    if !whole.chars().all(|c| c.is_ascii_digit()) || !fraction.chars().all(|c| c.is_ascii_digit()) {
         return None;
     }
     if fraction.len() > exponent as usize {

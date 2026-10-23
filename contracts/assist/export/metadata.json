@@ -518,6 +518,95 @@
       "verb": "untag"
     },
     {
+      "action": "add-account",
+      "app": "money",
+      "command": "account.add",
+      "id_param": "id",
+      "kind": "account",
+      "names": [
+        "name",
+        "type"
+      ],
+      "qualifier": null,
+      "verb": "create"
+    },
+    {
+      "action": "edit-account",
+      "app": "money",
+      "command": "account.edit",
+      "id_param": "id",
+      "kind": "account",
+      "names": [
+        "name"
+      ],
+      "qualifier": null,
+      "verb": "edit"
+    },
+    {
+      "action": "close-account",
+      "app": "money",
+      "command": "flag.set",
+      "id_param": "id",
+      "kind": "account",
+      "names": [],
+      "qualifier": null,
+      "verb": "archive"
+    },
+    {
+      "action": "reopen-account",
+      "app": "money",
+      "command": "flag.clear",
+      "id_param": "id",
+      "kind": "account",
+      "names": [],
+      "qualifier": null,
+      "verb": "unarchive"
+    },
+    {
+      "action": "set-display-name",
+      "app": "money",
+      "command": "entity.retitle",
+      "id_param": "id",
+      "kind": "transaction",
+      "names": [
+        "name"
+      ],
+      "qualifier": null,
+      "verb": "edit"
+    },
+    {
+      "action": "unlink-transfer",
+      "app": "money",
+      "command": "txn.unlink_transfer",
+      "id_param": "id",
+      "kind": "transaction",
+      "names": [],
+      "qualifier": null,
+      "verb": "unlink"
+    },
+    {
+      "action": "edit-rule",
+      "app": "money",
+      "command": "rule.edit",
+      "id_param": "id",
+      "kind": "rule",
+      "names": [],
+      "qualifier": null,
+      "verb": "edit"
+    },
+    {
+      "action": "add-category",
+      "app": "money",
+      "command": "category.add",
+      "id_param": "id",
+      "kind": "category",
+      "names": [
+        "name"
+      ],
+      "qualifier": null,
+      "verb": "create"
+    },
+    {
       "action": "create-note",
       "app": "notes",
       "command": "note.create",
@@ -2100,7 +2189,7 @@
         "also": [],
         "app": "money",
         "bulk": false,
-        "chat": "card",
+        "chat": "direct",
         "command": "account.add",
         "inverse": "close-account",
         "kind": "account",
@@ -2280,7 +2369,7 @@
         "also": [],
         "app": "money",
         "bulk": false,
-        "chat": "card",
+        "chat": "direct",
         "command": "entity.retitle",
         "inverse": "set-display-name",
         "kind": "transaction",
@@ -2442,7 +2531,7 @@
         "also": [],
         "app": "money",
         "bulk": false,
-        "chat": "card",
+        "chat": "direct",
         "command": "category.add",
         "inverse": "archive-category",
         "kind": "category",
@@ -4300,261 +4389,9 @@
       "plural": "workouts",
       "table": "workout",
       "trash": true
-    },
-    {
-      "app": "money",
-      "container": false,
-      "date": null,
-      "entity": "account",
-      "fields": [
-        {
-          "name": "type",
-          "source": {
-            "column": "type",
-            "table": "account"
-          },
-          "type": "enum",
-          "unit": null,
-          "values": [
-            [
-              "checking",
-              "checking"
-            ],
-            [
-              "savings",
-              "savings"
-            ],
-            [
-              "credit_card",
-              "credit_card"
-            ],
-            [
-              "cash",
-              "cash"
-            ]
-          ]
-        },
-        {
-          "name": "currency",
-          "source": {
-            "column": "currency",
-            "table": "account"
-          },
-          "type": "text",
-          "unit": null,
-          "values": []
-        },
-        {
-          "name": "opening",
-          "source": {
-            "column": "opening_minor",
-            "table": "account"
-          },
-          "type": "money",
-          "unit": null,
-          "values": []
-        },
-        {
-          "name": "on_budget",
-          "source": {
-            "column": "on_budget",
-            "table": "account"
-          },
-          "type": "bool",
-          "unit": null,
-          "values": []
-        }
-      ],
-      "id": "account",
-      "name": "account",
-      "name_source": {
-        "column": "title",
-        "table": "entity"
-      },
-      "pk": "id",
-      "plural": "accounts",
-      "table": "account",
-      "trash": false
-    },
-    {
-      "app": "money",
-      "container": false,
-      "date": null,
-      "entity": "category",
-      "fields": [
-        {
-          "name": "key",
-          "source": {
-            "column": "key",
-            "table": "concept"
-          },
-          "type": "text",
-          "unit": null,
-          "values": []
-        },
-        {
-          "name": "group",
-          "source": {
-            "column": "parent_id",
-            "table": "concept"
-          },
-          "type": "text",
-          "unit": null,
-          "values": []
-        }
-      ],
-      "id": "category",
-      "name": "category",
-      "name_source": {
-        "column": "title",
-        "table": "entity"
-      },
-      "pk": "id",
-      "plural": "categories",
-      "table": "concept",
-      "trash": false
-    },
-    {
-      "app": "money",
-      "container": false,
-      "date": {
-        "label": "month",
-        "source": {
-          "column": "month",
-          "table": "budget"
-        }
-      },
-      "entity": "budget",
-      "fields": [
-        {
-          "name": "amount",
-          "source": {
-            "column": "amount_minor",
-            "table": "budget"
-          },
-          "type": "money",
-          "unit": null,
-          "values": []
-        },
-        {
-          "name": "currency",
-          "source": {
-            "column": "currency",
-            "table": "budget"
-          },
-          "type": "text",
-          "unit": null,
-          "values": []
-        },
-        {
-          "name": "carry",
-          "source": {
-            "column": "carry",
-            "table": "budget"
-          },
-          "type": "bool",
-          "unit": null,
-          "values": []
-        }
-      ],
-      "id": "budget",
-      "name": "budget",
-      "name_source": {
-        "column": "category_id",
-        "table": "budget"
-      },
-      "pk": "category_id",
-      "plural": "budgets",
-      "table": "budget",
-      "trash": false
-    },
-    {
-      "app": "money",
-      "container": false,
-      "date": {
-        "label": "created",
-        "source": {
-          "column": "created_at",
-          "table": "rule"
-        }
-      },
-      "entity": "rule",
-      "fields": [
-        {
-          "name": "category",
-          "source": {
-            "column": "category_id",
-            "table": "rule"
-          },
-          "type": "text",
-          "unit": null,
-          "values": []
-        },
-        {
-          "name": "position",
-          "source": {
-            "column": "position",
-            "table": "rule"
-          },
-          "type": "number",
-          "unit": null,
-          "values": []
-        }
-      ],
-      "id": "rule",
-      "name": "rule",
-      "name_source": {
-        "column": "pattern",
-        "table": "rule"
-      },
-      "pk": "id",
-      "plural": "rules",
-      "table": "rule",
-      "trash": false
     }
   ],
-  "declared_verbs": [
-    {
-      "action": "edit-account",
-      "app": "money",
-      "command": "account.edit",
-      "kind": "account",
-      "reason": "the assistant's runtime does not write this kind yet",
-      "verb": "edit"
-    },
-    {
-      "action": "close-account",
-      "app": "money",
-      "command": "flag.set",
-      "kind": "account",
-      "reason": "the assistant's runtime does not write this kind yet",
-      "verb": "archive"
-    },
-    {
-      "action": "reopen-account",
-      "app": "money",
-      "command": "flag.clear",
-      "kind": "account",
-      "reason": "the assistant's runtime does not write this kind yet",
-      "verb": "unarchive"
-    },
-    {
-      "action": "unlink-transfer",
-      "app": "money",
-      "command": "txn.unlink_transfer",
-      "kind": "transaction",
-      "reason": "the assistant's runtime does not run this verb yet",
-      "verb": "unlink"
-    },
-    {
-      "action": "edit-rule",
-      "app": "money",
-      "command": "rule.edit",
-      "kind": "rule",
-      "reason": "the assistant's runtime does not write this kind yet",
-      "verb": "edit"
-    }
-  ],
+  "declared_verbs": [],
   "decline_reasons": [
     "out_of_scope",
     "unbounded_destruction",
@@ -5360,7 +5197,7 @@
       ]
     },
     {
-      "card": "transaction: name, date (posted), amount (USD), account, category, status (posted|void)",
+      "card": "transaction: name, date (posted), amount (USD), account, category, transfer, status (posted|void) · verbs: edit unlink",
       "container": false,
       "date": {
         "label": "posted",
@@ -5402,6 +5239,16 @@
           "values": []
         },
         {
+          "name": "transfer",
+          "source": {
+            "column": "transfer_id",
+            "table": "txn"
+          },
+          "type": "text",
+          "unit": null,
+          "values": []
+        },
+        {
           "name": "status",
           "source": {
             "column": "status",
@@ -5432,12 +5279,263 @@
       "plural": "transactions",
       "table": "txn",
       "trash": false,
-      "verbs": [],
+      "verbs": [
+        "edit",
+        "unlink"
+      ],
       "where_fields": [
         "amount",
         "account",
         "category",
+        "transfer",
         "status"
+      ]
+    },
+    {
+      "card": "account: name, type (checking|savings|credit_card|cash), currency, opening (USD), on_budget (yes|no) · verbs: create edit archive unarchive",
+      "container": false,
+      "date": null,
+      "entity": "account",
+      "fields": [
+        {
+          "name": "type",
+          "source": {
+            "column": "type",
+            "table": "account"
+          },
+          "type": "enum",
+          "unit": null,
+          "values": [
+            [
+              "checking",
+              "checking"
+            ],
+            [
+              "savings",
+              "savings"
+            ],
+            [
+              "credit_card",
+              "credit_card"
+            ],
+            [
+              "cash",
+              "cash"
+            ]
+          ]
+        },
+        {
+          "name": "currency",
+          "source": {
+            "column": "currency",
+            "table": "account"
+          },
+          "type": "text",
+          "unit": null,
+          "values": []
+        },
+        {
+          "name": "opening",
+          "source": {
+            "column": "opening_minor",
+            "table": "account"
+          },
+          "type": "money",
+          "unit": null,
+          "values": []
+        },
+        {
+          "name": "on_budget",
+          "source": {
+            "column": "on_budget",
+            "table": "account"
+          },
+          "type": "bool",
+          "unit": null,
+          "values": []
+        }
+      ],
+      "kind": "account",
+      "links": [],
+      "name": "account",
+      "name_source": {
+        "column": "title",
+        "table": "entity"
+      },
+      "pk": "id",
+      "plural": "accounts",
+      "table": "account",
+      "trash": false,
+      "verbs": [
+        "create",
+        "edit",
+        "archive",
+        "unarchive"
+      ],
+      "where_fields": [
+        "type",
+        "currency",
+        "opening",
+        "on_budget"
+      ]
+    },
+    {
+      "card": "category: name, key, group · verbs: create",
+      "container": false,
+      "date": null,
+      "entity": "category",
+      "fields": [
+        {
+          "name": "key",
+          "source": {
+            "column": "key",
+            "table": "concept"
+          },
+          "type": "text",
+          "unit": null,
+          "values": []
+        },
+        {
+          "name": "group",
+          "source": {
+            "column": "parent_id",
+            "table": "concept"
+          },
+          "type": "text",
+          "unit": null,
+          "values": []
+        }
+      ],
+      "kind": "category",
+      "links": [],
+      "name": "category",
+      "name_source": {
+        "column": "title",
+        "table": "entity"
+      },
+      "pk": "id",
+      "plural": "categories",
+      "table": "concept",
+      "trash": false,
+      "verbs": [
+        "create"
+      ],
+      "where_fields": [
+        "key",
+        "group"
+      ]
+    },
+    {
+      "card": "budget: name, date (month), amount (USD), currency, carry (yes|no)",
+      "container": false,
+      "date": {
+        "label": "month",
+        "source": {
+          "column": "month",
+          "table": "budget"
+        }
+      },
+      "entity": "budget",
+      "fields": [
+        {
+          "name": "amount",
+          "source": {
+            "column": "amount_minor",
+            "table": "budget"
+          },
+          "type": "money",
+          "unit": null,
+          "values": []
+        },
+        {
+          "name": "currency",
+          "source": {
+            "column": "currency",
+            "table": "budget"
+          },
+          "type": "text",
+          "unit": null,
+          "values": []
+        },
+        {
+          "name": "carry",
+          "source": {
+            "column": "carry",
+            "table": "budget"
+          },
+          "type": "bool",
+          "unit": null,
+          "values": []
+        }
+      ],
+      "kind": "budget",
+      "links": [],
+      "name": "budget",
+      "name_source": {
+        "column": "category_id",
+        "table": "budget"
+      },
+      "pk": "category_id",
+      "plural": "budgets",
+      "table": "budget",
+      "trash": false,
+      "verbs": [],
+      "where_fields": [
+        "amount",
+        "currency",
+        "carry"
+      ]
+    },
+    {
+      "card": "rule: name, date (created), category, position · verbs: edit",
+      "container": false,
+      "date": {
+        "label": "created",
+        "source": {
+          "column": "created_at",
+          "table": "rule"
+        }
+      },
+      "entity": "rule",
+      "fields": [
+        {
+          "name": "category",
+          "source": {
+            "column": "category_id",
+            "table": "rule"
+          },
+          "type": "text",
+          "unit": null,
+          "values": []
+        },
+        {
+          "name": "position",
+          "source": {
+            "column": "position",
+            "table": "rule"
+          },
+          "type": "number",
+          "unit": null,
+          "values": []
+        }
+      ],
+      "kind": "rule",
+      "links": [],
+      "name": "rule",
+      "name_source": {
+        "column": "pattern",
+        "table": "rule"
+      },
+      "pk": "id",
+      "plural": "rules",
+      "table": "rule",
+      "trash": false,
+      "verbs": [
+        "edit"
+      ],
+      "where_fields": [
+        "category",
+        "position"
       ]
     }
   ],
@@ -5508,6 +5606,7 @@
     "txn.id",
     "txn.posted_on",
     "txn.status",
+    "txn.transfer_id",
     "workout.climb_m",
     "workout.distance_m",
     "workout.energy_kcal",
@@ -5516,7 +5615,9 @@
     "workout.moving_s"
   ],
   "mapped_commands": [
+    "account.add",
     "account.edit",
+    "category.add",
     "container.create",
     "document.create_text",
     "document.move",
@@ -5662,6 +5763,14 @@
         [
           "list",
           "container.create"
+        ],
+        [
+          "account",
+          "account.add"
+        ],
+        [
+          "category",
+          "category.add"
         ]
       ],
       "done": "created",
@@ -5715,6 +5824,18 @@
         [
           "list",
           "entity.retitle"
+        ],
+        [
+          "transaction",
+          "entity.retitle"
+        ],
+        [
+          "account",
+          "account.edit"
+        ],
+        [
+          "rule",
+          "rule.edit"
         ]
       ],
       "done": "edited",
@@ -6076,7 +6197,24 @@
       "args": "",
       "commands": [
         [
+          "transaction",
+          "txn.unlink_transfer"
+        ]
+      ],
+      "done": "unlinked",
+      "flag": null,
+      "name": "unlink",
+      "verb": "unlink"
+    },
+    {
+      "args": "",
+      "commands": [
+        [
           "locker_item",
+          "flag.set"
+        ],
+        [
+          "account",
           "flag.set"
         ]
       ],
@@ -6090,6 +6228,10 @@
       "commands": [
         [
           "locker_item",
+          "flag.clear"
+        ],
+        [
+          "account",
           "flag.clear"
         ]
       ],

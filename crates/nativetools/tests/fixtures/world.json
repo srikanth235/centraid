@@ -191,6 +191,32 @@
       "password": "s3cret"
     }
   ],
+  "accounts": [
+    { "key": "everyday", "name": "Everyday", "kind": "checking", "currency": "USD" },
+    { "key": "rainy", "name": "Rainy day", "kind": "savings", "currency": "USD" }
+  ],
+  "transactions": [
+    {
+      "key": "to_savings",
+      "account": "everyday",
+      "date": "2026-09-20",
+      "amount": -200,
+      "name": "To savings",
+      "description": "TRANSFER TO SAVINGS"
+    },
+    {
+      "key": "from_checking",
+      "account": "rainy",
+      "date": "2026-09-20",
+      "amount": 200,
+      "name": "From checking",
+      "description": "TRANSFER FROM CHECKING"
+    }
+  ],
+  "transfers": [{ "a": "to_savings", "b": "from_checking" }],
+  "rules": [
+    { "key": "coffee_rule", "match": "contains", "text": "BLUE BOTTLE", "category": "food.dining" }
+  ],
   "links": [
     {
       "from": "reed",
