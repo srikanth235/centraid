@@ -642,6 +642,67 @@ mod tests {
         assert_eq!(bracket_opened("", "plain"), None);
     }
 
+    fn draft(id: Option<&str>, title: &str, body: &str) -> NoteDraft {
+        NoteDraft {
+            id: id.map(str::to_owned),
+            title: title.into(),
+            body: body.into(),
+        }
+    }
+
+    fn sent(request: &wire::ActRequest) -> Vec<String> {
+        let mut keys: Vec<String> = request.input.keys().cloned().collect();
+        keys.sort();
+        keys
+    }
+
+    #[test]
+    fn only_the_changed_fields_are_sent() {
+        let base = draft(Some("n1"), "Old", "words");
+        // The title alone.
+        let request = draft(Some("n1"), "New", "words").request(&base).unwrap();
+        assert_eq!(request.action, "edit-note");
+        assert_eq!(sent(&request), ["id", "title"]);
+        // The body alone.
+        let request = draft(Some("n1"), "Old", "more words").request(&base).unwrap();
+        assert_eq!(sent(&request), ["body", "id"]);
+        // Nothing changed: nothing to send.
+        assert!(base.request(&base).is_none());
+        // A body cleared to nothing is the member's words.
+        let request = draft(Some("n1"), "Old", "").request(&base).unwrap();
+        assert_eq!(sent(&request), ["body", "id"]);
+    }
+
+    #[test]
+    fn an_untitled_note_is_titled_from_its_first_line() {
+        let base = draft(Some("n1"), "", "old line");
+        let request = draft(Some("n1"), "", "\n  Shopping list \nmilk")
+            .request(&base)
+            .unwrap();
+        assert_eq!(sent(&request), ["body", "id", "title"]);
+        assert_eq!(
+            request.input["title"].kind,
+            Some(wire::value::Kind::Text("Shopping list".to_owned()))
+        );
+    }
+
+    #[test]
+    fn a_new_note_is_created_whole_and_learns_its_id_from_the_output() {
+        let mut fresh = draft(None, "Groceries", "milk");
+        let request = fresh.request(&draft(None, "", "")).unwrap();
+        assert_eq!(request.action, "create-note");
+        assert_eq!(sent(&request), ["body", "format", "title"]);
+        fresh.committed(br#"{"id":"n-9"}"#);
+        assert_eq!(fresh.id.as_deref(), Some("n-9"));
+        // From now on it is an edit of that note.
+        let after = draft(Some("n-9"), "Groceries", "milk and eggs");
+        assert_eq!(after.request(&fresh).unwrap().action, "edit-note");
+        // An output that names no id leaves the draft new.
+        let mut stubborn = draft(None, "x", "y");
+        stubborn.committed(b"{}");
+        assert!(stubborn.id.is_none());
+    }
+
     #[test]
     fn a_derived_title_stays_derived() {
         let current = NoteDraft {

@@ -43,7 +43,6 @@ const TYPES: Record<string, string> = {
   money: "centraid.screen.v1.MoneyHomeState",
   "money-import": "centraid.screen.v1.MoneyImportState",
   "money-transaction": "centraid.screen.v1.MoneyTransactionState",
-  notes: "centraid.screen.v1.NotesEditorState",
   photos: "centraid.screen.v1.PhotosGridState",
   // The rest of the photos miniapp: nine state messages for v0's fourteen
   // routes. The seven that collapsed did so under *a band destination is a
