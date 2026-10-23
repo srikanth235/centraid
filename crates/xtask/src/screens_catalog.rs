@@ -100,7 +100,7 @@ const HEADER: &str = "\
 
 use centraid_api_proto::core_v1 as wire;
 
-use crate::field::{Field, flag, null, put_field, real, text, whole};
+use crate::field::{Field, blob, flag, null, put_field, real, text, whole};
 ";
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -298,6 +298,10 @@ fn param(
             "integer" => ("i64".to_owned(), "whole"),
             "number" => ("f64".to_owned(), "real"),
             "boolean" => ("bool".to_owned(), "flag"),
+            // A string the schema calls binary is bytes, sent as a BLOB.
+            "string" if prop.get("format").and_then(Value::as_str) == Some("binary") => {
+                ("Vec<u8>".to_owned(), "blob")
+            }
             // An array or an object is its JSON text; the core decodes it by the schema.
             _ => ("String".to_owned(), "text"),
         }
