@@ -36,10 +36,6 @@ pub fn standard() -> Runtime {
                 agenda::TAB.to_owned(),
                 agenda::routes::home(centraid_api_proto::core_v1::AgendaDestination::Day, ""),
             ),
-            (
-                notes::TAB.to_owned(),
-                notes::routes::home(centraid_api_proto::core_v1::NotesPlace::Notes, "", "", false),
-            ),
         ],
     )
 }
