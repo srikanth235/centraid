@@ -1925,6 +1925,51 @@ pub mod act {
                 value.request()
             }
         }
+
+        #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+        pub enum RevealUse {
+            #[default]
+            Show,
+            Copy,
+        }
+        impl RevealUse {
+            fn wire(self) -> &'static str {
+                match self {
+                    Self::Show => "show",
+                    Self::Copy => "copy",
+                }
+            }
+        }
+
+        /// Receipt the reveal of ONE sealed field through locker.reveal_receipt, the record of who looked. It returns a receipt id and never the secret: the phone core opens the field behind the unlock and hands the plaintext only to the card or screen that asked, never to the model. Running it again only writes another receipt, so it is its own inverse.
+        #[derive(Clone, Debug, Default)]
+        pub struct Reveal {
+            pub columns: String,
+            pub item_id: String,
+            pub kind: String,
+            pub object_type: String,
+            pub field_id: Option<String>,
+            pub r#use: Option<RevealUse>,
+        }
+        impl Reveal {
+            pub const NAME: &str = "reveal";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("columns".to_owned(), text(self.columns));
+                map.insert("item_id".to_owned(), text(self.item_id));
+                map.insert("kind".to_owned(), text(self.kind));
+                map.insert("object_type".to_owned(), text(self.object_type));
+                if let Some(it) = self.field_id { map.insert("field_id".to_owned(), text(it)); }
+                if let Some(it) = self.r#use { map.insert("use".to_owned(), text(it.wire())); }
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<Reveal> for wire::ActRequest {
+            fn from(value: Reveal) -> Self {
+                value.request()
+            }
+        }
     }
 
     pub mod money {
@@ -4772,6 +4817,24 @@ pub mod load {
         }
         impl From<Search> for wire::LoadRequest {
             fn from(value: Search) -> Self {
+                value.request()
+            }
+        }
+
+        /// What deserves a second look, from metadata alone: items the member flagged compromised, logins whose address is not https, cards past their expiry and cards expiring within the month. Weak and reused passwords are not scored (a secret is never read to judge it). Reads the first 2,000 live and archived items and says when it stopped.
+        #[derive(Clone, Debug, Default)]
+        pub struct Review {
+        }
+        impl Review {
+            pub const NAME: &str = "review";
+            pub fn request(self) -> wire::LoadRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), params: map, ..Default::default() }
+            }
+        }
+        impl From<Review> for wire::LoadRequest {
+            fn from(value: Review) -> Self {
                 value.request()
             }
         }

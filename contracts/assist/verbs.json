@@ -164,13 +164,5 @@
       "done": "applied"
     }
   ],
-  "unbacked": [
-    {
-      "verb": "reveal",
-      "kind": "locker_item",
-      "app": "locker",
-      "command": "locker.reveal_receipt",
-      "why": "Locker declares no action that opens one sealed field: its `export` receipts a mass reveal, and the single reveal is a phone-side command the app table does not carry"
-    }
-  ]
+  "unbacked": []
 }

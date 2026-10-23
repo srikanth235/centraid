@@ -542,6 +542,9 @@ fn read(
         )?,
         // The trash: what is waiting to be purged.
         ("locker", "trash") => {
+            app_query::locker::trash(vault, door, &wire::LockerReviewRequest { tz })?
+        }
+        ("locker", "review") => {
             app_query::locker::review(vault, door, now, &wire::LockerReviewRequest { tz })?
         }
         ("locker", "access") => app_query::locker::access(

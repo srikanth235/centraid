@@ -128,6 +128,7 @@ pub mod agenda_editor;
 pub mod agenda_event;
 pub mod agenda_home;
 pub mod agenda_todo;
+pub mod locker;
 pub mod money;
 pub mod shared;
 pub mod task;

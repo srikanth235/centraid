@@ -30,6 +30,14 @@ message Route {
     TodoProjectRoute todo_project = 104;
     TodoDetailRoute todo_detail = 105;
     TodoCatchUpRoute todo_catch_up = 106;
+    // ---- locker (400-499) ----
+    LockerHomeRoute locker_home = 400;
+    LockerItemRoute locker_item = 401;
+    LockerEditorRoute locker_editor = 402;
+    LockerAccessRoute locker_access = 403;
+    LockerExportRoute locker_export = 404;
+    LockerImportRoute locker_import = 405;
+    LockerLockRoute locker_lock = 406;
     // ---- money (500-599) ----
     MoneyHomeRoute money_home = 500;
     MoneyTransactionRoute money_transaction = 501;
@@ -133,6 +141,65 @@ message TodoCatchUpRoute {}
 message TrashRoute {}
 
 // ---------------------------------------------------------------------------
+// Locker
+// ---------------------------------------------------------------------------
+
+message LockerHomeRoute {
+  LockerDestination destination = 1;
+}
+
+enum LockerDestination {
+  LOCKER_DESTINATION_UNSPECIFIED = 0;
+  LOCKER_DESTINATION_ITEMS = 1;
+  LOCKER_DESTINATION_REVIEW = 2;
+  LOCKER_DESTINATION_GENERATE = 3;
+  // Not a tab: the search bar lands here, closing goes back to Items.
+  LOCKER_DESTINATION_SEARCH = 4;
+}
+
+message LockerItemRoute {
+  string item_id = 1;
+  // The pushing page's title, which the back control says.
+  string parent = 2;
+  // A member action a chat card offered (`reveal:password`, `code:otp_seed`):
+  // once the page has loaded under an open Locker it runs that flow. Empty for
+  // a plain open.
+  string follow = 3;
+}
+
+// AN EXPLICIT SAVE, NOT AUTOSAVE: a secret saved on a pause mid-typing would
+// be a wrong secret the member did not choose. Leaving with changes asks first.
+// A SAVE OF AN EXISTING ITEM IS THE WHOLE DRAFT: `locker.edit-item` REPLACES the
+// type's fields, so a field left empty is cleared and a sealed secret the
+// member did not touch goes as the placeholder `«sealed»`, which keeps it.
+message LockerEditorRoute {
+  LockerEditorMode mode = 1;
+  // EDIT names the item; ADD mints its id in Rust.
+  string item_id = 2;
+  // A new item's type; empty is a login.
+  string type = 3;
+  // The generator's candidate was handed over (`kit` take-once slot): the new
+  // login's password starts as it.
+  bool from_generator = 4;
+}
+
+enum LockerEditorMode {
+  LOCKER_EDITOR_MODE_UNSPECIFIED = 0;
+  LOCKER_EDITOR_MODE_ADD = 1;
+  LOCKER_EDITOR_MODE_EDIT = 2;
+}
+
+message LockerAccessRoute {}
+
+message LockerExportRoute {
+  string parent = 1;
+}
+
+message LockerImportRoute {
+  string parent = 1;
+}
+
+message LockerLockRoute {}
 // Money
 // ---------------------------------------------------------------------------
 

@@ -742,6 +742,30 @@ impl Handle {
             .clone()
     }
 
+    /// THE LOCKER SESSION (#1047, D-5): one step of `Request.locker`. A shell
+    /// asks it over the ABI; the screen runtime asks it through
+    /// [`crate::screens::ScreenCtx::locker`], the same step on the same session.
+    ///
+    /// # Errors
+    /// The session's own refusals; [`CoreError::Unpaired`] with no file.
+    pub fn locker_session(
+        &self,
+        request: &wire::LockerSessionRequest,
+    ) -> Result<wire::LockerSessionResponse> {
+        let changes = crate::events::ChangeFeed::new(self.events());
+        self.with_vault(|vault| {
+            crate::locker::phone::answer(
+                vault,
+                &self.registry,
+                &self.owner(),
+                self.keys.as_ref(),
+                &self.locker,
+                request,
+                &changes,
+            )
+        })
+    }
+
     /// Run a body with the vault. The **one** way anything reaches the file.
     ///
     /// Refuses [`CoreError::Unpaired`] when this seat holds no copy. That is a
@@ -923,22 +947,9 @@ impl Handle {
                 )?)))
             }
             // THE LOCKER SESSION (#1047, D-5). See `crate::locker::phone`.
-            K::Locker(request) => {
-                let changes = crate::events::ChangeFeed::new(self.events());
-                Ok(response(wire::response::Kind::Locker(self.with_vault(
-                    |vault| {
-                        crate::locker::phone::answer(
-                            vault,
-                            &self.registry,
-                            &self.owner(),
-                            self.keys.as_ref(),
-                            &self.locker,
-                            request,
-                            &changes,
-                        )
-                    },
-                )?)))
-            }
+            K::Locker(request) => Ok(response(wire::response::Kind::Locker(
+                self.locker_session(request)?,
+            ))),
             // THE PASS (#1080). Not through `with_vault` for its whole length:
             // the vault is held for the snapshot's copy and the reads a pass
             // makes, never across the network, so a screen's reads go on while
@@ -1020,6 +1031,14 @@ impl Handle {
                 let host = self.screens.get().ok_or_else(|| CoreError::Unsupported {
                     type_url: "centraid.core.v1.ScreenRequest".to_owned(),
                 })?;
+                // LEAVING THE FOREGROUND RELOCKS THE LOCKER (D-5), whether or
+                // not a Locker screen is open to hear it: the session is the
+                // core's, so the rule is too.
+                if let Some(wire::screen_request::Kind::Lifecycle(lifecycle)) = &request.kind
+                    && !lifecycle.foreground
+                {
+                    crate::locker::phone::relock(&self.locker);
+                }
                 Ok(response(wire::response::Kind::Screen(Box::new(
                     host.call(self, request)?,
                 ))))

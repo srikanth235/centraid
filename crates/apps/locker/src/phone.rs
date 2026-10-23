@@ -95,6 +95,21 @@ pub fn trashed_statement() -> PageQuery {
     )
 }
 
+/// Every trashed item, most recently trashed first: its ENTITY rows.
+#[must_use]
+pub fn trash_statement() -> PageQuery {
+    PageQuery::new(
+        "locker.phone.trash",
+        ENTITY_COLUMNS,
+        "entity",
+        PageOrder::desc("deleted_at", "id"),
+    )
+    .filter(
+        "kind = ? AND deleted_at IS NOT NULL",
+        vec![PageBindValue::Text(KIND.to_owned())],
+    )
+}
+
 /// The entity kind this app's items are.
 const KIND: &str = "locker_item";
 
@@ -385,6 +400,14 @@ pub fn load_items(door: &dyn PageDoor, archived: bool, limit: Option<i64>) -> Ki
         tags: tags.into_iter().collect(),
         items,
     })
+}
+
+/// `locker.trash`: what is in the trash, most recently trashed first, each
+/// with the instant the sweep erases it.
+pub fn load_trash(door: &dyn PageDoor) -> KitResult<Vec<ItemRow>> {
+    let walked = read_window(door, &trash_statement(), TRASH_ROWS)?;
+    let (rows, _) = fold_items(door, walked.rows)?;
+    Ok(rows)
 }
 
 /// One item, trashed or not; `None` when no item has the id.

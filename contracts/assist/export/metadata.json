@@ -518,6 +518,18 @@
       "verb": "untag"
     },
     {
+      "action": "reveal",
+      "app": "locker",
+      "command": "locker.reveal_receipt",
+      "id_param": "item_id",
+      "kind": "locker item",
+      "names": [
+        "field"
+      ],
+      "qualifier": null,
+      "verb": "reveal"
+    },
+    {
       "action": "add-account",
       "app": "money",
       "command": "account.add",
@@ -1014,16 +1026,6 @@
       ],
       "qualifier": null,
       "verb": "untag"
-    },
-    {
-      "action": "",
-      "app": "locker",
-      "command": "locker.reveal_receipt",
-      "id_param": "item_id",
-      "kind": "locker item",
-      "names": [],
-      "qualifier": null,
-      "verb": "reveal"
     }
   ],
   "catalog": {
@@ -2199,6 +2201,24 @@
           "export my whole locker",
           "download every item with its secrets",
           "export the locker including the trash"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "reveal"
+      },
+      {
+        "action": "reveal",
+        "also": [],
+        "app": "locker",
+        "bulk": false,
+        "chat": "direct",
+        "command": "locker.reveal_receipt",
+        "inverse": "reveal",
+        "kind": "locker_item",
+        "phrasings": [
+          "show me the password for my bank login",
+          "copy the card number of my Visa",
+          "reveal the wifi password"
         ],
         "qualifier": null,
         "sealed": [],
@@ -3943,6 +3963,18 @@
         ],
         "kind": "locker_item",
         "query": "search"
+      },
+      {
+        "app": "locker",
+        "figures": [
+          "compromised",
+          "insecure_address",
+          "expired",
+          "expiring",
+          "reviewed"
+        ],
+        "kind": "locker_item",
+        "query": "review"
       },
       {
         "app": "locker",
@@ -5751,15 +5783,7 @@
     "ask",
     "decline"
   ],
-  "unbacked_verbs": [
-    {
-      "app": "locker",
-      "command": "locker.reveal_receipt",
-      "kind": "locker_item",
-      "verb": "reveal",
-      "why": "Locker declares no action that opens one sealed field: its `export` receipts a mass reveal, and the single reveal is a phone-side command the app table does not carry"
-    }
-  ],
+  "unbacked_verbs": [],
   "verbs": [
     {
       "args": "kind: <kind>, name: <text>, then that kind's fields (dates as date expressions)",

@@ -140,7 +140,19 @@ final class ScreenStore: ObservableObject {
         switch request.effect.kind {
         #if os(iOS)
         case .clipboardSet(let set)?:
-            UIPasteboard.general.string = set.text
+            if set.sensitive && set.clearAfterMs > 0 {
+                // THE OS KEEPS THE DEADLINE: a pasteboard item expires on its own, so a killed app
+                // cannot leave a secret behind, and `localOnly` keeps it off Universal Clipboard.
+                UIPasteboard.general.setItems(
+                    [["public.utf8-plain-text": set.text]],
+                    options: [
+                        .expirationDate: Date(timeIntervalSinceNow: Double(set.clearAfterMs) / 1000),
+                        .localOnly: true,
+                    ]
+                )
+            } else {
+                UIPasteboard.general.string = set.text
+            }
             answer(request, .done(Centraid_Core_V1_EffectDone()))
         case .clipboardClear(let clear)?:
             // Only what the core put there: never clear something the member copied since.
