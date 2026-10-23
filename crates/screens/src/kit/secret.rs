@@ -37,6 +37,9 @@ pub struct Secrets {
     shown: BTreeMap<String, String>,
     shielded: bool,
     copied: Option<String>,
+    /// The screen's own view already shields capture for as long as it is open
+    /// (Locker's whole-app `secure` flag), so no shield effect is sent.
+    view_shields: bool,
 }
 
 // A derived `Debug` would print the plaintext into a log line.
@@ -65,12 +68,23 @@ fn millis(after: Duration) -> u64 {
 }
 
 impl Secrets {
+    /// Secrets for a screen whose view carries its own capture shield: values
+    /// still auto-hide and copies still clear, but no `ScreenshotShield` effect
+    /// is sent (two owners of one flag would fight).
+    #[must_use]
+    pub fn view_shielded() -> Self {
+        Self {
+            view_shields: true,
+            ..Self::default()
+        }
+    }
+
     /// Show `value` under `key` for `after`, then hide it. Raises the shield
     /// when nothing was shown yet. Showing the same key again restarts its life.
     pub fn show(&mut self, ctx: &Ctx, key: &str, value: &str, after: Duration) -> Vec<wire::Effect> {
         self.shown.insert(key.to_owned(), value.to_owned());
         ctx.start_timer(&format!("{HIDE_TIMER}{key}"), after);
-        if self.shielded {
+        if self.shielded || self.view_shields {
             Vec::new()
         } else {
             self.shielded = true;

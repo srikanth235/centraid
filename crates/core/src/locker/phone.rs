@@ -80,6 +80,22 @@ pub fn answer(
     request: &wire::LockerSessionRequest,
     changes: &crate::events::ChangeFeed,
 ) -> Result<wire::LockerSessionResponse> {
+    let mut answered = step(vault, registry, owner, keys, cell, request, changes)?;
+    // WHETHER AN UNLOCK CAN SUCCEED rides every answer, so a wall never raises
+    // the OS prompt for a core that would refuse it.
+    answered.keyed = keys.is_some();
+    Ok(answered)
+}
+
+fn step(
+    vault: &Vault,
+    registry: &Registry,
+    owner: &Principal,
+    keys: Option<&crate::phone::Keyring>,
+    cell: &Cell,
+    request: &wire::LockerSessionRequest,
+    changes: &crate::events::ChangeFeed,
+) -> Result<wire::LockerSessionResponse> {
     use wire::locker_session_request::Step;
     let now = vault.clock().now_ms();
     match &request.step {
