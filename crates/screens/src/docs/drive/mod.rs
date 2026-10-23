@@ -52,6 +52,7 @@ mod query;
 mod sheets;
 mod view;
 
+pub use ingest::UNAVAILABLE;
 use ingest::{Ingest, Kind};
 use query::Query;
 use sheets::Sheet;
@@ -349,7 +350,11 @@ impl Drive {
             Some(D::Dismissed(_)) => self.asking = None,
             Some(D::Permission(changed)) => self.permission(&changed),
             Some(D::FollowedChanged(changed)) => self.followed = changed.followed,
-            Some(D::IngestRetried(_)) => return self.ingest.retry(ctx),
+            Some(D::IngestRetried(_)) => {
+                let effects = self.ingest.retry(ctx);
+                self.reload(ctx);
+                return effects;
+            }
             Some(D::IngestDismissed(_)) => self.ingest.dismiss(),
             None => {}
         }
@@ -506,7 +511,10 @@ impl Drive {
         self.sheet = Sheet::None;
         let into = self.new_item_folder();
         let parent = self.title(ctx);
-        self.ingest.request(ctx, kind, &into, &parent)
+        let effects = self.ingest.request(ctx, kind, &into, &parent);
+        // A filed document is on the shelf now.
+        self.reload(ctx);
+        effects
     }
 
     /// A new document or folder lands inside the folder open, else at the top
@@ -673,6 +681,7 @@ impl Drive {
             return Vec::new();
         };
         if let Some(effects) = self.ingest.result(ctx, &outcome) {
+            self.reload(ctx);
             return effects;
         }
         match outcome {
