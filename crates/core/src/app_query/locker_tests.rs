@@ -1635,3 +1635,43 @@ fn a_json_export_imports_back_whole() {
         "the archived item stays archived"
     );
 }
+
+impl Scratch {
+    /// A manifest query through the one read, as a screen asks it.
+    fn load(&self, query: &str) -> Answer {
+        self.handle
+            .load(&wire::LoadRequest {
+                app: "locker".to_owned(),
+                query: query.to_owned(),
+                zone: TZ.to_owned(),
+                ..wire::LoadRequest::default()
+            })
+            .expect("the read answers")
+            .answer
+            .and_then(|response| response.answer)
+            .expect("a load is answered")
+    }
+}
+
+/// THE TRASH QUERY ANSWERS THE TRASH (#1135). It used to answer the Review
+/// verdicts, so the kit's trash screen would have listed nothing it could name.
+#[test]
+fn the_trash_query_lists_the_trashed_items_with_the_days_they_went_and_will_be_erased() {
+    let scratch = stocked();
+    let Answer::LockerItems(trash) = scratch.load("trash") else {
+        panic!("the trash answers its items");
+    };
+    let ids: Vec<&str> = trash.items.iter().map(|row| row.item_id.as_str()).collect();
+    assert_eq!(ids, ["item-trashed"]);
+    let gone = &trash.items[0];
+    assert_eq!(gone.title, "Gone");
+    assert!(!gone.deleted_local_day.is_empty());
+    assert!(gone.purge_local_day > gone.deleted_local_day);
+}
+
+/// REVIEW IS A MANIFEST QUERY (#1135): the Review tab reads it through `load`.
+#[test]
+fn review_is_a_manifest_query() {
+    let scratch = stocked();
+    assert!(matches!(scratch.load("review"), Answer::LockerReview(_)));
+}
