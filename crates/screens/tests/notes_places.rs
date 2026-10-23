@@ -63,17 +63,45 @@ fn the_band_swaps_the_place_and_never_a_stack_entry() {
             .len()
     };
     let before = depth(&d);
-    send_home(&mut d, i, H::Band(ev::BandPicked { key: "notebooks".into() }));
+    send_home(
+        &mut d,
+        i,
+        H::Band(ev::BandPicked {
+            key: "notebooks".into(),
+        }),
+    );
     let state = home_state(d.view(i));
     assert_eq!(state.place, wire::NotesPlace::Notebooks as i32);
     assert_eq!(state.title, "Notebooks");
-    assert!(state.band.iter().find(|t| t.key == "notebooks").unwrap().current);
+    assert!(
+        state
+            .band
+            .iter()
+            .find(|t| t.key == "notebooks")
+            .unwrap()
+            .current
+    );
     assert!(state.chips.is_empty() && state.search.is_none());
     assert_eq!(state.new_note, Some(routes::new_note()));
-    send_home(&mut d, i, H::Band(ev::BandPicked { key: "journal".into() }));
-    assert_eq!(home_state(d.view(i)).place, wire::NotesPlace::Journal as i32);
+    send_home(
+        &mut d,
+        i,
+        H::Band(ev::BandPicked {
+            key: "journal".into(),
+        }),
+    );
+    assert_eq!(
+        home_state(d.view(i)).place,
+        wire::NotesPlace::Journal as i32
+    );
     assert_eq!(home_state(d.view(i)).title, "Journal");
-    send_home(&mut d, i, H::Band(ev::BandPicked { key: "notes".into() }));
+    send_home(
+        &mut d,
+        i,
+        H::Band(ev::BandPicked {
+            key: "notes".into(),
+        }),
+    );
     assert_eq!(home_state(d.view(i)).place, wire::NotesPlace::Notes as i32);
     assert_eq!(depth(&d), before);
 }
@@ -106,7 +134,10 @@ fn notebooks_unfiled_first_every_notebook_with_its_count_in_words() {
     assert_eq!(recipes_row.count, "1 note");
     assert_eq!(recipes_row.accessibility_label, "Recipes, 1 note");
     assert!(recipes_row.manageable);
-    assert_eq!(rows.iter().find(|r| r.title == "Empty").unwrap().count, "0 notes");
+    assert_eq!(
+        rows.iter().find(|r| r.title == "Empty").unwrap().count,
+        "0 notes"
+    );
     assert!(books(d.view(i)).empty.is_none());
 }
 
@@ -138,7 +169,13 @@ fn create_is_a_write_a_refusal_keeps_the_name_and_a_commit_closes_the_sheet() {
     let mut d = clean();
     clear_notebooks(&d);
     let i = home(&mut d, wire::NotesPlace::Notebooks);
-    send_home(&mut d, i, H::FormOpened(ev::FormOpened { notebook_id: String::new() }));
+    send_home(
+        &mut d,
+        i,
+        H::FormOpened(ev::FormOpened {
+            notebook_id: String::new(),
+        }),
+    );
     let form = home_state(d.view(i)).form.clone().expect("the sheet");
     assert_eq!(form.title, "New notebook");
     assert_eq!(form.placeholder, "Notebook name");
@@ -146,11 +183,21 @@ fn create_is_a_write_a_refusal_keeps_the_name_and_a_commit_closes_the_sheet() {
     assert_eq!(form.cancel_label, "Cancel");
     assert!(!form.can_confirm);
     // A blank name creates nothing.
-    send_home(&mut d, i, H::FormName(ev::FormNameEdited { name: "  ".into() }));
+    send_home(
+        &mut d,
+        i,
+        H::FormName(ev::FormNameEdited { name: "  ".into() }),
+    );
     send_home(&mut d, i, H::FormConfirmed(ev::FormConfirmed {}));
     assert!(home_state(d.view(i)).form.is_some());
     assert_eq!(books(d.view(i)).rows.len(), 1);
-    send_home(&mut d, i, H::FormName(ev::FormNameEdited { name: "  Travel ".into() }));
+    send_home(
+        &mut d,
+        i,
+        H::FormName(ev::FormNameEdited {
+            name: "  Travel ".into(),
+        }),
+    );
     assert!(home_state(d.view(i)).form.clone().unwrap().can_confirm);
     send_home(&mut d, i, H::FormConfirmed(ev::FormConfirmed {}));
     assert!(home_state(d.view(i)).form.is_none());
@@ -158,7 +205,13 @@ fn create_is_a_write_a_refusal_keeps_the_name_and_a_commit_closes_the_sheet() {
     assert_eq!(rows.len(), 2);
     assert_eq!(rows[1].title, "Travel");
     // The sheet can be put away.
-    send_home(&mut d, i, H::FormOpened(ev::FormOpened { notebook_id: String::new() }));
+    send_home(
+        &mut d,
+        i,
+        H::FormOpened(ev::FormOpened {
+            notebook_id: String::new(),
+        }),
+    );
     send_home(&mut d, i, H::FormDismissed(ev::FormDismissed {}));
     assert!(home_state(d.view(i)).form.is_none());
 }
@@ -177,7 +230,13 @@ fn a_notebook_is_renamed_and_deleted_from_its_menu() {
         },
     );
     let i = home(&mut d, wire::NotesPlace::Notebooks);
-    send_home(&mut d, i, H::NotebookMenu(ev::NotebookMenuOpened { notebook_id: book.clone() }));
+    send_home(
+        &mut d,
+        i,
+        H::NotebookMenu(ev::NotebookMenuOpened {
+            notebook_id: book.clone(),
+        }),
+    );
     let state = home_state(d.view(i));
     assert_eq!(state.sheet, wire::NotesSheet::NotebookMenu as i32);
     let menu = state.menu.clone().unwrap();
@@ -185,23 +244,45 @@ fn a_notebook_is_renamed_and_deleted_from_its_menu() {
     assert_eq!(menu.rename_label, "Rename");
     assert_eq!(menu.trash_label, "Delete");
     // RENAME opens the sheet over the current name.
-    send_home(&mut d, i, H::FormOpened(ev::FormOpened { notebook_id: book.clone() }));
+    send_home(
+        &mut d,
+        i,
+        H::FormOpened(ev::FormOpened {
+            notebook_id: book.clone(),
+        }),
+    );
     let form = home_state(d.view(i)).form.clone().unwrap();
     assert_eq!(form.title, "Rename notebook");
     assert_eq!(form.name, "Trips");
     assert_eq!(form.confirm_label, "Rename");
     assert_eq!(home_state(d.view(i)).sheet, wire::NotesSheet::None as i32);
-    send_home(&mut d, i, H::FormName(ev::FormNameEdited { name: "Journeys".into() }));
+    send_home(
+        &mut d,
+        i,
+        H::FormName(ev::FormNameEdited {
+            name: "Journeys".into(),
+        }),
+    );
     send_home(&mut d, i, H::FormConfirmed(ev::FormConfirmed {}));
     assert_eq!(books(d.view(i)).rows[1].title, "Journeys");
     // DELETE is asked first.
-    send_home(&mut d, i, H::NotebookDelete(ev::NotebookDeleteAsked { notebook_id: book.clone() }));
+    send_home(
+        &mut d,
+        i,
+        H::NotebookDelete(ev::NotebookDeleteAsked {
+            notebook_id: book.clone(),
+        }),
+    );
     let confirm = home_state(d.view(i)).confirm.clone().expect("a confirm");
     assert_eq!(confirm.title, "Delete this notebook?");
     assert!(confirm.destructive);
     send_home(&mut d, i, H::Dismissed(ev::Dismissed {}));
     assert_eq!(books(d.view(i)).rows.len(), 2);
-    send_home(&mut d, i, H::NotebookDelete(ev::NotebookDeleteAsked { notebook_id: book }));
+    send_home(
+        &mut d,
+        i,
+        H::NotebookDelete(ev::NotebookDeleteAsked { notebook_id: book }),
+    );
     send_home(&mut d, i, H::Confirmed(ev::Confirmed {}));
     assert_eq!(books(d.view(i)).rows.len(), 1);
     // The notes it held went to the trash with it, as the confirm said.
@@ -227,13 +308,29 @@ fn a_notebook_row_opens_the_notes_place_filtered_and_unfiled_is_its_own_filter()
         },
     );
     let i = home(&mut d, wire::NotesPlace::Notebooks);
-    send_home(&mut d, i, H::NotebookPicked(ev::NotebookPicked { id: book }));
+    send_home(
+        &mut d,
+        i,
+        H::NotebookPicked(ev::NotebookPicked { id: book }),
+    );
     let state = home_state(d.view(i));
     assert_eq!(state.place, wire::NotesPlace::Notes as i32);
     assert_eq!(state.title, "Cabin");
     assert_eq!(titles(d.view(i)), ["Plans"]);
-    send_home(&mut d, i, H::Band(ev::BandPicked { key: "notebooks".into() }));
-    send_home(&mut d, i, H::NotebookPicked(ev::NotebookPicked { id: "unfiled".into() }));
+    send_home(
+        &mut d,
+        i,
+        H::Band(ev::BandPicked {
+            key: "notebooks".into(),
+        }),
+    );
+    send_home(
+        &mut d,
+        i,
+        H::NotebookPicked(ev::NotebookPicked {
+            id: "unfiled".into(),
+        }),
+    );
     assert_eq!(home_state(d.view(i)).title, "Unfiled");
     assert_eq!(titles(d.view(i)), ["Loose"]);
 }
@@ -266,7 +363,11 @@ fn the_journal_groups_entries_by_the_local_day_newest_first_in_words() {
     let day = data.days.first().expect("a day");
     assert_eq!(day.head.as_ref().unwrap().title, "Today");
     assert_eq!(day.day, core.today);
-    assert!(day.rows.iter().any(|row| !row.meta.is_empty() && row.route.is_some()));
+    assert!(
+        day.rows
+            .iter()
+            .any(|row| !row.meta.is_empty() && row.route.is_some())
+    );
     assert_eq!(data.tz, core.tz);
 }
 
@@ -279,13 +380,21 @@ fn the_empty_journal_is_one_sentence() {
     };
     for day in core.days {
         for entry in day.entries {
-            arrange(&d, act::notes::DeleteNote { note_id: entry.note_id });
+            arrange(
+                &d,
+                act::notes::DeleteNote {
+                    note_id: entry.note_id,
+                },
+            );
         }
     }
     let i = home(&mut d, wire::NotesPlace::Journal);
     let empty = journal(d.view(i)).empty.clone().expect("empty");
     assert_eq!(empty.headline, "No journal entries yet");
-    assert_eq!(empty.body, "Entries you write about people in People appear here.");
+    assert_eq!(
+        empty.body,
+        "Entries you write about people in People appear here."
+    );
     assert!(journal(d.view(i)).days.is_empty());
 }
 
@@ -328,7 +437,12 @@ fn a_new_entry_opens_the_sheet_and_save_files_it_through_peoples_action_on_the_d
     let data = journal(d.view(i));
     assert_eq!(data.days[0].day, today);
     assert_eq!(data.days[0].head.as_ref().unwrap().title, "Today");
-    assert!(data.days[0].rows.iter().any(|row| row.title.contains("calm") || row.title.contains("Wrote")));
+    assert!(
+        data.days[0]
+            .rows
+            .iter()
+            .any(|row| row.title.contains("calm") || row.title.contains("Wrote"))
+    );
     // Putting the sheet away writes nothing.
     send_home(&mut d, i, H::NewEntry(ev::NewEntryTapped {}));
     send_home(&mut d, i, H::ComposeClosed(ev::ComposeClosed {}));

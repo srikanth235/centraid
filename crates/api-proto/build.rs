@@ -119,6 +119,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .boxed(".centraid.core.v1.TodoProjectState.content.data")
         // Home is by far the largest view state.
         .boxed(".centraid.core.v1.ViewState.kind.agenda_home")
+        .boxed(".centraid.core.v1.ViewState.kind.notes_home")
         .boxed(".centraid.screen.v1.PeopleHomeData.surface.touch")
         .boxed(".centraid.screen.v1.PeopleHomeState.content.data")
         .boxed(".centraid.screen.v1.PeopleHomeEvent.kind.data")

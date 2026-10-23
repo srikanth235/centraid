@@ -207,7 +207,13 @@ impl Home {
     fn confirmed(&mut self, ctx: &Ctx) {
         match std::mem::replace(&mut self.asking, Asking::Nothing) {
             Asking::TrashNote(id) => {
-                self.write(ctx, act::notes::DeleteNote { note_id: id.clone() }, &id);
+                self.write(
+                    ctx,
+                    act::notes::DeleteNote {
+                        note_id: id.clone(),
+                    },
+                    &id,
+                );
             }
             Asking::DeleteNotebook(id) => {
                 self.write(
@@ -557,7 +563,11 @@ impl Home {
                         .phase
                         .data()
                         .map(|library| {
-                            super::fold::file_choices(locale, &library.notebooks, &found.notebook_id)
+                            super::fold::file_choices(
+                                locale,
+                                &library.notebooks,
+                                &found.notebook_id,
+                            )
                         })
                         .unwrap_or_default()
                 } else {
@@ -663,7 +673,7 @@ impl Screen for Home {
             window: self.library.window,
         };
         wire::ViewState {
-            kind: Some(wire::view_state::Kind::NotesHome(state)),
+            kind: Some(wire::view_state::Kind::NotesHome(Box::new(state))),
             ..wire::ViewState::default()
         }
     }

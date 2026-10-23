@@ -416,6 +416,19 @@ pub(crate) fn note(
                 deleted_at: note.deleted_at,
                 purge_at: note.purge_at,
                 notebook_id: note.notebook_id,
+                tags: note
+                    .tags
+                    .into_iter()
+                    .map(|tag| wire::NotesTag {
+                        concept_id: tag.concept_id,
+                        label: tag.label,
+                    })
+                    .collect(),
+                attachments: note
+                    .attachments
+                    .into_iter()
+                    .map(attachment_to_wire)
+                    .collect(),
             })
         },
     )

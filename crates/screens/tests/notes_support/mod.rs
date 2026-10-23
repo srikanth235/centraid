@@ -108,7 +108,12 @@ pub fn clear_notes(d: &Driver) {
             break;
         }
         for row in library.notes {
-            arrange(d, act::notes::DeleteNote { note_id: row.note_id });
+            arrange(
+                d,
+                act::notes::DeleteNote {
+                    note_id: row.note_id,
+                },
+            );
         }
     }
 }
@@ -166,7 +171,10 @@ pub fn library_data(v: &wire::ViewState) -> &wire::NotesLibraryData {
 }
 
 pub fn titles(v: &wire::ViewState) -> Vec<String> {
-    library_rows(v).iter().map(|row| row.title.clone()).collect()
+    library_rows(v)
+        .iter()
+        .map(|row| row.title.clone())
+        .collect()
 }
 
 pub fn send_home(d: &mut Driver, i: u64, event: wire::notes_home_event::Kind) {

@@ -58,7 +58,10 @@ fn the_notes_about_a_thing_are_one_read_newest_first_live_only() {
     assert!(!found.truncated);
     // Newest first, each a preview and a tally and never a body.
     assert!(found.notes[0].preview.starts_with("Birthday dinner at six"));
-    assert_eq!((found.notes[0].check_total, found.notes[0].check_done), (1, 0));
+    assert_eq!(
+        (found.notes[0].check_total, found.notes[0].check_done),
+        (1, 0)
+    );
     assert!(found.notes[1].preview.starts_with("Likes the blue scarf"));
     assert!(found.notes[0].updated_local_day.len() == 10);
     assert_eq!(about(&d, &dad).notes.len(), 1);

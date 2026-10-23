@@ -361,11 +361,7 @@ fn looks_like_when(text: &str) -> bool {
 /// The first non-blank line of `markdown`, unmarked and capped at 80 characters.
 #[must_use]
 pub fn excerpt(markdown: &str) -> String {
-    let Some(line) = markdown
-        .lines()
-        .map(unmark)
-        .find(|line| !line.is_empty())
-    else {
+    let Some(line) = markdown.lines().map(unmark).find(|line| !line.is_empty()) else {
         return String::new();
     };
     if line.chars().count() <= EXCERPT {
@@ -399,10 +395,13 @@ fn strip_block_marks(line: &str) -> String {
     let mut rest = line;
     loop {
         let trimmed = rest.trim_start();
-        let after = ["###### ", "##### ", "#### ", "### ", "## ", "# ", "> ", "- ", "* ", "+ ", "[ ] ", "[x] ", "[X] "]
-            .iter()
-            .find_map(|mark| trimmed.strip_prefix(mark))
-            .or_else(|| numbered(trimmed));
+        let after = [
+            "###### ", "##### ", "#### ", "### ", "## ", "# ", "> ", "- ", "* ", "+ ", "[ ] ",
+            "[x] ", "[X] ",
+        ]
+        .iter()
+        .find_map(|mark| trimmed.strip_prefix(mark))
+        .or_else(|| numbered(trimmed));
         match after {
             Some(next) => rest = next,
             None => return trimmed.to_owned(),
@@ -435,7 +434,9 @@ fn replace_bracketed(text: &str, open: &str, mid: &str, close: &str) -> String {
         let tail = if close.is_empty() {
             Some(after_mid)
         } else {
-            after_mid.find(close).map(|at| &after_mid[at + close.len()..])
+            after_mid
+                .find(close)
+                .map(|at| &after_mid[at + close.len()..])
         };
         let Some(tail) = tail else {
             break;
@@ -538,7 +539,10 @@ mod tests {
 
     #[test]
     fn an_excerpt_drops_markdown_marks() {
-        assert_eq!(excerpt("## **Bold** and [a link](http://x) and [[Wiki]]"), "Bold and a link and Wiki");
+        assert_eq!(
+            excerpt("## **Bold** and [a link](http://x) and [[Wiki]]"),
+            "Bold and a link and Wiki"
+        );
         assert_eq!(excerpt("> - [ ] buy milk"), "buy milk");
         assert_eq!(excerpt(&"word ".repeat(40)).chars().count(), 80);
     }

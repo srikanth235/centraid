@@ -67,7 +67,11 @@ fn versions_newest_first_the_current_one_unrestorable_and_restore_is_a_write() {
     assert_eq!(note_of(&d, &id).body, "third words");
     // RESTORING ASKS NOTHING and writes the words it replaces as a new version.
     let oldest = versions[2].content_id.clone();
-    send_history(&mut d, i, H::Restore(ev::RestoreTapped { content_id: oldest }));
+    send_history(
+        &mut d,
+        i,
+        H::Restore(ev::RestoreTapped { content_id: oldest }),
+    );
     assert_eq!(note_of(&d, &id).body, "first words");
     let after = rows(d.view(i));
     assert_eq!(after.len(), 4, "the restore is itself a version");
@@ -134,8 +138,18 @@ fn the_trash_lists_trashed_notes_with_their_day_restore_only() {
             ..Default::default()
         },
     );
-    arrange(&d, act::notes::DeleteNote { note_id: named.clone() });
-    arrange(&d, act::notes::DeleteNote { note_id: unnamed.clone() });
+    arrange(
+        &d,
+        act::notes::DeleteNote {
+            note_id: named.clone(),
+        },
+    );
+    arrange(
+        &d,
+        act::notes::DeleteNote {
+            note_id: unnamed.clone(),
+        },
+    );
     let i = d.push(notes::TAB, routes::trash());
     let view = trash_state(d.view(i));
     assert_eq!(view.app_id, "notes");
@@ -160,12 +174,25 @@ fn the_trash_lists_trashed_notes_with_their_day_restore_only() {
     assert_eq!(data.empty_label, "");
     send_trash(&mut d, i, T::Purge(te::PurgeTapped { id: named.clone() }));
     send_trash(&mut d, i, T::Empty(te::EmptyTapped {}));
-    assert!(trash_state(d.view(i)).confirm.is_none(), "nothing to confirm");
+    assert!(
+        trash_state(d.view(i)).confirm.is_none(),
+        "nothing to confirm"
+    );
     // Restore asks nothing and brings the note back.
-    send_trash(&mut d, i, T::Restore(te::RestoreTapped { id: named.clone() }));
+    send_trash(
+        &mut d,
+        i,
+        T::Restore(te::RestoreTapped { id: named.clone() }),
+    );
     assert!(!trashed_ids(d.view(i)).contains(&named));
     assert!(trashed_ids(d.view(i)).contains(&unnamed));
     assert!(note_of(&d, &named).deleted_at.is_none());
-    send_trash(&mut d, i, T::Restore(te::RestoreTapped { id: unnamed.clone() }));
+    send_trash(
+        &mut d,
+        i,
+        T::Restore(te::RestoreTapped {
+            id: unnamed.clone(),
+        }),
+    );
     assert!(!trashed_ids(d.view(i)).contains(&unnamed));
 }

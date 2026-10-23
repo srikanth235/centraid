@@ -195,15 +195,19 @@ impl Library {
 
     /// A note on screen — the library's or search's — by id: its pin and notebook.
     pub fn find(&self, locale: Locale, note_id: &str) -> Option<Found> {
-        let searched = if self.search.active() { self.search.held.as_ref() } else { None };
-        if let Some(Phase::Ready(found)) = searched {
-            if let Some(hit) = found.hits.iter().find(|hit| hit.note_id == note_id) {
-                return Some(Found {
-                    title: fold::title_of(locale, hit.title.as_deref(), &hit.preview),
-                    pinned: hit.pinned,
-                    notebook_id: hit.notebook_ids.first().cloned().unwrap_or_default(),
-                });
-            }
+        let searched = if self.search.active() {
+            self.search.held.as_ref()
+        } else {
+            None
+        };
+        if let Some(Phase::Ready(found)) = searched
+            && let Some(hit) = found.hits.iter().find(|hit| hit.note_id == note_id)
+        {
+            return Some(Found {
+                title: fold::title_of(locale, hit.title.as_deref(), &hit.preview),
+                pinned: hit.pinned,
+                notebook_id: hit.notebook_ids.first().cloned().unwrap_or_default(),
+            });
         }
         let library = self.phase.data()?;
         let row = library.notes.iter().find(|row| row.note_id == note_id)?;
@@ -331,7 +335,11 @@ impl Library {
                 ..wire::EmptyState::default()
             })
         };
-        let window = if self.window == 0 { DEFAULT_WINDOW } else { self.window };
+        let window = if self.window == 0 {
+            DEFAULT_WINDOW
+        } else {
+            self.window
+        };
         wire::NotesLibraryData {
             sections: fold::sections(locale, rows),
             tags: library
@@ -385,7 +393,11 @@ impl Library {
         let Some(Phase::Ready(found)) = &self.search.held else {
             return state;
         };
-        let rows: Vec<wire::NotesNoteRow> = found.hits.iter().map(|hit| fold::hit(locale, hit)).collect();
+        let rows: Vec<wire::NotesNoteRow> = found
+            .hits
+            .iter()
+            .map(|hit| fold::hit(locale, hit))
+            .collect();
         let containers = containers(locale, &found.containers);
         // A NOTEBOOK THAT MATCHED IS AN ANSWER: no "nothing found" over it.
         let empty = (rows.is_empty() && containers.is_empty()).then(|| wire::EmptyState {

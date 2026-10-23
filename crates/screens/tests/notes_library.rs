@@ -50,7 +50,11 @@ fn opening_reads_the_library_with_the_band_and_the_default_sort() {
         ]
     );
     assert_eq!(
-        state.band.iter().map(|t| t.label.as_str()).collect::<Vec<_>>(),
+        state
+            .band
+            .iter()
+            .map(|t| t.label.as_str())
+            .collect::<Vec<_>>(),
         ["Notes", "Notebooks", "Journal", "More"]
     );
     assert_eq!(titles(d.view(i)), ["Grocery run"]);
@@ -150,19 +154,34 @@ fn sort_pinned_only_tags_and_a_wider_window_are_the_reads_parameters_and_chips()
     // Pinned leads under every order, then A first.
     assert_eq!(titles(d.view(i)), ["Cherry", "Apple", "Banana"]);
     // A selected chip clears itself.
-    send_home(&mut d, i, H::Chip(ev::ChipPicked { key: "pinned".into() }));
+    send_home(
+        &mut d,
+        i,
+        H::Chip(ev::ChipPicked {
+            key: "pinned".into(),
+        }),
+    );
     assert!(home_state(d.view(i)).chips[0].selected);
     assert_eq!(titles(d.view(i)), ["Cherry"]);
-    send_home(&mut d, i, H::Chip(ev::ChipPicked { key: "pinned".into() }));
+    send_home(
+        &mut d,
+        i,
+        H::Chip(ev::ChipPicked {
+            key: "pinned".into(),
+        }),
+    );
     assert!(home_state(d.view(i)).chips.iter().all(|c| !c.selected));
     assert_eq!(titles(d.view(i)).len(), 3);
     // An unknown key is nothing.
     let before = d.view(i).clone();
     send_home(&mut d, i, H::Chip(ev::ChipPicked { key: "nope".into() }));
-    assert_eq!(*d.view(i), wire::ViewState {
-        revision: d.view(i).revision,
-        ..before
-    });
+    assert_eq!(
+        *d.view(i),
+        wire::ViewState {
+            revision: d.view(i).revision,
+            ..before
+        }
+    );
 }
 
 #[test]
@@ -186,15 +205,22 @@ fn a_tag_is_a_chip_that_narrows_the_shelf() {
     );
     let i = home(&mut d, wire::NotesPlace::Notes);
     let chips = &home_state(d.view(i)).chips;
-    let tag = chips.iter().find(|c| c.key.starts_with("tag-")).expect("a tag chip");
+    let tag = chips
+        .iter()
+        .find(|c| c.key.starts_with("tag-"))
+        .expect("a tag chip");
     assert_eq!(tag.label, "work");
     let key = tag.key.clone();
     send_home(&mut d, i, H::Chip(ev::ChipPicked { key: key.clone() }));
     assert_eq!(titles(d.view(i)), ["Tagged"]);
     let chips = &home_state(d.view(i)).chips;
     assert_eq!(
-        chips.iter().filter(|c| c.selected).map(|c| c.key.clone()).collect::<Vec<_>>(),
-        [key.clone()]
+        chips
+            .iter()
+            .filter(|c| c.selected)
+            .map(|c| c.key.clone())
+            .collect::<Vec<_>>(),
+        std::slice::from_ref(&key)
     );
     send_home(&mut d, i, H::Chip(ev::ChipPicked { key }));
     assert_eq!(titles(d.view(i)).len(), 2);
@@ -229,11 +255,21 @@ fn opened_on_a_notebook_its_chip_leads_and_a_tap_widens_to_every_note() {
     assert_eq!(state.chips[0].label, "Recipes");
     assert!(state.chips[0].selected);
     assert_eq!(titles(d.view(i)), ["Soup"]);
-    send_home(&mut d, i, H::Chip(ev::ChipPicked { key: "notebook".into() }));
+    send_home(
+        &mut d,
+        i,
+        H::Chip(ev::ChipPicked {
+            key: "notebook".into(),
+        }),
+    );
     let state = home_state(d.view(i));
     assert_eq!(state.title, "Notes");
     assert_eq!(
-        state.chips.iter().map(|c| c.key.as_str()).collect::<Vec<_>>(),
+        state
+            .chips
+            .iter()
+            .map(|c| c.key.as_str())
+            .collect::<Vec<_>>(),
         ["pinned", "sort"]
     );
     assert_eq!(titles(d.view(i)).len(), 2);
@@ -282,25 +318,61 @@ fn a_row_menu_pins_at_once_files_and_trashes_only_after_a_confirm() {
     let book = notebook(&d, "Recipes");
     let i = home(&mut d, wire::NotesPlace::Notes);
 
-    send_home(&mut d, i, H::RowMenu(ev::RowMenuOpened { note_id: id.clone() }));
+    send_home(
+        &mut d,
+        i,
+        H::RowMenu(ev::RowMenuOpened {
+            note_id: id.clone(),
+        }),
+    );
     let state = home_state(d.view(i));
     assert_eq!(state.sheet, wire::NotesSheet::RowMenu as i32);
     assert_eq!(state.menu.as_ref().unwrap().pin_label, "Pin");
-    assert_eq!(state.menu.as_ref().unwrap().file_label, "File into notebook");
+    assert_eq!(
+        state.menu.as_ref().unwrap().file_label,
+        "File into notebook"
+    );
     assert_eq!(state.menu.as_ref().unwrap().trash_label, "Trash");
 
     // PIN: the sheet closes, the vault has the flag, the row is pinned.
-    send_home(&mut d, i, H::Pin(ev::PinToggled { note_id: id.clone() }));
+    send_home(
+        &mut d,
+        i,
+        H::Pin(ev::PinToggled {
+            note_id: id.clone(),
+        }),
+    );
     assert_eq!(home_state(d.view(i)).sheet, wire::NotesSheet::None as i32);
     assert!(note_of(&d, &id).pinned);
     assert!(library_rows(d.view(i))[0].pinned);
-    send_home(&mut d, i, H::RowMenu(ev::RowMenuOpened { note_id: id.clone() }));
-    assert_eq!(home_state(d.view(i)).menu.as_ref().unwrap().pin_label, "Unpin");
-    send_home(&mut d, i, H::Pin(ev::PinToggled { note_id: id.clone() }));
+    send_home(
+        &mut d,
+        i,
+        H::RowMenu(ev::RowMenuOpened {
+            note_id: id.clone(),
+        }),
+    );
+    assert_eq!(
+        home_state(d.view(i)).menu.as_ref().unwrap().pin_label,
+        "Unpin"
+    );
+    send_home(
+        &mut d,
+        i,
+        H::Pin(ev::PinToggled {
+            note_id: id.clone(),
+        }),
+    );
     assert!(!note_of(&d, &id).pinned);
 
     // FILE: every notebook is offered, "No notebook" leading and selected.
-    send_home(&mut d, i, H::FileInto(ev::FileIntoOpened { note_id: id.clone() }));
+    send_home(
+        &mut d,
+        i,
+        H::FileInto(ev::FileIntoOpened {
+            note_id: id.clone(),
+        }),
+    );
     let state = home_state(d.view(i));
     assert_eq!(state.sheet, wire::NotesSheet::FileInto as i32);
     // The seeded notebooks are offered too, an empty one included.
@@ -318,7 +390,13 @@ fn a_row_menu_pins_at_once_files_and_trashes_only_after_a_confirm() {
     assert_eq!(library_rows(d.view(i))[0].notebook_id, book);
     assert!(library_rows(d.view(i))[0].meta.ends_with("Recipes"));
     // And back out of it.
-    send_home(&mut d, i, H::FileInto(ev::FileIntoOpened { note_id: id.clone() }));
+    send_home(
+        &mut d,
+        i,
+        H::FileInto(ev::FileIntoOpened {
+            note_id: id.clone(),
+        }),
+    );
     send_home(
         &mut d,
         i,
@@ -329,7 +407,13 @@ fn a_row_menu_pins_at_once_files_and_trashes_only_after_a_confirm() {
     assert_eq!(library_rows(d.view(i))[0].notebook_id, "");
 
     // TRASH IS ASKED FIRST, in full sentences.
-    send_home(&mut d, i, H::Trash(ev::TrashAsked { note_id: id.clone() }));
+    send_home(
+        &mut d,
+        i,
+        H::Trash(ev::TrashAsked {
+            note_id: id.clone(),
+        }),
+    );
     let confirm = home_state(d.view(i)).confirm.clone().expect("a confirm");
     assert_eq!(confirm.title, "Move this note to trash?");
     assert_eq!(
@@ -342,7 +426,13 @@ fn a_row_menu_pins_at_once_files_and_trashes_only_after_a_confirm() {
     send_home(&mut d, i, H::Dismissed(ev::Dismissed {}));
     assert!(home_state(d.view(i)).confirm.is_none());
     assert_eq!(titles(d.view(i)), ["A"]);
-    send_home(&mut d, i, H::Trash(ev::TrashAsked { note_id: id.clone() }));
+    send_home(
+        &mut d,
+        i,
+        H::Trash(ev::TrashAsked {
+            note_id: id.clone(),
+        }),
+    );
     send_home(&mut d, i, H::Confirmed(ev::Confirmed {}));
     assert!(home_state(d.view(i)).confirm.is_none());
     assert!(titles(d.view(i)).is_empty());
@@ -355,7 +445,12 @@ fn a_refused_write_keeps_the_rows_and_says_the_cores_sentence() {
     let id = note(&d, "A", "body");
     let i = home(&mut d, wire::NotesPlace::Notes);
     // The note is trashed behind the screen's back, so the pin is refused.
-    arrange(&d, act::notes::DeleteNote { note_id: id.clone() });
+    arrange(
+        &d,
+        act::notes::DeleteNote {
+            note_id: id.clone(),
+        },
+    );
     send_home(&mut d, i, H::Pin(ev::PinToggled { note_id: id }));
     // The row is gone from the screen (the change reloaded it), so the pin is nothing.
     assert!(titles(d.view(i)).is_empty());
@@ -371,17 +466,35 @@ fn search_is_a_field_marks_matches_and_close_restores_the_library() {
     let search = home_state(d.view(i)).search.clone().unwrap();
     assert!(search.open);
     assert_eq!(
-        search.results.as_ref().unwrap().empty.as_ref().unwrap().body,
+        search
+            .results
+            .as_ref()
+            .unwrap()
+            .empty
+            .as_ref()
+            .unwrap()
+            .body,
         "Type to search titles and bodies."
     );
     // No chip row over search: no filter narrows its results.
     assert!(home_state(d.view(i)).chips.is_empty());
-    send_home(&mut d, i, H::SearchTerm(ev::SearchTerm { term: "milk".into() }));
+    send_home(
+        &mut d,
+        i,
+        H::SearchTerm(ev::SearchTerm {
+            term: "milk".into(),
+        }),
+    );
     let search = home_state(d.view(i)).search.clone().unwrap();
     let results = search.results.as_ref().unwrap();
     assert_eq!(results.rows.len(), 1);
     assert_eq!(results.rows[0].note_id, id);
-    assert!(results.rows[0].snippet_runs.iter().any(|r| r.highlighted && r.text.to_lowercase().contains("milk")));
+    assert!(
+        results.rows[0]
+            .snippet_runs
+            .iter()
+            .any(|r| r.highlighted && r.text.to_lowercase().contains("milk"))
+    );
     assert!(results.empty.is_none());
     // Ask is the foot of a current answer.
     assert_eq!(
@@ -393,15 +506,34 @@ fn search_is_a_field_marks_matches_and_close_restores_the_library() {
         })
     );
     // Nothing found: the sentence, and Ask still offered.
-    send_home(&mut d, i, H::SearchTerm(ev::SearchTerm { term: "zzqxv".into() }));
+    send_home(
+        &mut d,
+        i,
+        H::SearchTerm(ev::SearchTerm {
+            term: "zzqxv".into(),
+        }),
+    );
     let search = home_state(d.view(i)).search.clone().unwrap();
     assert_eq!(
-        search.results.as_ref().unwrap().empty.as_ref().unwrap().headline,
+        search
+            .results
+            .as_ref()
+            .unwrap()
+            .empty
+            .as_ref()
+            .unwrap()
+            .headline,
         "No matches"
     );
     assert_eq!(search.ask.unwrap().label, "Ask about “zzqxv”");
     // A new blank term clears the answer and the ask.
-    send_home(&mut d, i, H::SearchTerm(ev::SearchTerm { term: String::new() }));
+    send_home(
+        &mut d,
+        i,
+        H::SearchTerm(ev::SearchTerm {
+            term: String::new(),
+        }),
+    );
     assert!(home_state(d.view(i)).search.clone().unwrap().ask.is_none());
     // Close restores the library.
     send_home(&mut d, i, H::SearchClosed(ev::SearchClosed {}));
@@ -416,12 +548,24 @@ fn the_words_the_core_corrected_are_on_the_field() {
     note(&d, "Shopping", "buy milk today");
     let i = home(&mut d, wire::NotesPlace::Notes);
     send_home(&mut d, i, H::SearchOpened(ev::SearchOpened {}));
-    send_home(&mut d, i, H::SearchTerm(ev::SearchTerm { term: "mlik".into() }));
+    send_home(
+        &mut d,
+        i,
+        H::SearchTerm(ev::SearchTerm {
+            term: "mlik".into(),
+        }),
+    );
     let search = home_state(d.view(i)).search.clone().unwrap();
     if !search.corrected.is_empty() {
         assert_eq!(search.corrected, "Including results for “milk”");
     }
-    send_home(&mut d, i, H::SearchTerm(ev::SearchTerm { term: "milk".into() }));
+    send_home(
+        &mut d,
+        i,
+        H::SearchTerm(ev::SearchTerm {
+            term: "milk".into(),
+        }),
+    );
     assert_eq!(home_state(d.view(i)).search.clone().unwrap().corrected, "");
 }
 
@@ -431,7 +575,13 @@ fn a_notebook_found_by_name_is_a_container_on_the_field_and_opens_the_notes_plac
     let book = notebook(&d, "Cabin");
     let i = home(&mut d, wire::NotesPlace::Notes);
     send_home(&mut d, i, H::SearchOpened(ev::SearchOpened {}));
-    send_home(&mut d, i, H::SearchTerm(ev::SearchTerm { term: "cabin".into() }));
+    send_home(
+        &mut d,
+        i,
+        H::SearchTerm(ev::SearchTerm {
+            term: "cabin".into(),
+        }),
+    );
     let search = home_state(d.view(i)).search.clone().unwrap();
     let container = search.containers.first().expect("a container");
     assert_eq!(container.entity, "notebook");
@@ -446,7 +596,13 @@ fn a_notebook_found_by_name_is_a_container_on_the_field_and_opens_the_notes_plac
     // A notebook that matched is an answer: no nothing-found over it.
     assert!(search.results.unwrap().empty.is_none());
     // A new term clears it.
-    send_home(&mut d, i, H::SearchTerm(ev::SearchTerm { term: "cabi".into() }));
+    send_home(
+        &mut d,
+        i,
+        H::SearchTerm(ev::SearchTerm {
+            term: "cabi".into(),
+        }),
+    );
     let _ = home_state(d.view(i));
 }
 
@@ -456,15 +612,35 @@ fn a_change_while_searching_re_reads_the_search_and_the_library_on_close() {
     note(&d, "Shopping", "buy milk");
     let i = home(&mut d, wire::NotesPlace::Notes);
     send_home(&mut d, i, H::SearchOpened(ev::SearchOpened {}));
-    send_home(&mut d, i, H::SearchTerm(ev::SearchTerm { term: "milk".into() }));
+    send_home(
+        &mut d,
+        i,
+        H::SearchTerm(ev::SearchTerm {
+            term: "milk".into(),
+        }),
+    );
     assert_eq!(
-        home_state(d.view(i)).search.clone().unwrap().results.unwrap().rows.len(),
+        home_state(d.view(i))
+            .search
+            .clone()
+            .unwrap()
+            .results
+            .unwrap()
+            .rows
+            .len(),
         1
     );
     note(&d, "More milk", "milk again");
     d.pump(std::time::Duration::from_millis(300));
     assert_eq!(
-        home_state(d.view(i)).search.clone().unwrap().results.unwrap().rows.len(),
+        home_state(d.view(i))
+            .search
+            .clone()
+            .unwrap()
+            .results
+            .unwrap()
+            .rows
+            .len(),
         2
     );
     send_home(&mut d, i, H::SearchClosed(ev::SearchClosed {}));
@@ -499,7 +675,13 @@ fn more_is_a_sheet_that_holds_trash_alone_and_the_same_tab_is_nothing() {
     assert_eq!(state.more_rows[0].route, Some(routes::trash()));
     send_home(&mut d, i, H::SheetClosed(ev::SheetClosed {}));
     assert_eq!(home_state(d.view(i)).sheet, wire::NotesSheet::None as i32);
-    send_home(&mut d, i, H::Band(ev::BandPicked { key: "notes".into() }));
+    send_home(
+        &mut d,
+        i,
+        H::Band(ev::BandPicked {
+            key: "notes".into(),
+        }),
+    );
     assert_eq!(home_state(d.view(i)).place, wire::NotesPlace::Notes as i32);
 }
 

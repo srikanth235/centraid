@@ -444,6 +444,15 @@ message NotesEditorState {
   // Where Send to Agenda goes (To-do's quick add holds the words); absent
   // while there are none.
   optional Route send_to_agenda = 10;
+  // The note's tags, each removable; empty before the note exists.
+  repeated NotesEditorTag tags = 11;
+}
+
+message NotesEditorTag {
+  string concept_id = 1;
+  string label = 2;
+  // "Remove tag", said for a screen reader.
+  string remove_label = 3;
 }
 
 message NotesEditorDraft {
@@ -468,6 +477,8 @@ message NotesEditorChrome {
   string menu_label = 10;
   bool history_enabled = 11;
   string retry = 12;
+  // The add-tag field's placeholder; empty while the note does not exist (tags need a note).
+  string tag_placeholder = 13;
 }
 
 message NotesLinkSheet {
@@ -517,6 +528,16 @@ message NotesEditorEvent {
     Refreshed refreshed = 8;
     // Save now (the native Done / back).
     Saved save = 9;
+    TagAdded tag_added = 10;
+    TagRemoved tag_removed = 11;
+  }
+
+  message TagAdded {
+    string label = 1;
+  }
+
+  message TagRemoved {
+    string label = 1;
   }
 
   message TitleEdited {

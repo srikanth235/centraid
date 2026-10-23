@@ -55,8 +55,10 @@ impl Draft for NoteDraft {
     /// not yet a note. A body cleared to nothing IS saved: `body` takes an
     /// empty string.
     fn refusal(&self, locale: Locale) -> Option<String> {
-        (self.id.is_none() && self.title.trim().is_empty() && fold::first_line(&self.body).is_empty())
-            .then(|| words::write_a_line(locale))
+        (self.id.is_none()
+            && self.title.trim().is_empty()
+            && fold::first_line(&self.body).is_empty())
+        .then(|| words::write_a_line(locale))
     }
 
     /// `note.create` with the whole draft, or `note.edit` with ONLY THE FIELDS
@@ -141,6 +143,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         blocked: None,
         denied: None,
         pinned: false,
+        tags: Vec::new(),
         status: None,
         link: None,
         started: false,
@@ -165,6 +168,8 @@ struct Editor {
     blocked: Option<wire::Failure>,
     denied: Option<wire::AppQueryDenial>,
     pinned: bool,
+    /// The tags the vault holds for the note: `(concept id, label)`.
+    tags: Vec<(String, String)>,
     /// A pin's refusal.
     status: Option<String>,
     link: Option<LinkSheet>,
@@ -178,12 +183,16 @@ impl Editor {
             return;
         };
         let locale = ctx.locale();
-        let reading = read::read(ctx, load::notes::Note { note_id: id.clone() }, |answer| {
-            match answer {
+        let reading = read::read(
+            ctx,
+            load::notes::Note {
+                note_id: id.clone(),
+            },
+            |answer| match answer {
                 Answer::NotesNote(note) => Some(note),
                 _ => None,
-            }
-        });
+            },
+        );
         match reading {
             Reading::Data(note) if !note.found => self.refuse(words::note_missing(locale)),
             Reading::Data(note) if note.deleted_at.is_some() => {
@@ -193,6 +202,11 @@ impl Editor {
                 self.blocked = None;
                 self.denied = None;
                 self.pinned = note.pinned;
+                self.tags = note
+                    .tags
+                    .iter()
+                    .map(|tag| (tag.concept_id.clone(), tag.label.clone()))
+                    .collect();
                 let incoming = keep_derived(
                     self.auto.draft(),
                     NoteDraft {
@@ -276,6 +290,36 @@ impl Editor {
                 self.pinned = !pinned;
             }
         }
+    }
+
+    /// A TAG IS ITS OWN WRITE, sent at once under the note's id (`add-tag`,
+    /// `remove-tag`): a choice, not typing. A note not yet created has nothing to
+    /// tag, so the field is not offered then. The load after shows what committed.
+    fn tag(&mut self, ctx: &Ctx, label: &str, adding: bool) {
+        let label = label.trim();
+        let Some(id) = self.note_id.clone() else {
+            return;
+        };
+        if label.is_empty() {
+            return;
+        }
+        let request: wire::ActRequest = if adding {
+            act::notes::AddTag {
+                note_id: id.clone(),
+                label: label.to_owned(),
+            }
+            .into()
+        } else {
+            act::notes::RemoveTag {
+                note_id: id.clone(),
+                label: label.to_owned(),
+            }
+            .into()
+        };
+        let key = kit_act::key(&[&request.action.clone(), &id, label], kit_act::fresh());
+        let settled = kit_act::act(ctx, request, &key);
+        self.status = (!settled.committed).then_some(settled.refusal);
+        self.reload(ctx);
     }
 
     fn save_now(&mut self, ctx: &Ctx) {
@@ -376,6 +420,8 @@ impl Editor {
                 }
             }
             Some(N::Save(_)) => self.save_now(ctx),
+            Some(N::TagAdded(added)) => self.tag(ctx, &added.label, true),
+            Some(N::TagRemoved(removed)) => self.tag(ctx, &removed.label, false),
             None => {}
         }
     }
@@ -400,10 +446,7 @@ impl Editor {
                     },
                     ..wire::EmptyState::default()
                 });
-                wire::notes_link_sheet::Content::Data(wire::NotesLinkData {
-                    domains,
-                    empty,
-                })
+                wire::notes_link_sheet::Content::Data(wire::NotesLinkData { domains, empty })
             }
         };
         wire::NotesLinkSheet {
@@ -541,17 +584,19 @@ impl Screen for Editor {
                 sentence: denied(locale, denial).body,
                 remedy: String::new(),
             }),
-            (Some(draft), None, None) => wire::notes_editor_state::Content::Draft(wire::NotesEditorDraft {
-                title: draft.title.clone(),
-                body: draft.body.clone(),
-                pinned: self.pinned,
-            }),
+            (Some(draft), None, None) => {
+                wire::notes_editor_state::Content::Draft(wire::NotesEditorDraft {
+                    title: draft.title.clone(),
+                    body: draft.body.clone(),
+                    pinned: self.pinned,
+                })
+            }
             (None, None, None) => {
                 wire::notes_editor_state::Content::Loading(wire::Loading { first_load: true })
             }
         };
-        let phase = wire::autosave::Phase::try_from(autosave.phase)
-            .unwrap_or(wire::autosave::Phase::Clean);
+        let phase =
+            wire::autosave::Phase::try_from(autosave.phase).unwrap_or(wire::autosave::Phase::Clean);
         let save_status = match phase {
             wire::autosave::Phase::Saving => words::saving(locale),
             // A save and the clean re-read after it are both "Saved".
@@ -596,11 +641,29 @@ impl Screen for Editor {
                 menu_label: words::row_menu(locale),
                 history_enabled: exists && draft.is_some(),
                 retry: words::retry(locale),
+                // Tags belong to a note, so the field waits for the first save.
+                tag_placeholder: if exists {
+                    words::tag_placeholder(locale)
+                } else {
+                    String::new()
+                },
             }),
             autosave: Some(autosave),
-            link: self.link.as_ref().map(|sheet| self.sheet_view(locale, sheet)),
+            link: self
+                .link
+                .as_ref()
+                .map(|sheet| self.sheet_view(locale, sheet)),
             history: None,
             send_to_agenda: None,
+            tags: self
+                .tags
+                .iter()
+                .map(|(concept_id, label)| wire::NotesEditorTag {
+                    concept_id: concept_id.clone(),
+                    label: label.clone(),
+                    remove_label: words::remove_tag(locale),
+                })
+                .collect(),
         };
         if let Some(id) = draft.and_then(|draft| draft.id.as_deref()) {
             state.history = Some(routes::history(id, &title));
@@ -626,11 +689,20 @@ mod tests {
 
     #[test]
     fn a_link_is_its_own_word() {
-        assert_eq!(splice_link("Middlemarch.", 12, false, "Book"), "Middlemarch. [[Book]]");
+        assert_eq!(
+            splice_link("Middlemarch.", 12, false, "Book"),
+            "Middlemarch. [[Book]]"
+        );
         assert_eq!(splice_link("", 0, false, "Book"), "[[Book]]");
-        assert_eq!(splice_link("# Heading", 9, false, "Book"), "# Heading\n[[Book]]");
+        assert_eq!(
+            splice_link("# Heading", 9, false, "Book"),
+            "# Heading\n[[Book]]"
+        );
         assert_eq!(splice_link("one\n", 4, false, "Book"), "one\n[[Book]]");
-        assert_eq!(splice_link("see [[ now", 4, true, "Book"), "see [[Book]] now");
+        assert_eq!(
+            splice_link("see [[ now", 4, true, "Book"),
+            "see [[Book]] now"
+        );
         assert_eq!(splice_link("ab", 1, false, "X"), "a [[X]] b");
     }
 
@@ -664,7 +736,9 @@ mod tests {
         assert_eq!(request.action, "edit-note");
         assert_eq!(sent(&request), ["id", "title"]);
         // The body alone.
-        let request = draft(Some("n1"), "Old", "more words").request(&base).unwrap();
+        let request = draft(Some("n1"), "Old", "more words")
+            .request(&base)
+            .unwrap();
         assert_eq!(sent(&request), ["body", "id"]);
         // Nothing changed: nothing to send.
         assert!(base.request(&base).is_none());

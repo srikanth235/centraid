@@ -112,6 +112,8 @@ catalog! {
         "Locker items link by name; their secrets stay sealed.",
         "Locker items link by name; their secrets stay sealed."
     );
+    plain remove_tag = ("Remove tag", "Remove tag");
+    plain tag_placeholder = ("Add a tag", "Add a tag");
     plain rename = ("Rename", "Rename");
     plain rename_notebook = ("Rename notebook", "Rename notebook");
     plain restore = ("Restore", "Restore");

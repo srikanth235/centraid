@@ -472,7 +472,10 @@ fn real_or_zero(row: &Row, column: &str) -> i64 {
 
 /// The tags on a set of notes: the `tagged` edges that lead to a `tag` (the
 /// flags are the other kind), with the tag's own label.
-fn tags_of(door: &dyn PageDoor, ids: &[String]) -> KitResult<BTreeMap<String, Vec<TagChip>>> {
+pub(crate) fn tags_of(
+    door: &dyn PageDoor,
+    ids: &[String],
+) -> KitResult<BTreeMap<String, Vec<TagChip>>> {
     let edges = Read {
         name: "notes.library.tags",
         table: "edge",

@@ -186,20 +186,22 @@ impl Screen for History {
             }
         };
         wire::ViewState {
-            kind: Some(wire::view_state::Kind::NotesHistory(wire::NotesHistoryState {
-                note_id: self.note_id.clone(),
-                title: words::history_title(locale),
-                back: if self.note_title.trim().is_empty() {
-                    words::untitled(locale)
-                } else {
-                    self.note_title.clone()
+            kind: Some(wire::view_state::Kind::NotesHistory(
+                wire::NotesHistoryState {
+                    note_id: self.note_id.clone(),
+                    title: words::history_title(locale),
+                    back: if self.note_title.trim().is_empty() {
+                        words::untitled(locale)
+                    } else {
+                        self.note_title.clone()
+                    },
+                    close: words::close(locale),
+                    retry: words::retry(locale),
+                    loading_label: words::loading_history(locale),
+                    content: Some(content),
+                    status: self.status.clone(),
                 },
-                close: words::close(locale),
-                retry: words::retry(locale),
-                loading_label: words::loading_history(locale),
-                content: Some(content),
-                status: self.status.clone(),
-            })),
+            )),
             ..wire::ViewState::default()
         }
     }

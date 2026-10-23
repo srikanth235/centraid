@@ -1,6 +1,17 @@
 package dev.centraid.android.screens.notes
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.Text
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.input.ImeAction
+import dev.centraid.android.kit.KitGeometry
+import dev.centraid.android.theme.centraidColor
+import dev.centraid.android.theme.centraidType
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -30,6 +41,7 @@ import dev.centraid.android.kit.CentraidSearchField
 import dev.centraid.android.kit.EditableFieldRow
 import dev.centraid.android.kit.EditorRoom
 import dev.centraid.android.kit.EmptyStateView
+import dev.centraid.android.kit.IconKey
 import dev.centraid.android.kit.FailureView
 import dev.centraid.android.kit.OptionSheet
 import dev.centraid.android.kit.OutlineButton
@@ -113,6 +125,7 @@ public fun NotesEditorScreen(
                     testTag = "notes-title",
                     onEdit = { value -> onEvent(NotesEditorEvent(title = NotesEditorEvent.TitleEdited(value))) },
                 )
+                TagsRow(state, onEvent)
                 EditableFieldRow(
                     key = "",
                     value = note.body,
@@ -150,6 +163,52 @@ public fun NotesEditorScreen(
         )
     }
     state.link?.let { sheet -> LinkSheet(sheet, onEvent) }
+}
+
+/**
+ * THE NOTE'S TAGS, each removable, and the field that adds one (`add-tag`,
+ * `remove-tag`; Rust writes at once). The field is offered only once the note
+ * exists (`tag_placeholder` is empty before).
+ */
+@Composable
+private fun TagsRow(state: NotesEditorState, onEvent: (NotesEditorEvent) -> Unit) {
+    val placeholder = state.chrome?.tag_placeholder.orEmpty()
+    state.tags.forEach { tag ->
+        CentraidRow(
+            title = tag.label,
+            testTag = "notes-tag-${tag.concept_id}",
+        ) {
+            IconKey(
+                iconKey = "X",
+                label = tag.remove_label,
+                testTag = "notes-tag-remove-${tag.concept_id}",
+                bordered = false,
+            ) { onEvent(NotesEditorEvent(tag_removed = NotesEditorEvent.TagRemoved(tag.label))) }
+        }
+    }
+    if (placeholder.isNotEmpty()) {
+        // THE ADD FIELD IS LOCAL UNTIL THE KEYBOARD'S DONE: only then is the label an event.
+        var typed by remember(state.note_id) { mutableStateOf("") }
+        Box(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 6.dp).heightIn(min = 36.dp)) {
+            if (typed.isEmpty()) {
+                Text(placeholder, style = centraidType("small"), color = centraidColor("textFaint"))
+            }
+            BasicTextField(
+                value = typed,
+                onValueChange = { typed = it },
+                singleLine = true,
+                textStyle = centraidType("small").copy(color = centraidColor("text")),
+                cursorBrush = SolidColor(centraidColor("text")),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = {
+                    val label = typed.trim()
+                    typed = ""
+                    if (label.isNotEmpty()) onEvent(NotesEditorEvent(tag_added = NotesEditorEvent.TagAdded(label)))
+                }),
+                modifier = Modifier.fillMaxWidth().testTag("notes-tag-field"),
+            )
+        }
+    }
 }
 
 /** THE POWERBOX: a sheet over the editor; a pick is `LinkPicked` and Rust splices `[[title]]`. */

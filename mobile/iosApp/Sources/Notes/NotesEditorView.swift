@@ -95,6 +95,7 @@ struct NotesEditorView: View {
                             guard typed != draft.title else { return }
                             send(event { $0.title = .with { $0.title = typed } })
                         }
+                    NotesTagsRow(tags: state.tags, placeholder: chrome.tagPlaceholder, send: send)
                     ZStack(alignment: .topLeading) {
                         if typedBody.isEmpty {
                             Text(chrome.bodyPlaceholder)
@@ -139,6 +140,49 @@ struct NotesEditorView: View {
             // THE POWERBOX CLOSED: a pick spliced `[[title]]` into the body
             // Rust holds, so the field takes it.
             if !shown, let draft { typedBody = draft.body }
+        }
+    }
+}
+
+/// THE NOTE'S TAGS, each removable, and the field that adds one (`add-tag`,
+/// `remove-tag`; Rust writes at once). The field is offered only once the
+/// note exists (`tag_placeholder` is empty before).
+private struct NotesTagsRow: View {
+    let tags: [Centraid_Core_V1_NotesEditorTag]
+    let placeholder: String
+    let send: (Centraid_Core_V1_NotesEditorEvent) -> Void
+
+    @State private var typed = ""
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ForEach(tags, id: \.conceptID) { tag in
+                HStack(spacing: 6) {
+                    Text(tag.label)
+                        .centraidType("small")
+                        .foregroundStyle(Theme.color("textSoft", scheme))
+                    KitIconKey(iconKey: "X", label: tag.removeLabel, tint: "textSoft", identifier: "note-tag-remove-\(tag.conceptID)") {
+                        var event = Centraid_Core_V1_NotesEditorEvent()
+                        event.tagRemoved = .with { $0.label = tag.label }
+                        send(event)
+                    }
+                }
+            }
+            if !placeholder.isEmpty {
+                TextField(placeholder, text: $typed)
+                    .centraidType("small")
+                    .foregroundStyle(Theme.color("text", scheme))
+                    .submitLabel(.done)
+                    .accessibilityIdentifier("note-tag-field")
+                    .onSubmit {
+                        let label = typed
+                        typed = ""
+                        var event = Centraid_Core_V1_NotesEditorEvent()
+                        event.tagAdded = .with { $0.label = label }
+                        send(event)
+                    }
+            }
         }
     }
 }

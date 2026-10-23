@@ -253,6 +253,9 @@ message NotesNote {
   string created_local_day = 15;
   string updated_local_day = 16;
   string updated_local = 17;
+  // The tags it carries and what is attached to it.
+  repeated NotesTag tags = 18;
+  repeated NotesAttachment attachments = 19;
 }
 
 // ---------------------------------------------------------------------------
