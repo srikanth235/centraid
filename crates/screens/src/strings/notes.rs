@@ -20,7 +20,10 @@ catalog! {
     );
     plain delete_note_title = ("Move this note to trash?", "Move this note to trash?");
     plain delete_note_verb = ("Trash", "Trash");
-    plain delete_notebook_body = ("Its notes are kept, unfiled.", "Its notes are kept, unfiled.");
+    plain delete_notebook_body = (
+        "Its notes go to the trash with it, restorable for 30 days.",
+        "Its notes go to the trash with it, restorable for 30 days."
+    );
     plain delete_notebook_title = ("Delete this notebook?", "Delete this notebook?");
     plain delete_notebook_verb = ("Delete", "Delete");
     plain denied_body = (

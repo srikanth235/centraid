@@ -324,7 +324,8 @@ pub fn subtitle_of(locale: Locale, target: &wire::NotesLinkTarget) -> String {
     let subtitle = target.subtitle.trim();
     // THE INDEX'S FALLBACK IS THE APP KEY ("photos", "docs") when a row has no
     // subtitle column of its own — an identifier, not copy.
-    if subtitle == target.app_id {
+    // The same goes for the entity's own kind name ("note", "person").
+    if subtitle == target.app_id || subtitle == target.entity {
         return kind_of(locale, &target.entity);
     }
     if let Some(day) = target.subtitle_local_day.get(..10) {

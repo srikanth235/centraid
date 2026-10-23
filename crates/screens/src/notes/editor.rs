@@ -238,6 +238,9 @@ impl Editor {
         if self.pinned {
             self.write_pin(ctx, &id, true);
         }
+        // READ IT ONCE: the screen then knows which tables it depends on, so the
+        // vault's own changes reach it from here on.
+        self.reload(ctx);
     }
 
     fn write_pin(&mut self, ctx: &Ctx, id: &str, pinned: bool) {
@@ -551,7 +554,9 @@ impl Screen for Editor {
             .unwrap_or(wire::autosave::Phase::Clean);
         let save_status = match phase {
             wire::autosave::Phase::Saving => words::saving(locale),
+            // A save and the clean re-read after it are both "Saved".
             wire::autosave::Phase::Saved => words::saved(locale),
+            wire::autosave::Phase::Clean if autosave.edit_seq > 0 => words::saved(locale),
             wire::autosave::Phase::Refused => autosave
                 .failure
                 .as_ref()
