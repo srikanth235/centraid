@@ -25,13 +25,8 @@ public object ScreenIds {
     public const val NOTES_HISTORY: String = "notes.history"
     public const val NOTES_TRASH: String = "notes.trash"
 
-    public const val DOCS_DRIVE: String = "docs.drive"
 
     /** The folder page: the drive's machine on a bridge of its own, keyed apart so the drive under it keeps its tab. */
-    public const val DOCS_FOLDER: String = "docs.folder"
-    public const val DOCS_DOCUMENT: String = "docs.document"
-    public const val DOCS_EDITOR: String = "docs.editor"
-    public const val DOCS_TRASH: String = "docs.trash"
 
     public const val PEOPLE_HOME: String = "people.home"
     public const val PEOPLE_PERSON: String = "people.person"

@@ -1,9 +1,5 @@
 package dev.centraid.shared.nav
 
-import centraid.screen.v1.DocsDocumentEvent
-import centraid.screen.v1.DocsDriveEvent
-import centraid.screen.v1.DocsDriveState
-import centraid.screen.v1.DocsEditorEvent
 import centraid.screen.v1.HealthConnectEvent
 import centraid.screen.v1.HealthHomeEvent
 import centraid.screen.v1.HealthMetricEvent
@@ -74,31 +70,6 @@ public object ScreenOpenings {
                     notebook_id = destination.notebookId,
                     notebook_name = destination.notebookName,
                     unfiled_only = destination.unfiledOnly,
-                ),
-            ).encode(),
-        )
-        is Destination.DocsHome -> screen(
-            ScreenIds.DOCS_DRIVE,
-            DocsDriveEvent(opened = DocsDriveEvent.Opened(destination = destination.destination)).encode(),
-        )
-        is Destination.DocsFolder -> screen(
-            ScreenIds.DOCS_FOLDER,
-            DocsDriveEvent(
-                opened = DocsDriveEvent.Opened(
-                    destination = DocsDriveState.Destination.DESTINATION_FOLDERS,
-                    folder_id = destination.folderId,
-                    folder_name = destination.folderName,
-                    parent = destination.parent,
-                ),
-            ).encode(),
-        )
-        is Destination.DocsDocument -> screen(
-            ScreenIds.DOCS_DOCUMENT,
-            DocsDocumentEvent(
-                opened = DocsDocumentEvent.Opened(
-                    document_id = destination.documentId,
-                    title = destination.title,
-                    parent = destination.parent,
                 ),
             ).encode(),
         )
@@ -184,11 +155,6 @@ public object ScreenOpenings {
             NotesHistoryEvent(opened = NotesHistoryEvent.Opened(note_id = destination.noteId, note_title = destination.title)).encode(),
         )
         Destination.NotesTrash -> screen(ScreenIds.NOTES_TRASH, TrashListEvent(opened = TrashListEvent.Opened()).encode())
-        is Destination.DocsEditor -> screen(
-            ScreenIds.DOCS_EDITOR,
-            DocsEditorEvent(opened = DocsEditorEvent.Opened(document_id = destination.documentId, title = destination.title)).encode(),
-        )
-        Destination.DocsTrash -> screen(ScreenIds.DOCS_TRASH, TrashListEvent(opened = TrashListEvent.Opened()).encode())
         // A NEW PERSON's id rides as the minted one: the editor adds them on its first save.
         is Destination.PeopleEditor -> screen(
             ScreenIds.PEOPLE_EDITOR,

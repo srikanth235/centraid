@@ -23,24 +23,24 @@ agenda,create-section,create,section,card,yes: crates/screens/src/agenda/todo/op
 agenda,add-task-tag,tag,task,direct,yes: crates/screens/src/agenda/detail.rs,no
 agenda,remove-task-tag,untag,task,direct,yes: crates/screens/src/agenda/detail.rs,no
 agenda,follow-calendar,import,event,card,yes: crates/screens/src/agenda/calendar.rs,no
-docs,upload,import,document,card,yes: apps/docs/DocsFold.kt; apps/docs/DocsWrites.kt,no
-docs,create-text,create,document,direct,yes: apps/docs/DocsFold.kt; apps/docs/DocsWrites.kt,yes
-docs,rename,edit,document,direct,yes: apps/docs/DocsFold.kt; apps/docs/DocsWrites.kt,yes
-docs,move,add_to,document,direct,yes: apps/docs/DocsFold.kt; apps/docs/DocsWrites.kt,yes
-docs,trash,delete,document,direct,yes: apps/docs/DocsFold.kt; apps/docs/DocsWrites.kt,yes
-docs,restore,restore,document,direct,yes: apps/docs/DocsFold.kt; apps/docs/DocsWrites.kt,yes
-docs,purge,purge,document,card,yes: apps/docs/DocsWrites.kt,no
-docs,empty-trash,purge,document,card,yes: apps/docs/DocsFold.kt; apps/docs/DocsWrites.kt,no
-docs,star,star,document,direct,yes: apps/docs/DocsFold.kt; apps/docs/DocsWrites.kt,yes
-docs,unstar,unstar,document,direct,yes: apps/docs/DocsFold.kt; apps/docs/DocsWrites.kt,yes
-docs,tag,tag,document,direct,yes: apps/docs/DocsFold.kt; apps/docs/DocsWrites.kt,no
-docs,untag,untag,document,direct,yes: apps/docs/DocsFold.kt; apps/docs/DocsWrites.kt,no
-docs,edit,edit,document,card,yes: apps/docs/DocsFold.kt; apps/docs/DocsWrites.kt,no
-docs,replace,edit:content,document,card,yes: apps/docs/DocsFold.kt; apps/docs/DocsWrites.kt,no
-docs,restore-version,restore,document,card,yes: apps/docs/DocsFold.kt; apps/docs/DocsWrites.kt,no
-docs,create-folder,create,folder,direct,yes: apps/docs/DocsWrites.kt; apps/docs/FilesImport.kt,yes
-docs,rename-folder,edit,folder,direct,yes: apps/docs/DocsFold.kt; apps/docs/DocsWrites.kt,yes
-docs,delete-folder,delete,folder,direct,yes: apps/docs/DocsFold.kt; apps/docs/DocsWrites.kt,yes
+docs,upload,import,document,card,yes: crates/screens/src/docs/drive/ingest.rs,no
+docs,create-text,create,document,direct,yes: crates/screens/src/docs/drive/ingest.rs,yes
+docs,rename,edit,document,direct,yes: crates/screens/src/docs/rename.rs,yes
+docs,move,add_to,document,direct,yes: crates/screens/src/docs/drive/mod.rs; crates/screens/src/docs/document.rs,yes
+docs,trash,delete,document,direct,yes: crates/screens/src/docs/drive/mod.rs; crates/screens/src/docs/document.rs,yes
+docs,restore,restore,document,direct,yes: crates/screens/src/docs/document.rs; crates/screens/src/docs/trash.rs,yes
+docs,purge,purge,document,card,yes: crates/screens/src/docs/document.rs; crates/screens/src/docs/trash.rs,no
+docs,empty-trash,purge,document,card,yes: crates/screens/src/docs/trash.rs,no
+docs,star,star,document,direct,yes: crates/screens/src/docs/drive/mod.rs; crates/screens/src/docs/document.rs,yes
+docs,unstar,unstar,document,direct,yes: crates/screens/src/docs/drive/mod.rs; crates/screens/src/docs/document.rs,yes
+docs,tag,tag,document,direct,yes: crates/screens/src/docs/drive/mod.rs; crates/screens/src/docs/document.rs,no
+docs,untag,untag,document,direct,yes: crates/screens/src/docs/drive/mod.rs; crates/screens/src/docs/document.rs,no
+docs,edit,edit,document,card,yes: crates/screens/src/docs/editor.rs,no
+docs,replace,edit:content,document,card,no,no
+docs,restore-version,restore,document,card,yes: crates/screens/src/docs/versions.rs,no
+docs,create-folder,create,folder,direct,yes: crates/screens/src/docs/drive/mod.rs,yes
+docs,rename-folder,edit,folder,direct,no,yes
+docs,delete-folder,delete,folder,direct,no,yes
 health,record-days,log,daily_figure,card,yes: apps/health/HealthImport.kt,no
 health,follow-workouts,import,workout,card,yes: apps/health/HealthImport.kt,no
 health,delete-workout,delete,workout,card,no,no

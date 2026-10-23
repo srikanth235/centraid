@@ -4,37 +4,32 @@ import SwiftUI
 
 import CentraidShared
 
-/// ONE DOCUMENT'S PAGE (#1046): its surface — the reader (text), the stage
-/// (image, video, PDF), facts only, or gone — then its path, facts, versions
-/// (restore on an earlier one), activity, and the verbs the state offers.
+/// ONE DOCUMENT'S PAGE (#1046, #1135): its surface — the reader (text), the
+/// stage (image, video, PDF), facts only, or gone — then its path, facts, a row
+/// to its version history, activity, and the verbs Rust offers.
 ///
 /// **THE VIEW DECIDES NOTHING.** Which verbs exist and whether each is
-/// enabled are `DocsDocumentData.actions`; a version's restore exists only
-/// when its row carries a label. `edit` and a crumb are intents the shell
-/// routes (`EditRequested`, `FolderPicked`).
+/// enabled are `DocsDocumentData.actions`; the editor, a crumb's folder and the
+/// version history are routes the data carries, which a tap pushes.
 struct DocsDocumentView: View {
-    let data: Data
-    let send: (Data) -> Void
+    let state: Centraid_Core_V1_DocsDocumentState
+    let send: (Centraid_Core_V1_DocsDocumentEvent) -> Void
+    let open: (Centraid_Core_V1_Route) -> Void
     let onBack: () -> Void
-    let onDeparted: () -> Void
 
     @Environment(\.colorScheme) private var scheme
 
-    private var state: Centraid_Screen_V1_DocsDocumentState {
-        (try? Centraid_Screen_V1_DocsDocumentState(serializedBytes: data)) ?? .init()
-    }
-
-    static func event(_ build: (inout Centraid_Screen_V1_DocsDocumentEvent) -> Void) -> Data {
-        var event = Centraid_Screen_V1_DocsDocumentEvent()
+    static func event(_ build: (inout Centraid_Core_V1_DocsDocumentEvent) -> Void) -> Centraid_Core_V1_DocsDocumentEvent {
+        var event = Centraid_Core_V1_DocsDocumentEvent()
         build(&event)
-        return event.encoded
+        return event
     }
 
-    private func content(_ state: Centraid_Screen_V1_DocsDocumentState) -> ScreenContent<Centraid_Screen_V1_DocsDocumentData> {
+    private func content(_ state: Centraid_Core_V1_DocsDocumentState) -> ScreenContent<Centraid_Core_V1_DocsDocumentData> {
         switch state.content {
         case let .loading(loading)?: return .loading(loading.firstLoad)
         case let .failure(failure)?: return .failed(failure)
-        case let .denied(denied)?: return .denied(denied)
+        case let .denied(denied)?: return .gated(denied)
         case let .data(data)?: return .data(data)
         case nil: return .loading(true)
         }
@@ -43,7 +38,7 @@ struct DocsDocumentView: View {
     var body: some View {
         let state = state
         let content = content(state)
-        let document: Centraid_Screen_V1_DocsDocumentData? = {
+        let document: Centraid_Core_V1_DocsDocumentData? = {
             if case let .data(document) = content { return document }
             return nil
         }()
@@ -62,10 +57,10 @@ struct DocsDocumentView: View {
             }
         } content: {
             VStack(spacing: 0) {
-                DocsWriteLine(write: state.write)
-                if let rename = DocsRenameOpen.of(state.hasRename, state.rename) {
+                DocsWriteLine(status: state.status)
+                if state.hasRename {
                     DocsRenameField(
-                        rename: rename,
+                        rename: state.rename,
                         placeholder: state.chrome.renamePlaceholder,
                         doneLabel: state.chrome.renameDone,
                         onEdit: { text in send(Self.event { $0.renameEdited = .with { $0.title = text } }) },
@@ -78,7 +73,7 @@ struct DocsDocumentView: View {
                     onRetry: { send(Self.event { $0.refreshed = .init() }) }
                 ) { document in
                     if case let .gone(empty)? = document.surface {
-                        EmptyStateView(empty)
+                        EmptyStateView(empty.legacy)
                     } else {
                         ScrollView {
                             LazyVStack(alignment: .leading, spacing: 0) {
@@ -99,12 +94,7 @@ struct DocsDocumentView: View {
                                         FieldRow(key: fact.label, value: fact.detail)
                                     }
                                 }
-                                if !document.versions.isEmpty {
-                                    SectionHeader(title: state.chrome.versionsHeading, count: UInt32(document.versions.count))
-                                    ForEach(document.versions, id: \.contentID) { version in
-                                        versionRow(version, state)
-                                    }
-                                }
+                                if document.hasVersions { versionsRow(document.versions) }
                                 SectionHeader(title: state.chrome.activityHeading)
                                 if document.activity.isEmpty, !document.activityEmpty.isEmpty {
                                     Text(document.activityEmpty)
@@ -124,8 +114,7 @@ struct DocsDocumentView: View {
                 }
             }
         }
-        .onDisappear(perform: onDeparted)
-        // DELETED FOREVER here (`dismissed`): the machine says the page is done.
+        // DELETED FOREVER here (`dismissed`): Rust says the page is done.
         .onChange(of: state.dismissed) { _, dismissed in
             if dismissed { onBack() }
         }
@@ -133,7 +122,7 @@ struct DocsDocumentView: View {
         // labels — and, on a second host so they never share a presenter,
         // its confirm.
         .sheet(isPresented: sheetBinding(state)) {
-            DocsSheetView(sheet: state.sheet, actions: sheetActions(document))
+            DocsSheetView(sheet: state.sheet, actions: sheetActions())
         }
         .background {
             Color.clear.sheet(isPresented: Binding(
@@ -141,7 +130,7 @@ struct DocsDocumentView: View {
                 set: { open in if !open, state.hasConfirm { send(Self.event { $0.dismissed = .init() }) } }
             )) {
                 ConfirmSheet(
-                    state.confirm,
+                    state.confirm.legacy,
                     onConfirm: { send(Self.event { $0.confirmed = .init() }) },
                     onDismiss: { send(Self.event { $0.dismissed = .init() }) }
                 )
@@ -152,7 +141,7 @@ struct DocsDocumentView: View {
     // MARK: Surface
 
     @ViewBuilder
-    private func surface(_ document: Centraid_Screen_V1_DocsDocumentData) -> some View {
+    private func surface(_ document: Centraid_Core_V1_DocsDocumentData) -> some View {
         switch document.surface {
         case let .reading(reader)?:
             VStack(alignment: .leading, spacing: 12) {
@@ -179,8 +168,10 @@ struct DocsDocumentView: View {
                         .foregroundStyle(Theme.color("text", scheme))
                         .textSelection(.enabled)
                 }
-                if reader.editable, !reader.editLabel.isEmpty {
-                    KitOutlineButton(label: reader.editLabel) { edit(document) }
+                // EDIT IS THE HEAD'S `edit` ACTION: its route is the editor.
+                if reader.editable, !reader.editLabel.isEmpty,
+                   let edit = document.actions.first(where: { $0.key == "edit" }), edit.hasRoute {
+                    KitOutlineButton(label: reader.editLabel) { open(edit.route) }
                         .accessibilityIdentifier("docs-document-edit")
                 }
             }
@@ -200,7 +191,7 @@ struct DocsDocumentView: View {
         }
     }
 
-    private func path(_ crumbs: [Centraid_Screen_V1_DocsCrumb]) -> some View {
+    private func path(_ crumbs: [Centraid_Core_V1_DocsCrumb]) -> some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 4) {
                 ForEach(Array(crumbs.enumerated()), id: \.offset) { index, crumb in
@@ -209,7 +200,7 @@ struct DocsDocumentView: View {
                             .accessibilityHidden(true)
                     }
                     KitLink(label: crumb.name, dense: true, identifier: "docs-crumb-\(crumb.folderID)") {
-                        send(Self.event { $0.folderPicked = .with { $0.folderID = crumb.folderID; $0.name = crumb.name } })
+                        if crumb.hasRoute { open(crumb.route) }
                     }
                     .disabled(crumb.folderID.isEmpty)
                 }
@@ -219,44 +210,42 @@ struct DocsDocumentView: View {
         }
     }
 
-    private func versionRow(
-        _ version: Centraid_Screen_V1_DocsVersionRow,
-        _ state: Centraid_Screen_V1_DocsDocumentState
-    ) -> some View {
-        HStack(spacing: 8) {
-            CentraidRow(title: version.label, meta: version.meta, dimmed: !version.current)
-            if !version.restoreLabel.isEmpty {
-                KitLink(
-                    label: version.restoreLabel,
-                    dense: true,
-                    identifier: "docs-version-restore-\(version.contentID)"
-                ) {
-                    send(Self.event { $0.versionRestore = .with { $0.contentID = version.contentID } })
-                }
-                .disabled(state.write.phase == .inFlight)
+    /// THE VERSION HISTORY'S ROW: its words, how many, and the page it opens.
+    private func versionsRow(_ versions: Centraid_Core_V1_DocsVersionsLink) -> some View {
+        Button {
+            open(versions.route)
+        } label: {
+            HStack(spacing: 12) {
+                Text(versions.label)
+                    .centraidType("body")
+                    .foregroundStyle(Theme.color("text", scheme))
+                Spacer(minLength: 8)
+                Text(versions.countLabel)
+                    .centraidType("annotLabel")
+                    .foregroundStyle(Theme.color("textFaint", scheme))
+                CentraidIconView(iconKey: "ChevronRight", tint: Theme.color("textFaint", scheme), size: 14)
+                    .accessibilityHidden(true)
             }
+            .padding(.horizontal, CentraidGeometry.pageMargin)
+            .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse)
+            .overlay(alignment: .bottom) { KitHairline() }
+            .contentShape(Rectangle())
         }
-        .padding(.trailing, 8)
+        .buttonStyle(KitRowPress())
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityIdentifier("docs-versions")
     }
 
-    // MARK: Events and intents
+    // MARK: Events
 
-    private func edit(_ document: Centraid_Screen_V1_DocsDocumentData) {
-        let id = document.row.documentID
-        send(Self.event { $0.editRequested = .with { $0.documentID = id; $0.title = document.row.title } })
-    }
-
-    /// A verb picked from a sheet is `ActionPicked` (which closes it) — and
-    /// `edit` is also the shell's route, as it is from the head.
-    private func sheetActions(_ document: Centraid_Screen_V1_DocsDocumentData?) -> DocsSheetActions {
+    /// A verb picked from a sheet is `ActionPicked` (which closes it); `edit`
+    /// carries the editor's route, as it does from the head.
+    private func sheetActions() -> DocsSheetActions {
         DocsSheetActions(
             onAction: { action in
-                if action.key == DocsWrites.shared.KEY_EDIT, let document {
-                    send(Self.event { $0.action = .with { $0.key = action.key } })
-                    edit(document)
-                } else {
-                    send(Self.event { $0.action = .with { $0.key = action.key } })
-                }
+                send(Self.event { $0.action = .with { $0.key = action.key } })
+                if action.hasRoute { open(action.route) }
             },
             onChoice: { key in send(Self.event { $0.choice = .with { $0.key = key } }) },
             onLabelAdd: { label in send(Self.event { $0.labelAdded = .with { $0.label = label } }) },
@@ -265,7 +254,7 @@ struct DocsDocumentView: View {
         )
     }
 
-    private func sheetBinding(_ state: Centraid_Screen_V1_DocsDocumentState) -> Binding<Bool> {
+    private func sheetBinding(_ state: Centraid_Core_V1_DocsDocumentState) -> Binding<Bool> {
         let open = state.sheet.kind != .none && state.sheet.kind != .unspecified
         return Binding(
             get: { open },
@@ -286,7 +275,7 @@ struct DocsDocumentView: View {
 /// player. With no path, the card says what the stage holds (its spoken
 /// label) or, absent, why.
 struct DocsStageCard: View {
-    let stage: Centraid_Screen_V1_DocsStage
+    let stage: Centraid_Core_V1_DocsStage
 
     @Environment(\.colorScheme) private var scheme
 
@@ -389,43 +378,100 @@ struct DocsPDFStage: UIViewRepresentable {
     }
 }
 
+// MARK: - Version history
+
+/// A DOCUMENT'S VERSIONS (`docs.versions`): newest first, the current one
+/// marked, an earlier one of a live document restorable. Every word, and
+/// whether a row offers Restore at all, is Rust's.
+struct DocsVersionsView: View {
+    let state: Centraid_Core_V1_DocsVersionsState
+    let send: (Centraid_Core_V1_DocsVersionsEvent) -> Void
+    let onBack: () -> Void
+
+    @Environment(\.colorScheme) private var scheme
+
+    static func event(_ build: (inout Centraid_Core_V1_DocsVersionsEvent) -> Void) -> Centraid_Core_V1_DocsVersionsEvent {
+        var event = Centraid_Core_V1_DocsVersionsEvent()
+        build(&event)
+        return event
+    }
+
+    private func content(_ state: Centraid_Core_V1_DocsVersionsState) -> ScreenContent<Centraid_Core_V1_DocsVersionsData> {
+        switch state.content {
+        case let .loading(loading)?: return .loading(loading.firstLoad)
+        case let .failure(failure)?: return .failed(failure)
+        case let .denied(denied)?: return .gated(denied)
+        case let .data(data)?: return .data(data)
+        case nil: return .loading(true)
+        }
+    }
+
+    var body: some View {
+        PushedPage(title: state.chrome.heading, parentTitle: state.chrome.back, onBack: onBack) {
+            EmptyView()
+        } content: {
+            VStack(spacing: 0) {
+                DocsWriteLine(status: state.status)
+                ReadStateView(
+                    content: content(state),
+                    loadingLabel: state.chrome.loading,
+                    onRetry: { send(Self.event { $0.refreshed = .init() }) }
+                ) { data in
+                    if data.hasEmpty {
+                        EmptyStateView(data.empty.legacy)
+                    } else {
+                        ScrollView {
+                            LazyVStack(alignment: .leading, spacing: 0) {
+                                ForEach(data.versions, id: \.key) { version in
+                                    HStack(spacing: 8) {
+                                        CentraidRow(title: version.label, meta: version.meta, dimmed: !version.current)
+                                        if !version.restoreLabel.isEmpty {
+                                            KitLink(
+                                                label: version.restoreLabel,
+                                                dense: true,
+                                                identifier: "docs-version-restore-\(version.key)"
+                                            ) {
+                                                send(Self.event { $0.restored = .with { $0.key = version.key } })
+                                            }
+                                        }
+                                    }
+                                    .padding(.trailing, 8)
+                                }
+                            }
+                            .padding(.bottom, 16)
+                        }
+                        .refreshable { send(Self.event { $0.refreshed = .init() }) }
+                    }
+                }
+            }
+        }
+    }
+}
+
 // MARK: - Editor
 
 /// THE TEXT EDITOR: an `EditorRoom` — autosave, close = done, the status line
-/// hosted inside. Leaving by any route is `onDeparted`, the bridge's
-/// `departed()`, which flushes unsaved words.
+/// hosted inside. Leaving by any route is a `NavPopped` the shell reports,
+/// which Rust turns into the screen's `Left`: the flush of unsaved words.
 struct DocsEditorView: View {
-    let data: Data
-    /// The route's `Opened`. ONE BRIDGE SERVES EVERY DOCUMENT: until the state
-    /// is about this one, the last document's draft is still held, and seeding
-    /// from it would put one document's words in another's fields.
-    var opened: Data = Data()
-    let send: (Data) -> Void
+    let state: Centraid_Core_V1_DocsEditorState
+    let send: (Centraid_Core_V1_DocsEditorEvent) -> Void
     let onClose: () -> Void
-    let onDeparted: () -> Void
 
-    /// THE ONLY PLACE A KEYSTROKE EXISTS BEFORE THE MACHINE HEARS IT — seeded
+    /// THE ONLY PLACE A KEYSTROKE EXISTS BEFORE RUST HEARS IT — seeded
     /// once from the draft, never again (see `NotesEditorView`).
     @State private var typedTitle = ""
     @State private var typedBody = ""
     @State private var seeded = false
     @Environment(\.colorScheme) private var scheme
 
-    private var state: Centraid_Screen_V1_DocsEditorState {
-        (try? Centraid_Screen_V1_DocsEditorState(serializedBytes: data)) ?? .init()
-    }
-
-    static func event(_ build: (inout Centraid_Screen_V1_DocsEditorEvent) -> Void) -> Data {
-        var event = Centraid_Screen_V1_DocsEditorEvent()
+    static func event(_ build: (inout Centraid_Core_V1_DocsEditorEvent) -> Void) -> Centraid_Core_V1_DocsEditorEvent {
+        var event = Centraid_Core_V1_DocsEditorEvent()
         build(&event)
-        return event.encoded
+        return event
     }
 
-    private func content(_ state: Centraid_Screen_V1_DocsEditorState) -> ScreenContent<Centraid_Screen_V1_DocsEditorDraft> {
-        if let route = (try? Centraid_Screen_V1_DocsEditorEvent(serializedBytes: opened))?.opened,
-           !route.documentID.isEmpty, state.documentID != route.documentID {
-            return .loading(true)
-        }
+    private func content(_ state: Centraid_Core_V1_DocsEditorState) -> ScreenContent<Centraid_Core_V1_DocsEditorDraft> {
         switch state.content {
         case let .loading(loading)?: return .loading(loading.firstLoad)
         case let .failure(failure)?: return .failed(failure)
@@ -439,10 +485,10 @@ struct DocsEditorView: View {
         let chrome = state.chrome
         EditorRoom(
             title: typedTitle.isEmpty ? state.titleHint : typedTitle,
-            status: state.autosave,
+            status: state.autosave.legacy,
             closeLabel: chrome.done,
             onClose: onClose,
-            onDeparted: onDeparted
+            onDeparted: {}
         ) {
             EmptyView()
         } content: {
@@ -463,7 +509,7 @@ struct DocsEditorView: View {
                         .foregroundStyle(Theme.color("text", scheme))
                         .accessibilityIdentifier("docs-editor-title")
                         .onChange(of: typedTitle) { _, typed in
-                            guard typed != draft.title else { return }
+                            guard seeded, typed != draft.title else { return }
                             send(Self.event { $0.title = .with { $0.title = typed } })
                         }
                     ZStack(alignment: .topLeading) {
@@ -482,7 +528,7 @@ struct DocsEditorView: View {
                             .accessibilityLabel(chrome.bodyPlaceholder)
                             .accessibilityIdentifier("docs-editor-body")
                             .onChange(of: typedBody) { _, typed in
-                                guard typed != draft.body else { return }
+                                guard seeded, typed != draft.body else { return }
                                 send(Self.event { $0.body = .with { $0.body = typed } })
                             }
                     }

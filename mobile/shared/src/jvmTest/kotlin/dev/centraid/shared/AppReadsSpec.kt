@@ -10,14 +10,6 @@ import centraid.screen.v1.NoteDraft
 import centraid.screen.v1.PhotoCell
 import centraid.screen.v1.ReadFailureKind
 import dev.centraid.core.CoreFailure
-import dev.centraid.shared.apps.docs.DocsDocumentMachine
-import dev.centraid.shared.apps.docs.DocsDocumentReads
-import dev.centraid.shared.apps.docs.DocsDriveMachine
-import dev.centraid.shared.apps.docs.DocsDriveReads
-import dev.centraid.shared.apps.docs.DocsEditorMachine
-import dev.centraid.shared.apps.docs.DocsEditorReads
-import dev.centraid.shared.apps.docs.DocsTrashMachine
-import dev.centraid.shared.apps.docs.DocsTrashReads
 import dev.centraid.shared.apps.health.HealthHomeMachine
 import dev.centraid.shared.apps.health.HealthHomeReads
 import dev.centraid.shared.apps.health.HealthMetricMachine
@@ -153,7 +145,6 @@ class AppReadsSpec : StringSpec({
         // THE DUPLICATES SHELF IS AN APP QUERY (`photos.duplicates`, the core's
         // clustering), and is in `queryScreens`.
         Triple("photos.duplicate", DuplicateReviewReads, DuplicateReviewMachine),
-        Triple("docs.trash", DocsTrashReads, DocsTrashMachine),
         // LOCKER (#1047): the kit's trash over `entity`, kind `locker_item` (#1135). The statement is
         // the kit's own; `LockerTrashReads` adds only the gate in front of it
         // (`LockerSpec`).
@@ -203,7 +194,6 @@ class AppReadsSpec : StringSpec({
             null,
         )
         "photos.places" -> PlacesReads.query(PlacesMachine.initial(), null)
-        "docs.trash" -> DocsTrashReads.query(DocsTrashMachine.initial(), null)
         "locker.trash" -> TrashReads(LOCKER_TRASH).query(LockerTrashMachine.initial(), null)
         else -> {
             // THE CLUSTER'S MEMBERS ARE THE CORE'S, asked as the screen opens; a
@@ -297,10 +287,6 @@ class AppReadsSpec : StringSpec({
         Triple("notes.history", NotesHistoryReads, NotesHistoryMachine),
         Triple("notes.link_targets", NotesLinkPickerReads, NotesLinkPickerMachine),
         Triple("notes.trash", NotesTrashReads, NotesTrashMachine),
-        // DOCS (#1046 port). The trash is a page read; it is in `screens`.
-        Triple("docs.drive", DocsDriveReads, DocsDriveMachine),
-        Triple("docs.document", DocsDocumentReads, DocsDocumentMachine),
-        Triple("docs.editor", DocsEditorReads, DocsEditorMachine),
         // PHOTOS' DUPLICATES (#1135): the core's clustering, asked as an app query.
         Triple("photos.duplicates", DuplicatesReads, DuplicatesMachine),
         // LOCKER (#1047). Every read screen shares one table set — the item,

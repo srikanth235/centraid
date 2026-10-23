@@ -5,56 +5,60 @@ import UIKit
 import CentraidShared
 
 /// THE DRIVE — All · Folders · Starred, More as a sheet; and, pushed over it,
-/// a folder's page (#1046).
+/// a folder's page (#1046, #1135).
 ///
 /// **THE VIEW DECIDES NOTHING.** The band, the pills and whether they are
 /// lit, the list-or-grid layout, every sheet's rows and enabled flags, the
-/// empty and its one action, the head's subtitle: all `DocsDriveState`. What
-/// is here is geometry, the events, and the INTENTS the machine leaves to the
-/// shell — a folder, a document, the trash, and capture.
+/// empty and its one action, the head's subtitle: all `DocsDriveState`, which
+/// Rust makes (`crates/screens/src/docs`). What is here is geometry, the
+/// events, and the platform's half of a capture: the OS grants, reported.
+/// A row, a folder and a sheet row that opens a page carry their `Route`, and
+/// a tap hands it to `open`.
 struct DocsDriveView: View {
-    let data: Data
-    /// The registry id this page's bridge answers to.
-    let screen: String
-    /// `nil` on the drive (an app place with the band); the parent's name on a
-    /// folder page (a pushed page).
-    let parentTitle: String?
-    /// ADDING A DOCUMENT: the capture rows start it, its line is drawn here.
-    let ingest: DocsIngestHooks
-    let send: (Data) -> Void
+    let state: Centraid_Core_V1_DocsDriveState
+    let send: (Centraid_Core_V1_DocsDriveEvent) -> Void
+    let open: (Centraid_Core_V1_Route) -> Void
     let onBack: () -> Void
     let onHome: () -> Void
-    /// Open a folder found by name (#1097) through the shell's one row router.
-    var openContainer: (Centraid_Screen_V1_ChatCard, String) -> Void = { _, _ in }
 
     @Environment(\.colorScheme) private var scheme
 
-    private var state: Centraid_Screen_V1_DocsDriveState {
-        (try? Centraid_Screen_V1_DocsDriveState(serializedBytes: data)) ?? .init()
+    /// A folder is a pushed page; the drive at its tab is an app place with the band.
+    private var isFolderPage: Bool {
+        state.destination == .folders && !state.folderID.isEmpty
     }
 
-    static func event(_ build: (inout Centraid_Screen_V1_DocsDriveEvent) -> Void) -> Data {
-        var event = Centraid_Screen_V1_DocsDriveEvent()
+    static func event(_ build: (inout Centraid_Core_V1_DocsDriveEvent) -> Void) -> Centraid_Core_V1_DocsDriveEvent {
+        var event = Centraid_Core_V1_DocsDriveEvent()
         build(&event)
-        return event.encoded
+        return event
     }
 
-    private func content(_ state: Centraid_Screen_V1_DocsDriveState) -> ScreenContent<Centraid_Screen_V1_DocsDriveData> {
+    private func content(_ state: Centraid_Core_V1_DocsDriveState) -> ScreenContent<Centraid_Core_V1_DocsDriveData> {
         switch state.content {
         case let .loading(loading)?: return .loading(loading.firstLoad)
         case let .failure(failure)?: return .failed(failure)
-        case let .denied(denied)?: return .denied(denied)
+        case let .denied(denied)?: return .gated(denied)
         case let .data(data)?: return .data(data)
         case nil: return .loading(true)
         }
+    }
+
+    /// Rust's search flag and term, as the kit's field state.
+    private func searchField(_ state: Centraid_Core_V1_DocsDriveState) -> Centraid_Screen_V1_SearchField {
+        var field = Centraid_Screen_V1_SearchField()
+        field.open = state.search.open
+        field.term = state.search.term
+        field.corrected = state.search.corrected
+        return field
     }
 
     var body: some View {
         let state = state
         let content = content(state)
         Group {
-            if let parentTitle {
-                PushedPage(title: state.folderName, parentTitle: parentTitle, onBack: onBack) {
+            if isFolderPage {
+                PushedPage(title: state.folderName, parentTitle: state.chrome.back, onBack: onBack) {
                     RoomTrailing(action: addAction(state, content))
                 } content: {
                     // A FOLDER PAGE IS NOT A ROOM, so it draws the room's
@@ -63,7 +67,7 @@ struct DocsDriveView: View {
                         Group {
                             if state.search.open {
                                 CentraidSearchField(
-                                    field: state.search,
+                                    field: searchField(state),
                                     placeholder: state.chrome.searchPlaceholder,
                                     closeLabel: state.chrome.searchClose,
                                     identifier: "docs-search",
@@ -95,7 +99,7 @@ struct DocsDriveView: View {
                     title: state.chrome.title,
                     trailing: addAction(state, content),
                     search: SearchSlot(
-                        field: state.search,
+                        field: searchField(state),
                         placeholder: state.chrome.searchPlaceholder,
                         closeLabel: state.chrome.searchClose,
                         onOpen: { send(Self.event { $0.searchOpened = .init() }) },
@@ -110,12 +114,16 @@ struct DocsDriveView: View {
                         tabs: state.band.map { tab in
                             BandView(
                                 label: tab.label,
-                                event: Self.event { $0.band = .with { $0.key = tab.key } },
+                                event: Data(tab.key.utf8),
                                 iconKey: tab.iconKey,
-                                selected: tab.current
+                                selected: tab.current,
+                                key: tab.key
                             )
                         },
-                        onSelect: send,
+                        onSelect: { picked in
+                            let key = String(decoding: picked, as: UTF8.self)
+                            send(Self.event { $0.band = .with { $0.key = key } })
+                        },
                         onHome: onHome
                     )
                 } content: {
@@ -128,15 +136,15 @@ struct DocsDriveView: View {
         }
         .onAppear {
             reportPermissions()
-            ingest.reportFollowed()
+            reportFollowed()
         }
     }
 
     /// THE ONE TRAILING ACTION (R-CHROME-1): the Plus, said as the state's
-    /// add label; it opens the machine's Add sheet.
+    /// add label; it opens the Add sheet.
     private func addAction(
-        _ state: Centraid_Screen_V1_DocsDriveState,
-        _ content: ScreenContent<Centraid_Screen_V1_DocsDriveData>
+        _ state: Centraid_Core_V1_DocsDriveState,
+        _ content: ScreenContent<Centraid_Core_V1_DocsDriveData>
     ) -> RoomAction? {
         guard !content.isDenied, !state.chrome.add.isEmpty else { return nil }
         return RoomAction(iconKey: "Plus", label: state.chrome.add, identifier: "docs-add") {
@@ -144,11 +152,11 @@ struct DocsDriveView: View {
         }
     }
 
-    /// THE CHIP ROW (R-CHROME-3), the machine's pills as they come: the
-    /// filters, Clear while one is set, the sort last.
+    /// THE CHIP ROW (R-CHROME-3), Rust's pills as they come: the filters,
+    /// Clear while one is set, the sort last.
     private func chips(
-        _ state: Centraid_Screen_V1_DocsDriveState,
-        _ content: ScreenContent<Centraid_Screen_V1_DocsDriveData>
+        _ state: Centraid_Core_V1_DocsDriveState,
+        _ content: ScreenContent<Centraid_Core_V1_DocsDriveData>
     ) -> [RoomChip] {
         guard !content.isDenied else { return [] }
         return state.pills.map { pill in
@@ -171,22 +179,22 @@ struct DocsDriveView: View {
     // MARK: The page
 
     private func page(
-        _ state: Centraid_Screen_V1_DocsDriveState,
-        _ content: ScreenContent<Centraid_Screen_V1_DocsDriveData>
+        _ state: Centraid_Core_V1_DocsDriveState,
+        _ content: ScreenContent<Centraid_Core_V1_DocsDriveData>
     ) -> some View {
         VStack(spacing: 0) {
             if !content.isDenied { controls(state) }
-            DocsWriteLine(write: state.write)
-            ingestLine
-            if let rename = DocsRenameOpen.of(state.hasRename, state.rename) {
+            DocsWriteLine(status: state.status)
+            ingestLine(state.ingest)
+            if state.hasRename {
                 DocsRenameField(
-                    rename: rename,
+                    rename: state.rename,
                     placeholder: state.chrome.renamePlaceholder,
                     doneLabel: state.chrome.renameDone,
                     onEdit: { title in send(Self.event { $0.renameEdited = .with { $0.title = title } }) },
                     onClose: { send(Self.event { $0.renameClosed = .init() }) }
                 )
-                .id(rename.documentID)
+                .id(state.rename.documentID)
             }
             ReadStateView(
                 content: content,
@@ -195,19 +203,21 @@ struct DocsDriveView: View {
             ) { drive in
                 ScrollView {
                   VStack(alignment: .leading, spacing: 0) {
-                    // THE FOLDERS WHOSE NAME MATCHED come first (#1097), through the router.
-                    SearchContainerList(containers: state.search.containers) { openContainer($0, state.chrome.title) }
+                    // THE FOLDERS WHOSE NAME MATCHED come first (#1097): each pushes its route.
+                    ForEach(drive.containers, id: \.id) { container in
+                        SearchContainerRow(container: container.legacy) { _ in open(container.route) }
+                    }
                     LazyVStack(alignment: .leading, spacing: 0) {
-                        if !drive.crumbs.isEmpty, parentTitle != nil { crumbs(drive.crumbs) }
+                        if !drive.crumbs.isEmpty, isFolderPage { crumbs(drive.crumbs) }
                         ForEach(drive.folders, id: \.folderID) { node in
                             folderRow(node)
                         }
                         if drive.hasEmpty {
                             if drive.mode == .search {
                                 // A SEARCH THAT FOUND NOTHING: the kit's one no-match state.
-                                EmptyStateView(drive.empty)
+                                EmptyStateView(drive.empty.legacy)
                             } else {
-                                EmptyStateView(drive.empty, onAction: emptyAction(drive.emptyAction))
+                                EmptyStateView(drive.empty.legacy, onAction: emptyAction(drive.emptyAction))
                             }
                         } else if state.layout == .grid {
                             grid(drive.rows, state)
@@ -217,7 +227,7 @@ struct DocsDriveView: View {
                                     row: row,
                                     starredLabel: state.chrome.starred,
                                     menuLabel: state.chrome.rowMenu,
-                                    onTap: { open(row) },
+                                    onTap: { open(row.route) },
                                     onMenu: { send(Self.event { $0.rowMenu = .with { $0.documentID = row.documentID } }) }
                                 )
                             }
@@ -226,7 +236,7 @@ struct DocsDriveView: View {
                         note(drive.truncatedNote)
                     }
                     // THE ASK ROW closes a search's answer, matched or not (#1135).
-                    if state.search.hasAskRow { SearchAskRow(ask: state.search.askRow) }
+                    if state.search.hasAskRow { SearchAskRow(ask: state.search.askRow.legacy) }
                   }
                   .padding(.bottom, 16)
                 }
@@ -239,7 +249,7 @@ struct DocsDriveView: View {
             set: { open in if !open, state.hasConfirm { send(Self.event { $0.dismissed = .init() }) } }
         )) {
             ConfirmSheet(
-                state.confirm,
+                state.confirm.legacy,
                 onConfirm: { send(Self.event { $0.confirmed = .init() }) },
                 onDismiss: { send(Self.event { $0.dismissed = .init() }) }
             )
@@ -248,7 +258,7 @@ struct DocsDriveView: View {
 
     /// The head's subtitle and the layout toggle — one line over the list.
     /// Search and the chips are the room's (R-CHROME-2/3), drawn above.
-    private func controls(_ state: Centraid_Screen_V1_DocsDriveState) -> some View {
+    private func controls(_ state: Centraid_Core_V1_DocsDriveState) -> some View {
         HStack(spacing: 6) {
             Text(state.headMeta)
                 .centraidType("annotLabel")
@@ -270,7 +280,7 @@ struct DocsDriveView: View {
         KitIconKey(iconKey: icon, label: label, framed: true, identifier: identifier, action: action)
     }
 
-    private func crumbs(_ crumbs: [Centraid_Screen_V1_DocsCrumb]) -> some View {
+    private func crumbs(_ crumbs: [Centraid_Core_V1_DocsCrumb]) -> some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 4) {
                 ForEach(Array(crumbs.enumerated()), id: \.offset) { index, crumb in
@@ -289,9 +299,9 @@ struct DocsDriveView: View {
         .accessibilityElement(children: .combine)
     }
 
-    private func folderRow(_ node: Centraid_Screen_V1_DocsFolderNode) -> some View {
+    private func folderRow(_ node: Centraid_Core_V1_DocsFolderNode) -> some View {
         Button {
-            send(Self.event { $0.folderPicked = .with { $0.folderID = node.folderID; $0.name = node.name } })
+            open(node.route)
         } label: {
             HStack(spacing: 12) {
                 CentraidIconView(iconKey: "Folder", tint: Theme.color("textSoft", scheme), size: 20)
@@ -320,11 +330,11 @@ struct DocsDriveView: View {
         .accessibilityIdentifier("docs-folder-\(node.folderID)")
     }
 
-    private func grid(_ rows: [Centraid_Screen_V1_DocsRowView], _ state: Centraid_Screen_V1_DocsDriveState) -> some View {
+    private func grid(_ rows: [Centraid_Core_V1_DocsRowView], _ state: Centraid_Core_V1_DocsDriveState) -> some View {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 8)], spacing: 8) {
             ForEach(rows, id: \.documentID) { row in
                 Button {
-                    open(row)
+                    open(row.route)
                 } label: {
                     VStack(alignment: .leading, spacing: 6) {
                         CentraidIconView(iconKey: row.kindIconKey, tint: Theme.color("textSoft", scheme), size: 28)
@@ -379,15 +389,9 @@ struct DocsDriveView: View {
         }
     }
 
-    // MARK: Events and intents
+    // MARK: Events
 
-    private func open(_ row: Centraid_Screen_V1_DocsRowView) {
-        send(Self.event {
-            $0.documentPicked = .with { $0.documentID = row.documentID; $0.title = row.title; $0.surface = row.surface }
-        })
-    }
-
-    private func emptyAction(_ action: Centraid_Screen_V1_DocsDriveData.EmptyAction) -> (() -> Void)? {
+    private func emptyAction(_ action: Centraid_Core_V1_DocsDriveData.EmptyAction) -> (() -> Void)? {
         switch action {
         case .add: return { send(Self.event { $0.sheetOpened = .with { $0.kind = .add } }) }
         case .clearFilters: return { send(Self.event { $0.filtersCleared = .init() }) }
@@ -396,31 +400,14 @@ struct DocsDriveView: View {
         }
     }
 
-    private func sheetActions(_ state: Centraid_Screen_V1_DocsDriveState) -> DocsSheetActions {
+    /// A sheet row is one event; Rust decides what it does (a capture asks this
+    /// shell for a picker, Follow a folder for its folder picker). A row that
+    /// opens a page carries its `route`, which the shell pushes.
+    private func sheetActions(_ state: Centraid_Core_V1_DocsDriveState) -> DocsSheetActions {
         DocsSheetActions(
             onAction: { action in
-                // The keys are `DocsWrites.KEY_*`. Capture and the trash are
-                // the shell's; everything else is the machine's.
-                switch (state.sheet.kind, action.key) {
-                case (.add, DocsWrites.shared.KEY_UPLOAD): addRequested(action.key, .upload, state)
-                case (.add, DocsWrites.shared.KEY_SCAN): addRequested(action.key, .scan, state)
-                case (.add, DocsWrites.shared.KEY_TEXT): addRequested(action.key, .text, state)
-                case (.add, DocsWrites.shared.KEY_FOLLOW_FOLDER):
-                    send(Self.event { $0.followFolderRequested = .init() })
-                    ingest.followFolder()
-                case (.more, DocsWrites.shared.KEY_TRASH_SHELF):
-                    send(Self.event { $0.trashOpened = .init() })
-                case (.followed, _):
-                    // The row's key names the folder; the shell tells the vault and drops its access.
-                    if let origin = DocsScreens.followBridge.stopTarget(actionKey: action.key) {
-                        send(Self.event { $0.stopFollowingRequested = .with { $0.originID = origin } })
-                        ingest.stopFollowing(origin)
-                    } else {
-                        send(Self.event { $0.action = .with { $0.key = action.key } })
-                    }
-                default:
-                    send(Self.event { $0.action = .with { $0.key = action.key } })
-                }
+                send(Self.event { $0.action = .with { $0.key = action.key } })
+                if action.hasRoute { open(action.route) }
             },
             onChoice: { key in send(Self.event { $0.choice = .with { $0.key = key } }) },
             onLabelAdd: { label in send(Self.event { $0.labelAdded = .with { $0.label = label } }) },
@@ -431,44 +418,30 @@ struct DocsDriveView: View {
         )
     }
 
-    /// CAPTURE IS THE INGEST'S. The event puts the drive's sheet away; the
-    /// ingest bridge does the rest — the root answers its picker, stages the
-    /// bytes, files them, and pushes what it filed (`DocsIngestRoot`). The
-    /// filed document's back word is this page's own title.
-    private func addRequested(
-        _ key: String,
-        _ kind: Centraid_Screen_V1_DocsDriveEvent.AddRequested.Kind,
-        _ state: Centraid_Screen_V1_DocsDriveState
-    ) {
-        send(Self.event { $0.addRequested = .with { $0.kind = kind; $0.folderID = state.folderID } })
-        ingest.request(key, state.folderID, state.chrome.title)
-    }
-
     /// THE INGEST'S LINE (DESIGN.md: one line, at most one text action, never
     /// clears itself): its words, a determinate bar while bytes move, Try again
     /// on a failure, and the close key once there is something to put away.
     @ViewBuilder
-    private var ingestLine: some View {
-        let line = (try? Centraid_Screen_V1_DocsIngestState(serializedBytes: ingest.state())) ?? .init()
+    private func ingestLine(_ line: Centraid_Core_V1_DocsIngestView) -> some View {
         if !line.statusLabel.isEmpty {
-            let moving = line.phase == .staging || line.phase == .filing
+            let moving = line.phase == .picking || line.phase == .filing
             ProgressStatusLine(
                 sentence: line.statusLabel,
                 permille: moving ? line.progressPermille : nil,
                 refused: line.phase == .failed,
                 actionLabel: line.retryLabel,
-                onAct: ingest.retry,
+                onAct: { send(Self.event { $0.ingestRetried = .init() }) },
                 closeLabel: line.dismissLabel,
-                onClose: ingest.dismiss,
+                onClose: { send(Self.event { $0.ingestDismissed = .init() }) },
                 identifier: "docs-ingest"
             )
         }
     }
 
     /// THE OS GRANTS, REPORTED (law 4): the Add sheet offers, greys or drops
-    /// Scan and Upload by what the machine hears here.
+    /// Scan and Upload by what Rust hears here.
     private func reportPermissions() {
-        let camera: Centraid_Screen_V1_DocsCapture.Permission
+        let camera: Centraid_Core_V1_DocsPermission
         if !UIImagePickerController.isSourceTypeAvailable(.camera) {
             camera = .unavailable
         } else {
@@ -485,7 +458,24 @@ struct DocsDriveView: View {
         send(Self.event { $0.permission = .with { $0.surface = .files; $0.permission = .granted } })
     }
 
-    private func sheetBinding(_ state: Centraid_Screen_V1_DocsDriveState) -> Binding<Bool> {
+    /// THE FOLDERS FOLLOWED, REPORTED (law 4): the More sheet lists them.
+    private func reportFollowed() {
+        DocsFollow.shared.followed { folders in
+            send(Self.event {
+                $0.followedChanged = .with {
+                    $0.followed = folders.map { folder -> Centraid_Core_V1_DocsFollowed in
+                        var followed = Centraid_Core_V1_DocsFollowed()
+                        followed.originID = folder.phoneOrigin
+                        followed.name = folder.name
+                        followed.documents = folder.documents
+                        return followed
+                    }
+                }
+            })
+        }
+    }
+
+    private func sheetBinding(_ state: Centraid_Core_V1_DocsDriveState) -> Binding<Bool> {
         let open = state.sheet.kind != .none && state.sheet.kind != .unspecified
         return Binding(
             get: { open },
@@ -495,28 +485,4 @@ struct DocsDriveView: View {
             }
         )
     }
-}
-
-/// An open inline rename, or nothing.
-enum DocsRenameOpen {
-    static func of(_ present: Bool, _ rename: Centraid_Screen_V1_DocsRename) -> Centraid_Screen_V1_DocsRename? {
-        guard present, !rename.closed, !rename.documentID.isEmpty else { return nil }
-        return rename
-    }
-}
-
-/// The drive's doors into the one ingest (`DocsScreens.ingestBridge`).
-struct DocsIngestHooks {
-    /// The ingest's state now, encoded.
-    let state: () -> Data
-    /// Start one: the Add sheet row's key, the folder, the page's title.
-    let request: (String, String, String) -> Void
-    let retry: () -> Void
-    let dismiss: () -> Void
-    /// "Follow a folder" (#1127): raise the folder picker.
-    let followFolder: () -> Void
-    /// A followed folder's "Stop following", by its origin.
-    let stopFollowing: (String) -> Void
-    /// Tell the machine which folders are followed now.
-    let reportFollowed: () -> Void
 }

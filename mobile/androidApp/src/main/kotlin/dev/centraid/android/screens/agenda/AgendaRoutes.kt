@@ -3,6 +3,7 @@ package dev.centraid.android.screens.agenda
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -13,6 +14,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import centraid.core.v1.AgendaDestination
+import centraid.core.v1.DocsDriveEvent
+import centraid.core.v1.DocsFollowed
+import centraid.core.v1.DocsPermission
 import centraid.core.v1.NavEvent
 import centraid.core.v1.NavPopToRoot
 import centraid.core.v1.NavPopped
@@ -24,6 +28,13 @@ import dev.centraid.android.kit.PerformScreenEffects
 import dev.centraid.android.kit.TrashScreen
 import dev.centraid.android.screens.AgendaHomeScreen
 import dev.centraid.android.screens.AppRoutes
+import dev.centraid.android.screens.docs.DocsDocumentScreen
+import dev.centraid.android.screens.docs.DocsDriveScreen
+import dev.centraid.android.screens.docs.DocsEditorScreen
+import dev.centraid.android.screens.docs.DocsFiles
+import dev.centraid.android.screens.docs.DocsVersionsScreen
+import dev.centraid.android.screens.docs.rememberDocsPickers
+import dev.centraid.shared.nav.DocsEntry
 import dev.centraid.android.screens.RouteNav
 import dev.centraid.core.CentraidCore
 import dev.centraid.core.Screens
@@ -32,6 +43,7 @@ import dev.centraid.shared.nav.AppIds
 import dev.centraid.shared.nav.Destination
 import dev.centraid.shared.nav.NavStack
 import dev.centraid.shared.shell.HomeSession
+import dev.centraid.shared.sync.phone.PhoneSource
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -78,19 +90,22 @@ internal class AgendaRoutes(private val phone: AndroidPhoneFollow) : AppRoutes {
     /** A KMP entry and the screen instance Rust opened for it. */
     private class Opened(val entry: Destination.RustScreen, val instance: Long)
 
+    private val docsFiles = DocsFiles()
+
     override fun handles(destination: Destination): Boolean =
-        destination is Destination.RustScreen && destination.route.screen.startsWith(SCREEN_PREFIX)
+        destination is Destination.RustScreen && PREFIXES.any { destination.route.screen.startsWith(it) }
 
     // ENTERING AGENDA FROM HOME: its home route, on today (`AgendaEntry`, which the shell lane removes).
-    override fun opens(moveId: String): Destination? = if (moveId == AppIds.AGENDA) {
-        AgendaEntry.home(AgendaDestination.AGENDA_DESTINATION_DAY, "")
-    } else {
-        null
+    override fun opens(moveId: String): Destination? = when (moveId) {
+        AppIds.AGENDA -> AgendaEntry.home(AgendaDestination.AGENDA_DESTINATION_DAY, "")
+        AppIds.DOCS -> DocsEntry.home()
+        else -> null
     }
 
     override fun attach(session: HomeSession, scope: CoroutineScope) {
         this.session = session
         this.scope = scope
+        docsFiles.attach(session)
         ensureScreens()
     }
 
@@ -106,7 +121,10 @@ internal class AgendaRoutes(private val phone: AndroidPhoneFollow) : AppRoutes {
                 }
             }
         }
-        screens?.let { PerformScreenEffects(it, phone) }
+        screens?.let {
+            val pickers = rememberDocsPickers(docsFiles, onFollowed = { phone.requested(PhoneSource.FILES) })
+            PerformScreenEffects(it, phone, docs = pickers, openRoute = { route -> nav.push(Destination.RustScreen(route)) })
+        }
     }
 
     @Composable
@@ -148,7 +166,7 @@ internal class AgendaRoutes(private val phone: AndroidPhoneFollow) : AppRoutes {
     private suspend fun reconcile(runtime: Screens, stack: NavStack) {
         val wanted = stack.entries
             .filterIsInstance<Destination.RustScreen>()
-            .filter { it.route.screen.startsWith(SCREEN_PREFIX) }
+            .filter { entry -> PREFIXES.any { entry.route.screen.startsWith(it) } }
         var kept = 0
         while (kept < opened.size && kept < wanted.size && opened[kept].entry === wanted[kept]) kept++
         if (opened.size > kept) {
@@ -183,9 +201,14 @@ internal class AgendaRoutes(private val phone: AndroidPhoneFollow) : AppRoutes {
         val detail = view.todo_detail
         val catchUp = view.todo_catch_up
         val trash = view.trash
+        val drive = view.docs_drive
+        val doc = view.docs_document
+        val versions = view.docs_versions
+        val docEditor = view.docs_editor
 
         // THE SCREEN IS DONE (a cancel committed, the editor saved or left, the task deleted): its page goes.
-        val done = event?.dismissed == true || editor?.dismissed == true || detail?.finished == true
+        val done = event?.dismissed == true || editor?.dismissed == true || detail?.finished == true ||
+            doc?.dismissed == true
         LaunchedEffect(done) {
             if (done && nav.stack.current === entry) nav.pop()
         }
@@ -233,6 +256,33 @@ internal class AgendaRoutes(private val phone: AndroidPhoneFollow) : AppRoutes {
                 onOpen = open,
                 onBack = back,
             )
+            drive != null -> {
+                // WHAT THE OS LETS DOCS OFFER, and the folders followed, reported as state.
+                DocsReports(instance, send)
+                DocsDriveScreen(
+                    state = drive,
+                    onEvent = { send(ScreenEvent(docs_drive = it)) },
+                    onOpen = open,
+                    onHome = { nav.home() },
+                    onBack = back,
+                )
+            }
+            doc != null -> DocsDocumentScreen(
+                state = doc,
+                onEvent = { send(ScreenEvent(docs_document = it)) },
+                onOpen = open,
+                onBack = back,
+            )
+            versions != null -> DocsVersionsScreen(
+                state = versions,
+                onEvent = { send(ScreenEvent(docs_versions = it)) },
+                onBack = back,
+            )
+            docEditor != null -> DocsEditorScreen(
+                state = docEditor,
+                onEvent = { send(ScreenEvent(docs_editor = it)) },
+                onClose = back,
+            )
             trash != null -> TrashScreen(
                 view = trash,
                 onEvent = { send(ScreenEvent(trash = it)) },
@@ -241,10 +291,35 @@ internal class AgendaRoutes(private val phone: AndroidPhoneFollow) : AppRoutes {
         }
     }
 
+    /** The permission and the followed list Docs' drive shows, reported once per page. */
+    @Composable
+    private fun DocsReports(instance: Long, send: (ScreenEvent) -> Unit) {
+        val context = LocalContext.current
+        LaunchedEffect(instance) {
+            val camera = if (context.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY)) {
+                DocsPermission.DOCS_PERMISSION_GRANTED
+            } else {
+                DocsPermission.DOCS_PERMISSION_UNAVAILABLE
+            }
+            send(ScreenEvent(docs_drive = DocsDriveEvent(permission = DocsDriveEvent.PermissionChanged(
+                surface = DocsDriveEvent.PermissionChanged.Surface.SURFACE_FILES,
+                permission = DocsPermission.DOCS_PERMISSION_GRANTED,
+            ))))
+            send(ScreenEvent(docs_drive = DocsDriveEvent(permission = DocsDriveEvent.PermissionChanged(
+                surface = DocsDriveEvent.PermissionChanged.Surface.SURFACE_CAMERA,
+                permission = camera,
+            ))))
+            docsFiles.follow.followed { folders ->
+                val followed = folders.map { DocsFollowed(origin_id = it.originId, name = it.name, documents = it.documents) }
+                send(ScreenEvent(docs_drive = DocsDriveEvent(followed_changed = DocsDriveEvent.FollowedChanged(followed = followed))))
+            }
+        }
+    }
+
     private companion object {
-        /** Rust's tab for Agenda's pages, and the prefix every one of its screens' names carries. */
+        /** Rust's tab for Agenda's and Docs' pages, and the prefixes their screens' names carry. */
         const val TAB = "agenda"
-        const val SCREEN_PREFIX = "agenda."
+        val PREFIXES = listOf("agenda.", "docs.")
     }
 }
 

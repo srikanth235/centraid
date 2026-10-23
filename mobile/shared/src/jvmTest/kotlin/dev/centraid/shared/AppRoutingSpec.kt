@@ -2,13 +2,6 @@ package dev.centraid.shared
 
 import centraid.core.v1.AgendaDestination
 import centraid.core.v1.Route
-import centraid.screen.v1.DocsDocumentEvent
-import centraid.screen.v1.DocsDocumentState
-import centraid.screen.v1.DocsDriveChrome
-import centraid.screen.v1.DocsDriveEvent
-import centraid.screen.v1.DocsDriveState
-import centraid.screen.v1.DocsEditorEvent
-import centraid.screen.v1.DocsIngestState
 import centraid.screen.v1.HomeTile
 import centraid.screen.v1.LockerEditorEvent
 import centraid.screen.v1.LockerEditorState
@@ -41,11 +34,6 @@ import centraid.screen.v1.PeoplePersonData
 import centraid.screen.v1.PeoplePersonEvent
 import centraid.screen.v1.PeoplePersonState
 import centraid.screen.v1.TileStatus
-import dev.centraid.shared.apps.docs.DocsDocumentMachine
-import dev.centraid.shared.apps.docs.DocsDriveMachine
-import dev.centraid.shared.apps.docs.DocsEditorMachine
-import dev.centraid.shared.apps.docs.DocsRouting
-import dev.centraid.shared.apps.docs.DocsTrashMachine
 import dev.centraid.shared.apps.locker.LockerAccessMachine
 import dev.centraid.shared.apps.locker.LockerEditorMachine
 import dev.centraid.shared.apps.locker.LockerExportMachine
@@ -137,8 +125,6 @@ class AppRoutingSpec : StringSpec({
             Destination.NotesJournal to NotesJournalMachine.SCREEN_ID,
             Destination.NotesHistory("n") to NotesHistoryMachine.SCREEN_ID,
             Destination.NotesTrash to NotesTrashMachine.screenId,
-            Destination.DocsEditor("d") to DocsEditorMachine.SCREEN_ID,
-            Destination.DocsTrash to DocsTrashMachine.screenId,
             Destination.PeopleEditor("p") to PeopleEditorMachine.SCREEN_ID,
             Destination.PeopleTrash to PeopleTrashMachine.screenId,
             Destination.MoneyTarget("2026-10", "c", "EUR") to MoneyTargetMachine.SCREEN_ID,
@@ -176,7 +162,6 @@ class AppRoutingSpec : StringSpec({
             item_id shouldBe "i2"
             password shouldBe ""
         }
-        DocsEditorEvent.ADAPTER.decode(ScreenOpenings.of(Destination.DocsEditor("d1", "Lease"))!!.event).opened!!.title shouldBe "Lease"
     }
 
     // --- Notes -----------------------------------------------------------
@@ -340,38 +325,6 @@ class AppRoutingSpec : StringSpec({
         PeopleRouting.channelRow(edit.encode(), state.encode()).shouldBeNull()
         PeopleRouting.route(PeoplePersonMachine.SCREEN_ID, edit.encode(), state.encode())!!.openings.single().screenId shouldBe
             PeopleEditorMachine.SCREEN_ID
-    }
-
-    // --- Docs ------------------------------------------------------------
-
-    "Docs: a folder, a document and the trash push with the drive's title; a folder with no id is not a page" {
-        val state = DocsDriveState(chrome = DocsDriveChrome(title = "Folders"))
-        DocsRouting.drive(DocsDriveEvent(folder_picked = DocsDriveEvent.FolderPicked(folder_id = "f1", name = "Taxes")), state) shouldBe
-            Destination.DocsFolder("f1", "Taxes", "Folders")
-        DocsRouting.drive(DocsDriveEvent(folder_picked = DocsDriveEvent.FolderPicked(name = "Top")), state).shouldBeNull()
-        DocsRouting.drive(DocsDriveEvent(document_picked = DocsDriveEvent.DocumentPicked(document_id = "d1", title = "Lease")), state) shouldBe
-            Destination.DocsDocument("d1", "Lease", "Folders")
-        DocsRouting.drive(DocsDriveEvent(trash_opened = DocsDriveEvent.TrashOpened()), state) shouldBe Destination.DocsTrash
-        // The folder page is the drive's machine on its own key, and routes the same.
-        DocsRouting.route(
-            DocsDriveMachine.FOLDER_SCREEN_ID,
-            DocsDriveEvent(document_picked = DocsDriveEvent.DocumentPicked(document_id = "d1")).encode(),
-            state.encode(),
-        )!!.openings.single().screenId shouldBe DocsDocumentMachine.SCREEN_ID
-    }
-
-    "Docs: a document's crumb names the document as the folder's parent; Edit opens the editor; a filed ingest opens once" {
-        val document = DocsDocumentState(title_hint = "Lease")
-        DocsRouting.document(DocsDocumentEvent(folder_picked = DocsDocumentEvent.FolderPicked(folder_id = "f1", name = "Taxes")), document) shouldBe
-            Destination.DocsFolder("f1", "Taxes", "Lease")
-        DocsRouting.document(DocsDocumentEvent(edit_requested = DocsDocumentEvent.EditRequested(document_id = "d1", title = "Lease")), document) shouldBe
-            Destination.DocsEditor("d1", "Lease")
-        val filed = DocsIngestState(phase = DocsIngestState.Phase.PHASE_FILED, document_id = "d2", title = "Scan", parent = "All")
-        DocsRouting.filed(filed) shouldBe Destination.DocsDocument("d2", "Scan", parent = "All")
-        DocsRouting.filed(filed.copy(open_editor = true)) shouldBe Destination.DocsEditor("d2", "Scan")
-        DocsRouting.filed(filed.copy(routed = true)).shouldBeNull()
-        DocsRouting.filed(filed.copy(phase = DocsIngestState.Phase.PHASE_UNSPECIFIED)).shouldBeNull()
-        DocsRouting.filedOpening(filed.encode())!!.screenId shouldBe DocsDocumentMachine.SCREEN_ID
     }
 
     // --- Locker ----------------------------------------------------------

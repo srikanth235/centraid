@@ -16,7 +16,7 @@ import java.util.UUID
 /**
  * THE FILES A DOCS INGEST HANDS THE BRIDGE (#1047, R-1047-Q4).
  *
- * `DocsIngestBridge.picked` takes a PATH on this device, never bytes, so a
+ * the `PickFile` effect's staging takes a PATH on this device, never bytes, so a
  * large file streams through the stage frames without ever sitting in memory.
  * This is the Android half of that seam: the Storage Access Framework's
  * `content://` stream copied into the app's cache, and a camera capture

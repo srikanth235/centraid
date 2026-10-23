@@ -154,8 +154,37 @@ public object FilesImport {
     /** The prefix of a folder origin: `folder:<uuid>`. */
     public const val FOLDER: String = "folder"
 
-    /** A media type for a file the platform named none for, off its name. */
-    internal fun mediaTypeOf(file: PhoneFile): String = DocsIngestMachine.mediaTypeOf(file.name, file.mediaType)
+    /**
+     * A media type for a file the platform named none for, off its name: the core has no sniffer,
+     * and bytes promoted as `application/octet-stream` are ones no stage will draw.
+     */
+    internal fun mediaTypeOf(file: PhoneFile): String {
+        if (file.mediaType.isNotBlank()) return file.mediaType.trim()
+        return MEDIA_TYPES[file.name.substringAfterLast('.', "").lowercase()] ?: OCTET_STREAM
+    }
+
+    private const val OCTET_STREAM: String = "application/octet-stream"
+
+    private val MEDIA_TYPES: Map<String, String> = mapOf(
+        "pdf" to "application/pdf",
+        "png" to "image/png",
+        "jpg" to "image/jpeg",
+        "jpeg" to "image/jpeg",
+        "heic" to "image/heic",
+        "gif" to "image/gif",
+        "webp" to "image/webp",
+        "txt" to "text/plain",
+        "md" to "text/markdown",
+        "csv" to "text/csv",
+        "mp4" to "video/mp4",
+        "mov" to "video/quicktime",
+        "mp3" to "audio/mpeg",
+        "m4a" to "audio/mp4",
+        "doc" to "application/msword",
+        "docx" to "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "xls" to "application/vnd.ms-excel",
+        "xlsx" to "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
 
     /** The phone's half of a record: the cheap pre-check. */
     internal fun statOf(file: PhoneFile): String = "${file.size}:${file.modifiedMs}"

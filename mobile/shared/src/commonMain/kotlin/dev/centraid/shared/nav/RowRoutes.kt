@@ -71,8 +71,8 @@ public object RowRoutes {
         AppIds.PHOTOS to ALBUM -> Destination.PhotoShelfRoute(
             PhotoShelf(album = PhotoShelf.Album(collection_id = row.id, name = row.title)),
         )
-        AppIds.DOCS to FOLDER -> Destination.DocsFolder(row.id, row.title, parent = parent)
-        AppIds.DOCS to DOCUMENT -> Destination.DocsDocument(row.id, row.title, parent = parent)
+        AppIds.DOCS to FOLDER -> DocsEntry.folder(row.id, row.title, parent = parent)
+        AppIds.DOCS to DOCUMENT -> DocsEntry.document(row.id, row.title, parent = parent)
         AppIds.PEOPLE to PERSON -> Destination.PeoplePerson(row.id, row.title)
         AppIds.AGENDA to EVENT -> AgendaEntry.event(eventId = row.id, instanceKey = row.qualifier)
         AppIds.PHOTOS to PHOTO -> Destination.PhotoLightbox(row.id, neighbours.ifEmpty { listOf(row.id) })
@@ -113,7 +113,7 @@ public object RowRoutes {
     /** An app's own front door, for a reference whose noun has no row route. */
     public fun appHome(app: String): Destination? = when (app) {
         AppIds.NOTES -> Destination.NotesLibrary()
-        AppIds.DOCS -> Destination.DocsHome()
+        AppIds.DOCS -> DocsEntry.home()
         AppIds.PEOPLE -> Destination.PeopleHome()
         AppIds.AGENDA -> AgendaEntry.home()
         AppIds.PHOTOS -> Destination.PhotosHome()

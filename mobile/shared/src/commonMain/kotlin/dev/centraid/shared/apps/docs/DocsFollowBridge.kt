@@ -1,25 +1,27 @@
 package dev.centraid.shared.apps.docs
 
-import centraid.screen.v1.DocsDriveEvent
-import centraid.screen.v1.DocsFollowed
 import dev.centraid.design.copy.DocsCopy
 import dev.centraid.shared.shell.HomeSession
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlin.uuid.ExperimentalUuidApi
+import kotlin.uuid.Uuid
 
 /**
- * FOLLOWING A FOLDER, BOTH SHELLS (#1127, R-1127-7): the three acts a member does with a folder,
- * and the list the drive shows. The shell owns the picker and the persisted access to the folder
- * (a security-scoped bookmark, a tree URI with a persisted grant), keyed by the folder's origin id;
- * this owns what the vault is told.
+ * FOLLOWING A FOLDER, BOTH SHELLS (#1127, R-1127-7): what the vault is told when a member follows
+ * or stops a folder, and the list of what is followed. Docs' screens are Rust's (#1135) and ask
+ * the shell for these through the `FollowFolder` and `StopFollowing` effects; the shell owns the
+ * picker and the persisted access to the folder (a security-scoped bookmark, a tree URI with a
+ * persisted grant), keyed by the folder's origin id, and this owns what the follower engine
+ * ([FilesImport]) writes to the vault.
  *
- * - [follow]: the member picked a folder. The shell minted the origin ([FilesImport.origin]) and
- *   stored its access; the vault now holds the origin, and the shell asks the follower for a pass.
+ * - [follow]: the member picked a folder. The shell minted the origin ([mintOrigin]) and stored
+ *   its access; the vault now holds the origin, and the shell asks the follower for a pass.
  * - [stop]: the member stopped following. The vault forgets the folder's sources and keeps every
  *   document; the shell forgets its access and the follower is not asked for anything.
- * - [report]: tell a drive page which folders are followed, so its More sheet lists them.
+ * - [followed]: the folders the vault follows, for the shell to report to the drive.
  *
  * Bytes across to SwiftUI, nothing `suspend`; call on the main thread.
  */
@@ -32,7 +34,8 @@ public class DocsFollowBridge {
     }
 
     /** The origin id for a newly picked folder: `folder:<uuid>`. */
-    public fun mintOrigin(): String = FilesImport.origin(DocsIngestBridge.mintId())
+    @OptIn(ExperimentalUuidApi::class)
+    public fun mintOrigin(): String = FilesImport.origin(Uuid.random().toString())
 
     /** The folder [origin], named [name] by the phone, is followed; [done] is told whether the vault took it. */
     public fun follow(origin: String, name: String, done: (Boolean) -> Unit) {
@@ -46,32 +49,10 @@ public class DocsFollowBridge {
         scope.launch { done(FilesImport.stop(core, origin)) }
     }
 
-    /** The folder a Followed sheet row's key stops (`stop:<origin>`), or null for any other key. */
-    public fun stopTarget(actionKey: String): String? =
-        actionKey.removePrefix(DocsWrites.KEY_STOP_PREFIX).takeIf { actionKey.startsWith(DocsWrites.KEY_STOP_PREFIX) && it.isNotEmpty() }
-
-    /** Tell [drive] which folders are followed now (Compose). */
-    public fun report(drive: DocsDriveBridge) {
-        publish { event -> drive.forward(event) }
-    }
-
-    /** Tell a drive page which folders are followed now: [deliver] is handed the encoded `DocsDriveEvent` (SwiftUI). */
-    public fun report(deliver: (ByteArray) -> Unit) {
-        publish { event -> deliver(event.encode()) }
-    }
-
-    private fun publish(deliver: (DocsDriveEvent) -> Unit) {
+    /** The folders the vault follows now, with the documents each holds; [deliver] is not called when the vault would not say. */
+    public fun followed(deliver: (List<FollowedFolder>) -> Unit) {
         val core = session?.shelf?.core() ?: return
-        scope.launch {
-            val folders = FilesImport.followed(core) ?: return@launch
-            deliver(
-                DocsDriveEvent(
-                    followed_changed = DocsDriveEvent.FollowedChanged(
-                        followed = folders.map { DocsFollowed(origin_id = it.phoneOrigin, name = it.name, documents = it.documents) },
-                    ),
-                ),
-            )
-        }
+        scope.launch { FilesImport.followed(core)?.let(deliver) }
     }
 
     /** The title of the sheet a refused pick is told in: the act that was refused. */

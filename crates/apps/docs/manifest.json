@@ -164,6 +164,11 @@
             "minLength": 64,
             "maxLength": 64
           },
+          "size": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "The bytes' length as the stage door counted them. The command claims bytes it names, so bytes no command has claimed yet need it."
+          },
           "media_type": {
             "type": "string",
             "minLength": 1
