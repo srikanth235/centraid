@@ -92,7 +92,6 @@ fn covers(query: &Q) -> &'static str {
         Q::VaultSearch(_) => "vault.search",
         Q::PhotosSearch(_) => "photos.search",
         Q::PhotosDuplicates(_) => "photos.duplicates",
-        Q::PhotosLibrary(_) => "photos.library",
         Q::PhotosShelf(_) => "photos.shelf",
         Q::PhotosPhoto(_) => "photos.photo",
         Q::PhotosAlbums(_) => "photos.albums",
@@ -259,11 +258,6 @@ fn requests(word: &str) -> Vec<Q> {
             correct: true,
         }),
         Q::PhotosDuplicates(wire::PhotosDuplicatesRequest {}),
-        Q::PhotosLibrary(wire::PhotosLibraryRequest::default()),
-        Q::PhotosLibrary(wire::PhotosLibraryRequest {
-            limit: 40,
-            before: "2025-03-01T00:00:00Z".to_owned(),
-        }),
         Q::PhotosAlbums(wire::PhotosAlbumsRequest {}),
         Q::PhotosPlaces(wire::PhotosPlacesRequest {}),
         Q::PhotosPhoto(wire::PhotosPhotoRequest { id: some("photo") }),
@@ -854,11 +848,11 @@ fn ask(handle: &centraid_core::Handle, query: Q) -> Result<(), String> {
 }
 
 /// Every wire query has an entry in [`requests`]: the names it asks are the names
-/// [`covers`] knows. The wire has 61 queries (`app_query.proto`'s `oneof query`);
+/// [`covers`] knows. The wire has 60 queries (`app_query.proto`'s `oneof query`);
 /// a new one is a compile error in [`covers`], and this count says it was also
 /// asked.
 #[test]
 fn the_sweep_asks_every_query_the_wire_has() {
     let asked: BTreeSet<&str> = requests("word").iter().map(covers).collect();
-    assert_eq!(asked.len(), 61, "{asked:?}");
+    assert_eq!(asked.len(), 60, "{asked:?}");
 }

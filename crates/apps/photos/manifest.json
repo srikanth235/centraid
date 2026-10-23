@@ -1125,56 +1125,6 @@
   ],
   "queries": [
     {
-      "name": "library",
-      "kind": "photo",
-      "figures": ["photos", "albums", "places", "trash"],
-      "description": "A bounded recent window of live photographs (newest by taken_at, not archived, an edit folding the original it was made from) with their bytes' media type and size plus the albums they belong to — never a whole-table pull; trashed photographs ride separately (newest 200) with their days-until-purge, and `truncated` says older photographs exist beyond the window. Each photograph also carries `place` and `tags`; `places` is the full known place list. `before` is a keyset cursor (only photographs taken strictly earlier), and `tail` reports the oldest timestamp this page reached — pass it back as the next `before`.",
-      "input": {
-        "type": "object",
-        "properties": {
-          "limit": {
-            "type": "integer",
-            "minimum": 20,
-            "maximum": 2000
-          },
-          "before": {
-            "type": "string",
-            "minLength": 1
-          }
-        },
-        "additionalProperties": false
-      },
-      "output": {
-        "type": "object",
-        "properties": {
-          "photos": {
-            "type": "array"
-          },
-          "albums": {
-            "type": "array"
-          },
-          "places": {
-            "type": "array"
-          },
-          "trash": {
-            "type": "array"
-          },
-          "truncated": {
-            "type": "boolean"
-          },
-          "window": {
-            "type": "integer"
-          },
-          "tail": {
-            "type": ["string", "null"]
-          },
-          "vaultDenied": {
-            "type": "object"
-          }
-        }
-      }
-    },
-    {
       "name": "search",
       "kind": "photo",
       "figures": ["matches", "top_hits", "total"],

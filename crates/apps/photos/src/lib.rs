@@ -1,4 +1,4 @@
-//! # Photos — a manifest, seven queries, one verdict on what is live, twenty-one actions
+//! # Photos — a manifest, six queries, one verdict on what is live, twenty-one actions
 //!
 //! Its doctrine, from the manifest's own description (`manifest.json`):
 //!
@@ -10,8 +10,9 @@
 //! - **a star is an edge, not a column**: a heart and the archive are `tagged`
 //!   edges to `flag:starred` and `flag:archived`, the flags Docs, Notes and Locker
 //!   read, each anchored on its own subject;
-//! - **an edit folds its original, a crop folds nothing** ([`queries`]'s module
-//!   note): the library draws the newest live photograph of a burst;
+//! - **an edit folds its original, a crop folds nothing**
+//!   ([`centraid_apps_kit::rules::Standing`], the one verdict on what is live): the
+//!   library draws the newest live photograph of a burst;
 //! - **duplicates are a projection of the perceptual hashes**, clustered at read by
 //!   the one clustering `crates/media` owns ([`duplicates`], D-1020-P3); nothing is
 //!   stored and no sweep has to run;
@@ -28,7 +29,7 @@
 //! |---|---|
 //! | SQL, in any form | `cargo xtask rules`' `sql-confinement` scans this crate; SQL lives only under `crates/{ontology,vault,search}` and `crates/apps/kit`. A statement here is a [`centraid_apps_kit::PageQuery`] — a projection, a `from`, a predicate and an order, as data |
 //! | A model, a codec or a hash | recognition is the phone's and the byte plane is `crates/media`'s; the only dependencies here are the kit and `serde_json` |
-//! | A write from a query | [`queries`] holds statements and a [`centraid_apps_kit::PageDoor`], whose one method reads |
+//! | A write from a query | the reads hold statements and a [`centraid_apps_kit::PageDoor`], whose one method reads |
 //! | An invocation with no `invoke_key` | the field is required on [`commands::Invocation`] (D-1020-D3-5) |
 //! | A denial turned into an error | [`commands::Outcome::Denied`] and [`Denial`] are states a surface renders |
 //! | A failed read folded into a `0` | every three-state answer in this crate models the third state explicitly (#1020 apps seam 6, census §A seam 5) |
@@ -55,7 +56,7 @@ pub use commands::{ACTIONS, Commands, Invocation, Outcome};
 pub use duplicates::{DuplicateCluster, Fingerprint, duplicate_cluster_count, duplicate_clusters};
 pub use manifest::{APP_ID, manifest};
 pub use places::{PlacePhrase, PlacePhraseSource, PlaceRow, place_phrase};
-pub use queries::{LibraryData, LibraryInput, SearchData, load_library, load_search_term};
+pub use queries::{SearchData, load_search_term};
 
 /// A CONSENT DENIAL, as the payload carries it: the kit's one type, shared by
 /// every app so the core settles all of them through one door.

@@ -6,7 +6,6 @@
 use std::sync::Arc;
 
 use centraid_apps_kit::testdoor::TestDoor;
-use centraid_apps_photos::queries::{LibraryInput, load_library};
 use centraid_vault::clock::{FixedClock, SeededIds};
 use centraid_vault::commands::Registry;
 use centraid_vault::{Command, CommandStatus, Principal, Vault};
@@ -90,12 +89,6 @@ impl World {
         self.vault
             .read(|c| Ok(body(&TestDoor::new(c))))
             .expect("a read")
-    }
-
-    pub fn library(&self) -> centraid_apps_photos::LibraryData {
-        let now = centraid_vault::time::recurrence::parse_instant_ms("2026-01-02T00:00:00.000Z")
-            .expect("an instant");
-        self.read(|door| load_library(door, &LibraryInput::default(), now).expect("reads"))
     }
 }
 

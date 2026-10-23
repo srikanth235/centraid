@@ -5299,27 +5299,6 @@ pub mod load {
         use super::*;
         pub const APP: &str = "photos";
 
-        /// A bounded recent window of live photographs (newest by taken_at, not archived, an edit folding the original it was made from) with their bytes' media type and size plus the albums they belong to — never a whole-table pull; trashed photographs ride separately (newest 200) with their days-until-purge, and `truncated` says older photographs exist beyond the window. Each photograph also carries `place` and `tags`; `places` is the full known place list. `before` is a keyset cursor (only photographs taken strictly earlier), and `tail` reports the oldest timestamp this page reached — pass it back as the next `before`.
-        #[derive(Clone, Debug, Default)]
-        pub struct Library {
-            pub before: Option<String>,
-            pub limit: u32,
-        }
-        impl Library {
-            pub const NAME: &str = "library";
-            pub fn request(self) -> wire::LoadRequest {
-                #[allow(unused_mut)]
-                let mut map = std::collections::HashMap::<String, wire::Value>::new();
-                if let Some(it) = self.before { map.insert("before".to_owned(), text(it)); }
-                wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), limit: self.limit, params: map, ..Default::default() }
-            }
-        }
-        impl From<Library> for wire::LoadRequest {
-            fn from(value: Library) -> Self {
-                value.request()
-            }
-        }
-
         /// Search the whole live library: the vault's one search index (the caption, the place's name and its locality, the text recognised in the picture) plus the places a word names, `no location` for the photographs that have none, and the labels a word names — all folded into one answer. `photos` are the index's ranked photograph ids; `cells` are every live photograph any leg reaches, newest taken first then the undated, at most `limit` of them, with `total` the exact number; `top_hits` are the places (three at most, then the no-location bucket) and albums (three at most) the words name, each with the size of the shelf it opens; `labels` are the labels the words name that are on a live photograph. The archive and an edited photograph's original are left out. An empty `term` answers the resting suggestions instead: the places that hold a live photograph and the labels on one. `correct` allows a typo to be corrected when nothing was found as typed.
         #[derive(Clone, Debug, Default)]
         pub struct Search {

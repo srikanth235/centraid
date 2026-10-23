@@ -4126,17 +4126,6 @@
       {
         "app": "photos",
         "figures": [
-          "photos",
-          "albums",
-          "places",
-          "trash"
-        ],
-        "kind": "photo",
-        "query": "library"
-      },
-      {
-        "app": "photos",
-        "figures": [
           "matches",
           "top_hits",
           "total"

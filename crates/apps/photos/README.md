@@ -1,11 +1,11 @@
 # `centraid-apps-photos` — the library as a projection
 
-Photos is 7 queries and 21 actions. This crate is the read plane and the action table; the writes are `crates/vault`'s `photo.*`, `place.*` and `album.set_cover` commands and the shared verbs (`entity.*`, `flag.*`, `tag.*`, `edge.*`, `container.*`), and the bytes are `crates/media`'s.
+Photos is 6 queries and 21 actions. This crate is the read plane and the action table; the writes are `crates/vault`'s `photo.*`, `place.*` and `album.set_cover` commands and the shared verbs (`entity.*`, `flag.*`, `tag.*`, `edge.*`, `container.*`), and the bytes are `crates/media`'s.
 
 | Module | What it is |
 | --- | --- |
 | `manifest` | The app's `manifest.json`, parsed by the kit's parser at load time. Two copies of "which tables does Photos write" is how the two answers drift. |
-| `queries` | `library` (the chat's windowed overview) and the full-text leg of `search`. |
+| `queries` | The full-text leg of `search` and the few facts every read shares (the trash countdown, the flags' names). |
 | `cells` | One photograph as every grid draws it: bytes' hash, capture, box, heart, albums, the held thumbnail path and whether the original is on this device, the Live Photo pairing. |
 | `shelf` | `shelf`: the library, favorites, videos, archive, trash, an album, a place and "no location yet" as one query, paged by one cursor, with an exact total. |
 | `overview` | `albums`: every album and standing shelf with its exact count and cover, and the albums in the trash. |
@@ -33,7 +33,7 @@ Every one is an answer to a way this crate could be wrong.
 
 **The Places facet stays here.** There is no `crates/apps/places`. The phrase logic is the load-bearing half: in a **shared** context the relative rung is skipped, because "5.2 km NW of the cabin" hands a stranger a bearing to the member's house, and `printable_name` refuses a coordinate-shaped name at every rung, so a gazetteer that wrote digits into a title cannot leak them. A place has no kind, so the relative rung measures from the nearest named place and prefers no home ([R-1135-5-3](../../../docs/decisions.md#photos)).
 
-**A shelf is two walks, dated then undated (D-1020-P11).** `photo.taken_at` is nullable, and the kit's door refuses a **continued** page over a nullable sort key because SQLite's row-value comparison puts every NULL on one side of the keyset and the walk silently drops them. The dated walk therefore excludes its NULLs and continues by predicate (`page_by_predicate`: `(taken_at < ? OR (taken_at = ? AND id < ?))` on a first page the door never sees as a continuation); the photographs with no capture time are a second walk keyed on the id alone; one cursor spans both (an empty sort key is inside the tail). The trash, the archive and the fold are not columns, so a walk applies the verdict to every row it examines and stops when the page is full. `library` keeps its one page for the chat.
+**A shelf is two walks, dated then undated (D-1020-P11).** `photo.taken_at` is nullable, and the kit's door refuses a **continued** page over a nullable sort key because SQLite's row-value comparison puts every NULL on one side of the keyset and the walk silently drops them. The dated walk therefore excludes its NULLs and continues by predicate (`page_by_predicate`: `(taken_at < ? OR (taken_at = ? AND id < ?))` on a first page the door never sees as a continuation); the photographs with no capture time are a second walk keyed on the id alone; one cursor spans both (an empty sort key is inside the tail). The trash, the archive and the fold are not columns, so a walk applies the verdict to every row it examines and stops when the page is full.
 
 **An album's cover is a photograph's blob, and the read falls back to the first live member** ([R-1135-5-2](../../../docs/decisions.md#photos)). Trashing a photograph keeps its album edges, and counts and covers read live members only ([R-1135-5-6](../../../docs/decisions.md#the-vault-model)).
 

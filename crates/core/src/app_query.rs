@@ -155,7 +155,6 @@ pub(crate) fn answer_recording(
         Q::VaultSearch(asked) => vault::search(vault, &door, asked)?,
         Q::PhotosSearch(asked) => photos::search(vault, &door, &now, asked)?,
         Q::PhotosDuplicates(_) => photos::duplicates(&door, &now)?,
-        Q::PhotosLibrary(asked) => photos::library(&door, &now, asked)?,
         Q::PhotosShelf(asked) => photos::shelf(&door, &now, asked)?,
         Q::PhotosPhoto(asked) => photos::photo(&door, &now, asked)?,
         Q::PhotosAlbums(_) => photos::albums(&door, &now)?,

@@ -565,14 +565,6 @@ fn read(
             },
         )?,
         ("photos", "duplicates") => app_query::photos::duplicates(door, now)?,
-        ("photos", "library") => app_query::photos::library(
-            door,
-            now,
-            &wire::PhotosLibraryRequest {
-                limit: p.limit(0),
-                before: p.opt_text("before")?.unwrap_or_default(),
-            },
-        )?,
         // The screens' reads: one shelf, one photograph, the collections, the places.
         ("photos", "shelf") => app_query::photos::shelf(
             door,

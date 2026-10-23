@@ -124,74 +124,9 @@ message PhotosDuplicates {
   repeated PhotosDuplicateCluster clusters = 1;
 }
 
-// `photos.library`: a bounded recent window of live photographs, the albums, the places and the
-// trash.
-message PhotosLibraryRequest {
-  // The window, clamped to 20..2000; zero is the default window.
-  uint32 limit = 1;
-  // A keyset cursor: only photographs taken strictly earlier. Empty is the newest.
-  string before = 2;
-}
-
-message PhotosLibrary {
-  // The window, newest first.
-  repeated PhotosGridPhoto photos = 1;
-  repeated PhotosAlbum albums = 2;
-  // Every known place.
-  repeated PhotosPlace places = 3;
-  // Trashed photographs (newest 200), each with its days until purge.
-  repeated PhotosGridPhoto trash = 4;
-  // Older photographs exist beyond the window.
-  bool truncated = 5;
-  // The window actually served, after the clamp.
-  uint32 window = 6;
-  // The oldest `taken_at` this page reached: pass it back as `before`. Empty when none.
-  string tail = 7;
-}
-
-message PhotosGridPhoto {
-  string photo_id = 1;
-  // The bytes' hash.
-  string content_id = 2;
-  optional string media_type = 3;
-  // `photo`, `video` or `scan`.
-  optional string form = 4;
-  // The caption; empty when there is none.
-  string title = 5;
-  // `taken_at`, else when the photograph was made.
-  optional string taken_at = 6;
-  optional sint64 offset_min = 7;
-  optional string burst = 8;
-  optional string place_id = 9;
-  optional sint64 width = 10;
-  optional sint64 height = 11;
-  optional double duration_s = 12;
-  optional string edited_from = 13;
-  optional string created_at = 14;
-  optional string updated_at = 15;
-  optional string deleted_at = 16;
-  optional string purge_at = 17;
-  bool favorite = 18;
-  optional sint64 byte_size = 19;
-  repeated string album_ids = 20;
-  repeated string album_titles = 21;
-  optional PhotosPlace place = 22;
-  repeated PhotosTag tags = 23;
-  // Trash only: days until the grace window closes; absent when the row carries no `purge_at`.
-  optional sint64 purge_in_days = 24;
-}
-
 message PhotosTag {
   string tag_id = 1;
   string label = 2;
-}
-
-message PhotosAlbum {
-  string album_id = 1;
-  optional string title = 2;
-  // The cover's bytes: the chosen cover when still a live member, else the first live photograph.
-  optional string cover_content_id = 3;
-  uint32 photo_count = 4;
 }
 
 message PhotosPlace {
