@@ -7,4 +7,5 @@ pub mod autosave;
 pub mod civil;
 pub mod read;
 pub mod search;
+pub mod secret;
 pub mod trash;

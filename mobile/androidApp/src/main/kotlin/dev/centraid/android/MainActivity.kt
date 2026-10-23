@@ -286,6 +286,8 @@ public class MainActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // A secret copied before the app was killed is cleared once its deadline has passed.
+        dev.centraid.android.kit.ClipboardDeadline.sweep(applicationContext)
         // EDGE TO EDGE, and it owns the system bars' icon contrast. The page
         // ground is the emitted `bg` and it reaches the notch; the insets are
         // then paid back by `safeDrawingPadding` below, which is the only place

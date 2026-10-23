@@ -118,6 +118,8 @@ private suspend fun perform(
                 }
             }
             clipboard(context).setPrimaryClip(clip)
+            // THE DEADLINE OUTLIVES THE PROCESS: kept beside the clip, swept on the next launch.
+            ClipboardDeadline.armed(context, set.text, set.clear_after_ms.toLong())
             done
         }
         effect.clipboard_clear != null -> {
@@ -126,6 +128,7 @@ private suspend fun perform(
             if (held == effect.clipboard_clear!!.expected_text) {
                 clipboard(context).setPrimaryClip(ClipData.newPlainText("", ""))
             }
+            ClipboardDeadline.spent(context)
             done
         }
         effect.haptic != null -> {

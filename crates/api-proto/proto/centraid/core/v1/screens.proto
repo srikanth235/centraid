@@ -248,6 +248,12 @@ message ClipboardSet {
   string text = 1;
   // A secret is marked so the OS keeps it out of clipboard history.
   bool sensitive = 2;
+  // When the clip must be gone, in milliseconds from the set; 0 keeps it. A
+  // shell persists the DEADLINE with the clip, so a process killed before the
+  // Rust timer fires still clears it: it clears a stale clip it finds on its
+  // next launch. The Rust timer's `ClipboardClear` is the same clear while the
+  // app lives.
+  uint64 clear_after_ms = 3;
 }
 
 // Clears the clipboard only if it still holds what the core put there.

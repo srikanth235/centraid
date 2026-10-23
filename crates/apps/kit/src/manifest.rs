@@ -1581,7 +1581,7 @@ mod tests {
             ("agenda", 24),
             ("docs", 18),
             ("health", 3),
-            ("locker", 19),
+            ("locker", 20),
             ("money", 22),
             ("notes", 17),
             ("people", 25),
