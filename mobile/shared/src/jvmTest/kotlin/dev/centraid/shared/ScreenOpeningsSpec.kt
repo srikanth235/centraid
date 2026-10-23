@@ -10,8 +10,6 @@ import dev.centraid.shared.apps.docs.DocsDriveMachine
 import dev.centraid.shared.apps.health.HealthHomeMachine
 import dev.centraid.shared.apps.money.MoneyHomeMachine
 import dev.centraid.shared.apps.money.MoneyTransactionMachine
-import dev.centraid.shared.apps.notes.NotesEditorMachine
-import dev.centraid.shared.apps.notes.NotesLibraryMachine
 import dev.centraid.shared.apps.people.PeopleHomeMachine
 import dev.centraid.shared.apps.people.PeoplePersonMachine
 import dev.centraid.shared.apps.photos.PhotoLightboxMachine
@@ -39,11 +37,14 @@ class ScreenOpeningsSpec : StringSpec({
         RowRef(app, entity, id, title, qualifier)
 
     "every row the table names opens the screen its machine owns, on the event that screen opens by" {
+        // Notes' pages are Rust's (#1135): the opening is the Rust screen id and the encoded route.
         val note = RowRoutes.route(row("notes", "note", "n1"))!!
-        note.screenId shouldBe NotesEditorMachine.SCREEN_ID
+        note.screenId shouldBe ScreenIds.RUST_SCREEN
+        Route.ADAPTER.decode(note.event).notes_editor!!.note_id shouldBe "n1"
 
         val notebook = RowRoutes.route(row("notes", "notebook", "nb", "Cabin"))!!
-        notebook.screenId shouldBe NotesLibraryMachine.SCREEN_ID
+        notebook.screenId shouldBe ScreenIds.RUST_SCREEN
+        Route.ADAPTER.decode(notebook.event).notes_home!!.notebook_id shouldBe "nb"
 
         val doc = RowRoutes.route(row("docs", "document", "d1", "Lease"), parent = "Search")!!
         doc.screenId shouldBe DocsDocumentMachine.SCREEN_ID

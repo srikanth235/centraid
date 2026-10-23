@@ -78,8 +78,8 @@ class NavigationAndMountSpec : StringSpec({
         // A route carries its display name, so the app bar never waits on a read.
         val folder = Destination.DocsFolder(folderId = "fld-1", folderName = "Taxes")
         folder.folderName shouldBe "Taxes"
-        Destination.NotesEditor(noteId = "note-1", title = "Winter plans").title shouldBe
-            "Winter plans"
+        Destination.PeoplePerson(partyId = "p-1", name = "Dana Reyes").name shouldBe
+            "Dana Reyes"
     }
 
     "a photo state view is a discriminated union" {

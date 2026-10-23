@@ -66,8 +66,8 @@ public object RowRoutes {
     ): Destination? = when (row.app to row.entity) {
         AppIds.AGENDA to TASK -> AgendaEntry.task(row.id)
         AppIds.AGENDA to PROJECT -> AgendaEntry.project(row.id, row.title)
-        AppIds.NOTES to NOTE -> Destination.NotesEditor(row.id, title = row.title)
-        AppIds.NOTES to NOTEBOOK -> Destination.NotesLibrary(notebookId = row.id, notebookName = row.title, unfiledOnly = false)
+        AppIds.NOTES to NOTE -> NotesEntry.editor(row.id)
+        AppIds.NOTES to NOTEBOOK -> NotesEntry.home(notebookId = row.id, notebookName = row.title)
         AppIds.PHOTOS to ALBUM -> Destination.PhotoShelfRoute(
             PhotoShelf(album = PhotoShelf.Album(collection_id = row.id, name = row.title)),
         )
@@ -112,7 +112,7 @@ public object RowRoutes {
 
     /** An app's own front door, for a reference whose noun has no row route. */
     public fun appHome(app: String): Destination? = when (app) {
-        AppIds.NOTES -> Destination.NotesLibrary()
+        AppIds.NOTES -> NotesEntry.home()
         AppIds.DOCS -> Destination.DocsHome()
         AppIds.PEOPLE -> Destination.PeopleHome()
         AppIds.AGENDA -> AgendaEntry.home()

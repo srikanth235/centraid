@@ -1,6 +1,6 @@
 package dev.centraid.shared
 
-import centraid.core.v1.AgendaDestination
+import centraid.core.v1.NotesPlace
 import centraid.core.v1.Route
 import centraid.screen.v1.DocsDocumentEvent
 import centraid.screen.v1.DocsDocumentState
@@ -28,12 +28,6 @@ import centraid.screen.v1.MoneySearchEvent
 import centraid.screen.v1.MoneySearchState
 import centraid.screen.v1.MoneyTargetEvent
 import centraid.screen.v1.MoneyTransactionEvent
-import centraid.screen.v1.NotesEditorChrome
-import centraid.screen.v1.NotesEditorEvent
-import centraid.screen.v1.NotesEditorState
-import centraid.screen.v1.NotesJournalEvent
-import centraid.screen.v1.NotesLibraryEvent
-import centraid.screen.v1.NotesNotebooksEvent
 import centraid.screen.v1.PeopleChannelRow
 import centraid.screen.v1.PeopleEditorEvent
 import centraid.screen.v1.PeopleHomeEvent
@@ -68,20 +62,11 @@ import dev.centraid.shared.apps.money.MoneyRulesMachine
 import dev.centraid.shared.apps.money.MoneySearchMachine
 import dev.centraid.shared.apps.money.MoneyTargetMachine
 import dev.centraid.shared.apps.money.MoneyTransactionMachine
-import dev.centraid.shared.apps.notes.NotesBand
-import dev.centraid.shared.apps.notes.NotesEditorMachine
-import dev.centraid.shared.apps.notes.NotesHistoryMachine
-import dev.centraid.shared.apps.notes.NotesJournalMachine
-import dev.centraid.shared.apps.notes.NotesLibraryMachine
-import dev.centraid.shared.apps.notes.NotesNotebooksMachine
-import dev.centraid.shared.apps.notes.NotesRouting
-import dev.centraid.shared.apps.notes.NotesTrashMachine
 import dev.centraid.shared.apps.people.PeopleEditorMachine
 import dev.centraid.shared.apps.people.PeopleHomeMachine
 import dev.centraid.shared.apps.people.PeoplePersonMachine
 import dev.centraid.shared.apps.people.PeopleRouting
 import dev.centraid.shared.apps.people.PeopleTrashMachine
-import dev.centraid.shared.nav.AgendaEntry
 import dev.centraid.shared.nav.AppIds
 import dev.centraid.shared.nav.Destination
 import dev.centraid.shared.nav.MemberAction
@@ -90,6 +75,7 @@ import dev.centraid.shared.nav.RowRoutes
 import dev.centraid.shared.nav.ScreenIds
 import dev.centraid.shared.nav.NavMove
 import dev.centraid.shared.nav.NavStack
+import dev.centraid.shared.nav.NotesEntry
 import dev.centraid.shared.nav.ScreenMoves
 import dev.centraid.shared.nav.ScreenOpenings
 import dev.centraid.shared.nav.applying
@@ -115,28 +101,24 @@ class AppRoutingSpec : StringSpec({
     val home = Destination.Home
 
     "a move drops the top (never the floor), then pushes; spelled, it is the same openings in order" {
-        val stack = NavStack().push(Destination.NotesLibrary())
-        stack.applying(NavMove.swap(Destination.NotesJournal)).entries shouldContainExactly listOf(home, Destination.NotesJournal)
+        val stack = NavStack().push(Destination.PeopleHome())
+        stack.applying(NavMove.swap(Destination.PeopleTrash)).entries shouldContainExactly listOf(home, Destination.PeopleTrash)
         stack.applying(NavMove.Pop).entries shouldContainExactly listOf(home)
         NavStack().applying(NavMove.Pop).entries shouldContainExactly listOf(home)
-        stack.applying(NavMove.push(Destination.NotesTrash)).entries shouldContainExactly
-            listOf(home, Destination.NotesLibrary(), Destination.NotesTrash)
+        stack.applying(NavMove.push(Destination.PeopleTrash)).entries shouldContainExactly
+            listOf(home, Destination.PeopleHome(), Destination.PeopleTrash)
 
-        val spelled = ScreenMoves.of(NavMove(dropsTop = true, pushes = listOf(Destination.NotesEditor("n1"), Destination.NotesHistory("n1"))))
+        val spelled = ScreenMoves.of(NavMove(dropsTop = true, pushes = listOf(Destination.PeopleEditor("p1"), Destination.PeoplePerson("p1"))))
         spelled.shouldNotBeNull()
         spelled.dropsTop shouldBe true
-        spelled.openings.map { it.screenId } shouldContainExactly listOf(NotesEditorMachine.SCREEN_ID, NotesHistoryMachine.SCREEN_ID)
+        spelled.openings.map { it.screenId } shouldContainExactly listOf(PeopleEditorMachine.SCREEN_ID, PeoplePersonMachine.SCREEN_ID)
         // Half a move is no move: a page no route spells spells nothing.
-        ScreenMoves.of(NavMove(pushes = listOf(Destination.NotesTrash, Destination.Settings))).shouldBeNull()
+        ScreenMoves.of(NavMove(pushes = listOf(Destination.PeopleTrash, Destination.Settings))).shouldBeNull()
         ScreenMoves.of(null).shouldBeNull()
     }
 
     "every page a routing names is spelled on the id its machine registers under" {
         val ids = mapOf(
-            Destination.NotesNotebooks to NotesNotebooksMachine.SCREEN_ID,
-            Destination.NotesJournal to NotesJournalMachine.SCREEN_ID,
-            Destination.NotesHistory("n") to NotesHistoryMachine.SCREEN_ID,
-            Destination.NotesTrash to NotesTrashMachine.screenId,
             Destination.DocsEditor("d") to DocsEditorMachine.SCREEN_ID,
             Destination.DocsTrash to DocsTrashMachine.screenId,
             Destination.PeopleEditor("p") to PeopleEditorMachine.SCREEN_ID,
@@ -181,83 +163,30 @@ class AppRoutingSpec : StringSpec({
 
     // --- Notes -----------------------------------------------------------
 
-    "Notes: another band place swaps the top; the same place and More are the machine's" {
-        fun band(key: String) = NotesLibraryEvent(band = NotesLibraryEvent.BandPicked(key = key))
-        NotesRouting.library(band(NotesBand.NOTEBOOKS)) shouldBe NavMove.swap(Destination.NotesNotebooks)
-        NotesRouting.library(band(NotesBand.NOTES)).shouldBeNull()
-        NotesRouting.library(band(NotesBand.MORE)).shouldBeNull()
-        NotesRouting.notebooks(NotesNotebooksEvent(band = NotesNotebooksEvent.BandPicked(key = NotesBand.JOURNAL))) shouldBe
-            NavMove.swap(Destination.NotesJournal)
-        NotesRouting.journal(NotesJournalEvent(band = NotesJournalEvent.BandPicked(key = NotesBand.NOTES))) shouldBe
-            NavMove.swap(Destination.NotesLibrary())
-        NotesRouting.journal(NotesJournalEvent(band = NotesJournalEvent.BandPicked(key = NotesBand.JOURNAL))).shouldBeNull()
-    }
-
-    "Notes: a notebook is the Notes place filtered, swapped in; Unfiled is the unfiled filter, not a notebook id" {
-        NotesRouting.notebooks(NotesNotebooksEvent(notebook_picked = NotesNotebooksEvent.NotebookPicked(id = "nb", name = "Cabin"))) shouldBe
-            NavMove.swap(Destination.NotesLibrary(notebookId = "nb", notebookName = "Cabin"))
-        NotesRouting.notebooks(
-            NotesNotebooksEvent(notebook_picked = NotesNotebooksEvent.NotebookPicked(id = NotesNotebooksMachine.UNFILED, name = "Unfiled")),
-        ) shouldBe NavMove.swap(Destination.NotesLibrary(notebookName = "Unfiled", unfiledOnly = true))
-        NotesRouting.notebooks(NotesNotebooksEvent(trash_opened = NotesNotebooksEvent.TrashOpened())) shouldBe NavMove.push(Destination.NotesTrash)
-    }
-
-    "Notes: a note, a new note and More's Trash push; a note with no id opens nothing" {
-        NotesRouting.library(NotesLibraryEvent(note_picked = NotesLibraryEvent.NotePicked(note_id = "n1", title = "Hi"))) shouldBe
-            NavMove.push(Destination.NotesEditor("n1", "Hi"))
-        NotesRouting.library(NotesLibraryEvent(note_picked = NotesLibraryEvent.NotePicked())).shouldBeNull()
-        val fresh = NotesRouting.library(NotesLibraryEvent(new_note = NotesLibraryEvent.NewNoteRequested()))!!.pushes.single()
-        (fresh as Destination.NotesEditor).isNew shouldBe true
-        fresh.noteId.shouldNotBeEmpty()
-        NotesRouting.library(NotesLibraryEvent(more_row = NotesLibraryEvent.MoreRowPicked(key = NotesLibraryMachine.MORE_TRASH))) shouldBe
-            NavMove.push(Destination.NotesTrash)
-        NotesRouting.journal(NotesJournalEvent(entry_picked = NotesJournalEvent.EntryPicked(note_id = "j1"))) shouldBe
-            NavMove.push(Destination.NotesEditor("j1", ""))
-    }
-
-    "Notes: History re-spells the note under it as no longer new, once the note has history; Send to Agenda lands on To-do with the words" {
-        val history = NotesEditorEvent(history = NotesEditorEvent.HistoryRequested())
-        NotesRouting.editor(history, NotesEditorState(note_id = "n1")).shouldBeNull()
-        val ready = NotesEditorState(note_id = "n1", chrome = NotesEditorChrome(history_enabled = true))
-        NotesRouting.editor(history, ready) shouldBe NavMove(
-            dropsTop = true,
-            pushes = listOf(Destination.NotesEditor("n1", "", isNew = false), Destination.NotesHistory("n1", "")),
-        )
-        NotesRouting.editor(NotesEditorEvent(send_to_tasks = NotesEditorEvent.SendToTasks(text = "  ")), ready).shouldBeNull()
-        val sent = NotesRouting.editor(NotesEditorEvent(send_to_tasks = NotesEditorEvent.SendToTasks(text = "Buy milk")), ready)
-        sent shouldBe NavMove.push(AgendaEntry.home(AgendaDestination.AGENDA_DESTINATION_TODO, quickAdd = "Buy milk"))
-        // Spelled, the home is the Rust screen id and the encoded route (#1135), which a shell that keys by id pushes.
-        val opening = ScreenMoves.of(sent)!!.openings.single()
-        opening.screenId shouldBe ScreenIds.RUST_SCREEN
-        Route.ADAPTER.decode(opening.event).agenda_home!!.quick_add_title shouldBe "Buy milk"
-    }
-
-    "Notes: Done pops onto a Notes screen, else swaps in the library; the tile opens its shelf's place" {
-        NotesRouting.close(NotesLibraryMachine.SCREEN_ID) shouldBe NavMove.Pop
-        NotesRouting.close("") shouldBe NavMove.swap(Destination.NotesLibrary())
-        NotesRouting.close("people.home") shouldBe NavMove.swap(Destination.NotesLibrary())
-
+    "Notes' entry: the tile opens its shelf's place, a new note on an empty vault, and nothing while it reads" {
+        val route = { destination: Destination? -> (destination as Destination.RustScreen).route }
         val tile = HomeTile(app_id = "notes", status = TileStatus.TILE_STATUS_EMPTY)
-        (NotesRouting.tile(tile) as Destination.NotesEditor).isNew shouldBe true
-        NotesRouting.tile(HomeTile(app_id = "notes", status = TileStatus.TILE_STATUS_LOADING)).shouldBeNull()
-        NotesRouting.tileOpening(tile.encode())!!.screenId shouldBe NotesEditorMachine.SCREEN_ID
-        NotesRouting.tileOpening(HomeTile(app_id = "notes", status = TileStatus.TILE_STATUS_CONTENT).encode())!!
-            .screenId shouldBe NotesLibraryMachine.SCREEN_ID
-        NotesRouting.tileOpening(byteArrayOf(-1, -1)).shouldBeNull()
+        route(NotesEntry.tile(tile)).notes_editor!!.is_new shouldBe true
+        route(NotesEntry.tile(null)).notes_editor!!.is_new shouldBe true
+        NotesEntry.tile(HomeTile(app_id = "notes", status = TileStatus.TILE_STATUS_LOADING)).shouldBeNull()
+        NotesEntry.tile(HomeTile(app_id = "notes", status = TileStatus.TILE_STATUS_UNKNOWN)).shouldBeNull()
+        val shelf = HomeTile(app_id = "notes", status = TileStatus.TILE_STATUS_CONTENT)
+        route(NotesEntry.tile(shelf)).screen shouldBe "notes.home"
+        route(NotesEntry.tile(shelf)).notes_home!!.place shouldBe NotesPlace.NOTES_PLACE_NOTES
+        // Spelled, a Notes page is the Rust screen id and the encoded route, which a shell that keys by id pushes.
+        val opening = NotesEntry.tileOpening(tile.encode())!!
+        opening.screenId shouldBe ScreenIds.RUST_SCREEN
+        Route.ADAPTER.decode(opening.event).screen shouldBe "notes.editor"
+        NotesEntry.tileOpening(byteArrayOf(-1, -1)).shouldBeNull()
     }
 
-    "Notes, asked as bytes, answer the move Android applies" {
-        val swap = NotesRouting.route(
-            NotesLibraryMachine.SCREEN_ID,
-            NotesLibraryEvent(band = NotesLibraryEvent.BandPicked(key = NotesBand.JOURNAL)).encode(),
-            ByteArray(0),
-        )
-        swap.shouldNotBeNull()
-        swap.dropsTop shouldBe true
-        swap.openings.single().screenId shouldBe NotesJournalMachine.SCREEN_ID
-        NotesRouting.route(NotesLibraryMachine.SCREEN_ID, byteArrayOf(-1, -1, -1), ByteArray(0)).shouldBeNull()
-        NotesRouting.route("agenda.home", ByteArray(0), ByteArray(0)).shouldBeNull()
-        NotesRouting.closeMove("")!!.openings.single().screenId shouldBe NotesLibraryMachine.SCREEN_ID
+    "Notes' rows route by their kind: a note opens its editor, a notebook the home filtered to it" {
+        val note = RowRoutes.destination(RowRef(AppIds.NOTES, "note", "n1", "Plans")) as Destination.RustScreen
+        note.route.notes_editor!!.note_id shouldBe "n1"
+        val book = RowRoutes.destination(RowRef(AppIds.NOTES, "notebook", "nb", "Cabin")) as Destination.RustScreen
+        book.route.notes_home!!.notebook_id shouldBe "nb"
+        book.route.notes_home!!.notebook_name shouldBe "Cabin"
+        (RowRoutes.appHome(AppIds.NOTES) as Destination.RustScreen).route.screen shouldBe "notes.home"
     }
 
     // --- Money -----------------------------------------------------------

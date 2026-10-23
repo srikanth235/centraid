@@ -12,7 +12,6 @@ import centraid.screen.v1.MoneyTransactionState
 import centraid.screen.v1.Springboard
 import centraid.screen.v1.TileStatus
 import centraid.screen.v1.MediaPermission
-import centraid.screen.v1.NotesEditorState
 import centraid.screen.v1.PhotoCell
 import centraid.screen.v1.PhotoLightboxState
 import centraid.screen.v1.PhotoPickerState
@@ -541,33 +540,6 @@ class ScreenFixtureSpec : StringSpec({
         }
     }
 
-    // --- Notes ------------------------------------------------------------
-
-    "notes/save-refused keeps the words on the screen; notes/read-refused does not" {
-        val saveRefused = NotesEditorState.ADAPTER.decode(screens.bytes("notes/save-refused"))
-        val readRefused = NotesEditorState.ADAPTER.decode(screens.bytes("notes/read-refused"))
-
-        // A failed SAVE: the draft is present, the editor is intact, and the
-        // sentence rides on the draft.
-        saveRefused.draft.shouldNotBeNull().body shouldBe "Book the cabin."
-        saveRefused.failure.shouldBeNull()
-        saveRefused.save shouldBe NotesEditorState.SaveState.SAVE_STATE_REFUSED
-        saveRefused.draft.save_failure.shouldNotBeNull().kind shouldBe
-            ReadFailureKind.READ_FAILURE_KIND_UNAVAILABLE
-
-        // A failed READ: there is nothing to edit, because the body never came.
-        readRefused.draft.shouldBeNull()
-        readRefused.failure.shouldNotBeNull().kind shouldBe
-            ReadFailureKind.READ_FAILURE_KIND_REFUSED
-    }
-
-    "notes/draft-dirty is edited and unsaved, with no write in flight" {
-        val state = NotesEditorState.ADAPTER.decode(screens.bytes("notes/draft-dirty"))
-        state.save shouldBe NotesEditorState.SaveState.SAVE_STATE_DIRTY
-        state.draft.shouldNotBeNull().base_revision_id shouldBe "rev-0007"
-        state.draft.body.contains('\n').shouldBeTrue()
-    }
-
     // --- Seat -------------------------------------------------------------
 
     "the seat's four sentences decode, and 'platform refused to say' is not 'offline'" {
@@ -593,10 +565,6 @@ class ScreenFixtureSpec : StringSpec({
         screens.resolve("photos").binFiles().forEach { file ->
             val state = PhotosGridState.ADAPTER.decode(file.readBytes())
             contentCount(state.loading, state.failure, state.data_) shouldBe 1
-        }
-        screens.resolve("notes").binFiles().forEach { file ->
-            val state = NotesEditorState.ADAPTER.decode(file.readBytes())
-            contentCount(state.loading, state.failure, state.draft) shouldBe 1
         }
     }
     // --- Home: the graded springboard -------------------------------------

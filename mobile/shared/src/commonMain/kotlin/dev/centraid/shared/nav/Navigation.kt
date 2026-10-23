@@ -143,18 +143,6 @@ public sealed interface Destination {
         val collectionName: String,
     ) : Destination
 
-    public data class NotesEditor(
-        val noteId: String,
-        /** The title rides along so the app bar has something to say at once. */
-        val title: String? = null,
-        /**
-         * The id was minted on the phone for a note not yet written
-         * (`NotesRouting.tile`): the editor opens empty and creates it on
-         * its first save.
-         */
-        val isNew: Boolean = false,
-    ) : Destination
-
     /** [parent] is the pushing page's title: the back control's word (#1047). */
     public data class DocsFolder(val folderId: String, val folderName: String, val parent: String = "") : Destination
 
@@ -183,27 +171,6 @@ public sealed interface Destination {
 
     /** Docs' trash: restore, Delete forever and Empty trash (D-1 of 2026-09-25). */
     public data object DocsTrash : Destination
-
-    // --- Notes (#1029 port) ---
-
-    /**
-     * NOTES' LIBRARY: every note, one notebook's, or the unfiled ones. A shell
-     * forwards `NotesLibraryEvent.Opened` with the same three.
-     */
-    public data class NotesLibrary(
-        val notebookId: String = "",
-        val notebookName: String = "",
-        val unfiledOnly: Boolean = false,
-    ) : Destination
-
-    public data object NotesNotebooks : Destination
-
-    public data object NotesJournal : Destination
-
-    /** One note's versions; the title rides along for the head. */
-    public data class NotesHistory(val noteId: String, val title: String = "") : Destination
-
-    public data object NotesTrash : Destination
 
     // --- People (#1029 port) ---
 
