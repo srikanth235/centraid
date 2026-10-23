@@ -2,61 +2,61 @@ import SwiftUI
 
 import CentraidShared
 
-/// ADD OR EDIT AN ITEM (#1047, R-1047-L5): AN EXPLICIT SAVE, NOT AUTOSAVE —
-/// a secret saved on a pause mid-typing would be a wrong secret. Cancel with
-/// changes asks first (the machine's `confirm`); a committed save sets
-/// `done`, and the shell closes the editor.
+/// The editor's events, built once.
+enum LockerEditorEvents {
+    static func make(_ build: (inout Centraid_Core_V1_LockerEditorEvent) -> Void) -> Centraid_Core_V1_LockerEditorEvent {
+        var event = Centraid_Core_V1_LockerEditorEvent()
+        build(&event)
+        return event
+    }
+}
+
+/// ADD OR EDIT AN ITEM (#1047, R-1047-L5): AN EXPLICIT SAVE, NOT AUTOSAVE — a
+/// secret saved on a pause mid-typing would be a wrong secret. Cancel with
+/// changes asks first (Rust's `confirm`); a committed save sets `finished`, and
+/// the shell closes the editor.
 ///
-/// A secret input is a `SecureField`: never autocorrected, never suggested,
-/// and kept out of the keyboard's learning. On edit, a stored secret left
-/// empty stays sealed as it was (the machine's note says so).
+/// A secret input is a `SecureField`: never autocorrected, never suggested, and
+/// kept out of the keyboard's learning. On edit, a stored secret left empty
+/// stays sealed as it was (the row's note says so).
 ///
 /// **NO "SAVE PASSWORD?" FROM iOS.** AutoFill offers to copy a login into the
 /// system's password store when a form's secure field leaves the screen still
 /// holding text — a copy of a Locker secret outside the vault, and no content
-/// type stops it (`.oneTimeCode` did not). So the moment the member commits
-/// (Save, or Discard on the confirm), every secure field is emptied on screen
-/// ([concealing]) before the editor can close: the draft is already the
-/// machine's, and a field with nothing in it has nothing to offer. A refused
-/// save un-conceals and the fields refill from the machine.
+/// type stops it. So the moment the member commits (Save, or Discard on the
+/// confirm), every secure field is emptied on screen ([concealing]) before the
+/// editor can close: the draft is already Rust's, and a field with nothing in
+/// it has nothing to offer. A refused save un-conceals and the fields refill.
 struct LockerEditorView: View {
-    let data: Data
-    let lock: Data
-    let send: (Data) -> Void
-    let sendLock: (Data) -> Void
+    let state: Centraid_Core_V1_LockerEditorState
+    let send: (Centraid_Core_V1_LockerEditorEvent) -> Void
+    let sendWall: (Centraid_Core_V1_LockerWallEvent) -> Void
+    let onWords: () -> Void
     let onClose: () -> Void
-    let onDeparted: () -> Void
 
     @Environment(\.colorScheme) private var scheme
     @State private var concealing = false
 
-    private var state: Centraid_Screen_V1_LockerEditorState {
-        (try? Centraid_Screen_V1_LockerEditorState(serializedBytes: data)) ?? .init()
-    }
-
-    static func event(_ build: (inout Centraid_Screen_V1_LockerEditorEvent) -> Void) -> Data {
-        var event = Centraid_Screen_V1_LockerEditorEvent()
-        build(&event)
-        return event.encoded
-    }
-
-    private func content(_ state: Centraid_Screen_V1_LockerEditorState) -> ScreenContent<Centraid_Screen_V1_LockerEditorData> {
+    private var content: ScreenContent<Centraid_Core_V1_LockerEditorData> {
         switch state.content {
-        case let .loading(loading)?: return .loading(loading.firstLoad)
+        case .loading?, nil: return .loading(true)
         case let .failure(failure)?: return .failed(failure)
-        case let .denied(denied)?: return .denied(denied)
+        case let .denied(denied)?: return .gated(denied)
         case let .data(data)?: return .data(data)
-        case nil: return .loading(true)
         }
     }
 
+    private var canSave: Bool {
+        if case let .data(data)? = state.content { return data.canSave }
+        return false
+    }
+
     var body: some View {
-        let state = state
         let chrome = state.chrome
-        LockerCovered(lock: lock, sendLock: sendLock, onBack: onClose) {
-            // THE FORM IS SHIELDED FROM CAPTURE while the gate says `secure`.
-            LockerShield(lock: lock) {
-                ReadStateView(content: content(state), onRetry: nil) { editor in
+        LockerCovered(wall: state.hasWall ? state.wall : nil, backLabel: chrome.title, send: sendWall, onWords: onWords, onBack: onClose) {
+            // THE FORM IS SHIELDED FROM CAPTURE while Rust says `secure`.
+            LockerShield(secure: state.secure) {
+                ReadStateView(content: content, onRetry: { send(LockerEditorEvents.make { $0.refreshed = .init() }) }) { editor in
                     ScrollView {
                         VStack(alignment: .leading, spacing: 0) {
                             if !chrome.lede.isEmpty {
@@ -65,7 +65,7 @@ struct LockerEditorView: View {
                             if !editor.types.isEmpty {
                                 SectionHeader(title: editor.typesLabel)
                                 LockerChoicePills(choices: editor.types, identifier: "locker-editor-type") { key in
-                                    send(Self.event { $0.type = .with { $0.key = key } })
+                                    send(LockerEditorEvents.make { $0.type = .with { $0.key = key } })
                                 }
                             }
                             ForEach(editor.inputs, id: \.key) { input in
@@ -76,8 +76,8 @@ struct LockerEditorView: View {
                                     // last type's keystrokes.
                                     identity: "\(state.itemID)-\(input.key)",
                                     concealed: concealing,
-                                    onEdit: { value in send(Self.event { $0.typed = .with { $0.key = input.key; $0.value = value } }) },
-                                    onGenerate: { send(Self.event { $0.generate = .with { $0.key = input.key } }) }
+                                    onEdit: { value in send(LockerEditorEvents.make { $0.typed = .with { $0.key = input.key; $0.value = value } }) },
+                                    onGenerate: { send(LockerEditorEvents.make { $0.generate = .with { $0.key = input.key } }) }
                                 )
                             }
                             VStack(alignment: .leading, spacing: 2) {
@@ -85,7 +85,7 @@ struct LockerEditorView: View {
                                     .centraidType("annotLabel")
                                     .foregroundStyle(Theme.color("textSoft", scheme))
                                 MachineTextField(placeholder: editor.tagsHint, value: editor.tagsText) { text in
-                                    send(Self.event { $0.tags = .with { $0.text = text } })
+                                    send(LockerEditorEvents.make { $0.tags = .with { $0.text = text } })
                                 }
                                 .centraidType("body")
                                 .textInputAutocapitalization(.never)
@@ -101,7 +101,7 @@ struct LockerEditorView: View {
                                     on: editor.compromised,
                                     note: editor.compromisedNote
                                 ) { on in
-                                    send(Self.event { $0.compromised = .with { $0.on = on } })
+                                    send(LockerEditorEvents.make { $0.compromised = .with { $0.on = on } })
                                 }
                             }
                             LockerNote(text: editor.blocked)
@@ -111,7 +111,16 @@ struct LockerEditorView: View {
                 }
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                LockerWriteLine(write: state.write)
+                if state.hasStatus, state.status.refused {
+                    Text(state.status.sentence)
+                        .centraidType("small")
+                        .foregroundStyle(Theme.color("net", scheme))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, CentraidGeometry.pageMargin)
+                        .padding(.vertical, 6)
+                        .background(Theme.color("bg", scheme))
+                        .accessibilityIdentifier("locker-write-refused")
+                }
             }
             .background(Theme.color("bg", scheme).ignoresSafeArea())
             .navigationTitle(chrome.title)
@@ -120,42 +129,40 @@ struct LockerEditorView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     ToolbarVerb(label: chrome.cancelLabel, identifier: "locker-editor-cancel") {
-                        send(Self.event { $0.cancel = .init() })
+                        send(LockerEditorEvents.make { $0.cancel = .init() })
                     }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    let canSave = state.data.canSave
                     ToolbarVerb(label: chrome.saveLabel, identifier: "locker-editor-save") {
                         concealing = true
-                        send(Self.event { $0.save = .init() })
+                        send(LockerEditorEvents.make { $0.save = .init() })
                     }
                     .disabled(!canSave)
                 }
             }
         }
-        .onChange(of: state.done) { _, done in if done { onClose() } }
+        .onChange(of: state.finished) { _, done in if done { onClose() } }
         // A refused save is still an open form: give the fields back.
-        .onChange(of: state.write.refused) { _, refused in if refused { concealing = false } }
+        .onChange(of: state.hasStatus && state.status.refused) { _, refused in if refused { concealing = false } }
         .sheet(isPresented: Binding(
             get: { state.hasConfirm },
-            set: { open in if !open, state.hasConfirm { send(Self.event { $0.dismissed = .init() }) } }
+            set: { isOpen in if !isOpen, state.hasConfirm { send(LockerEditorEvents.make { $0.dismissed = .init() }) } }
         )) {
             ConfirmSheet(
-                state.confirm,
+                state.confirm.legacy,
                 onConfirm: {
                     concealing = true
-                    send(Self.event { $0.confirmed = .init() })
+                    send(LockerEditorEvents.make { $0.confirmed = .init() })
                 },
-                onDismiss: { send(Self.event { $0.dismissed = .init() }) }
+                onDismiss: { send(LockerEditorEvents.make { $0.dismissed = .init() }) }
             )
         }
-        .onDisappear(perform: onDeparted)
     }
 }
 
-/// THE COMPROMISED FLAG (R-1047-F7): a toggle row, its note under it — what
-/// the flag does and, over a newly typed password, that saving clears it. The
-/// machine decides both; this draws them.
+/// THE COMPROMISED FLAG (R-1047-F7): a toggle row, its note under it — what the
+/// flag does and, over a newly typed password, that saving clears it. Rust
+/// decides both; this draws them.
 struct LockerCompromisedRow: View {
     let label: String
     let on: Bool
@@ -186,37 +193,10 @@ struct LockerCompromisedRow: View {
     }
 }
 
-/// A refused write, in the core's words (the kit's `DocsWriteLine` shape).
-struct LockerWriteLine: View {
-    let write: Centraid_Screen_V1_WriteState
-
-    @Environment(\.colorScheme) private var scheme
-
-    var body: some View {
-        if !write.refusal.isEmpty {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(write.refusal)
-                    .centraidType("small")
-                    .foregroundStyle(Theme.color("net", scheme))
-                if !write.failure.remedy.isEmpty {
-                    Text(write.failure.remedy)
-                        .centraidType("annotLabel")
-                        .foregroundStyle(Theme.color("textSoft", scheme))
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, CentraidGeometry.pageMargin)
-            .padding(.vertical, 6)
-            .background(Theme.color("bg", scheme))
-            .accessibilityIdentifier("locker-write-refused")
-        }
-    }
-}
-
 /// ONE INPUT: its label, the field (secure for a secret), the note under it
 /// and, on a password, Generate.
 struct LockerInputRowView: View {
-    let input: Centraid_Screen_V1_LockerInputRow
+    let input: Centraid_Core_V1_LockerInputRow
     let identity: String
     /// The editor is closing: a secure field shows nothing (see the editor's note).
     let concealed: Bool
@@ -277,7 +257,7 @@ struct LockerInputRowView: View {
         }
     }
 
-    static func keyboard(_ kind: Centraid_Screen_V1_LockerInputRow.Kind) -> UIKeyboardType {
+    static func keyboard(_ kind: Centraid_Core_V1_LockerInputRow.Kind) -> UIKeyboardType {
         switch kind {
         case .email: return .emailAddress
         case .url: return .URL
@@ -287,7 +267,7 @@ struct LockerInputRowView: View {
         }
     }
 
-    static func capitalization(_ kind: Centraid_Screen_V1_LockerInputRow.Kind) -> TextInputAutocapitalization {
+    static func capitalization(_ kind: Centraid_Core_V1_LockerInputRow.Kind) -> TextInputAutocapitalization {
         switch kind {
         case .email, .url, .phone, .number: return .never
         default: return .sentences
@@ -296,12 +276,12 @@ struct LockerInputRowView: View {
 }
 
 /// A SECRET'S FIELD: `MachineTextField`'s shape over a `SecureField`, so a
-/// keystroke never waits on the machine and a Generate seeds the field.
+/// keystroke never waits on Rust and a Generate seeds the field.
 struct LockerSecretField: View {
     let placeholder: String
     let value: String
-    /// Empty the field on screen WITHOUT telling the machine: the draft stays
-    /// the machine's, and AutoFill finds nothing to offer to save.
+    /// Empty the field on screen WITHOUT telling Rust: the draft stays Rust's,
+    /// and AutoFill finds nothing to offer to save.
     let concealed: Bool
     let onEdit: (String) -> Void
 
@@ -313,8 +293,8 @@ struct LockerSecretField: View {
             .focused($focused)
             // NOT A LOGIN FORM: without this iOS pairs the field with the
             // username above it and offers to save the secret to the system
-            // password manager on leave — a copy of a Locker secret outside
-            // the vault. A one-time-code field is never offered for saving.
+            // password manager on leave. A one-time-code field is never offered
+            // for saving.
             .textContentType(.oneTimeCode)
             .textInputAutocapitalization(.never)
             .autocorrectionDisabled(true)

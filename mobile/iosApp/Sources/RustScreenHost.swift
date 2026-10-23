@@ -120,6 +120,63 @@ private struct RustScreenView: View {
                 open: open,
                 onBack: pop
             )
+        case .lockerHome(let state)?:
+            LockerHomeView(
+                state: state,
+                send: { store.send(instance, .lockerHome($0)) },
+                sendWall: { store.send(instance, .lockerWall($0)) },
+                open: open,
+                onWords: { shell.openRekey() },
+                onHome: { shell.path.removeAll() }
+            )
+        case .lockerItem(let state)?:
+            LockerItemView(
+                state: state,
+                send: { store.send(instance, .lockerItem($0)) },
+                sendWall: { store.send(instance, .lockerWall($0)) },
+                open: open,
+                onWords: { shell.openRekey() },
+                onBack: pop
+            )
+        case .lockerEditor(let state)?:
+            LockerEditorView(
+                state: state,
+                send: { store.send(instance, .lockerEditor($0)) },
+                sendWall: { store.send(instance, .lockerWall($0)) },
+                onWords: { shell.openRekey() },
+                onClose: pop
+            )
+        case .lockerAccess(let state)?:
+            LockerAccessView(
+                state: state,
+                send: { store.send(instance, .lockerAccess($0)) },
+                sendWall: { store.send(instance, .lockerWall($0)) },
+                onWords: { shell.openRekey() },
+                onBack: pop
+            )
+        case .lockerExport(let state)?:
+            LockerExportView(
+                state: state,
+                send: { store.send(instance, .lockerExport($0)) },
+                sendWall: { store.send(instance, .lockerWall($0)) },
+                onWords: { shell.openRekey() },
+                onBack: pop
+            )
+        case .lockerImport(let state)?:
+            LockerImportView(
+                state: state,
+                send: { store.send(instance, .lockerImport($0)) },
+                sendWall: { store.send(instance, .lockerWall($0)) },
+                onWords: { shell.openRekey() },
+                onBack: pop
+            )
+        case .lockerLock(let state)?:
+            LockerLockPageView(
+                state: state,
+                sendWall: { store.send(instance, .lockerWall($0)) },
+                onWords: { shell.openRekey() },
+                onClose: pop
+            )
         case .trash(let state)?:
             CoreTrashView(
                 state: state,

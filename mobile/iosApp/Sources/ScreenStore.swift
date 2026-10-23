@@ -30,6 +30,9 @@ final class ScreenStore: ObservableObject {
     @Published private(set) var navigation: Centraid_Core_V1_Navigation?
     @Published private(set) var views: [UInt64: Centraid_Core_V1_ViewState] = [:]
 
+    /// Told when Rust announces something the shell may act on (`locker.unlocked`).
+    var onAnnounce: ((String) -> Void)?
+
     private let core: any ScreenCore
     private var closed: Set<UInt64> = []
     /// Instances this shell opened with `open`, so two opens never claim one entry.
@@ -66,6 +69,15 @@ final class ScreenStore: ObservableObject {
         var nav = Centraid_Core_V1_NavEvent()
         nav.kind = event
         Task { await request(.nav(nav)) }
+    }
+
+    /// The app left or came back to the foreground; Rust tells every open screen
+    /// (a Locker relocks the instant it leaves). `.background` only, never
+    /// `.inactive`, which a system prompt causes.
+    func lifecycle(foreground: Bool) {
+        var lifecycle = Centraid_Core_V1_AppLifecycle()
+        lifecycle.foreground = foreground
+        Task { await request(.lifecycle(lifecycle)) }
     }
 
     /// Report the device's locale and zone; Rust formats from them.
@@ -174,6 +186,20 @@ final class ScreenStore: ObservableObject {
         #endif
         case .keychain(let operation)?:
             answer(request, Self.keychain(operation))
+        case .ownerCheck(let check)?:
+            Task {
+                let outcome = await OwnerCheckPerformer.run(check)
+                answer(request, outcome)
+            }
+        case .announce(let note)?:
+            onAnnounce?(note.topic)
+            answer(request, .done(Centraid_Core_V1_EffectDone()))
+        #if os(iOS)
+        case .pickFile(let pick)?:
+            FilePerformer.pick(pick) { [weak self] outcome in self?.answer(request, outcome) }
+        case .saveFile(let save)?:
+            FilePerformer.save(save) { [weak self] outcome in self?.answer(request, outcome) }
+        #endif
         case .calendarRead(let read)?:
             Task {
                 let outcome = await PhoneCalendar.snapshot(read)
@@ -194,10 +220,11 @@ final class ScreenStore: ObservableObject {
         send(request.instance, .effectResult(result))
     }
 
-    private static func failure(_ reason: String, denied: Bool = false) -> Centraid_Core_V1_EffectFailed {
+    static func failure(_ reason: String, denied: Bool = false, cancelled: Bool = false) -> Centraid_Core_V1_EffectFailed {
         var failed = Centraid_Core_V1_EffectFailed()
         failed.reason = reason
         failed.denied = denied
+        failed.cancelled = cancelled
         return failed
     }
 

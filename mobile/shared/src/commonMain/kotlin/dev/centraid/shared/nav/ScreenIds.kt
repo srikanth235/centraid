@@ -54,13 +54,6 @@ public object ScreenIds {
     public const val HEALTH_WORKOUT: String = "health.workout"
     public const val HEALTH_CONNECT: String = "health.connect"
 
-    public const val LOCKER_HOME: String = "locker.home"
-    public const val LOCKER_ITEM: String = "locker.item"
-    public const val LOCKER_EDITOR: String = "locker.editor"
-    public const val LOCKER_TRASH: String = "locker.trash"
-    public const val LOCKER_EXPORT: String = "locker.export"
-    public const val LOCKER_IMPORT: String = "locker.import"
-    public const val LOCKER_ACCESS: String = "locker.access"
 
     public const val PHOTOS_GRID: String = "photos.grid"
     public const val PHOTOS_SHELF: String = "photos.shelf"

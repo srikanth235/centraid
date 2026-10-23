@@ -318,10 +318,20 @@ impl Wall {
     /// up; returning re-reads the session, which idle may have ended.
     pub fn lifecycle(&mut self, ctx: &Ctx, foreground: bool) -> Step {
         if foreground {
-            return if self.phase == Phase::Open {
-                self.recheck(ctx)
-            } else {
-                Step::default()
+            return match self.phase {
+                Phase::Open => self.recheck(ctx),
+                // A re-key may have landed while away: the core now holds the
+                // keys, and "Enter your recovery key" becomes "Unlock with …".
+                Phase::Unavailable if !self.keyed => {
+                    if let Some(answer) = Self::state(ctx) {
+                        self.keyed = answer.keyed;
+                        if self.keyed {
+                            self.phase = Phase::Locked;
+                        }
+                    }
+                    Step::default()
+                }
+                _ => Step::default(),
             };
         }
         self.asking = false;

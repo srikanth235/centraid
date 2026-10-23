@@ -8,13 +8,6 @@ import centraid.screen.v1.HealthConnectEvent
 import centraid.screen.v1.HealthHomeEvent
 import centraid.screen.v1.HealthMetricEvent
 import centraid.screen.v1.HealthWorkoutEvent
-import centraid.screen.v1.LockerAccessEvent
-import centraid.screen.v1.LockerEditorEvent
-import centraid.screen.v1.LockerEditorState
-import centraid.screen.v1.LockerExportEvent
-import centraid.screen.v1.LockerHomeEvent
-import centraid.screen.v1.LockerImportEvent
-import centraid.screen.v1.LockerItemEvent
 import centraid.screen.v1.MoneyAccountsEvent
 import centraid.screen.v1.MoneyCategoriesEvent
 import centraid.screen.v1.MoneyHomeEvent
@@ -201,36 +194,6 @@ public object ScreenOpenings {
             ).encode(),
         )
         Destination.PeopleTrash -> screen(ScreenIds.PEOPLE_TRASH, TrashListEvent(opened = TrashListEvent.Opened()).encode())
-        // LOCKER: every page's bridge opens itself on arrival, so the event is
-        // what names the page. The generator's candidate never rides here
-        // (`Destination.LockerEditor`), and neither does `fromGenerator`: that
-        // hand-over is bridge to bridge, in the shell that has both.
-        is Destination.LockerHome -> screen(
-            ScreenIds.LOCKER_HOME,
-            LockerHomeEvent(opened = LockerHomeEvent.Opened(destination = destination.destination)).encode(),
-        )
-        is Destination.LockerItem -> screen(
-            ScreenIds.LOCKER_ITEM,
-            LockerItemEvent(opened = LockerItemEvent.Opened(item_id = destination.itemId, parent = destination.parent, follow = destination.follow)).encode(),
-        )
-        is Destination.LockerEditor -> if (destination.fromGenerator) {
-            null
-        } else {
-            screen(
-                ScreenIds.LOCKER_EDITOR,
-                LockerEditorEvent(
-                    opened = LockerEditorEvent.Opened(
-                        mode = if (destination.itemId.isEmpty()) LockerEditorState.Mode.MODE_ADD else LockerEditorState.Mode.MODE_EDIT,
-                        item_id = destination.itemId,
-                        type = destination.type,
-                    ),
-                ).encode(),
-            )
-        }
-        Destination.LockerTrash -> screen(ScreenIds.LOCKER_TRASH, TrashListEvent(opened = TrashListEvent.Opened()).encode())
-        Destination.LockerExport -> screen(ScreenIds.LOCKER_EXPORT, LockerExportEvent(opened = LockerExportEvent.Opened()).encode())
-        Destination.LockerImport -> screen(ScreenIds.LOCKER_IMPORT, LockerImportEvent(opened = LockerImportEvent.Opened()).encode())
-        Destination.LockerAccess -> screen(ScreenIds.LOCKER_ACCESS, LockerAccessEvent(opened = LockerAccessEvent.Opened()).encode())
         // THE PHOTOGRAPHS: a shelf is its `PhotoShelf`, a lightbox its photograph and swipe.
         is Destination.PhotoShelfRoute -> screen(ScreenIds.PHOTOS_SHELF, destination.shelf.encode())
         is Destination.PhotoLightbox -> ScreenOpening(

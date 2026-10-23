@@ -231,54 +231,6 @@ public sealed interface Destination {
 
     public data object PeopleTrash : Destination
 
-    // --- Locker (#1047, D-5) ---
-    //
-    // EVERY LOCKER DESTINATION IS DRAWN UNDER THE LOCK WALL while
-    // `LockerLockState.cover` is set: a shell draws `LockerLockBridge`'s wall
-    // in place of any of these until the Locker opens, and nothing of them
-    // reads meanwhile.
-
-    /**
-     * Items · Review · Generate · Search, More as a sheet. A shell calls
-     * `LockerHomeBridge.open(destination)`; GENERATE draws the generator
-     * (`LockerGeneratorBridge`) in the band's slot.
-     */
-    public data class LockerHome(
-        val destination: centraid.screen.v1.LockerHomeState.Destination =
-            centraid.screen.v1.LockerHomeState.Destination.DESTINATION_ITEMS,
-    ) : Destination
-
-    /**
-     * One item. `parent` is the pushing page's title, the back control's word. [follow] is a
-     * [MemberAction] qualifier (`reveal:password`, `code:otp_seed`): once the page has loaded under
-     * an open gate it runs Locker's own flow for that field (#1135).
-     */
-    public data class LockerItem(val itemId: String, val parent: String = "", val follow: String = "") : Destination
-
-    /**
-     * Add ([itemId] empty — the bridge mints one) or edit. [fromGenerator]
-     * is the generator's "Put it on an item": the shell opens the editor with
-     * `LockerEditorBridge.openAddFrom(generatorBridge)`, so the candidate
-     * password moves bridge to bridge and is never a navigation parameter
-     * (a v0 defect: a generated password in the route).
-     */
-    public data class LockerEditor(val itemId: String = "", val type: String = "", val fromGenerator: Boolean = false) : Destination
-
-    /** The generator on its own page (from the editor, or pushed). */
-    public data object LockerGenerator : Destination
-
-    /** The kit's trash, with Locker as its parameter: restore and Delete forever. */
-    public data object LockerTrash : Destination
-
-    /** Every secret in a file (#1047 T2): `LockerExportBridge.open(parent)`. */
-    public data object LockerExport : Destination
-
-    /** A password-manager file, reviewed and sealed in (#1047 T2): `LockerImportBridge.open(parent)`. */
-    public data object LockerImport : Destination
-
-    /** The whole Locker's access history (Q-1047-21), from the More sheet: `LockerAccessBridge.open()`. */
-    public data object LockerAccess : Destination
-
     // --- Money (#1099, R-1099-13) ---
     // `parent` on a pushed Money page is the pushing page's title: the back
     // control's word. Empty: "Money".

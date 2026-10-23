@@ -88,11 +88,11 @@ public object RowRoutes {
      */
     private fun lockerItem(row: RowRef, parent: String): Destination {
         val action = MemberAction.parse(row.app, row.entity, row.id, row.qualifier)
-            ?: return Destination.LockerItem(row.id, parent = parent)
+            ?: return LockerEntry.item(row.id, parent = parent)
         return when (action.kind) {
-            MemberAction.Kind.Reveal, MemberAction.Kind.Code -> Destination.LockerItem(row.id, parent = parent, follow = action.qualifier)
-            MemberAction.Kind.EditSecret -> Destination.LockerEditor(itemId = row.id)
-            MemberAction.Kind.Export -> Destination.LockerExport
+            MemberAction.Kind.Reveal, MemberAction.Kind.Code -> LockerEntry.item(row.id, parent = parent, follow = action.qualifier)
+            MemberAction.Kind.EditSecret -> LockerEntry.editor(row.id)
+            MemberAction.Kind.Export -> LockerEntry.export(parent)
         }
     }
 

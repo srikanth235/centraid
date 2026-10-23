@@ -403,6 +403,21 @@ final class ShellModel: ObservableObject {
     func attachScreens(core: any ScreenCore) {
         let store = ScreenStore(core: core)
         screens = store
+        // AN UNLOCK IS WHEN A VAULT'S OWN KEY CAN BE FILED (R-ONBOARD-10), and when
+        // Home's tile and chat's key slot learn the Locker is open.
+        store.onAnnounce = { [weak self] topic in
+            guard topic == "locker.unlocked", let session = self?.session else { return }
+            LockerEntry.shared.unlocked(session: session)
+        }
+        LockerEntry.shared.install()
+        LockerEntry.shared.pushLock = { [weak self] in
+            Task { @MainActor in
+                var route = Centraid_Core_V1_Route()
+                route.screen = "locker.lock"
+                route.lockerLock = Centraid_Core_V1_LockerLockRoute()
+                self?.open(route)
+            }
+        }
         Task {
             await store.start()
             store.reportEnvironment()
@@ -1132,9 +1147,9 @@ final class ShellModel: ObservableObject {
         let state = (try? Centraid_Screen_V1_WordsEntryState(serializedBytes: data)) ?? .init()
         if state.phase == .closed, wordsSheet == .enter {
             wordsSheet = nil
-            // THE GATE RE-READS `keyed` ON ITS NEXT EVENT: a re-key that just
+            // A LOCKER WALL RE-READS `keyed` ON ITS NEXT EVENT: a re-key that just
             // landed turns Locker's "Enter your 24 words" into "Unlock with …".
-            LockerLockSeam.attached(self)
+            screens?.lifecycle(foreground: true)
         }
     }
 
