@@ -124,6 +124,16 @@ message NotesNoteRequest {
   string tz = 2;
 }
 
+// `notes.about`: the live notes written about one thing.
+message NotesAboutRequest {
+  // The id of the thing — a person, an event, a task, a document.
+  string about_id = 1;
+  // As `NotesLibraryRequest.window`.
+  uint32 window = 2;
+  // As `NotesLibraryRequest.tz`.
+  string tz = 3;
+}
+
 // ---------------------------------------------------------------------------
 // The answers.
 // ---------------------------------------------------------------------------
@@ -184,6 +194,15 @@ message NotesSearch {
 
 message NotesTrash {
   repeated NotesRow notes = 1;
+}
+
+// The notes about one thing, newest `updated_at` first. A note about a thing is
+// a memo, so the library does not list it; this is where it is read, by subject.
+message NotesAbout {
+  repeated NotesRow notes = 1;
+  // The recent window filled: older notes may exist.
+  bool truncated = 2;
+  uint32 window = 3;
 }
 
 message NotesHistory {

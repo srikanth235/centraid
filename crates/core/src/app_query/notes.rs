@@ -366,6 +366,29 @@ pub(crate) fn history(
     )
 }
 
+pub(crate) fn about(
+    vault: &Vault,
+    door: &VaultDoor<'_>,
+    asked: &wire::NotesAboutRequest,
+) -> Result<Answer> {
+    let zone = zone_of(vault, &asked.tz)?;
+    settle(
+        door,
+        queries::load_about(door, &asked.about_id, window_of(asked.window)),
+        |data| {
+            Answer::NotesAbout(wire::NotesAbout {
+                notes: data
+                    .notes
+                    .into_iter()
+                    .map(|row| row_to_wire(row, &zone))
+                    .collect(),
+                truncated: data.truncated,
+                window: count(data.window),
+            })
+        },
+    )
+}
+
 pub(crate) fn note(
     vault: &Vault,
     door: &VaultDoor<'_>,

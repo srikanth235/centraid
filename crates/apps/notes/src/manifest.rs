@@ -45,9 +45,9 @@ mod tests {
     }
 
     #[test]
-    fn it_declares_eight_queries_and_seventeen_actions() {
+    fn it_declares_nine_queries_and_seventeen_actions() {
         let manifest = manifest();
-        assert_eq!(manifest.queries.len(), 8);
+        assert_eq!(manifest.queries.len(), 9);
         assert_eq!(manifest.actions.len(), 17);
         for name in [
             "link-targets",
@@ -58,6 +58,7 @@ mod tests {
             "journal",
             "notebooks",
             "trash",
+            "about",
         ] {
             assert!(manifest.query(name).is_some(), "no query {name}");
         }
@@ -326,7 +327,7 @@ mod tests {
     /// a member cannot act on.
     #[test]
     fn both_windowed_queries_declare_the_same_bounds_the_clamp_uses() {
-        for name in ["library", "journal"] {
+        for name in ["library", "journal", "about"] {
             let query = manifest().query(name).expect("the query is declared");
             let limit = &query.input["properties"]["limit"];
             assert_eq!(limit["minimum"], serde_json::json!(20), "{name}");

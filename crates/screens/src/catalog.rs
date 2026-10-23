@@ -5181,6 +5181,27 @@ pub mod load {
                 value.request()
             }
         }
+
+        /// The live notes written about one thing — a person, an event, a task, a document — newest first, each with a short preview, a checklist tally, its notebook, tags and attachments and never a full body; `truncated` says older notes exist beyond the window. The one read for "what have I written about this?", whatever the thing is.
+        #[derive(Clone, Debug, Default)]
+        pub struct About {
+            pub about_id: String,
+            pub limit: u32,
+        }
+        impl About {
+            pub const NAME: &str = "about";
+            pub fn request(self) -> wire::LoadRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("about_id".to_owned(), text(self.about_id));
+                wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), limit: self.limit, params: map, ..Default::default() }
+            }
+        }
+        impl From<About> for wire::LoadRequest {
+            fn from(value: About) -> Self {
+                value.request()
+            }
+        }
     }
 
     pub mod people {

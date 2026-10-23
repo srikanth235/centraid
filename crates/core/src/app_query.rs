@@ -138,6 +138,7 @@ pub(crate) fn answer_recording(
         Q::NotesHistory(asked) => notes::history(vault, &door, asked)?,
         Q::NotesLinkTargets(asked) => notes::link_targets(vault, &door, asked)?,
         Q::NotesNote(asked) => notes::note(vault, &door, asked)?,
+        Q::NotesAbout(asked) => notes::about(vault, &door, asked)?,
         Q::TasksBoard(asked) => agenda_task::board(vault, &door, &now, asked)?,
         Q::TasksTask(asked) => agenda_task::task(vault, &door, &now, asked)?,
         Q::TasksProjects(asked) => agenda_task::projects(vault, &door, &now, asked)?,

@@ -4020,6 +4020,14 @@
         "query": "trash"
       },
       {
+        "app": "notes",
+        "figures": [
+          "notes"
+        ],
+        "kind": "note",
+        "query": "about"
+      },
+      {
         "app": "people",
         "figures": [
           "people",
