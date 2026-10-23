@@ -98,6 +98,23 @@ impl<'a> Ctx<'a> {
         self.core.act(request)
     }
 
+    /// The keep list and the census of originals (`originals.proto`).
+    ///
+    /// # Errors
+    /// Whatever the core refuses with.
+    pub fn originals(&self, request: &wire::OriginalsRequest) -> Result<wire::OriginalsResponse> {
+        self.core.originals(request)
+    }
+
+    /// Where content items' bytes are on this phone, one answer per ref in
+    /// order: the path the shell hands to the platform (share, save).
+    ///
+    /// # Errors
+    /// Whatever the core refuses with.
+    pub fn content_urls(&self, request: &wire::ContentUrlRequest) -> Result<wire::ContentUrls> {
+        self.core.content_urls(request)
+    }
+
     /// The locale every string is made in.
     #[must_use]
     pub fn locale(&self) -> Locale {

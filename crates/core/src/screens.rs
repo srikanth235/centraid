@@ -33,6 +33,29 @@ pub trait ScreenCtx {
     /// Whatever [`Handle::act`] refuses with.
     fn act(&self, request: &wire::ActRequest) -> Result<wire::ActResponse>;
 
+    /// The keep list and the census of originals on this phone
+    /// (`originals.proto`): a fact about this phone's disk, so it has no
+    /// catalogue query. A host that does not carry the door refuses.
+    ///
+    /// # Errors
+    /// Whatever [`Handle::call`] refuses with.
+    fn originals(&self, _request: &wire::OriginalsRequest) -> Result<wire::OriginalsResponse> {
+        Err(crate::error::CoreError::Unsupported {
+            type_url: "originals".to_owned(),
+        })
+    }
+
+    /// Where each content item's bytes are on this phone, one answer per ref in
+    /// order (`content.proto`): the path a hand-off to the platform opens.
+    ///
+    /// # Errors
+    /// Whatever [`Handle::call`] refuses with.
+    fn content_urls(&self, _request: &wire::ContentUrlRequest) -> Result<wire::ContentUrls> {
+        Err(crate::error::CoreError::Unsupported {
+            type_url: "content_urls".to_owned(),
+        })
+    }
+
     /// Push a finished update to the shell's event stream.
     fn push(&self, update: wire::ScreenUpdate);
 
@@ -66,6 +89,38 @@ impl ScreenCtx for Handle {
 
     fn act(&self, request: &wire::ActRequest) -> Result<wire::ActResponse> {
         Handle::act(self, request)
+    }
+
+    fn originals(&self, request: &wire::OriginalsRequest) -> Result<wire::OriginalsResponse> {
+        match Handle::call(
+            self,
+            &wire::Request {
+                kind: Some(wire::request::Kind::Originals(request.clone())),
+            },
+        )?
+        .kind
+        {
+            Some(wire::response::Kind::Originals(answer)) => Ok(answer),
+            _ => Err(crate::error::CoreError::Unsupported {
+                type_url: "originals".to_owned(),
+            }),
+        }
+    }
+
+    fn content_urls(&self, request: &wire::ContentUrlRequest) -> Result<wire::ContentUrls> {
+        match Handle::call(
+            self,
+            &wire::Request {
+                kind: Some(wire::request::Kind::ContentUrls(request.clone())),
+            },
+        )?
+        .kind
+        {
+            Some(wire::response::Kind::ContentUrls(answer)) => Ok(answer),
+            _ => Err(crate::error::CoreError::Unsupported {
+                type_url: "content_urls".to_owned(),
+            }),
+        }
     }
 
     fn push(&self, update: wire::ScreenUpdate) {
