@@ -102,7 +102,7 @@ mod tests {
                 actions += 1;
             }
         }
-        assert_eq!(actions, 148, "the eight manifests declare 148 actions");
+        assert_eq!(actions, 149, "the eight manifests declare 149 actions");
     }
 
     /// THERE IS NO `tasks` APP (#1128, the owner's ruling): Tasks were folded into Agenda, so no

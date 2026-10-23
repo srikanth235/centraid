@@ -165,6 +165,7 @@ fn a_copy_the_shell_could_not_make_leaves_nothing_to_clear() {
             outcome: Some(wire::effect_result::Outcome::Failed(wire::EffectFailed {
                 reason: "no clipboard".to_owned(),
                 denied: false,
+                ..Default::default()
             })),
         }),
     );

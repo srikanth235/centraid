@@ -5,7 +5,7 @@
 //! is parsed by the kit at load time: two copies of "which tables does Money
 //! write" is how the two answers drift, and the drift is invisible because both
 //! copies look right. Each action's `input` is the vault command's own schema,
-//! copied verbatim; `the_action_schemas_are_the_vaults` proves it.
+//! copied verbatim (but for the words chat reads); `every_action_is_a_vault_command_with_its_schema` proves it.
 
 use std::sync::OnceLock;
 
@@ -48,10 +48,10 @@ mod tests {
     }
 
     #[test]
-    fn it_declares_eleven_queries_and_twenty_two_actions() {
+    fn it_declares_eleven_queries_and_twenty_three_actions() {
         let manifest = manifest();
         assert_eq!(manifest.queries.len(), 11);
-        assert_eq!(manifest.actions.len(), 22);
+        assert_eq!(manifest.actions.len(), 23);
         for name in [
             "spending",
             "activity",
@@ -152,6 +152,20 @@ mod tests {
         );
     }
 
+    /// The input without the words only the conversation surface reads: the names chat says a
+    /// property under (`aliases`) and the ids it leaves for the core (`x-minted`, `x-target`).
+    fn chat_words_removed(schema: &serde_json::Value) -> serde_json::Value {
+        match schema {
+            serde_json::Value::Object(map) => serde_json::Value::Object(
+                map.iter()
+                    .filter(|(key, _)| !matches!(key.as_str(), "aliases" | "x-minted" | "x-target"))
+                    .map(|(key, value)| (key.clone(), chat_words_removed(value)))
+                    .collect(),
+            ),
+            other => other.clone(),
+        }
+    }
+
     /// An action's input is its command's own schema, copied verbatim: two
     /// copies of "what does `txn.categorize` take" is how the two drift.
     #[test]
@@ -163,7 +177,7 @@ mod tests {
                 .get(row.command)
                 .unwrap_or_else(|| panic!("{} is not a vault command", row.command));
             assert_eq!(
-                &manifest().action(row.action).expect("declared").input,
+                &chat_words_removed(&manifest().action(row.action).expect("declared").input),
                 registered.schema(),
                 "{}'s input is not {}'s schema",
                 row.action,

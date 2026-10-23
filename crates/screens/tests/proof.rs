@@ -108,6 +108,7 @@ fn a_failed_copy_cancels_the_clear() {
     driver.answer_effect(wire::effect_result::Outcome::Failed(wire::EffectFailed {
         reason: "denied".to_owned(),
         denied: true,
+        ..Default::default()
     }));
     driver.pump(Duration::from_millis(400));
     assert!(driver.effects.is_empty(), "{:?}", driver.effects);

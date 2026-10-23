@@ -38,6 +38,16 @@ message Route {
     LockerExportRoute locker_export = 404;
     LockerImportRoute locker_import = 405;
     LockerLockRoute locker_lock = 406;
+    // ---- money (500-599) ----
+    MoneyHomeRoute money_home = 500;
+    MoneyTransactionRoute money_transaction = 501;
+    MoneyTargetRoute money_target = 502;
+    MoneyPageRoute money_search = 503;
+    MoneyPageRoute money_recurring = 504;
+    MoneyPageRoute money_accounts = 505;
+    MoneyPageRoute money_categories = 506;
+    MoneyPageRoute money_rules = 507;
+    MoneyPageRoute money_import = 508;
     // ---- the kit (900-999) ----
     TrashRoute trash = 900;
   }
@@ -190,3 +200,38 @@ message LockerImportRoute {
 }
 
 message LockerLockRoute {}
+// Money
+// ---------------------------------------------------------------------------
+
+enum MoneyDestination {
+  MONEY_DESTINATION_UNSPECIFIED = 0;
+  MONEY_DESTINATION_SPENDING = 1;
+  MONEY_DESTINATION_ACTIVITY = 2;
+  MONEY_DESTINATION_CASHFLOW = 3;
+}
+
+// `money.home`: lands on `destination`, Spending when unspecified.
+message MoneyHomeRoute {
+  MoneyDestination destination = 1;
+}
+
+// `money.transaction`: one line.
+message MoneyTransactionRoute {
+  string txn_id = 1;
+  // The title of the page it was pushed from: its back control says it.
+  string parent = 2;
+}
+
+// `money.target`: a category's plan for one month.
+message MoneyTargetRoute {
+  // `YYYY-MM`.
+  string month = 1;
+  string category_id = 2;
+  string currency = 3;
+}
+
+// The pages that take no argument but the title of the page they were pushed
+// from (search, recurring, accounts, categories, rules, import).
+message MoneyPageRoute {
+  string parent = 1;
+}

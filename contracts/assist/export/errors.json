@@ -1112,6 +1112,27 @@
       "why_no_example": ""
     },
     {
+      "argument": "args",
+      "example": [
+        {
+          "args": {
+            "args": "name: x",
+            "kind": "account",
+            "verb": "create"
+          },
+          "think": null,
+          "tool": "act",
+          "user": null
+        }
+      ],
+      "family": "value",
+      "id": "act.create_account_needs_type_checking_savings",
+      "source": "act.rs",
+      "template": "error: create account needs type: checking | savings | credit card | cash.",
+      "tool": "act",
+      "why_no_example": ""
+    },
+    {
       "argument": "verb",
       "example": null,
       "family": "vault",

@@ -41,6 +41,13 @@ pub(crate) fn flag(value: bool) -> wire::Value {
     whole(i64::from(value))
 }
 
+/// An explicit `null`, for a required property the schema lets be cleared.
+pub(crate) fn null() -> wire::Value {
+    wire::Value {
+        kind: Some(wire::value::Kind::Null(wire::NullValue {})),
+    }
+}
+
 pub(crate) fn put_field<T>(
     map: &mut HashMap<String, wire::Value>,
     name: &str,
