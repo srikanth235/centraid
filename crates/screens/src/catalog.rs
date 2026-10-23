@@ -4782,6 +4782,24 @@ pub mod load {
             }
         }
 
+        /// What deserves a second look, from metadata alone: items the member flagged compromised, logins whose address is not https, cards past their expiry and cards expiring within the month. Weak and reused passwords are not scored (a secret is never read to judge it). Reads the first 2,000 live and archived items and says when it stopped.
+        #[derive(Clone, Debug, Default)]
+        pub struct Review {
+        }
+        impl Review {
+            pub const NAME: &str = "review";
+            pub fn request(self) -> wire::LoadRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), params: map, ..Default::default() }
+            }
+        }
+        impl From<Review> for wire::LoadRequest {
+            fn from(value: Review) -> Self {
+                value.request()
+            }
+        }
+
         /// Trashed items with their purge dates (secret-free row shape); on the phone the kit's one trash screen reads them.
         #[derive(Clone, Debug, Default)]
         pub struct Trash {

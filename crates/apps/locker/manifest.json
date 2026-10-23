@@ -1367,6 +1367,49 @@
       }
     },
     {
+      "name": "review",
+      "kind": "locker_item",
+      "figures": [
+        "compromised",
+        "insecure_address",
+        "expired",
+        "expiring",
+        "reviewed"
+      ],
+      "description": "What deserves a second look, from metadata alone: items the member flagged compromised, logins whose address is not https, cards past their expiry and cards expiring within the month. Weak and reused passwords are not scored (a secret is never read to judge it). Reads the first 2,000 live and archived items and says when it stopped.",
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "compromised": {
+            "type": "array"
+          },
+          "insecure_address": {
+            "type": "array"
+          },
+          "expired": {
+            "type": "array"
+          },
+          "expiring": {
+            "type": "array"
+          },
+          "reviewed": {
+            "type": "integer"
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
       "name": "trash",
       "kind": "locker_item",
       "figures": ["items", "purge_dates"],

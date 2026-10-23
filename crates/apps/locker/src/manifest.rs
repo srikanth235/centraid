@@ -93,12 +93,12 @@ mod tests {
     }
 
     #[test]
-    fn it_declares_five_queries_and_twenty_actions() {
+    fn it_declares_six_queries_and_twenty_actions() {
         let manifest = manifest();
         // v0's eight less the two autofill queries, deleted with the fill
         // plane (R-1047-D3), and the Watchtower review, deleted with the
         // weak/reused scoring (Q-1047-16).
-        assert_eq!(manifest.queries.len(), 5);
+        assert_eq!(manifest.queries.len(), 6);
         assert_eq!(manifest.actions.len(), 20);
         for name in ["items", "item", "search", "trash", "access"] {
             assert!(manifest.query(name).is_some(), "no query {name}");

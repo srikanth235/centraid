@@ -3840,6 +3840,18 @@
       {
         "app": "locker",
         "figures": [
+          "compromised",
+          "insecure_address",
+          "expired",
+          "expiring",
+          "reviewed"
+        ],
+        "kind": "locker_item",
+        "query": "review"
+      },
+      {
+        "app": "locker",
+        "figures": [
           "items",
           "purge_dates"
         ],
