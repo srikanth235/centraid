@@ -1047,6 +1047,7 @@ fn the_device_remembers_the_kind_of_the_last_add_an_event_is_absence_and_an_unkn
         .answer_effect(wire::effect_result::Outcome::Failed(wire::EffectFailed {
             reason: "locked".to_owned(),
             denied: false,
+            ..wire::EffectFailed::default()
         }));
     assert_eq!(world.editor_state(page).kind, Kind::Event as i32);
 
