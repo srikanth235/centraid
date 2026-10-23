@@ -496,10 +496,13 @@ message FilePicked {
   string media_type = 4;
 }
 
-// Bytes streamed so far, of a file `total_bytes` long (0 is unknown).
+// Bytes streamed so far, of a file `total_bytes` long (0 is unknown). `name` is
+// what the platform called the file (empty for a scan), so the line can say what
+// is being added while it streams.
 message FileProgress {
   uint64 staged_bytes = 1;
   uint64 total_bytes = 2;
+  string name = 3;
 }
 
 // Follow a folder the member picks (#1127): the shell opens its folder picker,

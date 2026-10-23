@@ -60,6 +60,8 @@ pub struct Ingest {
     failure: String,
     staged_bytes: u64,
     total_bytes: u64,
+    /// The shell is streaming the picked file: the title is known and the bar moves.
+    staging: bool,
     /// The page the Add sheet was on: the filed document's back word.
     parent: String,
 }
@@ -75,6 +77,7 @@ impl Default for Ingest {
             failure: String::new(),
             staged_bytes: 0,
             total_bytes: 0,
+            staging: false,
             parent: String::new(),
         }
     }
@@ -120,6 +123,7 @@ impl Ingest {
     fn pick(&mut self) -> Vec<wire::Effect> {
         self.phase = Phase::Picking;
         self.failure.clear();
+        self.staging = false;
         vec![effect(wire::effect::Kind::PickFile(wire::PickFile {
             kind: match self.kind {
                 Kind::Scan => wire::pick_file::Kind::Scan,
@@ -141,8 +145,10 @@ impl Ingest {
         }
         match outcome {
             O::FileProgress(progress) => {
+                self.title = title_of(ctx.locale(), self.kind, &progress.name);
                 self.staged_bytes = progress.staged_bytes;
                 self.total_bytes = progress.total_bytes;
+                self.staging = true;
                 Some(Vec::new())
             }
             O::FilePicked(picked) => {
@@ -262,6 +268,10 @@ impl Ingest {
     pub fn view(&self, locale: Locale) -> wire::DocsIngestView {
         let status_label = match self.phase {
             Phase::Filing => fill(&words::ingest_adding(locale), &[("title", &self.title)]),
+            // The file is picked and streaming: the title is known and the bar moves.
+            Phase::Picking if self.staging => {
+                fill(&words::ingest_adding(locale), &[("title", &self.title)])
+            }
             Phase::Filed => fill(&words::ingest_added(locale), &[("title", &self.title)]),
             Phase::Failed => self.failure.clone(),
             _ => String::new(),

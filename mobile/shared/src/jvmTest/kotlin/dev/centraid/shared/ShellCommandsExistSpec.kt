@@ -129,7 +129,6 @@ class ShellCommandsExistSpec : StringSpec({
             "entity.purge", // an argument to a trash spec
             "locker.edit_item", // an `if` branch
             "thread.clear", // an argument to a helper
-            "document.restore_version", // a `when` arm
         ).forEach { command ->
             withClue(command) {
                 (command in seen).shouldBeTrue()

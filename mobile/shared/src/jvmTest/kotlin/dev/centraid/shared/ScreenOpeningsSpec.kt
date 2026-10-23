@@ -1,12 +1,9 @@
 package dev.centraid.shared
 
 import centraid.core.v1.AgendaDestination
+import centraid.core.v1.DocsDestination
 import centraid.core.v1.Route
-import centraid.screen.v1.DocsDriveEvent
-import centraid.screen.v1.DocsDriveState
 import centraid.screen.v1.PhotoShelf
-import dev.centraid.shared.apps.docs.DocsDocumentMachine
-import dev.centraid.shared.apps.docs.DocsDriveMachine
 import dev.centraid.shared.apps.health.HealthHomeMachine
 import dev.centraid.shared.apps.money.MoneyHomeMachine
 import dev.centraid.shared.apps.money.MoneyTransactionMachine
@@ -19,6 +16,7 @@ import dev.centraid.shared.apps.photos.PhotoShelfMachine
 import dev.centraid.shared.apps.photos.PhotosGridMachine
 import dev.centraid.shared.nav.AgendaEntry
 import dev.centraid.shared.nav.Destination
+import dev.centraid.shared.nav.DocsEntry
 import dev.centraid.shared.nav.RowRef
 import dev.centraid.shared.nav.RowRoutes
 import dev.centraid.shared.nav.ScreenIds
@@ -45,14 +43,13 @@ class ScreenOpeningsSpec : StringSpec({
         val notebook = RowRoutes.route(row("notes", "notebook", "nb", "Cabin"))!!
         notebook.screenId shouldBe NotesLibraryMachine.SCREEN_ID
 
+        // DOCS' SCREENS ARE RUST'S (#1135): a document and a folder open as the Route Rust's registry
+        // names, carrying the pushing page's title as their back word.
         val doc = RowRoutes.route(row("docs", "document", "d1", "Lease"), parent = "Search")!!
-        doc.screenId shouldBe DocsDocumentMachine.SCREEN_ID
-
-        // A folder is the drive's machine on its own key, so the drive under it keeps its tab.
+        doc shouldBe DocsEntry.document("d1", "Lease", parent = "Search")
         val folder = RowRoutes.route(row("docs", "folder", "f1", "Taxes"), parent = "Search")!!
-        folder.screenId shouldBe DocsDriveMachine.FOLDER_SCREEN_ID
-        val opened = DocsDriveEvent.ADAPTER.decode(folder.event).opened!!
-        opened.destination shouldBe DocsDriveState.Destination.DESTINATION_FOLDERS
+        val opened = (folder as Destination.RustScreen).route.docs_drive!!
+        opened.destination shouldBe DocsDestination.DOCS_DESTINATION_FOLDERS
         opened.folder_id shouldBe "f1"
         opened.folder_name shouldBe "Taxes"
         opened.parent shouldBe "Search"

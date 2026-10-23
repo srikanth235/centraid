@@ -64,9 +64,12 @@ fn upload_picks_then_files_the_staged_bytes_and_opens_the_document() {
         O::FileProgress(wire::FileProgress {
             staged_bytes: 500,
             total_bytes: 2000,
+            name: "Lease.pdf".to_owned(),
         }),
     );
     assert_eq!(ingest(&d, i).progress_permille, 250);
+    // The file is picked and streaming: the line says what is being added.
+    assert_eq!(ingest(&d, i).status_label, "Adding Lease.pdf");
     // The shell staged the file: the screen files it.
     result(&mut d, i, picked(&"b".repeat(64), 2048, "Lease.pdf", ""));
     let line = ingest(&d, i);

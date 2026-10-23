@@ -402,6 +402,7 @@ final class ShellModel: ObservableObject {
     /// the core the session holds. Called once the transport exists.
     func attachScreens(core: any ScreenCore) {
         let store = ScreenStore(core: core)
+        store.onOpenRoute = { [weak self] route in self?.open(route) }
         screens = store
         Task {
             await store.start()
