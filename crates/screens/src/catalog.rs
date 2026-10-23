@@ -5,11 +5,11 @@
 // converts it into the request. A stale file fails `cargo xtask screens-catalog --check`.
 
 #![cfg_attr(rustfmt, rustfmt::skip)]
-#![allow(clippy::all, clippy::pedantic, missing_docs, unused_imports)]
+#![allow(clippy::all, clippy::pedantic, missing_docs)]
 
 use centraid_api_proto::core_v1 as wire;
 
-use crate::field::{Field, flag, null, put_field, real, text, whole};
+use crate::field::{Field, flag, put_field, real, text, whole};
 
 pub mod act {
     use super::*;
@@ -2249,7 +2249,7 @@ pub mod act {
         /// File transactions under a category, or clear it.
         #[derive(Clone, Debug, Default)]
         pub struct Categorize {
-            pub category_id: Option<String>,
+            pub category_id: String,
             pub ids: String,
         }
         impl Categorize {
@@ -2257,7 +2257,7 @@ pub mod act {
             pub fn request(self) -> wire::ActRequest {
                 #[allow(unused_mut)]
                 let mut map = std::collections::HashMap::<String, wire::Value>::new();
-                map.insert("category_id".to_owned(), match self.category_id { Some(it) => text(it), None => null() });
+                map.insert("category_id".to_owned(), text(self.category_id));
                 map.insert("ids".to_owned(), text(self.ids));
                 wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
             }
@@ -2355,7 +2355,7 @@ pub mod act {
         /// Plan an amount for a category in a month; an amount of null removes the plan.
         #[derive(Clone, Debug, Default)]
         pub struct SetTarget {
-            pub amount_minor: Option<i64>,
+            pub amount_minor: i64,
             pub category_id: String,
             pub month: String,
             pub carry: Option<bool>,
@@ -2366,7 +2366,7 @@ pub mod act {
             pub fn request(self) -> wire::ActRequest {
                 #[allow(unused_mut)]
                 let mut map = std::collections::HashMap::<String, wire::Value>::new();
-                map.insert("amount_minor".to_owned(), match self.amount_minor { Some(it) => whole(it), None => null() });
+                map.insert("amount_minor".to_owned(), whole(self.amount_minor));
                 map.insert("category_id".to_owned(), text(self.category_id));
                 map.insert("month".to_owned(), text(self.month));
                 if let Some(it) = self.carry { map.insert("carry".to_owned(), flag(it)); }
@@ -3482,7 +3482,7 @@ pub mod act {
         #[derive(Clone, Debug, Default)]
         pub struct SetReminder {
             pub important_date_id: String,
-            pub reminders: Option<String>,
+            pub reminders: String,
         }
         impl SetReminder {
             pub const NAME: &str = "set-reminder";
@@ -3490,7 +3490,7 @@ pub mod act {
                 #[allow(unused_mut)]
                 let mut map = std::collections::HashMap::<String, wire::Value>::new();
                 map.insert("id".to_owned(), text(self.important_date_id));
-                map.insert("reminders".to_owned(), match self.reminders { Some(it) => text(it), None => null() });
+                map.insert("reminders".to_owned(), text(self.reminders));
                 wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
             }
         }
