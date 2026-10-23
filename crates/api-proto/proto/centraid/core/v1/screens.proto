@@ -30,6 +30,7 @@ package centraid.core.v1;
 import "centraid/core/v1/agenda_screens.proto";
 import "centraid/core/v1/kit_screens.proto";
 import "centraid/core/v1/locker_screens.proto";
+import "centraid/core/v1/money_screens.proto";
 import "centraid/core/v1/route.proto";
 
 // ---------------------------------------------------------------------------
@@ -192,6 +193,16 @@ message ScreenEvent {
     LockerAccessEvent locker_access = 404;
     LockerExportEvent locker_export = 405;
     LockerImportEvent locker_import = 406;
+    // ---- money (500-599) ----
+    MoneyHomeEvent money_home = 500;
+    MoneyTransactionEvent money_transaction = 501;
+    MoneyTargetEvent money_target = 502;
+    MoneySearchEvent money_search = 503;
+    MoneyRecurringEvent money_recurring = 504;
+    MoneyAccountsEvent money_accounts = 505;
+    MoneyCategoriesEvent money_categories = 506;
+    MoneyRulesEvent money_rules = 507;
+    MoneyImportEvent money_import = 508;
     // ---- the kit (900-999) ----
     TrashEvent trash = 900;
   }
@@ -237,6 +248,16 @@ message ViewState {
     LockerExportState locker_export = 404;
     LockerImportState locker_import = 405;
     LockerLockState locker_lock = 406;
+    // ---- money (500-599) ----
+    MoneyHomeState money_home = 500;
+    MoneyTransactionState money_transaction = 501;
+    MoneyTargetState money_target = 502;
+    MoneySearchState money_search = 503;
+    MoneyRecurringState money_recurring = 504;
+    MoneyAccountsState money_accounts = 505;
+    MoneyCategoriesState money_categories = 506;
+    MoneyRulesState money_rules = 507;
+    MoneyImportState money_import = 508;
     // ---- the kit (900-999) ----
     TrashView trash = 900;
   }

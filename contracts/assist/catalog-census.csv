@@ -64,7 +64,7 @@ locker,clear-passkey,delete,locker_passkey,card,yes: apps/locker/LockerItem.kt,n
 locker,set-memo,edit,locker_item,card,yes: apps/locker/LockerItem.kt,no
 locker,export,reveal,locker_item,card,no,no
 locker,reveal,reveal,locker_item,direct,no,no
-money,add-account,create,account,card,yes: apps/money/MoneyAccounts.kt,no
+money,add-account,create,account,direct,yes: apps/money/MoneyAccounts.kt,no
 money,edit-account,edit,account,direct,yes: apps/money/MoneyAccounts.kt,no
 money,close-account,archive,account,direct,yes: apps/money/MoneyAccounts.kt; apps/money/MoneyCategories.kt,no
 money,reopen-account,unarchive,account,direct,yes: apps/money/MoneyAccounts.kt; apps/money/MoneyCategories.kt,no
@@ -74,7 +74,7 @@ money,record-checkpoint,log,account,card,yes: apps/money/MoneyImport.kt,no
 money,save-import-profile,edit,account,card,yes: apps/money/MoneyImport.kt,no
 money,categorize,categorize,transaction,card,yes: apps/money/MoneyTransaction.kt,no
 money,void-transaction,void,transaction,card,yes: apps/money/MoneyTransaction.kt,no
-money,set-display-name,edit,transaction,card,yes: apps/money/MoneyTransaction.kt,no
+money,set-display-name,edit,transaction,direct,yes: apps/money/MoneyTransaction.kt,no
 money,link-transfer,link,transaction,card,yes: apps/money/MoneyTransaction.kt,no
 money,unlink-transfer,unlink,transaction,direct,yes: apps/money/MoneyTransaction.kt,no
 money,set-target,edit,budget,card,yes: apps/money/MoneyTarget.kt,no
@@ -83,9 +83,10 @@ money,add-rule,create,rule,card,yes: apps/money/MoneyRules.kt; apps/money/MoneyT
 money,edit-rule,edit,rule,direct,yes: apps/money/MoneyRules.kt,no
 money,delete-rule,delete,rule,card,yes: apps/money/MoneyRules.kt,no
 money,apply-rule-to-history,apply,rule,card,yes: apps/money/MoneyRules.kt,no
-money,add-category,create,category,card,yes: apps/money/MoneyCategories.kt,no
+money,add-category,create,category,direct,yes: apps/money/MoneyCategories.kt,no
 money,merge-category,merge,category,card,yes: apps/money/MoneyCategories.kt,no
-money,archive-category,archive,category,card,yes: apps/money/MoneyAccounts.kt; apps/money/MoneyCategories.kt,no
+money,archive-category,archive,category,direct,yes: apps/money/MoneyAccounts.kt; apps/money/MoneyCategories.kt,no
+money,unarchive-category,unarchive,category,direct,yes: apps/money/MoneyCategories.kt,no
 notes,create-note,create,note,direct,yes: apps/notes/NotesEditorMachine.kt,yes
 notes,edit-note,edit,note,direct,yes: apps/notes/NotesEditorMachine.kt,yes
 notes,move-note,add_to,note,direct,yes: apps/notes/NotesLibraryMachine.kt,yes

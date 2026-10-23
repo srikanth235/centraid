@@ -2630,6 +2630,45 @@ pub mod act {
                 value.request()
             }
         }
+
+        #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+        pub enum UnarchiveCategoryFlag {
+            #[default]
+            Starred,
+            Pinned,
+            Archived,
+        }
+        impl UnarchiveCategoryFlag {
+            fn wire(self) -> &'static str {
+                match self {
+                    Self::Starred => "starred",
+                    Self::Pinned => "pinned",
+                    Self::Archived => "archived",
+                }
+            }
+        }
+
+        /// Bring an archived category back: it can be chosen again. Send flag `archived`.
+        #[derive(Clone, Debug, Default)]
+        pub struct UnarchiveCategory {
+            pub flag: UnarchiveCategoryFlag,
+            pub category_id: String,
+        }
+        impl UnarchiveCategory {
+            pub const NAME: &str = "unarchive-category";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("flag".to_owned(), text(self.flag.wire()));
+                map.insert("id".to_owned(), text(self.category_id));
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<UnarchiveCategory> for wire::ActRequest {
+            fn from(value: UnarchiveCategory) -> Self {
+                value.request()
+            }
+        }
     }
 
     pub mod notes {

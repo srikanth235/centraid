@@ -259,6 +259,7 @@
               "undo",
               "tag",
               "untag",
+              "unlink",
               "archive",
               "unarchive"
             ],

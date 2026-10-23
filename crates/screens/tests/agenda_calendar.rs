@@ -588,7 +588,7 @@ fn a_denied_read_says_where_to_turn_it_on_and_a_calendarless_phone_says_to_add_a
         wire::effect_result::Outcome::Failed(wire::EffectFailed {
             reason: "no".to_owned(),
             denied: true,
-            ..wire::EffectFailed::default()
+            ..Default::default()
         }),
     );
     assert_eq!(
@@ -622,7 +622,7 @@ fn a_denied_read_says_where_to_turn_it_on_and_a_calendarless_phone_says_to_add_a
         wire::effect_result::Outcome::Failed(wire::EffectFailed {
             reason: "io".to_owned(),
             denied: false,
-            ..wire::EffectFailed::default()
+            ..Default::default()
         }),
     );
     assert_eq!(status(&world, host), "The calendar did not import.");
@@ -842,7 +842,7 @@ fn a_pass_with_no_access_asks_nothing_and_the_next_change_follows_again() {
         wire::effect_result::Outcome::Failed(wire::EffectFailed {
             reason: "off".to_owned(),
             denied: true,
-            ..wire::EffectFailed::default()
+            ..Default::default()
         }),
     );
     assert_eq!(
