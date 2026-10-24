@@ -1,11 +1,14 @@
 import Combine
 import Contacts
 import EventKit
+import CentraidShared
 import Foundation
 import Security
 import SwiftProtobuf
 
 #if os(iOS)
+import Photos
+import PhotosUI
 import UIKit
 #endif
 
@@ -38,8 +41,35 @@ final class ScreenStore: ObservableObject {
     private var watches: [UInt64: (instance: UInt64, source: Centraid_Core_V1_ImportSource)] = [:]
     private var storeObservers: [NSObjectProtocol] = []
 
+    /// THE CAMERA ROLL AND THE PHOTOS DEVICE (#1135, lane D): the roll, the free-up
+    /// flow and an original back from the gateway are the shell's, not a screen's.
+    /// Rust asks for them as effects and learns the grant and each pass's progress
+    /// as events, which this forwards to every Photos home that is open.
+    var photos: PhotosDevice? {
+        didSet { if photos != nil, oldValue == nil { observePhotos() } }
+    }
+    /// What the roll last said (the grant, the pass), replayed to a Photos home
+    /// that opens after it said so.
+    private var rollEvents: [Int: Centraid_Core_V1_PhotosHomeEvent] = [:]
+    private var rollTold: Set<UInt64> = []
+
     init(core: any ScreenCore) {
         self.core = core
+    }
+
+    private func observePhotos() {
+        photos?.observe { [weak self] bytes in
+            guard let event = try? Centraid_Core_V1_PhotosHomeEvent(serializedBytes: bytes.data) else { return }
+            Task { @MainActor in self?.rollSaid(event) }
+        }
+    }
+
+    /// The roll said something: keep it, and tell every Photos home on screen.
+    private func rollSaid(_ event: Centraid_Core_V1_PhotosHomeEvent) {
+        rollEvents[event.permissionKey] = event
+        for instance in views.keys where views[instance]?.isPhotosHome == true {
+            send(instance, .photosHome(event))
+        }
     }
 
     /// Apply the core's pushed updates for as long as it lives, then open the
@@ -128,6 +158,10 @@ final class ScreenStore: ObservableObject {
         for view in update.views
         where !closed.contains(view.instance) && view.revision > (views[view.instance]?.revision ?? 0) {
             views[view.instance] = view
+            // A PHOTOS HOME THAT OPENS AFTER THE ROLL SPOKE is told what it said.
+            if view.isPhotosHome, rollTold.insert(view.instance).inserted {
+                for event in rollEvents.values { send(view.instance, .photosHome(event)) }
+            }
         }
         for effect in update.effects { perform(effect) }
     }
@@ -166,6 +200,26 @@ final class ScreenStore: ObservableObject {
                 answer(request, outcome)
             }
         #endif
+        case .cameraRoll(let roll)?:
+            answer(request, performCameraRoll(roll))
+        case .freeUpSpace(let space)?:
+            guard let photos else {
+                answer(request, .failed(Self.failure("this shell has no photos device")))
+                return
+            }
+            photos.freeUp(free: space.action == .free) { [weak self] bytes in
+                guard let facts = try? Centraid_Core_V1_FreeUpFacts(serializedBytes: bytes.data) else { return }
+                Task { @MainActor in self?.answer(request, .freeUpFacts(facts)) }
+            }
+        case .fetchOriginal(let fetch)?:
+            guard let photos else {
+                answer(request, .failed(Self.failure("this shell has no photos device")))
+                return
+            }
+            photos.fetchOriginal(contentHash: fetch.contentHash) { [weak self] bytes in
+                guard let fetched = try? Centraid_Core_V1_OriginalFetched(serializedBytes: bytes.data) else { return }
+                Task { @MainActor in self?.answer(request, .originalFetched(fetched)) }
+            }
         case .keychain(let operation)?:
             answer(request, Self.keychain(operation))
         case .calendarRead(let read)?:
@@ -187,6 +241,32 @@ final class ScreenStore: ObservableObject {
             // Platform work this build does not perform yet: say so, by value.
             answer(request, .failed(Self.failure("not performed by this shell")))
         }
+    }
+
+    /// WHAT A SCREEN ASKED OF THE CAMERA ROLL. The prompt and a pass are the
+    /// device's (`PhotosDevice`); Settings and iOS's limited selection are this
+    /// app's own pages, which only the platform can open.
+    private func performCameraRoll(_ roll: Centraid_Core_V1_CameraRoll) -> Centraid_Core_V1_EffectResult.OneOf_Outcome {
+        #if os(iOS)
+        switch roll.action {
+        case .askPermission:
+            photos?.perform(action: PhotosDevice.Companion.shared.ACTION_ASK_PERMISSION)
+        case .importNow:
+            photos?.perform(action: PhotosDevice.Companion.shared.ACTION_IMPORT_NOW)
+        case .openSettings:
+            if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
+        case .manageSelection:
+            let scene = UIApplication.shared.connectedScenes
+                .compactMap { $0 as? UIWindowScene }
+                .first { $0.activationState == .foregroundActive }
+            if let root = scene?.keyWindow?.rootViewController {
+                PHPhotoLibrary.shared().presentLimitedLibraryPicker(from: root)
+            }
+        default:
+            return .failed(Self.failure("no camera roll action"))
+        }
+        #endif
+        return .done(Centraid_Core_V1_EffectDone())
     }
 
     private func answer(_ request: Centraid_Core_V1_EffectRequest, _ outcome: Centraid_Core_V1_EffectResult.OneOf_Outcome) {
@@ -307,4 +387,21 @@ final class ScreenStore: ObservableObject {
         top.present(sheet, animated: true)
     }
     #endif
+}
+
+
+extension Centraid_Core_V1_ViewState {
+    /// Whether this is a Photos home, the screen the camera roll talks to.
+    var isPhotosHome: Bool {
+        if case .photosHome? = kind { return true }
+        return false
+    }
+}
+
+extension Centraid_Core_V1_PhotosHomeEvent {
+    /// Which of the roll's two facts this event carries, so the latest of each is kept.
+    var permissionKey: Int {
+        if case .permission? = kind { return 0 }
+        return 1
+    }
 }

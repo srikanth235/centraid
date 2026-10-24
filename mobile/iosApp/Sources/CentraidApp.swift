@@ -81,68 +81,6 @@ struct CentraidApp: App {
                             // A SCREEN RUST OWNS, drawn from its view state.
                             case let .rust(entry):
                                 RustScreenHost(shell: shell, entry: entry)
-                            case .photos:
-                                PhotosGridView(shell: shell)
-
-                            // THE PHOTOS MINIAPP'S OTHER NINE SCREENS.
-                            //
-                            // Every one takes BYTES and closures, never this
-                            // model: a view that held the shell would be a
-                            // view that could reach past its own screen, and
-                            // the whole execution model is that a view renders
-                            // a finished state and forwards events.
-                            case let .photoShelf(shelf):
-                                PhotoShelfView(
-                                    data: shell.photoShelfState,
-                                    shelf: (try? Centraid_Screen_V1_PhotoShelf(
-                                        serializedBytes: shelf
-                                    )) ?? .init(),
-                                    copy: shell.photoShelfCopy,
-                                    send: { shell.send(screen: PhotosScreens.shelf, event: $0) },
-                                    onOpenAsset: { identifier, neighbours in
-                                        // AN ALBUM'S LIGHTBOX KNOWS ITS ALBUM,
-                                        // for "Make key photo".
-                                        let album = (try? Centraid_Screen_V1_PhotoShelf(
-                                            serializedBytes: shelf
-                                        ))?.album.collectionID ?? ""
-                                        shell.open(
-                                            PhotosEntry.lightbox(identifier, neighbours: neighbours, album: album)
-                                        )
-                                    },
-                                    onAddPhotographs: { identifier, name in
-                                        shell.path.append(.photoPicker(identifier, name))
-                                    },
-                                    onExport: { identifiers, kind in
-                                        shell.exportShelf(identifiers, as: kind)
-                                    }
-                                )
-
-                            case let .photoPicker(identifier, name):
-                                PhotoPickerView(
-                                    data: shell.photoPickerState,
-                                    collectionIdentifier: identifier,
-                                    collectionName: name,
-                                    // EMPTY, AND NOT A GAP: the picker reads
-                                    // the album's whole membership itself on
-                                    // open (`PhotoPickerMachine.MEMBERS_READ_ID`)
-                                    // — no caller holds more than one page of it.
-                                    alreadyInAlbum: [],
-                                    send: { shell.send(screen: PhotosScreens.picker, event: $0) },
-                                    onFinished: { shell.path.removeLast() }
-                                )
-
-                            case .places:
-                                PlacesView(
-                                    data: shell.placesState,
-                                    send: { shell.send(screen: PhotosScreens.places, event: $0) },
-                                    onOpenPlace: { identifier, name in
-                                        shell.path.append(.photoShelf(shell.placeShelf(
-                                            identifier: identifier,
-                                            name: name
-                                        )))
-                                    },
-                                    onOpenShelf: { shell.path.append(.photoShelf($0)) }
-                                )
                             }
                         }
                         // A SCREEN READS BECAUSE IT WAS OPENED. The machine

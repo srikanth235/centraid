@@ -43,43 +43,12 @@ final class ScreenFixtureTests: XCTestCase {
         let manifest = try Data(contentsOf: screens.appendingPathComponent("manifest.json"))
         let decoded = try JSONSerialization.jsonObject(with: manifest) as? [String: Any]
         let fixtures = decoded?["fixtures"] as? [[String: Any]] ?? []
-        XCTAssertEqual(fixtures.count, 47)
+        XCTAssertEqual(fixtures.count, 22)
         for fixture in fixtures {
             let binary = try XCTUnwrap(fixture["binary"] as? String)
             let name = String(binary.dropFirst("contracts/screens/".count).dropLast(".bin".count))
             XCTAssertNoThrow(try bytes(name), "\(name) is listed and missing")
         }
-    }
-
-    /// A denied photo grant must not blank a library the member already owns.
-    func testDeniedPhotoPermissionKeepsTheGridFull() throws {
-        let state = try Centraid_Screen_V1_PhotosGridState(
-            serializedBytes: try bytes("photos/permission-denied")
-        )
-        XCTAssertEqual(state.permission, .denied)
-        XCTAssertEqual(state.data.cells.count, 1)
-        XCTAssertEqual(state.backup.phase, .idle)
-        XCTAssertTrue(state.backup.pausedReason.contains("Settings"))
-    }
-
-    /// iOS's limited selection is a first-class state.
-    func testLimitedSelectionIsNeitherEmptyNorDenied() throws {
-        let state = try Centraid_Screen_V1_PhotosGridState(
-            serializedBytes: try bytes("photos/limited-selection")
-        )
-        XCTAssertEqual(state.permission, .limited)
-        XCTAssertEqual(state.backup.phase, .transferring)
-        // A Live Photo's still and its paired movie share one capture group.
-        XCTAssertFalse(state.data.cells[0].captureGroupID.isEmpty)
-    }
-
-    /// `more` is a sheet, never a destination.
-    func testMoreIsASheet() throws {
-        let state = try Centraid_Screen_V1_PhotosGridState(
-            serializedBytes: try bytes("photos/more-sheet-open")
-        )
-        XCTAssertEqual(state.sheet, .more)
-        XCTAssertEqual(state.destination, .library)
     }
 
     /// A refused SAVE keeps the words; a refused READ does not.
@@ -111,16 +80,6 @@ final class ScreenFixtureTests: XCTestCase {
         XCTAssertEqual(waiting.connectivity, .offline)
         XCTAssertNotEqual(refusedToSay.connectivity, waiting.connectivity)
         XCTAssertEqual(refusedToSay.pending.queuedUploads, 41)
-    }
-
-    /// The sweep: no fixture may carry both a failure and data.
-    func testEveryFixtureSetsAtMostOneContentState() throws {
-        for fixture in ["permission-denied", "limited-selection"] {
-            let state = try Centraid_Screen_V1_PhotosGridState(
-                serializedBytes: try bytes("photos/\(fixture)")
-            )
-            XCTAssertNotNil(state.content, "\(fixture) sets exactly one content case")
-        }
     }
 
     // MARK: - Home, the graded springboard
@@ -194,162 +153,6 @@ final class ScreenFixtureTests: XCTestCase {
             return XCTFail("a refused Home decodes to the failure case")
         }
         XCTAssertEqual(failure.kind, .noCopyYet)
-    }
-
-    // MARK: - Photos: the rest of the miniapp
-
-    // Ten screens for v0's fourteen routes, and the Swift half of each law the
-    // Kotlin spec asserts. Every case here is one a shell that got the
-    // distinction wrong would draw wrong; a happy path would pass against every
-    // such shell and is therefore not here.
-
-    private func collections(_ case_: String) throws -> Centraid_Screen_V1_PhotosCollectionsState {
-        try Centraid_Screen_V1_PhotosCollectionsState(
-            serializedBytes: try bytes("photos-collections/\(case_)")
-        )
-    }
-
-    /// One row type for five shelves, and `memberOwned` is the only difference.
-    func testOneShelfRowTypeAndMemberOwnedIsTheDifference() throws {
-        let data = try collections("standing-and-owned").data
-        XCTAssertEqual(data.shelves.filter { !$0.memberOwned }.count, 4)
-        let owned = try XCTUnwrap(data.shelves.first { $0.memberOwned })
-        XCTAssertEqual(owned.title, "Portugal")
-        // Zero is a real count and the row is still a door; and the absent
-        // cover is absent rather than a placeholder the view would load.
-        let videos = try XCTUnwrap(data.shelves.first { $0.title == "Videos" })
-        XCTAssertEqual(videos.itemCount, 0)
-        XCTAssertFalse(videos.hasCoverThumbnailPath)
-        // The doors are the taps that land somewhere other than a shelf, and
-        // the badge is a different number from the count.
-        let duplicates = try XCTUnwrap(data.doors.first { $0.kind == .duplicates })
-        XCTAssertEqual(duplicates.count, 3)
-        XCTAssertEqual(duplicates.needsAttention, 3)
-        XCTAssertEqual(data.doors.count, 2)
-    }
-
-    /// A sheet leaves the list underneath intact — a shape a route could not
-    /// produce.
-    func testTheNewAlbumSheetLeavesTheListIntact() throws {
-        let sheet = try collections("new-album-sheet")
-        XCTAssertEqual(sheet.sheet, .newAlbum)
-        XCTAssertEqual(sheet.data.shelves.count, 2)
-    }
-
-    /// A count over a filled page is a FLOOR, and the row says so.
-    ///
-    /// No `COUNT(*)` on the read door, so every count here is counted from the
-    /// rows one page returned. Both pairs live in one fixture because a view
-    /// that drew capped and uncapped alike passes against either alone.
-    func testACountOverAFilledPageIsAFloor() throws {
-        let data = try collections("counts-are-floors").data
-        let trash = try XCTUnwrap(data.shelves.first { $0.title == "Trash" })
-        let album = try XCTUnwrap(data.shelves.first { $0.memberOwned })
-        XCTAssertEqual(trash.itemCount, 2)
-        XCTAssertFalse(trash.itemCountCapped)
-        XCTAssertEqual(album.itemCount, 137)
-        // "At least 137". A bare number states a total nobody counted.
-        XCTAssertTrue(album.itemCountCapped)
-
-        let placesDoor = try XCTUnwrap(data.doors.first { $0.kind == .places })
-        let duplicatesDoor = try XCTUnwrap(data.doors.first { $0.kind == .duplicates })
-        XCTAssertTrue(placesDoor.countCapped)
-        XCTAssertFalse(duplicatesDoor.countCapped)
-        // A badge is "there is work": a floor and a total draw the same dot,
-        // which is why `needsAttention` has no capped sibling to assert.
-        XCTAssertEqual(duplicatesDoor.needsAttention, 3)
-        XCTAssertTrue(data.hasNextCursor)
-    }
-
-    /// A refused Collections invents no standing shelves. The four exist in
-    /// every vault, but their counts and covers come from a read.
-    func testARefusedCollectionsInventsNoShelves() throws {
-        guard case let .failure(failure) = try collections("read-refused").content else {
-            return XCTFail("a refused Collections decodes to the failure case")
-        }
-        XCTAssertEqual(failure.kind, .noCopyYet)
-    }
-
-    private func search(_ case_: String) throws -> Centraid_Screen_V1_PhotosSearchState {
-        try Centraid_Screen_V1_PhotosSearchState(
-            serializedBytes: try bytes("photos-search/\(case_)")
-        )
-    }
-
-    /// A corrected answer is the shared field's words (#1097, R-1097-27): the
-    /// hits still answer what was typed, and an exact answer carries none.
-    func testACorrectedAnswerIsTheFieldsWords() throws {
-        let corrected = try search("corrected")
-        XCTAssertEqual(corrected.query, "sunscren")
-        XCTAssertEqual(corrected.search.corrected, "sunscreen")
-        XCTAssertEqual(corrected.search.term, "sunscren")
-        guard case let .hits(hits) = corrected.content else {
-            return XCTFail("a corrected answer is hits")
-        }
-        XCTAssertEqual(hits.query, "sunscren")
-        XCTAssertEqual(hits.cells.count, 1)
-        XCTAssertFalse(try search("hits-say-why").hasSearch)
-    }
-
-    /// Resting and no-hits must never read the same words. Both show a grid
-    /// with nothing in it; only one of them may say "Nothing matched".
-    func testRestingAndNoHitsAreDifferentScreens() throws {
-        let resting = try search("resting")
-        let noHits = try search("no-hits")
-
-        XCTAssertEqual(resting.query, "")
-        guard case let .resting(vocabulary) = resting.content else {
-            return XCTFail("nothing typed decodes to the resting case")
-        }
-        XCTAssertEqual(vocabulary.suggestedLabels.count, 2)
-
-        XCTAssertEqual(noHits.query, "kayak")
-        guard case let .hits(hits) = noHits.content else {
-            return XCTFail("an empty result is data, not a failure")
-        }
-        XCTAssertTrue(hits.cells.isEmpty)
-        XCTAssertNotEqual(resting, noHits)
-    }
-
-    /// A match is a KIND and a name, never prose.
-    ///
-    /// Field 4 was `repeated string matched_on` and is now reserved. A prose
-    /// line made each shell compose its own sentence, which is how v0's empty
-    /// states drifted apart; the kind is the contract's and the sentence is the
-    /// view's.
-    func testAMatchIsAKindAndANameNeverProse() throws {
-        let hits = try search("hits-say-why").hits
-        XCTAssertEqual(hits.matches.map(\.kind), [.place, .label, .title])
-        // The value is the vault's word for the thing, never the query echoed
-        // back: two of these three do not contain "Dublin" as it was typed.
-        XCTAssertEqual(hits.matches.first?.value, "Dún Laoghaire")
-        XCTAssertEqual(hits.matches.filter { $0.value.contains("Dublin") }.count, 1)
-        XCTAssertEqual(hits.cells.count, 2)
-    }
-
-    /// The three-state law as a sweep over the nine new screens. An empty data
-    /// case standing in for a failure is the fourth state every one of these is
-    /// tempted to grow, and the only way to know none of them did is to ask all
-    /// of them. `content` is an optional oneof: exactly one arm, or nil.
-    func testEveryNewPhotosFixtureSetsExactlyOneContentState() throws {
-        func sweep(_ directory: String, _ cases: [String], _ set: (Data) throws -> Bool) throws {
-            for case_ in cases {
-                XCTAssertTrue(
-                    try set(try bytes("\(directory)/\(case_)")),
-                    "\(directory)/\(case_) sets exactly one content case"
-                )
-            }
-        }
-        try sweep(
-            "photos-collections",
-            ["counts-are-floors", "new-album-sheet", "read-refused", "standing-and-owned"]
-        ) { try Centraid_Screen_V1_PhotosCollectionsState(serializedBytes: $0).content != nil }
-        // Search has FOUR arms: resting is a third thing that is neither a load
-        // nor a result, and it is still exactly one of them.
-        try sweep(
-            "photos-search",
-            ["corrected", "hits-say-why", "no-hits", "resting"]
-        ) { try Centraid_Screen_V1_PhotosSearchState(serializedBytes: $0).content != nil }
     }
 
     // MARK: - Money (#1099)

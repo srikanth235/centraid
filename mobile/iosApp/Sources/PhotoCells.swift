@@ -108,7 +108,7 @@ struct PhotoCellSquare: View {
 /// ONE TILE OF THE JUSTIFIED TIMELINE (v0's `PhotoTile.tsx`, #1029 photos port).
 ///
 /// Its box is fixed from the asset record before a byte arrives — `width` and
-/// `height` come from shared's `PhotoJustify` — and every state paints INSIDE it, so
+/// `height` come from Rust's packing (`PhotosPackedTile`) — and every state paints INSIDE it, so
 /// nothing reflows when a thumbnail lands. Four overlay slots and nothing else
 /// (v0's `tile-overlays.ts`): selection top-trailing, kind bottom-trailing, and
 /// the held state bottom-leading. The fourth, v0's vault rule, marked a
@@ -281,62 +281,34 @@ struct PhotoKindLine: View {
     }
 }
 
-/// The tile's measures, v0's (`tile-overlays.ts`, `justify.ts`). The rungs and
-/// the gutter are shared's (`PhotosTimeline`, `PhotoJustify`), read across the
-/// bridge so both shells step through one table; the dot and outline are the
-/// tile's own paint.
+/// The tile's measures, v0's (`tile-overlays.ts`). The gutter is Rust's
+/// (`photos::home::layout::GAP`), which also packs the rows; the dot and outline
+/// are the tile's own paint.
 enum PhotoTileMetrics {
     /// The gutter between tiles, both axes — the 4 base rung halved.
-    static let gap = CGFloat(PhotoJustify.shared.GAP)
+    static let gap: CGFloat = 2
     static let dot: CGFloat = 20
     static let dotInset: CGFloat = 6
     static let outline: CGFloat = 2
-    /// The phone's tile heights, XS to L.
-    static let rungHeights: [CGFloat] = PhotosTimeline.shared.RUNG_HEIGHTS.map { CGFloat($0.intValue) }
-
-    static func height(rung: Int) -> CGFloat {
-        rungHeights[Int(PhotosTimeline.shared.clampRung(rung: Int32(rung)))]
-    }
-
-    /// `1:04`, `12:07`, `1:02:03` — the shared `MediaFormat`'s, so a tile, the
-    /// player and the facts panel state one recording's length the same way.
-    static func clock(_ seconds: Int) -> String {
-        MediaFormat.shared.clock(seconds: Int64(seconds))
-    }
-}
-
-/// A tile's packed box: the cell, and where shared's `PhotoJustify` put its
-/// edges. The packing is Kotlin's — it names tiles by index, and this puts the
-/// cell back under each.
-struct JustifiedTile {
-    let cell: Centraid_Core_V1_PhotoTile
-    let width: CGFloat
-    let height: CGFloat
 }
 
 /// THE GRID IS THE LOADING STATE (v0's `PhotosGridSkeleton.tsx`, §14).
 ///
-/// Skeleton tiles at the rung's own geometry, packed by the same
-/// `PhotoJustify`, so the photographs land where their placeholders stood. The
+/// Skeleton tiles at the rung's own geometry, packed by Rust at the width the
+/// shell reported, so the photographs land where their placeholders stood. The
 /// aspect sequence is FIXED — random aspects would flicker — and nothing moves:
 /// DESIGN.md's `Loading` is static skeletons, and a shimmer is
-/// attention-seeking about work the product can simply describe. The rows are
-/// shared's (`PhotoJustify.skeleton`).
+/// attention-seeking about work the product can simply describe.
 struct PhotoGridSkeleton: View {
     @Environment(\.colorScheme) private var scheme
-    let width: CGFloat
-    let target: CGFloat
-    var viewport: CGFloat = 800
-
-    private var rows: [[PackedTile]] {
-        PhotoJustify.shared.skeleton(containerWidth: Double(width), targetHeight: Double(target), viewportHeight: Double(viewport))
-    }
+    let rows: [Centraid_Core_V1_PhotosPackedRow]
+    let label: String
 
     var body: some View {
         VStack(alignment: .leading, spacing: PhotoTileMetrics.gap) {
             ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
                 HStack(spacing: PhotoTileMetrics.gap) {
-                    ForEach(row, id: \.index) { tile in
+                    ForEach(Array(row.packed.enumerated()), id: \.offset) { _, tile in
                         RoundedRectangle(cornerRadius: Theme.radius("sm", scheme))
                             .fill(Theme.color("skel", scheme))
                             .frame(width: CGFloat(tile.width), height: CGFloat(tile.height))
@@ -345,7 +317,7 @@ struct PhotoGridSkeleton: View {
             }
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(PhotosCopy.shared.PHOTOS_OPENING_LIBRARY)
+        .accessibilityLabel(label)
     }
 }
 

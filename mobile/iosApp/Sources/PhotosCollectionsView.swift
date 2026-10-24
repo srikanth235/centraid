@@ -1,371 +1,163 @@
-import Foundation
-import SwiftProtobuf
 import SwiftUI
 
 import CentraidShared
 
-/// COLLECTIONS, IN SWIFTUI (#1029, the photos port).
+/// COLLECTIONS, IN SWIFTUI (#1029, the photos port; #1135).
 ///
-/// The hub: v0's `PHOTOS_MORE_FOOT` says "The rest of Photos is in
-/// Collections", so every surface this miniapp has that is not the library or
-/// search is reached from this list.
+/// The hub: every surface this miniapp has that is not the library or search is
+/// reached from this list.
 ///
-/// **LAID OUT AS THE SYSTEM PHOTOS APP LAYS OUT ITS COLLECTIONS TAB** (iOS 26):
-/// a run of titled sections, each foldable — Pinned
-/// as a strip of square covers with the name printed on the photograph, Albums
-/// as covers with the name and count beneath, and Utilities as a grouped list.
-/// A member who knows that screen knows this one. What is NOT borrowed is the
-/// system's own look: the type, colour and icons are the emitted tables'
+/// **LAID OUT AS THE SYSTEM PHOTOS APP LAYS OUT ITS COLLECTIONS TAB** (iOS 26): a
+/// run of titled sections, each foldable — Pinned as a strip of square covers with
+/// the name printed on the photograph, Albums as covers with the name and count
+/// beneath, Utilities as a grouped list, and the albums in the trash with their
+/// Restore. A member who knows that screen knows this one. What is NOT borrowed is
+/// the system's own look: the type, colour and icons are the emitted tables'
 /// (DESIGN.md), because a second icon set is a second product.
 ///
-/// **The wire decides nothing new.** Which section a row lands in is read off
-/// what the row already is — `member_owned` for albums, the mode for a standing
-/// shelf, the kind for a door — and a row this file does not recognise goes to
-/// Pinned rather than nowhere, so a sixth standing shelf is drawn before
-/// anyone edits this.
+/// **THE VIEW DECIDES NOTHING.** Which section a card lands in, every title, every
+/// count, which sections are folded and the route a tap opens are Rust's
+/// (`photos::home::collections`); this draws them and sends the taps.
 ///
-/// **It takes bytes and two closures, not a `ShellModel`.** Where a tap GOES is
-/// the navigator's business and this file routes nothing: it names the shelf
-/// that was pressed and the door that was opened, and the shell decides what
-/// that means. The closures are defaulted so the view renders in isolation.
-struct PhotosCollectionsView: View {
-    let data: Data
-    /// The bulk fold's two words, from the grid's chrome. The fold itself is
-    /// where the member's eye is and stays this view's; the words do not.
-    var showAllLabel: String = ""
-    var collapseAllLabel: String = ""
-    var send: (Data) -> Void = { _ in }
-    /// A shelf was tapped — the parameter for `photos.shelf`, whole.
-    var onOpenShelf: (Centraid_Screen_V1_PhotoShelf) -> Void = { _ in }
-    var onOpenDoor: (Centraid_Screen_V1_CollectionsDoor.Kind) -> Void = { _ in }
-
+/// The Compose twin is `androidApp/.../screens/PhotosCollectionsScreen.kt`.
+struct PhotosCollectionsBody: View {
     @Environment(\.colorScheme) private var scheme
-    /// WHICH SECTIONS ARE FOLDED, held here and nowhere else.
-    ///
-    /// The one piece of state this view owns, and deliberately: a fold is where
-    /// a member's eye is, like a scroll offset, and not a fact about the vault.
-    /// Nothing reads it back, no write depends on it, and a relaunch that opens
-    /// every section again has lost nothing a member made.
-    @State private var folded: Set<CollectionsSection> = []
-    /// The album a member asked to delete, while the confirm is up.
-    @State private var deleting: Centraid_Screen_V1_ShelfRow?
 
-    var state: PhotosCollectionsStateView { PhotosCollectionsStateView(data: data) }
+    let state: Centraid_Core_V1_PhotosHomeState
+    let collections: Centraid_Core_V1_PhotosCollections
+    let send: (Centraid_Core_V1_PhotosHomeEvent) -> Void
+    let open: (Centraid_Core_V1_Route) -> Void
 
     var body: some View {
-        // NO SCROLL VIEW OF ITS OWN. This body is drawn inside the photos
-        // grid's scroll view, under its band, and a second vertical scroll view
-        // nested in the first is two scrollers fighting for one drag.
-        VStack(alignment: .leading, spacing: 0) {
-            switch state.content {
-            case .loading:
-                RowSkeleton()
-            case let .denied(denied):
-                DeniedGate(denied)
-            case let .failure(sentence, remedy):
-                ScreenFailureView(sentence: sentence, remedy: remedy)
-            case let .data(shelves, doors):
-                let layout = CollectionsLayout(shelves: shelves, doors: doors)
-                // SHOW ALL / COLLAPSE ALL, ONE LINK — v0's Collections menu
-                // (`photos-collections-menu.ts`) without the menu: a bulk fold
-                // is a command over this list, not a header verb, and the
-                // room's one trailing slot is New album's (R-CHROME-1).
-                if !showAllLabel.isEmpty {
-                    let everyFolded = folded.isSuperset(of: CollectionsSection.allCases)
-                    HStack {
-                        Spacer(minLength: 0)
-                        KitLink(
-                            label: everyFolded ? showAllLabel : collapseAllLabel,
-                            identifier: "photos.collections.fold-all"
-                        ) { fold(nothing: everyFolded) }
+        // The room's scroll view is this one: the header and band are `AppPlace`'s.
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                switch collections.content {
+                case .loading?:
+                    RowSkeleton()
+                case let .failure(failure)?:
+                    ScreenFailureView(sentence: failure.sentence, remedy: failure.remedy)
+                case let .data(data)?:
+                    // SHOW ALL / COLLAPSE ALL, ONE LINK — v0's Collections menu without
+                    // the menu: a bulk fold is a command over this list, not a header verb.
+                    if !data.sections.isEmpty {
+                        let everyFolded = data.sections.allSatisfy(\.folded)
+                        HStack {
+                            Spacer(minLength: 0)
+                            KitLink(
+                                label: everyFolded ? state.chrome.showAllLabel : state.chrome.collapseAllLabel,
+                                identifier: "photos.collections.fold-all"
+                            ) { send(PhotosHomeEvents.make { $0.foldAll = .init() }) }
+                        }
+                        .padding(.top, 4)
                     }
-                    .padding(.top, 4)
-                }
-                if !layout.pinned.isEmpty {
-                    section(.pinned) { pinnedStrip(layout.pinned) }
-                }
-                section(.albums) { albums(layout.albums) }
-                if !layout.utilities.isEmpty {
-                    section(.utilities) {
-                        UtilitiesGroup(
-                            items: layout.utilities,
-                            onOpenShelf: onOpenShelf,
-                            onOpenDoor: onOpenDoor
-                        )
+                    ForEach(data.sections, id: \.key) { section in
+                        sectionView(section)
                     }
+                case nil:
+                    EmptyView()
                 }
             }
+            .padding(.horizontal, CentraidGeometry.pageMargin)
+            .padding(.bottom, 24)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.bottom, 24)
-        // THE HEADER IS THE ROOM'S: "Photos" and New album's `Plus` are drawn
-        // by `AppPlace` in `PhotosGridView`, so this body adds no title and no
-        // toolbar of its own.
-        // DELETING AN ALBUM DELETES THE GROUPING, and the confirm says so in
-        // v0's one sentence. The reducer's `album_deleted` arm was wired and
-        // nothing sent it.
-        .sheet(isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {
-            ConfirmSheet(
-                Centraid_Screen_V1_Confirm.with {
-                    $0.title = PhotosCopy.shared.PHOTOS_DELETE_ALBUM_TITLE
-                    $0.body = PhotosCopy.shared.PHOTOS_DELETE_ALBUM_BODY
-                    $0.confirmLabel = PhotosCopy.shared.PHOTOS_DELETE_ALBUM
-                    $0.destructive = true
-                },
-                cancelLabel: PhotosCopy.shared.PHOTOS_KEEP_IT,
-                onConfirm: {
-                    if let row = deleting, case let .album(album) = row.shelf.of {
-                        send(PhotosCollectionsStateView.deleteEvent(album.collectionID))
-                    }
-                    deleting = nil
-                },
-                onDismiss: { deleting = nil }
-            )
-        }
-        // NAMING A NEW ALBUM IS A SHEET AND THE STATE SAYS WHICH SHEET IS OPEN.
-        // `isPresented` is derived from the state rather than held here,
-        // because a sheet with its own `@State` would be a second place the
-        // answer lives — and a swipe-to-dismiss has to reach the reducer too,
-        // or the state would still say `NEW_ALBUM` with nothing on screen.
-        .sheet(
-            isPresented: Binding(
-                get: { state.sheet == .newAlbum },
-                set: { open in
-                    guard !open, state.sheet == .newAlbum else { return }
-                    send(state.sheetEvent(.none))
-                }
-            )
-        ) {
-            NewAlbumSheet(send: send, failure: state.writeFailure)
-        }
+        .scrollDismissesKeyboard(.immediately)
     }
 
-    /// EVERY SECTION AT ONCE, open or folded — under the same curve a single
-    /// fold uses.
-    private func fold(nothing: Bool) {
-        withAnimation(.easeInOut(duration: CentraidGeometry.durationOne / 1000)) {
-            folded = nothing ? [] : Set(CollectionsSection.allCases)
-        }
-    }
-
-    /// A TITLED, FOLDABLE SECTION — the system's header: the name large and on
-    /// the left, a round fold control on the right that points down while the
-    /// section is open.
-    private func section<Content: View>(
-        _ section: CollectionsSection,
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        let isFolded = folded.contains(section)
-        return VStack(alignment: .leading, spacing: 12) {
+    /// A TITLED, FOLDABLE SECTION — the system's header: the name large and on the
+    /// left, a round fold control on the right that points down while the section
+    /// is open.
+    private func sectionView(_ section: Centraid_Core_V1_PhotosCollectionsSection) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .center) {
                 Text(section.title)
                     .centraidType("title")
                     .foregroundStyle(Theme.color("text", scheme))
                     .accessibilityAddTraits(.isHeader)
                 Spacer(minLength: 8)
-                KitIconKey(
-                    iconKey: "ChevronDown",
-                    label: copyFill(isFolded ? PhotosCopy.shared.PHOTOS_SECTION_SHOW : PhotosCopy.shared.PHOTOS_SECTION_HIDE, "title", section.title),
-                    framed: true
-                ) {
+                KitIconKey(iconKey: "ChevronDown", label: section.toggleLabel, framed: true) {
                     withAnimation(.easeInOut(duration: CentraidGeometry.durationOne / 1000)) {
-                        if isFolded { folded.remove(section) } else { folded.insert(section) }
+                        send(PhotosHomeEvents.make { $0.sectionToggled = section.key })
                     }
                 }
-                .rotationEffect(.degrees(isFolded ? -90 : 0))
+                .rotationEffect(.degrees(section.folded ? -90 : 0))
             }
-            if !isFolded { content() }
+            if !section.folded { sectionBody(section) }
         }
         .padding(.top, 20)
     }
 
-    /// PINNED IS A STRIP, and it runs to the screen's edge.
-    ///
-    /// The strip bleeds through the page margin on both sides so a card that
-    /// does not fit is cut by the glass and not by an invisible gutter — the
-    /// half-shown card is how a member learns the row scrolls.
-    private func pinnedStrip(_ items: [CollectionsItem]) -> some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: cardGap) {
-                ForEach(Array(items.enumerated()), id: \.offset) { _, item in
-                    PinnedCard(item: item, onOpenShelf: onOpenShelf, onOpenDoor: onOpenDoor)
-                }
-            }
-            .padding(.horizontal, CentraidGeometry.pageMargin)
-        }
-        .padding(.horizontal, -CentraidGeometry.pageMargin)
-    }
-
-    /// THE MEMBER'S OWN ALBUMS — covers in a strip, or the invitation to make
-    /// one. The empty case is a card with its verb on it, as the system draws
-    /// it, and not a blank section: a section that vanished when it was empty
-    /// would hide the one place a first album is made.
     @ViewBuilder
-    private func albums(_ rows: [Centraid_Screen_V1_ShelfRow]) -> some View {
-        if rows.isEmpty {
-            EmptySectionCard(
-                iconKey: "album",
-                title: PhotosCopy.shared.PHOTOS_COLLECTIONS_NO_ALBUMS,
-                caption: PhotosCopy.shared.PHOTOS_COLLECTIONS_NO_ALBUMS_CAPTION,
-                verb: PhotosCopy.shared.PHOTOS_CREATE,
-                onVerb: { send(state.sheetEvent(.newAlbum)) }
-            )
-        } else {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(alignment: .top, spacing: cardGap) {
-                    ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
-                        AlbumCard(row: row, onOpen: onOpenShelf, onDelete: { deleting = row })
+    private func sectionBody(_ section: Centraid_Core_V1_PhotosCollectionsSection) -> some View {
+        switch section.key {
+        case "pinned":
+            strip { ForEach(section.cards, id: \.id) { PinnedCard(card: $0, open: open) } }
+        case "albums":
+            if section.hasEmpty {
+                EmptySectionCard(
+                    iconKey: "album",
+                    title: section.empty.headline,
+                    caption: section.empty.body,
+                    verb: section.empty.actionLabel,
+                    onVerb: { send(PhotosHomeEvents.sheet(.newAlbum)) }
+                )
+            } else {
+                strip {
+                    ForEach(section.cards, id: \.id) { card in
+                        AlbumCard(
+                            card: card,
+                            open: open,
+                            onDelete: { send(PhotosHomeEvents.make { $0.albumDeleteAsked = card.id }) }
+                        )
                     }
                 }
-                .padding(.horizontal, CentraidGeometry.pageMargin)
             }
-            .padding(.horizontal, -CentraidGeometry.pageMargin)
+        case "deleted":
+            DeletedGroup(cards: section.cards) { id in send(PhotosHomeEvents.make { $0.albumRestored = id }) }
+        default:
+            UtilitiesGroup(cards: section.cards, open: open)
         }
+    }
+
+    /// A strip that runs to the screen's edges, so a half-shown card says it scrolls.
+    private func strip<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(alignment: .top, spacing: cardGap) { content() }
+                .padding(.horizontal, CentraidGeometry.pageMargin)
+        }
+        .padding(.horizontal, -CentraidGeometry.pageMargin)
     }
 }
 
 // MARK: - the measures, and where each came from
 
-/// Home's tile radius: one card corner in the product, not one per screen —
-/// the `lg` container rung.
+/// Home's tile radius: one card corner in the product, not one per screen — the
+/// `lg` container rung.
 private func cardRadius(_ scheme: ColorScheme) -> CGFloat { Theme.radius("lg", scheme) }
 /// The gap between cards in a strip — the system's, measured on its Pinned row.
 private let cardGap: CGFloat = 12
 /// A Pinned card's side. The system shows three and a sliver on a 402pt phone.
 private let pinnedSide: CGFloat = 110
-/// An album cover's side: larger than Pinned's, because an album is read by
-/// its picture and a pinned shelf by its name.
+/// An album cover's side: larger than Pinned's, because an album is read by its
+/// picture and a pinned shelf by its name.
 private let albumSide: CGFloat = 150
 /// An empty section's card height.
 private let wideCardHeight: CGFloat = 150
 
-// MARK: - which row goes in which section
-
-enum CollectionsSection: Hashable, CaseIterable {
-    case pinned, albums, utilities
-
-    var title: String {
-        switch self {
-        case .pinned: return PhotosCopy.shared.PHOTOS_PINNED
-        case .albums: return PhotosCopy.shared.PHOTOS_ALBUMS
-        case .utilities: return PhotosCopy.shared.PHOTOS_UTILITIES
-        }
-    }
-}
-
-/// A shelf or a door, which is all a card on this screen can be.
-enum CollectionsItem {
-    case shelf(Centraid_Screen_V1_ShelfRow)
-    case door(Centraid_Screen_V1_CollectionsDoor)
-}
-
-/// The rows, sorted into the system's sections.
-///
-/// Pinned holds what a member reaches for — Favorites, Videos, and Places in
-/// the slot the system gives its Map. Utilities holds the housekeeping —
-/// Duplicates, Archive, Trash — where the system keeps Duplicates and Recently
-/// Deleted. Anything else a standing shelf turns out to be lands in Pinned.
-struct CollectionsLayout {
-    var pinned: [CollectionsItem] = []
-    var albums: [Centraid_Screen_V1_ShelfRow] = []
-    var utilities: [CollectionsItem] = []
-
-    init(shelves: [Centraid_Screen_V1_ShelfRow], doors: [Centraid_Screen_V1_CollectionsDoor]) {
-        var places: Centraid_Screen_V1_CollectionsDoor?
-        var duplicates: Centraid_Screen_V1_CollectionsDoor?
-        for door in doors {
-            switch door.kind {
-            case .places: places = door
-            case .duplicates: duplicates = door
-            case .unspecified, .UNRECOGNIZED: break
-            }
-        }
-        var housekeeping: [CollectionsItem] = []
-        for row in shelves {
-            if row.memberOwned {
-                albums.append(row)
-            } else if [.archive, .trash].contains(Self.mode(of: row)) {
-                housekeeping.append(.shelf(row))
-            } else {
-                pinned.append(.shelf(row))
-            }
-        }
-        // PLACES AFTER THE SECOND STANDING SHELF, where the system puts Map:
-        // after Favorites and its neighbour, before the rest.
-        if let places {
-            pinned.insert(.door(places), at: min(2, pinned.count))
-        }
-        if let duplicates { utilities.append(.door(duplicates)) }
-        utilities += housekeeping
-    }
-
-    static func mode(of row: Centraid_Screen_V1_ShelfRow) -> Centraid_Screen_V1_PhotoStateView.Mode.Kind? {
-        guard case let .stateView(view) = row.shelf.of, case let .mode(mode) = view.view else { return nil }
-        return mode.kind
-    }
-}
-
-// MARK: - the counts, spelled once
-
-/// **A CAPPED COUNT SAYS `N+` AND NEVER A BARE NUMBER.** The door has no
-/// `COUNT(*)`, so every count on this screen is rows read and counted, and a
-/// page that filled has more behind it — printing its ceiling as a fact would
-/// be stating a total nobody counted. `HomeView`'s tile count is the same rule
-/// and the same spelling, and the spoken form says "at least" because a screen
-/// reader cannot pronounce a plus.
-///
-/// Zero on a SHELF is a real count and reads "Empty", which is the field's own
-/// word. Zero on a DOOR means nothing is known yet — the contract's own words —
-/// so it draws nothing: an empty Trash is a fact, and a Places door with nothing
-/// to say is a door that has not been counted.
-private enum Counted {
-    static func shelf(_ row: Centraid_Screen_V1_ShelfRow) -> (shown: String, spoken: String) {
-        if row.itemCount == 0 && !row.itemCountCapped {
-            return (PhotosCopy.shared.PHOTOS_COUNT_EMPTY, PhotosCopy.shared.PHOTOS_COUNT_EMPTY)
-        }
-        return bare(Int64(row.itemCount), capped: row.itemCountCapped)
-    }
-
-    /// A count with no noun: `12+` drawn, `at least 12` spoken.
-    private static func bare(_ count: Int64, capped: Bool) -> (shown: String, spoken: String) {
-        (
-            CappedCount.shared.shown(count: count, capped: capped, one: "", many: ""),
-            CappedCount.shared.spoken(count: count, capped: capped, one: "", many: "")
-        )
-    }
-
-    /// `needs_attention` OUTRANKS the count: a member deciding whether to open
-    /// Duplicates is deciding on the decisions still owed, not on how many
-    /// clusters exist.
-    static func door(_ door: Centraid_Screen_V1_CollectionsDoor) -> (shown: String, spoken: String, urgent: Bool)? {
-        if door.needsAttention > 0 {
-            let waiting = copyFill(PhotosCopy.shared.PHOTOS_WAITING, "count", "\(door.needsAttention)")
-            return (waiting, waiting, true)
-        }
-        guard door.count > 0 else { return nil }
-        let counted = bare(Int64(door.count), capped: door.countCapped)
-        return (counted.shown, counted.spoken, false)
-    }
-
-    /// AN ALBUM WITH NO NAME IS STILL A CARD, and it says so. Dropping it would
-    /// leave a member with an album they made and cannot find; a blank caption
-    /// would leave them with one they cannot recognise.
-    static func title(_ row: Centraid_Screen_V1_ShelfRow) -> String {
-        row.title.isEmpty ? PhotosCopy.shared.PHOTOS_UNTITLED_ALBUM : row.title
-    }
-}
-
-// MARK: - the cards
-
 /// A cover, or the ground a card without one stands on.
 ///
-/// With no photograph the card is a soft vertical wash rather than a flat
-/// block, so a coverless shelf reads as a card waiting for a picture — the
-/// system does the same with its grey Map and Favorites cards.
+/// With no photograph the card is a soft vertical wash rather than a flat block,
+/// so a coverless shelf reads as a card waiting for a picture — the system does
+/// the same with its grey Map and Favorites cards.
 private struct CoverGround: View {
-    let path: String?
+    let card: Centraid_Core_V1_PhotosCollectionCard
     let iconKey: String
     @Environment(\.colorScheme) private var scheme
+
+    private var path: String? {
+        card.hasCover && card.cover.hasThumbnailPath && !card.cover.thumbnailPath.isEmpty ? card.cover.thumbnailPath : nil
+    }
 
     var body: some View {
         ZStack {
@@ -374,7 +166,7 @@ private struct CoverGround: View {
                 startPoint: .top,
                 endPoint: .bottom
             )
-            if let path, !path.isEmpty {
+            if let path {
                 ContentImage(path: path)
             } else {
                 CentraidIconView(iconKey: iconKey, tint: Theme.color("textFaint", scheme), size: 28)
@@ -384,27 +176,25 @@ private struct CoverGround: View {
     }
 }
 
-/// ONE PINNED CARD: a square, the name printed on the picture.
-///
-/// The name sits on a dark wash at the foot of the card so it reads on any
-/// photograph — white on a bright sky is the failure the wash prevents. A card
-/// with no cover gets the same wash, so the name is always drawn one way.
+/// ONE PINNED CARD: a square, the name printed on the picture over a dark wash, so
+/// it reads on any photograph.
 private struct PinnedCard: View {
-    let item: CollectionsItem
-    let onOpenShelf: (Centraid_Screen_V1_PhotoShelf) -> Void
-    let onOpenDoor: (Centraid_Screen_V1_CollectionsDoor.Kind) -> Void
+    let card: Centraid_Core_V1_PhotosCollectionCard
+    let open: (Centraid_Core_V1_Route) -> Void
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        Button(action: open) {
+        Button {
+            if card.hasRoute { open(card.route) }
+        } label: {
             ZStack(alignment: .bottomLeading) {
-                CoverGround(path: cover, iconKey: iconKey)
+                CoverGround(card: card, iconKey: card.iconKey)
                 LinearGradient(
                     colors: [.black.opacity(0), .black.opacity(0.45)],
                     startPoint: .center,
                     endPoint: .bottom
                 )
-                Text(title)
+                Text(card.title)
                     .centraidType("smallStrong")
                     .foregroundStyle(.white)
                     .lineLimit(2)
@@ -415,76 +205,34 @@ private struct PinnedCard: View {
             .contentShape(RoundedRectangle(cornerRadius: cardRadius(scheme)))
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(spoken)
-        .accessibilityIdentifier(identifier)
-    }
-
-    private var title: String {
-        switch item {
-        case let .shelf(row): return Counted.title(row)
-        case let .door(door): return PhotosCollectionsStateView.title(for: door.kind)
-        }
-    }
-
-    private var cover: String? {
-        guard case let .shelf(row) = item, row.hasCoverThumbnailPath else { return nil }
-        return row.coverThumbnailPath
-    }
-
-    private var iconKey: String {
-        switch item {
-        case let .shelf(row): return PhotosCollectionsStateView.iconKey(for: row.shelf)
-        case let .door(door): return PhotosCollectionsStateView.iconKey(for: door.kind)
-        }
-    }
-
-    private var spoken: String {
-        switch item {
-        case let .shelf(row): return "\(title), \(Counted.shelf(row).spoken)"
-        case let .door(door):
-            guard let count = Counted.door(door) else { return title }
-            return "\(title), \(count.spoken)"
-        }
-    }
-
-    private var identifier: String {
-        if case .door = item { return "photos.collections.door" }
-        return "photos.collections.shelf"
-    }
-
-    private func open() {
-        switch item {
-        case let .shelf(row): onOpenShelf(row.shelf)
-        case let .door(door): onOpenDoor(door.kind)
-        }
+        .accessibilityLabel(card.accessibilityLabel)
+        .accessibilityIdentifier("photos.collections.shelf")
     }
 }
 
-/// ONE ALBUM: the cover, then the name and the count beneath it.
+/// ONE ALBUM: the cover, then the name and the count beneath it. A long press is
+/// the system's way to the album's own verbs — here, Delete, which Rust confirms
+/// before it writes.
 private struct AlbumCard: View {
-    let row: Centraid_Screen_V1_ShelfRow
-    let onOpen: (Centraid_Screen_V1_PhotoShelf) -> Void
-    /// A long-press's "Delete album" — the parent confirms before it sends.
-    var onDelete: () -> Void = {}
+    let card: Centraid_Core_V1_PhotosCollectionCard
+    let open: (Centraid_Core_V1_Route) -> Void
+    let onDelete: () -> Void
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         Button {
-            onOpen(row.shelf)
+            if card.hasRoute { open(card.route) }
         } label: {
             VStack(alignment: .leading, spacing: 6) {
-                CoverGround(
-                    path: row.hasCoverThumbnailPath ? row.coverThumbnailPath : nil,
-                    iconKey: "album"
-                )
-                .frame(width: albumSide, height: albumSide)
-                .clipShape(RoundedRectangle(cornerRadius: cardRadius(scheme)))
+                CoverGround(card: card, iconKey: "album")
+                    .frame(width: albumSide, height: albumSide)
+                    .clipShape(RoundedRectangle(cornerRadius: cardRadius(scheme)))
                 VStack(alignment: .leading, spacing: 0) {
-                    Text(Counted.title(row))
+                    Text(card.title)
                         .centraidType("smallStrong")
                         .foregroundStyle(Theme.color("text", scheme))
                         .lineLimit(1)
-                    Text(Counted.shelf(row).shown)
+                    Text(card.countLabel)
                         .centraidType("small")
                         .foregroundStyle(Theme.color("textFaint", scheme))
                 }
@@ -493,21 +241,20 @@ private struct AlbumCard: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        // THE SYSTEM'S LONG-PRESS ON AN ALBUM. Only an album: a standing shelf
-        // is not `member_owned`, and never reaches this card.
+        // THE SYSTEM'S LONG-PRESS ON AN ALBUM. Only an album: a standing shelf is
+        // not `member_owned`, and never reaches this card.
         .contextMenu {
-            Button(PhotosCopy.shared.PHOTOS_DELETE_ALBUM, role: .destructive, action: onDelete)
+            Button(card.deleteLabel, role: .destructive, action: onDelete)
                 .accessibilityIdentifier("photos.collections.delete-album")
         }
-        .accessibilityLabel("\(Counted.title(row)), \(Counted.shelf(row).spoken)")
+        .accessibilityLabel(card.accessibilityLabel)
         .accessibilityIdentifier("photos.collections.shelf")
-        .accessibilityAction(named: PhotosCopy.shared.PHOTOS_DELETE_ALBUM, onDelete)
+        .accessibilityAction(named: card.deleteLabel, onDelete)
     }
 }
 
 /// AN EMPTY SECTION'S CARD: icon and verb across the top, the sentence at the
-/// foot. The verb is a real control, not decoration — it is the same
-/// `newAlbum` sheet the toolbar's plus opens.
+/// foot. The verb is a real control — the same sheet the toolbar's plus opens.
 private struct EmptySectionCard: View {
     let iconKey: String
     let title: String
@@ -539,72 +286,43 @@ private struct EmptySectionCard: View {
 }
 
 /// UTILITIES, AS A GROUPED LIST: one rounded card, a row per shelf or door,
-/// hairlines between them inset past the icon — the system's inset-grouped
-/// list, which is how it draws Duplicates and Recently Deleted.
+/// hairlines between them inset past the icon — the system's inset-grouped list,
+/// which is how it draws Duplicates and Recently Deleted.
 private struct UtilitiesGroup: View {
-    let items: [CollectionsItem]
-    let onOpenShelf: (Centraid_Screen_V1_PhotoShelf) -> Void
-    let onOpenDoor: (Centraid_Screen_V1_CollectionsDoor.Kind) -> Void
+    let cards: [Centraid_Core_V1_PhotosCollectionCard]
+    let open: (Centraid_Core_V1_Route) -> Void
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         VStack(spacing: 0) {
-            ForEach(Array(items.enumerated()), id: \.offset) { index, item in
+            ForEach(Array(cards.enumerated()), id: \.offset) { index, card in
                 if index > 0 {
                     Rectangle()
                         .fill(Theme.color("line", scheme))
                         .frame(height: CentraidGeometry.hairline)
                         .padding(.leading, 50)
                 }
-                row(item)
+                row(card)
             }
         }
         .background(RoundedRectangle(cornerRadius: cardRadius(scheme)).fill(Theme.color("bgElev", scheme)))
     }
 
-    private func row(_ item: CollectionsItem) -> some View {
-        let (title, iconKey, count, spoken, urgent, identifier): (String, String, String?, String, Bool, String) = {
-            switch item {
-            case let .shelf(row):
-                let counted = Counted.shelf(row)
-                return (
-                    Counted.title(row),
-                    PhotosCollectionsStateView.iconKey(for: row.shelf),
-                    counted.shown,
-                    "\(Counted.title(row)), \(counted.spoken)",
-                    false,
-                    "photos.collections.shelf"
-                )
-            case let .door(door):
-                let name = PhotosCollectionsStateView.title(for: door.kind)
-                let counted = Counted.door(door)
-                return (
-                    name,
-                    PhotosCollectionsStateView.iconKey(for: door.kind),
-                    counted?.shown,
-                    counted.map { "\(name), \($0.spoken)" } ?? name,
-                    counted?.urgent ?? false,
-                    "photos.collections.door"
-                )
-            }
-        }()
-        return Button {
-            switch item {
-            case let .shelf(row): onOpenShelf(row.shelf)
-            case let .door(door): onOpenDoor(door.kind)
-            }
+    private func row(_ card: Centraid_Core_V1_PhotosCollectionCard) -> some View {
+        Button {
+            if card.hasRoute { open(card.route) }
         } label: {
             HStack(spacing: 12) {
-                CentraidIconView(iconKey: iconKey, tint: Theme.color("link", scheme), size: 22)
+                CentraidIconView(iconKey: card.iconKey, tint: Theme.color("link", scheme), size: 22)
                     .frame(width: 26)
-                Text(title)
+                Text(card.title)
                     .centraidType("body")
                     .foregroundStyle(Theme.color("text", scheme))
                 Spacer(minLength: 8)
-                if let count {
-                    Text(count)
+                if !card.countLabel.isEmpty {
+                    Text(card.countLabel)
                         .centraidType("small")
-                        .foregroundStyle(Theme.color(urgent ? "accent" : "textFaint", scheme))
+                        .foregroundStyle(Theme.color(card.urgent ? "accent" : "textFaint", scheme))
                 }
                 CentraidIconView(iconKey: "ChevronRight", tint: Theme.color("textFaint", scheme))
             }
@@ -613,186 +331,50 @@ private struct UtilitiesGroup: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(spoken)
-        .accessibilityIdentifier(identifier)
+        .accessibilityLabel(card.accessibilityLabel)
+        .accessibilityIdentifier("photos.collections.door")
     }
 }
 
-/// ONE FIELD AND A VERB.
-///
-/// The sheet does NOT close itself when Create is pressed: the reducer closes
-/// it when the write commits, so a refused create leaves the member's typed
-/// name on the screen and the album visibly not made. Closing on the press
-/// would be the shell claiming an album exists because a button was tapped.
-private struct NewAlbumSheet: View {
-    let send: (Data) -> Void
-    /// The last refusal, drawn BESIDE the field and never instead of it — the
-    /// member's typed name is the only copy of it, and a sheet that swapped it
-    /// for an error would have thrown that away.
-    let failure: String?
-
+/// THE ALBUMS IN THE TRASH, as the same grouped list: each with the days left
+/// before it is purged and a Restore, which brings the album back with its
+/// photographs. Nothing else opens them.
+private struct DeletedGroup: View {
+    let cards: [Centraid_Core_V1_PhotosCollectionCard]
+    let onRestore: (String) -> Void
     @Environment(\.colorScheme) private var scheme
-    @State private var name = ""
-    @FocusState private var focused: Bool
-
-    // AN EMPTY NAME IS NOT A WRITE. `media.create_album`'s schema has
-    // `"title": { "minLength": 1 }`, so the vault would refuse it — and a
-    // control that submits a command known to be refused is a control that
-    // wastes a round trip to tell a member what the field already knew. The
-    // sheet's one ink button is therefore greyed until there is a name.
-    private var trimmed: String { name.trimmingCharacters(in: .whitespacesAndNewlines) }
 
     var body: some View {
-        SheetRoom(
-            title: PhotosCopy.shared.PHOTOS_NEW_ALBUM,
-            primary: SheetPrimary(
-                label: PhotosCopy.shared.PHOTOS_CREATE,
-                enabled: !trimmed.isEmpty,
-                identifier: "photos.collections.create-album"
-            ) { send(PhotosCollectionsStateView.createEvent(name)) }
-        ) {
-            TextField(PhotosCopy.shared.PHOTOS_ALBUM_NAME, text: $name)
-                .centraidType("body")
-                .focused($focused)
-                .submitLabel(.done)
-                .onSubmit {
-                    guard !trimmed.isEmpty else { return }
-                    send(PhotosCollectionsStateView.createEvent(name))
+        VStack(spacing: 0) {
+            ForEach(Array(cards.enumerated()), id: \.offset) { index, card in
+                if index > 0 {
+                    Rectangle()
+                        .fill(Theme.color("line", scheme))
+                        .frame(height: CentraidGeometry.hairline)
+                        .padding(.leading, 50)
                 }
-                .frame(minHeight: CentraidGeometry.targetMinCoarse)
-                .accessibilityIdentifier("photos.collections.album-name")
-            if let failure {
-                Text(failure)
-                    .centraidType("small")
-                    .foregroundStyle(Theme.color("textSoft", scheme))
-                    .accessibilityIdentifier("photos.collections.write-failure")
+                HStack(spacing: 12) {
+                    CentraidIconView(iconKey: card.iconKey, tint: Theme.color("textFaint", scheme), size: 22)
+                        .frame(width: 26)
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(card.title)
+                            .centraidType("body")
+                            .foregroundStyle(Theme.color("text", scheme))
+                            .lineLimit(1)
+                        if !card.countLabel.isEmpty {
+                            Text(card.countLabel)
+                                .centraidType("small")
+                                .foregroundStyle(Theme.color("textFaint", scheme))
+                        }
+                    }
+                    Spacer(minLength: 8)
+                    KitLink(label: card.restoreLabel, identifier: "photos.collections.restore-album") { onRestore(card.id) }
+                }
+                .padding(.horizontal, 12)
+                .frame(minHeight: CentraidGeometry.targetMinCoarse + 4)
+                .accessibilityElement(children: .contain)
             }
         }
-        .onAppear { focused = true }
+        .background(RoundedRectangle(cornerRadius: cardRadius(scheme)).fill(Theme.color("bgElev", scheme)))
     }
 }
-
-/// The decoder between Collections' bytes and the view above.
-///
-/// Its own file rather than an addition to `StateViews.swift`, which is shared
-/// and would collide with every other screen landing in this port. The
-/// three-state read law is a Swift `enum` with three cases, which is how the
-/// law survives the language boundary — `ScreenContent` is declared once in
-/// `StateViews.swift` and reused here rather than redeclared.
-struct PhotosCollectionsStateView {
-    let data: Data
-
-    private var state: Centraid_Screen_V1_PhotosCollectionsState {
-        (try? Centraid_Screen_V1_PhotosCollectionsState(serializedBytes: data)) ?? .init()
-    }
-
-    var sheet: Centraid_Screen_V1_PhotosCollectionsState.Sheet { state.sheet }
-
-    /// A WRITE WAS REFUSED, AND THE SENTENCE A MEMBER READS.
-    ///
-    /// **Read off `write_failure` and never off `content`'s `failure`.** That
-    /// slot is the READ's — one of the three states a read can be in — and a
-    /// denied create drawn there would replace the whole list of shelves with
-    /// an error, so a member whose new album was refused would lose the
-    /// Collections screen itself, four standing shelves and all.
-    var writeFailure: String? {
-        state.hasWriteFailure ? state.writeFailure.sentence : nil
-    }
-
-    /// The shelves and the doors, as the wire holds them.
-    ///
-    /// No per-row struct in between: the rows are already decoded by the time
-    /// this has a data case, and a mapping step would be a second decode plus a
-    /// second place for "is this member-owned" to be spelled.
-    var content: ScreenContent<
-        ([Centraid_Screen_V1_ShelfRow], [Centraid_Screen_V1_CollectionsDoor])
-    > {
-        switch state.content {
-        case let .failure(failure):
-            return .failure(failure.sentence, failure.remedy)
-        case let .data(data):
-            return .data((data.shelves, data.doors))
-        // `loading`, and the `nil` a message with no content set decodes to,
-        // are the SAME screen — a state that has not read yet. Collapsing them
-        // into an empty data case is the fourth state the read law forbids.
-        case let .loading(loading):
-            return .loading(loading.firstLoad)
-        case .none:
-            return .loading(true)
-        }
-    }
-
-    func sheetEvent(_ sheet: Centraid_Screen_V1_PhotosCollectionsState.Sheet) -> Data {
-        var event = Centraid_Screen_V1_PhotosCollectionsEvent()
-        event.sheet = .with { $0.sheet = sheet }
-        return event.encoded
-    }
-
-    static func createEvent(_ name: String) -> Data {
-        var event = Centraid_Screen_V1_PhotosCollectionsEvent()
-        event.albumCreated = .with { $0.name = name }
-        return event.encoded
-    }
-
-    /// Sent from the album card's long-press, after the confirm.
-    static func deleteEvent(_ collectionIdentifier: String) -> Data {
-        var event = Centraid_Screen_V1_PhotosCollectionsEvent()
-        event.albumDeleted = .with { $0.collectionID = collectionIdentifier }
-        return event.encoded
-    }
-
-    static func nextPageEvent(_ cursor: String) -> Data {
-        var event = Centraid_Screen_V1_PhotosCollectionsEvent()
-        event.nextPage = .with { $0.afterCursor = cursor }
-        return event.encoded
-    }
-
-    /// THE CATALOG'S KEYS AND NOTHING ELSE.
-    ///
-    /// `CentraidIconView` looks the key up in `CentraidCatalog.icons` and falls
-    /// back to `?? []`, so a key that does not exist draws NOTHING — silently,
-    /// which is the failure that once made the band's More tab render as a
-    /// dash. Every key below is in the emitted catalog. SF Symbols are
-    /// deliberately not reachable from here: a second icon set is a second
-    /// product.
-    static func iconKey(for shelf: Centraid_Screen_V1_PhotoShelf) -> String {
-        switch shelf.of {
-        case let .stateView(view):
-            switch view.view {
-            case let .mode(mode):
-                switch mode.kind {
-                case .favorites: return "heart"
-                case .archive: return "Archive"
-                case .trash: return "trash"
-                case .videos: return "Video"
-                case .unspecified, .UNRECOGNIZED: return "album"
-                }
-            case .none: return "album"
-            }
-        case .album, .none: return "album"
-        case .place: return "place"
-        }
-    }
-
-    static func iconKey(for kind: Centraid_Screen_V1_CollectionsDoor.Kind) -> String {
-        switch kind {
-        case .places: return "place"
-        case .duplicates: return "dupe"
-        case .unspecified, .UNRECOGNIZED: return "album"
-        }
-    }
-
-    /// A DOOR'S NAME IS COPY AND RIDES THE SHELL, not the wire.
-    ///
-    /// `CollectionsDoor` carries a `kind` and no title, deliberately: the three
-    /// are fixed and a string on the row would be three strings to keep in step
-    /// with Compose's three. The kind is the fact; this is the word.
-    static func title(for kind: Centraid_Screen_V1_CollectionsDoor.Kind) -> String {
-        switch kind {
-        case .places: return PhotosCopy.shared.PHOTOS_PLACES
-        case .duplicates: return PhotosCopy.shared.PHOTOS_DUPLICATES
-        case .unspecified, .UNRECOGNIZED: return ""
-        }
-    }
-}
-

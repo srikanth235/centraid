@@ -18,8 +18,11 @@ enum RustScreens {
     /// The screen id the shared side spells a Rust route under (`ScreenOpening.screenId`);
     /// its event is the encoded `centraid.core.v1.Route`.
     static let id = ScreenIds.shared.RUST_SCREEN
-    /// The tab Rust keeps these screens' stack under.
-    static let tab = "agenda"
+    /// The tab Rust keeps a route's screens' stack under: an app's screens live
+    /// under that app (`photos.` under `photos`), the rest under Agenda's.
+    static func tab(for route: Centraid_Core_V1_Route) -> String {
+        route.screen.hasPrefix("photos.") ? "photos" : "agenda"
+    }
 }
 
 /// ONE PUSH OF A RUST ROUTE: the route Rust built and a token unique to the
@@ -119,6 +122,14 @@ private struct RustScreenView: View {
                 send: { store.send(instance, .todoCatchUp($0)) },
                 open: open,
                 onBack: pop
+            )
+        case .photosHome(let state)?:
+            PhotosHomeView(
+                state: state,
+                send: { store.send(instance, .photosHome($0)) },
+                open: open,
+                onHome: { shell.path.removeAll() },
+                onResume: { store.photos?.opened() }
             )
         case .photosShelf(let state)?:
             PhotoShelfView(

@@ -42,25 +42,6 @@ final class ShellModel: ObservableObject {
         /// popping it reports the pop. INTERIM HOSTING: this path still holds
         /// the back stack until the shell lane replaces it.
         case rust(RustEntry)
-        case photos
-
-        // THE PHOTOS MINIAPP'S OTHER NINE SCREENS (#1029, photos port).
-        //
-        // **The shelf carries its parameter as `Data`, not as a message.** The
-        // route holds an ENCODED `PhotoShelf`, because `Centraid_Screen_V1_*`
-        // is SwiftProtobuf's struct and the bridge wants Wire's Kotlin class —
-        // generated from the same `.proto` and not the same type, so bytes are
-        // the only thing both halves agree on. It is also what makes `Route`
-        // `Hashable` without SwiftProtobuf conforming to it.
-        //
-        // `more` is deliberately absent, as it is from `Destination`: it is a
-        // `PhotosGridState.Sheet` and there is no route it could be. So are
-        // Collections and Search, which are band DESTINATIONS on
-        // `photos.grid` — a parameter, never a push, so back does not walk
-        // through the bands a member happened to tap.
-        case photoShelf(Data)
-        case photoPicker(String, String)
-        case places
     }
 
     @Published var path: [Route] = [] {
@@ -298,22 +279,6 @@ final class ShellModel: ObservableObject {
     @Published var states: [String: Data] = [:]
     /// Each registered screen's opener and view, by `SCREEN_ID`.
     var routes: [String: ScreenRoute] = [:]
-    @Published var photosState = Data()
-    @Published var photoShelfState = Data()
-    @Published var photoPickerState = Data()
-    @Published var photosCollectionsState = Data()
-    @Published var photosSearchState = Data()
-    @Published var placesState = Data()
-
-    /// The shelf's own sentences, read off the bridge when it opens.
-    ///
-    /// Not derived here and not a second table in Swift: `PhotoShelfMachine`
-    /// owns every empty sentence and title, and `PhotoShelfBridge.sentences()`
-    /// hands the ANSWERS across because the machine's functions take Wire's
-    /// `PhotoShelf` and this side holds SwiftProtobuf's. A Swift copy of that
-    /// table is exactly the drift that gave v0 a `PlaceDetail` with an empty
-    /// sentence and three state views without one.
-    @Published var photoShelfCopy = PhotoShelfCopy.unknown
 
     /// Home's bridge into `CentraidShared`. Created once, observed once.
     ///
@@ -346,7 +311,10 @@ final class ShellModel: ObservableObject {
     /// They live in `CentraidShared`'s app packages, not in `shell/`, because a
     /// bridge names its screen's types and `PerAppLayoutSpec` keeps that inside
     /// the app.
-    private let photos = PhotosBridge()
+    /// THE CAMERA ROLL AND THE PHOTOS DEVICE (#1135, lane D): the roll, free up
+    /// space and an original back from the gateway, which Rust's Photos screens ask
+    /// for as effects (`ScreenStore`).
+    private let photosDevice = PhotosDevice()
 
     /// THE 24 WORDS' TWO BRIDGES (#1047 E2), held for the life of the shell.
     private let vaultWords = VaultWordsBridge()
@@ -372,16 +340,6 @@ final class ShellModel: ObservableObject {
     /// is still attached.
     var session: HomeSession?
 
-    /// THE PHOTOS MINIAPP'S OTHER NINE, held for the same reason as the three
-    /// above: a `ScreenHost` routed onto the change stream cannot be
-    /// un-routed, so a bridge rebuilt per push would leave a routed host
-    /// drawing into a view that is gone.
-    private let photoShelf = PhotoShelfBridge()
-    private let photoPicker = PhotoPickerBridge()
-    private let photosCollections = PhotosCollectionsBridge()
-    private let photosSearch = PhotosSearchBridge()
-    private let places = PlacesBridge()
-
     /// ATTACH THE SCREEN RUNTIME: the store that draws Rust-owned screens, over
     /// the core the session holds. Called once the transport exists.
     func attachScreens(core: any ScreenCore) {
@@ -403,13 +361,15 @@ final class ShellModel: ObservableObject {
         guard let screens, rustInstances[entry.token] == nil, !rustOpening.contains(entry.token) else { return }
         rustOpening.insert(entry.token)
         defer { rustOpening.remove(entry.token) }
-        guard let instance = await screens.open(tab: RustScreens.tab, route: entry.route) else { return }
+        guard let instance = await screens.open(tab: RustScreens.tab(for: entry.route), route: entry.route) else { return }
         // Popped while the push was in flight: Rust is told at once.
         guard path.contains(.rust(entry)) else {
-            screens.popped(tab: RustScreens.tab, instance: instance)
+            screens.popped(tab: RustScreens.tab(for: entry.route), instance: instance)
             return
         }
         rustInstances[entry.token] = instance
+        // PHOTOS' HOME IS ON SCREEN: the camera-roll grant is read again (a read, never an ask).
+        if entry.route.screen == "photos.home" { photosDevice.opened() }
     }
 
     /// A Rust entry left `path` (a back control, a swipe, Home): Rust drops its
@@ -424,7 +384,7 @@ final class ShellModel: ObservableObject {
         for entry in removed { rustOpening.remove(entry.token) }
         guard let instance = rustInstances[lowest.token] else { return }
         for entry in removed { rustInstances[entry.token] = nil }
-        screens.popped(tab: RustScreens.tab, instance: instance)
+        screens.popped(tab: RustScreens.tab(for: lowest.route), instance: instance)
     }
 
     init() {
@@ -444,7 +404,6 @@ final class ShellModel: ObservableObject {
         NotificationCenter.default.addObserver(forName: NSLocale.currentLocaleDidChangeNotification, object: nil, queue: .main) { _ in
             HealthAccess.state()
         }
-        photos.observe { [weak self] bytes in self?.photosState = bytes.data }
         home.observeHoldsNoVault { [weak self] none in self?.holdsNoVaultChanged(none.boolValue) }
         home.appearance { [weak self] stored in self?.appearance = stored }
         vaultWords.observe { [weak self] bytes in self?.vaultWordsChanged(bytes.data) }
@@ -457,7 +416,7 @@ final class ShellModel: ObservableObject {
         vaultWords.observeMade { [weak self] sentence in
             guard let self else { return }
             self.gatewayStatus = sentence
-            self.photos.askForPhotos { [weak self] in
+            self.photosDevice.askForPhotos { [weak self] in
                 DispatchQueue.main.async { self?.importEverythingFromPhone() }
             }
         }
@@ -470,24 +429,6 @@ final class ShellModel: ObservableObject {
         for app in AppRegistry.apps { app.register(into: self) }
         // HOME'S SEARCH (R-CHROME-6): Home's own screen, not an app's.
         HomeSearchScreens.register(into: self)
-        photoShelf.observe { [weak self] bytes in
-            guard let self else { return }
-            self.photoShelfState = bytes.data
-            // THE COPY FOLLOWS THE STATE, NOT THE OPEN.
-            //
-            // It was read once, straight after `openedEncoded` — and
-            // `opened` LAUNCHES a coroutine, so `sentences()` ran before the
-            // reduce that set the shelf. Every shelf drew
-            // `PhotoShelfCopy.unknown`: the favourites shelf was titled
-            // "Photographs" and the trash offered no retention sentence.
-            // Reading it here instead means it is re-derived after each
-            // reduce, from the shelf the host actually holds.
-            self.photoShelfCopy = self.shelfWords()
-        }
-        photoPicker.observe { [weak self] bytes in self?.photoPickerState = bytes.data }
-        photosCollections.observe { [weak self] bytes in self?.photosCollectionsState = bytes.data }
-        photosSearch.observe { [weak self] bytes in self?.photosSearchState = bytes.data }
-        places.observe { [weak self] bytes in self?.placesState = bytes.data }
         // THE SESSION OWNS THE ONE CORE (R-1020-24), so the app screens are
         // attached TO it rather than opening one. It is opened asynchronously,
         // so this is a callback and not a getter: there is exactly one moment
@@ -498,7 +439,8 @@ final class ShellModel: ObservableObject {
             self.session = session
             self.attachScreens(core: SessionScreenCore(transport: session.screenTransport))
             for port in self.ports.values { port.attach(session) }
-            self.photos.attach(session: session)
+            self.photosDevice.attach(session: session)
+            self.screens?.photos = self.photosDevice
             self.vaultWords.attach(session: session)
             self.wordsEntry.attach(session: session)
             self.wordsShow.attach(session: session)
@@ -515,11 +457,6 @@ final class ShellModel: ObservableObject {
             )
             self.healthConnect.attach(session: session)
             self.backup.attach(session: session)
-            self.photoShelf.attach(session: session)
-            self.photoPicker.attach(session: session)
-            self.photosCollections.attach(session: session)
-            self.photosSearch.attach(session: session)
-            self.places.attach(session: session)
             self.chat.attach(session: session)
             // THE BACKGROUND WINDOWS NOW HAVE SOMETHING TO RUN (#1029 W18-6).
             //
@@ -1290,73 +1227,6 @@ final class ShellModel: ObservableObject {
         gatewayStatus = ""
     }
 
-    /// A BAND BODY CAME ON SCREEN (#1029, photos port).
-    ///
-    /// Collections and Search are DESTINATIONS on `photos.grid`, not routes —
-    /// law 2 — so neither gets a `Route` and neither passes through
-    /// [opened]. They still have to be told they are showing, for the reason
-    /// that method's doc gives: a screen reads because it was OPENED, and one
-    /// that is merely composed sits on its seeded `LOADING` for ever.
-    ///
-    /// Idempotence is the machines': a second `Opened` re-reads, which is what
-    /// a member returning to a band should get.
-    func openedPhotosBand(_ destination: Centraid_Screen_V1_PhotosGridState.Destination) {
-        switch destination {
-        case .collections: photosCollections.opened()
-        case .search: photosSearch.opened()
-        case .library, .unspecified, .UNRECOGNIZED: break
-        }
-    }
-
-    /// THE MACHINE'S ANSWERS, CROSSING THE ABI AS SIX PLAIN VALUES.
-    ///
-    /// `PhotoShelfMachine` owns every shelf title and empty sentence; its
-    /// functions take Wire's `PhotoShelf` and the views hold SwiftProtobuf's,
-    /// so the DERIVATION stays put and only the answers cross. A Swift table
-    /// of shelf sentences beside the Kotlin one is the drift that left v0 with
-    /// a `PlaceDetail` carrying an empty sentence and three state views
-    /// carrying none.
-    private func shelfWords() -> PhotoShelfCopy {
-        let words = photoShelf.sentences()
-        return PhotoShelfCopy(
-            title: words.title,
-            empty: words.empty,
-            emptyRemedy: words.emptyRemedy,
-            purgeWindow: words.purgeWindow,
-            isTrash: words.isTrash,
-            isArchive: words.isArchive
-        )
-    }
-
-    /// THE TWO SHELVES THAT ARE REACHED FROM ANOTHER SCREEN, ENCODED.
-    ///
-    /// A place card and a memory each open the SAME screen —
-    /// `photos.shelf`, the library under a predicate — so each of these builds
-    /// the parameter that says which. They are here rather than in the views
-    /// because a route's payload is the shell's business, and because
-    /// `PhotoShelfRoute` carries bytes: SwiftProtobuf's `PhotoShelf` and
-    /// Wire's are different types generated from one `.proto`.
-    ///
-    /// **Names ride along** (`navigation.ts:63-69`), so the shelf's app bar
-    /// says "Lisbon" before its page read has landed and never paints under
-    /// the previous shelf's title.
-    func placeShelf(identifier: String, name: String) -> Data {
-        var shelf = Centraid_Screen_V1_PhotoShelf()
-        shelf.place = .with {
-            $0.placeID = identifier
-            $0.placeName = name
-        }
-        return (try? shelf.serializedData()) ?? Data()
-    }
-
-    /// The four standing shelves, for Collections and for anything else that
-    /// names one. A `Mode` and never a string.
-    func modeShelf(_ kind: Centraid_Screen_V1_PhotoStateView.Mode.Kind) -> Data {
-        var shelf = Centraid_Screen_V1_PhotoShelf()
-        shelf.stateView = .with { $0.mode = .with { $0.kind = kind } }
-        return (try? shelf.serializedData()) ?? Data()
-    }
-
     /// Forward an event. The shared module reduces; nothing here decides.
     ///
     /// The `screen` string is the machine's own `SCREEN_ID` — the same constant
@@ -1373,27 +1243,9 @@ final class ShellModel: ObservableObject {
     func send(screen: String, event: Data) {
         switch screen {
         case HomeMachine.shared.SCREEN_ID: home.send(event: event.kotlin)
-        case PhotosScreens.grid: photos.send(event: event.kotlin)
-        case PhotosScreens.shelf: photoShelf.send(event: event.kotlin)
-        case PhotosScreens.picker: photoPicker.send(event: event.kotlin)
-        case PhotosScreens.collections: photosCollections.send(event: event.kotlin)
-        case PhotosScreens.search: photosSearch.send(event: event.kotlin)
-        case PhotosScreens.places: places.send(event: event.kotlin)
         // EVERY REGISTERED SCREEN: a lookup, not a case (K5).
         default: ports[screen]?.send(event)
         }
-    }
-
-    /// "Send a copy" and "Download original" over a shelf's pick. The work is
-    /// `ShelfCopyExport.swift`'s; this only lends it the shelf's bridge.
-    func exportShelf(_ assetIdentifiers: [String], as kind: ShelfCopyExport.Kind) {
-        ShelfCopyExport.run(kind, assetIdentifiers, bridge: photoShelf)
-    }
-
-    /// "Send a copy" over the library's selection — the shelf's batch hand-off,
-    /// lent the grid's `LibraryCopies` so the outcome lands on the library.
-    func exportLibrary(_ assetIdentifiers: [String], keepLocation: Bool) {
-        ShelfCopyExport.run(.send(keepLocation: keepLocation), assetIdentifiers, bridge: photos.copies)
     }
 
     /// Open the transfer-rules sheet, reading the current rule as it opens.
@@ -1468,7 +1320,7 @@ final class ShellModel: ObservableObject {
     /// `BackupChanged` events through the bridge's own runner. A view that sent
     /// an event here would be asking the reducer to do a file read.
     func backUpCameraRoll() {
-        photos.backUpNow()
+        photosDevice.backUpNow()
     }
 
     /// Tell a screen it is on screen (#1025 S5, lane L5).
@@ -1492,37 +1344,6 @@ final class ShellModel: ObservableObject {
         case .rust:
             // Opened on Rust's stack by its host (`openRust`), once per push.
             break
-        case .photos:
-            // Re-read the OS grant, then open (R-PHOTOS-1). Sending `Opened`
-            // alone left a post-attach grant as NOT_ASKED on first paint.
-            photos.opened()
-
-        // THE SHELF OPENS ON ITS PARAMETER, AND READS THE MACHINE'S WORDS.
-        //
-        // `openedEncoded` and not `opened`: the bridge wants Wire's
-        // `PhotoShelf` and this route holds SwiftProtobuf's bytes. The copy is
-        // read straight after, because `sentences()` is a function of the
-        // shelf the host has just been told about — which is why it is read at
-        // the moment of the call rather than published.
-        case let .photoShelf(shelf):
-            photoShelf.openedEncoded(shelf: shelf.kotlin)
-
-        case let .photoPicker(identifier, name):
-            // ALREADY IN THE ALBUM IS EMPTY FROM HERE, and the picker knows
-            // it: the set is what the album's own entries say, and this route
-            // carries the album's id and name, not its contents. The reducer
-            // treats an empty list as "nothing is known to be taken" rather
-            // than "nothing is", which is the conservative reading — a member
-            // can add a photograph twice and the second add is a no-op at the
-            // vault, where a wrongly-greyed cell would be a photograph they
-            // could not add at all.
-            photoPicker.opened(
-                collectionId: identifier,
-                collectionName: name,
-                alreadyInAlbumAssetIds: []
-            )
-
-        case .places: places.opened()
         }
     }
 }

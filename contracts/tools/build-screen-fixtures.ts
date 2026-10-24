@@ -44,11 +44,7 @@ const TYPES: Record<string, string> = {
   "money-import": "centraid.screen.v1.MoneyImportState",
   "money-transaction": "centraid.screen.v1.MoneyTransactionState",
   notes: "centraid.screen.v1.NotesEditorState",
-  photos: "centraid.screen.v1.PhotosGridState",
-  // The rest of the photos miniapp that is not yet a Rust screen. The shelf,
-  // the picker and Places are `crates/screens` views now (#1135), tested there.
-  "photos-collections": "centraid.screen.v1.PhotosCollectionsState",
-  "photos-search": "centraid.screen.v1.PhotosSearchState",
+  // Photos' screens are `crates/screens` views (#1135), tested there.
   seat: "centraid.screen.v1.SeatState",
 };
 

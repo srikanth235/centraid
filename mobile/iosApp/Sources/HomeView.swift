@@ -511,9 +511,9 @@ private struct TileCard: View {
     /// Notes leads to the Notes place once its shelf is drawn, and to a new
     /// note on an empty vault (`NotesRouting.tile`).
     static func route(for tile: Centraid_Screen_V1_HomeTile) -> ShellModel.Route? {
-        // Photos is the one app still routed by its own case; every other
-        // app's tile route is its `AppScreens.tileRoute` (K5).
-        if tile.appID == AppIds.shared.PHOTOS { return .photos }
+        // Photos' front door is a route Rust built (`PhotosEntry.home`); every
+        // other app's tile route is its `AppScreens.tileRoute` (K5).
+        if tile.appID == AppIds.shared.PHOTOS { return ShellModel.Route.home(of: tile.appID) }
         return AppRegistry.tileRoute(tile)
     }
 }

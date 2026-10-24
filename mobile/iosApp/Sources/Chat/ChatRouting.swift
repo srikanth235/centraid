@@ -43,10 +43,8 @@ enum ChatRouting {
         case let .screen(identifier, _):
             let app = identifier.split(separator: ".").first.map(String.init) ?? ""
             return app.isEmpty ? nil : app
-        case .rust:
-            return RustScreens.tab
-        case .photos, .photoShelf, .photoPicker, .places:
-            return AppIds.shared.PHOTOS
+        case let .rust(entry):
+            return RustScreens.tab(for: entry.route)
         }
     }
 

@@ -1,23 +1,14 @@
 package dev.centraid.shared
 
-import centraid.screen.v1.BackupState
 import centraid.screen.v1.WriteState
-import centraid.screen.v1.CollectionsDoor
 import centraid.screen.v1.HomeState
 import centraid.screen.v1.MoneyHomeState
 import centraid.screen.v1.MoneyImportState
 import centraid.screen.v1.MoneyTransactionState
 import centraid.screen.v1.Springboard
 import centraid.screen.v1.TileStatus
-import centraid.screen.v1.MediaPermission
 import centraid.screen.v1.NotesEditorState
-import centraid.screen.v1.PhotoCell
-import centraid.screen.v1.PhotoStateView
-import centraid.screen.v1.PhotosCollectionsState
-import centraid.screen.v1.PhotosGridState
-import centraid.screen.v1.PhotosSearchState
 import centraid.screen.v1.ReadFailureKind
-import centraid.screen.v1.SearchMatch
 import centraid.screen.v1.SeatState
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.booleans.shouldBeFalse
@@ -80,199 +71,6 @@ class ScreenFixtureSpec : StringSpec({
         }
     }
 
-    // --- Photos -----------------------------------------------------------
-
-    "photos/permission-denied keeps the grid full — the grant moves the BACKUP" {
-        // The grid reads the vault; the backup reads the camera roll. Two
-        // planes, two permissions, and a denied grant must not blank a library
-        // the member already owns.
-        val state = PhotosGridState.ADAPTER.decode(screens.bytes("photos/permission-denied"))
-        state.permission shouldBe MediaPermission.MEDIA_PERMISSION_DENIED
-        state.data_.shouldNotBeNull().cells.size shouldBe 1
-        state.failure.shouldBeNull()
-        state.backup.shouldNotBeNull().phase shouldBe BackupState.Phase.PHASE_IDLE
-        state.backup.paused_reason.contains("Settings").shouldBeTrue()
-    }
-
-    "photos/limited-selection is neither an empty library nor a denial" {
-        val state = PhotosGridState.ADAPTER.decode(screens.bytes("photos/limited-selection"))
-        state.permission shouldBe MediaPermission.MEDIA_PERMISSION_LIMITED
-        state.backup.shouldNotBeNull().phase shouldBe BackupState.Phase.PHASE_TRANSFERRING
-        // FIELD 5 IS RESERVED (#1080): the fixture carries no transport, so
-        // nothing decodes into the unknown fields where a stale `.bin` would put it.
-        state.backup.unknownFields.size shouldBe 0
-        // A Live Photo's still and its paired movie share one capture group.
-        state.data_.shouldNotBeNull().cells.single().capture_group_id.shouldNotBeNull()
-    }
-
-    "photos: the two empty-cell sentences are two different facts" {
-        val noPack = PhotosGridState.ADAPTER
-            .decode(screens.bytes("photos/thumbnail-pack-absent"))
-        val evicted = PhotosGridState.ADAPTER
-            .decode(screens.bytes("photos/more-sheet-open"))
-        noPack.data_.shouldNotBeNull().thumbnail_pack_absent.shouldBeTrue()
-        noPack.data_.cells.single().thumbnail_path.shouldBeNull()
-        // The other case: a pack exists and these particular cells are not in
-        // it. Same absent path, different sentence.
-        evicted.data_.shouldNotBeNull().thumbnail_pack_absent.shouldBeFalse()
-        evicted.data_.cells.single().thumbnail_path.shouldBeNull()
-    }
-
-    "photos/no-copy-yet is not a refusal" {
-        val state = PhotosGridState.ADAPTER.decode(screens.bytes("photos/no-copy-yet"))
-        state.failure.shouldNotBeNull().kind shouldBe
-            ReadFailureKind.READ_FAILURE_KIND_NO_COPY_YET
-        state.seat.shouldNotBeNull().availability shouldBe
-            SeatState.Availability.AVAILABILITY_WAITING_FOR_MOUNT
-    }
-
-    "photos/more-sheet-open keeps the band it was on: more is a sheet" {
-        val state = PhotosGridState.ADAPTER.decode(screens.bytes("photos/more-sheet-open"))
-        state.sheet shouldBe PhotosGridState.Sheet.SHEET_MORE
-        state.destination shouldBe PhotosGridState.Destination.DESTINATION_LIBRARY
-    }
-
-    // --- Photos: the rest of the miniapp ----------------------------------
-    //
-    // Ten screens for v0's fourteen routes. The cases below are the ones a
-    // shell that got the distinction wrong would draw wrong; a happy path
-    // would pass against every such shell and is therefore not here.
-
-    fun collections(case: String): PhotosCollectionsState =
-        PhotosCollectionsState.ADAPTER.decode(screens.bytes("photos-collections/$case"))
-
-    "photos-collections: one row type, and member_owned is the only difference" {
-        val data = collections("standing-and-owned").data_.shouldNotBeNull()
-        data.shelves.count { !it.member_owned } shouldBe 4
-        data.shelves.single { it.member_owned }.title shouldBe "Portugal"
-        // Zero is a real count and the row is still a door; and the absent
-        // cover is absent rather than a placeholder path.
-        val videos = data.shelves.single { it.title == "Videos" }
-        videos.item_count shouldBe 0
-        videos.cover_thumbnail_path.shouldBeNull()
-        // The doors are the taps that do not land on a shelf, and the badge is
-        // a different number from the count.
-        val duplicates = data.doors.single { it.kind == CollectionsDoor.Kind.KIND_DUPLICATES }
-        duplicates.count shouldBe 3
-        duplicates.needs_attention shouldBe 3
-        data.doors.size shouldBe 2
-    }
-
-    "photos-collections: the new-album sheet leaves the list underneath intact" {
-        val sheet = collections("new-album-sheet")
-        sheet.sheet shouldBe PhotosCollectionsState.Sheet.SHEET_NEW_ALBUM
-        // A route could not produce this shape: the shelves are still here.
-        sheet.data_.shouldNotBeNull().shelves.size shouldBe 2
-    }
-
-    "photos-collections: a count over a filled page is a floor and says so" {
-        // No `COUNT(*)` on the read door, so every count here is counted from
-        // the rows one page returned. Both pairs are in one fixture because a
-        // view that drew capped and uncapped alike passes against either alone.
-        val data = collections("counts-are-floors").data_.shouldNotBeNull()
-        val trash = data.shelves.single { it.title == "Trash" }
-        val album = data.shelves.single { it.member_owned }
-        trash.item_count shouldBe 2
-        trash.item_count_capped.shouldBeFalse()
-        album.item_count shouldBe 137
-        // "At least 137". A bare number here states a total nobody counted.
-        album.item_count_capped.shouldBeTrue()
-
-        val placesDoor = data.doors.single { it.kind == CollectionsDoor.Kind.KIND_PLACES }
-        val duplicatesDoor = data.doors.single {
-            it.kind == CollectionsDoor.Kind.KIND_DUPLICATES
-        }
-        placesDoor.count_capped.shouldBeTrue()
-        duplicatesDoor.count_capped.shouldBeFalse()
-        // A badge is "there is work": a floor and a total draw the same dot,
-        // which is why `needs_attention` has no capped sibling to assert.
-        duplicatesDoor.needs_attention shouldBe 3
-        data.next_cursor.shouldNotBeNull()
-    }
-
-    "photos-collections: a refused Collections invents no standing shelves" {
-        // The standing four exist in every vault, which makes this the screen
-        // most likely to draw rows it did not read. Their counts and covers
-        // come from a read, and a failed read has none.
-        val refused = collections("read-refused")
-        refused.data_.shouldBeNull()
-        refused.failure.shouldNotBeNull().kind shouldBe
-            ReadFailureKind.READ_FAILURE_KIND_NO_COPY_YET
-    }
-
-    fun search(case: String): PhotosSearchState =
-        PhotosSearchState.ADAPTER.decode(screens.bytes("photos-search/$case"))
-
-    "photos-search: resting and no-hits must never read the same words" {
-        // The two that a bag of optionals collapses: both show a grid with
-        // nothing in it, and only one of them may say "Nothing matched".
-        val resting = search("resting")
-        val noHits = search("no-hits")
-
-        resting.query shouldBe ""
-        resting.resting.shouldNotBeNull().suggested_labels.size shouldBe 2
-        resting.hits.shouldBeNull()
-
-        noHits.query shouldBe "kayak"
-        noHits.hits.shouldNotBeNull().cells.shouldContainExactly()
-        noHits.resting.shouldBeNull()
-        // An empty result is DATA, not a failure.
-        noHits.failure.shouldBeNull()
-        (resting == noHits).shouldBeFalse()
-    }
-
-    "photos-search: a corrected answer is the field's words, and the hits answer what was typed" {
-        // #1097, R-1097-27. The correction rides the shared field, which the
-        // kit draws as "Including results for"; the hits still answer the TYPED
-        // words, so a reducer can tell a late page from a current one.
-        val corrected = search("corrected")
-        corrected.query shouldBe "sunscren"
-        corrected.search.shouldNotBeNull().corrected shouldBe "sunscreen"
-        corrected.search.shouldNotBeNull().term shouldBe "sunscren"
-        corrected.hits.shouldNotBeNull().query shouldBe "sunscren"
-        corrected.hits.shouldNotBeNull().cells.size shouldBe 1
-        // An exact answer carries no correction.
-        search("hits-say-why").search shouldBe null
-    }
-
-    "photos-search: a match is a KIND and a name, never prose" {
-        // Field 4 was `repeated string matched_on` and is now reserved. A
-        // prose line made each shell compose its own sentence, which is how
-        // v0's empty states drifted apart; the kind is the contract's and the
-        // sentence is the view's.
-        val hits = search("hits-say-why").hits.shouldNotBeNull()
-        hits.matches.map { it.kind } shouldContainExactly listOf(
-            SearchMatch.Kind.KIND_PLACE,
-            SearchMatch.Kind.KIND_LABEL,
-            SearchMatch.Kind.KIND_TITLE,
-        )
-        // The value is the vault's word for the thing, never the query echoed
-        // back: two of these three do not contain "Dublin" as it was typed.
-        // (`value_` is Wire's escaped name, as `data_` and `where_` are.)
-        hits.matches.first().value_ shouldBe "Dún Laoghaire"
-        hits.matches.count { it.value_.contains("Dublin") } shouldBe 1
-        hits.cells.size shouldBe 2
-    }
-
-    "photos: each of the six new screens sets exactly one content state" {
-        // The three-state law as a sweep. An empty data case standing in for a
-        // failure is the fourth state every one of these is tempted to grow,
-        // and the only way to know none of them did is to ask all of them.
-        fun sweep(directory: String, count: (ByteArray) -> Int) =
-            screens.resolve(directory).binFiles().forEach { count(it.readBytes()) shouldBe 1 }
-
-        sweep("photos-collections") { bytes ->
-            PhotosCollectionsState.ADAPTER.decode(bytes)
-                .let { contentCount(it.loading, it.failure, it.data_) }
-        }
-        // Search has FOUR arms: resting is a third thing that is neither a
-        // load nor a result, and it is still exactly one of them.
-        sweep("photos-search") { bytes ->
-            PhotosSearchState.ADAPTER.decode(bytes)
-                .let { contentCount(it.resting, it.loading, it.failure, it.hits) }
-        }
-    }
-
     // --- Notes ------------------------------------------------------------
 
     "notes/save-refused keeps the words on the screen; notes/read-refused does not" {
@@ -322,10 +120,6 @@ class ScreenFixtureSpec : StringSpec({
         // The three-state law as a sweep rather than a claim: no fixture may
         // carry both a failure and data, which is the shape a decoder that
         // collapsed the two would produce.
-        screens.resolve("photos").binFiles().forEach { file ->
-            val state = PhotosGridState.ADAPTER.decode(file.readBytes())
-            contentCount(state.loading, state.failure, state.data_) shouldBe 1
-        }
         screens.resolve("notes").binFiles().forEach { file ->
             val state = NotesEditorState.ADAPTER.decode(file.readBytes())
             contentCount(state.loading, state.failure, state.draft) shouldBe 1
