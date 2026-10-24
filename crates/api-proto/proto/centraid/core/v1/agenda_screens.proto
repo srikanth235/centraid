@@ -1,0 +1,1526 @@
+// AGENDA'S SCREENS (#1135): events and to-dos in one app. Every message here is
+// finished state a view draws or an event a view sends; Rust (`crates/screens`,
+// module `agenda`) makes every decision, string, count and route. Arms in
+// `screens.proto`: 100-199.
+//
+// Screens: `agenda.home` (Day, Schedule, Waiting and To-do, with Search as a
+// mode and More as a sheet), `agenda.event`, `agenda.editor` (Event | Task),
+// `agenda.todo_list`, `agenda.project`, `agenda.task`, `agenda.catch_up`, and
+// the kit's `agenda.trash`.
+
+syntax = "proto3";
+
+package centraid.core.v1;
+
+import "centraid/core/v1/kit_screens.proto";
+import "centraid/core/v1/route.proto";
+
+message AgendaHomeState {
+  // WHICH LIST, as a parameter (law 2). Search is a mode over it and More is a
+  // sheet, so neither is a value here.
+  AgendaDestination destination = 2;
+  // THE DAY THE SURFACE IS ANCHORED ON, civil `YYYY-MM-DD`, and EMPTY until
+  // the first answer says which day today is — never a device-clock guess.
+  string anchor_day = 3;
+  // SEARCH IS THE BAR UNDER THE TITLE (R-CHROME-2): closed, a field-shaped
+  // bar whose tap sends `SearchOpened`; open, the field. Never a band tab.
+  bool search_open = 4;
+  // What the member typed. Closing search CLEARS it.
+  string search_term = 5;
+  // Calendars switched off, FOR THE SESSION (not persisted).
+  repeated string hidden_calendar_ids = 6;
+  oneof content {
+    Loading loading = 7;
+    Failure failure = 8;
+    // The vault would not let Agenda read. A state and not a failure: no band,
+    // no toolbar, the kit's gate.
+    Denied denied = 9;
+    AgendaHomeData data = 10;
+  }
+  Sheet sheet = 11;
+  // THE BAND, computed: Day, Schedule, Waiting, To-do, then More — places only
+  // (R-CHROME-5, R-1128-1). The destination's tab stays lit while search is open,
+  // because search is a mode over it. EMPTY while denied: the gate has no
+  // band.
+  repeated AgendaBandTab band = 12;
+  // The day bar. On the state and not on `data`, so stepping a day keeps the
+  // bar standing (and its buttons pressable) while the new day reads. Not
+  // shown on To-do, which has no window.
+  AgendaToolbar toolbar = 13;
+  // The screen's fixed words, so a view carries no copy of its own.
+  AgendaChrome chrome = 14;
+  // 15 and 16 were the write overlay (`pending_event_ids`,
+  // `cancel_asked_event_ids`): a write is answered at once, so a row is never
+  // drawn pending.
+  reserved 15, 16;
+  reserved "pending_event_ids", "cancel_asked_event_ids";
+  // 17 was `due_open_days`, the days whose due shelf was open. A task due on a
+  // day is a row on that day now (`AgendaRowItem.task`, R-1128-2).
+  reserved 17;
+  reserved "due_open_days";
+  // THE MORE SHEET, as rows, in order (R-1046-5, R-CHROME-4, R-1128-6): each
+  // calendar as a show/hide toggle under the Calendars heading, then the
+  // Tasks places (Anytime, Logbook, Reminders, Trash) under a Tasks heading,
+  // then "What Agenda may read". Computed, so both platforms draw the same
+  // list; no calendar rows until an answer has named the calendars.
+  repeated AgendaMoreRow more_rows = 18;
+  // THE WORDS THE HITS ANSWER when the core corrected a typo in `search_term`
+  // (#1097); EMPTY for an exact answer. Agenda's search is a mode of this
+  // screen and not a `SearchField`, so the correction sits beside the term.
+  // A new term, closing search, and a refusal clear it.
+  string search_corrected = 19;
+  // THE ASK ROW OF AGENDA'S SEARCH (#1097, R-1097-28, #1135), the twin of
+  // `SearchField.ask_row` on Agenda's flat fields: set by the hits for the current
+  // term, matched or not, cleared by a new term, closing search and a refusal.
+  reserved 20;
+  reserved "search_ask";
+  SearchAsk search_ask_row = 29;
+  // THE TASK WRITE'S STATUS LINE (#1128): "Task done" with Undo, a filing's
+  // "Filed in …", or the vault's own refusal. Empty when nothing was written.
+  StatusLine status = 21;
+  // To-do's quick-add bar (R-CHROME-1: the Plus on To-do opens it). `shown`
+  // governs whether the To-do Plus is drawn; the bar itself waits for `drawn`.
+  TodoQuickAdd quick_add = 22;
+  // SHEET_FILE: the task being filed, and where it can go.
+  string filing_task_id = 23;
+  repeated TodoChoice file_choices = 24;
+  // SHEET_NEW_PROJECT's name field.
+  string new_project_name = 25;
+  bool new_project_can_submit = 26;
+  // THE HEADER PLUS (R-CHROME-1), per place: its accessibility label — "Add
+  // task" on To-do, "Add" elsewhere (the sheet adds an event or a task) — and
+  // what a tap does. On To-do it opens the quick-add bar (`QuickAddOpened`), so
+  // `add_opens_quick_add` is true; elsewhere it pushes `new_event`, the add
+  // sheet (R-1128-1).
+  string add_label = 27;
+  bool add_opens_quick_add = 28;
+  // THE ADD SHEET on the anchor day (the core's today while no anchor is
+  // known): the page the Plus pushes where `add_opens_quick_add` is false, and
+  // the empty state's `empty_action` too. Absent while denied.
+  Route new_event = 30;
+
+  enum Sheet {
+    SHEET_UNSPECIFIED = 0;
+    SHEET_NONE = 1;
+    // Calendars to show or hide, the Tasks places, and the row to the facts
+    // sheet.
+    SHEET_MORE = 2;
+    // "What Agenda may read" — `AgendaChrome.reads_facts`.
+    SHEET_READS = 3;
+    // The filing sheet: Inbox, projects and their sections.
+    SHEET_FILE = 4;
+    // The new-project name sheet.
+    SHEET_NEW_PROJECT = 5;
+  }
+}
+
+message AgendaToolbar {
+  // False while nothing is known to anchor it (the first read), while denied,
+  // and while a search term is answering: search results are not a window.
+  bool shown = 1;
+  // Day: "Today" / "Tomorrow" / "Yesterday" / "Wednesday 11 March".
+  // Schedule and Waiting: "From today" / "From Wednesday 11 March".
+  string range_label = 2;
+  // The app bar's subtitle: "March 2026".
+  string month_label = 3;
+  // Hides "Today".
+  bool at_today = 4;
+}
+
+message AgendaChrome {
+  string title = 1;
+  string new_event = 2;
+  string today = 3;
+  // The ‹ and › buttons' accessibility labels.
+  string previous_day = 4;
+  string next_day = 5;
+  string search_placeholder = 6;
+  string search_label = 7;
+  string search_close = 8;
+  // The failure state's action; it sends `Refreshed`.
+  string retry = 9;
+  // The skeleton's accessibility label.
+  string loading = 10;
+  string more_title = 11;
+  // 12 was `calendars_heading`, the More sheet's Calendars heading. The sheet
+  // is rows on the state now, and the heading rides on its first calendar row
+  // (`AgendaMoreRow.section`).
+  reserved 12;
+  reserved "calendars_heading";
+  // "What Agenda may read" — `SHEET_READS`' title.
+  string reads_title = 13;
+  repeated AgendaFact reads_facts = 14;
+  // The band's home capsule.
+  string home = 15;
+  // 16 was `shelf_label`, the due shelf toggle's accessibility label (R-1128-2).
+  reserved 16;
+  reserved "shelf_label";
+  // THE TASK WORDS Day and To-do draw: the quick-add placeholder and verb, the
+  // filing sheet's title, the new-project words, cancel, "Move to project" and
+  // "Show more". Fields a task page alone draws are empty here.
+  TodoChrome tasks = 17;
+}
+
+message AgendaFact {
+  string label = 1;
+  string detail = 2;
+}
+
+message AgendaBandTab {
+  // `day`, `schedule`, `waiting`, `todo`, `more` — what `BandPicked` sends.
+  string key = 1;
+  string label = 2;
+  // A `design/native-catalog.json` icon key.
+  string icon_key = 3;
+  // The 2px accent bar.
+  bool current = 4;
+}
+
+message AgendaHomeData {
+  // `YYYY-MM-DD` and `YYYY-MM-DDTHH:MM`, from the answer.
+  string today = 1;
+  string now_local = 2;
+  // In day order. Past days are not drawn except as search hits.
+  repeated AgendaDaySection days = 3;
+  // `AGENDA_EMPTY_NONE` whenever `days` has a section, and under a search
+  // whenever `task_hits` or `containers` has one.
+  AgendaEmpty empty = 4;
+  // The empty state's words; empty strings draw nothing. `empty_action` sends
+  // `NewEventRequested`.
+  string empty_title = 5;
+  string empty_body = 6;
+  string empty_action = 7;
+  // Every calendar the member has, for the More sheet.
+  repeated AgendaCalendarChoice calendars = 8;
+  // Occurrences in the window waiting on your reply.
+  uint32 waiting_count = 9;
+  // Events drawn, and the app bar's words for it: "3 events".
+  uint32 event_count = 10;
+  string event_count_label = 11;
+  // WHERE OPENING LANDS: this section, at its now line when it has one. Empty
+  // `day` is the top.
+  AgendaLanding landing = 12;
+  // WHILE THE VAULT HOLDS NO EVENT IN THE WINDOW (marks — due tasks,
+  // birthdays — aside), where the phone already holds the member's calendar: a
+  // shell that can read it offers the import — as the empty state's action in
+  // place of `empty_action` on day one, and as a quiet row above the list when
+  // marks fill it. See `EmptyState.import_source`.
+  ImportSource import_source = 13;
+  // DAY ON TODAY ONLY (R-1128-3): the open work whose day has passed, above
+  // the day, with the verb "Reschedule" (`verb_key` `catch_up`; it pushes
+  // `catch_up`). Absent on every other anchor and place.
+  optional TodoRowGroup overdue = 14;
+  // The absence notice on Day on today: "You were away 16 days · 34 tasks came
+  // due", with its verb, which pushes `catch_up`.
+  optional TodoNotice notice = 15;
+  // SEARCH (R-1128-4): the tasks the term found, one group drawn above the
+  // event days. Empty without a term.
+  repeated TodoRowGroup task_hits = 16;
+  // To-do's content; set on `AGENDA_DESTINATION_TODO` only.
+  AgendaTodo todo = 17;
+  // SEARCH'S CONTAINERS (#1097 R-1097-19, #1128 Q-1128-1): the projects whose
+  // own name the term matched (`search`'s `containers`), drawn by the one
+  // container row each shell has, above `task_hits`. Empty without a term, and
+  // held as `task_hits` are: the answer to the term on screen sets them,
+  // closing search clears them. A tap pushes the container's `route`, the
+  // project page To-do's project row opens.
+  repeated SearchContainer containers = 18;
+  // CATCH UP, the page the Overdue group's verb and the absence notice's verb
+  // push.
+  Route catch_up = 19;
+}
+
+// THE TO-DO PLACE (#1128, R-1128-1): the Inbox's tasks, then the projects by
+// area — named areas A→Z, then "Projects" for those in none — in one list.
+message AgendaTodo {
+  // The Inbox: open work filed in no project. A group per head the core named.
+  repeated TodoRowGroup groups = 1;
+  // One group per area; a project row pushes its `route`.
+  repeated TodoProjectGroup projects = 2;
+  // Nothing open: day one's words, or "all done" with the phone's reminders
+  // offered (`import_source`). `TodoEmptyActed` performs `action_label`.
+  EmptyState empty = 3;
+  // "7 tasks · 3 projects"; empty while the list is empty.
+  string count_label = 4;
+  // "500 tasks · more not shown"; empty when whole.
+  string window_label = 5;
+  // "Show more" is live: the window can widen (`NextPageRequested`).
+  bool can_show_more = 6;
+  // The verb that opens the new-project sheet, "New project" — drawn at the
+  // foot of the list whatever it holds (the sheet is reachable always).
+  string new_project_label = 7;
+}
+
+message AgendaLanding {
+  string day = 1;
+  bool now_line = 2;
+}
+
+message AgendaDaySection {
+  string day = 1;
+  string day_number = 2;
+  string weekday_short = 3;
+  // "Today" / "Wed 11 March".
+  string heading = 4;
+  bool is_today = 5;
+  bool is_past = 6;
+  // "April 2026" on the first section of a month the list had not shown yet.
+  optional string month_heading = 7;
+  // "Dana" / "3 birthdays" — day context, never an event row.
+  optional string ribbon = 8;
+  repeated string ribbon_names = 9;
+  // 10-13 were the due shelf (`due_count`, `due`, `due_label`, `due_open`):
+  // an open task due on the day is a row now (`AgendaRowItem.task`, R-1128-2).
+  reserved 10, 11, 12, 13;
+  reserved "due_count", "due", "due_label", "due_open";
+  // All-day rows first and the day's untimed tasks right after them, then the
+  // timed rows and timed tasks by time, with the now line placed among them on
+  // today.
+  repeated AgendaRowItem items = 14;
+}
+
+message AgendaRowItem {
+  oneof kind {
+    AgendaEventRow event = 1;
+    AgendaNowLine now_line = 2;
+    // A TASK DUE ON THE DAY, finished (R-1128-2): the one row shape every to-do
+    // list draws. Its box checks it off in place (`TaskChecked`), a tap pushes
+    // its `route`.
+    TodoRow task = 3;
+  }
+}
+
+message AgendaNowLine {
+  // "09:42".
+  string label = 1;
+  // "Now, 09:42".
+  string accessibility_label = 2;
+}
+
+message AgendaEventRow {
+  string event_id = 1;
+  string instance_key = 2;
+  optional string original_start_local = 3;
+  // `day|instance_key`: a run over three days is three rows.
+  string row_key = 4;
+  // The summary, or "Untitled event".
+  string title = 5;
+  // "08:15 – 09:45" / "08:15" (no end) / "All day" / "Until 10:00" (runs in
+  // from a day before) / "From 22:00" (runs past midnight) / "Continues" (a
+  // day inside a longer run).
+  string time_label = 6;
+  // "repeats · 2 guests · call". Hidden on touch; spoken in
+  // `accessibility_label`.
+  string meta = 7;
+  // The 2px rule's colour, from the calendar's: the THEME'S COLOUR ROLE
+  // (`cTeal`), as People's hues are — every Agenda `*hue_key` is one (#1047).
+  string calendar_hue_key = 8;
+  AgendaRowStatus status = 9;
+  // "needs a reply"; empty for none.
+  string status_label = 10;
+  // "Survey walk-through, 08:15 to 09:45, repeats, 2 guests, needs a reply".
+  string accessibility_label = 11;
+  // Ended before now: drawn dimmed.
+  bool is_past = 12;
+  // WHERE A TAP GOES: this occurrence's page, drawn under the section's day.
+  Route route = 13;
+}
+
+enum AgendaRowStatus {
+  // 3 and 4 were PENDING and CANCEL_ASKED, the held-write overlay: a write is
+  // answered at once, so a row is never drawn waiting on one.
+  reserved 3, 4;
+  reserved "AGENDA_ROW_STATUS_PENDING", "AGENDA_ROW_STATUS_CANCEL_ASKED";
+  AGENDA_ROW_STATUS_UNSPECIFIED = 0;
+  AGENDA_ROW_STATUS_NONE = 1;
+  // You are a guest and have not answered.
+  AGENDA_ROW_STATUS_NEEDS_REPLY = 2;
+}
+
+message AgendaCalendarChoice {
+  string calendar_id = 1;
+  string name = 2;
+  string hue_key = 3;
+  bool hidden = 4;
+  // "Shown" / "Hidden".
+  string state_label = 5;
+}
+
+// ONE ROW OF AGENDA'S MORE SHEET. A view draws `label` (with the `hue_key` dot
+// and `meta` on a calendar), a heading above it when `section` is set, and
+// sends `MoreRowPicked` with `key` on a tap; Rust decides what the key does
+// (a calendar toggles, `reads` opens the facts sheet, a place closes the sheet)
+// and a row with a `route` is then pushed by the shell. The sheet's order
+// (R-1128-6): the calendars, then the Tasks places (Anytime, Logbook,
+// Reminders, Trash) under a "Tasks" heading, then "What Agenda may read".
+message AgendaMoreRow {
+  // `calendar-<calendar_id>`, a Tasks place (`anytime`, `logbook`,
+  // `reminders`, `trash`) or `reads`.
+  string key = 1;
+  string label = 2;
+  // "Shown" / "Hidden" on a calendar row; empty on an action row.
+  string meta = 3;
+  // A calendar's colour role (`cTeal`); empty on an action row.
+  string hue_key = 4;
+  // A calendar row is a TOGGLE, and `on` is "shown". An action row is neither.
+  bool toggle = 5;
+  bool on = 6;
+  // The heading drawn ABOVE this row ("Calendars"); empty for none.
+  string section = 7;
+  // What a screen reader says for the row: "Work, Hidden".
+  string spoken = 8;
+  // A `design/native-catalog.json` icon key on a Tasks place's row; empty on
+  // a calendar row.
+  string icon_key = 9;
+  // WHERE A TAP GOES on a Tasks place's row: Anytime, Logbook and Reminders
+  // (`agenda.todo_list`) and Trash (`agenda.trash`). Absent on a calendar and
+  // on `reads`, which are the sheet's own.
+  Route route = 10;
+}
+
+enum AgendaEmpty {
+  AGENDA_EMPTY_UNSPECIFIED = 0;
+  AGENDA_EMPTY_NONE = 1;
+  // Schedule's whole window holds nothing, with no search and no calendar
+  // hidden: "Nothing in your calendar yet."
+  AGENDA_EMPTY_DAY_ONE = 2;
+  // "Nothing on this day." / "Nothing on these days."
+  AGENDA_EMPTY_NOTHING_ON_DAY = 3;
+  AGENDA_EMPTY_NOTHING_WAITING = 4;
+  AGENDA_EMPTY_NO_MATCH = 5;
+}
+
+// What a view sends. A row that opens a page carries its own `Route` and the
+// shell pushes it (`NavPush`): an event row, a task row, a project row or
+// container, the Plus on the add sheet, the Overdue verb, the notice. The
+// events below are the ones Rust must hear.
+message AgendaHomeEvent {
+  oneof kind {
+    // The pull, and the failure state's retry.
+    Refreshed refreshed = 2;
+    DestinationChanged destination = 3;
+    DayStepped day_stepped = 4;
+    TodayRequested today = 5;
+    SearchOpened search_opened = 6;
+    SearchTermChanged search_term = 7;
+    SearchClosed search_closed = 8;
+    CalendarToggled calendar_toggled = 9;
+    BandPicked band = 10;
+    SheetOpened sheet_opened = 11;
+    SheetClosed sheet_closed = 12;
+    // A More sheet row, by `AgendaMoreRow.key`. A place's row also carries a
+    // `route`: send this first (the sheet closes), then push the route.
+    MoreRowPicked more_row = 19;
+    // TASKS (#1128). 13 was `DueShelfToggled`.
+    TaskChecked task_checked = 20;
+    StatusActed status_acted = 21;
+    FileRequested file_requested = 22;
+    FileChosen file_chosen = 23;
+    QuickAddOpened quick_add_opened = 24;
+    QuickAddChanged quick_add_changed = 25;
+    QuickAddSubmitted quick_add_submitted = 26;
+    QuickAddClosed quick_add_closed = 27;
+    NewProjectNameChanged new_project_name = 28;
+    NewProjectSubmitted new_project_submitted = 29;
+    TodoEmptyActed todo_empty_acted = 30;
+    NextPageRequested next_page = 32;
+    // The empty state's Import (`EmptyState.import_source` = calendar): Rust asks
+    // the shell to read the phone's calendars, imports them, and follows.
+    ImportRequested import_requested = 37;
+  }
+  // 13 was `due_toggled`; 17, 18 and 33-36 were the intents (`new_event`,
+  // `event_picked`, `task_picked`, `project_picked`, `group_verb`,
+  // `notice_acted`), which are routes now.
+  reserved 13, 17, 18, 31, 33, 34, 35, 36;
+  reserved "due_toggled", "new_event", "event_picked", "task_picked", "project_picked", "group_verb", "notice_acted";
+
+  message Refreshed {}
+
+  message ImportRequested {}
+
+  message DestinationChanged {
+    AgendaDestination destination = 1;
+  }
+
+  // Days to move the anchor: -1 is ‹, 1 is ›. (`by` would be escaped by
+  // Wire, a Kotlin keyword.)
+  message DayStepped {
+    int32 days = 1;
+  }
+
+  message TodayRequested {}
+
+  // The search bar under the title was tapped: the field opens.
+  message SearchOpened {}
+
+  message SearchTermChanged {
+    string term = 1;
+  }
+
+  message SearchClosed {}
+
+  message CalendarToggled {
+    string calendar_id = 1;
+  }
+
+  // A band tab, by `AgendaBandTab.key`.
+  message BandPicked {
+    string key = 1;
+  }
+
+  message MoreRowPicked {
+    string key = 1;
+  }
+
+  message SheetOpened {
+    AgendaHomeState.Sheet sheet = 1;
+  }
+
+  message SheetClosed {}
+
+  // A task's box: open work completes, in place.
+  message TaskChecked {
+    string task_id = 1;
+  }
+
+  // The status line's Undo.
+  message StatusActed {}
+
+  // A long press on an open task: the filing sheet.
+  message FileRequested {
+    string task_id = 1;
+  }
+
+  // A `file_choices` key.
+  message FileChosen {
+    string key = 1;
+  }
+
+  // The Plus on To-do: the bar opens on the keyboard.
+  message QuickAddOpened {}
+
+  message QuickAddChanged {
+    string title = 1;
+  }
+
+  // The bar's Add verb: files the typed title in the Inbox.
+  message QuickAddSubmitted {}
+
+  // The keyboard left the bar. It closes only when its field is empty, so
+  // typed words are never thrown away.
+  message QuickAddClosed {}
+
+  message NewProjectNameChanged {
+    string name = 1;
+  }
+
+  message NewProjectSubmitted {}
+
+  // To-do's empty state action (`AgendaTodo.empty.action_label`).
+  message TodoEmptyActed {}
+
+  // "Show more" under a To-do window that is not everything open.
+  message NextPageRequested {}
+}
+
+// Which occurrences a change or a cancellation reaches. `edit_occurrence`'s
+// `scope` values, and SERIES is the whole event (`edit_event`, `cancel_event`).
+enum AgendaScope {
+  AGENDA_SCOPE_UNSPECIFIED = 0;
+  AGENDA_SCOPE_OCCURRENCE = 1;
+  AGENDA_SCOPE_FUTURE = 2;
+  AGENDA_SCOPE_SERIES = 3;
+}
+
+// One row of a scope sheet. NONE IS PRE-CHOSEN: the three answers are equal, so
+// nothing is filled until the member picks.
+message AgendaScopeChoice {
+  AgendaScope scope = 1;
+  string label = 2;
+  bool selected = 3;
+  // False when this change cannot reach that far — a new repeat rule is the
+  // whole series' alone; `note` says why.
+  bool enabled = 4;
+  string note = 5;
+}
+
+// "This event is no longer on your calendar": the answer has no such
+// occurrence — cancelled, moved or deleted since it was picked.
+message AgendaGone {
+  string title = 1;
+  string body = 2;
+  string action_label = 3;
+}
+
+// A button on the detail. `key` is what `ActionPicked` carries.
+message AgendaAction {
+  string key = 1;
+  string label = 2;
+  bool enabled = 3;
+  // Drawn in the `net` hue (the cancel).
+  bool destructive = 4;
+  string accessibility_label = 5;
+  // WHERE THE BUTTON GOES, when it opens a page: `edit` is the editor on this
+  // occurrence, pushed by the shell, and sends no event. Absent on `cancel`,
+  // which is `ActionPicked`.
+  optional Route route = 6;
+}
+
+// `agenda.event`. Its arguments are its `Route`; this is only what it shows.
+message AgendaEventState {
+  oneof content {
+    Loading loading = 6;
+    Failure failure = 7;
+    Denied denied = 8;
+    AgendaEventData data = 9;
+    AgendaGone gone = 10;
+  }
+  Sheet sheet = 12;
+  // The confirm step for cancelling an event that does not repeat. Absent
+  // otherwise: a series' confirm is the scope sheet itself.
+  optional Confirm confirm = 13;
+  // The scope sheet's rows, while it is up.
+  repeated AgendaScopeChoice cancel_scopes = 14;
+  AgendaEventChrome chrome = 16;
+  // THE SCREEN IS DONE — a cancellation committed. The shell pops.
+  bool dismissed = 17;
+  // The scope sheet's commit button is armed (a scope is picked).
+  bool cancel_armed = 18;
+  // What the last write came to when the vault refused it: the core's own
+  // sentence. Absent otherwise; a commit shows in the data.
+  optional StatusLine status = 19;
+
+  enum Sheet {
+    SHEET_UNSPECIFIED = 0;
+    SHEET_NONE = 1;
+    SHEET_CANCEL_SCOPE = 2;
+  }
+}
+
+message AgendaEventChrome {
+  string title = 1;
+  // The back control names the page it returns to: "Agenda".
+  string back = 2;
+  string loading = 3;
+  string retry = 4;
+  string scope_title = 5;
+  string scope_body = 6;
+  string scope_commit = 7;
+  string scope_keep = 8;
+  string confirm_keep = 9;
+}
+
+message AgendaEventData {
+  string title = 1;
+  // "Wednesday 11 March", or "Wednesday 11 March – Friday 13 March".
+  string date_label = 2;
+  // "08:15 – 09:45" / "08:15" / "All day".
+  string when_label = 3;
+  string calendar_name = 4;
+  string calendar_hue_key = 5;
+  // Label and value rows, in the handoff's order: repeats, where (the place's
+  // name), joining link, reminder, calendar. A row with nothing to say is
+  // absent.
+  repeated AgendaFact facts = 6;
+  string notes = 7;
+  // "3 guests · 1 awaiting". Empty with no guests.
+  string guest_heading = 9;
+  repeated AgendaGuestRow guests = 10;
+  // The member's own reply, when they are a guest.
+  optional AgendaRsvp rsvp = 11;
+  repeated AgendaAction actions = 12;
+  bool is_past = 13;
+  // "Survey walk-through, Wednesday 11 March, 08:15 to 09:45, repeats".
+  string accessibility_label = 14;
+  // The joining link itself, for the view to open.
+  string call_uri = 15;
+  // The button that opens `call_uri`: "Join call". Empty with no link.
+  string call_label = 16;
+}
+
+message AgendaGuestRow {
+  string party_id = 1;
+  string name = 2;
+  string initial = 3;
+  string reply_label = 4;
+  string hue_key = 5;
+  bool is_you = 6;
+  string accessibility_label = 7;
+}
+
+message AgendaRsvp {
+  string question = 1;
+  repeated AgendaRsvpChoice choices = 2;
+  // "Your answer is for every occurrence." on a series.
+  string note = 3;
+}
+
+message AgendaRsvpChoice {
+  // `accepted`, `tentative` or `declined` — what `RsvpPicked` carries.
+  string partstat = 1;
+  string label = 2;
+  // The answer on record.
+  bool selected = 3;
+  bool enabled = 4;
+}
+
+message AgendaEventEvent {
+  oneof kind {
+    // Read again (the failure's retry).
+    Refreshed refreshed = 2;
+    RsvpPicked rsvp = 6;
+    // `AgendaAction.key`. Only `cancel` is an event: it opens the confirm or
+    // the scope sheet. `edit` carries a route and is the shell's push.
+    ActionPicked action = 7;
+    ScopePicked scope = 8;
+    SheetClosed sheet_closed = 9;
+    // The confirm, or the scope sheet's commit.
+    Confirmed confirmed = 10;
+    ConfirmDismissed confirm_dismissed = 11;
+  }
+
+  message Refreshed {}
+
+  message RsvpPicked {
+    string partstat = 1;
+  }
+
+  message ActionPicked {
+    string key = 1;
+  }
+
+  message ScopePicked {
+    AgendaScope scope = 1;
+  }
+
+  message SheetClosed {}
+
+  message Confirmed {}
+
+  message ConfirmDismissed {}
+}
+
+// `agenda.editor`. Its arguments are its `Route`; this is only what it shows.
+message AgendaEditorState {
+  Mode mode = 2;
+  oneof content {
+    Loading loading = 7;
+    Failure failure = 8;
+    Denied denied = 9;
+    AgendaEditorData data = 10;
+    AgendaGone gone = 11;
+  }
+  Sheet sheet = 13;
+  // The discard or skip question, while it is asked.
+  optional Confirm confirm = 14;
+  Asking asking = 15;
+  AgendaEditorChrome chrome = 16;
+  // THE EDITOR IS DONE — saved, skipped, or left with nothing to lose. The
+  // shell pops.
+  bool dismissed = 17;
+  // WHAT THIS SITTING ADDS (#1128): an event, or a task. CREATE opens on the
+  // kind the route names, else the kind the member last added on this device;
+  // the switch at its top moves it. An EDIT is always an event.
+  AgendaEditorKind kind = 18;
+  // What the last Save came to when the vault refused it: the core's own
+  // sentence, over the draft that stays. Absent otherwise.
+  optional StatusLine status = 19;
+
+  enum Mode {
+    MODE_UNSPECIFIED = 0;
+    MODE_CREATE = 1;
+    MODE_EDIT = 2;
+  }
+
+  enum Sheet {
+    SHEET_UNSPECIFIED = 0;
+    SHEET_NONE = 1;
+    SHEET_CALENDAR = 2;
+    SHEET_GUESTS = 3;
+    SHEET_REPEAT = 4;
+    SHEET_REMINDER = 5;
+    // Saving a change to one occurrence of a series.
+    SHEET_SCOPE = 6;
+  }
+
+  enum Asking {
+    ASKING_UNSPECIFIED = 0;
+    ASKING_NONE = 1;
+    ASKING_DISCARD = 2;
+    ASKING_SKIP = 3;
+  }
+}
+
+message AgendaEditorChrome {
+  string title_placeholder = 1;
+  string notes_placeholder = 2;
+  string link_placeholder = 3;
+  string field_title = 4;
+  string field_all_day = 5;
+  string field_starts = 6;
+  string field_ends = 7;
+  string field_calendar = 8;
+  string field_guests = 9;
+  string field_repeat = 10;
+  string field_reminder = 11;
+  string field_link = 12;
+  string field_notes = 13;
+  string save = 14;
+  string close = 15;
+  string done = 16;
+  string keep_editing = 17;
+  string loading = 18;
+  string retry = 19;
+  string scope_title = 20;
+  string scope_question = 21;
+  // The words on the rows that open the platform's pickers.
+  string pick_date = 22;
+  string pick_time = 23;
+  // The spoken name of the Event | Task switch (#1128).
+  string kind_label = 24;
+}
+
+// THE MEMBER'S VALUES, as the pickers bind them. Days are civil `YYYY-MM-DD`,
+// times `HH:MM` on the device's wall clock; the shell never reads a zone.
+message AgendaDraft {
+  string title = 1;
+  string notes = 2;
+  bool all_day = 3;
+  string start_day = 4;
+  string start_time = 5;
+  // An ALL-DAY end is the last day, inclusive (`agenda.proto`'s `local_end`).
+  string end_day = 6;
+  string end_time = 7;
+  string calendar_id = 8;
+  repeated string guest_ids = 9;
+  // `AgendaChoice.key` of the repeat list.
+  string repeat_key = 10;
+  // `AgendaChoice.key` of the reminder list.
+  string reminder_key = 11;
+  string link = 12;
+}
+
+message AgendaChoice {
+  string key = 1;
+  string label = 2;
+  bool selected = 3;
+  string hue_key = 4;
+  string accessibility_label = 5;
+}
+
+message AgendaEditorData {
+  AgendaDraft draft = 1;
+  // "New event" / "New task" / "Edit event".
+  string heading = 2;
+  // "Wednesday 11 March · 08:15" / "Wednesday 11 March": the row, spoken.
+  string start_label = 3;
+  string end_label = 4;
+  string calendar_label = 5;
+  string calendar_hue_key = 6;
+  repeated AgendaChoice calendars = 7;
+  // "Priya Raman, Tom Whitcombe" / "Nobody else".
+  string guests_label = 8;
+  repeated AgendaChoice guests = 9;
+  string repeat_label = 10;
+  repeated AgendaChoice repeats = 11;
+  // "A repeat rule belongs to the whole series." on a series occurrence.
+  string repeat_note = 13;
+  string reminder_label = 14;
+  repeated AgendaChoice reminders = 15;
+  // The save scope sheet's rows (EDIT of a series occurrence).
+  repeated AgendaScopeChoice scopes = 16;
+  bool dirty = 17;
+  bool can_save = 18;
+  // Why Save is not armed: "Add a title to save." / "An event must end after
+  // it starts." Empty when it is, or when nothing changed.
+  string blocked_reason = 19;
+  // "Skip this occurrence", on a series occurrence.
+  bool show_skip = 20;
+  string skip_label = 21;
+  string foot_note = 22;
+  // The scope sheet's Save is armed (a scope is picked).
+  bool scope_armed = 23;
+  // The day and the time apart, for a row that draws two pickers:
+  // "Wednesday 11 March" and "08:15". The times are empty all-day.
+  string start_day_label = 24;
+  string start_time_label = 25;
+  string end_day_label = 26;
+  string end_time_label = 27;
+  // THE EVENT | TASK SWITCH (#1128), in order: empty on an EDIT, which has
+  // none. The one selected is what this sitting adds.
+  repeated AgendaKindChoice kinds = 28;
+  // False while a TASK is being added: a task has a title and a due day (and
+  // a time, unless "All day" is on) — no end, calendar, guests, repeat,
+  // reminder, link or notes. The pickers for those are not drawn.
+  bool show_event_fields = 29;
+  // The key of the start row: "Starts" for an event, "Due" for a task.
+  string start_field_label = 30;
+}
+
+// One side of the Event | Task switch (#1128).
+message AgendaKindChoice {
+  AgendaEditorKind kind = 1;
+  string label = 2;
+  bool selected = 3;
+  string accessibility_label = 4;
+}
+
+message AgendaEditorEvent {
+  oneof kind {
+    // Read again (the failure's retry).
+    Refreshed refreshed = 2;
+    TitleChanged title = 6;
+    NotesChanged notes = 7;
+    AllDayToggled all_day = 8;
+    StartChanged start = 9;
+    EndChanged end = 10;
+    CalendarPicked calendar = 11;
+    GuestToggled guest = 12;
+    RepeatPicked repeat = 13;
+    ReminderPicked reminder = 14;
+    LinkChanged link = 15;
+    SheetOpened sheet_opened = 16;
+    SheetClosed sheet_closed = 17;
+    // Save, for an event or a task alike.
+    SaveTapped save = 18;
+    ScopePicked scope = 19;
+    SkipTapped skip = 20;
+    // Back or close. With changes it asks; without, it is done.
+    LeaveRequested leave = 21;
+    Confirmed confirmed = 22;
+    ConfirmDismissed confirm_dismissed = 23;
+    KindPicked kind_picked = 25;
+  }
+
+  // The Event | Task switch (#1128). Ignored on an EDIT.
+  message KindPicked {
+    AgendaEditorKind kind = 1;
+  }
+
+  message Refreshed {}
+
+  message TitleChanged {
+    string text = 1;
+  }
+
+  message NotesChanged {
+    string text = 1;
+  }
+
+  message AllDayToggled {
+    bool on = 1;
+  }
+
+  // What the start picker chose: `YYYY-MM-DD` and `HH:MM` (ignored all-day).
+  message StartChanged {
+    string day = 1;
+    string time = 2;
+  }
+
+  message EndChanged {
+    string day = 1;
+    string time = 2;
+  }
+
+  message CalendarPicked {
+    string calendar_id = 1;
+  }
+
+  message GuestToggled {
+    string party_id = 1;
+  }
+
+  message RepeatPicked {
+    string key = 1;
+  }
+
+  message ReminderPicked {
+    string key = 1;
+  }
+
+  message LinkChanged {
+    string text = 1;
+  }
+
+  message SheetOpened {
+    AgendaEditorState.Sheet sheet = 1;
+  }
+
+  message SheetClosed {}
+
+  message SaveTapped {}
+
+  message ScopePicked {
+    AgendaScope scope = 1;
+  }
+
+  message SkipTapped {}
+
+  message LeaveRequested {}
+
+  message Confirmed {}
+
+  message ConfirmDismissed {}
+}
+
+// A task's box.
+enum TodoCheck {
+  TODO_CHECK_UNSPECIFIED = 0;
+  TODO_CHECK_OPEN = 1;
+  TODO_CHECK_DONE = 2;
+  // Released: drawn `–`, in the Logbook only.
+  TODO_CHECK_WONT_DO = 3;
+  TODO_CHECK_IN_PROCESS = 4;
+}
+
+// ONE TASK AS A ROW, finished. A root carries its family in `children`.
+message TodoRow {
+  string task_id = 1;
+  string title = 2;
+  // "2 days ago", "Today", "09:00", "Tomorrow", "Fri 14 March"; empty undated.
+  string due_label = 3;
+  // `due_label` in the attention tone. Never red, never a count.
+  bool overdue = 4;
+  // One clamped line: "Home · Daily · missed 2 · next is Fri 14 March ·
+  // reminder Tomorrow 08:30 · ~25 min · #errand · 2 of 5 · sitting since March".
+  string meta = 5;
+  // "Now", "Next", "Soon", or empty: no room is reserved for a priority.
+  string priority_label = 6;
+  // The project's hue key for the 6px dot; empty when unfiled.
+  string project_hue_key = 7;
+  TodoCheck check = 8;
+  // What the box does: "Mark Buy milk done" / "Reopen Buy milk".
+  string check_label = 9;
+  string accessibility_label = 10;
+  bool subtask = 12;
+  repeated TodoRow children = 13;
+  // A long press offers "Move to project" (open roots only).
+  bool can_file = 14;
+  // WHERE A TAP GOES: this task's page, as the route the shell pushes.
+  Route route = 16;
+}
+
+// A group of rows under one head.
+message TodoRowGroup {
+  // Stable across answers, for list item keys.
+  string key = 1;
+  // "Overdue", "Today", "Tomorrow", "Wed 11 March", a project's name, "Done".
+  string title = 2;
+  // The count, as digits.
+  string meta = 3;
+  // "April 2026" on the first group of a month the list had not shown yet.
+  optional string month_heading = 4;
+  // At most one quiet verb: "Catch up" on Overdue, "Add task" on a section.
+  // Empty for none; `GroupVerb` sends `verb_key` back.
+  string verb_label = 5;
+  string verb_key = 6;
+  // A project's section this group is (the project screen), else absent.
+  optional string section_id = 7;
+  repeated TodoRow rows = 8;
+}
+
+message TodoFact {
+  string label = 1;
+  string detail = 2;
+}
+
+// One row of a choice sheet: a filing target, a More row, a field choice.
+message TodoChoice {
+  // What the choice event sends back.
+  string key = 1;
+  string label = 2;
+  string meta = 3;
+  bool selected = 4;
+  bool enabled = 5;
+  // A section under its project.
+  bool indented = 6;
+  string icon_key = 7;
+}
+
+// Every fixed word a Tasks screen draws, so no view carries copy.
+message TodoChrome {
+  string title = 1;
+  string retry = 2;
+  // The skeleton's accessibility label.
+  string loading = 3;
+  string search_placeholder = 4;
+  string search_label = 5;
+  string search_close = 6;
+  string more_title = 7;
+  string reads_title = 8;
+  repeated TodoFact reads_facts = 9;
+  string quick_add_placeholder = 10;
+  string quick_add_verb = 11;
+  string file_title = 12;
+  string new_project_title = 13;
+  string new_project_placeholder = 14;
+  string new_project_verb = 15;
+  string add_section_title = 16;
+  string add_section_placeholder = 17;
+  string add_section_verb = 18;
+  string cancel = 19;
+  // The band's home capsule.
+  string home = 20;
+  string show_more = 21;
+  // A pushed page's back control: the app it was pushed from, "Agenda".
+  string back = 22;
+  // The verbs beside the detail's subtask and tag entries.
+  string add_subtask_verb = 23;
+  string add_tag_verb = 24;
+  // A row's filing verb (`TodoRow.can_file`), "Move to project": a
+  // long press on the row offers it.
+  string file_verb = 25;
+}
+
+// A notice over a list: one sentence and at most one verb.
+message TodoNotice {
+  string sentence = 1;
+  string verb_label = 2;
+  // What `NoticeActed` means: `catch_up`.
+  string verb_key = 3;
+}
+
+// The quick-add bar: a bare title, and where it lands.
+message TodoQuickAdd {
+  // What the member typed. Cleared when an add is submitted.
+  string title = 1;
+  // The Add verb is live: a title that is not blank.
+  bool can_submit = 2;
+  // Where the task lands, as the field's placeholder: "Add to Today" /
+  // "Add to Inbox" / "Add to Garden · Beds".
+  string lands_label = 3;
+  // False where nothing can be added (denied, loading the first page). On
+  // To-do it governs the header's Plus; the bar itself waits for `drawn`.
+  bool shown = 4;
+  // The field takes the keyboard when drawn: the Plus opened it, or it was
+  // opened with words already in it (Notes' "Send to Tasks").
+  bool focused = 5;
+  // The header's Plus (R-CHROME-1), drawn while the bar is `shown`: what a
+  // screen reader says for it, "Add task". A tap opens the bar on the
+  // keyboard (`QuickAddOpened`). Empty on a pushed page.
+  string add_label = 6;
+  // The bar is drawn. On Agenda's To-do only after the Plus (or Notes' "Send
+  // to Agenda") opened it, until the keyboard leaves an empty field
+  // (`QuickAddClosed`); a pushed page, which has no Plus, keeps it open.
+  bool drawn = 7;
+}
+
+// One area's projects on To-do (`AgendaTodo.projects`).
+message TodoProjectGroup {
+  string key = 1;
+  // An area's name, or "Projects" for those in none.
+  string title = 2;
+  repeated TodoProjectRow rows = 3;
+}
+
+// One project on To-do: the kit's row, and the page a tap pushes.
+message TodoProjectRow {
+  ListRow row = 1;
+  // `agenda.project`, named so its head has words before the read lands.
+  Route route = 2;
+}
+
+// `agenda.todo_list`: Anytime, All, Logbook or Reminders. The route names the
+// view (`TodoListRoute.view`).
+message TodoListState {
+  TodoView view = 2;
+  // "Anytime", "All", "Logbook", "Reminders".
+  string title = 3;
+  oneof content {
+    Loading loading = 4;
+    Failure failure = 5;
+    Denied denied = 6;
+    TodoListData data = 7;
+  }
+  TodoChrome chrome = 8;
+  StatusLine status = 9;
+}
+
+message TodoListData {
+  string today = 1;
+  repeated TodoRowGroup groups = 2;
+  // Present only when no group has a row: what this view says when empty.
+  optional EmptyState empty = 3;
+  string count_label = 4;
+  // "100 tasks · more not shown" when the window is not everything.
+  string window_label = 5;
+  bool can_show_more = 6;
+}
+
+message TodoListEvent {
+  oneof kind {
+    // The failure's "Try again".
+    Refreshed refreshed = 2;
+    RowChecked row_checked = 3;
+    StatusActed status_acted = 4;
+    NextPageRequested next_page = 10;
+  }
+
+  message Refreshed {}
+
+  // Open views: complete. The Logbook: reopen.
+  message RowChecked {
+    string task_id = 1;
+  }
+
+  // The status line's verb: Undo.
+  message StatusActed {}
+
+  // "Show more": the window widens by a page.
+  message NextPageRequested {}
+}
+
+// `agenda.project`: one project, its sections and a quick add into them.
+message TodoProjectState {
+  string project_id = 2;
+  // The name, riding along from the route until the answer names it.
+  string title = 3;
+  oneof content {
+    Loading loading = 4;
+    Failure failure = 5;
+    Denied denied = 6;
+    TodoProjectData data = 7;
+  }
+  TodoChrome chrome = 8;
+  StatusLine status = 9;
+  TodoQuickAdd quick_add = 10;
+  Sheet sheet = 11;
+  // The words typed in the Add section sheet.
+  string new_section_name = 12;
+  bool new_section_can_submit = 13;
+  // The section a quick add lands in; empty is the project's unsectioned work.
+  string target_section_id = 14;
+  // The words typed in the Rename sheet, from the project's own name.
+  string rename_name = 15;
+  bool rename_can_submit = 16;
+
+  enum Sheet {
+    SHEET_UNSPECIFIED = 0;
+    SHEET_NONE = 1;
+    SHEET_ADD_SECTION = 2;
+    SHEET_RENAME = 3;
+  }
+}
+
+message TodoProjectData {
+  string today = 1;
+  // Unsectioned first (when it has rows), then EVERY section in its order,
+  // an empty one included — each with the "Add task" verb.
+  repeated TodoRowGroup groups = 2;
+  // Present when the project has no row and no section, or is gone.
+  optional EmptyState empty = 3;
+  string count_label = 4;
+  // "Add section".
+  string add_section_label = 5;
+  // False when the answer names no live project by this id.
+  bool found = 6;
+  // The Rename sheet's words: the header verb, the sheet title, the field
+  // placeholder and the submit verb.
+  string rename_label = 7;
+  string rename_title = 8;
+  string rename_placeholder = 9;
+  string rename_verb = 10;
+}
+
+message TodoProjectEvent {
+  oneof kind {
+    Refreshed refreshed = 2;
+    RowChecked row_checked = 3;
+    StatusActed status_acted = 4;
+    QuickAddChanged quick_add_changed = 5;
+    QuickAddSubmitted quick_add_submitted = 6;
+    GroupVerb group_verb = 7;
+    AddSectionRequested add_section = 8;
+    SectionNameChanged section_name = 9;
+    SectionSubmitted section_submitted = 10;
+    SheetClosed sheet_closed = 11;
+    RenameRequested rename = 12;
+    RenameNameChanged rename_name = 13;
+    RenameSubmitted rename_submitted = 14;
+  }
+
+  message Refreshed {}
+
+  message RowChecked {
+    string task_id = 1;
+  }
+
+  message StatusActed {}
+
+  message QuickAddChanged {
+    string title = 1;
+  }
+
+  message QuickAddSubmitted {}
+
+  // A group's `verb_key`: `add:<section_id>` points the quick add at it.
+  message GroupVerb {
+    string key = 1;
+  }
+
+  message AddSectionRequested {}
+
+  message SectionNameChanged {
+    string name = 1;
+  }
+
+  message SectionSubmitted {}
+
+  // Closes whichever sheet is up.
+  message SheetClosed {}
+
+  message RenameRequested {}
+
+  message RenameNameChanged {
+    string name = 1;
+  }
+
+  message RenameSubmitted {}
+}
+
+// The words the member types. Autosaved (`Autosave`); every other field is a
+// write of its own.
+message TodoDraft {
+  string title = 1;
+  string notes = 2;
+}
+
+// `agenda.task`: one task, an editor that saves as the member types.
+message TodoDetailState {
+  string task_id = 2;
+  oneof content {
+    Loading loading = 3;
+    Failure failure = 4;
+    Denied denied = 5;
+    TodoDetailData data = 6;
+    // NO LIVE TASK HAS THE ID — never made, deleted, or in the trash. A
+    // state the screen draws ("This task is gone."), not a failed read.
+    EmptyState gone = 17;
+  }
+  Autosave autosave = 7;
+  // The confirm on screen, and what it asks about.
+  optional Confirm confirm = 11;
+  Asking asking = 12;
+  // The field whose choice sheet is up; empty for none.
+  string open_field = 13;
+  TodoChrome chrome = 14;
+  StatusLine status = 15;
+  // THE TASK LEFT (deleted): the shell pops.
+  bool finished = 16;
+
+  enum Asking {
+    ASKING_UNSPECIFIED = 0;
+    ASKING_NONE = 1;
+    ASKING_DELETE = 2;
+    ASKING_RELEASE = 3;
+  }
+}
+
+message TodoDetailData {
+  TodoDraft draft = 1;
+  TodoCheck check = 2;
+  string check_label = 3;
+  // "Done", "Won't do", "Started", or empty for open work.
+  string status_label = 4;
+  // When, Time, Reminder, Repeats, Anchor, Priority, Effort, Project, Tags.
+  repeated TodoField fields = 5;
+  // "Subtasks · 2 of 5" / "Subtasks".
+  string subtasks_label = 6;
+  repeated TodoRow subtasks = 7;
+  // A top-level task takes subtasks; a subtask does not (one level).
+  bool can_add_subtask = 8;
+  string subtask_note = 9;
+  // The parent, when this is a subtask: its title, and the page a tap opens.
+  string parent_task_id = 10;
+  string parent_title = 11;
+  string title_placeholder = 12;
+  string notes_placeholder = 13;
+  string add_subtask_placeholder = 14;
+  string delete_label = 15;
+  string release_label = 16;
+  // False once released or done: releasing is for open work.
+  bool can_release = 17;
+  string today = 18;
+  // WHERE THE PARENT LINK GOES, as the route the shell pushes; absent on a
+  // top-level task.
+  optional Route parent_route = 19;
+}
+
+message TodoField {
+  // `when`, `time`, `reminder`, `repeats`, `anchor`, `priority`, `effort`,
+  // `project`, `tags` — what `FieldChoice` sends back.
+  string key = 1;
+  string label = 2;
+  // "Tomorrow", "09:00", "Every 2 weeks on Monday", "Never", "—".
+  string value = 3;
+  // One `--annot` note, or empty.
+  string note = 4;
+  // Chips, cards or sheet rows, in order.
+  repeated TodoChoice choices = 5;
+  // The view offers the platform's date (`DatePicked`) or time
+  // (`TimePicked`) picker beside the choices.
+  bool pick_date = 6;
+  bool pick_time = 7;
+  // Repeats: the rule as the vault stores it (`TodoTask.rrule`), for the
+  // picker to pre-select from; empty on a one-off. Never drawn (#834): the
+  // member reads `value`, the core's sentence.
+  string raw = 8;
+  // The field takes an edit now (a reminder needs a due, for one).
+  bool enabled = 9;
+  // Tags: the field offers a text entry (`TagAdded`).
+  bool add_text = 10;
+  string add_placeholder = 11;
+  // Choices open in a sheet (`FieldOpened`) rather than inline.
+  bool sheet = 12;
+  // What the platform's pickers open on: the civil day (`YYYY-MM-DD`) and
+  // wall-clock time (`HH:MM`) the task is due, else today and empty. The
+  // machine's values, so a view never reads a clock.
+  string day = 13;
+  string time = 14;
+  // The words on the picker row: "Pick a date" / "Pick a time".
+  string pick_label = 15;
+}
+
+message TodoDetailEvent {
+  oneof kind {
+    // The failure's "Try again".
+    Refreshed refreshed = 2;
+    TitleChanged title = 3;
+    NotesChanged notes = 4;
+    FieldChoice field_choice = 5;
+    DatePicked date_picked = 6;
+    TimePicked time_picked = 7;
+    FieldOpened field_opened = 8;
+    FieldClosed field_closed = 9;
+    TagAdded tag_added = 10;
+    CheckTapped check = 11;
+    SubtaskChecked subtask_checked = 12;
+    SubtaskAdded subtask_added = 13;
+    DeleteRequested delete = 14;
+    ReleaseRequested release = 15;
+    Confirmed confirmed = 16;
+    Dismissed dismissed = 17;
+    StatusActed status_acted = 24;
+  }
+
+  message Refreshed {}
+
+  message TitleChanged {
+    string title = 1;
+  }
+
+  message NotesChanged {
+    string notes = 1;
+  }
+
+  // A `TodoChoice.key` of the field `field`.
+  message FieldChoice {
+    string field = 1;
+    string key = 2;
+  }
+
+  // `YYYY-MM-DD` from the platform's picker. Closes the open field.
+  message DatePicked {
+    string day = 1;
+  }
+
+  // `HH:MM` from the platform's picker. Closes the open field.
+  message TimePicked {
+    string time = 1;
+  }
+
+  message FieldOpened {
+    string field = 1;
+  }
+
+  message FieldClosed {}
+
+  message TagAdded {
+    string label = 1;
+  }
+
+  message CheckTapped {}
+
+  message SubtaskChecked {
+    string task_id = 1;
+  }
+
+  message SubtaskAdded {
+    string title = 1;
+  }
+
+  message DeleteRequested {}
+
+  message ReleaseRequested {}
+
+  message Confirmed {}
+
+  message Dismissed {}
+
+  // The status line's verb: Undo.
+  message StatusActed {}
+}
+
+// `agenda.catch_up`: what came due, what repeats and is behind, what has sat.
+message TodoCatchUpState {
+  oneof content {
+    Loading loading = 2;
+    Failure failure = 3;
+    Denied denied = 4;
+    TodoCatchUpData data = 5;
+  }
+  TodoChrome chrome = 6;
+  StatusLine status = 7;
+  optional Confirm confirm = 8;
+  // The pile the confirm asks about: `dated`, `repeating`, `sitting`.
+  string asking_pile = 9;
+}
+
+message TodoCatchUpData {
+  string today = 1;
+  // "16 days away · 34 tasks came due" when the core names an absence; empty
+  // otherwise.
+  string head = 2;
+  // Dated, repeating, sitting — an empty pile is not drawn.
+  repeated TodoPile piles = 3;
+  // Present only when no pile has a row.
+  optional EmptyState empty = 4;
+}
+
+message TodoPile {
+  // `dated`, `repeating`, `sitting` — what `CompleteAllTapped` sends.
+  string key = 1;
+  string title = 2;
+  string meta = 3;
+  // "Complete all".
+  string verb_label = 4;
+  repeated TodoRow rows = 6;
+}
+
+message TodoCatchUpEvent {
+  oneof kind {
+    Refreshed refreshed = 2;
+    CompleteAllTapped complete_all = 3;
+    Confirmed confirmed = 4;
+    Dismissed dismissed = 5;
+    RowChecked row_checked = 6;
+    StatusActed status_acted = 7;
+  }
+
+  message Refreshed {}
+
+  message CompleteAllTapped {
+    string pile = 1;
+  }
+
+  message Confirmed {}
+
+  message Dismissed {}
+
+  message RowChecked {
+    string task_id = 1;
+  }
+
+  // The status line's verb: Undo.
+  message StatusActed {}
+}

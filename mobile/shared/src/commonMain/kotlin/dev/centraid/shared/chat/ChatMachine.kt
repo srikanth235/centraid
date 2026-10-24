@@ -140,10 +140,8 @@ public object ChatMachine {
 
     /**
      * THE APPS A CHAT CAN BE SCOPED TO, in the order the composer's menu lists
-     * them: every app a member opens, Locker included. `tasks` is a domain read
-     * through Agenda's scope, not a scope of its own (#1128, R-1128-F2): a chat
-     * scoped to Agenda covers its tasks, and a card still names `tasks`. The core
-     * accepts exactly these: they are the apps of
+     * them: every app a member opens, Locker included; a chat scoped to Agenda
+     * covers its tasks (#1128, R-1128-F2). The core accepts exactly these: they are the apps of
      * `centraid_vault::roster::APPS` that open in themselves (R-1135-7-1), the one
      * constant `thread.save_turn`'s schema and `App::SCOPES` in `crates/assist` read;
      * `ChatScopeSpec` holds this list equal to it, and the shells draw their menu from here.
@@ -153,8 +151,7 @@ public object ChatMachine {
 
     /**
      * THE SCOPE A VISIT TO [appId] GIVES A CHAT: the app it opens in, when that
-     * is a scope, else every app (""). A pushed task page names the `tasks`
-     * domain and scopes the chat to Agenda (R-1128-F2); every other app scopes to itself.
+     * is a scope, else every app (""). Every app scopes to itself.
      */
     public fun scopeOf(appId: String): String = AppHomes.appOf(appId).takeIf { it in SCOPABLE_APPS }.orEmpty()
 
@@ -1135,7 +1132,7 @@ public object ChatMachine {
         text.replace("**", "").replace("__", "").replace("`", "")
             .lines().joinToString("\n") { it.replaceFirst(Regex("^\\s*#{1,6}\\s+"), "") }
 
-    /** An app id as a member reads it: the name of the app it opens in, so `tasks` is Agenda (#1128, R-1128-7). */
+    /** An app id as a member reads it: the name of the app it opens in. */
     internal fun appName(id: String): String = AppHomes.nameOf(id)
 
     /** `530 MB`, `1.6 GB`: decimal units, the way a download is quoted. */

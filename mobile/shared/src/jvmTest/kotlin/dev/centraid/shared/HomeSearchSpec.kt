@@ -10,7 +10,10 @@ import centraid.screen.v1.ChatCard
 import centraid.screen.v1.HomeSearchEvent
 import centraid.screen.v1.HomeSearchState
 import dev.centraid.design.copy.SharedCopy
+import dev.centraid.shared.nav.AgendaEntry
 import dev.centraid.shared.nav.Destination
+import dev.centraid.shared.nav.DocsEntry
+import dev.centraid.shared.nav.NotesEntry
 import dev.centraid.shared.nav.RowRoutes
 import dev.centraid.shared.platform.DeviceClock
 import dev.centraid.shared.screen.ScreenEffect
@@ -52,7 +55,7 @@ class HomeSearchSpec : StringSpec({
         fun answered(term: String, corrected: String) = HomeSearchReads.arrived(
             listOf(
                 AppQueryResponse(
-                    vault_search = VaultSearch(hits = listOf(hit("tasks", "task", "t1", "Buy sunscreen")), corrected = corrected),
+                    vault_search = VaultSearch(hits = listOf(hit("agenda", "task", "t1", "Buy sunscreen")), corrected = corrected),
                 ),
             ),
             listOf(AppQueryRequest(vault_search = VaultSearchRequest(term = term, tz = now.zone))),
@@ -93,11 +96,11 @@ class HomeSearchSpec : StringSpec({
                 hit("agenda", "event", "e1", "Cabin weekend"),
                 hit("notes", "note", "n2", "Cabin key"),
                 hit("photos", "photo", "a1", "Cabin at dusk"),
-                hit("tasks", "task", "t1", "Book the cabin"),
+                hit("agenda", "task", "t1", "Book the cabin"),
             ),
         )
         // SPRINGBOARD_ORDER: photos, docs, agenda, notes, money, people. The task hit is
-        // grouped under the app it opens in (#1128, R-1128-7), so Agenda's group holds both.
+        // Agenda's own (#1128), so Agenda's group holds both.
         data.groups.map { it.app_id } shouldContainExactly listOf("photos", "agenda", "notes")
         data.groups.map { it.label } shouldContainExactly listOf("Photos", "Agenda", "Notes")
         data.groups.map { it.count } shouldContainExactly listOf(1, 2, 2)
@@ -107,7 +110,7 @@ class HomeSearchSpec : StringSpec({
             listOf(SharedCopy.SEARCH_KIND_NOTE to "Cabin packing", SharedCopy.SEARCH_KIND_NOTE to "Cabin key")
         data.groups[1].accessibility_label shouldBe "Agenda, 2 results"
         data.groups[1].rows.map { it.app_id to it.title } shouldContainExactly
-            listOf("agenda" to "Cabin weekend", "tasks" to "Book the cabin")
+            listOf("agenda" to "Cabin weekend", "agenda" to "Book the cabin")
         data.groups[1].rows[0].kind_label shouldBe SharedCopy.SEARCH_KIND_EVENT
         data.groups[2].rows[0].accessibility_label shouldBe "Note, Cabin packing"
     }
@@ -213,23 +216,19 @@ class HomeSearchSpec : StringSpec({
                 hit("notes", "note", "n1", "Cabin packing"),
                 hit("people", "person", "p1", "Kate Bell"),
                 hit("agenda", "event", "e1", "Cabin weekend"),
-                hit("tasks", "task", "t1", "Book the cabin"),
                 hit("docs", "document", "d1", "Cabin lease"),
                 hit("photos", "photo", "a1", "Cabin at dusk"),
             ),
         )
-        // A task hit sits in Agenda's group and still opens in its own app's router (R-CHROME-6).
-        data.groups.single { it.app_id == "agenda" }.rows.map { it.target!!.app } shouldContainExactly listOf("agenda", "tasks")
         data.groups.none { it.app_id == "tasks" } shouldBe true
         val targets = data.groups.flatMap { group -> group.rows.map { it.target!! } }
         targets.single { it.app == "photos" } shouldBe ChatCard(app = "photos", entity = "photo", id = "a1", title = "Cabin at dusk")
         targets.single { it.app == "notes" } shouldBe ChatCard(app = "notes", entity = "note", id = "n1", title = "Cabin packing")
         val opens = targets.associate { it.app to RowRoutes.destination(it, parent = "Search") }
-        opens["notes"] shouldBe Destination.NotesEditor("n1", title = "Cabin packing")
+        opens["notes"] shouldBe NotesEntry.editor("n1")
         opens["people"] shouldBe Destination.PeoplePerson("p1", "Kate Bell")
-        opens["agenda"] shouldBe Destination.AgendaEvent("e1", "", null, "")
-        opens["tasks"] shouldBe Destination.TasksDetail("t1")
-        opens["docs"] shouldBe Destination.DocsDocument("d1", "Cabin lease", parent = "Search")
+        opens["agenda"] shouldBe AgendaEntry.event("e1")
+        opens["docs"] shouldBe DocsEntry.document("d1", "Cabin lease", parent = "Search")
         opens["photos"] shouldBe Destination.PhotoLightbox("a1", listOf("a1"))
         // Picking a row is an intent: the machine records, the shell opens.
         val shown = step(typed(opened, "cabin").state, answer("cabin", hit("notes", "note", "n1", "Cabin packing"))).state
@@ -237,7 +236,7 @@ class HomeSearchSpec : StringSpec({
         val picked = step(shown, HomeSearchEvent(row = HomeSearchEvent.RowPicked(row = row)))
         picked.effects.shouldBeEmpty()
         picked.state.data_ shouldBe shown.data_
-        RowRoutes.destination(row.target!!) shouldBe Destination.NotesEditor("n1", title = "Cabin packing")
+        RowRoutes.destination(row.target!!) shouldBe NotesEntry.editor("n1")
     }
 
     // ---- THE CHAT GROUP (#1097, R-1097-24) ---------------------------------------------------------

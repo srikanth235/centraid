@@ -1,165 +1,70 @@
 package dev.centraid.android.screens.agenda
 
-import android.Manifest
 import android.content.ContentResolver
 import android.content.ContentUris
 import android.content.Context
-import android.content.pm.PackageManager
 import android.provider.CalendarContract
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.platform.LocalContext
-import androidx.core.content.ContextCompat
+import centraid.core.v1.CalendarSnapshot
+import centraid.core.v1.PhoneCalendar
+import centraid.core.v1.PhoneCalendarEvent
+import centraid.core.v1.PhoneCalendarSeries
 import dev.centraid.android.kit.PhoneOrigins
-import dev.centraid.design.copy.AgendaCopy
-import dev.centraid.shared.apps.agenda.CalendarImport
-import dev.centraid.shared.apps.agenda.PhoneEvent
-import dev.centraid.shared.apps.agenda.PhoneSeries
-import dev.centraid.shared.shell.HomeSession
-import dev.centraid.shared.sync.phone.PhoneOriginRef
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 
 /**
- * CALENDAR → AGENDA, ANDROID'S HALF (docs/decisions.md, "Onboarding without
- * sample data"): the permission, the phone's calendar, and the hand-off to
- * [CalendarImport], which writes the events.
+ * THE PHONE'S CALENDARS, READ FOR THE SCREEN RUNTIME (#1135; docs/decisions.md,
+ * "Onboarding without sample data"): the platform half of Calendar → Agenda.
  *
- * **THE PERMISSION IS ASKED AT THE TAP**, never at launch: Agenda's day one
- * draws "Import calendar" (`AgendaHomeData.import_source`), and the system's
- * dialog is the answer to that tap. A grant reads the calendar; a refusal —
- * including the one the system returns at once after "don't ask again" — is
- * [AgendaCopy.IMPORT_CALENDAR_DENIED], which names Settings.
- *
- * **INTO THE MEMBER'S FOREGROUND VAULT** (`Shelf.core`). Agenda
- * re-reads by itself — every event lands through the change stream.
- *
- * [onStatus] is handed each sentence: [AgendaCopy.IMPORT_CALENDAR_RUNNING]
- * while it runs (`holds` true: it stays until the outcome replaces it), then
- * the outcome's one sentence. [onImported] is called on the main thread once an
- * import has written, so the follower takes the next pass (and asks about a calendar
- * that left the phone: R-1127-9).
+ * Rust asks with a `CalendarRead` effect (`kit/ScreenEffects.kt` performs it and
+ * has already settled the permission, which is asked only at the member's
+ * Import tap, never by a following pass); this answers with a
+ * [CalendarSnapshot] of what `CalendarContract` holds over the window, every
+ * occurrence its own event. What to import, how a series folds back into one
+ * record, how an event maps and what the member is told are Rust's
+ * (`crates/screens/src/agenda/calendar.rs`); nothing is decided here.
  */
-@Composable
-public fun rememberCalendarImport(
-    session: HomeSession?,
-    onStatus: (sentence: String, holds: Boolean) -> Unit,
-    onImported: () -> Unit = {},
-): (after: ((String?) -> Unit)?) -> Unit {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val currentSession by rememberUpdatedState(session)
-    val currentStatus by rememberUpdatedState(onStatus)
-    val currentImported by rememberUpdatedState(onImported)
-    // ONE IMPORT AT A TIME: a second tap while the first writes would propose
-    // every event twice, and the second copy would land as a free duplicate.
-    var running by remember { mutableStateOf(false) }
-    // A MADE VAULT'S CHAIN waits on this import (R-ONBOARD-8): its outcome
-    // goes to [after] instead of the banner, and a refusal is null.
-    var pending by remember { mutableStateOf<((String?) -> Unit)?>(null) }
-
-    fun finish(after: ((String?) -> Unit)?, sentence: String) {
-        if (after != null) after(sentence) else currentStatus(sentence, false)
-    }
-
-    fun run(after: ((String?) -> Unit)?) {
-        if (running) {
-            after?.invoke(null)
-            return
-        }
-        val core = currentSession?.shelf?.core()
-        if (core == null) {
-            finish(after, AgendaCopy.IMPORT_CALENDAR_NO_VAULT)
-            return
-        }
-        running = true
-        currentStatus(AgendaCopy.IMPORT_CALENDAR_RUNNING, true)
-        scope.launch {
-            // OFF THE MAIN THREAD, both halves: the calendar is a content
-            // provider query and each event is a core call.
-            val sentence = withContext(Dispatchers.IO) {
-                val now = System.currentTimeMillis()
-                val read = readPhoneEvents(context, now)
-                val outcome = CalendarImport.run(core, read.events, TimeZone.getDefault().id, now, read.origins, read.complete)
-                // THE FOLLOWER TAKES IT FROM HERE: a pass asks about an origin this one found gone (R-1127-9).
-                withContext(Dispatchers.Main) { currentImported() }
-                CalendarImport.sentence(outcome)
-            }
-            running = false
-            finish(after, sentence)
-        }
-    }
-
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        val after = pending
-        pending = null
-        when {
-            granted -> run(after)
-            after != null -> after(null)
-            else -> currentStatus(AgendaCopy.IMPORT_CALENDAR_DENIED, false)
-        }
-    }
-    return remember(launcher) {
-        { after ->
-            if (granted(context)) {
-                run(after)
-            } else {
-                pending = after
-                launcher.launch(Manifest.permission.READ_CALENDAR)
-            }
-        }
-    }
+internal fun readCalendarSnapshot(context: Context, daysBack: Int, daysOn: Int, deviceId: String): CalendarSnapshot {
+    val now = System.currentTimeMillis()
+    val zone = TimeZone.getDefault().id
+    // A query that throws is a read that may have missed events: `complete` false, so nothing is trashed.
+    val read = runCatching { readEvents(context.contentResolver, now - daysBack * DAY_MS, now + daysOn * DAY_MS) }
+        .getOrElse { CalendarsRead(emptyList(), emptyList(), complete = false) }
+    return CalendarSnapshot(
+        now_ms = now,
+        device_zone = zone,
+        complete = read.complete,
+        calendars = read.calendars,
+        events = read.events,
+        device_id = deviceId,
+    )
 }
 
-private fun granted(context: Context): Boolean =
-    ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CALENDAR) == PackageManager.PERMISSION_GRANTED
+private const val DAY_MS: Long = 24L * 60 * 60 * 1000
 
 /** What the phone's calendars held at one read: the events, and every writable calendar present. */
-internal class CalendarsRead(
-    val events: List<PhoneEvent>,
-    val origins: List<PhoneOriginRef>,
-    /** False when the read may have missed events (no permission, a query that failed): nothing is then trashed (R-1127-3). */
+private class CalendarsRead(
+    val events: List<PhoneCalendarEvent>,
+    val calendars: List<PhoneCalendar>,
+    /** False when the read may have missed events (a query that failed): nothing is then trashed (R-1127-3). */
     val complete: Boolean,
 )
 
-/**
- * THE PHONE'S CALENDARS AS ONE PASS READS THEM, or an incomplete empty read when the permission
- * is not granted or a provider query throws. **It never asks the OS for anything**: only the
- * member's Import tap does (R-ONBOARD-4).
- */
-internal fun readPhoneEvents(context: Context, now: Long): CalendarsRead =
-    if (!granted(context)) {
-        CalendarsRead(emptyList(), emptyList(), complete = false)
-    } else {
-        runCatching { readEvents(context.contentResolver, now) }
-            .getOrElse { CalendarsRead(emptyList(), emptyList(), complete = false) }
-    }
-
 /** One calendar the member writes to: its origin and the name they know it by. */
-private class CalendarRow(val ref: PhoneOriginRef)
+private class CalendarRow(val key: String, val calendar: PhoneCalendar)
 
 /** What an event row says about where it lives and what it is called on every device. */
 private class EventMeta(val calendarId: Long, val uid: String?)
 
 /**
- * THE PHONE'S CALENDAR, ONE [PhoneEvent] PER OCCURRENCE: `Instances` over
- * [CalendarImport]'s window, so a recurring series arrives expanded. An
- * occurrence of a series also carries its [PhoneSeries] — the master event's
- * rule and its own first occurrence — and, for an exception event (one the
- * member moved: `ORIGINAL_ID` names its series), where the rule put it; the
- * shared importer folds them back into one series. A cancelled occurrence
+ * THE PHONE'S CALENDAR, ONE [PhoneCalendarEvent] PER OCCURRENCE: `Instances` over
+ * the window Rust asked for, so a recurring series arrives expanded. An
+ * occurrence of a series also carries its [PhoneCalendarSeries] — the master
+ * event's rule and its own first occurrence — and, for an exception event (one
+ * the member moved: `ORIGINAL_ID` names its series), where the rule put it; Rust
+ * folds them back into one series. A cancelled occurrence
  * ([CalendarContract.Events.STATUS_CANCELED], or an `EXDATE`) is not read, which is
  * how the importer knows to skip it.
  *
@@ -168,11 +73,11 @@ private class EventMeta(val calendarId: Long, val uid: String?)
  * an empty one included. A calendar the member hides has no instances, so it reads as one that
  * left the phone, and the member is asked, with Keep the default.
  */
-internal fun readEvents(resolver: ContentResolver, now: Long): CalendarsRead {
+private fun readEvents(resolver: ContentResolver, windowStart: Long, windowEnd: Long): CalendarsRead {
     val calendars = readCalendars(resolver)
     val uri = CalendarContract.Instances.CONTENT_URI.buildUpon().also {
-        ContentUris.appendId(it, CalendarImport.windowStart(now))
-        ContentUris.appendId(it, CalendarImport.windowEnd(now))
+        ContentUris.appendId(it, windowStart)
+        ContentUris.appendId(it, windowEnd)
     }.build()
     val projection = arrayOf(
         CalendarContract.Instances.TITLE,
@@ -226,20 +131,19 @@ internal fun readEvents(resolver: ContentResolver, now: Long): CalendarsRead {
         if (row.allDay) {
             // ALL-DAY INSTANCES ARE UTC MIDNIGHTS in `CalendarContract`, END
             // exclusive: the first day is BEGIN's UTC date and the last day,
-            // inclusive as `PhoneEvent` keeps it, is the millisecond before END's.
-            PhoneEvent(
+            // inclusive as `PhoneCalendarEvent` keeps it, is the millisecond before END's.
+            PhoneCalendarEvent(
                 title = row.title,
                 notes = row.notes,
-                allDay = true,
+                all_day = true,
                 start = utcDay(row.begin),
                 end = utcDay(maxOf(row.begin, row.end - 1)),
                 free = row.free,
                 series = own?.series,
-                originalStart = if (moved) row.originalTime?.let(::utcDay).orEmpty() else "",
+                original_start = if (moved) row.originalTime?.let(::utcDay).orEmpty() else "",
                 moved = moved,
-                phoneId = PhoneOrigins.eventId(meta.uid, row.eventId),
-                origin = calendar.ref.id,
-                originLabel = calendar.ref.label,
+                phone_id = PhoneOrigins.eventId(meta.uid, row.eventId),
+                calendar_key = calendar.key,
             )
         } else {
             // A TIMED INSTANCE IS A WALL CLOCK IN ITS OWN ZONE — the zone the
@@ -247,7 +151,7 @@ internal fun readEvents(resolver: ContentResolver, now: Long): CalendarsRead {
             // one this runtime does not know. Where the rule put a moved one
             // is read in the SERIES' zone, the one the vault keys it in.
             val zone = zoneOf(row.zone, device)
-            PhoneEvent(
+            PhoneCalendarEvent(
                 title = row.title,
                 notes = row.notes,
                 start = wallClock(row.begin, zone),
@@ -255,19 +159,18 @@ internal fun readEvents(resolver: ContentResolver, now: Long): CalendarsRead {
                 tz = zone.id,
                 free = row.free,
                 series = own?.series,
-                originalStart = if (moved && own != null) row.originalTime?.let { wallClock(it, own.zone) }.orEmpty() else "",
+                original_start = if (moved && own != null) row.originalTime?.let { wallClock(it, own.zone) }.orEmpty() else "",
                 moved = moved,
-                phoneId = PhoneOrigins.eventId(meta.uid, row.eventId),
-                origin = calendar.ref.id,
-                originLabel = calendar.ref.label,
+                phone_id = PhoneOrigins.eventId(meta.uid, row.eventId),
+                calendar_key = calendar.key,
             )
         }
     }
-    return CalendarsRead(events, calendars.values.map { it.ref }.distinctBy { it.id }, complete = true)
+    return CalendarsRead(events, calendars.values.map { it.calendar }.distinctBy { it.key }, complete = true)
 }
 
 /**
- * EVERY VISIBLE CALENDAR THE MEMBER WRITES TO, by row id: its origin and its label. Empty
+ * EVERY VISIBLE CALENDAR THE MEMBER WRITES TO, by row id: its key and its titles. Empty
  * calendars are in it, so one with no event is not mistaken for gone (R-1127-9).
  */
 private fun readCalendars(resolver: ContentResolver): Map<Long, CalendarRow> {
@@ -284,13 +187,11 @@ private fun readCalendars(resolver: ContentResolver): Map<Long, CalendarRow> {
     resolver.query(CalendarContract.Calendars.CONTENT_URI, projection, selection, null, "${CalendarContract.Calendars._ID} ASC")?.use { cursor ->
         while (cursor.moveToNext()) {
             val id = cursor.getLong(0)
-            // THE SHARED HELPER MAKES THE ORIGIN and its "{account}: {calendar}" label.
+            // THE PLATFORM'S OWN KEY, unprefixed: Rust makes the origin and its label.
+            val key = PhoneOrigins.calendarKey(cursor.getString(1), cursor.getString(2), cursor.getString(3), id)
             found[id] = CalendarRow(
-                CalendarImport.calendar(
-                    PhoneOrigins.calendarKey(cursor.getString(1), cursor.getString(2), cursor.getString(3), id),
-                    cursor.getString(2).orEmpty(),
-                    cursor.getString(4).orEmpty(),
-                ),
+                key,
+                PhoneCalendar(key = key, source_title = cursor.getString(2).orEmpty(), title = cursor.getString(4).orEmpty()),
             )
         }
     }
@@ -340,10 +241,10 @@ private class InstanceRow(
 )
 
 /** A series' master, and the zone its wall clocks are read in. */
-private class SeriesRow(val series: PhoneSeries, val zone: TimeZone)
+private class SeriesRow(val series: PhoneCalendarSeries, val zone: TimeZone)
 
 /**
- * THE MASTER EVENTS OF [ids], each as a [PhoneSeries]: its rule, and its own
+ * THE MASTER EVENTS OF [ids], each as a [PhoneCalendarSeries]: its rule, and its own
  * first occurrence — `DTSTART`, ending `DURATION` later (a repeating event
  * carries no `DTEND`). A master with no rule, or a duration that does not
  * parse, is left out, and its occurrences import one by one.
@@ -371,9 +272,9 @@ private fun readSeries(resolver: ContentResolver, ids: Set<Long>, device: TimeZo
             val zone = zoneOf(cursor.getString(5), device)
             val seriesId = PhoneOrigins.eventId(metas[id]?.uid, id)
             val series = if (cursor.getInt(6) == 1) {
-                PhoneSeries(id = seriesId, rrule = rule, start = utcDay(start), end = utcDay(maxOf(start, end - 1)))
+                PhoneCalendarSeries(id = seriesId, rrule = rule, start = utcDay(start), end = utcDay(maxOf(start, end - 1)))
             } else {
-                PhoneSeries(id = seriesId, rrule = rule, start = wallClock(start, zone), end = wallClock(maxOf(start, end), zone))
+                PhoneCalendarSeries(id = seriesId, rrule = rule, start = wallClock(start, zone), end = wallClock(maxOf(start, end), zone))
             }
             found[id] = SeriesRow(series, zone)
         }

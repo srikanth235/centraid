@@ -1,25 +1,21 @@
 import SwiftUI
 
 /// `agenda.editor` — make an event, edit one, or edit one occurrence of one
-/// (#1046 wave 5).
+/// (#1135).
 ///
 /// **THE ONE EXPLICIT SAVE.** A wrong date written by an autosave is worse
 /// than a lost draft, so this editor is the deliberate exception to #1015 D3:
 /// a `PushedPage` whose one trailing action is Save, armed by the state's
 /// `can_save`. Back never pops by itself — it forwards `LeaveRequested`, and
-/// the machine asks first when there are changes (the discard confirm) or
+/// Rust asks first when there are changes (the discard confirm) or
 /// answers `dismissed`, which is what pops.
 ///
 /// The date and time pickers bind to the draft's civil strings
 /// (`CivilDayPicker`/`CivilTimePicker`) and forward what was picked; every
-/// label, choice, block reason and note is the machine's.
+/// label, choice, block reason and note is Rust's.
 struct AgendaEditorView: View {
-    let data: Data
-    /// The route's `Opened`: ONE BRIDGE SERVES EVERY SITTING, so until the
-    /// state is about this one (the last sitting's draft is still held while
-    /// this `Opened` is in flight) the view draws loading and seeds nothing.
-    var opened: Data = Data()
-    let send: (Data) -> Void
+    let state: Centraid_Core_V1_AgendaEditorState
+    let send: (Centraid_Core_V1_AgendaEditorEvent) -> Void
     let onDone: () -> Void
 
     /// THE MEMBER'S TYPING, seeded once from the draft (`NotesEditorView`'s rule).
@@ -28,35 +24,21 @@ struct AgendaEditorView: View {
     @State private var typedLink = ""
     @State private var seeded = false
     /// Which platform picker is up — presentation only: the value it opens on
-    /// and the words over it are the draft's and the machine's.
+    /// and the words over it are the draft's and Rust's.
     @State private var picking: CivilPick? = nil
 
     @Environment(\.colorScheme) private var scheme
 
-    private var state: Centraid_Screen_V1_AgendaEditorState {
-        (try? Centraid_Screen_V1_AgendaEditorState(serializedBytes: data)) ?? .init()
-    }
-
-    private func event(_ build: (inout Centraid_Screen_V1_AgendaEditorEvent) -> Void) -> Data {
-        tasksEvent(Centraid_Screen_V1_AgendaEditorEvent.self, build)
-    }
-
-    /// The state is this route's sitting: same mode, same occurrence, same day.
-    private func mine(_ state: Centraid_Screen_V1_AgendaEditorState) -> Bool {
-        guard let route = (try? Centraid_Screen_V1_AgendaEditorEvent(serializedBytes: opened))?.opened,
-              route.mode != .unspecified else { return true }
-        return state.mode == route.mode
-            && state.eventID == route.eventID
-            && state.instanceKey == route.instanceKey
-            && (route.day.isEmpty || state.day == route.day)
+    private func event(_ build: (inout Centraid_Core_V1_AgendaEditorEvent) -> Void) -> Centraid_Core_V1_AgendaEditorEvent {
+        var event = Centraid_Core_V1_AgendaEditorEvent()
+        build(&event)
+        return event
     }
 
     var body: some View {
-        let state = state
         let chrome = state.chrome
-        let mine = mine(state)
-        let editorData: Centraid_Screen_V1_AgendaEditorData? = {
-            if mine, case let .data(data)? = state.content { return data }
+        let editorData: Centraid_Core_V1_AgendaEditorData? = {
+            if case let .data(data)? = state.content { return data }
             return nil
         }()
         PushedPage(
@@ -68,15 +50,15 @@ struct AgendaEditorView: View {
                 ToolbarVerb(label: chrome.save, identifier: "agenda-editor-save") {
                     send(event { $0.save = .init() })
                 }
-                .disabled(!editorData.canSave || state.write.phase == .inFlight)
+                .disabled(!editorData.canSave)
             }
         } content: {
-            if mine, case let .gone(gone)? = state.content {
+            if case let .gone(gone)? = state.content {
                 EmptyStateView(headline: gone.title, body: gone.body, actionLabel: gone.actionLabel, onAction: onDone)
                     .accessibilityIdentifier("agenda-editor-gone")
             } else {
                 ReadStateView(
-                    content: mine ? readContent(state) : .loading(true),
+                    content: readContent(state),
                     loadingLabel: chrome.loading,
                     onRetry: { send(event { $0.refreshed = .init() }) }
                 ) { editor in
@@ -95,7 +77,7 @@ struct AgendaEditorView: View {
             set: { open in if !open, state.hasConfirm { send(event { $0.confirmDismissed = .init() }) } }
         )) {
             ConfirmSheet(
-                state.confirm,
+                state.confirm.legacy,
                 cancelLabel: chrome.keepEditing,
                 onConfirm: { send(event { $0.confirmed = .init() }) },
                 onDismiss: { send(event { $0.confirmDismissed = .init() }) }
@@ -103,28 +85,28 @@ struct AgendaEditorView: View {
         }
         // SAVED, SKIPPED, OR LEFT WITH NOTHING TO LOSE: the editor is done.
         .onChange(of: state.dismissed) { _, dismissed in
-            if dismissed, mine { onDone() }
+            if dismissed { onDone() }
         }
     }
 
-    private func readContent(_ state: Centraid_Screen_V1_AgendaEditorState) -> ScreenContent<Centraid_Screen_V1_AgendaEditorData> {
+    private func readContent(_ state: Centraid_Core_V1_AgendaEditorState) -> ScreenContent<Centraid_Core_V1_AgendaEditorData> {
         switch state.content {
         case let .loading(loading)?: return .loading(loading.firstLoad)
         case let .failure(failure)?: return .failed(failure)
-        case let .denied(denied)?: return .denied(denied)
+        case let .denied(denied)?: return .gated(denied)
         case let .data(data)?: return .data(data)
         case .gone?, nil: return .loading(true)
         }
     }
 
     @ViewBuilder
-    private func form(_ editor: Centraid_Screen_V1_AgendaEditorData, state: Centraid_Screen_V1_AgendaEditorState) -> some View {
+    private func form(_ editor: Centraid_Core_V1_AgendaEditorData, state: Centraid_Core_V1_AgendaEditorState) -> some View {
         let chrome = state.chrome
         let draft = editor.draft
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 // THE ADD SHEET'S SWITCH (#1128): only a create has one, and
-                // the machine says which side is lit and what each is called.
+                // Rust says which side is lit and what each is called.
                 if !editor.kinds.isEmpty {
                     KitSegmented(
                         options: editor.kinds.map { (key: $0.kind, label: $0.label) },
@@ -205,7 +187,6 @@ struct AgendaEditorView: View {
                     ChoiceFieldRow(key: chrome.fieldRepeat, value: editor.repeatLabel, identifier: "agenda-editor-repeat") {
                         send(event { $0.sheetOpened = .with { $0.sheet = .repeat } })
                     }
-                    .disabled(!editor.repeatEnabled)
                     if !editor.repeatNote.isEmpty {
                         note(editor.repeatNote)
                     }
@@ -239,8 +220,8 @@ struct AgendaEditorView: View {
                     .padding(.vertical, 8)
                     .overlay(alignment: .bottom) { KitHairline() }
                 }
-                if !state.write.refusal.isEmpty {
-                    Text(state.write.refusal)
+                if state.hasStatus, !state.status.sentence.isEmpty {
+                    Text(state.status.sentence)
                         .centraidType("small")
                         .foregroundStyle(Theme.color("net", scheme))
                         .padding(.horizontal, CentraidGeometry.pageMargin)
@@ -269,14 +250,14 @@ struct AgendaEditorView: View {
         }
     }
 
-    /// Starts / Ends: the machine's day and time words, each its own tap that
+    /// Starts / Ends: Rust's day and time words, each its own tap that
     /// opens the platform's picker over the draft's civil strings (no time
-    /// all-day), titled with the machine's "Pick a date" / "Pick a time".
+    /// all-day), titled with Rust's "Pick a date" / "Pick a time".
     private func whenRow(
         key: String,
         dayLabel: String,
         timeLabel: String,
-        chrome: Centraid_Screen_V1_AgendaEditorChrome,
+        chrome: Centraid_Core_V1_AgendaEditorChrome,
         day: String,
         time: String,
         allDay: Bool,
@@ -307,7 +288,7 @@ struct AgendaEditorView: View {
         .accessibilityIdentifier(identifier)
     }
 
-    /// The machine's words as the tap that opens a picker.
+    /// Rust's words as the tap that opens a picker.
     private func pickerFace(_ words: String, hint: String, identifier: String, action: @escaping () -> Void) -> some View {
         KitLink(label: words, identifier: identifier, action: action)
             .monospacedDigit()
@@ -323,7 +304,7 @@ struct AgendaEditorView: View {
     }
 
     @ViewBuilder
-    private func sheet(_ state: Centraid_Screen_V1_AgendaEditorState, _ editor: Centraid_Screen_V1_AgendaEditorData) -> some View {
+    private func sheet(_ state: Centraid_Core_V1_AgendaEditorState, _ editor: Centraid_Core_V1_AgendaEditorData) -> some View {
         let chrome = state.chrome
         switch state.sheet {
         case .calendar:
@@ -345,7 +326,7 @@ struct AgendaEditorView: View {
         case .scope:
             SheetRoom(
                 title: chrome.scopeTitle,
-                status: state.write.refusal,
+                status: state.hasStatus ? state.status.sentence : "",
                 primary: editor.scopeArmed ? SheetPrimary(label: chrome.save) { send(event { $0.save = .init() }) } : nil
             ) {
                 if !chrome.scopeQuestion.isEmpty {
@@ -364,7 +345,7 @@ struct AgendaEditorView: View {
 
     private func choiceSheet(
         _ title: String,
-        _ choices: [Centraid_Screen_V1_AgendaChoice],
+        _ choices: [Centraid_Core_V1_AgendaChoice],
         status: String = "",
         onPick: @escaping (String) -> Void
     ) -> some View {
@@ -392,8 +373,8 @@ struct AgendaEditorView: View {
 
     /// READ from the state, WRITTEN as an event.
     private func sheetBinding(
-        _ state: Centraid_Screen_V1_AgendaEditorState,
-        _ sheets: Set<Centraid_Screen_V1_AgendaEditorState.Sheet>
+        _ state: Centraid_Core_V1_AgendaEditorState,
+        _ sheets: Set<Centraid_Core_V1_AgendaEditorState.Sheet>
     ) -> Binding<Bool> {
         Binding(
             get: { sheets.contains(state.sheet) },

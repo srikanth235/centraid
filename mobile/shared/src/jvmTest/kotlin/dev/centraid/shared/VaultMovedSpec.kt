@@ -3,12 +3,13 @@ package dev.centraid.shared
 import centraid.core.v1.CommandStatus
 import centraid.screen.v1.BackupState
 import centraid.screen.v1.MediaPermission
-import centraid.screen.v1.NoteDraft
-import centraid.screen.v1.NotesEditorEvent
-import centraid.screen.v1.NotesEditorState
+import centraid.screen.v1.Autosave
+import centraid.screen.v1.PeopleEditorEvent
+import centraid.screen.v1.PeopleEditorState
+import centraid.screen.v1.PeopleProfileDraft
 import dev.centraid.core.CentraidCore
-import dev.centraid.shared.apps.notes.NotesEditorMachine
-import dev.centraid.shared.apps.notes.NotesReads
+import dev.centraid.shared.apps.people.PeopleEditorMachine
+import dev.centraid.shared.apps.people.PeopleEditorReads
 import dev.centraid.shared.platform.FakePlatformServices
 import dev.centraid.shared.screen.ScreenHost
 import dev.centraid.shared.shell.CameraRoll
@@ -114,7 +115,7 @@ class VaultMovedSpec : StringSpec({
 
     "a save on a frozen vault is DENIED with the sentence, and never reaches the core" {
         runTest {
-            val host = ScreenHost(NotesEditorMachine)
+            val host = ScreenHost(PeopleEditorMachine)
             val seen = mutableListOf<Pair<CommandStatus, String>>()
             // A HEALTHY HANDLE, OPEN, and that is what makes the assertion
             // worth making: the refusal has to happen in front of a door that
@@ -135,22 +136,22 @@ class VaultMovedSpec : StringSpec({
             ScreenQueryRuntime(
                 core = { core },
                 host = host,
-                queries = NotesReads,
+                queries = PeopleEditorReads,
                 clock = dev.centraid.shared.platform.FakeDeviceClock(),
                 scope = runtimeScope,
                 writes = object : dev.centraid.shared.sync.ScreenWrites<
-                    NotesEditorState,
-                    NotesEditorEvent,
+                    PeopleEditorState,
+                    PeopleEditorEvent,
                     > {
-                    override val appId: String = NotesReads.appId
+                    override val appId: String = PeopleEditorReads.appId
 
                     override fun settled(
                         status: CommandStatus,
                         sentence: String,
                         invokeKey: String,
-                    ): NotesEditorEvent {
+                    ): PeopleEditorEvent {
                         seen += status to sentence
-                        return NotesReads.settled(status, sentence, invokeKey)
+                        return PeopleEditorReads.settled(status, sentence, invokeKey)
                     }
                 },
                 readOnly = { Shelf.MOVED_SENTENCE },
@@ -158,16 +159,14 @@ class VaultMovedSpec : StringSpec({
 
             // DRIVEN THROUGH THE REAL EDITOR, so what is refused is the write
             // the product actually emits rather than one this test invented.
-            host.send(NotesEditorEvent(opened = NotesEditorEvent.Opened(note_id = "n-1")))
+            host.send(PeopleEditorEvent(opened = PeopleEditorEvent.Opened(party_id = "p-1")))
             host.send(
-                NotesEditorEvent(
-                    data_ = NotesEditorEvent.DataArrived(
-                        draft = NoteDraft(title = "Groceries", body = "milk", base_revision_id = "rev-7"),
-                    ),
+                PeopleEditorEvent(
+                    data_ = PeopleEditorEvent.DataArrived(draft = PeopleProfileDraft(display_name = "Dana", met = "At the studio")),
                 ),
             )
-            host.send(NotesEditorEvent(title = NotesEditorEvent.TitleEdited(title = "Groceries and wine")))
-            host.send(NotesEditorEvent(save = NotesEditorEvent.SaveRequested()))
+            host.send(PeopleEditorEvent(met = PeopleEditorEvent.MetChanged(text = "At the studio, twice")))
+            host.send(PeopleEditorMachine.left())
             runtimeScope.cancel()
 
             seen shouldBe listOf(CommandStatus.COMMAND_STATUS_DENIED to Shelf.MOVED_SENTENCE)
@@ -181,7 +180,7 @@ class VaultMovedSpec : StringSpec({
             // stub core refuses the editor's opening READ a beat later, which
             // clears the draft, and chasing that ordering would be testing the
             // stub. What belongs here is that a frozen vault denies.
-            host.state.value.save shouldBe NotesEditorState.SaveState.SAVE_STATE_REFUSED
+            host.state.value.autosave.shouldNotBeNull().phase shouldBe Autosave.Phase.PHASE_REFUSED
         }
     }
 

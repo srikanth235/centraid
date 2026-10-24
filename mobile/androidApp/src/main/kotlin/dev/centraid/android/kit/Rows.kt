@@ -467,13 +467,59 @@ public fun SearchContainerRow(
     onOpen: (ChatCard) -> Unit,
 ) {
     val target = container.target
+    SearchContainerLine(
+        container.entity,
+        container.id,
+        container.icon_key,
+        container.title,
+        container.kind_label,
+        container.accessibility_label,
+        modifier,
+        onTap = if (target != null) ({ onOpen(target) }) else null,
+    )
+}
+
+/**
+ * THE SAME ROW FROM THE SCREEN RUNTIME'S CONTAINER (#1135): a tap hands the
+ * container's own [centraid.core.v1.Route] to the shell, which pushes it.
+ */
+@Composable
+public fun SearchContainerRow(
+    container: centraid.core.v1.SearchContainer,
+    modifier: Modifier = Modifier,
+    onOpen: (centraid.core.v1.Route) -> Unit,
+) {
+    val route = container.route
+    SearchContainerLine(
+        container.entity,
+        container.id,
+        container.icon_key,
+        container.title,
+        container.kind_label,
+        container.accessibility_label,
+        modifier,
+        onTap = if (route != null) ({ onOpen(route) }) else null,
+    )
+}
+
+@Composable
+private fun SearchContainerLine(
+    entity: String,
+    id: String,
+    iconKey: String,
+    title: String,
+    kindLabel: String,
+    accessibilityLabel: String,
+    modifier: Modifier,
+    onTap: (() -> Unit)?,
+) {
     Column(
         modifier
             .fillMaxWidth()
-            .then(if (target != null) Modifier.clickable { onOpen(target) } else Modifier)
-            .testTag("search-container-${container.entity}-${container.id}")
+            .then(if (onTap != null) Modifier.clickable(onClick = onTap) else Modifier)
+            .testTag("search-container-$entity-$id")
             .clearAndSetSemantics {
-                contentDescription = container.accessibility_label
+                contentDescription = accessibilityLabel
                 role = Role.Button
             },
     ) {
@@ -484,9 +530,9 @@ public fun SearchContainerRow(
                 .padding(horizontal = KitGeometry.GUTTER),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            CentraidIcon(iconKey = container.icon_key, tint = centraidColor("textSoft"), size = 18.dp)
+            CentraidIcon(iconKey = iconKey, tint = centraidColor("textSoft"), size = 18.dp)
             Text(
-                container.title,
+                title,
                 style = centraidType("body"),
                 color = centraidColor("text"),
                 maxLines = 1,
@@ -494,7 +540,7 @@ public fun SearchContainerRow(
                 modifier = Modifier.padding(start = 12.dp).weight(1f),
             )
             Text(
-                container.kind_label,
+                kindLabel,
                 style = centraidType("small"),
                 color = centraidColor("textSoft"),
                 maxLines = 1,

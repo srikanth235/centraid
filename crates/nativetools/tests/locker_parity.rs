@@ -15,7 +15,7 @@ mod common;
 
 use std::sync::{Arc, Mutex};
 
-use centraid_nativetools::vaultio::{Door, Handle, Ran, SetClock};
+use centraid_nativetools::vaultio::{Call, Door, Handle, Ran, SetClock};
 use centraid_nativetools::{Flags, Session, dates, vaultio};
 use common::{TODAY, World, call, seeded};
 use serde_json::{Value, json};
@@ -80,13 +80,14 @@ impl Door for Recording {
         Door::search(&self.inner, entity, text, limit)
     }
 
-    fn run(&self, command: &str, input: Value) -> Result<Ran, String> {
+    fn act(&self, call: &Call, input: Value) -> Result<Ran, String> {
+        let command = call.command;
         {
             let mut log = self.log.lock().unwrap();
             log.commands.push(command.to_owned());
             log.inputs.push((command.to_owned(), input.clone()));
         }
-        Door::run(&self.inner, command, input)
+        Door::act(&self.inner, call, input)
     }
 
     fn advance(&self) {

@@ -1,13 +1,11 @@
 package dev.centraid.shared.nav
 
-import centraid.screen.v1.AgendaHomeState
-import centraid.screen.v1.DocsDriveState
+import centraid.core.v1.Route
 import centraid.screen.v1.PeopleHomeState
 import centraid.screen.v1.PhotoShelf
 import centraid.screen.v1.PhotoStateView
 import centraid.screen.v1.PhotosGridState
 import centraid.screen.v1.PlacesState
-import centraid.screen.v1.TasksListState
 
 /**
  * The navigation model (#1020, D-1020-E1, D-1020-E3).
@@ -26,7 +24,7 @@ import centraid.screen.v1.TasksListState
  *
  * 1. A **band destination is a parameter**, so [Destination.PhotosHome] carries
  *    one and there is no `PhotosCollections` destination.
- * 2. **Names ride along the route**, so [Destination.DocsFolder] carries
+ * 2. **Names ride along the route**, so the Docs folder route carries
  *    `folderName` and an app bar need not wait a replica round trip.
  * 3. A **discriminated union, not a bag of optionals**:
  *    [Destination.PhotoStateViewRoute] holds a `PhotoStateView`, whose `view`
@@ -60,42 +58,14 @@ public sealed interface Destination {
     public data object Copies : Destination
 
     /**
-     * AGENDA'S HOME (#1046, #1128). Day, Schedule, Waiting or To-do, as a
-     * parameter; Search is a mode over it and More a sheet, so neither is a
-     * value here. A shell pushes this and calls `AgendaBridge.open(destination)`
-     * — or, with [quickAdd] (Notes' "Send to Agenda"), `open(destination,
-     * quickAdd)`, which lands on To-do with those words in the quick add.
+     * A SCREEN RUST OWNS (#1135), drawn by the shell from the view state Rust
+     * sends: [route] is the registered screen and its arguments, built by Rust
+     * (a row's `route`) or, at an app's front door, by [AgendaEntry]. INTERIM
+     * HOSTING: this stack still holds the back stack until the shell lane
+     * replaces it; pushing an entry sends `NavPush(tab, route)` and popping it
+     * sends `NavPopped`.
      */
-    public data class AgendaHome(
-        val destination: AgendaHomeState.Destination =
-            AgendaHomeState.Destination.DESTINATION_DAY,
-        /** Words waiting in To-do's quick add, focused (Notes' "Send to Agenda"); empty is none. */
-        val quickAdd: String = "",
-    ) : Destination
-
-    /**
-     * ONE AGENDA OCCURRENCE (#1046 wave 4) — `AgendaHomeEvent.EventPicked`'s
-     * fields. A shell pushes this and calls `AgendaEventBridge.open`.
-     */
-    public data class AgendaEvent(
-        val eventId: String,
-        val instanceKey: String,
-        val originalStartLocal: String? = null,
-        val day: String,
-    ) : Destination
-
-    /**
-     * AGENDA'S EDITOR (#1046 wave 5): a new event on [day] when [eventId] is
-     * null (`AgendaEditorBridge.openNew`), else that occurrence
-     * (`AgendaEditorBridge.openEdit`). Popped only on
-     * `AgendaEditorState.dismissed`.
-     */
-    public data class AgendaEditor(
-        val eventId: String? = null,
-        val instanceKey: String = "",
-        val originalStartLocal: String? = null,
-        val day: String = "",
-    ) : Destination
+    public data class RustScreen(val route: Route) : Destination
 
     public data class PhotosHome(
         /**
@@ -172,67 +142,6 @@ public sealed interface Destination {
         val collectionName: String,
     ) : Destination
 
-    public data class NotesEditor(
-        val noteId: String,
-        /** The title rides along so the app bar has something to say at once. */
-        val title: String? = null,
-        /**
-         * The id was minted on the phone for a note not yet written
-         * (`NotesRouting.tile`): the editor opens empty and creates it on
-         * its first save.
-         */
-        val isNew: Boolean = false,
-    ) : Destination
-
-    /** [parent] is the pushing page's title: the back control's word (#1047). */
-    public data class DocsFolder(val folderId: String, val folderName: String, val parent: String = "") : Destination
-
-    // --- Docs (#1046, docs port) ---------------------------------------
-
-    /**
-     * DOCS' DRIVE. All, Folders, Starred or Recently added, as a parameter;
-     * search is a field and More a sheet, so neither is a value here. A folder
-     * inside Folders is [DocsFolder], pushed over it (#1015 D4: content
-     * pushes). A shell pushes this and calls `DocsDriveBridge.open(destination)`.
-     */
-    public data class DocsHome(
-        val destination: DocsDriveState.Destination = DocsDriveState.Destination.DESTINATION_ALL,
-    ) : Destination
-
-    /** One document. The title rides along so the head has words at once. */
-    public data class DocsDocument(
-        val documentId: String,
-        val title: String = "",
-        /** The pushing page's title (`DocsDriveChrome.title`): the back control's word. */
-        val parent: String = "",
-    ) : Destination
-
-    /** A text document's editor: autosave, close = done, no band. */
-    public data class DocsEditor(val documentId: String, val title: String = "") : Destination
-
-    /** Docs' trash: restore, Delete forever and Empty trash (D-1 of 2026-09-25). */
-    public data object DocsTrash : Destination
-
-    // --- Notes (#1029 port) ---
-
-    /**
-     * NOTES' LIBRARY: every note, one notebook's, or the unfiled ones. A shell
-     * forwards `NotesLibraryEvent.Opened` with the same three.
-     */
-    public data class NotesLibrary(
-        val notebookId: String = "",
-        val notebookName: String = "",
-        val unfiledOnly: Boolean = false,
-    ) : Destination
-
-    public data object NotesNotebooks : Destination
-
-    public data object NotesJournal : Destination
-
-    /** One note's versions; the title rides along for the head. */
-    public data class NotesHistory(val noteId: String, val title: String = "") : Destination
-
-    public data object NotesTrash : Destination
 
     // --- People (#1029 port) ---
 
@@ -260,21 +169,6 @@ public sealed interface Destination {
 
     public data object PeopleTrash : Destination
 
-    // --- Tasks (#1029 port) ---
-
-    /** Anytime, All, Logbook or Reminders — one screen, the view a parameter. */
-    public data class TasksList(val view: TasksListState.View) : Destination
-
-    /** One project; the name rides along for the head. */
-    public data class TasksProject(val projectId: String, val name: String = "") : Destination
-
-    /** The task editor: autosave, close = done, no band. */
-    public data class TasksDetail(val taskId: String) : Destination
-
-    public data object TasksCatchUp : Destination
-
-    /** Tasks' trash: restore, and delete forever behind a confirm. */
-    public data object TasksTrash : Destination
     // --- Locker (#1047, D-5) ---
     //
     // EVERY LOCKER DESTINATION IS DRAWN UNDER THE LOCK WALL while
@@ -425,26 +319,6 @@ public data class NavStack(val entries: List<Destination> = listOf(Destination.H
             NavStack(entries.dropLast(1) + top.copy(presentation = presentation))
         } else {
             push(Destination.Places(presentation))
-        }
-    }
-
-    /** The same in-place swap for Agenda's band. */
-    public fun withAgendaDestination(destination: AgendaHomeState.Destination): NavStack {
-        val top = current
-        return if (top is Destination.AgendaHome) {
-            NavStack(entries.dropLast(1) + top.copy(destination = destination, quickAdd = ""))
-        } else {
-            push(Destination.AgendaHome(destination))
-        }
-    }
-
-    /** The same in-place swap for Docs' band. A folder page is left for its tab's top level. */
-    public fun withDocsDestination(destination: DocsDriveState.Destination): NavStack {
-        val top = current
-        return if (top is Destination.DocsHome) {
-            NavStack(entries.dropLast(1) + top.copy(destination = destination))
-        } else {
-            push(Destination.DocsHome(destination))
         }
     }
 }

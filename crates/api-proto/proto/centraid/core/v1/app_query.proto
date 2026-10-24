@@ -81,6 +81,8 @@ message AppQueryRequest {
     NotesHistoryRequest notes_history = 45;
     NotesLinkTargetsRequest notes_link_targets = 46;
     NotesNoteRequest notes_note = 47;
+    // The notes written about one thing (#1135): any thing that carries `about` edges.
+    NotesAboutRequest notes_about = 48;
     PeopleRosterRequest people_roster = 20;
     PeopleTouchRequest people_touch = 21;
     PeoplePersonRequest people_person = 22;
@@ -101,9 +103,9 @@ message AppQueryRequest {
     // Photos' own search (#1097, R-1097-25..27): 90.
     PhotosSearchRequest photos_search = 90;
     PhotosDuplicatesRequest photos_duplicates = 91;
-    // Money (#1099, R-1099-12): 100-109. 110-119 stay reserved for Money. The
-    // import plan and Home's tile are not app queries: they ride
-    // `Request.money` (`money.proto`).
+    PhotosLibraryRequest photos_library = 92;
+    // Money (#1099, R-1099-12): 100-109. 111-119 stay reserved for Money. The
+    // import plan rides `Request.money` (`money.proto`).
     MoneySpendingRequest money_spending = 100;
     MoneyActivityRequest money_activity = 101;
     MoneyTransactionRequest money_transaction = 102;
@@ -114,6 +116,8 @@ message AppQueryRequest {
     MoneyTargetSheetRequest money_target_sheet = 107;
     MoneyRecurringRequest money_recurring = 108;
     MoneySearchRequest money_search = 109;
+    // Home's tile, as the manifest's `home-tile` query (it also rides `Request.money`).
+    MoneyHomeTileRequest money_home_tile = 110;
     // Health (#1129, R-1129-12): 120-125. 126-139 stay reserved for Health. The
     // writes are `health.*` commands; `health_follow_view` is the follower
     // engine's read, not a screen's.
@@ -159,6 +163,7 @@ message AppQueryResponse {
     NotesHistory notes_history = 45;
     NotesLinkTargets notes_link_targets = 46;
     NotesNote notes_note = 47;
+    NotesAbout notes_about = 48;
     PeopleRoster people_roster = 20;
     PeopleTouch people_touch = 21;
     PeoplePerson people_person = 22;
@@ -175,6 +180,7 @@ message AppQueryResponse {
     VaultSearch vault_search = 80;
     PhotosSearch photos_search = 90;
     PhotosDuplicates photos_duplicates = 91;
+    PhotosLibrary photos_library = 92;
     MoneySpending money_spending = 100;
     MoneyActivity money_activity = 101;
     MoneyTransaction money_transaction = 102;
@@ -185,6 +191,7 @@ message AppQueryResponse {
     MoneyTargetSheet money_target_sheet = 107;
     MoneyRecurring money_recurring = 108;
     MoneySearch money_search = 109;
+    MoneyHomeTile money_home_tile = 110;
     HealthToday health_today = 120;
     HealthSeries health_series = 121;
     HealthTrends health_trends = 122;

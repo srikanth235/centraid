@@ -167,59 +167,63 @@ final class FolderFollowReader: NSObject, FilesReader {
     }
 }
 
-/// THE PICKER AND ITS WORDS, at the app's root (`DocsScreens.global`).
+/// THE FOLDER PICKER (#1127; the `FollowFolder` and `StopFollowing` effects, #1135).
+/// Rust asks; this raises the system's folder picker, keeps the access the member grants,
+/// tells the vault (`DocsFollowBridge`) and answers: `FolderFollowed` with the origin and the
+/// name the phone gives the folder, `EffectDone` for a closed picker, `EffectFailed` for a
+/// refusal (Rust says the sentence). What is followed is the shared follower engine's.
 @MainActor
 final class DocsFollow: ObservableObject {
     static let shared = DocsFollow()
 
     /// The folder picker is up.
     @Published var picking = false
-    /// A refusal, in the member's words, until they put it away.
-    @Published var message: String?
 
     weak var shell: ShellModel?
     let bridge = DocsScreens.followBridge
 
-    /// "Follow a folder": raise the picker.
-    func request() { picking = true }
+    private var answer: ((Centraid_Core_V1_EffectResult.OneOf_Outcome) -> Void)?
 
-    /// Tell both drive pages which folders are followed (the More sheet lists them).
-    func report() {
-        bridge.report { [weak self] bytes in
-            let event = bytes.data
-            DispatchQueue.main.async {
-                self?.shell?.send(screen: DocsScreens.drive, event: event)
-                self?.shell?.send(screen: DocsScreens.folder, event: event)
-            }
+    /// "Follow a folder": raise the picker.
+    func request(answer: @escaping (Centraid_Core_V1_EffectResult.OneOf_Outcome) -> Void) {
+        self.answer = answer
+        picking = true
+    }
+
+    /// The folders the vault follows now, for the drive's More sheet.
+    func followed(_ deliver: @escaping ([FollowedFolder]) -> Void) {
+        bridge.followed { folders in
+            DispatchQueue.main.async { deliver(folders) }
         }
     }
 
     func picked(_ result: Result<[URL], Swift.Error>) {
         switch result {
         case let .failure(error):
-            if (error as NSError).code != NSUserCancelledError { message = bridge.failed }
+            if (error as NSError).code == NSUserCancelledError { done() } else { fail() }
         case let .success(urls):
-            guard let url = urls.first else { return }
-            if let known = FolderAccess.following(url) {
+            guard let url = urls.first else { return done() }
+            if FolderAccess.following(url) != nil {
                 // Already followed: a pass over it is the most the tap can mean.
                 shell?.followFolders()
-                _ = known
-                return
+                return done()
             }
             let origin = bridge.mintOrigin()
-            guard FolderAccess.remember(origin: origin, url: url) else {
-                message = bridge.failed
-                return
-            }
-            bridge.follow(origin: origin, name: url.lastPathComponent) { [weak self] ok in
+            guard FolderAccess.remember(origin: origin, url: url) else { return fail() }
+            let name = url.lastPathComponent
+            bridge.follow(origin: origin, name: name) { [weak self] ok in
                 DispatchQueue.main.async {
                     guard let self else { return }
                     if ok.boolValue {
                         self.shell?.followFolders()
-                        self.report()
+                        var followed = Centraid_Core_V1_FolderFollowed()
+                        followed.origin = origin
+                        followed.name = name
+                        self.answer?(.folderFollowed(followed))
+                        self.answer = nil
                     } else {
                         FolderAccess.forget(origin: origin)
-                        self.message = self.bridge.failed
+                        self.fail()
                     }
                 }
             }
@@ -227,17 +231,29 @@ final class DocsFollow: ObservableObject {
     }
 
     /// "Stop following": the vault forgets the links and keeps every document; then the access goes.
-    func stop(_ origin: String) {
-        bridge.stop(origin: origin) { [weak self] ok in
+    func stop(_ origin: String, answer: @escaping (Centraid_Core_V1_EffectResult.OneOf_Outcome) -> Void) {
+        bridge.stop(origin: origin) { ok in
             DispatchQueue.main.async {
                 if ok.boolValue { FolderAccess.forget(origin: origin) }
-                self?.report()
+                answer(.done(Centraid_Core_V1_EffectDone()))
             }
         }
     }
+
+    private func done() {
+        answer?(.done(Centraid_Core_V1_EffectDone()))
+        answer = nil
+    }
+
+    private func fail() {
+        var failed = Centraid_Core_V1_EffectFailed()
+        failed.reason = "the folder could not be followed"
+        answer?(.failed(failed))
+        answer = nil
+    }
 }
 
-/// THE FOLDER PICKER AND ITS REFUSAL, hosted beside the ingest's (a view carries one importer).
+/// THE FOLDER PICKER, hosted beside the file picker's (a view carries one importer).
 struct DocsFollowRoot: View {
     @ObservedObject var model = DocsFollow.shared
 
@@ -245,15 +261,6 @@ struct DocsFollowRoot: View {
         Color.clear
             .fileImporter(isPresented: $model.picking, allowedContentTypes: [.folder], allowsMultipleSelection: false) { result in
                 model.picked(result)
-            }
-            // A REFUSAL IS THE KIT'S SHEET, never an alert (DESIGN.md "The controls (mobile)").
-            .sheet(isPresented: Binding(get: { model.message != nil }, set: { if !$0 { model.message = nil } })) {
-                NoticeSheet(
-                    title: model.bridge.failedTitle,
-                    sentence: model.message ?? "",
-                    doneLabel: DocsCopy.shared.DONE,
-                    onDone: { model.message = nil }
-                )
             }
     }
 }

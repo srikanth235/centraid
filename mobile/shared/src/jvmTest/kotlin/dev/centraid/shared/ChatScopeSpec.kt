@@ -19,11 +19,10 @@ import java.io.File
  * two together. The core is Rust and this module cannot link it, so the check
  * reads its source, as `ShellCommandsExistSpec` does for the command registry.
  *
- * A CARD NAMES A DOMAIN; A CHAT IS SCOPED TO AN APP (#1128, R-1128-F2). The roster
- * lists every domain a card may name and the app a member opens it in; a scope is
- * a roster entry that opens in itself. `thread.save_turn`'s schema, the
- * assistant's `App` and this list all read that one constant, and no app word is
- * in the vault's DDL (principle 6 of the model).
+ * ONE APP IS ONE WORD (#1128): the tasks a member keeps are Agenda's, so the roster
+ * lists the apps a card may name and each is a scope. `thread.save_turn`'s schema,
+ * the assistant's `App` and this list all read that one constant, and no app word
+ * is in the vault's DDL (principle 6 of the model).
  */
 class ChatScopeSpec : StringSpec({
 
@@ -40,24 +39,17 @@ class ChatScopeSpec : StringSpec({
 
     fun quoted(text: String): List<String> = Regex("\"([a-z]+)\"").findAll(text).map { it.groupValues[1] }.toList()
 
-    /** The roster's entries, `(id, opens_in)`, in the order the core states them. */
-    fun roster(): List<Pair<String, String>> {
+    /** The roster's app ids, in the order the core states them. */
+    fun roster(): List<String> {
         val array = Regex("""pub const APPS: \[RosterApp; \d+\] = \[(.*?)\];""", RegexOption.DOT_MATCHES_ALL)
             .find(source("crates/vault/src/roster.rs"))
             ?: error("APPS is gone from crates/vault/src/roster.rs; point this spec at its replacement")
-        return Regex("""app\("([a-z]+)", "([a-z]+)"\)""").findAll(array.groupValues[1])
-            .map { it.groupValues[1] to it.groupValues[2] }
-            .toList()
+        return Regex("""RosterApp \{ id: "([a-z]+)" \}""").findAll(array.groupValues[1]).map { it.groupValues[1] }.toList()
     }
 
-    "the scopes are the roster's apps that open in themselves, and each card app opens in a scope" {
-        val cardApps = roster().map { it.first }
-        cardApps.filter(AppHomes::isLaunchable) shouldBe ChatMachine.SCOPABLE_APPS
-        roster().filter { it.first == it.second }.map { it.first } shouldBe ChatMachine.SCOPABLE_APPS
-        // A card app that is no scope is a folded domain, read through the scope it opens in.
-        cardApps.filterNot { it in ChatMachine.SCOPABLE_APPS } shouldBe listOf("tasks")
-        cardApps.all { ChatMachine.scopeOf(it) == AppHomes.appOf(it) } shouldBe true
-        roster().all { (id, opensIn) -> AppHomes.appOf(id) == opensIn } shouldBe true
+    "the scopes are the roster's apps: every app a card may name is a scope" {
+        roster() shouldBe ChatMachine.SCOPABLE_APPS
+        roster().all { ChatMachine.scopeOf(it) == it } shouldBe true
     }
 
     "and the vault's DDL holds no app word: the roster is the commands' schema, never a CHECK" {
@@ -67,13 +59,13 @@ class ChatScopeSpec : StringSpec({
             ?: error("thread is gone from contracts/schema/vault-ddl.sql; point this spec at its replacement")
         thread.groupValues[1].contains("scope TEXT,") shouldBe true
         thread.groupValues[1].contains("CHECK") shouldBe false
-        roster().map { it.first }.none { ddl.contains("'$it'") } shouldBe true
+        roster().none { ddl.contains("'$it'") } shouldBe true
     }
 
-    "and the scopes the assistant takes (App::SCOPES)" {
-        val scopes = Regex("""pub const SCOPES: \[Self; \d+\] = \[(.*?)\];""", RegexOption.DOT_MATCHES_ALL)
+    "and the scopes the assistant takes (App::ALL: every app is a scope)" {
+        val scopes = Regex("""pub const ALL: \[Self; \d+\] = \[(.*?)\];""", RegexOption.DOT_MATCHES_ALL)
             .find(source("crates/assist/src/app.rs"))
-            ?: error("App::SCOPES is gone from crates/assist/src/app.rs; point this spec at its replacement")
+            ?: error("App::ALL is gone from crates/assist/src/app.rs; point this spec at its replacement")
         Regex("""Self::([A-Za-z]+)""").findAll(scopes.groupValues[1]).map { it.groupValues[1].lowercase() }.toList() shouldBe
             ChatMachine.SCOPABLE_APPS
     }
@@ -83,7 +75,7 @@ class ChatScopeSpec : StringSpec({
         // no scope list names Health — the shells' menu, the roster every command schema reads
         // and the assistant's app set (its ids are the roster's).
         ChatMachine.SCOPABLE_APPS.contains("health") shouldBe false
-        roster().map { it.first }.contains("health") shouldBe false
+        roster().contains("health") shouldBe false
         source("crates/assist/src/app.rs").contains("Health") shouldBe false
     }
 
@@ -92,10 +84,10 @@ class ChatScopeSpec : StringSpec({
         ChatMachine.SCOPABLE_APPS shouldBe ChatMachine.SCOPABLE_APPS.sorted()
     }
 
-    "every scope is an app a member opens, and a visit to a folded domain scopes to its app (#1128)" {
+    "every scope is an app a member opens, and an id that is no app scopes to every app" {
         ChatMachine.SCOPABLE_APPS.all(AppHomes::isLaunchable) shouldBe true
         ChatMachine.SCOPABLE_APPS.all { SpringboardPolicy.SPRINGBOARD_ORDER.contains(it) } shouldBe true
-        ChatMachine.scopeOf("tasks") shouldBe "agenda"
+        ChatMachine.scopeOf("tasks") shouldBe ""
         ChatMachine.scopeOf("agenda") shouldBe "agenda"
         ChatMachine.scopeOf("locker") shouldBe "locker"
         ChatMachine.scopeOf("") shouldBe ""

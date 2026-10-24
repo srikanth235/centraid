@@ -91,7 +91,7 @@ class AssistRoundTripSpec : StringSpec({
             ).answer().started!!
             (started.session_id > 0L) shouldBe true
 
-            // `tasks` is a domain a card names, not a scope: Agenda's scope covers it (R-1128-F2).
+            // There is no `tasks` app: the tasks are Agenda's, so that scope is refused.
             val tasks = core.assist(AssistRequest(start = AssistStartRequest(app = "tasks")))
             tasks.shouldBeInstanceOf<CoreOutcome.Failed>()
             tasks.failure.shouldBeInstanceOf<CoreFailure.Refused>().code shouldBe

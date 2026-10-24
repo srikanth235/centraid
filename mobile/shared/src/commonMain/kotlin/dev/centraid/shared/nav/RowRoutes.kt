@@ -1,6 +1,5 @@
 package dev.centraid.shared.nav
 
-import centraid.screen.v1.AgendaHomeState
 import centraid.screen.v1.ChatCard
 import centraid.screen.v1.PhotoShelf
 
@@ -21,7 +20,7 @@ import centraid.screen.v1.PhotoShelf
  * | notes | `note` | the note's editor |
  * | docs | `document` | the document page |
  * | people | `person` | the person page |
- * | agenda | `event` | the event's detail (`qualifier` is the occurrence) |
+ * | agenda | `event` | the event's page (`qualifier` is the occurrence) |
  * | photos | `photo` | the lightbox, with [neighbours] as its swipe |
  * | notes | `notebook` | the library under that notebook (a container found by name, #1097) |
  * | photos | `album` | the album's shelf |
@@ -65,22 +64,17 @@ public object RowRoutes {
         parent: String = "",
         neighbours: List<String> = emptyList(),
     ): Destination? = when (row.app to row.entity) {
-        AppIds.TASKS to TASK -> Destination.TasksDetail(row.id)
-        AppIds.TASKS to PROJECT -> Destination.TasksProject(row.id, row.title)
-        AppIds.NOTES to NOTE -> Destination.NotesEditor(row.id, title = row.title)
-        AppIds.NOTES to NOTEBOOK -> Destination.NotesLibrary(notebookId = row.id, notebookName = row.title, unfiledOnly = false)
+        AppIds.AGENDA to TASK -> AgendaEntry.task(row.id)
+        AppIds.AGENDA to PROJECT -> AgendaEntry.project(row.id, row.title)
+        AppIds.NOTES to NOTE -> NotesEntry.editor(row.id)
+        AppIds.NOTES to NOTEBOOK -> NotesEntry.home(notebookId = row.id, notebookName = row.title)
         AppIds.PHOTOS to ALBUM -> Destination.PhotoShelfRoute(
             PhotoShelf(album = PhotoShelf.Album(collection_id = row.id, name = row.title)),
         )
-        AppIds.DOCS to FOLDER -> Destination.DocsFolder(row.id, row.title, parent = parent)
-        AppIds.DOCS to DOCUMENT -> Destination.DocsDocument(row.id, row.title, parent = parent)
+        AppIds.DOCS to FOLDER -> DocsEntry.folder(row.id, row.title, parent = parent)
+        AppIds.DOCS to DOCUMENT -> DocsEntry.document(row.id, row.title, parent = parent)
         AppIds.PEOPLE to PERSON -> Destination.PeoplePerson(row.id, row.title)
-        AppIds.AGENDA to EVENT -> Destination.AgendaEvent(
-            eventId = row.id,
-            instanceKey = row.qualifier,
-            originalStartLocal = null,
-            day = "",
-        )
+        AppIds.AGENDA to EVENT -> AgendaEntry.event(eventId = row.id, instanceKey = row.qualifier)
         AppIds.PHOTOS to PHOTO -> Destination.PhotoLightbox(row.id, neighbours.ifEmpty { listOf(row.id) })
         AppIds.MONEY to TRANSACTION -> Destination.MoneyTransaction(row.id, parent = parent)
         AppIds.LOCKER to LOCKER_ITEM -> lockerItem(row, parent)
@@ -118,11 +112,10 @@ public object RowRoutes {
 
     /** An app's own front door, for a reference whose noun has no row route. */
     public fun appHome(app: String): Destination? = when (app) {
-        AppIds.TASKS -> Destination.AgendaHome(AgendaHomeState.Destination.DESTINATION_TODO)
-        AppIds.NOTES -> Destination.NotesLibrary()
-        AppIds.DOCS -> Destination.DocsHome()
+        AppIds.NOTES -> NotesEntry.home()
+        AppIds.DOCS -> DocsEntry.home()
         AppIds.PEOPLE -> Destination.PeopleHome()
-        AppIds.AGENDA -> Destination.AgendaHome()
+        AppIds.AGENDA -> AgendaEntry.home()
         AppIds.PHOTOS -> Destination.PhotosHome()
         AppIds.MONEY -> Destination.MoneyHome()
         AppIds.HEALTH -> Destination.HealthHome()
@@ -146,14 +139,8 @@ public class RowRef(
     public val qualifier: String = "",
 )
 
-/**
- * THE IDS A HOME TILE, A CARD AND A SCREEN ID'S PREFIX GO BY. [TASKS] is the vault's task
- * domain and the write app of the `tasks.*` pages, not an app a member launches
- * (R-1128-7): a reference to a task opens its page, and the domain's front door
- * ([RowRoutes.appHome]) is Agenda's To-do.
- */
+/** THE IDS A HOME TILE, A CARD AND A SCREEN ID'S PREFIX GO BY. */
 public object AppIds {
-    public const val TASKS: String = "tasks"
     public const val NOTES: String = "notes"
     public const val DOCS: String = "docs"
     public const val PEOPLE: String = "people"

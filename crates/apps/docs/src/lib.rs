@@ -55,8 +55,9 @@ pub use bytes::{ByteDoor, ByteRequest, NEVER_INLINE, StagedBlob, may_serve_inlin
 pub use commands::{ACTIONS, Commands, Invocation, Outcome};
 pub use manifest::{APP_ID, manifest};
 pub use queries::{
-    ActivityData, DocumentData, DriveData, DriveInput, HistoryData, MAX_VERSIONS, SearchData,
-    load_activity, load_document, load_drive, load_history, load_search_term,
+    ActivityData, DocumentData, DriveData, DriveInput, FolderNode, HistoryData, MAX_VERSIONS,
+    SearchData, folder_path, load_activity, load_document, load_drive, load_history,
+    load_search_term,
 };
 
 /// A CONSENT DENIAL, as the payload carries it: the kit's one type, shared by

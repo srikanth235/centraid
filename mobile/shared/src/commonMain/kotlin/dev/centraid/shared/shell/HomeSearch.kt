@@ -208,7 +208,7 @@ public object HomeSearchMachine : ScreenMachine<HomeSearchState, HomeSearchEvent
      * A HIT IS GROUPED UNDER THE APP A MEMBER OPENS IT IN (#1128, R-1128-7): a
      * task hit sits in Agenda's group, among its events, and the group's header,
      * mark and test id are Agenda's. The row keeps its own `app_id`, so it still
-     * opens `TasksDetail` through `RowRoutes` (R-CHROME-6: a row opens in its own
+     * opens the task's page through `RowRoutes` (R-CHROME-6: a row opens in its own
      * app's router).
      */
     public fun fold(hits: List<VaultSearchHit>): HomeSearchData {

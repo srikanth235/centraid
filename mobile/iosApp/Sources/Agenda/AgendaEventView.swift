@@ -1,32 +1,30 @@
 import SwiftUI
 
 /// `agenda.event` — one occurrence, with the member's reply, Edit and Cancel
-/// (#1046 wave 4), on the kit.
+/// (#1135), on the kit.
 ///
 /// **THE VIEW DECIDES NOTHING.** Every word, fact, guest, reply choice, action
-/// and scope row is on `AgendaEventState`; this file lays them out. Cancel on a
+/// and scope row is on `AgendaEventState`, made in Rust; this file lays them out. Cancel on a
 /// one-off asks through the kit's `ConfirmSheet`; on a series the scope sheet
 /// IS the confirm, its commit armed only once a scope is picked. `dismissed`
-/// (a committed cancellation) and the gone card's action pop; `edit` is an
-/// intent `AgendaScreens` routes to the editor.
+/// (a committed cancellation) and the gone card's action pop; `edit` carries a
+/// `route` to the editor, which the shell pushes.
 struct AgendaEventView: View {
-    let data: Data
-    let send: (Data) -> Void
+    let state: Centraid_Core_V1_AgendaEventState
+    let send: (Centraid_Core_V1_AgendaEventEvent) -> Void
+    let open: (Centraid_Core_V1_Route) -> Void
     let onBack: () -> Void
 
     @Environment(\.colorScheme) private var scheme
     @Environment(\.openURL) private var openURL
 
-    private var state: Centraid_Screen_V1_AgendaEventState {
-        (try? Centraid_Screen_V1_AgendaEventState(serializedBytes: data)) ?? .init()
-    }
-
-    private func event(_ build: (inout Centraid_Screen_V1_AgendaEventEvent) -> Void) -> Data {
-        tasksEvent(Centraid_Screen_V1_AgendaEventEvent.self, build)
+    private func event(_ build: (inout Centraid_Core_V1_AgendaEventEvent) -> Void) -> Centraid_Core_V1_AgendaEventEvent {
+        var event = Centraid_Core_V1_AgendaEventEvent()
+        build(&event)
+        return event
     }
 
     var body: some View {
-        let state = state
         let chrome = state.chrome
         PushedPage(title: chrome.title, parentTitle: chrome.back, onBack: onBack) {
             EmptyView()
@@ -79,7 +77,7 @@ struct AgendaEventView: View {
             set: { open in if !open, state.hasConfirm { send(event { $0.confirmDismissed = .init() }) } }
         )) {
             ConfirmSheet(
-                state.confirm,
+                state.confirm.legacy,
                 cancelLabel: chrome.confirmKeep,
                 onConfirm: { send(event { $0.confirmed = .init() }) },
                 onDismiss: { send(event { $0.confirmDismissed = .init() }) }
@@ -91,32 +89,30 @@ struct AgendaEventView: View {
         }
     }
 
-    private func readContent(_ state: Centraid_Screen_V1_AgendaEventState) -> ScreenContent<Centraid_Screen_V1_AgendaEventData> {
+    private func readContent(_ state: Centraid_Core_V1_AgendaEventState) -> ScreenContent<Centraid_Core_V1_AgendaEventData> {
         switch state.content {
         case let .loading(loading)?: return .loading(loading.firstLoad)
         case let .failure(failure)?: return .failed(failure)
-        case let .denied(denied)?: return .denied(denied)
+        case let .denied(denied)?: return .gated(denied)
         case let .data(data)?: return .data(data)
         case .gone?, nil: return .loading(true)
         }
     }
 
-    private func writeSentence(_ state: Centraid_Screen_V1_AgendaEventState) -> String {
-        state.write.refusal
+    /// What the last write came to when the vault refused it: the core's own sentence.
+    private func writeSentence(_ state: Centraid_Core_V1_AgendaEventState) -> String {
+        state.hasStatus ? state.status.sentence : ""
     }
 
     @ViewBuilder
-    private func detailView(_ detail: Centraid_Screen_V1_AgendaEventData, state: Centraid_Screen_V1_AgendaEventState) -> some View {
+    private func detailView(_ detail: Centraid_Core_V1_AgendaEventData, state: Centraid_Core_V1_AgendaEventState) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                if state.hasParked {
-                    parkedCard(state.parked)
-                }
                 header(detail)
                 ForEach(Array(detail.facts.enumerated()), id: \.offset) { _, fact in
                     FieldRow(key: fact.label, value: fact.detail)
                 }
-                // THE JOINING LINK, OPENED BY THE OS under the machine's verb
+                // THE JOINING LINK, OPENED BY THE OS under Rust's verb
                 // ("Join call"); empty with no link.
                 if !detail.callLabel.isEmpty, let url = URL(string: detail.callUri) {
                     HStack {
@@ -155,7 +151,13 @@ struct AgendaEventView: View {
                 KitChoiceStack {
                     ForEach(detail.actions, id: \.key) { action in
                         KitOutlineButton(label: action.label, tone: action.destructive ? "net" : "text") {
-                            send(event { $0.action = .with { $0.key = action.key } })
+                            // `edit` opens the editor on this occurrence (a route the shell
+                            // pushes); `cancel` is the event that asks first.
+                            if action.hasRoute {
+                                open(action.route)
+                            } else {
+                                send(event { $0.action = .with { $0.key = action.key } })
+                            }
                         }
                         .disabled(!action.enabled)
                         .accessibilityLabel(action.accessibilityLabel.isEmpty ? action.label : action.accessibilityLabel)
@@ -168,7 +170,7 @@ struct AgendaEventView: View {
         .refreshable { send(event { $0.refreshed = .init() }) }
     }
 
-    private func header(_ detail: Centraid_Screen_V1_AgendaEventData) -> some View {
+    private func header(_ detail: Centraid_Core_V1_AgendaEventData) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(detail.title)
@@ -176,7 +178,6 @@ struct AgendaEventView: View {
                     .foregroundStyle(Theme.color(detail.isPast ? "textSoft" : "text", scheme))
                     .accessibilityAddTraits(.isHeader)
                 Spacer(minLength: 0)
-                if detail.hasChip { StatusChipView(detail.chip) }
             }
             Text(detail.dateLabel)
                 .centraidType("body")
@@ -207,7 +208,7 @@ struct AgendaEventView: View {
         .accessibilityIdentifier("agenda-event-head")
     }
 
-    private func rsvpView(_ rsvp: Centraid_Screen_V1_AgendaRsvp) -> some View {
+    private func rsvpView(_ rsvp: Centraid_Core_V1_AgendaRsvp) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(rsvp.question)
                 .centraidType("smallStrong")
@@ -235,7 +236,7 @@ struct AgendaEventView: View {
         .padding(CentraidGeometry.pageMargin)
     }
 
-    private func guestRow(_ guest: Centraid_Screen_V1_AgendaGuestRow) -> some View {
+    private func guestRow(_ guest: Centraid_Core_V1_AgendaGuestRow) -> some View {
         HStack(spacing: 10) {
             Text(guest.initial)
                 .centraidType("smallStrong")
@@ -258,40 +259,13 @@ struct AgendaEventView: View {
         .accessibilityLabel(guest.accessibilityLabel)
         .accessibilityIdentifier("agenda-guest-\(guest.partyID)")
     }
-
-    private func parkedCard(_ parked: Centraid_Screen_V1_AgendaParkedCard) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(parked.title)
-                .centraidType("smallStrong")
-                .foregroundStyle(Theme.color("net", scheme))
-            if !parked.body.isEmpty {
-                Text(parked.body)
-                    .centraidType("small")
-                    .foregroundStyle(Theme.color("textSoft", scheme))
-            }
-            HStack(spacing: 8) {
-                KitOutlineButton(label: parked.retryLabel) { send(event { $0.parkedRetried = .init() }) }
-                    .accessibilityIdentifier("agenda-parked-retry")
-                KitOutlineButton(label: parked.dismissLabel) { send(event { $0.parkedDismissed = .init() }) }
-                    .accessibilityIdentifier("agenda-parked-dismiss")
-            }
-        }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.radius("md", scheme))
-                .strokeBorder(Theme.color("net", scheme), lineWidth: CentraidGeometry.hairline)
-        )
-        .padding(CentraidGeometry.pageMargin)
-        .accessibilityIdentifier("agenda-parked")
-    }
 }
 
 /// A scope sheet's rows — the cancel's and the editor's save. None is
 /// pre-chosen; a row that cannot reach that far says why under it.
 struct AgendaScopeRows: View {
-    let scopes: [Centraid_Screen_V1_AgendaScopeChoice]
-    let onPick: (Centraid_Screen_V1_AgendaScope) -> Void
+    let scopes: [Centraid_Core_V1_AgendaScopeChoice]
+    let onPick: (Centraid_Core_V1_AgendaScope) -> Void
 
     @Environment(\.colorScheme) private var scheme
 

@@ -438,28 +438,25 @@ fn suggestions_are_three_questions_this_vault_can_answer() {
     use centraid_assist::suggest::{SUGGESTIONS, suggest};
     let sample = common::chat::sample();
     let door = sample.handle.assist_door();
-    for scope in std::iter::once(None).chain(App::SCOPES.into_iter().map(Some)) {
+    for scope in std::iter::once(None).chain(App::ALL.into_iter().map(Some)) {
         let got = suggest(&door, common::chat::TZ, scope);
         assert_eq!(got.len(), SUGGESTIONS, "{scope:?}");
         // Deterministic: the same vault, the same three, in the same order.
         assert_eq!(got, suggest(&door, common::chat::TZ, scope), "{scope:?}");
         // Opened from an app, all three are about it — Agenda's about its events or its tasks
-        // (R-1128-F2).
+        // (#1128).
         if let Some(app) = scope {
-            assert!(
-                got.iter().all(|s| s.app.opens_in() == app),
-                "{app:?}: {got:?}"
-            );
+            assert!(got.iter().all(|s| s.app == app), "{app:?}: {got:?}");
         }
         let texts: std::collections::BTreeSet<_> = got.iter().map(|s| &s.text).collect();
         assert_eq!(texts.len(), SUGGESTIONS, "{scope:?}: no repeats");
     }
     let unscoped = suggest(&door, common::chat::TZ, None);
     let apps: std::collections::BTreeSet<_> = unscoped.iter().map(|s| s.app).collect();
-    assert_eq!(
-        apps.len(),
-        3,
-        "an unscoped chat opens on three different apps"
+    // Tasks and events are both Agenda's, so Agenda may fill two of the three (#1128).
+    assert!(
+        apps.len() >= 2,
+        "an unscoped chat opens on at least two different apps: {apps:?}"
     );
 }
 
@@ -494,16 +491,19 @@ fn suggestions_name_things_from_this_vault() {
         agenda,
         offered.iter().map(|s| s.text.clone()).collect::<Vec<_>>()
     );
-    assert!(offered.iter().any(|s| s.app == App::Tasks), "{offered:?}");
-    // THE TASK DOMAIN IS NO SCOPE: refused, naming the scope that covers it.
+    assert!(offered.iter().all(|s| s.app == App::Agenda), "{offered:?}");
+    // THERE IS NO `tasks` APP: the tasks are Agenda's (#1128), so the word is refused.
     match sample.assist(Ask::Suggest(wire::AssistSuggestRequest {
         app: "tasks".to_owned(),
         tz: common::chat::TZ.to_owned(),
     })) {
         Err(CoreError::InvalidRequest { detail }) => {
-            assert!(detail.contains("`agenda` covers it"), "{detail}");
+            assert!(
+                detail.contains("not an app the assistant reads"),
+                "{detail}"
+            );
         }
-        other => panic!("the task domain was taken as a scope: {other:?}"),
+        other => panic!("`tasks` was taken as a scope: {other:?}"),
     }
     // LOCKER IS A SCOPE: its three questions read plain fields and never a sealed value.
     assert_eq!(prompts("locker").len(), 3);

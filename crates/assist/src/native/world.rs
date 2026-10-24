@@ -641,6 +641,7 @@ impl World {
             let mut fields = BTreeMap::new();
             put(&mut fields, "body", nonempty(text(note, "body")));
             fields.insert("pinned", Val::Bool(flags.pinned.contains(&id)));
+            fields.insert("starred", Val::Bool(flags.starred.contains(&id)));
             let created = text(entity, "created_at").unwrap_or_default();
             self.insert(Row {
                 date: Stamp::parse(&created),

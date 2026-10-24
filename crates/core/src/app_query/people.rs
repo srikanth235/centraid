@@ -60,7 +60,7 @@ fn clock(zone: &FireZone, now: &str) -> Result<Clock> {
     })
 }
 
-pub(super) fn roster(
+pub(crate) fn roster(
     vault: &Vault,
     door: &VaultDoor<'_>,
     now: &str,
@@ -105,7 +105,7 @@ pub(super) fn roster(
     })
 }
 
-pub(super) fn touch(
+pub(crate) fn touch(
     vault: &Vault,
     door: &VaultDoor<'_>,
     now: &str,
@@ -170,7 +170,7 @@ pub(super) fn touch(
     )
 }
 
-pub(super) fn person(
+pub(crate) fn person(
     vault: &Vault,
     door: &VaultDoor<'_>,
     now: &str,
@@ -190,7 +190,7 @@ pub(super) fn person(
     )
 }
 
-pub(super) fn trash(
+pub(crate) fn trash(
     vault: &Vault,
     door: &VaultDoor<'_>,
     asked: &wire::PeopleTrashRequest,
@@ -222,7 +222,7 @@ pub(super) fn trash(
 /// The index holds a person's nickname, role, where they were met, their contact
 /// points and the notes about them beside their name, so it is the whole search
 /// and [`people::roster::rank_hits`] ranks one list.
-pub(super) fn search(
+pub(crate) fn search(
     vault: &Vault,
     door: &VaultDoor<'_>,
     now: &str,

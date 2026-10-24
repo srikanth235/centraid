@@ -1,0 +1,57 @@
+# Screens
+
+Every decision a person sees is made in Rust: screen state, finished strings, counts, navigation, timers. SwiftUI and Compose draw `ViewState`, send `ScreenEvent`s and perform `Effect`s ([#1135](https://github.com/srikanth235/centraid/issues/1135)). Code: [`crates/screens`](../crates/screens); wire: [`screens.proto`](../crates/api-proto/proto/centraid/core/v1/screens.proto).
+
+## The contract
+
+- **A screen** implements `Screen`: `update(event, &Ctx) -> Vec<Effect>` and `view(&Ctx) -> ViewState`. It reads and writes only through `Ctx::load` / `Ctx::act` — the core's one read and one write, the same door chat and the training harness use.
+- **Re-render.** Each `load` records the tables it read; when one changes the screen gets `DataChanged` and loads again. A view is pushed only if it differs from the last, so a screen's own `act` echoes no second draw.
+- **Navigation** is a route stack per tab, owned by the runtime. Routes are protos. A shell draws the stack it is given and reports a tap (`NavPush`) or a back-swipe (`NavPopped`) as events; the root of a tab cannot be popped.
+- **Effects** are platform work: clipboard, haptic, share, open URL, pick photos, camera, Health read, keychain, screenshot shield, notification. The shell performs one and answers with `EffectResult` carrying the same `effect_id`.
+- **Timers** (undo windows, clipboard clear, reveal auto-hide) live in the runtime: `ctx.start_timer(name, after)` and the screen later gets `TimerFired`. They die with their screen.
+- **Catalogue ids.** A screen never spells an app, action, query or input name: it builds `catalog::act::<app>::<Action> { .. }` or `catalog::load::<app>::<Query> { .. }` (generated from the manifests by `cargo xtask screens-catalog`; `--check` and a unit test fail on a stale file) and converts it into the request. Mint a fresh `.keyed(..)` per gesture: the core runs one `invoke_key` once.
+- **Strings** come from one catalog, [`strings.rs`](../crates/screens/src/strings/mod.rs): typed functions, plural-aware, locale-ready; the locale and zone arrive in `Environment`. Native views write no copy.
+- **Wire.** Requests ride `centraid_call` (`Request.screen`); pushes ride `centraid_next_event` (`Event.screen`). The ABI stays five symbols. The runtime is driven from `Handle::call`, change events and wakes inside `next_event`, so it holds no handle reference between calls.
+- **A failed read is not an empty list.** A view has three states — loading, a `Failure`, data.
+
+## Writing a screen
+
+Agenda is the worked example: [`crates/screens/src/agenda/`](../crates/screens/src/agenda).
+
+1. **Protos.** The app's view states and events in `<app>_screens.proto`; its route arguments in `route.proto` (with any enum a route names); one arm each in `Route.args` (`route.proto`), `ScreenEvent.kind` and `ViewState.kind` (`screens.proto`) in the app's reserved range. The shared view vocabulary (`Failure`, `Loading`, `Denied`, `EmptyState`, `StatusLine`, `Confirm`, `Autosave`, `ListRow`, the kit trash) is `kit_screens.proto`. `route.proto` and `kit_screens.proto` are leaves, so a view can hold a `Route` without an import cycle. Add the files to `build.rs`.
+2. **Code.** `crates/screens/src/<app>/<name>.rs`, one folder per app, self-contained, no imports from another app. It is not in `crates/apps/<app>` because the core depends on the app crates for their readers and this crate depends on the core for `load` and `act`: a screen there would be a Cargo cycle. A piece several apps use goes in `crates/screens/src/kit/` and is shared.
+3. A struct holding the loaded data and local UI state; `update` handles `Appeared` (the one load), `DataChanged` (load again), your events, `EffectResult`, `TimerFired`, `Left`; `view` makes every string through `strings::<app>::*`.
+4. **Strings.** One module per app (`strings/<app>.rs`) and one per screen that needs its own (`strings/<app>_<screen>.rs`), each a `catalog!` block; the kit's are `strings::shared`.
+5. Register: `<app>::registry()` returns `Registry::with("<app>.<name>", build)`; the shell composes registries with `Registry::merge`.
+
+## Conventions every app copies
+
+- **A tap that opens a page is a `Route` in the row** (`<app>::routes::*`). The shell sends the route back as `NavPush`; no screen names a destination in Swift or Kotlin and no screen pushes itself. A screen that is done (saved, deleted, cancelled) sets `dismissed`/`finished` in its view and the shell pops.
+- **Writes are synchronous.** `ctx.act` answers with the verdict, so there is no in-flight map, pending row or held write: submit, read the verdict (`kit::act::act` → `Settled`), load again. A refusal's sentence goes in the view. Undo is the core's `inverse` for the action, sent back as an action.
+- **Invoke keys: take the sequence from `kit::act::fresh()`.** The vault journals a key for good and answers a repeat "replayed" without running it, so a counter that restarts at 1 on each open turns a later tap into a silent no-op.
+- **Reads are `kit::read::read`**: `Reading::{Data, Denied, Failed}`. A failed read is a `Failure` in the view, never an empty list.
+- **`Left`** is sent to a screen the instant before it is popped: its last chance to `act` what the member typed (the kit's autosave flushes there). Timers die with the screen.
+- **Civil time** comes from the core's answers (`today`, `local_days`) and `kit::civil`; the zone arrives in `Environment` (`ctx.zone()`).
+- **Device memory** (a per-phone habit) is a Keychain effect, not a vault row; platform reads that feed an import are generic Effects the shell answers (`CalendarRead`, `PhoneWatch`).
+- **A file the member picks is a generic Effect that answers more than once** (`PickFile`, #1135). The shell copies the choice to a file, streams it through the stage door and answers `FileProgress` any number of times under the one effect id, then `FilePicked{blob, byte_size, name, media_type}`; Rust files it with an `act` (`document.upload`, whose `size` the stage door cannot know). `FollowFolder`/`StopFollowing` keep the OS grant in the shell, the vault's links in Rust. `OpenRoute` lets Rust ask the shell to push a page when no tap caused it (a filed document).
+- **A path is computed once, in Rust.** Docs' folder walk is `centraid_apps_docs::folder_path`, shared by the core's answer and the screens; the shells draw the crumbs' `Route`s.
+- **Interim hosting of a second app**: Docs pages ride `Destination.RustScreen` on the KMP stack (Android `AgendaRoutes` handles the `agenda.` and `docs.` prefixes under tab `agenda`; iOS `.rust`). The shell lane replaces it.
+- The kit's generic screens (`kit::trash`, parameterised by a spec; `kit::autosave`) are built once. A new app supplies a spec.
+
+## Testing
+
+`centraid_screens::testing::Driver` goes through the door a shell uses: `start()`, `send(instance, event)`, `nav(..)`, `answer_effect(..)`, `pump(wait)` (the shell's event thread, for timers and change pushes), then assert on `driver.views`, `driver.effects`, `driver.navigation`. `crates/screens/tests/proof.rs` is the model. This replaces `jvmTest` as the place screen behaviour is tested.
+
+## Drawing
+
+- **iOS**: `Sources/ScreenStore.swift` (navigation, views, effects; generic effect performers) over a `ScreenCore`: the live app reaches the session's one core through `HomeSession.screenTransport` (`Sources/SessionScreenCore.swift`), because a vault file takes one handle. `Sources/RustScreenHost.swift` is the one place that maps `ViewState.kind` to a view. Switch on `ViewState.kind`; no screen names in Swift.
+- **Android**: `dev.centraid.core.Screens` (`mobile/core`) holds `navigation`, `views`, `effects`; Compose collects them. `kit/ScreenEffects.kt` performs the generic effects; see `ProofScreen.kt` and `screens/agenda/AgendaRoutes.kt`.
+- **Interim hosting.** Until the shell lane ports Home, the KMP `NavStack` still holds the back stack. Every Rust screen is one `Destination.RustScreen(route)` entry: pushing it sends `NavPush`, popping it `NavPopped`, and the entry draws that instance. `nav/AgendaEntry.kt` is the one KMP file that spells an Agenda route (for Home's tile, search, chat cards, Notes' "Send to Agenda"); the shell lane deletes it.
+
+## Porting a KMP screen
+
+1. Read the KMP state machine and its `commonMain` strings; list its events, states and effects. Drop what only existed for the Kotlin architecture (seat, outbox, pending overlays, read plumbing) and say so.
+2. Replace each KMP `suspend` read with `ctx.load` and each write with `ctx.act` (generated ids come from the manifests); a read the manifest lacks is a catalogue gap — add the query, not a side door.
+3. Move every string into `strings.rs` (counted ones as `counted`); move timers to `ctx.start_timer`.
+4. Port the `jvmTest` cases to `Driver` tests, then delete the KMP screen and its test.
+5. Draw the new `ViewState` in SwiftUI and Compose; delete the old native view.

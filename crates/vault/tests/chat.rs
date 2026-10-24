@@ -114,7 +114,7 @@ fn a_turn_is_one_commit_with_its_cards_and_attachments() {
             "question": { "text": "what   is due\ntoday?", "attachments": [
               { "form": "image", "label": "receipt", "thumbnail_data_uri": PIXEL }] },
             "answer": { "outcome": "answered", "text": "Rent.", "record_json": "{\"read\":1}",
-                        "cards": [card("tasks", "task", "t1")] }
+                        "cards": [card("agenda", "task", "t1")] }
           }
         }),
     );
@@ -155,7 +155,7 @@ fn a_turn_is_one_commit_with_its_cards_and_attachments() {
         )
         .unwrap();
     let cards: Value = serde_json::from_str(&cards).unwrap();
-    assert_eq!(cards[0]["app"], "tasks");
+    assert_eq!(cards[0]["app"], "agenda");
     assert_eq!(cards[0]["id"], "t1");
     // The reader gives it back whole.
     let stored = w
@@ -317,9 +317,10 @@ fn the_roster_is_the_schemas_not_a_check() {
         input["scope_app"] = scope;
         w.run("thread.save_turn", input).status
     };
-    assert_eq!(attempt(json!(null), "tasks"), CommandStatus::Executed);
-    // Health is never named; Locker is a card domain and a scope (the owner's ruling of
-    // 2026-10-22); `tasks` is a domain that is no scope (R-1128-F2).
+    assert_eq!(attempt(json!(null), "agenda"), CommandStatus::Executed);
+    // Health is never named; Locker is an app a card names and a scope (the owner's ruling of
+    // 2026-10-22); there is no `tasks` app, the tasks are Agenda's (#1128).
+    assert_ne!(attempt(json!(null), "tasks"), CommandStatus::Executed);
     assert_eq!(attempt(json!(null), "locker"), CommandStatus::Executed);
     assert_ne!(attempt(json!(null), "health"), CommandStatus::Executed);
     assert_ne!(attempt(json!("tasks"), "notes"), CommandStatus::Executed);

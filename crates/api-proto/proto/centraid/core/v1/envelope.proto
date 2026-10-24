@@ -19,6 +19,7 @@ syntax = "proto3";
 package centraid.core.v1;
 
 import "centraid/core/v1/app_query.proto";
+import "centraid/core/v1/action.proto";
 import "centraid/core/v1/assist.proto";
 import "centraid/core/v1/change.proto";
 import "centraid/core/v1/command.proto";
@@ -30,6 +31,7 @@ import "centraid/core/v1/money.proto";
 import "centraid/core/v1/originals.proto";
 import "centraid/core/v1/phone.proto";
 import "centraid/core/v1/query.proto";
+import "centraid/core/v1/screens.proto";
 import "centraid/core/v1/vault.proto";
 
 message Envelope {
@@ -128,6 +130,11 @@ message Request {
     // WHICH ASSET A LIBRARY ITEM WAS BACKED UP AS (#1127, A20): how an edit made
     // in place finds the photograph it is an edit of. See `phone.proto`.
     LibraryAssetsRequest library_assets = 34;
+    // THE ONE READ AND THE ONE WRITE (#1135). See `action.proto`.
+    LoadRequest load = 35;
+    ActRequest act = 36;
+    // Screen events and navigation (#1135, lane C2): `screens.proto`.
+    ScreenRequest screen = 37;
   }
 }
 
@@ -168,6 +175,9 @@ message Response {
     MoneyResponse money = 32;
     RefreshDestinationResponse refresh_destination = 33;
     LibraryAssetsResponse library_assets = 34;
+    LoadResponse load = 35;
+    ActResponse act = 36;
+    ScreenResponse screen = 38;
   }
 }
 
@@ -178,6 +188,12 @@ message Event {
     ConnectivityEvent connectivity = 3;
     // A running chat turn: its activity, cards, sentence and outcome.
     AssistEvent assist = 4;
+    // A screen's new view state, pushed by Rust (a table changed, a timer
+    // fired): `screens.proto`.
+    ScreenUpdate screen = 5;
+    // The screen runtime's own timer marker. The core handles it inside
+    // `next_event` and never hands it to a shell.
+    ScreenWake wake = 6;
   }
 }
 

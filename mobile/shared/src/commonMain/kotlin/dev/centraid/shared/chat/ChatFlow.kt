@@ -37,7 +37,6 @@ import centraid.screen.v1.ChatEvent
 import centraid.screen.v1.ChatState
 import dev.centraid.core.CentraidCore
 import dev.centraid.core.CoreOutcome
-import dev.centraid.shared.apps.locker.LockerGate
 import dev.centraid.shared.kit.InvokeKeys
 import dev.centraid.shared.kit.jsonString
 import okio.ByteString.Companion.encodeUtf8
@@ -173,6 +172,15 @@ public interface ChatDoor {
  * [timeZone] the device's IANA zone, read at every send because a phone changes
  * zone.
  */
+/**
+ * SLOTS CHAT OWNS AND AN APP FILLS. Chat reaches no app (PerAppLayoutSpec):
+ * Locker fills [unlockLocker] when its gate is built, as it fills Home's
+ * `HomeReads.lockerOpen`. Unfilled, a card that needs the key stays sealed.
+ */
+public object ChatSlots {
+    public var unlockLocker: suspend () -> Boolean = { false }
+}
+
 public class CoreChatDoor(
     private val core: () -> CentraidCore?,
     private val modelPath: () -> String,
@@ -257,7 +265,7 @@ public class CoreChatDoor(
             sessionCore,
         )?.settled
 
-    override suspend fun unlockLocker(): Boolean = LockerGate.shared.unlockAndWait()
+    override suspend fun unlockLocker(): Boolean = ChatSlots.unlockLocker()
 
     override suspend fun dismiss(session: Long, pendingId: String): AssistSettled? =
         ask(

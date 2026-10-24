@@ -532,6 +532,9 @@ message MoneyResponse {
 // `money.home_tile`: this month's spending per currency, for Home's tile.
 message MoneyHomeTileRequest {
   string tz = 1;
+  // The month to total, `YYYY-MM`. Empty is the current month in `tz`: Home's tile asks for
+  // that; the manifest's `home-tile` query (`load`) names its month.
+  string month = 2;
 }
 
 message MoneyHomeTile {

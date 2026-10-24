@@ -1,15 +1,9 @@
 package dev.centraid.shared
 
 import centraid.core.v1.CommandStatus
-import centraid.screen.v1.NoteDraft
-import centraid.screen.v1.NotesEditorEvent
-import centraid.screen.v1.NotesEditorState
 import centraid.screen.v1.SeatState
-import dev.centraid.shared.apps.notes.NotesEditorMachine
-import dev.centraid.shared.apps.notes.NotesReads
-import dev.centraid.shared.screen.ScreenEffect
+import dev.centraid.shared.kit.WriteLaw
 import io.kotest.core.spec.style.StringSpec
-import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 
@@ -45,8 +39,8 @@ class WriteRunnerSpec : StringSpec({
         // not. QUEUED left with the outbox, so there is no third state — and
         // the settle carries the key it answers, so the editor can tell its
         // own save's answer from a stale one.
-        NotesReads.settled(CommandStatus.COMMAND_STATUS_EXECUTED, "", "k:1")
-            .write_settled.shouldNotBeNull().let {
+        WriteLaw.settledOf(CommandStatus.COMMAND_STATUS_EXECUTED, "", "k:1")
+            .let {
                 it.committed shouldBe true
                 it.invoke_key shouldBe "k:1"
             }
@@ -58,7 +52,7 @@ class WriteRunnerSpec : StringSpec({
             CommandStatus.COMMAND_STATUS_FAILED,
             CommandStatus.COMMAND_STATUS_UNSPECIFIED,
         ).forEach { status ->
-            NotesReads.settled(status, "", "k:1").write_settled.shouldNotBeNull().committed shouldBe false
+            WriteLaw.settledOf(status, "", "k:1").committed shouldBe false
         }
     }
 
@@ -66,43 +60,11 @@ class WriteRunnerSpec : StringSpec({
         // `CommandOutcome.reason` is the author's words for a denial or a failed
         // precondition — never the raw predicate, which reaches the audit trail
         // only. A shell that composed one would be the hole in that rule.
-        NotesReads.settled(CommandStatus.COMMAND_STATUS_DENIED, "That note was removed.", "k:1")
-            .write_settled?.failure.shouldNotBeNull()
+        WriteLaw.settledOf(CommandStatus.COMMAND_STATUS_DENIED, "That note was removed.", "k:1")
+            .failure.shouldNotBeNull()
             .sentence shouldBe "That note was removed."
-        NotesReads.settled(CommandStatus.COMMAND_STATUS_DENIED, "", "k:1")
-            .write_settled?.failure shouldBe null
-    }
-
-    "a draft saves through the note's own edit, keyed by its sequence" {
-        // A NOTE'S BODY IS ITS OWN COLUMN (#1135): it is always here, so there is
-        // no "body not on this device" to guard and a save is a save.
-        val loaded = NotesEditorMachine.reduce(
-            NotesEditorMachine.reduce(
-                NotesEditorMachine.initial(),
-                NotesEditorEvent(opened = NotesEditorEvent.Opened(note_id = "note-1")),
-            ).state,
-            NotesEditorEvent(
-                data_ = NotesEditorEvent.DataArrived(
-                    draft = NoteDraft(
-                        title = "Groceries",
-                        body = "milk",
-                        base_revision_id = "rev-7",
-                    ),
-                ),
-            ),
-        ).state
-        val edited = NotesEditorMachine.reduce(
-            loaded,
-            NotesEditorEvent(title = NotesEditorEvent.TitleEdited(title = "Groceries and wine")),
-        ).state
-        val saved = NotesEditorMachine.reduce(
-            edited,
-            NotesEditorEvent(save = NotesEditorEvent.SaveRequested()),
-        )
-        val write = saved.effects.single() as ScreenEffect.SubmitWrite
-        write.command shouldBe NotesEditorMachine.SAVE_COMMAND
-        write.invokeKey shouldBe "note.edit:note-1:seq=1"
-        saved.state.save shouldBe NotesEditorState.SaveState.SAVE_STATE_SAVING
+        WriteLaw.settledOf(CommandStatus.COMMAND_STATUS_DENIED, "", "k:1")
+            .failure shouldBe null
     }
 
     "every screen turns a seat into its own event, so one fact reaches all of them" {
@@ -113,8 +75,9 @@ class WriteRunnerSpec : StringSpec({
             SeatState.Connectivity.CONNECTIVITY_ONLINE_UNMETERED,
             SeatState.Durability.DURABILITY_AUTHORITATIVE,
         )
-        NotesEditorMachine.seatChanged(reachable).seat_changed?.seat shouldBe reachable
-        dev.centraid.shared.apps.tasks.TasksTrashMachine.machine.seatChanged(reachable)
+        dev.centraid.shared.apps.people.PeopleHomeMachine.seatChanged(reachable)
+            .seat_changed?.seat shouldBe reachable
+        dev.centraid.shared.apps.people.PeopleTrashMachine.seatChanged(reachable)
             .seat_changed?.seat shouldBe reachable
         dev.centraid.shared.apps.photos.PhotosGridMachine.seatChanged(reachable)
             .seat_changed?.seat shouldBe reachable

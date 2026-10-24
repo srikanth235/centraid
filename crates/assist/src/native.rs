@@ -58,5 +58,5 @@ pub mod values;
 pub mod whr;
 pub mod world;
 
-pub use door::{Door, Ran};
+pub use door::{Call, Door, Ran};
 pub use session::{Flags, Session};

@@ -4,10 +4,6 @@ import centraid.core.v1.CommandStatus
 import centraid.core.v1.Row
 import centraid.core.v1.Value
 import centraid.screen.v1.SearchAsk
-import centraid.screen.v1.Autosave
-import centraid.screen.v1.NoteDraft
-import centraid.screen.v1.NotesEditorEvent
-import centraid.screen.v1.NotesEditorState
 import centraid.screen.v1.SearchField
 import centraid.screen.v1.TrashListData
 import centraid.screen.v1.TrashListEvent
@@ -15,12 +11,9 @@ import centraid.screen.v1.TrashListState
 import centraid.screen.v1.TrashRow
 import centraid.screen.v1.WriteSettled
 import centraid.screen.v1.WriteState
-import dev.centraid.shared.apps.notes.NotesEditorMachine
-import dev.centraid.shared.kit.AutosaveLaw
 import dev.centraid.shared.kit.BandLaw
 import dev.centraid.shared.kit.BandLens
 import dev.centraid.shared.kit.ContentLens
-import dev.centraid.shared.kit.InvokeKeys
 import dev.centraid.shared.kit.ReadContent
 import dev.centraid.shared.kit.SearchLaw
 import dev.centraid.shared.kit.SearchLens
@@ -32,7 +25,6 @@ import dev.centraid.shared.kit.WriteLaw
 import dev.centraid.shared.kit.WriteLens
 import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.screen.ScreenEffect
-import dev.centraid.shared.screen.Step
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.nulls.shouldBeNull
@@ -245,124 +237,6 @@ class KitLawsSpec : StringSpec({
         SearchLaw.unasked(lens, SearchField()) shouldBe SearchField()
     }
 
-    // --- Autosave ---------------------------------------------------------
-
-    "autosave: each edit schedules its own token, and a stale tick saves nothing" {
-        val one = notes(loaded(), title("Winter trip"))
-        val two = notes(one.state, title("Winter plans"))
-        two.effects shouldBe listOf(ScreenEffect.Schedule(NotesEditorMachine.SCREEN_ID, "save:2", 900))
-        // The first edit's tick comes due after the second edit: stale.
-        notes(two.state, tick("save:1")).effects.shouldBeEmpty()
-        val saved = notes(two.state, tick("save:2"))
-        (saved.effects.single() as ScreenEffect.SubmitWrite).inputJson shouldContain "Winter plans"
-        saved.state.autosave.shouldNotBeNull().phase shouldBe Autosave.Phase.PHASE_SAVING
-    }
-
-    "autosave: one invoke key per edit_seq, so the next save is a new command" {
-        val first = notes(notes(loaded(), body("a")).state, tick("save:1"))
-        val key1 = (first.effects.single() as ScreenEffect.SubmitWrite).invokeKey
-        key1 shouldBe InvokeKeys.of(NotesEditorMachine.SAVE_COMMAND, "note-1", "seq=1")
-        val committed = notes(first.state, settled(key1, committed = true)).state
-        val second = notes(notes(committed, body("ab")).state, tick("save:2"))
-        val key2 = (second.effects.single() as ScreenEffect.SubmitWrite).invokeKey
-        key2 shouldBe InvokeKeys.of(NotesEditorMachine.SAVE_COMMAND, "note-1", "seq=2")
-    }
-
-    "autosave: only the changed fields are sent" {
-        val titleOnly = notes(notes(loaded(), title("New")).state, tick("save:1"))
-        val input = (titleOnly.effects.single() as ScreenEffect.SubmitWrite).inputJson
-        input shouldBe "{\"id\":\"note-1\",\"title\":\"New\"}"
-        input shouldNotContain "body"
-        input shouldNotContain "pinned"
-    }
-
-    "autosave: a pin is the shared flag verb, sent at once with no debounce" {
-        val pinned = notes(loaded(), NotesEditorEvent(pin = NotesEditorEvent.PinToggled()))
-        val write = pinned.effects.single() as ScreenEffect.SubmitWrite
-        write.command shouldBe "flag.set"
-        write.inputJson shouldBe "{\"id\":\"note-1\",\"flag\":\"pinned\"}"
-    }
-
-    "autosave: a change from the vault never replaces words being typed" {
-        val dirty = notes(loaded(), body("my words")).state
-        // EMPTY keys: the core's own "re-read the table", which is this note too.
-        val moved = notes(dirty, NotesEditorEvent(rows_changed = NotesEditorEvent.RowsChanged(emptyList())))
-        moved.effects.shouldBeEmpty()
-        moved.state.autosave.shouldNotBeNull().remote_changed shouldBe true
-        // A read's answer that lands anyway replaces nothing either.
-        val answered = notes(moved.state, NotesEditorEvent(data_ = NotesEditorEvent.DataArrived(draft("theirs")))).state
-        answered.draft.shouldNotBeNull().body shouldBe "my words"
-        // Saved: then, and only then, the editor reads what the vault moved to.
-        val saving = notes(answered, tick("save:1"))
-        val key = (saving.effects.single() as ScreenEffect.SubmitWrite).invokeKey
-        val done = notes(saving.state, settled(key, committed = true))
-        done.effects shouldBe listOf(ScreenEffect.ReadPage(NotesEditorMachine.SCREEN_ID, null))
-        done.state.autosave.shouldNotBeNull().remote_changed shouldBe false
-    }
-
-    "autosave: a clean editor re-reads on an empty change, and ignores another note's" {
-        notes(loaded(), NotesEditorEvent(rows_changed = NotesEditorEvent.RowsChanged(emptyList()))).effects shouldBe
-            listOf(ScreenEffect.ReadPage(NotesEditorMachine.SCREEN_ID, null))
-        notes(loaded(), NotesEditorEvent(rows_changed = NotesEditorEvent.RowsChanged(listOf("other")))).effects
-            .shouldBeEmpty()
-    }
-
-    "autosave: a settle under another key is not this save's" {
-        val saving = notes(notes(loaded(), body("x")).state, tick("save:1")).state
-        notes(saving, settled("someone-else", committed = false)).state shouldBe saving
-    }
-
-    "autosave: words typed while a save is in flight are saved when it commits" {
-        val saving = notes(notes(loaded(), body("x")).state, tick("save:1"))
-        val key = (saving.effects.single() as ScreenEffect.SubmitWrite).invokeKey
-        val more = notes(saving.state, body("xy")).state
-        // Their tick comes due against a SAVING editor, and does nothing.
-        notes(more, tick("save:2")).effects.shouldBeEmpty()
-        val next = notes(more, settled(key, committed = true))
-        (next.effects.single() as ScreenEffect.SubmitWrite).inputJson shouldContain "\"body\":\"xy\""
-    }
-
-    "autosave: an untitled note is titled from its first line; an emptied body is saved empty" {
-        val untitled = notes(notes(loaded(title = ""), body("\n  Shopping list \nmilk")).state, tick("save:1"))
-        (untitled.effects.single() as ScreenEffect.SubmitWrite).inputJson shouldContain "\"title\":\"Shopping list\""
-
-        // `body` takes an empty string: clearing a note is the member's words.
-        val emptied = notes(notes(loaded(), body("")).state, tick("save:1"))
-        (emptied.effects.single() as ScreenEffect.SubmitWrite).inputJson shouldBe
-            "{\"id\":\"note-1\",\"body\":\"\"}"
-        emptied.state.save shouldBe NotesEditorState.SaveState.SAVE_STATE_SAVING
-    }
-
-    "autosave: leaving saves what is unsaved, and nothing when all is saved" {
-        notes(loaded(), NotesEditorEvent(left = NotesEditorEvent.Left())).effects.shouldBeEmpty()
-        val left = notes(notes(loaded(), body("bye")).state, NotesEditorEvent(left = NotesEditorEvent.Left()))
-        (left.effects.single() as ScreenEffect.SubmitWrite).inputJson shouldContain "bye"
-        AutosaveLaw.DEBOUNCE_MS shouldBe 900L
-    }
-
-    "autosave: the status line's words ride in the state, the same on both shells (#1047)" {
-        loaded().autosave.shouldNotBeNull().label shouldBe "Saved"
-        val dirty = notes(loaded(), body("x")).state
-        dirty.autosave.shouldNotBeNull().label shouldBe "Edited"
-        val saving = notes(dirty, tick("save:1"))
-        saving.state.autosave.shouldNotBeNull().label shouldBe "Saving…"
-        val key = (saving.effects.single() as ScreenEffect.SubmitWrite).invokeKey
-        notes(
-            saving.state,
-            NotesEditorEvent(
-                write_settled = WriteSettled(
-                    invoke_key = key,
-                    committed = false,
-                    failure = centraid.screen.v1.ReadFailure(sentence = "The vault is read-only."),
-                ),
-            ),
-        ).state.autosave.shouldNotBeNull().label shouldBe "The vault is read-only."
-        notes(saving.state, settled(key, committed = false)).state.autosave.shouldNotBeNull().label shouldBe "Not saved"
-        notes(saving.state, settled(key, committed = true)).state.autosave.shouldNotBeNull().label shouldBe "Saved"
-        dev.centraid.shared.kit.KitWords.backTo("People") shouldBe "Back to People"
-        dev.centraid.shared.kit.KitWords.backTo("") shouldBe "Back"
-    }
-
     // --- Writes -----------------------------------------------------------
 
     "write law: the same key in flight is one write; a settle under another key is ignored" {
@@ -370,9 +244,9 @@ class KitLawsSpec : StringSpec({
             override fun write(state: WriteState): WriteState = state
             override fun with(state: WriteState, write: WriteState): WriteState = write
         }
-        val sent = WriteLaw.submit(lens, WriteState(), "tasks.complete_task", "{}", "k1")
+        val sent = WriteLaw.submit(lens, WriteState(), "agenda.complete_task", "{}", "k1")
         sent.state.phase shouldBe WriteState.Phase.PHASE_IN_FLIGHT
-        WriteLaw.submit(lens, sent.state, "tasks.complete_task", "{}", "k1").effects.shouldBeEmpty()
+        WriteLaw.submit(lens, sent.state, "agenda.complete_task", "{}", "k1").effects.shouldBeEmpty()
         WriteLaw.settled(lens, sent.state, WriteSettled(invoke_key = "k0", committed = true)).state shouldBe sent.state
         val refused = WriteLaw.settled(
             lens,
@@ -392,7 +266,7 @@ class KitLawsSpec : StringSpec({
         sent.state.refusal shouldBe ""
         WriteLaw.settled(lens, refused, WriteSettled(invoke_key = "k1", committed = true)).state.refusal shouldBe ""
         // A NEW ATTEMPT CLEARS THE OLD SENTENCE.
-        WriteLaw.submit(lens, refused, "tasks.complete_task", "{}", "k2").state.refusal shouldBe ""
+        WriteLaw.submit(lens, refused, "agenda.complete_task", "{}", "k2").state.refusal shouldBe ""
         // AND "REFUSED" IS SAID ONCE TOO — a silent refusal is still one, so the
         // sentence cannot say it alone; nothing else is.
         refused.refused shouldBe true
@@ -403,7 +277,7 @@ class KitLawsSpec : StringSpec({
         ).state.refused shouldBe true
         sent.state.refused shouldBe false
         WriteLaw.settled(lens, refused, WriteSettled(invoke_key = "k1", committed = true)).state.refused shouldBe false
-        WriteLaw.submit(lens, refused, "tasks.complete_task", "{}", "k2").state.refused shouldBe false
+        WriteLaw.submit(lens, refused, "agenda.complete_task", "{}", "k2").state.refused shouldBe false
     }
 
     // --- Trash ------------------------------------------------------------
@@ -416,9 +290,9 @@ class KitLawsSpec : StringSpec({
 
         val restore = machine.reduce(shown, TrashListEvent(restore = TrashListEvent.RestoreTapped(id = "t1")))
         restore.effects.single() shouldBe ScreenEffect.SubmitWrite(
-            "tasks.restore_task",
+            "agenda.restore_task",
             "{\"task_id\":\"t1\"}",
-            "tasks.restore_task:t1",
+            "agenda.restore_task:t1",
         )
 
         val asked = machine.reduce(shown, TrashListEvent(purge = TrashListEvent.PurgeTapped(id = "t1")))
@@ -429,13 +303,13 @@ class KitLawsSpec : StringSpec({
         dismissed.state.confirm.shouldBeNull()
         dismissed.effects.shouldBeEmpty()
         val purged = machine.reduce(asked.state, TrashListEvent(confirmed = TrashListEvent.Confirmed()))
-        (purged.effects.single() as ScreenEffect.SubmitWrite).command shouldBe "tasks.purge_task"
+        (purged.effects.single() as ScreenEffect.SubmitWrite).command shouldBe "agenda.purge_task"
         purged.state.confirm.shouldBeNull()
 
         val emptying = machine.reduce(shown, TrashListEvent(empty = TrashListEvent.EmptyTapped()))
         emptying.state.empty_all shouldBe true
         val emptied = machine.reduce(emptying.state, TrashListEvent(confirmed = TrashListEvent.Confirmed()))
-        (emptied.effects.single() as ScreenEffect.SubmitWrite).command shouldBe "tasks.empty_trash"
+        (emptied.effects.single() as ScreenEffect.SubmitWrite).command shouldBe "agenda.empty_trash"
     }
 
     "trash: an app with no destroy path offers restore only" {
@@ -454,7 +328,7 @@ class KitLawsSpec : StringSpec({
         val restoring = machine.reduce(shown, TrashListEvent(restore = TrashListEvent.RestoreTapped(id = "t1"))).state
         val refused = machine.reduce(
             restoring,
-            TrashListEvent(write_settled = WriteSettled(invoke_key = "tasks.restore_task:t1", committed = false)),
+            TrashListEvent(write_settled = WriteSettled(invoke_key = "agenda.restore_task:t1", committed = false)),
         ).state
         refused.data_.shouldNotBeNull().rows.single().id shouldBe "t1"
         refused.write.shouldNotBeNull().phase shouldBe WriteState.Phase.PHASE_REFUSED
@@ -551,11 +425,11 @@ class KitLawsSpec : StringSpec({
 }) {
     private companion object {
         val tasksTrash = TrashSpec(
-            appId = "tasks",
+            appId = "agenda",
             table = "task",
-            restoreCommand = "tasks.restore_task",
-            purgeCommand = "tasks.purge_task",
-            emptyCommand = "tasks.empty_trash",
+            restoreCommand = "agenda.restore_task",
+            purgeCommand = "agenda.purge_task",
+            emptyCommand = "agenda.empty_trash",
             idColumn = "task_id",
             titleColumn = "title",
             purgeWindowDays = 30,
@@ -579,32 +453,6 @@ class KitLawsSpec : StringSpec({
         fun changedRows(vararg ids: String) = TrashListEvent(rows_changed = TrashListEvent.RowsChanged(ids = ids.toList()))
 
         fun TrashListState.ids(): List<String> = data_?.rows?.map { it.id } ?: emptyList()
-
-        fun draft(body: String, title: String = "Winter"): NoteDraft =
-            NoteDraft(title = title, body = body, base_revision_id = "rev-1")
-
-        fun loaded(title: String = "Winter"): NotesEditorState {
-            val opened = NotesEditorMachine.reduce(
-                NotesEditorMachine.initial(),
-                NotesEditorEvent(opened = NotesEditorEvent.Opened(note_id = "note-1")),
-            ).state
-            return NotesEditorMachine.reduce(
-                opened,
-                NotesEditorEvent(data_ = NotesEditorEvent.DataArrived(draft("plans", title))),
-            ).state
-        }
-
-        fun notes(state: NotesEditorState, event: NotesEditorEvent): Step<NotesEditorState> =
-            NotesEditorMachine.reduce(state, event)
-
-        fun title(t: String) = NotesEditorEvent(title = NotesEditorEvent.TitleEdited(title = t))
-
-        fun body(b: String) = NotesEditorEvent(body = NotesEditorEvent.BodyEdited(body = b))
-
-        fun tick(token: String) = NotesEditorEvent(tick = NotesEditorEvent.Ticked(token = token))
-
-        fun settled(key: String, committed: Boolean) =
-            NotesEditorEvent(write_settled = WriteSettled(invoke_key = key, committed = committed))
 
         fun trash(machine: TrashMachine, state: TrashListState, data: TrashListData): TrashListState =
             machine.reduce(

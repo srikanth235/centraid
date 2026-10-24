@@ -34,6 +34,8 @@ centraid-apps-health = { path = "../apps/health" }
 # over a seed opened under `K` after the code's receipt lands; see the
 # workspace manifest's note beside `sha1`.
 hmac.workspace = true
+# The manifest's input schemas, which `act` validates an input against (#1135).
+jsonschema.workspace = true
 sha1.workspace = true
 # THE APP QUERIES THE PHONE ASKS FOR BY NAME (#1046). Agenda's `upcoming` joins
 # six-plus tables and expands every series through the one recurrence engine,
@@ -43,7 +45,6 @@ sha1.workspace = true
 centraid-apps-agenda = { path = "../apps/agenda" }
 # Tasks' board, one task, projects, search and catch-up (#1046): the families,
 # the recurrence collapse and every civil reading run here, over the page door.
-centraid-apps-tasks = { path = "../apps/tasks" }
 # Docs' drive, search, document and activity (#1046), the same way.
 centraid-apps-docs = { path = "../apps/docs" }
 # People's five phone queries (#1046) — the roster, Touch, the sheet, search and

@@ -1,0 +1,574 @@
+// THE SCREEN RUNTIME'S WIRE (#1135, lane C2). Every decision a person sees is
+// made in Rust: a screen is a state machine (`crates/screens`) that takes a
+// `ScreenEvent` and yields a `ViewState` and `Effect`s. SwiftUI and Compose draw
+// the view state, send events, and perform effects — they own no copy, no count,
+// no timer and no route.
+//
+// IN `core.v1` AND NOT `screen.v1`, deliberately. `centraid.screen.v1` is the
+// KMP shell's per-screen state package and is deleted with that shell; this file
+// is what replaces it, and it rides the one `Envelope` (`Request.screen`,
+// `Response.screen`, `Event.screen`) so the ABI stays five symbols.
+//
+// HOW AN APP LANE ADDS A SCREEN: one arm in each of `Route.args`,
+// `ScreenEvent.kind` and `ViewState.kind`, in the app's reserved range (below),
+// and its messages in its own file (`<app>_screens.proto`) imported here.
+// Reserved arm ranges: 10-19 proof, 100-199 agenda, 200-299 docs, 300-399
+// health, 400-499 locker, 500-599 money, 600-699 notes, 700-799 people, 800-899
+// photos, 900-999 the kit (trash), 1000-1999 the shell (Home, search, chat,
+// onboarding, backup).
+//
+// WHERE THE MESSAGES LIVE: the `Route` and its argument messages in
+// `route.proto`, the shared view vocabulary (`Failure`, `Loading`, `Denied`,
+// `EmptyState`, `StatusLine`, ...) in `kit_screens.proto`, an app's own in
+// `<app>_screens.proto`. All three are leaves that this file imports, so a view
+// can name a `Route` without a cycle.
+
+syntax = "proto3";
+
+package centraid.core.v1;
+
+import "centraid/core/v1/agenda_screens.proto";
+import "centraid/core/v1/docs_screens.proto";
+import "centraid/core/v1/kit_screens.proto";
+import "centraid/core/v1/notes_screens.proto";
+import "centraid/core/v1/route.proto";
+
+// ---------------------------------------------------------------------------
+// The door
+// ---------------------------------------------------------------------------
+
+message ScreenRequest {
+  oneof kind {
+    // The shell reports a tap on a link or a back-swipe; Rust moves the stack.
+    NavEvent nav = 1;
+    // An event for one open screen.
+    InstanceEvent send = 2;
+    // Everything again: the navigation and every open screen's view state. A
+    // shell asks after it was suspended or restarted its views.
+    SnapshotRequest snapshot = 3;
+    // The device's locale and time zone. Rust formats every string and civil
+    // reading from these; a shell reports them at start and when they change.
+    Environment environment = 4;
+  }
+}
+
+message SnapshotRequest {}
+
+message Environment {
+  // A BCP 47 tag, e.g. `en`. An unknown locale falls back to English.
+  string locale = 1;
+  // An IANA zone, e.g. `Asia/Kolkata`.
+  string zone = 2;
+}
+
+// A timer elapsed (`Event.wake`). Internal to the core: see `next_event`.
+message ScreenWake {}
+
+// The answer to every `ScreenRequest`, and the body of every pushed
+// `Event.screen`: what changed, in one message, so a shell applies one update
+// and draws once.
+message ScreenUpdate {
+  // Present only when the stack or the selected tab moved.
+  optional Navigation navigation = 1;
+  // The views whose state moved, each with a revision a renderer uses to drop
+  // an update it has already surpassed.
+  repeated ViewState views = 2;
+  // Platform work the shell is asked to perform. Each is answered with a
+  // `ScreenEvent.effect_result` carrying the same `effect_id`.
+  repeated EffectRequest effects = 3;
+  // Instances closed by this update (popped off a stack): a shell frees their
+  // view models.
+  repeated uint64 closed = 4;
+}
+
+message ScreenResponse {
+  ScreenUpdate update = 1;
+}
+
+// ---------------------------------------------------------------------------
+// Navigation: a route stack per tab, owned by Rust
+// ---------------------------------------------------------------------------
+
+message Navigation {
+  string selected_tab = 1;
+  repeated TabStack tabs = 2;
+  // Monotonic: a renderer drops a navigation older than the one it drew.
+  uint64 revision = 3;
+}
+
+message TabStack {
+  string tab = 1;
+  // Root first.
+  repeated StackEntry entries = 2;
+}
+
+message StackEntry {
+  // The screen instance this entry shows; `ViewState.instance` names it.
+  uint64 instance = 1;
+  Route route = 2;
+}
+
+message NavEvent {
+  oneof kind {
+    NavPush push = 1;
+    // The shell already popped visually (a back-swipe or the back button); Rust
+    // drops the instance and everything above it.
+    NavPopped popped = 2;
+    NavSelectTab select_tab = 3;
+    // Pop to the root of a tab (a second tap on the selected tab).
+    NavPopToRoot pop_to_root = 4;
+  }
+}
+
+message NavPush {
+  string tab = 1;
+  Route route = 2;
+}
+
+message NavPopped {
+  string tab = 1;
+  uint64 instance = 2;
+}
+
+message NavSelectTab {
+  string tab = 1;
+}
+
+message NavPopToRoot {
+  string tab = 1;
+}
+
+// ---------------------------------------------------------------------------
+// Events: what a shell (or the runtime itself) says to a screen
+// ---------------------------------------------------------------------------
+
+message InstanceEvent {
+  uint64 instance = 1;
+  ScreenEvent event = 2;
+}
+
+message ScreenEvent {
+  oneof kind {
+    // The screen came into view. The first one loads.
+    Appeared appeared = 1;
+    // A shell answers an `EffectRequest`.
+    EffectResult effect_result = 2;
+    // RUNTIME-ORIGINATED: a timer the screen started has elapsed. A shell never
+    // sends it.
+    TimerFired timer_fired = 3;
+    // RUNTIME-ORIGINATED: a table the screen read has changed. A shell never
+    // sends it.
+    DataChanged data_changed = 4;
+    // RUNTIME-ORIGINATED: the locale or zone changed.
+    EnvironmentChanged environment_changed = 5;
+    // RUNTIME-ORIGINATED: the screen is being popped. Its last chance to write
+    // what the member typed (an autosave's pending edit); a shell never sends
+    // it, and only its `act`s survive: the view is no longer drawn.
+    Left left = 6;
+    CounterEvent counter = 10;
+    // ---- agenda (100-199) ----
+    AgendaHomeEvent agenda_home = 100;
+    AgendaEventEvent agenda_event = 101;
+    AgendaEditorEvent agenda_editor = 102;
+    TodoListEvent todo_list = 103;
+    TodoProjectEvent todo_project = 104;
+    TodoDetailEvent todo_detail = 105;
+    TodoCatchUpEvent todo_catch_up = 106;
+    // ---- docs (200-299) ----
+    DocsDriveEvent docs_drive = 200;
+    DocsDocumentEvent docs_document = 201;
+    DocsEditorEvent docs_editor = 202;
+    DocsVersionsEvent docs_versions = 203;
+    // ---- notes (600-699) ----
+    NotesHomeEvent notes_home = 600;
+    NotesEditorEvent notes_editor = 601;
+    NotesHistoryEvent notes_history = 602;
+    // ---- the kit (900-999) ----
+    TrashEvent trash = 900;
+  }
+}
+
+message Appeared {}
+
+message TimerFired {
+  // The screen's own name for the timer.
+  string timer = 1;
+}
+
+message EnvironmentChanged {}
+
+message Left {}
+
+message DataChanged {
+  repeated string tables = 1;
+}
+
+// ---------------------------------------------------------------------------
+// View state: finished, ready to draw
+// ---------------------------------------------------------------------------
+
+message ViewState {
+  uint64 instance = 1;
+  uint64 revision = 2;
+  oneof kind {
+    CounterView counter = 10;
+    // ---- agenda (100-199) ----
+    AgendaHomeState agenda_home = 100;
+    AgendaEventState agenda_event = 101;
+    AgendaEditorState agenda_editor = 102;
+    TodoListState todo_list = 103;
+    TodoProjectState todo_project = 104;
+    TodoDetailState todo_detail = 105;
+    TodoCatchUpState todo_catch_up = 106;
+    // ---- docs (200-299) ----
+    DocsDriveState docs_drive = 200;
+    DocsDocumentState docs_document = 201;
+    DocsEditorState docs_editor = 202;
+    DocsVersionsState docs_versions = 203;
+    // ---- notes (600-699) ----
+    NotesHomeState notes_home = 600;
+    NotesEditorState notes_editor = 601;
+    NotesHistoryState notes_history = 602;
+    // ---- the kit (900-999) ----
+    TrashView trash = 900;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Effects: platform work the shell performs
+// ---------------------------------------------------------------------------
+
+message EffectRequest {
+  // Unique per runtime; the answer names it.
+  uint64 effect_id = 1;
+  // The screen that asked, and that the answer returns to.
+  uint64 instance = 2;
+  Effect effect = 3;
+}
+
+message Effect {
+  oneof kind {
+    ClipboardSet clipboard_set = 1;
+    ClipboardClear clipboard_clear = 2;
+    Haptic haptic = 3;
+    Share share = 4;
+    OpenUrl open_url = 5;
+    PickPhotos pick_photos = 6;
+    CapturePhoto capture_photo = 7;
+    HealthRead health_read = 8;
+    KeychainOp keychain = 9;
+    ScreenshotShield screenshot_shield = 10;
+    ScheduleNotification schedule_notification = 11;
+    CalendarRead calendar_read = 12;
+    PhoneWatch phone_watch = 13;
+    // Open a page now, wherever the member is: the shell pushes `route` as a
+    // tapped row's route is pushed. For a screen that makes a thing and
+    // opens it (a document just filed).
+    OpenRoute open_route = 20;
+    // ---- docs (200-299): files ----
+    PickFile pick_file = 200;
+    FollowFolder follow_folder = 201;
+    StopFollowing stop_following = 202;
+  }
+}
+
+message ClipboardSet {
+  string text = 1;
+  // A secret is marked so the OS keeps it out of clipboard history.
+  bool sensitive = 2;
+}
+
+// Clears the clipboard only if it still holds what the core put there.
+message ClipboardClear {
+  string expected_text = 1;
+}
+
+enum HapticKind {
+  HAPTIC_KIND_UNSPECIFIED = 0;
+  HAPTIC_KIND_SELECTION = 1;
+  HAPTIC_KIND_SUCCESS = 2;
+  HAPTIC_KIND_WARNING = 3;
+  HAPTIC_KIND_ERROR = 4;
+}
+
+message Haptic {
+  HapticKind kind = 1;
+}
+
+message Share {
+  string text = 1;
+  string url = 2;
+  // Already localized: it is shown by the OS share sheet.
+  string subject = 3;
+}
+
+message OpenUrl {
+  string url = 1;
+}
+
+message PickPhotos {
+  uint32 max_count = 1;
+}
+
+message CapturePhoto {}
+
+message HealthRead {
+  // The Health store's own type names (`step_count`, `heart_rate`, ...).
+  repeated string types = 1;
+  // Inclusive window, epoch milliseconds.
+  int64 from_ms = 2;
+  int64 to_ms = 3;
+}
+
+message KeychainOp {
+  enum Op {
+    OP_UNSPECIFIED = 0;
+    OP_GET = 1;
+    OP_SET = 2;
+    OP_DELETE = 3;
+  }
+  Op op = 1;
+  string key = 2;
+  // For `OP_SET`.
+  bytes value = 3;
+}
+
+message ScreenshotShield {
+  bool on = 1;
+}
+
+message ScheduleNotification {
+  string id = 1;
+  // Already localized: the notification is shown by the OS.
+  string title = 2;
+  string body = 3;
+  // Epoch milliseconds. A cancel is an empty `title` and `body`.
+  int64 at_ms = 4;
+}
+
+// Read the phone's calendars over a window around the shell's clock. A shell
+// that is denied (or has no calendar) answers `EffectFailed{denied}`.
+message CalendarRead {
+  // The member's Import tap lets the OS ask for permission; a following pass
+  // never does.
+  bool ask_permission = 1;
+  uint32 days_back = 2;
+  uint32 days_on = 3;
+}
+
+// Start (`on`) or stop watching a phone store; while it is on, the shell
+// answers this effect with a `PhoneChanged` each time the store changes, under
+// the effect's one `effect_id`.
+message PhoneWatch {
+  ImportSource source = 1;
+  bool on = 2;
+}
+
+message EffectResult {
+  uint64 effect_id = 1;
+  oneof outcome {
+    EffectDone done = 2;
+    EffectFailed failed = 3;
+    PhotosPicked photos = 4;
+    HealthSamples health = 5;
+    KeychainValue keychain = 6;
+    CalendarSnapshot calendar = 7;
+    PhoneChanged phone_changed = 8;
+    // ---- docs (200-299): files ----
+    FilePicked file_picked = 200;
+    FileProgress file_progress = 201;
+    FolderFollowed folder_followed = 202;
+  }
+}
+
+message EffectDone {}
+
+message EffectFailed {
+  // Which platform refused, in words for a log; the screen decides what a
+  // member reads.
+  string reason = 1;
+  bool denied = 2;
+}
+
+message PhotosPicked {
+  // Ids of bytes the shell streamed through the stage door; the screen hands
+  // them to `act`.
+  repeated string stage_ids = 1;
+}
+
+message HealthSamples {
+  message Sample {
+    string type = 1;
+    double value = 2;
+    string unit = 3;
+    int64 at_ms = 4;
+  }
+  repeated Sample samples = 1;
+}
+
+message KeychainValue {
+  bool found = 1;
+  bytes value = 2;
+}
+
+// The phone's calendars as the OS holds them, every occurrence in the window
+// its own event; Rust folds a series back into one and makes every record.
+message CalendarSnapshot {
+  // The shell's clock when it read, epoch milliseconds, and its zone.
+  int64 now_ms = 1;
+  string device_zone = 2;
+  // False when the read may have missed events: nothing is then trashed.
+  bool complete = 3;
+  // Every visible calendar the member writes to, an empty one included.
+  repeated PhoneCalendar calendars = 4;
+  repeated PhoneCalendarEvent events = 5;
+  // This install's id, minted once and kept off the vault: an id that means
+  // something on this phone only is followed under it (R-1127-10).
+  string device_id = 6;
+}
+
+message PhoneCalendar {
+  // The platform's own id for the calendar, not yet prefixed.
+  string key = 1;
+  string source_title = 2;
+  string title = 3;
+}
+
+// One occurrence. An all-day `start`/`end` is `YYYY-MM-DD` with `end` the LAST
+// day, inclusive; a timed one is `YYYY-MM-DDTHH:MM:SS` in `tz`, `end` exclusive.
+message PhoneCalendarEvent {
+  string title = 1;
+  string notes = 2;
+  bool all_day = 3;
+  string start = 4;
+  string end = 5;
+  // The event's IANA zone; empty is the device's.
+  string tz = 6;
+  // The calendar holds it as not blocking its time.
+  bool free = 7;
+  optional PhoneCalendarSeries series = 8;
+  // Where the series' rule puts this occurrence, when the member moved it.
+  string original_start = 9;
+  bool moved = 10;
+  // The phone's most durable id, kind-prefixed (`uid:`, `lookup:`, `local:`).
+  string phone_id = 11;
+  string calendar_key = 12;
+}
+
+// A repeating series as the phone holds it; `start`/`end` are the series' OWN
+// first occurrence, in the form of the occurrences'.
+message PhoneCalendarSeries {
+  string id = 1;
+  string rrule = 2;
+  string start = 3;
+  string end = 4;
+}
+
+// A watched store changed.
+message PhoneChanged {
+  ImportSource source = 1;
+}
+
+// ---------------------------------------------------------------------------
+// Files (Docs): pick and stage a file, follow a folder
+// ---------------------------------------------------------------------------
+
+message OpenRoute {
+  Route route = 1;
+}
+
+// Pick one file for the drive's Add sheet: Upload is the system file picker,
+// Scan the document camera (its pages written to one PDF). The shell copies the
+// choice to a file on this device, STREAMS it through the stage door (a 900 MB
+// scan never exists in memory at once), and answers `FilePicked` with the hash
+// the core named. While it streams it may answer `FileProgress` any number of
+// times under the same `effect_id`. A closed picker is `EffectDone`; a refusal
+// is `EffectFailed` (`denied` for a camera or file grant the member refused).
+message PickFile {
+  Kind kind = 1;
+
+  enum Kind {
+    KIND_UNSPECIFIED = 0;
+    KIND_UPLOAD = 1;
+    KIND_SCAN = 2;
+  }
+}
+
+// A file the shell picked and staged. `blob` is the hash the stage door named
+// and `byte_size` the bytes it counted; `name` is what the platform called the
+// file (empty for a scan) and `media_type` its type (empty: Rust reads it off
+// the name).
+message FilePicked {
+  string blob = 1;
+  uint64 byte_size = 2;
+  string name = 3;
+  string media_type = 4;
+}
+
+// Bytes streamed so far, of a file `total_bytes` long (0 is unknown). `name` is
+// what the platform called the file (empty for a scan), so the line can say what
+// is being added while it streams.
+message FileProgress {
+  uint64 staged_bytes = 1;
+  uint64 total_bytes = 2;
+  string name = 3;
+}
+
+// Follow a folder the member picks (#1127): the shell opens its folder picker,
+// keeps the access it is given (a security-scoped bookmark, a persisted tree
+// URI) under an origin it mints, and answers `FolderFollowed`. A closed picker
+// is `EffectDone`.
+message FollowFolder {}
+
+// The folder the shell is now following, and the name the phone gives it.
+message FolderFollowed {
+  // `folder:<uuid>`.
+  string origin = 1;
+  string name = 2;
+}
+
+// Stop following the folder whose origin is `origin`: the shell forgets its
+// access and tells the core to forget the folder's links; every document stays.
+message StopFollowing {
+  string origin = 1;
+}
+
+// ---------------------------------------------------------------------------
+// The proof screen (`proof.counter`): how many events are upcoming, one `load`
+// over `agenda.upcoming`. Exists to prove the runtime end to end — load, a
+// re-render on a change, an effect and a timer — and is deleted when the first
+// real screen is ported.
+// ---------------------------------------------------------------------------
+
+message CounterEvent {
+  oneof kind {
+    // The member tapped the count: copy it, and clear the clipboard later.
+    CounterCopyTapped copy_tapped = 1;
+    CounterRetryTapped retry_tapped = 2;
+  }
+}
+
+message CounterCopyTapped {}
+
+message CounterRetryTapped {}
+
+message CounterView {
+  string title = 1;
+  oneof content {
+    CounterLoading loading = 2;
+    Failure failed = 3;
+    CounterData data = 4;
+  }
+}
+
+message CounterLoading {
+  string label = 1;
+}
+
+message CounterData {
+  // "3 upcoming events": plural-aware, finished.
+  string count_label = 1;
+  string copy_label = 2;
+  // "Copied. The clipboard clears in 30 seconds." Empty when nothing was copied.
+  string notice = 3;
+}

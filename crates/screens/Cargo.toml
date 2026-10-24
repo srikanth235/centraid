@@ -1,0 +1,26 @@
+[package]
+name = "centraid-screens"
+description = "The screen runtime: every decision a person sees is made here, in Rust (#1135)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[lib]
+name = "centraid_screens"
+path = "src/lib.rs"
+
+[dependencies]
+centraid-api-proto = { path = "../api-proto" }
+centraid-core = { path = "../core" }
+# The folder walk: a document's path, a folder page's crumbs and a Move sheet's labels are
+# the docs crate's one `folder_path` (#1135).
+centraid-apps-docs = { path = "../apps/docs" }
+prost.workspace = true
+serde_json.workspace = true
+# THE ONE PARTY HUE WHEEL: a project and a calendar are drawn in the hue their id lands on.
+centraid-design = { path = "../design" }
+# The headless driver founds and seeds a scratch vault (`testing`).
+centraid-ontology = { path = "../ontology" }

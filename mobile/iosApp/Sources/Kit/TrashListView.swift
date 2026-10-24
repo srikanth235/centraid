@@ -104,7 +104,7 @@ struct TrashListView: View {
     }
 }
 
-private struct TrashRowView: View {
+struct TrashRowView: View {
     let row: Centraid_Screen_V1_TrashRow
     let onRestore: () -> Void
     let onPurge: () -> Void

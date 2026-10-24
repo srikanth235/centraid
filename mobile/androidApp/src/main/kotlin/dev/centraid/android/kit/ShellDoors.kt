@@ -30,13 +30,16 @@ import dev.centraid.design.copy.PeopleCopy
  *
  * The door is only ever called with a source [importLabel] names: a screen
  * reads the label first, and an empty label is "this shell cannot read that".
+ * It serves Contacts; the calendar is not a door (Agenda asks Rust to import it).
  */
 public val LocalPhoneImport: ProvidableCompositionLocal<((ImportSource) -> Unit)?> = staticCompositionLocalOf { null }
 
 /**
  * THE IMPORT'S VERB FOR [source], or "" WHERE ANDROID HAS NOTHING TO READ:
  * Contacts and Calendar are the phone's own stores; Android has no system
- * reminders, so a Reminders source draws the app's own action instead.
+ * reminders, so a Reminders source draws the app's own action instead (and
+ * Rust has no path for the phone's reminders import yet, only the calendar's,
+ * which Agenda's screen starts itself with `ImportRequested`, #1135).
  */
 public fun importLabel(source: ImportSource): String = when (source) {
     ImportSource.IMPORT_SOURCE_CONTACTS -> PeopleCopy.IMPORT_CONTACTS

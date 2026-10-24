@@ -16,7 +16,6 @@ members = [
   "crates/apps/notes",
   "crates/apps/people",
   "crates/apps/photos",
-  "crates/apps/tasks",
 ]
 exclude = ["crates/apps"]
 

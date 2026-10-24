@@ -44,6 +44,7 @@
 
 #![forbid(unsafe_code)]
 
+pub(crate) mod act;
 pub mod api;
 /// AN APP'S OWN QUERY, RUN IN THE CORE (#1046): the page door an app crate
 /// reads through, and Agenda's answers as `agenda.proto` spells them.
@@ -52,6 +53,7 @@ pub mod app_query;
 /// through the query path, and `Request::Assist`'s arm. The plane itself is
 /// `centraid-assist`.
 pub mod assist;
+pub(crate) mod catalog;
 pub mod config;
 pub mod convert;
 pub mod error;
@@ -62,6 +64,7 @@ pub mod events;
 pub mod example;
 pub mod handle;
 pub mod identity;
+pub mod load;
 pub mod locker;
 /// THE ORIGINALS ON THIS PHONE, AND THE ALBUMS WHOSE ORIGINALS STAY (#1029,
 /// the photos port). See `originals.proto`.
@@ -70,6 +73,7 @@ pub mod originals;
 /// the status the shell draws, and the doors beside the pass. See
 /// `phone.proto`.
 pub mod phone;
+pub mod screens;
 pub mod stage;
 /// THE STARTER ROWS a member's first vault is founded with: ordinary rows of
 /// theirs, best-effort, declared as data. See `vault.proto`'s `FoundContent`.

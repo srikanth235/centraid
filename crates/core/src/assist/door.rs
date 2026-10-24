@@ -10,9 +10,9 @@
 //! |---|---|
 //! | `table` | [`VaultDoor`], the page door every app query reads through (`Vault::keyset_page`) |
 //! | `search` | the FTS door over the vault's read connection, as a screen's search does |
-//! | `run` | refused: a write is a confirmed card's, keyed (below) |
+//! | `act` | refused: a write is a confirmed card's, keyed (below) |
 //! | `mint_id`, `now_ms` | the vault's own id source and clock |
-//! | `run_keyed` | `api::command`, the write path the shell's own `Command` request takes: a typed Locker secret is sealed under the open Locker session, then `invoke_raw` runs it (#1135) |
+//! | `act_keyed` | [`crate::act::act`], THE ONE WRITE a screen's `Act` request takes: the manifest's input schema, the frozen-vault check, the Locker seal, the change feed and the durable key are all there (#1135) |
 //!
 //! # A SEALED VALUE IS A CHANNEL THIS DOOR KEEPS CLOSED (#1135)
 //!
@@ -20,8 +20,8 @@
 //! vault withholds nothing from it. What it never does is let a sealed plaintext reach the
 //! runtime. A sealed column is read as a presence bit (the runtime's world asks for `IS NOT NULL`),
 //! no door method returns a sealed cell, and a secret the member typed in chat arrives in the input
-//! of `locker.add_item` / `locker.edit_item` and is sealed in [`crate::api::command`], the one write
-//! path the shell's own `Command` request takes too, before the vault sees it. A shut Locker answers [`Door::locked_for`] first, so a confirm stops before it
+//! of `locker.add_item` / `locker.edit_item` and is sealed in [`crate::api::command`], which
+//! [`crate::act::act`] runs, before the vault sees it. A shut Locker answers [`Door::locked_for`] first, so a confirm stops before it
 //! runs a step and the card waits for the unlock.
 //!
 //! # THE DOOR OUTLIVES A CALL, THE LOCK DOES NOT
@@ -36,16 +36,14 @@
 //! # WRITES ARE A CONFIRMED CARD'S, KEYED
 //!
 //! A write the model makes parks behind a confirm card (R-1088-2), so the runtime reaches
-//! [`Door::run_keyed`] only when the member taps, once per step, under `<pending id>:<step>`. That
-//! is the one way this door writes. A bare [`Door::run`] is refused: nothing legitimate on the
+//! [`Door::act_keyed`] only when the member taps, once per step, under `<pending id>:<step>`. That
+//! is the one way this door writes. A bare [`Door::act`] is refused: nothing legitimate on the
 //! phone issues one, so a path around the card finds a closed door and the vault untouched.
 //!
-//! The vault keeps no ledger of `invoke_key`s ([`crate::api::invoke`] requires one and runs the
-//! command), so the door keeps its own: a key it has already run successfully answers the same
-//! [`Ran`] and runs nothing. That is what makes a confirm delivered twice write once; it lives as
-//! long as the session that holds the door, which is as long as a pending write can be confirmed.
+//! THE KEY IS THE VAULT'S, NOT THE DOOR'S: `act` records it in the journal row of the commit it
+//! names, so a confirm delivered twice writes once, across a restart too. The door keeps no
+//! memory of keys of its own.
 
-use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 
@@ -54,9 +52,9 @@ use centraid_apps_kit::reads::{FanOutBound, read_pages};
 use centraid_apps_kit::row::Row;
 use centraid_apps_kit::statement::{PageBindValue, PageOrder, PageQuery};
 use centraid_assist::native::door::Occurrence;
-use centraid_assist::native::{Door, Ran};
+use centraid_assist::native::{Call, Door, Ran};
 use centraid_search::Target;
-use centraid_vault::commands::{CommandStatus, Registry};
+use centraid_vault::commands::Registry;
 use centraid_vault::time::zone::FireZone;
 use centraid_vault::{Principal, Vault};
 use serde_json::Value;
@@ -85,8 +83,8 @@ pub struct CoreDoor {
     owner: Principal,
     /// The Locker session the handle holds: a typed secret is sealed under its key.
     locker: Arc<crate::locker::phone::Cell>,
-    /// What each key has already run, so a step confirmed twice runs once.
-    done: Mutex<BTreeMap<String, Ran>>,
+    /// The backup plane beside the vault file, which remembers a vault that moved.
+    plane: crate::phone::Plane,
     calls: AtomicU64,
 }
 
@@ -97,6 +95,7 @@ impl CoreDoor {
         events: Arc<EventQueue>,
         owner: Principal,
         locker: Arc<crate::locker::phone::Cell>,
+        plane: crate::phone::Plane,
     ) -> Self {
         Self {
             vault,
@@ -104,7 +103,7 @@ impl CoreDoor {
             events,
             owner,
             locker,
-            done: Mutex::new(BTreeMap::new()),
+            plane,
             calls: AtomicU64::new(0),
         }
     }
@@ -193,7 +192,7 @@ impl Door for CoreDoor {
         })
     }
 
-    fn run(&self, _command: &str, _input: Value) -> Result<Ran, String> {
+    fn act(&self, _call: &Call, _input: Value) -> Result<Ran, String> {
         Ok(Ran {
             ok: false,
             output: Value::Null,
@@ -202,41 +201,35 @@ impl Door for CoreDoor {
         })
     }
 
-    fn run_keyed(&self, key: &str, command: &str, input: Value) -> Result<Ran, String> {
-        let mut done = self.done.lock().unwrap_or_else(PoisonError::into_inner);
-        if let Some(earlier) = done.get(key) {
-            return Ok(earlier.clone());
-        }
-        let request = wire::Command {
-            name: command.to_owned(),
-            input: serde_json::to_vec(&input)
-                .map_err(|error| format!("{command}: the input is not JSON: {error}"))?,
+    fn act_keyed(&self, key: &str, call: &Call, input: Value) -> Result<Ran, String> {
+        let Value::Object(object) = &input else {
+            return Err(format!("{}: the input is not an object", call.command));
+        };
+        let request = wire::ActRequest {
+            app: call.app.to_owned(),
+            action: call.action.to_owned(),
+            input: crate::act::input_to_wire(object),
             invoke_key: key.to_owned(),
-            ..wire::Command::default()
         };
         let changes = ChangeFeed::new(Arc::clone(&self.events));
-        let outcome = self.with(|vault| {
-            crate::api::command(
+        let answer = self.with(|vault| {
+            let ctx = crate::act::Ctx {
                 vault,
-                &self.locker,
-                &self.registry,
-                &self.owner,
-                &request,
-                &changes,
-            )
-            .map_err(|error| format!("{command}: {error}"))
+                locker: &self.locker,
+                registry: &self.registry,
+                owner: &self.owner,
+                changes: &changes,
+                plane: &self.plane,
+            };
+            // A write no manifest action names yet runs as its bare command, keyed the same.
+            if call.action.is_empty() {
+                crate::act::command_keyed(&ctx, call.command, key, &input)
+            } else {
+                crate::act::act(&ctx, &request)
+            }
+            .map_err(|error| format!("{}: {error}", call.command))
         })?;
-        let ran = Ran {
-            ok: outcome.status == CommandStatus::Executed,
-            output: outcome.output,
-            reason: outcome.reason,
-            predicate: outcome.predicate,
-        };
-        // only a step that landed is remembered: a refused one may be asked again
-        if ran.ok {
-            done.insert(key.to_owned(), ran.clone());
-        }
-        Ok(ran)
+        Ok(ran_of(&answer))
     }
 
     fn events(&self, from_day: &str, to_day: &str, tz: &str) -> Result<Vec<Occurrence>, String> {
@@ -281,5 +274,36 @@ impl Door for CoreDoor {
             ))
         })
         .unwrap_or(false)
+    }
+}
+
+/// What the runtime reads of an `act`'s answer. A refusal is a value: the check that failed is the
+/// predicate, except the manifest's own input checks, which are the `schema` the runtime reads a
+/// call the command rejects as.
+fn ran_of(answer: &wire::ActResponse) -> Ran {
+    if answer.status == wire::ActStatus::Executed as i32 {
+        return Ran {
+            ok: true,
+            output: serde_json::from_slice(&answer.output).unwrap_or(Value::Null),
+            reason: None,
+            predicate: None,
+        };
+    }
+    let check = answer
+        .refusal
+        .as_ref()
+        .map(|refusal| refusal.check.as_str())
+        .unwrap_or_default();
+    Ran {
+        ok: false,
+        output: Value::Null,
+        reason: Some(answer.reason.clone()),
+        predicate: Some(
+            match check {
+                "input_schema" | "input_decode" | "command_input" => "schema",
+                other => other,
+            }
+            .to_owned(),
+        ),
     }
 }

@@ -1,0 +1,148 @@
+app,action,verb,kind,chat_surface,reachable_from_screen_today,reachable_from_chat_today
+agenda,propose,create,event,direct,yes: crates/screens/src/agenda/editor.rs,yes
+agenda,rsvp,respond,event,card,yes: crates/screens/src/agenda/event.rs,no
+agenda,edit-event,edit,event,direct,yes: crates/screens/src/agenda/editor.rs,yes
+agenda,edit-occurrence,reschedule,event,card,yes: crates/screens/src/agenda/editor.rs,no
+agenda,cancel-event,cancel,event,direct,yes: crates/screens/src/agenda/event.rs,yes
+agenda,trash-event,delete,event,direct,no,no
+agenda,restore-event,restore,event,direct,no,no
+agenda,attach,attach,event,card,no,no
+agenda,detach,detach,event,card,no,no
+agenda,add-task,create,task,direct,yes: crates/screens/src/agenda/todo/ops.rs,yes
+agenda,edit-task,edit,task,direct,yes: crates/screens/src/agenda/detail.rs,yes
+agenda,complete-task,complete,task,direct,yes: crates/screens/src/agenda/todo/ops.rs,yes
+agenda,reopen-task,reopen,task,direct,yes: crates/screens/src/agenda/todo/ops.rs,yes
+agenda,cancel-task,cancel,task,direct,yes: crates/screens/src/agenda/todo/ops.rs,yes
+agenda,organize-task,add_to,task,direct,yes: crates/screens/src/agenda/todo/ops.rs,yes
+agenda,delete-task,delete,task,direct,yes: crates/screens/src/agenda/detail.rs,yes
+agenda,purge-task,purge,task,card,yes: crates/screens/src/agenda/trash.rs,no
+agenda,restore-task,restore,task,direct,yes: crates/screens/src/agenda/trash.rs,yes
+agenda,create-project,create,list,direct,yes: crates/screens/src/agenda/todo/ops.rs,yes
+agenda,rename-list,edit,list,direct,no,no
+agenda,create-section,create,section,card,yes: crates/screens/src/agenda/todo/ops.rs,no
+agenda,add-task-tag,tag,task,direct,yes: crates/screens/src/agenda/detail.rs,no
+agenda,remove-task-tag,untag,task,direct,yes: crates/screens/src/agenda/detail.rs,no
+agenda,follow-calendar,import,event,card,yes: crates/screens/src/agenda/calendar.rs,no
+docs,upload,import,document,card,yes: crates/screens/src/docs/drive/ingest.rs,no
+docs,create-text,create,document,direct,yes: crates/screens/src/docs/drive/ingest.rs,yes
+docs,rename,edit,document,direct,yes: crates/screens/src/docs/rename.rs,yes
+docs,move,add_to,document,direct,yes: crates/screens/src/docs/drive/mod.rs; crates/screens/src/docs/document.rs,yes
+docs,trash,delete,document,direct,yes: crates/screens/src/docs/drive/mod.rs; crates/screens/src/docs/document.rs,yes
+docs,restore,restore,document,direct,yes: crates/screens/src/docs/document.rs; crates/screens/src/docs/trash.rs,yes
+docs,purge,purge,document,card,yes: crates/screens/src/docs/document.rs; crates/screens/src/docs/trash.rs,no
+docs,empty-trash,purge,document,card,yes: crates/screens/src/docs/trash.rs,no
+docs,star,star,document,direct,yes: crates/screens/src/docs/drive/mod.rs; crates/screens/src/docs/document.rs,yes
+docs,unstar,unstar,document,direct,yes: crates/screens/src/docs/drive/mod.rs; crates/screens/src/docs/document.rs,yes
+docs,tag,tag,document,direct,yes: crates/screens/src/docs/drive/mod.rs; crates/screens/src/docs/document.rs,no
+docs,untag,untag,document,direct,yes: crates/screens/src/docs/drive/mod.rs; crates/screens/src/docs/document.rs,no
+docs,edit,edit,document,card,yes: crates/screens/src/docs/editor.rs,no
+docs,replace,edit:content,document,card,no,no
+docs,restore-version,restore,document,card,yes: crates/screens/src/docs/versions.rs,no
+docs,create-folder,create,folder,direct,yes: crates/screens/src/docs/drive/mod.rs,yes
+docs,rename-folder,edit,folder,direct,no,yes
+docs,delete-folder,delete,folder,direct,no,yes
+health,record-days,log,daily_figure,card,yes: apps/health/HealthImport.kt,no
+health,follow-workouts,import,workout,card,yes: apps/health/HealthImport.kt,no
+health,delete-workout,delete,workout,card,no,no
+locker,add-item,create,locker_item,direct,yes: apps/locker/LockerEditor.kt,yes
+locker,edit-item,edit,locker_item,direct,yes: apps/locker/LockerEditor.kt,yes
+locker,trash-item,delete,locker_item,direct,yes: apps/locker/LockerItem.kt,yes
+locker,restore-item,restore,locker_item,direct,yes: apps/locker/LockerBridges.kt; apps/locker/LockerItem.kt,yes
+locker,purge-item,purge,locker_item,card,yes: apps/locker/LockerBridges.kt; apps/locker/LockerItem.kt,no
+locker,star-item,star,locker_item,direct,yes: apps/locker/LockerItem.kt,yes
+locker,unstar-item,unstar,locker_item,direct,yes: apps/locker/LockerItem.kt,yes
+locker,archive-item,archive,locker_item,direct,yes: apps/locker/LockerItem.kt,yes
+locker,unarchive-item,unarchive,locker_item,direct,yes: apps/locker/LockerItem.kt,yes
+locker,add-tag,tag,locker_item,direct,yes: apps/locker/LockerEditor.kt,no
+locker,remove-tag,untag,locker_item,direct,yes: apps/locker/LockerEditor.kt,no
+locker,duplicate-item,duplicate,locker_item,card,no,no
+locker,set-field,edit,locker_field,card,yes: apps/locker/LockerItem.kt,no
+locker,remove-field,delete,locker_field,card,yes: apps/locker/LockerItem.kt,no
+locker,set-addresses,edit,locker_item,card,no,no
+locker,set-passkey,edit,locker_passkey,card,yes: apps/locker/LockerItem.kt,no
+locker,clear-passkey,delete,locker_passkey,card,yes: apps/locker/LockerItem.kt,no
+locker,set-memo,edit,locker_item,card,yes: apps/locker/LockerItem.kt,no
+locker,export,reveal,locker_item,card,no,no
+money,add-account,create,account,card,yes: apps/money/MoneyAccounts.kt,no
+money,edit-account,edit,account,direct,yes: apps/money/MoneyAccounts.kt,no
+money,close-account,archive,account,direct,yes: apps/money/MoneyAccounts.kt; apps/money/MoneyCategories.kt,no
+money,reopen-account,unarchive,account,direct,yes: apps/money/MoneyAccounts.kt; apps/money/MoneyCategories.kt,no
+money,set-opening-balance,edit,account,card,no,no
+money,import-transactions,import,transaction,card,yes: apps/money/MoneyImport.kt,no
+money,record-checkpoint,log,account,card,yes: apps/money/MoneyImport.kt,no
+money,save-import-profile,edit,account,card,yes: apps/money/MoneyImport.kt,no
+money,categorize,categorize,transaction,card,yes: apps/money/MoneyTransaction.kt,no
+money,void-transaction,void,transaction,card,yes: apps/money/MoneyTransaction.kt,no
+money,set-display-name,edit,transaction,card,yes: apps/money/MoneyTransaction.kt,no
+money,link-transfer,link,transaction,card,yes: apps/money/MoneyTransaction.kt,no
+money,unlink-transfer,unlink,transaction,direct,yes: apps/money/MoneyTransaction.kt,no
+money,set-target,edit,budget,card,yes: apps/money/MoneyTarget.kt,no
+money,set-carry,edit:carry,budget,card,no,no
+money,add-rule,create,rule,card,yes: apps/money/MoneyRules.kt; apps/money/MoneyTransaction.kt,no
+money,edit-rule,edit,rule,direct,yes: apps/money/MoneyRules.kt,no
+money,delete-rule,delete,rule,card,yes: apps/money/MoneyRules.kt,no
+money,apply-rule-to-history,apply,rule,card,yes: apps/money/MoneyRules.kt,no
+money,add-category,create,category,card,yes: apps/money/MoneyCategories.kt,no
+money,merge-category,merge,category,card,yes: apps/money/MoneyCategories.kt,no
+money,archive-category,archive,category,card,yes: apps/money/MoneyAccounts.kt; apps/money/MoneyCategories.kt,no
+notes,create-note,create,note,direct,yes: crates/screens/src/notes/editor.rs,yes
+notes,edit-note,edit,note,direct,yes: crates/screens/src/notes/editor.rs,yes
+notes,move-note,add_to,note,direct,yes: crates/screens/src/notes/home/mod.rs,yes
+notes,create-notebook,create,notebook,direct,yes: crates/screens/src/notes/home/mod.rs,yes
+notes,rename-notebook,edit,notebook,direct,yes: crates/screens/src/notes/home/mod.rs,yes
+notes,delete-notebook,delete,notebook,direct,yes: crates/screens/src/notes/home/mod.rs,yes
+notes,delete-note,delete,note,direct,yes: crates/screens/src/notes/home/mod.rs,yes
+notes,restore-note,restore,note,direct,yes: crates/screens/src/notes/trash.rs,yes
+notes,restore-note-version,restore,note,card,yes: crates/screens/src/notes/history.rs,no
+notes,flag-note,star,note,direct,yes: crates/screens/src/notes/home/mod.rs; crates/screens/src/notes/editor.rs,yes
+notes,unflag-note,unstar,note,direct,yes: crates/screens/src/notes/home/mod.rs; crates/screens/src/notes/editor.rs,no
+notes,link,link,note,card,no,no
+notes,send-to-tasks,create,task,card,yes: crates/screens/src/agenda/todo/ops.rs,yes
+notes,attach,attach,note,card,no,no
+notes,detach,detach,note,card,no,no
+notes,add-tag,tag,note,direct,yes: crates/screens/src/notes/editor.rs,no
+notes,remove-tag,untag,note,direct,yes: crates/screens/src/notes/editor.rs,no
+people,add-person,create,person,direct,yes: apps/people/PeopleEditorMachine.kt,yes
+people,edit-person,edit,person,direct,yes: apps/people/PeopleEditorMachine.kt,yes
+people,set-cadence,edit:cadence,person,direct,yes: apps/people/PeopleEditorMachine.kt,yes
+people,trash-person,delete,person,direct,yes: apps/people/PeoplePersonMachine.kt,yes
+people,restore-person,restore,person,direct,yes: apps/people/PeopleTrash.kt,yes
+people,purge-person,purge,person,card,yes: apps/people/PeopleTrash.kt,no
+people,log-interaction,log,person,direct,yes: apps/people/PeoplePersonMachine.kt,yes
+people,star-person,star,person,direct,yes: apps/people/PeopleHomeMachine.kt,yes
+people,unstar-person,unstar,person,direct,yes: apps/people/PeopleHomeMachine.kt,yes
+people,move-person,add_to,person,card,no,no
+people,add-note,create,note,card,yes: apps/people/PeoplePersonMachine.kt,no
+people,add-task,create,task,card,no,no
+people,complete-task,complete,task,card,yes: crates/screens/src/agenda/todo/ops.rs,yes
+people,reopen-task,reopen,task,card,yes: crates/screens/src/agenda/todo/ops.rs,yes
+people,add-important-date,create,important_date,card,yes: apps/people/PeoplePersonMachine.kt,no
+people,set-reminder,edit,important_date,card,yes: apps/people/PeoplePersonMachine.kt,no
+people,add-relationship,link,person,card,no,no
+people,add-gift,create,gift,card,no,no
+people,create-list,create,people_list,card,no,no
+people,rename-list,edit,people_list,card,no,no
+people,delete-list,delete,people_list,card,yes: apps/people/PeoplePersonMachine.kt,no
+people,add-journal-entry,create,journal_entry,card,no,no
+people,save-contact-channel,edit,contact_point,card,yes: apps/people/PeoplePersonMachine.kt,no
+people,delete-contact-channel,delete,contact_point,card,yes: apps/people/PeoplePersonMachine.kt,no
+people,merge-people,merge,person,card,yes: apps/people/PeoplePersonMachine.kt,no
+photos,upload,import,photo,card,yes: apps/photos/PhotoWrites.kt,no
+photos,edit-photo,edit,photo,card,yes: apps/photos/PhotoWrites.kt,no
+photos,retitle-photo,edit,photo,direct,yes: apps/photos/PhotoWrites.kt,yes
+photos,flag-photo,star,photo,direct,yes: apps/photos/PhotoWrites.kt,yes
+photos,unflag-photo,unstar,photo,direct,yes: apps/photos/PhotoWrites.kt,yes
+photos,delete-photo,delete,photo,direct,yes: apps/photos/PhotoWrites.kt,yes
+photos,restore-photo,restore,photo,direct,yes: apps/photos/PhotoWrites.kt,yes
+photos,purge-photo,purge,photo,card,yes: apps/photos/PhotoWrites.kt,no
+photos,create-album,create,album,direct,yes: apps/photos/PhotoWrites.kt,yes
+photos,rename-album,edit,album,direct,yes: apps/photos/PhotoWrites.kt,yes
+photos,set-album-cover,edit,album,card,yes: apps/photos/PhotoWrites.kt,no
+photos,delete-album,delete,album,direct,yes: apps/photos/PhotoWrites.kt,yes
+photos,restore-album,restore,album,direct,yes: apps/photos/PhotoWrites.kt,no
+photos,add-to-album,add_to,photo,direct,yes: apps/photos/PhotoWrites.kt,yes
+photos,remove-from-album,remove_from,photo,direct,yes: apps/photos/PhotoWrites.kt,yes
+photos,set-place,edit,place,card,yes: apps/photos/PhotoWrites.kt,no
+photos,name-place,edit,place,card,yes: apps/photos/PhotoWrites.kt,no
+photos,tag-photo,tag,photo,direct,yes: apps/photos/PhotoWrites.kt,no
+photos,untag-photo,untag,photo,direct,yes: apps/photos/PhotoWrites.kt,no

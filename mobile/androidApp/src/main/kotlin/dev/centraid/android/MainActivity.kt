@@ -32,7 +32,6 @@ import dev.centraid.android.kit.AndroidPhoneFollow
 import dev.centraid.android.kit.LocalPhoneImport
 import dev.centraid.android.kit.PhoneFollowSheet
 import dev.centraid.android.kit.ShellBanner
-import dev.centraid.android.screens.agenda.rememberCalendarImport
 import dev.centraid.android.screens.people.rememberContactsImport
 import dev.centraid.shared.shell.HomeWords
 import androidx.compose.foundation.layout.fillMaxSize
@@ -44,7 +43,6 @@ import androidx.core.view.WindowCompat
 import dev.centraid.android.screens.AppRoutes
 import dev.centraid.android.screens.RouteNav
 import dev.centraid.android.screens.agenda.AgendaRoutes
-import dev.centraid.android.screens.docs.DocsRoutes
 import dev.centraid.android.screens.health.HealthRoutes
 import dev.centraid.android.screens.locker.LockerRoutes
 import dev.centraid.android.screens.money.MoneyRoutes
@@ -52,7 +50,6 @@ import dev.centraid.android.screens.notes.NotesRoutes
 import dev.centraid.android.screens.people.PeopleRoutes
 import dev.centraid.android.screens.mediaPermissions
 import dev.centraid.android.screens.photos.PhotosRoutes
-import dev.centraid.android.screens.tasks.TasksRoutes
 import dev.centraid.android.screens.words.FirstLaunchScreen
 import dev.centraid.android.screens.words.WordsSheets
 import androidx.compose.runtime.key
@@ -146,12 +143,10 @@ public class MainActivity : FragmentActivity() {
      */
     private val routes: List<AppRoutes> by lazy {
         listOf(
-            AgendaRoutes(),
+            AgendaRoutes(phoneFollow),
             PhotosRoutes(cacheDir),
             NotesRoutes(),
-            DocsRoutes(onFollowed = { phoneFollow.requested(PhoneSource.FILES) }),
             PeopleRoutes(),
-            TasksRoutes(),
             MoneyRoutes(),
             HealthRoutes(health),
             locker,
@@ -437,33 +432,28 @@ public class MainActivity : FragmentActivity() {
                 // and a held line (an import still running) has no Done.
                 var shellNote by remember { mutableStateOf(ShellNote("", holds = false)) }
                 // THE PHONE'S STORES → THE APPS, at the tap: Contacts → People
-                // (`ContactsImporter`), Calendar → Agenda (`CalendarImporter`).
-                // One door keyed by source, into the member's vault. Android has no system
-                // reminders: `importLabel` names no verb for them, so the
-                // door is never called with one.
+                // (`ContactsImporter`). One door keyed by source, into the member's vault.
+                // The calendar is not one: Agenda's screen holds its import and its
+                // follow in Rust (#1135) and asks this shell for the read. Android has no
+                // system reminders: `importLabel` names no verb for them, so the door is
+                // never called with one.
                 val contactsImport = rememberContactsImport(
                     homeSession,
                     onStatus = { sentence, holds -> shellNote = ShellNote(sentence, holds) },
                     onImported = { phoneFollow.requested(PhoneSource.CONTACTS) },
                 )
-                val calendarImport = rememberCalendarImport(
-                    homeSession,
-                    onStatus = { sentence, holds -> shellNote = ShellNote(sentence, holds) },
-                    onImported = { phoneFollow.requested(PhoneSource.CALENDAR) },
-                )
-                // THE QUESTION AN ACCOUNT OR CALENDAR THAT LEFT THE PHONE ASKS (R-1127-9).
+                // THE QUESTION AN ACCOUNT THAT LEFT THE PHONE ASKS (R-1127-9).
                 phoneFollow.question?.let { asked ->
                     PhoneFollowSheet(asked) { keep -> phoneFollow.answer(asked, keep) }
                 }
                 val phoneImport: ((ImportSource) -> Unit)? =
-                    remember(contactsImport, calendarImport, homeSession) {
+                    remember(contactsImport, homeSession) {
                         if (homeSession == null) {
                             null
                         } else {
                             { source ->
                                 when (source) {
                                     ImportSource.IMPORT_SOURCE_CONTACTS -> contactsImport(null)
-                                    ImportSource.IMPORT_SOURCE_CALENDAR -> calendarImport(null)
                                     else -> Unit
                                 }
                             }
@@ -581,8 +571,9 @@ public class MainActivity : FragmentActivity() {
                     val made = words.made
                     // A VAULT WAS MADE: what the phone already holds is asked
                     // for once and brought in (R-ONBOARD-8) — the photos, then
-                    // the contacts, then the calendar, each prompt after the
-                    // last was answered (Android has no system reminders).
+                    // the contacts, each prompt after the last was answered
+                    // (Android has no system reminders; the calendar is Agenda's own
+                    // import, held by its screen in Rust).
                     // The photo prompt is this activity's launcher; the answer
                     // goes to the camera-roll runner, which walks on a grant.
                     // One banner says what came in (`PhoneImport.madeSummary`).
@@ -591,14 +582,12 @@ public class MainActivity : FragmentActivity() {
                     ) {
                         routes.filterIsInstance<PhotosRoutes>().firstOrNull()?.photosAnswered(scope)
                         contactsImport { people ->
-                            calendarImport { events ->
-                                val made = listOf("people" to people, "agenda" to events).filter { it.second != null }
-                                val outcomes = made.map { it.second.orEmpty() }
-                                val summary = PhoneImport.madeSummary(outcomes)
-                                // THE LINE'S ONE ACTION opens what came in.
-                                val opens = if (summary.isEmpty()) "" else PhoneImport.madeOpens(made.map { it.first }, outcomes)
-                                shellNote = ShellNote(summary, holds = false, opens = opens)
-                            }
+                            val made = listOf("people" to people).filter { it.second != null }
+                            val outcomes = made.map { it.second.orEmpty() }
+                            val summary = PhoneImport.madeSummary(outcomes)
+                            // THE LINE'S ONE ACTION opens what came in.
+                            val opens = if (summary.isEmpty()) "" else PhoneImport.madeOpens(made.map { it.first }, outcomes)
+                            shellNote = ShellNote(summary, holds = false, opens = opens)
                         }
                     }
                     LaunchedEffect(made.first) {

@@ -41,8 +41,7 @@ pub(super) fn app_of(kind: &str) -> &'static str {
     match kind {
         "person" => "people",
         "note" | "notebook" => "notes",
-        "event" | "calendar" => "agenda",
-        "task" | "project" | "section" | "area" => "tasks",
+        "event" | "calendar" | "task" | "project" | "section" | "area" => "agenda",
         "photo" | "album" => "photos",
         "document" | "folder" => "docs",
         "thread" => CHAT,
@@ -122,17 +121,17 @@ mod tests {
         for kind in centraid_vault::model::Kind::ALL {
             let app = app_of(kind.as_str());
             assert!(
-                app.is_empty() || app == CHAT || centraid_vault::roster::is_card_app(app),
+                app.is_empty() || app == CHAT || centraid_vault::roster::is_app(app),
                 "{kind:?} opens in `{app}`, which the roster does not know"
             );
         }
         // Locker is a card domain and a chat scope (the owner's ruling of 2026-10-22).
         assert!(
-            centraid_vault::roster::is_card_app(LOCKER) && centraid_vault::roster::is_scope(LOCKER),
+            centraid_vault::roster::is_app(LOCKER),
             "Locker is an app a card names and a scope"
         );
         assert!(
-            !centraid_vault::roster::is_card_app(CHAT),
+            !centraid_vault::roster::is_app(CHAT),
             "the Chat tab is no app a card names"
         );
     }

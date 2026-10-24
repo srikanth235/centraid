@@ -752,21 +752,41 @@ pub struct DocumentData {
     pub body: Option<String>,
 }
 
+/// A folder as the tree sees it: its id and its parent's. [`folder_path`] is
+/// written over this, so the core's answer and a screen's rail walk the SAME
+/// chain with the same cycle guard (#1135): a document's path, a folder page's
+/// crumbs and a Move sheet's "Taxes / 2026" are one computation.
+pub trait FolderNode {
+    fn node_id(&self) -> &str;
+    /// `None` at the drive's top level.
+    fn parent_node(&self) -> Option<&str>;
+}
+
+impl FolderNode for FolderRow {
+    fn node_id(&self) -> &str {
+        &self.folder_id
+    }
+
+    fn parent_node(&self) -> Option<&str> {
+        self.parent_id.as_deref()
+    }
+}
+
 /// The folder chain above `folder_id`, top level first. Capped at the number of
 /// folders, so a cycle no command can write still terminates.
 #[must_use]
-pub fn folder_path(folders: &[FolderRow], folder_id: Option<&str>) -> Vec<FolderRow> {
+pub fn folder_path<N: FolderNode + Clone>(folders: &[N], folder_id: Option<&str>) -> Vec<N> {
     let mut path = Vec::new();
     let mut at = folder_id.map(str::to_owned);
     while let Some(id) = at {
         if path.len() > folders.len() {
             break;
         }
-        let Some(folder) = folders.iter().find(|folder| folder.folder_id == id) else {
+        let Some(folder) = folders.iter().find(|folder| folder.node_id() == id) else {
             break;
         };
         path.push(folder.clone());
-        at = folder.parent_id.clone();
+        at = folder.parent_node().map(str::to_owned);
     }
     path.reverse();
     path

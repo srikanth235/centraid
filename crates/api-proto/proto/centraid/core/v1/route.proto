@@ -1,0 +1,212 @@
+// WHERE A SCREEN IS, AS A VALUE (#1135). A `Route` names a registered screen and
+// carries its arguments; Rust builds every one and hands it to a shell inside a
+// view state (a row's `route`), and the shell sends the same value back as a
+// push. A shell never builds a route of its own.
+//
+// ITS OWN FILE, LEAF, because a view state names a `Route` (a row opens a
+// page) and `Route` names every app's arguments: `screens.proto` imports each
+// app's view file for its `ViewState` arms, so a `Route` defined there would
+// make a cycle. The arguments' enums (`AgendaDestination`) live here for the
+// same reason.
+//
+// HOW AN APP LANE ADDS A ROUTE: one arm in `Route.args`, in the app's reserved
+// range (listed in `screens.proto`), and its small argument message in the
+// app's section below.
+
+syntax = "proto3";
+
+package centraid.core.v1;
+
+message Route {
+  // The screen's registered name, e.g. `proof.counter`, `agenda.event`.
+  string screen = 1;
+  oneof args {
+    CounterRoute counter = 10;
+    // ---- agenda (100-199) ----
+    AgendaHomeRoute agenda_home = 100;
+    AgendaEventRoute agenda_event = 101;
+    AgendaEditorRoute agenda_editor = 102;
+    TodoListRoute todo_list = 103;
+    TodoProjectRoute todo_project = 104;
+    TodoDetailRoute todo_detail = 105;
+    TodoCatchUpRoute todo_catch_up = 106;
+    // ---- docs (200-299) ----
+    DocsDriveRoute docs_drive = 200;
+    DocsDocumentRoute docs_document = 201;
+    DocsEditorRoute docs_editor = 202;
+    DocsVersionsRoute docs_versions = 203;
+    // ---- notes (600-699) ----
+    NotesHomeRoute notes_home = 600;
+    NotesEditorRoute notes_editor = 601;
+    NotesHistoryRoute notes_history = 602;
+    // ---- the kit (900-999) ----
+    TrashRoute trash = 900;
+  }
+}
+
+// The proof screen's route: no arguments.
+message CounterRoute {}
+
+// ---------------------------------------------------------------------------
+// Agenda
+// ---------------------------------------------------------------------------
+
+enum AgendaDestination {
+  AGENDA_DESTINATION_UNSPECIFIED = 0;
+  AGENDA_DESTINATION_DAY = 1;
+  AGENDA_DESTINATION_SCHEDULE = 2;
+  AGENDA_DESTINATION_WAITING = 3;
+  // The Inbox, then the projects by area (R-1128-1).
+  AGENDA_DESTINATION_TODO = 4;
+}
+
+// What the add sheet adds: an event, or a to-do.
+enum AgendaEditorKind {
+  AGENDA_EDITOR_KIND_UNSPECIFIED = 0;
+  AGENDA_EDITOR_KIND_EVENT = 1;
+  AGENDA_EDITOR_KIND_TASK = 2;
+}
+
+// Which list the to-do list page shows.
+enum TodoView {
+  TODO_VIEW_UNSPECIFIED = 0;
+  TODO_VIEW_ANYTIME = 1;
+  TODO_VIEW_ALL = 2;
+  TODO_VIEW_LOGBOOK = 3;
+  TODO_VIEW_REMINDERS = 4;
+}
+
+// `agenda.home`: lands on `destination` at today, or on Day when unspecified.
+message AgendaHomeRoute {
+  AgendaDestination destination = 1;
+  // Words waiting in To-do's quick add, focused (Notes' "Send to Agenda");
+  // empty is an empty bar. Naming words also names To-do as the place.
+  string quick_add_title = 2;
+}
+
+// `agenda.event`: one occurrence of an event.
+message AgendaEventRoute {
+  string event_id = 1;
+  string instance_key = 2;
+  optional string original_start_local = 3;
+  // The civil day the row was drawn under: the read's window.
+  string day = 4;
+}
+
+// `agenda.editor`: an empty `event_id` creates (on `day`, as `kind`); a named
+// one edits that occurrence.
+message AgendaEditorRoute {
+  string event_id = 1;
+  string instance_key = 2;
+  optional string original_start_local = 3;
+  string day = 4;
+  // A create's kind; UNSPECIFIED is the kind this device last added.
+  AgendaEditorKind kind = 5;
+}
+
+// `agenda.todo_list`: the Anytime, All, Logbook or Reminders page.
+message TodoListRoute {
+  TodoView view = 1;
+}
+
+// `agenda.project`: one project's page. The name rides along so the head has
+// words before the read lands.
+message TodoProjectRoute {
+  string project_id = 1;
+  string name = 2;
+}
+
+// `agenda.task`: one task's page.
+message TodoDetailRoute {
+  string task_id = 1;
+}
+
+// `agenda.catch_up`: the Overdue work, piled.
+message TodoCatchUpRoute {}
+
+// ---------------------------------------------------------------------------
+// Docs
+// ---------------------------------------------------------------------------
+
+// Which shelf the drive page shows.
+enum DocsDestination {
+  DOCS_DESTINATION_UNSPECIFIED = 0;
+  DOCS_DESTINATION_ALL = 1;
+  DOCS_DESTINATION_FOLDERS = 2;
+  DOCS_DESTINATION_STARRED = 3;
+  // Chosen from the More sheet; not a band tab.
+  DOCS_DESTINATION_RECENT = 4;
+}
+
+// `docs.drive`: lands on `destination` (All when unspecified); FOLDERS with a
+// `folder_id` is that folder's page. `parent` is the pushing page's own title,
+// which the page's back control says (#1047); empty is "Docs".
+message DocsDriveRoute {
+  DocsDestination destination = 1;
+  string folder_id = 2;
+  string folder_name = 3;
+  string parent = 4;
+}
+
+// `docs.document`: one document. The title rides along so the head has words
+// before the read lands; `parent` is the pushing page's title.
+message DocsDocumentRoute {
+  string document_id = 1;
+  string title = 2;
+  string parent = 3;
+}
+
+// `docs.editor`: a text document's editor.
+message DocsEditorRoute {
+  string document_id = 1;
+  string title = 2;
+}
+
+// `docs.versions`: one document's version history.
+message DocsVersionsRoute {
+  string document_id = 1;
+  string title = 2;
+}
+
+// ---------------------------------------------------------------------------
+// Notes
+// ---------------------------------------------------------------------------
+
+// Which of the band's places `notes.home` shows. Notes · Notebooks · Journal
+// are one screen, so a tap on the band changes this value and no stack entry.
+enum NotesPlace {
+  NOTES_PLACE_UNSPECIFIED = 0;
+  NOTES_PLACE_NOTES = 1;
+  NOTES_PLACE_NOTEBOOKS = 2;
+  NOTES_PLACE_JOURNAL = 3;
+}
+
+// `notes.home`: UNSPECIFIED is the Notes place. A notebook (or Unfiled) filters
+// the Notes place.
+message NotesHomeRoute {
+  NotesPlace place = 1;
+  string notebook_id = 2;
+  string notebook_name = 3;
+  bool unfiled_only = 4;
+}
+
+// `notes.editor`: an empty `note_id` with `is_new` opens an empty draft, whose
+// first save creates the note under the id the vault mints.
+message NotesEditorRoute {
+  string note_id = 1;
+  bool is_new = 2;
+}
+
+// `notes.history`: one note's versions. The title rides along so the back
+// control has words before the read lands.
+message NotesHistoryRoute {
+  string note_id = 1;
+  string note_title = 2;
+}
+
+// ---------------------------------------------------------------------------
+// The kit
+// ---------------------------------------------------------------------------
+
+// `<app>.trash`: the kit's one trash screen; the screen name says which app.
+message TrashRoute {}

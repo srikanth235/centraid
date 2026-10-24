@@ -13,12 +13,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
-import dev.centraid.android.screens.agenda.readPhoneEvents
 import dev.centraid.android.screens.docs.AndroidFolderReader
 import dev.centraid.android.screens.people.readPhoneContacts
-import dev.centraid.shared.apps.agenda.CalendarFollow
-import dev.centraid.shared.apps.agenda.CalendarRead
-import dev.centraid.shared.apps.agenda.CalendarReader
 import dev.centraid.shared.apps.docs.FilesFollow
 import dev.centraid.shared.apps.health.HealthFollow
 import dev.centraid.shared.apps.health.HealthReader
@@ -33,7 +29,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
-import java.util.TimeZone
 
 /**
  * ANDROID FOLLOWS THE PHONE (#1127): THE TRIGGERS, THE READERS AND THE QUESTION.
@@ -42,7 +37,11 @@ import java.util.TimeZone
  *   the address book and on the events, registered from `onStart` to `onStop`, each say
  *   [requested]. The bridge coalesces a burst, runs one pass per source at a time, and does
  *   nothing for a source the member never imported.
- * - **Reads.** The [ContactsReader] and [CalendarReader] below answer off the main thread, and
+ * - **The calendar is Rust's (#1135).** Agenda's screen holds the calendar's follow
+ *   (`crates/screens/src/agenda/calendar.rs`): it asks to watch the store with a `PhoneWatch`
+ *   effect ([watchCalendar]) and reads it with `CalendarRead` (`ScreenEffects.kt`). Here the
+ *   calendar is only the observer and the app coming forward, each reported to that watch.
+ * - **Reads.** The [ContactsReader] below answers off the main thread, and
  *   **null when the permission is not already granted: a pass never asks the OS**, only the
  *   member's Import tap does (R-ONBOARD-4). Docs' folders are read by `AndroidFolderReader`, over
  *   the tree grants the member gave when they picked each folder; triggers for them are the app
@@ -61,7 +60,14 @@ internal class AndroidPhoneFollow(context: Context, private val health: HealthRe
     private val io = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val main = Handler(Looper.getMainLooper())
     private val contactsObserver = observer(PhoneSource.CONTACTS)
-    private val calendarObserver = observer(PhoneSource.CALENDAR)
+    private val calendarObserver = object : ContentObserver(main) {
+        override fun onChange(selfChange: Boolean) {
+            calendarChanged?.invoke()
+        }
+    }
+
+    /** What Rust's `PhoneWatch` on the calendar wants told when the store changes, or null. Main thread. */
+    private var calendarChanged: (() -> Unit)? = null
     private var started = false
     private var attached = false
 
@@ -73,7 +79,6 @@ internal class AndroidPhoneFollow(context: Context, private val health: HealthRe
     fun attach(session: HomeSession) {
         val sources = listOf(
             ContactsFollow(contactsReader),
-            CalendarFollow(calendarReader),
             FilesFollow(AndroidFolderReader(context)),
             HealthFollow(health),
         )
@@ -88,6 +93,14 @@ internal class AndroidPhoneFollow(context: Context, private val health: HealthRe
         question = null
     }
 
+    /**
+     * Rust's `PhoneWatch` on the calendar: [changed] is told each time the store changes and each
+     * time the app comes forward, until a null [changed] stops it. Main thread.
+     */
+    fun watchCalendar(changed: (() -> Unit)?) {
+        calendarChanged = changed
+    }
+
     /** The activity started: watch the phone for as long as it is in view, and follow once. */
     fun start() {
         if (started) return
@@ -96,6 +109,7 @@ internal class AndroidPhoneFollow(context: Context, private val health: HealthRe
         resolver.registerContentObserver(ContactsContract.Contacts.CONTENT_URI, true, contactsObserver)
         resolver.registerContentObserver(CalendarContract.Events.CONTENT_URI, true, calendarObserver)
         if (attached) requestAll()
+        calendarChanged?.invoke()
     }
 
     /** The activity stopped: no observers while no one is looking. */
@@ -120,7 +134,6 @@ internal class AndroidPhoneFollow(context: Context, private val health: HealthRe
 
     private fun requestAll() {
         bridge.requested(PhoneSource.CONTACTS)
-        bridge.requested(PhoneSource.CALENDAR)
         bridge.requested(PhoneSource.FILES)
         bridge.requested(PhoneSource.HEALTH)
     }
@@ -141,23 +154,12 @@ internal class AndroidPhoneFollow(context: Context, private val health: HealthRe
         }
     }
 
-    private val calendarReader = object : CalendarReader {
-        override fun read(deliver: (CalendarRead?) -> Unit) {
-            if (!granted(Manifest.permission.READ_CALENDAR)) return deliver(null)
-            io.launch {
-                val now = System.currentTimeMillis()
-                val read = readPhoneEvents(context, now)
-                deliver(CalendarRead(read.events, read.origins, read.complete, TimeZone.getDefault().id, now))
-            }
-        }
-    }
-
     private fun granted(permission: String): Boolean =
         ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
 }
 
 /**
- * THE QUESTION AN ACCOUNT OR CALENDAR THAT LEFT THE PHONE LEAVES (R-1127-9), in the kit's
+ * THE QUESTION AN ACCOUNT THAT LEFT THE PHONE LEAVES (R-1127-9), in the kit's
  * [ConfirmSheet] (DESIGN.md: a destructive confirm is never a dialog). The shared question chose
  * every word and built the confirm: Move to trash is its destructive verb, and **Keep, the
  * default**, is the sheet's cancel and what the grabber, the scrim and back mean.

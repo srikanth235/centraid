@@ -41,6 +41,8 @@ debug-fault = ["centraid-core/debug-fault"]
 [dependencies]
 centraid-api-proto = { path = "../api-proto" }
 centraid-core = { path = "../core" }
+# THE SCREEN RUNTIME (#1135, lane C2), attached at open; no export of its own.
+centraid-screens = { path = "../screens" }
 # THE ON-DEVICE CHAT'S ENGINE (llama.cpp), and the only crate that links it,
 # behind this crate's `llama` feature. `centraid_open` hands every handle its
 # process-wide model slot, so with `llama` the engine is compiled into the one

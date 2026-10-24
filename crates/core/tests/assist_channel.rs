@@ -453,7 +453,7 @@ fn no_sealed_value_reaches_the_model_an_event_the_thread_the_journal_or_the_inde
 /// refuses both with the same sentence.
 #[test]
 fn a_sealing_command_through_the_door_lands_sealed_exactly_as_a_shell_command_does() {
-    use centraid_assist::native::Door as _;
+    use centraid_assist::native::{Call, Door as _};
     let seed = centraid_identity::RecoveryPhrase::parse(WORDS)
         .expect("the words parse")
         .seed();
@@ -478,7 +478,7 @@ fn a_sealing_command_through_the_door_lands_sealed_exactly_as_a_shell_command_do
     // shut: both refuse, in the same words, and nothing is written
     let by_shell = shell("lk-shell").expect_err("a shut Locker refuses the shell");
     let by_door = door
-        .run_keyed("pend:0", "locker.add_item", input("lk-door"))
+        .act_keyed("pend:0", &Call::bare("locker.add_item"), input("lk-door"))
         .expect_err("a shut Locker refuses the door");
     assert!(
         by_shell.to_string().contains("Locker is locked") && by_door.contains("Locker is locked"),
@@ -489,7 +489,7 @@ fn a_sealing_command_through_the_door_lands_sealed_exactly_as_a_shell_command_do
     unlock(&sample);
     shell("lk-shell").expect("the shell's command runs");
     let ran = door
-        .run_keyed("pend:0", "locker.add_item", input("lk-door"))
+        .act_keyed("pend:0", &Call::bare("locker.add_item"), input("lk-door"))
         .expect("the door answers");
     assert!(ran.ok, "{:?}", ran.reason);
     for id in ["lk-shell", "lk-door"] {

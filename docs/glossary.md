@@ -212,7 +212,7 @@ Store once, draw in the asking room's shape. These words are how the apps talk a
 | --- | --- | --- |
 | **projection** | A read-only re-shaping of rows another app or another table owns, drawn where it is useful and never copied. A birthday stays canonical on the person; Agenda projects it. An app that stores its own copy of another app's fact has left this doctrine, whatever the screen looks like. | `crates/apps/agenda/src/queries.rs` |
 | **day context** | The costless layers a calendar day learns from elsewhere — birthdays (People), due tasks (the `tasks` domain), holidays — answered by read-only Agenda reads over a bounded date range. **A layer is not a calendar**: it carries no hue dot, nothing writes to it, and it never takes grid shape. | `crates/apps/agenda/src/queries.rs` |
-| **re-entry** | How a room lets someone back in after they fall behind: one live occurrence for a repeating task with its elapsed periods collapsed beside it (`missed 4 · next is Friday`), a group that offers to catch up, and `won't do` as a respectable exit. The house alternative to a wall of shame. | `crates/apps/tasks/src/board.rs` |
+| **re-entry** | How a room lets someone back in after they fall behind: one live occurrence for a repeating task with its elapsed periods collapsed beside it (`missed 4 · next is Friday`), a group that offers to catch up, and `won't do` as a respectable exit. The house alternative to a wall of shame. | `crates/apps/agenda/src/task/board.rs` |
 
 ## Owners (gateway, #726)
 

@@ -1,9 +1,9 @@
 package dev.centraid.shared
 
-import centraid.screen.v1.DocsDriveState
 import centraid.screen.v1.PhotoStateView
 import centraid.screen.v1.PhotosGridState
 import dev.centraid.shared.nav.Destination
+import dev.centraid.shared.nav.DocsEntry
 import dev.centraid.shared.nav.NavStack
 import dev.centraid.shared.shell.Mount
 import dev.centraid.shared.shell.MountKey
@@ -43,14 +43,6 @@ class NavigationAndMountSpec : StringSpec({
         stack.pop().current shouldBe Destination.Home
     }
 
-    "a band destination from somewhere else IS a push" {
-        val stack = NavStack()
-            .withDocsDestination(DocsDriveState.Destination.DESTINATION_STARRED)
-        stack.entries.size shouldBe 2
-        (stack.current as Destination.DocsHome).destination shouldBe
-            DocsDriveState.Destination.DESTINATION_STARRED
-    }
-
     "iOS tells a route swapped in place that it opened, not only a pushed one" {
         // A screen reads because it was OPENED (`ShellModel.opened`), and
         // `CentraidApp` says so from the destination's `.task`. Notes' band
@@ -76,10 +68,9 @@ class NavigationAndMountSpec : StringSpec({
 
     "names ride along the route, so an app bar has something to say at once" {
         // A route carries its display name, so the app bar never waits on a read.
-        val folder = Destination.DocsFolder(folderId = "fld-1", folderName = "Taxes")
-        folder.folderName shouldBe "Taxes"
-        Destination.NotesEditor(noteId = "note-1", title = "Winter plans").title shouldBe
-            "Winter plans"
+        DocsEntry.folder("fld-1", "Taxes").route.docs_drive!!.folder_name shouldBe "Taxes"
+        Destination.PeoplePerson(partyId = "p-1", name = "Dana Reyes").name shouldBe
+            "Dana Reyes"
     }
 
     "a photo state view is a discriminated union" {

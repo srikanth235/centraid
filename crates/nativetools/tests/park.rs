@@ -104,7 +104,8 @@ fn the_patched_world_is_the_vaults_after_every_mapped_write() {
         );
     });
     let pairs: usize = VERBS.iter().map(|spec| spec.commands.len()).sum();
-    assert_eq!(driven, pairs, "every pair of the table is driven");
+    // every pair but `restore album`, which no selector can reach (`verb_coverage.rs`, `UNDRIVEN`)
+    assert_eq!(driven + 1, pairs, "every pair of the table is driven");
 }
 
 #[test]
@@ -170,7 +171,7 @@ fn a_parked_session_leaves_the_vault_as_it_found_it() {
         "a parked create does not reach the vault"
     );
     assert_eq!(session.parked().len(), 1, "its one step is kept, in order");
-    assert_eq!(session.parked()[0].command, "task.add");
+    assert_eq!(session.parked()[0].act.command, "task.add");
 }
 
 #[test]
@@ -201,7 +202,7 @@ fn a_parked_chain_names_the_row_its_first_write_made() {
     let steps: Vec<&str> = session
         .parked()
         .iter()
-        .map(|step| step.command.as_str())
+        .map(|step| step.act.command)
         .collect();
     assert_eq!(steps, ["task.add", "task.complete"]);
     // the id the second step names is the id the first one makes

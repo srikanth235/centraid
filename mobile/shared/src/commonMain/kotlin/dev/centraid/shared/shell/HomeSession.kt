@@ -364,6 +364,9 @@ public class HomeSession private constructor(
     /** Whether this session has a core behind it at all. */
     public val live: Boolean get() = core != null
 
+    /** Rust's screens, for a shell that cannot open a core of its own (SwiftUI). See [ScreenTransport]. */
+    public val screenTransport: ScreenTransport = ScreenTransport({ core }, scope)
+
     public fun send(event: HomeEvent) {
         scope.launch { host.send(event) }
     }
