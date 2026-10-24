@@ -115,8 +115,14 @@ pub fn month_day(locale: Locale, month_day: &str) -> String {
 /// place (`in_days` absent) is the stored day in words.
 #[must_use]
 pub fn day_label(locale: Locale, today: &str, in_days: Option<i64>, stored: &str) -> String {
-    let _ = (today, in_days);
-    month_day(locale, stored)
+    let next = in_days.and_then(|days| civil::plus_days(today, days));
+    match next.as_deref() {
+        Some(day) => {
+            let dom = civil::day_of_month_of(day).unwrap_or_default();
+            format!("{dom} {}", civil::month_of(locale, day))
+        }
+        None => month_day(locale, stored),
+    }
 }
 
 #[cfg(test)]
