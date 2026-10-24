@@ -3996,6 +3996,15 @@
       {
         "app": "money",
         "figures": [
+          "new",
+          "already_in"
+        ],
+        "kind": "transaction",
+        "query": "import-plan"
+      },
+      {
+        "app": "money",
+        "figures": [
           "spent",
           "planned",
           "carried_in",

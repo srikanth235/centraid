@@ -44,49 +44,49 @@ docs,delete-folder,delete,folder,direct,yes: apps/docs/DocsFold.kt; apps/docs/Do
 health,record-days,log,daily_figure,card,yes: apps/health/HealthImport.kt,no
 health,follow-workouts,import,workout,card,yes: apps/health/HealthImport.kt,no
 health,delete-workout,delete,workout,card,no,no
-locker,add-item,create,locker_item,direct,yes: apps/locker/LockerEditor.kt,yes
-locker,edit-item,edit,locker_item,direct,yes: apps/locker/LockerEditor.kt,yes
-locker,trash-item,delete,locker_item,direct,yes: apps/locker/LockerItem.kt,yes
-locker,restore-item,restore,locker_item,direct,yes: apps/locker/LockerBridges.kt; apps/locker/LockerItem.kt,yes
-locker,purge-item,purge,locker_item,card,yes: apps/locker/LockerBridges.kt; apps/locker/LockerItem.kt,no
-locker,star-item,star,locker_item,direct,yes: apps/locker/LockerItem.kt,yes
-locker,unstar-item,unstar,locker_item,direct,yes: apps/locker/LockerItem.kt,yes
-locker,archive-item,archive,locker_item,direct,yes: apps/locker/LockerItem.kt,yes
-locker,unarchive-item,unarchive,locker_item,direct,yes: apps/locker/LockerItem.kt,yes
-locker,add-tag,tag,locker_item,direct,yes: apps/locker/LockerEditor.kt,no
-locker,remove-tag,untag,locker_item,direct,yes: apps/locker/LockerEditor.kt,no
+locker,add-item,create,locker_item,direct,yes: crates/screens/src/locker/editor.rs,yes
+locker,edit-item,edit,locker_item,direct,yes: crates/screens/src/locker/editor.rs,yes
+locker,trash-item,delete,locker_item,direct,yes: crates/screens/src/locker/item.rs,yes
+locker,restore-item,restore,locker_item,direct,yes: crates/screens/src/locker/trash.rs; crates/screens/src/locker/item.rs,yes
+locker,purge-item,purge,locker_item,card,yes: crates/screens/src/locker/trash.rs; crates/screens/src/locker/item.rs,no
+locker,star-item,star,locker_item,direct,yes: crates/screens/src/locker/item.rs,yes
+locker,unstar-item,unstar,locker_item,direct,yes: crates/screens/src/locker/item.rs,yes
+locker,archive-item,archive,locker_item,direct,yes: crates/screens/src/locker/item.rs,yes
+locker,unarchive-item,unarchive,locker_item,direct,yes: crates/screens/src/locker/item.rs,yes
+locker,add-tag,tag,locker_item,direct,yes: crates/screens/src/locker/editor.rs,no
+locker,remove-tag,untag,locker_item,direct,yes: crates/screens/src/locker/editor.rs,no
 locker,duplicate-item,duplicate,locker_item,card,no,no
-locker,set-field,edit,locker_field,card,yes: apps/locker/LockerItem.kt,no
-locker,remove-field,delete,locker_field,card,yes: apps/locker/LockerItem.kt,no
+locker,set-field,edit,locker_field,card,yes: crates/screens/src/locker/item.rs,no
+locker,remove-field,delete,locker_field,card,yes: crates/screens/src/locker/item.rs,no
 locker,set-addresses,edit,locker_item,card,no,no
-locker,set-passkey,edit,locker_passkey,card,yes: apps/locker/LockerItem.kt,no
-locker,clear-passkey,delete,locker_passkey,card,yes: apps/locker/LockerItem.kt,no
-locker,set-memo,edit,locker_item,card,yes: apps/locker/LockerItem.kt,no
+locker,set-passkey,edit,locker_passkey,card,yes: crates/screens/src/locker/item.rs,no
+locker,clear-passkey,delete,locker_passkey,card,yes: crates/screens/src/locker/item.rs,no
+locker,set-memo,edit,locker_item,card,yes: crates/screens/src/locker/item.rs,no
 locker,export,reveal,locker_item,card,no,no
 locker,reveal,reveal,locker_item,direct,no,no
-money,add-account,create,account,direct,yes: apps/money/MoneyAccounts.kt,no
-money,edit-account,edit,account,direct,yes: apps/money/MoneyAccounts.kt,no
-money,close-account,archive,account,direct,yes: apps/money/MoneyAccounts.kt; apps/money/MoneyCategories.kt,no
-money,reopen-account,unarchive,account,direct,yes: apps/money/MoneyAccounts.kt; apps/money/MoneyCategories.kt,no
+money,add-account,create,account,direct,yes: crates/screens/src/money/accounts.rs,no
+money,edit-account,edit,account,direct,yes: crates/screens/src/money/accounts.rs,no
+money,close-account,archive,account,direct,yes: crates/screens/src/money/accounts.rs; crates/screens/src/money/categories.rs,no
+money,reopen-account,unarchive,account,direct,yes: crates/screens/src/money/accounts.rs; crates/screens/src/money/categories.rs,no
 money,set-opening-balance,edit,account,card,no,no
-money,import-transactions,import,transaction,card,yes: apps/money/MoneyImport.kt,no
-money,record-checkpoint,log,account,card,yes: apps/money/MoneyImport.kt,no
-money,save-import-profile,edit,account,card,yes: apps/money/MoneyImport.kt,no
-money,categorize,categorize,transaction,card,yes: apps/money/MoneyTransaction.kt,no
-money,void-transaction,void,transaction,card,yes: apps/money/MoneyTransaction.kt,no
-money,set-display-name,edit,transaction,direct,yes: apps/money/MoneyTransaction.kt,no
-money,link-transfer,link,transaction,card,yes: apps/money/MoneyTransaction.kt,no
-money,unlink-transfer,unlink,transaction,direct,yes: apps/money/MoneyTransaction.kt,no
-money,set-target,edit,budget,card,yes: apps/money/MoneyTarget.kt,no
+money,import-transactions,import,transaction,card,yes: crates/screens/src/money/import.rs,no
+money,record-checkpoint,log,account,card,yes: crates/screens/src/money/import.rs,no
+money,save-import-profile,edit,account,card,yes: crates/screens/src/money/import.rs,no
+money,categorize,categorize,transaction,card,yes: crates/screens/src/money/transaction.rs,no
+money,void-transaction,void,transaction,card,yes: crates/screens/src/money/transaction.rs,no
+money,set-display-name,edit,transaction,direct,yes: crates/screens/src/money/transaction.rs,no
+money,link-transfer,link,transaction,card,yes: crates/screens/src/money/transaction.rs,no
+money,unlink-transfer,unlink,transaction,direct,yes: crates/screens/src/money/transaction.rs,no
+money,set-target,edit,budget,card,yes: crates/screens/src/money/target.rs,no
 money,set-carry,edit:carry,budget,card,no,no
-money,add-rule,create,rule,card,yes: apps/money/MoneyRules.kt; apps/money/MoneyTransaction.kt,no
-money,edit-rule,edit,rule,direct,yes: apps/money/MoneyRules.kt,no
-money,delete-rule,delete,rule,card,yes: apps/money/MoneyRules.kt,no
-money,apply-rule-to-history,apply,rule,card,yes: apps/money/MoneyRules.kt,no
-money,add-category,create,category,direct,yes: apps/money/MoneyCategories.kt,no
-money,merge-category,merge,category,card,yes: apps/money/MoneyCategories.kt,no
-money,archive-category,archive,category,direct,yes: apps/money/MoneyAccounts.kt; apps/money/MoneyCategories.kt,no
-money,unarchive-category,unarchive,category,direct,yes: apps/money/MoneyCategories.kt,no
+money,add-rule,create,rule,card,yes: crates/screens/src/money/rules.rs; crates/screens/src/money/transaction.rs,no
+money,edit-rule,edit,rule,direct,yes: crates/screens/src/money/rules.rs,no
+money,delete-rule,delete,rule,card,yes: crates/screens/src/money/rules.rs,no
+money,apply-rule-to-history,apply,rule,card,yes: crates/screens/src/money/rules.rs,no
+money,add-category,create,category,direct,yes: crates/screens/src/money/categories.rs,no
+money,merge-category,merge,category,card,yes: crates/screens/src/money/categories.rs,no
+money,archive-category,archive,category,direct,yes: crates/screens/src/money/accounts.rs; crates/screens/src/money/categories.rs,no
+money,unarchive-category,unarchive,category,direct,yes: crates/screens/src/money/categories.rs,no
 notes,create-note,create,note,direct,yes: apps/notes/NotesEditorMachine.kt,yes
 notes,edit-note,edit,note,direct,yes: apps/notes/NotesEditorMachine.kt,yes
 notes,move-note,add_to,note,direct,yes: apps/notes/NotesLibraryMachine.kt,yes

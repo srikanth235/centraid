@@ -48,9 +48,9 @@ mod tests {
     }
 
     #[test]
-    fn it_declares_eleven_queries_and_twenty_three_actions() {
+    fn it_declares_twelve_queries_and_twenty_three_actions() {
         let manifest = manifest();
-        assert_eq!(manifest.queries.len(), 11);
+        assert_eq!(manifest.queries.len(), 12);
         assert_eq!(manifest.actions.len(), 23);
         for name in [
             "spending",
@@ -64,6 +64,7 @@ mod tests {
             "recurring",
             "home-tile",
             "search",
+            "import-plan",
         ] {
             assert!(manifest.query(name).is_some(), "no query {name}");
         }
