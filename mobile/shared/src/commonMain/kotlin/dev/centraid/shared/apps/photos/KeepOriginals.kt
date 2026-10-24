@@ -1,28 +1,15 @@
 package dev.centraid.shared.apps.photos
 
-import centraid.screen.v1.FreeUpSpace
 import centraid.screen.v1.KeepOriginalsRow
 import centraid.screen.v1.PhotoShelf
 import centraid.screen.v1.PhotoShelfEvent
 import centraid.screen.v1.PhotoShelfState
-import centraid.screen.v1.PhotosGridEvent
-import centraid.screen.v1.PhotosGridState
 import dev.centraid.design.copy.PhotosCopy
 import dev.centraid.shared.screen.ScreenHost
 import dev.centraid.shared.shell.HomeSession
-import dev.centraid.shared.sync.CoreFreeUpDoors
 import dev.centraid.shared.sync.CoreOriginals
-import dev.centraid.shared.sync.DeleteCapability
-import dev.centraid.shared.sync.DeleteOutcome
-import dev.centraid.shared.sync.DrainCopy
-import dev.centraid.shared.sync.FreeUpDoors
-import dev.centraid.shared.sync.LibraryDeleter
-import dev.centraid.shared.sync.ReleasableList
-import kotlin.coroutines.resume
-import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
@@ -34,10 +21,10 @@ import kotlinx.coroutines.launch
  * Two surfaces over the core's originals doors: an album shelf's switch,
  * which puts that album on this phone's keep list, and the More sheet's row,
  * which says what freeing space would reclaim and does it. The reducer halves
- * are pure functions here so [PhotoShelfMachine] and [PhotosGridMachine] each
- * carry one line per event; the I/O halves are the two `attach` functions and
- * [FreeUpFlow], which answer a host through its own events — the reducer stays
- * the only writer of a screen's state.
+ * are pure functions here so [PhotoShelfMachine] carries one line per event; the
+ * I/O half is `attachShelf`, which answers a host through its own events. The
+ * More sheet's row is Rust's now (`photos::keep_originals`), and the free-up work
+ * the phone does is [dev.centraid.shared.shell.FreeUpFlow].
  *
  * ## "FREE UP SPACE" IS A VERB AGAIN (#1080 A19)
  *
@@ -66,48 +53,6 @@ public object KeepOriginals {
     /** A list the core would not read or write. The switch stays disabled. */
     public const val UNREADABLE: String =
         "This album's setting could not be read."
-
-    /** The More sheet row's title. */
-    public const val FREE_UP_TITLE: String = PhotosCopy.PHOTOS_FREE_UP_TITLE
-
-    /**
-     * WHAT A PHOTO DELETED FOR GOOD COSTS THE BACKUP DEVICE (#1080 F5): the
-     * file stays sealed there while a kept restore point may name it, up to
-     * about six months. Drawn under the row on both shells, whatever the count.
-     */
-    public const val FREE_UP_RETENTION: String = PhotosCopy.PHOTOS_FREE_UP_RETENTION_BODY
-
-    /** While the census runs. */
-    public const val COUNTING: String = "Counting the originals on this phone…"
-
-    /** A core that could not count — no content store, or a refused read. */
-    public const val NOT_COUNTED: String = "Not counted yet."
-
-    /** WHY NOTHING CAN BE FREED YET: no original is whole on a gateway. */
-    public const val NOTHING_SAFE: String =
-        "None can be freed yet. Originals free up once a backup device holds them."
-
-    /** The core could not say what is safe, so nothing is offered. */
-    public const val NOT_CHECKED: String =
-        "Centraid could not check which originals are backed up, so none is offered."
-
-    /** The action: "Free up 2 GB". */
-    public const val FREE_UP_ACTION: String = "Free up {size}"
-
-    /** The notice after a free-up. */
-    public const val FREED: String =
-        "Freed {size}. Photos download again from your backup device when you open them."
-
-    /** The member said no in the system's dialog, or nothing could go. */
-    public const val NOTHING_REMOVED: String = "Nothing removed."
-
-    /** The library let them go and the core did not record it. */
-    public const val NOT_RECORDED: String =
-        "Photos removed from this phone. They show as downloadable once Centraid catches up."
-
-    /** How many originals a gateway holds whole, in the row's words. */
-    public fun safe(count: Int): String =
-        if (count == 1) "1 photo is backed up." else "$count photos are backed up."
 
     // -----------------------------------------------------------------------
     // The album shelf's switch — reducer halves
@@ -164,68 +109,6 @@ public object KeepOriginals {
         if (keep) "Kept out of Free up space" else "Included in Free up space"
 
     // -----------------------------------------------------------------------
-    // The More sheet's row
-    // -----------------------------------------------------------------------
-
-    /** The row while the census runs. */
-    public fun counting(): FreeUpSpace = FreeUpSpace(offered = true, counted = false, meta = COUNTING)
-
-    /**
-     * The row from what the core counted. [census] null is [NOT_COUNTED], never
-     * zero; [releasable] null is [NOT_CHECKED], which offers nothing. The
-     * action frees exactly what [releasable] lists, so its size is theirs.
-     */
-    public fun freeUp(
-        census: CoreOriginals.Census?,
-        releasable: ReleasableList?,
-        capability: DeleteCapability = DeleteCapability.SYSTEM_CONFIRMATION,
-        notice: String = "",
-    ): FreeUpSpace {
-        // NO ROW AT ALL where nothing can delete (A20): an action this phone
-        // cannot take is not offered, and the count alone is no help to a
-        // member deciding whether to free anything.
-        if (capability != DeleteCapability.SYSTEM_CONFIRMATION) return FreeUpSpace(offered = false)
-        if (census == null) return FreeUpSpace(offered = true, counted = false, meta = NOT_COUNTED, notice = notice)
-        if (census.onPhoneCount <= 0L) {
-            return FreeUpSpace(offered = true, counted = true, meta = "No originals on this phone", notice = notice)
-        }
-        val noun = if (census.onPhoneCount == 1L) "original" else "originals"
-        val kept = when {
-            census.keptCount <= 0L -> ""
-            census.keptCount == 1L -> " One of them is in an album you keep on this phone."
-            else -> " ${census.keptCount} of them are in albums you keep on this phone."
-        }
-        val row = FreeUpSpace(
-            offered = true,
-            counted = true,
-            meta = "${census.onPhoneCount} $noun · ${DrainCopy.bytes(census.onPhoneBytes)} on this phone",
-            notice = notice,
-        )
-        val items = releasable?.items.orEmpty()
-        return when {
-            releasable == null -> row.copy(reason = NOT_CHECKED + kept)
-            items.isEmpty() -> row.copy(reason = NOTHING_SAFE + kept)
-            else -> {
-                val bytes = items.sumOf { it.size }
-                row.copy(
-                    reason = safe(items.size) + kept,
-                    action_label = FREE_UP_ACTION.replace("{size}", DrainCopy.bytes(bytes)),
-                    enabled = true,
-                    releasable_count = items.size,
-                    releasable_bytes = bytes,
-                )
-            }
-        }
-    }
-
-    /**
-     * The member tapped the action. **Null is "ignore"**: before the count,
-     * with nothing to free, or while a free-up is already in the system's hands.
-     */
-    public fun tapped(row: FreeUpSpace?): FreeUpSpace? =
-        row?.takeIf { it.counted && it.enabled && !it.freeing }?.copy(freeing = true, notice = "")
-
-    // -----------------------------------------------------------------------
     // The I/O halves
     // -----------------------------------------------------------------------
 
@@ -263,93 +146,5 @@ public object KeepOriginals {
                     )
                 }
         }
-    }
-
-    /**
-     * THE MORE SHEET'S ROW, served. Counted each time the sheet opens, because
-     * a count is only as fresh as the last import, and never while it is shut:
-     * a census lists the whole content store. A tap ([tapped]) is run by
-     * [FreeUpFlow.free], and its answer is the next count.
-     */
-    public fun attachGrid(
-        session: HomeSession,
-        host: ScreenHost<PhotosGridState, PhotosGridEvent>,
-        scope: CoroutineScope,
-    ) {
-        val door = CoreOriginals { session.shelf.core() }
-        val flow = FreeUpFlow(CoreFreeUpDoors { session.shelf.core() }, { door.census()?.census }) {
-            session.libraryDeleter
-        }
-        fun counted(row: FreeUpSpace) = PhotosGridEvent(free_up_counted = PhotosGridEvent.FreeUpCounted(row))
-        scope.launch {
-            host.state
-                .map { it.sheet == PhotosGridState.Sheet.SHEET_MORE }
-                .distinctUntilChanged()
-                .filter { it }
-                .collect {
-                    // NOTHING TO COUNT FOR where nothing can delete: no row.
-                    if (flow.capability() == DeleteCapability.SYSTEM_CONFIRMATION) host.send(counted(counting()))
-                    host.send(counted(flow.count()))
-                }
-        }
-        scope.launch {
-            host.state
-                .map { it.free_up?.freeing == true }
-                .distinctUntilChanged()
-                .filter { it }
-                .collect { host.send(counted(flow.free())) }
-        }
-    }
-}
-
-/**
- * FREE UP SPACE, RUN (#1080 A19, A20).
- *
- * Ask the core what is safe to free, hand those items to the shell's installed
- * [LibraryDeleter] — which shows the system's own confirmation and removes
- * whole assets — then tell the core exactly the hashes that went, and count
- * again. Every answer is a row ([KeepOriginals.freeUp]) carrying what happened
- * as its `notice`. The deleter is read at each use: Android installs and
- * clears its own with the activity.
- */
-public class FreeUpFlow(
-    private val doors: FreeUpDoors,
-    private val census: suspend () -> CoreOriginals.Census?,
-    private val deleter: () -> LibraryDeleter?,
-) {
-    /** What the installed deleter can do; NONE when none is installed. */
-    public fun capability(): DeleteCapability = deleter()?.capability() ?: DeleteCapability.NONE
-
-    /** The row as it stands, with [notice] on it. */
-    public suspend fun count(notice: String = ""): FreeUpSpace {
-        val capability = capability()
-        if (capability != DeleteCapability.SYSTEM_CONFIRMATION) return KeepOriginals.freeUp(null, null, capability)
-        return KeepOriginals.freeUp(census(), doors.releasable(LIMIT), capability, notice)
-    }
-
-    /** Free what is safe; answers the row recounted, saying what happened. */
-    public suspend fun free(): FreeUpSpace {
-        val hand = deleter()?.takeIf { it.capability() == DeleteCapability.SYSTEM_CONFIRMATION } ?: return count()
-        val list = doors.releasable(LIMIT) ?: return count(KeepOriginals.NOT_CHECKED)
-        val items = list.items.filter { it.osRef.isNotEmpty() }
-        if (items.isEmpty()) return count(KeepOriginals.NOTHING_REMOVED)
-        val outcome = suspendCancellableCoroutine<DeleteOutcome> { asked ->
-            hand.delete(items) { answer -> if (asked.isActive) asked.resume(answer) }
-        }
-        // ONLY WHAT THE PLATFORM SAYS WENT is reported, by the hash it named.
-        val gone = outcome.deleted.map { it.toList() }.toSet()
-        val freed = items.filter { it.contentHash.toList() in gone }
-        val notice = when {
-            freed.isNotEmpty() && doors.released(freed.map { it.contentHash }) == null -> KeepOriginals.NOT_RECORDED
-            freed.isNotEmpty() -> KeepOriginals.FREED.replace("{size}", DrainCopy.bytes(freed.sumOf { it.size }))
-            outcome.error != null -> outcome.error
-            else -> KeepOriginals.NOTHING_REMOVED
-        }
-        return count(notice)
-    }
-
-    public companion object {
-        /** One tap frees at most this many originals, oldest first; the next tap frees more. */
-        public const val LIMIT: Long = 1_000
     }
 }

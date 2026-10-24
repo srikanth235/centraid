@@ -120,7 +120,7 @@ public object ShelfCopies {
 
 /**
  * A SCREEN WHOSE PICK CAN BE HANDED TO THE PLATFORM — the photo shelf
- * ([PhotoShelfBridge]) and the library's selection ([LibraryCopies]).
+ * ([PhotoShelfBridge]).
  *
  * The shells' hand-off (`ShelfCopyExport.swift`, `PhotoShelfCopies.kt`) takes
  * this and not a named bridge, so one batch path serves every selection bar

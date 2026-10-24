@@ -1,15 +1,8 @@
 package dev.centraid.shared
 
-import centraid.screen.v1.PhotoCell
-import centraid.screen.v1.PhotosGridData
-import centraid.screen.v1.PhotosGridEvent
-import dev.centraid.design.copy.SharedCopy
-import dev.centraid.shared.apps.photos.FreeUpFlow
-import dev.centraid.shared.apps.photos.KeepOriginals
-import dev.centraid.shared.apps.photos.PhotosGridMachine
+import dev.centraid.shared.shell.FreeUpFlow
 import dev.centraid.shared.platform.FakeLibraryDeleter
 import dev.centraid.shared.platform.FakePlatformServices
-import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.shell.HomeSession
 import dev.centraid.shared.sync.ContentHash
 import dev.centraid.shared.sync.CoreOriginals
@@ -23,20 +16,20 @@ import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.shouldBe
-import io.kotest.matchers.string.shouldContain
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.runTest
 import kotlin.io.path.createTempDirectory
 
 /**
- * FREE UP SPACE IS A VERB AGAIN (#1080 A19, A20; R-1029-PH-1 superseded).
+ * FREE UP SPACE IS A VERB AGAIN (#1080 A19, A20; R-1029-PH-1 superseded): the
+ * shell's half.
  *
- * The row offers only what the core named releasable — library originals a
- * gateway holds whole, never an edited one — and only where the shell
- * installed a deleter that asks through the system's own confirmation. The
- * deleter answers which hashes went, and the core is told exactly those. The
- * three answers a deleter gives — deleted, declined, failed — are each a
- * sentence on the row.
+ * What a member READS about it (the row, its reason, the action's size, the
+ * notice) is Rust's and is pinned by `crates/screens/tests/photos_home.rs`. What
+ * is pinned here is the flow: only what the core named releasable is handed to
+ * the installed deleter, which asks through the system's own confirmation; the
+ * core is told exactly the hashes that went; and the three answers a deleter
+ * gives — deleted, declined, failed — each reach the screen as a closed outcome.
  */
 class FreeUpSpec : StringSpec({
 
@@ -57,46 +50,23 @@ class FreeUpSpec : StringSpec({
         }
     }
 
-    "nothing is offered until a gateway holds an original whole, and a core that cannot say offers nothing" {
-        val unchecked = KeepOriginals.freeUp(census, null)
-        unchecked.offered shouldBe true
-        unchecked.enabled shouldBe false
-        unchecked.reason shouldContain KeepOriginals.NOT_CHECKED
-        unchecked.action_label shouldBe ""
-        val none = KeepOriginals.freeUp(census, ReleasableList(emptyList(), 0))
-        none.enabled shouldBe false
-        none.reason shouldContain KeepOriginals.NOTHING_SAFE
+    "a phone that cannot delete behind the system's confirmation offers no row, and counts what the core said" {
+        runTest {
+            val none = FreeUpFlow(Doors(both), { census }) { null }
+            none.count().offered shouldBe false
 
-        val offered = KeepOriginals.freeUp(census, both)
-        offered.enabled shouldBe true
-        offered.action_label shouldBe "Free up 2 GB"
-        offered.reason shouldBe "2 photos are backed up."
-        offered.releasable_count shouldBe 2
-        offered.releasable_bytes shouldBe 2_000_000_000L
-        offered.meta shouldBe "40 originals · 3 GB on this phone"
-        // NOT COUNTED IS NEVER ZERO, and offers nothing either.
-        KeepOriginals.freeUp(null, both).enabled shouldBe false
-    }
-
-    "a phone that cannot delete behind the system's confirmation draws no row at all" {
-        val none = KeepOriginals.freeUp(census, both, DeleteCapability.NONE)
-        none.offered shouldBe false
-        none.enabled shouldBe false
-        none.action_label shouldBe ""
-    }
-
-    "a tap holds the row while the system asks, and only a counted, enabled row is tapped" {
-        val offered = KeepOriginals.freeUp(census, both)
-        KeepOriginals.tapped(offered)?.freeing shouldBe true
-        KeepOriginals.tapped(offered.copy(freeing = true)).shouldBeNull()
-        KeepOriginals.tapped(KeepOriginals.freeUp(census, null)).shouldBeNull()
-        KeepOriginals.tapped(null).shouldBeNull()
-
-        val grid = PhotosGridMachine.initial().copy(free_up = offered)
-        val tapped = PhotosGridMachine.reduce(grid, PhotosGridEvent(free_up_tapped = PhotosGridEvent.FreeUpTapped()))
-        tapped.state.free_up?.freeing shouldBe true
-        PhotosGridMachine.reduce(tapped.state, PhotosGridEvent(free_up_tapped = PhotosGridEvent.FreeUpTapped()))
-            .state shouldBe tapped.state
+            val counted = FreeUpFlow(Doors(both), { census }) { FakeLibraryDeleter() }.count()
+            counted.offered shouldBe true
+            counted.counted shouldBe true
+            counted.onPhoneCount shouldBe 40
+            counted.checked shouldBe true
+            counted.releasableCount shouldBe 2
+            counted.releasableBytes shouldBe 2_000_000_000L
+            // NOT COUNTED IS NEVER ZERO, and a core that cannot say what is safe is not "nothing safe".
+            val blind = FreeUpFlow(Doors(null), { null }) { FakeLibraryDeleter() }.count()
+            blind.counted shouldBe false
+            blind.checked shouldBe false
+        }
     }
 
     "deleted: the deleter is handed the items whole, and the core is told exactly the hashes that went" {
@@ -106,13 +76,15 @@ class FreeUpSpec : StringSpec({
             val after = FreeUpFlow(doors, { census }) { deleter }.free()
             deleter.handed shouldBe listOf(listOf(a, b))
             doors.released shouldBe listOf(listOf(a.hex, b.hex))
-            after.notice shouldBe "Freed 2 GB. Photos download again from your backup device when you open them."
-            after.freeing shouldBe false
+            after.outcome shouldBe FreeUpFlow.Outcome.FREED
+            after.freedBytes shouldBe 2_000_000_000L
 
             // AN ASSET THE PLATFORM KEPT WHOLE is not reported.
             val partial = Doors(both)
             deleter.answer = { items -> DeleteOutcome(listOf(items.first().contentHash), declined = false, error = null) }
-            FreeUpFlow(partial, { census }) { deleter }.free().notice shouldContain "Freed 1 GB"
+            val some = FreeUpFlow(partial, { census }) { deleter }.free()
+            some.outcome shouldBe FreeUpFlow.Outcome.FREED
+            some.freedBytes shouldBe 1_500_000_000L
             partial.released shouldBe listOf(listOf(a.hex))
         }
     }
@@ -121,7 +93,7 @@ class FreeUpSpec : StringSpec({
         runTest {
             val doors = Doors(both)
             val deleter = FakeLibraryDeleter(answer = { DeleteOutcome(emptyList(), declined = true, error = null) })
-            FreeUpFlow(doors, { census }) { deleter }.free().notice shouldBe KeepOriginals.NOTHING_REMOVED
+            FreeUpFlow(doors, { census }) { deleter }.free().outcome shouldBe FreeUpFlow.Outcome.NOTHING_REMOVED
             doors.released.shouldBeEmpty()
         }
     }
@@ -130,16 +102,17 @@ class FreeUpSpec : StringSpec({
         runTest {
             val doors = Doors(both)
             val deleter = FakeLibraryDeleter(answer = { DeleteOutcome(emptyList(), declined = false, error = "Photos access is limited.") })
-            FreeUpFlow(doors, { census }) { deleter }.free().notice shouldBe "Photos access is limited."
+            val failed = FreeUpFlow(doors, { census }) { deleter }.free()
+            failed.outcome shouldBe FreeUpFlow.Outcome.PLATFORM_ERROR
+            failed.platformError shouldBe "Photos access is limited."
             doors.released.shouldBeEmpty()
 
             // A CORE THAT WILL NOT RECORD what went says so.
-            FreeUpFlow(Doors(both, records = false), { census }) { FakeLibraryDeleter() }.free().notice shouldBe
-                KeepOriginals.NOT_RECORDED
+            FreeUpFlow(Doors(both, records = false), { census }) { FakeLibraryDeleter() }.free().outcome shouldBe
+                FreeUpFlow.Outcome.NOT_RECORDED
             // AND ONE THAT CANNOT SAY WHAT IS SAFE deletes nothing.
             val unasked = FakeLibraryDeleter()
-            val unchecked = FreeUpFlow(Doors(null), { census }) { unasked }.free()
-            unchecked.notice shouldBe KeepOriginals.NOT_CHECKED
+            FreeUpFlow(Doors(null), { census }) { unasked }.free().outcome shouldBe FreeUpFlow.Outcome.NOT_CHECKED
             unasked.handed.shouldBeEmpty()
         }
     }
@@ -175,43 +148,10 @@ class FreeUpSpec : StringSpec({
         }
     }
 
-    "the way back: a freed original fetched from the grid re-reads on success and says why not on a failure (#1080)" {
-        val grid = PhotosGridMachine.initial().copy(
-            loading = null,
-            data_ = PhotosGridData(cells = listOf(PhotoCell(asset_id = "a-1", held = PhotoCell.Held.HELD_WITHHELD_BY_RULE))),
-        )
-        val tapped = PhotosGridMachine.reduce(
-            grid,
-            PhotosGridEvent(fetch_original = PhotosGridEvent.OriginalRequested(asset_id = "a-1", content_hash = "ab".repeat(32))),
-        )
-        tapped.state.data_!!.cells.single().held shouldBe PhotoCell.Held.HELD_FETCHING
-        tapped.effects shouldBe listOf(ScreenEffect.FetchOriginal(PhotosGridMachine.SCREEN_ID, "a-1", "ab".repeat(32)))
-        // A SUCCESS IS A RE-READ: the bytes are here, and only a read draws them.
-        PhotosGridMachine.reduce(
-            tapped.state,
-            PhotosGridEvent(fetch_settled = PhotosGridEvent.FetchSettled(asset_id = "a-1", fetched = true)),
-        ).effects.any { it is ScreenEffect.ReadPage } shouldBe true
-        // A FAILURE STOPS THE SPINNER AND NAMES WHY, without replacing the library.
-        val failed = PhotosGridMachine.reduce(
-            tapped.state,
-            PhotosGridEvent(
-                fetch_settled = PhotosGridEvent.FetchSettled(asset_id = "a-1", fetched = false, sentence = SharedCopy.FETCH_UNTRUSTED),
-            ),
-        )
-        failed.state.data_!!.cells.single().held shouldBe PhotoCell.Held.HELD_WITHHELD_BY_RULE
-        failed.state.write_failure!!.sentence shouldBe SharedCopy.FETCH_UNTRUSTED
-        failed.state.failure.shouldBeNull()
-        failed.effects.shouldBeEmpty()
-    }
-
-    "every way a fetch ends is fetched or a line that names why, the two outcomes lane C adds included" {
+    "every way a fetch ends is fetched or a line that names why" {
         FetchedOriginal.entries.filter { it.fetched } shouldBe listOf(FetchedOriginal.LANDED, FetchedOriginal.ALREADY_HELD)
-        FetchedOriginal.entries.filterNot { it.fetched }.associateWith { it.sentence } shouldBe mapOf(
-            FetchedOriginal.UNREACHABLE to SharedCopy.FETCH_UNREACHABLE,
-            FetchedOriginal.NOT_IN_BACKUP to SharedCopy.FETCH_NOT_IN_BACKUP,
-            FetchedOriginal.UNTRUSTED to SharedCopy.FETCH_UNTRUSTED,
-            FetchedOriginal.DAMAGED to SharedCopy.FETCH_DAMAGED,
-        )
-        FetchedOriginal.entries.filter { it.fetched }.all { it.sentence.isEmpty() } shouldBe true
+        // The sentences are Rust's (`photos::fetch`); the shell reports the closed outcome.
+        FetchedOriginal.entries.filterNot { it.fetched }.map { it.name } shouldBe
+            listOf("UNREACHABLE", "NOT_IN_BACKUP", "UNTRUSTED", "DAMAGED")
     }
 })

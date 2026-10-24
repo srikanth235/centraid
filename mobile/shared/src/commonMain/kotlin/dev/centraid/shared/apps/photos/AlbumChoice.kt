@@ -124,7 +124,7 @@ public object AlbumChoice {
         select = listOf("id", "title"),
         from = ENTITY_TABLE,
         where_ = "kind = ? AND deleted_at IS NULL",
-        bind = listOf(Value(text = PhotosCollectionsReads.ALBUM_KIND)),
+        bind = listOf(Value(text = "album")),
         order = PageOrder(sort_column = "title", pk_column = "id"),
     )
 
@@ -297,7 +297,7 @@ public object AlbumChoice {
      * not ride with it.
      *
      * An empty name is not a write: `title` is `minLength: 1` and the vault
-     * would refuse it. The key is `PhotosCollectionsMachine`'s, so a name typed
+     * would refuse it. The key is the album create's own, so a name typed
      * on Collections and the same name typed here are the same intent for the
      * answer's sake; it makes no second create one (R-1088-12), and the sheet's
      * field, which clears on Create, is what stops a repeat.

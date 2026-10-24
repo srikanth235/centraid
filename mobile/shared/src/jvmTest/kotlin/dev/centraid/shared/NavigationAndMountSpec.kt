@@ -2,7 +2,6 @@ package dev.centraid.shared
 
 import centraid.screen.v1.DocsDriveState
 import centraid.screen.v1.PhotoStateView
-import centraid.screen.v1.PhotosGridState
 import dev.centraid.shared.nav.Destination
 import dev.centraid.shared.nav.NavStack
 import dev.centraid.shared.shell.Mount
@@ -27,20 +26,6 @@ class NavigationAndMountSpec : StringSpec({
         stack.current shouldBe Destination.Home
         stack.pop() shouldBe stack
         shouldThrow<IllegalArgumentException> { NavStack(emptyList()) }
-    }
-
-    "a band destination changes in place, so back does not walk the bands" {
-        // Doctrine 1. A second screen per band would make every band tap a
-        // push, and a member who looked at three bands would press back three
-        // times to leave Photos.
-        val stack = NavStack()
-            .push(Destination.PhotosHome())
-            .withPhotosDestination(PhotosGridState.Destination.DESTINATION_COLLECTIONS)
-            .withPhotosDestination(PhotosGridState.Destination.DESTINATION_SEARCH)
-        stack.entries.size shouldBe 2
-        (stack.current as Destination.PhotosHome).destination shouldBe
-            PhotosGridState.Destination.DESTINATION_SEARCH
-        stack.pop().current shouldBe Destination.Home
     }
 
     "a band destination from somewhere else IS a push" {

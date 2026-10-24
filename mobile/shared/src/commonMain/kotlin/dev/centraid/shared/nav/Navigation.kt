@@ -5,7 +5,6 @@ import centraid.screen.v1.DocsDriveState
 import centraid.screen.v1.PeopleHomeState
 import centraid.screen.v1.PhotoShelf
 import centraid.screen.v1.PhotoStateView
-import centraid.screen.v1.PhotosGridState
 import centraid.screen.v1.PlacesState
 
 /**
@@ -23,16 +22,16 @@ import centraid.screen.v1.PlacesState
  *
  * ## The four doctrines, as types
  *
- * 1. A **band destination is a parameter**, so [Destination.PhotosHome] carries
- *    one and there is no `PhotosCollections` destination.
+ * 1. A **band destination is a parameter**: Photos' Collections and Search are
+ *    destinations of one Rust screen (`photos.home`), never a push.
  * 2. **Names ride along the route**, so [Destination.DocsFolder] carries
  *    `folderName` and an app bar need not wait a replica round trip.
  * 3. A **discriminated union, not a bag of optionals**:
  *    [Destination.PhotoStateViewRoute] holds a `PhotoStateView`, whose `view`
  *    is a oneof.
  * 4. **An OS permission is not a route.** There is no `PhotoPermission`
- *    destination and there never will be; the grant is a field on
- *    `PhotosGridState`.
+ *    destination and there never will be; the grant is a field of the Photos
+ *    home screen's view state.
  */
 public sealed interface Destination {
     public data object Home : Destination
@@ -67,16 +66,6 @@ public sealed interface Destination {
      * sends `NavPopped`.
      */
     public data class RustScreen(val route: Route) : Destination
-
-    public data class PhotosHome(
-        /**
-         * `more` IS ABSENT FROM THIS TYPE, and cannot be added: it is a
-         * `PhotosGridState.Destination`, and `more` is a
-         * `PhotosGridState.Sheet` (`navigation.ts:19-24`).
-         */
-        val destination: PhotosGridState.Destination =
-            PhotosGridState.Destination.DESTINATION_LIBRARY,
-    ) : Destination
 
     /**
      * A PHOTO SHELF: the library under a predicate.
@@ -124,7 +113,7 @@ public sealed interface Destination {
      * PLACES, and CARDS-OR-MAP IS A PARAMETER.
      *
      * v0's `PlacesView` and `PlacesMap` were two routes over one read. The
-     * presentation rides the destination for [PhotosHome]'s reason: moving
+     * presentation rides the destination for the band's reason: moving
      * between them is not a push, so back does not walk through the
      * presentations a member happened to tap.
      */
@@ -356,22 +345,6 @@ public data class NavStack(val entries: List<Destination> = listOf(Destination.H
     /** Pop, unless this is the floor. Popping Home is not a thing. */
     public fun pop(): NavStack =
         if (entries.size == 1) this else NavStack(entries.dropLast(1))
-
-    /**
-     * Change a band destination IN PLACE.
-     *
-     * The whole point of doctrine 1: moving from the library band to the
-     * collections band is not a push, so back does not walk through the bands
-     * a member happened to tap. A second screen per band would make it one.
-     */
-    public fun withPhotosDestination(destination: PhotosGridState.Destination): NavStack {
-        val top = current
-        return if (top is Destination.PhotosHome) {
-            NavStack(entries.dropLast(1) + top.copy(destination = destination))
-        } else {
-            push(Destination.PhotosHome(destination))
-        }
-    }
 
     /** The same in-place swap for the Places presentation, and for the same
      *  reason: cards and the map are one screen. */

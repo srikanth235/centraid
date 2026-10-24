@@ -16,7 +16,6 @@ import dev.centraid.shared.apps.people.PeopleHomeMachine
 import dev.centraid.shared.apps.people.PeoplePersonMachine
 import dev.centraid.shared.apps.photos.PhotoLightboxMachine
 import dev.centraid.shared.apps.photos.PhotoShelfMachine
-import dev.centraid.shared.apps.photos.PhotosGridMachine
 import dev.centraid.shared.nav.AgendaEntry
 import dev.centraid.shared.nav.Destination
 import dev.centraid.shared.nav.RowRef
@@ -87,7 +86,7 @@ class ScreenOpeningsSpec : StringSpec({
                 RowRoutes.route(row("people", "tag", "x"))!!.screenId shouldBe PeopleHomeMachine.SCREEN_ID
         RowRoutes.route(row("money", "tag", "x"))!!.screenId shouldBe MoneyHomeMachine.SCREEN_ID
         RowRoutes.route(row("health", "activity", "x"))!!.screenId shouldBe HealthHomeMachine.SCREEN_ID
-        RowRoutes.route(row("photos", "tag", "x"))!!.screenId shouldBe PhotosGridMachine.SCREEN_ID
+        RowRoutes.route(row("photos", "tag", "x"))!!.screenId shouldBe ScreenIds.RUST_SCREEN
         RowRoutes.route(row("weather", "forecast", "x")).shouldBeNull()
         RowRoutes.appHomeRoute("locker").shouldBeNull()
     }

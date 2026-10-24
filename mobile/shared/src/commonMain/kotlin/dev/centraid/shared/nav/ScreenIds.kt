@@ -18,6 +18,8 @@ public object ScreenIds {
     /** A screen Rust owns (#1135): the opening's event is the encoded `centraid.core.v1.Route`, whichever app it opens. */
     public const val RUST_SCREEN: String = "rust.screen"
 
+    public const val PHOTOS_GRID: String = "photos.grid"
+
     public const val NOTES_EDITOR: String = "notes.editor"
     public const val NOTES_LIBRARY: String = "notes.library"
     public const val NOTES_NOTEBOOKS: String = "notes.notebooks"
@@ -62,7 +64,6 @@ public object ScreenIds {
     public const val LOCKER_IMPORT: String = "locker.import"
     public const val LOCKER_ACCESS: String = "locker.access"
 
-    public const val PHOTOS_GRID: String = "photos.grid"
     public const val PHOTOS_SHELF: String = "photos.shelf"
     public const val PHOTOS_LIGHTBOX: String = "photos.lightbox"
 }

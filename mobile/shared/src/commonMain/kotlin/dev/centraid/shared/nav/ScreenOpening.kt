@@ -238,7 +238,6 @@ public object ScreenOpenings {
             assetId = destination.assetId,
             neighbours = destination.neighbours,
         )
-        is Destination.PhotosHome -> ScreenOpening(ScreenIds.PHOTOS_GRID)
         // A SCREEN RUST OWNS: the event is the `Route` Rust built, which the shell pushes as it stands.
         is Destination.RustScreen -> screen(ScreenIds.RUST_SCREEN, destination.route.encode())
         else -> null

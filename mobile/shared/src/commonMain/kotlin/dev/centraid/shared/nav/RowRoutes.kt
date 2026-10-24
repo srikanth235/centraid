@@ -116,7 +116,7 @@ public object RowRoutes {
         AppIds.DOCS -> Destination.DocsHome()
         AppIds.PEOPLE -> Destination.PeopleHome()
         AppIds.AGENDA -> AgendaEntry.home()
-        AppIds.PHOTOS -> Destination.PhotosHome()
+        AppIds.PHOTOS -> PhotosEntry.home()
         AppIds.MONEY -> Destination.MoneyHome()
         AppIds.HEALTH -> Destination.HealthHome()
         else -> null
