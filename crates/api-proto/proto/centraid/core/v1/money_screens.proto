@@ -239,6 +239,10 @@ message MoneyCategoryTable {
   string heading = 1;
   string currency = 2;
   repeated MoneyCategoryLine rows = 3;
+  // The column heads.
+  string planned_label = 4;
+  string spent_label = 5;
+  string left_label = 6;
 }
 
 message MoneyCategoryLine {
@@ -281,6 +285,10 @@ message MoneyCashflowSeries {
   // The currency code when more than one currency is drawn.
   string heading = 2;
   repeated MoneyCashflowMonth months = 3;
+  // The legend and the month rows' figure labels.
+  string in_label = 4;
+  string out_label = 5;
+  string partial_label = 6;
 }
 
 message MoneyCashflowMonth {
@@ -299,6 +307,8 @@ message MoneyCashflowMonth {
   // The month is not over: outlined, never compared as if whole.
   bool partial = 10;
   string accessibility_label = 11;
+  // `rate_label` and, while the month is not over, its note: one meta line.
+  string meta = 12;
 }
 
 message MoneyHomeEvent {

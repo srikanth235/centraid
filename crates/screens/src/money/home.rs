@@ -623,6 +623,9 @@ fn spending(locale: Locale, answer: &wire::MoneySpending) -> wire::MoneySpending
                 String::new()
             },
             currency: (*currency).to_owned(),
+            planned_label: words::planned(locale),
+            spent_label: capitalised(&words::spent(locale)),
+            left_label: words::left(locale),
             rows: answer
                 .categories
                 .iter()
@@ -832,6 +835,9 @@ fn cashflow(locale: Locale, answer: &wire::MoneyCashflow) -> wire::MoneyCashflow
                 } else {
                     String::new()
                 },
+                in_label: words::in_word(locale),
+                out_label: words::out_word(locale),
+                partial_label: words::partial_month(locale),
                 months: series
                     .months
                     .iter()
@@ -855,6 +861,18 @@ fn cashflow(locale: Locale, answer: &wire::MoneyCashflow) -> wire::MoneyCashflow
                             })
                             .unwrap_or_default(),
                         partial: month.partial,
+                        meta: [
+                            rate_label_of(locale, month.savings_rate_bp),
+                            if month.partial {
+                                words::partial_month(locale)
+                            } else {
+                                String::new()
+                            },
+                        ]
+                        .into_iter()
+                        .filter(|part| !part.is_empty())
+                        .collect::<Vec<_>>()
+                        .join(" · "),
                         accessibility_label: [
                             fold::month_label(locale, &month.month),
                             if month.partial {
@@ -926,4 +944,23 @@ impl Screen for Home {
             ..wire::ViewState::default()
         }
     }
+}
+
+fn capitalised(word: &str) -> String {
+    let mut chars = word.chars();
+    chars
+        .next()
+        .map(|first| first.to_uppercase().chain(chars).collect())
+        .unwrap_or_default()
+}
+
+fn rate_label_of(locale: Locale, rate: Option<i64>) -> String {
+    rate.filter(|rate| *rate >= 0)
+        .map(|rate| {
+            fill(
+                &words::rate_kept(locale),
+                &[("percent", &(rate / BP_PERCENT).to_string())],
+            )
+        })
+        .unwrap_or_default()
 }
