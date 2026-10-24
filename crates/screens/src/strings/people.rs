@@ -90,6 +90,7 @@ catalog! {
         "They were moved to the trash or merged into someone else."
     );
     plain gone_title = ("This person is not in People.", "This person is not in People.");
+    plain import_contacts = ("Import contacts", "Import contacts");
     plain import_contacts_add_account = (
         "No contacts found. Add your Google or other account in your phone's Settings, then come back.",
         "No contacts found. Add your Google or other account in your phone's Settings, then come back."

@@ -348,6 +348,7 @@ impl Home {
             sort_heading: words::sort_heading(locale),
             home: words::band_home(locale),
             cancel: words::cancel(locale),
+            import_contacts: words::import_contacts(locale),
         }
     }
 

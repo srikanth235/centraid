@@ -124,6 +124,8 @@ message PeopleHomeChrome {
   string sort_heading = 8;
   string home = 9;
   string cancel = 10;
+  // The day-one empty state's import, "Import contacts".
+  string import_contacts = 11;
 }
 
 // One filter chip, with its count over the whole window.

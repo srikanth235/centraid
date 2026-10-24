@@ -22,14 +22,11 @@ extension Centraid_Core_V1_Denied {
 }
 
 extension Centraid_Core_V1_ImportSource {
-    /// ONLY THE DOORS THE KIT CAN OPEN. The kit draws an import as the empty
-    /// state's action and `ShellModel.importFromPhone` runs it; that is the
-    /// contacts'. Agenda's calendar import is a Rust event (`ImportRequested`,
-    /// drawn by `AgendaHomeView`) and the reminders have no door yet, so both
-    /// draw the app's own action here.
-    var legacy: Centraid_Screen_V1_ImportSource {
-        self == .contacts ? .contacts : .unspecified
-    }
+    /// NO DOOR THE KIT CAN OPEN. Every import is a Rust event now — Agenda's
+    /// calendar (`ImportRequested`, drawn by `AgendaHomeView`) and People's
+    /// contacts (`ImportContactsTapped`, drawn by `PeopleHomeView`) — and the
+    /// reminders have no door yet, so the kit draws the app's own action.
+    var legacy: Centraid_Screen_V1_ImportSource { .unspecified }
 }
 
 extension Centraid_Core_V1_EmptyState {
