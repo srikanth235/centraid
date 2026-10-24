@@ -457,14 +457,12 @@ fn merge_is_a_choices_sheet_from_the_roster_then_a_confirm_then_the_merge() {
         panic!("the choices stand");
     };
     // Everyone but the person themselves.
-    assert_eq!(
-        choices
-            .choices
-            .iter()
-            .map(|c| c.party_id.clone())
-            .collect::<Vec<_>>(),
-        [dupe.clone()]
-    );
+    let offered: Vec<&str> = choices
+        .choices
+        .iter()
+        .map(|c| c.party_id.as_str())
+        .collect();
+    assert_eq!(offered, [dupe.as_str()]);
     send_person(
         &mut d,
         i,

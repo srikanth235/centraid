@@ -166,21 +166,21 @@ pub fn editor_state(v: &wire::ViewState) -> &wire::PeopleEditorState {
 /// The roster surface of People's home.
 pub fn roster_data(v: &wire::ViewState) -> &wire::PeopleRosterData {
     match &home_state(v).content {
-        Some(wire::people_home_state::Content::Roster(data)) => data,
+        Some(wire::people_home_state::Content::Roster(data)) => data.as_ref(),
         other => panic!("not the roster: {other:?}"),
     }
 }
 
 pub fn touch_data(v: &wire::ViewState) -> &wire::PeopleTouchData {
     match &home_state(v).content {
-        Some(wire::people_home_state::Content::Touch(data)) => data,
+        Some(wire::people_home_state::Content::Touch(data)) => data.as_ref(),
         other => panic!("not Touch: {other:?}"),
     }
 }
 
 pub fn person_data(v: &wire::ViewState) -> &wire::PeoplePersonData {
     match &person_state(v).content {
-        Some(wire::people_person_state::Content::Data(data)) => data,
+        Some(wire::people_person_state::Content::Data(data)) => data.as_ref(),
         other => panic!("not a person's data: {other:?}"),
     }
 }

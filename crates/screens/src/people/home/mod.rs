@@ -463,13 +463,15 @@ impl Screen for Home {
                 Phase::Loading => C::Loading(wire::Loading { first_load: true }),
                 Phase::Failed => failure(),
                 Phase::Denied(denial) => C::Denied(denied(locale, denial)),
-                Phase::Ready(answer) => C::Touch(rows::touch(locale, answer)),
+                Phase::Ready(answer) => C::Touch(Box::new(rows::touch(locale, answer))),
             },
             _ => match &self.roster {
                 Phase::Loading => C::Loading(wire::Loading { first_load: true }),
                 Phase::Failed => failure(),
                 Phase::Denied(denial) => C::Denied(denied(locale, denial)),
-                Phase::Ready(answer) => C::Roster(rows::roster(locale, answer, self.chip)),
+                Phase::Ready(answer) => {
+                    C::Roster(Box::new(rows::roster(locale, answer, self.chip)))
+                }
             },
         });
         let chips = self.chips(locale);

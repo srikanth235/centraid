@@ -16,8 +16,7 @@ pub struct Kinds {
 }
 
 impl Kinds {
-    fn of(locale: Locale, choices: &[(&'static str, String)]) -> Self {
-        let _ = locale;
+    fn of(choices: &[(&'static str, String)]) -> Self {
         Self {
             keys: choices.iter().map(|(key, _)| *key).collect(),
             picked: 0,
@@ -99,7 +98,7 @@ pub struct Sheet {
 impl Sheet {
     pub fn log_touch(locale: Locale) -> Self {
         Self::of(Form::LogTouch(LogTouch {
-            kinds: Kinds::of(locale, &fold::log_kinds(locale)),
+            kinds: Kinds::of(&fold::log_kinds(locale)),
             note: String::new(),
         }))
     }
@@ -118,7 +117,7 @@ impl Sheet {
 
     pub fn channel(locale: Locale) -> Self {
         Self::of(Form::Channel(Channel {
-            kinds: Kinds::of(locale, &fold::channel_kinds(locale)),
+            kinds: Kinds::of(&fold::channel_kinds(locale)),
             value: String::new(),
             label: String::new(),
             preferred: false,
