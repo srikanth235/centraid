@@ -147,6 +147,31 @@ private struct RustScreenView: View {
                 send: { store.send(instance, .docsEditor($0)) },
                 onClose: pop
             )
+        case .healthHome(let state)?:
+            HealthHomeView(
+                state: state,
+                send: { store.send(instance, .healthHome($0)) },
+                open: open,
+                onHome: { shell.path.removeAll() }
+            )
+        case .healthMetric(let state)?:
+            HealthMetricView(
+                state: state,
+                send: { store.send(instance, .healthMetric($0)) },
+                onBack: pop
+            )
+        case .healthWorkout(let state)?:
+            HealthWorkoutView(
+                state: state,
+                send: { store.send(instance, .healthWorkout($0)) },
+                onBack: pop
+            )
+        case .healthConnect(let state)?:
+            HealthConnectView(
+                state: state,
+                send: { store.send(instance, .healthConnect($0)) },
+                onBack: pop
+            )
         case .notesHome(let state)?:
             NotesHomeView(
                 state: state,

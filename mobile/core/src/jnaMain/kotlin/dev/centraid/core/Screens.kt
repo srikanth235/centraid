@@ -79,8 +79,8 @@ public class Screens(
         request(ScreenRequest(nav = event))
 
     /** Report the device's locale and zone; Rust formats from them. */
-    public suspend fun environment(locale: String, zone: String): CoreOutcome<Unit> =
-        request(ScreenRequest(environment = Environment(locale = locale, zone = zone)))
+    public suspend fun environment(locale: String, zone: String, platform: String = "android"): CoreOutcome<Unit> =
+        request(ScreenRequest(environment = Environment(locale = locale, zone = zone, platform = platform)))
 
     /** Answer an effect the shell performed. */
     public suspend fun answer(effect: EffectRequest, result: EffectResult): CoreOutcome<Unit> =

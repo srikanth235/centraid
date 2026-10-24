@@ -17,12 +17,12 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import centraid.screen.v1.HealthConnectEvent
-import centraid.screen.v1.HealthConnectState
-import centraid.screen.v1.HealthMetricEvent
-import centraid.screen.v1.HealthMetricState
-import centraid.screen.v1.HealthWorkoutEvent
-import centraid.screen.v1.HealthWorkoutState
+import centraid.core.v1.HealthConnectEvent
+import centraid.core.v1.HealthConnectState
+import centraid.core.v1.HealthMetricEvent
+import centraid.core.v1.HealthMetricState
+import centraid.core.v1.HealthWorkoutEvent
+import centraid.core.v1.HealthWorkoutState
 import dev.centraid.android.kit.EmptyStateView
 import dev.centraid.android.kit.FieldRow
 import dev.centraid.android.kit.InkButton
@@ -33,11 +33,12 @@ import dev.centraid.android.kit.KitWords
 import dev.centraid.android.kit.PushedPage
 import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.screenContentOf
+import dev.centraid.android.kit.toKit
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 
 // ---------------------------------------------------------------------------
-// health.metric: one metric over a week, a month or a year (#1129)
+// health.metric: one metric over a week, a month or a year (#1129, #1135)
 // ---------------------------------------------------------------------------
 
 @Composable
@@ -60,7 +61,7 @@ internal fun HealthMetricScreen(state: HealthMetricState, onEvent: (HealthMetric
             ) { data ->
                 val empty = data.empty
                 if (empty != null) {
-                    EmptyStateView(empty, onAction = null)
+                    EmptyStateView(empty.toKit(), onAction = null)
                 } else {
                     LazyColumn {
                         item(key = "head") {
@@ -97,7 +98,7 @@ internal fun HealthWorkoutScreen(state: HealthWorkoutState, onEvent: (HealthWork
         ) { data ->
             val gone = data.gone
             if (gone != null) {
-                EmptyStateView(gone, onAction = null)
+                EmptyStateView(gone.toKit(), onAction = null)
             } else {
                 LazyColumn {
                     item(key = "head") {
@@ -126,8 +127,9 @@ internal fun HealthWorkoutScreen(state: HealthWorkoutState, onEvent: (HealthWork
 
 /**
  * CONNECT. A check box a type, the note, and the one Ink button; the status line says why the
- * button is off, that the store is being read, or why it was refused. The tap is an intent the
- * route answers with Health Connect's own sheet ([rememberHealthConnect]).
+ * button is off, that the store is being read, or why it was refused. The tap is an event: Rust
+ * asks the shell to read the store (`HealthRead`, with Health Connect's own permission sheet at
+ * the member's tap, `ScreenEffects.kt`). A connected page is `finished` and the host pops it.
  */
 @Composable
 internal fun HealthConnectScreen(state: HealthConnectState, onEvent: (HealthConnectEvent) -> Unit, onBack: () -> Unit) {

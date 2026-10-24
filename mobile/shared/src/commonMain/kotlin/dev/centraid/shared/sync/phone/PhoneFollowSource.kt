@@ -16,7 +16,7 @@ import kotlin.coroutines.resume
  * ONE PHONE STORE A SHELL CAN FOLLOW, as its app makes it (#1127). The app owns what its reader
  * returns and how that becomes a pass ([bind]); the shell's follower owns when a pass runs and
  * what is asked. Neither names the other's types, which is why this seam is generic: People
- * brings `ContactsFollow`, Health `HealthFollow`, and the shell hands the follower the list.
+ * brings `ContactsFollow`, and the shell hands the follower the list.
  */
 public interface PhoneFollowSource {
     public val source: PhoneSource

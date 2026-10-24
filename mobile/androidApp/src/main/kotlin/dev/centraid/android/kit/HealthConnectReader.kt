@@ -2,13 +2,10 @@ package dev.centraid.android.kit
 
 import android.content.Context
 import android.content.Intent
-import android.icu.util.LocaleData
-import android.icu.util.ULocale
 import android.os.Build
 import androidx.activity.result.contract.ActivityResultContract
 import androidx.annotation.ChecksSdkIntAtLeast
 import androidx.annotation.RequiresApi
-import androidx.core.content.edit
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.HealthConnectFeatures
 import androidx.health.connect.client.PermissionController
@@ -28,110 +25,97 @@ import androidx.health.connect.client.request.AggregateGroupByPeriodRequest
 import androidx.health.connect.client.request.AggregateRequest
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
-import dev.centraid.shared.apps.health.HealthDayTotal
-import dev.centraid.shared.apps.health.HealthDevices
-import dev.centraid.shared.apps.health.HealthImport
-import dev.centraid.shared.apps.health.HealthMetrics
-import dev.centraid.shared.apps.health.HealthRead
-import dev.centraid.shared.apps.health.HealthReader
-import dev.centraid.shared.apps.health.HealthStoreKind
-import dev.centraid.shared.apps.health.HealthWindow
-import dev.centraid.shared.apps.health.PhoneWorkout
-import kotlinx.coroutines.CoroutineScope
+import centraid.core.v1.EffectFailed
+import centraid.core.v1.EffectResult
+import centraid.core.v1.HealthDayTotal
+import centraid.core.v1.HealthPhoneWorkout
+import centraid.core.v1.HealthRead
+import centraid.core.v1.HealthSnapshot
+import dev.centraid.shared.sync.phone.PhoneDevice
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.time.Instant
 import java.time.LocalDate
 import java.time.Period
 import java.time.ZoneId
-import java.util.Locale
 import kotlin.reflect.KClass
 
 /**
- * HEALTH CONNECT → HEALTH, READ ONLY (#1129). Everything the Android shell does with Health
- * Connect lives here: whether it can be reached, which permissions a chosen type needs, the
- * member's chosen set, the phone's facts stated to the screens, and the [HealthReader] the
- * follower and Connect read through.
+ * HEALTH CONNECT → HEALTH, READ ONLY (#1129, #1135). Everything the Android shell does with Health
+ * Connect lives here: whether it can be reached, which permissions a chosen type needs, and the
+ * `HealthRead` effect it answers with a `HealthSnapshot`.
  *
  * - **Nothing is written to Health Connect** (R-1129-7): the manifest declares `READ_*` health
  *   permissions only and this file calls no insert, update or delete (`HealthConnectReadOnlySpec`
  *   holds both).
  * - **The OS is asked only at the member's Connect tap**, through [contract], for exactly the
- *   chosen types' [permissionsFor] (R-1127-15); a read never asks, and answers null when nothing
- *   was ever granted.
+ *   chosen types' [permissionsFor] (R-1127-15), when the effect says `ask_permission`; a read never
+ *   asks, and answers `failed(denied)` when nothing was ever granted.
  * - **Below API 26, or while Health Connect is not available, no class of the client is
  *   touched.** Its library says minSdk 26 and the app stays at 24 (an owner setting), so the
  *   manifest admits the library below its floor and [HealthConnectAccess.status] gates every
  *   call: below 26 Health Connect is [HealthConnectAccess.Status.UNAVAILABLE].
- * - **The chosen set is the shell's** (R-1129-6), kept in this app's own preferences and never
- *   in the vault, like a followed folder's access.
+ * - **The chosen set is Rust's** (R-1129-6): the screen keeps it as a per-device habit and sends
+ *   it with each read. Nothing here remembers it.
  *
  * Built on the application context, so it keeps no activity alive.
  */
 internal class AndroidHealth(context: Context) {
     private val context: Context = context.applicationContext
-    private val prefs = this.context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-    private val io = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    /** The reader the follower and Connect hand to the shared engine. */
-    val reader: HealthReader = HealthConnectReader(this.context, ::chosen)
+    /** One permission sheet may be out, and its answer. */
+    private var waiting: CompletableDeferred<Set<String>>? = null
 
     /** Whether Health Connect can be asked anything on this phone, now. */
     fun status(): HealthConnectAccess.Status = HealthConnectAccess.status(context)
 
-    /** The type keys the member chose on Connect, in the order Health lists them; empty before the first Connect. */
-    fun chosen(): List<String> {
-        val stored = prefs.getStringSet(CHOSEN, null).orEmpty()
-        return HealthConnectAccess.KEYS.filter { it in stored }
-    }
-
-    /** Keep the member's choice: the shell's, never the vault's (R-1129-6). */
-    fun choose(keys: List<String>) {
-        prefs.edit { putStringSet(CHOSEN, keys.toSet()) }
-    }
-
-    /**
-     * STATE THE PHONE'S FACTS to the screens ([HealthDevices]): Health Connect, the locale's
-     * measurement system and the chosen set at once, then — off the main thread — which chosen
-     * types Health Connect refused. Called when the activity starts, which a locale change also
-     * does (the activity is re-made), and after Connect.
-     */
-    fun state() {
-        val chosen = chosen()
-        HealthDevices.update(HealthDevices.HEALTH_CONNECT, metric(), chosen, HealthDevices.current.refused.filter { it in chosen })
-        if (chosen.isEmpty() || status() != HealthConnectAccess.Status.AVAILABLE) return
-        io.launch {
-            val granted = HealthConnectAccess.granted(context) ?: return@launch
-            HealthDevices.update(HealthDevices.HEALTH_CONNECT, metric(), chosen, HealthConnectAccess.refused(chosen, granted))
-        }
-    }
-
     /** The permissions Connect asks for [keys]: each type's read, a workout's figures, and the history read where offered. */
     fun permissionsFor(keys: List<String>): Set<String> = HealthConnectAccess.permissionsFor(context, keys)
-
-    /** What Health Connect has granted, or null when it cannot be asked. Suspends; call off the main thread. */
-    suspend fun granted(): Set<String>? = HealthConnectAccess.granted(context)
 
     /** The permission sheet, as an activity result; below API 26 a contract that grants nothing. */
     fun contract(): ActivityResultContract<Set<String>, Set<String>> = HealthConnectAccess.contract()
 
-    /**
-     * THE MEMBER'S MEASUREMENT SYSTEM, for display only (storage is the metric's own unit).
-     * ICU's answer on API 28 and up; below it, the three countries that measure in miles and
-     * pounds. Only the US system reads as imperial.
-     */
-    private fun metric(): Boolean = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-        LocaleData.getMeasurementSystem(ULocale.getDefault()) != LocaleData.MeasurementSystem.US
-    } else {
-        Locale.getDefault().country !in IMPERIAL_COUNTRIES
+    /** The sheet's answer reached the activity. */
+    fun permissionsAnswered(granted: Set<String>) {
+        waiting?.complete(granted)
+        waiting = null
     }
 
-    private companion object {
-        const val PREFS: String = "health"
-        const val CHOSEN: String = "chosen"
-        val IMPERIAL_COUNTRIES: Set<String> = setOf("US", "LR", "MM")
+    /**
+     * THE `HealthRead` EFFECT'S ANSWER: a snapshot of the store, `store_present = false` where
+     * Health Connect is not reachable (`installable` where Google Play can bring it), or
+     * `failed(denied)` when nothing was ever granted. [launch] shows the permission sheet; it is
+     * called only when the effect says the member's tap may ask.
+     */
+    suspend fun snapshot(read: HealthRead, launch: (Set<String>) -> Unit): EffectResult {
+        val status = status()
+        if (status != HealthConnectAccess.Status.AVAILABLE) {
+            return EffectResult(
+                health = HealthSnapshot(
+                    store = HealthSnapshot.Store.STORE_HEALTH_CONNECT,
+                    store_present = false,
+                    installable = status == HealthConnectAccess.Status.INSTALL,
+                ),
+            )
+        }
+        if (read.ask_permission) {
+            val answer = CompletableDeferred<Set<String>>()
+            waiting = answer
+            try {
+                launch(permissionsFor(read.chosen))
+            } catch (_: android.content.ActivityNotFoundException) {
+                waiting = null
+                return denied("the permission sheet could not be shown")
+            }
+            answer.await()
+        }
+        return withContext(Dispatchers.IO) {
+            runCatching { HealthConnectReader(context).read(read) }.getOrNull()
+        }?.let { EffectResult(health = it) } ?: denied("health connect has granted nothing")
     }
+
+    private fun denied(reason: String) = EffectResult(failed = EffectFailed(reason = reason, denied = true))
 }
 
 /**
@@ -146,8 +130,16 @@ internal object HealthConnectAccess {
     @get:ChecksSdkIntAtLeast(api = Build.VERSION_CODES.O)
     val apiSupported: Boolean get() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
 
-    /** The type keys a member can choose, in the order Health lists them ([HealthMetrics], then workouts). */
-    val KEYS: List<String> = HealthMetrics.entries.map { it.key } + HealthMetrics.WORKOUTS
+    /** The type keys Rust names (`HealthRead.chosen`). */
+    object Key {
+        const val STEPS: String = "steps"
+        const val SLEEP: String = "sleep_min"
+        const val ENERGY: String = "active_energy_kcal"
+        const val EXERCISE: String = "exercise_min"
+        const val RESTING_HR: String = "resting_hr_bpm"
+        const val WEIGHT: String = "weight_kg"
+        const val WORKOUTS: String = "workouts"
+    }
 
     private const val PREFIX: String = "android.permission.health."
     const val READ_STEPS: String = PREFIX + "READ_STEPS"
@@ -166,13 +158,13 @@ internal object HealthConnectAccess {
      * (R-1129-6) and not read. Workouts and exercise minutes both stand on exercise sessions.
      */
     val TYPE: Map<String, String> = mapOf(
-        HealthMetrics.STEPS.key to READ_STEPS,
-        HealthMetrics.SLEEP.key to READ_SLEEP,
-        HealthMetrics.ENERGY.key to READ_ACTIVE_CALORIES_BURNED,
-        HealthMetrics.EXERCISE.key to READ_EXERCISE,
-        HealthMetrics.RESTING_HR.key to READ_RESTING_HEART_RATE,
-        HealthMetrics.WEIGHT.key to READ_WEIGHT,
-        HealthMetrics.WORKOUTS to READ_EXERCISE,
+        Key.STEPS to READ_STEPS,
+        Key.SLEEP to READ_SLEEP,
+        Key.ENERGY to READ_ACTIVE_CALORIES_BURNED,
+        Key.EXERCISE to READ_EXERCISE,
+        Key.RESTING_HR to READ_RESTING_HEART_RATE,
+        Key.WEIGHT to READ_WEIGHT,
+        Key.WORKOUTS to READ_EXERCISE,
     )
 
     /**
@@ -200,7 +192,7 @@ internal object HealthConnectAccess {
         if (types.isEmpty()) return emptySet()
         return buildSet {
             addAll(types)
-            if (HealthMetrics.WORKOUTS in keys) addAll(FIGURES)
+            if (Key.WORKOUTS in keys) addAll(FIGURES)
             if (historyOffered(context)) add(READ_HEALTH_DATA_HISTORY)
         }
     }
@@ -234,78 +226,67 @@ internal object HealthConnectAccess {
 }
 
 /**
- * THE READER (#1129, `lane-k-api.md` §3): Health Connect's own statistics for the chosen types over
- * the window the engine derived, and every workout since its start. Off the main thread; **null
- * when Health Connect has granted nothing**, and `storePresent = false` when it is not on the phone.
+ * THE READER (#1129, #1135): Health Connect's own statistics for the chosen types over the window
+ * Rust placed, and every workout since its start. Off the main thread; **null when Health Connect
+ * has granted nothing**.
  *
  * - **Days** are the store's own aggregates bucketed by the device's local day
- *   (`aggregateGroupByPeriod` over `totalsFrom..today`), so a watch and a phone counting the same
+ *   (`aggregateGroupByPeriod` over `totals_from..today`), so a watch and a phone counting the same
  *   steps count once: steps, active energy (kcal), exercise minutes (exercise sessions' duration)
  *   and the day's average resting heart rate. **Weight** is the day's last weighing (kg).
  *   **Sleep** is the minutes asleep of the sessions that END on the day — awake stages left out
  *   where a session has stages, and sessions that overlap (two apps saw one night) merged first.
  * - **A metric is all or nothing.** One that fails part-way is left out of the read entirely, so
- *   the engine's zero rule never reads a lost page as a deleted day (R-1129-3, RP-K-3).
- * - **Workouts** are the exercise sessions started at or after `workoutsSince`, each with the
+ *   Rust's zero rule never reads a lost page as a deleted day (R-1129-3, RP-K-3).
+ * - **Workouts** are the exercise sessions started at or after `workouts_since_ms`, each with the
  *   store's id, its `EXERCISE_TYPE_*` name ([ExerciseNames]), its span, and what Health Connect
  *   aggregates over it. A workout whose figures could not be read is left out and the read is
  *   marked incomplete, which removes nothing (R-1129-5).
  */
-internal class HealthConnectReader(
-    private val context: Context,
-    private val chosen: () -> List<String>,
-) : HealthReader {
-    private val io = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-
-    override fun read(window: HealthWindow, deliver: (HealthRead?) -> Unit) {
-        val keys = chosen()
-        if (!HealthConnectAccess.apiSupported || HealthConnectAccess.status(context) != HealthConnectAccess.Status.AVAILABLE) {
-            return deliver(HealthRead(HealthStoreKind.HEALTH_CONNECT, emptyList(), emptyList(), keys, storePresent = false))
-        }
-        io.launch {
-            // A FAILURE NOBODY PLANNED FOR IS "NOTHING READ": the pass does nothing, never a removal.
-            deliver(runCatching { readNow(window, keys) }.getOrNull())
-        }
-    }
+internal class HealthConnectReader(private val context: Context) {
+    /** A FAILURE NOBODY PLANNED FOR IS "NOTHING READ": the caller makes it a refusal, never a removal. */
+    suspend fun read(read: HealthRead): HealthSnapshot? = readNow(read)
 
     @RequiresApi(Build.VERSION_CODES.O)
-    private suspend fun readNow(window: HealthWindow, keys: List<String>): HealthRead? {
+    private suspend fun readNow(request: HealthRead): HealthSnapshot? {
+        val keys = request.chosen
         val client = HealthConnectClient.getOrCreate(context)
         val granted = client.permissionController.getGrantedPermissions()
         if (HealthConnectAccess.TYPE.values.none { it in granted }) return null
         val refused = HealthConnectAccess.refused(keys, granted)
-        HealthDevices.update(HealthDevices.current.copy(refused = refused))
         val allowed = keys - refused.toSet()
         val zone = ZoneId.systemDefault()
-        val from = LocalDate.parse(window.totalsFrom)
-        val today = LocalDate.parse(window.today)
+        val from = LocalDate.parse(request.totals_from)
+        val today = LocalDate.parse(request.today)
         val days = buildList {
-            dailyReads().forEach { (metric, read) ->
-                if (metric.key in allowed) {
+            dailyReads().forEach { (key, read) ->
+                if (key in allowed) {
                     runCatching { daily(client, from, today, read) }.getOrNull()?.forEach { (day, value) ->
-                        add(HealthDayTotal(day, metric.key, value))
+                        add(HealthDayTotal(day = day, metric = key, value_ = value))
                     }
                 }
             }
-            if (HealthMetrics.SLEEP.key in allowed) {
+            if (HealthConnectAccess.Key.SLEEP in allowed) {
                 runCatching { sleep(client, zone, from, today) }.getOrNull()?.let { addAll(it) }
             }
-            if (HealthMetrics.WEIGHT.key in allowed) {
+            if (HealthConnectAccess.Key.WEIGHT in allowed) {
                 runCatching { weight(client, zone, from, today) }.getOrNull()?.let { addAll(it) }
             }
         }
-        val sessions = if (HealthMetrics.WORKOUTS in allowed) {
-            runCatching { workouts(client, granted, window.workoutsSince) }.getOrNull() ?: (emptyList<PhoneWorkout>() to false)
+        val sessions = if (HealthConnectAccess.Key.WORKOUTS in allowed) {
+            runCatching { workouts(client, granted, request.workouts_since_ms) }.getOrNull()
+                ?: (emptyList<HealthPhoneWorkout>() to false)
         } else {
-            emptyList<PhoneWorkout>() to true
+            emptyList<HealthPhoneWorkout>() to true
         }
-        return HealthRead(
-            store = HealthStoreKind.HEALTH_CONNECT,
+        return HealthSnapshot(
+            store = HealthSnapshot.Store.STORE_HEALTH_CONNECT,
+            store_present = true,
+            refused = refused,
             days = days,
             workouts = sessions.first,
-            chosen = keys,
-            refused = refused,
-            workoutsComplete = sessions.second,
+            workouts_complete = sessions.second,
+            device_id = PhoneDevice.id(),
         )
     }
 
@@ -349,7 +330,7 @@ internal class HealthConnectReader(
         val last = today.toString()
         return SleepNights.minutesByEnd(nights) { end -> Instant.ofEpochMilli(end).atZone(zone).toLocalDate().toString() }
             .filterKeys { it in first..last }
-            .map { (day, minutes) -> HealthDayTotal(day, HealthMetrics.SLEEP.key, minutes) }
+            .map { (day, minutes) -> HealthDayTotal(day = day, metric = HealthConnectAccess.Key.SLEEP, value_ = minutes) }
     }
 
     /** The last weighing of each local day, in kilograms. */
@@ -358,7 +339,7 @@ internal class HealthConnectReader(
         readAll(client, WeightRecord::class, from, today, zone)
             .groupBy { it.time.atZone(zone).toLocalDate().toString() }
             .mapNotNull { (day, weighings) ->
-                weighings.maxByOrNull { it.time }?.let { HealthDayTotal(day, HealthMetrics.WEIGHT.key, it.weight.inKilograms) }
+                weighings.maxByOrNull { it.time }?.let { HealthDayTotal(day = day, metric = HealthConnectAccess.Key.WEIGHT, value_ = it.weight.inKilograms) }
             }
 
     /**
@@ -366,7 +347,7 @@ internal class HealthConnectReader(
      * its span; second is false when one or more could not be read whole.
      */
     @RequiresApi(Build.VERSION_CODES.O)
-    private suspend fun workouts(client: HealthConnectClient, granted: Set<String>, since: Long): Pair<List<PhoneWorkout>, Boolean> {
+    private suspend fun workouts(client: HealthConnectClient, granted: Set<String>, since: Long): Pair<List<HealthPhoneWorkout>, Boolean> {
         val sessions = pages(client, ExerciseSessionRecord::class, TimeRangeFilter.after(Instant.ofEpochMilli(since)))
             .filter { it.startTime.toEpochMilli() >= since }
         val metrics: Set<AggregateMetric<*>> = buildSet {
@@ -387,17 +368,17 @@ internal class HealthConnectReader(
                 return@mapNotNull null
             }
             val origin = session.metadata.dataOrigin.packageName
-            PhoneWorkout(
+            HealthPhoneWorkout(
                 id = session.metadata.id,
                 kind = ExerciseNames.name(session.exerciseType),
-                startedAt = HealthImport.instantOf(session.startTime.toEpochMilli()),
-                endedAt = HealthImport.instantOf(session.endTime.toEpochMilli()),
-                movingSec = figures[ExerciseSessionRecord.EXERCISE_DURATION_TOTAL]?.seconds,
-                distanceM = figures[DistanceRecord.DISTANCE_TOTAL]?.inMeters,
-                energyKcal = figures[ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL]?.inKilocalories,
-                avgHrBpm = figures[HeartRateRecord.BPM_AVG],
-                elevationGainM = figures[ElevationGainedRecord.ELEVATION_GAINED_TOTAL]?.inMeters,
-                recordedBy = origin.takeIf { it.isNotEmpty() }?.let { labels.getOrPut(it) { label(it) } },
+                started_at = session.startTime.toString(),
+                ended_at = session.endTime.toString(),
+                moving_sec = figures[ExerciseSessionRecord.EXERCISE_DURATION_TOTAL]?.seconds,
+                distance_m = figures[DistanceRecord.DISTANCE_TOTAL]?.inMeters,
+                energy_kcal = figures[ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL]?.inKilocalories,
+                avg_hr_bpm = figures[HeartRateRecord.BPM_AVG],
+                elevation_gain_m = figures[ElevationGainedRecord.ELEVATION_GAINED_TOTAL]?.inMeters,
+                recorded_by = origin.takeIf { it.isNotEmpty() }?.let { labels.getOrPut(it) { label(it) } },
             )
         }
         return read to complete
@@ -435,16 +416,16 @@ internal class HealthConnectReader(
 
         /** The four daily metrics; built per read, past the API gate (they are client classes). */
         @RequiresApi(Build.VERSION_CODES.O)
-        fun dailyReads(): List<Pair<HealthMetrics, DailyRead>> =
+        fun dailyReads(): List<Pair<String, DailyRead>> =
             listOf(
-                HealthMetrics.STEPS to DailyRead(StepsRecord.COUNT_TOTAL) { it[StepsRecord.COUNT_TOTAL]?.toDouble() },
-                HealthMetrics.ENERGY to DailyRead(ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL) {
+                HealthConnectAccess.Key.STEPS to DailyRead(StepsRecord.COUNT_TOTAL) { it[StepsRecord.COUNT_TOTAL]?.toDouble() },
+                HealthConnectAccess.Key.ENERGY to DailyRead(ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL) {
                     it[ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL]?.inKilocalories
                 },
-                HealthMetrics.EXERCISE to DailyRead(ExerciseSessionRecord.EXERCISE_DURATION_TOTAL) {
+                HealthConnectAccess.Key.EXERCISE to DailyRead(ExerciseSessionRecord.EXERCISE_DURATION_TOTAL) {
                     it[ExerciseSessionRecord.EXERCISE_DURATION_TOTAL]?.let { duration -> duration.toMillis() / MS_PER_MINUTE }
                 },
-                HealthMetrics.RESTING_HR to DailyRead(RestingHeartRateRecord.BPM_AVG) { it[RestingHeartRateRecord.BPM_AVG]?.toDouble() },
+                HealthConnectAccess.Key.RESTING_HR to DailyRead(RestingHeartRateRecord.BPM_AVG) { it[RestingHeartRateRecord.BPM_AVG]?.toDouble() },
             )
 
         /** The stages a member is awake in: out of a night's asleep total. */
@@ -512,7 +493,7 @@ internal object SleepNights {
 
 /**
  * HEALTH CONNECT'S EXERCISE TYPES BY NAME (#1129): the `ExerciseSessionRecord.EXERCISE_TYPE_*`
- * constant's name is the store's word Health keeps (`HealthKinds.TABLE` maps the ones it seeds);
+ * constant's name is the store's word Rust keeps (`kinds.rs` maps the ones it seeds);
  * a value this table does not know is the store's "other workout". Spelled out rather than
  * reflected, because a release build's shrinker renames the constants.
  */
