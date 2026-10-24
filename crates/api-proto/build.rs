@@ -117,6 +117,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .boxed(".centraid.screen.v1.PhotoLightboxEvent.kind.data")
         // Every app screen's `data` arm: the answer is the whole screen, and
         // its siblings (loading, empty, refused) are a line or two each.
+        .boxed(".centraid.core.v1.PhotosDuplicatesState.content.data")
+        .boxed(".centraid.core.v1.PhotosDuplicateReviewState.content.data")
         .boxed(".centraid.core.v1.AgendaHomeState.content.data")
         .boxed(".centraid.core.v1.AgendaEventState.content.data")
         .boxed(".centraid.core.v1.AgendaEditorState.content.data")

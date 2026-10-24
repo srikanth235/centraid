@@ -44,6 +44,7 @@ pub mod fetch;
 pub mod home;
 pub mod keep_originals;
 pub mod lightbox;
+pub mod media;
 pub mod picker;
 pub mod places;
 pub mod selection;

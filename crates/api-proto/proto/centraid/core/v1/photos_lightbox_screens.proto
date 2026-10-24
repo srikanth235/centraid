@@ -9,9 +9,9 @@ syntax = "proto3";
 
 package centraid.core.v1;
 
-// IMPORTS: add `import "centraid/core/v1/photos_screens.proto";` (the cell, the
-// selection bar, the album sheet), `kit_screens.proto` and `route.proto` when a
-// field first needs one.
+import "centraid/core/v1/kit_screens.proto";
+import "centraid/core/v1/photos_screens.proto";
+import "centraid/core/v1/route.proto";
 
 message PhotosLightboxState {}
 
@@ -21,10 +21,123 @@ message PhotosEditorState {}
 
 message PhotosEditorEvent {}
 
-message PhotosDuplicatesState {}
+// ---------------------------------------------------------------------------
+// Duplicates: the sets, and the decision about one
+// ---------------------------------------------------------------------------
 
-message PhotosDuplicatesEvent {}
+// THE NEAR-DUPLICATE SETS. A list of decisions, not of photographs: each row is
+// the way in to `photos.duplicate_review`. Nothing here deletes anything.
+message PhotosDuplicatesState {
+  // "Duplicates".
+  string title = 1;
+  oneof content {
+    Loading loading = 2;
+    Failure failure = 3;
+    Denied denied = 4;
+    PhotosDuplicatesData data = 5;
+  }
+}
 
-message PhotosDuplicateReviewState {}
+message PhotosDuplicatesData {
+  // Most worth doing first.
+  repeated PhotosDuplicateSet sets = 1;
+  // "3 sets of near-identical photos."; empty with no sets.
+  string lede = 2;
+  // "1.2 MB to reclaim."; empty while any copy's size is unknown.
+  string reclaim = 3;
+  // Set when there are no sets.
+  optional EmptyState empty = 4;
+}
 
-message PhotosDuplicateReviewEvent {}
+message PhotosDuplicateSet {
+  string cluster_key = 1;
+  // "4 near-identical copies".
+  string headline = 2;
+  // "1.2 MB to reclaim." or "Pick the one to keep.".
+  string subhead = 3;
+  optional PhotoTile cover = 4;
+  // Where a tap goes.
+  Route route = 5;
+  string accessibility_label = 6;
+}
+
+message PhotosDuplicatesEvent {
+  oneof kind {
+    // The failure's "Try again".
+    Refreshed refreshed = 1;
+  }
+
+  message Refreshed {}
+}
+
+// ONE SET, AND THE DECISION THAT TRASHES A MEMBER'S PHOTOGRAPHS. Nothing is kept
+// until the member picks; the suggestion is a remark on a row and never a pick;
+// the others go to the trash and never past it.
+message PhotosDuplicateReviewState {
+  string cluster_key = 1;
+  // "Duplicates".
+  string title = 2;
+  oneof content {
+    Loading loading = 3;
+    Failure failure = 4;
+    Denied denied = 5;
+    PhotosDuplicateReviewData data = 6;
+  }
+  // A refused trash, BESIDE the copies and never instead of them.
+  optional StatusLine status = 7;
+}
+
+message PhotosDuplicateReviewData {
+  repeated PhotosDuplicateMember members = 1;
+  // "Pick the copy to keep." / "The others go to the trash and can be restored."
+  string pick_line = 2;
+  string pick_caption = 3;
+  // "Albums are checked. Favorites are not."
+  string checked_line = 4;
+  // The recommendation, as a recommendation: never written into `keep_photo_id`.
+  string suggested_photo_id = 5;
+  // Empty or the sentence that says why this one.
+  string suggestion_reason = 6;
+  // The member's pick; empty until they choose.
+  string keep_photo_id = 7;
+  // "Trash the other 2 copies"; carries no number until a copy is picked.
+  string resolve_label = 8;
+  bool resolve_enabled = 9;
+  // "Choose the copy to keep first." while nothing is picked.
+  string resolve_hint = 10;
+  // Set when no copy is left in the set.
+  optional EmptyState empty = 11;
+}
+
+message PhotosDuplicateMember {
+  string photo_id = 1;
+  PhotoTile tile = 2;
+  // "4032 × 3024 · 3.1 MB", or "This copy" when neither is known.
+  string facts = 3;
+  // "30 July 2026 17:42", or "No capture time on this copy".
+  string captured = 4;
+  bool in_album = 5;
+  // "In an album" when `in_album`.
+  string in_album_label = 6;
+  bool kept = 7;
+  // The suggestion's reason on the suggested row only.
+  string suggestion = 8;
+  string accessibility_label = 9;
+}
+
+message PhotosDuplicateReviewEvent {
+  oneof kind {
+    Refreshed refreshed = 1;
+    KeepPicked keep = 2;
+    // Trash every copy but the kept one.
+    ResolveTapped resolve = 3;
+  }
+
+  message Refreshed {}
+
+  message KeepPicked {
+    string photo_id = 1;
+  }
+
+  message ResolveTapped {}
+}

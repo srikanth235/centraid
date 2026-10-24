@@ -130,6 +130,7 @@ pub mod agenda_home;
 pub mod agenda_todo;
 pub mod photos;
 pub mod photos_home;
+pub mod photos_lightbox;
 pub mod shared;
 pub mod task;
 
