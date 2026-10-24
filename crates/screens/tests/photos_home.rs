@@ -523,6 +523,26 @@ fn the_grant_moves_the_banner_and_never_the_library_and_the_banner_rides_every_s
 }
 
 #[test]
+fn a_permission_or_progress_report_asks_the_shell_for_nothing() {
+    let mut r = rig();
+    let update = r.send(H::Permission(wire::PhotosPermissionChanged {
+        permission: Perm::Denied as i32,
+    }));
+    assert!(
+        update.effects.is_empty(),
+        "a report is a fact, not a request: {:?}",
+        update.effects
+    );
+    let update = r.send(H::Backup(wire::PhotosBackupChanged {
+        phase: Phase::Transferring as i32,
+        assets_transferred_this_session: 1,
+        assets_remaining: 2,
+        paused_reason: String::new(),
+    }));
+    assert!(update.effects.is_empty(), "{:?}", update.effects);
+}
+
+#[test]
 fn import_now_over_an_emptied_library_asks_the_shell_to_run_a_pass() {
     let mut r = rig();
     r.clear_library();
@@ -1004,6 +1024,35 @@ fn a_favourite_keeps_the_selection_and_the_value_is_one_for_the_whole_pick() {
     assert_eq!(r.state().selection.as_ref().unwrap().count, 2);
     r.send(verb(V::Unfavorite));
     assert!(!r.tile(&a).favorite && !r.tile(&b).favorite);
+}
+
+#[test]
+fn the_bar_offers_favorite_in_all_and_unfavorite_only_under_the_favorites_filter() {
+    use wire::photos_batch_action::Kind as V;
+    let mut r = rig();
+    let a = r.photo("bar a", Some("2026-06-01T10:00:00Z"), None);
+    r.arrange(act::photos::FlagPhoto {
+        photo_id: a.clone(),
+    });
+    r.send(H::Refreshed(wire::PhotosRefreshed {}));
+    let kinds = |r: &Rig| -> Vec<i32> {
+        r.state()
+            .selection
+            .as_ref()
+            .unwrap()
+            .actions
+            .iter()
+            .map(|action| action.kind)
+            .collect()
+    };
+    r.send(toggle(&a));
+    assert!(kinds(&r).contains(&(V::Favorite as i32)));
+    assert!(!kinds(&r).contains(&(V::Unfavorite as i32)));
+    // Under Favorites every photograph on screen already is one: the verb turns round.
+    r.send(H::Filter(Filter::Favorites as i32));
+    r.send(toggle(&a));
+    assert!(kinds(&r).contains(&(V::Unfavorite as i32)));
+    assert!(!kinds(&r).contains(&(V::Favorite as i32)));
 }
 
 #[test]
