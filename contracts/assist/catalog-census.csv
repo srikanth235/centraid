@@ -127,6 +127,7 @@ people,add-journal-entry,create,journal_entry,card,no,no
 people,save-contact-channel,edit,contact_point,card,yes: apps/people/PeoplePersonMachine.kt,no
 people,delete-contact-channel,delete,contact_point,card,yes: apps/people/PeoplePersonMachine.kt,no
 people,merge-people,merge,person,card,yes: apps/people/PeoplePersonMachine.kt,no
+people,follow-contacts,import,person,card,no,no
 photos,upload,import,photo,card,yes: apps/photos/PhotoWrites.kt,no
 photos,edit-photo,edit,photo,card,yes: apps/photos/PhotoWrites.kt,no
 photos,retitle-photo,edit,photo,direct,yes: apps/photos/PhotoWrites.kt,yes

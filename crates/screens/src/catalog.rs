@@ -3651,6 +3651,32 @@ pub mod act {
                 value.request()
             }
         }
+
+        /// Follow the phone's address book through follow.contacts, one account at a time: a field the member never changed follows the phone, one they changed stands, a contact the vault does not know is matched by name to a person of the member's own before one is added, and one gone from a complete read goes to the trash if the member never edited it. A record carries a name, its phone numbers and email addresses as points, and an optional MM-DD birthday.
+        #[derive(Clone, Debug, Default)]
+        pub struct FollowContacts {
+            pub origin: String,
+            pub records: String,
+            pub complete: Option<bool>,
+            pub since: Option<String>,
+        }
+        impl FollowContacts {
+            pub const NAME: &str = "follow-contacts";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("origin".to_owned(), text(self.origin));
+                map.insert("records".to_owned(), text(self.records));
+                if let Some(it) = self.complete { map.insert("complete".to_owned(), flag(it)); }
+                if let Some(it) = self.since { map.insert("since".to_owned(), text(it)); }
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
+            }
+        }
+        impl From<FollowContacts> for wire::ActRequest {
+            fn from(value: FollowContacts) -> Self {
+                value.request()
+            }
+        }
     }
 
     pub mod photos {
