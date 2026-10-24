@@ -825,7 +825,7 @@ impl Screen for Import {
             Phase::Loading => Content::Loading(wire::Loading { first_load: true }),
             Phase::Failed => Content::Failure(read::failure(locale)),
             Phase::Denied => Content::Denied(fold::denied(locale)),
-            Phase::Ready(_) => Content::Data(self.data(locale)),
+            Phase::Ready(_) => Content::Data(Box::new(self.data(locale))),
         };
         wire::ViewState {
             kind: Some(wire::view_state::Kind::MoneyImport(wire::MoneyImportState {
