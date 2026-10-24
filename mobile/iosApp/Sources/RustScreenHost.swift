@@ -120,6 +120,25 @@ private struct RustScreenView: View {
                 open: open,
                 onBack: pop
             )
+        case .photosShelf(let state)?:
+            PhotoShelfView(
+                state: state,
+                send: { store.send(instance, .photosShelf($0)) },
+                open: open,
+                onBack: pop
+            )
+        case .photosPicker(let state)?:
+            PhotoPickerView(
+                state: state,
+                send: { store.send(instance, .photosPicker($0)) },
+                onFinished: pop
+            )
+        case .photosPlaces(let state)?:
+            PlacesView(
+                state: state,
+                send: { store.send(instance, .photosPlaces($0)) },
+                open: open
+            )
         case .trash(let state)?:
             CoreTrashView(
                 state: state,

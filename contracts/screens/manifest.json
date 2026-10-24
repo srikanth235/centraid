@@ -276,41 +276,6 @@
       "binary": "contracts/screens/photos-lightbox/withheld-by-rule.bin"
     },
     {
-      "case": "already-in-album",
-      "screen": "photos-picker",
-      "type": "centraid.screen.v1.PhotoPickerState",
-      "textproto": "contracts/screens/photos-picker/already-in-album.textproto",
-      "binary": "contracts/screens/photos-picker/already-in-album.bin"
-    },
-    {
-      "case": "named-before-the-read",
-      "screen": "photos-picker",
-      "type": "centraid.screen.v1.PhotoPickerState",
-      "textproto": "contracts/screens/photos-picker/named-before-the-read.textproto",
-      "binary": "contracts/screens/photos-picker/named-before-the-read.bin"
-    },
-    {
-      "case": "map-presentation",
-      "screen": "photos-places",
-      "type": "centraid.screen.v1.PlacesState",
-      "textproto": "contracts/screens/photos-places/map-presentation.textproto",
-      "binary": "contracts/screens/photos-places/map-presentation.bin"
-    },
-    {
-      "case": "no-coordinate",
-      "screen": "photos-places",
-      "type": "centraid.screen.v1.PlacesState",
-      "textproto": "contracts/screens/photos-places/no-coordinate.textproto",
-      "binary": "contracts/screens/photos-places/no-coordinate.bin"
-    },
-    {
-      "case": "no-places-but-unplaced",
-      "screen": "photos-places",
-      "type": "centraid.screen.v1.PlacesState",
-      "textproto": "contracts/screens/photos-places/no-places-but-unplaced.textproto",
-      "binary": "contracts/screens/photos-places/no-places-but-unplaced.bin"
-    },
-    {
       "case": "corrected",
       "screen": "photos-search",
       "type": "centraid.screen.v1.PhotosSearchState",
@@ -337,20 +302,6 @@
       "type": "centraid.screen.v1.PhotosSearchState",
       "textproto": "contracts/screens/photos-search/resting.textproto",
       "binary": "contracts/screens/photos-search/resting.bin"
-    },
-    {
-      "case": "album-selecting",
-      "screen": "photos-shelf",
-      "type": "centraid.screen.v1.PhotoShelfState",
-      "textproto": "contracts/screens/photos-shelf/album-selecting.textproto",
-      "binary": "contracts/screens/photos-shelf/album-selecting.bin"
-    },
-    {
-      "case": "trash-states-its-window",
-      "screen": "photos-shelf",
-      "type": "centraid.screen.v1.PhotoShelfState",
-      "textproto": "contracts/screens/photos-shelf/trash-states-its-window.textproto",
-      "binary": "contracts/screens/photos-shelf/trash-states-its-window.bin"
     },
     {
       "case": "locked",

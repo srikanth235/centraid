@@ -159,6 +159,12 @@ final class ScreenStore: ObservableObject {
             } else {
                 answer(request, .failed(Self.failure("not a URL")))
             }
+        case .exportOriginals(let export)?:
+            // THE ORIGINALS OF A PICK, to the share sheet or this phone's photos.
+            Task { [core] in
+                let outcome = await ShelfCopyExport.run(export, core: core)
+                answer(request, outcome)
+            }
         #endif
         case .keychain(let operation)?:
             answer(request, Self.keychain(operation))

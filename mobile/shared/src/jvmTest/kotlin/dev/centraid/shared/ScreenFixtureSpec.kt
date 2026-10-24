@@ -15,13 +15,10 @@ import centraid.screen.v1.MediaPermission
 import centraid.screen.v1.NotesEditorState
 import centraid.screen.v1.PhotoCell
 import centraid.screen.v1.PhotoLightboxState
-import centraid.screen.v1.PhotoPickerState
-import centraid.screen.v1.PhotoShelfState
 import centraid.screen.v1.PhotoStateView
 import centraid.screen.v1.PhotosCollectionsState
 import centraid.screen.v1.PhotosGridState
 import centraid.screen.v1.PhotosSearchState
-import centraid.screen.v1.PlacesState
 import centraid.screen.v1.ReadFailureKind
 import centraid.screen.v1.SearchMatch
 import centraid.screen.v1.SeatState
@@ -143,40 +140,6 @@ class ScreenFixtureSpec : StringSpec({
     // Ten screens for v0's fourteen routes. The cases below are the ones a
     // shell that got the distinction wrong would draw wrong; a happy path
     // would pass against every such shell and is therefore not here.
-
-    fun shelf(case: String): PhotoShelfState =
-        PhotoShelfState.ADAPTER.decode(screens.bytes("photos-shelf/$case"))
-
-    "photos-shelf: ONLY trash states a retention window" {
-        // The field exists on the one message that serves four of v0's routes,
-        // so the law is not "trash may state a window" but "no other shelf
-        // may". Asserting the trash case alone would pass against a shelf that
-        // filled the field for everything.
-        //
-        // It is the WINDOW and not a countdown: a countdown needs `purge_at` on
-        // the row, which `PhotoCell` does not carry, and a clock, which
-        // `commonMain` deliberately has not got.
-        val trash = shelf("trash-states-its-window")
-        trash.shelf.shouldNotBeNull().state_view.shouldNotBeNull().mode
-            .shouldNotBeNull().kind shouldBe PhotoStateView.Mode.Kind.KIND_TRASH
-        trash.purge_window_days shouldBe 30
-        listOf("album-selecting").forEach { case ->
-            shelf(case).purge_window_days shouldBe 0
-        }
-    }
-
-    "photos-shelf: a selection outlives the page it was made on" {
-        // `ast-0204` is selected and is NOT in the loaded page, which is the
-        // whole reason the field is on the state: a selection carried on the
-        // cells is a selection the next page read drops.
-        val album = shelf("album-selecting")
-        album.selecting.shouldBeTrue()
-        album.selected_asset_ids shouldContainExactly listOf("ast-0201", "ast-0204")
-        val loaded = album.data_.shouldNotBeNull().cells.map { it.asset_id }
-        loaded.contains("ast-0204").shouldBeFalse()
-        // A keyset cursor, and it is the SORT KEY plus the primary key.
-        album.data_.next_cursor.shouldNotBeNull().contains('|').shouldBeTrue()
-    }
 
     fun lightbox(case: String): PhotoLightboxState =
         PhotoLightboxState.ADAPTER.decode(screens.bytes("photos-lightbox/$case"))
@@ -350,44 +313,6 @@ class ScreenFixtureSpec : StringSpec({
         hits.cells.size shouldBe 2
     }
 
-    fun places(case: String): PlacesState =
-        PlacesState.ADAPTER.decode(screens.bytes("photos-places/$case"))
-
-    "photos-places: 0,0 is a real point, and has_coordinate is what says so" {
-        val rows = places("no-coordinate").data_.shouldNotBeNull().places
-        val nullIsland = rows.single { it.place_id == "plc-0011" }
-        val unlocated = rows.single { it.place_id == "plc-0012" }
-        // Byte-identical doubles; only the bool separates a pin in the Gulf of
-        // Guinea from a place the vault holds no coordinate for. Anything that
-        // tested `lat != 0 || lng != 0` is wrong about one of these.
-        nullIsland.latitude shouldBe unlocated.latitude
-        nullIsland.longitude shouldBe unlocated.longitude
-        nullIsland.has_coordinate.shouldBeTrue()
-        unlocated.has_coordinate.shouldBeFalse()
-    }
-
-    "photos-places: cards and the map are one screen with a parameter" {
-        val cards = places("no-coordinate")
-        val map = places("map-presentation")
-        cards.presentation shouldBe PlacesState.Presentation.PRESENTATION_CARDS
-        map.presentation shouldBe PlacesState.Presentation.PRESENTATION_MAP
-        // Same rows, read the same way. If the map ever needs a field the
-        // cards do not have, it has to be added here in front of a reviewer.
-        map.data_.shouldNotBeNull().unplaced_count shouldBe
-            cards.data_.shouldNotBeNull().unplaced_count
-        map.data_.places.all { row ->
-            cards.data_.places.any { it.place_id == row.place_id }
-        }.shouldBeTrue()
-    }
-
-    "photos-places: the unplaced count is not derived from the page" {
-        // A screen that computed "everything not on this page" would say 0
-        // here, because the page is empty, and be wrong by 1904.
-        val data = places("no-places-but-unplaced").data_.shouldNotBeNull()
-        data.places.shouldContainExactly()
-        data.unplaced_count shouldBe 1904
-    }
-
     fun duplicates(case: String): DuplicatesState =
         DuplicatesState.ADAPTER.decode(screens.bytes("photos-duplicates/$case"))
 
@@ -468,47 +393,13 @@ class ScreenFixtureSpec : StringSpec({
         data.members.map { it.byte_size }.distinct().size shouldBe 1
     }
 
-    fun picker(case: String): PhotoPickerState =
-        PhotoPickerState.ADAPTER.decode(screens.bytes("photos-picker/$case"))
-
-    "photos-picker: what the album holds is not what the member just picked" {
-        val state = picker("already-in-album")
-        val loaded = state.data_.shouldNotBeNull().cells.map { it.asset_id }
-        // The overlap is the point: without it every cell looks addable,
-        // including the ones this album already has.
-        state.already_in_album_asset_ids shouldContainExactly listOf("ast-0201", "ast-0202")
-        state.already_in_album_asset_ids.all { loaded.contains(it) }.shouldBeTrue()
-        // Two lists, disjoint: collapsing them would make the member's new
-        // picks indistinguishable from what was already there.
-        state.picked_asset_ids shouldContainExactly listOf("ast-0203")
-        state.picked_asset_ids.none {
-            state.already_in_album_asset_ids.contains(it)
-        }.shouldBeTrue()
-    }
-
-    "photos-picker: the head is named before the read lands" {
-        val state = picker("named-before-the-read")
-        state.data_.shouldBeNull()
-        state.loading.shouldNotBeNull().first_load.shouldBeTrue()
-        state.collection_name shouldBe "Portugal"
-        // Arrived on `Opened`, from the album the member came from — not from
-        // the library read, which has not landed.
-        state.already_in_album_asset_ids.size shouldBe 2
-        // The screen never pre-picks.
-        state.picked_asset_ids.shouldContainExactly()
-    }
-
-    "photos: each of the nine new screens sets exactly one content state" {
+    "photos: each of the six new screens sets exactly one content state" {
         // The three-state law as a sweep. An empty data case standing in for a
         // failure is the fourth state every one of these is tempted to grow,
         // and the only way to know none of them did is to ask all of them.
         fun sweep(directory: String, count: (ByteArray) -> Int) =
             screens.resolve(directory).binFiles().forEach { count(it.readBytes()) shouldBe 1 }
 
-        sweep("photos-shelf") { bytes ->
-            PhotoShelfState.ADAPTER.decode(bytes)
-                .let { contentCount(it.loading, it.failure, it.data_) }
-        }
         sweep("photos-lightbox") { bytes ->
             PhotoLightboxState.ADAPTER.decode(bytes)
                 .let { contentCount(it.loading, it.failure, it.detail) }
@@ -523,20 +414,12 @@ class ScreenFixtureSpec : StringSpec({
             PhotosSearchState.ADAPTER.decode(bytes)
                 .let { contentCount(it.resting, it.loading, it.failure, it.hits) }
         }
-        sweep("photos-places") { bytes ->
-            PlacesState.ADAPTER.decode(bytes)
-                .let { contentCount(it.loading, it.failure, it.data_) }
-        }
         sweep("photos-duplicates") { bytes ->
             DuplicatesState.ADAPTER.decode(bytes)
                 .let { contentCount(it.loading, it.failure, it.data_) }
         }
         sweep("photos-duplicate-review") { bytes ->
             DuplicateReviewState.ADAPTER.decode(bytes)
-                .let { contentCount(it.loading, it.failure, it.data_) }
-        }
-        sweep("photos-picker") { bytes ->
-            PhotoPickerState.ADAPTER.decode(bytes)
                 .let { contentCount(it.loading, it.failure, it.data_) }
         }
     }

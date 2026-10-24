@@ -45,19 +45,13 @@ const TYPES: Record<string, string> = {
   "money-transaction": "centraid.screen.v1.MoneyTransactionState",
   notes: "centraid.screen.v1.NotesEditorState",
   photos: "centraid.screen.v1.PhotosGridState",
-  // The rest of the photos miniapp: nine state messages for v0's fourteen
-  // routes. The seven that collapsed did so under *a band destination is a
-  // parameter, not a screen*, which is why there is a `photos-shelf` and no
-  // album, place or album-detail directory beside it — those are `PhotoShelf`
-  // arms, and the fixtures in `photos-shelf` are what hold them to one message.
+  // The rest of the photos miniapp that is not yet a Rust screen. The shelf,
+  // the picker and Places are `crates/screens` views now (#1135), tested there.
   "photos-collections": "centraid.screen.v1.PhotosCollectionsState",
   "photos-duplicate-review": "centraid.screen.v1.DuplicateReviewState",
   "photos-duplicates": "centraid.screen.v1.DuplicatesState",
   "photos-lightbox": "centraid.screen.v1.PhotoLightboxState",
-  "photos-picker": "centraid.screen.v1.PhotoPickerState",
-  "photos-places": "centraid.screen.v1.PlacesState",
   "photos-search": "centraid.screen.v1.PhotosSearchState",
-  "photos-shelf": "centraid.screen.v1.PhotoShelfState",
   seat: "centraid.screen.v1.SeatState",
 };
 

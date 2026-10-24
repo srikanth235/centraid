@@ -1,7 +1,6 @@
 package dev.centraid.shared.nav
 
 import centraid.screen.v1.ChatCard
-import centraid.screen.v1.PhotoShelf
 
 /**
  * WHERE A REFERENCE TO ONE ROW OPENS (R-CHROME-6).
@@ -68,9 +67,7 @@ public object RowRoutes {
         AppIds.AGENDA to PROJECT -> AgendaEntry.project(row.id, row.title)
         AppIds.NOTES to NOTE -> Destination.NotesEditor(row.id, title = row.title)
         AppIds.NOTES to NOTEBOOK -> Destination.NotesLibrary(notebookId = row.id, notebookName = row.title, unfiledOnly = false)
-        AppIds.PHOTOS to ALBUM -> Destination.PhotoShelfRoute(
-            PhotoShelf(album = PhotoShelf.Album(collection_id = row.id, name = row.title)),
-        )
+        AppIds.PHOTOS to ALBUM -> PhotosShelfEntry.album(row.id, row.title)
         AppIds.DOCS to FOLDER -> Destination.DocsFolder(row.id, row.title, parent = parent)
         AppIds.DOCS to DOCUMENT -> Destination.DocsDocument(row.id, row.title, parent = parent)
         AppIds.PEOPLE to PERSON -> Destination.PeoplePerson(row.id, row.title)

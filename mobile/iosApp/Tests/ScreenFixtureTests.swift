@@ -43,20 +43,12 @@ final class ScreenFixtureTests: XCTestCase {
         let manifest = try Data(contentsOf: screens.appendingPathComponent("manifest.json"))
         let decoded = try JSONSerialization.jsonObject(with: manifest) as? [String: Any]
         let fixtures = decoded?["fixtures"] as? [[String: Any]] ?? []
-        XCTAssertEqual(fixtures.count, 54)
+        XCTAssertEqual(fixtures.count, 47)
         for fixture in fixtures {
             let binary = try XCTUnwrap(fixture["binary"] as? String)
             let name = String(binary.dropFirst("contracts/screens/".count).dropLast(".bin".count))
             XCTAssertNoThrow(try bytes(name), "\(name) is listed and missing")
         }
-    }
-
-    /// A keyset cursor: the sort key and the primary key, never an offset.
-    func testAShelfCursorIsTheSortKeyAndThePrimaryKey() throws {
-        let state = try Centraid_Screen_V1_PhotoShelfState(
-            serializedBytes: try bytes("photos-shelf/album-selecting")
-        )
-        XCTAssertTrue(state.data.nextCursor.contains("|"))
     }
 
     /// A denied photo grant must not blank a library the member already owns.
@@ -210,39 +202,6 @@ final class ScreenFixtureTests: XCTestCase {
     // Kotlin spec asserts. Every case here is one a shell that got the
     // distinction wrong would draw wrong; a happy path would pass against every
     // such shell and is therefore not here.
-
-    private func shelf(_ case_: String) throws -> Centraid_Screen_V1_PhotoShelfState {
-        try Centraid_Screen_V1_PhotoShelfState(serializedBytes: try bytes("photos-shelf/\(case_)"))
-    }
-
-    /// ONLY trash carries a purge countdown.
-    ///
-    /// The field is on the one message that serves four of v0's routes, so the
-    /// law is not "trash may show a countdown" but "no other shelf may".
-    /// Asserting the trash case alone would pass against a shelf that filled
-    /// the field for everything.
-    func testOnlyTrashCarriesAPurgeCountdown() throws {
-        let trash = try shelf("trash-states-its-window")
-        guard case let .stateView(view) = trash.shelf.of, case let .mode(mode) = view.view else {
-            return XCTFail("the trash shelf is a state view in mode form")
-        }
-        XCTAssertEqual(mode.kind, .trash)
-        XCTAssertEqual(trash.purgeWindowDays, 30)
-        for case_ in ["album-selecting"] {
-            XCTAssertEqual(try shelf(case_).purgeWindowDays, 0, "\(case_) may not state a window")
-        }
-    }
-
-    /// A selection outlives the page it was made on: `ast-0204` is selected and
-    /// is NOT in the loaded page, which is why the field is on the state. A
-    /// selection carried on the cells is one the next page read drops.
-    func testASelectionOutlivesThePageItWasMadeOn() throws {
-        let album = try shelf("album-selecting")
-        XCTAssertTrue(album.selecting)
-        XCTAssertEqual(album.selectedAssetIds, ["ast-0201", "ast-0204"])
-        let loaded = album.data.cells.map(\.assetID)
-        XCTAssertFalse(loaded.contains("ast-0204"))
-    }
 
     private func lightbox(_ case_: String) throws -> Centraid_Screen_V1_PhotoLightboxState {
         try Centraid_Screen_V1_PhotoLightboxState(
@@ -436,48 +395,6 @@ final class ScreenFixtureTests: XCTestCase {
         XCTAssertEqual(hits.cells.count, 2)
     }
 
-    private func places(_ case_: String) throws -> Centraid_Screen_V1_PlacesState {
-        try Centraid_Screen_V1_PlacesState(serializedBytes: try bytes("photos-places/\(case_)"))
-    }
-
-    /// 0,0 IS A REAL POINT IN THE GULF OF GUINEA AND NOT A NULL.
-    ///
-    /// These two rows carry byte-identical doubles; only the bool separates a
-    /// pin at Null Island from a place the vault holds no coordinate for.
-    /// Anything that tested `lat != 0 || lng != 0` is wrong about one of them.
-    func testZeroZeroIsARealPointAndHasCoordinateSaysSo() throws {
-        let rows = try places("no-coordinate").data.places
-        let nullIsland = try XCTUnwrap(rows.first { $0.placeID == "plc-0011" })
-        let unlocated = try XCTUnwrap(rows.first { $0.placeID == "plc-0012" })
-        XCTAssertEqual(nullIsland.latitude, unlocated.latitude)
-        XCTAssertEqual(nullIsland.longitude, unlocated.longitude)
-        // SwiftProtobuf spells `has_coordinate` with a trailing `_p`, because
-        // `hasCoordinate` is the presence accessor's name.
-        XCTAssertTrue(nullIsland.hasCoordinate_p)
-        XCTAssertFalse(unlocated.hasCoordinate_p)
-    }
-
-    /// Cards or a map is a PARAMETER, not a screen: the same rows read the same
-    /// way. If the map ever needs a field the cards do not have, it has to be
-    /// added here, in front of a reviewer.
-    func testCardsAndTheMapAreOneScreen() throws {
-        let cards = try places("no-coordinate")
-        let map = try places("map-presentation")
-        XCTAssertEqual(cards.presentation, .cards)
-        XCTAssertEqual(map.presentation, .map)
-        XCTAssertEqual(map.data.unplacedCount, cards.data.unplacedCount)
-        let known = Set(cards.data.places.map(\.placeID))
-        XCTAssertTrue(map.data.places.allSatisfy { known.contains($0.placeID) })
-    }
-
-    /// The unplaced count is not derived from the page. A screen that computed
-    /// "everything not on this page" would say 0 here and be wrong by 1904.
-    func testTheUnplacedCountIsNotDerivedFromThePage() throws {
-        let data = try places("no-places-but-unplaced").data
-        XCTAssertTrue(data.places.isEmpty)
-        XCTAssertEqual(data.unplacedCount, 1904)
-    }
-
     private func duplicates(_ case_: String) throws -> Centraid_Screen_V1_DuplicatesState {
         try Centraid_Screen_V1_DuplicatesState(
             serializedBytes: try bytes("photos-duplicates/\(case_)")
@@ -574,40 +491,6 @@ final class ScreenFixtureTests: XCTestCase {
         XCTAssertEqual(Set(data.members.map(\.byteSize)).count, 1)
     }
 
-    private func picker(_ case_: String) throws -> Centraid_Screen_V1_PhotoPickerState {
-        try Centraid_Screen_V1_PhotoPickerState(
-            serializedBytes: try bytes("photos-picker/\(case_)")
-        )
-    }
-
-    /// What the album already holds is not what the member just picked. The
-    /// overlap with the cells is the point: without it every cell looks
-    /// addable, including the ones this album already has. Two lists, disjoint
-    /// — collapsing them would make new picks indistinguishable from old.
-    func testWhatTheAlbumHoldsIsNotWhatTheMemberPicked() throws {
-        let state = try picker("already-in-album")
-        let loaded = Set(state.data.cells.map(\.assetID))
-        XCTAssertEqual(state.alreadyInAlbumAssetIds, ["ast-0201", "ast-0202"])
-        XCTAssertTrue(state.alreadyInAlbumAssetIds.allSatisfy { loaded.contains($0) })
-        XCTAssertEqual(state.pickedAssetIds, ["ast-0203"])
-        let already = Set(state.alreadyInAlbumAssetIds)
-        XCTAssertTrue(state.pickedAssetIds.allSatisfy { !already.contains($0) })
-    }
-
-    /// The head is named before the read lands, and what the album holds
-    /// arrived with it — from the album the member came from, not from the
-    /// library read. The screen never pre-picks.
-    func testThePickerHeadIsNamedBeforeTheReadLands() throws {
-        let state = try picker("named-before-the-read")
-        guard case let .loading(loading) = state.content else {
-            return XCTFail("this case is still loading")
-        }
-        XCTAssertTrue(loading.firstLoad)
-        XCTAssertEqual(state.collectionName, "Portugal")
-        XCTAssertEqual(state.alreadyInAlbumAssetIds.count, 2)
-        XCTAssertTrue(state.pickedAssetIds.isEmpty)
-    }
-
     /// The three-state law as a sweep over the nine new screens. An empty data
     /// case standing in for a failure is the fourth state every one of these is
     /// tempted to grow, and the only way to know none of them did is to ask all
@@ -621,10 +504,6 @@ final class ScreenFixtureTests: XCTestCase {
                 )
             }
         }
-        try sweep(
-            "photos-shelf",
-            ["album-selecting", "trash-states-its-window"]
-        ) { try Centraid_Screen_V1_PhotoShelfState(serializedBytes: $0).content != nil }
         try sweep(
             "photos-lightbox",
             [
@@ -643,10 +522,6 @@ final class ScreenFixtureTests: XCTestCase {
             ["corrected", "hits-say-why", "no-hits", "resting"]
         ) { try Centraid_Screen_V1_PhotosSearchState(serializedBytes: $0).content != nil }
         try sweep(
-            "photos-places",
-            ["map-presentation", "no-coordinate", "no-places-but-unplaced"]
-        ) { try Centraid_Screen_V1_PlacesState(serializedBytes: $0).content != nil }
-        try sweep(
             "photos-duplicates",
             [
                 "clusters-by-reclaimable", "clusters-partial-page", "scan-incomplete",
@@ -657,10 +532,6 @@ final class ScreenFixtureTests: XCTestCase {
             "photos-duplicate-review",
             ["member-overrode-the-suggestion", "no-suggestion-at-all", "suggestion-not-accepted"]
         ) { try Centraid_Screen_V1_DuplicateReviewState(serializedBytes: $0).content != nil }
-        try sweep(
-            "photos-picker",
-            ["already-in-album", "named-before-the-read"]
-        ) { try Centraid_Screen_V1_PhotoPickerState(serializedBytes: $0).content != nil }
     }
 
     // MARK: - Money (#1099)

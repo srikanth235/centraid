@@ -80,10 +80,7 @@ import dev.centraid.shared.apps.people.PeoplePersonMachine
 import dev.centraid.shared.apps.people.PeoplePersonReads
 import dev.centraid.shared.apps.people.PeopleTrashMachine
 import dev.centraid.shared.apps.people.PeopleTrashReads
-import centraid.screen.v1.PhotoShelf
-import centraid.screen.v1.PhotoShelfEvent
 import centraid.screen.v1.PhotoLightboxEvent
-import centraid.screen.v1.PhotoPickerEvent
 import centraid.screen.v1.DuplicateReviewEvent
 import dev.centraid.shared.apps.photos.DuplicateReviewMachine
 import dev.centraid.shared.apps.photos.DuplicateClusterMembers
@@ -92,14 +89,8 @@ import dev.centraid.shared.apps.photos.DuplicatesMachine
 import dev.centraid.shared.apps.photos.DuplicatesReads
 import dev.centraid.shared.apps.photos.PhotoLightboxMachine
 import dev.centraid.shared.apps.photos.PhotoLightboxReads
-import dev.centraid.shared.apps.photos.PhotoPickerMachine
-import dev.centraid.shared.apps.photos.PhotoPickerReads
-import dev.centraid.shared.apps.photos.PhotoShelfMachine
-import dev.centraid.shared.apps.photos.PhotoShelfReads
 import dev.centraid.shared.apps.photos.PhotosGridMachine
 import dev.centraid.shared.apps.photos.PhotosReads
-import dev.centraid.shared.apps.photos.PlacesMachine
-import dev.centraid.shared.apps.photos.PlacesReads
 import dev.centraid.shared.screen.ScreenMachine
 import dev.centraid.shared.kit.TrashReads
 import dev.centraid.shared.shell.HomeMachine
@@ -146,10 +137,7 @@ class AppReadsSpec : StringSpec({
         // bridges and fold the answers, because their data case cannot be
         // CONSTRUCTED from one table (`HomeSession.attachReads`' ruling).
         // Those are asserted in their own specs, which is where the fold is.
-        Triple("photos.shelf", PhotoShelfReads, PhotoShelfMachine),
-        Triple("photos.picker", PhotoPickerReads, PhotoPickerMachine),
         Triple("photos.lightbox", PhotoLightboxReads, PhotoLightboxMachine),
-        Triple("photos.places", PlacesReads, PlacesMachine),
         // THE DUPLICATES SHELF IS AN APP QUERY (`photos.duplicates`, the core's
         // clustering), and is in `queryScreens`.
         Triple("photos.duplicate", DuplicateReviewReads, DuplicateReviewMachine),
@@ -170,31 +158,6 @@ class AppReadsSpec : StringSpec({
         // empty statement — proving nothing about the screens most likely to
         // get their projection wrong. Each is driven through its own `Opened`,
         // which is how the parameter reaches the state in the product.
-        "photos.shelf" -> PhotoShelfReads.query(
-            PhotoShelfMachine.reduce(
-                PhotoShelfMachine.initial(),
-                PhotoShelfEvent(
-                    opened = PhotoShelfEvent.Opened(
-                        shelf = PhotoShelf(
-                            album = PhotoShelf.Album(collection_id = "alb-1", name = "Portugal"),
-                        ),
-                    ),
-                ),
-            ).state,
-            null,
-        )
-        "photos.picker" -> PhotoPickerReads.query(
-            PhotoPickerMachine.reduce(
-                PhotoPickerMachine.initial(),
-                PhotoPickerEvent(
-                    opened = PhotoPickerEvent.Opened(
-                        collection_id = "alb-1",
-                        collection_name = "Portugal",
-                    ),
-                ),
-            ).state,
-            null,
-        )
         "photos.lightbox" -> PhotoLightboxReads.query(
             PhotoLightboxMachine.reduce(
                 PhotoLightboxMachine.initial(),
@@ -202,7 +165,6 @@ class AppReadsSpec : StringSpec({
             ).state,
             null,
         )
-        "photos.places" -> PlacesReads.query(PlacesMachine.initial(), null)
         "docs.trash" -> DocsTrashReads.query(DocsTrashMachine.initial(), null)
         "locker.trash" -> TrashReads(LOCKER_TRASH).query(LockerTrashMachine.initial(), null)
         else -> {

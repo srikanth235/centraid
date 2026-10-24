@@ -4,7 +4,6 @@ import centraid.core.v1.AgendaDestination
 import centraid.core.v1.Route
 import centraid.screen.v1.DocsDriveEvent
 import centraid.screen.v1.DocsDriveState
-import centraid.screen.v1.PhotoShelf
 import dev.centraid.shared.apps.docs.DocsDocumentMachine
 import dev.centraid.shared.apps.docs.DocsDriveMachine
 import dev.centraid.shared.apps.health.HealthHomeMachine
@@ -15,7 +14,6 @@ import dev.centraid.shared.apps.notes.NotesLibraryMachine
 import dev.centraid.shared.apps.people.PeopleHomeMachine
 import dev.centraid.shared.apps.people.PeoplePersonMachine
 import dev.centraid.shared.apps.photos.PhotoLightboxMachine
-import dev.centraid.shared.apps.photos.PhotoShelfMachine
 import dev.centraid.shared.nav.AgendaEntry
 import dev.centraid.shared.nav.Destination
 import dev.centraid.shared.nav.RowRef
@@ -64,8 +62,9 @@ class ScreenOpeningsSpec : StringSpec({
             dev.centraid.shared.nav.ScreenIds.LOCKER_ITEM
 
         val shelf = RowRoutes.route(row("photos", "album", "al", "Summer"))!!
-        shelf.screenId shouldBe PhotoShelfMachine.SCREEN_ID
-        PhotoShelf.ADAPTER.decode(shelf.event).album!!.collection_id shouldBe "al"
+        // AN ALBUM ROW IS A RUST SCREEN (#1135): the route Rust's shelf opens from.
+        shelf.screenId shouldBe dev.centraid.shared.nav.ScreenIds.RUST_SCREEN
+        centraid.core.v1.Route.ADAPTER.decode(shelf.event).photos_shelf!!.id shouldBe "al"
     }
 
     "a photograph's swipe walks the photographs among the answer, in the order it showed them" {

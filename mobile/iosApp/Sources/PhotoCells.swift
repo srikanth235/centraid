@@ -5,7 +5,7 @@ import CentraidShared
 /// ONE CELL RENDERER, FOR EVERY SURFACE THAT DRAWS PHOTOGRAPHS.
 ///
 /// The library grid, a shelf, the picker and search hits all draw the same
-/// `PhotoCell` from the same page read: the same square ground, the same two
+/// `PhotoTile` the core finished: the same square ground, the same two
 /// empty-cell sentences, the same held overlay and the same download arrow.
 /// v0 wrote that four times (`PhotoTile.tsx`, `AlbumDetail.tsx`,
 /// `PhotoStateView.tsx`, `PhotosSearch.tsx`) and they drifted — only one of
@@ -14,15 +14,11 @@ import CentraidShared
 /// did not have.
 ///
 /// **It takes the WIRE TYPE and not a view model.** Every screen's data case
-/// carries `repeated PhotoCell`, so a per-screen struct in between would be a
+/// carries `repeated PhotoTile`, so a per-screen struct in between would be a
 /// second decode of a message that is already decoded, and a fifth place for
 /// the held derivation to be spelled differently.
 struct PhotoCellsGrid: View {
-    let cells: [Centraid_Screen_V1_PhotoCell]
-    /// TWO DIFFERENT EMPTY-CELL SENTENCES (`docs/mobile-offline.md:224`). A
-    /// member with no thumbnail pack and a member whose pack has evicted these
-    /// must not read the same words.
-    let packAbsent: Bool
+    let cells: [Centraid_Core_V1_PhotoTile]
     /// The member's selection, when this surface has one.
     var selected: Set<String> = []
     /// Assets this surface cannot pick because they are already where the pick
@@ -38,12 +34,11 @@ struct PhotoCellsGrid: View {
 
     var body: some View {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: minimumCell), spacing: 2)], spacing: 2) {
-            ForEach(cells, id: \.assetID) { cell in
+            ForEach(cells, id: \.photoID) { cell in
                 PhotoCellSquare(
                     cell: cell,
-                    packAbsent: packAbsent,
-                    isSelected: selected.contains(cell.assetID),
-                    isTaken: taken.contains(cell.assetID),
+                    isSelected: selected.contains(cell.photoID),
+                    isTaken: taken.contains(cell.photoID),
                     onTap: onTap,
                     onFetch: onFetch
                 )
@@ -57,8 +52,7 @@ struct PhotoCellsGrid: View {
 /// frame, so an image asked for its own size would otherwise grow the row.
 struct PhotoCellSquare: View {
     @Environment(\.colorScheme) private var scheme
-    let cell: Centraid_Screen_V1_PhotoCell
-    let packAbsent: Bool
+    let cell: Centraid_Core_V1_PhotoTile
     var isSelected = false
     var isTaken = false
     var onTap: ((String) -> Void)?
@@ -68,7 +62,7 @@ struct PhotoCellSquare: View {
         cell.hasThumbnailPath && !cell.thumbnailPath.isEmpty ? cell.thumbnailPath : nil
     }
 
-    private var label: String { PhotoCellLabel.of(cell, packAbsent: packAbsent) }
+    private var label: String { cell.accessibilityLabel }
 
     var body: some View {
         Theme.color("skel", scheme)
@@ -103,9 +97,9 @@ struct PhotoCellSquare: View {
             .clipped()
             .opacity(isTaken ? 0.45 : 1)
             .contentShape(Rectangle())
-            .onTapGesture { if !isTaken { onTap?(cell.assetID) } }
+            .onTapGesture { if !isTaken { onTap?(cell.photoID) } }
             .accessibilityElement(children: .combine)
-            .accessibilityIdentifier(path ?? "photos.cell.\(cell.assetID)")
+            .accessibilityIdentifier(path ?? "photos.cell.\(cell.photoID)")
             .accessibilityLabel(label)
             .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : [.isButton])
     }
@@ -123,7 +117,7 @@ struct PhotoCellSquare: View {
 /// mark would say nothing.
 struct PhotoTile: View {
     @Environment(\.colorScheme) private var scheme
-    let cell: Centraid_Screen_V1_PhotoCell
+    let cell: Centraid_Core_V1_PhotoTile
     let width: CGFloat
     let height: CGFloat
     let rung: Int
@@ -162,25 +156,10 @@ struct PhotoTile: View {
             .onTapGesture(perform: onTap)
             .onLongPressGesture(minimumDuration: 0.35) { onLongPress?() }
             .accessibilityElement(children: .combine)
-            .accessibilityLabel(PhotoCellLabel.of(cell, packAbsent: false))
+            .accessibilityLabel(cell.accessibilityLabel)
             .accessibilityAddTraits(selected ? [.isImage, .isButton, .isSelected] : [.isImage, .isButton])
             .accessibilityAction(named: selecting ? PhotosCopy.shared.PHOTOS_SELECT : PhotosCopy.shared.PHOTOS_OPEN, onTap)
-            .accessibilityIdentifier(path ?? "photos.tile.\(cell.assetID)")
-    }
-}
-
-/// A GRID CELL IS AN IMAGE-ONLY CONTROL, so it carries a description even when
-/// the image is missing — which is when it matters most. A video and a live
-/// photograph say so, because that is what changes what a tap does.
-enum PhotoCellLabel {
-    static func of(_ cell: Centraid_Screen_V1_PhotoCell, packAbsent: Bool) -> String {
-        let noun = cell.live
-            ? PhotosCopy.shared.PHOTOS_CELL_LIVE
-            : (cell.kind == .video ? PhotosCopy.shared.PHOTOS_CELL_VIDEO : PhotosCopy.shared.PHOTOGRAPH)
-        if cell.hasThumbnailPath && !cell.thumbnailPath.isEmpty { return noun }
-        return packAbsent
-            ? copyFill(PhotosCopy.shared.PHOTOS_CELL_NOT_DOWNLOADED, "noun", noun)
-            : copyFill(PhotosCopy.shared.PHOTOS_CELL_PREVIEW_GONE, "noun", noun)
+            .accessibilityIdentifier(path ?? "photos.tile.\(cell.photoID)")
     }
 }
 
@@ -196,12 +175,12 @@ enum PhotoCellLabel {
 /// tile's own chip — v0's state slot, one quiet mono line on the page colour.
 struct PhotoHeldMark: View {
     @Environment(\.colorScheme) private var scheme
-    let cell: Centraid_Screen_V1_PhotoCell
+    let cell: Centraid_Core_V1_PhotoTile
     var onFetch: ((String, String) -> Void)?
 
     var body: some View {
         if cell.held == .fetching {
-            Text(PhotosCopy.shared.PHOTOS_CELL_DOWNLOADING_MARK)
+            Text(cell.heldLabel)
                 .centraidType("mono")
                 .foregroundStyle(Theme.color("textFaint", scheme))
                 .lineLimit(1)
@@ -209,11 +188,11 @@ struct PhotoHeldMark: View {
                 .padding(.vertical, 1)
                 .background(Theme.color("bg", scheme), in: RoundedRectangle(cornerRadius: Theme.radius("sm", scheme)))
                 .padding(4)
-                .accessibilityIdentifier("photos.cell.fetching.\(cell.assetID)")
-                .accessibilityLabel(PhotosCopy.shared.PHOTOS_CELL_DOWNLOADING)
-        } else if cell.held == .withheldByRule, !cell.originalHash.isEmpty, let onFetch {
+                .accessibilityIdentifier("photos.cell.fetching.\(cell.photoID)")
+                .accessibilityLabel(cell.accessibilityLabel)
+        } else if cell.held == .withheldByRule, !cell.contentID.isEmpty, let onFetch {
             Button {
-                onFetch(cell.assetID, cell.originalHash)
+                onFetch(cell.photoID, cell.contentID)
             } label: {
                 CentraidIconView(iconKey: "Download", tint: Theme.color("text", scheme), size: 14)
                     .padding(3)
@@ -229,8 +208,8 @@ struct PhotoHeldMark: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityIdentifier("photos.cell.download.\(cell.assetID)")
-            .accessibilityLabel(PhotosCopy.shared.PHOTOS_CELL_DOWNLOAD_FULL)
+            .accessibilityIdentifier("photos.cell.download.\(cell.photoID)")
+            .accessibilityLabel(cell.heldLabel)
         }
     }
 }
@@ -267,15 +246,15 @@ struct PhotoSelectionDot: View {
 /// with the catalog's play mark, because that is what changes what a tap does.
 struct PhotoKindLine: View {
     @Environment(\.colorScheme) private var scheme
-    let cell: Centraid_Screen_V1_PhotoCell
+    let cell: Centraid_Core_V1_PhotoTile
     let rung: Int
 
     /// v0's `KIND_MIN_RUNG`: S.
     static let minimumRung = 1
 
     private var text: String? {
-        if cell.live { return PhotosCopy.shared.PHOTOS_CELL_LIVE_MARK }
-        if cell.kind == .video, cell.durationSeconds > 0 { return PhotoTileMetrics.clock(Int(cell.durationSeconds)) }
+        if cell.live { return cell.liveLabel }
+        if cell.kind == .video, cell.durationSeconds > 0 { return cell.durationLabel }
         return nil
     }
 
@@ -330,7 +309,7 @@ enum PhotoTileMetrics {
 /// edges. The packing is Kotlin's — it names tiles by index, and this puts the
 /// cell back under each.
 struct JustifiedTile {
-    let cell: Centraid_Screen_V1_PhotoCell
+    let cell: Centraid_Core_V1_PhotoTile
     let width: CGFloat
     let height: CGFloat
 }
