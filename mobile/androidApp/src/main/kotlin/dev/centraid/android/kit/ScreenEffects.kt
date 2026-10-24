@@ -11,6 +11,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.PersistableBundle
+import android.provider.Settings
 import android.view.HapticFeedbackConstants
 import android.view.View
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -21,20 +22,26 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.content.ContextCompat
+import centraid.core.v1.CameraRoll
 import centraid.core.v1.Effect
 import centraid.core.v1.EffectDone
 import centraid.core.v1.EffectFailed
 import centraid.core.v1.EffectResult
+import centraid.core.v1.FreeUpFacts
+import centraid.core.v1.FreeUpSpace
 import centraid.core.v1.HapticKind
 import centraid.core.v1.ImportSource
 import centraid.core.v1.KeychainOp
 import centraid.core.v1.KeychainValue
+import centraid.core.v1.OriginalFetched
 import centraid.core.v1.PhoneChanged
 import dev.centraid.android.screens.agenda.readCalendarSnapshot
+import dev.centraid.android.screens.mediaPermissions
 import dev.centraid.android.screens.performExportOriginals
 import dev.centraid.core.CentraidCore
 import dev.centraid.core.Screens
 import dev.centraid.shared.platform.platformServices
+import dev.centraid.shared.shell.PhotosDevice
 import dev.centraid.shared.sync.phone.PhoneDevice
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -59,20 +66,41 @@ import okio.ByteString
  * watcher is answered `failed`.
  */
 @Composable
-internal fun PerformScreenEffects(screens: Screens, phone: AndroidPhoneFollow?) {
+internal fun PerformScreenEffects(
+    screens: Screens,
+    phone: AndroidPhoneFollow?,
+    /** Photos' device half: the camera roll, free up space and an original from the gateway. */
+    photos: PhotosDevice? = null,
+    /** This app's tab: when set, only its instances' effects are performed here (two apps share one core). */
+    tab: String? = null,
+) {
     val context = LocalContext.current
     val view = LocalView.current
     val asking = remember { CalendarPermission() }
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         asking.answer(granted)
     }
+    val mediaAsk = remember { MediaPermissionAsk() }
+    val mediaLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+        mediaAsk.answer()
+    }
     LaunchedEffect(screens) {
         screens.effects.collect { request ->
+            // TWO APPS' RUNTIMES SHARE ONE CORE, so each hears every push: an effect for
+            // another app's screen is that app's performer's to answer.
+            if (tab != null && screens.navigation.value?.tabs?.firstOrNull { it.tab == tab }
+                    ?.entries?.none { it.instance == request.instance } != false
+            ) {
+                return@collect
+            }
             // ONE COROUTINE PER EFFECT: a permission dialog waits for the member
             // without holding up the keychain read behind it.
             launch {
                 val effect = request.effect
-                val result = perform(effect, context, view, asking, { launcher.launch(it) }, phone, screens.core) { changed ->
+                val result = perform(
+                    effect, context, view, asking, { launcher.launch(it) }, phone, screens.core, photos,
+                    { mediaAsk.ask { mediaLauncher.launch(mediaPermissions()) } },
+                ) { changed ->
                     launch { screens.answer(request, EffectResult(phone_changed = changed)) }
                 }
                 if (result != null) screens.answer(request, result)
@@ -107,6 +135,8 @@ private suspend fun perform(
     launchPermission: (String) -> Unit,
     phone: AndroidPhoneFollow?,
     core: CentraidCore,
+    photos: PhotosDevice?,
+    askMedia: suspend () -> Unit,
     report: (PhoneChanged) -> Unit,
 ): EffectResult? {
     val done = EffectResult(done = EffectDone())
@@ -151,6 +181,22 @@ private suspend fun perform(
         effect.export_originals != null ->
             runCatching { performExportOriginals(context, core, effect.export_originals!!) }
                 .getOrElse { failed("the originals could not be handed off") }
+        // THE PHOTOS DEVICE HALF (#1135): the roll, the free-up flow and an original
+        // back from the gateway. The roll itself is the shell's; Rust only asks.
+        effect.camera_roll != null -> cameraRoll(context, photos, effect.camera_roll!!, askMedia)
+        effect.free_up_space != null -> {
+            val device = photos ?: return failed("this shell has no photos device")
+            val free = effect.free_up_space!!.action == FreeUpSpace.Action.ACTION_FREE
+            val answer = CompletableDeferred<ByteArray>()
+            device.freeUp(free) { answer.complete(it) }
+            EffectResult(free_up_facts = FreeUpFacts.ADAPTER.decode(answer.await()))
+        }
+        effect.fetch_original != null -> {
+            val device = photos ?: return failed("this shell has no photos device")
+            val answer = CompletableDeferred<ByteArray>()
+            device.fetchOriginal(effect.fetch_original!!.content_hash) { answer.complete(it) }
+            EffectResult(original_fetched = OriginalFetched.ADAPTER.decode(answer.await()))
+        }
         effect.calendar_read != null -> {
             val read = effect.calendar_read!!
             val allowed = granted(context) ||
@@ -190,6 +236,64 @@ private suspend fun perform(
 }
 
 private fun failed(reason: String) = EffectResult(failed = EffectFailed(reason = reason))
+
+/** The one media-permission prompt that may be out, and its answer. */
+private class MediaPermissionAsk {
+    private var waiting: CompletableDeferred<Unit>? = null
+
+    suspend fun ask(launch: () -> Unit) {
+        val answer = CompletableDeferred<Unit>()
+        waiting = answer
+        launch()
+        answer.await()
+    }
+
+    fun answer() {
+        waiting?.complete(Unit)
+        waiting = null
+    }
+}
+
+/**
+ * THE CAMERA ROLL'S REMEDIES (D-1025-S7-75). Which one, and its words, are Rust's;
+ * this launches what the platform needs for it.
+ *
+ * * ask: the system's own prompt, then the roll reads the grant fresh and walks
+ *   on a grant. The prompt belongs to the activity (`MediaLibrary.requestPermission`
+ *   on Android reads the grant and cannot ask).
+ * * settings: this app's own page there, the one place a member can change an
+ *   answer Android has stopped asking about.
+ * * manage selection: Android 14's selected-photos grant, edited by asking again.
+ * * import now: a pass of the roll.
+ */
+private suspend fun cameraRoll(
+    context: Context,
+    photos: PhotosDevice?,
+    roll: CameraRoll,
+    askMedia: suspend () -> Unit,
+): EffectResult {
+    val done = EffectResult(done = EffectDone())
+    return when (roll.action) {
+        CameraRoll.Action.ACTION_ASK_PERMISSION, CameraRoll.Action.ACTION_MANAGE_SELECTION -> {
+            askMedia()
+            photos?.perform(PhotosDevice.ACTION_ASK_PERMISSION)
+            done
+        }
+        CameraRoll.Action.ACTION_OPEN_SETTINGS -> start(
+            context,
+            Intent(
+                Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                Uri.fromParts("package", context.packageName, null),
+            ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            done,
+        )
+        CameraRoll.Action.ACTION_IMPORT_NOW -> {
+            photos?.perform(PhotosDevice.ACTION_IMPORT_NOW)
+            done
+        }
+        CameraRoll.Action.ACTION_UNSPECIFIED -> failed("no camera roll action")
+    }
+}
 
 private fun clipboard(context: Context): ClipboardManager =
     context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager

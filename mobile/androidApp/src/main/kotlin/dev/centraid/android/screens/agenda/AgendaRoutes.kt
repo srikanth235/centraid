@@ -106,7 +106,7 @@ internal class AgendaRoutes(private val phone: AndroidPhoneFollow) : AppRoutes {
                 }
             }
         }
-        screens?.let { PerformScreenEffects(it, phone) }
+        screens?.let { PerformScreenEffects(it, phone, tab = TAB) }
     }
 
     @Composable

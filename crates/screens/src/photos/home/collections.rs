@@ -167,6 +167,9 @@ impl Collections {
                 destructive: true,
             }),
             delete_album_id: self.deleting.clone().unwrap_or_default(),
+            new_album_placeholder: words::photos_album_name(locale),
+            create_label: words::photos_create(locale),
+            keep_label: words::photos_keep_it(locale),
         }
     }
 
@@ -254,7 +257,7 @@ impl Collections {
                     .favorites
                     .as_ref()
                     .unwrap_or(&wire::PhotosShelfTile::default()),
-                "Heart",
+                "heart",
             ),
             shelf(
                 wire::PhotosShelfKind::Videos,
@@ -263,7 +266,7 @@ impl Collections {
                     .videos
                     .as_ref()
                     .unwrap_or(&wire::PhotosShelfTile::default()),
-                "Play",
+                "Video",
             ),
         ];
         // PLACES AFTER THE SECOND STANDING SHELF, where the system puts Map.
@@ -275,7 +278,7 @@ impl Collections {
                 albums.places,
                 0,
                 routes::places(),
-                "MapPin",
+                "place",
             ),
         );
         let utilities = vec![
@@ -285,7 +288,7 @@ impl Collections {
                 albums.duplicate_clusters,
                 albums.duplicate_clusters,
                 routes::duplicates(),
-                "Copy",
+                "dupe",
             ),
             shelf(
                 wire::PhotosShelfKind::Archive,
@@ -303,7 +306,7 @@ impl Collections {
                     .trash
                     .as_ref()
                     .unwrap_or(&wire::PhotosShelfTile::default()),
-                "Trash",
+                "trash",
             ),
         ];
 
@@ -329,7 +332,7 @@ impl Collections {
                         &title,
                     )),
                     member_owned: true,
-                    icon_key: "Image".to_owned(),
+                    icon_key: "album".to_owned(),
                     delete_label: words::photos_delete_album(locale),
                     title,
                     ..wire::PhotosCollectionCard::default()
@@ -378,7 +381,7 @@ impl Collections {
                         accessibility_label: format!("{title}, {count_label}"),
                         count_label,
                         restore_label: sentences::library_albums_restore(locale),
-                        icon_key: "Image".to_owned(),
+                        icon_key: "album".to_owned(),
                         title,
                         ..wire::PhotosCollectionCard::default()
                     }

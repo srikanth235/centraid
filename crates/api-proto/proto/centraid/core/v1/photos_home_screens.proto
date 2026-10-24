@@ -108,6 +108,14 @@ message PhotosHomeChrome {
   string collapse_all_label = 7;
   // The search field's close verb.
   string close_search_label = 8;
+  // The header while selecting with nothing picked yet, and the bar's "Send a copy".
+  string selecting_title = 9;
+  string send_copy_label = 10;
+  string search_label = 11;
+  // The zoom control's three segments.
+  string grain_years_label = 12;
+  string grain_months_label = 13;
+  string grain_all_label = 14;
 }
 
 // ---------------------------------------------------------------------------
@@ -161,6 +169,8 @@ message PhotosLibraryData {
   string loading_more_label = 10;
   // The scrub rail's labels.
   string scrub_label = 11;
+  string scrub_next_label = 12;
+  string scrub_previous_label = 13;
 }
 
 enum PhotosRowKind {
@@ -185,6 +195,8 @@ message PhotosTimelineRow {
   string select_label = 7;
   // The packed tiles, each as wide as the row leaves it.
   repeated PhotosPackedTile packed = 8;
+  // The day header's short verb: "Select", or "Deselect" once every one is picked.
+  string toggle_label = 9;
 }
 
 message PhotosPackedRow {
@@ -234,6 +246,11 @@ message PhotosCollections {
   // The album a delete confirm is asking about.
   optional Confirm delete_confirm = 7;
   string delete_album_id = 8;
+  // The New album sheet's field and verb.
+  string new_album_placeholder = 9;
+  string create_label = 10;
+  // The delete confirm's way out: "Keep it".
+  string keep_label = 11;
 }
 
 message PhotosCollectionsData {

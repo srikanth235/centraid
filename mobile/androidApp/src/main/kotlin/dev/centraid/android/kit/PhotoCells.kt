@@ -37,7 +37,7 @@ import centraid.core.v1.PhotoTile as WireTile
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 import dev.centraid.design.copy.PhotosCopy
-import dev.centraid.shared.apps.photos.PhotoJustify
+import centraid.core.v1.PhotosPackedRow
 import dev.centraid.shared.kit.MediaFormat
 
 /**
@@ -328,31 +328,24 @@ private fun BoxScope.KindLine(cell: WireTile, rung: Int) {
 public fun mediaClock(seconds: Int): String = MediaFormat.clock(seconds.toLong())
 
 /**
- * A tile's packed box: the cell, and where `PhotoJustify` put its edges. The
- * packing is shared's (`commonMain`) and names tiles by index; the library
- * puts the cell back under each (`libraryRows`).
- */
-public data class JustifiedTile(val cell: WireTile, val width: Int, val height: Int)
-
-/**
  * THE GRID IS THE LOADING STATE (v0's `PhotosGridSkeleton.tsx`, §14).
  *
- * Skeleton tiles at the rung's own geometry, packed by the same `PhotoJustify`
- * so the photographs land where their placeholders stood. The aspect sequence is
- * FIXED — random aspects would flicker — and nothing moves: DESIGN.md's
- * `Loading` is static skeletons, and a shimmer is attention-seeking about work
- * the product can simply describe.
+ * Skeleton tiles at the rung's own geometry, packed by Rust at the width the
+ * shell reported ([rows] is `PhotosLibraryLoading.skeleton`), so the photographs
+ * land where their placeholders stood. The aspect sequence is FIXED — random
+ * aspects would flicker — and nothing moves: DESIGN.md's `Loading` is static
+ * skeletons, and a shimmer is attention-seeking about work the product can
+ * simply describe.
  */
 @Composable
-public fun PhotoGridSkeleton(containerWidth: Int, targetHeight: Int, viewportHeight: Int, modifier: Modifier = Modifier) {
-    val rows = PhotoJustify.skeleton(containerWidth.toDouble(), targetHeight.toDouble(), viewportHeight.toDouble())
+public fun PhotoGridSkeleton(rows: List<PhotosPackedRow>, label: String, modifier: Modifier = Modifier) {
     Column(
-        modifier.semantics { contentDescription = PhotosCopy.PHOTOS_OPENING_LIBRARY },
+        modifier.semantics { contentDescription = label },
         verticalArrangement = Arrangement.spacedBy(GAP.dp),
     ) {
         rows.forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(GAP.dp)) {
-                row.forEach { tile ->
+                row.packed.forEach { tile ->
                     Box(
                         Modifier
                             .size(tile.width.dp, tile.height.dp)
@@ -365,8 +358,8 @@ public fun PhotoGridSkeleton(containerWidth: Int, targetHeight: Int, viewportHei
     }
 }
 
-/** The gutter between tiles, both axes — the 4 base rung halved. Shared's. */
-public const val GAP: Int = PhotoJustify.GAP
+/** The gutter between tiles, both axes — the 4 base rung halved. Rust's packing leaves it. */
+public const val GAP: Int = 2
 
 /** v0's `KIND_MIN_RUNG`: S. */
 private const val TILE_KIND_MIN_RUNG: Int = 1

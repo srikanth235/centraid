@@ -208,19 +208,19 @@ fn door(locale: Locale, hit: &wire::PhotosTopHit) -> wire::PhotosSearchDoor {
         Kind::Album => (
             hit.label.clone(),
             words::photos_album(locale),
-            "Layers",
+            "album",
             routes::shelf(wire::PhotosShelfKind::Album, &hit.id, &hit.label),
         ),
         Kind::Unplaced => (
             sentences::library_search_no_location(locale),
             words::photos_place(locale),
-            "MapPin",
+            "place",
             routes::shelf(wire::PhotosShelfKind::Unplaced, "", ""),
         ),
         _ => (
             hit.label.clone(),
             words::photos_place(locale),
-            "MapPin",
+            "place",
             routes::shelf(wire::PhotosShelfKind::Place, &hit.id, &hit.label),
         ),
     };

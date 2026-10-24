@@ -4,7 +4,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -14,10 +13,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
-import centraid.screen.v1.FreeUpSpace
 import centraid.screen.v1.KeepOriginalsRow
-import dev.centraid.android.kit.CentraidIcon
-import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.kitSwitchColors
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
@@ -60,46 +56,5 @@ internal fun KeepOriginalsRowView(row: KeepOriginalsRow, onToggle: (Boolean) -> 
                 stateDescription = row.meta
             },
         )
-    }
-}
-
-/**
- * THE MORE SHEET'S "FREE UP SPACE" ROW — A STATEMENT, NOT A BUTTON
- * (`KeepOriginals.kt`). v0's row deleted originals whose copy elsewhere was
- * proved; the laptop's backup does not hold originals yet, so every one here is
- * the only copy, and the row says so with the count and the size rather than
- * offering a verb that could only destroy a photograph.
- *
- * The SwiftUI twin is `FreeUpSpaceRow` in `PhotosMoreSheet.swift`.
- */
-@Composable
-internal fun FreeUpSpaceRowView(freeUp: FreeUpSpace?) {
-    val meta = freeUp?.meta ?: KeepOriginals.COUNTING
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp)
-            // ONE SPOKEN ELEMENT: the title and the census's line.
-            .semantics(mergeDescendants = true) {},
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            CentraidIcon(iconKey = "Gauge", tint = centraidColor("text"))
-            Column {
-                Text(text = KeepOriginals.FREE_UP_TITLE, style = centraidType("body"), color = centraidColor("text"))
-                Text(text = meta, style = centraidType("small"), color = centraidColor("textSoft"))
-            }
-        }
-        val reason = freeUp?.reason.orEmpty()
-        if (reason.isNotEmpty()) {
-            Text(text = reason, style = centraidType("small"), color = centraidColor("textSoft"))
-        }
-        // WHAT A PHOTO DELETED FOR GOOD COSTS THE BACKUP DEVICE (#1080 F5).
-        if (freeUp?.offered == true) {
-            Text(text = KeepOriginals.FREE_UP_RETENTION, style = centraidType("small"), color = centraidColor("textSoft"))
-        }
     }
 }

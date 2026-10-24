@@ -102,6 +102,12 @@ pub fn words_of(locale: Locale) -> wire::PhotosHomeChrome {
         show_all_label: words::photos_show_all(locale),
         collapse_all_label: words::photos_collapse_all(locale),
         close_search_label: crate::strings::shared::kit_close_search(locale),
+        selecting_title: words::photos_grid_select(locale),
+        send_copy_label: words::photos_send_copy(locale),
+        search_label: crate::strings::shared::kit_search(locale),
+        grain_years_label: words::photos_grain_years(locale),
+        grain_months_label: words::photos_grain_months(locale),
+        grain_all_label: words::photos_grain_all(locale),
     }
 }
 

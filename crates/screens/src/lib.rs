@@ -36,6 +36,13 @@ pub fn standard() -> Runtime {
                 agenda::TAB.to_owned(),
                 agenda::routes::home(centraid_api_proto::core_v1::AgendaDestination::Day, ""),
             ),
+            (
+                photos::TAB.to_owned(),
+                photos::routes::home(
+                    centraid_api_proto::core_v1::PhotosDestination::Library,
+                    None,
+                ),
+            ),
         ],
     )
 }

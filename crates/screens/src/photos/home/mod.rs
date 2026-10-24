@@ -632,6 +632,13 @@ impl Home {
                             && row.ids.iter().all(|id| picked.iter().any(|p| p == id));
                         wire::PhotosTimelineRow {
                             kind: row.kind as i32,
+                            toggle_label: if row.ids.is_empty() {
+                                String::new()
+                            } else if all_selected {
+                                words::photos_deselect(locale)
+                            } else {
+                                words::photos_select(locale)
+                            },
                             select_label: if row.ids.is_empty() {
                                 String::new()
                             } else {
@@ -696,8 +703,24 @@ impl Home {
             loading_more: false,
             loading_more_label: words::photos_library_loading_more(locale),
             scrub_label: words::photos_scrub(locale),
+            scrub_next_label: words::photos_scrub_next(locale),
+            scrub_previous_label: words::photos_scrub_previous(locale),
             tiles,
         }
+    }
+
+    /// The bar, with ONE favourite verb: "Favorite" over the library, "Unfavorite"
+    /// under the Favorites filter, where every photograph on screen already is one.
+    fn selection_view(&self, locale: Locale) -> wire::PhotosSelection {
+        let mut bar = self.selection.view(locale);
+        let favorites = self.filter == Filter::Favorites;
+        bar.actions
+            .retain(|action| match Verb::try_from(action.kind) {
+                Ok(Verb::Favorite) => !favorites,
+                Ok(Verb::Unfavorite) => favorites,
+                _ => true,
+            });
+        bar
     }
 
     fn empty_library(&self) -> bool {
@@ -825,7 +848,7 @@ impl Screen for Home {
                 None
             },
             status,
-            selection: Some(self.selection.view(locale)),
+            selection: Some(self.selection_view(locale)),
             album_choice: Some(self.choice.view(locale, self.link())),
             ..wire::PhotosHomeState::default()
         };
