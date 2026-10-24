@@ -265,7 +265,13 @@ impl Person {
 
     /// One write with no sheet over it: the outcome or the refusal is the status
     /// line. Returns whether it committed.
-    fn write(&mut self, ctx: &Ctx, request: wire::ActRequest, subject: &str, outcome: String) -> bool {
+    fn write(
+        &mut self,
+        ctx: &Ctx,
+        request: wire::ActRequest,
+        subject: &str,
+        outcome: String,
+    ) -> bool {
         let key = kit_act::key(&[&request.action.clone(), subject], kit_act::fresh());
         let settled = kit_act::act(ctx, request, &key);
         self.status = Some(if settled.committed {
@@ -415,7 +421,10 @@ impl Person {
         match &self.asking {
             Asking::Nothing => None,
             Asking::Trash => Some(wire::Confirm {
-                title: fill(&words::confirm_trash_title(locale), &[("name", &self.name())]),
+                title: fill(
+                    &words::confirm_trash_title(locale),
+                    &[("name", &self.name())],
+                ),
                 body: words::confirm_trash_body(locale),
                 confirm_label: words::move_to_trash(locale),
                 destructive: true,
@@ -427,7 +436,10 @@ impl Person {
                     .map(|channel| fold::channel_kind(locale, &channel.kind).to_lowercase())
                     .unwrap_or_default();
                 Some(wire::Confirm {
-                    title: fill(&words::confirm_remove_channel_title(locale), &[("kind", &kind)]),
+                    title: fill(
+                        &words::confirm_remove_channel_title(locale),
+                        &[("kind", &kind)],
+                    ),
                     body: words::confirm_remove_channel_body(locale),
                     confirm_label: words::remove(locale),
                     destructive: true,
@@ -555,7 +567,9 @@ impl Person {
 fn percent_encode(value: &str) -> String {
     let mut out = String::with_capacity(value.len());
     for byte in value.bytes() {
-        if byte.is_ascii_alphanumeric() || matches!(byte, b'@' | b'.' | b'+' | b'-' | b'_' | b'~' | b'*') {
+        if byte.is_ascii_alphanumeric()
+            || matches!(byte, b'@' | b'.' | b'+' | b'-' | b'_' | b'~' | b'*')
+        {
             out.push(char::from(byte));
         } else {
             out.push_str(&format!("%{byte:02X}"));

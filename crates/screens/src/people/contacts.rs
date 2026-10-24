@@ -378,7 +378,9 @@ enum Gate {
     /// A trigger armed the settle timer; later ones join it.
     Armed,
     /// A pass is out; `queued` is a trigger that arrived during it.
-    Running { queued: bool },
+    Running {
+        queued: bool,
+    },
 }
 
 /// THE IMPORT AND THE FOLLOW, as one component a long-lived screen hosts. The
@@ -742,7 +744,9 @@ mod tests {
         for good in ["01-01", "02-29", "12-31", "04-30"] {
             assert!(is_month_day(good), "{good}");
         }
-        for bad in ["13-01", "02-30", "00-10", "04-31", "1-1", "12/10", "ab-cd", ""] {
+        for bad in [
+            "13-01", "02-30", "00-10", "04-31", "1-1", "12/10", "ab-cd", "",
+        ] {
             assert!(!is_month_day(bad), "{bad}");
         }
     }

@@ -36,10 +36,21 @@ fn the_root_is_the_roster_under_a_band_with_one_chip_row() {
     let state = home_state(d.view(i));
     assert_eq!(state.title, "People");
     assert_eq!(
-        state.band.iter().map(|t| t.key.as_str()).collect::<Vec<_>>(),
+        state
+            .band
+            .iter()
+            .map(|t| t.key.as_str())
+            .collect::<Vec<_>>(),
         ["people", "touch", "more"]
     );
-    assert!(state.band.iter().find(|t| t.key == "people").unwrap().current);
+    assert!(
+        state
+            .band
+            .iter()
+            .find(|t| t.key == "people")
+            .unwrap()
+            .current
+    );
     let chips: Vec<(&str, u32)> = state
         .chips
         .iter()
@@ -58,7 +69,10 @@ fn the_root_is_the_roster_under_a_band_with_one_chip_row() {
     assert_eq!(dana.avatar.as_ref().unwrap().initials, "DR");
     assert!(dana.avatar.as_ref().unwrap().hue_key.starts_with('c'));
     assert_eq!(dana.star_label, "Star Dana Reyes");
-    assert_eq!(dana.route, Some(routes::person(&dana.party_id, "Dana Reyes", false)));
+    assert_eq!(
+        dana.route,
+        Some(routes::person(&dana.party_id, "Dana Reyes", false))
+    );
     assert_eq!(state.add_person, Some(routes::new_person()));
 }
 
@@ -114,7 +128,13 @@ fn the_star_is_a_write_from_the_row_and_the_starred_chip_filters() {
     let dana = person(&d, "Dana");
     person(&d, "Sam");
     let i = begin(&mut d);
-    send_home(&mut d, i, H::Star(ev::StarToggled { party_id: dana.clone() }));
+    send_home(
+        &mut d,
+        i,
+        H::Star(ev::StarToggled {
+            party_id: dana.clone(),
+        }),
+    );
     let state = home_state(d.view(i));
     let status = state.status.as_ref().expect("a status");
     assert_eq!(status.sentence, "Dana starred");
@@ -141,9 +161,15 @@ fn the_star_is_a_write_from_the_row_and_the_starred_chip_filters() {
 
     send_home(&mut d, i, H::Star(ev::StarToggled { party_id: dana }));
     let state = home_state(d.view(i));
-    assert_eq!(state.status.as_ref().unwrap().sentence, "Star removed · Dana");
+    assert_eq!(
+        state.status.as_ref().unwrap().sentence,
+        "Star removed · Dana"
+    );
     // Nobody is starred now, and that is the chip's own sentence, not day one's.
-    let empty = roster_data(d.view(i)).empty.clone().expect("an empty state");
+    let empty = roster_data(d.view(i))
+        .empty
+        .clone()
+        .expect("an empty state");
     assert_eq!(empty.headline, "Nobody is starred.");
     assert_eq!(empty.action_label, "");
     assert_eq!(empty.import_source, wire::ImportSource::Unspecified as i32);
@@ -223,7 +249,11 @@ fn search_is_a_field_over_the_roster_names_only_and_closing_clears_it() {
     assert!(state.chips.is_empty());
     assert!(state.sort_chip.is_none());
 
-    send_home(&mut d, i, H::SearchTerm(ev::SearchTermChanged { term: "dan".into() }));
+    send_home(
+        &mut d,
+        i,
+        H::SearchTerm(ev::SearchTermChanged { term: "dan".into() }),
+    );
     let state = home_state(d.view(i));
     let results = state
         .search
@@ -233,7 +263,11 @@ fn search_is_a_field_over_the_roster_names_only_and_closing_clears_it() {
         .as_ref()
         .expect("results");
     assert_eq!(
-        results.rows.iter().map(|r| r.name.as_str()).collect::<Vec<_>>(),
+        results
+            .rows
+            .iter()
+            .map(|r| r.name.as_str())
+            .collect::<Vec<_>>(),
         ["Dana Reyes"]
     );
     // Ask is the row at the foot of an answer, scoped to People.
@@ -243,7 +277,13 @@ fn search_is_a_field_over_the_roster_names_only_and_closing_clears_it() {
     // The roster stands under it.
     assert_eq!(roster_data(d.view(i)).rows.len(), 2);
 
-    send_home(&mut d, i, H::SearchTerm(ev::SearchTermChanged { term: "zzqx".into() }));
+    send_home(
+        &mut d,
+        i,
+        H::SearchTerm(ev::SearchTermChanged {
+            term: "zzqx".into(),
+        }),
+    );
     let none = home_state(d.view(i))
         .search
         .as_ref()
@@ -269,7 +309,10 @@ fn more_holds_trash_alone_and_is_an_ordinary_band_tab_last() {
     let i = begin(&mut d);
     let landed = home_state(d.view(i));
     let last = landed.band.last().unwrap();
-    assert_eq!((last.key.as_str(), last.icon_key.as_str()), ("more", "MoreHoriz"));
+    assert_eq!(
+        (last.key.as_str(), last.icon_key.as_str()),
+        ("more", "MoreHoriz")
+    );
     send_home(&mut d, i, H::Band(ev::BandPicked { key: "more".into() }));
     let more = home_state(d.view(i));
     assert_eq!(more.sheet, wire::people_home_state::Sheet::More as i32);
@@ -300,7 +343,13 @@ fn touch_is_tiles_rails_and_the_band_swaps_it_without_a_stack_entry() {
         d.navigation.as_ref().unwrap().tabs[0].entries.len()
     };
     let before = depth(&d);
-    send_home(&mut d, i, H::Band(ev::BandPicked { key: "touch".into() }));
+    send_home(
+        &mut d,
+        i,
+        H::Band(ev::BandPicked {
+            key: "touch".into(),
+        }),
+    );
     assert_eq!(depth(&d), before);
     let state = home_state(d.view(i));
     assert_eq!(state.destination, wire::PeopleDestination::Touch as i32);
@@ -322,31 +371,66 @@ fn touch_is_tiles_rails_and_the_band_swaps_it_without_a_stack_entry() {
             ("Starred", 0, true)
         ]
     );
-    assert!(touch.tiles.iter().find(|t| t.key == "reconnect").unwrap().net);
+    assert!(
+        touch
+            .tiles
+            .iter()
+            .find(|t| t.key == "reconnect")
+            .unwrap()
+            .net
+    );
     assert_eq!(touch.reconnect_empty, "Nobody is overdue.");
     assert_eq!(touch.upcoming_empty, "No dates coming up.");
     // BOTH SPELLINGS OF A KIND are one noun: `visit` is "Met up".
     let recent = &touch.recent[0];
-    assert_eq!((recent.kind_label.as_str(), recent.when_label.as_str()), ("Met up", "Today"));
+    assert_eq!(
+        (recent.kind_label.as_str(), recent.when_label.as_str()),
+        ("Met up", "Today")
+    );
     assert_eq!(recent.text, "Coffee");
     assert_eq!(recent.route, Some(routes::person(&dana, "Dana", false)));
     assert_eq!(touch.status_line, "1 person · 0 overdue");
 
     // The same tab is nothing; a tile lands on People under its chip.
-    send_home(&mut d, i, H::Band(ev::BandPicked { key: "touch".into() }));
+    send_home(
+        &mut d,
+        i,
+        H::Band(ev::BandPicked {
+            key: "touch".into(),
+        }),
+    );
     assert_eq!(
         home_state(d.view(i)).destination,
         wire::PeopleDestination::Touch as i32
     );
-    send_home(&mut d, i, H::Tile(ev::TilePicked { key: "upcoming".into() }));
+    send_home(
+        &mut d,
+        i,
+        H::Tile(ev::TilePicked {
+            key: "upcoming".into(),
+        }),
+    );
     assert_eq!(
         home_state(d.view(i)).destination,
         wire::PeopleDestination::Touch as i32
     );
-    send_home(&mut d, i, H::Tile(ev::TilePicked { key: "reconnect".into() }));
+    send_home(
+        &mut d,
+        i,
+        H::Tile(ev::TilePicked {
+            key: "reconnect".into(),
+        }),
+    );
     let state = home_state(d.view(i));
     assert_eq!(state.destination, wire::PeopleDestination::People as i32);
-    assert!(state.chips.iter().find(|c| c.label == "Overdue").unwrap().selected);
+    assert!(
+        state
+            .chips
+            .iter()
+            .find(|c| c.label == "Overdue")
+            .unwrap()
+            .selected
+    );
 }
 
 #[test]

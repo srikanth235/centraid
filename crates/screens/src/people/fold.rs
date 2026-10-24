@@ -60,7 +60,10 @@ pub fn last_touch(
     core_days: i64,
 ) -> String {
     let ever = ever_contacted || !last_local_day.is_empty();
-    let days = match (civil::epoch_day_of(last_local_day), civil::epoch_day_of(today)) {
+    let days = match (
+        civil::epoch_day_of(last_local_day),
+        civil::epoch_day_of(today),
+    ) {
         (Some(from), Some(to)) => to - from,
         _ => core_days,
     };
@@ -246,11 +249,20 @@ mod tests {
     #[test]
     fn a_leap_day_birthday_falls_on_the_twenty_eighth_in_a_common_year() {
         // 2025 is a common year: from 1 February it is 27 days away.
-        assert_eq!(day_label(EN, "2025-02-01", Some(27), "02-29"), "28 February");
+        assert_eq!(
+            day_label(EN, "2025-02-01", Some(27), "02-29"),
+            "28 February"
+        );
         // In a leap year the day exists and is used.
-        assert_eq!(day_label(EN, "2024-02-01", Some(28), "02-29"), "29 February");
+        assert_eq!(
+            day_label(EN, "2024-02-01", Some(28), "02-29"),
+            "29 February"
+        );
         // After this year's, it is next year's: 1 March 2025 to 28 February 2026.
-        assert_eq!(day_label(EN, "2025-03-01", Some(364), "02-29"), "28 February");
+        assert_eq!(
+            day_label(EN, "2025-03-01", Some(364), "02-29"),
+            "28 February"
+        );
     }
 
     #[test]
@@ -273,12 +285,27 @@ mod tests {
     /// today. A touch three hours ago across midnight is yesterday, whatever elapsed time says.
     #[test]
     fn a_last_touch_is_counted_in_the_members_days_and_not_in_elapsed_time() {
-        assert_eq!(last_touch(EN, true, "2026-10-23", "2026-10-24", 0), "Last touch yesterday");
-        assert_eq!(last_touch(EN, true, "2026-10-24", "2026-10-24", 3), "Last touch today");
-        assert_eq!(last_touch(EN, true, "2026-10-12", "2026-10-24", 11), "Last touch 12 days ago");
+        assert_eq!(
+            last_touch(EN, true, "2026-10-23", "2026-10-24", 0),
+            "Last touch yesterday"
+        );
+        assert_eq!(
+            last_touch(EN, true, "2026-10-24", "2026-10-24", 3),
+            "Last touch today"
+        );
+        assert_eq!(
+            last_touch(EN, true, "2026-10-12", "2026-10-24", 11),
+            "Last touch 12 days ago"
+        );
         // A zone that resolved no day keeps the core's own count.
-        assert_eq!(last_touch(EN, true, "", "2026-10-24", 5), "Last touch 5 days ago");
-        assert_eq!(last_touch(EN, false, "", "2026-10-24", 0), "No touch logged yet");
+        assert_eq!(
+            last_touch(EN, true, "", "2026-10-24", 5),
+            "Last touch 5 days ago"
+        );
+        assert_eq!(
+            last_touch(EN, false, "", "2026-10-24", 0),
+            "No touch logged yet"
+        );
     }
 
     #[test]

@@ -50,7 +50,10 @@ impl Draft for Profile {
 
     /// A person needs a name: the command refuses an empty one.
     fn refusal(&self, locale: Locale) -> Option<String> {
-        self.name.trim().is_empty().then(|| words::name_needed(locale))
+        self.name
+            .trim()
+            .is_empty()
+            .then(|| words::name_needed(locale))
     }
 
     /// `add-person` with the whole draft, or `edit-person` with ONLY THE FIELDS THAT
@@ -160,7 +163,9 @@ impl Editor {
         }
         let reading = read::read(
             ctx,
-            load::people::Person { party_id: id.clone() },
+            load::people::Person {
+                party_id: id.clone(),
+            },
             |answer| match answer {
                 Answer::PeoplePerson(person) => Some(person),
                 _ => None,
@@ -242,7 +247,10 @@ impl Editor {
     /// follows it. `again`: the vault moved while words were unsaved, and they are saved now.
     fn saved(&mut self, ctx: &Ctx, again: bool) {
         let added = self.party_id.is_empty()
-            && self.autosave.draft().is_some_and(|draft| draft.id.is_some());
+            && self
+                .autosave
+                .draft()
+                .is_some_and(|draft| draft.id.is_some());
         if added || again {
             self.reload(ctx);
         }
