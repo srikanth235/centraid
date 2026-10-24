@@ -271,6 +271,7 @@ impl Vault {
         // rather than served from a pool, and nothing else in the process
         // opens the file for writing.
         Self::apply_pragmas(&connection)?;
+        crate::log::guard::install_without_rowid_census(&connection)?;
         Ok(Self {
             connection: Held(Some(connection)),
             path,

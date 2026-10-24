@@ -295,10 +295,8 @@ fn every_app_takes_an_act_and_refuses_a_bad_input_with_its_check() {
             !done.invocation_id.is_empty(),
             "{app}.{action} left no journal row"
         );
-        // Health's `record-days` answers `written: 1` and an empty census over this scenario:
-        // the vault's, reported rather than asserted here.
         assert!(
-            app == "health" || !done.tables.is_empty(),
+            !done.tables.is_empty(),
             "{app}.{action} wrote no table: {done:?}"
         );
 
