@@ -38,4 +38,9 @@ catalog! {
     );
     plain edit_fallback_name = ("photograph", "photograph");
     plain not_in_vault = ("This photo is not in a vault yet.", "This photo is not in a vault yet.");
+    plain utc = ("UTC", "UTC");
+    plain captured_fact = ("{when} · {zone}", "{when} · {zone}");
+    plain stamp_line = ("{clock} · {place}", "{clock} · {place}");
+    counted trash_days_left = ("1 day left in the trash", "{n} days left in the trash");
+    plain play_live = ("Live", "Live");
 }

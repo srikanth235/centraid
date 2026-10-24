@@ -120,6 +120,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .boxed(".centraid.core.v1.PhotosDuplicatesState.content.data")
         .boxed(".centraid.core.v1.PhotosDuplicateReviewState.content.data")
         .boxed(".centraid.core.v1.PhotosEditorState.content.data")
+        .boxed(".centraid.core.v1.PhotosLightboxState.content.photo")
+        .boxed(".centraid.core.v1.ViewState.kind.photos_lightbox")
         .boxed(".centraid.core.v1.AgendaHomeState.content.data")
         .boxed(".centraid.core.v1.AgendaEventState.content.data")
         .boxed(".centraid.core.v1.AgendaEditorState.content.data")
