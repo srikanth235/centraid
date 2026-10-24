@@ -581,6 +581,7 @@ impl Shelf {
         wire::PhotosShelfData {
             count_label: cells::count_phrase(locale, count, capped),
             can_show_more: capped,
+            show_more_label: words::photos_show_all(locale),
             empty_trash_label: (self.is_trash() && !tiles.is_empty())
                 .then(|| words::photos_empty_trash(locale)),
             empty,

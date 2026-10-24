@@ -232,6 +232,7 @@ impl Picker {
         let nothing_left = self.next.is_none() && cells.iter().all(|cell| cell.taken);
         wire::PhotosPickerData {
             can_show_more: self.next.is_some(),
+            show_more_label: words::photos_show_all(locale),
             empty: nothing_left.then(|| wire::EmptyState {
                 headline: words::photos_picker_nothing_left(locale),
                 ..wire::EmptyState::default()

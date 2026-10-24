@@ -81,8 +81,9 @@ message PhotosShelfData {
   repeated PhotosShelfCell cells = 1;
   // `5 photos`, or `At least 200 photos` while more is unread.
   string count_label = 2;
-  // More of the shelf is unread: the grid sends `load_more` at its end.
+  // More of the shelf is unread: `show_more_label` sends `load_more`.
   bool can_show_more = 3;
+  string show_more_label = 6;
   // Present when the shelf holds nothing: this shelf's own sentence.
   optional EmptyState empty = 4;
   // "Empty trash", on the trash and while it holds something.
@@ -210,6 +211,7 @@ message PhotosPickerCell {
 message PhotosPickerData {
   repeated PhotosPickerCell cells = 1;
   bool can_show_more = 2;
+  string show_more_label = 4;
   // Present when there is nothing left to add: "Everything in your library is
   // already in this album."
   optional EmptyState empty = 3;
@@ -277,6 +279,8 @@ message PhotosPlaceRow {
   double pin_x = 10;
   double pin_y = 11;
   double pin_size = 12;
+  // The bare number a pin carries (`12`); empty when the count is not known.
+  string count_mark = 13;
 }
 
 message PhotosPlacesData {

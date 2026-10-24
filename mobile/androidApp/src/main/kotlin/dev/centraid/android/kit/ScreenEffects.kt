@@ -31,6 +31,8 @@ import centraid.core.v1.KeychainOp
 import centraid.core.v1.KeychainValue
 import centraid.core.v1.PhoneChanged
 import dev.centraid.android.screens.agenda.readCalendarSnapshot
+import dev.centraid.android.screens.performExportOriginals
+import dev.centraid.core.CentraidCore
 import dev.centraid.core.Screens
 import dev.centraid.shared.platform.platformServices
 import dev.centraid.shared.sync.phone.PhoneDevice
@@ -70,7 +72,7 @@ internal fun PerformScreenEffects(screens: Screens, phone: AndroidPhoneFollow?) 
             // without holding up the keychain read behind it.
             launch {
                 val effect = request.effect
-                val result = perform(effect, context, view, asking, { launcher.launch(it) }, phone) { changed ->
+                val result = perform(effect, context, view, asking, { launcher.launch(it) }, phone, screens.core) { changed ->
                     launch { screens.answer(request, EffectResult(phone_changed = changed)) }
                 }
                 if (result != null) screens.answer(request, result)
@@ -104,6 +106,7 @@ private suspend fun perform(
     asking: CalendarPermission,
     launchPermission: (String) -> Unit,
     phone: AndroidPhoneFollow?,
+    core: CentraidCore,
     report: (PhoneChanged) -> Unit,
 ): EffectResult? {
     val done = EffectResult(done = EffectDone())
@@ -144,6 +147,10 @@ private suspend fun perform(
         effect.open_url != null ->
             start(context, Intent(Intent.ACTION_VIEW, Uri.parse(effect.open_url!!.url)), done)
         effect.keychain != null -> keychain(effect.keychain!!)
+        // THE ORIGINALS OF A PICK, to the share sheet or this phone's photos.
+        effect.export_originals != null ->
+            runCatching { performExportOriginals(context, core, effect.export_originals!!) }
+                .getOrElse { failed("the originals could not be handed off") }
         effect.calendar_read != null -> {
             val read = effect.calendar_read!!
             val allowed = granted(context) ||

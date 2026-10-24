@@ -211,6 +211,11 @@ impl Places {
                 .cover
                 .as_ref()
                 .map(|cover| cells::tile(cover, Link::default(), locale)),
+            count_mark: if card.count > 0 {
+                card.count.to_string()
+            } else {
+                String::new()
+            },
             name_label: words::photos_places_name_this(locale),
             current_name: card.name.clone().unwrap_or_default(),
             pinned: pin.is_some(),
@@ -263,7 +268,7 @@ impl Places {
             unplaced_open_label: words::photos_places_open_them(locale),
             unplaced_open: (unplaced > 0)
                 .then(|| routes::shelf(wire::PhotosShelfKind::Unplaced, "", "")),
-            unpinned_label: if map && unpinned > 0 && unpinned < rows.len() {
+            unpinned_label: if map && unpinned > 0 {
                 if unpinned == 1 {
                     words::photos_places_unpinned_one(locale)
                 } else {
