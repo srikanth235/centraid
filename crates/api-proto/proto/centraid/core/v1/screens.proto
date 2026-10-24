@@ -31,6 +31,7 @@ import "centraid/core/v1/agenda_screens.proto";
 import "centraid/core/v1/docs_screens.proto";
 import "centraid/core/v1/kit_screens.proto";
 import "centraid/core/v1/notes_screens.proto";
+import "centraid/core/v1/people_screens.proto";
 import "centraid/core/v1/route.proto";
 
 // ---------------------------------------------------------------------------
@@ -183,6 +184,10 @@ message ScreenEvent {
     NotesHomeEvent notes_home = 600;
     NotesEditorEvent notes_editor = 601;
     NotesHistoryEvent notes_history = 602;
+    // ---- people (700-799) ----
+    PeopleHomeEvent people_home = 700;
+    PeoplePersonEvent people_person = 701;
+    PeopleEditorEvent people_editor = 702;
     // ---- the kit (900-999) ----
     TrashEvent trash = 900;
   }
@@ -229,6 +234,10 @@ message ViewState {
     NotesHomeState notes_home = 600;
     NotesEditorState notes_editor = 601;
     NotesHistoryState notes_history = 602;
+    // ---- people (700-799) ----
+    PeopleHomeState people_home = 700;
+    PeoplePersonState people_person = 701;
+    PeopleEditorState people_editor = 702;
     // ---- the kit (900-999) ----
     TrashView trash = 900;
   }
@@ -261,6 +270,9 @@ message Effect {
     ScheduleNotification schedule_notification = 11;
     CalendarRead calendar_read = 12;
     PhoneWatch phone_watch = 13;
+    ContactsRead contacts_read = 14;
+    // Open the OS maps app at an address (People's address channel).
+    OpenMap open_map = 15;
     // Open a page now, wherever the member is: the shell pushes `route` as a
     // tapped row's route is pushed. For a screen that makes a thing and
     // opens it (a document just filed).
@@ -356,6 +368,18 @@ message CalendarRead {
   uint32 days_on = 3;
 }
 
+// Read the phone's address book. A shell that is denied (or has none) answers
+// `EffectFailed{denied}`; a pass that only follows never asks the OS for
+// permission (`ask_permission` false), the member's Import tap does.
+message ContactsRead {
+  bool ask_permission = 1;
+}
+
+message OpenMap {
+  // An address, as the member wrote it.
+  string query = 1;
+}
+
 // Start (`on`) or stop watching a phone store; while it is on, the shell
 // answers this effect with a `PhoneChanged` each time the store changes, under
 // the effect's one `effect_id`.
@@ -374,6 +398,7 @@ message EffectResult {
     KeychainValue keychain = 6;
     CalendarSnapshot calendar = 7;
     PhoneChanged phone_changed = 8;
+    ContactsSnapshot contacts = 9;
     // ---- docs (200-299): files ----
     FilePicked file_picked = 200;
     FileProgress file_progress = 201;
@@ -462,6 +487,45 @@ message PhoneCalendarSeries {
   string rrule = 2;
   string start = 3;
   string end = 4;
+}
+
+// The phone's address book as the OS holds it. Rust makes every record: it
+// squashes the names, keeps one contact once, labels each account and decides
+// what to send (`follow-contacts`).
+message ContactsSnapshot {
+  // False when the read may have missed contacts (iOS limited access, a read
+  // that failed part-way): nothing is then trashed.
+  bool complete = 1;
+  // This install's id, minted once and kept off the vault: an id that means
+  // something on this phone only is followed under it (R-1127-10).
+  string device_id = 2;
+  // Every account or container present, an empty one included.
+  repeated PhoneContactContainer containers = 3;
+  repeated PhoneContact contacts = 4;
+}
+
+message PhoneContactContainer {
+  // The platform's own id for the account, not yet prefixed.
+  string key = 1;
+  // What the OS calls it ("iCloud", "Gmail"); empty is the phone's own.
+  string name = 2;
+}
+
+message PhoneContact {
+  // The display name; a contact with none is skipped.
+  string name = 1;
+  repeated string phones = 2;
+  repeated string emails = 3;
+  // `MM-DD`, or empty: the year is not asked for, because a People date is a
+  // day of the year.
+  string birthday = 4;
+  // The phone's most durable id, kind-prefixed (`lookup:` Android's
+  // `LOOKUP_KEY`, `local:` a device-scoped id). A contact with none is skipped,
+  // because nothing could find it again.
+  string phone_id = 5;
+  // The account the contact was read in (a `PhoneContactContainer.key`); empty
+  // is this phone.
+  string container_key = 6;
 }
 
 // A watched store changed.

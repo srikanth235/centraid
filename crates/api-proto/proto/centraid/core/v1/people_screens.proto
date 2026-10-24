@@ -1,0 +1,740 @@
+// PEOPLE'S SCREENS (#1135): the roster and Touch under one band, one person's
+// sheet with its write sheets and confirms, the profile editor, and the kit's
+// `people.trash`. Every message here is finished state a view draws or an event
+// a view sends; Rust (`crates/screens`, module `people`) makes every decision,
+// string, count, day and route. Arms in `screens.proto`: 700-799.
+//
+// Screens: `people.home` (People and Touch are DESTINATIONS of one screen, so a
+// tap on the band changes a value and no stack entry; Search is a field over the
+// current one and More a sheet), `people.person`, `people.editor` (autosaving)
+// and the kit's `people.trash`.
+//
+// VIEWS DECIDE NOTHING. Every label, sentence, chip, hue key, accessibility
+// label, enabled flag and day below is made in Rust; a row that opens a page
+// carries the `Route` to push. Calling, mailing and opening a map are platform
+// acts that Rust asks for as `Effect`s (`OpenUrl`, `OpenMap`, `ClipboardSet`).
+//
+// NO SHARING PLANE (#1029 amendment): no Linked chips, no Vaults rail, no share
+// or revoke. A party with no People profile (a face-review party) is not in any
+// list here — the core's ruling in `app_query/people.rs`.
+
+syntax = "proto3";
+
+package centraid.core.v1;
+
+import "centraid/core/v1/kit_screens.proto";
+import "centraid/core/v1/route.proto";
+
+// ---------------------------------------------------------------------------
+// Shared pieces
+// ---------------------------------------------------------------------------
+
+enum PeopleChipKey {
+  PEOPLE_CHIP_KEY_UNSPECIFIED = 0;
+  PEOPLE_CHIP_KEY_ALL = 1;
+  PEOPLE_CHIP_KEY_STARRED = 2;
+  PEOPLE_CHIP_KEY_DUE = 3;
+}
+
+enum PeopleOrder {
+  PEOPLE_ORDER_UNSPECIFIED = 0;
+  // Newest-added first.
+  PEOPLE_ORDER_RECENT = 1;
+  PEOPLE_ORDER_NAME = 2;
+}
+
+// An avatar, finished: initials and a party-hue key, never a stored colour. A
+// person's hue is drawn from their id (`cRose`, a theme colour role).
+message PeopleAvatar {
+  string initials = 1;
+  string hue_key = 2;
+}
+
+// A section's heading with its count and the verb that adds to it ("Add
+// channel"); empty `verb_label` draws no verb.
+message PeopleSectionHead {
+  string title = 1;
+  uint32 count = 2;
+  string verb_label = 3;
+}
+
+// ---------------------------------------------------------------------------
+// people.home
+// ---------------------------------------------------------------------------
+
+message PeopleHomeState {
+  PeopleDestination destination = 1;
+  // "People".
+  string title = 2;
+  // The band: People · Touch, then More. EMPTY while denied.
+  repeated PeopleBandTab band = 3;
+  PeopleHomeChrome chrome = 4;
+  oneof content {
+    Loading loading = 5;
+    Failure failure = 6;
+    Denied denied = 7;
+    PeopleRosterData roster = 8;
+    PeopleTouchData touch = 9;
+  }
+  // THE CHIP ROW (R-CHROME-3): the roster's filters with their counts, the
+  // current one selected. EMPTY on Touch, over search and while denied.
+  repeated PeopleChip chips = 10;
+  // The row's last chip, the sort; absent exactly when `chips` is empty.
+  optional PeopleSortChip sort_chip = 11;
+  // Search is the field under the title; while a term is answered its rows
+  // replace the surface.
+  PeopleSearchState search = 12;
+  // SHEET_MORE's rows: Trash alone (R-CHROME-4).
+  repeated PeopleMoreRow more_rows = 13;
+  Sheet sheet = 14;
+  // SHEET_ORDER's choices.
+  repeated PeopleOrderChoice order_choices = 15;
+  // What a write did, a refusal's sentence, or how an import went; the screen
+  // under it stays.
+  StatusLine status = 16;
+  // The header's one action: the editor on a new person.
+  Route add_person = 17;
+
+  enum Sheet {
+    SHEET_NONE = 0;
+    SHEET_MORE = 1;
+    SHEET_ORDER = 2;
+  }
+}
+
+// One tab of People's band: `people`, `touch`, `more` (an ordinary tab, last,
+// whose tap opens SHEET_MORE).
+message PeopleBandTab {
+  string key = 1;
+  string label = 2;
+  // A `design/native-catalog.json` icon key.
+  string icon_key = 3;
+  bool current = 4;
+}
+
+message PeopleHomeChrome {
+  string add_person = 1;
+  string search_label = 2;
+  string search_placeholder = 3;
+  string search_close = 4;
+  string retry = 5;
+  string loading = 6;
+  string more_title = 7;
+  // SHEET_ORDER's title.
+  string sort_heading = 8;
+  string home = 9;
+  string cancel = 10;
+}
+
+// One filter chip, with its count over the whole window.
+message PeopleChip {
+  PeopleChipKey key = 1;
+  string label = 2;
+  uint32 count = 3;
+  bool selected = 4;
+  string accessibility_label = 5;
+}
+
+// THE SORT CHIP, last in the chip row: the current order's name; a tap opens
+// SHEET_ORDER.
+message PeopleSortChip {
+  string label = 1;
+  // "Sort, Recently added".
+  string spoken = 2;
+}
+
+message PeopleOrderChoice {
+  PeopleOrder order = 1;
+  string label = 2;
+  bool selected = 3;
+}
+
+message PeopleMoreRow {
+  string key = 1;
+  string label = 2;
+  string icon_key = 3;
+  // Where a tap goes.
+  Route route = 4;
+}
+
+// ONE PERSON AS A LIST DRAWS THEM: the roster and search.
+message PeopleRow {
+  string party_id = 1;
+  string name = 2;
+  PeopleAvatar avatar = 3;
+  // The role line; empty draws nothing.
+  string role = 4;
+  // "Last touch 12 days ago" / "No touch logged yet".
+  string meta = 5;
+  // "Overdue" (net) and the next reminder within a month ("Birthday · in 3
+  // days"), in draw order.
+  repeated StatusChip chips = 6;
+  bool due = 7;
+  bool starred = 8;
+  // The star control's accessibility label: "Star Dana" / "Remove star from Dana".
+  string star_label = 9;
+  string accessibility_label = 10;
+  // The person's page.
+  Route route = 11;
+}
+
+message PeopleRosterData {
+  repeated PeopleRow rows = 1;
+  // Set exactly when `rows` is empty: day one (with "Add person" and the
+  // phone's contacts), or the chip's own sentence.
+  optional EmptyState empty = 2;
+  // "12 people · 3 to reconnect · 2 starred" ("shown" when truncated).
+  string status_line = 3;
+  bool truncated = 4;
+}
+
+// A count tile on Touch. `tappable` false draws a figure, not a control.
+message PeopleTile {
+  string key = 1;
+  string label = 2;
+  uint32 count = 3;
+  // The `net` tone: a consequence, not an alert.
+  bool net = 4;
+  bool tappable = 5;
+  string accessibility_label = 6;
+}
+
+// A Reconnect card: who is overdue, and by how much.
+message PeopleCardRow {
+  string party_id = 1;
+  string name = 2;
+  PeopleAvatar avatar = 3;
+  string role = 4;
+  // "3 days over".
+  string detail = 5;
+  // "Log a touch".
+  string action_label = 6;
+  string accessibility_label = 7;
+  // The person's page.
+  Route route = 8;
+  // The person's page with the Log a touch sheet already open.
+  Route log_route = 9;
+}
+
+message PeopleUpcomingRow {
+  string party_id = 1;
+  string date_id = 2;
+  string name = 3;
+  PeopleAvatar avatar = 4;
+  // "Birthday".
+  string label = 5;
+  // "Today" / "Tomorrow" / "In 12 days".
+  string when_label = 6;
+  // The day it falls on next, "28 February": the stored day clamped into the
+  // year it falls in, so a 29 February birthday is the 28th in a common year.
+  string day_label = 7;
+  string accessibility_label = 8;
+  Route route = 9;
+}
+
+message PeopleRecentRow {
+  string interaction_id = 1;
+  string party_id = 2;
+  string name = 3;
+  PeopleAvatar avatar = 4;
+  // "Met up".
+  string kind_label = 5;
+  string text = 6;
+  // "Today" / "Yesterday" / "Wed 11 March".
+  string when_label = 7;
+  string accessibility_label = 8;
+  Route route = 9;
+}
+
+message PeopleTouchData {
+  repeated PeopleTile tiles = 1;
+  PeopleSectionHead reconnect_head = 2;
+  repeated PeopleCardRow reconnect = 3;
+  // One sentence when the rail is empty; empty draws nothing.
+  string reconnect_empty = 4;
+  PeopleSectionHead upcoming_head = 5;
+  repeated PeopleUpcomingRow upcoming = 6;
+  string upcoming_empty = 7;
+  PeopleSectionHead recent_head = 8;
+  repeated PeopleRecentRow recent = 9;
+  string recent_empty = 10;
+  // "12 people · 3 overdue".
+  string status_line = 11;
+  // DAY ONE: nobody in People at all. Drawn instead of the rails.
+  optional EmptyState empty = 12;
+}
+
+// The search field and its answer.
+message PeopleSearchState {
+  bool open = 1;
+  string term = 2;
+  // Set while a term is answered: the rows, or the sentence for none.
+  optional PeopleSearchResults results = 3;
+  // "Including results for “x”", when the core corrected a typo.
+  string corrected = 4;
+  optional SearchAsk ask = 5;
+}
+
+message PeopleSearchResults {
+  repeated PeopleRow rows = 1;
+  optional EmptyState empty = 2;
+}
+
+message PeopleHomeEvent {
+  oneof kind {
+    // The failure's "Try again".
+    Refreshed refreshed = 1;
+    BandPicked band = 2;
+    ChipPicked chip = 3;
+    OrderPicked order = 4;
+    SearchOpened search_opened = 5;
+    SearchTermChanged search_term = 6;
+    SearchClosed search_closed = 7;
+    SheetOpened sheet_opened = 8;
+    SheetClosed sheet_closed = 9;
+    StarToggled star = 10;
+    TilePicked tile = 11;
+    // The member tapped the day-one "Import contacts": Rust asks the shell to
+    // read the address book (the OS asks its own permission then).
+    ImportContactsTapped import_contacts = 12;
+  }
+
+  message Refreshed {}
+
+  // A band tab by `PeopleBandTab.key`; `more` opens the sheet.
+  message BandPicked {
+    string key = 1;
+  }
+
+  message ChipPicked {
+    PeopleChipKey chip = 1;
+  }
+
+  message OrderPicked {
+    PeopleOrder order = 1;
+  }
+
+  message SearchOpened {}
+
+  message SearchTermChanged {
+    string term = 1;
+  }
+
+  message SearchClosed {}
+
+  message SheetOpened {
+    PeopleHomeState.Sheet sheet = 1;
+  }
+
+  message SheetClosed {}
+
+  message StarToggled {
+    string party_id = 1;
+  }
+
+  // A Touch tile by `PeopleTile.key`: lands on People under its chip.
+  message TilePicked {
+    string key = 1;
+  }
+
+  message ImportContactsTapped {}
+}
+
+// ---------------------------------------------------------------------------
+// people.person
+// ---------------------------------------------------------------------------
+
+enum PeopleChannelIntent {
+  PEOPLE_CHANNEL_INTENT_UNSPECIFIED = 0;
+  PEOPLE_CHANNEL_INTENT_CALL = 1;
+  PEOPLE_CHANNEL_INTENT_MAIL = 2;
+  PEOPLE_CHANNEL_INTENT_MAP = 3;
+  // A handle or an unknown kind: copy the value.
+  PEOPLE_CHANNEL_INTENT_COPY = 4;
+}
+
+message PeoplePersonState {
+  string party_id = 1;
+  // The name the route carried, for the app bar before the read lands.
+  string name_hint = 2;
+  PeoplePersonChrome chrome = 3;
+  oneof content {
+    Loading loading = 4;
+    Failure failure = 5;
+    Denied denied = 6;
+    PeoplePersonData data = 7;
+    // No live person has this id: trashed, merged away, or never here.
+    EmptyState gone = 8;
+  }
+  // The write sheet or choices sheet on screen; absent is none.
+  optional PeoplePersonSheet sheet = 9;
+  optional Confirm confirm = 10;
+  // The last write's outcome or refusal, one sentence.
+  StatusLine status = 11;
+  // THE SHELL POPS THIS SCREEN: the person was moved to the trash here.
+  bool done = 12;
+  // The editor on this person.
+  Route edit = 13;
+}
+
+message PeoplePersonChrome {
+  string edit = 1;
+  string log_touch = 2;
+  string add_note = 3;
+  string add_date = 4;
+  string add_channel = 5;
+  string merge = 6;
+  string move_to_trash = 7;
+  string retry = 8;
+  string loading = 9;
+  string back = 10;
+}
+
+// A label and a value on the sheet: "Nickname", "How you met".
+message PeopleFact {
+  string label = 1;
+  string value = 2;
+}
+
+message PeopleChannelRow {
+  string channel_id = 1;
+  // "Phone".
+  string kind_label = 2;
+  string value = 3;
+  // The member's own label ("work"), or empty.
+  string label = 4;
+  // "preferred", or empty.
+  string preferred_label = 5;
+  // "Also on Sam's card", or empty.
+  string duplicate_note = 6;
+  // What a tap does, for the glyph: the effect itself is Rust's.
+  PeopleChannelIntent intent = 7;
+  // "Call" / "Email" / "Open map" / "Copy".
+  string action_label = 8;
+  // The remove control's accessibility label: "Remove this phone".
+  string remove_label = 9;
+  string accessibility_label = 10;
+}
+
+message PeopleDateRow {
+  string date_id = 1;
+  string label = 2;
+  // The day it falls on next, "28 February"; the stored "14 August" when the
+  // core could not place it.
+  string day_label = 3;
+  // "Today" / "Tomorrow" / "In 12 days"; empty when the date does not parse.
+  string when_label = 4;
+  bool reminder_on = 5;
+  // "Reminder on" / "Reminder off".
+  string reminder_label = 6;
+  // The toggle's accessibility label.
+  string toggle_label = 7;
+  string accessibility_label = 8;
+  // A birthday is a column of the person and always has its reminder: no toggle.
+  bool toggleable = 9;
+}
+
+message PeopleNoteRow {
+  string annotation_id = 1;
+  string text = 2;
+  string when_label = 3;
+}
+
+message PeopleTouchRow {
+  string interaction_id = 1;
+  string kind_label = 2;
+  string text = 3;
+  string when_label = 4;
+  string accessibility_label = 5;
+}
+
+message PeoplePersonData {
+  string party_id = 1;
+  string name = 2;
+  PeopleAvatar avatar = 3;
+  string role = 4;
+  // "Every 14 days · last touch 3 days ago" / "No cadence · no touch logged yet".
+  string cadence_line = 5;
+  optional StatusChip due_chip = 6;
+  bool starred = 7;
+  // "Star" / "Remove star": the control's label.
+  string star_label = 8;
+  // Nickname and how you met, only those that are set.
+  repeated PeopleFact facts = 9;
+  PeopleSectionHead channels_head = 10;
+  repeated PeopleChannelRow channels = 11;
+  // One sentence for none; empty draws nothing.
+  string channels_empty = 12;
+  PeopleSectionHead dates_head = 13;
+  repeated PeopleDateRow dates = 14;
+  string dates_empty = 15;
+  PeopleSectionHead notes_head = 16;
+  repeated PeopleNoteRow notes = 17;
+  string notes_empty = 18;
+  PeopleSectionHead touches_head = 19;
+  repeated PeopleTouchRow touches = 20;
+  string touches_empty = 21;
+}
+
+// A pick among fixed choices: a touch kind, a channel kind.
+message PeopleKindChoice {
+  string key = 1;
+  string label = 2;
+  bool selected = 3;
+}
+
+// What every write sheet on the person carries: its words and its state.
+message PeopleSheetFrame {
+  string title = 1;
+  string submit_label = 2;
+  bool submit_enabled = 3;
+  string cancel_label = 4;
+  // The write's refusal, over the fields that are kept.
+  optional Failure failure = 5;
+}
+
+message PeopleLogTouchSheet {
+  PeopleSheetFrame frame = 1;
+  repeated PeopleKindChoice kinds = 2;
+  string note = 3;
+  string note_label = 4;
+  string note_placeholder = 5;
+  // "Logging stamps last contacted."
+  string hint = 6;
+}
+
+message PeopleNoteSheet {
+  PeopleSheetFrame frame = 1;
+  string text = 2;
+  string placeholder = 3;
+}
+
+message PeopleDateSheet {
+  PeopleSheetFrame frame = 1;
+  string label = 2;
+  string label_field = 3;
+  // What was typed, `MM-DD` when valid.
+  string month_day = 4;
+  string month_day_field = 5;
+  string month_day_placeholder = 6;
+  // The sentence under a month-day that is not a real day; empty when fine.
+  string month_day_invalid = 7;
+  bool reminder_on = 8;
+  string reminder_label = 9;
+}
+
+message PeopleChannelSheet {
+  PeopleSheetFrame frame = 1;
+  repeated PeopleKindChoice kinds = 2;
+  string value = 3;
+  string value_field = 4;
+  string label = 5;
+  string label_field = 6;
+  bool preferred = 7;
+  string preferred_label = 8;
+}
+
+message PeopleMergeChoice {
+  string party_id = 1;
+  string name = 2;
+  PeopleAvatar avatar = 3;
+  string role = 4;
+}
+
+// "Merge in": pick who folds INTO this person. A choices sheet (#1015 D4).
+message PeopleMergeSheet {
+  string title = 1;
+  // "Merging cannot be undone."
+  string body = 2;
+  string cancel_label = 3;
+  oneof content {
+    Loading loading = 4;
+    Failure failure = 5;
+    PeopleMergeChoices choices = 6;
+  }
+}
+
+message PeopleMergeChoices {
+  repeated PeopleMergeChoice choices = 1;
+  optional EmptyState empty = 2;
+}
+
+message PeoplePersonSheet {
+  oneof kind {
+    PeopleLogTouchSheet log_touch = 1;
+    PeopleNoteSheet note = 2;
+    PeopleDateSheet date = 3;
+    PeopleChannelSheet channel = 4;
+    PeopleMergeSheet merge = 5;
+  }
+}
+
+message PeoplePersonEvent {
+  oneof kind {
+    Refreshed refreshed = 1;
+    StarToggled star = 2;
+    SheetOpened sheet_opened = 3;
+    SheetClosed sheet_closed = 4;
+    // Sheet fields.
+    KindPicked kind_picked = 5;
+    TextChanged text = 6;
+    SecondTextChanged second_text = 7;
+    FlagToggled flag = 8;
+    SheetSubmitted submitted = 9;
+    ReminderToggled reminder = 10;
+    RemoveChannelTapped remove_channel = 11;
+    MergePicked merge_picked = 12;
+    TrashTapped trash_tapped = 13;
+    Confirmed confirmed = 14;
+    Dismissed dismissed = 15;
+    // A channel row's tap: Rust asks the OS to call, mail, map or copy it.
+    ChannelTapped channel = 16;
+  }
+
+  message Refreshed {}
+
+  message StarToggled {}
+
+  message SheetOpened {
+    Which which = 1;
+
+    enum Which {
+      WHICH_UNSPECIFIED = 0;
+      WHICH_LOG_TOUCH = 1;
+      WHICH_NOTE = 2;
+      WHICH_DATE = 3;
+      WHICH_CHANNEL = 4;
+      WHICH_MERGE = 5;
+    }
+  }
+
+  message SheetClosed {}
+
+  message KindPicked {
+    string key = 1;
+  }
+
+  // The sheet's first text: the touch note, the note, the date's label, the
+  // channel's value.
+  message TextChanged {
+    string text = 1;
+  }
+
+  // The sheet's second text: the date's `MM-DD`, the channel's label.
+  message SecondTextChanged {
+    string text = 1;
+  }
+
+  // The sheet's switch: the date's reminder, the channel's preferred.
+  message FlagToggled {}
+
+  message SheetSubmitted {}
+
+  message ReminderToggled {
+    string date_id = 1;
+  }
+
+  message RemoveChannelTapped {
+    string channel_id = 1;
+  }
+
+  message MergePicked {
+    string party_id = 1;
+  }
+
+  message TrashTapped {}
+
+  message Confirmed {}
+
+  message Dismissed {}
+
+  message ChannelTapped {
+    string channel_id = 1;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// people.editor
+// ---------------------------------------------------------------------------
+
+// The profile as the editor holds it. A person's hue is drawn from their id
+// and nothing stores one (#1135).
+message PeopleProfileDraft {
+  string display_name = 1;
+  string role = 2;
+  string nickname = 3;
+  string met = 4;
+  // 0 is no cadence.
+  int64 cadence_days = 5;
+}
+
+message PeopleCadenceChoice {
+  int64 days = 1;
+  // "Never" / "7 days".
+  string label = 2;
+  bool selected = 3;
+}
+
+message PeopleEditorChrome {
+  // "New person" / "Edit person".
+  string title = 1;
+  string name_field = 2;
+  string role_field = 3;
+  string role_placeholder = 4;
+  string nickname_field = 5;
+  string met_field = 6;
+  string cadence_field = 7;
+  // "Cancel" before the first keystroke of a new person, else "Done".
+  string close_label = 8;
+  string retry = 9;
+  string loading = 10;
+}
+
+message PeopleEditorState {
+  PeopleEditorChrome chrome = 1;
+  oneof content {
+    Loading loading = 2;
+    Failure failure = 3;
+    Denied denied = 4;
+    PeopleProfileDraft draft = 5;
+    // The person is not there to edit.
+    EmptyState gone = 6;
+  }
+  Autosave autosave = 7;
+  repeated PeopleCadenceChoice cadences = 8;
+  // A refused cadence, or another sentence the editor owes; empty when none.
+  StatusLine status = 9;
+}
+
+message PeopleEditorEvent {
+  oneof kind {
+    Refreshed refreshed = 1;
+    NameChanged name = 2;
+    RoleChanged role = 3;
+    NicknameChanged nickname = 4;
+    MetChanged met = 5;
+    CadencePicked cadence = 6;
+  }
+
+  message Refreshed {}
+
+  message NameChanged {
+    string text = 1;
+  }
+
+  message RoleChanged {
+    string text = 1;
+  }
+
+  message NicknameChanged {
+    string text = 1;
+  }
+
+  message MetChanged {
+    string text = 1;
+  }
+
+  message CadencePicked {
+    int64 days = 1;
+  }
+}

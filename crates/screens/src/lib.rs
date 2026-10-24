@@ -10,6 +10,7 @@ pub mod docs;
 pub mod field;
 pub mod kit;
 pub mod notes;
+pub mod people;
 pub mod proof;
 pub mod registry;
 pub mod runtime;
@@ -31,7 +32,8 @@ pub fn standard() -> Runtime {
             .with(proof::NAME, proof::build)
             .merge(agenda::registry())
             .merge(docs::registry())
-            .merge(notes::registry()),
+            .merge(notes::registry())
+            .merge(people::registry()),
         vec![
             ("proof".to_owned(), proof::route()),
             (

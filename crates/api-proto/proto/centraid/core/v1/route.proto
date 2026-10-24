@@ -39,6 +39,10 @@ message Route {
     NotesHomeRoute notes_home = 600;
     NotesEditorRoute notes_editor = 601;
     NotesHistoryRoute notes_history = 602;
+    // ---- people (700-799) ----
+    PeopleHomeRoute people_home = 700;
+    PeoplePersonRoute people_person = 701;
+    PeopleEditorRoute people_editor = 702;
     // ---- the kit (900-999) ----
     TrashRoute trash = 900;
   }
@@ -202,6 +206,39 @@ message NotesEditorRoute {
 message NotesHistoryRoute {
   string note_id = 1;
   string note_title = 2;
+}
+
+// ---------------------------------------------------------------------------
+// People
+// ---------------------------------------------------------------------------
+
+// Which list `people.home` shows. People and Touch are one screen, so a tap on
+// the band changes this value and no stack entry.
+enum PeopleDestination {
+  PEOPLE_DESTINATION_UNSPECIFIED = 0;
+  PEOPLE_DESTINATION_PEOPLE = 1;
+  PEOPLE_DESTINATION_TOUCH = 2;
+}
+
+// `people.home`: UNSPECIFIED is People.
+message PeopleHomeRoute {
+  PeopleDestination destination = 1;
+}
+
+// `people.person`: one person's sheet. The name rides along so the app bar has
+// words before the read lands; `log_touch` opens the Log a touch sheet at once
+// (Touch's card action).
+message PeoplePersonRoute {
+  string party_id = 1;
+  string name = 2;
+  bool log_touch = 3;
+}
+
+// `people.editor`: an existing person, or `is_new` with no id: an empty draft
+// whose first save adds the person under the id the vault mints.
+message PeopleEditorRoute {
+  string party_id = 1;
+  bool is_new = 2;
 }
 
 // ---------------------------------------------------------------------------
