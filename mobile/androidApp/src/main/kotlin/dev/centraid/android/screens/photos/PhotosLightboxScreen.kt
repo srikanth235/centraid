@@ -20,7 +20,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
@@ -43,8 +42,6 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import centraid.core.v1.PhotoTile
-import centraid.core.v1.PhotosAlbumChoice
-import centraid.core.v1.PhotosAlbumChoiceEvent
 import centraid.core.v1.PhotosLightboxEvent
 import centraid.core.v1.PhotosLightboxPhoto
 import centraid.core.v1.PhotosLightboxShareChoice
@@ -55,7 +52,7 @@ import centraid.core.v1.Route
 import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.ConfirmSheet
 import dev.centraid.android.kit.KitLink
-import dev.centraid.android.kit.OutlineButton
+import dev.centraid.android.kit.PhotosAlbumChoiceSheet
 import dev.centraid.android.kit.ScreenFailure
 import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.SheetRow
@@ -384,7 +381,7 @@ private fun Sheets(
     }
     val album = state.album_choice
     if (album != null && album.open) {
-        AlbumSheet(album, onEvent)
+        PhotosAlbumChoiceSheet(album) { event -> onEvent(PhotosLightboxEvent(album_choice = event)) }
     }
     state.confirm?.let { confirm ->
         ConfirmSheet(
@@ -400,68 +397,6 @@ private fun ShareRow(choice: PhotosLightboxShareChoice, onEvent: (PhotosLightbox
     SheetRow(label = choice.label, detail = choice.detail, onTap = {
         onEvent(PhotosLightboxEvent(share = PhotosLightboxEvent.ShareChosen(precision = choice.precision)))
     })
-}
-
-/** "ADD TO ALBUM": Rust's list, its words, and the create row that keeps the sheet open. */
-@Composable
-private fun AlbumSheet(album: PhotosAlbumChoice, onEvent: (PhotosLightboxEvent) -> Unit) {
-    fun send(event: PhotosAlbumChoiceEvent) = onEvent(PhotosLightboxEvent(album_choice = event))
-    var naming by remember { mutableStateOf(false) }
-    var name by remember { mutableStateOf("") }
-    SheetRoom(
-        title = album.title,
-        onDismiss = { send(PhotosAlbumChoiceEvent(dismissed = PhotosAlbumChoiceEvent.Dismissed())) },
-    ) {
-        Column(Modifier.fillMaxWidth()) {
-            if (naming) {
-                Row(
-                    Modifier.padding(horizontal = CentraidGeometry.PAGE_MARGIN.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    val create = {
-                        val trimmed = name.trim()
-                        if (trimmed.isNotEmpty()) {
-                            send(PhotosAlbumChoiceEvent(created = PhotosAlbumChoiceEvent.Created(title = trimmed)))
-                            name = ""
-                            naming = false
-                        }
-                    }
-                    OutlinedTextField(
-                        value = name,
-                        onValueChange = { name = it },
-                        label = { Text(album.name_placeholder) },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                        keyboardActions = KeyboardActions(onDone = { create() }),
-                        modifier = Modifier.weight(1f),
-                    )
-                    KitLink(label = album.create_label, onClick = create, dense = true, enabled = name.isNotBlank())
-                }
-            } else {
-                SheetRow(label = album.new_album_label, iconKey = "add", onTap = { naming = true })
-            }
-            if (album.empty.isNotEmpty()) {
-                Text(
-                    album.empty,
-                    style = centraidType("small"),
-                    color = centraidColor("textFaint"),
-                    modifier = Modifier.padding(horizontal = CentraidGeometry.PAGE_MARGIN.dp, vertical = 8.dp),
-                )
-            }
-            album.entries.forEach { entry ->
-                SheetRow(label = entry.title, detail = entry.count_label, onTap = {
-                    send(PhotosAlbumChoiceEvent(chosen = PhotosAlbumChoiceEvent.Chosen(album_id = entry.album_id)))
-                })
-            }
-            OutlineButton(
-                label = album.cancel_label,
-                testTag = "album-choice-cancel",
-                modifier = Modifier.padding(horizontal = CentraidGeometry.PAGE_MARGIN.dp, vertical = 8.dp),
-                onPress = { send(PhotosAlbumChoiceEvent(dismissed = PhotosAlbumChoiceEvent.Dismissed())) },
-            )
-        }
-    }
 }
 
 /** "ADJUST LOCATION": the places this vault knows, and "No place". A place is picked, never typed. */

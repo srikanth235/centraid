@@ -175,6 +175,14 @@ final class ScreenStore: ObservableObject {
             }
         case .phoneWatch(let watch)?:
             self.watch(request, watch)
+        // PHOTOS' ONE-PHOTOGRAPH PAGES (#1135): the camera the original's header
+        // names, and the editor's pixel work.
+        case .readCamera(let read)?:
+            Task { answer(request, await PhotoEffects.camera(read)) }
+        #if os(iOS)
+        case .renderEdit(let render)?:
+            Task { answer(request, await PhotoEffects.renderEdit(render, core: core)) }
+        #endif
         default:
             // Platform work this build does not perform yet: say so, by value.
             answer(request, .failed(Self.failure("not performed by this shell")))

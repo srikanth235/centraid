@@ -72,7 +72,7 @@ public object RowRoutes {
         AppIds.DOCS to DOCUMENT -> Destination.DocsDocument(row.id, row.title, parent = parent)
         AppIds.PEOPLE to PERSON -> Destination.PeoplePerson(row.id, row.title)
         AppIds.AGENDA to EVENT -> AgendaEntry.event(eventId = row.id, instanceKey = row.qualifier)
-        AppIds.PHOTOS to PHOTO -> PhotosLightboxEntry.lightbox(row.id, neighbours.ifEmpty { listOf(row.id) })
+        AppIds.PHOTOS to PHOTO -> PhotosEntry.lightbox(row.id, neighbours.ifEmpty { listOf(row.id) })
         AppIds.MONEY to TRANSACTION -> Destination.MoneyTransaction(row.id, parent = parent)
         AppIds.LOCKER to LOCKER_ITEM -> lockerItem(row, parent)
         else -> appHome(row.app)

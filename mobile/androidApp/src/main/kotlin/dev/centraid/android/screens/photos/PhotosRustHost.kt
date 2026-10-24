@@ -223,6 +223,38 @@ internal class PhotosRustHost(private val device: PhotosDevice) {
                 onHome = { nav.home() },
                 onResume = { device.opened() },
             )
+            view.photos_lightbox != null -> {
+                val lightbox = view.photos_lightbox!!
+                // A deleted-for-good photograph leaves its own room.
+                LaunchedEffect(lightbox.dismissed) { if (lightbox.dismissed) nav.pop() }
+                PhotosLightboxScreen(
+                    state = lightbox,
+                    onEvent = { send(ScreenEvent(photos_lightbox = it)) },
+                    onOpen = open,
+                    onClose = { nav.pop() },
+                )
+            }
+            view.photos_editor != null -> PhotosEditorScreen(
+                state = view.photos_editor!!,
+                onEvent = { send(ScreenEvent(photos_editor = it)) },
+                onClose = { nav.pop() },
+                // The saved photograph replaces the editor, so back lands on the lightbox it came from.
+                onSaved = { route ->
+                    nav.pop()
+                    nav.push(Destination.RustScreen(route))
+                },
+            )
+            view.photos_duplicates != null -> PhotosDuplicatesScreen(
+                state = view.photos_duplicates!!,
+                onEvent = { send(ScreenEvent(photos_duplicates = it)) },
+                onOpen = open,
+                onBack = { nav.pop() },
+            )
+            view.photos_duplicate_review != null -> PhotosDuplicateReviewScreen(
+                state = view.photos_duplicate_review!!,
+                onEvent = { send(ScreenEvent(photos_duplicate_review = it)) },
+                onBack = { nav.pop() },
+            )
         }
     }
 

@@ -1,24 +1,8 @@
 package dev.centraid.android.screens.photos
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.ui.Modifier
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import dev.centraid.android.kit.PushedPage
 import dev.centraid.android.screens.AppRoutes
-import dev.centraid.android.screens.DuplicateReviewScreen
-import dev.centraid.android.screens.DuplicatesScreen
-import dev.centraid.android.screens.LocalPhotoEditOpener
-import dev.centraid.android.screens.PhotoEditorScreen
-import dev.centraid.android.screens.PhotoLightboxScreen
 import dev.centraid.android.screens.RouteNav
-import dev.centraid.android.screens.installPhotoEditRenderer
-import dev.centraid.design.copy.PhotosCopy
-import dev.centraid.shared.apps.photos.DuplicateReviewBridge
-import dev.centraid.shared.apps.photos.DuplicatesBridge
-import dev.centraid.shared.apps.photos.PhotoEditorBridge
-import dev.centraid.shared.apps.photos.PhotoLightboxBridge
 import dev.centraid.shared.nav.PhotosEntry
 import dev.centraid.shared.shell.PhotosDevice
 import dev.centraid.shared.nav.Destination
@@ -47,11 +31,6 @@ import kotlinx.coroutines.launch
  * leave the routed one drawing into nothing.
  */
 public class PhotosRoutes(private val cacheDir: java.io.File) : AppRoutes {
-    private val photoLightbox = PhotoLightboxBridge()
-    private val duplicates = DuplicatesBridge()
-    private val duplicateReview = DuplicateReviewBridge()
-    private val photoEditor = PhotoEditorBridge()
-
     /**
      * THE DEVICE'S HALF OF PHOTOS: the camera roll (walked once PER VAULT), free up
      * space and an original back from the gateway. Held so the Photos screen's
@@ -62,14 +41,7 @@ public class PhotosRoutes(private val cacheDir: java.io.File) : AppRoutes {
     /** Photos' screens that Rust owns (#1135): the home, and whatever joins it. */
     private val rust = PhotosRustHost(device)
 
-    override fun handles(destination: Destination): Boolean = when (destination) {
-        is Destination.PhotoLightbox,
-        is Destination.PhotoEditor,
-        is Destination.PhotoDuplicates,
-        is Destination.PhotoDuplicateReview,
-        -> true
-        else -> rust.handles(destination)
-    }
+    override fun handles(destination: Destination): Boolean = rust.handles(destination)
 
     override fun opens(moveId: String): Destination? = if (moveId == "photos") PhotosEntry.home() else null
 
@@ -87,15 +59,6 @@ public class PhotosRoutes(private val cacheDir: java.io.File) : AppRoutes {
         // exactly once**, because attaching routes a host onto the change stream.
         device.attach(session)
         rust.attach(session, scope)
-        // Each `attach` is the bridge's, which is either `attachScreen` plus its legs
-        // or `changes.route` plus a fan-out.
-        photoLightbox.attach(session)
-        duplicates.attach(session)
-        duplicateReview.attach(session)
-        // THE EDITOR'S SAVE RENDERS HERE, on this shell's own decoder, and
-        // ingests through the bridge (#1029).
-        installPhotoEditRenderer(photoEditor, cacheDir)
-        photoEditor.attach(session)
     }
 
     /**
@@ -112,112 +75,8 @@ public class PhotosRoutes(private val cacheDir: java.io.File) : AppRoutes {
 
     @Composable
     override fun Routes(destination: Destination, nav: RouteNav) {
-        var stack by nav
-        val scope = nav.scope
         when (destination) {
             is Destination.RustScreen -> rust.Routes(destination, nav)
-
-            is Destination.PhotoLightbox -> {
-                LaunchedEffect(destination.assetId, destination.neighbours) {
-                    photoLightbox.opened(
-                        assetId = destination.assetId,
-                        neighbours = destination.neighbours,
-                        albumId = destination.albumId,
-                    )
-                }
-                val state by photoLightbox.host.state.collectAsStateWithLifecycle()
-                // "SEND A COPY" AND "DOWNLOAD" ARE THE SCREEN'S OWN
-                // (`PhotoHandOff.kt`, behind the manifest's
-                // `FileProvider`): the precision is reduced, and the
-                // bytes leave from the lightbox that chose it.
-                // EDIT PUSHES THE EDITOR, and the neighbours ride along
-                // so a save can come back to the same shelf's order.
-                androidx.compose.runtime.CompositionLocalProvider(
-                    LocalPhotoEditOpener provides { assetId, neighbours ->
-                        stack = stack.push(Destination.PhotoEditor(assetId, neighbours))
-                    },
-                ) {
-                PhotoLightboxScreen(
-                        state = state,
-                        onEvent = { event ->
-                            scope.launch { photoLightbox.host.send(event) }
-                        },
-                        // THE SWIPE DOWN AND THE CLOSE CHIP: one way out.
-                        onClose = { stack = stack.pop() },
-                    )
-                }
-            }
-
-            // THE EDITOR (#1029, photos port). Cancel pops back onto
-            // the lightbox it came from; a save replaces that lightbox
-            // with one on the NEW photograph, which is the one the
-            // member just made, with the shelf's order kept behind it.
-            is Destination.PhotoEditor -> {
-                LaunchedEffect(destination.assetId) { photoEditor.opened(destination.assetId) }
-                val state by photoEditor.host.state.collectAsStateWithLifecycle()
-                PhotoEditorScreen(
-                    state = state,
-                    onEvent = { event -> scope.launch { photoEditor.host.send(event) } },
-                    onClose = { stack = stack.pop() },
-                    onSaved = { saved ->
-                        val under = stack.pop()
-                        stack = if (saved.isNotEmpty() &&
-                            under.current is Destination.PhotoLightbox
-                        ) {
-                            NavStack(
-                                under.entries.dropLast(1) + Destination.PhotoLightbox(
-                                    assetId = saved,
-                                    neighbours = listOf(saved) +
-                                        destination.neighbours.filter { it != saved },
-                                ),
-                            )
-                        } else {
-                            under
-                        }
-                    },
-                )
-            }
-
-            is Destination.PhotoDuplicates -> {
-                LaunchedEffect(destination) { duplicates.opened() }
-                val state by duplicates.host.state.collectAsStateWithLifecycle()
-                PushedPage(
-                    title = PhotosCopy.PHOTOS_DUPLICATES,
-                    parentTitle = PhotosCopy.PHOTOS_BAND_COLLECTIONS,
-                    onBack = { stack = stack.pop() },
-                ) {
-                    DuplicatesScreen(
-                        state = state,
-                        onEvent = { event -> scope.launch { duplicates.host.send(event) } },
-                        onOpenCluster = { clusterId ->
-                            stack = stack.push(Destination.PhotoDuplicateReview(clusterId))
-                        },
-                    )
-                }
-            }
-
-            // THE CLUSTER'S ID RIDES ON THE EVENT, for the note
-            // editor's reason: `DuplicateReviewReads.query` reads it off
-            // the state, and a review opened without one reads nothing
-            // rather than reading whichever cluster sorted first.
-            is Destination.PhotoDuplicateReview -> {
-                LaunchedEffect(destination.clusterId) {
-                    duplicateReview.opened(destination.clusterId)
-                }
-                val state by duplicateReview.host.state.collectAsStateWithLifecycle()
-                PushedPage(
-                    title = PhotosCopy.PHOTOS_DUPLICATES,
-                    parentTitle = PhotosCopy.PHOTOS_DUPLICATES,
-                    onBack = { stack = stack.pop() },
-                ) {
-                    DuplicateReviewScreen(
-                        state = state,
-                        onEvent = { event ->
-                            scope.launch { duplicateReview.host.send(event) }
-                        },
-                    )
-                }
-            }
 
             else -> Unit
         }

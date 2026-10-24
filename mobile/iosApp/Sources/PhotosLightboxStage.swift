@@ -7,7 +7,7 @@ import CentraidShared
 
 /// THE STAGE — the photograph, and the three gestures a member reaches it by
 /// (#1029 photos port; v0's `MediaPage.tsx` and `lightbox-gestures.ts`). The
-/// Compose twin is `PhotoLightboxStage.kt`.
+/// Compose twin is `PhotosLightboxStage.kt`.
 ///
 /// - **A horizontal swipe pages** to the shelf's next or previous photograph.
 ///   The neighbours slide in as their filmstrip frames, so the photograph a
@@ -22,13 +22,13 @@ import CentraidShared
 /// One bare tap toggles the chrome, a long press plays a Live Photo's movie.
 /// Every settle runs on the one state-change curve and cuts under reduced
 /// motion.
-struct PhotoLightboxStage: View {
+struct PhotosLightboxStage: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    let state: PhotoLightboxStateView
+    let state: PhotosLightboxModel
     let player: LightboxPlayer?
     let live: LightboxPlayer?
-    let send: (Data) -> Void
+    let send: (PhotosLightboxSend) -> Void
     let onClose: () -> Void
 
     /// THE PHOTOGRAPH THE STAGE IS DRAWING, which leads the state by one frame
@@ -46,7 +46,7 @@ struct PhotoLightboxStage: View {
     var body: some View {
         GeometryReader { geometry in
             let size = geometry.size
-            let current = shown.isEmpty ? state.assetID : shown
+            let current = shown.isEmpty ? state.photoID : shown
             let neighbours = state.neighbours
             let at = neighbours.firstIndex(of: current)
             let previous = at.flatMap { $0 > 0 ? neighbours[$0 - 1] : nil }
@@ -77,13 +77,13 @@ struct PhotoLightboxStage: View {
             .onTapGesture(count: 2, coordinateSpace: .local) { location in
                 doubleTap(at: location, size: size)
             }
-            .onTapGesture { send(state.chromeEvent(!state.chromeVisible)) }
+            .onTapGesture { send(.chrome(.with { $0.visible = !state.chromeVisible })) }
             .onLongPressGesture(minimumDuration: 0.4) { live?.playFromStart() }
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(state.stageLabel)
-            .accessibilityIdentifier("photos.lightbox.stage.\(state.assetID)")
+            .accessibilityIdentifier("photos.lightbox.stage.\(state.photoID)")
         }
-        .onChange(of: state.assetID) { _, identifier in
+        .onChange(of: state.photoID) { _, identifier in
             resetZoom()
             if state.slideshow && !reduceMotion {
                 withAnimation(curve) { shown = identifier }
@@ -116,7 +116,7 @@ struct PhotoLightboxStage: View {
             if let thumbnail = state.thumbnailPath(for: identifier) {
                 StageImage(path: thumbnail, maxPixel: 1024)
             }
-            if identifier == state.assetID {
+            if identifier == state.photoID {
                 if state.isVideo, let player {
                     PlayerSurface(player: player.player)
                 } else if let original = state.drawableOriginal {
@@ -195,7 +195,7 @@ struct PhotoLightboxStage: View {
                     settle({ pageX = end }, then: {
                         shown = target
                         pageX = 0
-                        send(state.movedEvent(target))
+                        send(.moved(.with { $0.photoID = target }))
                     })
                 case .vertical:
                     if dismissY > dismissDistance || value.predictedEndTranslation.height > dismissDistance * 2 {
@@ -490,6 +490,7 @@ struct PlayerSurface: UIViewRepresentable {
 struct LightboxTransport: View {
     @Environment(\.colorScheme) private var scheme
     @ObservedObject var player: LightboxPlayer
+    let words: Centraid_Core_V1_PhotosLightboxWords
 
     var body: some View {
         HStack(spacing: 8) {
@@ -503,7 +504,7 @@ struct LightboxTransport: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(player.playing ? PhotosCopy.shared.PHOTOS_PLAYER_PAUSE : PhotosCopy.shared.PHOTOS_PLAYER_PLAY)
+            .accessibilityLabel(player.playing ? words.pause : words.play)
             GeometryReader { geometry in
                 let fraction = player.duration > 0 ? player.position / player.duration : 0
                 ZStack(alignment: .leading) {
@@ -524,10 +525,10 @@ struct LightboxTransport: View {
             }
             .frame(height: 28)
             .accessibilityElement()
-            .accessibilityLabel(PhotosCopy.shared.PHOTOS_PLAYER_POSITION)
+            .accessibilityLabel(words.playerPosition)
             .accessibilityValue(
                 copyFill(
-                    copyFill(PhotosCopy.shared.PHOTOS_PLAYER_POSITION_VALUE, "position", MediaFormat.shared.clockOf(seconds: player.position)),
+                    copyFill(words.playerPositionValue, "position", MediaFormat.shared.clockOf(seconds: player.position)),
                     "duration",
                     MediaFormat.shared.clockOf(seconds: player.duration)
                 )
@@ -553,43 +554,43 @@ struct LightboxTransport: View {
 /// says where a member is and lets them jump.
 struct LightboxFilmstrip: View {
     @Environment(\.colorScheme) private var scheme
-    let state: PhotoLightboxStateView
-    let send: (Data) -> Void
+    let state: PhotosLightboxModel
+    let send: (PhotosLightboxSend) -> Void
 
     var body: some View {
-        let window = state.filmWindow
+        let window = state.state.film
         if window.count > 1 {
             ScrollViewReader { reader in
                 ScrollView(.horizontal, showsIndicators: false) {
                     LazyHStack(spacing: 2) {
-                        ForEach(Array(window.enumerated()), id: \.element) { index, identifier in
-                            frame(identifier, number: state.filmOffset + index + 1)
-                                .id(identifier)
+                        ForEach(window, id: \.photoID) { frame in
+                            self.frame(frame)
+                                .id(frame.photoID)
                         }
                     }
                 }
                 .frame(height: 58)
                 // PAGING MOVES THE STRIP TOO, or the two controls disagree
                 // about where the member is.
-                .onAppear { reader.scrollTo(state.assetID, anchor: .center) }
-                .onChange(of: state.assetID) { _, identifier in
+                .onAppear { reader.scrollTo(state.photoID, anchor: .center) }
+                .onChange(of: state.photoID) { _, identifier in
                     reader.scrollTo(identifier, anchor: .center)
                 }
             }
-            .accessibilityLabel(PhotosCopy.shared.PHOTOS_FILMSTRIP)
+            .accessibilityLabel(state.words.filmstrip)
         }
     }
 
     @ViewBuilder
-    private func frame(_ identifier: String, number: Int) -> some View {
-        let here = identifier == state.assetID
+    private func frame(_ frame: Centraid_Core_V1_PhotosLightboxFrame) -> some View {
+        let here = frame.current
         let side: CGFloat = here ? 58 : 40
         Button {
-            if !here { send(state.movedEvent(identifier)) }
+            if !here { send(.moved(.with { $0.photoID = frame.photoID })) }
         } label: {
             ZStack {
                 Theme.color("skel", scheme)
-                if let path = state.framePath(identifier) {
+                if let path = state.framePath(frame.photoID) {
                     StageFrame(path: path)
                 }
             }
@@ -602,18 +603,11 @@ struct LightboxFilmstrip: View {
             }
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(
-            copyFill(
-                copyFill(PhotosCopy.shared.PHOTOS_FILMSTRIP_SHOW, "number", "\(number)"),
-                "total",
-                "\(state.neighbours.count)"
-            )
-        )
+        .accessibilityLabel(frame.accessibilityLabel)
         .accessibilityAddTraits(here ? .isSelected : [])
     }
 }
 
-/// A strip frame: a thumbnail CROPPED to its square, as a grid cell is.
 private struct StageFrame: View {
     let path: String
     @State private var image: UIImage?
@@ -638,18 +632,19 @@ private struct StageFrame: View {
 struct LiveChip: View {
     @Environment(\.colorScheme) private var scheme
     let live: LightboxPlayer
+    let words: Centraid_Core_V1_PhotosLightboxWords
 
     var body: some View {
         Button { live.playFromStart() } label: {
             HStack(spacing: 4) {
                 CentraidIconView(iconKey: "Play", tint: Theme.color("onStage", scheme), size: 14)
-                Text(PhotosCopy.shared.PHOTOS_LIVE_BADGE).centraidType("small").foregroundStyle(Theme.color("onStage", scheme))
+                Text(words.liveBadge).centraidType("small").foregroundStyle(Theme.color("onStage", scheme))
             }
             .padding(.horizontal, 10)
             .frame(height: 28)
             .background(Theme.color("stageSunken", scheme), in: Capsule())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(PhotosCopy.shared.PHOTOS_PLAY_LIVE)
+        .accessibilityLabel(words.playLive)
     }
 }
