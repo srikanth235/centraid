@@ -81,12 +81,11 @@ impl WorkoutPage {
                 String::new(),
             ));
         }
-        if PACED.contains(&row.kind_key.as_str()) {
-            if let (Some(seconds), Some(metres)) = (seconds, row.distance_m) {
-                if let Some((n, u)) = figures::pace(locale, seconds, metres, units) {
-                    figures_.push(figure(words::figure_pace(locale), n, u));
-                }
-            }
+        if PACED.contains(&row.kind_key.as_str())
+            && let (Some(seconds), Some(metres)) = (seconds, row.distance_m)
+            && let Some((n, u)) = figures::pace(locale, seconds, metres, units)
+        {
+            figures_.push(figure(words::figure_pace(locale), n, u));
         }
         if let Some(kcal) = row.energy_kcal {
             figures_.push(figure(

@@ -75,6 +75,8 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         phase: Phase::Loading,
         follow: HealthFollow::following(),
         status: None,
+        known_connected: false,
+        recheck: false,
     }))
 }
 
@@ -95,6 +97,11 @@ struct Home {
     phase: Phase<Loaded>,
     follow: HealthFollow,
     status: Option<wire::StatusLine>,
+    /// The vault followed a store the last time this read.
+    known_connected: bool,
+    /// The vault just became connected while this phone's habit says it is not
+    /// (Connect kept a new one): read the habit again so a pass can run.
+    recheck: bool,
 }
 
 impl Home {
@@ -157,6 +164,12 @@ impl Home {
                 _ => {}
             }
         }
+        let connected = loaded.today.connected;
+        let habit = self.follow.device();
+        if connected && !self.known_connected && habit.loaded && !habit.connected {
+            self.recheck = true;
+        }
+        self.known_connected = connected;
         self.phase = Phase::Ready(loaded);
     }
 
@@ -236,8 +249,8 @@ impl Home {
         self.sheet = Sheet::None;
         self.status = None;
         let effects = match self.follow.stop(ctx) {
-            Ok(effects) => effects,
-            Err(()) => {
+            Some(effects) => effects,
+            None => {
                 self.status = Some(wire::StatusLine {
                     sentence: shared::write_refused(ctx.locale()),
                     action_label: String::new(),
@@ -768,6 +781,9 @@ impl Screen for Home {
                 }
             }
             None => {}
+        }
+        if std::mem::take(&mut self.recheck) {
+            effects.extend(self.follow.recheck_device());
         }
         effects
     }

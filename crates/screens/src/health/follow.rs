@@ -607,6 +607,16 @@ impl HealthFollow {
         vec![keychain(wire::keychain_op::Op::Get, Vec::new())]
     }
 
+    /// Read what this phone remembers again: another screen (Connect) may have
+    /// kept a new habit. Asked only when nothing is out.
+    pub fn recheck_device(&mut self) -> Vec<wire::Effect> {
+        if self.waiting != Waiting::Nothing {
+            return Vec::new();
+        }
+        self.waiting = Waiting::Device;
+        vec![keychain(wire::keychain_op::Op::Get, Vec::new())]
+    }
+
     #[must_use]
     pub fn device(&self) -> &Device {
         &self.device
@@ -673,14 +683,14 @@ impl HealthFollow {
 
     /// The member confirmed Stop: the store's origin is retired, every day and
     /// workout stays, and this phone forgets it connected (it keeps the choice).
-    /// `Err` carries nothing: the vault refused part of it and the host says so.
-    pub fn stop(&mut self, ctx: &Ctx) -> Result<Vec<wire::Effect>, ()> {
+    /// `None` when the vault refused part of it: the host says so.
+    pub fn stop(&mut self, ctx: &Ctx) -> Option<Vec<wire::Effect>> {
         if !stop(ctx) {
-            return Err(());
+            return None;
         }
         self.device.connected = false;
         self.refused.clear();
-        Ok(vec![keychain(
+        Some(vec![keychain(
             wire::keychain_op::Op::Set,
             Device::encode(false, &self.device.chosen),
         )])
@@ -959,7 +969,7 @@ mod tests {
     fn numbers_are_canonical_integers_as_integers_reals_to_three_places() {
         assert_eq!(number(5_234.0).to_string(), "5234");
         assert_eq!(number(5_234.5).to_string(), "5234.5");
-        assert_eq!(number(5_234.5671).to_string(), "5234.567");
+        assert_eq!(number(5_234.567_1).to_string(), "5234.567");
         assert_eq!(number(5_234.567_000_000_1).to_string(), "5234.567");
         assert_eq!(number(0.0004).to_string(), "0");
     }
@@ -971,7 +981,7 @@ mod tests {
             started_at: format!("2026-10-15T07:{:02}:00Z", 10 + minute),
             ended_at: format!("2026-10-15T07:{:02}:00.5Z", 40 + minute),
             moving_sec: Some(1_800),
-            distance_m: Some(5_234.5671),
+            distance_m: Some(5_234.567_1),
             energy_kcal: Some(338.0),
             avg_hr_bpm: Some(148),
             elevation_gain_m: Some(0.0),

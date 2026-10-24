@@ -41,8 +41,8 @@ docs,restore-version,restore,document,card,yes: crates/screens/src/docs/versions
 docs,create-folder,create,folder,direct,yes: crates/screens/src/docs/drive/mod.rs,yes
 docs,rename-folder,edit,folder,direct,no,yes
 docs,delete-folder,delete,folder,direct,no,yes
-health,record-days,log,daily_figure,card,yes: apps/health/HealthImport.kt,no
-health,follow-workouts,import,workout,card,yes: apps/health/HealthImport.kt,no
+health,record-days,log,daily_figure,card,yes: crates/screens/src/health/follow.rs,no
+health,follow-workouts,import,workout,card,yes: crates/screens/src/health/follow.rs,no
 health,delete-workout,delete,workout,card,no,no
 health,stop-following,detach,daily_figure,card,yes: crates/screens/src/health/home.rs,no
 locker,add-item,create,locker_item,direct,yes: apps/locker/LockerEditor.kt,yes

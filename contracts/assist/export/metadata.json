@@ -1738,6 +1738,24 @@
         "verb": "delete"
       },
       {
+        "action": "stop-following",
+        "also": [],
+        "app": "health",
+        "bulk": false,
+        "chat": "card",
+        "command": "follow.stop",
+        "inverse": null,
+        "kind": "daily_figure",
+        "phrasings": [
+          "stop reading my health app",
+          "disconnect Apple Health",
+          "stop following Health Connect"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "detach"
+      },
+      {
         "action": "add-item",
         "also": [],
         "app": "locker",
