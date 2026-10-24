@@ -26,14 +26,18 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
-import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.unit.dp
-import centraid.screen.v1.PeopleAvatar
-import centraid.screen.v1.PeopleHomeEvent
-import centraid.screen.v1.PeopleHomeState
-import centraid.screen.v1.PeopleRosterData
-import centraid.screen.v1.PeopleRow
-import centraid.screen.v1.PeopleTouchData
+import centraid.core.v1.PeopleAvatar
+import centraid.core.v1.PeopleHomeEvent
+import centraid.core.v1.PeopleHomeState
+import centraid.core.v1.PeopleRosterData
+import centraid.core.v1.PeopleRow
+import centraid.core.v1.PeopleSectionHead
+import centraid.core.v1.PeopleTouchData
+import centraid.core.v1.Route
+import centraid.screen.v1.SearchField
+import centraid.screen.v1.SectionHead
+import centraid.screen.v1.StatusChip
 import dev.centraid.android.kit.AppBand
 import dev.centraid.android.kit.AppBandTab
 import dev.centraid.android.kit.AppPlace
@@ -41,9 +45,9 @@ import dev.centraid.android.kit.CentraidRow
 import dev.centraid.android.kit.EmptyStateView
 import dev.centraid.android.kit.IconKey
 import dev.centraid.android.kit.KitGeometry
+import dev.centraid.android.kit.OptionSheet
 import dev.centraid.android.kit.OutlineButton
 import dev.centraid.android.kit.ReadStateView
-import dev.centraid.android.kit.OptionSheet
 import dev.centraid.android.kit.RoomAction
 import dev.centraid.android.kit.RoomChip
 import dev.centraid.android.kit.RoomSearch
@@ -54,45 +58,45 @@ import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.SheetRow
 import dev.centraid.android.kit.hueColor
 import dev.centraid.android.kit.screenContentOf
+import dev.centraid.android.kit.toKit
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 
 /**
- * PEOPLE'S HOME (#1029 app port): People (the roster) and Touch (the rails)
- * under one band — Add person top right, the search bar, ONE chip row (the
- * roster's chips, the sort last), More (Trash) an ordinary band tab.
+ * `people.home` (#1135): People (the roster) and Touch (the rails) under one band
+ * — Add person top right, the search bar, ONE chip row (the roster's chips, the
+ * sort last), More (Trash) an ordinary band tab.
  *
- * The view decides nothing: every word, chip, count and empty sentence is on
- * [PeopleHomeState], and every tap is a [PeopleHomeEvent]. The intents
- * (`PersonPicked`, `AddPersonRequested`, `MoreRowPicked`,
- * `LogTouchRequested`) are forwarded like any event; the route reads them
- * off the way and moves the stack.
+ * THE VIEW DECIDES NOTHING. Every word, chip, count and empty sentence is on
+ * [PeopleHomeState], which Rust makes, and every tap is a [PeopleHomeEvent]; a
+ * row that opens a page carries its [Route] and a tap hands it to [onOpen].
  */
 @Composable
 public fun PeopleHomeScreen(
     state: PeopleHomeState,
     onEvent: (PeopleHomeEvent) -> Unit,
+    onOpen: (Route) -> Unit,
     onHome: () -> Unit,
 ) {
     val chrome = state.chrome
     val search = state.search
-    val write = state.write
-    val status = when {
-        !write?.refusal.isNullOrEmpty() -> write?.refusal.orEmpty()
-        state.status.isNotEmpty() -> state.status
-        else -> state.data_?.roster?.status_line ?: state.data_?.touch?.status_line ?: ""
+    val denied = state.denied != null
+    val status = state.status?.sentence.orEmpty().ifEmpty {
+        state.roster?.status_line ?: state.touch?.status_line ?: ""
     }
     AppPlace(
         app = "people",
-        title = chrome?.title.orEmpty(),
-        trailing = chrome?.let {
-            RoomAction("Plus", it.add_person, "people-add") {
-                onEvent(PeopleHomeEvent(add_person = PeopleHomeEvent.AddPersonRequested()))
+        title = state.title,
+        trailing = if (denied) {
+            null
+        } else {
+            state.add_person?.let { route ->
+                RoomAction("Plus", chrome?.add_person.orEmpty(), "people-add") { onOpen(route) }
             }
         },
-        search = if (search != null) {
+        search = if (search != null && !denied) {
             RoomSearch(
-                field = search,
+                field = SearchField(open_ = search.open, term = search.term, corrected = search.corrected),
                 placeholder = chrome?.search_placeholder.orEmpty(),
                 label = chrome?.search_label.orEmpty(),
                 closeLabel = chrome?.search_close.orEmpty(),
@@ -103,7 +107,7 @@ public fun PeopleHomeScreen(
         } else {
             null
         },
-        // ONE CHIP ROW: the machine's filters, then its sort chip, last.
+        // ONE CHIP ROW: the filters, then the sort chip, last.
         chips = state.chips.map { chip ->
             RoomChip(
                 testTag = "people-chip-${chip.key.name}",
@@ -120,47 +124,49 @@ public fun PeopleHomeScreen(
             },
         ),
         status = status,
-        // More is an ordinary tab, last, as the machine lists it (R-CHROME-4).
-        band = {
-            AppBand(
-                app = "people",
-                tabs = state.band.map { AppBandTab(key = it.key, label = it.label, iconKey = it.icon_key, selected = it.current) },
-                onSelect = { key -> onEvent(PeopleHomeEvent(band = PeopleHomeEvent.BandPicked(key))) },
-                onHome = onHome,
-            )
+        // More is an ordinary tab, last, as Rust lists it (R-CHROME-4).
+        band = if (state.band.isEmpty()) {
+            null
+        } else {
+            {
+                AppBand(
+                    app = "people",
+                    tabs = state.band.map { AppBandTab(key = it.key, label = it.label, iconKey = it.icon_key, selected = it.current) },
+                    onSelect = { key -> onEvent(PeopleHomeEvent(band = PeopleHomeEvent.BandPicked(key))) },
+                    onHome = onHome,
+                )
+            }
         },
     ) {
-        val searchData = state.search_data
-        if (search?.open_ == true) {
+        val results = search?.results
+        if (search?.open == true && results != null && !denied) {
             // SEARCH IS A MODE OVER THE SURFACE: its rows while a term reads.
-            if (searchData != null) {
-                LazyColumn(Modifier.testTag("people-search-results")) {
-                    val empty = searchData.empty
-                    if (searchData.rows.isEmpty() && empty != null) {
-                        item(key = "empty") { EmptyStateView(empty, onAction = null) }
-                    }
-                    items(searchData.rows, key = { "s-" + it.party_id }) { row -> PersonRow(row, onEvent) }
+            LazyColumn(Modifier.testTag("people-search-results")) {
+                val empty = results.empty
+                if (results.rows.isEmpty() && empty != null) {
+                    item(key = "empty") { EmptyStateView(empty.toKit(), onAction = null) }
                 }
+                items(results.rows, key = { "s-" + it.party_id }) { row -> PersonRow(row, onOpen, onEvent) }
             }
         } else {
             ReadStateView(
-                content = screenContentOf(state.loading, state.failure, state.data_, state.denied),
+                content = screenContentOf(state.loading, state.failure, state.roster ?: state.touch, state.denied),
                 onRetry = { onEvent(PeopleHomeEvent(refreshed = PeopleHomeEvent.Refreshed())) },
                 retryLabel = chrome?.retry.orEmpty(),
                 skeleton = { RowSkeleton(label = chrome?.loading.orEmpty()) },
             ) { data ->
-                val roster = data.roster
-                val touch = data.touch
                 LazyColumn(Modifier.testTag("people-list")) {
-                    if (roster != null) roster(roster, onEvent)
-                    if (touch != null) touch(touch, onEvent)
+                    when (data) {
+                        is PeopleRosterData -> roster(data, chrome?.import_contacts.orEmpty(), onOpen, onEvent)
+                        is PeopleTouchData -> touch(data, chrome?.import_contacts.orEmpty(), onOpen, onEvent)
+                    }
                 }
             }
         }
     }
 
     val dismiss = { onEvent(PeopleHomeEvent(sheet_closed = PeopleHomeEvent.SheetClosed())) }
-    // MORE IS THE MACHINE'S ROWS (Trash): never search, sort or a filter.
+    // MORE IS RUST'S ROWS (Trash): never search, sort or a filter.
     if (state.sheet == PeopleHomeState.Sheet.SHEET_MORE && chrome != null) {
         SheetRoom(title = chrome.more_title, onDismiss = dismiss) {
             state.more_rows.forEach { row ->
@@ -168,7 +174,10 @@ public fun PeopleHomeScreen(
                     label = row.label,
                     iconKey = row.icon_key,
                     testTag = "people-more-${row.key}",
-                    onTap = { onEvent(PeopleHomeEvent(more_row = PeopleHomeEvent.MoreRowPicked(row.key))) },
+                    onTap = {
+                        dismiss()
+                        row.route?.let(onOpen)
+                    },
                 )
             }
         }
@@ -188,20 +197,46 @@ public fun PeopleHomeScreen(
     }
 }
 
-private fun LazyListScope.roster(roster: PeopleRosterData, onEvent: (PeopleHomeEvent) -> Unit) {
-    val empty = roster.empty
-    if (roster.rows.isEmpty() && empty != null) {
-        item(key = "empty") {
-            EmptyStateView(empty, onAction = { onEvent(PeopleHomeEvent(add_person = PeopleHomeEvent.AddPersonRequested())) })
-        }
-    }
-    items(roster.rows, key = { it.party_id }) { row -> PersonRow(row, onEvent) }
+/** The day-one empty state: the phone's contacts are its action (the header's Add person stays). */
+@Composable
+private fun DayOne(empty: centraid.core.v1.EmptyState, importLabel: String, onEvent: (PeopleHomeEvent) -> Unit) {
+    val offersImport = empty.import_source == centraid.core.v1.ImportSource.IMPORT_SOURCE_CONTACTS && importLabel.isNotEmpty()
+    val shown = empty.toKit().copy(
+        import_source = centraid.screen.v1.ImportSource.IMPORT_SOURCE_UNSPECIFIED,
+        action_label = if (offersImport) importLabel else "",
+    )
+    EmptyStateView(
+        shown,
+        onAction = if (offersImport) {
+            { onEvent(PeopleHomeEvent(import_contacts = PeopleHomeEvent.ImportContactsTapped())) }
+        } else {
+            null
+        },
+    )
 }
 
-private fun LazyListScope.touch(touch: PeopleTouchData, onEvent: (PeopleHomeEvent) -> Unit) {
+private fun LazyListScope.roster(
+    roster: PeopleRosterData,
+    importLabel: String,
+    onOpen: (Route) -> Unit,
+    onEvent: (PeopleHomeEvent) -> Unit,
+) {
+    val empty = roster.empty
+    if (roster.rows.isEmpty() && empty != null) {
+        item(key = "empty") { DayOne(empty, importLabel, onEvent) }
+    }
+    items(roster.rows, key = { it.party_id }) { row -> PersonRow(row, onOpen, onEvent) }
+}
+
+private fun LazyListScope.touch(
+    touch: PeopleTouchData,
+    importLabel: String,
+    onOpen: (Route) -> Unit,
+    onEvent: (PeopleHomeEvent) -> Unit,
+) {
     val empty = touch.empty
     if (empty != null) {
-        item(key = "touch-empty") { EmptyStateView(empty, onAction = null) }
+        item(key = "touch-empty") { DayOne(empty, importLabel, onEvent) }
         return
     }
     if (touch.tiles.isNotEmpty()) {
@@ -230,7 +265,7 @@ private fun LazyListScope.touch(touch: PeopleTouchData, onEvent: (PeopleHomeEven
                             .padding(10.dp)
                             .testTag("people-tile-${tile.key}")
                             .clearAndSetSemantics {
-                                contentDescription = tile.accessibility_label.ifEmpty { "${tile.label}, ${tile.count}" }
+                                contentDescription = tile.accessibility_label
                                 if (tile.tappable) role = Role.Button
                             },
                     ) {
@@ -245,7 +280,7 @@ private fun LazyListScope.touch(touch: PeopleTouchData, onEvent: (PeopleHomeEven
             }
         }
     }
-    touch.reconnect_head?.let { head -> item(key = "reconnect-head") { SectionHeader(head) } }
+    touch.reconnect_head?.let { head -> item(key = "reconnect-head") { SectionHeader(head.toKit()) } }
     if (touch.reconnect.isEmpty() && touch.reconnect_empty.isNotEmpty()) {
         item(key = "reconnect-empty") { RailEmpty(touch.reconnect_empty) }
     }
@@ -254,21 +289,20 @@ private fun LazyListScope.touch(touch: PeopleTouchData, onEvent: (PeopleHomeEven
             title = card.name,
             meta = listOf(card.role, card.detail).filter { it.isNotEmpty() }.joinToString(" · "),
             hueKey = card.avatar?.hue_key.orEmpty(),
+            a11y = card.accessibility_label,
             testTag = "people-reconnect-${card.party_id}",
-            onTap = { onEvent(PeopleHomeEvent(person = PeopleHomeEvent.PersonPicked(card.party_id, card.name))) },
+            onTap = { card.route?.let(onOpen) },
         ) {
             if (card.action_label.isNotEmpty()) {
                 OutlineButton(
                     label = card.action_label,
                     testTag = "people-log-${card.party_id}",
                     modifier = Modifier.padding(start = 8.dp),
-                ) {
-                    onEvent(PeopleHomeEvent(log_touch = PeopleHomeEvent.LogTouchRequested(card.party_id, card.name)))
-                }
+                ) { card.log_route?.let(onOpen) }
             }
         }
     }
-    touch.upcoming_head?.let { head -> item(key = "upcoming-head") { SectionHeader(head) } }
+    touch.upcoming_head?.let { head -> item(key = "upcoming-head") { SectionHeader(head.toKit()) } }
     if (touch.upcoming.isEmpty() && touch.upcoming_empty.isNotEmpty()) {
         item(key = "upcoming-empty") { RailEmpty(touch.upcoming_empty) }
     }
@@ -280,10 +314,10 @@ private fun LazyListScope.touch(touch: PeopleTouchData, onEvent: (PeopleHomeEven
             hueKey = row.avatar?.hue_key.orEmpty(),
             a11y = row.accessibility_label,
             testTag = "people-upcoming-${row.date_id}",
-            onTap = { onEvent(PeopleHomeEvent(person = PeopleHomeEvent.PersonPicked(row.party_id, row.name))) },
+            onTap = { row.route?.let(onOpen) },
         )
     }
-    touch.recent_head?.let { head -> item(key = "recent-head") { SectionHeader(head) } }
+    touch.recent_head?.let { head -> item(key = "recent-head") { SectionHeader(head.toKit()) } }
     if (touch.recent.isEmpty() && touch.recent_empty.isNotEmpty()) {
         item(key = "recent-empty") { RailEmpty(touch.recent_empty) }
     }
@@ -295,13 +329,16 @@ private fun LazyListScope.touch(touch: PeopleTouchData, onEvent: (PeopleHomeEven
             hueKey = row.avatar?.hue_key.orEmpty(),
             a11y = row.accessibility_label,
             testTag = "people-recent-${row.interaction_id}",
-            onTap = { onEvent(PeopleHomeEvent(person = PeopleHomeEvent.PersonPicked(row.party_id, row.name))) },
+            onTap = { row.route?.let(onOpen) },
         )
     }
 }
 
+internal fun PeopleSectionHead.toKit(): SectionHead =
+    SectionHead(title = title, count = count, verb_label = verb_label)
+
 @Composable
-private fun RailEmpty(sentence: String) {
+internal fun RailEmpty(sentence: String) {
     Text(
         sentence,
         style = centraidType("annotLabel"),
@@ -312,18 +349,19 @@ private fun RailEmpty(sentence: String) {
 
 /** One roster row: avatar, name over role · meta, every chip in draw order, and the star key. */
 @Composable
-private fun PersonRow(row: PeopleRow, onEvent: (PeopleHomeEvent) -> Unit) {
+private fun PersonRow(row: PeopleRow, onOpen: (Route) -> Unit, onEvent: (PeopleHomeEvent) -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = KitGeometry.GUTTER)) {
         Avatar(row.avatar)
         Box(Modifier.weight(1f)) {
             CentraidRow(
                 title = row.name,
                 meta = listOf(row.role, row.meta).filter { it.isNotEmpty() }.joinToString(" · "),
-                chips = row.chips,
-                pending = row.star_pending,
+                chips = row.chips.map { chip ->
+                    StatusChip(label = chip.label, tone = StatusChip.Tone.fromValue(chip.tone.value) ?: StatusChip.Tone.TONE_UNSPECIFIED)
+                },
                 a11y = row.accessibility_label,
                 testTag = "people-row-${row.party_id}",
-                onTap = { onEvent(PeopleHomeEvent(person = PeopleHomeEvent.PersonPicked(row.party_id, row.name))) },
+                onTap = { row.route?.let(onOpen) },
             )
         }
         IconKey(

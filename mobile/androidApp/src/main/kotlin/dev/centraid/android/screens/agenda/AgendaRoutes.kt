@@ -39,12 +39,16 @@ import dev.centraid.android.screens.RouteNav
 import dev.centraid.android.screens.notes.NotesEditorScreen
 import dev.centraid.android.screens.notes.NotesHistoryScreen
 import dev.centraid.android.screens.notes.NotesHomeScreen
+import dev.centraid.android.screens.people.PeopleEditorScreen
+import dev.centraid.android.screens.people.PeopleHomeScreen
+import dev.centraid.android.screens.people.PeoplePersonScreen
 import dev.centraid.core.CentraidCore
 import dev.centraid.core.Screens
 import dev.centraid.shared.nav.AgendaEntry
 import dev.centraid.shared.nav.AppIds
 import dev.centraid.shared.nav.Destination
 import dev.centraid.shared.nav.NavStack
+import dev.centraid.shared.nav.PeopleEntry
 import dev.centraid.shared.shell.HomeSession
 import dev.centraid.shared.sync.phone.PhoneSource
 import kotlinx.coroutines.CoroutineScope
@@ -102,6 +106,7 @@ internal class AgendaRoutes(private val phone: AndroidPhoneFollow) : AppRoutes {
     override fun opens(moveId: String): Destination? = when (moveId) {
         AppIds.AGENDA -> AgendaEntry.home(AgendaDestination.AGENDA_DESTINATION_DAY, "")
         AppIds.DOCS -> DocsEntry.home()
+        AppIds.PEOPLE -> PeopleEntry.home()
         else -> null
     }
 
@@ -211,10 +216,13 @@ internal class AgendaRoutes(private val phone: AndroidPhoneFollow) : AppRoutes {
         val notesHome = view.notes_home
         val notesEditor = view.notes_editor
         val notesHistory = view.notes_history
+        val peopleHome = view.people_home
+        val peoplePerson = view.people_person
+        val peopleEditor = view.people_editor
 
         // THE SCREEN IS DONE (a cancel committed, the editor saved or left, the task deleted): its page goes.
         val done = event?.dismissed == true || editor?.dismissed == true || detail?.finished == true ||
-            doc?.dismissed == true
+            doc?.dismissed == true || peoplePerson?.done == true
         LaunchedEffect(done) {
             if (done && nav.stack.current === entry) nav.pop()
         }
@@ -307,6 +315,24 @@ internal class AgendaRoutes(private val phone: AndroidPhoneFollow) : AppRoutes {
                 onEvent = { send(ScreenEvent(notes_history = it)) },
                 onBack = back,
             )
+            peopleHome != null -> PeopleHomeScreen(
+                state = peopleHome,
+                onEvent = { send(ScreenEvent(people_home = it)) },
+                onOpen = open,
+                onHome = { nav.home() },
+            )
+            peoplePerson != null -> PeoplePersonScreen(
+                state = peoplePerson,
+                onEvent = { send(ScreenEvent(people_person = it)) },
+                onOpen = open,
+                onBack = back,
+            )
+            // CLOSE = DONE: the pop; Rust flushes the autosave when it sees the page leave.
+            peopleEditor != null -> PeopleEditorScreen(
+                state = peopleEditor,
+                onEvent = { send(ScreenEvent(people_editor = it)) },
+                onClose = back,
+            )
             trash != null -> TrashScreen(
                 view = trash,
                 onEvent = { send(ScreenEvent(trash = it)) },
@@ -343,11 +369,11 @@ internal class AgendaRoutes(private val phone: AndroidPhoneFollow) : AppRoutes {
     private companion object {
         /**
          * Rust's one tab for the pages this host draws, and the prefixes their screen names carry:
-         * Agenda's, Docs' and Notes' (#1135). Every Rust-owned app's pages ride this stack until the
+         * Agenda's, Docs', Notes' and People's (#1135). Every Rust-owned app's pages ride this stack until the
          * shell lane replaces the KMP one.
          */
         const val TAB = "agenda"
-        val PREFIXES = listOf("agenda.", "docs.", "notes.")
+        val PREFIXES = listOf("agenda.", "docs.", "notes.", "people.")
     }
 }
 
