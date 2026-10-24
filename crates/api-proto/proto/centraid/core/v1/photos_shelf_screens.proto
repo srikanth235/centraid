@@ -3,25 +3,350 @@
 // (adding to an album) and `photos.places`. Arms in `screens.proto`: 801, 802,
 // 803.
 //
-// A SKELETON the shelf worker fills. Add fields; do not renumber the arms. The
-// cell, the selection bar and the album sheet are `photos_screens.proto`'s.
+// Rust makes every decision, string and count; SwiftUI and Compose draw these
+// messages and send these events. The cell, the selection bar and the album
+// sheet are `photos_screens.proto`'s.
 
 syntax = "proto3";
 
 package centraid.core.v1;
 
-// IMPORTS: add `import "centraid/core/v1/photos_screens.proto";` (the cell, the
-// selection bar, the album sheet), `kit_screens.proto` and `route.proto` when a
-// field first needs one.
+import "centraid/core/v1/kit_screens.proto";
+import "centraid/core/v1/photos_screens.proto";
+import "centraid/core/v1/route.proto";
 
-message PhotosShelfState {}
+// ---------------------------------------------------------------------------
+// A shelf
+// ---------------------------------------------------------------------------
 
-message PhotosShelfEvent {}
+message PhotosShelfState {
+  // The head: the route's title until the read lands, then the shelf's own
+  // (an album's name, a place's phrase).
+  string title = 1;
+  PhotosShelfKind kind = 2;
+  oneof content {
+    Loading loading = 3;
+    Failure failure = 4;
+    PhotosShelfData data = 5;
+  }
+  // Select mode, the picked set, the bar and the confirm over its destructive
+  // verbs.
+  PhotosSelection selection = 6;
+  // A refused write, in its own slot: never the read's `failure`, so a refused
+  // delete does not replace the shelf (or the pick) with an error.
+  optional StatusLine status = 7;
+  // What the last hand-off of originals came to, one clause; empty before one.
+  string notice = 8;
+  // The trash's rule, "Photos here are deleted forever 30 days after you trash
+  // them."; empty on every other shelf.
+  string purge_window = 9;
+  PhotosAlbumChoice album_choice = 10;
+  // Present on an album shelf.
+  optional PhotosShelfAlbum album = 11;
+  // Which sheet is up over the shelf, and its words.
+  Prompt prompt = 12;
+  optional Confirm confirm = 13;
+  // For `PROMPT_SEND_LOCATION`: how much of the place travels.
+  optional PhotosLocationChoice location_choice = 14;
+  // For `PROMPT_RENAME_ALBUM`.
+  optional PhotosRenameSheet rename = 15;
+  // The album's "Keep originals on this phone" switch; absent off an album.
+  optional PhotosKeepSwitch keep_originals = 16;
+  // The album this shelf showed is gone (deleted, or no such album): the shell
+  // pops.
+  bool dismissed = 17;
+  PhotosShelfChrome chrome = 18;
+  // The bar's hand-off verbs, beside `selection.actions`.
+  PhotosShelfBar bar = 19;
+  // The sheet's way out: "Keep them" over the trash, "Keep it" over an album.
+  string prompt_cancel_label = 20;
 
-message PhotosPickerState {}
+  enum Prompt {
+    PROMPT_NONE = 0;
+    PROMPT_EMPTY_TRASH = 1;
+    PROMPT_DELETE_ALBUM = 2;
+    PROMPT_SEND_LOCATION = 3;
+    PROMPT_RENAME_ALBUM = 4;
+  }
+}
 
-message PhotosPickerEvent {}
+message PhotosShelfCell {
+  PhotoTile tile = 1;
+  // The lightbox, over the neighbours a swipe walks (a window around this cell,
+  // in the order drawn).
+  Route open = 2;
+}
 
-message PhotosPlacesState {}
+message PhotosShelfData {
+  repeated PhotosShelfCell cells = 1;
+  // `5 photos`, or `At least 200 photos` while more is unread.
+  string count_label = 2;
+  // More of the shelf is unread: the grid sends `load_more` at its end.
+  bool can_show_more = 3;
+  // Present when the shelf holds nothing: this shelf's own sentence.
+  optional EmptyState empty = 4;
+  // "Empty trash", on the trash and while it holds something.
+  optional string empty_trash_label = 5;
+}
 
-message PhotosPlacesEvent {}
+message PhotosShelfAlbum {
+  string album_id = 1;
+  string name = 2;
+  // The album is in the trash: `restore_label` brings it back.
+  bool trashed = 3;
+  string trashed_note = 4;
+  string restore_label = 5;
+  string add_label = 6;
+  // The picker that adds to this album.
+  Route add_route = 7;
+  string options_label = 8;
+  string rename_label = 9;
+  string delete_label = 10;
+}
+
+message PhotosKeepSwitch {
+  string title = 1;
+  string label = 2;
+  // False until the list has answered for this album; the switch is disabled.
+  bool ready = 3;
+  bool keep = 4;
+  string meta = 5;
+}
+
+message PhotosLocationChoice {
+  string title = 1;
+  string none_label = 2;
+  string exact_label = 3;
+  string cancel_label = 4;
+}
+
+message PhotosRenameSheet {
+  string title = 1;
+  string field_label = 2;
+  string current = 3;
+  string save_label = 4;
+  string cancel_label = 5;
+}
+
+message PhotosShelfChrome {
+  string select_label = 1;
+  string done_label = 2;
+}
+
+// The hand-off verbs a bar offers beside the batch verbs.
+message PhotosShelfBar {
+  string send_copy_label = 1;
+  string download_label = 2;
+  // "Make key photo": album only, and only over exactly one pick.
+  string make_key_label = 3;
+  bool make_key_offered = 4;
+  bool make_key_enabled = 5;
+  string more_label = 6;
+  bool enabled = 7;
+}
+
+message PhotosShelfEvent {
+  oneof kind {
+    // The grid reached its end.
+    LoadMore load_more = 1;
+    PhotosSelectionEvent selection = 2;
+    PhotosAlbumChoiceEvent album_choice = 3;
+    // Open a sheet: empty trash, delete album, the location choice, rename.
+    PromptOpened prompt_opened = 4;
+    PromptDismissed prompt_dismissed = 5;
+    // The member confirmed `empty trash` or `delete album`.
+    PromptConfirmed prompt_confirmed = 6;
+    // The member chose the location for a send (true: the exact location).
+    LocationChosen location_chosen = 7;
+    AlbumRenamed album_renamed = 8;
+    // "Make key photo" over the one pick.
+    CoverChosen cover_chosen = 9;
+    KeepToggled keep_toggled = 10;
+    AlbumRestored album_restored = 11;
+    // "Download original": the pick into this device's photos.
+    DownloadRequested download = 12;
+  }
+
+  message LoadMore {}
+
+  message PromptOpened {
+    PhotosShelfState.Prompt prompt = 1;
+  }
+
+  message PromptDismissed {}
+
+  message PromptConfirmed {}
+
+  message LocationChosen {
+    bool exact = 1;
+  }
+
+  message AlbumRenamed {
+    string title = 1;
+  }
+
+  message CoverChosen {}
+
+  message KeepToggled {
+    bool keep = 1;
+  }
+
+  message AlbumRestored {}
+
+  message DownloadRequested {}
+}
+
+// ---------------------------------------------------------------------------
+// The picker
+// ---------------------------------------------------------------------------
+
+message PhotosPickerCell {
+  PhotoTile tile = 1;
+  // The album already holds it: drawn as taken, and a tap does nothing.
+  bool taken = 2;
+  bool picked = 3;
+}
+
+message PhotosPickerData {
+  repeated PhotosPickerCell cells = 1;
+  bool can_show_more = 2;
+  // Present when there is nothing left to add: "Everything in your library is
+  // already in this album."
+  optional EmptyState empty = 3;
+}
+
+message PhotosPickerState {
+  // "Add to “Portugal”", from the route before any read has landed.
+  string title = 1;
+  // "Nothing chosen yet" / "3 chosen".
+  string chosen_label = 2;
+  // "Add" / "Add 3".
+  string add_label = 3;
+  bool add_enabled = 4;
+  // "An album points to a photo where it lives."
+  string refers_note = 5;
+  oneof content {
+    Loading loading = 6;
+    Failure failure = 7;
+    PhotosPickerData data = 8;
+  }
+  optional StatusLine status = 9;
+  // Every pick landed: the shell pops.
+  bool finished = 10;
+}
+
+message PhotosPickerEvent {
+  oneof kind {
+    LoadMore load_more = 1;
+    PickToggled pick = 2;
+    ConfirmRequested confirm = 3;
+  }
+
+  message LoadMore {}
+
+  message PickToggled {
+    string photo_id = 1;
+  }
+
+  message ConfirmRequested {}
+}
+
+// ---------------------------------------------------------------------------
+// Places
+// ---------------------------------------------------------------------------
+
+message PhotosPlaceRow {
+  string place_id = 1;
+  // How to say where it is: the member's name, `near <city>`, a bearing, or
+  // "Unnamed place". Never digits.
+  string title = 2;
+  // `3 photos`.
+  string count_label = 3;
+  // What a screen reader says: "Lisbon, 3 photos".
+  string spoken = 4;
+  optional PhotoTile cover = 5;
+  // The place's shelf.
+  Route open = 6;
+  // "Name this place".
+  string name_label = 7;
+  // The member's own name for it, to start the rename field from.
+  string current_name = 8;
+  // On the map: the pin stands at (`pin_x`, `pin_y`) in the unit square (0,0 top
+  // left, y growing south) and is `pin_size` points wide.
+  bool pinned = 9;
+  double pin_x = 10;
+  double pin_y = 11;
+  double pin_size = 12;
+}
+
+message PhotosPlacesData {
+  repeated PhotosPlaceRow places = 1;
+  // Present when there are no places at all.
+  optional EmptyState empty = 2;
+  // Present on the map when no place has a location.
+  optional EmptyState map_empty = 3;
+  // "3 photos have no place." with `unplaced_open_label` ("Open them.").
+  string unplaced_label = 4;
+  string unplaced_open_label = 5;
+  optional Route unplaced_open = 6;
+  // "1 place has no location, so it is not on the map."; empty when all are.
+  string unpinned_label = 7;
+  string map_note = 8;
+  string north_label = 9;
+}
+
+message PhotosPlacesState {
+  string title = 1;
+  Presentation presentation = 2;
+  string cards_label = 3;
+  string map_label = 4;
+  oneof content {
+    Loading loading = 5;
+    Failure failure = 6;
+    PhotosPlacesData data = 7;
+  }
+  // A refused rename, in its own slot.
+  optional StatusLine status = 8;
+  // The sheet that names a place.
+  optional PhotosPlaceNameSheet name_sheet = 9;
+
+  enum Presentation {
+    PRESENTATION_UNSPECIFIED = 0;
+    PRESENTATION_CARDS = 1;
+    PRESENTATION_MAP = 2;
+  }
+}
+
+message PhotosPlaceNameSheet {
+  string place_id = 1;
+  string title = 2;
+  string field_label = 3;
+  string current = 4;
+  string save_label = 5;
+  string cancel_label = 6;
+}
+
+message PhotosPlacesEvent {
+  oneof kind {
+    PresentationChanged presentation = 1;
+    // "Name this place" tapped: the sheet opens.
+    NameRequested name_requested = 2;
+    NameDismissed name_dismissed = 3;
+    Renamed renamed = 4;
+  }
+
+  message PresentationChanged {
+    PhotosPlacesState.Presentation presentation = 1;
+  }
+
+  message NameRequested {
+    string place_id = 1;
+  }
+
+  message NameDismissed {}
+
+  message Renamed {
+    string place_id = 1;
+    string name = 2;
+  }
+}
