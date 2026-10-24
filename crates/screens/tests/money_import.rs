@@ -187,3 +187,49 @@ fn a_file_that_cannot_name_its_date_order_asks_and_the_answer_plans_it_again() {
     assert!(statement.question.is_none());
     assert_eq!(data(d.view(i)).publish_label, "Import 5 rows");
 }
+
+#[test]
+fn rows_proposed_as_duplicates_are_skipped_unless_the_member_says_otherwise() {
+    let (mut d, i) = opened();
+    let (account, _) = accounts(&d).remove(0);
+    let choose_account = |d: &mut Driver, i: u64| {
+        if accounts(d).len() > 1 {
+            event(
+                d,
+                i,
+                iev(ie::Kind::AccountPicked(ie::AccountPicked {
+                    account_id: account.clone(),
+                })),
+            );
+        }
+    };
+    pick(&mut d, i, "first.csv", CSV);
+    choose_account(&mut d, i);
+    event(&mut d, i, iev(ie::Kind::Publish(ie::Publish {})));
+    assert_eq!(imp(d.view(i)).status.as_ref().unwrap().sentence, "Imported 5 rows");
+
+    // The same lines a day later look alike: proposed, never written on their own.
+    let shifted = "Date,Description,Amount\n2026-09-02,GROCER A,-20.00\n2026-09-04,GROCER B,-30.00\n2026-09-09,GROCER C,-40.00\n2026-09-11,GROCER D,-50.00\n2026-09-13,GROCER E,-60.00\n";
+    pick(&mut d, i, "second.csv", shifted);
+    choose_account(&mut d, i);
+    let statement = &data(d.view(i)).statements[0];
+    assert!(statement.has_proposed);
+    let check = statement
+        .counts
+        .iter()
+        .find(|c| c.label == "Check these")
+        .expect("a Check these count");
+    assert_eq!(check.detail, "5");
+    assert_eq!(
+        check.tone,
+        wire::status_chip::Tone::Seam as i32,
+        "lines owed a look carry their tone"
+    );
+    assert_eq!(data(d.view(i)).publish_label, "", "nothing new, nothing to import");
+
+    event(&mut d, i, iev(ie::Kind::KeepProposed(ie::KeepProposedToggled {})));
+    assert!(imp(d.view(i)).keep_proposed);
+    assert_eq!(data(d.view(i)).publish_label, "Import 5 rows");
+    event(&mut d, i, iev(ie::Kind::Publish(ie::Publish {})));
+    assert_eq!(imp(d.view(i)).status.as_ref().unwrap().sentence, "Imported 5 rows");
+}

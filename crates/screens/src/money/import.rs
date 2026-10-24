@@ -209,11 +209,21 @@ impl Import {
             .collect()
     }
 
+    /// Rows an Import would write: what the plan counts as new, plus the rows
+    /// proposed as duplicates when the member keeps them. A statement that asks
+    /// a question, or has nothing to send under the chosen input, writes none.
     fn publishable(&self) -> u32 {
-        self.plan.iter().flat_map(|plan| &plan.statements).fold(
-            0,
-            |sum, statement| {
-                if statement.question.is_some() || statement.publish_input.is_empty() {
+        self.plan
+            .iter()
+            .flat_map(|plan| &plan.statements)
+            .fold(0, |sum, statement| {
+                let with = &statement.publish_input_with_proposed;
+                let chosen = if self.keep_proposed && !with.is_empty() {
+                    with
+                } else {
+                    &statement.publish_input
+                };
+                if statement.question.is_some() || chosen.is_empty() {
                     sum
                 } else {
                     sum + statement.new
@@ -223,8 +233,7 @@ impl Import {
                             0
                         }
                 }
-            },
-        )
+            })
     }
 
     fn publish(&mut self, ctx: &Ctx) {

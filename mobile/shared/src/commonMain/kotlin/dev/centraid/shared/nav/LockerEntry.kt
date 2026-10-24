@@ -56,26 +56,26 @@ public object LockerEntry {
 
     /** Locker's home at [destination] (Items when unspecified). */
     public fun home(destination: LockerDestination = LockerDestination.LOCKER_DESTINATION_ITEMS): Destination.RustScreen =
-        Destination.RustScreen(route(HOME).copy(locker_home = LockerHomeRoute(destination = destination)))
+        Destination.RustScreen(route(screenId = HOME).copy(locker_home = LockerHomeRoute(destination = destination)))
 
     /** One item's page; [follow] is a chat card's member action (`reveal:password`). */
     public fun item(id: String, parent: String = "", follow: String = ""): Destination.RustScreen =
-        Destination.RustScreen(route(ITEM).copy(locker_item = LockerItemRoute(item_id = id, parent = parent, follow = follow)))
+        Destination.RustScreen(route(screenId = ITEM).copy(locker_item = LockerItemRoute(item_id = id, parent = parent, follow = follow)))
 
     /** The editor of an existing item. */
     public fun editor(id: String): Destination.RustScreen = Destination.RustScreen(
-        route(EDITOR).copy(
+        route(screenId = EDITOR).copy(
             locker_editor = LockerEditorRoute(mode = LockerEditorMode.LOCKER_EDITOR_MODE_EDIT, item_id = id),
         ),
     )
 
     /** Every secret in a file. */
     public fun export(parent: String = ""): Destination.RustScreen =
-        Destination.RustScreen(route(EXPORT).copy(locker_export = LockerExportRoute(parent = parent)))
+        Destination.RustScreen(route(screenId = EXPORT).copy(locker_export = LockerExportRoute(parent = parent)))
 
     /** The wall as a page: what a caller that needs the key pushes. */
     public fun lock(): Destination.RustScreen =
-        Destination.RustScreen(route(LOCK).copy(locker_lock = LockerLockRoute()))
+        Destination.RustScreen(route(screenId = LOCK).copy(locker_lock = LockerLockRoute()))
 
     /** The shell heard that Locker is [opened] (an unlock announced, a wall drawn, the app backgrounded). */
     public fun setOpen(opened: Boolean) {

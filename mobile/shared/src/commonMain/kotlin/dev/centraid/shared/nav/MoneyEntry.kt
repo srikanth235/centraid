@@ -17,15 +17,18 @@ public object MoneyEntry {
     private const val HOME: String = "money.home"
     private const val TRANSACTION: String = "money.transaction"
 
+    /** The route to a registered screen, before its arguments ride on it. */
+    private fun route(screenId: String): Route = Route(screen = screenId)
+
     /** Money's home at [destination] (Spending when unspecified). */
     public fun home(
         destination: MoneyDestination = MoneyDestination.MONEY_DESTINATION_SPENDING,
     ): Destination.RustScreen = Destination.RustScreen(
-        Route(screen = HOME, money_home = MoneyHomeRoute(destination = destination)),
+        route(screenId = HOME).copy(money_home = MoneyHomeRoute(destination = destination)),
     )
 
     /** One transaction's page; [parent] is the pushing page's title, the back control's word. */
     public fun transaction(txnId: String, parent: String = ""): Destination.RustScreen = Destination.RustScreen(
-        Route(screen = TRANSACTION, money_transaction = MoneyTransactionRoute(txn_id = txnId, parent = parent)),
+        route(screenId = TRANSACTION).copy(money_transaction = MoneyTransactionRoute(txn_id = txnId, parent = parent)),
     )
 }
