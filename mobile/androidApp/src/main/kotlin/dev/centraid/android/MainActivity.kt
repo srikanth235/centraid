@@ -43,7 +43,6 @@ import androidx.core.view.WindowCompat
 import dev.centraid.android.screens.AppRoutes
 import dev.centraid.android.screens.RouteNav
 import dev.centraid.android.screens.agenda.AgendaRoutes
-import dev.centraid.android.screens.docs.DocsRoutes
 import dev.centraid.android.screens.health.HealthRoutes
 import dev.centraid.android.screens.notes.NotesRoutes
 import dev.centraid.android.screens.people.PeopleRoutes
@@ -145,7 +144,6 @@ public class MainActivity : FragmentActivity() {
             agenda,
             PhotosRoutes(cacheDir),
             NotesRoutes(),
-            DocsRoutes(onFollowed = { phoneFollow.requested(PhoneSource.FILES) }),
             PeopleRoutes(),
             HealthRoutes(health),
             homeSearch,

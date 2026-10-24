@@ -45,34 +45,6 @@
       "binary": "contracts/screens/home/status-urgent.bin"
     },
     {
-      "case": "draft-dirty",
-      "screen": "notes",
-      "type": "centraid.screen.v1.NotesEditorState",
-      "textproto": "contracts/screens/notes/draft-dirty.textproto",
-      "binary": "contracts/screens/notes/draft-dirty.bin"
-    },
-    {
-      "case": "loading",
-      "screen": "notes",
-      "type": "centraid.screen.v1.NotesEditorState",
-      "textproto": "contracts/screens/notes/loading.textproto",
-      "binary": "contracts/screens/notes/loading.bin"
-    },
-    {
-      "case": "read-refused",
-      "screen": "notes",
-      "type": "centraid.screen.v1.NotesEditorState",
-      "textproto": "contracts/screens/notes/read-refused.textproto",
-      "binary": "contracts/screens/notes/read-refused.bin"
-    },
-    {
-      "case": "save-refused",
-      "screen": "notes",
-      "type": "centraid.screen.v1.NotesEditorState",
-      "textproto": "contracts/screens/notes/save-refused.textproto",
-      "binary": "contracts/screens/notes/save-refused.bin"
-    },
-    {
       "case": "limited-selection",
       "screen": "photos",
       "type": "centraid.screen.v1.PhotosGridState",

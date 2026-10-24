@@ -124,7 +124,7 @@ internal fun LockerExportScreen(
 
 /**
  * `locker.import`: the file, the verdicts, the plan row by row, and Add or
- * Discard. Choose is a `PickFile` effect Rust asks the shell for; every word,
+ * Discard. Choose is a `PickBytes` effect Rust asks the shell for; every word,
  * verdict and verb is Rust's.
  */
 @Composable

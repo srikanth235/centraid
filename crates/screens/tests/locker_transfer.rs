@@ -124,9 +124,9 @@ fn import_plans_a_file_row_by_row_and_adds_only_on_publish() {
     );
     assert!(effects_of(&d, before)
         .iter()
-        .any(|k| matches!(k, wire::effect::Kind::PickFile(_))));
+        .any(|k| matches!(k, wire::effect::Kind::PickBytes(_))));
     let csv = "name,url,username,password\nGitHub,https://github.com,dev,s3cret\n";
-    d.answer_effect(wire::effect_result::Outcome::File(wire::FilePicked {
+    d.answer_effect(wire::effect_result::Outcome::BytesPicked(wire::BytesPicked {
         cancelled: false,
         name: "export.csv".to_owned(),
         media_type: "text/csv".to_owned(),
@@ -162,7 +162,7 @@ fn a_file_that_is_not_a_password_manager_export_is_refused_in_words() {
             kind: Some(I::Choose(wire::locker_import_event::ChooseTapped {})),
         }),
     );
-    d.answer_effect(wire::effect_result::Outcome::File(wire::FilePicked {
+    d.answer_effect(wire::effect_result::Outcome::BytesPicked(wire::BytesPicked {
         cancelled: false,
         name: "x.bin".to_owned(),
         media_type: String::new(),

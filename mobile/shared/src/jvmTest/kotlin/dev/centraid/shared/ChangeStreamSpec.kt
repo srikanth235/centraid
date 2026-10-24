@@ -5,19 +5,15 @@ import centraid.core.v1.Event
 import centraid.core.v1.HealthEvent
 import centraid.core.v1.RecordKey
 import centraid.core.v1.Value
-import centraid.screen.v1.NoteDraft
-import centraid.screen.v1.NotesEditorEvent
-import centraid.screen.v1.NotesEditorState
 import centraid.screen.v1.TrashListData
 import centraid.screen.v1.TrashListEvent
 import centraid.screen.v1.TrashRow
-import centraid.screen.v1.WriteSettled
 import centraid.screen.v1.PhotoCell
 import centraid.screen.v1.PhotosGridData
 import centraid.screen.v1.PhotosGridEvent
-import dev.centraid.shared.apps.notes.NotesEditorMachine
 import dev.centraid.shared.apps.photos.PhotosGridMachine
-import dev.centraid.shared.apps.notes.NotesTrashMachine
+import dev.centraid.shared.kit.TrashMachine
+import dev.centraid.shared.kit.TrashSpec
 import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.ScreenHost
 import dev.centraid.shared.shell.HomeMachine
@@ -29,7 +25,6 @@ import dev.centraid.shared.shell.HomeReads
 import dev.centraid.shared.sync.ChangeStream
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.booleans.shouldBeFalse
-import io.kotest.matchers.booleans.shouldBeTrue
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
@@ -74,9 +69,23 @@ class ChangeStreamSpec : StringSpec({
             host.effects.collect { into += it }
         }
 
-    /** A paged list showing [ids]: Notes' trash, the kit's machine. */
+    /** THE KIT'S TRASH MACHINE over a table keyed by the rows it lists: any app's trash is one of these. */
+    val keyedTrash = TrashMachine(
+        TrashSpec(
+            appId = "kit",
+            table = "entity",
+            restoreCommand = "entity.restore",
+            purgeCommand = null,
+            emptyCommand = null,
+            idColumn = "id",
+            titleColumn = "title",
+            purgeWindowDays = 30,
+        ),
+    )
+
+    /** A paged list showing [ids]: the kit's trash machine. */
     suspend fun listShowing(vararg ids: String): ScreenHost<*, TrashListEvent> {
-        val host = ScreenHost(NotesTrashMachine)
+        val host = ScreenHost(keyedTrash)
         host.send(
             TrashListEvent(
                 data_ = TrashListEvent.DataArrived(
@@ -112,7 +121,7 @@ class ChangeStreamSpec : StringSpec({
         // state cannot change until rows are read, and the re-read IS the
         // deliverable: without it a member sees a gateway's write on the next
         // relaunch.
-        effects shouldBe listOf(ScreenEffect.ReadPage(NotesTrashMachine.screenId, null))
+        effects shouldBe listOf(ScreenEffect.ReadPage(keyedTrash.screenId, null))
         watcher.cancel()
     }
 
@@ -136,13 +145,12 @@ class ChangeStreamSpec : StringSpec({
         // The routing decision is the MACHINE's, so it is asserted on the
         // machine: a stream holding its own table map would be a second place
         // every screen's reads are written down.
-        NotesTrashMachine.rowsChanged("media_asset", listOf("ast-1")).shouldBeNull()
+        keyedTrash.rowsChanged("media_asset", listOf("ast-1")).shouldBeNull()
         // A grid is the library: `photo`, and the `entity` and `edge` a photograph
         // is live by. A note is none of them.
         PhotosGridMachine.rowsChanged("note", listOf("t-1")).shouldBeNull()
         PhotosGridMachine.rowsChanged("media_asset", listOf("ast-1")).shouldBeNull()
         PhotosGridMachine.rowsChanged("entity", listOf("t-1")).shouldNotBeNull()
-        NotesEditorMachine.rowsChanged("media_asset", listOf("ast-1")).shouldBeNull()
         // Home COUNTS Locker's items since #1047 (ids only), off `entity` and the
         // `edge` that archives one (#1135); a Locker sidecar is not Home's table.
         HomeMachine.rowsChanged("locker_item_field", listOf("fld-1")).shouldBeNull()
@@ -179,49 +187,6 @@ class ChangeStreamSpec : StringSpec({
                 HomeNotesTile.TABLES + HomeMoneyTile.TABLES + HomeHealthTile.TABLES
     }
 
-    "a change from the gateway never takes a member's typing" {
-        val host = ScreenHost(NotesEditorMachine)
-        host.send(NotesEditorEvent(opened = NotesEditorEvent.Opened(note_id = "note-1")))
-        val arrived = NotesEditorEvent(
-            data_ = NotesEditorEvent.DataArrived(
-                draft = NoteDraft(title = "t", body = "b"),
-            ),
-        )
-        host.send(arrived)
-        host.send(NotesEditorEvent(body = NotesEditorEvent.BodyEdited(body = "half a paragraph")))
-        (host.state.value.save != NotesEditorState.SaveState.SAVE_STATE_CLEAN).shouldBeTrue()
-
-        val effects = mutableListOf<ScreenEffect>()
-        val watcher = watch(host, effects)
-        val stream = ChangeStream()
-        stream.route(host)
-        stream.deliver(change("note", "note-1"))
-
-        // NO RE-READ, and the typing is still there. This is the one outcome no
-        // member forgives, and the decision is in the REDUCER because only it
-        // knows there is an unsaved draft.
-        effects shouldBe emptyList()
-        host.state.value.draft?.body shouldBe "half a paragraph"
-
-        // A read's answer landing over the typing replaces nothing either.
-        host.send(arrived)
-        host.state.value.draft?.body shouldBe "half a paragraph"
-
-        // ONCE THE WORDS ARE SAVED the editor reads what the vault moved to —
-        // the rule is about unsaved words, not about ignoring the vault.
-        host.send(NotesEditorEvent(tick = NotesEditorEvent.Ticked(token = "save:1")))
-        val key = (effects.last() as ScreenEffect.SubmitWrite).invokeKey
-        effects.clear()
-        host.send(NotesEditorEvent(write_settled = WriteSettled(invoke_key = key, committed = true)))
-        effects shouldBe listOf(ScreenEffect.ReadPage(NotesEditorMachine.SCREEN_ID, null))
-
-        // And a change on a CLEAN editor re-reads.
-        effects.clear()
-        stream.deliver(change("note", "note-1"))
-        effects shouldBe listOf(ScreenEffect.ReadPage(NotesEditorMachine.SCREEN_ID, null))
-        watcher.cancel()
-    }
-
     "a grid re-reads its first page rather than patching a cell" {
         val host = photosShowing("ast-1")
         val effects = mutableListOf<ScreenEffect>()
@@ -255,8 +220,7 @@ class ChangeStreamSpec : StringSpec({
 
         photosEffects shouldBe listOf(ScreenEffect.ReadPage(PhotosGridMachine.SCREEN_ID, null))
         listEffects shouldBe emptyList()
-        NotesTrashMachine.conditionsChanged().shouldBeNull()
-        NotesEditorMachine.conditionsChanged().shouldBeNull()
+        keyedTrash.conditionsChanged().shouldBeNull()
         PhotosGridMachine.conditionsChanged().shouldNotBeNull()
         a.cancel()
         b.cancel()

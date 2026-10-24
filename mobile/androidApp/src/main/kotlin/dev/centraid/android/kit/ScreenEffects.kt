@@ -25,14 +25,17 @@ import centraid.core.v1.Effect
 import centraid.core.v1.EffectDone
 import centraid.core.v1.EffectFailed
 import centraid.core.v1.EffectResult
+import centraid.core.v1.BytesPicked
 import centraid.core.v1.FilePicked
 import centraid.core.v1.HapticKind
 import centraid.core.v1.ImportSource
 import centraid.core.v1.KeychainOp
 import centraid.core.v1.KeychainValue
 import centraid.core.v1.PhoneChanged
+import centraid.core.v1.Route
 import dev.centraid.android.screens.agenda.readCalendarSnapshot
 import android.provider.OpenableColumns
+import dev.centraid.android.screens.docs.DocsPickers
 import dev.centraid.core.Screens
 import dev.centraid.shared.platform.platformServices
 import dev.centraid.shared.sync.phone.PhoneDevice
@@ -57,9 +60,19 @@ import okio.ByteString
  *
  * [phone] is the activity's watcher of the phone's stores; a `PhoneWatch` with no
  * watcher is answered `failed`.
+ *
+ * [docs] performs Docs' `PickFile`, `FollowFolder` and `StopFollowing` (the pickers, the
+ * camera, the follower's grant); [openRoute] is `OpenRoute`: a page Rust asked the shell to push.
+ * Either is null where the host has none, and the effect is answered `failed`.
  */
 @Composable
-internal fun PerformScreenEffects(screens: Screens, phone: AndroidPhoneFollow?, onAnnounce: (String) -> Unit = {}) {
+internal fun PerformScreenEffects(
+    screens: Screens,
+    phone: AndroidPhoneFollow?,
+    onAnnounce: (String) -> Unit = {},
+    docs: DocsPickers? = null,
+    openRoute: ((Route) -> Unit)? = null,
+) {
     val context = LocalContext.current
     val view = LocalView.current
     val asking = remember { CalendarPermission() }
@@ -67,18 +80,23 @@ internal fun PerformScreenEffects(screens: Screens, phone: AndroidPhoneFollow?, 
         asking.answer(granted)
     }
     // THE FILE SHEETS (Locker's import and export): the system's pickers, one out at a time.
-    val files = remember { FileDoors() }
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> files.picked(uri) }
-    val saver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("*/*")) { uri -> files.saved(uri) }
+    val fileDoors = remember { FileDoors() }
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> fileDoors.picked(uri) }
+    val saver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("*/*")) { uri -> fileDoors.saved(uri) }
     LaunchedEffect(screens) {
         screens.effects.collect { request ->
             // ONE COROUTINE PER EFFECT: a permission dialog waits for the member
             // without holding up the keychain read behind it.
             launch {
                 val effect = request.effect
-                val doors = Doors(files, { picker.launch(arrayOf("*/*")) }, { saver.launch(it) }, onAnnounce)
-                val result = perform(effect, context, view, asking, { launcher.launch(it) }, phone, doors) { changed ->
-                    launch { screens.answer(request, EffectResult(phone_changed = changed)) }
+                val doors = Doors(fileDoors, { picker.launch(arrayOf("*/*")) }, { saver.launch(it) }, onAnnounce)
+                val answer: (EffectResult) -> Unit = { result -> launch { screens.answer(request, result) } }
+                val result = if (effect?.pick_file != null || effect?.follow_folder != null || effect?.stop_following != null || effect?.open_route != null) {
+                    files(effect, docs, openRoute, answer)
+                } else {
+                    perform(effect, context, view, asking, { launcher.launch(it) }, phone, doors) { changed ->
+                        answer(EffectResult(phone_changed = changed))
+                    }
                 }
                 if (result != null) screens.answer(request, result)
             }
@@ -156,7 +174,7 @@ private suspend fun perform(
             start(context, Intent(Intent.ACTION_VIEW, Uri.parse(effect.open_url!!.url)), done)
         effect.keychain != null -> keychain(effect.keychain!!)
         effect.owner_check != null -> OwnerPrompt.check(context, effect.owner_check!!)
-        effect.pick_file != null -> doors.files.pick(context, doors.launchPicker)
+        effect.pick_bytes != null -> doors.files.pick(context, doors.launchPicker)
         effect.save_file != null -> doors.files.save(context, effect.save_file!!, doors.launchSaver)
         effect.announce != null -> {
             doors.announce(effect.announce!!.topic)
@@ -197,6 +215,35 @@ private suspend fun perform(
         }
         // Platform work this build does not perform yet: say so, by value.
         else -> failed("not performed by this shell")
+    }
+}
+
+/**
+ * DOCS' EFFECTS AND `OpenRoute`: the pickers answer under the effect's one id (progress, then
+ * the file), so this returns null when the picker will, and a result only for a refusal.
+ */
+private fun files(
+    effect: Effect,
+    docs: DocsPickers?,
+    openRoute: ((Route) -> Unit)?,
+    answer: (EffectResult) -> Unit,
+): EffectResult? = when {
+    effect.open_route != null -> openRoute?.let { open ->
+        open(effect.open_route!!.route!!)
+        EffectResult(done = EffectDone())
+    } ?: failed("no page to open")
+    docs == null -> failed("not performed by this shell")
+    effect.pick_file != null -> {
+        docs.pick(effect.pick_file!!.kind, answer)
+        null
+    }
+    effect.follow_folder != null -> {
+        docs.follow(answer)
+        null
+    }
+    else -> {
+        docs.stop(effect.stop_following!!.origin, answer)
+        null
     }
 }
 
@@ -262,7 +309,7 @@ private class Doors(
 )
 
 /**
- * THE SYSTEM'S FILE SHEETS, ONE OUT AT A TIME (#1135): `PickFile` reads the
+ * THE SYSTEM'S FILE SHEETS, ONE OUT AT A TIME (#1135): `PickBytes` reads the
  * chosen document into bytes handed to Rust and kept nowhere here; `SaveFile`
  * writes Rust's bytes to the document the member named and nowhere else. A
  * dismissed sheet is a cancel, by value, never a failure the screen draws.
@@ -285,7 +332,7 @@ private class FileDoors {
         val answer = CompletableDeferred<android.net.Uri?>()
         picking = answer
         launch()
-        val uri = answer.await() ?: return EffectResult(file = FilePicked(cancelled = true))
+        val uri = answer.await() ?: return EffectResult(bytes_picked = BytesPicked(cancelled = true))
         return withContext(Dispatchers.IO) {
             runCatching {
                 val resolver = context.contentResolver
@@ -294,7 +341,7 @@ private class FileDoors {
                 }.orEmpty()
                 val bytes = resolver.openInputStream(uri)?.use { it.readBytes() } ?: error("unreadable")
                 EffectResult(
-                    file = FilePicked(
+                    bytes_picked = BytesPicked(
                         name = name,
                         media_type = resolver.getType(uri).orEmpty(),
                         content = ByteString.of(*bytes),

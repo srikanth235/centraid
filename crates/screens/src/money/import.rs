@@ -127,7 +127,7 @@ impl Import {
         self.phase = P::Idle;
     }
 
-    fn picked(&mut self, ctx: &Ctx, file: wire::FilePicked) {
+    fn picked(&mut self, ctx: &Ctx, file: wire::BytesPicked) {
         if file.cancelled || self.phase == P::Publishing {
             return;
         }
@@ -348,7 +348,7 @@ impl Import {
         match event.kind {
             Some(I::Choose(_)) if !busy => {
                 return vec![wire::Effect {
-                    kind: Some(wire::effect::Kind::PickFile(wire::PickFile {
+                    kind: Some(wire::effect::Kind::PickBytes(wire::PickBytes {
                         accept: vec![
                             "text/csv".to_owned(),
                             "application/x-ofx".to_owned(),
@@ -818,7 +818,7 @@ impl Screen for Import {
             }
             Some(E::MoneyImport(event)) => self.event(event, ctx),
             Some(E::EffectResult(result)) => {
-                if let Some(wire::effect_result::Outcome::File(file)) = result.outcome {
+                if let Some(wire::effect_result::Outcome::BytesPicked(file)) = result.outcome {
                     self.picked(ctx, file);
                 }
                 Vec::new()

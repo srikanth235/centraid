@@ -855,6 +855,7 @@ pub mod act {
             pub title: String,
             pub folder_id: Option<String>,
             pub document_id: Option<String>,
+            pub size: Option<i64>,
             pub text: Option<String>,
         }
         impl Upload {
@@ -867,6 +868,7 @@ pub mod act {
                 map.insert("title".to_owned(), text(self.title));
                 if let Some(it) = self.folder_id { map.insert("folder_id".to_owned(), text(it)); }
                 if let Some(it) = self.document_id { map.insert("id".to_owned(), text(it)); }
+                if let Some(it) = self.size { map.insert("size".to_owned(), whole(it)); }
                 if let Some(it) = self.text { map.insert("text".to_owned(), text(it)); }
                 wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new() }
             }
@@ -5355,6 +5357,27 @@ pub mod load {
         }
         impl From<Trash> for wire::LoadRequest {
             fn from(value: Trash) -> Self {
+                value.request()
+            }
+        }
+
+        /// The live notes written about one thing — a person, an event, a task, a document — newest first, each with a short preview, a checklist tally, its notebook, tags and attachments and never a full body; `truncated` says older notes exist beyond the window. The one read for "what have I written about this?", whatever the thing is.
+        #[derive(Clone, Debug, Default)]
+        pub struct About {
+            pub about_id: String,
+            pub limit: u32,
+        }
+        impl About {
+            pub const NAME: &str = "about";
+            pub fn request(self) -> wire::LoadRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("about_id".to_owned(), text(self.about_id));
+                wire::LoadRequest { app: APP.to_owned(), query: Self::NAME.to_owned(), limit: self.limit, params: map, ..Default::default() }
+            }
+        }
+        impl From<About> for wire::LoadRequest {
+            fn from(value: About) -> Self {
                 value.request()
             }
         }

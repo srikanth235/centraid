@@ -402,6 +402,7 @@ final class ShellModel: ObservableObject {
     /// the core the session holds. Called once the transport exists.
     func attachScreens(core: any ScreenCore) {
         let store = ScreenStore(core: core)
+        store.onOpenRoute = { [weak self] route in self?.open(route) }
         screens = store
         // AN UNLOCK IS WHEN A VAULT'S OWN KEY CAN BE FILED (R-ONBOARD-10), and when
         // Home's tile and chat's key slot learn the Locker is open.

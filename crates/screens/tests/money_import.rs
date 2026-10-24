@@ -32,7 +32,7 @@ fn iev(kind: ie::Kind) -> wire::screen_event::Kind {
 /// Tap Choose, and answer the shell's picker with `body`.
 fn pick(d: &mut Driver, i: u64, name: &str, body: &str) {
     event(d, i, iev(ie::Kind::Choose(ie::ChooseTapped {})));
-    d.answer_effect(wire::effect_result::Outcome::File(wire::FilePicked {
+    d.answer_effect(wire::effect_result::Outcome::BytesPicked(wire::BytesPicked {
         cancelled: false,
         name: name.to_owned(),
         media_type: String::new(),
@@ -55,7 +55,7 @@ fn choosing_asks_the_shell_for_a_file_and_nothing_is_written_until_import() {
     event(&mut d, i, iev(ie::Kind::Choose(ie::ChooseTapped {})));
     assert!(matches!(
         d.effects.last().and_then(|e| e.effect.as_ref()).and_then(|e| e.kind.as_ref()),
-        Some(wire::effect::Kind::PickFile(_))
+        Some(wire::effect::Kind::PickBytes(_))
     ));
     assert_eq!(data(d.view(i)).publish_label, "");
 }
@@ -139,7 +139,7 @@ fn leaving_drops_the_file_and_the_plan() {
 fn a_cancelled_pick_changes_nothing_and_discard_starts_over() {
     let (mut d, i) = opened();
     event(&mut d, i, iev(ie::Kind::Choose(ie::ChooseTapped {})));
-    d.answer_effect(wire::effect_result::Outcome::File(wire::FilePicked {
+    d.answer_effect(wire::effect_result::Outcome::BytesPicked(wire::BytesPicked {
         cancelled: true,
         ..Default::default()
     }));

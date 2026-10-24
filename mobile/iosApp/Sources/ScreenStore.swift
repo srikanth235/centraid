@@ -40,6 +40,9 @@ final class ScreenStore: ObservableObject {
     /// The phone stores being watched (`PhoneWatch`), each under the effect that asked.
     private var watches: [UInt64: (instance: UInt64, source: Centraid_Core_V1_ImportSource)] = [:]
     private var storeObservers: [NSObjectProtocol] = []
+    /// OPEN A PAGE NOW, wherever the member is (`OpenRoute`): the shell pushes the
+    /// route as it pushes a tapped row's route. Set by `ShellModel`.
+    var onOpenRoute: ((Centraid_Core_V1_Route) -> Void)?
 
     init(core: any ScreenCore) {
         self.core = core
@@ -195,7 +198,7 @@ final class ScreenStore: ObservableObject {
             onAnnounce?(note.topic)
             answer(request, .done(Centraid_Core_V1_EffectDone()))
         #if os(iOS)
-        case .pickFile(let pick)?:
+        case .pickBytes(let pick)?:
             FilePerformer.pick(pick) { [weak self] outcome in self?.answer(request, outcome) }
         case .saveFile(let save)?:
             FilePerformer.save(save) { [weak self] outcome in self?.answer(request, outcome) }
@@ -207,6 +210,23 @@ final class ScreenStore: ObservableObject {
             }
         case .phoneWatch(let watch)?:
             self.watch(request, watch)
+        case .openRoute(let open)?:
+            onOpenRoute?(open.route)
+            answer(request, .done(Centraid_Core_V1_EffectDone()))
+        // DOCS' FILES (#1135): the file picker and scanner (answered more than once under
+        // one effect: progress, then the file), and the folder picker.
+        case .pickFile(let pick)?:
+            DocsFiles.shared.pick(pick.kind) { outcome in
+                Task { @MainActor [weak self] in self?.answer(request, outcome) }
+            }
+        case .followFolder?:
+            DocsFollow.shared.request { outcome in
+                Task { @MainActor [weak self] in self?.answer(request, outcome) }
+            }
+        case .stopFollowing(let stop)?:
+            DocsFollow.shared.stop(stop.origin) { outcome in
+                Task { @MainActor [weak self] in self?.answer(request, outcome) }
+            }
         default:
             // Platform work this build does not perform yet: say so, by value.
             answer(request, .failed(Self.failure("not performed by this shell")))

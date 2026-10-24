@@ -55,7 +55,7 @@ enum OwnerCheckPerformer {
 }
 
 #if os(iOS)
-/// `PickFile` and `SaveFile`: the system document picker over the frontmost
+/// `PickBytes` and `SaveFile`: the system document picker over the frontmost
 /// screen. A picked file is read in place from the picker's own URL and handed
 /// back as bytes; a saved file goes through a protected temporary file that
 /// exists only while the save sheet is up.
@@ -64,13 +64,13 @@ enum FilePerformer {
     private static var holders: [PickerHolder] = []
 
     static func pick(
-        _ pick: Centraid_Core_V1_PickFile,
+        _ pick: Centraid_Core_V1_PickBytes,
         _ done: @escaping (Centraid_Core_V1_EffectResult.OneOf_Outcome) -> Void
     ) {
         let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.commaSeparatedText, .json, .plainText, .item])
         picker.allowsMultipleSelection = false
         let holder = PickerHolder { urls in
-            var file = Centraid_Core_V1_FilePicked()
+            var file = Centraid_Core_V1_BytesPicked()
             if let url = urls.first {
                 let scoped = url.startAccessingSecurityScopedResource()
                 defer { if scoped { url.stopAccessingSecurityScopedResource() } }
@@ -83,7 +83,7 @@ enum FilePerformer {
             } else {
                 file.cancelled = true
             }
-            done(.file(file))
+            done(.bytesPicked(file))
         }
         present(picker, holder)
     }

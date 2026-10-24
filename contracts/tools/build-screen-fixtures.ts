@@ -38,7 +38,6 @@ import path from "node:path";
  */
 const TYPES: Record<string, string> = {
   home: "centraid.screen.v1.HomeState",
-  notes: "centraid.screen.v1.NotesEditorState",
   photos: "centraid.screen.v1.PhotosGridState",
   // The rest of the photos miniapp: nine state messages for v0's fourteen
   // routes. The seven that collapsed did so under *a band destination is a

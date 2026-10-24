@@ -120,7 +120,7 @@ struct LockerExportView: View {
 }
 
 /// `locker.import` — a password-manager file, reviewed and sealed in (#1047 T2;
-/// the handoff's `locker/import`). Choose is a `PickFile` effect Rust asks the
+/// the handoff's `locker/import`). Choose is a `PickBytes` effect Rust asks the
 /// shell for; every word, verdict and verb is Rust's.
 struct LockerImportView: View {
     let state: Centraid_Core_V1_LockerImportState

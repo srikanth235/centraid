@@ -8,7 +8,7 @@
 //! to the OS save sheet (`SaveFile`) and nowhere else — this screen keeps no
 //! copy, and any answer ends the sheet.
 //!
-//! **Import is draft → review → publish.** Choosing is a `PickFile` effect; the
+//! **Import is draft → review → publish.** Choosing is a `PickBytes` effect; the
 //! picked bytes are held here — never in a view — while the core plans them. Add
 //! writes the plan (every secret sealed by the core on the way in) and drops the
 //! file; Discard drops it and writes nothing; so does a relock or leaving.
@@ -537,7 +537,7 @@ impl Import {
         match event.kind {
             Some(I::Choose(_)) if !matches!(self.phase, P::Reading | P::Publishing) => {
                 vec![wire::Effect {
-                    kind: Some(wire::effect::Kind::PickFile(wire::PickFile {
+                    kind: Some(wire::effect::Kind::PickBytes(wire::PickBytes {
                         accept: vec![
                             "text/csv".to_owned(),
                             "application/json".to_owned(),
@@ -567,7 +567,7 @@ impl Import {
     }
 
     /// The OS picker handed over a file (or was dismissed).
-    fn picked(&mut self, ctx: &Ctx, file: wire::FilePicked) {
+    fn picked(&mut self, ctx: &Ctx, file: wire::BytesPicked) {
         use wire::locker_import_state::Phase as P;
         if file.cancelled || matches!(self.phase, P::Reading | P::Publishing) {
             return;
@@ -768,7 +768,7 @@ impl Screen for Import {
                 }
             }
             Some(E::EffectResult(result)) => match result.outcome {
-                Some(wire::effect_result::Outcome::File(file)) => {
+                Some(wire::effect_result::Outcome::BytesPicked(file)) => {
                     if self.wall.is_open() {
                         self.picked(ctx, file);
                     }

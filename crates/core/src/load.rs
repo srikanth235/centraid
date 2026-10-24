@@ -468,6 +468,15 @@ fn read(
                 tz,
             },
         )?,
+        ("notes", "about") => app_query::notes::about(
+            vault,
+            door,
+            &wire::NotesAboutRequest {
+                about_id: p.text("about_id")?,
+                window: p.limit(0),
+                tz,
+            },
+        )?,
         ("notes", "note") => app_query::notes::note(
             vault,
             door,

@@ -23,24 +23,24 @@ agenda,create-section,create,section,card,yes: crates/screens/src/agenda/todo/op
 agenda,add-task-tag,tag,task,direct,yes: crates/screens/src/agenda/detail.rs,no
 agenda,remove-task-tag,untag,task,direct,yes: crates/screens/src/agenda/detail.rs,no
 agenda,follow-calendar,import,event,card,yes: crates/screens/src/agenda/calendar.rs,no
-docs,upload,import,document,card,yes: apps/docs/DocsFold.kt; apps/docs/DocsWrites.kt,no
-docs,create-text,create,document,direct,yes: apps/docs/DocsFold.kt; apps/docs/DocsWrites.kt,yes
-docs,rename,edit,document,direct,yes: apps/docs/DocsFold.kt; apps/docs/DocsWrites.kt,yes
-docs,move,add_to,document,direct,yes: apps/docs/DocsFold.kt; apps/docs/DocsWrites.kt,yes
-docs,trash,delete,document,direct,yes: apps/docs/DocsFold.kt; apps/docs/DocsWrites.kt,yes
-docs,restore,restore,document,direct,yes: apps/docs/DocsFold.kt; apps/docs/DocsWrites.kt,yes
-docs,purge,purge,document,card,yes: apps/docs/DocsWrites.kt,no
-docs,empty-trash,purge,document,card,yes: apps/docs/DocsFold.kt; apps/docs/DocsWrites.kt,no
-docs,star,star,document,direct,yes: apps/docs/DocsFold.kt; apps/docs/DocsWrites.kt,yes
-docs,unstar,unstar,document,direct,yes: apps/docs/DocsFold.kt; apps/docs/DocsWrites.kt,yes
-docs,tag,tag,document,direct,yes: apps/docs/DocsFold.kt; apps/docs/DocsWrites.kt,no
-docs,untag,untag,document,direct,yes: apps/docs/DocsFold.kt; apps/docs/DocsWrites.kt,no
-docs,edit,edit,document,card,yes: apps/docs/DocsFold.kt; apps/docs/DocsWrites.kt,no
-docs,replace,edit:content,document,card,yes: apps/docs/DocsFold.kt; apps/docs/DocsWrites.kt,no
-docs,restore-version,restore,document,card,yes: apps/docs/DocsFold.kt; apps/docs/DocsWrites.kt,no
-docs,create-folder,create,folder,direct,yes: apps/docs/DocsWrites.kt; apps/docs/FilesImport.kt,yes
-docs,rename-folder,edit,folder,direct,yes: apps/docs/DocsFold.kt; apps/docs/DocsWrites.kt,yes
-docs,delete-folder,delete,folder,direct,yes: apps/docs/DocsFold.kt; apps/docs/DocsWrites.kt,yes
+docs,upload,import,document,card,yes: crates/screens/src/docs/drive/ingest.rs,no
+docs,create-text,create,document,direct,yes: crates/screens/src/docs/drive/ingest.rs,yes
+docs,rename,edit,document,direct,yes: crates/screens/src/docs/rename.rs,yes
+docs,move,add_to,document,direct,yes: crates/screens/src/docs/drive/mod.rs; crates/screens/src/docs/document.rs,yes
+docs,trash,delete,document,direct,yes: crates/screens/src/docs/drive/mod.rs; crates/screens/src/docs/document.rs,yes
+docs,restore,restore,document,direct,yes: crates/screens/src/docs/document.rs; crates/screens/src/docs/trash.rs,yes
+docs,purge,purge,document,card,yes: crates/screens/src/docs/document.rs; crates/screens/src/docs/trash.rs,no
+docs,empty-trash,purge,document,card,yes: crates/screens/src/docs/trash.rs,no
+docs,star,star,document,direct,yes: crates/screens/src/docs/drive/mod.rs; crates/screens/src/docs/document.rs,yes
+docs,unstar,unstar,document,direct,yes: crates/screens/src/docs/drive/mod.rs; crates/screens/src/docs/document.rs,yes
+docs,tag,tag,document,direct,yes: crates/screens/src/docs/drive/mod.rs; crates/screens/src/docs/document.rs,no
+docs,untag,untag,document,direct,yes: crates/screens/src/docs/drive/mod.rs; crates/screens/src/docs/document.rs,no
+docs,edit,edit,document,card,yes: crates/screens/src/docs/editor.rs,no
+docs,replace,edit:content,document,card,no,no
+docs,restore-version,restore,document,card,yes: crates/screens/src/docs/versions.rs,no
+docs,create-folder,create,folder,direct,yes: crates/screens/src/docs/drive/mod.rs,yes
+docs,rename-folder,edit,folder,direct,no,yes
+docs,delete-folder,delete,folder,direct,no,yes
 health,record-days,log,daily_figure,card,yes: apps/health/HealthImport.kt,no
 health,follow-workouts,import,workout,card,yes: apps/health/HealthImport.kt,no
 health,delete-workout,delete,workout,card,no,no
@@ -87,23 +87,23 @@ money,add-category,create,category,direct,yes: crates/screens/src/money/categori
 money,merge-category,merge,category,card,yes: crates/screens/src/money/categories.rs,no
 money,archive-category,archive,category,direct,yes: crates/screens/src/money/accounts.rs; crates/screens/src/money/categories.rs,no
 money,unarchive-category,unarchive,category,direct,yes: crates/screens/src/money/categories.rs,no
-notes,create-note,create,note,direct,yes: apps/notes/NotesEditorMachine.kt,yes
-notes,edit-note,edit,note,direct,yes: apps/notes/NotesEditorMachine.kt,yes
-notes,move-note,add_to,note,direct,yes: apps/notes/NotesLibraryMachine.kt,yes
-notes,create-notebook,create,notebook,direct,yes: apps/notes/NotesNotebooks.kt,yes
-notes,rename-notebook,edit,notebook,direct,no,yes
-notes,delete-notebook,delete,notebook,direct,yes: apps/notes/NotesLibraryMachine.kt,yes
-notes,delete-note,delete,note,direct,yes: apps/notes/NotesLibraryMachine.kt,yes
-notes,restore-note,restore,note,direct,yes: apps/notes/NotesTrash.kt,yes
-notes,restore-note-version,restore,note,card,yes: apps/notes/NotesHistory.kt,no
-notes,flag-note,star,note,direct,yes: apps/notes/NotesTables.kt,yes
-notes,unflag-note,unstar,note,direct,yes: apps/notes/NotesTables.kt,no
+notes,create-note,create,note,direct,yes: crates/screens/src/notes/editor.rs,yes
+notes,edit-note,edit,note,direct,yes: crates/screens/src/notes/editor.rs,yes
+notes,move-note,add_to,note,direct,yes: crates/screens/src/notes/home/mod.rs,yes
+notes,create-notebook,create,notebook,direct,yes: crates/screens/src/notes/home/mod.rs,yes
+notes,rename-notebook,edit,notebook,direct,yes: crates/screens/src/notes/home/mod.rs,yes
+notes,delete-notebook,delete,notebook,direct,yes: crates/screens/src/notes/home/mod.rs,yes
+notes,delete-note,delete,note,direct,yes: crates/screens/src/notes/home/mod.rs,yes
+notes,restore-note,restore,note,direct,yes: crates/screens/src/notes/trash.rs,yes
+notes,restore-note-version,restore,note,card,yes: crates/screens/src/notes/history.rs,no
+notes,flag-note,star,note,direct,yes: crates/screens/src/notes/home/mod.rs; crates/screens/src/notes/editor.rs,yes
+notes,unflag-note,unstar,note,direct,yes: crates/screens/src/notes/home/mod.rs; crates/screens/src/notes/editor.rs,no
 notes,link,link,note,card,no,no
 notes,send-to-tasks,create,task,card,yes: crates/screens/src/agenda/todo/ops.rs,yes
 notes,attach,attach,note,card,no,no
 notes,detach,detach,note,card,no,no
-notes,add-tag,tag,note,direct,no,no
-notes,remove-tag,untag,note,direct,no,no
+notes,add-tag,tag,note,direct,yes: crates/screens/src/notes/editor.rs,no
+notes,remove-tag,untag,note,direct,yes: crates/screens/src/notes/editor.rs,no
 people,add-person,create,person,direct,yes: apps/people/PeopleEditorMachine.kt,yes
 people,edit-person,edit,person,direct,yes: apps/people/PeopleEditorMachine.kt,yes
 people,set-cadence,edit:cadence,person,direct,yes: apps/people/PeopleEditorMachine.kt,yes

@@ -90,23 +90,6 @@ final class ScreenFixtureTests: XCTestCase {
         XCTAssertEqual(state.destination, .library)
     }
 
-    /// A refused SAVE keeps the words; a refused READ does not.
-    func testARefusedSaveKeepsTheEditor() throws {
-        let saveRefused = try Centraid_Screen_V1_NotesEditorState(
-            serializedBytes: try bytes("notes/save-refused")
-        )
-        XCTAssertEqual(saveRefused.draft.body, "Book the cabin.")
-        XCTAssertEqual(saveRefused.save, .refused)
-        XCTAssertEqual(saveRefused.draft.saveFailure.kind, .unavailable)
-
-        let readRefused = try Centraid_Screen_V1_NotesEditorState(
-            serializedBytes: try bytes("notes/read-refused")
-        )
-        guard case .failure = readRefused.content else {
-            return XCTFail("a refused read replaces the editor")
-        }
-    }
-
     /// "The platform would not say" is not "offline".
     func testPlatformRefusedIsNotOffline() throws {
         let refusedToSay = try Centraid_Screen_V1_SeatState(

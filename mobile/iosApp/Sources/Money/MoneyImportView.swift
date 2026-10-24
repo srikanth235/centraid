@@ -7,7 +7,7 @@ import CentraidShared
 /// The file, the account a CSV goes into, then the plan the core made of it,
 /// each statement with its verdicts; nothing is written until the last button.
 /// **Choose is Rust's**: the tap is forwarded, Rust asks for a file as a generic
-/// `PickFile` effect (`ScreenStore` performs it) and holds the bytes only until
+/// `PickBytes` effect (`ScreenStore` performs it) and holds the bytes only until
 /// the page is left, so nothing here reads, keeps or drops a file.
 struct MoneyImportView: View {
     let state: Centraid_Core_V1_MoneyImportState

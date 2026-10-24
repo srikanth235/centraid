@@ -59,7 +59,7 @@ class ShellRoutingStatedOnceSpec : StringSpec({
     "the scan sees the constants it polices" {
         screenIds.shouldNotBeEmpty()
         keys.shouldNotBeEmpty()
-        screenIds.contains("notes.editor") shouldBe true
+        screenIds.contains("home.search") shouldBe true
         keys.contains("backup") shouldBe true
     }
 

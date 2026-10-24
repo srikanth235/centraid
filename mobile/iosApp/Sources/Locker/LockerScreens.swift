@@ -10,7 +10,7 @@ import CentraidShared
 /// as a `.rust` entry that `RustScreenHost` draws from `ScreenStore`.
 ///
 /// What the platform does for the lock is generic effects `ScreenStore` performs
-/// (`OwnerCheck`, `PickFile`, `SaveFile`, the clipboard with its deadline) and
+/// (`OwnerCheck`, `PickBytes`, `SaveFile`, the clipboard with its deadline) and
 /// the app's foreground/background, which it reports (`CentraidApp`).
 enum LockerScreens: AppScreens {
     static let appID = AppIds.shared.LOCKER

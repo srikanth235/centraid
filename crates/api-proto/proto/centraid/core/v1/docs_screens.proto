@@ -1,0 +1,905 @@
+// DOCS' SCREENS (#1135): the drive (All · Folders · Starred, Recently added from
+// More, and a folder's own page), one document, its version history, its text
+// editor and its trash, over the core's `docs.drive`, `docs.search`,
+// `docs.history` and `docs.activity` (`crates/apps/docs/manifest.json`) and
+// every write the manifest lists. Every word, flag, icon key and empty-state
+// choice a view draws is made in `crates/screens/src/docs`; a view lays these
+// out and forwards events.
+//
+// THE CORE'S ANSWERS ARE FOLDED IN RUST before they cross: the shelf, the filters
+// and the sort are part of the core's REQUEST, so changing one reads again; what
+// depends on the SCREEN's state (the band, the pills, the sheets, the empty
+// choice) is made by the screen on every view.
+//
+// THE BAND IS ALL · FOLDERS · STARRED · MORE. Shared left with the sharing plane
+// (#1029); "Coming due" has no data plane in this build. Search is a field on the
+// current surface, never a destination; Recently changed is a shelf chosen from
+// the More sheet; Trash is the kit's screen (`docs.trash`, `TrashView`).
+//
+// DOCS DESTROYS, ON PHOTOS' PATH (D-1 of 2026-09-25): "Delete forever" is
+// `entity.purge` and "Empty trash" is `entity.empty_trash`, each behind the kit's
+// destructive confirm.
+//
+// A LEAF-LIKE FILE: it imports the kit's vocabulary and the routes only, so
+// `screens.proto` can import it for the `ViewState` arms (range 200-299).
+
+syntax = "proto3";
+
+package centraid.core.v1;
+
+import "centraid/core/v1/kit_screens.proto";
+import "centraid/core/v1/route.proto";
+
+// ---------------------------------------------------------------------------
+// The drive
+// ---------------------------------------------------------------------------
+
+message DocsDriveState {
+  // WHICH SHELF, as a parameter (law 2). More is a sheet and search a field,
+  // so neither is a value here.
+  DocsDestination destination = 1;
+  // FOLDERS only: the folder open, EMPTY for the drive's top level. Its name
+  // rides along so the head has words before the read lands.
+  string folder_id = 2;
+  string folder_name = 3;
+  // The filters and the order, as the member chose them. Carried across
+  // shelves; "Clear filters" resets the three filters and keeps the order.
+  DocsQuery query = 4;
+  Layout layout = 5;
+  DocsSearchField search = 6;
+  oneof content {
+    Loading loading = 7;
+    Failure failure = 8;
+    // The vault would not let Docs read: no band, the gate's words.
+    Denied denied = 9;
+    DocsDriveData data = 10;
+  }
+  // 11 was `refreshing`: a read is answered at once, so no re-read runs over
+  // rows the screen keeps drawing.
+  reserved 11;
+  reserved "refreshing";
+  // The one sheet up, if any (law 3: a oneof, never a bag of optionals).
+  DocsSheet sheet = 12;
+  // A refused write's sentence, over the rows (the rows stay).
+  StatusLine status = 13;
+  // Trash's confirm, and the document it asks about.
+  optional Confirm confirm = 14;
+  string confirm_document_id = 15;
+  // An inline rename, autosaving (#1015 D3). Unset when none is open.
+  optional DocsRename rename = 16;
+  // THE BAND, computed. EMPTY while denied.
+  repeated DocsBandTab band = 17;
+  // The room's chip row (R-CHROME-3), computed: filters, "Clear filters"
+  // while one is set, the sort last. EMPTY in search, on Recently changed (a
+  // window, not a filter) and while denied.
+  repeated DocsPill pills = 18;
+  // Whether any filter is set, and so whether the "Clear filters" chip shows.
+  bool filters_active = 19;
+  DocsDriveChrome chrome = 20;
+  // The app bar's subtitle: "24 documents", "Starred · 3".
+  string head_meta = 21;
+  // ADDING A DOCUMENT: the status line's words and bar, from the phase.
+  DocsIngestView ingest = 22;
+  enum Layout {
+    LAYOUT_UNSPECIFIED = 0;
+    LAYOUT_LIST = 1;
+    LAYOUT_GRID = 2;
+  }
+}
+
+// The core's filter and sort values, mirrored (this file cannot import them).
+message DocsQuery {
+  TypeFilter type = 1;
+  Modified modified = 2;
+  // One label, matched exactly; EMPTY is none.
+  string label = 3;
+  Sort sort = 4;
+  // FALSE is descending: newest changed, Z→A, largest first.
+  bool ascending = 5;
+
+  enum TypeFilter {
+    TYPE_FILTER_UNSPECIFIED = 0;
+    TYPE_FILTER_PDF = 1;
+    TYPE_FILTER_IMAGE = 2;
+    TYPE_FILTER_WORD = 3;
+    TYPE_FILTER_SPREADSHEET = 4;
+    TYPE_FILTER_MARKDOWN = 5;
+    TYPE_FILTER_TEXT = 6;
+    TYPE_FILTER_AUDIO = 7;
+    TYPE_FILTER_VIDEO = 8;
+  }
+
+  enum Modified {
+    MODIFIED_UNSPECIFIED = 0;
+    MODIFIED_TODAY = 1;
+    MODIFIED_LAST_7_DAYS = 2;
+    MODIFIED_LAST_30_DAYS = 3;
+    MODIFIED_THIS_YEAR = 4;
+  }
+
+  enum Sort {
+    SORT_UNSPECIFIED = 0;
+    SORT_CHANGED = 1;
+    SORT_NAME = 2;
+    SORT_KIND = 3;
+    SORT_SIZE = 4;
+  }
+}
+
+// SEARCH IS THE BAR UNDER THE TITLE (R-CHROME-2): closed, a field-shaped bar
+// whose tap sends `SearchOpened`; open, the field.
+message DocsSearchField {
+  bool open = 1;
+  string term = 2;
+  // The words a search answer corrected (#1097); EMPTY for an exact answer.
+  string corrected = 3;
+  // The words that line says: "Including results for “x”".
+  string corrected_label = 4;
+  // The Ask row for the answered term, matched or not.
+  SearchAsk ask_row = 5;
+}
+
+message DocsDriveChrome {
+  string title = 1;
+  string home = 2;
+  string search_label = 3;
+  string search_placeholder = 4;
+  string search_close = 5;
+  // The failure state's action; it sends `Refreshed`.
+  string retry = 6;
+  // The skeleton's accessibility label.
+  string loading = 7;
+  // The Add button (sends `SheetOpened{KIND_ADD}`).
+  string add = 8;
+  // The grid/list toggle: its label names what a tap switches TO.
+  string layout_toggle = 9;
+  string layout_icon_key = 10;
+  // "Clear filters". Not `clear_…`: SwiftProtobuf suffixes a field that
+  // begins with `clear`.
+  string filters_clear_label = 11;
+  // The row's overflow button's accessibility label.
+  string row_menu = 12;
+  // "Starred" / "Not starred", for a view that draws the star glyph.
+  string starred = 13;
+  // The inline rename's words.
+  string rename_placeholder = 14;
+  string rename_done = 15;
+  // A folder page's back control: the page it was pushed from, else "Docs"
+  // (#1047).
+  string back = 16;
+}
+
+message DocsBandTab {
+  // `all`, `folders`, `starred`, `more` — what `BandPicked` sends.
+  string key = 1;
+  string label = 2;
+  // A `design/native-catalog.json` icon key.
+  string icon_key = 3;
+  bool current = 4;
+}
+
+// A CHIP IN THE ROOM'S FILTER ROW (R-CHROME-3): Type, Modified, Label, then
+// "Clear filters" while a filter is set, then the sort LAST. `key` is what
+// `SheetOpened` asks for; `label` is the choice when one is set ("PDF") and
+// the filter's name when none is ("Type"); the sort's is the current order
+// ("Name · A to Z").
+message DocsPill {
+  DocsSheet.Kind key = 1;
+  string label = 2;
+  bool active = 3;
+  string accessibility_label = 4;
+  // Opens a sheet of choices (every filter and the sort): drawn with a chevron.
+  bool chevron = 5;
+  // The "Clear filters" chip: a tap sends `FiltersCleared`, not `SheetOpened`
+  // (its `key` is KIND_NONE).
+  bool clears = 6;
+}
+
+// OS grants the Add sheet's rows depend on, reported by the shell.
+enum DocsPermission {
+  DOCS_PERMISSION_UNSPECIFIED = 0;
+  // Never asked: the row is offered and the shell asks the OS on tap.
+  DOCS_PERMISSION_NOT_ASKED = 1;
+  DOCS_PERMISSION_GRANTED = 2;
+  // Refused by the member: the row says where to turn it on.
+  DOCS_PERMISSION_DENIED = 3;
+  // Refused by policy (parental controls, MDM): the row says so and is off.
+  DOCS_PERMISSION_RESTRICTED = 4;
+  // This device has no camera, or no file picker: the row is hidden.
+  DOCS_PERMISSION_UNAVAILABLE = 5;
+}
+
+message DocsFolderNode {
+  string folder_id = 1;
+  string name = 2;
+  // EMPTY at the top level.
+  string parent_id = 3;
+  uint32 document_count = 4;
+  // "3 documents" / "Empty".
+  string count_label = 5;
+  string accessibility_label = 6;
+  // WHERE A TAP GOES: this folder's page.
+  Route route = 7;
+}
+
+message DocsCrumb {
+  // EMPTY is the drive's top level.
+  string folder_id = 1;
+  string name = 2;
+  // The folder's page; absent for the top level, which is the tab.
+  optional Route route = 3;
+}
+
+message DocsDriveData {
+  Mode mode = 1;
+  // The shelf's rows (or the hits), in the core's order.
+  repeated DocsRowView rows = 2;
+  // FOLDERS only: the open folder's child folders, and the path to it.
+  repeated DocsFolderNode folders = 3;
+  repeated DocsCrumb crumbs = 4;
+  // Set exactly when there is nothing to draw: no rows and no folders.
+  optional EmptyState empty = 5;
+  // What the empty state's action sends; NONE when it has none.
+  EmptyAction empty_action = 6;
+  // "Showing the newest 200. Search reaches the rest." EMPTY when whole.
+  string truncated_note = 7;
+  // Recently changed's one-line rule. EMPTY elsewhere.
+  string shelf_note = 8;
+  // SEARCH'S CONTAINERS (#1097): the folders whose own name the term matched.
+  repeated SearchContainer containers = 9;
+
+  enum Mode {
+    MODE_UNSPECIFIED = 0;
+    MODE_SHELF = 1;
+    MODE_SEARCH = 2;
+  }
+
+  enum EmptyAction {
+    EMPTY_ACTION_UNSPECIFIED = 0;
+    EMPTY_ACTION_NONE = 1;
+    // Opens the Add sheet.
+    EMPTY_ACTION_ADD = 2;
+    // Sends `FiltersCleared`.
+    EMPTY_ACTION_CLEAR_FILTERS = 3;
+    // Opens the new-folder sheet.
+    EMPTY_ACTION_NEW_FOLDER = 4;
+  }
+}
+
+// ONE DOCUMENT, as every list and the document's head draw it.
+message DocsRowView {
+  string document_id = 1;
+  // The head's bytes: what a thumbnail or the stage asks for.
+  string content_id = 2;
+  // The title, or "Untitled".
+  string title = 3;
+  // A `design/native-catalog.json` icon key for the kind.
+  string kind_icon_key = 4;
+  // "PDF", "Image", …
+  string kind_label = 5;
+  // "PDF · 2.4 MB · Changed today". Trash: "Deleted 3 March".
+  string meta = 6;
+  DocsSurfaceKind surface = 7;
+  bool starred = 8;
+  bool trashed = 9;
+  // EMPTY at the top level.
+  string folder_id = 10;
+  repeated DocsLabelChip labels = 11;
+  // Search only: the match, cut into runs the view marks.
+  repeated DocsSnippetRun snippet = 12;
+  // "Lease 2026, PDF, 2.4 MB, changed today, starred".
+  string accessibility_label = 13;
+  // WHERE A TAP GOES: the document's page.
+  Route route = 14;
+}
+
+enum DocsSurfaceKind {
+  DOCS_SURFACE_KIND_UNSPECIFIED = 0;
+  // Text: the reader, over the body, and editable.
+  DOCS_SURFACE_KIND_READING = 1;
+  // An image, audio, video or PDF: the media stage.
+  DOCS_SURFACE_KIND_STAGE = 2;
+  // Anything the phone cannot render: the facts.
+  DOCS_SURFACE_KIND_FACTS = 3;
+}
+
+message DocsLabelChip {
+  // The label's words are its identity: `tag.remove` takes them.
+  string tag_id = 1;
+  string label = 2;
+}
+
+message DocsSnippetRun {
+  string text = 1;
+  bool match = 2;
+}
+
+// An action on a menu or a sheet row. `key` is what the picked event sends.
+message DocsAction {
+  string key = 1;
+  string label = 2;
+  string icon_key = 3;
+  // Drawn in the `net` tone.
+  bool destructive = 4;
+  bool enabled = 5;
+  // One line under the label; EMPTY for none.
+  string detail = 6;
+  // WHERE THE ACTION GOES when it opens a page (Edit, Trash, Versions): the
+  // shell sends the pick and pushes this.
+  optional Route route = 7;
+}
+
+// A FOLDER DOCS FOLLOWS ON THIS PHONE (#1127): its origin (`folder:<uuid>`), the
+// name the phone gives it, and how many documents it holds. The shell reports
+// the list (`FollowedChanged`).
+message DocsFollowed {
+  string origin_id = 1;
+  string name = 2;
+  int32 documents = 3;
+}
+
+// A choice on a choices sheet (#1015 D4: choices sheet, content pushes).
+message DocsChoice {
+  string key = 1;
+  string label = 2;
+  string detail = 3;
+  bool selected = 4;
+}
+
+// THE ONE SHEET UP. `kind` says which; the arm holds what it draws.
+message DocsSheet {
+  Kind kind = 1;
+  string title = 2;
+  oneof body {
+    // More, Add and a row's menu: a list of actions.
+    DocsActionList actions = 3;
+    // A filter, the sort, or where to move a document.
+    DocsChoiceList choices = 4;
+    DocsLabelsSheet labels = 5;
+    DocsNewFolderSheet new_folder = 6;
+  }
+  // The document a row menu, a move or labels sheet is about.
+  string document_id = 7;
+  string close_label = 8;
+
+  enum Kind {
+    KIND_UNSPECIFIED = 0;
+    KIND_NONE = 1;
+    KIND_MORE = 2;
+    KIND_ADD = 3;
+    KIND_TYPE = 4;
+    KIND_MODIFIED = 5;
+    KIND_LABEL = 6;
+    KIND_SORT = 7;
+    KIND_ROW_MENU = 8;
+    KIND_MOVE = 9;
+    KIND_LABELS = 10;
+    KIND_NEW_FOLDER = 11;
+    // The folders Docs follows on this phone (#1127): one "Stop following" row each.
+    KIND_FOLLOWED = 12;
+  }
+}
+
+message DocsActionList {
+  repeated DocsAction actions = 1;
+  // One line under the list; EMPTY for none.
+  string footer = 2;
+}
+
+message DocsChoiceList {
+  repeated DocsChoice choices = 1;
+}
+
+message DocsLabelsSheet {
+  // On the document now; each removable.
+  repeated DocsLabelChip current = 1;
+  // Labels elsewhere in the drive, not on this document.
+  repeated string available = 2;
+  // The new label being typed, and whether "Add" can be pressed.
+  string draft = 3;
+  bool can_add = 4;
+  string add_label = 5;
+  string placeholder = 6;
+  string remove_label = 7;
+}
+
+message DocsNewFolderSheet {
+  string name = 1;
+  string placeholder = 2;
+  string create_label = 3;
+  bool can_create = 4;
+  // "In Taxes" / "At the top level".
+  string where_label = 5;
+}
+
+// AN INLINE RENAME, autosaving: the kit's `Autosave` over the title alone.
+message DocsRename {
+  string document_id = 1;
+  string title = 2;
+  Autosave autosave = 3;
+  // "Saved" / "Saving" / the refusal's sentence. EMPTY while clean.
+  string status_label = 4;
+}
+
+// ADDING A DOCUMENT (#1047, R-1047-Q4): Upload, Scan and Text from the Add
+// sheet. The shell picks and stages the bytes (`PickFile`); the screen files
+// them (`upload`, or `create-text`).
+//
+//   REQUESTED ─┬─ UPLOAD/SCAN ─> PICKING ─FilePicked─> FILING ─> FILED
+//              └─ TEXT ──────────────────────────────> FILING ─> FILED
+//   any refusal ─> FAILED ─Retried─> (FILING with the file held, else PICKING)
+message DocsIngestView {
+  Phase phase = 1;
+  // One clause for the status line: "Adding Lease.pdf", "Lease.pdf added", or
+  // the failure's sentence. EMPTY while idle or picking.
+  string status_label = 2;
+  // Bytes streamed into the core so far and the file's size, as thousandths
+  // for a bar. 0 is unknown.
+  uint32 progress_permille = 3;
+  // THE STATUS LINE'S CONTROLS (DESIGN.md: at most one inline text action).
+  // `retry_label` is that one text action — FAILED only, EMPTY otherwise.
+  // `dismiss_label` is the line's CLOSE KEY (an icon control; this is its
+  // accessibility label), set at FILED and at FAILED, EMPTY otherwise.
+  string retry_label = 4;
+  string dismiss_label = 5;
+
+  enum Phase {
+    PHASE_UNSPECIFIED = 0;
+    PHASE_IDLE = 1;
+    // The platform's picker or scanner is up.
+    PHASE_PICKING = 2;
+    // The write that files the bytes is in flight.
+    PHASE_FILING = 3;
+    PHASE_FILED = 4;
+    PHASE_FAILED = 5;
+  }
+}
+
+message DocsDriveEvent {
+  oneof kind {
+    Refreshed refreshed = 1;
+    BandPicked band = 2;
+    SearchOpened search_opened = 3;
+    SearchTermChanged search_term = 4;
+    SearchClosed search_closed = 5;
+    LayoutToggled layout_toggled = 6;
+    SheetOpened sheet_opened = 7;
+    SheetClosed sheet_closed = 8;
+    ChoicePicked choice = 9;
+    FiltersCleared filters_cleared = 10;
+    RowMenuOpened row_menu = 11;
+    ActionPicked action = 12;
+    RenameEdited rename_edited = 13;
+    RenameClosed rename_closed = 14;
+    LabelAdded label_added = 15;
+    LabelRemoved label_removed = 16;
+    LabelDraftEdited label_draft = 17;
+    FolderNameEdited folder_name = 18;
+    FolderCreated folder_created = 19;
+    Confirmed confirmed = 20;
+    Dismissed dismissed = 21;
+    // The shell's reports (law 4): what the OS lets the Add sheet offer, and
+    // the folders followed now.
+    PermissionChanged permission = 22;
+    FollowedChanged followed_changed = 23;
+    // The status line's controls.
+    IngestRetried ingest_retried = 24;
+    IngestDismissed ingest_dismissed = 25;
+  }
+
+  message Refreshed {}
+
+  // By `DocsBandTab.key`. `more` opens the More sheet.
+  message BandPicked {
+    string key = 1;
+  }
+
+  message SearchOpened {}
+
+  message SearchTermChanged {
+    string term = 1;
+  }
+
+  message SearchClosed {}
+
+  message LayoutToggled {}
+
+  message SheetOpened {
+    DocsSheet.Kind kind = 1;
+  }
+
+  message SheetClosed {}
+
+  // A `DocsChoice.key` on the open choices sheet.
+  message ChoicePicked {
+    string key = 1;
+  }
+
+  message FiltersCleared {}
+
+  message RowMenuOpened {
+    string document_id = 1;
+  }
+
+  // A `DocsAction.key` on the open sheet (More, Add or a row menu).
+  message ActionPicked {
+    string key = 1;
+  }
+
+  message RenameEdited {
+    string title = 1;
+  }
+
+  // Done, or the field lost focus: save now (close = done).
+  message RenameClosed {}
+
+  message LabelAdded {
+    string label = 1;
+  }
+
+  // A `DocsLabelChip.tag_id` (the label's words).
+  message LabelRemoved {
+    string tag_id = 1;
+  }
+
+  message LabelDraftEdited {
+    string text = 1;
+  }
+
+  message FolderNameEdited {
+    string name = 1;
+  }
+
+  message FolderCreated {}
+
+  message Confirmed {}
+
+  message Dismissed {}
+
+  message PermissionChanged {
+    Surface surface = 1;
+    DocsPermission permission = 2;
+
+    enum Surface {
+      SURFACE_UNSPECIFIED = 0;
+      SURFACE_CAMERA = 1;
+      SURFACE_FILES = 2;
+    }
+  }
+
+  message FollowedChanged {
+    repeated DocsFollowed followed = 1;
+  }
+
+  message IngestRetried {}
+
+  message IngestDismissed {}
+}
+
+// ---------------------------------------------------------------------------
+// One document
+// ---------------------------------------------------------------------------
+
+message DocsDocumentState {
+  string document_id = 1;
+  // Rides along, so the head has words before the read.
+  string title_hint = 2;
+  oneof content {
+    Loading loading = 3;
+    Failure failure = 4;
+    Denied denied = 5;
+    DocsDocumentData data = 6;
+  }
+  // 7 was `refreshing` (see `DocsDriveState`).
+  reserved 7;
+  reserved "refreshing";
+  StatusLine status = 8;
+  optional Confirm confirm = 9;
+  optional DocsRename rename = 10;
+  DocsSheet sheet = 11;
+  DocsDocumentChrome chrome = 12;
+  // WHICH VERB `confirm` ASKS ABOUT: trash on a live document, delete
+  // forever on a trashed one. NONE while no confirm is up.
+  Asking asking = 13;
+  // THE SCREEN IS DONE — the document was deleted forever here. The shell pops.
+  bool dismissed = 14;
+
+  enum Asking {
+    ASKING_UNSPECIFIED = 0;
+    ASKING_NONE = 1;
+    ASKING_TRASH = 2;
+    ASKING_PURGE = 3;
+  }
+}
+
+message DocsDocumentChrome {
+  // The parent's name — the page it was pushed from, else "Docs" — never a
+  // bare "Back".
+  string back = 1;
+  string retry = 2;
+  string loading = 3;
+  string more = 4;
+  string versions_heading = 5;
+  string activity_heading = 6;
+  string facts_heading = 7;
+  string rename_placeholder = 8;
+  string rename_done = 9;
+}
+
+message DocsDocumentData {
+  // The document, as its head draws it. Unset when it is gone.
+  optional DocsRowView row = 1;
+  // WHICH SURFACE, and what it draws (law 3).
+  oneof surface {
+    DocsReader reading = 2;
+    DocsStage stage = 3;
+    // Docs cannot render this kind: the facts below are the answer.
+    DocsFactsOnly facts_only = 4;
+    // No such document: deleted elsewhere, or a stale link.
+    EmptyState gone = 5;
+  }
+  repeated DocsFact facts = 6;
+  // The folder path, top level first, for the breadcrumb.
+  repeated DocsCrumb path = 7;
+  // The version history row: "Versions" and how many. Absent for a document
+  // with one version.
+  optional DocsVersionsLink versions = 8;
+  repeated DocsActivityRow activity = 9;
+  // "Nothing recorded yet." when `activity` is empty; EMPTY otherwise.
+  string activity_empty = 10;
+  // The head's actions, in order: edit, star, rename, move, labels, then
+  // trash — or restore, on a trashed document.
+  repeated DocsAction actions = 11;
+  // A trashed document's line: "In trash · restorable until 3 April" or
+  // "In trash · can no longer be restored". EMPTY on a live one.
+  string trashed_note = 12;
+  // The drive's folders and labels, for the move and labels sheets.
+  repeated DocsFolderNode folders = 13;
+  repeated string labels = 14;
+}
+
+// The row that opens the version history.
+message DocsVersionsLink {
+  string label = 1;
+  // How many versions: "3 versions".
+  string count_label = 2;
+  Route route = 3;
+}
+
+message DocsReader {
+  // The decoded text. Meaningful only when `has_text`.
+  string body = 1;
+  // FALSE is "this vault holds no text for these bytes", said by
+  // `no_text`; TRUE with an empty body is an empty document.
+  bool has_text = 2;
+  string no_text = 3;
+  Format format = 4;
+  // Opens `docs.editor`. FALSE on a trashed document or one with no text.
+  bool editable = 5;
+  string edit_label = 6;
+  // "This document is empty." for an empty body; EMPTY otherwise.
+  string empty_body = 7;
+
+  enum Format {
+    FORMAT_UNSPECIFIED = 0;
+    FORMAT_PLAIN = 1;
+    FORMAT_MARKDOWN = 2;
+  }
+}
+
+message DocsStage {
+  // What the stage asks the byte door for.
+  string content_id = 1;
+  Media media = 2;
+  string media_type = 3;
+  // Whether there is a file on this device to draw (`bytes_path`); when not,
+  // `absent_reason` says why in the member's words and the stage draws that
+  // instead.
+  bool held = 4;
+  string absent_reason = 5;
+  string accessibility_label = 6;
+  // THE FILE (#1047, R-1047-Q4): an absolute path the view hands its
+  // platform's renderer, picked by `media`. The core sets it only when the
+  // bytes are here and the type may be drawn inline. EMPTY when `held` is false.
+  string bytes_path = 7;
+
+  enum Media {
+    MEDIA_UNSPECIFIED = 0;
+    MEDIA_IMAGE = 1;
+    MEDIA_PDF = 2;
+    MEDIA_AUDIO = 3;
+    MEDIA_VIDEO = 4;
+  }
+}
+
+message DocsFactsOnly {
+  string sentence = 1;
+}
+
+// One line of the facts: "Kind" · "PDF".
+message DocsFact {
+  string label = 1;
+  string detail = 2;
+}
+
+message DocsActivityRow {
+  // "Edited", "Renamed", …
+  string label = 1;
+  // "Wed 11 March 09:12".
+  string meta = 2;
+}
+
+message DocsDocumentEvent {
+  oneof kind {
+    Refreshed refreshed = 1;
+    ActionPicked action = 2;
+    MoreOpened more_opened = 3;
+    RenameEdited rename_edited = 4;
+    RenameClosed rename_closed = 5;
+    SheetClosed sheet_closed = 6;
+    ChoicePicked choice = 7;
+    LabelAdded label_added = 8;
+    LabelRemoved label_removed = 9;
+    LabelDraftEdited label_draft = 10;
+    Confirmed confirmed = 11;
+    Dismissed dismissed = 12;
+  }
+
+  message Refreshed {}
+
+  // A `DocsAction.key` from the head or the verbs sheet.
+  message ActionPicked {
+    string key = 1;
+  }
+
+  // The head's More: the verbs sheet (`DocsSheet.KIND_MORE`, every
+  // `DocsDocumentData.actions` row). A verb picked from it is `ActionPicked`,
+  // and closes it.
+  message MoreOpened {}
+
+  message RenameEdited {
+    string title = 1;
+  }
+
+  message RenameClosed {}
+
+  message SheetClosed {}
+
+  message ChoicePicked {
+    string key = 1;
+  }
+
+  message LabelAdded {
+    string label = 1;
+  }
+
+  message LabelRemoved {
+    string tag_id = 1;
+  }
+
+  message LabelDraftEdited {
+    string text = 1;
+  }
+
+  message Confirmed {}
+
+  message Dismissed {}
+}
+
+// ---------------------------------------------------------------------------
+// Version history (`docs.versions`): `docs.history` and `restore-version`
+// ---------------------------------------------------------------------------
+
+message DocsVersionsState {
+  string document_id = 1;
+  string title = 2;
+  oneof content {
+    Loading loading = 3;
+    Failure failure = 4;
+    Denied denied = 5;
+    DocsVersionsData data = 6;
+  }
+  StatusLine status = 7;
+  DocsVersionsChrome chrome = 8;
+}
+
+message DocsVersionsChrome {
+  // The page this one was pushed from: the document's title.
+  string back = 1;
+  string heading = 2;
+  string retry = 3;
+  string loading = 4;
+}
+
+message DocsVersionsData {
+  repeated DocsVersionRow versions = 1;
+  // Set when the document is gone or has nothing to list.
+  optional EmptyState empty = 2;
+}
+
+message DocsVersionRow {
+  // The version's own key is its number: two versions can hold the same bytes.
+  string key = 1;
+  // "Version 3".
+  string label = 2;
+  // "Current · 2.4 MB · 3 March 09:12".
+  string meta = 3;
+  bool current = 4;
+  // "Restore" on an earlier version of a live document; EMPTY otherwise.
+  string restore_label = 5;
+}
+
+message DocsVersionsEvent {
+  oneof kind {
+    Refreshed refreshed = 1;
+    Restored restored = 2;
+  }
+
+  message Refreshed {}
+
+  // A `DocsVersionRow.key` whose Restore was tapped.
+  message Restored {
+    string key = 1;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// The text editor (#1015 D3: autosave everywhere, close = done)
+// ---------------------------------------------------------------------------
+//
+// The kit's `Autosave` over a text document's title and body. Each save is one
+// `edit`, which mints a new version; `version_label` follows the vault after
+// each save commits.
+
+message DocsEditorState {
+  string document_id = 1;
+  string title_hint = 2;
+  oneof content {
+    Loading loading = 3;
+    Failure failure = 4;
+    DocsEditorDraft draft = 5;
+  }
+  Autosave autosave = 6;
+  // "Version 4" — the vault's, re-read after a save commits.
+  string version_label = 7;
+  // "Saved" / "Saving" / "Edited" / the refusal's sentence; EMPTY while
+  // clean.
+  string status_label = 8;
+  // "Changed elsewhere; saving reloads it." EMPTY unless
+  // `autosave.remote_changed`.
+  string remote_note = 9;
+  DocsReader.Format format = 10;
+  DocsEditorChrome chrome = 11;
+}
+
+message DocsEditorDraft {
+  string title = 1;
+  string body = 2;
+}
+
+message DocsEditorChrome {
+  // Close = done: the one way out, and it saves.
+  string done = 1;
+  string title_placeholder = 2;
+  string body_placeholder = 3;
+  string loading = 4;
+  string retry = 5;
+}
+
+message DocsEditorEvent {
+  oneof kind {
+    Refreshed refreshed = 1;
+    TitleEdited title = 2;
+    BodyEdited body = 3;
+  }
+
+  message Refreshed {}
+
+  message TitleEdited {
+    string title = 1;
+  }
+
+  message BodyEdited {
+    string body = 1;
+  }
+}

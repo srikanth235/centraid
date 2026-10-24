@@ -2,14 +2,15 @@ import SwiftUI
 
 import CentraidShared
 
-// DOCS' PIECES, SHARED BY THE DRIVE AND THE DOCUMENT PAGE (#1046). The sheet
-// (one oneof: actions, choices, labels, new folder), the document row and the
-// inline rename. Every word and every enabled flag is the state's.
+// DOCS' PIECES, SHARED BY THE DRIVE AND THE DOCUMENT PAGE (#1046, #1135). The
+// sheet (one oneof: actions, choices, labels, new folder), the document row and
+// the inline rename. Every word and every enabled flag is Rust's
+// (`crates/screens/src/docs`); a row that opens a page carries its `Route`.
 
 /// What a Docs sheet's rows do, as closures — the drive and the document page
 /// forward them as their own events.
 struct DocsSheetActions {
-    var onAction: (Centraid_Screen_V1_DocsAction) -> Void = { _ in }
+    var onAction: (Centraid_Core_V1_DocsAction) -> Void = { _ in }
     var onChoice: (String) -> Void = { _ in }
     var onLabelAdd: (String) -> Void = { _ in }
     var onLabelRemove: (String) -> Void = { _ in }
@@ -20,7 +21,7 @@ struct DocsSheetActions {
 
 /// THE DOCS SHEET: the state's `DocsSheet`, whichever body it carries.
 struct DocsSheetView: View {
-    let sheet: Centraid_Screen_V1_DocsSheet
+    let sheet: Centraid_Core_V1_DocsSheet
     let actions: DocsSheetActions
 
     @Environment(\.colorScheme) private var scheme
@@ -80,7 +81,7 @@ struct DocsSheetView: View {
 
 private struct DocsLabelsSheetView: View {
     let title: String
-    let labels: Centraid_Screen_V1_DocsLabelsSheet
+    let labels: Centraid_Core_V1_DocsLabelsSheet
     let actions: DocsSheetActions
 
     @State private var draft = ""
@@ -127,7 +128,7 @@ private struct DocsLabelsSheetView: View {
 
 private struct DocsNewFolderSheetView: View {
     let title: String
-    let folder: Centraid_Screen_V1_DocsNewFolderSheet
+    let folder: Centraid_Core_V1_DocsNewFolderSheet
     let actions: DocsSheetActions
 
     @State private var name = ""
@@ -175,7 +176,7 @@ struct FlowChips: View {
 /// THE DOCUMENT ROW: kind mark, title (or a search hit's snippet under it),
 /// meta, labels, star, and the row menu.
 struct DocsRowItem: View {
-    let row: Centraid_Screen_V1_DocsRowView
+    let row: Centraid_Core_V1_DocsRowView
     let starredLabel: String
     let menuLabel: String
     let onTap: () -> Void
@@ -244,7 +245,7 @@ struct DocsRowItem: View {
 
 /// A search hit's snippet, with the matched runs in strong ink.
 struct DocsSnippet: View {
-    let runs: [Centraid_Screen_V1_DocsSnippetRun]
+    let runs: [Centraid_Core_V1_DocsSnippetRun]
 
     @Environment(\.colorScheme) private var scheme
 
@@ -261,7 +262,7 @@ struct DocsSnippet: View {
 
 /// THE INLINE RENAME: the title typed in place, its autosave line, Done.
 struct DocsRenameField: View {
-    let rename: Centraid_Screen_V1_DocsRename
+    let rename: Centraid_Core_V1_DocsRename
     let placeholder: String
     let doneLabel: String
     let onEdit: (String) -> Void
@@ -301,28 +302,21 @@ struct DocsRenameField: View {
     }
 }
 
-/// A write refused, said where the member is looking.
+/// A write refused, said where the member is looking: the core's own sentence.
 struct DocsWriteLine: View {
-    let write: Centraid_Screen_V1_WriteState
+    let status: Centraid_Core_V1_StatusLine
 
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        if !write.refusal.isEmpty {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(write.refusal)
-                    .centraidType("small")
-                    .foregroundStyle(Theme.color("net", scheme))
-                if !write.failure.remedy.isEmpty {
-                    Text(write.failure.remedy)
-                        .centraidType("annotLabel")
-                        .foregroundStyle(Theme.color("textSoft", scheme))
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, CentraidGeometry.pageMargin)
-            .padding(.vertical, 6)
-            .accessibilityIdentifier("docs-write-refused")
+        if !status.sentence.isEmpty {
+            Text(status.sentence)
+                .centraidType("small")
+                .foregroundStyle(Theme.color("net", scheme))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, CentraidGeometry.pageMargin)
+                .padding(.vertical, 6)
+                .accessibilityIdentifier("docs-write-refused")
         }
     }
 }

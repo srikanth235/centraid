@@ -1,30 +1,24 @@
 import SwiftUI
 
-/// The Notes editor, in SwiftUI, on the kit (#1020, D-1020-E3; K5; #1029 port).
+/// `notes.editor` — the Notes editor, in SwiftUI, on the kit (#1135).
 ///
 /// **AN EDITOR ROOM: AUTOSAVE, CLOSE = DONE (#1015 D3).** There is no Save
-/// button and no save event from here: every edit is handed to the machine,
-/// whose `AutosaveLaw` writes after its debounce, and `AutosaveStatus` — hosted
-/// by `EditorRoom` — is the one line that says whether the words are safe.
-/// Done pops the route; the room going off screen by ANY route calls
-/// `onDeparted`, which the registry forwards to `NotesBridge.departed()`: the
-/// machine's `Left`, which flushes unsaved words and leaves the bridge alive.
+/// button and no save event from here: every edit is handed to Rust, whose
+/// autosave writes after its debounce, and `AutosaveStatus` — hosted by
+/// `EditorRoom` — says whether the words are safe. Done pops the page; Rust
+/// flushes what is unsaved when it sees the page leave (`Left`).
 ///
-/// **EVERY WORD IS THE MACHINE'S** — the close verb, the placeholders, the
-/// pin/link/history/send-to-Tasks labels and the status (`NotesEditorChrome`).
-/// The powerbox (the link picker) is a sheet
-/// the machine opens (`link_sheet_open`, also on a typed `[[`); a pick is the
-/// editor's `LinkPicked`, and the spliced body is re-seeded when it closes.
+/// **EVERY WORD IS RUST'S** — the close verb, the placeholders, the pin, link,
+/// history and Send to Agenda labels and the status (`NotesEditorChrome`).
+/// History and Send to Agenda are routes the state carries; the powerbox is a
+/// sheet the state opens (`link`), also on a typed `[[`.
 struct NotesEditorView: View {
-    let data: Data
-    let picker: Data
-    let opened: Data
-    let send: (Data) -> Void
-    let sendPicker: (Data) -> Void
+    let state: Centraid_Core_V1_NotesEditorState
+    let send: (Centraid_Core_V1_NotesEditorEvent) -> Void
+    let open: (Centraid_Core_V1_Route) -> Void
     let onClose: () -> Void
-    let onDeparted: () -> Void
 
-    /// THE ONLY PLACE A KEYSTROKE EXISTS BEFORE THE MACHINE HEARS IT (#1025 S5).
+    /// THE ONLY PLACE A KEYSTROKE EXISTS BEFORE RUST HEARS IT.
     ///
     /// Filled from the draft ONCE, when the draft first arrives — and again
     /// only when the powerbox closes, because a pick changed the body under
@@ -35,52 +29,43 @@ struct NotesEditorView: View {
 
     @Environment(\.colorScheme) private var scheme
 
-    private var state: Centraid_Screen_V1_NotesEditorState {
-        (try? Centraid_Screen_V1_NotesEditorState(serializedBytes: data)) ?? .init()
+    private func event(_ build: (inout Centraid_Core_V1_NotesEditorEvent) -> Void) -> Centraid_Core_V1_NotesEditorEvent {
+        var event = Centraid_Core_V1_NotesEditorEvent()
+        build(&event)
+        return event
     }
 
-    /// ONE BRIDGE SERVES EVERY NOTE: until the state is about the note this
-    /// route opened, the last note's draft is still held — seeding from it
-    /// would put one note's words in another's fields, and the first
-    /// keystroke would write them there. Until then the room draws loading.
-    private var mine: Bool {
-        guard let route = (try? Centraid_Screen_V1_NotesEditorEvent(serializedBytes: opened))?.opened,
-              !route.noteID.isEmpty else { return true }
-        return state.noteID == route.noteID
-    }
-
-    private var draft: Centraid_Screen_V1_NoteDraft? {
-        if mine, case let .draft(draft) = state.content { return draft }
+    private var draft: Centraid_Core_V1_NotesEditorDraft? {
+        if case let .draft(draft)? = state.content { return draft }
         return nil
     }
 
+    private var content: ScreenContent<Centraid_Core_V1_NotesEditorDraft> {
+        switch state.content {
+        case .loading?, nil: return .loading(true)
+        case let .failure(failure)?: return .failed(failure)
+        case let .draft(draft)?: return .data(draft)
+        }
+    }
+
     var body: some View {
-        let state = state
         let chrome = state.chrome
         EditorRoom(
             title: chrome.title,
-            status: state.autosave,
+            status: state.autosave.legacy,
             closeLabel: chrome.close,
             onClose: onClose,
-            onDeparted: onDeparted
+            onDeparted: {}
         ) {
             if draft != nil {
                 Menu {
-                    Button(chrome.pinLabel) { send(NotesEditorEvents.make { $0.pin = .init() }) }
-                    Button(chrome.linkLabel) {
-                        send(NotesEditorEvents.make {
-                            // THE MACHINE PLACES IT (at the end of the note): no caret is sent.
-                            $0.linkRequested = .init()
-                        })
+                    Button(chrome.pinLabel) { send(event { $0.pin = .init() }) }
+                    Button(chrome.linkLabel) { send(event { $0.linkRequested = .init() }) }
+                    if chrome.historyEnabled, state.hasHistory {
+                        Button(chrome.historyLabel) { open(state.history) }
                     }
-                    if chrome.historyEnabled {
-                        Button(chrome.historyLabel) { send(NotesEditorEvents.make { $0.history = .init() }) }
-                    }
-                    if !chrome.sendToTasksLabel.isEmpty {
-                        Button(chrome.sendToTasksLabel) {
-                            let text = typedTitle.isEmpty ? typedBody : typedTitle
-                            send(NotesEditorEvents.make { $0.sendToTasks = .with { $0.text = text } })
-                        }
+                    if state.hasSendToAgenda {
+                        Button(chrome.sendToAgendaLabel) { open(state.sendToAgenda) }
                     }
                 } label: {
                     ToolbarIconFace(iconKey: "MoreHoriz")
@@ -90,9 +75,9 @@ struct NotesEditorView: View {
             }
         } content: {
             ReadStateView(
-                content: mine ? content(state) : .loading(true),
+                content: content,
                 skeleton: { RowSkeleton(rows: 4, meta: false, label: "") },
-                onRetry: { send(opened) }
+                onRetry: { send(event { $0.refreshed = .init() }) }
             ) { draft in
                 VStack(alignment: .leading, spacing: 8) {
                     if !chrome.status.isEmpty {
@@ -108,8 +93,9 @@ struct NotesEditorView: View {
                         // assignment to the field: seeding writes to it too.
                         .onChange(of: typedTitle) { _, typed in
                             guard typed != draft.title else { return }
-                            send(NotesEditorEvents.make { $0.title = .with { $0.title = typed } })
+                            send(event { $0.title = .with { $0.title = typed } })
                         }
+                    NotesTagsRow(tags: state.tags, placeholder: chrome.tagPlaceholder, send: send)
                     ZStack(alignment: .topLeading) {
                         if typedBody.isEmpty {
                             Text(chrome.bodyPlaceholder)
@@ -126,7 +112,7 @@ struct NotesEditorView: View {
                             .accessibilityIdentifier("note-body-field")
                             .onChange(of: typedBody) { _, typed in
                                 guard typed != draft.body else { return }
-                                send(NotesEditorEvents.make { $0.body = .with { $0.body = typed } })
+                                send(event { $0.body = .with { $0.body = typed } })
                             }
                     }
                 }
@@ -142,41 +128,196 @@ struct NotesEditorView: View {
             }
         }
         .sheet(isPresented: Binding(
-            get: { state.linkSheetOpen },
-            set: { open in
-                guard !open, state.linkSheetOpen else { return }
-                send(NotesEditorEvents.make { $0.linkDismissed = .init() })
+            get: { state.hasLink },
+            set: { shown in
+                guard !shown, state.hasLink else { return }
+                send(event { $0.linkDismissed = .init() })
             }
         )) {
-            NotesLinkPickerView(
-                data: picker,
-                send: sendPicker,
-                onPick: { target in send(NotesEditorEvents.make { $0.linkPicked = .with { $0.target = target } }) },
-                onClose: { send(NotesEditorEvents.make { $0.linkDismissed = .init() }) }
-            )
+            NotesLinkSheet(sheet: state.link, send: send)
         }
-        .onChange(of: state.linkSheetOpen) { _, open in
+        .onChange(of: state.hasLink) { _, shown in
             // THE POWERBOX CLOSED: a pick spliced `[[title]]` into the body
-            // the machine holds, so the field takes it.
-            if !open, let draft { typedBody = draft.body }
-        }
-    }
-
-    private func content(_ state: Centraid_Screen_V1_NotesEditorState) -> ScreenContent<Centraid_Screen_V1_NoteDraft> {
-        switch state.content {
-        case let .loading(loading): return .loading(loading.firstLoad)
-        case let .failure(failure): return .failed(failure)
-        case let .draft(draft): return .data(draft)
-        case .none: return .loading(true)
+            // Rust holds, so the field takes it.
+            if !shown, let draft { typedBody = draft.body }
         }
     }
 }
 
-/// Encoded `NotesEditorEvent`s.
-enum NotesEditorEvents {
-    static func make(_ build: (inout Centraid_Screen_V1_NotesEditorEvent) -> Void) -> Data {
-        var event = Centraid_Screen_V1_NotesEditorEvent()
+/// THE NOTE'S TAGS, each removable, and the field that adds one (`add-tag`,
+/// `remove-tag`; Rust writes at once). The field is offered only once the
+/// note exists (`tag_placeholder` is empty before).
+private struct NotesTagsRow: View {
+    let tags: [Centraid_Core_V1_NotesEditorTag]
+    let placeholder: String
+    let send: (Centraid_Core_V1_NotesEditorEvent) -> Void
+
+    @State private var typed = ""
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ForEach(tags, id: \.conceptID) { tag in
+                HStack(spacing: 6) {
+                    Text(tag.label)
+                        .centraidType("small")
+                        .foregroundStyle(Theme.color("textSoft", scheme))
+                    KitIconKey(iconKey: "X", label: tag.removeLabel, tint: "textSoft", identifier: "note-tag-remove-\(tag.conceptID)") {
+                        var event = Centraid_Core_V1_NotesEditorEvent()
+                        event.tagRemoved = .with { $0.label = tag.label }
+                        send(event)
+                    }
+                }
+            }
+            if !placeholder.isEmpty {
+                TextField(placeholder, text: $typed)
+                    .centraidType("small")
+                    .foregroundStyle(Theme.color("text", scheme))
+                    .submitLabel(.done)
+                    .accessibilityIdentifier("note-tag-field")
+                    .onSubmit {
+                        let label = typed
+                        typed = ""
+                        var event = Centraid_Core_V1_NotesEditorEvent()
+                        event.tagAdded = .with { $0.label = label }
+                        send(event)
+                    }
+            }
+        }
+    }
+}
+
+/// THE POWERBOX: a sheet over the editor. A pick is `LinkPicked`, and Rust
+/// splices `[[title]]` into the body.
+private struct NotesLinkSheet: View {
+    let sheet: Centraid_Core_V1_NotesLinkSheet
+    let send: (Centraid_Core_V1_NotesEditorEvent) -> Void
+
+    private func event(_ build: (inout Centraid_Core_V1_NotesEditorEvent) -> Void) -> Centraid_Core_V1_NotesEditorEvent {
+        var event = Centraid_Core_V1_NotesEditorEvent()
         build(&event)
-        return event.encoded
+        return event
+    }
+
+    private var content: ScreenContent<Centraid_Core_V1_NotesLinkData> {
+        switch sheet.content {
+        case .loading?, nil: return .loading(true)
+        case let .failure(failure)?: return .failed(failure)
+        case let .denied(denied)?: return .gated(denied)
+        case let .data(data)?: return .data(data)
+        }
+    }
+
+    var body: some View {
+        SheetRoom(title: sheet.title, status: sheet.foot) {
+            CentraidSearchField(
+                field: Centraid_Screen_V1_SearchField.with {
+                    $0.open = true
+                    $0.term = sheet.term
+                },
+                placeholder: sheet.searchPlaceholder,
+                closeLabel: sheet.close,
+                identifier: "notes-link-search",
+                onTerm: { term in send(event { $0.linkTerm = .with { $0.term = term } }) },
+                onClose: { send(event { $0.linkDismissed = .init() }) }
+            )
+            ReadStateView(
+                content: content,
+                skeleton: { RowSkeleton(rows: 4, label: sheet.loadingLabel) },
+                onRetry: { send(event { $0.refreshed = .init() }) }
+            ) { picker in
+                if picker.domains.allSatisfy({ $0.rows.isEmpty }) {
+                    EmptyStateView(picker.empty.legacy)
+                } else {
+                    ScrollView {
+                        LazyVStack(spacing: 0) {
+                            ForEach(Array(picker.domains.enumerated()), id: \.offset) { _, domain in
+                                SectionHeader(title: domain.head.title, count: domain.head.count)
+                                    .padding(.horizontal, -CentraidGeometry.pageMargin)
+                                ForEach(domain.rows, id: \.id) { row in
+                                    CentraidRow(
+                                        title: row.title,
+                                        meta: row.subtitle,
+                                        accessibility: row.accessibilityLabel,
+                                        identifier: "notes-link-\(row.id)",
+                                        onTap: { send(event { $0.linkPicked = .with { $0.id = row.id } }) }
+                                    )
+                                    .padding(.horizontal, -CentraidGeometry.pageMargin)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// `notes.history` — one note's versions, newest first (#1135).
+struct NotesHistoryView: View {
+    let state: Centraid_Core_V1_NotesHistoryState
+    let send: (Centraid_Core_V1_NotesHistoryEvent) -> Void
+    let onBack: () -> Void
+
+    private func event(_ build: (inout Centraid_Core_V1_NotesHistoryEvent) -> Void) -> Centraid_Core_V1_NotesHistoryEvent {
+        var event = Centraid_Core_V1_NotesHistoryEvent()
+        build(&event)
+        return event
+    }
+
+    private var content: ScreenContent<Centraid_Core_V1_NotesHistoryData> {
+        switch state.content {
+        case .loading?, nil: return .loading(true)
+        case let .failure(failure)?: return .failed(failure)
+        case let .denied(denied)?: return .gated(denied)
+        case let .data(data)?: return .data(data)
+        }
+    }
+
+    var body: some View {
+        PushedPage(title: state.title, parentTitle: state.back, onBack: onBack) {
+            EmptyView()
+        } content: {
+            VStack(spacing: 0) {
+                StatusLineView(status: state.status.legacy, identifier: "notes-history-status") {}
+                ReadStateView(
+                    content: content,
+                    loadingLabel: state.loadingLabel,
+                    onRetry: { send(event { $0.refreshed = .init() }) }
+                ) { history in
+                    if history.rows.count <= 1, history.hasEmpty {
+                        EmptyStateView(history.empty.legacy)
+                    } else {
+                        ScrollView {
+                            LazyVStack(spacing: 0) {
+                                ForEach(history.rows, id: \.contentID) { row in
+                                    HStack(spacing: 0) {
+                                        CentraidRow(
+                                            title: row.label,
+                                            meta: row.preview,
+                                            dimmed: row.current,
+                                            accessibility: row.accessibilityLabel,
+                                            identifier: "notes-version-\(row.contentID)"
+                                        )
+                                        if !row.current, !row.restoreLabel.isEmpty {
+                                            KitLink(
+                                                label: row.restoreLabel,
+                                                dense: true,
+                                                identifier: "notes-restore-\(row.contentID)"
+                                            ) {
+                                                send(event { $0.restore = .with { $0.contentID = row.contentID } })
+                                            }
+                                            .padding(.trailing, 8)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        .refreshable { send(event { $0.refreshed = .init() }) }
+                        .accessibilityIdentifier("notes-history")
+                    }
+                }
+            }
+        }
     }
 }

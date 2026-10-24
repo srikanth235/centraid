@@ -11,8 +11,8 @@ import java.io.File
  *
  * ## The defect this is a gate against
  *
- * `NotesEditorMachine.SAVE_COMMAND` was `"knowledge.save_note"` and **there is
- * no such command.** The registry has `create_note`, `edit_note`, `move_note`,
+ * Notes' save command was `"knowledge.save_note"` and **there is no such
+ * command.** The registry has `create_note`, `edit_note`, `move_note`,
  * `delete_note`, `restore_note` and the notebook verbs. `Vault::execute`
  * answered `UnknownCommand`, `crates/core` mapped that to
  * `ERROR_CODE_INVALID_REQUEST`, and a member on a real device read *"That
@@ -124,12 +124,11 @@ class ShellCommandsExistSpec : StringSpec({
             .toSet()
         val registered = registeredCommands(repositoryRoot)
         listOf(
-            "note.edit", // a `const val SAVE_COMMAND`
+            "person.edit", // a `const val EDIT_COMMAND`
             "locker.add_item", // a bare `const val COMMAND`
             "entity.purge", // an argument to a trash spec
             "vault.rename", // an `if` branch
             "thread.clear", // an argument to a helper
-            "document.restore_version", // a `when` arm
         ).forEach { command ->
             withClue(command) {
                 (command in seen).shouldBeTrue()
@@ -314,9 +313,9 @@ private fun commandLiterals(
     tables: Set<String>,
     registered: Set<String> = emptySet(),
 ): List<Pair<Int, String>> {
-    // A constant a `screenId = NAME` in this file reads is a screen id by use,
+    // A constant a `screenId = NAME` (or a Rust `Route(screen = NAME)`) in this file reads is a screen id by use,
     // and so is one a machine anywhere binds as `SCREEN_ID = ScreenIds.NAME`.
-    val screenConstants = Regex("\\bscreenId\\s*=\\s*([A-Z][A-Z_]*)").findAll(text).map { it.groupValues[1] }.toSet() + registered
+    val screenConstants = Regex("\\b(?:screenId|screen)\\s*=\\s*([A-Z][A-Z_]*)").findAll(text).map { it.groupValues[1] }.toSet() + registered
     // What precedes a literal that makes it a screen id or a page-read name.
     val screenBinding = Regex(
         "(?:\\bscreenId\\s*(?::\\s*String)?\\s*=\\s*|\\bSCREEN_ID\\s*(?::\\s*String)?\\s*=\\s*|" +
@@ -353,8 +352,8 @@ private fun unknownIds(
 /**
  * THE `ScreenIds` CONSTANTS SOME SCREEN IS BOUND TO. `nav/ScreenIds.kt` states
  * the ids cross-app routes open screens by, and each machine aliases its own
- * (`SCREEN_ID = ScreenIds.NOTES_EDITOR`) or `ScreenOpenings` opens it
- * (`screen(ScreenIds.NOTES_TRASH, …)`); a constant no binding reads is NOT
+ * (`SCREEN_ID = ScreenIds.PEOPLE_HOME`) or `ScreenOpenings` opens it
+ * (`screen(ScreenIds.PEOPLE_TRASH, …)`); a constant no binding reads is NOT
  * exempt, so a command parked in that file is still a finding.
  */
 private fun registeredScreenIds(sources: List<Pair<String, String>>): Set<String> =

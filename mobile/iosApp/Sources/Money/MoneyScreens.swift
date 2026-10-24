@@ -10,7 +10,7 @@ import CentraidShared
 /// draws from `ScreenStore`. Inside Money a row carries the `Route` of the page
 /// it opens.
 ///
-/// What the platform does for an import is a generic `PickFile` effect
+/// What the platform does for an import is a generic `PickBytes` effect
 /// `ScreenStore` performs.
 enum MoneyScreens: AppScreens {
     static let appID = AppIds.shared.MONEY

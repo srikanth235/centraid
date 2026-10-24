@@ -2,42 +2,18 @@ package dev.centraid.shared
 
 import centraid.core.v1.AppQueryResponse
 import centraid.core.v1.ErrorCode
-import centraid.core.v1.NotesNote
 import centraid.core.v1.PageCursor
 import centraid.core.v1.Row
 import centraid.core.v1.Value
-import centraid.screen.v1.NoteDraft
 import centraid.screen.v1.PhotoCell
 import centraid.screen.v1.ReadFailureKind
 import dev.centraid.core.CoreFailure
-import dev.centraid.shared.apps.docs.DocsDocumentMachine
-import dev.centraid.shared.apps.docs.DocsDocumentReads
-import dev.centraid.shared.apps.docs.DocsDriveMachine
-import dev.centraid.shared.apps.docs.DocsDriveReads
-import dev.centraid.shared.apps.docs.DocsEditorMachine
-import dev.centraid.shared.apps.docs.DocsEditorReads
-import dev.centraid.shared.apps.docs.DocsTrashMachine
-import dev.centraid.shared.apps.docs.DocsTrashReads
 import dev.centraid.shared.apps.health.HealthHomeMachine
 import dev.centraid.shared.apps.health.HealthHomeReads
 import dev.centraid.shared.apps.health.HealthMetricMachine
 import dev.centraid.shared.apps.health.HealthMetricReads
 import dev.centraid.shared.apps.health.HealthWorkoutMachine
 import dev.centraid.shared.apps.health.HealthWorkoutReads
-import dev.centraid.shared.apps.notes.NotesEditorMachine
-import dev.centraid.shared.apps.notes.NotesReads
-import dev.centraid.shared.apps.notes.NotesHistoryMachine
-import dev.centraid.shared.apps.notes.NotesHistoryReads
-import dev.centraid.shared.apps.notes.NotesJournalMachine
-import dev.centraid.shared.apps.notes.NotesJournalReads
-import dev.centraid.shared.apps.notes.NotesLibraryMachine
-import dev.centraid.shared.apps.notes.NotesLibraryReads
-import dev.centraid.shared.apps.notes.NotesLinkPickerMachine
-import dev.centraid.shared.apps.notes.NotesLinkPickerReads
-import dev.centraid.shared.apps.notes.NotesNotebooksMachine
-import dev.centraid.shared.apps.notes.NotesNotebooksReads
-import dev.centraid.shared.apps.notes.NotesTrashMachine
-import dev.centraid.shared.apps.notes.NotesTrashReads
 import dev.centraid.shared.apps.people.PeopleEditorMachine
 import dev.centraid.shared.apps.people.PeopleEditorReads
 import dev.centraid.shared.apps.people.PeopleHomeMachine
@@ -119,7 +95,6 @@ class AppReadsSpec : StringSpec({
         // THE DUPLICATES SHELF IS AN APP QUERY (`photos.duplicates`, the core's
         // clustering), and is in `queryScreens`.
         Triple("photos.duplicate", DuplicateReviewReads, DuplicateReviewMachine),
-        Triple("docs.trash", DocsTrashReads, DocsTrashMachine),
     )
 
     /** The statement each screen makes when it is holding a state that can read. */
@@ -165,7 +140,6 @@ class AppReadsSpec : StringSpec({
             null,
         )
         "photos.places" -> PlacesReads.query(PlacesMachine.initial(), null)
-        "docs.trash" -> DocsTrashReads.query(DocsTrashMachine.initial(), null)
         else -> {
             // THE CLUSTER'S MEMBERS ARE THE CORE'S, asked as the screen opens; a
             // cluster the core did not answer has no members to read.
@@ -245,23 +219,10 @@ class AppReadsSpec : StringSpec({
      * is that the declaration and the machine agree EXACTLY.
      */
     val queryScreens: List<Triple<String, ScreenQueries<*, *>, ScreenMachine<*, *>>> = listOf(
-        Triple("notes.editor", NotesReads, NotesEditorMachine),
         Triple("people.home", PeopleHomeReads, PeopleHomeMachine),
         Triple("people.person", PeoplePersonReads, PeoplePersonMachine),
         Triple("people.editor", PeopleEditorReads, PeopleEditorMachine),
         Triple("people.trash", PeopleTrashReads, PeopleTrashMachine),
-        // NOTES (#1029 port). The powerbox declares no table: a transient
-        // sheet over search results re-reads on a new term only.
-        Triple("notes.library", NotesLibraryReads, NotesLibraryMachine),
-        Triple("notes.notebooks", NotesNotebooksReads, NotesNotebooksMachine),
-        Triple("notes.journal", NotesJournalReads, NotesJournalMachine),
-        Triple("notes.history", NotesHistoryReads, NotesHistoryMachine),
-        Triple("notes.link_targets", NotesLinkPickerReads, NotesLinkPickerMachine),
-        Triple("notes.trash", NotesTrashReads, NotesTrashMachine),
-        // DOCS (#1046 port). The trash is a page read; it is in `screens`.
-        Triple("docs.drive", DocsDriveReads, DocsDriveMachine),
-        Triple("docs.document", DocsDocumentReads, DocsDocumentMachine),
-        Triple("docs.editor", DocsEditorReads, DocsEditorMachine),
         // PHOTOS' DUPLICATES (#1135): the core's clustering, asked as an app query.
         Triple("photos.duplicates", DuplicatesReads, DuplicatesMachine),
         // HEALTH (#1129). Home reads the days, the workouts, their kinds and whether a
@@ -293,19 +254,6 @@ class AppReadsSpec : StringSpec({
         // HOME IS HELD TO IT TOO: its page reads' tables plus the ones
         // Agenda's tile query declares, and not one table more.
         reactsTo(HomeMachine) shouldBe HomeReads.TABLES
-    }
-
-    "the notes editor will not read until it knows which note" {
-        val now = dev.centraid.shared.platform.DeviceClock.Reading(zone = "Europe/Lisbon", epochMillis = 1_773_230_400_000)
-        // A READ WITH NO NOTE IS NOT A READ OF EVERY NOTE: the request binds the
-        // id, so a missing id answers null, which the runtime turns into a
-        // sentence rather than an editor opened on whichever note sorted first.
-        NotesReads.requests(NotesEditorMachine.initial(), now) shouldBe null
-        val requests = NotesReads.requests(
-            NotesEditorMachine.initial().copy(note_id = "note-0001"),
-            now,
-        ).shouldNotBeNull()
-        requests.single().notes_note.shouldNotBeNull().note_id shouldBe "note-0001"
     }
 
     "a photo cell is projected off the columns it selected" {
@@ -394,47 +342,6 @@ class AppReadsSpec : StringSpec({
         // An absent capture group is ABSENT, not the empty string: a Live
         // Photo's pairing is a real id or it is nothing.
         cell.capture_group_id shouldBe null
-    }
-
-    "a note the core found is the draft, with its row_version as the base" {
-        val draft = NotesReads.arrived(
-            listOf(
-                AppQueryResponse(
-                    notes_note = NotesNote(
-                        found = true,
-                        note_id = "note-1",
-                        title = "Groceries",
-                        format = "markdown",
-                        pinned = true,
-                        body = "milk and eggs",
-                        row_version = 7L,
-                    ),
-                ),
-            ),
-        ).data_.shouldNotBeNull().draft
-        draft shouldBe NoteDraft(
-            title = "Groceries",
-            body = "milk and eggs",
-            format = NoteDraft.Format.FORMAT_MARKDOWN,
-            pinned = true,
-            base_revision_id = "7",
-        )
-    }
-
-    "a note that is not there, or is in the trash, is a sentence, not an editor" {
-        // AN ABSENT NOTE IS NOT AN EMPTY NOTE: an editor over one that was purged
-        // or never made would invite a member to type into a document that does
-        // not exist, and `note.edit` refuses a trashed one.
-        for (answer in listOf(
-            NotesNote(found = false, note_id = "gone"),
-            NotesNote(found = true, note_id = "n", deleted_at = "2026-03-01T00:00:00.000Z"),
-        )) {
-            val event = NotesReads.arrived(listOf(AppQueryResponse(notes_note = answer)))
-            event.data_ shouldBe null
-            val failure = event.refused.shouldNotBeNull().failure.shouldNotBeNull()
-            failure.kind shouldBe ReadFailureKind.READ_FAILURE_KIND_REFUSED
-            failure.sentence shouldNotContain "null"
-        }
     }
 
     "the cursor pair survives the one string a screen carries" {
