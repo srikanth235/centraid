@@ -48,14 +48,6 @@ import dev.centraid.shared.apps.money.MoneyTargetMachine
 import dev.centraid.shared.apps.money.MoneyTargetReads
 import dev.centraid.shared.apps.money.MoneyTransactionMachine
 import dev.centraid.shared.apps.money.MoneyTransactionReads
-import dev.centraid.shared.apps.people.PeopleEditorMachine
-import dev.centraid.shared.apps.people.PeopleEditorReads
-import dev.centraid.shared.apps.people.PeopleHomeMachine
-import dev.centraid.shared.apps.people.PeopleHomeReads
-import dev.centraid.shared.apps.people.PeoplePersonMachine
-import dev.centraid.shared.apps.people.PeoplePersonReads
-import dev.centraid.shared.apps.people.PeopleTrashMachine
-import dev.centraid.shared.apps.people.PeopleTrashReads
 import centraid.screen.v1.PhotoShelf
 import centraid.screen.v1.PhotoShelfEvent
 import centraid.screen.v1.PhotoLightboxEvent
@@ -258,10 +250,6 @@ class AppReadsSpec : StringSpec({
      * is that the declaration and the machine agree EXACTLY.
      */
     val queryScreens: List<Triple<String, ScreenQueries<*, *>, ScreenMachine<*, *>>> = listOf(
-        Triple("people.home", PeopleHomeReads, PeopleHomeMachine),
-        Triple("people.person", PeoplePersonReads, PeoplePersonMachine),
-        Triple("people.editor", PeopleEditorReads, PeopleEditorMachine),
-        Triple("people.trash", PeopleTrashReads, PeopleTrashMachine),
         // PHOTOS' DUPLICATES (#1135): the core's clustering, asked as an app query.
         Triple("photos.duplicates", DuplicatesReads, DuplicatesMachine),
         // LOCKER (#1047). Every read screen shares one table set — the item,

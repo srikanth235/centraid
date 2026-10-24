@@ -4,6 +4,7 @@ import centraid.screen.v1.PhotoStateView
 import centraid.screen.v1.PhotosGridState
 import dev.centraid.shared.nav.Destination
 import dev.centraid.shared.nav.DocsEntry
+import dev.centraid.shared.nav.PeopleEntry
 import dev.centraid.shared.nav.NavStack
 import dev.centraid.shared.shell.Mount
 import dev.centraid.shared.shell.MountKey
@@ -69,8 +70,7 @@ class NavigationAndMountSpec : StringSpec({
     "names ride along the route, so an app bar has something to say at once" {
         // A route carries its display name, so the app bar never waits on a read.
         DocsEntry.folder("fld-1", "Taxes").route.docs_drive!!.folder_name shouldBe "Taxes"
-        Destination.PeoplePerson(partyId = "p-1", name = "Dana Reyes").name shouldBe
-            "Dana Reyes"
+        PeopleEntry.person("p-1", "Dana Reyes").route.people_person!!.name shouldBe "Dana Reyes"
     }
 
     "a photo state view is a discriminated union" {

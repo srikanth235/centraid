@@ -15,9 +15,5 @@ enum PeopleScreens: AppScreens {
     @MainActor
     static func register(into shell: ShellModel) {}
 
-    /// WHERE THE TILE LEADS: the shared `PeopleEntry.tile` — the roster, nowhere
-    /// while the read is out.
-    static func tileRoute(_ tile: Centraid_Screen_V1_HomeTile) -> ShellModel.Route? {
-        PeopleEntry.shared.tileOpening(tile: tile.encoded.kotlin).map { .opening($0) }
-    }
+    static func tileRoute(_ tile: Centraid_Screen_V1_HomeTile) -> ShellModel.Route? { .home(of: appID) }
 }

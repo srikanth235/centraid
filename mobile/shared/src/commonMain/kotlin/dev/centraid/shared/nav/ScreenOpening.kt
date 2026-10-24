@@ -20,9 +20,6 @@ import centraid.screen.v1.MoneyRulesEvent
 import centraid.screen.v1.MoneySearchEvent
 import centraid.screen.v1.MoneyTargetEvent
 import centraid.screen.v1.MoneyTransactionEvent
-import centraid.screen.v1.PeopleEditorEvent
-import centraid.screen.v1.PeopleHomeEvent
-import centraid.screen.v1.PeoplePersonEvent
 import centraid.screen.v1.TrashListEvent
 
 /**
@@ -54,20 +51,6 @@ public object ScreenOpenings {
      * spells (a shell-owned page, or one the callers have not needed yet).
      */
     public fun of(destination: Destination): ScreenOpening? = when (destination) {
-        is Destination.PeopleHome -> screen(
-            ScreenIds.PEOPLE_HOME,
-            PeopleHomeEvent(opened = PeopleHomeEvent.Opened(destination = destination.destination)).encode(),
-        )
-        is Destination.PeoplePerson -> screen(
-            ScreenIds.PEOPLE_PERSON,
-            PeoplePersonEvent(
-                opened = PeoplePersonEvent.Opened(
-                    party_id = destination.partyId,
-                    name = destination.name,
-                    log_touch = destination.logTouch,
-                ),
-            ).encode(),
-        )
         is Destination.MoneyHome -> screen(
             ScreenIds.MONEY_HOME,
             MoneyHomeEvent(opened = MoneyHomeEvent.Opened(destination = destination.destination)).encode(),
@@ -126,18 +109,6 @@ public object ScreenOpenings {
             ScreenIds.HEALTH_CONNECT,
             HealthConnectEvent(opened = HealthConnectEvent.Opened(parent = destination.parent)).encode(),
         )
-        // A NEW PERSON's id rides as the minted one: the editor adds them on its first save.
-        is Destination.PeopleEditor -> screen(
-            ScreenIds.PEOPLE_EDITOR,
-            PeopleEditorEvent(
-                opened = if (destination.isNew) {
-                    PeopleEditorEvent.Opened(minted_party_id = destination.partyId)
-                } else {
-                    PeopleEditorEvent.Opened(party_id = destination.partyId)
-                },
-            ).encode(),
-        )
-        Destination.PeopleTrash -> screen(ScreenIds.PEOPLE_TRASH, TrashListEvent(opened = TrashListEvent.Opened()).encode())
         // LOCKER: every page's bridge opens itself on arrival, so the event is
         // what names the page. The generator's candidate never rides here
         // (`Destination.LockerEditor`), and neither does `fromGenerator`: that

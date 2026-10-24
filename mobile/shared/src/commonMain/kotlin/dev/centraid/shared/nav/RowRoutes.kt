@@ -74,7 +74,7 @@ public object RowRoutes {
         )
         AppIds.DOCS to FOLDER -> DocsEntry.folder(row.id, row.title, parent = parent)
         AppIds.DOCS to DOCUMENT -> DocsEntry.document(row.id, row.title, parent = parent)
-        AppIds.PEOPLE to PERSON -> Destination.PeoplePerson(row.id, row.title)
+        AppIds.PEOPLE to PERSON -> PeopleEntry.person(row.id, row.title)
         AppIds.AGENDA to EVENT -> AgendaEntry.event(eventId = row.id, instanceKey = row.qualifier)
         AppIds.PHOTOS to PHOTO -> Destination.PhotoLightbox(row.id, neighbours.ifEmpty { listOf(row.id) })
         AppIds.MONEY to TRANSACTION -> Destination.MoneyTransaction(row.id, parent = parent)
@@ -116,7 +116,7 @@ public object RowRoutes {
     public fun appHome(app: String): Destination? = when (app) {
         AppIds.NOTES -> NotesEntry.home()
         AppIds.DOCS -> DocsEntry.home()
-        AppIds.PEOPLE -> Destination.PeopleHome()
+        AppIds.PEOPLE -> PeopleEntry.home()
         AppIds.AGENDA -> AgendaEntry.home()
         AppIds.PHOTOS -> Destination.PhotosHome()
         AppIds.MONEY -> Destination.MoneyHome()

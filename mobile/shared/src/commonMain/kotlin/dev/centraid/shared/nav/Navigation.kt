@@ -1,7 +1,6 @@
 package dev.centraid.shared.nav
 
 import centraid.core.v1.Route
-import centraid.screen.v1.PeopleHomeState
 import centraid.screen.v1.PhotoShelf
 import centraid.screen.v1.PhotoStateView
 import centraid.screen.v1.PhotosGridState
@@ -142,32 +141,6 @@ public sealed interface Destination {
         val collectionName: String,
     ) : Destination
 
-
-    // --- People (#1029 port) ---
-
-    /**
-     * PEOPLE'S HOME: People or Touch, as a parameter; search is a field over it
-     * and More a sheet. A shell calls `PeopleHomeBridge.open(destination)`.
-     */
-    public data class PeopleHome(
-        val destination: PeopleHomeState.Destination =
-            PeopleHomeState.Destination.DESTINATION_PEOPLE,
-    ) : Destination
-
-    /** One person; the name rides along for the head. `logTouch` opens the Log a touch sheet. */
-    public data class PeoplePerson(
-        val partyId: String,
-        val name: String = "",
-        val logTouch: Boolean = false,
-    ) : Destination
-
-    /**
-     * The profile editor. `isNew`: `partyId` was minted by
-     * `PeopleEditorBridge.openNew` and the first save adds the person.
-     */
-    public data class PeopleEditor(val partyId: String, val isNew: Boolean = false) : Destination
-
-    public data object PeopleTrash : Destination
 
     // --- Locker (#1047, D-5) ---
     //
@@ -320,16 +293,6 @@ public data class NavStack(val entries: List<Destination> = listOf(Destination.H
         } else {
             push(Destination.Places(presentation))
         }
-    }
-}
-
-/** PEOPLE'S BAND, IN PLACE (#1029 port): People and Touch are one screen's parameter. */
-public fun NavStack.withPeopleDestination(destination: PeopleHomeState.Destination): NavStack {
-    val top = current
-    return if (top is Destination.PeopleHome) {
-        NavStack(entries.dropLast(1) + top.copy(destination = destination))
-    } else {
-        push(Destination.PeopleHome(destination))
     }
 }
 
