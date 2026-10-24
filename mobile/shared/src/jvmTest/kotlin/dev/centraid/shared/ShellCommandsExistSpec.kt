@@ -311,9 +311,9 @@ private fun commandLiterals(
     tables: Set<String>,
     registered: Set<String> = emptySet(),
 ): List<Pair<Int, String>> {
-    // A constant a `screenId = NAME` in this file reads is a screen id by use,
+    // A constant a `screenId = NAME` (or a Rust `Route(screen = NAME)`) in this file reads is a screen id by use,
     // and so is one a machine anywhere binds as `SCREEN_ID = ScreenIds.NAME`.
-    val screenConstants = Regex("\\bscreenId\\s*=\\s*([A-Z][A-Z_]*)").findAll(text).map { it.groupValues[1] }.toSet() + registered
+    val screenConstants = Regex("\\b(?:screenId|screen)\\s*=\\s*([A-Z][A-Z_]*)").findAll(text).map { it.groupValues[1] }.toSet() + registered
     // What precedes a literal that makes it a screen id or a page-read name.
     val screenBinding = Regex(
         "(?:\\bscreenId\\s*(?::\\s*String)?\\s*=\\s*|\\bSCREEN_ID\\s*(?::\\s*String)?\\s*=\\s*|" +

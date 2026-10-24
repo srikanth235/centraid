@@ -47,9 +47,11 @@ class ScreenOpeningsSpec : StringSpec({
         // DOCS' SCREENS ARE RUST'S (#1135): a document and a folder open as the Route Rust's registry
         // names, carrying the pushing page's title as their back word.
         val doc = RowRoutes.route(row("docs", "document", "d1", "Lease"), parent = "Search")!!
-        doc shouldBe DocsEntry.document("d1", "Lease", parent = "Search")
+        doc.screenId shouldBe ScreenIds.RUST_SCREEN
+        Route.ADAPTER.decode(doc.event) shouldBe DocsEntry.document("d1", "Lease", parent = "Search").route
         val folder = RowRoutes.route(row("docs", "folder", "f1", "Taxes"), parent = "Search")!!
-        val opened = (folder as Destination.RustScreen).route.docs_drive!!
+        folder.screenId shouldBe ScreenIds.RUST_SCREEN
+        val opened = Route.ADAPTER.decode(folder.event).docs_drive!!
         opened.destination shouldBe DocsDestination.DOCS_DESTINATION_FOLDERS
         opened.folder_id shouldBe "f1"
         opened.folder_name shouldBe "Taxes"
