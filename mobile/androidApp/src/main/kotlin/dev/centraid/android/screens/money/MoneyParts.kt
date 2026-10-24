@@ -26,34 +26,32 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.toggleableState
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.unit.dp
-import centraid.screen.v1.Money
-import centraid.screen.v1.MoneyFigure
-import centraid.screen.v1.MoneyHero
-import centraid.screen.v1.MoneyRow
+import centraid.core.v1.MoneyFigure
+import centraid.core.v1.MoneyHero
+import centraid.core.v1.MoneyRow
 import centraid.screen.v1.SectionHead
 import dev.centraid.android.kit.CentraidRow
 import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.SectionHeader
 import dev.centraid.android.kit.kitSwitchColors
+import dev.centraid.android.kit.toKit
 import dev.centraid.android.kit.toneInk
 import dev.centraid.android.theme.LocalCentraidTokens
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
-import dev.centraid.android.theme.formatMoney
 
 /*
- * MONEY'S SHARED DRAWING PARTS (#1099). Every word here is the state's; the view
- * renders an amount with `formatMoney` at the state's own exponent, appends it
- * to the state's accessibility words, and decides nothing: not a sign, not a
- * tone, not a sum. Nothing here adds two amounts.
+ * MONEY'S SHARED DRAWING PARTS (#1099; #1135). Every word here is Rust's, an amount
+ * included: the view appends it to the state's accessibility words and decides
+ * nothing: not a sign, not a tone, not a sum. Nothing here adds two amounts.
  */
 
-/** Money as the vault says to render it; absent is nothing. */
-internal fun money(amount: Money?): String = amount?.let(::formatMoney).orEmpty()
+/** An amount arrives finished from Rust (`kit::money` is the one formatter); nothing here renders one. */
+internal fun money(amount: String): String = amount
 
-/** The state's words, then the rendered money after them. */
-internal fun spoken(words: String, amount: Money?): String =
-    listOf(words, money(amount)).filter { it.isNotEmpty() }.joinToString(", ")
+/** The state's words, then the finished amount after them. */
+internal fun spoken(words: String, amount: String?): String =
+    listOf(words, amount.orEmpty()).filter { it.isNotEmpty() }.joinToString(", ")
 
 /** A section label with the kit's header. Empty is nothing. */
 @Composable
@@ -157,8 +155,8 @@ internal fun MoneyRowView(row: MoneyRow, onTap: (() -> Unit)?) {
         title = row.title,
         meta = listOf(row.category_label, row.meta).filter { it.isNotEmpty() }.joinToString(" · "),
         trailing = money(row.amount),
-        trailingTone = row.amount_tone,
-        chips = row.chips,
+        trailingTone = row.amount_tone.toKit(),
+        chips = row.chips.map { it.toKit() },
         dimmed = row.dimmed,
         a11y = spoken(row.accessibility_label, row.amount),
         testTag = "money-row-${row.txn_id}",

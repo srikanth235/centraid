@@ -45,7 +45,6 @@ import dev.centraid.android.screens.RouteNav
 import dev.centraid.android.screens.agenda.AgendaRoutes
 import dev.centraid.android.screens.docs.DocsRoutes
 import dev.centraid.android.screens.health.HealthRoutes
-import dev.centraid.android.screens.money.MoneyRoutes
 import dev.centraid.android.screens.notes.NotesRoutes
 import dev.centraid.android.screens.people.PeopleRoutes
 import dev.centraid.android.screens.mediaPermissions
@@ -148,7 +147,6 @@ public class MainActivity : FragmentActivity() {
             NotesRoutes(),
             DocsRoutes(onFollowed = { phoneFollow.requested(PhoneSource.FILES) }),
             PeopleRoutes(),
-            MoneyRoutes(),
             HealthRoutes(health),
             homeSearch,
         )
@@ -158,7 +156,7 @@ public class MainActivity : FragmentActivity() {
     private val homeSearch: HomeSearchRoutes by lazy { HomeSearchRoutes() }
 
     /**
-     * AGENDA'S AND LOCKER'S ROUTES, NAMED: both draw the screen runtime's pages
+     * AGENDA'S, LOCKER'S AND MONEY'S ROUTES, NAMED: both draw the screen runtime's pages
      * (#1135), and the 24 words' sheet's close has every Locker wall re-read
      * `keyed` (#1047 E3).
      */

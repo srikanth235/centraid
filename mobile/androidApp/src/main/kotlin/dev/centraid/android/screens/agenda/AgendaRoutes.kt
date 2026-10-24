@@ -37,12 +37,22 @@ import dev.centraid.android.screens.locker.LockerHomeScreen
 import dev.centraid.android.screens.locker.LockerImportScreen
 import dev.centraid.android.screens.locker.LockerItemScreen
 import dev.centraid.android.screens.locker.LockerLockPage
+import dev.centraid.android.screens.money.MoneyAccountsScreen
+import dev.centraid.android.screens.money.MoneyCategoriesScreen
+import dev.centraid.android.screens.money.MoneyHomeScreen
+import dev.centraid.android.screens.money.MoneyImportScreen
+import dev.centraid.android.screens.money.MoneyRecurringScreen
+import dev.centraid.android.screens.money.MoneyRulesScreen
+import dev.centraid.android.screens.money.MoneySearchScreen
+import dev.centraid.android.screens.money.MoneyTargetScreen
+import dev.centraid.android.screens.money.MoneyTransactionScreen
 import dev.centraid.core.CentraidCore
 import dev.centraid.core.Screens
 import dev.centraid.shared.nav.AgendaEntry
 import dev.centraid.shared.nav.AppIds
 import dev.centraid.shared.nav.Destination
 import dev.centraid.shared.nav.LockerEntry
+import dev.centraid.shared.nav.MoneyEntry
 import dev.centraid.shared.nav.NavStack
 import dev.centraid.shared.shell.HomeSession
 import kotlinx.coroutines.CoroutineScope
@@ -100,6 +110,8 @@ internal class AgendaRoutes(private val phone: AndroidPhoneFollow, private val o
         AppIds.AGENDA -> AgendaEntry.home(AgendaDestination.AGENDA_DESTINATION_DAY, "")
         // LOCKER'S TILE: its home, whose wall asks the owner check as it appears.
         AppIds.LOCKER -> LockerEntry.home()
+        // MONEY'S TILE: its home, on Spending.
+        AppIds.MONEY -> MoneyEntry.home()
         else -> null
     }
 
@@ -238,10 +250,20 @@ internal class AgendaRoutes(private val phone: AndroidPhoneFollow, private val o
         val lockerImport = view.locker_import
         val lockerLock = view.locker_lock
         val sendWall: (LockerWallEvent) -> Unit = { event -> send(ScreenEvent(locker_wall = event)) }
+        val moneyHome = view.money_home
+        val moneyTransaction = view.money_transaction
+        val moneyTarget = view.money_target
+        val moneyRecurring = view.money_recurring
+        val moneyAccounts = view.money_accounts
+        val moneyRules = view.money_rules
+        val moneyCategories = view.money_categories
+        val moneyImport = view.money_import
+        val moneySearch = view.money_search
 
         // THE SCREEN IS DONE (a cancel committed, the editor saved or left, the task deleted): its page goes.
         val done = event?.dismissed == true || editor?.dismissed == true || detail?.finished == true ||
-            lockerItem?.finished == true || lockerEditor?.finished == true || lockerLock?.finished == true
+            lockerItem?.finished == true || lockerEditor?.finished == true || lockerLock?.finished == true ||
+            moneyTarget?.finished == true || moneyImport?.finished == true
         LaunchedEffect(done) {
             if (done && nav.stack.current === entry) nav.pop()
         }
@@ -339,6 +361,54 @@ internal class AgendaRoutes(private val phone: AndroidPhoneFollow, private val o
                 onWords = openWords,
                 onClose = back,
             )
+            moneyHome != null -> MoneyHomeScreen(
+                state = moneyHome,
+                onEvent = { send(ScreenEvent(money_home = it)) },
+                onOpen = open,
+                onHome = { nav.home() },
+            )
+            moneyTransaction != null -> MoneyTransactionScreen(
+                state = moneyTransaction,
+                onEvent = { send(ScreenEvent(money_transaction = it)) },
+                onBack = back,
+            )
+            moneyTarget != null -> MoneyTargetScreen(
+                state = moneyTarget,
+                onEvent = { send(ScreenEvent(money_target = it)) },
+                onBack = back,
+            )
+            moneyRecurring != null -> MoneyRecurringScreen(
+                state = moneyRecurring,
+                onEvent = { send(ScreenEvent(money_recurring = it)) },
+                onBack = back,
+            )
+            moneyAccounts != null -> MoneyAccountsScreen(
+                state = moneyAccounts,
+                onEvent = { send(ScreenEvent(money_accounts = it)) },
+                onBack = back,
+            )
+            moneyRules != null -> MoneyRulesScreen(
+                state = moneyRules,
+                onEvent = { send(ScreenEvent(money_rules = it)) },
+                onBack = back,
+            )
+            moneyCategories != null -> MoneyCategoriesScreen(
+                state = moneyCategories,
+                onEvent = { send(ScreenEvent(money_categories = it)) },
+                onBack = back,
+            )
+            moneyImport != null -> MoneyImportScreen(
+                state = moneyImport,
+                onEvent = { send(ScreenEvent(money_import = it)) },
+                onOpen = open,
+                onBack = back,
+            )
+            moneySearch != null -> MoneySearchScreen(
+                state = moneySearch,
+                onEvent = { send(ScreenEvent(money_search = it)) },
+                onOpen = open,
+                onBack = back,
+            )
             trash != null -> TrashScreen(
                 view = trash,
                 onEvent = { send(ScreenEvent(trash = it)) },
@@ -351,7 +421,7 @@ internal class AgendaRoutes(private val phone: AndroidPhoneFollow, private val o
         /** Rust's tab for Agenda's pages, and the prefix every one of its screens' names carries. */
         const val TAB = "agenda"
         const val SCREEN_PREFIX = "agenda."
-        val SCREEN_PREFIXES = listOf(SCREEN_PREFIX, "locker.")
+        val SCREEN_PREFIXES = listOf(SCREEN_PREFIX, "locker.", "money.")
     }
 }
 

@@ -106,7 +106,6 @@ class AppRoutingSpec : StringSpec({
             Destination.DocsTrash to DocsTrashMachine.screenId,
             Destination.PeopleEditor("p") to PeopleEditorMachine.SCREEN_ID,
             Destination.PeopleTrash to PeopleTrashMachine.screenId,
-            Destination.MoneyTarget("2026-10", "c", "EUR") to MoneyTargetMachine.SCREEN_ID,
             Destination.HealthHome() to HealthHomeMachine.SCREEN_ID,
             Destination.HealthMetric("steps") to HealthMetricMachine.SCREEN_ID,
             Destination.HealthWorkout("a") to HealthWorkoutMachine.SCREEN_ID,

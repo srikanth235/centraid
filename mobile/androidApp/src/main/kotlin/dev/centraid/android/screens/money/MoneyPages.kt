@@ -7,14 +7,14 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import centraid.screen.v1.MoneyAccountsEvent
-import centraid.screen.v1.MoneyAccountsState
-import centraid.screen.v1.MoneyCategoriesEvent
-import centraid.screen.v1.MoneyCategoriesState
-import centraid.screen.v1.MoneyImportEvent
-import centraid.screen.v1.MoneyImportState
-import centraid.screen.v1.MoneyRulesEvent
-import centraid.screen.v1.MoneyRulesState
+import centraid.core.v1.MoneyAccountsEvent
+import centraid.core.v1.MoneyAccountsState
+import centraid.core.v1.MoneyCategoriesEvent
+import centraid.core.v1.MoneyCategoriesState
+import centraid.core.v1.MoneyImportEvent
+import centraid.core.v1.MoneyImportState
+import centraid.core.v1.MoneyRulesEvent
+import centraid.core.v1.MoneyRulesState
 import dev.centraid.android.kit.ChoiceFieldRow
 import dev.centraid.android.kit.CentraidRow
 import dev.centraid.android.kit.ChoiceStack
@@ -35,6 +35,8 @@ import dev.centraid.android.kit.SheetOption
 import dev.centraid.android.kit.SheetPrimary
 import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.screenContentOf
+import dev.centraid.android.kit.toKit
+import centraid.core.v1.Route
 
 // ---------------------------------------------------------------------------
 // money.import: pick a statement, read the plan, publish
@@ -46,7 +48,12 @@ import dev.centraid.android.kit.screenContentOf
  * last button. Choose is the machine's intent: the route opens the OS picker.
  */
 @Composable
-internal fun MoneyImportScreen(state: MoneyImportState, onEvent: (MoneyImportEvent) -> Unit, onBack: () -> Unit) {
+internal fun MoneyImportScreen(
+    state: MoneyImportState,
+    onEvent: (MoneyImportEvent) -> Unit,
+    onOpen: (Route) -> Unit,
+    onBack: () -> Unit,
+) {
     val chrome = state.chrome
     PushedPage(
         title = chrome?.title.orEmpty(),
@@ -61,7 +68,7 @@ internal fun MoneyImportScreen(state: MoneyImportState, onEvent: (MoneyImportEve
         ) { plan ->
             val empty = plan.empty
             if (empty != null) {
-                EmptyStateView(empty, onAction = { onEvent(MoneyImportEvent(add_account = MoneyImportEvent.AddAccount())) })
+                EmptyStateView(empty.toKit(), onAction = { plan.accounts_route?.let(onOpen) })
             } else {
                 LazyColumn {
                     item(key = "lede") { MoneyNote(plan.lede) }
@@ -105,7 +112,7 @@ internal fun MoneyImportScreen(state: MoneyImportState, onEvent: (MoneyImportEve
                                             label = option.label,
                                             selected = option.selected,
                                             modifier = Modifier.padding(end = 8.dp),
-                                            onClick = { onEvent(MoneyImportEvent(date_order = MoneyImportEvent.DateOrderAnswered(order = option.key))) },
+                                            onClick = { onEvent(MoneyImportEvent(date_order = MoneyImportEvent.DateOrderPicked(order = option.key))) },
                                         )
                                     }
                                 }
@@ -118,7 +125,7 @@ internal fun MoneyImportScreen(state: MoneyImportState, onEvent: (MoneyImportEve
                                             label = option.label,
                                             selected = option.selected,
                                             modifier = Modifier.padding(end = 8.dp),
-                                            onClick = { onEvent(MoneyImportEvent(sign = MoneyImportEvent.SignChosen(choice = option.key))) },
+                                            onClick = { onEvent(MoneyImportEvent(sign = MoneyImportEvent.SignPicked(choice = option.key))) },
                                         )
                                     }
                                 }
@@ -135,7 +142,7 @@ internal fun MoneyImportScreen(state: MoneyImportState, onEvent: (MoneyImportEve
                                 meta = listOf(line.line_label.takeIf { line.title.isNotEmpty() }.orEmpty(), line.meta, line.reason)
                                     .filter { it.isNotEmpty() }.joinToString(" · "),
                                 trailing = if (line.has_amount) money(line.amount) else "",
-                                chips = listOf(line.chip).filterNotNull(),
+                                chips = listOfNotNull(line.chip?.toKit()),
                                 a11y = spoken(line.accessibility_label, if (line.has_amount) line.amount else null),
                                 testTag = "money-import-${statement.key}-${line.key}",
                             )
@@ -208,7 +215,7 @@ internal fun MoneyAccountsScreen(state: MoneyAccountsState, onEvent: (MoneyAccou
         trailing = data?.add_label?.takeIf { it.isNotEmpty() }?.let { label ->
             RoomAction("Plus", label, "money-account-add") { onEvent(MoneyAccountsEvent(add = MoneyAccountsEvent.AddTapped())) }
         },
-        status = state.status?.sentence.orEmpty().ifEmpty { state.write?.refusal.orEmpty() },
+        status = state.status?.sentence.orEmpty(),
     ) {
         ReadStateView(
             content = screenContentOf(state.loading, state.failure, data, state.denied),
@@ -217,7 +224,7 @@ internal fun MoneyAccountsScreen(state: MoneyAccountsState, onEvent: (MoneyAccou
         ) { accounts ->
             val empty = accounts.empty
             if (empty != null) {
-                EmptyStateView(empty, onAction = { onEvent(MoneyAccountsEvent(add = MoneyAccountsEvent.AddTapped())) })
+                EmptyStateView(empty.toKit(), onAction = { onEvent(MoneyAccountsEvent(add = MoneyAccountsEvent.AddTapped())) })
             } else {
                 LazyColumn {
                     if (accounts.net_worth.isNotEmpty()) {
@@ -236,11 +243,11 @@ internal fun MoneyAccountsScreen(state: MoneyAccountsState, onEvent: (MoneyAccou
                                 trailing = if (row.has_balance) money(row.balance) else row.balance_note,
                                 a11y = spoken(row.accessibility_label, if (row.has_balance) row.balance else null),
                                 testTag = "money-account-${row.account_id}",
-                                onTap = { onEvent(MoneyAccountsEvent(account = MoneyAccountsEvent.AccountPicked(account_id = row.account_id))) },
+                                onTap = { onEvent(MoneyAccountsEvent(account = MoneyAccountsEvent.AccountTapped(account_id = row.account_id))) },
                             )
                             if (row.has_delta) {
                                 MoneyFigureRow(
-                                    centraid.screen.v1.MoneyFigure(
+                                    centraid.core.v1.MoneyFigure(
                                         label = row.checkpoint_line,
                                         amount = row.delta,
                                         tone = row.checkpoint_tone,
@@ -310,7 +317,7 @@ internal fun MoneyAccountsScreen(state: MoneyAccountsState, onEvent: (MoneyAccou
                     enabled = editor.can_remove_number,
                     testTag = "money-account-remove-number",
                     modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp),
-                ) { onEvent(MoneyAccountsEvent(remove_number = MoneyAccountsEvent.RemoveNumberTapped())) }
+                ) { onEvent(MoneyAccountsEvent(remove_number = MoneyAccountsEvent.RemoveNumber())) }
             }
             MoneyToggleRow(editor.on_budget_label, editor.on_budget, "money-account-budget") {
                 onEvent(MoneyAccountsEvent(on_budget = MoneyAccountsEvent.OnBudgetToggled()))
@@ -325,7 +332,7 @@ internal fun MoneyAccountsScreen(state: MoneyAccountsState, onEvent: (MoneyAccou
     }
     state.confirm?.let { confirm ->
         ConfirmSheet(
-            confirm = confirm,
+            confirm = confirm.toKit(),
             onConfirm = { onEvent(MoneyAccountsEvent(confirm_accepted = MoneyAccountsEvent.ConfirmAccepted())) },
             onDismiss = { onEvent(MoneyAccountsEvent(confirm_dismissed = MoneyAccountsEvent.ConfirmDismissed())) },
         )
@@ -347,7 +354,7 @@ internal fun MoneyRulesScreen(state: MoneyRulesState, onEvent: (MoneyRulesEvent)
         trailing = data?.add_label?.takeIf { it.isNotEmpty() }?.let { label ->
             RoomAction("Plus", label, "money-rule-add") { onEvent(MoneyRulesEvent(add = MoneyRulesEvent.AddTapped())) }
         },
-        status = state.status?.sentence.orEmpty().ifEmpty { state.write?.refusal.orEmpty() },
+        status = state.status?.sentence.orEmpty(),
     ) {
         ReadStateView(
             content = screenContentOf(state.loading, state.failure, data, state.denied),
@@ -356,7 +363,7 @@ internal fun MoneyRulesScreen(state: MoneyRulesState, onEvent: (MoneyRulesEvent)
         ) { rules ->
             val empty = rules.empty
             if (empty != null) {
-                EmptyStateView(empty, onAction = { onEvent(MoneyRulesEvent(add = MoneyRulesEvent.AddTapped())) })
+                EmptyStateView(empty.toKit(), onAction = { onEvent(MoneyRulesEvent(add = MoneyRulesEvent.AddTapped())) })
             } else {
                 LazyColumn {
                     item(key = "limit") { MoneyNote(rules.limit_line) }
@@ -366,7 +373,7 @@ internal fun MoneyRulesScreen(state: MoneyRulesState, onEvent: (MoneyRulesEvent)
                             meta = row.meta,
                             a11y = row.accessibility_label,
                             testTag = "money-rule-${row.rule_id}",
-                            onTap = { onEvent(MoneyRulesEvent(rule = MoneyRulesEvent.RulePicked(rule_id = row.rule_id))) },
+                            onTap = { onEvent(MoneyRulesEvent(rule = MoneyRulesEvent.RuleTapped(rule_id = row.rule_id))) },
                         )
                     }
                     if (rules.apply_label.isNotEmpty()) {
@@ -375,7 +382,7 @@ internal fun MoneyRulesScreen(state: MoneyRulesState, onEvent: (MoneyRulesEvent)
                                 label = rules.apply_label,
                                 testTag = "money-rules-apply",
                                 modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp),
-                            ) { onEvent(MoneyRulesEvent(apply = MoneyRulesEvent.ApplyTapped())) }
+                            ) { onEvent(MoneyRulesEvent(apply = MoneyRulesEvent.Apply())) }
                         }
                     }
                 }
@@ -467,7 +474,7 @@ internal fun MoneyRulesScreen(state: MoneyRulesState, onEvent: (MoneyRulesEvent)
                                 label = editor.apply_label,
                                 testTag = "money-rule-apply",
                                 modifier = gutter,
-                            ) { onEvent(MoneyRulesEvent(apply = MoneyRulesEvent.ApplyTapped())) }
+                            ) { onEvent(MoneyRulesEvent(apply = MoneyRulesEvent.Apply())) }
                         }
                         if (editor.delete_label.isNotEmpty()) {
                             OutlineButton(
@@ -475,7 +482,7 @@ internal fun MoneyRulesScreen(state: MoneyRulesState, onEvent: (MoneyRulesEvent)
                                 ink = "net",
                                 testTag = "money-rule-delete",
                                 modifier = gutter,
-                            ) { onEvent(MoneyRulesEvent(delete = MoneyRulesEvent.DeleteTapped())) }
+                            ) { onEvent(MoneyRulesEvent(delete = MoneyRulesEvent.Delete())) }
                         }
                     }
                 }
@@ -484,7 +491,7 @@ internal fun MoneyRulesScreen(state: MoneyRulesState, onEvent: (MoneyRulesEvent)
     }
     state.confirm?.let { confirm ->
         ConfirmSheet(
-            confirm = confirm,
+            confirm = confirm.toKit(),
             onConfirm = { onEvent(MoneyRulesEvent(confirm_accepted = MoneyRulesEvent.ConfirmAccepted())) },
             onDismiss = { onEvent(MoneyRulesEvent(confirm_dismissed = MoneyRulesEvent.ConfirmDismissed())) },
         )
@@ -506,7 +513,7 @@ internal fun MoneyCategoriesScreen(state: MoneyCategoriesState, onEvent: (MoneyC
         trailing = data?.add_label?.takeIf { it.isNotEmpty() }?.let { label ->
             RoomAction("Plus", label, "money-category-add") { onEvent(MoneyCategoriesEvent(add = MoneyCategoriesEvent.AddTapped())) }
         },
-        status = state.status?.sentence.orEmpty().ifEmpty { state.write?.refusal.orEmpty() },
+        status = state.status?.sentence.orEmpty(),
     ) {
         ReadStateView(
             content = screenContentOf(state.loading, state.failure, data, state.denied),
@@ -515,7 +522,7 @@ internal fun MoneyCategoriesScreen(state: MoneyCategoriesState, onEvent: (MoneyC
         ) { categories ->
             val empty = categories.empty
             if (empty != null) {
-                EmptyStateView(empty, onAction = null)
+                EmptyStateView(empty.toKit(), onAction = null)
             } else {
                 LazyColumn {
                     categories.groups.forEach { group ->
@@ -527,7 +534,7 @@ internal fun MoneyCategoriesScreen(state: MoneyCategoriesState, onEvent: (MoneyC
                                 dimmed = row.archived,
                                 a11y = row.accessibility_label,
                                 testTag = "money-category-row-${row.category_id}",
-                                onTap = { onEvent(MoneyCategoriesEvent(category = MoneyCategoriesEvent.CategoryPicked(category_id = row.category_id))) },
+                                onTap = { onEvent(MoneyCategoriesEvent(category = MoneyCategoriesEvent.CategoryTapped(category_id = row.category_id))) },
                             )
                         }
                     }
@@ -569,7 +576,7 @@ internal fun MoneyCategoriesScreen(state: MoneyCategoriesState, onEvent: (MoneyC
             OptionSheet(
                 title = categories.row_title,
                 options = categories.row_actions.filter { it.enabled }.map { SheetOption(key = it.key, label = it.label, iconKey = it.icon_key) },
-                onPick = { key -> onEvent(MoneyCategoriesEvent(row_action = MoneyCategoriesEvent.RowActionPicked(key = key))) },
+                onPick = { key -> onEvent(MoneyCategoriesEvent(row_action = MoneyCategoriesEvent.RowAction(key = key))) },
                 onDismiss = close,
             )
         }
@@ -577,7 +584,7 @@ internal fun MoneyCategoriesScreen(state: MoneyCategoriesState, onEvent: (MoneyC
             OptionSheet(
                 title = categories.merge_title,
                 options = categories.merge_options.map { SheetOption(key = it.key, label = it.label, detail = it.detail) },
-                onPick = { key -> onEvent(MoneyCategoriesEvent(merge_into = MoneyCategoriesEvent.MergeIntoPicked(category_id = key))) },
+                onPick = { key -> onEvent(MoneyCategoriesEvent(merge_into = MoneyCategoriesEvent.MergeInto(category_id = key))) },
                 onDismiss = close,
             )
         }
@@ -585,7 +592,7 @@ internal fun MoneyCategoriesScreen(state: MoneyCategoriesState, onEvent: (MoneyC
     }
     state.confirm?.let { confirm ->
         ConfirmSheet(
-            confirm = confirm,
+            confirm = confirm.toKit(),
             onConfirm = { onEvent(MoneyCategoriesEvent(confirm_accepted = MoneyCategoriesEvent.ConfirmAccepted())) },
             onDismiss = { onEvent(MoneyCategoriesEvent(confirm_dismissed = MoneyCategoriesEvent.ConfirmDismissed())) },
         )
