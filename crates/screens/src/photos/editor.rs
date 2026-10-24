@@ -20,7 +20,7 @@
 //!
 //! Dropped with the Kotlin machine: the seat, the read legs, the pending-render
 //! map (the effect id is the runtime's), the content-door call in a bridge (the
-//! screen asks `Ctx::content_urls`),.
+//! screen asks `Ctx::content_urls`).
 
 use centraid_api_proto::core_v1 as wire;
 use wire::app_query_response::Answer;
