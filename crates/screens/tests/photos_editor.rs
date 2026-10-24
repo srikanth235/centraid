@@ -206,6 +206,8 @@ fn opened(bytes: &[u8]) -> (Driver, u64, String) {
     d.start();
     let id = upload(&d, bytes, Some("Pier day"), None);
     let at = d.push("photos", routes::editor(&id));
+    // The Photos home root asks the platform for its tile size; that is not ours.
+    d.effects.clear();
     (d, at, id)
 }
 

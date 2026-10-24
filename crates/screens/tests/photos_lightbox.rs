@@ -706,6 +706,9 @@ fn the_strip_is_a_window_around_the_photograph_and_every_frame_knows_its_tile() 
     assert_eq!(state.film.len(), 3);
     assert!(state.film[0].current && !state.film[1].current);
     assert!(state.film.iter().all(|frame| frame.tile.is_some()));
+    assert_eq!(state.film[0].accessibility_label, "Show photo 1 of 3");
+    assert_eq!(state.film[2].accessibility_label, "Show photo 3 of 3");
+    assert_eq!(state.words.as_ref().expect("words").filmstrip, "Filmstrip");
 }
 
 #[test]
