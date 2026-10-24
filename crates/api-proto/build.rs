@@ -119,6 +119,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // its siblings (loading, empty, refused) are a line or two each.
         .boxed(".centraid.core.v1.PhotosDuplicatesState.content.data")
         .boxed(".centraid.core.v1.PhotosDuplicateReviewState.content.data")
+        .boxed(".centraid.core.v1.PhotosEditorState.content.data")
         .boxed(".centraid.core.v1.AgendaHomeState.content.data")
         .boxed(".centraid.core.v1.AgendaEventState.content.data")
         .boxed(".centraid.core.v1.AgendaEditorState.content.data")

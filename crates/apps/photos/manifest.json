@@ -154,6 +154,11 @@
             "type": "string",
             "minLength": 1
           },
+          "size": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "The bytes' length in bytes: it claims bytes the stage door stored and no command has named yet (a camera-roll pass, a rendered edit). Omit it for bytes already claimed."
+          },
           "form": {
             "type": "string",
             "enum": ["photo", "video", "scan"]

@@ -3689,6 +3689,7 @@ pub mod act {
             pub offset_min: Field<i64>,
             pub phash: Field<String>,
             pub place_id: Field<String>,
+            pub size: Option<i64>,
             pub taken_at: Field<String>,
             pub thumbhash: Field<String>,
             pub title: Option<String>,
@@ -3713,6 +3714,7 @@ pub mod act {
                 put_field(&mut map, "offset_min", self.offset_min, |it| whole(it));
                 put_field(&mut map, "phash", self.phash, |it| text(it));
                 put_field(&mut map, "place_id", self.place_id, |it| text(it));
+                if let Some(it) = self.size { map.insert("size".to_owned(), whole(it)); }
                 put_field(&mut map, "taken_at", self.taken_at, |it| text(it));
                 put_field(&mut map, "thumbhash", self.thumbhash, |it| text(it));
                 if let Some(it) = self.title { map.insert("title".to_owned(), text(it)); }

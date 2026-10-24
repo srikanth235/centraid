@@ -21,4 +21,21 @@ catalog! {
     plain size_kb = ("{n} KB", "{n} KB");
     plain size_mb = ("{n} MB", "{n} MB");
     plain size_gb = ("{n} GB", "{n} GB");
+
+    plain edit_straighten = ("Straighten {degrees}", "Straighten {degrees}");
+    plain edit_flip = ("Flip", "Flip");
+    plain edit_flip_horizontal = ("Flip ↔", "Flip ↔");
+    plain edit_flip_vertical = ("Flip ↕", "Flip ↕");
+    plain edit_status = (
+        "Crop {ratio} · rotation {degrees}{flip}",
+        "Crop {ratio} · rotation {degrees}{flip}"
+    );
+    plain edit_status_flip = (" · {flip}", " · {flip}");
+    plain edit_retry = ("Try again.", "Try again.");
+    plain edit_no_vault = (
+        "Centraid could not read the edited photo.",
+        "Centraid could not read the edited photo."
+    );
+    plain edit_fallback_name = ("photograph", "photograph");
+    plain not_in_vault = ("This photo is not in a vault yet.", "This photo is not in a vault yet.");
 }

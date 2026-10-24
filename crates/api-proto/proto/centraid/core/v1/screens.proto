@@ -267,6 +267,7 @@ message Effect {
     ExportOriginals export_originals = 15;
     CameraRoll camera_roll = 16;
     FreeUpSpace free_up_space = 17;
+    RenderEdit render_edit = 18;
   }
 }
 
@@ -516,6 +517,7 @@ message EffectResult {
     OriginalFetched original_fetched = 9;
     OriginalsExported originals_exported = 10;
     FreeUpFacts free_up_facts = 11;
+    EditRendered edit_rendered = 12;
   }
 }
 

@@ -17,9 +17,196 @@ message PhotosLightboxState {}
 
 message PhotosLightboxEvent {}
 
-message PhotosEditorState {}
+// ---------------------------------------------------------------------------
+// The editor: crop, rotate, straighten, flip
+// ---------------------------------------------------------------------------
 
-message PhotosEditorEvent {}
+// THE EDIT, AS DATA. Every tool is a pure change to this plan, reduced in Rust;
+// nothing is written until "Save new photo", and then it is a NEW photograph
+// (`upload` with `edited_from`): the original is never touched.
+message PhotosEditPlan {
+  // Quarter turns clockwise, 0-3.
+  uint32 quarters = 1;
+  // Whole degrees, 0 to -15 (anticlockwise only, one control).
+  sint32 straighten = 2;
+  Flip flip = 3;
+  Ratio ratio = 4;
+  // In fractions of the rotated frame; never leaves it, never below a tenth.
+  PhotosEditCrop crop = 5;
+
+  // A three-way cycle, one flip per render.
+  enum Flip {
+    FLIP_UNSPECIFIED = 0;
+    FLIP_HORIZONTAL = 1;
+    FLIP_VERTICAL = 2;
+  }
+
+  enum Ratio {
+    RATIO_UNSPECIFIED = 0;
+    RATIO_ORIGINAL = 1;
+    RATIO_SQUARE = 2;
+    RATIO_THREE_TWO = 3;
+  }
+}
+
+message PhotosEditCrop {
+  double x = 1;
+  double y = 2;
+  double w = 3;
+  double h = 4;
+}
+
+// RENDER THE EDIT: the platform's pixel work (#1135). The shell decodes the
+// source original (never a thumbnail), applies `plan` (quarter turns, then the
+// straighten about the centre with the frame grown to fit, then the flip, then
+// the crop rectangle in fractions of that frame, rounded half up and clamped to
+// the bitmap), encodes JPEG at `jpeg_quality_percent`, streams the result
+// through the stage door and answers `EditRendered`. A failure is
+// `EffectFailed`.
+message RenderEdit {
+  // The original's file, as the content door located it.
+  string source_path = 1;
+  PhotosEditPlan plan = 2;
+  uint32 jpeg_quality_percent = 3;
+}
+
+message EditRendered {
+  // The staged bytes' hash, 64 hex characters (`StageHandle.content_hash`).
+  string content_hash = 1;
+  string media_type = 2;
+  uint32 width = 3;
+  uint32 height = 4;
+  // The staged bytes' length (`StageHandle.byte_size`): the upload claims them.
+  uint64 byte_size = 5;
+}
+
+message PhotosEditorState {
+  string photo_id = 1;
+  // "Crop and rotate".
+  string title = 2;
+  oneof content {
+    Loading loading = 3;
+    Failure failure = 4;
+    Denied denied = 5;
+    PhotosEditorData data = 6;
+  }
+  Phase phase = 7;
+  PhotosEditPlan plan = 8;
+  // "Crop Square · rotation +90° · flip ↔", or "Saving new photo".
+  string status_line = 9;
+  // "Straighten −3°".
+  string straighten_label = 10;
+  // "Flip", "Flip ↔", "Flip ↕".
+  string flip_label = 11;
+  // Something to lose: Cancel asks first.
+  bool edited = 12;
+  // Why Save cannot fire, or empty when it can.
+  string save_refusal = 13;
+  // The discard question while it is up.
+  optional Confirm discard = 14;
+  // The last save's refusal, beside the editor and never instead of it.
+  optional Failure save_failure = 15;
+  // Set when the save committed: the shell leaves for the new photograph.
+  optional Route saved_route = 16;
+  // The editor is done (cancelled, discarded or saved): the shell pops.
+  bool dismissed = 17;
+  repeated PhotosEditorRatio ratios = 18;
+  PhotosEditorWords words = 19;
+
+  enum Phase {
+    PHASE_UNSPECIFIED = 0;
+    PHASE_EDITING = 1;
+    PHASE_SAVING = 2;
+    PHASE_SAVED = 3;
+    PHASE_CLOSED = 4;
+  }
+}
+
+message PhotosEditorData {
+  optional PhotoTile tile = 1;
+  // The original on this phone; empty when it is not here (the stage then draws
+  // the thumbnail and Save is refused).
+  string original_path = 2;
+  // The pixel box, 0 when the vault does not know it.
+  uint32 width = 3;
+  uint32 height = 4;
+  // "from a photo taken 30 July 2026".
+  string meta = 5;
+}
+
+message PhotosEditorRatio {
+  PhotosEditPlan.Ratio ratio = 1;
+  // "Original", "Square", "3 : 2".
+  string label = 2;
+  bool selected = 3;
+}
+
+// The editor's fixed words, so a view carries no copy.
+message PhotosEditorWords {
+  string cancel = 1;
+  string save = 2;
+  string save_explanation = 3;
+  string rotate = 4;
+  string reset = 5;
+  string crop = 6;
+  string crop_hint = 7;
+  string loading = 8;
+  string retry = 9;
+}
+
+message PhotosEditorEvent {
+  oneof kind {
+    Refreshed refreshed = 1;
+    Rotated rotate = 2;
+    Straightened straighten = 3;
+    Flipped flip = 4;
+    RatioChosen ratio = 5;
+    CropMoved crop_moved = 6;
+    CropScaled crop_scaled = 7;
+    Reset reset = 8;
+    Saved save = 9;
+    Cancelled cancel = 10;
+    DiscardAnswered discard = 11;
+  }
+
+  message Refreshed {}
+
+  // A quarter turn resets the crop and the ratio.
+  message Rotated {}
+
+  // One press levels a degree anticlockwise; past the limit returns to level.
+  message Straightened {}
+
+  message Flipped {}
+
+  // `frame_ratio` is the stage's width over its height as the shell measured it
+  // (0 when unknown): the centred crop of the ratio is cut from it.
+  message RatioChosen {
+    PhotosEditPlan.Ratio ratio = 1;
+    double frame_ratio = 2;
+  }
+
+  // In fractions of the frame; the size never changes.
+  message CropMoved {
+    double dx = 1;
+    double dy = 2;
+  }
+
+  // Keeps the aspect: a free eight-handle resize would silently change the ratio.
+  message CropScaled {
+    double factor = 1;
+  }
+
+  message Reset {}
+
+  message Saved {}
+
+  message Cancelled {}
+
+  message DiscardAnswered {
+    bool discard = 1;
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Duplicates: the sets, and the decision about one
