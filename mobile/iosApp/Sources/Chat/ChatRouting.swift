@@ -45,8 +45,7 @@ enum ChatRouting {
             return app.isEmpty ? nil : app
         case .rust:
             return RustScreens.tab
-        case .photos, .photoShelf, .photoLightbox, .photoPicker, .places,
-             .photoDuplicates, .photoDuplicateReview, .photoEditor:
+        case .photos, .photoShelf, .photoPicker, .places:
             return AppIds.shared.PHOTOS
         }
     }

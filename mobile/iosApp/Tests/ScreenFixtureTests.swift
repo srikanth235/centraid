@@ -203,74 +203,6 @@ final class ScreenFixtureTests: XCTestCase {
     // distinction wrong would draw wrong; a happy path would pass against every
     // such shell and is therefore not here.
 
-    private func lightbox(_ case_: String) throws -> Centraid_Screen_V1_PhotoLightboxState {
-        try Centraid_Screen_V1_PhotoLightboxState(
-            serializedBytes: try bytes("photos-lightbox/\(case_)")
-        )
-    }
-
-    /// The download arrow needs a DECISION and a HASH. `withheldByRule` is the
-    /// one held state that carries it, and `seat.bytes.fetch` takes the hash.
-    func testTheDownloadArrowNeedsADecisionAndAHash() throws {
-        let withheld = try lightbox("withheld-by-rule")
-        guard case let .detail(detail) = withheld.content else {
-            return XCTFail("a loaded lightbox decodes to the detail case")
-        }
-        XCTAssertEqual(detail.held, .withheldByRule)
-        XCTAssertEqual(detail.originalHash.count, 64)
-        // Absent original, present thumbnail: the fallback, not an error.
-        XCTAssertFalse(detail.hasOriginalPath)
-        XCTAssertTrue(detail.hasThumbnailPath)
-    }
-
-    /// Chrome is a state, not an animation — and it is independent of the
-    /// sheet. A shell that inferred one from the other would put the bars back
-    /// the moment a sheet closed.
-    func testChromeIsAStateAndNotTheSheet() throws {
-        let hidden = try lightbox("chrome-hidden")
-        XCTAssertFalse(hidden.chromeVisible)
-        XCTAssertEqual(hidden.sheet, Centraid_Screen_V1_PhotoLightboxState.Sheet.none)
-        XCTAssertTrue(try lightbox("withheld-by-rule").chromeVisible)
-    }
-
-    /// The facts panel says which labels are guesses — the member's tag and a
-    /// derivation's proposal are one list.
-    func testTheFactsPanelSaysWhichLabelsAreGuesses() throws {
-        let info = try lightbox("info-sheet-proposals")
-        XCTAssertEqual(info.sheet, .info)
-        XCTAssertEqual(info.detail.labels.map(\.confirmed), [true, false])
-    }
-
-    /// The surface a member actually waits on can show a percentage.
-    ///
-    /// `fetchPercent` was absent from `PhotoDetail` for one draft, which put a
-    /// number on the 120-cell grid and none here — and here is where it is
-    /// felt: a member in the grid glances, a member here is waiting for THIS
-    /// photograph.
-    func testTheSurfaceAMemberWaitsOnCanShowAPercentage() throws {
-        let fetching = try lightbox("fetching-with-percent")
-        guard case let .detail(detail) = fetching.content else {
-            return XCTFail("a mid-fetch lightbox still decodes to the detail case")
-        }
-        XCTAssertEqual(detail.held, .fetching)
-        XCTAssertEqual(detail.fetchPercent, 43)
-        // The bytes have not landed, so the thumbnail is still what draws.
-        XCTAssertFalse(detail.hasOriginalPath)
-        XCTAssertTrue(detail.hasThumbnailPath)
-    }
-
-    /// A loading lightbox still knows which photograph it is: `assetID` sits
-    /// outside the oneof, so the chrome and the filmstrip have something to key
-    /// by while the read is in flight.
-    func testALoadingLightboxStillKnowsWhichPhotographItIs() throws {
-        let loading = try lightbox("loading-keyed-by-asset")
-        guard case .loading = loading.content else {
-            return XCTFail("this case is still loading")
-        }
-        XCTAssertEqual(loading.assetID, "ast-0330")
-        XCTAssertEqual(loading.neighbourAssetIds.count, 3)
-    }
-
     private func collections(_ case_: String) throws -> Centraid_Screen_V1_PhotosCollectionsState {
         try Centraid_Screen_V1_PhotosCollectionsState(
             serializedBytes: try bytes("photos-collections/\(case_)")
@@ -395,102 +327,6 @@ final class ScreenFixtureTests: XCTestCase {
         XCTAssertEqual(hits.cells.count, 2)
     }
 
-    private func duplicates(_ case_: String) throws -> Centraid_Screen_V1_DuplicatesState {
-        try Centraid_Screen_V1_DuplicatesState(
-            serializedBytes: try bytes("photos-duplicates/\(case_)")
-        )
-    }
-
-    /// An unwalked library is not a clean one. The same empty list, one boolean
-    /// apart, and only one of them may say "No duplicates". Asserted against
-    /// each other because two separate assertions pass just as happily against
-    /// a shell that collapsed them.
-    func testAnUnwalkedLibraryIsNotACleanOne() throws {
-        let incomplete = try duplicates("scan-incomplete").data
-        let clean = try duplicates("scanned-and-clean").data
-        XCTAssertTrue(incomplete.clusters.isEmpty)
-        XCTAssertTrue(clean.clusters.isEmpty)
-        XCTAssertFalse(incomplete.scanComplete)
-        XCTAssertTrue(clean.scanComplete)
-        XCTAssertNotEqual(incomplete, clean)
-    }
-
-    /// The shelf is ordered by what resolving each cluster gives back, and the
-    /// page is whole — so the total is the sum and not a floor.
-    func testDuplicateClustersAreOrderedByWhatTheyGiveBack() throws {
-        let data = try duplicates("clusters-by-reclaimable").data
-        let sizes = data.clusters.map(\.reclaimableBytes)
-        XCTAssertEqual(sizes, sizes.sorted(by: >))
-        XCTAssertFalse(data.hasNextCursor)
-        XCTAssertEqual(data.totalReclaimableBytes, sizes.reduce(0, +))
-    }
-
-    /// A partial page reports a FLOOR and never a total.
-    ///
-    /// The pair the whole-page case needs. Same shelf, one page short: the
-    /// total accounts for the clusters read and nothing behind them, and
-    /// `totalCapped` is the only thing that says the sum is not the answer. A
-    /// screen printing both the same way promises space it never accounted for.
-    func testAPartialDuplicatesPageReportsAFloor() throws {
-        let partial = try duplicates("clusters-partial-page").data
-        let whole = try duplicates("clusters-by-reclaimable").data
-        XCTAssertTrue(partial.hasNextCursor)
-        XCTAssertTrue(partial.totalCapped)
-        XCTAssertEqual(
-            partial.totalReclaimableBytes,
-            partial.clusters.map(\.reclaimableBytes).reduce(0, +)
-        )
-        XCTAssertFalse(whole.hasNextCursor)
-        XCTAssertFalse(whole.totalCapped)
-        // A cluster's own members are read within a page limit too.
-        let capped = partial.clusters.filter(\.memberCountCapped)
-        XCTAssertEqual(capped.map(\.clusterID), ["dup-0004"])
-        XCTAssertTrue(whole.clusters.allSatisfy { !$0.memberCountCapped })
-    }
-
-    private func duplicateReview(
-        _ case_: String
-    ) throws -> Centraid_Screen_V1_DuplicateReviewState {
-        try Centraid_Screen_V1_DuplicateReviewState(
-            serializedBytes: try bytes("photos-duplicate-review/\(case_)")
-        )
-    }
-
-    /// THE ONE THAT MATTERS MOST IN THIS SET.
-    ///
-    /// Resolving trashes every member but the one `keepAssetID` names, so a
-    /// recommendation written into that field is the product choosing which of
-    /// a member's photographs to delete. The suggestion stays in `data`.
-    func testASuggestionTheMemberHasNotAcceptedDeletesNothing() throws {
-        let state = try duplicateReview("suggestion-not-accepted")
-        XCTAssertEqual(state.data.suggestedKeepAssetID, "ast-0401")
-        XCTAssertFalse(state.data.suggestionReason.isEmpty)
-        XCTAssertTrue(state.keepAssetID.isEmpty)
-    }
-
-    /// The member may keep the one the suggestion did not. Both fields set and
-    /// disagreeing — only representable because they are two fields; one would
-    /// have lost the fact that a recommendation was made and declined.
-    func testTheMemberMayKeepTheOneTheSuggestionDidNot() throws {
-        let state = try duplicateReview("member-overrode-the-suggestion")
-        XCTAssertEqual(state.keepAssetID, "ast-0402")
-        XCTAssertEqual(state.data.suggestedKeepAssetID, "ast-0401")
-        // And the reason they chose it: a copy put somewhere by hand is not a
-        // stray, so deleting it is a different act.
-        let kept = try XCTUnwrap(state.data.members.first { $0.assetID == state.keepAssetID })
-        XCTAssertTrue(kept.memberPlaced)
-    }
-
-    /// Byte-identical copies get no recommendation at all. The rule is "largest
-    /// by bytes"; when it has no answer the honest state is silence, not an
-    /// arbitrary pick dressed as advice.
-    func testByteIdenticalCopiesGetNoRecommendation() throws {
-        let data = try duplicateReview("no-suggestion-at-all").data
-        XCTAssertTrue(data.suggestedKeepAssetID.isEmpty)
-        XCTAssertTrue(data.suggestionReason.isEmpty)
-        XCTAssertEqual(Set(data.members.map(\.byteSize)).count, 1)
-    }
-
     /// The three-state law as a sweep over the nine new screens. An empty data
     /// case standing in for a failure is the fourth state every one of these is
     /// tempted to grow, and the only way to know none of them did is to ask all
@@ -505,13 +341,6 @@ final class ScreenFixtureTests: XCTestCase {
             }
         }
         try sweep(
-            "photos-lightbox",
-            [
-                "chrome-hidden", "fetching-with-percent", "info-sheet-proposals",
-                "loading-keyed-by-asset", "withheld-by-rule",
-            ]
-        ) { try Centraid_Screen_V1_PhotoLightboxState(serializedBytes: $0).content != nil }
-        try sweep(
             "photos-collections",
             ["counts-are-floors", "new-album-sheet", "read-refused", "standing-and-owned"]
         ) { try Centraid_Screen_V1_PhotosCollectionsState(serializedBytes: $0).content != nil }
@@ -521,17 +350,6 @@ final class ScreenFixtureTests: XCTestCase {
             "photos-search",
             ["corrected", "hits-say-why", "no-hits", "resting"]
         ) { try Centraid_Screen_V1_PhotosSearchState(serializedBytes: $0).content != nil }
-        try sweep(
-            "photos-duplicates",
-            [
-                "clusters-by-reclaimable", "clusters-partial-page", "scan-incomplete",
-                "scanned-and-clean",
-            ]
-        ) { try Centraid_Screen_V1_DuplicatesState(serializedBytes: $0).content != nil }
-        try sweep(
-            "photos-duplicate-review",
-            ["member-overrode-the-suggestion", "no-suggestion-at-all", "suggestion-not-accepted"]
-        ) { try Centraid_Screen_V1_DuplicateReviewState(serializedBytes: $0).content != nil }
     }
 
     // MARK: - Money (#1099)

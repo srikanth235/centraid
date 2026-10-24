@@ -59,16 +59,8 @@ final class ShellModel: ObservableObject {
         // `photos.grid` — a parameter, never a push, so back does not walk
         // through the bands a member happened to tap.
         case photoShelf(Data)
-        // THE ALBUM IT WAS OPENED FROM rides along, empty from anywhere else,
-        // so "Make key photo" knows which cover it sets.
-        case photoLightbox(String, [String], album: String = "")
         case photoPicker(String, String)
         case places
-        case photoDuplicates
-        case photoDuplicateReview(String)
-        /// The editor over one photograph, with the lightbox's neighbours so a
-        /// save can come back to the same shelf's order (#1029).
-        case photoEditor(String, [String])
     }
 
     @Published var path: [Route] = [] {
@@ -308,14 +300,10 @@ final class ShellModel: ObservableObject {
     var routes: [String: ScreenRoute] = [:]
     @Published var photosState = Data()
     @Published var photoShelfState = Data()
-    @Published var photoLightboxState = Data()
     @Published var photoPickerState = Data()
     @Published var photosCollectionsState = Data()
     @Published var photosSearchState = Data()
     @Published var placesState = Data()
-    @Published var duplicatesState = Data()
-    @Published var duplicateReviewState = Data()
-    @Published var photoEditorState = Data()
 
     /// The shelf's own sentences, read off the bridge when it opens.
     ///
@@ -389,14 +377,10 @@ final class ShellModel: ObservableObject {
     /// un-routed, so a bridge rebuilt per push would leave a routed host
     /// drawing into a view that is gone.
     private let photoShelf = PhotoShelfBridge()
-    private let photoLightbox = PhotoLightboxBridge()
     private let photoPicker = PhotoPickerBridge()
     private let photosCollections = PhotosCollectionsBridge()
     private let photosSearch = PhotosSearchBridge()
     private let places = PlacesBridge()
-    private let duplicates = DuplicatesBridge()
-    private let duplicateReview = DuplicateReviewBridge()
-    private let photoEditor = PhotoEditorBridge()
 
     /// ATTACH THE SCREEN RUNTIME: the store that draws Rust-owned screens, over
     /// the core the session holds. Called once the transport exists.
@@ -500,19 +484,10 @@ final class ShellModel: ObservableObject {
             // reduce, from the shelf the host actually holds.
             self.photoShelfCopy = self.shelfWords()
         }
-        photoLightbox.observe { [weak self] bytes in self?.photoLightboxState = bytes.data }
         photoPicker.observe { [weak self] bytes in self?.photoPickerState = bytes.data }
         photosCollections.observe { [weak self] bytes in self?.photosCollectionsState = bytes.data }
         photosSearch.observe { [weak self] bytes in self?.photosSearchState = bytes.data }
         places.observe { [weak self] bytes in self?.placesState = bytes.data }
-        duplicates.observe { [weak self] bytes in self?.duplicatesState = bytes.data }
-        duplicateReview.observe { [weak self] bytes in self?.duplicateReviewState = bytes.data }
-        photoEditor.observe { [weak self] bytes in self?.photoEditorState = bytes.data }
-        // THE EDITOR'S SAVE RENDERS ON THIS SHELL'S OWN DECODER and ingests
-        // through the bridge — the camera roll's path (#1029).
-        photoEditor.onRender = { [weak self] key, path, plan in
-            self?.renderEdit(key: key, path: path, plan: plan.data)
-        }
         // THE SESSION OWNS THE ONE CORE (R-1020-24), so the app screens are
         // attached TO it rather than opening one. It is opened asynchronously,
         // so this is a callback and not a getter: there is exactly one moment
@@ -541,14 +516,10 @@ final class ShellModel: ObservableObject {
             self.healthConnect.attach(session: session)
             self.backup.attach(session: session)
             self.photoShelf.attach(session: session)
-            self.photoLightbox.attach(session: session)
             self.photoPicker.attach(session: session)
             self.photosCollections.attach(session: session)
             self.photosSearch.attach(session: session)
             self.places.attach(session: session)
-            self.duplicates.attach(session: session)
-            self.duplicateReview.attach(session: session)
-            self.photoEditor.attach(session: session)
             self.chat.attach(session: session)
             // THE BACKGROUND WINDOWS NOW HAVE SOMETHING TO RUN (#1029 W18-6).
             //
@@ -1319,40 +1290,6 @@ final class ShellModel: ObservableObject {
         gatewayStatus = ""
     }
 
-    /// THE EDITOR SAVED, AND THE MEMBER GOES TO WHAT THEY MADE (#1029).
-    ///
-    /// The editor comes off the stack and the lightbox under it is REPLACED by
-    /// one on the new photograph — the shelf's order kept behind it, so a swipe
-    /// still walks where it walked. An empty id (an output that named nothing)
-    /// returns to the photograph the member came from rather than to a guess.
-    func photoEditSaved(_ saved: String, neighbours: [String]) {
-        guard !path.isEmpty else { return }
-        path.removeLast()
-        guard !saved.isEmpty, case .photoLightbox? = path.last else { return }
-        path[path.count - 1] = .photoLightbox(saved, [saved] + neighbours.filter { $0 != saved })
-    }
-
-    /// DRAW AN EDIT, OFF THE MAIN THREAD, and hand the JPEG to the bridge —
-    /// which gives it the original's date, place and caption (#1029).
-    private func renderEdit(key: String, path: String, plan: Data) {
-        let decoded = (try? Centraid_Screen_V1_PhotoEditPlan(serializedBytes: plan)) ?? .init()
-        // THE BRIDGE, NOT `self`, crosses into the detached task: it is the one
-        // thing the answer goes to, and a captured model is a main-actor type
-        // read from a background thread.
-        let bridge = photoEditor
-        Task.detached(priority: .userInitiated) {
-            let made = PhotoEditRenderer.render(sourcePath: path, plan: decoded)
-            await MainActor.run {
-                switch made {
-                case let .made(file, width, height):
-                    bridge.rendered(key: key, path: file, width: Int32(width), height: Int32(height))
-                case let .refused(sentence):
-                    bridge.renderRefused(key: key, sentence: sentence)
-                }
-            }
-        }
-    }
-
     /// A BAND BODY CAME ON SCREEN (#1029, photos port).
     ///
     /// Collections and Search are DESTINATIONS on `photos.grid`, not routes —
@@ -1438,14 +1375,10 @@ final class ShellModel: ObservableObject {
         case HomeMachine.shared.SCREEN_ID: home.send(event: event.kotlin)
         case PhotosScreens.grid: photos.send(event: event.kotlin)
         case PhotosScreens.shelf: photoShelf.send(event: event.kotlin)
-        case PhotosScreens.lightbox: photoLightbox.send(event: event.kotlin)
         case PhotosScreens.picker: photoPicker.send(event: event.kotlin)
         case PhotosScreens.collections: photosCollections.send(event: event.kotlin)
         case PhotosScreens.search: photosSearch.send(event: event.kotlin)
         case PhotosScreens.places: places.send(event: event.kotlin)
-        case PhotosScreens.duplicates: duplicates.send(event: event.kotlin)
-        case PhotosScreens.duplicateReview: duplicateReview.send(event: event.kotlin)
-        case PhotosScreens.editor: photoEditor.send(event: event.kotlin)
         // EVERY REGISTERED SCREEN: a lookup, not a case (K5).
         default: ports[screen]?.send(event)
         }
@@ -1574,9 +1507,6 @@ final class ShellModel: ObservableObject {
         case let .photoShelf(shelf):
             photoShelf.openedEncoded(shelf: shelf.kotlin)
 
-        case let .photoLightbox(identifier, neighbours, album):
-            photoLightbox.opened(assetId: identifier, neighbours: neighbours, albumId: album)
-
         case let .photoPicker(identifier, name):
             // ALREADY IN THE ALBUM IS EMPTY FROM HERE, and the picker knows
             // it: the set is what the album's own entries say, and this route
@@ -1593,11 +1523,6 @@ final class ShellModel: ObservableObject {
             )
 
         case .places: places.opened()
-        case .photoDuplicates: duplicates.opened()
-        case let .photoEditor(identifier, _):
-            photoEditor.opened(assetId: identifier)
-        case let .photoDuplicateReview(clusterIdentifier):
-            duplicateReview.opened(clusterId: clusterIdentifier)
         }
     }
 }

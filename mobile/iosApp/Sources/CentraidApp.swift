@@ -105,8 +105,8 @@ struct CentraidApp: App {
                                         let album = (try? Centraid_Screen_V1_PhotoShelf(
                                             serializedBytes: shelf
                                         ))?.album.collectionID ?? ""
-                                        shell.path.append(
-                                            .photoLightbox(identifier, neighbours, album: album)
+                                        shell.open(
+                                            PhotosEntry.lightbox(identifier, neighbours: neighbours, album: album)
                                         )
                                     },
                                     onAddPhotographs: { identifier, name in
@@ -116,23 +116,6 @@ struct CentraidApp: App {
                                         shell.exportShelf(identifiers, as: kind)
                                     }
                                 )
-
-                            case let .photoLightbox(identifier, _, _):
-                                PhotoLightboxView(
-                                    data: shell.photoLightboxState,
-                                    send: { shell.send(screen: PhotosScreens.lightbox, event: $0) }
-                                )
-                                // THE NEIGHBOURS RIDE THE ROUTE and reach the
-                                // machine through `shell.opened(route)` below,
-                                // so a swipe needs no read. `.id` is what makes
-                                // SwiftUI rebuild when a member swipes from one
-                                // photograph to the next.
-                                .id(identifier)
-                                // EDIT PUSHES THE EDITOR, with the neighbours,
-                                // so a save can come back to the same shelf.
-                                .environment(\.openPhotoEditor) { assetIdentifier, neighbours in
-                                    shell.path.append(.photoEditor(assetIdentifier, neighbours))
-                                }
 
                             case let .photoPicker(identifier, name):
                                 PhotoPickerView(
@@ -160,36 +143,6 @@ struct CentraidApp: App {
                                     },
                                     onOpenShelf: { shell.path.append(.photoShelf($0)) }
                                 )
-
-                            case .photoDuplicates:
-                                DuplicatesView(
-                                    data: shell.duplicatesState,
-                                    send: { shell.send(screen: PhotosScreens.duplicates, event: $0) },
-                                    onOpenCluster: { identifier in
-                                        shell.path.append(.photoDuplicateReview(identifier))
-                                    }
-                                )
-
-                            case let .photoDuplicateReview(identifier):
-                                DuplicateReviewView(
-                                    data: shell.duplicateReviewState,
-                                    send: { shell.send(screen: PhotosScreens.duplicateReview, event: $0) }
-                                )
-                                .id(identifier)
-
-                            // THE EDITOR (#1029). Cancel pops back onto the
-                            // lightbox it came from; a save replaces that
-                            // lightbox with one on the NEW photograph.
-                            case let .photoEditor(identifier, neighbours):
-                                PhotoEditorView(
-                                    data: shell.photoEditorState,
-                                    send: { shell.send(screen: PhotosScreens.editor, event: $0) },
-                                    onClose: { shell.path.removeLast() },
-                                    onSaved: { saved in
-                                        shell.photoEditSaved(saved, neighbours: neighbours)
-                                    }
-                                )
-                                .id(identifier)
                             }
                         }
                         // A SCREEN READS BECAUSE IT WAS OPENED. The machine

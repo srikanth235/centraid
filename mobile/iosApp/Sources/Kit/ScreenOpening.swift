@@ -14,8 +14,6 @@ extension ShellModel.Route {
             return .photos
         case PhotosScreens.shelf:
             return .photoShelf(opening.event.data)
-        case PhotosScreens.lightbox:
-            return .photoLightbox(opening.assetId, opening.neighbours)
         default:
             return AppRegistry.present(opening.screenId, opening.event.data)
         }

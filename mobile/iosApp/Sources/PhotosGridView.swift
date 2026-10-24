@@ -174,7 +174,7 @@ struct PhotosGridView: View {
                         onOpenDoor: { kind in
                             switch kind {
                             case .places: shell.path.append(.places)
-                            case .duplicates: shell.path.append(.photoDuplicates)
+                            case .duplicates: shell.open(PhotosEntry.duplicates())
                             case .unspecified, .UNRECOGNIZED: break
                             }
                         }
@@ -192,7 +192,7 @@ struct PhotosGridView: View {
                         data: shell.photosSearchState,
                         send: { shell.send(screen: PhotosScreens.search, event: $0) },
                         onOpenAsset: { identifier in
-                            shell.path.append(.photoLightbox(identifier, []))
+                            shell.open(PhotosEntry.lightbox(identifier))
                         },
                         onOpenShelf: { shelf in shell.path.append(.photoShelf(shelf)) }
                     )
@@ -353,7 +353,7 @@ struct PhotosGridView: View {
                         // in the lightbox costs no read, and it walks the
                         // library in the order the member is looking at.
                         onOpen: { identifier in
-                            shell.path.append(.photoLightbox(identifier, cells.map(\.assetID)))
+                            shell.open(PhotosEntry.lightbox(identifier, neighbours: cells.map(\.assetID)))
                         }
                     )
                     LibraryMoreSentinel(complete: data.complete, count: cells.count, send: send)

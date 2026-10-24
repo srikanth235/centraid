@@ -9,12 +9,8 @@ import CentraidShared
 enum PhotosScreens {
     static let grid = PhotosGridMachine.shared.SCREEN_ID
     static let shelf = PhotoShelfMachine.shared.SCREEN_ID
-    static let lightbox = PhotoLightboxMachine.shared.SCREEN_ID
     static let picker = PhotoPickerMachine.shared.SCREEN_ID
     static let collections = PhotosCollectionsMachine.shared.SCREEN_ID
     static let search = PhotosSearchMachine.shared.SCREEN_ID
     static let places = PlacesMachine.shared.SCREEN_ID
-    static let duplicates = DuplicatesMachine.shared.SCREEN_ID
-    static let duplicateReview = DuplicateReviewMachine.shared.SCREEN_ID
-    static let editor = PhotoEditorMachine.shared.SCREEN_ID
 }
