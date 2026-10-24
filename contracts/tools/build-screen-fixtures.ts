@@ -48,9 +48,6 @@ const TYPES: Record<string, string> = {
   // The rest of the photos miniapp that is not yet a Rust screen. The shelf,
   // the picker and Places are `crates/screens` views now (#1135), tested there.
   "photos-collections": "centraid.screen.v1.PhotosCollectionsState",
-  "photos-duplicate-review": "centraid.screen.v1.DuplicateReviewState",
-  "photos-duplicates": "centraid.screen.v1.DuplicatesState",
-  "photos-lightbox": "centraid.screen.v1.PhotoLightboxState",
   "photos-search": "centraid.screen.v1.PhotosSearchState",
   seat: "centraid.screen.v1.SeatState",
 };

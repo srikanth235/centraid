@@ -704,6 +704,13 @@ impl Screen for Editor {
                 crop_hint: words::photos_crop_hint(locale),
                 loading: shared::kit_opening(locale),
                 retry: shared::kit_retry(locale),
+                crop_area: words::photos_crop_area(locale),
+                crop_left: words::photos_crop_left(locale),
+                crop_right: words::photos_crop_right(locale),
+                crop_up: words::photos_crop_up(locale),
+                crop_down: words::photos_crop_down(locale),
+                crop_larger: words::photos_crop_larger(locale),
+                crop_smaller: words::photos_crop_smaller(locale),
             }),
             plan: Some(self.plan),
         };

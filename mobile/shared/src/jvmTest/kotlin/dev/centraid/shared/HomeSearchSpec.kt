@@ -12,6 +12,7 @@ import centraid.screen.v1.HomeSearchState
 import dev.centraid.design.copy.SharedCopy
 import dev.centraid.shared.nav.AgendaEntry
 import dev.centraid.shared.nav.Destination
+import dev.centraid.shared.nav.PhotosLightboxEntry
 import dev.centraid.shared.nav.RowRoutes
 import dev.centraid.shared.platform.DeviceClock
 import dev.centraid.shared.screen.ScreenEffect
@@ -227,7 +228,7 @@ class HomeSearchSpec : StringSpec({
         opens["people"] shouldBe Destination.PeoplePerson("p1", "Kate Bell")
         opens["agenda"] shouldBe AgendaEntry.event("e1")
         opens["docs"] shouldBe Destination.DocsDocument("d1", "Cabin lease", parent = "Search")
-        opens["photos"] shouldBe Destination.PhotoLightbox("a1", listOf("a1"))
+        opens["photos"] shouldBe PhotosLightboxEntry.lightbox("a1", listOf("a1"))
         // Picking a row is an intent: the machine records, the shell opens.
         val shown = step(typed(opened, "cabin").state, answer("cabin", hit("notes", "note", "n1", "Cabin packing"))).state
         val row = shown.data_!!.groups.single().rows.single()

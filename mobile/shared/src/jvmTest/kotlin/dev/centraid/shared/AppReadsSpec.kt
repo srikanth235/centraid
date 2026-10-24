@@ -80,15 +80,6 @@ import dev.centraid.shared.apps.people.PeoplePersonMachine
 import dev.centraid.shared.apps.people.PeoplePersonReads
 import dev.centraid.shared.apps.people.PeopleTrashMachine
 import dev.centraid.shared.apps.people.PeopleTrashReads
-import centraid.screen.v1.PhotoLightboxEvent
-import centraid.screen.v1.DuplicateReviewEvent
-import dev.centraid.shared.apps.photos.DuplicateReviewMachine
-import dev.centraid.shared.apps.photos.DuplicateClusterMembers
-import dev.centraid.shared.apps.photos.DuplicateReviewReads
-import dev.centraid.shared.apps.photos.DuplicatesMachine
-import dev.centraid.shared.apps.photos.DuplicatesReads
-import dev.centraid.shared.apps.photos.PhotoLightboxMachine
-import dev.centraid.shared.apps.photos.PhotoLightboxReads
 import dev.centraid.shared.apps.photos.PhotosGridMachine
 import dev.centraid.shared.apps.photos.PhotosReads
 import dev.centraid.shared.screen.ScreenMachine
@@ -137,10 +128,6 @@ class AppReadsSpec : StringSpec({
         // bridges and fold the answers, because their data case cannot be
         // CONSTRUCTED from one table (`HomeSession.attachReads`' ruling).
         // Those are asserted in their own specs, which is where the fold is.
-        Triple("photos.lightbox", PhotoLightboxReads, PhotoLightboxMachine),
-        // THE DUPLICATES SHELF IS AN APP QUERY (`photos.duplicates`, the core's
-        // clustering), and is in `queryScreens`.
-        Triple("photos.duplicate", DuplicateReviewReads, DuplicateReviewMachine),
         Triple("docs.trash", DocsTrashReads, DocsTrashMachine),
         // LOCKER (#1047): the kit's trash over `entity`, kind `locker_item` (#1135). The statement is
         // the kit's own; `LockerTrashReads` adds only the gate in front of it
@@ -158,29 +145,9 @@ class AppReadsSpec : StringSpec({
         // empty statement — proving nothing about the screens most likely to
         // get their projection wrong. Each is driven through its own `Opened`,
         // which is how the parameter reaches the state in the product.
-        "photos.lightbox" -> PhotoLightboxReads.query(
-            PhotoLightboxMachine.reduce(
-                PhotoLightboxMachine.initial(),
-                PhotoLightboxEvent(opened = PhotoLightboxEvent.Opened(asset_id = "ast-1")),
-            ).state,
-            null,
-        )
         "docs.trash" -> DocsTrashReads.query(DocsTrashMachine.initial(), null)
         "locker.trash" -> TrashReads(LOCKER_TRASH).query(LockerTrashMachine.initial(), null)
-        else -> {
-            // THE CLUSTER'S MEMBERS ARE THE CORE'S, asked as the screen opens; a
-            // cluster the core did not answer has no members to read.
-            DuplicateClusterMembers.remember("dup-1", listOf("ast-1", "ast-2"))
-            DuplicateReviewReads.query(
-                DuplicateReviewMachine.reduce(
-                    DuplicateReviewMachine.initial(),
-                    DuplicateReviewEvent(
-                        opened = DuplicateReviewEvent.Opened(cluster_id = "dup-1"),
-                    ),
-                ).state,
-                null,
-            )
-        }
+        else -> error("no statement for $name")
     }
 
     "every screen's select carries both order columns" {
@@ -263,8 +230,6 @@ class AppReadsSpec : StringSpec({
         Triple("docs.drive", DocsDriveReads, DocsDriveMachine),
         Triple("docs.document", DocsDocumentReads, DocsDocumentMachine),
         Triple("docs.editor", DocsEditorReads, DocsEditorMachine),
-        // PHOTOS' DUPLICATES (#1135): the core's clustering, asked as an app query.
-        Triple("photos.duplicates", DuplicatesReads, DuplicatesMachine),
         // LOCKER (#1047). Every read screen shares one table set — the item,
         // its sidecars and its tags; the generator reads none.
         Triple("locker.home", LockerHomeReads, LockerHomeMachine),

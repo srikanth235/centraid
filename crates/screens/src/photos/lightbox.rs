@@ -800,6 +800,16 @@ impl Lightbox {
                 }
                 _ => String::new(),
             },
+            stage_label: if held == Held::Absent {
+                words::photos_not_on_phone(locale)
+            } else {
+                words::photos_preview_gone(locale)
+            },
+            spoken: if cell.title.trim().is_empty() {
+                words::photograph(locale)
+            } else {
+                cell.title.trim().to_owned()
+            },
             write_refusal: self.refusal(locale).unwrap_or_default(),
             edit_refusal: editor::edit_refusal(locale, Some(cell), self.fetching)
                 .unwrap_or_default(),
@@ -835,6 +845,13 @@ impl Lightbox {
             no_places: words::photos_no_places(locale),
             info_title: words::photos_info(locale),
             this_photo: words::photos_this_photo(locale),
+            filmstrip: words::photos_filmstrip(locale),
+            play: words::photos_player_play(locale),
+            pause: words::photos_player_pause(locale),
+            player_position: words::photos_player_position(locale),
+            player_position_value: words::photos_player_position_value(locale),
+            play_live: words::photos_play_live(locale),
+            live_badge: words::photos_live_badge(locale),
         }
     }
 }
@@ -1244,6 +1261,10 @@ impl Screen for Lightbox {
                 .unwrap_or_default()
         };
         let window = film_window(&self.neighbours, &self.photo_id);
+        let first = window
+            .first()
+            .and_then(|id| self.neighbours.iter().position(|n| n == id))
+            .unwrap_or(0);
         let located_precisely = self.detail().is_some_and(|d| {
             d.place
                 .as_ref()
@@ -1278,7 +1299,15 @@ impl Screen for Lightbox {
             dismissed: self.dismissed,
             film: window
                 .iter()
-                .map(|id| wire::PhotosLightboxFrame {
+                .enumerate()
+                .map(|(index, id)| wire::PhotosLightboxFrame {
+                    accessibility_label: fill(
+                        &words::photos_filmstrip_show(locale),
+                        &[
+                            ("number", &(first + index + 1).to_string()),
+                            ("total", &self.neighbours.len().to_string()),
+                        ],
+                    ),
                     photo_id: id.clone(),
                     tile: if *id == self.photo_id {
                         self.detail().map(|d| self.tile(&d.cell, locale))

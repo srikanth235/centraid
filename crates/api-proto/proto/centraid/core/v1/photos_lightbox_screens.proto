@@ -123,6 +123,11 @@ message PhotosLightboxPhoto {
   string write_refusal = 22;
   // WHY EDIT IS REFUSED, or empty when it is live.
   string edit_refusal = 23;
+  // What a stage with nothing to draw says: which of its truthful states it is
+  // in ("Preview no longer on this phone"), never a broken image.
+  string stage_label = 24;
+  // The stage's spoken name for the photograph: its caption, else the noun.
+  string spoken = 25;
 }
 
 message PhotosLightboxFact {
@@ -141,6 +146,8 @@ message PhotosLightboxFrame {
   string photo_id = 1;
   optional PhotoTile tile = 2;
   bool current = 3;
+  // "Show photo 3 of 184".
+  string accessibility_label = 4;
 }
 
 message PhotosLightboxPlaceChoice {
@@ -226,6 +233,15 @@ message PhotosLightboxWords {
   string no_places = 24;
   string info_title = 25;
   string this_photo = 26;
+  string filmstrip = 27;
+  string play = 28;
+  string pause = 29;
+  string player_position = 30;
+  // "{position} of {duration}": the transport's spoken value, filled by the
+  // player that owns the clock.
+  string player_position_value = 31;
+  string play_live = 32;
+  string live_badge = 33;
 }
 
 message PhotosLightboxEvent {
@@ -435,6 +451,15 @@ message PhotosEditorWords {
   string crop_hint = 7;
   string loading = 8;
   string retry = 9;
+  // The crop area's spoken name and its step equivalents (nothing is reachable
+  // by gesture alone).
+  string crop_area = 10;
+  string crop_left = 11;
+  string crop_right = 12;
+  string crop_up = 13;
+  string crop_down = 14;
+  string crop_larger = 15;
+  string crop_smaller = 16;
 }
 
 message PhotosEditorEvent {

@@ -88,27 +88,6 @@ public sealed interface Destination {
         public fun asShelf(): PhotoShelfRoute = PhotoShelfRoute(PhotoShelf(state_view = view))
     }
 
-    /** One photograph, full-bleed. `neighbours` is the shelf's order, so a
-     *  swipe needs no read; `albumId` is the album it was opened from, empty
-     *  from anywhere else, so "Make key photo" knows which cover it sets. */
-    public data class PhotoLightbox(
-        val assetId: String,
-        val neighbours: List<String> = emptyList(),
-        val albumId: String = "",
-    ) : Destination
-
-    /**
-     * THE EDITOR, pushed over the lightbox it was opened from. A route and not
-     * v0's in-place mode: it owns a screen machine, and the lightbox under it
-     * stays mounted so Cancel lands back on the same photograph. The
-     * lightbox's neighbours ride along, so a save can return to a lightbox
-     * whose swipe still walks the same shelf.
-     */
-    public data class PhotoEditor(
-        val assetId: String,
-        val neighbours: List<String> = emptyList(),
-    ) : Destination
-
     /**
      * PLACES, and CARDS-OR-MAP IS A PARAMETER.
      *
@@ -121,10 +100,6 @@ public sealed interface Destination {
         val presentation: PlacesState.Presentation =
             PlacesState.Presentation.PRESENTATION_CARDS,
     ) : Destination
-
-    public data object PhotoDuplicates : Destination
-
-    public data class PhotoDuplicateReview(val clusterId: String) : Destination
 
     /** Names ride along, so the head says "Add to Portugal" before a read. */
     public data class PhotoPicker(

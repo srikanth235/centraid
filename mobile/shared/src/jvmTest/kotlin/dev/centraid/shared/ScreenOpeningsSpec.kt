@@ -13,7 +13,6 @@ import dev.centraid.shared.apps.notes.NotesEditorMachine
 import dev.centraid.shared.apps.notes.NotesLibraryMachine
 import dev.centraid.shared.apps.people.PeopleHomeMachine
 import dev.centraid.shared.apps.people.PeoplePersonMachine
-import dev.centraid.shared.apps.photos.PhotoLightboxMachine
 import dev.centraid.shared.nav.AgendaEntry
 import dev.centraid.shared.nav.Destination
 import dev.centraid.shared.nav.RowRef
@@ -73,12 +72,15 @@ class ScreenOpeningsSpec : StringSpec({
             row("photos", "photo", "a"),
             row("photos", "photo", "b"),
         )
+        // The lightbox is a screen Rust owns: the opening is the route Rust will push.
         val lightbox = RowRoutes.route(row("photos", "photo", "b"), among = among)!!
-        lightbox.screenId shouldBe PhotoLightboxMachine.SCREEN_ID
-        lightbox.assetId shouldBe "b"
-        lightbox.neighbours shouldContainExactly listOf("a", "b")
+        lightbox.screenId shouldBe ScreenIds.RUST_SCREEN
+        val args = Route.ADAPTER.decode(lightbox.event).photos_lightbox!!
+        args.photo_id shouldBe "b"
+        args.neighbour_ids shouldContainExactly listOf("a", "b")
         // Alone, it is its own swipe.
-        RowRoutes.route(row("photos", "photo", "z"))!!.neighbours shouldContainExactly listOf("z")
+        Route.ADAPTER.decode(RowRoutes.route(row("photos", "photo", "z"))!!.event)
+            .photos_lightbox!!.neighbour_ids shouldContainExactly listOf("z")
     }
 
     "a noun the table has no row for opens the app's home, an unknown app opens nothing" {

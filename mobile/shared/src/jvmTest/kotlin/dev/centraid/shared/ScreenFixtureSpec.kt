@@ -3,8 +3,6 @@ package dev.centraid.shared
 import centraid.screen.v1.BackupState
 import centraid.screen.v1.WriteState
 import centraid.screen.v1.CollectionsDoor
-import centraid.screen.v1.DuplicateReviewState
-import centraid.screen.v1.DuplicatesState
 import centraid.screen.v1.HomeState
 import centraid.screen.v1.MoneyHomeState
 import centraid.screen.v1.MoneyImportState
@@ -14,7 +12,6 @@ import centraid.screen.v1.TileStatus
 import centraid.screen.v1.MediaPermission
 import centraid.screen.v1.NotesEditorState
 import centraid.screen.v1.PhotoCell
-import centraid.screen.v1.PhotoLightboxState
 import centraid.screen.v1.PhotoStateView
 import centraid.screen.v1.PhotosCollectionsState
 import centraid.screen.v1.PhotosGridState
@@ -141,62 +138,6 @@ class ScreenFixtureSpec : StringSpec({
     // shell that got the distinction wrong would draw wrong; a happy path
     // would pass against every such shell and is therefore not here.
 
-    fun lightbox(case: String): PhotoLightboxState =
-        PhotoLightboxState.ADAPTER.decode(screens.bytes("photos-lightbox/$case"))
-
-    "photos-lightbox: the download arrow needs a decision AND a hash" {
-        val withheld = lightbox("withheld-by-rule")
-        val detail = withheld.detail.shouldNotBeNull()
-        detail.held shouldBe PhotoCell.Held.HELD_WITHHELD_BY_RULE
-        // `seat.bytes.fetch` takes a hash, so the tap has one to name.
-        detail.original_hash.length shouldBe 64
-        // Absent original, present thumbnail: the fallback, not an error.
-        detail.original_path.shouldBeNull()
-        detail.thumbnail_path.shouldNotBeNull()
-    }
-
-    "photos-lightbox: chrome is a state, and it is not the sheet" {
-        val hidden = lightbox("chrome-hidden")
-        hidden.chrome_visible.shouldBeFalse()
-        // Independent of the sheet: a decoder that inferred one from the other
-        // would put the bars back the moment a sheet closed.
-        hidden.sheet shouldBe PhotoLightboxState.Sheet.SHEET_NONE
-        lightbox("withheld-by-rule").chrome_visible.shouldBeTrue()
-    }
-
-    "photos-lightbox: the facts panel says which labels are guesses" {
-        val info = lightbox("info-sheet-proposals")
-        info.sheet shouldBe PhotoLightboxState.Sheet.SHEET_INFO
-        val detail = info.detail.shouldNotBeNull()
-        // The member's tag and a derivation's proposal in one list, each saying
-        // which it is.
-        detail.labels.map { it.confirmed } shouldContainExactly listOf(true, false)
-    }
-
-    "photos-lightbox: the surface a member waits on can show a percentage" {
-        // `fetch_percent` was absent from `PhotoDetail` for one draft, which
-        // put a number on the 120-cell grid and none on the one surface a
-        // member actually watches a download on.
-        val fetching = lightbox("fetching-with-percent")
-        val detail = fetching.detail.shouldNotBeNull()
-        detail.held shouldBe PhotoCell.Held.HELD_FETCHING
-        detail.fetch_percent shouldBe 43
-        // The bytes are still moving, so the thumbnail is what draws. Taking
-        // HELD_FETCHING as permission to reach for the original is a blank
-        // frame for as long as the transfer takes.
-        detail.original_path.shouldBeNull()
-        detail.thumbnail_path.shouldNotBeNull()
-    }
-
-    "photos-lightbox: a loading lightbox still knows which photograph it is" {
-        val loading = lightbox("loading-keyed-by-asset")
-        loading.detail.shouldBeNull()
-        // `asset_id` sits outside the oneof, so the chrome and the filmstrip
-        // have something to key by while the read is in flight.
-        loading.asset_id shouldBe "ast-0330"
-        loading.neighbour_asset_ids.size shouldBe 3
-    }
-
     fun collections(case: String): PhotosCollectionsState =
         PhotosCollectionsState.ADAPTER.decode(screens.bytes("photos-collections/$case"))
 
@@ -313,86 +254,6 @@ class ScreenFixtureSpec : StringSpec({
         hits.cells.size shouldBe 2
     }
 
-    fun duplicates(case: String): DuplicatesState =
-        DuplicatesState.ADAPTER.decode(screens.bytes("photos-duplicates/$case"))
-
-    "photos-duplicates: an unwalked library is not a clean one" {
-        // Same empty list, one boolean apart, and only one of them may say
-        // "No duplicates". Asserted against each other because two separate
-        // assertions pass just as happily against a shell that collapsed them.
-        val incomplete = duplicates("scan-incomplete")
-        val clean = duplicates("scanned-and-clean")
-        incomplete.data_.shouldNotBeNull().clusters.shouldContainExactly()
-        clean.data_.shouldNotBeNull().clusters.shouldContainExactly()
-        incomplete.data_.scan_complete.shouldBeFalse()
-        clean.data_.scan_complete.shouldBeTrue()
-        (incomplete.data_ == clean.data_).shouldBeFalse()
-    }
-
-    "photos-duplicates: the shelf is ordered by what resolving gives back" {
-        val data = duplicates("clusters-by-reclaimable").data_.shouldNotBeNull()
-        data.clusters.map { it.reclaimable_bytes } shouldBe
-            data.clusters.map { it.reclaimable_bytes }.sortedDescending()
-        // The page is whole, so the total is the sum and not a floor.
-        data.next_cursor.shouldBeNull()
-        data.total_reclaimable_bytes shouldBe data.clusters.sumOf { it.reclaimable_bytes }
-    }
-
-    "photos-duplicates: a partial page reports a floor and never a total" {
-        // The pair the whole-page case needs. Same shelf, one page short: the
-        // total accounts for the three clusters read and nothing behind them,
-        // and `total_capped` is the only thing that says the sum is not the
-        // answer. A screen printing both the same way promises space it has
-        // not accounted for.
-        val partial = duplicates("clusters-partial-page").data_.shouldNotBeNull()
-        val whole = duplicates("clusters-by-reclaimable").data_.shouldNotBeNull()
-        partial.next_cursor.shouldNotBeNull()
-        partial.total_capped.shouldBeTrue()
-        partial.total_reclaimable_bytes shouldBe partial.clusters.sumOf { it.reclaimable_bytes }
-        whole.next_cursor.shouldBeNull()
-        whole.total_capped.shouldBeFalse()
-        // A cluster's own members are read within a page limit too.
-        partial.clusters.single { it.member_count_capped }.cluster_id shouldBe "dup-0004"
-        whole.clusters.none { it.member_count_capped }.shouldBeTrue()
-    }
-
-    fun duplicateReview(case: String): DuplicateReviewState =
-        DuplicateReviewState.ADAPTER.decode(screens.bytes("photos-duplicate-review/$case"))
-
-    "photos-duplicate-review: a suggestion the member has not accepted deletes nothing" {
-        // THE ONE THAT MATTERS MOST IN THIS SET. Resolving trashes every
-        // member but the one `keep_asset_id` names, so a recommendation
-        // written into that field is the product choosing which of a member's
-        // photographs to delete.
-        val state = duplicateReview("suggestion-not-accepted")
-        val data = state.data_.shouldNotBeNull()
-        data.suggested_keep_asset_id shouldBe "ast-0401"
-        data.suggestion_reason.isNotBlank().shouldBeTrue()
-        state.keep_asset_id shouldBe ""
-    }
-
-    "photos-duplicate-review: the member may keep the one the suggestion did not" {
-        // Both fields set and disagreeing — only representable because they
-        // are two fields. A single one would have lost the fact that a
-        // recommendation was made and declined.
-        val state = duplicateReview("member-overrode-the-suggestion")
-        val data = state.data_.shouldNotBeNull()
-        state.keep_asset_id shouldBe "ast-0402"
-        data.suggested_keep_asset_id shouldBe "ast-0401"
-        // And the reason they kept it: a copy put somewhere by hand is not a
-        // stray, so deleting it is a different act.
-        data.members.single { it.asset_id == state.keep_asset_id }.member_placed.shouldBeTrue()
-    }
-
-    "photos-duplicate-review: byte-identical copies get no recommendation at all" {
-        // The rule is "largest by bytes"; when it has no answer the honest
-        // state is silence, not an arbitrary pick dressed as advice.
-        val data = duplicateReview("no-suggestion-at-all").data_.shouldNotBeNull()
-        data.suggested_keep_asset_id shouldBe ""
-        data.suggestion_reason shouldBe ""
-        data.members.map { it.byte_size }.distinct().size shouldBe 1
-    }
-
     "photos: each of the six new screens sets exactly one content state" {
         // The three-state law as a sweep. An empty data case standing in for a
         // failure is the fourth state every one of these is tempted to grow,
@@ -400,10 +261,6 @@ class ScreenFixtureSpec : StringSpec({
         fun sweep(directory: String, count: (ByteArray) -> Int) =
             screens.resolve(directory).binFiles().forEach { count(it.readBytes()) shouldBe 1 }
 
-        sweep("photos-lightbox") { bytes ->
-            PhotoLightboxState.ADAPTER.decode(bytes)
-                .let { contentCount(it.loading, it.failure, it.detail) }
-        }
         sweep("photos-collections") { bytes ->
             PhotosCollectionsState.ADAPTER.decode(bytes)
                 .let { contentCount(it.loading, it.failure, it.data_) }
@@ -413,14 +270,6 @@ class ScreenFixtureSpec : StringSpec({
         sweep("photos-search") { bytes ->
             PhotosSearchState.ADAPTER.decode(bytes)
                 .let { contentCount(it.resting, it.loading, it.failure, it.hits) }
-        }
-        sweep("photos-duplicates") { bytes ->
-            DuplicatesState.ADAPTER.decode(bytes)
-                .let { contentCount(it.loading, it.failure, it.data_) }
-        }
-        sweep("photos-duplicate-review") { bytes ->
-            DuplicateReviewState.ADAPTER.decode(bytes)
-                .let { contentCount(it.loading, it.failure, it.data_) }
         }
     }
 

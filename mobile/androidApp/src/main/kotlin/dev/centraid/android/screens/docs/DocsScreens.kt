@@ -99,9 +99,9 @@ import dev.centraid.android.kit.SheetRow
 import dev.centraid.android.kit.StatusLine
 import dev.centraid.android.kit.screenContentOf
 import dev.centraid.android.screens.LightboxTransport
-import dev.centraid.android.screens.PlayerSurface
+import dev.centraid.android.screens.photos.PlayerSurface
 import dev.centraid.android.screens.decodeUpright
-import dev.centraid.android.screens.rememberLightboxPlayer
+import dev.centraid.android.screens.photos.rememberLightboxPlayer
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 import dev.centraid.shared.apps.docs.DocsWrites

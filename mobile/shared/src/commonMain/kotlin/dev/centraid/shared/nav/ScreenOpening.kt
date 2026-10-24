@@ -231,13 +231,8 @@ public object ScreenOpenings {
         Destination.LockerExport -> screen(ScreenIds.LOCKER_EXPORT, LockerExportEvent(opened = LockerExportEvent.Opened()).encode())
         Destination.LockerImport -> screen(ScreenIds.LOCKER_IMPORT, LockerImportEvent(opened = LockerImportEvent.Opened()).encode())
         Destination.LockerAccess -> screen(ScreenIds.LOCKER_ACCESS, LockerAccessEvent(opened = LockerAccessEvent.Opened()).encode())
-        // THE PHOTOGRAPHS: a shelf is its `PhotoShelf`, a lightbox its photograph and swipe.
+        // THE PHOTOGRAPHS: a shelf is its `PhotoShelf`.
         is Destination.PhotoShelfRoute -> screen(ScreenIds.PHOTOS_SHELF, destination.shelf.encode())
-        is Destination.PhotoLightbox -> ScreenOpening(
-            ScreenIds.PHOTOS_LIGHTBOX,
-            assetId = destination.assetId,
-            neighbours = destination.neighbours,
-        )
         // A SCREEN RUST OWNS: the event is the `Route` Rust built, which the shell pushes as it stands.
         is Destination.RustScreen -> screen(ScreenIds.RUST_SCREEN, destination.route.encode())
         else -> null

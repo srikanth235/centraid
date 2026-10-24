@@ -526,9 +526,9 @@ public object PhotosGridMachine : ScreenMachine<PhotosGridState, PhotosGridEvent
                     leaveSelection(state).copy(write_failure = null),
                     picked.map { assetId ->
                         ScreenEffect.SubmitWrite(
-                            command = PhotoLightboxMachine.DELETE_COMMAND,
+                            command = PhotoWrites.TRASH,
                             inputJson = PhotoWrites.idOnly(assetId),
-                            invokeKey = PhotoLightboxMachine.DELETE_COMMAND + ":" + assetId,
+                            invokeKey = PhotoWrites.TRASH + ":" + assetId,
                         )
                     },
                 )
@@ -581,7 +581,7 @@ public object PhotosGridMachine : ScreenMachine<PhotosGridState, PhotosGridEvent
                         state.copy(
                             write_failure = Reads.refused(
                                 event.write_settled.sentence.ifEmpty {
-                                    PhotoLightboxMachine.WRITE_REFUSED_WITHOUT_A_REASON
+                                    "Centraid could not make that change."
                                 },
                             ),
                         ),

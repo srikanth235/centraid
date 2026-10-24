@@ -65,5 +65,4 @@ public object ScreenIds {
     public const val LOCKER_ACCESS: String = "locker.access"
 
     public const val PHOTOS_SHELF: String = "photos.shelf"
-    public const val PHOTOS_LIGHTBOX: String = "photos.lightbox"
 }

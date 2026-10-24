@@ -22,6 +22,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.content.ContextCompat
+import centraid.core.v1.CameraRead
 import centraid.core.v1.CameraRoll
 import centraid.core.v1.Effect
 import centraid.core.v1.EffectDone
@@ -35,9 +36,11 @@ import centraid.core.v1.KeychainOp
 import centraid.core.v1.KeychainValue
 import centraid.core.v1.OriginalFetched
 import centraid.core.v1.PhoneChanged
+import dev.centraid.android.screens.PhotoHandOff
 import dev.centraid.android.screens.agenda.readCalendarSnapshot
 import dev.centraid.android.screens.mediaPermissions
 import dev.centraid.android.screens.performExportOriginals
+import dev.centraid.android.screens.photos.PhotosEditRender
 import dev.centraid.core.CentraidCore
 import dev.centraid.core.Screens
 import dev.centraid.shared.platform.platformServices
@@ -230,6 +233,14 @@ private suspend fun perform(
                 }
             }
         }
+        // PHOTOS' ONE-PHOTOGRAPH PAGES (#1135): the camera the original's header
+        // names, and the editor's pixel work.
+        effect.read_camera != null -> {
+            val camera = withContext(Dispatchers.IO) { PhotoHandOff.cameraOf(effect.read_camera!!.path) }
+            EffectResult(camera_read = CameraRead(camera = camera.orEmpty()))
+        }
+        effect.render_edit != null ->
+            PhotosEditRender.perform(context.cacheDir, core, effect.render_edit!!)
         // Platform work this build does not perform yet: say so, by value.
         else -> failed("not performed by this shell")
     }

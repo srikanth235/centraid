@@ -1,4 +1,4 @@
-package dev.centraid.android.screens
+package dev.centraid.android.screens.photos
 
 import android.net.Uri
 import android.view.ViewGroup
@@ -70,18 +70,18 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
-import centraid.screen.v1.PhotoCell
-import centraid.screen.v1.PhotoDetail
-import centraid.screen.v1.PhotoLightboxEvent
-import centraid.screen.v1.PhotoLightboxState
+import centraid.core.v1.PhotoTile
+import centraid.core.v1.PhotosLightboxEvent
+import centraid.core.v1.PhotosLightboxFrame
+import centraid.core.v1.PhotosLightboxPhoto
+import centraid.core.v1.PhotosLightboxState
+import dev.centraid.android.screens.decodeUpright
 import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.StageKey
 import dev.centraid.android.theme.LocalCentraidTokens
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 import dev.centraid.design.CentraidGeometry
-import dev.centraid.design.copy.PhotosCopy
-import dev.centraid.shared.apps.photos.PhotoLightboxMachine
 import dev.centraid.shared.kit.MediaFormat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -111,14 +111,16 @@ import kotlin.math.max
  */
 @Composable
 internal fun LightboxStage(
-    state: PhotoLightboxState,
+    state: PhotosLightboxState,
     reduceMotion: Boolean,
     player: LightboxPlayer?,
     live: LightboxPlayer?,
-    onEvent: (PhotoLightboxEvent) -> Unit,
+    onEvent: (PhotosLightboxEvent) -> Unit,
     onClose: () -> Unit,
 ) {
-    val neighbours = state.neighbour_asset_ids
+    // THE STRIP'S WINDOW IS THE PAGER'S: Rust windows the shelf around the
+    // photograph, and the window is what a swipe can reach.
+    val neighbours = remember(state.film) { state.film.map { it.photo_id } }
     // THE GESTURE LOOP OUTLIVES A RECOMPOSITION, so what it reads off the
     // state it reads through these — never a copy taken when it started.
     val current by rememberUpdatedState(state)
@@ -128,13 +130,13 @@ internal fun LightboxStage(
     // on a swipe: the incoming frame is already under the member's finger when
     // `Moved` is sent, and snapping back to the old one for the frame before
     // the state catches up would be a flicker on every page.
-    var shown by remember { mutableStateOf(state.asset_id) }
-    LaunchedEffect(state.asset_id) { shown = state.asset_id }
+    var shown by remember { mutableStateOf(state.photo_id) }
+    LaunchedEffect(state.photo_id) { shown = state.photo_id }
     val at = neighbours.indexOf(shown)
     val previous = if (at > 0) neighbours[at - 1] else null
     val next = if (at >= 0 && at + 1 < neighbours.size) neighbours[at + 1] else null
-    val frames = remember(state.film) { state.film.associateBy { it.asset_id } }
-    val detail = state.detail?.takeIf { it.asset_id == shown }
+    val frames = remember(state.film) { state.film.associateBy { it.photo_id } }
+    val detail = state.photo?.takeIf { it.tile?.photo_id == shown }
 
     val scope = rememberCoroutineScope()
     var pageX by remember { mutableFloatStateOf(0f) }
@@ -143,7 +145,7 @@ internal fun LightboxStage(
     var panX by remember(shown) { mutableFloatStateOf(0f) }
     var panY by remember(shown) { mutableFloatStateOf(0f) }
     val settle: AnimationSpec<Float> = if (reduceMotion) snap() else STATE_CHANGE
-    val zoomable = detail?.kind != PhotoCell.Kind.KIND_VIDEO && !state.slideshow
+    val zoomable = detail?.tile?.kind != PhotoTile.Kind.KIND_VIDEO && !state.slideshow
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val width = constraints.maxWidth.toFloat()
@@ -225,7 +227,7 @@ internal fun LightboxStage(
                                     if (target != null) {
                                         shown = target
                                         pageX = 0f
-                                        send(PhotoLightboxEvent(moved = PhotoLightboxEvent.Moved(target)))
+                                        send(PhotosLightboxEvent(moved = PhotosLightboxEvent.Moved(photo_id = target)))
                                     }
                                 }
                             }
@@ -254,8 +256,8 @@ internal fun LightboxStage(
                         // gesture that returns them.
                         onTap = {
                             send(
-                                PhotoLightboxEvent(
-                                    chrome = PhotoLightboxEvent.ChromeToggled(!current.chrome_visible),
+                                PhotosLightboxEvent(
+                                    chrome = PhotosLightboxEvent.ChromeToggled(visible = !current.chrome_visible),
                                 ),
                             )
                         },
@@ -297,7 +299,7 @@ internal fun LightboxStage(
                         contentAlignment = Alignment.Center,
                     ) {
                         // OFF THE STAGE until the swipe lands: the page it lands on speaks.
-                        frames[id]?.thumbnail_path?.let { StageImage(path = it, description = null) }
+                        frames[id]?.tile?.thumbnail_path?.let { StageImage(path = it, description = null) }
                     }
                 }
             }
@@ -320,7 +322,7 @@ internal fun LightboxStage(
                     animationSpec = if (state.slideshow && !reduceMotion) FADE else snap(),
                     label = "slide",
                 ) { id ->
-                    val here = state.detail?.takeIf { it.asset_id == id }
+                    val here = state.photo?.takeIf { it.tile?.photo_id == id }
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         StageContent(here, frames[id], player, live)
                     }
@@ -341,23 +343,23 @@ internal fun LightboxStage(
  */
 @Composable
 private fun StageContent(
-    detail: PhotoDetail?,
-    frame: PhotoCell?,
+    detail: PhotosLightboxPhoto?,
+    frame: PhotosLightboxFrame?,
     player: LightboxPlayer?,
     live: LightboxPlayer?,
 ) {
-    val thumbnail = detail?.thumbnail_path?.takeIf { it.isNotEmpty() }
-        ?: frame?.thumbnail_path?.takeIf { it.isNotEmpty() }
-    // THE PHOTOGRAPH IS THE CONTENT: it is spoken by its title, else the noun.
-    val spoken = detail?.title?.takeIf { it.isNotBlank() } ?: PhotosCopy.PHOTOGRAPH
+    val thumbnail = detail?.tile?.thumbnail_path?.takeIf { it.isNotEmpty() }
+        ?: frame?.tile?.thumbnail_path?.takeIf { it.isNotEmpty() }
+    // THE PHOTOGRAPH IS THE CONTENT: it is spoken by its caption, else the noun.
+    val spoken = detail?.spoken.orEmpty()
     // The thumbnail under a drawn original is the same photograph: said once.
     val original = detail?.original_path?.takeIf { it.isNotEmpty() && detail.original_embeddable }
-    val drawsOriginal = detail != null && detail.kind != PhotoCell.Kind.KIND_VIDEO && original != null
+    val video = detail?.tile?.kind == PhotoTile.Kind.KIND_VIDEO
+    val drawsOriginal = detail != null && !video && original != null
     if (thumbnail != null) StageImage(path = thumbnail, description = if (drawsOriginal) null else spoken)
     if (detail == null) return
     when {
-        detail.kind == PhotoCell.Kind.KIND_VIDEO && original != null && player != null ->
-            PlayerSurface(player)
+        video && original != null && player != null -> PlayerSurface(player)
         drawsOriginal -> StageImage(path = original, description = spoken, full = true)
     }
     if (live != null && live.showing) PlayerSurface(live)
@@ -486,7 +488,7 @@ internal fun PlayerSurface(player: LightboxPlayer) {
  * it is the clock the strip is drawing.
  */
 @Composable
-internal fun LightboxTransport(player: LightboxPlayer) {
+internal fun LightboxTransport(player: LightboxPlayer, words: centraid.core.v1.PhotosLightboxWords) {
     val ink = centraidColor("onStage")
     val soft = centraidColor("onStageSoft")
     val fraction = if (player.duration > 0L) player.position.toFloat() / player.duration else 0f
@@ -497,7 +499,7 @@ internal fun LightboxTransport(player: LightboxPlayer) {
     ) {
         StageKey(
             iconKey = if (player.playing) "Pause" else "Play",
-            label = if (player.playing) PhotosCopy.PHOTOS_PLAYER_PAUSE else PhotosCopy.PHOTOS_PLAYER_PLAY,
+            label = if (player.playing) words.pause else words.play,
             onClick = { player.toggle() },
         )
         // The strip's width is the pointer scope's `size`; nothing reads the
@@ -507,8 +509,8 @@ internal fun LightboxTransport(player: LightboxPlayer) {
                 .weight(1f)
                 .height(28.dp)
                 .semantics {
-                    contentDescription = PhotosCopy.PHOTOS_PLAYER_POSITION
-                    stateDescription = PhotosCopy.PHOTOS_PLAYER_POSITION_VALUE
+                    contentDescription = words.player_position
+                    stateDescription = words.player_position_value
                         .replace("{position}", MediaFormat.clock(player.position / 1_000L))
                         .replace("{duration}", MediaFormat.clock(player.duration / 1_000L))
                 }
@@ -550,17 +552,14 @@ internal fun LightboxTransport(player: LightboxPlayer) {
  * member is and lets them jump.
  */
 @Composable
-internal fun LightboxFilmstrip(state: PhotoLightboxState, onEvent: (PhotoLightboxEvent) -> Unit) {
-    val window = PhotoLightboxMachine.filmWindow(state)
+internal fun LightboxFilmstrip(state: PhotosLightboxState, onEvent: (PhotosLightboxEvent) -> Unit) {
+    val window = state.film
     if (window.size <= 1) return
-    val frames = remember(state.film) { state.film.associateBy { it.asset_id } }
     val list = rememberLazyListState()
-    val current = window.indexOf(state.asset_id)
-    val total = state.neighbour_asset_ids.size
-    val offset = state.neighbour_asset_ids.indexOf(window.first())
+    val current = window.indexOfFirst { it.current }
     // PAGING MOVES THE STRIP TOO, or the two controls disagree about where
     // the member is.
-    LaunchedEffect(current, window.first()) {
+    LaunchedEffect(current, window.first().photo_id) {
         if (current >= 0) list.animateScrollToItem(maxOf(0, current - 3))
     }
     LazyRow(
@@ -568,12 +567,13 @@ internal fun LightboxFilmstrip(state: PhotoLightboxState, onEvent: (PhotoLightbo
         modifier = Modifier
             .fillMaxWidth()
             .height(FILMSTRIP_HEIGHT.dp)
-            .semantics { contentDescription = PhotosCopy.PHOTOS_FILMSTRIP },
+            .semantics { contentDescription = state.words?.filmstrip.orEmpty() },
         horizontalArrangement = Arrangement.spacedBy(2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        itemsIndexed(window, key = { _, id -> id }) { index, id ->
-            val here = id == state.asset_id
+        itemsIndexed(window, key = { _, frame -> frame.photo_id }) { _, frame ->
+            val id = frame.photo_id
+            val here = frame.current
             val side = if (here) FILMSTRIP_HEIGHT else FILMSTRIP_NEIGHBOUR
             Box(
                 Modifier
@@ -585,15 +585,13 @@ internal fun LightboxFilmstrip(state: PhotoLightboxState, onEvent: (PhotoLightbo
                     .semantics {
                         role = Role.Button
                         selected = here
-                        contentDescription = PhotosCopy.PHOTOS_FILMSTRIP_SHOW
-                            .replace("{number}", "${offset + index + 1}")
-                            .replace("{total}", "$total")
+                        contentDescription = frame.accessibility_label
                     }
                     .clickable {
-                        if (!here) onEvent(PhotoLightboxEvent(moved = PhotoLightboxEvent.Moved(id)))
+                        if (!here) onEvent(PhotosLightboxEvent(moved = PhotosLightboxEvent.Moved(photo_id = id)))
                     },
             ) {
-                frames[id]?.thumbnail_path?.let { path ->
+                frame.tile?.thumbnail_path?.let { path ->
                     val bitmap by produceState<ImageBitmap?>(initialValue = null, path) {
                         value = withContext(Dispatchers.IO) {
                             decodeUpright(path, maxDimension = FILM_DECODE)?.asImageBitmap()
@@ -615,24 +613,24 @@ internal fun LightboxFilmstrip(state: PhotoLightboxState, onEvent: (PhotoLightbo
 
 /** A Live Photo's own control: the word, and the movie it plays. */
 @Composable
-internal fun LiveChip(live: LightboxPlayer) {
+internal fun LiveChip(live: LightboxPlayer, words: centraid.core.v1.PhotosLightboxWords) {
     val ink = centraidColor("onStage")
     Row(
         modifier = Modifier
             .height(28.dp)
-            .clip(tokenShape("pill"))
+            .clip(photosTokenShape("pill"))
             .background(centraidColor("stageSunken"))
             .clickable { live.playFromStart() }
             .padding(horizontal = 10.dp)
             .semantics(mergeDescendants = true) {
                 role = Role.Button
-                contentDescription = PhotosCopy.PHOTOS_PLAY_LIVE
+                contentDescription = words.play_live
             },
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         CentraidIcon(iconKey = "Play", tint = ink, size = 14.dp)
-        Text(text = PhotosCopy.PHOTOS_LIVE_BADGE, color = ink, style = centraidType("small"), textAlign = TextAlign.Center)
+        Text(text = words.live_badge, color = ink, style = centraidType("small"), textAlign = TextAlign.Center)
     }
 }
 
@@ -670,5 +668,5 @@ private val FADE = tween<Float>(
 
 /** A corner off the token scale (`md`, `pill`, ...). A literal radius is a finding. */
 @Composable
-internal fun tokenShape(name: String) =
+internal fun photosTokenShape(name: String) =
     androidx.compose.foundation.shape.RoundedCornerShape((LocalCentraidTokens.current.radii[name] ?: 0).dp)
