@@ -394,6 +394,9 @@ message OriginalFetched {
   OriginalFetchOutcome outcome = 1;
   // The file in the app's own store when there is one; empty otherwise.
   string path = 2;
+  // The hash that was asked for, echoed, so a screen with several fetches in
+  // flight knows which one this answers.
+  string content_hash = 3;
 }
 
 // HAND THE ORIGINALS OF A PICK TO THE PLATFORM: its share sheet (`MODE_SEND`) or

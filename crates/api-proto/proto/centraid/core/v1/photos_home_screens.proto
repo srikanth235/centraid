@@ -1,17 +1,577 @@
 // PHOTOS' HOME (#1135, lane D, worker 1): the library grid, Collections, Search
 // and the More sheet in one screen, `photos.home`. Arms in `screens.proto`: 800.
 //
-// A SKELETON the home worker fills. Add fields; do not renumber the arms. The
-// cell, the selection bar and the album sheet are `photos_screens.proto`'s.
+// Rust (`crates/screens/src/photos/home`) makes every decision: which photographs
+// the library holds, how they pack into justified rows at the width the shell
+// reports, which cards a grain draws, what Collections and Search say, the
+// camera-roll banner, the More sheet. SwiftUI and Compose draw these messages and
+// send these events. The cell, the selection bar and the album sheet are
+// `photos_screens.proto`'s.
 
 syntax = "proto3";
 
 package centraid.core.v1;
 
-// IMPORTS: add `import "centraid/core/v1/photos_screens.proto";` (the cell, the
-// selection bar, the album sheet), `kit_screens.proto` and `route.proto` when a
-// field first needs one.
+import "centraid/core/v1/command.proto";
+import "centraid/core/v1/kit_screens.proto";
+import "centraid/core/v1/photos_screens.proto";
+import "centraid/core/v1/route.proto";
 
-message PhotosHomeState {}
+// ---------------------------------------------------------------------------
+// The screen
+// ---------------------------------------------------------------------------
 
-message PhotosHomeEvent {}
+message PhotosHomeState {
+  PhotosDestination destination = 1;
+  // THE ROOT'S CHROME (R-CHROME-1…5): the band is places then More, with no
+  // Search tab (the bar under the title opens it); the chips are the library's
+  // filter; the words are Rust's.
+  repeated PhotosHomeBandTab band = 2;
+  repeated PhotosHomeFilterChip chips = 3;
+  PhotosHomeChrome chrome = 4;
+  Sheet sheet = 5;
+  // The camera-roll banner over the library; unset when there is nothing to say
+  // or do.
+  optional PhotosHomeImportBanner import_banner = 6;
+  // A write the vault refused, or what a copy came to: its own slot, never the
+  // read's `Failure`, so a refused favourite does not replace the grid.
+  optional StatusLine status = 7;
+
+  // The section on screen follows `destination`; the others are unset.
+  optional PhotosLibrary library = 10;
+  optional PhotosCollections collections = 11;
+  optional PhotosSearchView search = 12;
+
+  // The selection bar and the album sheet (the library's).
+  PhotosSelection selection = 13;
+  PhotosAlbumChoice album_choice = 14;
+
+  // The More sheet's rows, finished (set while `sheet` is MORE).
+  optional PhotosMoreSheet more = 15;
+  // The tile sizes choice (set while `sheet` is TILE_SIZE).
+  optional PhotosTileSizeSheet tile_size = 16;
+  // "Include which location?" over a pick (set while `sheet` is COPY_PLACE).
+  optional PhotosCopyPlaceSheet copy_place = 17;
+  optional PhotosBackupDetailSheet backup_detail = 18;
+
+  enum Sheet {
+    SHEET_UNSPECIFIED = 0;
+    SHEET_NONE = 1;
+    SHEET_MORE = 2;
+    SHEET_TILE_SIZE = 3;
+    // Naming a new album, from Collections' Plus.
+    SHEET_NEW_ALBUM = 4;
+    SHEET_COPY_PLACE = 5;
+    SHEET_BACKUP_DETAIL = 6;
+  }
+}
+
+message PhotosHomeBandTab {
+  // `library`, `collections`, `more`: the tab's identifier on both shells.
+  string key = 1;
+  string label = 2;
+  string icon_key = 3;
+  bool current = 4;
+}
+
+message PhotosHomeFilterChip {
+  PhotosFilter filter = 1;
+  string label = 2;
+  bool selected = 3;
+}
+
+enum PhotosFilter {
+  PHOTOS_FILTER_UNSPECIFIED = 0;
+  PHOTOS_FILTER_ALL = 1;
+  PHOTOS_FILTER_FAVORITES = 2;
+}
+
+// v0's three zooms, widest first. A VIEW, NOT A FILTER: Years and Months
+// summarise the same photographs All draws.
+enum PhotosGrain {
+  PHOTOS_GRAIN_UNSPECIFIED = 0;
+  PHOTOS_GRAIN_YEARS = 1;
+  PHOTOS_GRAIN_MONTHS = 2;
+  PHOTOS_GRAIN_ALL = 3;
+}
+
+message PhotosHomeChrome {
+  string title = 1;
+  string search_placeholder = 2;
+  // The library's one trailing action, and the way out of the selection.
+  string select_label = 3;
+  string cancel_label = 4;
+  // Collections' one trailing action.
+  string new_album_label = 5;
+  // Collections' bulk fold, one link.
+  string show_all_label = 6;
+  string collapse_all_label = 7;
+  // The search field's close verb.
+  string close_search_label = 8;
+}
+
+// ---------------------------------------------------------------------------
+// The library
+// ---------------------------------------------------------------------------
+
+message PhotosLibrary {
+  oneof content {
+    // The grid is the loading state: the skeleton's rows, packed at the rung.
+    PhotosLibraryLoading loading = 1;
+    Failure failure = 2;
+    PhotosLibraryData data = 3;
+  }
+  PhotosGrain grain = 4;
+  PhotosFilter filter = 5;
+  // 0-3, XS to L.
+  uint32 rung = 6;
+  // WHERE THE MEMBER IS, capture-local `YYYY-MM-DD`, so a grain switch lands on
+  // the same stretch of time; empty is the top.
+  string place_day = 7;
+}
+
+message PhotosLibraryLoading {
+  repeated PhotosPackedRow skeleton = 1;
+}
+
+message PhotosLibraryData {
+  // Every photograph read so far, in draw order (newest first, the undated tail
+  // last), a Live Photo's movie folded into its still. A tile in a row names its
+  // place in this list.
+  repeated PhotoTile tiles = 1;
+  // ALL: month headers, day headers and justified rows of tiles, packed at the
+  // width the shell reported. Empty until it has.
+  repeated PhotosTimelineRow rows = 2;
+  // YEARS and MONTHS: cards.
+  repeated PhotosGrainItem grain_items = 3;
+  // The lightbox route with every loaded id as its neighbours and `photo_id`
+  // EMPTY: the shell sets the tapped tile's id on a copy and pushes it.
+  Route open = 4;
+  // Both walks have ended: every photograph in the library is in `tiles`.
+  bool complete = 5;
+  // The photograph count phrase ("1,204 photos"), from the shelf's exact total.
+  string count_label = 6;
+  // Set while the library is empty: the sentence for an empty library or for an
+  // empty Favorites.
+  optional EmptyState empty = 7;
+  // "Photos with no capture date appear only in All." Drawn under Years/Months.
+  string undated_note = 8;
+  // Another page is being asked for.
+  bool loading_more = 9;
+  string loading_more_label = 10;
+  // The scrub rail's labels.
+  string scrub_label = 11;
+}
+
+enum PhotosRowKind {
+  PHOTOS_ROW_KIND_UNSPECIFIED = 0;
+  PHOTOS_ROW_KIND_MONTH = 1;
+  PHOTOS_ROW_KIND_DAY = 2;
+  PHOTOS_ROW_KIND_TILES = 3;
+}
+
+message PhotosTimelineRow {
+  PhotosRowKind kind = 1;
+  // What a scroll position reports and a grain switch lands on: `m:2026-08`,
+  // `d:2026-08-14`, `r:2026-08-14:0`.
+  string id = 2;
+  string day = 3;
+  // A month's name or a day's; empty on a row of tiles.
+  string title = 4;
+  // Under a day header: its photographs (for "Select"), and whether every one
+  // is picked.
+  repeated string ids = 5;
+  bool all_selected = 6;
+  string select_label = 7;
+  // The packed tiles, each as wide as the row leaves it.
+  repeated PhotosPackedTile packed = 8;
+}
+
+message PhotosPackedRow {
+  repeated PhotosPackedTile packed = 1;
+}
+
+message PhotosPackedTile {
+  // Index into `PhotosLibraryData.tiles` (skeleton: unused).
+  uint32 tile = 1;
+  double width = 2;
+  double height = 3;
+}
+
+// One item of a grain's list: a year header, a year card, or a pair of months.
+message PhotosGrainItem {
+  string key = 1;
+  // A year header's text; empty on a card or a pair.
+  string header = 2;
+  repeated PhotosPeriod periods = 3;
+}
+
+message PhotosPeriod {
+  string key = 1;
+  string title = 2;
+  // `3 photos · 1 video`.
+  string count_label = 3;
+  optional PhotoTile cover = 4;
+  string anchor_day = 5;
+  string accessibility_label = 6;
+}
+
+// ---------------------------------------------------------------------------
+// Collections
+// ---------------------------------------------------------------------------
+
+message PhotosCollections {
+  oneof content {
+    Loading loading = 1;
+    Failure failure = 2;
+    PhotosCollectionsData data = 3;
+  }
+  // The sections the member folded.
+  repeated string folded = 4;
+  // "New album": the field's value and whether Create can run.
+  string new_album_name = 5;
+  bool new_album_can_submit = 6;
+  // The album a delete confirm is asking about.
+  optional Confirm delete_confirm = 7;
+  string delete_album_id = 8;
+}
+
+message PhotosCollectionsData {
+  repeated PhotosCollectionsSection sections = 1;
+}
+
+message PhotosCollectionsSection {
+  // `pinned`, `albums`, `utilities`, `deleted`.
+  string key = 1;
+  string title = 2;
+  bool folded = 3;
+  string toggle_label = 4;
+  repeated PhotosCollectionCard cards = 5;
+  // An empty section's card (Albums with none).
+  optional EmptyState empty = 6;
+}
+
+message PhotosCollectionCard {
+  enum Kind {
+    KIND_UNSPECIFIED = 0;
+    // The library, favorites, videos, archive, trash: a shelf.
+    KIND_SHELF = 1;
+    KIND_ALBUM = 2;
+    KIND_PLACES = 3;
+    KIND_DUPLICATES = 4;
+    // An album in the trash: its verb is Restore.
+    KIND_DELETED_ALBUM = 5;
+  }
+  Kind kind = 1;
+  string id = 2;
+  string title = 3;
+  // `12 photos`, `At least 500 photos`, `Empty`; a door: its count or the
+  // decisions waiting.
+  string count_label = 4;
+  string accessibility_label = 5;
+  optional PhotoTile cover = 6;
+  // WHERE A TAP GOES. Unset on a deleted album, whose verb is Restore.
+  optional Route route = 7;
+  // An album can be deleted; a standing shelf cannot.
+  bool member_owned = 8;
+  string icon_key = 9;
+  // A door with decisions owed draws urgent.
+  bool urgent = 10;
+  string delete_label = 11;
+  string restore_label = 12;
+}
+
+// ---------------------------------------------------------------------------
+// Search
+// ---------------------------------------------------------------------------
+
+message PhotosSearchView {
+  string query = 1;
+  oneof content {
+    PhotosSearchResting resting = 2;
+    Loading loading = 3;
+    Failure failure = 4;
+    PhotosSearchHits hits = 5;
+  }
+  // "Including results for “x”": set only for a current corrected answer.
+  string corrected = 6;
+  optional SearchAsk ask = 7;
+}
+
+message PhotosSearchResting {
+  string hint = 1;
+  string places_title = 2;
+  string labels_title = 3;
+  repeated PhotosSearchWord places = 4;
+  repeated PhotosSearchWord labels = 5;
+}
+
+// A place or a label the resting page offers: a tap searches for it, or opens
+// the place's shelf.
+message PhotosSearchWord {
+  string id = 1;
+  string label = 2;
+  optional Route route = 3;
+}
+
+message PhotosSearchHits {
+  // Doors above the grid: the places and albums the words name.
+  repeated PhotosSearchDoor doors = 1;
+  repeated PhotoTile tiles = 2;
+  Route open = 3;
+  string count_label = 4;
+  optional EmptyState empty = 5;
+  // Labels the words name: a tap searches for that label.
+  repeated PhotosSearchWord labels = 6;
+  string labels_title = 7;
+  string truncated_label = 8;
+  // `Matched Lisbon, beach`: why these were found, in the vault's own words.
+  string matched_label = 9;
+}
+
+message PhotosSearchDoor {
+  string label = 1;
+  string kind_label = 2;
+  string count_label = 3;
+  string accessibility_label = 4;
+  string icon_key = 5;
+  Route route = 6;
+}
+
+// ---------------------------------------------------------------------------
+// Sheets
+// ---------------------------------------------------------------------------
+
+message PhotosMoreSheet {
+  string title = 1;
+  string foot = 2;
+  repeated PhotosMoreRow rows = 3;
+  optional PhotosFreeUpRow free_up = 4;
+  string close_label = 5;
+}
+
+// WHAT THIS DEVICE'S CAMERA-ROLL IMPORT IS DOING, IN FULL: the banner says the
+// phase in one sentence; this says the rest.
+message PhotosBackupDetailSheet {
+  string title = 1;
+  string status = 2;
+  string import_label = 3;
+  bool import_enabled = 4;
+  repeated PhotosBackupDetailRow rows = 5;
+}
+
+message PhotosBackupDetailRow {
+  string key = 1;
+  string value = 2;
+}
+
+message PhotosMoreRow {
+  // `tile_size`, `places`, `duplicates`.
+  string key = 1;
+  string label = 2;
+  string meta = 3;
+  string icon_key = 4;
+  // Pushes a page; unset on `tile_size`, which opens its choice.
+  optional Route route = 5;
+}
+
+message PhotosFreeUpRow {
+  string title = 1;
+  string meta = 2;
+  string reason = 3;
+  string action_label = 4;
+  bool enabled = 5;
+  bool freeing = 6;
+  string notice = 7;
+  // What a photo deleted for good costs the backup device.
+  string retention = 8;
+}
+
+message PhotosTileSizeSheet {
+  string title = 1;
+  repeated PhotosTileSizeOption options = 2;
+}
+
+message PhotosTileSizeOption {
+  uint32 rung = 1;
+  string label = 2;
+  bool selected = 3;
+}
+
+message PhotosCopyPlaceSheet {
+  string title = 1;
+  string no_location_label = 2;
+  string exact_location_label = 3;
+  string cancel_label = 4;
+}
+
+message PhotosHomeImportBanner {
+  // What the import is doing; empty when nothing moves.
+  string sentence = 1;
+  // Why: the grant's own sentence beside its remedy, or the wait's reason.
+  string reason = 2;
+  Remedy remedy = 3;
+  string allow_label = 4;
+  string settings_label = 5;
+  string manage_label = 6;
+  // "Import now": only over an empty library, with a grant, and no pass running.
+  bool import_now = 7;
+  string import_now_label = 8;
+
+  enum Remedy {
+    REMEDY_UNSPECIFIED = 0;
+    REMEDY_ASK = 1;
+    REMEDY_SETTINGS = 2;
+    REMEDY_MANAGE_SELECTION = 3;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Events
+// ---------------------------------------------------------------------------
+
+message PhotosHomeEvent {
+  oneof kind {
+    // The band, by key (`library`, `collections`, `more`).
+    string band = 1;
+    PhotosDestination destination = 2;
+    PhotosSelectionEvent selection = 3;
+    PhotosAlbumChoiceEvent album_choice = 4;
+    // THE LAYOUT'S INPUT: the width the grid is drawn at and the height of what
+    // the member can see, in points. Rust packs the rows.
+    PhotosViewport viewport = 5;
+    // The pull, or "Try again".
+    PhotosRefreshed refreshed = 6;
+    // The end of what is loaded came into view.
+    PhotosNextPage next_page = 7;
+    PhotosFilter filter = 8;
+    PhotosGrainChanged grain = 9;
+    // A Years/Months card opened: one grain in, at the period's first day.
+    string period_opened = 10;
+    uint32 rung = 11;
+    // A pinch, as its scale: a step in All and a grain past its ends.
+    PhotosPinched pinched = 12;
+    // The download arrow of a tile.
+    string original_requested = 13;
+    // ---- Search ----
+    PhotosSearchOpened search_opened = 14;
+    string search_term = 15;
+    PhotosSearchClosed search_closed = 16;
+    // ---- Sheets ----
+    PhotosHomeEvent.SheetEvent sheet = 17;
+    // ---- Collections ----
+    string section_toggled = 18;
+    PhotosFoldAll fold_all = 19;
+    string new_album_name = 20;
+    PhotosNewAlbumSubmitted new_album_submitted = 21;
+    string album_delete_asked = 22;
+    PhotosDeleteConfirmed album_delete_confirmed = 23;
+    PhotosDeleteDismissed album_delete_dismissed = 24;
+    string album_restored = 25;
+    // ---- The roll and the device ----
+    PhotosPermissionChanged permission = 26;
+    PhotosBackupChanged backup = 27;
+    PhotosLinkChanged link = 28;
+    PhotosBannerRemedy remedy = 29;
+    // ---- Free up ----
+    PhotosFreeUpTapped free_up_tapped = 30;
+    // ---- Send a copy ----
+    PhotosCopyAsked copy_asked = 31;
+    PhotosCopyPlaceChosen copy_place_chosen = 32;
+    PhotosImportNow import_now = 33;
+  }
+
+  message SheetEvent {
+    PhotosHomeState.Sheet sheet = 1;
+  }
+}
+
+message PhotosViewport {
+  double width = 1;
+  double height = 2;
+}
+
+message PhotosRefreshed {}
+
+message PhotosNextPage {}
+
+message PhotosGrainChanged {
+  PhotosGrain grain = 1;
+  // The day the member was looking at, so the zoom lands there.
+  string at_day = 2;
+}
+
+message PhotosPinched {
+  float scale = 1;
+  string at_day = 2;
+}
+
+message PhotosSearchOpened {}
+
+message PhotosSearchClosed {}
+
+message PhotosFoldAll {}
+
+message PhotosNewAlbumSubmitted {}
+
+message PhotosDeleteConfirmed {}
+
+message PhotosDeleteDismissed {}
+
+// The OS grant for the camera roll, which the shell reads and reports. It moves
+// the banner and never the library: the grid reads the VAULT, the roll reads the
+// CAMERA ROLL, and a denied permission must not blank a library the member owns.
+enum PhotosMediaPermission {
+  PHOTOS_MEDIA_PERMISSION_UNSPECIFIED = 0;
+  PHOTOS_MEDIA_PERMISSION_NOT_ASKED = 1;
+  PHOTOS_MEDIA_PERMISSION_GRANTED = 2;
+  // iOS's limited selection: a real library the member chose.
+  PHOTOS_MEDIA_PERMISSION_LIMITED = 3;
+  PHOTOS_MEDIA_PERMISSION_DENIED = 4;
+  // A device policy refuses, and no button in this app can change it.
+  PHOTOS_MEDIA_PERMISSION_RESTRICTED = 5;
+}
+
+message PhotosPermissionChanged {
+  PhotosMediaPermission permission = 1;
+}
+
+enum PhotosBackupPhase {
+  PHOTOS_BACKUP_PHASE_UNSPECIFIED = 0;
+  PHOTOS_BACKUP_PHASE_IDLE = 1;
+  PHOTOS_BACKUP_PHASE_ENUMERATING = 2;
+  PHOTOS_BACKUP_PHASE_TRANSFERRING = 3;
+  PHOTOS_BACKUP_PHASE_WAITING_FOR_POWER = 4;
+  PHOTOS_BACKUP_PHASE_WAITING_FOR_UNMETERED = 5;
+  PHOTOS_BACKUP_PHASE_PARKED_LOW_DISK = 6;
+  PHOTOS_BACKUP_PHASE_DONE = 7;
+}
+
+message PhotosBackupChanged {
+  PhotosBackupPhase phase = 1;
+  uint32 assets_transferred_this_session = 2;
+  uint32 assets_remaining = 3;
+  // The wait's reason, in the roll's words.
+  string paused_reason = 4;
+}
+
+// The member's transfer rule and whether the link is metered: the two facts a
+// tile's download arrow depends on.
+message PhotosLinkChanged {
+  TransferRule rule = 1;
+  bool metered = 2;
+}
+
+message PhotosBannerRemedy {
+  PhotosHomeImportBanner.Remedy remedy = 1;
+}
+
+message PhotosFreeUpTapped {}
+
+message PhotosCopyAsked {}
+
+message PhotosCopyPlaceChosen {
+  bool keep_location = 1;
+}
+
+message PhotosImportNow {}
