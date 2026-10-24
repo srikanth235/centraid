@@ -25,7 +25,7 @@
 //! id as its neighbours and an empty photo id, which the shell fills in for the
 //! tapped tile.
 
-mod chrome;
+pub mod chrome;
 mod collections;
 pub mod layout;
 mod library;
@@ -486,15 +486,9 @@ impl Home {
             }
             Some(O::OriginalsExported(exported)) => self.exported(locale, exported),
             Some(O::FreeUpFacts(facts)) => self.free_up = FreeUpRow::from_facts(locale, facts),
-            Some(O::Keychain(value)) => {
-                if value.found {
-                    if let Some(rung) = String::from_utf8_lossy(&value.value)
-                        .trim()
-                        .parse::<u32>()
-                        .ok()
-                    {
-                        self.rung = layout::clamp_rung(rung);
-                    }
+            Some(O::Keychain(value)) if value.found => {
+                if let Ok(rung) = String::from_utf8_lossy(&value.value).trim().parse::<u32>() {
+                    self.rung = layout::clamp_rung(rung);
                 }
             }
             _ => {}
@@ -553,7 +547,7 @@ impl Home {
                 })
             }
             library::Phase::Ready => {
-                wire::photos_library::Content::Data(self.library_data(locale, target))
+                wire::photos_library::Content::Data(Box::new(self.library_data(locale, target)))
             }
         };
         wire::PhotosLibrary {
@@ -858,7 +852,7 @@ impl Screen for Home {
         }
         let _ = civil::epoch_day_of;
         wire::ViewState {
-            kind: Some(wire::view_state::Kind::PhotosHome(state)),
+            kind: Some(wire::view_state::Kind::PhotosHome(Box::new(state))),
             ..wire::ViewState::default()
         }
     }

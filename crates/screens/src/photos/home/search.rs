@@ -115,7 +115,7 @@ impl Search {
                     view.corrected = ask::corrected(locale, &found.corrected);
                 }
                 view.ask = Some(ask::offer(locale, term, "photos"));
-                wire::photos_search_view::Content::Hits(hits(locale, link, term, found))
+                wire::photos_search_view::Content::Hits(Box::new(hits(locale, link, term, found)))
             }
             _ => wire::photos_search_view::Content::Resting(self.resting_view(locale)),
         });
