@@ -10,22 +10,20 @@ import CentraidShared
 /// word, the direction, the amount's tone and each action's enabled flag are the
 /// machine's.
 struct MoneyTransactionView: View {
-    let data: Data
-    let send: (Data) -> Void
+    let state: Centraid_Core_V1_MoneyTransactionState
+    let send: (Centraid_Core_V1_MoneyTransactionEvent) -> Void
+    let open: (Centraid_Core_V1_Route) -> Void
     let onBack: () -> Void
 
     @Environment(\.colorScheme) private var scheme
 
-    private var state: Centraid_Core_V1_MoneyTransactionState {
-        (try? Centraid_Core_V1_MoneyTransactionState(serializedBytes: data)) ?? .init()
-    }
-
-    private func event(_ build: (inout Centraid_Core_V1_MoneyTransactionEvent) -> Void) -> Data {
-        moneyEvent(Centraid_Core_V1_MoneyTransactionEvent.self, build)
+    private func event(_ build: (inout Centraid_Core_V1_MoneyTransactionEvent) -> Void) -> Centraid_Core_V1_MoneyTransactionEvent {
+        var event = Centraid_Core_V1_MoneyTransactionEvent()
+        build(&event)
+        return event
     }
 
     var body: some View {
-        let state = state
         let content = state.readContent
         let sheetBinding = moneySheetBinding(state.sheet == .category || state.sheet == .name) {
             send(event { $0.sheetClosed = .init() })
@@ -47,7 +45,7 @@ struct MoneyTransactionView: View {
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 MoneyStatusFoot(
-                    status: MoneyWords.line(state.hasStatus ? state.status : nil, write: state.write),
+                    status: MoneyWords.line(state.hasStatus ? state.status : nil),
                     identifier: "money-transaction-status"
                 )
             }
@@ -55,7 +53,7 @@ struct MoneyTransactionView: View {
         .sheet(isPresented: sheetBinding) { sheetContent(state, transaction: content.loaded) }
         .sheet(isPresented: confirmBinding) {
             ConfirmSheet(
-                state.confirm,
+                state.confirm.legacy,
                 onConfirm: { send(event { $0.confirmAccepted = .init() }) },
                 onDismiss: { send(event { $0.confirmDismissed = .init() }) }
             )
@@ -76,7 +74,7 @@ struct MoneyTransactionView: View {
                 .foregroundStyle(Theme.color("text", scheme))
                 .accessibilityAddTraits(.isHeader)
             HStack(spacing: 6) {
-                ForEach(Array(transaction.chips.enumerated()), id: \.offset) { _, chip in StatusChipView(chip) }
+                ForEach(Array(transaction.chips.enumerated()), id: \.offset) { _, chip in StatusChipView(chip.legacy) }
             }
         }
         .padding(.horizontal, CentraidGeometry.pageMargin)
@@ -208,20 +206,18 @@ struct MoneyTransactionView: View {
 /// every edit re-reads for the preview; the average, the carry and the preview's
 /// words are the machine's. Save is enabled by the state, not by this file.
 struct MoneyTargetView: View {
-    let data: Data
-    let send: (Data) -> Void
+    let state: Centraid_Core_V1_MoneyTargetState
+    let send: (Centraid_Core_V1_MoneyTargetEvent) -> Void
+    let open: (Centraid_Core_V1_Route) -> Void
     let onBack: () -> Void
 
-    private var state: Centraid_Core_V1_MoneyTargetState {
-        (try? Centraid_Core_V1_MoneyTargetState(serializedBytes: data)) ?? .init()
-    }
-
-    private func event(_ build: (inout Centraid_Core_V1_MoneyTargetEvent) -> Void) -> Data {
-        moneyEvent(Centraid_Core_V1_MoneyTargetEvent.self, build)
+    private func event(_ build: (inout Centraid_Core_V1_MoneyTargetEvent) -> Void) -> Centraid_Core_V1_MoneyTargetEvent {
+        var event = Centraid_Core_V1_MoneyTargetEvent()
+        build(&event)
+        return event
     }
 
     var body: some View {
-        let state = state
         let content = state.readContent
         PushedPage(
             title: content.loaded?.title ?? state.chrome.title,
@@ -241,11 +237,13 @@ struct MoneyTargetView: View {
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 MoneyStatusFoot(
-                    status: MoneyWords.line(nil, write: state.write),
+                    status: MoneyWords.line(state.hasStatus ? state.status : nil),
                     identifier: "money-target-status"
                 )
             }
         }
+        // SAVED OR REMOVED: Rust says the page is done, the shell pops.
+        .onChange(of: state.finished) { _, finished in if finished { onBack() } }
     }
 
     @ViewBuilder
@@ -286,25 +284,21 @@ struct MoneyTargetView: View {
 
 /// `money.recurring` — what repeats, per merchant (#1099). A read: nothing here writes.
 struct MoneyRecurringView: View {
-    let data: Data
-    let send: (Data) -> Void
+    let state: Centraid_Core_V1_MoneyRecurringState
+    let send: (Centraid_Core_V1_MoneyRecurringEvent) -> Void
+    let open: (Centraid_Core_V1_Route) -> Void
     let onBack: () -> Void
 
-    private var state: Centraid_Core_V1_MoneyRecurringState {
-        (try? Centraid_Core_V1_MoneyRecurringState(serializedBytes: data)) ?? .init()
-    }
-
     var body: some View {
-        let state = state
         PushedPage(title: state.chrome.title, parentTitle: state.chrome.backLabel, onBack: onBack) {
             EmptyView()
         } content: {
             ReadStateView(
                 content: state.readContent,
-                onRetry: { send(moneyEvent(Centraid_Core_V1_MoneyRecurringEvent.self) { $0.refreshed = .init() }) }
+                onRetry: { send(Centraid_Core_V1_MoneyRecurringEvent.with { $0.refreshed = .init() }) }
             ) { recurring in
                 if recurring.hasEmpty {
-                    EmptyStateView(recurring.empty)
+                    EmptyStateView(recurring.empty.legacy)
                 } else {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 0) {
@@ -313,7 +307,7 @@ struct MoneyRecurringView: View {
                                     title: row.merchant,
                                     meta: MoneyWords.meta(row.meta, row.detail),
                                     trailing: MoneyWords.amount(row.amount),
-                                    chips: row.chips,
+                                    chips: row.chips.map(\.legacy),
                                     accessibility: MoneyWords.spoken(row.accessibilityLabel, row.amount),
                                     identifier: "money-recurring-\(row.key)"
                                 )

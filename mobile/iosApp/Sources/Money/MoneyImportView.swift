@@ -1,5 +1,4 @@
 import SwiftUI
-import UniformTypeIdentifiers
 
 import CentraidShared
 
@@ -7,41 +6,24 @@ import CentraidShared
 ///
 /// The file, the account a CSV goes into, then the plan the core made of it,
 /// each statement with its verdicts; nothing is written until the last button.
-/// **Choose is the machine's intent and the OS picker is this file's**: the tap
-/// is forwarded, then `.fileImporter` opens, and the chosen file is read through
-/// its own URL (never copied into app storage) and handed to the shell as
-/// `(name, bytes)`. The bridge holds the bytes only until the page is left —
-/// `onDeparted` is the registry's `departed`, which drops the file.
+/// **Choose is Rust's**: the tap is forwarded, Rust asks for a file as a generic
+/// `PickFile` effect (`ScreenStore` performs it) and holds the bytes only until
+/// the page is left, so nothing here reads, keeps or drops a file.
 struct MoneyImportView: View {
-    let data: Data
-    let send: (Data) -> Void
-    let onPicked: (String, Data) -> Void
+    let state: Centraid_Core_V1_MoneyImportState
+    let send: (Centraid_Core_V1_MoneyImportEvent) -> Void
+    let open: (Centraid_Core_V1_Route) -> Void
     let onBack: () -> Void
-    let onDeparted: () -> Void
 
     @Environment(\.colorScheme) private var scheme
-    @State private var importing = false
 
-    /// What banks name their files. None of them agree on one type, so the
-    /// extensions are asked for by name as well as the CSV and plain-text types.
-    private static let statementTypes: [UTType] = {
-        var types: [UTType] = [UTType.commaSeparatedText, UTType.plainText]
-        for ext in ["ofx", "qfx"] {
-            if let type = UTType(filenameExtension: ext) { types.append(type) }
-        }
-        return types
-    }()
-
-    private var state: Centraid_Core_V1_MoneyImportState {
-        (try? Centraid_Core_V1_MoneyImportState(serializedBytes: data)) ?? .init()
-    }
-
-    private func event(_ build: (inout Centraid_Core_V1_MoneyImportEvent) -> Void) -> Data {
-        moneyEvent(Centraid_Core_V1_MoneyImportEvent.self, build)
+    private func event(_ build: (inout Centraid_Core_V1_MoneyImportEvent) -> Void) -> Centraid_Core_V1_MoneyImportEvent {
+        var event = Centraid_Core_V1_MoneyImportEvent()
+        build(&event)
+        return event
     }
 
     var body: some View {
-        let state = state
         let content = state.readContent
         let sheetBinding = moneySheetBinding(state.sheet == .account) { send(event { $0.sheetClosed = .init() }) }
         PushedPage(title: state.chrome.title, parentTitle: state.chrome.backLabel, onBack: onBack) {
@@ -52,7 +34,7 @@ struct MoneyImportView: View {
                 onRetry: { send(event { $0.refreshed = .init() }) }
             ) { plan in
                 if plan.hasEmpty {
-                    EmptyStateView(plan.empty, onAction: { send(event { $0.addAccount = .init() }) })
+                    EmptyStateView(plan.empty.legacy, onAction: { open(plan.accountsRoute) })
                 } else {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 0) { page(plan, state: state) }
@@ -74,20 +56,8 @@ struct MoneyImportView: View {
                 identifierPrefix: "money-import-account-option"
             ) { key in send(event { $0.accountPicked = .with { $0.accountID = key } }) }
         }
-        .fileImporter(
-            isPresented: $importing,
-            allowedContentTypes: Self.statementTypes,
-            allowsMultipleSelection: false
-        ) { result in
-            guard case let .success(urls) = result, let url = urls.first else { return }
-            let scoped = url.startAccessingSecurityScopedResource()
-            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-            // READ IN PLACE: the file's bytes, from the importer's own URL.
-            if let bytes = try? Data(contentsOf: url) {
-                onPicked(url.lastPathComponent, bytes)
-            }
-        }
-        .onDisappear(perform: onDeparted)
+        // IMPORTED: Rust says the page is done, the shell pops.
+        .onChange(of: state.finished) { _, finished in if finished { onBack() } }
     }
 
     @ViewBuilder
@@ -101,7 +71,6 @@ struct MoneyImportView: View {
             if !plan.chooseLabel.isEmpty {
                 MoneyQuietButton(label: plan.chooseLabel, identifier: "money-import-choose") {
                     send(event { $0.choose = .init() })
-                    importing = true
                 }
             }
             if plan.needsAccount {
@@ -185,7 +154,7 @@ struct MoneyImportView: View {
                 title: line.title.isEmpty ? line.lineLabel : line.title,
                 meta: MoneyWords.meta(line.title.isEmpty ? "" : line.lineLabel, line.meta, line.reason),
                 trailing: line.hasAmount_p ? MoneyWords.amount(line.amount) : "",
-                chips: line.hasChip ? [line.chip] : [],
+                chips: line.hasChip ? [line.chip.legacy] : [],
                 accessibility: MoneyWords.spoken(line.accessibilityLabel, line.hasAmount_p ? line.amount : nil),
                 identifier: "money-import-\(statement.key)-\(line.key)"
             )

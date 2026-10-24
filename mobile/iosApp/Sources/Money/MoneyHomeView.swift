@@ -29,7 +29,6 @@ struct MoneyHomeView: View {
     private func addStatement() { send(event { $0.add = .init() }) }
 
     var body: some View {
-        let state = state
         let content = state.readContent
         let chrome = state.chrome
         let sheetBinding = moneySheetBinding(sheetIsOpen(state)) { send(event { $0.sheetClosed = .init() }) }
@@ -53,7 +52,7 @@ struct MoneyHomeView: View {
             search: content.isDenied || chrome.searchPlaceholder.isEmpty ? nil : SearchSlot(
                 field: Centraid_Screen_V1_SearchField(),
                 placeholder: chrome.searchPlaceholder,
-                onOpen: { send(event { $0.searchOpened = .init() }) },
+                onOpen: { open(chrome.searchRoute) },
                 onTerm: { _ in },
                 onClose: {}
             ),
@@ -66,12 +65,16 @@ struct MoneyHomeView: View {
                 tabs: state.band.map { tab in
                     BandView(
                         label: tab.label,
-                        event: event { $0.band = .with { $0.key = tab.key } },
+                        event: Data(tab.key.utf8),
                         iconKey: tab.iconKey,
-                        selected: tab.current
+                        selected: tab.current,
+                        key: tab.key
                     )
                 },
-                onSelect: send,
+                onSelect: { picked in
+                    let key = String(decoding: picked, as: UTF8.self)
+                    send(event { $0.band = .with { $0.key = key } })
+                },
                 onHome: onHome
             )
         } content: {
@@ -137,7 +140,7 @@ struct MoneyHomeView: View {
     @ViewBuilder
     private func spending(_ spending: Centraid_Core_V1_MoneySpendingData) -> some View {
         if spending.hasEmpty {
-            EmptyStateView(spending.empty, onAction: addStatement)
+            EmptyStateView(spending.empty.legacy, onAction: addStatement)
         } else {
             ForEach(Array(spending.heroes.enumerated()), id: \.offset) { _, hero in
                 MoneyHeroView(hero: hero)
@@ -149,9 +152,9 @@ struct MoneyHomeView: View {
             ForEach(Array(spending.tables.enumerated()), id: \.offset) { _, table in
                 MoneySection(title: table.heading)
                 MoneyCategoryHeader(
-                    planned: MoneyCopy.shared.PLANNED,
-                    spent: MoneyCopy.shared.SPENT.capitalized,
-                    left: MoneyCopy.shared.LEFT
+                    planned: table.plannedLabel,
+                    spent: table.spentLabel,
+                    left: table.leftLabel
                 )
                 ForEach(Array(table.rows.enumerated()), id: \.offset) { _, line in
                     categoryLine(line, currency: table.currency)
@@ -165,7 +168,7 @@ struct MoneyHomeView: View {
                     title: spending.recurringLabel,
                     meta: spending.recurringMeta,
                     identifier: "money-recurring"
-                ) { send(event { $0.recurring = .init() }) }
+                ) { open(spending.recurringRoute) }
             }
             ForEach(Array(spending.definitions.enumerated()), id: \.offset) { _, fact in
                 FieldRow(key: fact.label, value: fact.detail)
@@ -177,23 +180,17 @@ struct MoneyHomeView: View {
     private func categoryLine(_ line: Centraid_Core_V1_MoneyCategoryLine, currency: String) -> some View {
         // Planned, spent and left across the page; a line with no plan has only what was spent.
         let figure = line.hasPlan_p ? line.left : line.spent
-        let categoryID = line.categoryID
         return MoneyCategoryRow(
             line: line,
             accessibility: MoneyWords.spoken(line.accessibilityLabel, figure),
-            identifier: "money-category-\(categoryID)"
-        ) {
-            send(event { $0.categoryLine = .with {
-                $0.categoryID = categoryID
-                $0.currency = currency
-            } })
-        }
+            identifier: "money-category-\(line.route.moneyTarget.categoryID)"
+        ) { open(line.route) }
     }
 
     @ViewBuilder
     private func activity(_ activity: Centraid_Core_V1_MoneyActivityData) -> some View {
         if activity.hasEmpty {
-            EmptyStateView(activity.empty, onAction: addStatement)
+            EmptyStateView(activity.empty.legacy, onAction: addStatement)
         } else {
             if !activity.needsLabel.isEmpty {
                 // THE FILTER THAT LISTS THESE ROWS is the state's own `needs_key`.
@@ -205,10 +202,7 @@ struct MoneyHomeView: View {
             ForEach(Array(activity.sections.enumerated()), id: \.offset) { _, section in
                 MoneySection(title: section.heading)
                 ForEach(Array(section.rows.enumerated()), id: \.offset) { _, row in
-                    let txnID = row.txnID
-                    MoneyRowView(row: row) {
-                        send(event { $0.transaction = .with { $0.txnID = txnID } })
-                    }
+                    MoneyRowView(row: row) { open(row.route) }
                 }
             }
             MoneyNote(text: activity.window)
@@ -219,7 +213,7 @@ struct MoneyHomeView: View {
     @ViewBuilder
     private func cashflow(_ flow: Centraid_Core_V1_MoneyCashflowData) -> some View {
         if flow.hasEmpty {
-            EmptyStateView(flow.empty, onAction: addStatement)
+            EmptyStateView(flow.empty.legacy, onAction: addStatement)
         } else {
             ForEach(Array(flow.series.enumerated()), id: \.offset) { _, series in
                 MoneySection(title: series.heading)
@@ -228,9 +222,9 @@ struct MoneyHomeView: View {
                     summary: series.months.map { MoneyWords.spoken($0.accessibilityLabel, $0.net) }.joined(separator: ". ")
                 )
                 MoneyLegend(
-                    incoming: MoneyCopy.shared.IN,
-                    outgoing: MoneyCopy.shared.OUT,
-                    partial: MoneyCopy.shared.PARTIAL_MONTH
+                    incoming: series.inLabel,
+                    outgoing: series.outLabel,
+                    partial: series.partialLabel
                 )
                 // NEWEST FIRST under the chart, which runs oldest to newest.
                 ForEach(Array(series.months.reversed().enumerated()), id: \.offset) { _, month in
@@ -260,13 +254,16 @@ struct MoneyHomeView: View {
         case .more:
             OptionSheet(title: chrome.moreTitle) {
                 ForEach(Array(chrome.moreRows.enumerated()), id: \.offset) { _, row in
-                    let key = row.key
                     MoneySheetRow(
                         iconKey: row.iconKey,
                         label: row.label,
                         detail: row.meta,
-                        identifier: "money-more-\(key)"
-                    ) { send(event { $0.more = .with { $0.key = key } }) }
+                        identifier: "money-more-\(row.route.screen.replacingOccurrences(of: "money.", with: ""))"
+                    ) {
+                        // The sheet closes behind the page the row opens.
+                        send(event { $0.moreOpened = .init() })
+                        open(row.route)
+                    }
                 }
             }
         case .month:

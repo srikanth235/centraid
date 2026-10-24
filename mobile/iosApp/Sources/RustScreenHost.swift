@@ -177,6 +177,69 @@ private struct RustScreenView: View {
                 onWords: { shell.openRekey() },
                 onClose: pop
             )
+        case .moneyHome(let state)?:
+            MoneyHomeView(
+                state: state,
+                send: { store.send(instance, .moneyHome($0)) },
+                open: open,
+                onHome: { shell.path.removeAll() }
+            )
+        case .moneyTransaction(let state)?:
+            MoneyTransactionView(
+                state: state,
+                send: { store.send(instance, .moneyTransaction($0)) },
+                open: open,
+                onBack: pop
+            )
+        case .moneyTarget(let state)?:
+            MoneyTargetView(
+                state: state,
+                send: { store.send(instance, .moneyTarget($0)) },
+                open: open,
+                onBack: pop
+            )
+        case .moneyRecurring(let state)?:
+            MoneyRecurringView(
+                state: state,
+                send: { store.send(instance, .moneyRecurring($0)) },
+                open: open,
+                onBack: pop
+            )
+        case .moneyAccounts(let state)?:
+            MoneyAccountsView(
+                state: state,
+                send: { store.send(instance, .moneyAccounts($0)) },
+                open: open,
+                onBack: pop
+            )
+        case .moneyRules(let state)?:
+            MoneyRulesView(
+                state: state,
+                send: { store.send(instance, .moneyRules($0)) },
+                open: open,
+                onBack: pop
+            )
+        case .moneyCategories(let state)?:
+            MoneyCategoriesView(
+                state: state,
+                send: { store.send(instance, .moneyCategories($0)) },
+                open: open,
+                onBack: pop
+            )
+        case .moneyImport(let state)?:
+            MoneyImportView(
+                state: state,
+                send: { store.send(instance, .moneyImport($0)) },
+                open: open,
+                onBack: pop
+            )
+        case .moneySearch(let state)?:
+            MoneySearchView(
+                state: state,
+                send: { store.send(instance, .moneySearch($0)) },
+                open: open,
+                onBack: pop
+            )
         case .trash(let state)?:
             CoreTrashView(
                 state: state,
