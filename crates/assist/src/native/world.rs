@@ -5,7 +5,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use centraid_apps_kit::row::Row as VaultRow;
+use centraid_apps_kit::row::{Cell, Row as VaultRow};
 
 use crate::native::dates::Stamp;
 use crate::native::door::{Door, int, text};
@@ -22,6 +22,12 @@ pub const EVENT_DAYS_AHEAD: i64 = 120;
 /// every write, so the read is bounded by months and never walks a ledger's years. A question
 /// about an older month finds nothing here and says so.
 pub const TRANSACTION_MONTHS: u32 = 3;
+/// The days of Health the world holds, today and the ones before it (#1135): the chat answers
+/// about how the member slept and moved lately, and a world is re-read after every write, so the
+/// read is bounded by days and never walks the years the store backfilled. A figure's `value` is
+/// read to the nearest whole unit (a weight to the kilogram); Health's own Trends keep the
+/// decimals.
+pub const HEALTH_DAYS: i64 = 90;
 /// Transactions read per chunk when the display names are fetched by id.
 const DECORATION_CHUNK: usize = 200;
 
@@ -222,6 +228,26 @@ pub struct World {
     pub areas: Vec<(String, String)>,
 }
 
+/// Today in the person's zone, else the door's clock read in UTC.
+fn today_of(door: &dyn Door, at: Option<&Standing>) -> jiff::civil::Date {
+    match at {
+        Some(standing) => standing.today,
+        None => jiff::Timestamp::from_millisecond(door.now_ms())
+            .unwrap_or_default()
+            .to_zoned(jiff::tz::TimeZone::UTC)
+            .date(),
+    }
+}
+
+/// A numeric cell to the nearest whole number (0 when absent).
+fn rounded(row: &VaultRow, column: &str) -> i64 {
+    match row.get(column) {
+        Some(Cell::Integer(value)) => *value,
+        Some(Cell::Real(value)) => value.round() as i64,
+        _ => int(row, column).unwrap_or_default(),
+    }
+}
+
 fn stamp(value: Option<String>) -> Option<Stamp> {
     value.as_deref().and_then(Stamp::parse)
 }
@@ -328,6 +354,7 @@ impl World {
         world.load_documents(door, &flags)?;
         world.load_locker(door, &flags)?;
         world.load_transactions(door, at)?;
+        world.load_health(door, at)?;
         world.load_links(door)?;
         // an edge is kept when both of its ends are rows the model talks about
         let rows = &world.rows;
@@ -779,13 +806,7 @@ impl World {
     /// is negative, as the vault stores it. Nothing is written or derived beyond that; the rows
     /// are read as stored. A transaction's name is its own title (Money's display name).
     fn load_transactions(&mut self, door: &dyn Door, at: Option<&Standing>) -> Result<(), String> {
-        let today = match at {
-            Some(standing) => standing.today,
-            None => jiff::Timestamp::from_millisecond(door.now_ms())
-                .unwrap_or_default()
-                .to_zoned(jiff::tz::TimeZone::UTC)
-                .date(),
-        };
+        let today = today_of(door, at);
         let first = today
             .first_of_month()
             .checked_sub(jiff::Span::new().months(i64::from(TRANSACTION_MONTHS) - 1))
@@ -868,6 +889,109 @@ impl World {
             });
             row.extra.remove("purge_at");
             self.insert(row);
+        }
+        Ok(())
+    }
+
+    /// Health's daily figures and workouts of the last [`HEALTH_DAYS`] days (#1135). A figure has no
+    /// entity of its own: it is the vault's `measurement` row of the member, named by its metric
+    /// and identified by `<day>:<metric>`. A workout is an activity of a workout kind beside its
+    /// `workout` row, named by the entity's title and dated by its start.
+    fn load_health(&mut self, door: &dyn Door, at: Option<&Standing>) -> Result<(), String> {
+        let floor = today_of(door, at)
+            .checked_sub(jiff::Span::new().days(HEALTH_DAYS))
+            .map_err(|error| format!("the health window is out of range: {error}"))?
+            .to_string();
+        let figures = door.table_where(
+            "measurement",
+            "day, metric, value",
+            "day",
+            "metric",
+            "person_id = ? AND day >= ?",
+            &[self.me.clone(), floor.clone()],
+        )?;
+        let spec = Kind::DailyFigure.spec();
+        for figure in &figures {
+            let (Some(day), Some(metric)) = (text(figure, "day"), text(figure, "metric")) else {
+                continue;
+            };
+            let mut fields = BTreeMap::new();
+            if let Some(value) = spec
+                .field("metric")
+                .and_then(|field| field.model_value(&metric))
+            {
+                fields.insert("metric", Val::Enum(value));
+            }
+            fields.insert("value", Val::Num(rounded(figure, "value")));
+            self.insert(Row {
+                kind: Kind::DailyFigure,
+                id: format!("{day}:{metric}"),
+                name: metric,
+                date: stamp(Some(day)),
+                fields,
+                trashed: false,
+                created: String::new(),
+                updated: String::new(),
+                extra: BTreeMap::new(),
+            });
+        }
+
+        let started = door.table_where(
+            "activity",
+            "id, starts",
+            "starts",
+            "id",
+            "type_kind = ? AND starts >= ?",
+            &["workout_kind".to_owned(), floor],
+        )?;
+        let ids: Vec<String> = started.iter().filter_map(|row| text(row, "id")).collect();
+        for chunk in ids.chunks(DECORATION_CHUNK) {
+            let marks = vec!["?"; chunk.len()].join(", ");
+            let measured = door.table_where(
+                "workout",
+                "id, moving_s, distance_m, energy_kcal, heart_bpm, climb_m",
+                "id",
+                "id",
+                &format!("id IN ({marks})"),
+                chunk,
+            )?;
+            let named = door.table_where(
+                "entity",
+                "id, title, created_at, updated_at, deleted_at, purge_at",
+                "id",
+                "id",
+                &format!("id IN ({marks})"),
+                chunk,
+            )?;
+            let named: BTreeMap<String, VaultRow> = named
+                .into_iter()
+                .filter_map(|entity| Some((text(&entity, "id")?, entity)))
+                .collect();
+            for workout in &measured {
+                let id = text(workout, "id").unwrap_or_default();
+                let Some(entity) = named.get(&id).filter(|e| text(e, "deleted_at").is_none())
+                else {
+                    continue;
+                };
+                let mut fields = BTreeMap::new();
+                for (field, column) in [
+                    ("moving", "moving_s"),
+                    ("distance", "distance_m"),
+                    ("energy", "energy_kcal"),
+                    ("heart_rate", "heart_bpm"),
+                    ("climb", "climb_m"),
+                ] {
+                    if !matches!(workout.get(column), None | Some(Cell::Null)) {
+                        fields.insert(field, Val::Num(rounded(workout, column)));
+                    }
+                }
+                let mut row = Row::of(Kind::Workout, &id, entity, fields);
+                row.date = started
+                    .iter()
+                    .find(|activity| text(activity, "id").as_deref() == Some(id.as_str()))
+                    .and_then(|activity| stamp(text(activity, "starts")));
+                self.insert(row);
+            }
         }
         Ok(())
     }

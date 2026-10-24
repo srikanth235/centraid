@@ -383,12 +383,11 @@ fn take_census(connection: &Connection, census: &Census) -> Tally {
     // already gone; the delete also clears the commit that just landed.
     if let Ok(mut statement) =
         connection.prepare_cached(&format!("SELECT name FROM temp.{WITHOUT_ROWID_TOUCHED}"))
+        && let Ok(rows) = statement.query_map([], |row| row.get::<_, String>(0))
     {
-        if let Ok(rows) = statement.query_map([], |row| row.get::<_, String>(0)) {
-            for name in rows.flatten() {
-                tally.rows += 1;
-                tally.tables.insert(name);
-            }
+        for name in rows.flatten() {
+            tally.rows += 1;
+            tally.tables.insert(name);
         }
     }
     let _ = connection.execute_batch(&format!("DELETE FROM temp.{WITHOUT_ROWID_TOUCHED}"));
