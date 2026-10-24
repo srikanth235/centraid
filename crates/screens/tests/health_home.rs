@@ -417,3 +417,48 @@ fn workouts_are_this_week_then_by_month_newest_first_with_a_chip_per_kind_presen
         other => panic!("{other:?}"),
     }
 }
+
+#[test]
+fn a_workout_re_reads_home_and_an_unrelated_write_does_not() {
+    // Port of "a change to the days, the workouts, their kinds or the store's origin re-reads
+    // home, and nothing else does".
+    let mut d = driver();
+    let today = today(&d);
+    connect_store(&d);
+    let i = root(&d);
+    band(&mut d, i, "workouts");
+    d.pump(Duration::from_millis(300));
+    assert!(
+        home_data(d.view(i))
+            .workouts
+            .as_ref()
+            .unwrap()
+            .sections
+            .is_empty()
+    );
+
+    // Nothing Health reads changed: no screen update arrives.
+    arrange(
+        &d,
+        centraid_screens::catalog::act::notes::CreateNote {
+            title: "Unrelated".to_owned(),
+            body: "words".to_owned(),
+            ..Default::default()
+        },
+    );
+    assert_eq!(d.pump(Duration::from_millis(400)), 0);
+
+    // A followed workout does: it is drawn with no tap.
+    workout(
+        &d,
+        "w1",
+        "run",
+        &format!("{today}T09:00:00.000Z"),
+        &format!("{today}T09:31:00.000Z"),
+    );
+    assert!(d.pump(Duration::from_millis(500)) > 0);
+    assert_eq!(
+        home_data(d.view(i)).workouts.as_ref().unwrap().sections[0].rows[0].title,
+        "Morning run"
+    );
+}
