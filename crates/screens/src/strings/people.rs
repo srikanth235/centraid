@@ -140,6 +140,7 @@ catalog! {
     plain outcome_starred = ("{name} starred", "{name} starred");
     plain outcome_trashed = ("{name} moved to trash", "{name} moved to trash");
     plain outcome_unstarred = ("Star removed · {name}", "Star removed · {name}");
+    counted people_count = ("{n} person", "{n} people");
     plain preferred = ("preferred", "preferred");
     plain recent_a11y = ("{kind} with {name}, {when}", "{kind} with {name}, {when}");
     plain reminder_off = ("Reminder off", "Reminder off");

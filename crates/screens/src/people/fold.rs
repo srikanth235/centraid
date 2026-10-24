@@ -125,6 +125,108 @@ pub fn day_label(locale: Locale, today: &str, in_days: Option<i64>, stored: &str
     }
 }
 
+/// IS THIS A REAL `MM-DD`? The command only checks the pattern, so v0 took `13-45`
+/// (audit defect). 29 February is a real annual date.
+#[must_use]
+pub fn valid_month_day(text: &str) -> bool {
+    super::contacts::is_month_day(text)
+}
+
+/// A logged instant's day in words, from the civil day the core read it on in the
+/// request's zone (`occurred_local_day`, `created_local_day`) against the core's
+/// `today`. Empty when the core answered no day.
+#[must_use]
+pub fn when_logged(locale: Locale, local_day: &str, today: &str) -> String {
+    let Some(day) = local_day.get(..10) else {
+        return String::new();
+    };
+    if today.is_empty() {
+        civil::day_month(locale, day)
+    } else {
+        civil::relative_day(locale, day, today)
+    }
+}
+
+/// BOTH SPELLINGS OF A TOUCH KIND land on one noun (v0's table): the word this
+/// phone writes and the notation another writer stored. An unknown value is
+/// shown as itself — a value the vault holds is a fact.
+#[must_use]
+pub fn touch_kind(locale: Locale, kind: &str) -> String {
+    match kind.trim().to_lowercase().as_str() {
+        "message" => words::kind_message(locale),
+        "call" => words::kind_call(locale),
+        "visit" | "met up" | "met-up" | "met_up" => words::kind_met_up(locale),
+        "note" => words::kind_note(locale),
+        "" | "touch" | "interaction" => words::kind_touch(locale),
+        _ => upper_first(kind),
+    }
+}
+
+fn upper_first(text: &str) -> String {
+    let mut chars = text.chars();
+    match chars.next() {
+        Some(first) => format!("{}{}", first.to_uppercase(), chars.as_str()),
+        None => String::new(),
+    }
+}
+
+/// The touch kinds the Log sheet offers, as the vault stores them, with their
+/// labels.
+#[must_use]
+pub fn log_kinds(locale: Locale) -> Vec<(&'static str, String)> {
+    vec![
+        ("message", words::kind_message(locale)),
+        ("call", words::kind_call(locale)),
+        ("met up", words::kind_met_up(locale)),
+        ("note", words::kind_note(locale)),
+    ]
+}
+
+/// The channel kinds `save-contact-channel` offers, with their labels.
+#[must_use]
+pub fn channel_kinds(locale: Locale) -> Vec<(&'static str, String)> {
+    vec![
+        ("phone", words::channel_phone(locale)),
+        ("email", words::channel_email(locale)),
+        ("address", words::channel_address(locale)),
+        ("handle", words::channel_handle(locale)),
+    ]
+}
+
+/// "Phone" for `phone`; an unknown kind is shown as itself.
+#[must_use]
+pub fn channel_kind(locale: Locale, kind: &str) -> String {
+    channel_kinds(locale)
+        .into_iter()
+        .find(|(key, _)| *key == kind)
+        .map_or_else(|| upper_first(kind), |(_, label)| label)
+}
+
+/// What a tap on a channel does.
+#[must_use]
+pub fn channel_intent(kind: &str) -> wire::PeopleChannelIntent {
+    match kind {
+        "phone" => wire::PeopleChannelIntent::Call,
+        "email" => wire::PeopleChannelIntent::Mail,
+        "address" => wire::PeopleChannelIntent::Map,
+        _ => wire::PeopleChannelIntent::Copy,
+    }
+}
+
+/// The verb a channel's action is called: "Call", "Email", "Open map", "Copy".
+#[must_use]
+pub fn channel_action(locale: Locale, intent: wire::PeopleChannelIntent) -> String {
+    match intent {
+        wire::PeopleChannelIntent::Call => words::action_call(locale),
+        wire::PeopleChannelIntent::Mail => words::action_mail(locale),
+        wire::PeopleChannelIntent::Map => words::action_map(locale),
+        _ => words::action_copy(locale),
+    }
+}
+
+/// The cadences the editor offers; `Never` is the zero, and zero is never overdue.
+pub const CADENCES: [i64; 5] = [0, 7, 14, 30, 90];
+
 #[cfg(test)]
 mod tests {
     use super::*;
