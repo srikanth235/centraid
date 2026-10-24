@@ -37,7 +37,7 @@ use super::album_choice::{self, AlbumChoice};
 use super::cells::{self, Link};
 use super::keep_originals as keep;
 use super::routes;
-use super::selection::{Drain, Offer, Outcome, Selection, Verb, Wording};
+use super::selection::{Drain, Offer, Outcome, Selection, Verb, Wording, each};
 use crate::catalog::{act, load};
 use crate::field::Field;
 use crate::kit::act as kit_act;
@@ -348,9 +348,25 @@ impl Shelf {
 
     fn confirmed(&mut self, ctx: &Ctx) {
         let prompt = std::mem::replace(&mut self.prompt, Prompt::None);
-        if prompt == Prompt::DeleteAlbum && self.is_album() {
-            self.delete_album(ctx);
+        match prompt {
+            Prompt::EmptyTrash if self.is_trash() => self.empty_trash(ctx),
+            Prompt::DeleteAlbum if self.is_album() => self.delete_album(ctx),
+            _ => {}
         }
+    }
+
+    /// Purge exactly what the trash is showing, one `purge-photo` each: the ids
+    /// the shelf holds, never a fresh list of the whole trash.
+    fn empty_trash(&mut self, ctx: &Ctx) {
+        let ids: Vec<String> = self.cells.iter().map(|cell| cell.photo_id.clone()).collect();
+        let written = each(ctx, &ids, "purge-photo", |id| {
+            act::photos::PurgePhoto {
+                photo_id: id.to_owned(),
+            }
+            .into()
+        });
+        self.selection.refuse(written.refusal);
+        self.reload(ctx);
     }
 
     fn delete_album(&mut self, ctx: &Ctx) {
@@ -416,7 +432,23 @@ impl Shelf {
         self.reload(ctx);
     }
 
-    fn restore_album(&mut self, _ctx: &Ctx) {}
+    /// Bring a trashed album back, with its ordered photographs.
+    fn restore_album(&mut self, ctx: &Ctx) {
+        if !self.is_album() || !self.head_trashed() {
+            return;
+        }
+        let key = kit_act::key(&["restore-album", &self.id], kit_act::fresh());
+        let settled = kit_act::act(
+            ctx,
+            act::photos::RestoreAlbum {
+                album_id: self.id.clone(),
+            },
+            &key,
+        );
+        self.selection
+            .refuse((!settled.committed).then_some(settled.refusal));
+        self.reload(ctx);
+    }
 
     /// Hand the pick's originals to the platform: its share sheet or this
     /// device's photos. The shell finds the files and takes the place out.
