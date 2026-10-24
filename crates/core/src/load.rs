@@ -661,8 +661,8 @@ fn read(
             },
         )?,
         // The plan a statement would make: read once, dropped, nothing written.
-        ("money", "import-plan") => wire::app_query_response::Answer::MoneyImportPlan(
-            app_query::money::import_plan(
+        ("money", "import-plan") => {
+            wire::app_query_response::Answer::MoneyImportPlan(app_query::money::import_plan(
                 vault,
                 &wire::MoneyImportPlanRequest {
                     tz,
@@ -672,8 +672,8 @@ fn read(
                     date_order: en!(p, "date_order", "MONEY_DATE_ORDER_", wire::MoneyDateOrder),
                     sign: en!(p, "sign", "MONEY_SIGN_CHOICE_", wire::MoneySignChoice),
                 },
-            )?,
-        ),
+            )?)
+        }
         ("money", "home-tile") => {
             wire::app_query_response::Answer::MoneyHomeTile(app_query::money::home_tile(
                 vault,

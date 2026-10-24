@@ -54,7 +54,11 @@ fn a_reveal_lives_its_window_is_receipted_and_is_gone_at_the_end() {
     d.pump(Duration::from_millis(300));
     let data = item_data(&d, id);
     let history = data.sections.last().unwrap();
-    assert!(history.rows[0].label.contains("Password revealed"), "{:?}", history.rows);
+    assert!(
+        history.rows[0].label.contains("Password revealed"),
+        "{:?}",
+        history.rows
+    );
     verb(&mut d, id, "password", "conceal");
     assert!(row_of(&item_data(&d, id), "password").value.is_empty());
 }
@@ -65,7 +69,11 @@ fn a_reveal_ticks_down_and_conceals_itself() {
     verb(&mut d, id, "password", "reveal");
     d.pump(Duration::from_millis(1_200));
     let data = item_data(&d, id);
-    assert!(row_of(&data, "password").note.contains("29"), "{}", row_of(&data, "password").note);
+    assert!(
+        row_of(&data, "password").note.contains("29"),
+        "{}",
+        row_of(&data, "password").note
+    );
 }
 
 #[test]
@@ -133,7 +141,11 @@ fn trashing_offers_undo_which_restores() {
         state.content,
         Some(wire::locker_item_state::Content::Data(ref data)) if !data.trashed_note.is_empty()
     ));
-    item_event(&mut d, id, I::StatusActed(wire::locker_item_event::StatusActed {}));
+    item_event(
+        &mut d,
+        id,
+        I::StatusActed(wire::locker_item_event::StatusActed {}),
+    );
     assert!(item_data(&d, id).trashed_note.is_empty());
 }
 
@@ -150,7 +162,11 @@ fn purging_asks_first_and_then_the_item_is_gone() {
         );
     }
     assert!(item(&d, id).confirm.unwrap().destructive);
-    item_event(&mut d, id, I::Confirmed(wire::locker_item_event::Confirmed {}));
+    item_event(
+        &mut d,
+        id,
+        I::Confirmed(wire::locker_item_event::Confirmed {}),
+    );
     assert!(item_data(&d, id).gone.is_some());
 }
 
@@ -179,7 +195,11 @@ fn a_seed_is_never_revealed_and_a_code_ticks_with_its_step() {
     verb(&mut d, id, "otp_seed", "code");
     let data = item_data(&d, id);
     let seed = row_of(&data, "otp_seed");
-    assert!(seed.revealed && seed.value.len() == 7, "grouped: {}", seed.value);
+    assert!(
+        seed.revealed && seed.value.len() == 7,
+        "grouped: {}",
+        seed.value
+    );
     assert_eq!(seed.countdown.as_ref().unwrap().period, 30);
 }
 
@@ -212,7 +232,11 @@ fn a_field_is_added_one_at_a_time_and_a_sealed_one_is_never_shown_back() {
             key: "sealed".to_owned(),
         }),
     );
-    item_event(&mut d, id, I::FieldSaved(wire::locker_item_event::FieldSaved {}));
+    item_event(
+        &mut d,
+        id,
+        I::FieldSaved(wire::locker_item_event::FieldSaved {}),
+    );
     assert!(item(&d, id).field_sheet.is_none());
     let data = item_data(&d, id);
     let field = data
@@ -284,7 +308,11 @@ fn a_new_login_saves_whole_with_its_tags_filed_after() {
         .note
         .clone();
     assert!(strength.contains("bits"), "{strength}");
-    editor_event(&mut d, id, K::Save(wire::locker_editor_event::SaveTapped {}));
+    editor_event(
+        &mut d,
+        id,
+        K::Save(wire::locker_editor_event::SaveTapped {}),
+    );
     assert!(editor(&d, id).finished);
     // The item is in the vault, with its tags.
     let home = home_instance(&d);
@@ -299,7 +327,11 @@ fn a_new_login_saves_whole_with_its_tags_filed_after() {
         wire::app_query_response::Answer::LockerItems(items) => items,
         other => panic!("{other:?}"),
     };
-    let saved = items.items.iter().find(|r| r.title == "Netflix").expect("saved");
+    let saved = items
+        .items
+        .iter()
+        .find(|r| r.title == "Netflix")
+        .expect("saved");
     assert_eq!(saved.tags, ["home", "media"]);
 }
 
@@ -314,7 +346,11 @@ fn an_edit_leaves_a_stored_secret_alone_unless_it_is_retyped() {
     let password = data.inputs.iter().find(|r| r.key == "password").unwrap();
     assert!(password.value.is_empty() && password.note.contains("Stored"));
     typed(&mut d, id, "title", "Bank 2");
-    editor_event(&mut d, id, K::Save(wire::locker_editor_event::SaveTapped {}));
+    editor_event(
+        &mut d,
+        id,
+        K::Save(wire::locker_editor_event::SaveTapped {}),
+    );
     assert!(editor(&d, id).finished);
     unlock_core(&d);
     let revealed = session(
@@ -335,11 +371,21 @@ fn the_editor_says_why_it_will_not_take_a_seed() {
     d.answer_effect(passed(wire::Biometry::Face));
     let id = d.push(locker::TAB, routes::add("login", false));
     typed(&mut d, id, "title", "Mail");
-    typed(&mut d, id, "otp_seed", "otpauth://hotp/x?secret=JBSWY3DPEHPK3PXP");
+    typed(
+        &mut d,
+        id,
+        "otp_seed",
+        "otpauth://hotp/x?secret=JBSWY3DPEHPK3PXP",
+    );
     let data = editor_data(&d, id);
     assert!(!data.can_save);
     assert!(data.blocked.contains("counter-based"), "{}", data.blocked);
-    typed(&mut d, id, "otp_seed", "otpauth://totp/x?secret=JBSWY3DPEHPK3PXP");
+    typed(
+        &mut d,
+        id,
+        "otp_seed",
+        "otpauth://totp/x?secret=JBSWY3DPEHPK3PXP",
+    );
     assert!(editor_data(&d, id).can_save);
 }
 
@@ -349,17 +395,28 @@ fn leaving_with_changes_asks_first_and_a_relock_closes_the_editor() {
     d.start();
     d.answer_effect(passed(wire::Biometry::Face));
     let id = d.push(locker::TAB, routes::add("", false));
-    editor_event(&mut d, id, K::Cancel(wire::locker_editor_event::CancelTapped {}));
+    editor_event(
+        &mut d,
+        id,
+        K::Cancel(wire::locker_editor_event::CancelTapped {}),
+    );
     assert!(editor(&d, id).finished, "nothing typed, nothing to lose");
     let id = d.push(locker::TAB, routes::add("", false));
     typed(&mut d, id, "title", "Half");
-    editor_event(&mut d, id, K::Cancel(wire::locker_editor_event::CancelTapped {}));
+    editor_event(
+        &mut d,
+        id,
+        K::Cancel(wire::locker_editor_event::CancelTapped {}),
+    );
     assert!(editor(&d, id).confirm.unwrap().destructive && !editor(&d, id).finished);
     d.call(wire::screen_request::Kind::Lifecycle(wire::AppLifecycle {
         foreground: false,
     }));
     let state = editor(&d, id);
-    assert!(state.finished && state.content.is_none(), "what was typed is gone");
+    assert!(
+        state.finished && state.content.is_none(),
+        "what was typed is gone"
+    );
 }
 
 #[test]
@@ -386,7 +443,11 @@ fn the_compromised_flag_is_sent_only_when_it_changed() {
     );
     typed(&mut d, id, "password", "a-new-password-1");
     assert!(editor_data(&d, id).compromised_note.contains("clear"));
-    editor_event(&mut d, id, K::Save(wire::locker_editor_event::SaveTapped {}));
+    editor_event(
+        &mut d,
+        id,
+        K::Save(wire::locker_editor_event::SaveTapped {}),
+    );
     // The vault's rule: a rotation answers the flag set in the same save.
     assert!(editor(&d, id).finished);
     let _ = Duration::from_secs(0);

@@ -54,14 +54,24 @@ fn export_asks_three_times_and_the_file_goes_only_to_the_save_sheet() {
     assert_eq!(data.what_value, "1 item, unencrypted");
     assert!(!data.commit_label.is_empty());
     // 1. the confirm names the consequence.
-    export_event(&mut d, id, X::Commit(wire::locker_export_event::CommitTapped {}));
+    export_event(
+        &mut d,
+        id,
+        X::Commit(wire::locker_export_event::CommitTapped {}),
+    );
     assert!(export_state(&d, id).confirm.unwrap().destructive);
     let before = d.effects.len();
     // 2. the owner check, raised afresh.
-    export_event(&mut d, id, X::Confirmed(wire::locker_export_event::Confirmed {}));
-    assert!(effects_of(&d, before)
-        .iter()
-        .any(|k| matches!(k, wire::effect::Kind::OwnerCheck(c) if c.ask)));
+    export_event(
+        &mut d,
+        id,
+        X::Confirmed(wire::locker_export_event::Confirmed {}),
+    );
+    assert!(
+        effects_of(&d, before)
+            .iter()
+            .any(|k| matches!(k, wire::effect::Kind::OwnerCheck(c) if c.ask))
+    );
     assert_eq!(
         export_state(&d, id).phase,
         wire::locker_export_state::Phase::Checking as i32
@@ -85,22 +95,41 @@ fn export_asks_three_times_and_the_file_goes_only_to_the_save_sheet() {
     d.answer_effect(wire::effect_result::Outcome::Done(wire::EffectDone {}));
     let state = export_state(&d, id);
     assert_eq!(state.phase, wire::locker_export_state::Phase::Idle as i32);
-    assert_eq!(state.status.unwrap().sentence, "File written. It holds every secret.");
+    assert_eq!(
+        state.status.unwrap().sentence,
+        "File written. It holds every secret."
+    );
 }
 
 #[test]
 fn a_cancelled_owner_check_writes_nothing_and_a_dismissed_save_sheet_says_so() {
     let mut d = ready();
     let id = d.push(locker::TAB, routes::export("Locker"));
-    export_event(&mut d, id, X::Commit(wire::locker_export_event::CommitTapped {}));
-    export_event(&mut d, id, X::Confirmed(wire::locker_export_event::Confirmed {}));
+    export_event(
+        &mut d,
+        id,
+        X::Commit(wire::locker_export_event::CommitTapped {}),
+    );
+    export_event(
+        &mut d,
+        id,
+        X::Confirmed(wire::locker_export_event::Confirmed {}),
+    );
     d.answer_effect(checked(wire::owner_checked::Outcome::Cancelled));
     let state = export_state(&d, id);
     assert_eq!(state.phase, wire::locker_export_state::Phase::Idle as i32);
     assert!(!state.status.unwrap().sentence.is_empty());
     // The access history shows no export.
-    export_event(&mut d, id, X::Commit(wire::locker_export_event::CommitTapped {}));
-    export_event(&mut d, id, X::Confirmed(wire::locker_export_event::Confirmed {}));
+    export_event(
+        &mut d,
+        id,
+        X::Commit(wire::locker_export_event::CommitTapped {}),
+    );
+    export_event(
+        &mut d,
+        id,
+        X::Confirmed(wire::locker_export_event::Confirmed {}),
+    );
     d.answer_effect(passed(wire::Biometry::Face));
     d.answer_effect(wire::effect_result::Outcome::Failed(wire::EffectFailed {
         reason: "dismissed".to_owned(),
@@ -108,7 +137,10 @@ fn a_cancelled_owner_check_writes_nothing_and_a_dismissed_save_sheet_says_so() {
         cancelled: true,
     }));
     let state = export_state(&d, id);
-    assert!(!state.status.unwrap().refused, "a dismissed sheet is not a failure");
+    assert!(
+        !state.status.unwrap().refused,
+        "a dismissed sheet is not a failure"
+    );
 }
 
 #[test]
@@ -122,18 +154,25 @@ fn import_plans_a_file_row_by_row_and_adds_only_on_publish() {
             kind: Some(I::Choose(wire::locker_import_event::ChooseTapped {})),
         }),
     );
-    assert!(effects_of(&d, before)
-        .iter()
-        .any(|k| matches!(k, wire::effect::Kind::PickBytes(_))));
+    assert!(
+        effects_of(&d, before)
+            .iter()
+            .any(|k| matches!(k, wire::effect::Kind::PickBytes(_)))
+    );
     let csv = "name,url,username,password\nGitHub,https://github.com,dev,s3cret\n";
-    d.answer_effect(wire::effect_result::Outcome::BytesPicked(wire::BytesPicked {
-        cancelled: false,
-        name: "export.csv".to_owned(),
-        media_type: "text/csv".to_owned(),
-        content: csv.as_bytes().to_vec(),
-    }));
+    d.answer_effect(wire::effect_result::Outcome::BytesPicked(
+        wire::BytesPicked {
+            cancelled: false,
+            name: "export.csv".to_owned(),
+            media_type: "text/csv".to_owned(),
+            content: csv.as_bytes().to_vec(),
+        },
+    ));
     let state = import_state(&d, id);
-    assert_eq!(state.phase, wire::locker_import_state::Phase::Planned as i32);
+    assert_eq!(
+        state.phase,
+        wire::locker_import_state::Phase::Planned as i32
+    );
     let data = match state.content {
         Some(wire::locker_import_state::Content::Data(data)) => *data,
         other => panic!("{other:?}"),
@@ -148,7 +187,10 @@ fn import_plans_a_file_row_by_row_and_adds_only_on_publish() {
         }),
     );
     let state = import_state(&d, id);
-    assert_eq!(state.phase, wire::locker_import_state::Phase::Published as i32);
+    assert_eq!(
+        state.phase,
+        wire::locker_import_state::Phase::Published as i32
+    );
     assert!(state.status.unwrap().sentence.starts_with("Added 1"));
 }
 
@@ -162,12 +204,14 @@ fn a_file_that_is_not_a_password_manager_export_is_refused_in_words() {
             kind: Some(I::Choose(wire::locker_import_event::ChooseTapped {})),
         }),
     );
-    d.answer_effect(wire::effect_result::Outcome::BytesPicked(wire::BytesPicked {
-        cancelled: false,
-        name: "x.bin".to_owned(),
-        media_type: String::new(),
-        content: vec![0, 1, 2, 3],
-    }));
+    d.answer_effect(wire::effect_result::Outcome::BytesPicked(
+        wire::BytesPicked {
+            cancelled: false,
+            name: "x.bin".to_owned(),
+            media_type: String::new(),
+            content: vec![0, 1, 2, 3],
+        },
+    ));
     let state = import_state(&d, id);
     assert_eq!(state.phase, wire::locker_import_state::Phase::Idle as i32);
     assert!(state.status.unwrap().refused);
@@ -190,8 +234,14 @@ fn the_access_history_lists_every_receipt_and_never_a_value() {
     };
     let rows = data.history.unwrap().rows;
     assert!(rows.iter().any(|r| r.label == "Locker unlocked"));
-    assert!(rows.iter().any(|r| r.label.contains("Password revealed") && r.label.contains("Bank")));
-    assert!(rows.iter().all(|r| !format!("{r:?}").contains("correct horse")));
+    assert!(
+        rows.iter()
+            .any(|r| r.label.contains("Password revealed") && r.label.contains("Bank"))
+    );
+    assert!(
+        rows.iter()
+            .all(|r| !format!("{r:?}").contains("correct horse"))
+    );
 }
 
 #[test]

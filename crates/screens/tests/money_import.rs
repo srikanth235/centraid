@@ -32,12 +32,14 @@ fn iev(kind: ie::Kind) -> wire::screen_event::Kind {
 /// Tap Choose, and answer the shell's picker with `body`.
 fn pick(d: &mut Driver, i: u64, name: &str, body: &str) {
     event(d, i, iev(ie::Kind::Choose(ie::ChooseTapped {})));
-    d.answer_effect(wire::effect_result::Outcome::BytesPicked(wire::BytesPicked {
-        cancelled: false,
-        name: name.to_owned(),
-        media_type: String::new(),
-        content: body.as_bytes().to_vec(),
-    }));
+    d.answer_effect(wire::effect_result::Outcome::BytesPicked(
+        wire::BytesPicked {
+            cancelled: false,
+            name: name.to_owned(),
+            media_type: String::new(),
+            content: body.as_bytes().to_vec(),
+        },
+    ));
 }
 
 fn opened() -> (Driver, u64) {
@@ -54,7 +56,10 @@ fn choosing_asks_the_shell_for_a_file_and_nothing_is_written_until_import() {
     d.effects.clear();
     event(&mut d, i, iev(ie::Kind::Choose(ie::ChooseTapped {})));
     assert!(matches!(
-        d.effects.last().and_then(|e| e.effect.as_ref()).and_then(|e| e.kind.as_ref()),
+        d.effects
+            .last()
+            .and_then(|e| e.effect.as_ref())
+            .and_then(|e| e.kind.as_ref()),
         Some(wire::effect::Kind::PickBytes(_))
     ));
     assert_eq!(data(d.view(i)).publish_label, "");
@@ -71,7 +76,10 @@ fn a_csv_waits_for_its_account_then_plans_and_publishes_the_plans_own_input() {
             imp(d.view(i)).status.as_ref().unwrap().sentence,
             "Choose the account first."
         );
-        assert_eq!(imp(d.view(i)).phase, wire::money_import_state::Phase::Idle as i32);
+        assert_eq!(
+            imp(d.view(i)).phase,
+            wire::money_import_state::Phase::Idle as i32
+        );
         event(
             &mut d,
             i,
@@ -80,7 +88,10 @@ fn a_csv_waits_for_its_account_then_plans_and_publishes_the_plans_own_input() {
             })),
         );
     }
-    assert_eq!(imp(d.view(i)).phase, wire::money_import_state::Phase::Planned as i32);
+    assert_eq!(
+        imp(d.view(i)).phase,
+        wire::money_import_state::Phase::Planned as i32
+    );
     let statement = &data(d.view(i)).statements[0];
     assert_eq!(statement.counts[0].label, "New");
     assert_eq!(statement.counts[0].detail, "5");
@@ -89,14 +100,23 @@ fn a_csv_waits_for_its_account_then_plans_and_publishes_the_plans_own_input() {
 
     let before = home_rows_marker(&d);
     event(&mut d, i, iev(ie::Kind::Publish(ie::Publish {})));
-    assert_eq!(imp(d.view(i)).phase, wire::money_import_state::Phase::Published as i32);
-    assert_eq!(imp(d.view(i)).status.as_ref().unwrap().sentence, "Imported 5 rows");
+    assert_eq!(
+        imp(d.view(i)).phase,
+        wire::money_import_state::Phase::Published as i32
+    );
+    assert_eq!(
+        imp(d.view(i)).status.as_ref().unwrap().sentence,
+        "Imported 5 rows"
+    );
     assert_eq!(data(d.view(i)).file_value, "Statement.csv");
     assert_eq!(data(d.view(i)).done_label, "Done");
     assert_ne!(before, home_rows_marker(&d), "the rows are in the vault");
     // A second tap writes nothing.
     event(&mut d, i, iev(ie::Kind::Publish(ie::Publish {})));
-    assert_eq!(imp(d.view(i)).status.as_ref().unwrap().sentence, "Imported 5 rows");
+    assert_eq!(
+        imp(d.view(i)).status.as_ref().unwrap().sentence,
+        "Imported 5 rows"
+    );
     event(&mut d, i, iev(ie::Kind::Done(ie::Done {})));
     assert!(imp(d.view(i)).finished);
 }
@@ -126,7 +146,9 @@ fn leaving_drops_the_file_and_the_plan() {
         event(
             &mut d,
             i,
-            iev(ie::Kind::AccountPicked(ie::AccountPicked { account_id: account })),
+            iev(ie::Kind::AccountPicked(ie::AccountPicked {
+                account_id: account,
+            })),
         );
     }
     assert!(!data(d.view(i)).statements.is_empty());
@@ -139,10 +161,12 @@ fn leaving_drops_the_file_and_the_plan() {
 fn a_cancelled_pick_changes_nothing_and_discard_starts_over() {
     let (mut d, i) = opened();
     event(&mut d, i, iev(ie::Kind::Choose(ie::ChooseTapped {})));
-    d.answer_effect(wire::effect_result::Outcome::BytesPicked(wire::BytesPicked {
-        cancelled: true,
-        ..Default::default()
-    }));
+    d.answer_effect(wire::effect_result::Outcome::BytesPicked(
+        wire::BytesPicked {
+            cancelled: true,
+            ..Default::default()
+        },
+    ));
     assert_eq!(data(d.view(i)).file_value, "No file chosen");
     let (account, _) = accounts(&d).remove(0);
     pick(&mut d, i, "Statement.csv", CSV);
@@ -150,7 +174,9 @@ fn a_cancelled_pick_changes_nothing_and_discard_starts_over() {
         event(
             &mut d,
             i,
-            iev(ie::Kind::AccountPicked(ie::AccountPicked { account_id: account })),
+            iev(ie::Kind::AccountPicked(ie::AccountPicked {
+                account_id: account,
+            })),
         );
     }
     event(&mut d, i, iev(ie::Kind::Discard(ie::Discard {})));
@@ -168,12 +194,21 @@ fn a_file_that_cannot_name_its_date_order_asks_and_the_answer_plans_it_again() {
         event(
             &mut d,
             i,
-            iev(ie::Kind::AccountPicked(ie::AccountPicked { account_id: account })),
+            iev(ie::Kind::AccountPicked(ie::AccountPicked {
+                account_id: account,
+            })),
         );
     }
-    let question = data(d.view(i)).statements[0].question.clone().expect("a question");
+    let question = data(d.view(i)).statements[0]
+        .question
+        .clone()
+        .expect("a question");
     assert_eq!(
-        question.options.iter().map(|o| o.key.as_str()).collect::<Vec<_>>(),
+        question
+            .options
+            .iter()
+            .map(|o| o.key.as_str())
+            .collect::<Vec<_>>(),
         ["mdy", "dmy"]
     );
     // While it is asked there is nothing to import.
@@ -181,7 +216,9 @@ fn a_file_that_cannot_name_its_date_order_asks_and_the_answer_plans_it_again() {
     event(
         &mut d,
         i,
-        iev(ie::Kind::DateOrder(ie::DateOrderPicked { order: "dmy".into() })),
+        iev(ie::Kind::DateOrder(ie::DateOrderPicked {
+            order: "dmy".into(),
+        })),
     );
     let statement = &data(d.view(i)).statements[0];
     assert!(statement.question.is_none());
@@ -206,7 +243,10 @@ fn rows_proposed_as_duplicates_are_skipped_unless_the_member_says_otherwise() {
     pick(&mut d, i, "first.csv", CSV);
     choose_account(&mut d, i);
     event(&mut d, i, iev(ie::Kind::Publish(ie::Publish {})));
-    assert_eq!(imp(d.view(i)).status.as_ref().unwrap().sentence, "Imported 5 rows");
+    assert_eq!(
+        imp(d.view(i)).status.as_ref().unwrap().sentence,
+        "Imported 5 rows"
+    );
 
     // The same lines a day later look alike: proposed, never written on their own.
     let shifted = "Date,Description,Amount\n2026-09-02,GROCER A,-20.00\n2026-09-04,GROCER B,-30.00\n2026-09-09,GROCER C,-40.00\n2026-09-11,GROCER D,-50.00\n2026-09-13,GROCER E,-60.00\n";
@@ -225,11 +265,22 @@ fn rows_proposed_as_duplicates_are_skipped_unless_the_member_says_otherwise() {
         wire::status_chip::Tone::Seam as i32,
         "lines owed a look carry their tone"
     );
-    assert_eq!(data(d.view(i)).publish_label, "", "nothing new, nothing to import");
+    assert_eq!(
+        data(d.view(i)).publish_label,
+        "",
+        "nothing new, nothing to import"
+    );
 
-    event(&mut d, i, iev(ie::Kind::KeepProposed(ie::KeepProposedToggled {})));
+    event(
+        &mut d,
+        i,
+        iev(ie::Kind::KeepProposed(ie::KeepProposedToggled {})),
+    );
     assert!(imp(d.view(i)).keep_proposed);
     assert_eq!(data(d.view(i)).publish_label, "Import 5 rows");
     event(&mut d, i, iev(ie::Kind::Publish(ie::Publish {})));
-    assert_eq!(imp(d.view(i)).status.as_ref().unwrap().sentence, "Imported 5 rows");
+    assert_eq!(
+        imp(d.view(i)).status.as_ref().unwrap().sentence,
+        "Imported 5 rows"
+    );
 }

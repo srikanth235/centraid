@@ -479,11 +479,14 @@ impl Import {
             account_value: chosen.map_or_else(
                 || words::import_no_account_chosen(locale),
                 |line| {
-                    [Some(line.name.clone()), line.mask.as_ref().map(|m| format!("····{m}"))]
-                        .into_iter()
-                        .flatten()
-                        .collect::<Vec<_>>()
-                        .join(" ")
+                    [
+                        Some(line.name.clone()),
+                        line.mask.as_ref().map(|m| format!("····{m}")),
+                    ]
+                    .into_iter()
+                    .flatten()
+                    .collect::<Vec<_>>()
+                    .join(" ")
                 },
             ),
             needs_account: csv,
@@ -494,7 +497,11 @@ impl Import {
                         &line.account_id,
                         &line.name,
                         line.account_id == self.account_id,
-                        &line.mask.as_ref().map(|m| format!("····{m}")).unwrap_or_default(),
+                        &line
+                            .mask
+                            .as_ref()
+                            .map(|m| format!("····{m}"))
+                            .unwrap_or_default(),
                     )
                 })
                 .collect(),
@@ -590,31 +597,34 @@ impl Import {
         .filter(|(len, cap)| len > cap)
         .map(|(len, cap)| fold::with_n(words::and_more(locale), len - cap))
         .collect();
-        let question = statement.question.as_ref().map(|q| wire::MoneyImportQuestion {
-            prompt: words::date_order_prompt(locale),
-            samples: q.samples.clone(),
-            options: q
-                .options
-                .iter()
-                .filter_map(|option| {
-                    match wire::MoneyDateOrder::try_from(*option).unwrap_or_default() {
-                        wire::MoneyDateOrder::Mdy => Some(choice(
-                            "mdy",
-                            &words::date_order_mdy(locale),
-                            self.date_order == Some(loads::ImportPlanDateOrder::Mdy),
-                            "",
-                        )),
-                        wire::MoneyDateOrder::Dmy => Some(choice(
-                            "dmy",
-                            &words::date_order_dmy(locale),
-                            self.date_order == Some(loads::ImportPlanDateOrder::Dmy),
-                            "",
-                        )),
-                        _ => None,
-                    }
-                })
-                .collect(),
-        });
+        let question = statement
+            .question
+            .as_ref()
+            .map(|q| wire::MoneyImportQuestion {
+                prompt: words::date_order_prompt(locale),
+                samples: q.samples.clone(),
+                options: q
+                    .options
+                    .iter()
+                    .filter_map(|option| {
+                        match wire::MoneyDateOrder::try_from(*option).unwrap_or_default() {
+                            wire::MoneyDateOrder::Mdy => Some(choice(
+                                "mdy",
+                                &words::date_order_mdy(locale),
+                                self.date_order == Some(loads::ImportPlanDateOrder::Mdy),
+                                "",
+                            )),
+                            wire::MoneyDateOrder::Dmy => Some(choice(
+                                "dmy",
+                                &words::date_order_dmy(locale),
+                                self.date_order == Some(loads::ImportPlanDateOrder::Dmy),
+                                "",
+                            )),
+                            _ => None,
+                        }
+                    })
+                    .collect(),
+            });
         let sign_guessed = statement
             .warnings
             .contains(&(wire::MoneyImportWarning::SignGuessed as i32));
@@ -666,8 +676,16 @@ impl Import {
             ),
             totals: if plain {
                 vec![
-                    fold::figure(&words::file_in(locale), statement.file_in.as_ref(), Tone::Unspecified),
-                    fold::figure(&words::file_out(locale), statement.file_out.as_ref(), Tone::Net),
+                    fold::figure(
+                        &words::file_in(locale),
+                        statement.file_in.as_ref(),
+                        Tone::Unspecified,
+                    ),
+                    fold::figure(
+                        &words::file_out(locale),
+                        statement.file_out.as_ref(),
+                        Tone::Net,
+                    ),
                 ]
             } else {
                 Vec::new()
@@ -714,11 +732,14 @@ impl Import {
             } else {
                 String::new()
             },
-            checkpoint: statement.checkpoint.as_ref().map(|stated| wire::MoneyFigure {
-                label: words::statement_balance(locale),
-                amount: fold::text(stated.balance.as_ref()),
-                tone: Tone::Unspecified as i32,
-            }),
+            checkpoint: statement
+                .checkpoint
+                .as_ref()
+                .map(|stated| wire::MoneyFigure {
+                    label: words::statement_balance(locale),
+                    amount: fold::text(stated.balance.as_ref()),
+                    tone: Tone::Unspecified as i32,
+                }),
             checkpoint_label: statement
                 .checkpoint
                 .as_ref()
@@ -843,16 +864,22 @@ impl Screen for Import {
             Phase::Ready(_) => Content::Data(Box::new(self.data(locale))),
         };
         wire::ViewState {
-            kind: Some(wire::view_state::Kind::MoneyImport(wire::MoneyImportState {
-                phase: self.phase as i32,
-                content: Some(content),
-                chrome: Some(fold::chrome(locale, words::import_title(locale), &self.parent)),
-                status: self.status.clone(),
-                account_id: self.account_id.clone(),
-                sheet: self.sheet as i32,
-                keep_proposed: self.keep_proposed,
-                finished: self.finished,
-            })),
+            kind: Some(wire::view_state::Kind::MoneyImport(
+                wire::MoneyImportState {
+                    phase: self.phase as i32,
+                    content: Some(content),
+                    chrome: Some(fold::chrome(
+                        locale,
+                        words::import_title(locale),
+                        &self.parent,
+                    )),
+                    status: self.status.clone(),
+                    account_id: self.account_id.clone(),
+                    sheet: self.sheet as i32,
+                    keep_proposed: self.keep_proposed,
+                    finished: self.finished,
+                },
+            )),
             ..wire::ViewState::default()
         }
     }
