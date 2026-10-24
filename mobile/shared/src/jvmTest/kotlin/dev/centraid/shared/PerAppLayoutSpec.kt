@@ -109,8 +109,6 @@ class PerAppLayoutSpec : StringSpec({
                 "dev.centraid.shared.kit",
                 "dev.centraid.shared.kit.time",
                 "dev.centraid.shared.apps.photos",
-                "dev.centraid.shared.apps.notes",
-                "dev.centraid.shared.apps.docs",
                 "dev.centraid.shared.apps.people",
                 "dev.centraid.shared.apps.locker",
             ).all { packages.contains(it) }.shouldBeTrue()

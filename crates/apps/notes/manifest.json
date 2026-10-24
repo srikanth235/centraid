@@ -1192,6 +1192,46 @@
         "type": "object",
         "properties": {}
       }
+    },
+    {
+      "name": "about",
+      "kind": "note",
+      "figures": ["notes"],
+      "description": "The live notes written about one thing — a person, an event, a task, a document — newest first, each with a short preview, a checklist tally, its notebook, tags and attachments and never a full body; `truncated` says older notes exist beyond the window. The one read for \"what have I written about this?\", whatever the thing is.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "about_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The id of the thing the notes are about."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 20,
+            "maximum": 2000
+          }
+        },
+        "required": ["about_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "notes": {
+            "type": "array"
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "window": {
+            "type": "integer"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
+        }
+      }
     }
   ],
   "kinds": [

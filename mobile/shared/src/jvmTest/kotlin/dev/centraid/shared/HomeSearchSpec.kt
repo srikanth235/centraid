@@ -12,6 +12,8 @@ import centraid.screen.v1.HomeSearchState
 import dev.centraid.design.copy.SharedCopy
 import dev.centraid.shared.nav.AgendaEntry
 import dev.centraid.shared.nav.Destination
+import dev.centraid.shared.nav.DocsEntry
+import dev.centraid.shared.nav.NotesEntry
 import dev.centraid.shared.nav.PhotosEntry
 import dev.centraid.shared.nav.RowRoutes
 import dev.centraid.shared.platform.DeviceClock
@@ -224,10 +226,10 @@ class HomeSearchSpec : StringSpec({
         targets.single { it.app == "photos" } shouldBe ChatCard(app = "photos", entity = "photo", id = "a1", title = "Cabin at dusk")
         targets.single { it.app == "notes" } shouldBe ChatCard(app = "notes", entity = "note", id = "n1", title = "Cabin packing")
         val opens = targets.associate { it.app to RowRoutes.destination(it, parent = "Search") }
-        opens["notes"] shouldBe Destination.NotesEditor("n1", title = "Cabin packing")
+        opens["notes"] shouldBe NotesEntry.editor("n1")
         opens["people"] shouldBe Destination.PeoplePerson("p1", "Kate Bell")
         opens["agenda"] shouldBe AgendaEntry.event("e1")
-        opens["docs"] shouldBe Destination.DocsDocument("d1", "Cabin lease", parent = "Search")
+        opens["docs"] shouldBe DocsEntry.document("d1", "Cabin lease", parent = "Search")
         opens["photos"] shouldBe PhotosEntry.lightbox("a1", listOf("a1"))
         // Picking a row is an intent: the machine records, the shell opens.
         val shown = step(typed(opened, "cabin").state, answer("cabin", hit("notes", "note", "n1", "Cabin packing"))).state
@@ -235,7 +237,7 @@ class HomeSearchSpec : StringSpec({
         val picked = step(shown, HomeSearchEvent(row = HomeSearchEvent.RowPicked(row = row)))
         picked.effects.shouldBeEmpty()
         picked.state.data_ shouldBe shown.data_
-        RowRoutes.destination(row.target!!) shouldBe Destination.NotesEditor("n1", title = "Cabin packing")
+        RowRoutes.destination(row.target!!) shouldBe NotesEntry.editor("n1")
     }
 
     // ---- THE CHAT GROUP (#1097, R-1097-24) ---------------------------------------------------------

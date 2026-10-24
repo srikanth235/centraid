@@ -5,15 +5,10 @@ import centraid.core.v1.AppQueryResponse
 import centraid.core.v1.CommandOutcome
 import centraid.core.v1.CommandStatus
 import centraid.core.v1.Envelope
-import centraid.core.v1.NotesNote
 import centraid.core.v1.Response
-import centraid.screen.v1.NotesEditorEvent
-import centraid.screen.v1.NotesEditorState
 import centraid.screen.v1.ReadFailure
 import centraid.screen.v1.SeatState
 import dev.centraid.core.CentraidCore
-import dev.centraid.shared.apps.notes.NotesEditorMachine
-import dev.centraid.shared.apps.notes.NotesReads
 import dev.centraid.shared.kit.ScreenBridge
 import dev.centraid.shared.platform.DeviceClock
 import dev.centraid.shared.platform.FakeDeviceClock
@@ -149,94 +144,6 @@ class KitRuntimeSpec : StringSpec({
             b.close()
         }
     }
-
-    "leaving flushes the unsaved words, and the save survives the bridge's close" {
-        val commands = ConcurrentLinkedQueue<String>()
-        val core = CentraidCore.answering(Dispatchers.Default) { envelope ->
-            val command = envelope.request?.command
-            if (command != null) {
-                commands += command.input.utf8()
-                executed()
-            } else {
-                noteAnswer()
-            }
-        }
-        val session = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-        try {
-            val bridge = ScreenBridge(
-                machine = NotesEditorMachine,
-                events = NotesEditorEvent.ADAPTER,
-                wire = {},
-                dispatcher = Dispatchers.Default,
-            )
-            bridge.attachOn(session) {
-                ScreenQueryRuntime(
-                    core = { core },
-                    host = bridge.host,
-                    queries = NotesReads,
-                    clock = FakeDeviceClock(),
-                    scope = session,
-                    writes = NotesReads,
-                    left = { bridge.left },
-                ).start()
-            }
-            loadAndType(bridge.host)
-            // CLOSE = DONE, well inside the 900 ms debounce: nothing has been
-            // saved yet, and the bridge's own scope is released by `leave()`.
-            commands.toList() shouldBe emptyList()
-            bridge.leave()
-            withTimeout(5_000) {
-                bridge.host.state.first { it.autosave?.saved_seq == 1L }
-            }
-            commands.single() shouldBe "{\"id\":\"n-1\",\"body\":\"milk and eggs\"}"
-        } finally {
-            session.cancel()
-            core.close()
-        }
-    }
-
-    "a flush that fails after the screen is left reaches the stranded-write seam" {
-        val core = CentraidCore.answering(Dispatchers.Default) { envelope ->
-            if (envelope.request?.command != null) {
-                Envelope(
-                    response = Response(
-                        command = CommandOutcome(
-                            status = CommandStatus.COMMAND_STATUS_DENIED,
-                            reason = "That note was removed.",
-                        ),
-                    ),
-                )
-            } else {
-                noteAnswer()
-            }
-        }
-        val stranded = ConcurrentLinkedQueue<Triple<String, String, String>>()
-        val session = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-        try {
-            val bridge = ScreenBridge(NotesEditorMachine, NotesEditorEvent.ADAPTER, {}, Dispatchers.Default)
-            bridge.attachOn(session) {
-                ScreenQueryRuntime(
-                    core = { core },
-                    host = bridge.host,
-                    queries = NotesReads,
-                    clock = FakeDeviceClock(),
-                    scope = session,
-                    writes = NotesReads,
-                    left = { bridge.left },
-                    stranded = StrandedWrites { app, command, sentence -> stranded += Triple(app, command, sentence) },
-                ).start()
-            }
-            loadAndType(bridge.host)
-            bridge.leave()
-            withTimeout(5_000) {
-                bridge.host.state.first { it.save == NotesEditorState.SaveState.SAVE_STATE_REFUSED }
-            }
-            stranded.single() shouldBe Triple("notes", NotesEditorMachine.SAVE_COMMAND, "That note was removed.")
-        } finally {
-            session.cancel()
-            core.close()
-        }
-    }
 }) {
     private companion object {
         const val SCREEN = "probe.screen"
@@ -273,30 +180,6 @@ class KitRuntimeSpec : StringSpec({
             override fun requests(state: List<String>, now: DeviceClock.Reading): List<AppQueryRequest>? = null
             override fun arrived(answers: List<AppQueryResponse>): String = "arrived"
             override fun refused(failure: ReadFailure): String = "refused"
-        }
-
-        /** The one note the editor reads: n-1, "milk". */
-        fun noteAnswer(): Envelope = Envelope(
-            response = Response(
-                app_query = AppQueryResponse(
-                    notes_note = NotesNote(
-                        found = true,
-                        note_id = "n-1",
-                        title = "Groceries",
-                        format = "plain",
-                        body = "milk",
-                        row_version = 1L,
-                    ),
-                ),
-            ),
-        )
-
-        /** Open note n-1, wait for it, and type into it — unsaved, inside the debounce. */
-        suspend fun loadAndType(host: ScreenHost<NotesEditorState, NotesEditorEvent>) {
-            host.send(NotesEditorEvent(opened = NotesEditorEvent.Opened(note_id = "n-1")))
-            withTimeout(5_000) { host.state.first { it.draft != null } }
-            host.send(NotesEditorEvent(body = NotesEditorEvent.BodyEdited(body = "milk and eggs")))
-            host.state.value.draft.shouldNotBeNull().body shouldBe "milk and eggs"
         }
     }
 }

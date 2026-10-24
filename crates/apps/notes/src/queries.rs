@@ -41,7 +41,7 @@ use centraid_search::{Answer, EachRequest, Principal, Search, SearchError, Searc
 use crate::Denial;
 use crate::cards::{self, RefCard};
 use crate::derive::{CheckTally, check_of, preview_of};
-use crate::journal::read_memo_ids;
+use crate::journal::{MEMO_BOUND, read_memo_ids};
 
 /// The `library` and `journal` window, as the manifest declares it.
 pub const WINDOW_MIN: usize = 20;
@@ -472,7 +472,10 @@ fn real_or_zero(row: &Row, column: &str) -> i64 {
 
 /// The tags on a set of notes: the `tagged` edges that lead to a `tag` (the
 /// flags are the other kind), with the tag's own label.
-fn tags_of(door: &dyn PageDoor, ids: &[String]) -> KitResult<BTreeMap<String, Vec<TagChip>>> {
+pub(crate) fn tags_of(
+    door: &dyn PageDoor,
+    ids: &[String],
+) -> KitResult<BTreeMap<String, Vec<TagChip>>> {
     let edges = Read {
         name: "notes.library.tags",
         table: "edge",
@@ -598,6 +601,53 @@ fn notebook_names(books: &[Notebook], note: &NoteRow) -> (Vec<String>, Vec<Strin
     (vec![id.clone()], vec![name])
 }
 
+/// The rows for `ids`, in `ids`' order, and the tag chips they carry (by concept).
+fn library_rows(
+    door: &dyn PageDoor,
+    ids: &[String],
+    pinned: &BTreeSet<String>,
+    books: &[Notebook],
+) -> KitResult<(Vec<LibraryRow>, BTreeMap<String, String>)> {
+    let notes = note_rows(door, ids)?;
+    let mut tags = tags_of(door, ids)?;
+    let mut attachments = centraid_apps_kit::attached::of(door, ids)?;
+    let (mut references, mut backlinks) = links_of(door, ids)?;
+
+    let mut facets: BTreeMap<String, String> = BTreeMap::new();
+    let rows: Vec<LibraryRow> = ids
+        .iter()
+        .filter_map(|id| notes.get(id))
+        .map(|note| {
+            let chips = tags.remove(&note.id).unwrap_or_default();
+            facets.extend(
+                chips
+                    .iter()
+                    .map(|chip| (chip.concept_id.clone(), chip.label.clone())),
+            );
+            let (notebook_ids, notebook_names) = notebook_names(books, note);
+            LibraryRow {
+                note_id: note.id.clone(),
+                title: Some(note.title.clone()),
+                format: Some(note.format.clone()),
+                pinned: pinned.contains(&note.id),
+                created_at: Some(note.created_at.clone()),
+                updated_at: Some(note.updated_at.clone()),
+                deleted_at: note.deleted_at.clone(),
+                purge_at: note.purge_at.clone(),
+                preview: preview_of(&note.body),
+                check: check_of(&note.body),
+                notebook_ids,
+                notebook_names,
+                attachments: attachments.remove(&note.id).unwrap_or_default(),
+                references: references.remove(&note.id).unwrap_or_default(),
+                backlinks: backlinks.remove(&note.id).unwrap_or_default(),
+                tags: chips,
+            }
+        })
+        .collect();
+    Ok((rows, facets))
+}
+
 // ---------------------------------------------------------------------------
 // `library`
 // ---------------------------------------------------------------------------
@@ -676,43 +726,7 @@ fn library_body(door: &dyn PageDoor, window: usize) -> KitResult<LibraryData> {
         });
     }
 
-    let notes = note_rows(door, &ids)?;
-    let mut tags = tags_of(door, &ids)?;
-    let mut attachments = centraid_apps_kit::attached::of(door, &ids)?;
-    let (mut references, mut backlinks) = links_of(door, &ids)?;
-
-    let mut facets: BTreeMap<String, String> = BTreeMap::new();
-    let mut rows: Vec<LibraryRow> = ids
-        .iter()
-        .filter_map(|id| notes.get(id))
-        .map(|note| {
-            let chips = tags.remove(&note.id).unwrap_or_default();
-            facets.extend(
-                chips
-                    .iter()
-                    .map(|chip| (chip.concept_id.clone(), chip.label.clone())),
-            );
-            let (notebook_ids, notebook_names) = notebook_names(&books, note);
-            LibraryRow {
-                note_id: note.id.clone(),
-                title: Some(note.title.clone()),
-                format: Some(note.format.clone()),
-                pinned: pinned.contains(&note.id),
-                created_at: Some(note.created_at.clone()),
-                updated_at: Some(note.updated_at.clone()),
-                deleted_at: note.deleted_at.clone(),
-                purge_at: note.purge_at.clone(),
-                preview: preview_of(&note.body),
-                check: check_of(&note.body),
-                notebook_ids,
-                notebook_names,
-                attachments: attachments.remove(&note.id).unwrap_or_default(),
-                references: references.remove(&note.id).unwrap_or_default(),
-                backlinks: backlinks.remove(&note.id).unwrap_or_default(),
-                tags: chips,
-            }
-        })
-        .collect();
+    let (mut rows, facets) = library_rows(door, &ids, &pinned, &books)?;
     // Pinned first, then newest. STABLE, so ties keep the read order above.
     rows.sort_by(|left, right| {
         right
@@ -992,6 +1006,115 @@ fn journal_body(door: &dyn PageDoor, window: usize) -> KitResult<JournalData> {
                 check: check_of(&note.body),
             })
             .collect(),
+        truncated: entries.filled,
+        window,
+    })
+}
+
+// ---------------------------------------------------------------------------
+// `about`
+// ---------------------------------------------------------------------------
+
+/// What `about` answers.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct AboutData {
+    pub notes: Vec<LibraryRow>,
+    pub truncated: bool,
+    pub window: usize,
+}
+
+/// The `about` edges that end at one thing: the notes written about it.
+#[must_use]
+pub fn about_statement(subject_id: &str) -> PageQuery {
+    PageQuery::new(
+        "notes.about.edges",
+        "from_id, to_id",
+        "edge",
+        PageOrder::asc("from_id", "to_id"),
+    )
+    .filter(
+        "rel = ? AND to_id = ?",
+        vec![
+            PageBindValue::Text("about".to_owned()),
+            PageBindValue::Text(subject_id.to_owned()),
+        ],
+    )
+}
+
+/// THE NOTES ABOUT ONE THING: a person, an event, a task, a document — whatever
+/// carries the `about` edges. The one read every surface asks "what has been
+/// written about this?" through, so no caller walks the edges itself.
+///
+/// A note about a thing is a memo, so the library leaves it out and this reads
+/// the set the other way round, by subject ([`load_journal`] reads it by
+/// nobody). Live notes only, newest by `updated_at`, a preview and a checklist
+/// tally each and never a full body (`note` opens one whole).
+///
+/// # Errors
+///
+/// The kit's own refusals; a door's refusal is the tuple's second element.
+pub fn load_about(
+    door: &dyn PageDoor,
+    subject_id: &str,
+    limit: Option<i64>,
+) -> KitResult<(AboutData, Option<Denial>)> {
+    let window = window_of(limit);
+    match about_body(door, subject_id.trim(), window) {
+        Err(KitError::Door(message)) => Ok((
+            AboutData {
+                window,
+                ..AboutData::default()
+            },
+            Some(denial(message)),
+        )),
+        other => Ok((other?, None)),
+    }
+}
+
+fn about_body(door: &dyn PageDoor, subject_id: &str, window: usize) -> KitResult<AboutData> {
+    let empty = AboutData {
+        window,
+        ..AboutData::default()
+    };
+    if subject_id.is_empty() {
+        return Ok(empty);
+    }
+    let mut ids: Vec<String> = read_pages(door, &about_statement(subject_id), MEMO_BOUND)?
+        .iter()
+        .filter_map(|row| text_of(row, "from_id"))
+        .collect();
+    ids.dedup();
+    if ids.is_empty() {
+        return Ok(empty);
+    }
+    let fragment = in_list("id", &ids)?;
+    let mut bind = note_kind();
+    bind.extend(fragment.bind);
+    let entries = read_window(
+        door,
+        &PageQuery::new(
+            "notes.about.entries",
+            ENTITY_COLUMNS,
+            "entity",
+            PageOrder::desc("updated_at", "id"),
+        )
+        .filter(
+            &format!("kind = ? AND deleted_at IS NULL AND {}", fragment.sql),
+            bind,
+        ),
+        window,
+    )?;
+    let found = texts(&entries.rows, "id");
+    if found.is_empty() {
+        return Ok(AboutData {
+            truncated: entries.filled,
+            ..empty
+        });
+    }
+    let books = notebooks(door)?;
+    let (notes, _facets) = library_rows(door, &found, &pinned_ids(door)?, &books)?;
+    Ok(AboutData {
+        notes,
         truncated: entries.filled,
         window,
     })

@@ -1,20 +1,16 @@
 package dev.centraid.shared
 
 import centraid.core.v1.AgendaDestination
+import centraid.core.v1.DocsDestination
 import centraid.core.v1.Route
-import centraid.screen.v1.DocsDriveEvent
-import centraid.screen.v1.DocsDriveState
-import dev.centraid.shared.apps.docs.DocsDocumentMachine
-import dev.centraid.shared.apps.docs.DocsDriveMachine
 import dev.centraid.shared.apps.health.HealthHomeMachine
 import dev.centraid.shared.apps.money.MoneyHomeMachine
 import dev.centraid.shared.apps.money.MoneyTransactionMachine
-import dev.centraid.shared.apps.notes.NotesEditorMachine
-import dev.centraid.shared.apps.notes.NotesLibraryMachine
 import dev.centraid.shared.apps.people.PeopleHomeMachine
 import dev.centraid.shared.apps.people.PeoplePersonMachine
 import dev.centraid.shared.nav.AgendaEntry
 import dev.centraid.shared.nav.Destination
+import dev.centraid.shared.nav.DocsEntry
 import dev.centraid.shared.nav.RowRef
 import dev.centraid.shared.nav.RowRoutes
 import dev.centraid.shared.nav.ScreenIds
@@ -35,20 +31,24 @@ class ScreenOpeningsSpec : StringSpec({
         RowRef(app, entity, id, title, qualifier)
 
     "every row the table names opens the screen its machine owns, on the event that screen opens by" {
+        // Notes' pages are Rust's (#1135): the opening is the Rust screen id and the encoded route.
         val note = RowRoutes.route(row("notes", "note", "n1"))!!
-        note.screenId shouldBe NotesEditorMachine.SCREEN_ID
+        note.screenId shouldBe ScreenIds.RUST_SCREEN
+        Route.ADAPTER.decode(note.event).notes_editor!!.note_id shouldBe "n1"
 
         val notebook = RowRoutes.route(row("notes", "notebook", "nb", "Cabin"))!!
-        notebook.screenId shouldBe NotesLibraryMachine.SCREEN_ID
+        notebook.screenId shouldBe ScreenIds.RUST_SCREEN
+        Route.ADAPTER.decode(notebook.event).notes_home!!.notebook_id shouldBe "nb"
 
+        // DOCS' SCREENS ARE RUST'S (#1135): a document and a folder open as the Route Rust's registry
+        // names, carrying the pushing page's title as their back word.
         val doc = RowRoutes.route(row("docs", "document", "d1", "Lease"), parent = "Search")!!
-        doc.screenId shouldBe DocsDocumentMachine.SCREEN_ID
-
-        // A folder is the drive's machine on its own key, so the drive under it keeps its tab.
+        doc.screenId shouldBe ScreenIds.RUST_SCREEN
+        Route.ADAPTER.decode(doc.event) shouldBe DocsEntry.document("d1", "Lease", parent = "Search").route
         val folder = RowRoutes.route(row("docs", "folder", "f1", "Taxes"), parent = "Search")!!
-        folder.screenId shouldBe DocsDriveMachine.FOLDER_SCREEN_ID
-        val opened = DocsDriveEvent.ADAPTER.decode(folder.event).opened!!
-        opened.destination shouldBe DocsDriveState.Destination.DESTINATION_FOLDERS
+        folder.screenId shouldBe ScreenIds.RUST_SCREEN
+        val opened = Route.ADAPTER.decode(folder.event).docs_drive!!
+        opened.destination shouldBe DocsDestination.DOCS_DESTINATION_FOLDERS
         opened.folder_id shouldBe "f1"
         opened.folder_name shouldBe "Taxes"
         opened.parent shouldBe "Search"

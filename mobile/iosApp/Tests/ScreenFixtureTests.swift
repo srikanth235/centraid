@@ -43,28 +43,11 @@ final class ScreenFixtureTests: XCTestCase {
         let manifest = try Data(contentsOf: screens.appendingPathComponent("manifest.json"))
         let decoded = try JSONSerialization.jsonObject(with: manifest) as? [String: Any]
         let fixtures = decoded?["fixtures"] as? [[String: Any]] ?? []
-        XCTAssertEqual(fixtures.count, 22)
+        XCTAssertEqual(fixtures.count, 18)
         for fixture in fixtures {
             let binary = try XCTUnwrap(fixture["binary"] as? String)
             let name = String(binary.dropFirst("contracts/screens/".count).dropLast(".bin".count))
             XCTAssertNoThrow(try bytes(name), "\(name) is listed and missing")
-        }
-    }
-
-    /// A refused SAVE keeps the words; a refused READ does not.
-    func testARefusedSaveKeepsTheEditor() throws {
-        let saveRefused = try Centraid_Screen_V1_NotesEditorState(
-            serializedBytes: try bytes("notes/save-refused")
-        )
-        XCTAssertEqual(saveRefused.draft.body, "Book the cabin.")
-        XCTAssertEqual(saveRefused.save, .refused)
-        XCTAssertEqual(saveRefused.draft.saveFailure.kind, .unavailable)
-
-        let readRefused = try Centraid_Screen_V1_NotesEditorState(
-            serializedBytes: try bytes("notes/read-refused")
-        )
-        guard case .failure = readRefused.content else {
-            return XCTFail("a refused read replaces the editor")
         }
     }
 

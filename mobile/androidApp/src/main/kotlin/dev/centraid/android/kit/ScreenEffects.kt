@@ -36,8 +36,10 @@ import centraid.core.v1.KeychainOp
 import centraid.core.v1.KeychainValue
 import centraid.core.v1.OriginalFetched
 import centraid.core.v1.PhoneChanged
+import centraid.core.v1.Route
 import dev.centraid.android.screens.PhotoHandOff
 import dev.centraid.android.screens.agenda.readCalendarSnapshot
+import dev.centraid.android.screens.docs.DocsPickers
 import dev.centraid.android.screens.mediaPermissions
 import dev.centraid.android.screens.performExportOriginals
 import dev.centraid.android.screens.photos.PhotosEditRender
@@ -67,6 +69,10 @@ import okio.ByteString
  *
  * [phone] is the activity's watcher of the phone's stores; a `PhoneWatch` with no
  * watcher is answered `failed`.
+ *
+ * [docs] performs Docs' `PickFile`, `FollowFolder` and `StopFollowing` (the pickers, the
+ * camera, the follower's grant); [openRoute] is `OpenRoute`: a page Rust asked the shell to push.
+ * Either is null where the host has none, and the effect is answered `failed`.
  */
 @Composable
 internal fun PerformScreenEffects(
@@ -76,6 +82,8 @@ internal fun PerformScreenEffects(
     photos: PhotosDevice? = null,
     /** This app's tab: when set, only its instances' effects are performed here (two apps share one core). */
     tab: String? = null,
+    docs: DocsPickers? = null,
+    openRoute: ((Route) -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val view = LocalView.current
@@ -100,11 +108,16 @@ internal fun PerformScreenEffects(
             // without holding up the keychain read behind it.
             launch {
                 val effect = request.effect
-                val result = perform(
-                    effect, context, view, asking, { launcher.launch(it) }, phone, screens.core, photos,
-                    { mediaAsk.ask { mediaLauncher.launch(mediaPermissions()) } },
-                ) { changed ->
-                    launch { screens.answer(request, EffectResult(phone_changed = changed)) }
+                val answer: (EffectResult) -> Unit = { result -> launch { screens.answer(request, result) } }
+                val result = if (effect?.pick_file != null || effect?.follow_folder != null || effect?.stop_following != null || effect?.open_route != null) {
+                    files(effect, docs, openRoute, answer)
+                } else {
+                    perform(
+                        effect, context, view, asking, { launcher.launch(it) }, phone, screens.core, photos,
+                        { mediaAsk.ask { mediaLauncher.launch(mediaPermissions()) } },
+                    ) { changed ->
+                        answer(EffectResult(phone_changed = changed))
+                    }
                 }
                 if (result != null) screens.answer(request, result)
             }
@@ -243,6 +256,35 @@ private suspend fun perform(
             PhotosEditRender.perform(context.cacheDir, core, effect.render_edit!!)
         // Platform work this build does not perform yet: say so, by value.
         else -> failed("not performed by this shell")
+    }
+}
+
+/**
+ * DOCS' EFFECTS AND `OpenRoute`: the pickers answer under the effect's one id (progress, then
+ * the file), so this returns null when the picker will, and a result only for a refusal.
+ */
+private fun files(
+    effect: Effect,
+    docs: DocsPickers?,
+    openRoute: ((Route) -> Unit)?,
+    answer: (EffectResult) -> Unit,
+): EffectResult? = when {
+    effect.open_route != null -> openRoute?.let { open ->
+        open(effect.open_route!!.route!!)
+        EffectResult(done = EffectDone())
+    } ?: failed("no page to open")
+    docs == null -> failed("not performed by this shell")
+    effect.pick_file != null -> {
+        docs.pick(effect.pick_file!!.kind, answer)
+        null
+    }
+    effect.follow_folder != null -> {
+        docs.follow(answer)
+        null
+    }
+    else -> {
+        docs.stop(effect.stop_following!!.origin, answer)
+        null
     }
 }
 

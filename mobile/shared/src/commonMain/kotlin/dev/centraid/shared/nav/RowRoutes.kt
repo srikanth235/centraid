@@ -65,11 +65,11 @@ public object RowRoutes {
     ): Destination? = when (row.app to row.entity) {
         AppIds.AGENDA to TASK -> AgendaEntry.task(row.id)
         AppIds.AGENDA to PROJECT -> AgendaEntry.project(row.id, row.title)
-        AppIds.NOTES to NOTE -> Destination.NotesEditor(row.id, title = row.title)
-        AppIds.NOTES to NOTEBOOK -> Destination.NotesLibrary(notebookId = row.id, notebookName = row.title, unfiledOnly = false)
+        AppIds.NOTES to NOTE -> NotesEntry.editor(row.id)
+        AppIds.NOTES to NOTEBOOK -> NotesEntry.home(notebookId = row.id, notebookName = row.title)
         AppIds.PHOTOS to ALBUM -> PhotosShelfEntry.album(row.id, row.title)
-        AppIds.DOCS to FOLDER -> Destination.DocsFolder(row.id, row.title, parent = parent)
-        AppIds.DOCS to DOCUMENT -> Destination.DocsDocument(row.id, row.title, parent = parent)
+        AppIds.DOCS to FOLDER -> DocsEntry.folder(row.id, row.title, parent = parent)
+        AppIds.DOCS to DOCUMENT -> DocsEntry.document(row.id, row.title, parent = parent)
         AppIds.PEOPLE to PERSON -> Destination.PeoplePerson(row.id, row.title)
         AppIds.AGENDA to EVENT -> AgendaEntry.event(eventId = row.id, instanceKey = row.qualifier)
         AppIds.PHOTOS to PHOTO -> PhotosEntry.lightbox(row.id, neighbours.ifEmpty { listOf(row.id) })
@@ -109,8 +109,8 @@ public object RowRoutes {
 
     /** An app's own front door, for a reference whose noun has no row route. */
     public fun appHome(app: String): Destination? = when (app) {
-        AppIds.NOTES -> Destination.NotesLibrary()
-        AppIds.DOCS -> Destination.DocsHome()
+        AppIds.NOTES -> NotesEntry.home()
+        AppIds.DOCS -> DocsEntry.home()
         AppIds.PEOPLE -> Destination.PeopleHome()
         AppIds.AGENDA -> AgendaEntry.home()
         AppIds.PHOTOS -> PhotosEntry.home()

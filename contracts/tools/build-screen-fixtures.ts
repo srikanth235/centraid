@@ -43,7 +43,6 @@ const TYPES: Record<string, string> = {
   money: "centraid.screen.v1.MoneyHomeState",
   "money-import": "centraid.screen.v1.MoneyImportState",
   "money-transaction": "centraid.screen.v1.MoneyTransactionState",
-  notes: "centraid.screen.v1.NotesEditorState",
   // Photos' screens are `crates/screens` views (#1135), tested there.
   seat: "centraid.screen.v1.SeatState",
 };

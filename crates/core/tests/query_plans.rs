@@ -76,6 +76,7 @@ fn covers(query: &Q) -> &'static str {
         Q::NotesHistory(_) => "notes.history",
         Q::NotesLinkTargets(_) => "notes.link_targets",
         Q::NotesNote(_) => "notes.note",
+        Q::NotesAbout(_) => "notes.about",
         Q::PeopleRoster(_) => "people.roster",
         Q::PeopleTouch(_) => "people.touch",
         Q::PeoplePerson(_) => "people.person",
@@ -194,6 +195,11 @@ fn requests(word: &str) -> Vec<Q> {
         }),
         Q::NotesNote(wire::NotesNoteRequest {
             note_id: some("note"),
+            tz: tz(),
+        }),
+        Q::NotesAbout(wire::NotesAboutRequest {
+            about_id: some("person"),
+            window: 100,
             tz: tz(),
         }),
         Q::PeopleTouch(wire::PeopleTouchRequest { tz: tz() }),
@@ -848,11 +854,11 @@ fn ask(handle: &centraid_core::Handle, query: Q) -> Result<(), String> {
 }
 
 /// Every wire query has an entry in [`requests`]: the names it asks are the names
-/// [`covers`] knows. The wire has 60 queries (`app_query.proto`'s `oneof query`);
+/// [`covers`] knows. The wire has 61 queries (`app_query.proto`'s `oneof query`);
 /// a new one is a compile error in [`covers`], and this count says it was also
 /// asked.
 #[test]
 fn the_sweep_asks_every_query_the_wire_has() {
     let asked: BTreeSet<&str> = requests("word").iter().map(covers).collect();
-    assert_eq!(asked.len(), 60, "{asked:?}");
+    assert_eq!(asked.len(), 61, "{asked:?}");
 }

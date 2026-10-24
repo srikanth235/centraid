@@ -28,10 +28,12 @@ syntax = "proto3";
 package centraid.core.v1;
 
 import "centraid/core/v1/agenda_screens.proto";
+import "centraid/core/v1/docs_screens.proto";
 import "centraid/core/v1/kit_screens.proto";
 import "centraid/core/v1/photos_home_screens.proto";
 import "centraid/core/v1/photos_lightbox_screens.proto";
 import "centraid/core/v1/photos_shelf_screens.proto";
+import "centraid/core/v1/notes_screens.proto";
 import "centraid/core/v1/route.proto";
 
 // ---------------------------------------------------------------------------
@@ -184,6 +186,15 @@ message ScreenEvent {
     PhotosEditorEvent photos_editor = 805;
     PhotosDuplicatesEvent photos_duplicates = 806;
     PhotosDuplicateReviewEvent photos_duplicate_review = 807;
+    // ---- docs (200-299) ----
+    DocsDriveEvent docs_drive = 200;
+    DocsDocumentEvent docs_document = 201;
+    DocsEditorEvent docs_editor = 202;
+    DocsVersionsEvent docs_versions = 203;
+    // ---- notes (600-699) ----
+    NotesHomeEvent notes_home = 600;
+    NotesEditorEvent notes_editor = 601;
+    NotesHistoryEvent notes_history = 602;
     // ---- the kit (900-999) ----
     TrashEvent trash = 900;
   }
@@ -230,6 +241,15 @@ message ViewState {
     PhotosEditorState photos_editor = 805;
     PhotosDuplicatesState photos_duplicates = 806;
     PhotosDuplicateReviewState photos_duplicate_review = 807;
+    // ---- docs (200-299) ----
+    DocsDriveState docs_drive = 200;
+    DocsDocumentState docs_document = 201;
+    DocsEditorState docs_editor = 202;
+    DocsVersionsState docs_versions = 203;
+    // ---- notes (600-699) ----
+    NotesHomeState notes_home = 600;
+    NotesEditorState notes_editor = 601;
+    NotesHistoryState notes_history = 602;
     // ---- the kit (900-999) ----
     TrashView trash = 900;
   }
@@ -269,6 +289,14 @@ message Effect {
     FreeUpSpace free_up_space = 17;
     RenderEdit render_edit = 18;
     ReadCamera read_camera = 19;
+    // Open a page now, wherever the member is: the shell pushes `route` as a
+    // tapped row's route is pushed. For a screen that makes a thing and
+    // opens it (a document just filed).
+    OpenRoute open_route = 20;
+    // ---- docs (200-299): files ----
+    PickFile pick_file = 200;
+    FollowFolder follow_folder = 201;
+    StopFollowing stop_following = 202;
   }
 }
 
@@ -520,6 +548,10 @@ message EffectResult {
     FreeUpFacts free_up_facts = 11;
     EditRendered edit_rendered = 12;
     CameraRead camera_read = 13;
+    // ---- docs (200-299): files ----
+    FilePicked file_picked = 200;
+    FileProgress file_progress = 201;
+    FolderFollowed folder_followed = 202;
   }
 }
 
@@ -609,6 +641,70 @@ message PhoneCalendarSeries {
 // A watched store changed.
 message PhoneChanged {
   ImportSource source = 1;
+}
+
+// ---------------------------------------------------------------------------
+// Files (Docs): pick and stage a file, follow a folder
+// ---------------------------------------------------------------------------
+
+message OpenRoute {
+  Route route = 1;
+}
+
+// Pick one file for the drive's Add sheet: Upload is the system file picker,
+// Scan the document camera (its pages written to one PDF). The shell copies the
+// choice to a file on this device, STREAMS it through the stage door (a 900 MB
+// scan never exists in memory at once), and answers `FilePicked` with the hash
+// the core named. While it streams it may answer `FileProgress` any number of
+// times under the same `effect_id`. A closed picker is `EffectDone`; a refusal
+// is `EffectFailed` (`denied` for a camera or file grant the member refused).
+message PickFile {
+  Kind kind = 1;
+
+  enum Kind {
+    KIND_UNSPECIFIED = 0;
+    KIND_UPLOAD = 1;
+    KIND_SCAN = 2;
+  }
+}
+
+// A file the shell picked and staged. `blob` is the hash the stage door named
+// and `byte_size` the bytes it counted; `name` is what the platform called the
+// file (empty for a scan) and `media_type` its type (empty: Rust reads it off
+// the name).
+message FilePicked {
+  string blob = 1;
+  uint64 byte_size = 2;
+  string name = 3;
+  string media_type = 4;
+}
+
+// Bytes streamed so far, of a file `total_bytes` long (0 is unknown). `name` is
+// what the platform called the file (empty for a scan), so the line can say what
+// is being added while it streams.
+message FileProgress {
+  uint64 staged_bytes = 1;
+  uint64 total_bytes = 2;
+  string name = 3;
+}
+
+// Follow a folder the member picks (#1127): the shell opens its folder picker,
+// keeps the access it is given (a security-scoped bookmark, a persisted tree
+// URI) under an origin it mints, and answers `FolderFollowed`. A closed picker
+// is `EffectDone`.
+message FollowFolder {}
+
+// The folder the shell is now following, and the name the phone gives it.
+message FolderFollowed {
+  // `folder:<uuid>`.
+  string origin = 1;
+  string name = 2;
+}
+
+// Stop following the folder whose origin is `origin`: the shell forgets its
+// access and tells the core to forget the folder's links; every document stays.
+message StopFollowing {
+  string origin = 1;
 }
 
 // ---------------------------------------------------------------------------

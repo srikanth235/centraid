@@ -7,7 +7,6 @@ import centraid.screen.v1.MoneyImportState
 import centraid.screen.v1.MoneyTransactionState
 import centraid.screen.v1.Springboard
 import centraid.screen.v1.TileStatus
-import centraid.screen.v1.NotesEditorState
 import centraid.screen.v1.ReadFailureKind
 import centraid.screen.v1.SeatState
 import io.kotest.core.spec.style.StringSpec
@@ -71,33 +70,6 @@ class ScreenFixtureSpec : StringSpec({
         }
     }
 
-    // --- Notes ------------------------------------------------------------
-
-    "notes/save-refused keeps the words on the screen; notes/read-refused does not" {
-        val saveRefused = NotesEditorState.ADAPTER.decode(screens.bytes("notes/save-refused"))
-        val readRefused = NotesEditorState.ADAPTER.decode(screens.bytes("notes/read-refused"))
-
-        // A failed SAVE: the draft is present, the editor is intact, and the
-        // sentence rides on the draft.
-        saveRefused.draft.shouldNotBeNull().body shouldBe "Book the cabin."
-        saveRefused.failure.shouldBeNull()
-        saveRefused.save shouldBe NotesEditorState.SaveState.SAVE_STATE_REFUSED
-        saveRefused.draft.save_failure.shouldNotBeNull().kind shouldBe
-            ReadFailureKind.READ_FAILURE_KIND_UNAVAILABLE
-
-        // A failed READ: there is nothing to edit, because the body never came.
-        readRefused.draft.shouldBeNull()
-        readRefused.failure.shouldNotBeNull().kind shouldBe
-            ReadFailureKind.READ_FAILURE_KIND_REFUSED
-    }
-
-    "notes/draft-dirty is edited and unsaved, with no write in flight" {
-        val state = NotesEditorState.ADAPTER.decode(screens.bytes("notes/draft-dirty"))
-        state.save shouldBe NotesEditorState.SaveState.SAVE_STATE_DIRTY
-        state.draft.shouldNotBeNull().base_revision_id shouldBe "rev-0007"
-        state.draft.body.contains('\n').shouldBeTrue()
-    }
-
     // --- Seat -------------------------------------------------------------
 
     "the seat's four sentences decode, and 'platform refused to say' is not 'offline'" {
@@ -116,15 +88,6 @@ class ScreenFixtureSpec : StringSpec({
             SeatState.Availability.AVAILABILITY_RESTARTING
     }
 
-    "every fixture sets at most one of the three content states" {
-        // The three-state law as a sweep rather than a claim: no fixture may
-        // carry both a failure and data, which is the shape a decoder that
-        // collapsed the two would produce.
-        screens.resolve("notes").binFiles().forEach { file ->
-            val state = NotesEditorState.ADAPTER.decode(file.readBytes())
-            contentCount(state.loading, state.failure, state.draft) shouldBe 1
-        }
-    }
     // --- Home: the graded springboard -------------------------------------
 
     fun home(case: String): HomeState =

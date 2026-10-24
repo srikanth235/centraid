@@ -13,6 +13,8 @@ import dev.centraid.design.copy.SharedCopy
 import dev.centraid.shared.kit.SearchContainers
 import dev.centraid.shared.nav.AgendaEntry
 import dev.centraid.shared.nav.Destination
+import dev.centraid.shared.nav.DocsEntry
+import dev.centraid.shared.nav.NotesEntry
 import dev.centraid.shared.nav.RowRoutes
 import dev.centraid.shared.shell.HomeSearchMachine
 import dev.centraid.shared.shell.HomeSearchReads
@@ -97,13 +99,12 @@ class SearchContainersSpec : StringSpec({
         fun open(app: String, entity: String, id: String, title: String) =
             RowRoutes.destination(ChatCard(app = app, entity = entity, id = id, title = title), parent = "Search")
 
-        open("notes", "notebook", "nb", "Cabin") shouldBe
-            Destination.NotesLibrary(notebookId = "nb", notebookName = "Cabin", unfiledOnly = false)
+        open("notes", "notebook", "nb", "Cabin") shouldBe NotesEntry.home(notebookId = "nb", notebookName = "Cabin")
         open("photos", "album", "al", "Summer") shouldBe
             Destination.PhotoShelfRoute(PhotoShelf(album = PhotoShelf.Album(collection_id = "al", name = "Summer")))
         open("agenda", "project", "pr", "Garden") shouldBe AgendaEntry.project("pr", "Garden")
-        open("docs", "folder", "fo", "Taxes") shouldBe Destination.DocsFolder("fo", "Taxes", parent = "Search")
+        open("docs", "folder", "fo", "Taxes") shouldBe DocsEntry.folder("fo", "Taxes", parent = "Search")
         // A noun the table does not name still opens the app's home.
-        open("notes", "shelf", "x", "X") shouldBe Destination.NotesLibrary()
+        open("notes", "shelf", "x", "X") shouldBe NotesEntry.home()
     }
 })

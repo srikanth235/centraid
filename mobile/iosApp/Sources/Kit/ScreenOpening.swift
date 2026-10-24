@@ -38,11 +38,4 @@ extension ShellModel {
         guard let opening else { return }
         path.append(.opening(opening))
     }
-
-    /// The screen id of the entry under the top, empty when it is Home or not
-    /// a registered screen — what `NotesRouting.close` asks.
-    var screenBelowTop: String {
-        guard path.count >= 2, case let .screen(id, _) = path[path.count - 2] else { return "" }
-        return id
-    }
 }

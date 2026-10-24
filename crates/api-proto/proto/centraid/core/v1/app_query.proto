@@ -85,6 +85,8 @@ message AppQueryRequest {
     NotesHistoryRequest notes_history = 45;
     NotesLinkTargetsRequest notes_link_targets = 46;
     NotesNoteRequest notes_note = 47;
+    // The notes written about one thing (#1135): any thing that carries `about` edges.
+    NotesAboutRequest notes_about = 48;
     PeopleRosterRequest people_roster = 20;
     PeopleTouchRequest people_touch = 21;
     PeoplePersonRequest people_person = 22;
@@ -171,6 +173,7 @@ message AppQueryResponse {
     NotesHistory notes_history = 45;
     NotesLinkTargets notes_link_targets = 46;
     NotesNote notes_note = 47;
+    NotesAbout notes_about = 48;
     PeopleRoster people_roster = 20;
     PeopleTouch people_touch = 21;
     PeoplePerson people_person = 22;

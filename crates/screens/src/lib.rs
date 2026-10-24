@@ -6,8 +6,10 @@
 
 pub mod agenda;
 pub mod catalog;
+pub mod docs;
 pub mod field;
 pub mod kit;
+pub mod notes;
 pub mod photos;
 pub mod proof;
 pub mod registry;
@@ -29,6 +31,8 @@ pub fn standard() -> Runtime {
         Registry::default()
             .with(proof::NAME, proof::build)
             .merge(agenda::registry())
+            .merge(docs::registry())
+            .merge(notes::registry())
             .merge(photos::registry()),
         vec![
             ("proof".to_owned(), proof::route()),
