@@ -295,6 +295,16 @@ pub fn tile(cell: &wire::PhotosCell, link: Link, locale: Locale) -> wire::PhotoT
         fetch_percent: 0,
         title: cell.title.clone(),
         purge_in_days: positive(cell.purge_in_days),
+        live_label: if cell.live {
+            words::photos_cell_live_mark(locale)
+        } else {
+            String::new()
+        },
+        held_label: match held {
+            Held::WithheldByRule => words::photos_cell_download_full(locale),
+            Held::Fetching => words::photos_cell_downloading_mark(locale),
+            _ => String::new(),
+        },
     }
 }
 

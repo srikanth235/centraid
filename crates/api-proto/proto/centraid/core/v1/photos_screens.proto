@@ -78,6 +78,12 @@ message PhotoTile {
   // The trash's countdown: whole days left, 0 when the photograph is not in
   // the trash or has no date to count from.
   uint32 purge_in_days = 19;
+  // "live": the mark a Live Photo's cell carries; empty unless `live`.
+  string live_label = 20;
+  // The words of the held mark: "downloading" over a `HELD_FETCHING` cell and
+  // "Download full-size photo" (the arrow's label) over `HELD_WITHHELD_BY_RULE`;
+  // empty otherwise.
+  string held_label = 21;
 
   // The five states a cell can be in, and no sixth. `HELD_FETCHING` is a
   // screen's: a tap is not a fact a page read can see.
