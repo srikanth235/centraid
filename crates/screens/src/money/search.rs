@@ -98,6 +98,9 @@ impl Screen for Search {
     fn update(&mut self, event: wire::ScreenEvent, ctx: &Ctx) -> Vec<wire::Effect> {
         match event.kind {
             Some(E::Appeared(_) | E::DataChanged(_) | E::EnvironmentChanged(_)) => self.reload(ctx),
+            Some(E::MoneySearch(wire::MoneySearchEvent {
+                kind: Some(wire::money_search_event::Kind::Refreshed(_)),
+            })) => self.reload(ctx),
             Some(E::MoneySearch(search)) => match search.kind {
                 Some(S::Term(typed)) => {
                     self.term = typed.term;
@@ -107,7 +110,7 @@ impl Screen for Search {
                     self.term.clear();
                     self.reload(ctx);
                 }
-                None => {}
+                Some(S::Refreshed(_)) | None => {}
             },
             _ => {}
         }

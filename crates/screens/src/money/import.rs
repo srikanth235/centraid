@@ -801,6 +801,12 @@ impl Screen for Import {
                 self.reload_accounts(ctx);
                 Vec::new()
             }
+            Some(E::MoneyImport(wire::MoneyImportEvent {
+                kind: Some(I::Refreshed(_)),
+            })) => {
+                self.reload_accounts(ctx);
+                Vec::new()
+            }
             Some(E::MoneyImport(event)) => self.event(event, ctx),
             Some(E::EffectResult(result)) => {
                 if let Some(wire::effect_result::Outcome::File(file)) = result.outcome {

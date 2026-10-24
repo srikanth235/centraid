@@ -207,7 +207,7 @@ impl Target {
             }
             Some(T::Save(_)) => self.save(ctx, false),
             Some(T::Remove(_)) => self.save(ctx, true),
-            None => {}
+            Some(T::Refreshed(_)) | None => {}
         }
     }
 }
@@ -216,6 +216,9 @@ impl Screen for Target {
     fn update(&mut self, event: wire::ScreenEvent, ctx: &Ctx) -> Vec<wire::Effect> {
         match event.kind {
             Some(E::Appeared(_) | E::DataChanged(_) | E::EnvironmentChanged(_)) => self.reload(ctx),
+            Some(E::MoneyTarget(wire::MoneyTargetEvent {
+                kind: Some(wire::money_target_event::Kind::Refreshed(_)),
+            })) => self.reload(ctx),
             Some(E::MoneyTarget(t)) => self.event(t, ctx),
             _ => {}
         }

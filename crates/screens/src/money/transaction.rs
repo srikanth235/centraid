@@ -457,6 +457,9 @@ impl Screen for Transaction {
     fn update(&mut self, event: wire::ScreenEvent, ctx: &Ctx) -> Vec<wire::Effect> {
         match event.kind {
             Some(E::Appeared(_) | E::DataChanged(_) | E::EnvironmentChanged(_)) => self.reload(ctx),
+            Some(E::MoneyTransaction(wire::MoneyTransactionEvent {
+                kind: Some(wire::money_transaction_event::Kind::Refreshed(_)),
+            })) => self.reload(ctx),
             Some(E::MoneyTransaction(t)) => self.event(t, ctx),
             _ => {}
         }

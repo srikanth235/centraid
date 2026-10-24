@@ -313,6 +313,8 @@ message MoneyCashflowMonth {
 
 message MoneyHomeEvent {
   oneof kind {
+    // The failure state's retry, and pull to refresh: read again.
+    Refreshed refreshed = 30;
     BandPicked band = 3;
     MonthStepped month_stepped = 4;
     MonthPicked month_picked = 5;
@@ -358,6 +360,8 @@ message MoneyHomeEvent {
   message ShowMore {}
 
   message MoreOpened {}
+
+  message Refreshed {}
 }
 
 // ---------------------------------------------------------------------------
@@ -430,6 +434,8 @@ message MoneyOffer {
 
 message MoneyTransactionEvent {
   oneof kind {
+    // The failure state's retry, and pull to refresh: read again.
+    Refreshed refreshed = 30;
     ActionPicked action = 3;
     CategoryPicked category = 4;
     NameEdited name_edited = 5;
@@ -469,6 +475,8 @@ message MoneyTransactionEvent {
   message ConfirmAccepted {}
 
   message ConfirmDismissed {}
+
+  message Refreshed {}
 }
 
 // ---------------------------------------------------------------------------
@@ -520,6 +528,8 @@ message MoneyTargetData {
 
 message MoneyTargetEvent {
   oneof kind {
+    // The failure state's retry, and pull to refresh: read again.
+    Refreshed refreshed = 30;
     AmountEdited amount = 3;
     CarryToggled carry = 4;
     UseAverage use_average = 5;
@@ -538,6 +548,8 @@ message MoneyTargetEvent {
   message Save {}
 
   message Remove {}
+
+  message Refreshed {}
 }
 
 // ---------------------------------------------------------------------------
@@ -613,6 +625,8 @@ message MoneySearchData {
 
 message MoneySearchEvent {
   oneof kind {
+    // The failure state's retry, and pull to refresh: read again.
+    Refreshed refreshed = 30;
     TermChanged term = 2;
     Cleared cleared = 3;
   }
@@ -622,6 +636,8 @@ message MoneySearchEvent {
   }
 
   message Cleared {}
+
+  message Refreshed {}
 }
 
 // ---------------------------------------------------------------------------
@@ -718,6 +734,8 @@ message MoneyAccountEditor {
 
 message MoneyAccountsEvent {
   oneof kind {
+    // The failure state's retry, and pull to refresh: read again.
+    Refreshed refreshed = 30;
     AddTapped add = 2;
     AccountTapped account = 3;
     NameEdited name = 4;
@@ -768,6 +786,8 @@ message MoneyAccountsEvent {
   message ConfirmAccepted {}
 
   message ConfirmDismissed {}
+
+  message Refreshed {}
 }
 
 // ---------------------------------------------------------------------------
@@ -834,6 +854,8 @@ message MoneyCategoryEntry {
 
 message MoneyCategoriesEvent {
   oneof kind {
+    // The failure state's retry, and pull to refresh: read again.
+    Refreshed refreshed = 30;
     AddTapped add = 2;
     NameEdited name = 3;
     GroupPicked group = 4;
@@ -876,6 +898,8 @@ message MoneyCategoriesEvent {
   message ConfirmAccepted {}
 
   message ConfirmDismissed {}
+
+  message Refreshed {}
 }
 
 // ---------------------------------------------------------------------------
@@ -964,6 +988,8 @@ message MoneyRuleEditor {
 
 message MoneyRulesEvent {
   oneof kind {
+    // The failure state's retry, and pull to refresh: read again.
+    Refreshed refreshed = 30;
     AddTapped add = 2;
     RuleTapped rule = 3;
     Apply apply = 4;
@@ -1027,6 +1053,8 @@ message MoneyRulesEvent {
   message ConfirmAccepted {}
 
   message ConfirmDismissed {}
+
+  message Refreshed {}
 }
 
 // ---------------------------------------------------------------------------
@@ -1137,6 +1165,8 @@ message MoneyImportLine {
 
 message MoneyImportEvent {
   oneof kind {
+    // The failure state's retry, and pull to refresh: read again.
+    Refreshed refreshed = 30;
     ChooseTapped choose = 2;
     AccountSheetOpened account_sheet_opened = 3;
     AccountPicked account_picked = 4;
@@ -1178,4 +1208,6 @@ message MoneyImportEvent {
 
   // The member tapped Done after an import.
   message Done {}
+
+  message Refreshed {}
 }

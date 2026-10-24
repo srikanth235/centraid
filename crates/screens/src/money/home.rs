@@ -263,7 +263,7 @@ impl Home {
                     self.reload(ctx);
                 }
             }
-            None => {}
+            Some(H::Refreshed(_)) | None => {}
         }
     }
 
@@ -906,6 +906,9 @@ impl Screen for Home {
     fn update(&mut self, event: wire::ScreenEvent, ctx: &Ctx) -> Vec<wire::Effect> {
         match event.kind {
             Some(E::Appeared(_) | E::DataChanged(_) | E::EnvironmentChanged(_)) => self.reload(ctx),
+            Some(E::MoneyHome(wire::MoneyHomeEvent {
+                kind: Some(wire::money_home_event::Kind::Refreshed(_)),
+            })) => self.reload(ctx),
             Some(E::MoneyHome(home)) => self.event(home, ctx),
             _ => {}
         }

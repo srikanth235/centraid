@@ -714,6 +714,9 @@ impl Screen for Rules {
     fn update(&mut self, event: wire::ScreenEvent, ctx: &Ctx) -> Vec<wire::Effect> {
         match event.kind {
             Some(E::Appeared(_) | E::DataChanged(_) | E::EnvironmentChanged(_)) => self.reload(ctx),
+            Some(E::MoneyRules(wire::MoneyRulesEvent {
+                kind: Some(wire::money_rules_event::Kind::Refreshed(_)),
+            })) => self.reload(ctx),
             Some(E::MoneyRules(r)) => self.event(r, ctx),
             _ => {}
         }
