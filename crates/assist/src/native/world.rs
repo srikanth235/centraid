@@ -22,6 +22,10 @@ pub const EVENT_DAYS_AHEAD: i64 = 120;
 /// every write, so the read is bounded by months and never walks a ledger's years. A question
 /// about an older month finds nothing here and says so.
 pub const TRANSACTION_MONTHS: u32 = 3;
+/// The days of Health the world holds, today and the ones before it (#1135): the daily figures
+/// and the workouts of the last quarter. The chat answers about how the member has been lately, a
+/// world is re-read after every write, and a year of six metrics would be two thousand rows.
+pub const HEALTH_DAYS: i64 = 90;
 /// Transactions read per chunk when the display names are fetched by id.
 const DECORATION_CHUNK: usize = 200;
 
@@ -232,6 +236,14 @@ fn put(fields: &mut BTreeMap<&'static str, Val>, name: &'static str, value: Opti
     }
 }
 
+/// A cell as the whole number the model sees: a real is rounded, not cut.
+fn number(row: &VaultRow, column: &str) -> Option<i64> {
+    match row.get(column) {
+        Some(centraid_apps_kit::row::Cell::Real(value)) => Some(value.round() as i64),
+        _ => int(row, column),
+    }
+}
+
 fn nonempty(value: Option<String>) -> Option<Val> {
     value.filter(|text| !text.is_empty()).map(Val::Text)
 }
@@ -328,6 +340,7 @@ impl World {
         world.load_documents(door, &flags)?;
         world.load_locker(door, &flags)?;
         world.load_transactions(door, at)?;
+        world.load_health(door, at)?;
         world.load_links(door)?;
         // an edge is kept when both of its ends are rows the model talks about
         let rows = &world.rows;
@@ -868,6 +881,125 @@ impl World {
             });
             row.extra.remove("purge_at");
             self.insert(row);
+        }
+        Ok(())
+    }
+
+    /// Health's two kinds (#1135), read as stored for the last [`HEALTH_DAYS`] days: a daily figure
+    /// is the member's own `measurement` row, its id `<day>:<metric>` (a figure has no entity of
+    /// its own), and a workout is an activity of a workout kind with the figures its `workout` row
+    /// holds. A figure is read as a whole number, as every number the model sees is: a weight of
+    /// 71.4 kg is 71, and the Health screens, which read the vault's reals, are the exact answer.
+    fn load_health(&mut self, door: &dyn Door, at: Option<&Standing>) -> Result<(), String> {
+        let today = match at {
+            Some(standing) => standing.today,
+            None => jiff::Timestamp::from_millisecond(door.now_ms())
+                .unwrap_or_default()
+                .to_zoned(jiff::tz::TimeZone::UTC)
+                .date(),
+        };
+        let first = today
+            .checked_sub(jiff::Span::new().days(HEALTH_DAYS))
+            .map_err(|error| format!("the health window is out of range: {error}"))?
+            .to_string();
+        let figure = Kind::DailyFigure.spec();
+        let days = door.table_where(
+            "measurement",
+            "day, metric, value",
+            "day",
+            "metric",
+            "person_id = ? AND day >= ?",
+            &[self.me.clone(), first.clone()],
+        )?;
+        for day in &days {
+            let (Some(date), Some(metric)) = (text(day, "day"), text(day, "metric")) else {
+                continue;
+            };
+            let mut fields = BTreeMap::new();
+            if let Some(word) = figure
+                .field("metric")
+                .and_then(|field| field.model_value(&metric))
+            {
+                fields.insert("metric", Val::Enum(word));
+            }
+            if let Some(value) = number(day, "value") {
+                fields.insert("value", Val::Num(value));
+            }
+            self.insert(Row {
+                kind: Kind::DailyFigure,
+                id: format!("{date}:{metric}"),
+                name: metric,
+                date: stamp(Some(date)),
+                fields,
+                trashed: false,
+                created: String::new(),
+                updated: String::new(),
+                extra: BTreeMap::new(),
+            });
+        }
+        let activities = door.table_where(
+            "activity",
+            "id, starts",
+            "starts",
+            "id",
+            "type_kind = ? AND starts >= ?",
+            &["workout_kind".to_owned(), first],
+        )?;
+        let ids: Vec<String> = activities
+            .iter()
+            .filter_map(|row| text(row, "id"))
+            .collect();
+        for chunk in ids.chunks(DECORATION_CHUNK) {
+            let marks = vec!["?"; chunk.len()].join(", ");
+            let named: BTreeMap<String, VaultRow> = door
+                .table_where(
+                    "entity",
+                    "id, title, created_at, updated_at, deleted_at, purge_at",
+                    "id",
+                    "id",
+                    &format!("id IN ({marks})"),
+                    chunk,
+                )?
+                .into_iter()
+                .filter_map(|row| Some((text(&row, "id")?, row)))
+                .collect();
+            let measured = door.table_where(
+                "workout",
+                "id, moving_s, distance_m, energy_kcal, heart_bpm, climb_m",
+                "id",
+                "id",
+                &format!("id IN ({marks})"),
+                chunk,
+            )?;
+            for activity in activities.iter().filter(|a| {
+                text(a, "id").is_some_and(|id| chunk.contains(&id))
+            }) {
+                let id = text(activity, "id").unwrap_or_default();
+                let Some(entity) = named.get(&id) else {
+                    continue;
+                };
+                let mut fields = BTreeMap::new();
+                if let Some(row) = measured
+                    .iter()
+                    .find(|row| text(row, "id").as_ref() == Some(&id))
+                {
+                    for (name, column) in [
+                        ("moving", "moving_s"),
+                        ("distance", "distance_m"),
+                        ("energy", "energy_kcal"),
+                        ("heart_rate", "heart_bpm"),
+                        ("climb", "climb_m"),
+                    ] {
+                        if let Some(value) = number(row, column) {
+                            fields.insert(name, Val::Num(value));
+                        }
+                    }
+                }
+                let mut row = Row::of(Kind::Workout, &id, entity, fields);
+                row.date = stamp(text(activity, "starts"));
+                row.extra.remove("purge_at");
+                self.insert(row);
+            }
         }
         Ok(())
     }
