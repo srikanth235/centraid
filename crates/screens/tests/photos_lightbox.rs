@@ -204,7 +204,7 @@ fn effects_of(d: &mut Driver) -> Vec<wire::effect::Kind> {
 fn it_opens_with_its_chrome_drawn_and_the_photograph_read() {
     let mut d = driver();
     let id = photo(&d, Shot::new("lb-open"));
-    let at = open(&mut d, &id, &[id.clone()], "");
+    let at = open(&mut d, &id, std::slice::from_ref(&id), "");
     let state = view(&d, at);
     assert!(
         state.chrome_visible,
@@ -715,7 +715,7 @@ fn the_strip_is_a_window_around_the_photograph_and_every_frame_knows_its_tile() 
 fn a_slideshow_needs_somewhere_to_go_wraps_at_the_end_and_leaving_keeps_the_photograph() {
     let mut d = driver();
     let lone = photo(&d, Shot::new("lb-lone"));
-    let at = open(&mut d, &lone, &[lone.clone()], "");
+    let at = open(&mut d, &lone, std::slice::from_ref(&lone), "");
     assert!(
         view(&d, at)
             .menu
@@ -902,7 +902,7 @@ fn a_send_is_a_decision_about_bytes_and_every_receipt_says_what_went_none_includ
         }),
     );
     let export = export_of(effects_of(&mut d));
-    assert_eq!(export.photo_ids, [id.clone()]);
+    assert_eq!(export.photo_ids, std::slice::from_ref(&id));
     assert_eq!(export.mode, wire::export_originals::Mode::Send as i32);
     assert!(
         !export.keep_location,
